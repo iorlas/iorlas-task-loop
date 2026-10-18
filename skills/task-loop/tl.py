@@ -308,6 +308,7 @@ def cmd_slot(a):
                    "--description", "Slot worktree " + name + " for task-loop. Claimed while a session uses it; never work.",
                    cwd=repo, check=True)
             d = slot_dir(repo, name, cfg)
+            exclude_local(repo, ".slots/", ".task/")
             if not os.path.isdir(d):
                 git("fetch", "origin", cwd=repo)
                 r = subprocess.run(["git", "-C", repo, "worktree", "add", "--detach", d, "origin/main"],
@@ -404,10 +405,25 @@ def cmd_slot_setup(repo, name, cfg, d, force=False):
 
 # ---- one worktree per loop session (slots off) --------------------------------------------------------------------
 
+def exclude_local(repo, *patterns):
+    """Keep the loop's own folders out of `git add -A` in every repo, without touching its tracked .gitignore."""
+    common = git("rev-parse", "--path-format=absolute", "--git-common-dir", cwd=repo)
+    if not common:
+        return
+    f = Path(common) / "info" / "exclude"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    have = f.read_text(encoding="utf-8") if f.exists() else ""
+    add = [p for p in patterns if p not in have.split()]
+    if add:
+        with open(f, "a", encoding="utf-8") as fh:
+            fh.write(("\n" if have and not have.endswith("\n") else "") + "\n".join(add) + "\n")
+
+
 def cmd_worktree(a):
     repo = repo_root()
     root = Path(repo) / ".worktrees"
     if a.op == "start":
+        exclude_local(repo, ".worktrees/", ".task/")
         name = "loop-" + actor()[3:]
         d = root / name
         if not d.exists():

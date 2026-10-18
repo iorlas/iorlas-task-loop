@@ -134,6 +134,13 @@ class SlotReset(Base):
         self.assertEqual(tl.git("show", "task/t-0:new.txt", cwd=str(self.slot)), "new")
         self.assertEqual(tl.git("show", "task/t-0:a.txt", cwd=str(self.slot)), "changed by a dead session")
 
+    def test_loop_folders_are_excluded_from_git_add(self):
+        tl.exclude_local(str(self.repo), ".slots/", ".task/")
+        tl.exclude_local(str(self.repo), ".slots/")
+        exclude = (self.repo / ".git" / "info" / "exclude").read_text()
+        self.assertEqual(exclude.split().count(".slots/"), 1)
+        self.assertNotIn(".slots", tl.git("status", "--porcelain", "--untracked-files=all", cwd=str(self.repo)))
+
     def test_detached_dirty_work_goes_to_wip_branch(self):
         (self.slot / "new.txt").write_text("new\n")
         self.assertEqual(self.reset("t-2"), 0)
