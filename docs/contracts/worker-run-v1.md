@@ -103,4 +103,11 @@ never reads. In the engine, plan is an AI node because the plan lives in the bea
 acceptance is the engine's checks, a fresh verify and the gate. A role no orchestrator needs → a new role in routing.json,
 never a second table.
 
+Usage feed (part of this contract): `route.py status --claude-usage '<get_usage plan.windows JSON>'` stores the reading;
+a headless `run` uses it for 30 minutes. In attended mode the coordinator feeds it every 20 minutes (the status-line
+file exists only where a terminal session runs). Unattended has no feed yet, so Claude nodes stay off.
+
+With delegate as launcher, `.task-loop.json → engine.workers` is ignored and the engine prints one ⚠ line saying so;
+it applies only to the builtin launcher.
+
 Version: the result's `v` is checked by the engine; another major → builtin launcher with a ⚠ line.
