@@ -346,7 +346,47 @@ def clean_cmd(s):
     return s
 
 
-ADAPTERS = {"claude": claude_events, "subagent": claude_events, "claude-p": claude_events,
+def engine_events(path, t0=None, t1=None):
+    """The engine's own log (engine.py): one line per node, decision, command."""
+    out = []
+    for ln in tail_lines(path):
+        try:
+            d = json.loads(ln)
+        except ValueError:
+            continue
+        e = {"t": d.get("t"), "kind": d.get("kind", "note"), "text": d.get("text", "")}
+        if e["kind"] == "cmd":
+            e["tool"], e["state"] = "sh", "ok"
+        if e["kind"] == "note" and out and out[-1]["kind"] == "cmd" and str(e["text"]).startswith("exit "):
+            out[-1]["state"] = "ok" if d.get("exit") == 0 else "fail"
+            out[-1]["detail"] = e["text"]
+            continue
+        if d.get("data") is not None:
+            e["detail"] = json.dumps(d["data"], indent=1)[:6000]
+        if d.get("cost"):
+            e["text"] += "  ($%.2f, %ss)" % (d["cost"], d.get("secs", "?"))
+        out.append(e)
+    return out
+
+
+def engine_runs(bead, t0, t1):
+    runs = []
+    for path in glob.glob(str(config_dir() / "engine" / ("%s-*.jsonl" % bead))):
+        first = first_json(path)
+        start = first.get("t") or os.path.getmtime(path)
+        if start < t0 - 5 or (t1 and start > t1 + 5):
+            continue
+        tail = "\n".join(tail_lines(path, 4000)[-3:])
+        closed = '"close: ' in tail
+        st, m = status_of(path, closed)
+        if closed:
+            st = "completed" if ('close: landed' in tail or 'close: done' in tail) else "failed"
+        runs.append({"id": "engine:" + path, "kind": "engine", "title": "Engine", "role": "runs the task",
+                     "status": st, "started": start, "updated": m, "ended": m if closed else None})
+    return runs
+
+
+ADAPTERS = {"engine": engine_events, "claude": claude_events, "subagent": claude_events, "claude-p": claude_events,
             "codex": codex_log_events, "codex-exec": rollout_events}
 
 
@@ -545,6 +585,7 @@ def runs_for_span(span):
         runs.append({"id": "claude:%s@%s@%s" % (tr, t0, t1 or ""), "kind": "claude", "title": "Orchestrator session",
                      "role": "orchestrator", "status": st if not t1 else "completed", "started": t0, "updated": m,
                      "ended": t1, "session": sess})
+    runs += engine_runs(span["bead"], t0, t1)
     if sess:
         runs += subagent_runs(sess, t0, t1)
         for j in codex_jobs(t0 - 60):

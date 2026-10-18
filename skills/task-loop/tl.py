@@ -12,6 +12,7 @@
   tl.py block ID --why TEXT                     block the bead with a question, record it
   tl.py slot list|take|release|reset|setup ...  slots (see SKILL.md, Slots)
   tl.py worktree start|sunset ...               one worktree per loop session when slots are off
+  tl.py run-task ID [--worktree DIR] [--slot S] [--dry-run]\n                                                one bead through the engine (engine.py), no judgement here
   tl.py dash ensure|stop|status|url             the dashboard server (one per machine)
   tl.py hook session-start                      SessionStart hook: index session id -> transcript path
 
@@ -51,7 +52,9 @@ def config_dir():
 
 
 def session_id():
-    return os.environ.get("CLAUDE_CODE_SESSION_ID") or os.environ.get("CLAUDE_SESSION_ID") or ""
+    """The session this process acts for: a Claude session, or the engine's own id when nobody drives it."""
+    return (os.environ.get("TASK_LOOP_SESSION") or os.environ.get("CLAUDE_CODE_SESSION_ID")
+            or os.environ.get("CLAUDE_SESSION_ID") or "")
 
 
 def git(*args, cwd=None):
@@ -582,6 +585,11 @@ def main(argv=None):
     p.add_argument("--self-too", action="store_true")
     p = sp.add_parser("dash")
     p.add_argument("op", choices=["ensure", "stop", "status", "url"])
+    p = sp.add_parser("run-task")
+    p.add_argument("id")
+    p.add_argument("--worktree")
+    p.add_argument("--slot")
+    p.add_argument("--dry-run", action="store_true")
     p = sp.add_parser("hook")
     p.add_argument("op", choices=["session-start"])
     a = ap.parse_args(argv)
@@ -589,6 +597,9 @@ def main(argv=None):
     if a.cmd == "actor":
         print(actor())
         return 0
+    if a.cmd == "run-task":
+        import engine
+        return engine.main(a)
     if a.cmd == "bd":
         r = subprocess.run([shutil.which("bd") or "bd", "--actor", actor()] + a.rest)
         return r.returncode

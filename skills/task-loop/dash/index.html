@@ -9,14 +9,14 @@
 :root{
   --bg:#0d0e10;--panel:#121316;--side:#0f1012;--raise:#17191d;--ink:#e9e8e4;--mute:#9a9891;--faint:#5f5e59;--line:#222428;--hover:#1a1c20;--sel:#1d2026;
   --live:#4ade80;--ok:#4ade80;--fail:#f87171;--warn:#e0b54a;--done:#a5b4fc;--open:#7dd3fc;--accent:#f0abfc;
-  --claude:#fb923c;--subagent:#fdba74;--codex:#2dd4bf;--claude-p:#c4b5fd;--codex-exec:#5eead4;
+  --claude:#fb923c;--engine:#f0abfc;--subagent:#fdba74;--codex:#2dd4bf;--claude-p:#c4b5fd;--codex-exec:#5eead4;
   --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;--sans:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",system-ui,sans-serif;
   color-scheme:dark;
 }
 @media (prefers-color-scheme:light){:root:not([data-theme="dark"]){
   --bg:#f6f5f2;--panel:#ffffff;--side:#f0eee9;--raise:#ffffff;--ink:#1b1b19;--mute:#6f6d67;--faint:#a6a39b;--line:#e3e0d8;--hover:#e9e6df;--sel:#ffffff;
   --live:#16a34a;--ok:#16a34a;--fail:#dc2626;--warn:#b8860b;--done:#6366f1;--open:#0284c7;--accent:#a21caf;
-  --claude:#c2410c;--subagent:#ea580c;--codex:#0f766e;--claude-p:#7c3aed;--codex-exec:#0d9488;color-scheme:light}}
+  --claude:#c2410c;--engine:#a21caf;--subagent:#ea580c;--codex:#0f766e;--claude-p:#7c3aed;--codex-exec:#0d9488;color-scheme:light}}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--ink);font:13px/1.45 var(--sans);display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}
@@ -67,6 +67,8 @@ button{font:inherit;color:inherit}
 .tag.live{color:var(--live);background:color-mix(in srgb,var(--live) 13%,transparent)}
 .k{font-size:10px;font-weight:650;text-transform:uppercase;letter-spacing:.04em;padding:0 5px;border-radius:3px;flex:none}
 .k.claude{color:var(--claude);background:color-mix(in srgb,var(--claude) 13%,transparent)}
+.k.engine{color:var(--engine);background:color-mix(in srgb,var(--engine) 13%,transparent)}
+.say.node{font-weight:650;color:var(--engine)}
 .k.subagent{color:var(--subagent);background:color-mix(in srgb,var(--subagent) 13%,transparent)}
 .k.codex{color:var(--codex);background:color-mix(in srgb,var(--codex) 13%,transparent)}
 .k.codex-exec{color:var(--codex-exec);background:color-mix(in srgb,var(--codex-exec) 13%,transparent)}
@@ -256,11 +258,13 @@ function renderLog(){
     if(e.kind=='cmd'){const st=e.state||'run';ic=`<span class="ic ${st=='run'?'run':st}">${st=='ok'?'✓':st=='fail'?'✕':'▸'}</span>`;
       body=`<span class="code">${e.tool?`<span class="tool">${esc(e.tool)}</span>`:''}${esc(e.text)}</span>`;meta=st=='run'?'running…':(e.dur!=null?fmt(e.dur):'')}
     else if(e.kind=='msg'){ic='<span class="ic msg">✦</span>';body=`<span class="say">${esc(e.text)}</span>`}
+    else if(e.kind=='node'){ic='<span class="ic user">▶</span>';body=`<span class="say node">${esc(e.text)}</span>`}
     else if(e.kind=='user'){ic='<span class="ic user">›</span>';body=`<span class="say user">${esc(e.text.length>600&&!S.open.has(i)?e.text.slice(0,600)+' …':e.text)}</span>`}
     else{ic='<span class="ic note">·</span>';body=`<span class="note">${esc(e.text)}</span>`}
     const hasD=e.detail||(e.kind=='cmd'&&e.text.length>90)||(e.kind=='user'&&e.text.length>600);
+    const showD=S.open.has(i)&&e.detail&&e.kind!='cmd';
     return `<div class="ev ${hasD?'click':''}" data-i="${i}"><span class="off">${off}</span>${ic}<span class="txt">${body}</span><span class="meta">${meta}</span>
-      ${S.open.has(i)&&hasD&&e.kind=='cmd'?`<div class="detail">${esc(e.text+'\n\n'+(e.detail||''))}</div>`:''}</div>`}).join('')||`<div class="empty">${r?'No events yet':''}</div>`;
+      ${S.open.has(i)&&hasD&&e.kind=='cmd'?`<div class="detail">${esc(e.text+'\n\n'+(e.detail||''))}</div>`:''}${showD?`<div class="detail">${esc(e.detail)}</div>`:''}</div>`}).join('')||`<div class="empty">${r?'No events yet':''}</div>`;
   if(S.follow&&(atBottom||tl.dataset.run!=S.run))tl.scrollTop=tl.scrollHeight;
   tl.dataset.run=S.run;
 }

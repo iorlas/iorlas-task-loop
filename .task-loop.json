@@ -1,0 +1,6 @@
+{
+  "engine": {
+    "gate": "python3 -m unittest discover -s tests",
+    "land": "git push origin HEAD:main"
+  }
+}
