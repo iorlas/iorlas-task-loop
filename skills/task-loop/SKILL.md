@@ -188,6 +188,8 @@ one, and never a worktree the loop did not make.
 
 ## Dashboard
 
+`tl register [DIR]` adds a repo's main checkout to the dashboard before claiming a bead; DIR defaults to the current directory.
+
 `tl dash ensure` starts one server per machine (`tl dash url` prints its addresses, `tl dash stop` stops it; it
 restarts by itself when the plugin's code changes and exits after hours without a loop). It listens on 127.0.0.1 and,
 when Tailscale is up, on the machine's Tailscale address; `TASK_LOOP_DASH_BIND=0.0.0.0` (e.g. in a container with a

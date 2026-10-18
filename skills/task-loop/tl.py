@@ -3,6 +3,7 @@
 
   tl.py actor                                   the --actor name this session uses for every bd call
   tl.py bd ARGS...                              run bd with this session's actor (in the current directory)
+  tl.py register [DIR]                          add a repo to the dashboard (default: current directory)
   tl.py claim ID [--worktree DIR]               claim a bead, record it (bd provenance + local event)
   tl.py heartbeat ID                            keep the claim alive (run in a background loop)
   tl.py stage ID TEXT                           record what the task is doing now (shown on the dashboard)
@@ -138,6 +139,20 @@ def register_repo(path):
         tmp = f.with_suffix(".tmp")
         tmp.write_text(json.dumps(repos, indent=1), encoding="utf-8")
         os.replace(tmp, f)
+
+
+def cmd_register(a):
+    try:
+        valid = git("rev-parse", "--is-inside-work-tree", cwd=a.directory) == "true"
+        path = repo_root(a.directory) if valid else None
+    except (OSError, ValueError):
+        path = None
+    if path is None:
+        print("tl: not a Git working directory: " + repr(a.directory), file=sys.stderr)
+        return 1
+    register_repo(path)
+    print("REGISTERED " + path)
+    return 0
 
 
 def prune_events():
@@ -562,6 +577,9 @@ def main(argv=None):
     ap = argparse.ArgumentParser(prog="tl.py", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sp = ap.add_subparsers(dest="cmd", required=True)
     sp.add_parser("actor")
+    p = sp.add_parser("register", help="add a repository to the dashboard")
+    p.add_argument("directory", nargs="?", default=".", metavar="DIR",
+                   help="Git working directory (default: current directory)")
     p = sp.add_parser("bd")
     p.add_argument("rest", nargs=argparse.REMAINDER)
     p = sp.add_parser("claim")
@@ -619,7 +637,7 @@ def main(argv=None):
     if a.cmd == "bd":
         r = subprocess.run([shutil.which("bd") or "bd", "--actor", actor()] + a.rest)
         return r.returncode
-    return {"claim": cmd_claim, "heartbeat": cmd_heartbeat, "stage": cmd_stage, "worker": cmd_worker,
+    return {"register": cmd_register, "claim": cmd_claim, "heartbeat": cmd_heartbeat, "stage": cmd_stage, "worker": cmd_worker,
             "land": cmd_land, "close": cmd_close, "block": cmd_block, "slot": cmd_slot, "worktree": cmd_worktree,
             "dash": cmd_dash, "hook": cmd_hook}[a.cmd](a)
 

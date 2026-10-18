@@ -88,6 +88,96 @@ class Records(Base):
             self.assertEqual(tl.main(["hook", "session-start"]), 0)
 
 
+class RegisterCLI(Base):
+    def setUp(self):
+        super().setUp()
+        self.repo = self.home / "repo"
+        sh("git", "init", "-q", str(self.repo), cwd=self.home)
+        self.config = self.home / "cfg" / "task-loop"
+        self.registry = self.config / "repos.json"
+
+    def cli(self, *args, cwd=None):
+        return subprocess.run([sys.executable, str(ROOT / "skills" / "task-loop" / "tl.py"), *args],
+                              cwd=cwd or self.home, capture_output=True, text=True)
+
+    def assert_registered(self, result):
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "REGISTERED " + str(self.repo.resolve()) + "\n")
+        self.assertEqual(result.stderr, "")
+        repos = json.loads(self.registry.read_text())
+        self.assertIn(str(self.repo.resolve()), repos)
+        self.assertIsInstance(repos[str(self.repo.resolve())]["added"], (int, float))
+
+    def test_default_directory(self):
+        self.assert_registered(self.cli("register", cwd=self.repo))
+        self.assertEqual(list(self.config.iterdir()), [self.registry])
+
+    def test_explicit_relative_subdirectory(self):
+        (self.repo / "nested dir").mkdir()
+        self.assert_registered(self.cli("register", "repo/nested dir"))
+
+    def test_worktree_default_and_explicit_share_main_checkout(self):
+        sh("git", "commit", "-qm", "init", "--allow-empty", cwd=self.repo)
+        worktree = self.home / "linked"
+        sh("git", "worktree", "add", "-q", "--detach", str(worktree), cwd=self.repo)
+        self.assert_registered(self.cli("register", str(self.repo)))
+        original = self.registry.read_bytes()
+        self.assert_registered(self.cli("register", cwd=worktree))
+        self.assert_registered(self.cli("register", str(worktree)))
+        self.assertEqual(self.registry.read_bytes(), original)
+        self.assertEqual(len(json.loads(original)), 1)
+
+    def test_repeated_registration_preserves_entries_and_metadata(self):
+        self.config.mkdir(parents=True)
+        existing = {str(self.home / "other"): {"added": 123, "extra": "keep"}}
+        self.registry.write_text(json.dumps(existing))
+        self.assert_registered(self.cli("register", str(self.repo)))
+        original = self.registry.read_bytes()
+        self.assert_registered(self.cli("register", str(self.repo)))
+        self.assertEqual(self.registry.read_bytes(), original)
+        repos = json.loads(original)
+        self.assertEqual(len(repos), 2)
+        for path, metadata in existing.items():
+            self.assertEqual(repos[path], metadata)
+
+    def test_invalid_input_leaves_configuration_unchanged(self):
+        ordinary = self.home / "ordinary"
+        ordinary.mkdir()
+        file = self.home / "file"
+        file.write_text("not a directory")
+        for configured in (False, True):
+            if configured:
+                self.config.mkdir(parents=True)
+                self.registry.write_text('{"existing": {"added": 123}}\n')
+                original = self.registry.read_bytes()
+            cases = [("register",), ("register", str(ordinary)),
+                     ("register", str(self.home / "missing")), ("register", str(file)),
+                     ("register", str(self.home / "missing\nwith newline"))]
+            for args in cases:
+                with self.subTest(configured=configured, args=args):
+                    result = self.cli(*args)
+                    self.assertEqual(result.returncode, 1)
+                    self.assertEqual(result.stdout, "")
+                    self.assertEqual(len(result.stderr.splitlines()), 1)
+                    self.assertTrue(result.stderr.startswith("tl: "), result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+                    if configured:
+                        self.assertEqual(self.registry.read_bytes(), original)
+                        self.assertEqual(list(self.config.iterdir()), [self.registry])
+                    else:
+                        self.assertFalse(self.config.parent.exists())
+
+    def test_help_documents_register_and_optional_directory(self):
+        result = self.cli("--help")
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("register [DIR]", result.stdout)
+        result = self.cli("register", "--help")
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("[DIR]", result.stdout)
+        self.assertIn("current directory", result.stdout)
+        self.assertFalse(self.config.parent.exists())
+
+
 class SlotReset(Base):
     """A slot reset must never lose a dead session's work."""
 
