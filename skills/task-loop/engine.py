@@ -228,6 +228,8 @@ class Engine:
         self.err_path = d / ("%s-%s.stderr" % (bead, stamp))
         self.task_dir = Path(wt) / ".task" / bead
         self.task_dir.mkdir(parents=True, exist_ok=True)
+        self.evidence_dir = self.task_dir / "evidence"  # the writer's proof of what the engine cannot rerun
+        self.evidence_dir.mkdir(exist_ok=True)
         self.route = find_route(cfg.get("delegate", ""))
 
     # -- records
@@ -451,11 +453,12 @@ class Engine:
             w, wfam = self.ai("write", "%s round %d" % (name, rnd), WRITE_PROMPT.format(
                 brief=self.task_dir / "brief.md", plan=self.task_dir / "plan.json", n=i + 1, goal=st["goal"],
                 files=", ".join(st["files"]), checks="\n".join("- " + c for c in st["checks"]) or "- (none named)",
-                feedback=feedback), resume_key="writer")
+                feedback=feedback, evidence=self.evidence_dir), resume_key="writer")
             checks = self.run_checks(st, name)
-            (self.task_dir / "checks.json").write_text(json.dumps(checks, indent=1))
+            (self.task_dir / "engine-checks.json").write_text(json.dumps(checks, indent=1))
             diff_before = self.git("diff", "HEAD")
-            v, _ = self.ai("verify", name, VERIFY_PROMPT.format(goal=st["goal"], checks=self.task_dir / "checks.json",
+            v, _ = self.ai("verify", name, VERIFY_PROMPT.format(goal=st["goal"], checks=compact(checks),
+                                                               evidence=self.evidence_dir, summary=w["summary"],
                                                                brief=self.task_dir / "brief.md"))
             if self.git("diff", "HEAD") != diff_before:
                 v["risk_flags"].append("the verifier changed files")
@@ -479,7 +482,8 @@ class Engine:
             facts = {"stage": st, "round": rnd, "writer": w, "checks_run_by_engine": checks, "verify": v,
                      "review": review}
             (self.task_dir / "judge-input.json").write_text(json.dumps(facts, indent=1))
-            j, _ = self.ai("judge", name, JUDGE_PROMPT.format(facts=self.task_dir / "judge-input.json"))
+            j, _ = self.ai("judge", name, JUDGE_PROMPT.format(facts=json.dumps(dict(facts, checks_run_by_engine=[
+                dict(c, tail=c["tail"][-600:]) for c in checks]), indent=1)))
             self.leftovers += j["leftovers"]
             if j["decision"] == "accept" and failed:
                 self.warn("judge accepted with %d failed checks: rework instead" % len(failed))
@@ -488,6 +492,8 @@ class Engine:
             if j["decision"] == "accept":
                 return "accept"
             if j["decision"] == "block":
+                if not j["question"].strip():  # a block is for the owner; one without a question is the engine's problem
+                    raise Blocked("failed: judge blocked without an owner question: " + j["why"])
                 raise Blocked(j["why"], j["question"])
             if j["decision"] == "replan":
                 (self.task_dir / "replan.md").write_text(j["why"] + "\n\n" + json.dumps(facts, indent=1))
@@ -495,7 +501,7 @@ class Engine:
             feedback = ("\nThe previous round was not accepted. Fix exactly this:\n%s\nGaps: %s\nFindings: %s\n"
                         "Check results (run by the engine, outside your sandbox): %s\n" % (
                             j["why"], "; ".join(v["gaps"]), "; ".join(f["fix"] for f in review["findings"]),
-                            self.task_dir / "checks.json"))
+                            compact(checks)))
         raise Blocked("stage %d not accepted after %s rounds" % (i + 1, self.cfg["max_rounds"]))
 
     def run_checks(self, st, name):
@@ -600,6 +606,12 @@ class Heartbeat:
         self.stop_ev.set()
 
 
+def compact(checks):
+    """Check results for a prompt: command, exit code and the last lines of output."""
+    return "\n".join("- `%s` exit %d%s" % (c["cmd"], c["exit"], (": " + c["tail"][-400:].replace("\n", " | "))
+                                          if c["exit"] else "") for c in checks) or "- (no checks)"
+
+
 def say(line):
     """Print whatever the console can show (a Windows cp1252 console cannot print ⚠): never crash on output."""
     try:
@@ -676,6 +688,9 @@ Before reporting, run these checks and make them pass:
 {feedback}
 Checks your sandbox cannot run (network, local ports, paths outside this folder) are run by the engine after you,
 outside the sandbox; say so in the summary and move on, never ask about permissions.
+Proof the engine cannot rerun (a test seen failing after a planted fault, then passing once restored; a manual
+measurement): save the exact commands and their output as files in {evidence}/ and name those files in the summary.
+Never write the engine's files (engine-*.json, judge-input.json).
 Rules: no commits, no pushing, no branches; no suppressions; do not weaken, skip or delete tests; stay inside the
 stage. question: empty unless only the owner can decide something about the task itself (then explain it for a
 phone); never a question about tools, sandbox or permissions."""
@@ -684,11 +699,16 @@ VERIFY_PROMPT = """You are a fresh verifier. Do not edit any file. Judge the unc
 (`git diff HEAD` and new files) against the stage goal: {goal}
 Task: {brief}
 
-The engine already ran the stage's checks outside any sandbox; their exit codes and output are in {checks}: copy them
-into checks (a check you cannot run yourself because of the sandbox is not a gap). Read the diff and the tests.
+The engine already ran the stage's checks outside any sandbox; copy them into checks (a check you cannot run yourself
+because of the sandbox is not a gap):
+{checks}
+The writer says: {summary}
+Proof the engine cannot rerun (a test seen failing after a planted fault) is in {evidence}/: read it; a requirement
+shown there is met. Read the diff and the tests.
 Then: count tests added and removed in the diff; list files changed outside what the task names (outside_touches);
 risk_flags: a public member changed, a test deleted/weakened/filtered, a suppression added, anything risky.
-verdict: accept only if every check exits 0 and the goal is met; else gaps, with each gap listed."""
+verdict: accept only if every check exits 0 and the goal is met; else gaps, with each gap listed. gaps holds only
+requirements that are not met, each saying what is missing; a remark that something is fine is never a gap."""
 
 REVIEW_PROMPT = """You are a reviewer from another model family than the writer. Do not edit files.
 Read the uncommitted diff (`git diff HEAD` and new files) against the task {brief} and its plan {plan}
@@ -696,13 +716,15 @@ Read the uncommitted diff (`git diff HEAD` and new files) against the task {brie
 Return findings that matter (bugs, broken contracts, risky changes), each with file, line, severity and the fix.
 No style nits. None is a fine answer."""
 
-JUDGE_PROMPT = """You are the judge of one stage in an unattended task engine. Read the facts: {facts}
-(the stage, the round number, the writer's summary, the verifier's report, the reviewer's findings).
+JUDGE_PROMPT = """You are the judge of one stage in an unattended task engine. The facts (the stage, the round number,
+the writer's summary, the checks the engine ran, the verifier's report, the reviewer's findings):
+{facts}
 Decide:
 - accept: the stage goal is met, the checks ran and passed, no high-severity finding is open.
 - rework: fixable within this stage; say exactly what to fix in why.
 - replan: the plan itself is wrong (wrong files, wrong approach, a missed dependency).
-- block: only the owner can unblock it (a product or scope decision); put the question in question.
+- block: only the owner can unblock it (a product or scope decision); put the question in question. Never block
+  for missing facts or tools: that is rework with what is missing.
 Distrust the writer's summary; trust commands that were run. leftovers: real follow-up work noticed, else empty."""
 
 

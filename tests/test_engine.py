@@ -36,12 +36,13 @@ class DelegateScript:
     """Fake `route.py run`: answers per role from a queue; a write creates the file like a real writer."""
 
     def __init__(self, answers):
-        self.answers, self.calls = {k: list(v) for k, v in answers.items()}, []
+        self.answers, self.calls, self.prompts = {k: list(v) for k, v in answers.items()}, [], []
 
     def __call__(self, route, role, prompt, schema, cwd, resume, timeout, log_path, writer=None, parent="", task="",
                  title=""):
         node = next(k for k, v in engine.SCHEMAS.items() if v is schema)
         self.calls.append((role, resume, writer))
+        self.prompts.append(prompt)
         a = self.answers[node].pop(0)
         if isinstance(a, dict) and a.get("v") is not None:
             j = a
@@ -146,6 +147,21 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertEqual(tl.git("status", "--porcelain", cwd=str(self.wt)), "")
         self.assertIn("wip (t-1)", tl.git("log", "-1", "--format=%s", "task/t-1", cwd=str(self.wt)))
+
+    def test_judge_block_without_a_question_is_an_engine_failure(self):
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "verify": [ACCEPT_V],
+                                 "judge": [judge("block")]})
+        self.assertEqual(rc, 2)
+        self.assertTrue(self.blocked[0].startswith("failed: judge blocked without an owner question"))
+
+    def test_verifier_and_judge_get_the_facts_in_the_prompt(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "verify": [ACCEPT_V], "judge": [judge("accept")]})
+        self.assertEqual(rc, 0)
+        verify, judge_prompt = s.prompts[2], s.prompts[3]
+        self.assertIn("exit 0", verify)
+        self.assertIn("wrote f", verify)
+        self.assertIn("evidence", verify)
+        self.assertIn('"checks_run_by_engine"', judge_prompt)
 
     def test_owner_question_blocks_with_the_question(self):
         rc, _ = self.run_engine({"plan": [dict(PLAN, question="Which format, A or B?")]})
