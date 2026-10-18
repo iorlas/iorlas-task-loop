@@ -13,7 +13,9 @@
   tl.py block ID --why TEXT                     block the bead with a question, record it
   tl.py slot list|take|release|reset|setup ...  slots (see SKILL.md, Slots)
   tl.py worktree start|sunset ...               one worktree per loop session when slots are off
-  tl.py run-task ID [--worktree DIR] [--slot S] [--dry-run]\n                                                one bead through the engine (engine.py), no judgement here
+  tl.py usage '<plan.windows JSON>'             feed get_usage to delegate (every 20 min while an engine runs)
+  tl.py run-task ID [--worktree DIR] [--slot S] [--dry-run]
+                                                one bead through the engine (engine.py), no judgement here
   tl.py dash ensure|stop|status|url             the dashboard server (one per machine)
   tl.py hook session-start                      SessionStart hook: index session id -> transcript path
 
@@ -625,6 +627,8 @@ def main(argv=None):
     p.add_argument("--slot")
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--quiet", action="store_true", help="only steps and ⚠ lines (default: verbose, for a watching coordinator)")
+    p = sp.add_parser("usage", help="pass get_usage's plan.windows (JSON) to delegate, so headless Claude steps may run")
+    p.add_argument("windows")
     p = sp.add_parser("hook")
     p.add_argument("op", choices=["session-start"])
     a = ap.parse_args(argv)
@@ -635,6 +639,22 @@ def main(argv=None):
     if a.cmd == "run-task":
         import engine
         return engine.main(a)
+    if a.cmd == "usage":
+        import engine
+        route = engine.find_route("auto")
+        if not route:
+            print("no delegate with worker-run v1 installed: nothing to feed")
+            return 0
+        r = subprocess.run([sys.executable, route, "status", "--claude-usage", a.windows, "--json"], capture_output=True,
+                           text=True, encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL)
+        try:
+            lane = json.loads(r.stdout)["lanes"]["CLAUDE_SUBSCRIPTION"]
+            print("fed %s: Claude subscription 5h %s%%, week %s%%%s" % (route, lane.get("five"), lane.get("week"),
+                                                                      ", OUT" if lane.get("out") else ""))
+        except (ValueError, KeyError, TypeError):
+            print("delegate did not take the reading (exit %d): %s" % (r.returncode, (r.stderr or r.stdout)[-400:]))
+            return 1
+        return 0
     if a.cmd == "bd":
         r = subprocess.run([shutil.which("bd") or "bd", "--actor", actor()] + a.rest)
         return r.returncode

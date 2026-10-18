@@ -179,9 +179,10 @@ How to get them:
   business (today reader and verifier → `light`, writer → `worker`, reviewer → `reviewer` with the writer's family,
   hard → `hard`). If its interface changes, follow its skill; nothing in this loop depends on its internals.
 - **Engine + delegate:** delegate spends the Claude subscription headless only with a usage reading under 30 minutes
-  old. While an engine runs, every 20 minutes: call `get_usage`, then
-  `python3 <delegate's route.py> status --claude-usage '<plan.windows as JSON>'`. Without it Claude nodes count as
-  out (plan falls to Codex, a risky review stops the task).
+  old. Before starting an engine and every 20 minutes while one runs: call `get_usage`, then
+  `$TL usage '<plan.windows as JSON>'`. Without it Claude steps count as out: the engine waits for a lane (⚠ "waits
+  for a lane"), then blocks the task. The engine uses delegate by itself when it is installed (first log line:
+  `launcher: delegate ...`); `.task-loop.json → engine.launcher: "builtin"` turns that off.
 - **Without it:** Agent-tool subagents in this session (never `isolation: worktree`); for the other-family reviewer,
   the Codex plugin when installed, else a different Claude model than the writer's.
 

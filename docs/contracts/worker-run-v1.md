@@ -1,6 +1,6 @@
-# worker-run v1: how the engine asks a launcher to run one AI step (draft, 2026-10-18)
+# worker-run v1: how the engine asks a launcher to run one AI step
 
-Status: agreed with delegate 2026-10-18 (no `--json`/`--headless` flags; git guard narrowed for all callers), not implemented. Owner: task-loop (the consumer), like agent-runs v1. First producer: delegate's
+Status: implemented (delegate 0.14.0, task-loop 0.4.0). Owner: task-loop (the consumer), like agent-runs v1. First producer: delegate's
 `route.py run`. Without a producer the engine keeps its built-in launcher (`call_codex`, `call_claude` in
 `skills/task-loop/engine.py`), so nothing here is required for task-loop to work.
 

@@ -31,6 +31,8 @@ DEFAULTS = {
     "max_rounds": 3,                  # write rounds per stage before the task is blocked
     "max_replans": 1,
     "node_timeout_min": 45,
+    "launcher": "auto",               # auto: delegate's route.py when installed (worker-run v1), else builtin
+    "lane_wait_min": 60,              # how long a step waits for a lane that is out before the task is blocked
     "workers": {"plan": "claude:opus", "write": "codex", "verify": "claude:sonnet", "review": "other",
                 "judge": "claude:haiku"},
 }
@@ -239,6 +241,53 @@ def call_claude(model, prompt, schema, cwd, write, resume, timeout, log_path, on
     return Result(data, j.get("result") or "", sid, float(j.get("total_cost_usd") or 0), secs, err or "", "claude")
 
 
+ROLES = {"plan": "planner", "write": "worker", "verify": "light", "review": "reviewer", "judge": "light"}
+
+
+def find_route(setting):
+    """worker-run v1 launcher (docs/contracts/worker-run-v1.md): "auto" = newest installed delegate, else none."""
+    if setting == "builtin":
+        return None
+    if setting not in ("auto", "delegate"):
+        return setting if os.path.exists(setting) else None
+    found = []
+    for p in (Path.home() / ".claude" / "plugins" / "cache").glob("*/iorlas-delegate/*/skills/delegate/route.py"):
+        ver = tuple(int(x) for x in re.findall(r"\d+", p.parents[2].name)[:3])
+        if ver >= (0, 14):  # worker-run v1 starts at delegate 0.14.0
+            found.append((ver, str(p)))
+    return max(found)[1] if found else None
+
+
+def call_delegate(route, role, prompt, schema, cwd, resume, timeout, log_path, writer=None, parent="", task="",
+                  title=""):
+    """One AI step through `route.py run` (worker-run v1). Returns (Result, the answer object or None)."""
+    with tempfile.TemporaryDirectory() as d:
+        bf, sf = os.path.join(d, "brief.md"), os.path.join(d, "schema.json")
+        Path(bf).write_text(prompt, encoding="utf-8")
+        Path(sf).write_text(json.dumps(schema))
+        cmd = [sys.executable, route, "run", role, "--brief", bf, "--cwd", cwd, "--schema", sf,
+               "--timeout", str(int(timeout)), "--parent", parent, "--task", task, "--title", title[:120]]
+        if resume:
+            cmd += ["--resume", resume]
+        if writer:
+            cmd += ["--writer", writer]
+        res, secs = run_proc(cmd, cwd, timeout + 120, log_path)
+    if res is None:
+        return Result(secs=secs, error="timeout", backend="delegate", ref=resume or ""), None
+    code, out = res
+    try:
+        j = json.loads(out.strip().splitlines()[-1]) if out.strip() else None
+    except ValueError:
+        j = None
+    if not isinstance(j, dict):
+        return Result(text=out[-2000:], secs=secs, error="route.py exit %d, no answer object" % code,
+                      backend="delegate"), None
+    st = j.get("status")
+    err = "" if st == "done" else "%s: %s" % (st, j.get("say") or "")
+    return Result(j.get("data"), j.get("text") or "", j.get("ref") or "", float(j.get("cost") or 0),
+                  float(j.get("secs") or secs), err, j.get("family") or "delegate"), j
+
+
 # ---- the engine -----------------------------------------------------------------------------------------------------
 
 class Blocked(Exception):
@@ -264,6 +313,7 @@ class Engine:
         self.err_path = d / ("%s-%s.stderr" % (bead, stamp))
         self.task_dir = Path(wt) / ".task" / bead
         self.task_dir.mkdir(parents=True, exist_ok=True)
+        self.route = find_route(cfg.get("launcher", "auto"))
 
     # -- records
     def log(self, kind, text, **kw):
@@ -306,6 +356,8 @@ class Engine:
     def ai(self, node, title, prompt, write=False, resume_key=None, writer_family=None):
         self.budget_check()
         self.stats["nodes"] += 1
+        if self.route:
+            return self.ai_delegate(node, title, prompt, resume_key, writer_family)
         fam, model = self.backend_for(node, writer_family)
         schema = SCHEMAS[node]
         resume = self.writer.get(fam) if resume_key else None
@@ -344,6 +396,59 @@ class Engine:
                               "exit": 0 if ok else 1})
         if not ok:
             raise Blocked("failed: %s node produced no valid output (%s)" % (node, "; ".join(errs[:3])))
+        return self.node_done(node, r, fam, model, attempt)
+
+    def ai_delegate(self, node, title, prompt, resume_key, writer_family):
+        """The same node through delegate (worker-run v1): it picks lane and model, limits apply, it records the run."""
+        role = ROLES[node]
+        writer = {"codex": "openai"}.get(writer_family, writer_family) if node == "review" else None
+        resume = self.writer.get("delegate") if resume_key else None
+        self.log("node", "%s: %s" % (node, title), node=node, backend="delegate", role=role, resume=bool(resume))
+        timeout = float(self.cfg["node_timeout_min"]) * 60
+        waited, attempt_prompt, attempt, errs = 0.0, prompt, 1, ["not run"]
+        while attempt <= 2:
+            r, j = call_delegate(self.route, role, attempt_prompt, SCHEMAS[node], self.wt, resume, timeout,
+                                 self.err_path, writer, self.session, self.bead, "%s · %s: %s" % (self.bead, node, title))
+            if j is not None and j.get("v") != 1:
+                self.warn("delegate answered worker-run v%s, this engine speaks v1: builtin launcher from now on" % j.get("v"))
+                self.route = None
+                self.stats["nodes"] -= 1
+                return self.ai(node, title, prompt, resume_key=resume_key, writer_family=writer_family)
+            st = (j or {}).get("status")
+            if st in ("lane_out", "stop"):
+                wait = max(60.0, min(600.0, float(j.get("retry_after") or 0) - time.time()))
+                if waited + wait > float(self.cfg["lane_wait_min"]) * 60:
+                    raise Blocked("paused: no lane for %s (%s)" % (node, j.get("say") or st))
+                self.warn("%s waits %d min for a lane: %s" % (node, wait // 60, j.get("say") or st))
+                time.sleep(wait)
+                waited += wait
+                continue
+            if st == "agent":
+                raise Blocked("failed: delegate answered `agent`; it does not see this engine as headless")
+            self.cost += r.cost
+            if j and j.get("git_violation"):
+                self.warn("%s changed git: %s" % (node, "; ".join(j["git_violation"])))
+            if resume_key and r.ref and st == "done":
+                self.writer["delegate"] = resume = r.ref
+            errs = validate(r.data, SCHEMAS[node]) if r.data is not None else [
+                "no structured output" + (": " + r.error if r.error else "")]
+            if not errs:
+                break
+            self.log("note", "%s output invalid (try %d): %s" % (node, attempt, "; ".join(errs[:4])))
+            fix = ("Your previous answer did not match the required output schema: %s. Answer again with only the "
+                   "structured result." % "; ".join(errs[:6]))
+            if r.ref and st == "done":
+                resume, attempt_prompt = r.ref, fix
+            else:
+                resume, attempt_prompt = None, prompt + "\n\n" + fix
+            attempt += 1
+        if errs:
+            raise Blocked("failed: %s node produced no valid output (%s)" % (node, "; ".join(errs[:3])))
+        fam = r.backend  # openai | claude: the family that wrote, for the reviewer
+        model = "%s %s on %s" % ((j or {}).get("model"), (j or {}).get("effort"), (j or {}).get("lane"))
+        return self.node_done(node, r, fam, model, attempt)
+
+    def node_done(self, node, r, fam, model, attempt):
         (self.task_dir / ("%s-%d.json" % (node, self.stats["nodes"]))).write_text(json.dumps(r.data, indent=1))
         self.log("msg", "%s → %s  [%s%s, %ds, $%.2f, total $%.2f]" % (
             node, summarize(node, r.data), fam, (":" + model) if model else "", r.secs, r.cost, self.cost),
@@ -427,6 +532,12 @@ class Engine:
             if not bead:
                 raise Blocked("failed: bead %s not found" % self.bead)
             hb.start()
+            if self.route:
+                self.log("note", "launcher: delegate %s (worker-run v1)" % self.route)
+                if self.cfg.get("_user_workers"):
+                    self.warn("engine.workers in .task-loop.json is ignored: delegate picks the models")
+            else:
+                self.log("note", "launcher: builtin (%s)" % ", ".join("%s=%s" % kv for kv in self.cfg["workers"].items()))
             self.reset(bead)
             plan = self.plan()
             replans = 0
@@ -764,6 +875,7 @@ def load_cfg(repo):
     except (OSError, ValueError):
         user = {}
     workers = dict(cfg["workers"], **(user.get("workers") or {}))
+    cfg["_user_workers"] = bool(user.get("workers"))
     cfg.update(user)
     cfg["workers"] = workers
     return cfg

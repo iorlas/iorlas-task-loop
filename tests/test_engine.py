@@ -88,6 +88,7 @@ class EngineTest(unittest.TestCase):
     def run_engine(self, answers, **cfg):
         script = Script(self.wt, answers)
         c = engine.load_cfg(str(self.wt))
+        c["launcher"] = "builtin"
         c.update(cfg)
         with mock.patch.object(engine, "call_codex", script), mock.patch.object(engine, "call_claude", script):
             rc = engine.Engine("t-1", str(self.wt), c).run()
@@ -181,6 +182,104 @@ class EngineTest(unittest.TestCase):
         self.assertNotIn("ANTHROPIC_BASE_URL", env)
         self.assertNotIn("CLAUDE_CODE_SESSION_ID", env)
         self.assertEqual(env["DELEGATE_DEPTH"], "1")
+
+
+class DelegateScript:
+    """Fake `route.py run`: answers per role from a queue; a write creates the file like a real writer."""
+
+    def __init__(self, answers):
+        self.answers, self.calls = {k: list(v) for k, v in answers.items()}, []
+
+    def __call__(self, route, role, prompt, schema, cwd, resume, timeout, log_path, writer=None, parent="", task="",
+                 title=""):
+        node = next(k for k, v in engine.SCHEMAS.items() if v is schema)
+        self.calls.append((role, resume, writer))
+        a = self.answers[node].pop(0)
+        if isinstance(a, dict) and a.get("v") is not None:
+            j = a
+        else:
+            if node == "write":
+                Path(cwd, "f.txt").write_text("d%d\n" % len(self.calls))
+            j = {"v": 1, "status": "done", "data": a, "ref": "ref-" + node, "cost": 0, "secs": 1,
+                 "family": "openai" if node in ("write", "verify", "judge") else "claude", "lane": "L", "model": "m",
+                 "effort": "e", "git_violation": []}
+        r = engine.Result(j.get("data"), "", j.get("ref") or "", 0.0, 1, "" if j["status"] == "done" else j["status"],
+                          j.get("family") or "delegate")
+        return r, j
+
+
+class DelegateLauncher(unittest.TestCase):
+    setUp, tearDown, fake_bd = EngineTest.setUp, EngineTest.tearDown, EngineTest.fake_bd
+
+    def run_engine(self, answers, **cfg):
+        script = DelegateScript(answers)
+        c = engine.load_cfg(str(self.wt))
+        c.update(cfg)
+        with mock.patch.object(engine, "find_route", return_value="/fake/route.py"), \
+                mock.patch.object(engine, "call_delegate", script), mock.patch.object(engine.time, "sleep"):
+            rc = engine.Engine("t-1", str(self.wt), c).run()
+        return rc, script
+
+    def test_nodes_map_to_delegate_roles_and_the_writer_resumes(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE], "verify": [GAPS_V, ACCEPT_V],
+                                 "judge": [judge("rework"), judge("accept")]})
+        self.assertEqual(rc, 0)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "light", "light", "worker", "light", "light"])
+        self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, "ref-write"])
+
+    def test_review_names_the_writer_family(self):
+        plan = dict(PLAN, risks=[{"what": "saved format", "check": "load old file"}])
+        rc, s = self.run_engine({"plan": [plan], "write": [WRITE], "verify": [ACCEPT_V],
+                                 "review": [{"findings": []}], "judge": [judge("accept")]})
+        self.assertEqual(rc, 0)
+        self.assertIn(("reviewer", None, "openai"), s.calls)
+
+    def test_lane_out_waits_then_runs(self):
+        out = {"v": 1, "status": "lane_out", "retry_after": 0, "say": "codex out"}
+        rc, s = self.run_engine({"plan": [PLAN], "write": [out, WRITE], "verify": [ACCEPT_V], "judge": [judge("accept")]})
+        self.assertEqual(rc, 0)
+        self.assertEqual([c[0] for c in s.calls].count("worker"), 2)
+
+    def test_no_lane_for_too_long_blocks(self):
+        stop = {"v": 1, "status": "stop", "retry_after": 0, "say": "no adequate model"}
+        rc, _ = self.run_engine({"plan": [stop] * 3}, lane_wait_min=2)
+        self.assertEqual(rc, 2)
+        self.assertIn("paused: no lane for plan", self.blocked[0])
+
+    def test_another_contract_version_falls_back_to_builtin(self):
+        script = Script(self.wt, {"plan": [PLAN], "write": [WRITE], "verify": [ACCEPT_V], "judge": [judge("accept")]})
+        with mock.patch.object(engine, "call_codex", script), mock.patch.object(engine, "call_claude", script):
+            rc, s = self.run_engine({"plan": [{"v": 2, "status": "done"}]})
+        self.assertEqual(rc, 0)
+        self.assertEqual([c[0] for c in script.calls], ["plan", "write", "verify", "judge"])
+
+
+class DelegateCall(unittest.TestCase):
+    def test_call_delegate_runs_route_py_and_reads_its_answer(self):
+        with tempfile.TemporaryDirectory() as d:
+            route = Path(d, "route.py")
+            route.write_text("import json,sys\nprint('chatter', file=sys.stderr)\n"
+                             "print(json.dumps({'v': 1, 'status': 'done', 'data': {'argv': sys.argv[1:]}, 'ref': 'r1',"
+                             " 'cost': 0, 'family': 'openai'}))\n")
+            r, j = engine.call_delegate(str(route), "worker", "do it", {"type": "object"}, d, "r0", 60,
+                                        Path(d, "err.log"), writer="claude", parent="p", task="t-1", title="x")
+        argv = r.data["argv"]
+        self.assertEqual(argv[:2], ["run", "worker"])
+        for flag, val in (("--resume", "r0"), ("--writer", "claude"), ("--parent", "p"), ("--task", "t-1")):
+            self.assertEqual(argv[argv.index(flag) + 1], val)
+        self.assertEqual((r.ref, r.backend, r.error), ("r1", "openai", ""))
+
+    def test_find_route_picks_the_newest_contract_version(self):
+        with tempfile.TemporaryDirectory() as home:
+            for v in ("0.9.1", "0.14.0", "0.15.2", "0.2.0"):
+                p = Path(home, ".claude/plugins/cache/m/iorlas-delegate", v, "skills/delegate")
+                p.mkdir(parents=True)
+                (p / "route.py").write_text("")
+            with mock.patch.object(engine.Path, "home", return_value=Path(home)):
+                self.assertIn("0.15.2", engine.find_route("auto"))
+                self.assertIsNone(engine.find_route("builtin"))
+        with tempfile.TemporaryDirectory() as home, mock.patch.object(engine.Path, "home", return_value=Path(home)):
+            self.assertIsNone(engine.find_route("auto"))
 
 
 class Validate(unittest.TestCase):
