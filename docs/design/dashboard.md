@@ -7,9 +7,10 @@ backlog as a tree. Viewable from the phone over Tailscale.
 
 ## Ownership
 - New plugin repo `iorlas-task-loop`, in iorlas-marketplace; ideas tracked as beads there.
-- task-loop owns the dashboard and the recording. Delegate is suggested, not required. When delegate is
-  present it adds a lanes/limits panel (reads ~/.config/delegate/state.json) and records its worker ids
-  through task-loop's worker contract (below).
+- task-loop owns the dashboard and the recording. Delegate is suggested, not required, and its files are never
+  read: any launcher (delegate included) shows its runs and lane limits by writing agent-runs v1 records
+  (docs/contracts/agent-runs-v1.md). Decided 2026-10-18: delegate's internals change often; only the contract is
+  stable.
 
 ## Records: who worked on what
 | record | written by | where | gives |
@@ -23,9 +24,9 @@ Why: measured 2026-10-18, a desktop orchestrator's transcript keeps its start cw
 session; provenance is append-only, idempotent, shared through bd, needs no delegate. A per-task view of the
 orchestrator = the transcript ranges between that bead's claim and its next suspend/land/close events.
 
-Worker ids (delegate changes, done in this session):
-- `claude -p`: route.py run-claude drops `--no-session-persistence`, passes `--session-id <uuid>` it mints,
-  prints the id; the orchestrator records it.
+Worker ids:
+- `claude -p` via delegate: run-claude passes `--session-id <uuid>` and publishes an agent-runs v1 record with
+  `parent_session`, so the dashboard links it with no extra call.
 - Codex: capture `thread_id` from `codex exec --json` (`thread.started`), record it; the rollout file name holds it.
 
 ## Server
