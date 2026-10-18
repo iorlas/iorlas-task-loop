@@ -17,7 +17,10 @@ def sh(*a, cwd):
     subprocess.run(list(a), cwd=cwd, check=True, capture_output=True)
 
 
-PLAN = {"summary": "do it", "stages": [{"goal": "add f", "files": ["f.txt"], "checks": ["test -f f.txt"],
+PY = '"%s"' % sys.executable
+HAS_F = PY + ' -c "import os,sys; sys.exit(0 if os.path.exists(\'f.txt\') else 1)"'
+FALSE = PY + ' -c "import sys; sys.exit(1)"'
+PLAN = {"summary": "do it", "stages": [{"goal": "add f", "files": ["f.txt"], "checks": [HAS_F],
                                         "hard": False}], "risks": [], "question": ""}
 WRITE = {"summary": "wrote f", "checks_run": [{"cmd": "test -f f.txt", "exit": 0}], "question": ""}
 ACCEPT_V = {"verdict": "accept", "checks": [{"cmd": "test -f f.txt", "exit": 0, "tail": ""}], "gaps": [],
@@ -123,7 +126,7 @@ class EngineTest(unittest.TestCase):
         self.assertIn("re-plan", self.blocked[0])
 
     def test_failed_engine_check_is_never_accepted(self):
-        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["false"])])
+        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[FALSE])])
         rc, s = self.run_engine({"plan": [plan], "write": [WRITE] * 2, "verify": [ACCEPT_V] * 2,
                                  "judge": [judge("accept")] * 2}, max_rounds=2)
         self.assertEqual(rc, 2)

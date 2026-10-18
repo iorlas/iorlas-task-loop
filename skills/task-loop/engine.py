@@ -377,8 +377,9 @@ class Engine:
 
     # -- script helpers
     def sh(self, cmd, timeout=3600, check=False):
-        self.log("cmd", cmd)
-        r = subprocess.run(cmd, shell=True, cwd=self.wt, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout,
+        """A command: a string goes through the shell (profile commands), a list runs as is (no quoting rules)."""
+        self.log("cmd", cmd if isinstance(cmd, str) else " ".join(cmd))
+        r = subprocess.run(cmd, shell=isinstance(cmd, str), cwd=self.wt, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout,
                            stdin=subprocess.DEVNULL)
         tail = "\n".join((r.stdout + r.stderr).strip().splitlines()[-15:])
         self.log("note", "exit %d%s" % (r.returncode, (": " + tail[-600:]) if r.returncode else ""), exit=r.returncode)
@@ -393,16 +394,16 @@ class Engine:
     def reset(self, bead):
         self.log("node", "reset")
         branch = (bead.get("metadata") or {}).get("branch") or "task/" + self.bead
-        self.sh("git fetch -q origin", check=True)
+        self.sh(["git", "fetch", "-q", "origin"], check=True)
         exists = bool(self.git("rev-parse", "--verify", "-q", "refs/heads/" + branch))
         if self.git("status", "--porcelain"):
             if self.git("symbolic-ref", "--short", "-q", "HEAD") != branch:
                 raise Blocked("failed: worktree %s has uncommitted work of another branch" % self.wt)
             self.wip("left from an earlier run")
         if exists:
-            self.sh("git checkout -q %s" % branch, check=True)
+            self.sh(["git", "checkout", "-q", branch], check=True)
         else:
-            self.sh("git checkout -q -B %s %s" % (branch, self.cfg["base"]), check=True)
+            self.sh(["git", "checkout", "-q", "-B", branch, self.cfg["base"]], check=True)
         exclude = Path(self.git("rev-parse", "--path-format=absolute", "--git-common-dir")) / "info" / "exclude"
         if ".task/" not in (exclude.read_text() if exclude.exists() else ""):
             with open(exclude, "a") as f:
@@ -553,10 +554,10 @@ class Engine:
         # one commit per task, titled after the bead: earlier runs' wip commits are folded in
         base = self.git("merge-base", "HEAD", self.cfg["base"])
         if base:
-            self.sh("git reset -q --soft %s" % base, check=True)
-        self.sh("git add -A", check=True)
+            self.sh(["git", "reset", "-q", "--soft", base], check=True)
+        self.sh(["git", "add", "-A"], check=True)
         msg = "%s (%s)" % (bead.get("title", self.bead)[:72], self.bead)
-        rc, tail = self.sh("git commit -q -m %s" % sh_quote(msg))
+        rc, tail = self.sh(["git", "commit", "-q", "-m", msg])
         if rc:
             raise Blocked("failed: commit refused (hooks)\n" + tail)
         if self.dry:
@@ -564,9 +565,11 @@ class Engine:
             return ""
         for attempt in range(1, 6):
             self.log("node", "land (try %d)" % attempt)
-            rc, tail = self.sh("git fetch -q origin && git rebase -q %s" % self.cfg["base"])
+            rc, tail = self.sh(["git", "fetch", "-q", "origin"])
+            if rc == 0:
+                rc, tail = self.sh(["git", "rebase", "-q", self.cfg["base"]])
             if rc:
-                self.sh("git rebase --abort")
+                self.sh(["git", "rebase", "--abort"])
                 raise Blocked("merge conflict with main; branch kept\n" + tail)
             if self.cfg["gate"]:
                 rc, tail = self.sh(self.cfg["gate"])
@@ -583,8 +586,8 @@ class Engine:
         raise Blocked("land rejected 5 times: main moves too fast")
 
     def wip(self, why):
-        self.sh("git add -A")
-        rc, _ = self.sh("git commit -q -m %s" % sh_quote("wip (%s): %s" % (self.bead, why)))
+        self.sh(["git", "add", "-A"])
+        rc, _ = self.sh(["git", "commit", "-q", "-m", "wip (%s): %s" % (self.bead, why)])
         return rc == 0
 
     def close(self, outcome, why, sha, question):
@@ -658,10 +661,6 @@ def say(line):
 class Args:
     def __init__(self, **kw):
         self.__dict__.update(kw)
-
-
-def sh_quote(s):
-    return "'" + s.replace("'", "'\"'\"'") + "'"
 
 
 def details(node, d):
