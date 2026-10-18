@@ -1,0 +1,16 @@
+{
+  "description": "Index each session's transcript path so the task-loop dashboard can show its live log.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/skills/task-loop/tl.py\" hook session-start",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

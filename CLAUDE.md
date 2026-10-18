@@ -60,18 +60,21 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 
 ## Build & Test
 
-_Add your build and test commands here_
-
 ```bash
-# Example:
-# npm install
-# npm test
+python3 -m unittest discover -s tests
 ```
+
+CI runs it on Ubuntu, macOS and Windows with Python 3.8 and 3.12. Linux locally: `docker run --rm -v "$PWD":/src:ro python:3.8-slim ...`.
 
 ## Architecture Overview
 
-_Add a brief overview of your project architecture_
+See README.md (Layout) and docs/design/dashboard.md. The skill (SKILL.md) is the method; `tl.py` is the only code the
+orchestrating session runs; the dashboard server only reads.
 
 ## Conventions & Patterns
 
-_Add your project-specific conventions here_
+- Python 3.8+, standard library only, no third-party packages; must run on macOS, Linux (in containers too) and Windows.
+- The page is one HTML file, no build, no CDN.
+- task-loop must work without the delegate plugin; anything delegate adds is optional.
+- Never touch a transcript or another tool's state: the dashboard reads, `tl.py` writes only `~/.config/task-loop` and bd.
+- Bump `.claude-plugin/plugin.json` version and the entry in iorlas-marketplace on every release.
