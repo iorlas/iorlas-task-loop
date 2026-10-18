@@ -258,6 +258,7 @@ function renderLog(){
     if(e.kind=='cmd'){const st=e.state||'run';ic=`<span class="ic ${st=='run'?'run':st}">${st=='ok'?'✓':st=='fail'?'✕':'▸'}</span>`;
       body=`<span class="code">${e.tool?`<span class="tool">${esc(e.tool)}</span>`:''}${esc(e.text)}</span>`;meta=st=='run'?'running…':(e.dur!=null?fmt(e.dur):'')}
     else if(e.kind=='msg'){ic='<span class="ic msg">✦</span>';body=`<span class="say">${esc(e.text)}</span>`}
+    else if(e.kind=='warn'){ic='<span class="ic fail">!</span>';body=`<span class="say" style="color:var(--warn)">${esc(e.text)}</span>`}
     else if(e.kind=='node'){ic='<span class="ic user">▶</span>';body=`<span class="say node">${esc(e.text)}</span>`}
     else if(e.kind=='user'){ic='<span class="ic user">›</span>';body=`<span class="say user">${esc(e.text.length>600&&!S.open.has(i)?e.text.slice(0,600)+' …':e.text)}</span>`}
     else{ic='<span class="ic note">·</span>';body=`<span class="note">${esc(e.text)}</span>`}

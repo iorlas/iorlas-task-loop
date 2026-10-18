@@ -248,13 +248,14 @@ class Blocked(Exception):
 
 
 class Engine:
-    def __init__(self, bead, wt, cfg, dry_run=False):
-        self.bead, self.wt, self.cfg, self.dry = bead, wt, cfg, dry_run
+    def __init__(self, bead, wt, cfg, dry_run=False, verbose=True):
+        self.bead, self.wt, self.cfg, self.dry, self.verbose = bead, wt, cfg, dry_run, verbose
         self.t0 = time.time()
         self.cost = 0.0
         self.stats = {"rounds": 0, "reviews": 0, "replans": 0, "nodes": 0, "tests_added": 0, "tests_removed": 0}
         self.session = tl.session_id()
         self.leftovers = []
+        self.budget_warned = set()
         self.writer = {}  # backend -> thread/session id, so later rounds of a task resume the same writer
         d = tl.config_dir() / "engine"
         d.mkdir(exist_ok=True)
@@ -272,7 +273,19 @@ class Engine:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
         if kind == "node":
             tl.event("stage", self.bead, text=text)
-        print("[%s] %s" % (time.strftime("%H:%M:%S"), text), flush=True)
+        if kind == "warn" or not (kind == "cmd" and not self.verbose):
+            print("[%s] %s%s" % (time.strftime("%H:%M:%S"), "⚠ " if kind == "warn" else "", text), flush=True)
+
+    def warn(self, text):
+        """Something a watching coordinator should look at: printed with ⚠, kept in the log, shown on the dashboard."""
+        self.log("warn", text)
+
+    def detail(self, lines):
+        """Verbose mode (the default): the facts behind a step, indented under it."""
+        if self.verbose:
+            for ln in lines:
+                if ln:
+                    print("           %s" % ln[:400], flush=True)
 
     def budget_check(self):
         mins = (time.time() - self.t0) / 60
@@ -332,9 +345,35 @@ class Engine:
         if not ok:
             raise Blocked("failed: %s node produced no valid output (%s)" % (node, "; ".join(errs[:3])))
         (self.task_dir / ("%s-%d.json" % (node, self.stats["nodes"]))).write_text(json.dumps(r.data, indent=1))
-        self.log("msg", "%s → %s" % (node, summarize(node, r.data)), node=node, data=r.data, cost=r.cost,
-                 secs=round(r.secs), backend=fam)
+        self.log("msg", "%s → %s  [%s%s, %ds, $%.2f, total $%.2f]" % (
+            node, summarize(node, r.data), fam, (":" + model) if model else "", r.secs, r.cost, self.cost),
+            node=node, data=r.data, cost=r.cost, secs=round(r.secs), backend=fam)
+        self.detail(details(node, r.data))
+        self.anomalies(node, r, attempt)
         return r.data, fam
+
+    def anomalies(self, node, r, attempt):
+        d = r.data
+        if attempt > 1:
+            self.warn("%s needed a retry to produce valid output" % node)
+        if r.secs > float(self.cfg["node_timeout_min"]) * 60 * 0.6:
+            self.warn("%s took %d min, close to the %s min limit" % (node, r.secs // 60, self.cfg["node_timeout_min"]))
+        spent = max(self.cost / float(self.cfg["budget_usd"]), (time.time() - self.t0) / 60 / float(self.cfg["budget_min"]))
+        for mark in (0.5, 0.8):
+            if spent > mark and mark not in self.budget_warned:
+                self.budget_warned.add(mark)
+                self.warn("%.0f%% of the task's budget is used" % (spent * 100))
+        if node == "plan" and len(d["stages"]) > 4:
+            self.warn("the plan has %d stages: the bead may be too big for one task" % len(d["stages"]))
+        if node == "verify":
+            if d["tests_removed"]:
+                self.warn("the diff removes %d tests" % d["tests_removed"])
+            if d["outside_touches"]:
+                self.warn("files outside the task: %s" % ", ".join(d["outside_touches"]))
+        if node == "review" and any(f["severity"] == "high" for f in d["findings"]):
+            self.warn("the reviewer found a high-severity problem")
+        if node == "judge" and d["decision"] in ("replan", "block"):
+            self.warn("judge says %s: %s" % (d["decision"], d["why"][:200]))
 
     # -- script helpers
     def sh(self, cmd, timeout=3600, check=False):
@@ -439,6 +478,8 @@ class Engine:
         feedback = ""
         for rnd in range(1, int(self.cfg["max_rounds"]) + 1):
             self.stats["rounds"] += 1
+            if rnd >= 2:
+                self.warn("%s: write round %d" % (name, rnd))
             w, wfam = self.ai("write", "%s round %d" % (name, rnd), WRITE_PROMPT.format(
                 brief=self.task_dir / "brief.md", plan=self.task_dir / "plan.json", n=i + 1, goal=st["goal"],
                 files=", ".join(st["files"]), checks="\n".join("- " + c for c in st["checks"]) or "- (none named)",
@@ -450,6 +491,7 @@ class Engine:
                                                                brief=self.task_dir / "brief.md"), write=True)
             if self.git("diff", "HEAD") != diff_before:
                 v["risk_flags"].append("the verifier changed files")
+                self.warn("the verifier changed files")
             self.stats["tests_added"] += v["tests_added"]
             self.stats["tests_removed"] += v["tests_removed"]
             risky = bool(v["risk_flags"] or v["outside_touches"] or st["hard"] or rnd >= 3 or
@@ -472,7 +514,7 @@ class Engine:
             j, _ = self.ai("judge", name, JUDGE_PROMPT.format(facts=self.task_dir / "judge-input.json"))
             self.leftovers += j["leftovers"]
             if j["decision"] == "accept" and failed:
-                self.log("note", "judge accepted with %d failed checks: rework instead" % len(failed))
+                self.warn("judge accepted with %d failed checks: rework instead" % len(failed))
                 j = dict(j, decision="rework", why="These checks fail: " + "; ".join(
                     "`%s` exit %d: %s" % (c["cmd"], c["exit"], c["tail"][-300:]) for c in failed))
             if j["decision"] == "accept":
@@ -496,8 +538,11 @@ class Engine:
         self.log("node", "checks: %s" % name)
         out = []
         for c in cmds:
+            t = time.time()
             rc, tail = self.sh(c, timeout=float(self.cfg["node_timeout_min"]) * 60)
             out.append({"cmd": c, "exit": rc, "tail": tail[-1500:]})
+            self.detail(["%s `%s` exit %d (%ds)" % ("✓" if rc == 0 else "✗", c, rc, time.time() - t)] +
+                        (tail.splitlines()[-3:] if rc else []))
         return out
 
     def finish(self, bead):
@@ -531,6 +576,7 @@ class Engine:
                 return sha
             if not re.search(r"rejected|non-fast-forward|fetch first|stale info", tail):
                 raise Blocked("land failed\n" + tail)
+            self.warn("push rejected (main moved), try %d of 5" % attempt)
         raise Blocked("land rejected 5 times: main moves too fast")
 
     def wip(self, why):
@@ -545,6 +591,9 @@ class Engine:
             self.wip(outcome)  # the next run continues this branch
         stats = "cost=$%.2f; minutes=%d; %s" % (self.cost, mins, "; ".join("%s=%s" % kv for kv in self.stats.items()))
         self.log("node", "close: %s" % outcome, outcome=outcome, why=why)
+        self.detail([stats] + ([why[:400]] if why else []) + (["question: " + question[:400]] if question else []))
+        if outcome == "failed":
+            self.warn("task failed: %s" % why.splitlines()[0][:200])
         if self.dry:
             self.log("note", "dry run: bead left as it was. %s" % stats)
             return
@@ -601,6 +650,24 @@ class Args:
 
 def sh_quote(s):
     return "'" + s.replace("'", "'\"'\"'") + "'"
+
+
+def details(node, d):
+    if node == "plan":
+        return (["%d. %s%s → checks: %s" % (n + 1, s["goal"], " (hard)" if s["hard"] else "", "; ".join(s["checks"]))
+                 for n, s in enumerate(d["stages"])] + ["risk: %s → %s" % (r["what"], r["check"]) for r in d["risks"]])
+    if node == "write":
+        return ["ran `%s` exit %d" % (c["cmd"], c["exit"]) for c in d["checks_run"]] + (
+            ["question: " + d["question"]] if d["question"].strip() else [])
+    if node == "verify":
+        return (["gap: " + g for g in d["gaps"]] + ["flag: " + f for f in d["risk_flags"]] +
+                ["tests +%d -%d" % (d["tests_added"], d["tests_removed"])])
+    if node == "review":
+        return ["%s %s:%s %s" % (f["severity"], f["file"], f["line"], f["fix"]) for f in d["findings"]]
+    if node == "judge":
+        return ["leftover: " + lo["title"] for lo in d["leftovers"]] + (
+            ["question: " + d["question"]] if d["question"].strip() else [])
+    return []
 
 
 def summarize(node, d):
@@ -706,6 +773,6 @@ def main(a):
     wt = str(Path(wt).resolve())
     if not a.dry_run and tl.cmd_claim(Args(id=a.id, worktree=wt, slot=a.slot)) != 0:
         return 1  # bd lets this session re-claim its own bead (a reopened one); another session's claim stops here
-    eng = Engine(a.id, wt, cfg, dry_run=a.dry_run)
+    eng = Engine(a.id, wt, cfg, dry_run=a.dry_run, verbose=not getattr(a, "quiet", False))
     print("engine log: %s" % eng.log_path, flush=True)
     return eng.run()

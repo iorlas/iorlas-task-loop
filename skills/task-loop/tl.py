@@ -624,6 +624,7 @@ def main(argv=None):
     p.add_argument("--worktree")
     p.add_argument("--slot")
     p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--quiet", action="store_true", help="only steps and ⚠ lines (default: verbose, for a watching coordinator)")
     p = sp.add_parser("hook")
     p.add_argument("op", choices=["session-start"])
     a = ap.parse_args(argv)
