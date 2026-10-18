@@ -704,10 +704,8 @@ def main(a):
         if not wt:
             sys.exit("tl: no worktree: " + r.stderr)
     wt = str(Path(wt).resolve())
-    if not a.dry_run:
-        mine = (tl.show(a.id).get("assignee") or "") == tl.actor()
-        if not mine and tl.cmd_claim(Args(id=a.id, worktree=wt, slot=a.slot)) != 0:
-            return 1
+    if not a.dry_run and tl.cmd_claim(Args(id=a.id, worktree=wt, slot=a.slot)) != 0:
+        return 1  # bd lets this session re-claim its own bead (a reopened one); another session's claim stops here
     eng = Engine(a.id, wt, cfg, dry_run=a.dry_run)
     print("engine log: %s" % eng.log_path, flush=True)
     return eng.run()
