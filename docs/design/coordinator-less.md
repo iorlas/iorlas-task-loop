@@ -1,12 +1,20 @@
-# task-loop without a coordinator session (design, 2026-10-18)
+# task-loop as our own AI factory: attended now, unattended later (design, 2026-10-18)
 
 Status: proposal, not built. Inputs: the lifesim AI factory (docs/ai-factory on lifesim origin/main: dispatcher,
 task and merge workflows, pilot and friction logs), today's task-loop, and a Fable review.
 
 ## Goal (owner)
 
-Run one command and the loop goes: no long-lived Claude session deciding things. task-loop and the AI factory are the
-same design; only the runner differs (a local script here, Archon on the Windows factory today).
+We build our own AI factory; no Archon, nothing third-party. One engine, two modes:
+
+| mode | who starts the engine | who watches | for |
+|---|---|---|---|
+| **attended** (now) | a coordinator session running the task-loop skill | that session: it reads the runner's decisions and the dashboard, spots strange things, corrects the profile or the scripts, files friction beads, says when no ready bead is left | evolving the factory fast, and people who want a skill, not a factory |
+| **unattended** (later) | one command (`tl run`), no Claude session | the dashboard and questions on the beads | full autonomy |
+
+The coordinator stops doing the work (pick, claim, plan, write, verify, land): the engine does it. Like watching the
+AI factory and fixing its configuration when it misbehaves. Design happens elsewhere: a bead that is fully described
+gets the ready label and the engine takes it (lifesim's `auto` and grooming rules).
 
 ## The finding
 
@@ -22,6 +30,11 @@ Dispatch moves to code. Judgement does not vanish; it moves to two places: **gro
 ambiguous results). Neither system has yet run write → verify → review without a judge; the first step proves it.
 
 ## Design
+
+### Coordinator (attended mode)
+Starts `tl run` (or `tl run-task <id>` while step 1 is being proven) in the background, then loops: read new decision
+lines and finished nodes, check what looks wrong (a node retried twice, a judge `replan`, a gate red twice, a slot
+dirty, a task over budget), fix the cause in the profile or the scripts, or file a bead. It never does a node's work.
 
 ### Runner
 `tl run [--slots N]`: one supervisor process, no Claude session. Each slot runs one task workflow at a time; at the
@@ -69,7 +82,18 @@ The dashboard lists open questions. A push channel (Telegram) is a later bead.
 
 ### Budgets
 Per task: dollars and wall-clock, node inputs. Over budget → `blocked` with what was spent. A lane out (limits) pauses
-the dispatch pass; it never fails a task.
+the dispatch pass; it never fails a task. Start generous (owner, 2026-10-18): $15 and 3 hours per task, every task's
+real spend and time recorded, limits tuned from those numbers.
+
+### bd store
+The repo's real, shared bd store: it is the hub every session, runner, worker and the dashboard read and write
+(claims, leases, notes, provenance). The factory pilot used a sandboxed copy only because its tasks were synthetic and
+Dolt auto-push reached the real GitHub store (friction #17).
+
+### Landing
+Default: as today. Each task rebases and pushes; the repo's pre-push gate runs; a push that loses the race rebases and
+gates again. The runner records the minutes spent on gates that lost a race; if that waste gets large, switch to a
+landing queue (one push at a time, no wasted gates, lower throughput).
 
 ### What stays from today
 `tl.py` bead lifecycle and actor, slots, the dashboard (it reads the runner's events and decisions instead of
@@ -91,7 +115,7 @@ coordinator sessions), the agent-runs contract.
 | Prefect, Temporal, Actions YAML | ❌ | heavier than the engine, none knows slots or bd |
 | Fresh agent per node everywhere | ❌ | writer keeps one resumed thread per task; verify and review stay fresh (no self-grading) |
 | Planning as an AI node | ✅ | "never delegated" protected the coordinator's context; with no coordinator the plan lives in the bead |
-| Serialized land with the full gate inside the lock | ❌ | 12-minute gate → about 5 landings an hour whatever the slots; gate before the lock, re-gate only on conflict |
+| Serialized land with the full gate inside the lock, from day one | ❌ | 12-minute gate → about 5 landings an hour whatever the slots; start with today's race and measure the wasted gates |
 | Slot reset wipes (factory reaper) | ❌ | commit leftover work, as `tl slot reset` does: reversible |
 
 ## Gaps neither system closes yet
@@ -99,11 +123,10 @@ coordinator sessions), the agent-runs contract.
 - No per-task cost cap anywhere (the factory has cost rows and reads none).
 - A merge retry reruns the whole task (factory §7).
 - No push channel for questions.
-- Which bd store an unattended runner writes to (the factory sandboxed after Dolt auto-push hit the real store).
 
 ## Steps
-1. `tl run-task <id>`: one real bead through the hardcoded sequence above, headless, on macOS. Proves "no coordinator
-   for one task".
+1. `tl run-task <id>`: one real bead through the hardcoded sequence above, headless, on macOS, started and watched by
+   a coordinator session. Proves the coordinator no longer does the work.
 2. `tl run`: the dispatch pass and slots, several tasks at once; dashboard on the runner's decisions.
 3. Budgets, reaper, kill switch, questions on the dashboard.
 4. Maybe: workflow as data, and the factory moves to the same node schema.
