@@ -506,6 +506,8 @@ def task_spans():
 
 
 def same_tree(a, b):
+    if not a or not b:  # realpath("") is the current folder
+        return False
     a, b = os.path.normcase(os.path.realpath(a or "")), os.path.normcase(os.path.realpath(b or ""))
     return bool(a and b) and (a == b or a.startswith(b + os.sep))
 
