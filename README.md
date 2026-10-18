@@ -68,6 +68,7 @@ hooks/hooks.json                 SessionStart: index session id -> transcript pa
 tests/                           python3 -m unittest discover -s tests   (CI: 3 OS x Python 3.8 and 3.12)
 docs/design/                     design notes
 docs/contracts/agent-runs-v1.md  the format other tools use to show their workers on the dashboard
+docs/dev/integrations.md         for developers: every external format read, and how delegate connects
 ```
 
 Work on this plugin is tracked with beads (`bd ready`).

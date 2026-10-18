@@ -71,6 +71,11 @@ CI runs it on Ubuntu, macOS and Windows with Python 3.8 and 3.12. Linux locally:
 See README.md (Layout) and docs/design/dashboard.md. The skill (SKILL.md) is the method; `tl.py` is the only code the
 orchestrating session runs; the dashboard server only reads.
 
+## Before changing the dashboard, tl.py, or the skill's Workers section
+
+Read `docs/dev/integrations.md`: every format task-loop reads but does not own (Claude transcripts, Codex state, bd,
+agent-runs), its one reader, and how delegate connects (only through agent-runs v1 and one table in SKILL.md).
+
 ## Conventions & Patterns
 
 - Python 3.8+, standard library only, no third-party packages; must run on macOS, Linux (in containers too) and Windows.
