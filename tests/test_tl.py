@@ -1,6 +1,8 @@
 import io
 import json
 import os
+import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -30,12 +32,25 @@ class Base(unittest.TestCase):
 
     def tearDown(self):
         self.env.stop()
-        self.tmp.cleanup()
+
+        def force(fn, path, _):  # Windows: git's pack files are read-only
+            os.chmod(path, stat.S_IWRITE)
+            fn(path)
+        shutil.rmtree(self.tmp.name, onerror=force)
+        try:
+            self.tmp.cleanup()
+        except OSError:
+            pass
 
 
 class Identity(Base):
     def test_actor_is_per_session(self):
         self.assertEqual(tl.actor(), "tl-abcdef12")
+
+    def test_actor_without_session_id_is_still_per_process(self):
+        os.environ.pop("CLAUDE_CODE_SESSION_ID")
+        os.environ["CLAUDE_PID"] = "4242"
+        self.assertTrue(tl.actor().endswith("-4242"))
 
     def test_actor_override(self):
         os.environ["TASK_LOOP_ACTOR"] = "me"

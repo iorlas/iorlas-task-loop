@@ -148,7 +148,14 @@ def events():
         m = f.stat().st_mtime
     except OSError:
         return []
-    return cached("events:%s" % m, 3600, load)
+    with _lock:
+        hit = _cache.get("events")
+    if hit and hit[2] == m:
+        return hit[1]
+    val = load()
+    with _lock:
+        _cache["events"] = (time.time(), val, m)
+    return val
 
 
 def repos():
@@ -449,6 +456,8 @@ def delegate_runs(since):
 
 
 def pid_alive(pid):
+    if os.name == "nt":  # os.kill(pid, 0) terminates the process on Windows; trust the job's own status
+        return True
     try:
         os.kill(int(pid), 0)
         return True

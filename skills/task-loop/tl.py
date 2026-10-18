@@ -75,6 +75,8 @@ def actor():
     sid = session_id()
     if sid:
         return "tl-" + sid[:8]
+    if os.environ.get("CLAUDE_PID"):  # older Claude Code: one name per session process, never per folder
+        return "tl-%s-%s" % (socket.gethostname().split(".")[0].lower(), os.environ["CLAUDE_PID"])
     top = git("rev-parse", "--show-toplevel")
     return "tl-" + (Path(top).name if top else socket.gethostname())
 
@@ -187,7 +189,7 @@ def cmd_claim(a):
 
 def session_alive():
     pid = os.environ.get("CLAUDE_PID")
-    if not pid:
+    if not pid or os.name == "nt":  # on Windows os.kill(pid, 0) terminates the process instead of probing it
         return True
     try:
         os.kill(int(pid), 0)
@@ -330,7 +332,7 @@ def cmd_slot(a):
         b = next((x for x in slot_beads(repo) if x["title"].split()[-1] == a.name), None)
         if not b:
             sys.exit("tl: no slot " + str(a.name))
-        bd("update", b["id"], "--status", "open", "--assignee", "", cwd=repo)
+        bd("unclaim", b["id"], cwd=repo)
         event("slot-release", "", slot=a.name, slot_bead=b["id"], repo=repo)
         return 0
     if a.op == "reset":  # per task: a clean tree on a fresh task branch; ignored setup output stays
@@ -463,10 +465,12 @@ def ping():
 
 
 def stop_server():
-    pidf = config_dir() / "dash.pid"
+    """Stop the server that answers on the port (its own pid, never a stale pidfile's)."""
+    v = ping()
+    if not v or not v.get("pid"):
+        return
     try:
-        pid = int(pidf.read_text())
-        os.kill(pid, signal.SIGTERM)
+        os.kill(int(v["pid"]), signal.SIGTERM)
     except (OSError, ValueError):
         pass
     for _ in range(20):
