@@ -596,12 +596,7 @@ def runs_for_span(span):
             runs.append(j)
     wt = span.get("worktree") or ""
     threads = {r.get("thread") for r in runs if r.get("thread")}
-    for j in codex_rollouts(t0 - 60):
-        if j.get("thread") in threads:
-            continue
-        if wt and same_tree(j.get("cwd"), wt) and j.get("started") and j["started"] >= t0 - 1 and (not t1 or j["started"] <= t1 + 1):
-            runs.append(j)
-    threads = {r.get("thread") for r in runs if r.get("thread")}
+    contract = []
     for j in contract_runs(t0 - 60):
         if j.get("thread") and j["thread"] in threads:
             continue
@@ -609,7 +604,18 @@ def runs_for_span(span):
             continue
         if span.get("worktree") and j.get("cwd") and not same_tree(j["cwd"], span["worktree"]):
             continue
-        runs.append(j)
+        contract.append(j)
+    runs += contract
+    threads |= {r.get("thread") for r in contract if r.get("thread")}
+    starts = [r["started"] for r in contract if r.get("started") and r.get("kind") == "codex"]
+    for j in codex_rollouts(t0 - 60):
+        if j.get("thread") in threads:
+            continue
+        if any(abs((j.get("started") or 0) - s0) < 30 for s0 in starts):
+            continue  # the launcher already recorded this run (its thread id may not be written yet)
+        if wt and same_tree(j.get("cwd"), wt) and j.get("started") and j["started"] >= t0 - 1 and \
+                (not t1 or j["started"] <= t1 + 1):
+            runs.append(j)
     for w in span.get("workers", []):
         if w.get("worker_kind") == "claude-p":
             tr2 = transcript_of(w.get("ref"))

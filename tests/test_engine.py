@@ -35,7 +35,7 @@ class Script:
     def __init__(self, wt, answers):
         self.wt, self.answers, self.calls = wt, {k: list(v) for k, v in answers.items()}, []
 
-    def __call__(self, model, prompt, schema, cwd, write, resume, timeout, log_path):
+    def __call__(self, model, prompt, schema, cwd, write, resume, timeout, log_path, on_ref=None):
         node = next(k for k, v in engine.SCHEMAS.items() if v is schema)
         self.calls.append((node, resume))
         data = self.answers[node].pop(0)
@@ -110,6 +110,20 @@ class EngineTest(unittest.TestCase):
                                  "judge": [judge("replan"), judge("replan")]})
         self.assertEqual(rc, 2)
         self.assertIn("re-plan", self.blocked[0])
+
+    def test_failed_engine_check_is_never_accepted(self):
+        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["false"])])
+        rc, s = self.run_engine({"plan": [plan], "write": [WRITE] * 2, "verify": [ACCEPT_V] * 2,
+                                 "judge": [judge("accept")] * 2}, max_rounds=2)
+        self.assertEqual(rc, 2)
+        self.assertIn("not accepted after 2 rounds", self.blocked[0])
+
+    def test_blocked_work_is_committed_on_the_task_branch(self):
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "verify": [ACCEPT_V],
+                                 "judge": [judge("block", "A or B?")]})
+        self.assertEqual(rc, 2)
+        self.assertEqual(tl.git("status", "--porcelain", cwd=str(self.wt)), "")
+        self.assertIn("wip (t-1)", tl.git("log", "-1", "--format=%s", "task/t-1", cwd=str(self.wt)))
 
     def test_owner_question_blocks_with_the_question(self):
         rc, _ = self.run_engine({"plan": [dict(PLAN, question="Which format, A or B?")]})

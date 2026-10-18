@@ -139,17 +139,31 @@ class Result:
             data, text, ref, cost, secs, error, backend)
 
 
-def run_proc(cmd, cwd, timeout, log_path):
+def run_proc(cmd, cwd, timeout, log_path, on_line=None):
     t = time.time()
+    lines = []
     with open(log_path, "ab") as log:
         p = subprocess.Popen(cmd, cwd=cwd, env=child_env(), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                              stderr=log, start_new_session=(os.name != "nt"))
+
+        def read():
+            for raw in p.stdout:
+                ln = raw.decode("utf-8", "replace")
+                lines.append(ln)
+                if on_line:
+                    try:
+                        on_line(ln)
+                    except Exception:
+                        pass
+        reader = threading.Thread(target=read, daemon=True)
+        reader.start()
         try:
-            out, _ = p.communicate(timeout=timeout)
+            p.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
             kill_tree(p)
             return None, time.time() - t
-    return (p.returncode, out.decode("utf-8", "replace")), time.time() - t
+        reader.join(10)
+    return (p.returncode, "".join(lines)), time.time() - t
 
 
 def kill_tree(p):
@@ -163,7 +177,7 @@ def kill_tree(p):
     p.wait()
 
 
-def call_codex(model, prompt, schema, cwd, write, resume, timeout, log_path):
+def call_codex(model, prompt, schema, cwd, write, resume, timeout, log_path, on_ref=None):
     with tempfile.TemporaryDirectory() as d:
         sf, of = os.path.join(d, "schema.json"), os.path.join(d, "out.json")
         Path(sf).write_text(json.dumps(schema))
@@ -174,7 +188,11 @@ def call_codex(model, prompt, schema, cwd, write, resume, timeout, log_path):
         if model:
             cmd += ["-m", model]
         cmd.append(prompt)
-        res, secs = run_proc(cmd, cwd, timeout, log_path)
+
+        def on_line(ln):
+            if on_ref and '"thread.started"' in ln:
+                on_ref(json.loads(ln).get("thread_id"))
+        res, secs = run_proc(cmd, cwd, timeout, log_path, on_line)
         if res is None:
             return Result(secs=secs, error="timeout", backend="codex", ref=resume or "")
         code, out = res
@@ -195,8 +213,10 @@ def call_codex(model, prompt, schema, cwd, write, resume, timeout, log_path):
         return Result(data, text, thread, 0.0, secs, err, "codex")
 
 
-def call_claude(model, prompt, schema, cwd, write, resume, timeout, log_path):
+def call_claude(model, prompt, schema, cwd, write, resume, timeout, log_path, on_ref=None):
     sid = resume or str(uuid.uuid4())
+    if on_ref:
+        on_ref(sid)
     tools = ["Read", "Glob", "Grep", "Bash"] + (["Edit", "Write"] if write else [])
     cmd = ["claude", "-p", "--output-format", "json", "--json-schema", json.dumps(schema), "--model", model,
            "--permission-mode", "acceptEdits" if write else "default", "--allowedTools"] + tools
@@ -286,7 +306,9 @@ class Engine:
         timeout = float(self.cfg["node_timeout_min"]) * 60
         attempt_prompt = prompt
         for attempt in (1, 2):
-            r = fn(model, attempt_prompt, schema, self.wt, write, resume, timeout, self.err_path)
+            ref_key = "thread" if fam == "codex" else "session"
+            r = fn(model, attempt_prompt, schema, self.wt, write, resume, timeout, self.err_path,
+                   on_ref=lambda ref, k=ref_key: tl_agent_run(run_id, {k: ref}))
             self.cost += r.cost
             ref = {"thread": r.ref} if fam == "codex" else {"session": r.ref}
             tl_agent_run(run_id, dict(ref))
@@ -335,7 +357,9 @@ class Engine:
         self.sh("git fetch -q origin", check=True)
         exists = bool(self.git("rev-parse", "--verify", "-q", "refs/heads/" + branch))
         if self.git("status", "--porcelain"):
-            raise Blocked("failed: worktree %s is not clean" % self.wt)
+            if self.git("symbolic-ref", "--short", "-q", "HEAD") != branch:
+                raise Blocked("failed: worktree %s has uncommitted work of another branch" % self.wt)
+            self.wip("left from an earlier run")
         if exists:
             self.sh("git checkout -q %s" % branch, check=True)
         else:
@@ -419,12 +443,11 @@ class Engine:
                 brief=self.task_dir / "brief.md", plan=self.task_dir / "plan.json", n=i + 1, goal=st["goal"],
                 files=", ".join(st["files"]), checks="\n".join("- " + c for c in st["checks"]) or "- (none named)",
                 feedback=feedback), write=True, resume_key="writer")
-            if w["question"].strip():
-                raise Blocked("owner decision needed", w["question"])
+            checks = self.run_checks(st, name)
+            (self.task_dir / "checks.json").write_text(json.dumps(checks, indent=1))
             diff_before = self.git("diff", "HEAD")
-            v, _ = self.ai("verify", name, VERIFY_PROMPT.format(goal=st["goal"], checks="\n".join(
-                "- " + c for c in st["checks"]) or "- (none named; run the project's tests)",
-                brief=self.task_dir / "brief.md"), write=True)
+            v, _ = self.ai("verify", name, VERIFY_PROMPT.format(goal=st["goal"], checks=self.task_dir / "checks.json",
+                                                               brief=self.task_dir / "brief.md"), write=True)
             if self.git("diff", "HEAD") != diff_before:
                 v["risk_flags"].append("the verifier changed files")
             self.stats["tests_added"] += v["tests_added"]
@@ -442,10 +465,16 @@ class Engine:
                 if review["findings"]:
                     self.comment("Review (engine, %s): " % name + "; ".join(
                         "%s:%s [%s] %s" % (f["file"], f["line"], f["severity"], f["fix"]) for f in review["findings"]))
-            facts = {"stage": st, "round": rnd, "writer": w, "verify": v, "review": review}
+            failed = [c for c in checks if c["exit"] != 0]
+            facts = {"stage": st, "round": rnd, "writer": w, "checks_run_by_engine": checks, "verify": v,
+                     "review": review}
             (self.task_dir / "judge-input.json").write_text(json.dumps(facts, indent=1))
             j, _ = self.ai("judge", name, JUDGE_PROMPT.format(facts=self.task_dir / "judge-input.json"))
             self.leftovers += j["leftovers"]
+            if j["decision"] == "accept" and failed:
+                self.log("note", "judge accepted with %d failed checks: rework instead" % len(failed))
+                j = dict(j, decision="rework", why="These checks fail: " + "; ".join(
+                    "`%s` exit %d: %s" % (c["cmd"], c["exit"], c["tail"][-300:]) for c in failed))
             if j["decision"] == "accept":
                 return "accept"
             if j["decision"] == "block":
@@ -453,9 +482,23 @@ class Engine:
             if j["decision"] == "replan":
                 (self.task_dir / "replan.md").write_text(j["why"] + "\n\n" + json.dumps(facts, indent=1))
                 return "replan"
-            feedback = ("\nThe previous round was not accepted. Fix exactly this:\n%s\nGaps: %s\nFindings: %s\n" % (
-                j["why"], "; ".join(v["gaps"]), "; ".join(f["fix"] for f in review["findings"])))
+            feedback = ("\nThe previous round was not accepted. Fix exactly this:\n%s\nGaps: %s\nFindings: %s\n"
+                        "Check results (run by the engine, outside your sandbox): %s\n" % (
+                            j["why"], "; ".join(v["gaps"]), "; ".join(f["fix"] for f in review["findings"]),
+                            self.task_dir / "checks.json"))
         raise Blocked("stage %d not accepted after %s rounds" % (i + 1, self.cfg["max_rounds"]))
+
+    def run_checks(self, st, name):
+        """The stage's checks and the gate, run by the engine outside any sandbox: the results are facts."""
+        cmds = list(st["checks"])
+        if self.cfg["gate"] and self.cfg["gate"] not in cmds:
+            cmds.append(self.cfg["gate"])
+        self.log("node", "checks: %s" % name)
+        out = []
+        for c in cmds:
+            rc, tail = self.sh(c, timeout=float(self.cfg["node_timeout_min"]) * 60)
+            out.append({"cmd": c, "exit": rc, "tail": tail[-1500:]})
+        return out
 
     def finish(self, bead):
         if not self.git("status", "--porcelain"):
@@ -490,8 +533,16 @@ class Engine:
                 raise Blocked("land failed\n" + tail)
         raise Blocked("land rejected 5 times: main moves too fast")
 
+    def wip(self, why):
+        self.sh("git add -A")
+        rc, _ = self.sh("git commit -q -m %s" % sh_quote("wip (%s): %s" % (self.bead, why)))
+        return rc == 0
+
     def close(self, outcome, why, sha, question):
         mins = (time.time() - self.t0) / 60
+        if outcome not in ("landed", "done") and self.git("status", "--porcelain") and \
+                self.git("symbolic-ref", "--short", "-q", "HEAD").startswith("task/"):
+            self.wip(outcome)  # the next run continues this branch
         stats = "cost=$%.2f; minutes=%d; %s" % (self.cost, mins, "; ".join("%s=%s" % kv for kv in self.stats.items()))
         self.log("node", "close: %s" % outcome, outcome=outcome, why=why)
         if self.dry:
@@ -594,15 +645,18 @@ Files: {files}
 Before reporting, run these checks and make them pass:
 {checks}
 {feedback}
+Checks your sandbox cannot run (network, local ports, paths outside this folder) are run by the engine after you,
+outside the sandbox; say so in the summary and move on, never ask about permissions.
 Rules: no commits, no pushing, no branches; no suppressions; do not weaken, skip or delete tests; stay inside the
-stage. question: empty unless only the owner can decide something (then explain it for a phone)."""
+stage. question: empty unless only the owner can decide something about the task itself (then explain it for a
+phone); never a question about tools, sandbox or permissions."""
 
 VERIFY_PROMPT = """You are a fresh verifier. Do not edit any file. Judge the uncommitted changes in this folder
 (`git diff HEAD` and new files) against the stage goal: {goal}
 Task: {brief}
 
-Run every check below yourself and report each one's exit code and last 3 lines; never write "passed" without running:
-{checks}
+The engine already ran the stage's checks outside any sandbox; their exit codes and output are in {checks}: copy them
+into checks (a check you cannot run yourself because of the sandbox is not a gap). Read the diff and the tests.
 Then: count tests added and removed in the diff; list files changed outside what the task names (outside_touches);
 risk_flags: a public member changed, a test deleted/weakened/filtered, a suppression added, anything risky.
 verdict: accept only if every check exits 0 and the goal is met; else gaps, with each gap listed."""
