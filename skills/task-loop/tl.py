@@ -641,7 +641,7 @@ def main(argv=None):
         return engine.main(a)
     if a.cmd == "usage":
         import engine
-        route = engine.find_route("auto")
+        route = engine.find_route()
         if not route:
             print("no delegate with worker-run v1 installed: nothing to feed")
             return 0

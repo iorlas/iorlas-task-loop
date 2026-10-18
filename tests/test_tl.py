@@ -178,6 +178,22 @@ class RegisterCLI(Base):
         self.assertFalse(self.config.parent.exists())
 
 
+class UsageCLI(Base):
+    def test_usage_feeds_the_installed_delegate(self):
+        d = self.home / ".claude/plugins/cache/m/iorlas-delegate/0.15.0/skills/delegate"
+        d.mkdir(parents=True)
+        (d / "route.py").write_text(
+            "import json,sys\nopen(%r,'w').write(json.dumps(sys.argv[1:]))\n"
+            "print(json.dumps({'lanes': {'CLAUDE_SUBSCRIPTION': {'five': 6.0, 'week': 4.0, 'out': False}}}))\n"
+            % str(self.home / "argv.json"))
+        env = dict(os.environ, HOME=str(self.home), USERPROFILE=str(self.home))
+        r = subprocess.run([sys.executable, str(ROOT / "skills" / "task-loop" / "tl.py"), "usage", "[]"],
+                           capture_output=True, text=True, env=env)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("5h 6.0%, week 4.0%", r.stdout)
+        self.assertEqual(json.loads((self.home / "argv.json").read_text()), ["status", "--claude-usage", "[]", "--json"])
+
+
 class SlotReset(Base):
     """A slot reset must never lose a dead session's work."""
 
