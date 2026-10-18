@@ -683,7 +683,9 @@ the owner's answers). Read the code it names. Then plan.
 
 - Split the work into stages, each one coherent piece that its checks can judge (often one stage is enough).
 - For each stage: goal, the files it changes, the exact commands that prove it (tests, linters), and hard=true only
-  when it is risky or subtle.
+  when it is risky or subtle. Every check is a shell command that exits 0 when it proves the goal and non-zero when it
+  does not: the engine reads only the exit code. "Expect empty" is `test -z "$(...)"` or `! grep ...`, never a bare
+  grep; a count is `test "$(... | wc -l)" -eq 25`, never a comment saying what to expect.
 - Name the risks ahead of time: what could break something users or other code rely on (a saved format, a public
   member, shared files), each with the check that proves it safe. None is fine.
 - question: empty, unless the task cannot be done without a decision only the owner can make (product direction,
