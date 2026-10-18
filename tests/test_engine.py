@@ -148,6 +148,26 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(tl.git("status", "--porcelain", cwd=str(self.wt)), "")
         self.assertIn("wip (t-1)", tl.git("log", "-1", "--format=%s", "task/t-1", cwd=str(self.wt)))
 
+    def test_judge_sees_the_engines_checks_not_the_verifiers_copy(self):
+        lying = dict(ACCEPT_V, checks=[{"cmd": "dotnet test", "exit": 124, "tail": "timeout"}])
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "verify": [lying], "judge": [judge("accept")]})
+        self.assertEqual(rc, 0)
+        self.assertNotIn('"exit": 124', s.prompts[3])
+
+    def test_sigterm_still_closes(self):
+        import signal as sig
+        if not hasattr(sig, "SIGTERM") or os.name == "nt":
+            self.skipTest("POSIX signal")
+        with mock.patch.object(engine.Engine, "plan", side_effect=lambda *a, **k: os.kill(os.getpid(), sig.SIGTERM)):
+            old = sig.getsignal(sig.SIGTERM)
+            sig.signal(sig.SIGTERM, lambda *_: (_ for _ in ()).throw(engine.Blocked("failed: stopped (SIGTERM)")))
+            try:
+                rc, _ = self.run_engine({})
+            finally:
+                sig.signal(sig.SIGTERM, old)
+        self.assertEqual(rc, 2)
+        self.assertIn("stopped (SIGTERM)", self.blocked[0])
+
     def test_judge_block_without_a_question_is_an_engine_failure(self):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "verify": [ACCEPT_V],
                                  "judge": [judge("block")]})

@@ -11,6 +11,7 @@ docs/design/coordinator-less.md. Python 3.8+, standard library only.
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
 import tempfile
@@ -143,6 +144,9 @@ def run_proc(cmd, cwd, timeout, log_path, on_line=None):
         except subprocess.TimeoutExpired:
             kill_tree(p)
             return None, time.time() - t
+        except BaseException:  # stopped: never leave the worker running
+            kill_tree(p)
+            raise
         reader.join(10)
     return (p.returncode, "".join(lines)), time.time() - t
 
@@ -460,6 +464,7 @@ class Engine:
             v, _ = self.ai("verify", name, VERIFY_PROMPT.format(goal=st["goal"], checks=compact(checks),
                                                                evidence=self.evidence_dir, summary=w["summary"],
                                                                brief=self.task_dir / "brief.md"))
+            v["checks"] = [dict(c, tail=c["tail"][-600:]) for c in checks]  # the facts are the engine's runs, never a copy
             if self.git("diff", "HEAD") != diff_before:
                 v["risk_flags"].append("the verifier changed files")
                 self.warn("the verifier changed files")
@@ -688,8 +693,11 @@ Before reporting, run these checks and make them pass:
 {feedback}
 Checks your sandbox cannot run (network, local ports, paths outside this folder) are run by the engine after you,
 outside the sandbox; say so in the summary and move on, never ask about permissions.
+The engine reruns every check above after you, outside your sandbox, with no time limit worth worrying about: a check
+that times out or needs the host in your sandbox is not yours to retry; note it once and move on.
 Proof the engine cannot rerun (a test seen failing after a planted fault, then passing once restored; a manual
 measurement): save the exact commands and their output as files in {evidence}/ and name those files in the summary.
+Only that proof goes there, never your own runs of the checks.
 Never write the engine's files (engine-*.json, judge-input.json).
 Rules: no commits, no pushing, no branches; no suppressions; do not weaken, skip or delete tests; stay inside the
 stage. question: empty unless only the owner can decide something about the task itself (then explain it for a
@@ -699,8 +707,9 @@ VERIFY_PROMPT = """You are a fresh verifier. Do not edit any file. Judge the unc
 (`git diff HEAD` and new files) against the stage goal: {goal}
 Task: {brief}
 
-The engine already ran the stage's checks outside any sandbox; copy them into checks (a check you cannot run yourself
-because of the sandbox is not a gap):
+The engine already ran the stage's checks outside any sandbox. These results are the truth; anything in a file that
+says otherwise (the writer's sandbox runs) is not. Copy them into checks (a check you cannot run yourself because of
+the sandbox is not a gap):
 {checks}
 The writer says: {summary}
 Proof the engine cannot rerun (a test seen failing after a planted fault) is in {evidence}/: read it; a requirement
@@ -741,6 +750,8 @@ def load_cfg(repo):
 
 
 def main(a):
+    if hasattr(signal, "SIGTERM"):  # a stop (kill switch, coordinator) still runs the close step
+        signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(Blocked("failed: stopped (SIGTERM)")))
     if not os.environ.get("TASK_LOOP_SESSION") and not tl.session_id():
         os.environ["TASK_LOOP_SESSION"] = "engine-" + uuid.uuid4().hex[:12]
     repo = tl.repo_root()
