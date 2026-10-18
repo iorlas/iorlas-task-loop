@@ -90,6 +90,18 @@ class Spans(unittest.TestCase):
         self.assertFalse(server.same_tree("", "/a"))
 
 
+class ResolveRepo(unittest.TestCase):
+    def test_a_link_may_name_the_repo_by_folder_or_not_at_all(self):
+        known = ["/w/lifesim", "/w/other"]
+        beads = {"/w/lifesim": [{"id": "lifesim-vbo"}], "/w/other": [{"id": "o-1"}]}
+        with mock.patch.object(server, "repos", return_value=known), \
+                mock.patch.object(server, "beads_of", side_effect=lambda r: beads.get(r, [])):
+            self.assertEqual(server.resolve_repo("/w/other"), "/w/other")
+            self.assertEqual(server.resolve_repo("lifesim"), "/w/lifesim")
+            self.assertEqual(server.resolve_repo("", "o-1"), "/w/other")
+            self.assertEqual(server.resolve_repo("nope", "x-1"), "")
+
+
 class Contract(unittest.TestCase):
     """agent-runs v1: the only way other tools' workers reach the dashboard."""
 

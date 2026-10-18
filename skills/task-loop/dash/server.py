@@ -675,8 +675,20 @@ def count_status(tasks):
     return c
 
 
+def resolve_repo(repo, bead=""):
+    """A link may name a repo by path or by folder name, or not at all: find the registered repo it means."""
+    known = repos()
+    if repo in known:
+        return repo
+    named = [p for p in known if os.path.basename(p.rstrip("/\\")) == repo]
+    if named:
+        return named[0]
+    return next((p for p in known if bead and any(x["id"] == bead for x in beads_of(p))), "")
+
+
 def task_detail(repo, bead):
     spans = task_spans().get(bead, [])
+    repo = resolve_repo(repo, bead)
     b = next((x for x in beads_of(repo) if x["id"] == bead), {}) if repo else {}
     return {"bead": {k: b.get(k) for k in ("id", "title", "status", "description", "acceptance_criteria", "assignee",
                                            "labels", "priority", "parent", "issue_type", "notes", "updated_at")},
