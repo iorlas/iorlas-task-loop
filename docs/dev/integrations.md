@@ -17,19 +17,19 @@ returns an error for that request; parsers skip lines they cannot read).
 
 ## Delegate
 
-task-loop does not depend on delegate. The two touch in three places only:
+task-loop requires delegate for the engine (decided 2026-10-18: everyone installs both; power users never call
+delegate directly). The two touch in three places only:
 
 1. **agent-runs v1**: delegate publishes its `claude -p` runs and lane limits; the dashboard shows them. Delegate's
    side of it is described in its repo, `docs/dev/integrations.md`.
 2. **The Workers table in `skills/task-loop/SKILL.md`** maps the loop's worker kinds (reader, writer, verifier,
    reviewer, hard) to delegate's role names. That mapping is the only delegate vocabulary in this plugin. When
-   delegate renames roles or changes how it is asked, update that table; if delegate goes away, the "Without it"
-   line already covers the loop.
+   delegate renames roles or changes how it is asked, update that table.
 
 3. **worker-run v1** (`docs/contracts/worker-run-v1.md`): the engine runs each AI step with `route.py run ROLE` and
    feeds usage with `route.py status --claude-usage` (`tl usage`). Code: `engine.find_route`, `engine.call_delegate`,
-   `Engine.ai_delegate`, `tl.py` `usage`. Only route.py from delegate 0.14.0 or later is used; an answer with another
-   `v` switches the engine to its builtin launcher. Delegate keeps its state in its plugin data dir, so always call the
+   `Engine.ai_delegate`, `tl.py` `usage`. Only route.py from delegate 0.14.0 or later is used; none installed, or an
+   answer with another `v`, blocks the task with what to do. Delegate keeps its state in its plugin data dir, so always call the
    installed route.py, never a checkout's (a checkout reads `~/.config/delegate`, another store).
 
 Never read delegate's files, and call `route.py` only through worker-run v1. A new need from delegate becomes a new optional

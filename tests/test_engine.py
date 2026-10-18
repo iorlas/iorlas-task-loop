@@ -32,19 +32,28 @@ def judge(decision, question=""):
     return {"decision": decision, "why": decision + " because", "question": question, "leftovers": []}
 
 
-class Script:
-    """Fake workers: each node pops its next answer; write creates a file like a real writer would."""
+class DelegateScript:
+    """Fake `route.py run`: answers per role from a queue; a write creates the file like a real writer."""
 
-    def __init__(self, wt, answers):
-        self.wt, self.answers, self.calls = wt, {k: list(v) for k, v in answers.items()}, []
+    def __init__(self, answers):
+        self.answers, self.calls = {k: list(v) for k, v in answers.items()}, []
 
-    def __call__(self, model, prompt, schema, cwd, write, resume, timeout, log_path, on_ref=None):
+    def __call__(self, route, role, prompt, schema, cwd, resume, timeout, log_path, writer=None, parent="", task="",
+                 title=""):
         node = next(k for k, v in engine.SCHEMAS.items() if v is schema)
-        self.calls.append((node, resume))
-        data = self.answers[node].pop(0)
-        if node == "write":
-            Path(cwd, "f.txt").write_text("x%d\n" % len(self.calls))
-        return engine.Result(data=data, ref="thread-%s" % node, cost=0.5, secs=1, backend="codex")
+        self.calls.append((role, resume, writer))
+        a = self.answers[node].pop(0)
+        if isinstance(a, dict) and a.get("v") is not None:
+            j = a
+        else:
+            if node == "write":
+                Path(cwd, "f.txt").write_text("d%d\n" % len(self.calls))
+            j = {"v": 1, "status": "done", "data": a, "ref": "ref-" + node, "cost": 0.5, "secs": 1,
+                 "family": "openai" if node in ("write", "verify", "judge") else "claude", "lane": "L", "model": "m",
+                 "effort": "e", "git_violation": []}
+        r = engine.Result(j.get("data"), "", j.get("ref") or "", float(j.get("cost") or 0), 1, "" if j["status"] == "done" else j["status"],
+                          j.get("family") or "delegate")
+        return r, j
 
 
 class EngineTest(unittest.TestCase):
@@ -71,7 +80,6 @@ class EngineTest(unittest.TestCase):
             mock.patch.object(tl, "cmd_close", side_effect=lambda a: self.closed.append(a.reason) or 0),
             mock.patch.object(tl, "cmd_block", side_effect=lambda a: self.blocked.append(a.why) or 0),
             mock.patch.object(tl, "cmd_land", return_value=0),
-            mock.patch.object(engine, "claude_available", return_value=False),
         ]
         for p in patches:
             p.start()
@@ -86,20 +94,20 @@ class EngineTest(unittest.TestCase):
         return mock.Mock(returncode=0, stdout="bead t-1: Add f\n", stderr="")
 
     def run_engine(self, answers, **cfg):
-        script = Script(self.wt, answers)
+        script = DelegateScript(answers)
         c = engine.load_cfg(str(self.wt))
-        c["launcher"] = "builtin"
         c.update(cfg)
-        with mock.patch.object(engine, "call_codex", script), mock.patch.object(engine, "call_claude", script):
+        with mock.patch.object(engine, "find_route", return_value="/fake/route.py"), \
+                mock.patch.object(engine, "call_delegate", script), mock.patch.object(engine.time, "sleep"):
             rc = engine.Engine("t-1", str(self.wt), c).run()
         return rc, script
 
     def test_happy_path_lands_and_closes(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "verify": [ACCEPT_V], "judge": [judge("accept")]})
         self.assertEqual(rc, 0)
-        self.assertEqual([c[0] for c in s.calls], ["plan", "write", "verify", "judge"])
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "light", "light"])
         self.assertTrue(self.closed and self.closed[0].startswith("merged "))
-        self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "x2")
+        self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
         self.assertTrue(any(c[:2] == ("comments", "add") and "Reflect (engine)" in c[3] for c in self.bd_calls))
 
     def test_wip_from_an_earlier_run_lands_as_one_titled_commit(self):
@@ -117,8 +125,7 @@ class EngineTest(unittest.TestCase):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE], "verify": [GAPS_V, ACCEPT_V],
                                  "judge": [judge("rework"), judge("accept")]})
         self.assertEqual(rc, 0)
-        writes = [c for c in s.calls if c[0] == "write"]
-        self.assertEqual(writes, [("write", None), ("write", "thread-write")])
+        self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, "ref-write"])
 
     def test_replan_starts_over_once_then_blocks(self):
         rc, s = self.run_engine({"plan": [PLAN, PLAN], "write": [WRITE, WRITE], "verify": [ACCEPT_V, ACCEPT_V],
@@ -149,7 +156,7 @@ class EngineTest(unittest.TestCase):
     def test_invalid_output_retries_once_then_fails_and_still_closes(self):
         rc, s = self.run_engine({"plan": [{"summary": "x"}, {"summary": "x"}]})
         self.assertEqual(rc, 2)
-        self.assertEqual([c for c in s.calls], [("plan", None), ("plan", "thread-plan")])
+        self.assertEqual([c[:2] for c in s.calls], [("planner", None), ("planner", "ref-plan")])
         self.assertTrue(self.blocked[0].startswith("failed: plan node"))
 
     def test_rounds_are_bounded(self):
@@ -174,7 +181,7 @@ class EngineTest(unittest.TestCase):
         rc, s = self.run_engine({"plan": [plan], "write": [WRITE], "verify": [ACCEPT_V],
                                  "review": [{"findings": []}], "judge": [judge("accept")]})
         self.assertEqual(rc, 0)
-        self.assertIn("review", [c[0] for c in s.calls])
+        self.assertIn(("reviewer", None, "openai"), s.calls)
 
     def test_child_env_drops_session_identity(self):
         with mock.patch.dict(os.environ, {"ANTHROPIC_BASE_URL": "x", "CLAUDE_CODE_SESSION_ID": "s"}):
@@ -184,55 +191,8 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(env["DELEGATE_DEPTH"], "1")
 
 
-class DelegateScript:
-    """Fake `route.py run`: answers per role from a queue; a write creates the file like a real writer."""
-
-    def __init__(self, answers):
-        self.answers, self.calls = {k: list(v) for k, v in answers.items()}, []
-
-    def __call__(self, route, role, prompt, schema, cwd, resume, timeout, log_path, writer=None, parent="", task="",
-                 title=""):
-        node = next(k for k, v in engine.SCHEMAS.items() if v is schema)
-        self.calls.append((role, resume, writer))
-        a = self.answers[node].pop(0)
-        if isinstance(a, dict) and a.get("v") is not None:
-            j = a
-        else:
-            if node == "write":
-                Path(cwd, "f.txt").write_text("d%d\n" % len(self.calls))
-            j = {"v": 1, "status": "done", "data": a, "ref": "ref-" + node, "cost": 0, "secs": 1,
-                 "family": "openai" if node in ("write", "verify", "judge") else "claude", "lane": "L", "model": "m",
-                 "effort": "e", "git_violation": []}
-        r = engine.Result(j.get("data"), "", j.get("ref") or "", 0.0, 1, "" if j["status"] == "done" else j["status"],
-                          j.get("family") or "delegate")
-        return r, j
-
-
 class DelegateLauncher(unittest.TestCase):
-    setUp, tearDown, fake_bd = EngineTest.setUp, EngineTest.tearDown, EngineTest.fake_bd
-
-    def run_engine(self, answers, **cfg):
-        script = DelegateScript(answers)
-        c = engine.load_cfg(str(self.wt))
-        c.update(cfg)
-        with mock.patch.object(engine, "find_route", return_value="/fake/route.py"), \
-                mock.patch.object(engine, "call_delegate", script), mock.patch.object(engine.time, "sleep"):
-            rc = engine.Engine("t-1", str(self.wt), c).run()
-        return rc, script
-
-    def test_nodes_map_to_delegate_roles_and_the_writer_resumes(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE], "verify": [GAPS_V, ACCEPT_V],
-                                 "judge": [judge("rework"), judge("accept")]})
-        self.assertEqual(rc, 0)
-        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "light", "light", "worker", "light", "light"])
-        self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, "ref-write"])
-
-    def test_review_names_the_writer_family(self):
-        plan = dict(PLAN, risks=[{"what": "saved format", "check": "load old file"}])
-        rc, s = self.run_engine({"plan": [plan], "write": [WRITE], "verify": [ACCEPT_V],
-                                 "review": [{"findings": []}], "judge": [judge("accept")]})
-        self.assertEqual(rc, 0)
-        self.assertIn(("reviewer", None, "openai"), s.calls)
+    setUp, tearDown, fake_bd, run_engine = EngineTest.setUp, EngineTest.tearDown, EngineTest.fake_bd, EngineTest.run_engine
 
     def test_lane_out_waits_then_runs(self):
         out = {"v": 1, "status": "lane_out", "retry_after": 0, "say": "codex out"}
@@ -246,12 +206,17 @@ class DelegateLauncher(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertIn("paused: no lane for plan", self.blocked[0])
 
-    def test_another_contract_version_falls_back_to_builtin(self):
-        script = Script(self.wt, {"plan": [PLAN], "write": [WRITE], "verify": [ACCEPT_V], "judge": [judge("accept")]})
-        with mock.patch.object(engine, "call_codex", script), mock.patch.object(engine, "call_claude", script):
-            rc, s = self.run_engine({"plan": [{"v": 2, "status": "done"}]})
-        self.assertEqual(rc, 0)
-        self.assertEqual([c[0] for c in script.calls], ["plan", "write", "verify", "judge"])
+    def test_another_contract_version_blocks(self):
+        rc, _ = self.run_engine({"plan": [{"v": 2, "status": "done"}]})
+        self.assertEqual(rc, 2)
+        self.assertIn("worker-run v2", self.blocked[0])
+
+    def test_no_delegate_blocks_with_the_install_command(self):
+        c = engine.load_cfg(str(self.wt))
+        with mock.patch.object(engine, "find_route", return_value=None):
+            rc = engine.Engine("t-1", str(self.wt), c).run()
+        self.assertEqual(rc, 2)
+        self.assertIn("claude plugin install iorlas-delegate", self.blocked[0])
 
 
 class DelegateCall(unittest.TestCase):
@@ -276,10 +241,10 @@ class DelegateCall(unittest.TestCase):
                 p.mkdir(parents=True)
                 (p / "route.py").write_text("")
             with mock.patch.object(engine.Path, "home", return_value=Path(home)):
-                self.assertIn("0.15.2", engine.find_route("auto"))
-                self.assertIsNone(engine.find_route("builtin"))
+                self.assertIn("0.15.2", engine.find_route())
         with tempfile.TemporaryDirectory() as home, mock.patch.object(engine.Path, "home", return_value=Path(home)):
-            self.assertIsNone(engine.find_route("auto"))
+            self.assertIsNone(engine.find_route())
+            self.assertIsNone(engine.find_route(str(Path(home, "missing.py"))))
 
 
 class Validate(unittest.TestCase):

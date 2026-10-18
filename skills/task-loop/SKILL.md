@@ -66,7 +66,8 @@ bead's provenance.
      `tl worktree start` → prints this session's worktree, made once and reused for every task.
 4. Your work directory (`WT` below) is that slot or worktree. A session cannot move its own folder: work there with
    absolute paths and `git -C "$WT"`; the shell's cwd resets between calls.
-5. Workers: see **Workers** below (delegate when installed, else Agent-tool subagents).
+5. Workers come from the iorlas-delegate plugin (required, see **Workers**). Feed it your Claude usage now:
+   `get_usage`, then `$TL usage '<plan.windows as JSON>'`.
 
 ## 1. Pick (before every task)
 
@@ -118,8 +119,8 @@ continues the task branch (its earlier work is kept) and the next plan reads the
 
 ## 4. By hand (only when the engine cannot run here)
 
-When no worker can run headless on this machine (no Codex or `claude` CLI login), do the same steps yourself in the
-same order, with the same records: `tl claim`, `tl stage`, plan in the bead, write through workers, run the checks
+When the engine cannot run here (delegate missing or not set up, no Codex or `claude` CLI login), do the same steps
+yourself in the same order, with the same records: `tl claim`, `tl stage`, plan in the bead, write through workers, run the checks
 yourself, a fresh verifier, a reviewer from another model family on risky stages, `tl land`, `tl close` or `tl block`.
 
 ## 5. Stop
@@ -174,17 +175,16 @@ The loop needs five kinds of worker; it does not care what runs them.
 | reviewer | reads the diff against the bead and its risks; another model family than the writer | fixes |
 | hard | a subtask two writers failed | |
 
-How to get them:
-- **delegate installed** (suggested): ask it for each worker and run what it answers; its role names are its own
-  business (today reader and verifier → `light`, writer → `worker`, reviewer → `reviewer` with the writer's family,
-  hard → `hard`). If its interface changes, follow its skill; nothing in this loop depends on its internals.
-- **Engine + delegate:** delegate spends the Claude subscription headless only with a usage reading under 30 minutes
-  old. Before starting an engine and every 20 minutes while one runs: call `get_usage`, then
-  `$TL usage '<plan.windows as JSON>'`. Without it Claude steps count as out: the engine waits for a lane (⚠ "waits
-  for a lane"), then blocks the task. The engine uses delegate by itself when it is installed (first log line:
-  `launcher: delegate ...`); `.task-loop.json → engine.launcher: "builtin"` turns that off.
-- **Without it:** Agent-tool subagents in this session (never `isolation: worktree`); for the other-family reviewer,
-  the Codex plugin when installed, else a different Claude model than the writer's.
+How to get them: from the **iorlas-delegate** plugin, which every task-loop install has. You don't talk to it; the
+engine does, one `route.py run ROLE` per AI step (contract: `docs/contracts/worker-run-v1.md` in this plugin's repo).
+Delegate picks lane, model and effort from its role table and live plan limits, and never spends API credit for the
+engine. Its role names (reader and verifier → `light`, writer → `worker`, reviewer → `reviewer` with the writer's
+family, hard → `hard`) matter only in §4 by hand, where you ask delegate's skill for each worker yourself.
+
+The one thing the engine cannot do itself: read your Claude usage. Delegate spends the Claude subscription headless only
+with a reading under 30 minutes old, so before starting an engine and every 20 minutes while one runs: call
+`get_usage`, then `$TL usage '<plan.windows as JSON>'`. Without it Claude steps count as out: the engine waits for a lane
+(⚠ "waits for a lane"), then blocks the task.
 
 Any launcher can put its runs on the dashboard by writing agent-runs v1 records
 (`docs/contracts/agent-runs-v1.md` in this plugin's repo); otherwise record them with `tl worker`.

@@ -1,8 +1,7 @@
 # worker-run v1: how the engine asks a launcher to run one AI step
 
-Status: implemented (delegate 0.14.0, task-loop 0.4.0). Owner: task-loop (the consumer), like agent-runs v1. First producer: delegate's
-`route.py run`. Without a producer the engine keeps its built-in launcher (`call_codex`, `call_claude` in
-`skills/task-loop/engine.py`), so nothing here is required for task-loop to work.
+Status: implemented (delegate 0.14.0, task-loop 0.4.0). Owner: task-loop (the consumer), like agent-runs v1. Producer:
+delegate's `route.py run`. Since task-loop 0.5.0 the engine has no launcher of its own: delegate is required.
 
 ## Why
 
@@ -78,12 +77,12 @@ Exit code: 0 when the object was printed, whatever `status` says; non-zero only 
    a limits file). Unknown subscription use must not make the call wait for input.
 6. **Encoding.** UTF-8 in and out, errors replaced (a cp1252 Windows console must not crash the call).
 
-## Engine side (when built)
+## Engine side
 
-- `.task-loop.json` → `engine.launcher`: `"builtin"` (default today), `"delegate"`, or an explicit command prefix.
-  `"delegate"` finds route.py in the newest installed `iorlas-delegate` plugin; missing → builtin, with a ⚠ line.
-- `lane_out` and `stop` pause the task until `retry_after` (later: pause the dispatch pass); they never fail it.
-- `docs/dev/integrations.md` changes from "never call route.py" to "call it only through this contract".
+- route.py: `.task-loop.json → engine.delegate` (a path) when set, else the newest installed `iorlas-delegate` 0.14.0+.
+  None → the task is blocked with the install command.
+- `lane_out` and `stop` make the step wait (up to `engine.lane_wait_min`, 60), then block the task.
+- `docs/dev/integrations.md` names the call sites.
 
 ## Claude nodes (owner, 2026-10-18)
 
@@ -107,7 +106,4 @@ Usage feed (part of this contract): `route.py status --claude-usage '<get_usage 
 a headless `run` uses it for 30 minutes. In attended mode the coordinator feeds it every 20 minutes (the status-line
 file exists only where a terminal session runs). Unattended has no feed yet, so Claude nodes stay off.
 
-With delegate as launcher, `.task-loop.json → engine.workers` is ignored and the engine prints one ⚠ line saying so;
-it applies only to the builtin launcher.
-
-Version: the result's `v` is checked by the engine; another major → builtin launcher with a ⚠ line.
+Version: the result's `v` is checked by the engine; another major blocks the task (update task-loop).

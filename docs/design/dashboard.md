@@ -7,7 +7,7 @@ backlog as a tree. Viewable from the phone over Tailscale.
 
 ## Ownership
 - New plugin repo `iorlas-task-loop`, in iorlas-marketplace; ideas tracked as beads there.
-- task-loop owns the dashboard and the recording. Delegate is suggested, not required, and its files are never
+- task-loop owns the dashboard and the recording. Delegate is required for the engine (since 0.5.0), and its files are never
   read: any launcher (delegate included) shows its runs and lane limits by writing agent-runs v1 records
   (docs/contracts/agent-runs-v1.md). Decided 2026-10-18: delegate's internals change often; only the contract is
   stable.

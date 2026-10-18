@@ -74,12 +74,13 @@ orchestrating session runs; the dashboard server only reads.
 ## Before changing the dashboard, tl.py, or the skill's Workers section
 
 Read `docs/dev/integrations.md`: every format task-loop reads but does not own (Claude transcripts, Codex state, bd,
-agent-runs), its one reader, and how delegate connects (only through agent-runs v1 and one table in SKILL.md).
+agent-runs), its one reader, and how delegate connects (worker-run v1, agent-runs v1, one table in SKILL.md).
 
 ## Conventions & Patterns
 
 - Python 3.8+, standard library only, no third-party packages; must run on macOS, Linux (in containers too) and Windows.
 - The page is one HTML file, no build, no CDN.
-- task-loop must work without the delegate plugin; anything delegate adds is optional.
+- The engine requires the iorlas-delegate plugin (worker-run v1) and has no launcher of its own; never add one back.
+  Only the contract is shared: never read delegate's files or call anything but `route.py run` and `status`.
 - Never touch a transcript or another tool's state: the dashboard reads, `tl.py` writes only `~/.config/task-loop` and bd.
 - Bump `.claude-plugin/plugin.json` version and the entry in iorlas-marketplace on every release.

@@ -11,7 +11,6 @@ docs/design/coordinator-less.md. Python 3.8+, standard library only.
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -31,10 +30,8 @@ DEFAULTS = {
     "max_rounds": 3,                  # write rounds per stage before the task is blocked
     "max_replans": 1,
     "node_timeout_min": 45,
-    "launcher": "auto",               # auto: delegate's route.py when installed (worker-run v1), else builtin
+    "delegate": "",                   # path to delegate's route.py; "" = the newest installed iorlas-delegate
     "lane_wait_min": 60,              # how long a step waits for a lane that is out before the task is blocked
-    "workers": {"plan": "claude:opus", "write": "codex", "verify": "claude:sonnet", "review": "other",
-                "judge": "claude:haiku"},
 }
 
 # ---- output contracts -----------------------------------------------------------------------------------------------
@@ -117,24 +114,6 @@ def child_env():
     return env
 
 
-_claude_ok = []
-
-
-def claude_available():
-    if not _claude_ok:
-        ok = False
-        exe = shutil.which("claude")
-        if exe:
-            try:
-                r = subprocess.run([exe, "auth", "status"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=20,
-                                   env=child_env(), stdin=subprocess.DEVNULL)
-                ok = '"loggedIn": true' in r.stdout
-            except (OSError, subprocess.SubprocessError):
-                pass
-        _claude_ok.append(ok)
-    return _claude_ok[0]
-
-
 class Result:
     def __init__(self, data=None, text="", ref="", cost=0.0, secs=0.0, error="", backend=""):
         self.data, self.text, self.ref, self.cost, self.secs, self.error, self.backend = (
@@ -179,77 +158,13 @@ def kill_tree(p):
     p.wait()
 
 
-def call_codex(model, prompt, schema, cwd, write, resume, timeout, log_path, on_ref=None):
-    with tempfile.TemporaryDirectory() as d:
-        sf, of = os.path.join(d, "schema.json"), os.path.join(d, "out.json")
-        Path(sf).write_text(json.dumps(schema))
-        sandbox = "workspace-write" if write else "read-only"
-        base = ["codex", "exec"] + (["resume", resume] if resume else [])
-        cmd = base + ["--skip-git-repo-check", "--json", "--output-schema", sf, "-o", of,
-                      "-c", "sandbox_mode=\"%s\"" % sandbox, "-c", "approval_policy=\"never\""]
-        if model:
-            cmd += ["-m", model]
-        cmd.append(prompt)
-
-        def on_line(ln):
-            if on_ref and '"thread.started"' in ln:
-                on_ref(json.loads(ln).get("thread_id"))
-        res, secs = run_proc(cmd, cwd, timeout, log_path, on_line)
-        if res is None:
-            return Result(secs=secs, error="timeout", backend="codex", ref=resume or "")
-        code, out = res
-        thread = resume or ""
-        for ln in out.splitlines():
-            if '"thread.started"' in ln:
-                try:
-                    thread = json.loads(ln).get("thread_id") or thread
-                except ValueError:
-                    pass
-                break
-        text = Path(of).read_text(encoding="utf-8") if os.path.exists(of) else ""
-        try:
-            data = json.loads(text)
-        except ValueError:
-            data = None
-        err = "" if code == 0 else "codex exit %d" % code
-        return Result(data, text, thread, 0.0, secs, err, "codex")
-
-
-def call_claude(model, prompt, schema, cwd, write, resume, timeout, log_path, on_ref=None):
-    sid = resume or str(uuid.uuid4())
-    if on_ref:
-        on_ref(sid)
-    tools = ["Read", "Glob", "Grep", "Bash"] + (["Edit", "Write"] if write else [])
-    cmd = ["claude", "-p", "--output-format", "json", "--json-schema", json.dumps(schema), "--model", model,
-           "--permission-mode", "acceptEdits" if write else "default", "--allowedTools"] + tools
-    cmd += (["--resume", sid] if resume else ["--session-id", sid]) + ["--", prompt]
-    res, secs = run_proc(cmd, cwd, timeout, log_path)
-    if res is None:
-        return Result(secs=secs, error="timeout", backend="claude", ref=sid)
-    code, out = res
-    try:
-        j = json.loads(out)
-    except ValueError:
-        return Result(text=out[-2000:], ref=sid, secs=secs, error="claude exit %d, no json" % code, backend="claude")
-    data = j.get("structured_output")
-    if data is None:
-        try:
-            data = json.loads(j.get("result") or "")
-        except ValueError:
-            data = None
-    err = j.get("result") if j.get("is_error") else ""
-    return Result(data, j.get("result") or "", sid, float(j.get("total_cost_usd") or 0), secs, err or "", "claude")
-
-
 ROLES = {"plan": "planner", "write": "worker", "verify": "light", "review": "reviewer", "judge": "light"}
 
 
-def find_route(setting):
-    """worker-run v1 launcher (docs/contracts/worker-run-v1.md): "auto" = newest installed delegate, else none."""
-    if setting == "builtin":
-        return None
-    if setting not in ("auto", "delegate"):
-        return setting if os.path.exists(setting) else None
+def find_route(path=""):
+    """delegate's route.py: `path` when given (engine.delegate), else the newest installed delegate with worker-run v1."""
+    if path:
+        return path if os.path.exists(path) else None
     found = []
     for p in (Path.home() / ".claude" / "plugins" / "cache").glob("*/iorlas-delegate/*/skills/delegate/route.py"):
         ver = tuple(int(x) for x in re.findall(r"\d+", p.parents[2].name)[:3])
@@ -313,7 +228,7 @@ class Engine:
         self.err_path = d / ("%s-%s.stderr" % (bead, stamp))
         self.task_dir = Path(wt) / ".task" / bead
         self.task_dir.mkdir(parents=True, exist_ok=True)
-        self.route = find_route(cfg.get("launcher", "auto"))
+        self.route = find_route(cfg.get("delegate", ""))
 
     # -- records
     def log(self, kind, text, **kw):
@@ -344,64 +259,12 @@ class Engine:
                                                                         self.cfg["budget_min"]))
 
     # -- AI node
-    def backend_for(self, node, writer_family=None):
-        spec = self.cfg["workers"].get(node) or "codex"
-        if spec == "other":
-            spec = "claude:sonnet" if writer_family == "codex" else "codex"
-        fam, _, model = spec.partition(":")
-        if fam == "claude" and not claude_available():
-            fam, model = "codex", ""
-        return fam, model
-
-    def ai(self, node, title, prompt, write=False, resume_key=None, writer_family=None):
+    def ai(self, node, title, prompt, resume_key=None, writer_family=None):
+        """One AI node through delegate (worker-run v1): it picks lane and model, limits apply, it records the run."""
         self.budget_check()
         self.stats["nodes"] += 1
-        if self.route:
-            return self.ai_delegate(node, title, prompt, resume_key, writer_family)
-        fam, model = self.backend_for(node, writer_family)
-        schema = SCHEMAS[node]
-        resume = self.writer.get(fam) if resume_key else None
-        self.log("node", "%s: %s" % (node, title), node=node, backend=fam, model=model, resume=bool(resume))
-        run_id = str(uuid.uuid4())
-        rec = {"kind": "codex" if fam == "codex" else "claude-p", "parent_session": self.session, "cwd": self.wt,
-               "title": "%s · %s: %s" % (self.bead, node, title), "model": model or fam, "lane": node,
-               "started": time.time(), "status": "running"}
-        tl_agent_run(run_id, rec)
-        fn = call_codex if fam == "codex" else call_claude
-        timeout = float(self.cfg["node_timeout_min"]) * 60
-        attempt_prompt = prompt
-        for attempt in (1, 2):
-            ref_key = "thread" if fam == "codex" else "session"
-            r = fn(model, attempt_prompt, schema, self.wt, write, resume, timeout, self.err_path,
-                   on_ref=lambda ref, k=ref_key: tl_agent_run(run_id, {k: ref}))
-            self.cost += r.cost
-            ref = {"thread": r.ref} if fam == "codex" else {"session": r.ref}
-            tl_agent_run(run_id, dict(ref))
-            if resume_key and r.ref:
-                self.writer[fam] = r.ref
-                resume = r.ref
-            errs = validate(r.data, schema) if r.data is not None else ["no structured output" +
-                                                                         (": " + r.error if r.error else "")]
-            if not errs:
-                break
-            self.log("note", "%s output invalid (try %d): %s" % (node, attempt, "; ".join(errs[:4])))
-            fix = ("Your previous answer did not match the required output schema: %s. Answer again with only the "
-                   "structured result." % "; ".join(errs[:6]))
-            if r.ref and r.error != "timeout":  # retry inside the same thread: it keeps its context
-                resume, attempt_prompt = r.ref, fix
-            else:
-                resume, attempt_prompt = None, prompt + "\n\n" + fix
-        ok = not errs
-        tl_agent_run(run_id, {"ended": time.time(), "status": "completed" if ok else "failed",
-                              "exit": 0 if ok else 1})
-        if not ok:
-            raise Blocked("failed: %s node produced no valid output (%s)" % (node, "; ".join(errs[:3])))
-        return self.node_done(node, r, fam, model, attempt)
-
-    def ai_delegate(self, node, title, prompt, resume_key, writer_family):
-        """The same node through delegate (worker-run v1): it picks lane and model, limits apply, it records the run."""
         role = ROLES[node]
-        writer = {"codex": "openai"}.get(writer_family, writer_family) if node == "review" else None
+        writer = writer_family if node == "review" else None
         resume = self.writer.get("delegate") if resume_key else None
         self.log("node", "%s: %s" % (node, title), node=node, backend="delegate", role=role, resume=bool(resume))
         timeout = float(self.cfg["node_timeout_min"]) * 60
@@ -410,10 +273,8 @@ class Engine:
             r, j = call_delegate(self.route, role, attempt_prompt, SCHEMAS[node], self.wt, resume, timeout,
                                  self.err_path, writer, self.session, self.bead, "%s · %s: %s" % (self.bead, node, title))
             if j is not None and j.get("v") != 1:
-                self.warn("delegate answered worker-run v%s, this engine speaks v1: builtin launcher from now on" % j.get("v"))
-                self.route = None
-                self.stats["nodes"] -= 1
-                return self.ai(node, title, prompt, resume_key=resume_key, writer_family=writer_family)
+                raise Blocked("failed: delegate answered worker-run v%s, this engine speaks v1 (update task-loop)"
+                              % j.get("v"))
             st = (j or {}).get("status")
             if st in ("lane_out", "stop"):
                 wait = max(60.0, min(600.0, float(j.get("retry_after") or 0) - time.time()))
@@ -446,9 +307,6 @@ class Engine:
             raise Blocked("failed: %s node produced no valid output (%s)" % (node, "; ".join(errs[:3])))
         fam = r.backend  # openai | claude: the family that wrote, for the reviewer
         model = "%s %s on %s" % ((j or {}).get("model"), (j or {}).get("effort"), (j or {}).get("lane"))
-        return self.node_done(node, r, fam, model, attempt)
-
-    def node_done(self, node, r, fam, model, attempt):
         (self.task_dir / ("%s-%d.json" % (node, self.stats["nodes"]))).write_text(json.dumps(r.data, indent=1))
         self.log("msg", "%s → %s  [%s%s, %ds, $%.2f, total $%.2f]" % (
             node, summarize(node, r.data), fam, (":" + model) if model else "", r.secs, r.cost, self.cost),
@@ -532,12 +390,10 @@ class Engine:
             if not bead:
                 raise Blocked("failed: bead %s not found" % self.bead)
             hb.start()
-            if self.route:
-                self.log("note", "launcher: delegate %s (worker-run v1)" % self.route)
-                if self.cfg.get("_user_workers"):
-                    self.warn("engine.workers in .task-loop.json is ignored: delegate picks the models")
-            else:
-                self.log("note", "launcher: builtin (%s)" % ", ".join("%s=%s" % kv for kv in self.cfg["workers"].items()))
+            if not self.route:
+                raise Blocked("failed: the engine needs the iorlas-delegate plugin (0.14.0 or later): "
+                              "claude plugin install iorlas-delegate@iorlas-marketplace")
+            self.log("note", "workers: delegate %s (worker-run v1)" % self.route)
             self.reset(bead)
             plan = self.plan()
             replans = 0
@@ -595,12 +451,12 @@ class Engine:
             w, wfam = self.ai("write", "%s round %d" % (name, rnd), WRITE_PROMPT.format(
                 brief=self.task_dir / "brief.md", plan=self.task_dir / "plan.json", n=i + 1, goal=st["goal"],
                 files=", ".join(st["files"]), checks="\n".join("- " + c for c in st["checks"]) or "- (none named)",
-                feedback=feedback), write=True, resume_key="writer")
+                feedback=feedback), resume_key="writer")
             checks = self.run_checks(st, name)
             (self.task_dir / "checks.json").write_text(json.dumps(checks, indent=1))
             diff_before = self.git("diff", "HEAD")
             v, _ = self.ai("verify", name, VERIFY_PROMPT.format(goal=st["goal"], checks=self.task_dir / "checks.json",
-                                                               brief=self.task_dir / "brief.md"), write=True)
+                                                               brief=self.task_dir / "brief.md"))
             if self.git("diff", "HEAD") != diff_before:
                 v["risk_flags"].append("the verifier changed files")
                 self.warn("the verifier changed files")
@@ -726,22 +582,6 @@ class Engine:
         else:
             text = why + (("\n\nQuestion: " + question) if question else "")
             tl.cmd_block(Args(id=self.bead, why=text))
-
-
-def tl_agent_run(run_id, fields):
-    """This engine is a worker launcher: it publishes agent-runs v1 records like any other (docs/contracts)."""
-    root = (Path(os.environ["APPDATA"]) if os.name == "nt" else
-            Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")) / "agent-runs" / "runs"
-    root.mkdir(parents=True, exist_ok=True)
-    f = root / (run_id + ".json")
-    try:
-        rec = json.loads(f.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        rec = {"v": 1, "producer": "tl-engine", "id": run_id}
-    rec.update(fields)
-    tmp = f.with_suffix(".tmp")
-    tmp.write_text(json.dumps(rec), encoding="utf-8")
-    os.replace(tmp, f)
 
 
 class Heartbeat:
@@ -874,10 +714,7 @@ def load_cfg(repo):
         user = json.loads((Path(repo) / ".task-loop.json").read_text(encoding="utf-8")).get("engine") or {}
     except (OSError, ValueError):
         user = {}
-    workers = dict(cfg["workers"], **(user.get("workers") or {}))
-    cfg["_user_workers"] = bool(user.get("workers"))
     cfg.update(user)
-    cfg["workers"] = workers
     return cfg
 
 

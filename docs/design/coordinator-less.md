@@ -72,8 +72,8 @@ failing node (factory lesson #21).
 ### Workers
 Headless agents: `claude -p --output-format json --json-schema ... --bare --settings <curated> --strict-mcp-config`,
 `codex exec --output-schema F -o F`, resume by id. Children get an env allow-list (strip `CLAUDE_*`, `ANTHROPIC_*`),
-no repo SessionStart hooks, their own process group. Lane and model per node: a configurable command (delegate's
-router is one implementation, never required).
+no repo SessionStart hooks, their own process group. Lane and model per node: delegate's `route.py run`, required
+(worker-run v1, decided 2026-10-18).
 
 ### Human in the loop (the factory's protocol)
 `blocked` with the question in notes (phone-decidable format: location, doing, found, decision, options with costs,

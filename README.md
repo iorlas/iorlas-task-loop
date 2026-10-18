@@ -15,9 +15,10 @@ claude plugin install iorlas-task-loop@iorlas-marketplace
 Then in a repo that uses bd, say "task loop". Requirements: Python 3.8+ (standard library only), git, bd 1.3+,
 Claude Code. macOS and Linux (also inside a container); Windows is expected to work and is untested.
 
-Suggested, not required: [iorlas-delegate](https://github.com/iorlas/iorlas-delegate) picks the worker lane and model
-for each step from live plan limits. task-loop never reads delegate's files: any launcher, delegate included, puts its
-runs and lane limits on the dashboard by writing [agent-runs v1](docs/contracts/agent-runs-v1.md) records.
+Required: [iorlas-delegate](https://github.com/iorlas/iorlas-delegate) 0.14+ from the same marketplace
+(`claude plugin install iorlas-delegate@iorlas-marketplace`). The engine runs every AI step through it
+([worker-run v1](docs/contracts/worker-run-v1.md)); it picks lane and model from live plan limits. You never call it
+yourself. Its runs and lane limits reach the dashboard as [agent-runs v1](docs/contracts/agent-runs-v1.md) records.
 
 ## What the loop does
 
