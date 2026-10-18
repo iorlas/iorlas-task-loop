@@ -26,7 +26,7 @@ Delegate already does the first four. The engine should not grow a second copy, 
 
 | flag | meaning |
 |---|---|
-| `ROLE` | delegate role. Engine mapping: plan → planner, write → worker, verify → reviewer `--writer <write family>`, review → reviewer `--writer <write family>`, judge → light, a hard stage → hard |
+| `ROLE` | delegate role. Engine mapping: plan → planner, write → worker, verify → light (runs checks, reports), review → reviewer `--writer <family that wrote the thread, from the engine's record>`, judge → light, a hard stage → hard |
 | `--schema FILE` | JSON Schema for the answer. Codex: `--output-schema FILE`; claude: `--json-schema`. The producer parses the answer; it does not need to validate it (the engine does) |
 | `--resume REF` | continue the thread or session `REF` from an earlier result, on the same lane. Codex: `codex exec resume REF` takes no `-s`/`-C`: set the sandbox with `-c sandbox_mode=...` and the folder through the process cwd. Claude: `--resume REF`. A lane that is now out → `status: "lane_out"`, never a silent switch to another lane (a new thread loses the writer's context; the engine decides) |
 | `--cap USD` | spend cap for this call (credit lanes). Absent → the role's step cap |
@@ -89,5 +89,18 @@ Exit code: 0 when the object was printed, whatever `status` says; non-zero only 
 
 Engine Claude nodes run on the subscription, never on API credit. Headless, delegate runs `CLAUDE_SUBSCRIPTION` with
 `claude -p` on the logged-in subscription (no API key) and never picks `CLAUDE_CREDIT`; with no usable subscription
-lane the answer is `stop` with `retry_after`. Subscription use: a fresh limits file when one exists, otherwise unknown
-counts as usable and a limit refusal marks the lane out (`lane_out`). Needs `claude auth login` on the machine.
+lane the answer is `stop` with `retry_after`. Subscription use comes from delegate's usage feeds (state.json from an
+orchestrator, `~/.claude/state/max-limits.json` from the status line), and the orchestrator reserve applies. Headless
+with every feed stale → `stop`, never "unknown counts as usable": N slots could drain the weekly window and lock out
+interactive work. A limit refusal marks the lane out (`lane_out`). Needs `claude auth login` on the machine.
+
+`cost` is 0 on a subscription, so the engine's dollar budget does not see Claude nodes; the engine budgets minutes and
+calls per task as well. Workers get `DELEGATE_DEPTH=1`: they cannot delegate.
+
+Why delegate's roles and not an engine profile: routing.json roles say which model is adequate for a kind of work, true
+for any caller. The orchestrator rules (never delegate plan or acceptance, consent prompts) are skill text the engine
+never reads. In the engine, plan is an AI node because the plan lives in the bead; the judge's `accept` is a route, and
+acceptance is the engine's checks, a fresh verify and the gate. A role no orchestrator needs → a new role in routing.json,
+never a second table.
+
+Version: the result's `v` is checked by the engine; another major → builtin launcher with a ⚠ line.
