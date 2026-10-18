@@ -443,6 +443,7 @@ class Engine:
                  (self.task_dir / "replan.md")) if again else ""
         data, _ = self.ai("plan", "re-plan" if again else "plan", PLAN_PROMPT.format(brief=self.task_dir / "brief.md",
                                                                                      wt=self.wt) + extra)
+        self.plan_summary = data["summary"]
         if data["question"].strip():
             raise Blocked("owner decision needed", data["question"])
         if not data["stages"]:
@@ -602,13 +603,18 @@ class Engine:
                   "--deps", "discovered-from:" + self.bead)
         self.comment("Reflect (engine): outcome=%s; filed=%d; %s%s" % (outcome, len(self.leftovers), stats,
                                                                      ("; why=" + why) if why else ""))
+        summary = (getattr(self, "plan_summary", "") or "")[:300]
         if outcome == "landed":
-            tl.cmd_close(Args(id=self.bead, reason="merged %s" % sha[:12]))
+            rc = tl.cmd_close(Args(id=self.bead, reason="merged %s to %s: %s; %s" % (
+                sha[:12], self.cfg["base"].split("/")[-1], summary or "the task's stages passed", stats)))
         elif outcome == "done":
-            tl.cmd_close(Args(id=self.bead, reason="done, nothing to land"))
+            rc = tl.cmd_close(Args(id=self.bead, reason="done with nothing to land: " + (summary or stats)))
         else:
             text = why + (("\n\nQuestion: " + question) if question else "")
-            tl.cmd_block(Args(id=self.bead, why=text))
+            rc = tl.cmd_block(Args(id=self.bead, why=text))
+        if rc:  # a repo's bd rules can refuse (e.g. a minimum reason length): say so, never report a clean close
+            self.warn("bd refused to %s %s (exit %s): close it by hand" % ("block" if outcome not in ("landed", "done")
+                                                                          else "close", self.bead, rc))
 
 
 class Heartbeat:

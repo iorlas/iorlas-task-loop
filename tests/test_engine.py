@@ -175,6 +175,14 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertIn("stopped (SIGTERM)", self.blocked[0])
 
+    def test_close_reason_says_what_landed_and_a_refused_close_is_a_warning(self):
+        with mock.patch.object(tl, "cmd_close", side_effect=lambda a: self.closed.append(a.reason) or 1):
+            rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "verify": [ACCEPT_V], "judge": [judge("accept")]})
+        self.assertIn("to main: do it", self.closed[0])
+        self.assertGreater(len(self.closed[0]), 40)
+        log = Path(sorted((Path(os.environ["XDG_CONFIG_HOME"]) / "task-loop" / "engine").glob("t-1-*.jsonl"))[-1])
+        self.assertIn("bd refused to close", log.read_text())
+
     def test_judge_block_without_a_question_is_an_engine_failure(self):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "verify": [ACCEPT_V],
                                  "judge": [judge("block")]})
