@@ -688,13 +688,14 @@ WRITE_PROMPT = """You are the writer for one stage of a task, in an unattended e
 
 Task: {brief}. Plan: {plan}. Your stage: {n}: {goal}
 Files: {files}
-Before reporting, run these checks and make them pass:
+The stage's checks (the engine runs all of them after you, outside your sandbox):
 {checks}
+Run only the quick ones (seconds, no build of the whole project, no editor) to see your change works; never run the
+full gate or a check that needs the host. The engine's run is the one that counts.
 {feedback}
 Checks your sandbox cannot run (network, local ports, paths outside this folder) are run by the engine after you,
 outside the sandbox; say so in the summary and move on, never ask about permissions.
-The engine reruns every check above after you, outside your sandbox, with no time limit worth worrying about: a check
-that times out or needs the host in your sandbox is not yours to retry; note it once and move on.
+A check that times out or fails only in your sandbox is not yours to retry; note it once and move on.
 Proof the engine cannot rerun (a test seen failing after a planted fault, then passing once restored; a manual
 measurement): save the exact commands and their output as files in {evidence}/ and name those files in the summary.
 Only that proof goes there, never your own runs of the checks.
