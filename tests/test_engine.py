@@ -230,6 +230,15 @@ class EngineTest(unittest.TestCase):
 class DelegateLauncher(unittest.TestCase):
     setUp, tearDown, fake_bd, run_engine = EngineTest.setUp, EngineTest.tearDown, EngineTest.fake_bd, EngineTest.run_engine
 
+    def test_same_family_review_is_recorded(self):
+        plan = dict(PLAN, risks=[{"what": "saved format", "check": "load old file"}])
+        same = {"v": 1, "status": "done", "data": {"findings": []}, "ref": "r", "family": "openai", "flag": "same_family"}
+        rc, s = self.run_engine({"plan": [plan], "write": [WRITE], "verify": [ACCEPT_V], "review": [same],
+                                 "judge": [judge("accept")]})
+        self.assertEqual(rc, 0)
+        self.assertTrue(any(c[:2] == ("comments", "add") and "same family as the writer" in c[3] for c in self.bd_calls))
+        self.assertIn('"same_family": true', s.prompts[-1])
+
     def test_lane_out_waits_then_runs(self):
         out = {"v": 1, "status": "lane_out", "retry_after": 0, "say": "codex out"}
         rc, s = self.run_engine({"plan": [PLAN], "write": [out, WRITE], "verify": [ACCEPT_V], "judge": [judge("accept")]})

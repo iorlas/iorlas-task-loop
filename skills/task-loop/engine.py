@@ -311,6 +311,7 @@ class Engine:
             attempt += 1
         if errs:
             raise Blocked("failed: %s node produced no valid output (%s)" % (node, "; ".join(errs[:3])))
+        self.last_flag = (j or {}).get("flag")  # same_family | degraded | ...: delegate could not give the usual lane
         fam = r.backend  # openai | claude: the family that wrote, for the reviewer
         model = "%s %s on %s" % ((j or {}).get("model"), (j or {}).get("effort"), (j or {}).get("lane"))
         (self.task_dir / ("%s-%d.json" % (node, self.stats["nodes"]))).write_text(json.dumps(r.data, indent=1))
@@ -480,9 +481,14 @@ class Engine:
                                                                         flags="; ".join(v["risk_flags"] +
                                                                                        v["outside_touches"]) or "none"),
                                     writer_family=wfam)
-                if review["findings"]:
-                    self.comment("Review (engine, %s): " % name + "; ".join(
-                        "%s:%s [%s] %s" % (f["file"], f["line"], f["severity"], f["fix"]) for f in review["findings"]))
+                same = self.last_flag == "same_family"
+                if same:
+                    self.warn("%s: the review is from the writer's own model family (no other lane was free)" % name)
+                    review["same_family"] = True
+                if review["findings"] or same:
+                    self.comment("Review (engine, %s%s): " % (name, ", same family as the writer" if same else "") + "; ".join(
+                        "%s:%s [%s] %s" % (f["file"], f["line"], f["severity"], f["fix"]) for f in review["findings"])
+                                 or "no findings")
             failed = [c for c in checks if c["exit"] != 0]
             facts = {"stage": st, "round": rnd, "writer": w, "checks_run_by_engine": checks, "verify": v,
                      "review": review}
