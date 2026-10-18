@@ -85,8 +85,9 @@ Exit code: 0 when the object was printed, whatever `status` says; non-zero only 
 - `lane_out` and `stop` pause the task until `retry_after` (later: pause the dispatch pass); they never fail it.
 - `docs/dev/integrations.md` changes from "never call route.py" to "call it only through this contract".
 
-## Open
+## Claude nodes (owner, 2026-10-18)
 
-- Subscription Claude headless: delegate's `CLAUDE_SUBSCRIPTION` lane runs through the Agent tool only. A headless
-  runner (`claude -p` on the logged-in subscription) plus a headless reader of its use would let the engine use it;
-  until then Claude nodes run on `CLAUDE_CREDIT` (API dollars, $150/month cap on this Mac).
+Engine Claude nodes run on the subscription, never on API credit. Headless, delegate runs `CLAUDE_SUBSCRIPTION` with
+`claude -p` on the logged-in subscription (no API key) and never picks `CLAUDE_CREDIT`; with no usable subscription
+lane the answer is `stop` with `retry_after`. Subscription use: a fresh limits file when one exists, otherwise unknown
+counts as usable and a limit refusal marks the lane out (`lane_out`). Needs `claude auth login` on the machine.
