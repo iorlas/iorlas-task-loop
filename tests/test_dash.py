@@ -90,6 +90,51 @@ class Spans(unittest.TestCase):
         self.assertFalse(server.same_tree("", "/a"))
 
 
+class Contract(unittest.TestCase):
+    """agent-runs v1: the only way other tools' workers reach the dashboard."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.env = mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": self.tmp.name, "APPDATA": self.tmp.name})
+        self.env.start()
+        server._cache.clear()
+        self.runs = Path(self.tmp.name) / "agent-runs" / "runs"
+        self.runs.mkdir(parents=True)
+
+    def tearDown(self):
+        self.env.stop()
+        self.tmp.cleanup()
+
+    def write(self, name, rec):
+        (self.runs / name).write_text(rec if isinstance(rec, str) else json.dumps(rec))
+
+    def test_reads_v1_and_skips_the_rest(self):
+        now = time.time()
+        log = Path(self.tmp.name) / "w.jsonl"
+        log.write_text("")
+        self.write("a.json", {"v": 1, "producer": "x", "id": "a", "kind": "claude-p", "parent_session": "p",
+                              "cwd": "/w", "started": now, "status": "running", "transcript": str(log), "extra": 1})
+        self.write("b.json", {"v": 2, "id": "b", "kind": "claude-p", "started": now, "status": "running"})
+        self.write("c.json", "{broken")
+        self.write("d.json", {"v": 1, "kind": "other"})
+        runs = server.contract_runs(now - 60)
+        self.assertEqual([(r["kind"], r["parent"]) for r in runs], [("claude-p", "p")])
+        self.assertTrue(runs[0]["id"].startswith("claude-p:"))
+
+    def test_missing_folder_is_fine(self):
+        self.runs.rmdir()
+        self.assertEqual(server.contract_runs(0), [])
+        self.assertEqual(server.contract_lanes(), [])
+
+    def test_lanes_only_when_fresh(self):
+        lanes = Path(self.tmp.name) / "agent-runs" / "lanes"
+        lanes.mkdir()
+        (lanes / "fresh.json").write_text(json.dumps({"v": 1, "producer": "x", "at": time.time(),
+                                                      "lanes": [{"name": "A", "usage": [{"window": "5h", "used_pct": 3}]}]}))
+        (lanes / "stale.json").write_text(json.dumps({"v": 1, "producer": "y", "at": 0, "lanes": [{"name": "B"}]}))
+        self.assertEqual([l["name"] for l in server.contract_lanes()], ["A"])
+
+
 def free_port():
     s = socket.socket()
     s.bind(("127.0.0.1", 0))

@@ -66,8 +66,7 @@ bead's provenance.
      `tl worktree start` → prints this session's worktree, made once and reused for every task.
 4. Your work directory (`WT` below) is that slot or worktree. A session cannot move its own folder: work there with
    absolute paths and `git -C "$WT"`; the shell's cwd resets between calls.
-5. Load `delegate` when it is installed (suggested): it picks the worker lane and model per step. Without it, run
-   workers as the profile says (Agent tool subagents in the current session by default).
+5. Workers: see **Workers** below (delegate when installed, else Agent-tool subagents).
 
 ## 1. Pick (before every task)
 
@@ -95,7 +94,7 @@ Say where the task is with `tl stage <id> "<what>"` at every step change (analys
 land): the dashboard shows it next to the bead.
 
 1. **Analyse:** the bead, its acceptance criteria, linked decisions, the code it names, the AGENTS.md triggers that
-   apply. Bulk reading goes to a worker (role `light` under delegate); keep only the conclusion.
+   apply. Bulk reading goes to a reader worker; keep only the conclusion.
 2. **Decide and plan** (never delegated): the approach as `tl bd comments add <id> "Plan: ..."`, split into stages,
    each one coherent piece its checks can judge, each marked writer or hard part. The plan names the **risks ahead of
    time**: what in this task could break something users keep or other code relies on (a saved format, a public
@@ -108,9 +107,10 @@ land): the dashboard shows it next to the bead.
       before reporting (the profile's workers), and "no commits, no pushing, no suppressions, do not weaken tests".
       Codex in a reused slot: a task's first stage starts a fresh thread, later stages of the same task resume it.
       Its report counts as nothing.
-   2. **Record the worker** when it is not an Agent-tool subagent or a Codex plugin job (those are found
-      automatically): `tl worker <id> --kind codex|claude-p|other --ref <thread or session id> --title "<stage>"`.
-   3. **Verify:** a fresh verifier (role `reviewer`) gets the goal, the checks and `git diff`, never the writer's
+   2. **Record the worker** unless the dashboard finds it by itself (Agent-tool subagents, Codex plugin jobs, and
+      runs whose launcher publishes agent-runs records): `tl worker <id> --kind codex|claude-p|other --ref <thread or
+      session id> --title "<stage>"`.
+   3. **Verify:** a fresh verifier gets the goal, the checks and `git diff`, never the writer's
       report. It reruns every check, then the profile's verify list, and returns only: `git diff --stat`; per check
       the exit code and last 3 lines (never "passed"); stats (lines added and removed, files, **tests added and
       removed**, counted from the diff and the test runs' totals); files outside the bead's `## Touches`; risk flags
@@ -123,7 +123,7 @@ land): the dashboard shows it next to the bead.
    5. **Judge:** read the verifier's report and the review's findings, not the diff. Read the diff yourself only for a
       finding you must decide on.
    6. **Gaps** → back to the same writer thread: re-export the brief (it now holds the review comments) and say which
-      findings to fix. Hard part → role `hard`.
+      findings to fix. Hard part → a hard worker.
    7. **Sync** (3.1) between stages, never while a worker is writing.
 4. **Every problem noticed** gets a bead now: `tl bd create ... --deps discovered-from:<id>`, with acceptance criteria
    and touched paths; small and mechanical → the profile's "ready for agents" label, else unlabelled for the owner.
@@ -199,6 +199,28 @@ the live log of any of them. A Workers tab lists every worker run on the machine
 records `tl` writes, `bd list`, and the transcripts Claude Code and Codex already write; it changes nothing.
 Finished tasks stay visible for 7 days.
 
+## Workers
+
+The loop needs five kinds of worker; it does not care what runs them.
+
+| kind | does | never |
+|---|---|---|
+| reader | reads many files or logs, returns a conclusion | edits |
+| writer | one stage's code, runs the stage's checks | commits, pushes, branches |
+| verifier | reruns the checks on the diff, returns facts | sees the writer's report |
+| reviewer | reads the diff against the bead and its risks; another model family than the writer | fixes |
+| hard | a subtask two writers failed | |
+
+How to get them:
+- **delegate installed** (suggested): ask it for each worker and run what it answers; its role names are its own
+  business (today reader → `light`, writer → `worker`, verifier and reviewer → `reviewer` with the writer's family,
+  hard → `hard`). If its interface changes, follow its skill; nothing in this loop depends on its internals.
+- **Without it:** Agent-tool subagents in this session (never `isolation: worktree`); for the other-family reviewer,
+  the Codex plugin when installed, else a different Claude model than the writer's.
+
+Any launcher can put its runs on the dashboard by writing agent-runs v1 records
+(`docs/contracts/agent-runs-v1.md` in this plugin's repo); otherwise record them with `tl worker`.
+
 ## Beads are the record
 
 Everything about a task lives in its bead, so any session or worker can pick it up: the plan, the named risks, every
@@ -209,4 +231,4 @@ worker reports are not the record.
 
 The session runs task after task; its context window is the scarce resource. Keep in it decisions, plans and
 verdicts; everything bulky goes through a worker that returns the conclusion. The task's thinking stays in the session;
-move it to a per-task worker (role `hard`) only if compactions start losing tasks.
+move it to a per-task hard worker only if compactions start losing tasks.

@@ -13,7 +13,8 @@ Sources, all local and read-only:
   ~/.claude/projects/**.jsonl                                Claude sessions and their subagents
   ~/.claude/plugins/data/codex-openai-codex/state/*/jobs     Codex runs (each names the Claude session that started it)
   ~/.codex/sessions/**/rollout-*.jsonl                       Codex runs started directly (codex exec)
-  ~/.config/delegate/state.json                              delegate's lanes, when delegate is installed
+  ~/.config/agent-runs/{runs,lanes}                          worker runs and lane limits any launcher publishes
+                                                             (docs/contracts/agent-runs-v1.md; delegate is one producer)
 """
 
 import argparse
@@ -54,10 +55,11 @@ def config_dir():
     return base / "task-loop"
 
 
-def delegate_dir():
+def agent_runs_dir():
+    """The agent-runs v1 contract folder: the only place task-loop learns about other tools' workers."""
     if os.name == "nt":
-        return Path(os.environ.get("APPDATA", HOME / "AppData" / "Roaming")) / "delegate"
-    return Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config")) / "delegate"
+        return Path(os.environ.get("APPDATA", HOME / "AppData" / "Roaming")) / "agent-runs"
+    return Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config")) / "agent-runs"
 
 
 def version():
@@ -427,32 +429,53 @@ def codex_rollouts(since):
     return cached("rollouts:%d" % int(since / 60), 5, load)
 
 
-def delegate_runs(since):
-    """claude -p runs started through delegate's run-claude (runs/<session>.json, delegate 0.9+)."""
+def contract_runs(since):
+    """Run records under agent-runs v1 (docs/contracts/agent-runs-v1.md). Unknown fields ignored, other versions skipped."""
     def load():
         out = []
-        for f in glob.glob(str(delegate_dir() / "runs" / "*.json")):
+        for f in glob.glob(str(agent_runs_dir() / "runs" / "*.json")):
             try:
                 if os.path.getmtime(f) < since:
                     continue
             except OSError:
                 continue
             r = read_json(f, {}) or {}
-            sess = r.get("session")
-            if not sess:
+            if not isinstance(r, dict) or r.get("v") != 1 or not r.get("id"):
                 continue
-            tr = transcript_of(sess)
-            st = r.get("status") or "?"
-            upd = os.path.getmtime(tr) if tr and os.path.exists(tr) else r.get("ended") or r.get("started")
+            kind = r.get("kind") or "other"
+            path, adapter = None, None
+            if r.get("session"):
+                path, adapter = transcript_of(r["session"]), "claude-p"
+            if not path and r.get("thread"):
+                hits = glob.glob(str(CODEX_SESSIONS / "*" / "*" / "*" / ("rollout-*%s.jsonl" % r["thread"])))
+                path, adapter = (hits[0], "codex-exec") if hits else (None, None)
+            if not path and r.get("transcript") and os.path.exists(r["transcript"]):
+                path, adapter = r["transcript"], ("codex-exec" if kind == "codex" else "claude-p")
+            st = r.get("status") or "running"
+            upd = os.path.getmtime(path) if path and os.path.exists(path) else (r.get("ended") or r.get("started"))
             if st == "running" and upd and time.time() - upd > 6 * 3600:
                 st = "dead"
-            out.append({"id": ("claude-p:" + tr) if tr else "claude-p-missing:" + sess, "kind": "claude-p",
-                        "session": sess, "parent": r.get("parent"), "cwd": r.get("cwd", ""),
-                        "title": r.get("title") or "claude -p worker", "model": r.get("model", ""),
+            out.append({"id": "%s:%s" % (adapter, path) if path else "none:" + str(r["id"]), "kind": kind,
+                        "parent": r.get("parent_session"), "cwd": r.get("cwd", ""), "thread": r.get("thread"),
+                        "title": r.get("title") or kind + " run", "model": r.get("model", ""),
                         "role": r.get("lane", ""), "status": st, "started": r.get("started"),
-                        "ended": r.get("ended"), "updated": upd})
+                        "ended": r.get("ended"), "updated": upd, "producer": r.get("producer")})
         return out
-    return cached("delegateruns:%d" % int(since / 60), 4, load)
+    return cached("contractruns:%d" % int(since / 60), 4, load)
+
+
+def contract_lanes():
+    """Lanes records under agent-runs v1, fresh ones only."""
+    out = []
+    for f in glob.glob(str(agent_runs_dir() / "lanes" / "*.json")):
+        r = read_json(f, {}) or {}
+        if not isinstance(r, dict) or r.get("v") != 1 or time.time() - float(r.get("at") or 0) > 6 * 3600:
+            continue
+        for ln in r.get("lanes") or []:
+            if isinstance(ln, dict) and ln.get("name"):
+                out.append({"producer": r.get("producer"), "name": ln["name"], "out_until": ln.get("out_until"),
+                            "why": ln.get("why"), "usage": [u for u in ln.get("usage") or [] if isinstance(u, dict)]})
+    return out
 
 
 def pid_alive(pid):
@@ -537,7 +560,10 @@ def runs_for_span(span):
             continue
         if wt and same_tree(j.get("cwd"), wt) and j.get("started") and j["started"] >= t0 - 1 and (not t1 or j["started"] <= t1 + 1):
             runs.append(j)
-    for j in delegate_runs(t0 - 60):
+    threads = {r.get("thread") for r in runs if r.get("thread")}
+    for j in contract_runs(t0 - 60):
+        if j.get("thread") and j["thread"] in threads:
+            continue
         if j.get("parent") != sess or not j.get("started") or j["started"] < t0 - 1 or (t1 and j["started"] > t1 + 1):
             continue
         if span.get("worktree") and j.get("cwd") and not same_tree(j["cwd"], span["worktree"]):
@@ -588,7 +614,7 @@ def summary():
             })
         data["repos"].append({"path": repo, "name": os.path.basename(repo), "tasks": tasks,
                               "counts": count_status(tasks), "known": len(by_id)})
-    data["delegate"] = delegate_state()
+    data["lanes"] = contract_lanes()
     return data
 
 
@@ -600,18 +626,6 @@ def count_status(tasks):
         c[t["status"]] = c.get(t["status"], 0) + 1
     c["live"] = sum(1 for t in tasks if t["live"])
     return c
-
-
-def delegate_state():
-    st = read_json(delegate_dir() / "state.json")
-    if not st:
-        return None
-    out = {"out": st.get("out") or {}}
-    lim = ((st.get("codex_limits") or {}).get("res") or {}).get("rateLimits") or {}
-    if lim:
-        out["codex"] = {k: {"used": (lim.get(k) or {}).get("usedPercent"), "resets": (lim.get(k) or {}).get("resetsAt")}
-                        for k in ("primary", "secondary")}
-    return out
 
 
 def task_detail(repo, bead):
@@ -636,7 +650,7 @@ def all_runs(hours):
             if r["id"] == "subagent:" + path:
                 r["where"] = os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(path)))).split("-")[-1]
                 runs.append(r)
-    for j in codex_jobs(since) + codex_rollouts(since) + delegate_runs(since):
+    for j in codex_jobs(since) + codex_rollouts(since) + contract_runs(since):
         j = dict(j)
         j["where"] = os.path.basename(j.get("cwd") or "")
         runs.append(j)

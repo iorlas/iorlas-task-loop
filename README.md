@@ -16,8 +16,8 @@ Then in a repo that uses bd, say "task loop". Requirements: Python 3.8+ (standar
 Claude Code. macOS and Linux (also inside a container); Windows is expected to work and is untested.
 
 Suggested, not required: [iorlas-delegate](https://github.com/iorlas/iorlas-delegate) picks the worker lane and model
-for each step from live plan limits; with it installed the dashboard also shows lane limits and links its `claude -p`
-runs to their tasks.
+for each step from live plan limits. task-loop never reads delegate's files: any launcher, delegate included, puts its
+runs and lane limits on the dashboard by writing [agent-runs v1](docs/contracts/agent-runs-v1.md) records.
 
 ## What the loop does
 
@@ -47,7 +47,7 @@ One read-only server per machine, started by the loop (`tl.py dash ensure`), def
 
 - **Tasks:** what is live now, then each repo's bead tree (epics and children; live, open, blocked, done in 7 days).
 - **A task:** its sessions over time and every worker under them: the orchestrating Claude session, its Agent-tool
-  subagents, Codex runs (codex plugin jobs and `codex exec`), delegate's `claude -p` runs.
+  subagents, Codex runs (codex plugin jobs and `codex exec`), and runs any launcher publishes as agent-runs v1.
 - **Live log** of any of them, following new output.
 - **Workers:** every worker run on the machine in the last 24 hours.
 
@@ -67,6 +67,7 @@ skills/task-loop/dash/index.html dashboard page (no build, no dependencies)
 hooks/hooks.json                 SessionStart: index session id -> transcript path
 tests/                           python3 -m unittest discover -s tests   (CI: 3 OS x Python 3.8 and 3.12)
 docs/design/                     design notes
+docs/contracts/agent-runs-v1.md  the format other tools use to show their workers on the dashboard
 ```
 
 Work on this plugin is tracked with beads (`bd ready`).

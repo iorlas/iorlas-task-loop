@@ -278,10 +278,10 @@ async function poll(){
   }catch(e){$('stats').innerHTML='<span style="color:var(--fail)">server unreachable</span>'}
 }
 function renderLanes(){
-  const d=S.sum&&S.sum.delegate;if(!d){$('lanes').innerHTML='';return}
-  const out=Object.keys(d.out||{}).filter(k=>(d.out[k].until||0)>now());
-  const cx=d.codex?`<span class="lane">codex ${d.codex.primary.used??'–'}% 5h · ${d.codex.secondary.used??'–'}% wk</span>`:'';
-  $('lanes').innerHTML=cx+out.map(k=>`<span class="lane out" title="${esc(d.out[k].why||'')}">${esc(k.toLowerCase())} out</span>`).join('');
+  const ls=(S.sum&&S.sum.lanes)||[];
+  $('lanes').innerHTML=ls.map(l=>{const out=l.out_until&&l.out_until>now();
+    const u=(l.usage||[]).map(x=>`${x.used_pct??'–'}% ${esc(x.window||'')}`).join(' · ');
+    return `<span class="lane ${out?'out':''}" title="${esc((l.producer||'')+(l.why?': '+l.why:''))}">${esc(l.name.toLowerCase())} ${out?'out':u}</span>`}).join('');
 }
 function tick(){$('clock').textContent=new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
   document.querySelectorAll('[data-since]').forEach(el=>el.textContent=fmt(now()-(+el.dataset.since)))}
