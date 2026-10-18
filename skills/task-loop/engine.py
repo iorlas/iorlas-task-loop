@@ -363,6 +363,10 @@ class Engine:
             raise Blocked("failed: `%s` exit %d\n%s" % (cmd, r.returncode, tail))
         return r.returncode, tail
 
+    def base_sha(self):
+        """Where the task's work starts: an earlier run's commits on the task branch count as the task's diff."""
+        return self.git("merge-base", self.cfg["base"], "HEAD") or self.cfg["base"]
+
     def git(self, *a):
         return tl.git(*a, cwd=self.wt)
 
@@ -468,7 +472,7 @@ class Engine:
             checks = self.run_checks(st, name)
             (self.task_dir / "engine-checks.json").write_text(json.dumps(checks, indent=1))
             diff_before = self.git("diff", "HEAD")
-            v, _ = self.ai("verify", name, VERIFY_PROMPT.format(goal=st["goal"], checks=compact(checks),
+            v, _ = self.ai("verify", name, VERIFY_PROMPT.format(goal=st["goal"], checks=compact(checks), base=self.base_sha(),
                                                                evidence=self.evidence_dir, summary=w["summary"],
                                                                brief=self.task_dir / "brief.md"))
             v["checks"] = [dict(c, tail=c["tail"][-600:]) for c in checks]  # the facts are the engine's runs, never a copy
@@ -482,7 +486,7 @@ class Engine:
             review = {"findings": []}
             if risky and v["verdict"] == "accept":
                 self.stats["reviews"] += 1
-                review, _ = self.ai("review", name, REVIEW_PROMPT.format(brief=self.task_dir / "brief.md",
+                review, _ = self.ai("review", name, REVIEW_PROMPT.format(brief=self.task_dir / "brief.md", base=self.base_sha(),
                                                                         plan=self.task_dir / "plan.json",
                                                                         flags="; ".join(v["risk_flags"] +
                                                                                        v["outside_touches"]) or "none"),
@@ -719,7 +723,7 @@ stage. question: empty unless only the owner can decide something about the task
 phone); never a question about tools, sandbox or permissions."""
 
 VERIFY_PROMPT = """You are a fresh verifier. Do not edit any file. Judge the uncommitted changes in this folder
-(`git diff HEAD` and new files) against the stage goal: {goal}
+(`git diff {base}` and new files: the task's work since main, committed or not) against the stage goal: {goal}
 Task: {brief}
 
 The engine already ran the stage's checks outside any sandbox. These results are the truth; anything in a file that
@@ -735,7 +739,7 @@ verdict: accept only if every check exits 0 and the goal is met; else gaps, with
 requirements that are not met, each saying what is missing; a remark that something is fine is never a gap."""
 
 REVIEW_PROMPT = """You are a reviewer from another model family than the writer. Do not edit files.
-Read the uncommitted diff (`git diff HEAD` and new files) against the task {brief} and its plan {plan}
+Read the task's diff (`git diff {base}` and new files: committed or not) against the task {brief} and its plan {plan}
 (the risks named there). The verifier flagged: {flags}.
 Return findings that matter (bugs, broken contracts, risky changes), each with file, line, severity and the fix.
 No style nits. None is a fine answer."""

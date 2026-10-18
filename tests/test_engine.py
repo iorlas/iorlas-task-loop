@@ -148,6 +148,13 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(tl.git("status", "--porcelain", cwd=str(self.wt)), "")
         self.assertIn("wip (t-1)", tl.git("log", "-1", "--format=%s", "task/t-1", cwd=str(self.wt)))
 
+    def test_verifier_diffs_from_the_merge_base(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "verify": [ACCEPT_V], "judge": [judge("accept")]})
+        self.assertEqual(rc, 0)
+        base = tl.git("rev-parse", "origin/main~0", cwd=str(self.wt))
+        self.assertNotIn("git diff HEAD", s.prompts[2])
+        self.assertRegex(s.prompts[2], r"git diff [0-9a-f]{40}")
+
     def test_judge_sees_the_engines_checks_not_the_verifiers_copy(self):
         lying = dict(ACCEPT_V, checks=[{"cmd": "dotnet test", "exit": 124, "tail": "timeout"}])
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "verify": [lying], "judge": [judge("accept")]})
