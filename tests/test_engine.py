@@ -275,9 +275,16 @@ class DelegateCall(unittest.TestCase):
                                         Path(d, "err.log"), writer="claude", parent="p", task="t-1", title="x")
         argv = r.data["argv"]
         self.assertEqual(argv[:2], ["run", "worker"])
-        for flag, val in (("--resume", "r0"), ("--writer", "claude"), ("--parent", "p"), ("--task", "t-1")):
+        for flag, val in (("--resume", "r0"), ("--authored-by", "claude"), ("--parent", "p"), ("--task", "t-1")):
             self.assertEqual(argv[argv.index(flag) + 1], val)
         self.assertEqual((r.ref, r.backend, r.error), ("r1", "openai", ""))
+
+    def test_author_flag_follows_the_installed_version(self):
+        base = "/h/.claude/plugins/cache/m/iorlas-delegate/%s/skills/delegate/route.py"
+        self.assertEqual(engine.author_flag(base % "0.16.0"), "--writer")
+        self.assertEqual(engine.author_flag(base % "0.17.0"), "--authored-by")
+        self.assertEqual(engine.author_flag(base % "1.2.0"), "--authored-by")
+        self.assertEqual(engine.author_flag("/src/delegate/skills/delegate/route.py"), "--authored-by")
 
     def test_find_route_picks_the_newest_contract_version(self):
         with tempfile.TemporaryDirectory() as home:

@@ -19,13 +19,13 @@ Delegate already does the first four. The engine should not grow a second copy, 
 
 ```
 <python> <route.py> run ROLE --cwd DIR --brief FILE
-        [--schema FILE] [--resume REF] [--writer openai|claude] [--failed I,J]
+        [--schema FILE] [--resume REF] [--authored-by openai|claude] [--failed I,J]
         [--timeout SECS] [--cap USD] [--parent SESSION] [--task ID] [--title TEXT]
 ```
 
 | flag | meaning |
 |---|---|
-| `ROLE` | delegate role. Engine mapping: plan → planner, write → worker, verify → light (runs checks, reports), review → reviewer `--writer <family that wrote the thread, from the engine's record>`, judge → light, a hard stage → hard |
+| `ROLE` | delegate role. Engine mapping: plan → planner, write → worker, verify → light (runs checks, reports), review → reviewer `--authored-by <family that wrote the thread, from the engine's record>` (`--writer` before delegate 0.17.0; the engine picks the flag by the installed version), judge → light, a hard stage → hard |
 | `--schema FILE` | JSON Schema for the answer. Codex: `--output-schema FILE`; claude: `--json-schema`. The producer parses the answer; it does not need to validate it (the engine does) |
 | `--resume REF` | continue the thread or session `REF` from an earlier result, on the same lane. Codex: `codex exec resume REF` takes no `-s`/`-C`: set the sandbox with `-c sandbox_mode=...` and the folder through the process cwd. Claude: `--resume REF`. A lane that is now out → `status: "lane_out"`, never a silent switch to another lane (a new thread loses the writer's context; the engine decides) |
 | `--cap USD` | spend cap for this call (credit lanes). Absent → the role's step cap |

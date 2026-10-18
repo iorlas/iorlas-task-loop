@@ -177,6 +177,12 @@ def find_route(path=""):
     return max(found)[1] if found else None
 
 
+def author_flag(route):
+    """delegate renamed --writer to --authored-by in 0.17.0; a route.py outside a versioned plugin folder is new."""
+    m = re.search(r"iorlas-delegate[/\\](\d+)\.(\d+)", route)
+    return "--writer" if m and (int(m.group(1)), int(m.group(2))) < (0, 17) else "--authored-by"
+
+
 def call_delegate(route, role, prompt, schema, cwd, resume, timeout, log_path, writer=None, parent="", task="",
                   title=""):
     """One AI step through `route.py run` (worker-run v1). Returns (Result, the answer object or None)."""
@@ -189,7 +195,7 @@ def call_delegate(route, role, prompt, schema, cwd, resume, timeout, log_path, w
         if resume:
             cmd += ["--resume", resume]
         if writer:
-            cmd += ["--writer", writer]
+            cmd += [author_flag(route), writer]
         res, secs = run_proc(cmd, cwd, timeout + 120, log_path)
     if res is None:
         return Result(secs=secs, error="timeout", backend="delegate", ref=resume or ""), None
