@@ -5,8 +5,8 @@ description: Run the autonomous task loop on a repo that tracks work in bd (bead
 
 # task-loop
 
-Several sessions run this at once on one repo and one shared bd database, each in its own worktree. Each session
-orchestrates; workers write and verify. The project's rules come from its **loop profile**; this file is the method,
+Several sessions run this at once on one repo and one shared bd database, each in its own worktree. The engine
+(`tl run-task`) does each task with headless workers; the session picks, starts and watches it (attended mode). The project's rules come from its **loop profile**; this file is the method,
 the profile is the project.
 
 The owner pre-approves everything here: claiming, committing, merging into main, filing beads. No plan mode, no
@@ -74,92 +74,53 @@ bead's provenance.
 2. Candidates: the profile's pick filter over `bd ready --json`, never a bead labelled `slot`, never `in_progress`,
    never an epic.
 3. Order: beads whose `## Touches` overlap no `in_progress` bead's Touches first, by priority; overlapping ones after
-   them, by priority. Overlap lowers the order, never skips a bead: the sync (step 3) resolves shared files.
-4. In that order: `tl claim <id> --worktree "$WT" [--slot <name>]`. `TAKEN` → next. Nothing left after a fresh
-   reclaim → step 5.
-5. Branch: a bead with `metadata.branch` (a reclaimed one) continues that branch, never restarts it; with
-   `metadata.slot` set it continues in that slot (its commits may exist only there).
-   - Slots on: `tl slot reset <name> --bead <id>`: commits any leftover work where it was (never wipes it), checks
-     out `task/<id>` from origin/main, `git clean -fd` (ignored setup output stays), reruns setup if its inputs
-     changed. `READY` → go; `DIRTY` → the leftover work could not be committed: block the slot's last bead with the
-     output, release the slot, take another.
-   - Slots off: `git -C "$WT" fetch origin && git -C "$WT" checkout -B task/<id> origin/main`.
-6. Keep the claims alive: a background Bash job `tl heartbeat <id> [<slot bead>] --loop`. It beats every 60 s and
-   exits when a heartbeat fails or the session's process is gone, so a dead session's leases lapse. Restart it after
-   the next claim.
+   them, by priority. Overlap lowers the order, never skips a bead: the engine's rebase before landing resolves shared files.
+4. Take the first one to the engine (step 2): it claims the bead as this session (`TAKEN`, exit 1 → the next
+   candidate), continues `metadata.branch` when the bead was worked before, and keeps the claim alive while it runs.
+   Nothing left after a fresh reclaim → step 5.
+5. Slots on: before the engine, `tl slot reset <name> --bead <id>` (commits leftover work, never wipes it; reruns the
+   setup only when its inputs changed). `DIRTY` → block the slot's last bead with the output, release the slot, take
+   another. A bead with `metadata.slot` set continues in that slot.
 
-## 2. Work (per task)
+## 2. Run the engine (per task)
 
-Say where the task is with `tl stage <id> "<what>"` at every step change (analyse, plan, stage 2 write, verify, gate,
-land): the dashboard shows it next to the bead.
+The engine does the task; you watch it. `tl run-task <id> --worktree "$WT" [--slot <name>]` in a background Bash job
+(several at once is fine, one per slot or worktree). It claims the bead, then: reset → plan → per stage (write →
+checks run by the engine → verify → review when risky → judge) → gate → land → close. Every AI step is a headless
+worker with a schema-checked answer; the close step always runs; the plan, findings and a Reflect line go into the
+bead. Engine settings: `.task-loop.json` → `engine` (gate, land, budgets, which worker runs which step).
 
-1. **Analyse:** the bead, its acceptance criteria, linked decisions, the code it names, the AGENTS.md triggers that
-   apply. Bulk reading goes to a reader worker; keep only the conclusion.
-2. **Decide and plan** (never delegated): the approach as `tl bd comments add <id> "Plan: ..."`, split into stages,
-   each one coherent piece its checks can judge, each marked writer or hard part. The plan names the **risks ahead of
-   time**: what in this task could break something users keep or other code relies on (a saved format, a public
-   member, a content number, a migration, shared files), each with the check that will prove it safe. A stage that
-   touches a named risk is reviewed (3.4) whatever the verifier says.
-3. **Stages,** one at a time:
-   1. **Write:** the bead is the brief. Export it, `bd show <id> > "$WT/.task/<id>/brief.md"` (with the comments:
-      plan, risks, review findings; `.task/` is git-ignored and per bead, because a sandboxed worker may not open the
-      bd database). The prompt points at that file and adds only the stage: its goal, files, the checks it must run
-      before reporting (the profile's workers), and "no commits, no pushing, no suppressions, do not weaken tests".
-      Codex in a reused slot: a task's first stage starts a fresh thread, later stages of the same task resume it.
-      Its report counts as nothing.
-   2. **Record the worker** unless the dashboard finds it by itself (Agent-tool subagents, Codex plugin jobs, and
-      runs whose launcher publishes agent-runs records): `tl worker <id> --kind codex|claude-p|other --ref <thread or
-      session id> --title "<stage>"`.
-   3. **Verify:** a fresh verifier gets the goal, the checks and `git diff`, never the writer's
-      report. It reruns every check, then the profile's verify list, and returns only: `git diff --stat`; per check
-      the exit code and last 3 lines (never "passed"); stats (lines added and removed, files, **tests added and
-      removed**, counted from the diff and the test runs' totals); files outside the bead's `## Touches`; risk flags
-      (a public member changed; a test deleted, weakened or filtered; a suppression added; a named risk touched; the
-      profile's extra flags); ACCEPT or GAPS with the list.
-   4. **Review** (on a risk flag, a named risk, a hard stage, a third round, a merge-conflict resolution, or a gate red
-      twice): a fresh reviewer from another model family than the writer (a Codex writer gets a Claude reviewer, and
-      the other way round) reads the diff against the bead and its named risks and returns findings, each with
-      file:line, severity and the fix. Every finding goes into the bead: `tl bd comments add <id> "Review: ..."`.
-   5. **Judge:** read the verifier's report and the review's findings, not the diff. Read the diff yourself only for a
-      finding you must decide on.
-   6. **Gaps** → back to the same writer thread: re-export the brief (it now holds the review comments) and say which
-      findings to fix. Hard part → a hard worker.
-   7. **Sync** (3.1) between stages, never while a worker is writing.
-4. **Every problem noticed** gets a bead now: `tl bd create ... --deps discovered-from:<id>`, with acceptance criteria
-   and touched paths; small and mechanical → the profile's "ready for agents" label, else unlabelled for the owner.
-5. **Gate:** the profile's gate, green. A known flaky check: retry once; red again → fix it or file it, never bypass.
-6. **Complete?** Walk the acceptance criteria line by line with evidence (test, log, screenshot). A line unmet → back
-   to 3. Small related work in the same files: do it now rather than file it.
-7. **Reflect:** `tl bd comments add <id> "Reflect: left=<what or none>; filed=<ids or none>; stats=<lines +/->,
-   <tests added>, <stages>, <review rounds>"`. Not optional; the stats feed the owner's view of what delegation
-   produced.
-8. Commit: `<what changed> (<id>)`.
+Its output is verbose by default (`--quiet` for less): each step, the facts behind it (checks with exit codes, gaps,
+flags, findings, the judge's reason, cost) and **⚠ lines** for what you must look at. Read the output as it comes
+(the job's output file, or the dashboard's Engine run). Never do a step's work yourself; change what makes the
+engine misbehave.
 
-## 3. Sync and land (in your own worktree, no lock)
+| ⚠ line | what to do |
+|---|---|
+| judge says block / an owner question | owner decision: leave it blocked, report it at the end |
+| judge says replan, write round 2+, rounds exhausted | read the gaps and checks: a vague bead → sharpen its description and acceptance criteria, reopen; a wrong check in the plan → note it in the bead |
+| a check fails the same way every round | the environment or the profile (setup, a missing tool, a flaky test): fix it or file it, then reopen |
+| needed a retry / no valid output / engine error | an engine problem: file a bead in iorlas-task-loop with the engine log path, then reopen and rerun |
+| files outside the task, tests removed, high finding, verifier changed files | read the diff; if wrong, reopen with a note saying what must not change |
+| budget 50% / 80% | fine once; on every task → the beads are too big (split them) or the budget too small |
+| push rejected | normal under parallel landings; five in a row → main is too busy, run fewer at once |
 
-Each session merges main into its own work often, so landing is a fast-forward push of a tree that is already merged
-and gated. Sessions never wait for each other: a push that loses the race syncs and retries.
+Reopen = `tl bd update <id> --status open --append-notes "<answer or correction>"`, then run the engine again: it
+continues the task branch (its earlier work is kept) and the next plan reads the note.
 
-1. **Sync:** `git -C "$WT" fetch origin && git -C "$WT" rebase origin/main`: after every stage, before the gate,
-   before every push.
-2. **Conflict:** keep both intents, main's and the task's; never `-X ours` or `-X theirs`, never drop main's change to
-   make yours fit; rerun the checks that cover the conflicted files. Truly contradictory → `git rebase --abort`,
-   `tl block <id> --why "merge conflict: <files>; <why>"`, keep the branch, pick next.
-3. **Land:** the profile's land command. The gate must run on the merged tree (the pre-push hook, or run it first);
-   never `--no-verify`, never a merge path that skips the gate (a PR merged on the forge's web page does).
-   Rejected because main moved → sync and push again; after 5 rejections in a row, take the next task and land this
-   one after it. Red because main itself is red → fix main first and file a bead. Landed → `tl land <id> --sha <sha> --worktree "$WT"`.
-4. Every third landing by your session: the profile's full gate on a detached `origin/main` (two tasks green alone,
-   red together); red → fix or file.
+## 3. After each run
 
-## 4. Close
+- Landed: next bead (step 1).
+- Blocked with an owner question: leave it; it goes in the final report.
+- Blocked or failed for any other reason: act on the ⚠ table, then rerun or move on.
+- Every problem you notice gets a bead (`tl bd create ... --deps discovered-from:<id>`); problems with the engine
+  itself go to iorlas-task-loop.
 
-`tl close <id> --reason "merged <sha>"`; stop the heartbeat job; `tl bd dolt pull && tl bd dolt push`; the profile's
-close step; `git -C "$WT" checkout --detach` and `git -C "$WT" branch -d task/<id>`. Back to step 1 (the slot or
-worktree stays yours).
+## 4. By hand (only when the engine cannot run here)
 
-A question only the owner can answer: `tl block <id> --why "<the question, with options and your pick>"`, stop the
-heartbeat, pick next.
+When no worker can run headless on this machine (no Codex or `claude` CLI login), do the same steps yourself in the
+same order, with the same records: `tl claim`, `tl stage`, plan in the bead, write through workers, run the checks
+yourself, a fresh verifier, a reviewer from another model family on risky stages, `tl land`, `tl close` or `tl block`.
 
 ## 5. Stop
 

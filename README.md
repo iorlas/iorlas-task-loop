@@ -21,11 +21,17 @@ runs and lane limits on the dashboard by writing [agent-runs v1](docs/contracts/
 
 ## What the loop does
 
-1. **Start:** starts the dashboard, takes a slot (or makes this session's worktree).
-2. **Pick:** reclaims dead sessions' beads, claims the next ready bead as this session.
-3. **Work:** plans in the bead, writes in stages through workers, verifies with a fresh verifier, reviews risky stages
-   with a reviewer from another model family, gates, reflects.
-4. **Land:** rebases on main, pushes through the project's gate, closes the bead.
+A Claude Code session (attended mode) picks ready beads and runs the **engine** on each, watching its output:
+
+```sh
+python3 skills/task-loop/tl.py run-task <bead id> --worktree <dir>
+```
+
+The engine claims the bead and runs reset → plan → per stage (write → checks run by the engine → verify → review
+when risky → judge) → gate → land → close, each AI step a headless worker (Codex or `claude -p`) with a
+schema-checked answer. Code routes; the judge reads ambiguous results; close always runs. Its output is verbose with
+⚠ lines for anything the watching session should react to. Settings: `.task-loop.json` → `engine`. Design:
+[docs/design/coordinator-less.md](docs/design/coordinator-less.md).
 
 Everything is recorded in the bead (plan, review findings, reflect stats, provenance of who claimed and landed it).
 The method is [`skills/task-loop/SKILL.md`](skills/task-loop/SKILL.md); each repo's specifics go in its loop profile

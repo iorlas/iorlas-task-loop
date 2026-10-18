@@ -550,12 +550,15 @@ class Engine:
             if self.git("rev-list", "--count", "%s..HEAD" % self.cfg["base"]) in ("", "0"):
                 self.log("note", "nothing changed")
                 return ""
-        else:
-            self.sh("git add -A", check=True)
-            msg = "%s (%s)" % (bead.get("title", self.bead)[:72], self.bead)
-            rc, tail = self.sh("git commit -q -m %s" % sh_quote(msg))
-            if rc:
-                raise Blocked("failed: commit refused (hooks)\n" + tail)
+        # one commit per task, titled after the bead: earlier runs' wip commits are folded in
+        base = self.git("merge-base", "HEAD", self.cfg["base"])
+        if base:
+            self.sh("git reset -q --soft %s" % base, check=True)
+        self.sh("git add -A", check=True)
+        msg = "%s (%s)" % (bead.get("title", self.bead)[:72], self.bead)
+        rc, tail = self.sh("git commit -q -m %s" % sh_quote(msg))
+        if rc:
+            raise Blocked("failed: commit refused (hooks)\n" + tail)
         if self.dry:
             self.log("note", "dry run: not landing")
             return ""

@@ -98,6 +98,17 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "x2")
         self.assertTrue(any(c[:2] == ("comments", "add") and "Reflect (engine)" in c[3] for c in self.bd_calls))
 
+    def test_wip_from_an_earlier_run_lands_as_one_titled_commit(self):
+        sh("git", "checkout", "-q", "-b", "task/t-1", cwd=self.wt)
+        Path(self.wt, "g.txt").write_text("from run 1\n")
+        sh("git", "add", "-A", cwd=self.wt)
+        sh("git", "commit", "-qm", "wip (t-1): blocked", cwd=self.wt)
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "verify": [ACCEPT_V], "judge": [judge("accept")]})
+        self.assertEqual(rc, 0)
+        log = tl.git("log", "--format=%s", "origin/main", cwd=str(self.wt)).splitlines()
+        self.assertEqual(log, ["Add f (t-1)", "init"])
+        self.assertEqual(tl.git("show", "origin/main:g.txt", cwd=str(self.wt)), "from run 1")
+
     def test_rework_resumes_the_same_writer(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE], "verify": [GAPS_V, ACCEPT_V],
                                  "judge": [judge("rework"), judge("accept")]})
