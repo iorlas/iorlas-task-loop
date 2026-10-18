@@ -184,7 +184,7 @@ def beads_of(repo):
     if exe:
         try:
             r = subprocess.run([exe, "list", "--json", "--all", "-n", "0"], cwd=repo, capture_output=True,
-                               text=True, timeout=30)
+                               text=True, encoding="utf-8", errors="replace", timeout=30)
             if r.returncode == 0:
                 beads = json.loads(r.stdout)
         except (subprocess.SubprocessError, ValueError, OSError):
@@ -727,7 +727,7 @@ def tailscale_ip():
                                           if os.path.exists("/Applications/Tailscale.app") else None)
     if exe:
         try:
-            r = subprocess.run([exe, "ip", "-4"], capture_output=True, text=True, timeout=3)
+            r = subprocess.run([exe, "ip", "-4"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=3)
             ip = r.stdout.strip().splitlines()[0] if r.returncode == 0 and r.stdout.strip() else ""
             if ip:
                 return ip
@@ -736,7 +736,7 @@ def tailscale_ip():
     cgnat = ipaddress.ip_network("100.64.0.0/10")
     for cmd in (["ip", "-4", "-o", "addr"], ["ifconfig"]):
         try:
-            out = subprocess.run(cmd, capture_output=True, text=True, timeout=3).stdout
+            out = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=3).stdout
         except (OSError, subprocess.SubprocessError):
             continue
         for ip in re.findall(r"inet (\d+\.\d+\.\d+\.\d+)", out):

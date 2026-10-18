@@ -59,7 +59,7 @@ def session_id():
 
 
 def git(*args, cwd=None):
-    r = subprocess.run(["git"] + list(args), cwd=cwd, capture_output=True, text=True)
+    r = subprocess.run(["git"] + list(args), cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     return r.stdout.strip() if r.returncode == 0 else ""
 
 
@@ -89,7 +89,7 @@ def bd(*args, cwd=None, check=False):
     exe = shutil.which("bd")
     if not exe:
         sys.exit("tl: bd is not on PATH")
-    r = subprocess.run([exe, "--actor", actor()] + list(args), cwd=cwd, capture_output=True, text=True)
+    r = subprocess.run([exe, "--actor", actor()] + list(args), cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if check and r.returncode != 0:
         sys.stderr.write(r.stderr)
         sys.exit(r.returncode)
@@ -327,7 +327,7 @@ def cmd_slot(a):
             if not os.path.isdir(d):
                 git("fetch", "origin", cwd=repo)
                 r = subprocess.run(["git", "-C", repo, "worktree", "add", "--detach", d, "origin/main"],
-                                   capture_output=True, text=True)
+                                   capture_output=True, text=True, encoding="utf-8", errors="replace")
                 if r.returncode != 0:
                     sys.exit(r.stderr)
             print(name + "\t" + d)
@@ -366,7 +366,7 @@ def cmd_slot(a):
                 git("checkout", "-b", br, cwd=d)
             git("add", "-A", cwd=d)
             r = subprocess.run(["git", "-C", d, "commit", "-qm", "wip: left in slot %s" % a.name],
-                               capture_output=True, text=True)
+                               capture_output=True, text=True, encoding="utf-8", errors="replace")
             if r.returncode != 0:
                 print("DIRTY: could not commit the leftover work on %s\n%s" % (br, r.stderr))
                 return 3
@@ -374,9 +374,9 @@ def cmd_slot(a):
         git("fetch", "origin", cwd=d)
         base = cfg.get("base") or "origin/main"
         if a.bead:
-            r = subprocess.run(["git", "-C", d, "checkout", "-B", "task/" + a.bead, base], capture_output=True, text=True)
+            r = subprocess.run(["git", "-C", d, "checkout", "-B", "task/" + a.bead, base], capture_output=True, text=True, encoding="utf-8", errors="replace")
         else:
-            r = subprocess.run(["git", "-C", d, "checkout", "--detach", base], capture_output=True, text=True)
+            r = subprocess.run(["git", "-C", d, "checkout", "--detach", base], capture_output=True, text=True, encoding="utf-8", errors="replace")
         if r.returncode != 0:
             sys.stderr.write(r.stderr)
             return r.returncode
@@ -444,7 +444,7 @@ def cmd_worktree(a):
         if not d.exists():
             git("fetch", "origin", cwd=repo)
             r = subprocess.run(["git", "-C", repo, "worktree", "add", "--detach", str(d), "origin/main"],
-                               capture_output=True, text=True)
+                               capture_output=True, text=True, encoding="utf-8", errors="replace")
             if r.returncode != 0:
                 sys.exit(r.stderr)
         event("worktree-start", "", worktree=str(d), repo=repo)

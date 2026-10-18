@@ -124,7 +124,7 @@ def claude_available():
         exe = shutil.which("claude")
         if exe:
             try:
-                r = subprocess.run([exe, "auth", "status"], capture_output=True, text=True, timeout=20,
+                r = subprocess.run([exe, "auth", "status"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=20,
                                    env=child_env(), stdin=subprocess.DEVNULL)
                 ok = '"loggedIn": true' in r.stdout
             except (OSError, subprocess.SubprocessError):
@@ -274,7 +274,7 @@ class Engine:
         if kind == "node":
             tl.event("stage", self.bead, text=text)
         if kind == "warn" or not (kind == "cmd" and not self.verbose):
-            print("[%s] %s%s" % (time.strftime("%H:%M:%S"), "⚠ " if kind == "warn" else "", text), flush=True)
+            say("[%s] %s%s" % (time.strftime("%H:%M:%S"), "⚠ " if kind == "warn" else "", text))
 
     def warn(self, text):
         """Something a watching coordinator should look at: printed with ⚠, kept in the log, shown on the dashboard."""
@@ -285,7 +285,7 @@ class Engine:
         if self.verbose:
             for ln in lines:
                 if ln:
-                    print("           %s" % ln[:400], flush=True)
+                    say("           %s" % ln[:400])
 
     def budget_check(self):
         mins = (time.time() - self.t0) / 60
@@ -378,7 +378,7 @@ class Engine:
     # -- script helpers
     def sh(self, cmd, timeout=3600, check=False):
         self.log("cmd", cmd)
-        r = subprocess.run(cmd, shell=True, cwd=self.wt, capture_output=True, text=True, timeout=timeout,
+        r = subprocess.run(cmd, shell=True, cwd=self.wt, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout,
                            stdin=subprocess.DEVNULL)
         tail = "\n".join((r.stdout + r.stderr).strip().splitlines()[-15:])
         self.log("note", "exit %d%s" % (r.returncode, (": " + tail[-600:]) if r.returncode else ""), exit=r.returncode)
@@ -646,6 +646,15 @@ class Heartbeat:
         self.stop_ev.set()
 
 
+def say(line):
+    """Print whatever the console can show (a Windows cp1252 console cannot print ⚠): never crash on output."""
+    try:
+        print(line, flush=True)
+    except UnicodeEncodeError:
+        enc = getattr(sys.stdout, "encoding", None) or "ascii"
+        print(line.encode(enc, "replace").decode(enc), flush=True)
+
+
 class Args:
     def __init__(self, **kw):
         self.__dict__.update(kw)
@@ -769,7 +778,7 @@ def main(a):
     wt = a.worktree
     if not wt:
         r = subprocess.run([sys.executable, str(Path(__file__).with_name("tl.py")), "worktree", "start"],
-                           capture_output=True, text=True)
+                           capture_output=True, text=True, encoding="utf-8", errors="replace")
         wt = r.stdout.strip().splitlines()[-1] if r.returncode == 0 and r.stdout.strip() else ""
         if not wt:
             sys.exit("tl: no worktree: " + r.stderr)
@@ -777,5 +786,5 @@ def main(a):
     if not a.dry_run and tl.cmd_claim(Args(id=a.id, worktree=wt, slot=a.slot)) != 0:
         return 1  # bd lets this session re-claim its own bead (a reopened one); another session's claim stops here
     eng = Engine(a.id, wt, cfg, dry_run=a.dry_run, verbose=not getattr(a, "quiet", False))
-    print("engine log: %s" % eng.log_path, flush=True)
+    say("engine log: %s" % eng.log_path)
     return eng.run()
