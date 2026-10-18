@@ -1,6 +1,6 @@
 # worker-run v1: how the engine asks a launcher to run one AI step (draft, 2026-10-18)
 
-Status: proposed, not implemented. Owner: task-loop (the consumer), like agent-runs v1. First producer: delegate's
+Status: agreed with delegate 2026-10-18 (no `--json`/`--headless` flags; git guard narrowed for all callers), not implemented. Owner: task-loop (the consumer), like agent-runs v1. First producer: delegate's
 `route.py run`. Without a producer the engine keeps its built-in launcher (`call_codex`, `call_claude` in
 `skills/task-loop/engine.py`), so nothing here is required for task-loop to work.
 
@@ -19,7 +19,7 @@ Delegate already does the first four. The engine should not grow a second copy, 
 ## Call
 
 ```
-<python> <route.py> run ROLE --json --headless --cwd DIR --brief FILE
+<python> <route.py> run ROLE --cwd DIR --brief FILE
         [--schema FILE] [--resume REF] [--writer openai|claude] [--failed I,J]
         [--timeout SECS] [--cap USD] [--parent SESSION] [--task ID] [--title TEXT]
 ```
@@ -27,14 +27,20 @@ Delegate already does the first four. The engine should not grow a second copy, 
 | flag | meaning |
 |---|---|
 | `ROLE` | delegate role. Engine mapping: plan → planner, write → worker, verify → reviewer `--writer <write family>`, review → reviewer `--writer <write family>`, judge → light, a hard stage → hard |
-| `--json` | stdout is exactly one JSON object (below), nothing else. Worker chatter and diagnostics go to stderr |
-| `--headless` | no human and no Claude session behind the caller: never answer `agent`, never `ask_user`, never `needs_input`. Lanes that need the Agent tool count as unavailable unless a headless runner exists for them |
 | `--schema FILE` | JSON Schema for the answer. Codex: `--output-schema FILE`; claude: `--json-schema`. The producer parses the answer; it does not need to validate it (the engine does) |
 | `--resume REF` | continue the thread or session `REF` from an earlier result, on the same lane. Codex: `codex exec resume REF` takes no `-s`/`-C`: set the sandbox with `-c sandbox_mode=...` and the folder through the process cwd. Claude: `--resume REF`. A lane that is now out → `status: "lane_out"`, never a silent switch to another lane (a new thread loses the writer's context; the engine decides) |
 | `--cap USD` | spend cap for this call (credit lanes). Absent → the role's step cap |
 | `--parent`, `--task`, `--title` | written into the agent-runs record (`parent_session`, `task`, `title`). The engine strips `CLAUDE_*` from the child env, so `$CLAUDE_CODE_SESSION_ID` is not there to read |
 
 The brief is passed as a file (or stdin when `--brief` is absent). The producer may prepend its git rules.
+
+## Output and headless mode (no flags)
+
+- `run` always prints exactly one JSON object (below) on stdout, for every caller; worker chatter and diagnostics go
+  to stderr.
+- Headless is derived from the environment: no `CLAUDE_CODE_ENTRYPOINT` (the engine strips `CLAUDE_*`) means no
+  Claude session behind the caller. Then: never `agent`, never `ask_user`, never `needs_input`; Agent-tool lanes are
+  unavailable; unknown subscription use does not block.
 
 ## Result (stdout, one object)
 
@@ -65,8 +71,9 @@ Exit code: 0 when the object was printed, whatever `status` says; non-zero only 
 2. **Process group.** The worker runs in its own process group; timeout kills the group (as `run` does today).
 3. **Env.** The worker gets the caller's env minus `CLAUDE_*`, `ANTHROPIC_*` (except the key the producer sets) and
    `DELEGATE_*`, plus `DELEGATE_DEPTH=1`. stdin is closed after the brief.
-4. **Git.** Measure only the cwd's HEAD and current branch. Other refs and the worktree list change during a call
-   when other slots of the same repo work and land in parallel; comparing them gives false violations.
+4. **Git.** Measure only the cwd's HEAD and current branch, for every caller. Other refs and the worktree list change
+   during a call when other slots of the same repo work and land in parallel; comparing them gives false violations.
+   Cost: a worker that creates a side branch or worktree is no longer caught (accepted).
 5. **Headless limits.** Lane limits come from what a headless process can read (codex app server, the credit ledger,
    a limits file). Unknown subscription use must not make the call wait for input.
 6. **Encoding.** UTF-8 in and out, errors replaced (a cp1252 Windows console must not crash the call).
