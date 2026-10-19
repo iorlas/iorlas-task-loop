@@ -288,6 +288,7 @@ class EngineTest(unittest.TestCase):
         self.assertNotIn("reviewer", [c[0] for c in s.calls])
         self.assertEqual([c[0] for c in s.calls].count("worker"), 4)
         self.assertIn("stuck", self.blocked[0])
+        self.assertEqual((self.eng.stats["writes"], self.eng.stats["rounds"]), (4, 2))
 
     def test_low_findings_are_noted_and_do_not_send_back(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [review(findings=[finding("low")])]})

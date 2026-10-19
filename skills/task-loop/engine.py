@@ -239,7 +239,7 @@ class Engine:
         self.bead, self.wt, self.cfg, self.dry, self.verbose = bead, wt, cfg, dry_run, verbose
         self.t0 = time.time()
         self.cost = 0.0
-        self.stats = {"rounds": 0, "reviews": 0, "replans": 0, "nodes": 0, "tests_added": 0, "tests_removed": 0}
+        self.stats = {"writes": 0, "rounds": 0, "reviews": 0, "replans": 0, "nodes": 0, "tests_added": 0, "tests_removed": 0}
         self.session = tl.session_id()
         self.leftovers = []
         self.stuck_why = ""
@@ -535,7 +535,7 @@ class Engine:
         feedback, rounds, red, n = "", 0, 0, 0
         while True:
             n += 1
-            self.stats["rounds"] += 1
+            self.stats["writes"] += 1
             if n >= 2:
                 self.warn("%s: write %d (round %d)" % (name, n, rounds + 1))
             w, wfam = self.ai("write", "%s write %d" % (name, n), WRITE_PROMPT.format(
@@ -560,6 +560,7 @@ class Engine:
                 if red < int(self.cfg["max_check_tries"]):
                     continue
                 red, rounds = 0, rounds + 1
+                self.stats["rounds"] += 1
                 self.stuck_why = "checks still red after %s tries: %s" % (self.cfg["max_check_tries"], compact(failed))
                 if rounds >= int(self.cfg["max_rounds"]):
                     (self.run_dir / "replan.md").write_text(self.stuck_why)
@@ -587,6 +588,7 @@ class Engine:
             if not blocking and not review["unmet"]:
                 return "accept"
             rounds += 1
+            self.stats["rounds"] += 1
             self.stuck_why = "the review still sends it back: %s" % "; ".join(
                 review["unmet"] + ["%s:%s %s" % (f["file"], f["line"], f["fix"]) for f in blocking])
             if rounds >= int(self.cfg["max_rounds"]):
