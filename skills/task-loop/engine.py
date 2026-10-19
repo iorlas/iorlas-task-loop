@@ -724,7 +724,8 @@ class Engine:
                     self.warn("`%s` failed (exit %d), retrying: it is marked flaky" % (c["id"], rc))
                 res = dict(base, exit=rc, status="ran" if rc == 0 else "failed", tries=tries, tail=tail[-1500:],
                            secs=round(time.time() - t))
-                cache.setdefault(key, {})[c["cmd"]] = res
+                if rc == 0:  # only a pass is a fact about the tree; a failure can come from outside git (stale
+                    cache.setdefault(key, {})[c["cmd"]] = res  # build output, a held editor, a flake) and must rerun
             out.append(res)
             if res["exit"] != 0:
                 red = c["group"]

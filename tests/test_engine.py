@@ -234,6 +234,16 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(count.read_text(), "1")
         self.assertEqual(seen.read_text(), tl.git("rev-parse", "HEAD^{tree}", cwd=str(self.wt)))
 
+    def test_a_failed_check_is_never_reused(self):
+        count = Path(self.tmp.name) / "count"
+        fails = PY + ' -c "import sys; open(%r, \'a\').write(\'1\'); sys.exit(1)"' % str(count)
+        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        st = {"checks": [fails], "files": []}
+        eng.run_checks(st, "s")
+        again = eng.run_checks(st, "s")
+        self.assertEqual(count.read_text(), "11")
+        self.assertFalse(again[0].get("cached"))
+
     def test_tests_added_and_removed_come_from_the_diff(self):
         diff = ("+++ b/tests/test_a.py\n+def test_one():\n+    pass\n+def test_two():\n-def test_old():\n"
                 "+++ b/T.cs\n+    [Fact]\n+    [Test]\n")
