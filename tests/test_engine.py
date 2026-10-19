@@ -445,6 +445,103 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertIn("stopped (SIGTERM)", self.blocked[0])
 
+    # -- what live runs found: real process trees, real signals, reruns on a branch that already has the work
+    SPAWN = "sleep 30 & echo $! > %s; "
+
+    def child_of(self, pidfile):
+        for _ in range(100):
+            if pidfile.exists() and pidfile.read_text().strip():
+                return int(pidfile.read_text())
+            time.sleep(0.05)
+        self.fail("the check never started its child")
+
+    def assertDead(self, pid):
+        for _ in range(60):
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                return
+            time.sleep(0.05)
+        os.kill(pid, 9)
+        self.fail("pid %d outlived the engine's stop" % pid)
+
+    def stoppable(self):
+        """The engine's own SIGTERM handler (main() installs it), restored after the test."""
+        import contextlib
+        import signal as sig
+        if os.name == "nt":
+            self.skipTest("POSIX signals")
+
+        @contextlib.contextmanager
+        def cm():
+            old = sig.getsignal(sig.SIGTERM)
+            sig.signal(sig.SIGTERM, lambda *_: (_ for _ in ()).throw(engine.Blocked("failed: stopped (SIGTERM)")))
+            try:
+                yield
+            finally:
+                sig.signal(sig.SIGTERM, old)
+        return cm()
+
+    def test_a_slow_check_that_times_out_is_stopped_with_everything_it_started(self):
+        if os.name == "nt":
+            self.skipTest("POSIX process groups")
+        pidfile = Path(self.tmp.name, "child.pid")
+        eng = self.checks_engine(node_timeout_min=0.03)
+        t = time.time()
+        res = eng.run_checks({"checks": [self.SPAWN % pidfile + "wait"], "files": []}, "s")
+        self.assertLess(time.time() - t, 15, "the engine waited for the check's child to end by itself")
+        self.assertEqual(res[0]["exit"], 124)
+        self.assertIn("timed out", res[0]["tail"])
+        self.assertDead(self.child_of(pidfile))
+
+    def test_sigterm_during_a_stage_check_stops_its_tree_and_still_closes(self):
+        pidfile = Path(self.tmp.name, "child.pid")
+        check = self.SPAWN % pidfile + "kill -TERM $PPID; wait"
+        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[check])])
+        with self.stoppable():
+            rc, _ = self.run_engine({"plan": [plan], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 2)
+        self.assertIn("stopped (SIGTERM)", self.blocked[0])
+        self.assertDead(self.child_of(pidfile))
+        self.assertIn("wip (t-1)", tl.git("log", "-1", "--format=%s", "task/t-1", cwd=str(self.wt)))
+
+    def test_sigterm_during_the_land_gate_stops_it_and_pushes_nothing(self):
+        pidfile = Path(self.tmp.name, "child.pid")
+        with self.stoppable():
+            rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
+                                    gate=self.SPAWN % pidfile + "kill -TERM $PPID; wait")
+        self.assertEqual(rc, 2)
+        self.assertIn("stopped (SIGTERM)", self.blocked[0])
+        self.assertDead(self.child_of(pidfile))
+        self.assertEqual(self.closed, [])
+        self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "")
+        self.assertEqual(tl.git("status", "--porcelain", cwd=str(self.wt)), "")
+
+    def test_a_rerun_after_a_red_land_gate_lands_the_reviewed_work_once(self):
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, gate=FALSE)
+        self.assertEqual(rc, 2)
+        first = tl.git("rev-parse", "task/t-1", cwd=str(self.wt))
+        self.assertEqual(tl.git("show", "task/t-1:f.txt", cwd=str(self.wt)), "d2")
+        idle = dict(WRITE, summary="re-proved, no change")
+        with mock.patch.object(DelegateScript, "__call__", self.no_write(DelegateScript.__call__)):
+            rc, _ = self.run_engine({"plan": [PLAN], "write": [idle], "review": [CLEAN]})
+        self.assertEqual(rc, 0)
+        self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
+        self.assertEqual(tl.git("rev-list", "--count", "origin/main", "^%s~1" % first, cwd=str(self.wt)), "1")
+        subjects = tl.git("log", "--format=%s", "origin/main", cwd=str(self.wt)).splitlines()
+        self.assertEqual(sum("(t-1)" in x for x in subjects), 1)
+        self.assertFalse(any(x.startswith("wip") for x in subjects))
+
+    @staticmethod
+    def no_write(real):
+        def call(this, route, role, prompt, schema, cwd, *a, **kw):
+            before = Path(cwd, "f.txt").read_text() if Path(cwd, "f.txt").exists() else None
+            r = real(this, route, role, prompt, schema, cwd, *a, **kw)
+            if role == "worker" and before is not None:
+                Path(cwd, "f.txt").write_text(before)  # the rerun's writer changes nothing
+            return r
+        return call
+
     def test_close_reason_says_what_landed_and_a_refused_close_is_a_warning(self):
         with mock.patch.object(tl, "cmd_close", side_effect=lambda a: self.closed.append(a.reason) or 1):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
