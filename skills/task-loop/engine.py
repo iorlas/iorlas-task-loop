@@ -245,6 +245,12 @@ def call_delegate(route, role, prompt, schema, cwd, resume, timeout, log_path, w
 
 # ---- the engine -----------------------------------------------------------------------------------------------------
 
+LOGGED_OUT = re.compile(r"(?i)failed to authenticate|oauth session expired|not logged in|please run .*login|"
+                        r"invalid api key|authentication_error")
+NETWORK_DOWN = re.compile(r"(?i)ENOTFOUND|EAI_AGAIN|ECONNRESET|ECONNREFUSED|ETIMEDOUT|can't reach the api server|"
+                          r"network is unreachable|could not resolve host|dns error|connection reset")
+
+
 class Blocked(Exception):
     def __init__(self, why, question=""):
         super().__init__(why)
@@ -364,6 +370,19 @@ class Engine:
                 self.warn("%s waits %d min for a lane: %s" % (node, wait // 60, j.get("say") or st))
                 time.sleep(wait)
                 waited += wait
+                continue
+            said = "%s %s" % ((j or {}).get("say") or "", r.error or "")
+            if LOGGED_OUT.search(said):  # retrying cannot help: the owner must log in (Setup), the bead stays open
+                login = "codex login" if "codex" in said.lower() or (j or {}).get("family") == "openai" else "claude auth login"
+                raise Blocked("paused: a worker CLI is logged out; run `%s` on this machine, then rerun. (%s)"
+                              % (login, said.strip()[:200]))
+            if NETWORK_DOWN.search(said):  # the machine lost the network (asleep, Wi-Fi): wait like for a lane
+                if waited + 60 > float(self.cfg["lane_wait_min"]) * 60:
+                    raise Blocked("paused: no network for %s for %s min (%s)" % (node, self.cfg["lane_wait_min"],
+                                                                                 said.strip()[:200]))
+                self.warn("%s: network down, retrying in 1 min: %s" % (node, said.strip()[:160]))
+                time.sleep(60)
+                waited += 60
                 continue
             if st == "error" and transient < 2:  # delegate 0.19: a state lock held >10 s answers error; try again
                 transient += 1
@@ -765,6 +784,9 @@ class Engine:
         return rc == 0
 
     def close(self, outcome, why, sha, question):
+        if hasattr(signal, "SIGTERM") and threading.current_thread() is threading.main_thread():
+            signal.signal(signal.SIGTERM, signal.SIG_IGN)  # a second stop must not break the close-out
+        why = why or ("stopped before a reason was recorded" if outcome == "failed" else "")
         mins = (time.time() - self.t0) / 60
         if outcome not in ("landed", "done") and self.git("status", "--porcelain") and \
                 self.git("symbolic-ref", "--short", "-q", "HEAD").startswith("task/"):
@@ -789,6 +811,10 @@ class Engine:
                 sha[:12], self.cfg["base"].split("/")[-1], summary or "the task's stages passed", stats)))
         elif outcome == "done":
             rc = tl.cmd_close(Args(id=self.bead, reason="done with nothing to land: " + (summary or stats)))
+        elif why.startswith("paused:"):  # the machine's problem (login, network, lanes), not the bead's: keep it open
+            self.warn(why)
+            r = tl.bd("update", self.bead, "--status", "open", "--append-notes", "Engine paused: " + why[:400])
+            rc = getattr(r, "returncode", 0)
         else:
             text = why + (("\n\nQuestion: " + question) if question else "")
             rc = tl.cmd_block(Args(id=self.bead, why=text))

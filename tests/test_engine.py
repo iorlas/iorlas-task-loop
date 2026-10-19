@@ -458,11 +458,35 @@ class DelegateLauncher(unittest.TestCase):
         self.assertEqual(len(workers), 2)
         self.assertNotIn("did not match the required output schema", workers[1])
 
+    def test_network_down_waits_and_retries(self):
+        down = {"v": 1, "status": "failed", "say": "API Error: Can't reach the API server — check your internet or DNS (ENOTFOUND)"}
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [down, CLEAN]})
+        self.assertEqual(rc, 0)
+        self.assertEqual([c[0] for c in s.calls].count("reviewer"), 2)
+        self.assertIn("network", self.eng.log_path.read_text())
+
+    def test_a_logged_out_worker_pauses_without_retry_and_leaves_the_bead_open(self):
+        out = {"v": 1, "status": "failed", "say": "Failed to authenticate: OAuth session expired and could not be refreshed"}
+        rc, s = self.run_engine({"plan": [out, out]})
+        self.assertEqual(rc, 2)
+        self.assertEqual([c[0] for c in s.calls], ["planner"])
+        self.assertEqual(self.blocked, [])
+        self.assertTrue(any(c[:1] == ("update",) and "open" in c for c in self.bd_calls))
+        self.assertIn("claude auth login", self.eng.log_path.read_text())
+
+    def test_close_with_an_empty_reason_still_closes(self):
+        c = engine.load_cfg(str(self.wt))
+        eng = engine.Engine("t-1", str(self.wt), c)
+        eng.close("failed", "", "", "")
+        self.assertTrue(self.blocked)
+
     def test_no_lane_for_too_long_blocks(self):
         stop = {"v": 1, "status": "stop", "retry_after": 0, "say": "no adequate model"}
         rc, _ = self.run_engine({"plan": [stop] * 3}, lane_wait_min=2)
         self.assertEqual(rc, 2)
-        self.assertIn("paused: no lane for plan", self.blocked[0])
+        self.assertEqual(self.blocked, [])  # a machine-wide wait is not the bead's fault: it stays open
+        self.assertTrue(any(c[:1] == ("update",) and "open" in c and any("paused: no lane for plan" in x for x in c)
+                            for c in self.bd_calls))
 
     def test_another_contract_version_blocks(self):
         rc, _ = self.run_engine({"plan": [{"v": 2, "status": "done"}]})
