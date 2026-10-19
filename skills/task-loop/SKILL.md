@@ -97,7 +97,9 @@ are done by hand from these traces for now.
 Its output is verbose by default (`--quiet` for less): each step, the facts behind it (checks with exit codes, gaps,
 flags, findings, the judge's reason, cost) and **⚠ lines** for what you must look at. Read the output as it comes
 (the job's output file, or the dashboard's Engine run). Never do a step's work yourself; change what makes the
-engine misbehave.
+engine misbehave. Never stop a live run to apply an engine fix: the fix applies to the next bead (the running
+process loaded the old engine anyway; 3 of 5 lifesim-vbo restarts on 2026-10-18 were stops for fixes, one a step before
+landing). Stop a run only when it is burning a paid lane or doing damage.
 
 | ⚠ line | what to do |
 |---|---|
