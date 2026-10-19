@@ -14,6 +14,7 @@
   tl.py slot list|take|release|reset|setup ...  slots (see SKILL.md, Slots)
   tl.py worktree start|sunset ...               one worktree per loop session when slots are off
   tl.py usage '<plan.windows JSON>'             feed get_usage to delegate (every 20 min while an engine runs)
+  tl.py trace [ID] [--last N] [--json]          engine runs and every worker session of each (for reflection)
   tl.py run-task ID [--worktree DIR] [--slot S] [--dry-run]
                                                 one bead through the engine (engine.py), no judgement here
   tl.py dash ensure|stop|status|url             the dashboard server (one per machine)
@@ -52,6 +53,49 @@ def config_dir():
     d = base / "task-loop"
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def transcript_of(family, ref):
+    """Where a worker session's transcript lives on this machine: Codex rollouts and Claude projects, by session id."""
+    if not ref:
+        return ""
+    home = Path.home()
+    pats = ([home / ".codex" / "sessions", "*%s*.jsonl" % ref] if family == "openai" else
+            [home / ".claude" / "projects", "*/%s.jsonl" % ref])
+    hits = sorted(pats[0].glob("**/" + pats[1])) if pats[0].is_dir() else []
+    return str(hits[-1]) if hits else ""
+
+
+def cmd_trace(a):
+    path = config_dir() / "traces.jsonl"
+    runs = []
+    if path.exists():
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            if not a.id or r.get("bead") == a.id:
+                runs.append(r)
+    if a.last:
+        runs = runs[-a.last:]
+    for r in runs:
+        for s in r.get("sessions", []):
+            s["transcript"] = s.get("transcript") or transcript_of(s.get("family"), s.get("ref"))
+    if a.json:
+        print(json.dumps(runs, indent=1, ensure_ascii=False))
+        return 0
+    if not runs:
+        print("no traces%s yet (%s)" % (" for " + a.id if a.id else "", path))
+        return 0
+    for r in runs:
+        mins = (r.get("ended", 0) - r.get("started", 0)) / 60
+        print("%s  %s  %s  %d min  $%.2f  coordinator=%s" % (r.get("run"), r.get("bead"), r.get("outcome"), mins,
+                                                             r.get("cost") or 0, r.get("coordinator_session") or "-"))
+        for s in r.get("sessions", []):
+            print("  %-7s %-8s %-6s %-9s %s  %s" % (s.get("node"), s.get("role"), s.get("family") or "?", s.get("status"),
+                                                   s.get("ref") or "-", s.get("transcript") or ""))
+    return 0
 
 
 def session_id():
@@ -629,6 +673,10 @@ def main(argv=None):
     p.add_argument("--quiet", action="store_true", help="only steps and ⚠ lines (default: verbose, for a watching coordinator)")
     p = sp.add_parser("usage", help="pass get_usage's plan.windows (JSON) to delegate, so headless Claude steps may run")
     p.add_argument("windows")
+    p = sp.add_parser("trace", help="engine runs of a bead (or all) with every worker session and its transcript")
+    p.add_argument("id", nargs="?", default="")
+    p.add_argument("--last", type=int, default=0)
+    p.add_argument("--json", action="store_true")
     p = sp.add_parser("hook")
     p.add_argument("op", choices=["session-start"])
     a = ap.parse_args(argv)
@@ -655,6 +703,8 @@ def main(argv=None):
             print("delegate did not take the reading (exit %d): %s" % (r.returncode, (r.stderr or r.stdout)[-400:]))
             return 1
         return 0
+    if a.cmd == "trace":
+        return cmd_trace(a)
     if a.cmd == "bd":
         r = subprocess.run([shutil.which("bd") or "bd", "--actor", actor()] + a.rest)
         return r.returncode

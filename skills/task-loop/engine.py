@@ -248,6 +248,7 @@ class Engine:
         self.leftovers = []
         self.budget_warned = set()
         self.writer = {}  # backend -> thread/session id, so later rounds of a task resume the same writer
+        self.sessions = []  # every AI call of this run: the trace a later reflection reads (traces.jsonl)
         d = tl.config_dir() / "engine"
         d.mkdir(exist_ok=True)
         stamp = time.strftime("%Y%m%d-%H%M%S")
@@ -269,6 +270,30 @@ class Engine:
             tl.event("stage", self.bead, text=text)
         if kind == "warn" or not (kind == "cmd" and not self.verbose):
             say("[%s] %s%s" % (time.strftime("%H:%M:%S"), "⚠ " if kind == "warn" else "", text))
+
+    def trace_call(self, node, role, attempt, r, j):
+        """One AI call into the run's trace: which worker session did what, and where its transcript is."""
+        j = j or {}
+        rec = {"node": node, "role": role, "attempt": attempt, "status": j.get("status") or r.error or "none",
+               "ref": j.get("ref") or r.ref or "", "run_id": j.get("run_id") or "", "transcript": j.get("transcript") or "",
+               "family": j.get("family") or "", "lane": j.get("lane") or "", "model": j.get("model") or "",
+               "effort": j.get("effort") or "", "secs": round(r.secs or 0), "cost": r.cost or 0.0, "t": time.time()}
+        self.sessions.append(rec)
+        self.log("session", "%s: %s %s" % (node, rec["family"] or "?", rec["ref"] or "(no session)"), **rec)
+
+    def write_trace(self, outcome, why, sha):
+        """One line per engine run in traces.jsonl, never pruned: bead, repo, branch, every session, the outcome."""
+        rec = {"v": 1, "run": self.log_path.stem, "bead": self.bead,
+               "repo": self.git("remote", "get-url", "origin") or str(self.wt), "worktree": str(self.wt),
+               "branch": self.git("symbolic-ref", "--short", "-q", "HEAD"), "coordinator_session": self.session,
+               "started": self.t0, "ended": time.time(), "outcome": outcome, "why": (why or "")[:500], "sha": sha or "",
+               "cost": self.cost, "stats": self.stats, "delegate": self.route or "", "log": str(self.log_path),
+               "stderr": str(self.err_path), "sessions": self.sessions}
+        try:
+            with open(tl.config_dir() / "traces.jsonl", "a", encoding="utf-8") as f:
+                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        except OSError as e:
+            self.warn("could not write the trace: %s" % e)
 
     def warn(self, text):
         """Something a watching coordinator should look at: printed with ⚠, kept in the log, shown on the dashboard."""
@@ -305,6 +330,7 @@ class Engine:
                 raise Blocked("failed: delegate answered worker-run v%s, this engine speaks v1 (update task-loop)"
                               % j.get("v"))
             st = (j or {}).get("status")
+            self.trace_call(node, role, attempt, r, j)
             if st in ("lane_out", "stop"):
                 wait = max(60.0, min(600.0, float(j.get("retry_after") or 0) - time.time()))
                 if waited + wait > float(self.cfg["lane_wait_min"]) * 60:
@@ -614,6 +640,7 @@ class Engine:
             self.wip(outcome)  # the next run continues this branch
         stats = "cost=$%.2f; minutes=%d; %s" % (self.cost, mins, "; ".join("%s=%s" % kv for kv in self.stats.items()))
         self.log("node", "close: %s" % outcome, outcome=outcome, why=why)
+        self.write_trace(outcome, why, sha)
         self.detail([stats] + ([why[:400]] if why else []) + (["question: " + question[:400]] if question else []))
         if outcome == "failed":
             self.warn("task failed: %s" % why.splitlines()[0][:200])
@@ -623,8 +650,8 @@ class Engine:
         for lo in self.leftovers:
             tl.bd("create", lo["title"], "--type", "task", "--description", lo["why"],
                   "--deps", "discovered-from:" + self.bead)
-        self.comment("Reflect (engine): outcome=%s; filed=%d; %s%s" % (outcome, len(self.leftovers), stats,
-                                                                     ("; why=" + why) if why else ""))
+        self.comment("Reflect (engine): outcome=%s; filed=%d; %s%s; trace=%s (tl trace %s)" % (
+            outcome, len(self.leftovers), stats, ("; why=" + why) if why else "", self.log_path.stem, self.bead))
         summary = (getattr(self, "plan_summary", "") or "")[:300]
         if outcome == "landed":
             rc = tl.cmd_close(Args(id=self.bead, reason="merged %s to %s: %s; %s" % (

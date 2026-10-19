@@ -194,6 +194,24 @@ class UsageCLI(Base):
         self.assertEqual(json.loads((self.home / "argv.json").read_text()), ["status", "--claude-usage", "[]", "--json"])
 
 
+class TraceCLI(Base):
+    def test_trace_lists_runs_and_sessions_of_a_bead(self):
+        cfg = self.home / "cfg" / "task-loop"
+        cfg.mkdir(parents=True)
+        run = {"v": 1, "run": "b-1-20261019-010000", "bead": "b-1", "outcome": "landed", "started": 0, "ended": 600,
+               "cost": 0, "coordinator_session": "c1",
+               "sessions": [{"node": "write", "role": "worker", "family": "openai", "status": "done", "ref": "thr-9"}]}
+        other = dict(run, run="b-2-x", bead="b-2")
+        (cfg / "traces.jsonl").write_text(json.dumps(run) + "\n" + json.dumps(other) + "\n")
+        env = dict(os.environ, HOME=str(self.home), XDG_CONFIG_HOME=str(self.home / "cfg"))
+        r = subprocess.run([sys.executable, str(ROOT / "skills" / "task-loop" / "tl.py"), "trace", "b-1"],
+                           capture_output=True, text=True, env=env)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("b-1-20261019-010000  b-1  landed  10 min", r.stdout)
+        self.assertIn("thr-9", r.stdout)
+        self.assertNotIn("b-2-x", r.stdout)
+
+
 class SlotReset(Base):
     """A slot reset must never lose a dead session's work."""
 

@@ -111,6 +111,17 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
         self.assertTrue(any(c[:2] == ("comments", "add") and "Reflect (engine)" in c[3] for c in self.bd_calls))
 
+    def test_a_run_leaves_a_trace_of_every_worker_session(self):
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "verify": [ACCEPT_V], "judge": [judge("accept")]})
+        self.assertEqual(rc, 0)
+        runs = [json.loads(l) for l in (tl.config_dir() / "traces.jsonl").read_text().splitlines()]
+        self.assertEqual(len(runs), 1)
+        r = runs[0]
+        self.assertEqual((r["bead"], r["outcome"], r["coordinator_session"]), ("t-1", "landed", "sess1234-x"))
+        self.assertEqual([x["role"] for x in r["sessions"]], ["planner", "worker", "light", "light"])
+        self.assertEqual(r["sessions"][1]["ref"], "ref-write")
+        self.assertTrue(any(c[:2] == ("comments", "add") and "trace=" + r["run"] in c[3] for c in self.bd_calls))
+
     def test_wip_from_an_earlier_run_lands_as_one_titled_commit(self):
         sh("git", "checkout", "-q", "-b", "task/t-1", cwd=self.wt)
         Path(self.wt, "g.txt").write_text("from run 1\n")

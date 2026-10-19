@@ -89,7 +89,10 @@ The engine does the task; you watch it. `tl run-task <id> --worktree "$WT" [--sl
 (several at once is fine, one per slot or worktree). It claims the bead, then: reset → plan → per stage (write →
 checks run by the engine → verify → review when risky → judge) → gate → land → close. Every AI step is a headless
 worker with a schema-checked answer; the close step always runs; the plan, findings and a Reflect line go into the
-bead. Engine settings: `.task-loop.json` → `engine` (gate, land, budgets, which worker runs which step).
+bead. Engine settings: `.task-loop.json` → `engine` (gate, land, budgets). Every run appends one line to
+`<config dir>/task-loop/traces.jsonl` (never pruned): bead, repo, branch, outcome, your session id, and every worker
+session (Codex thread, `claude -p` session) with its transcript. `tl trace <id>` lists them; reflection and improvement
+are done by hand from these traces for now.
 
 Its output is verbose by default (`--quiet` for less): each step, the facts behind it (checks with exit codes, gaps,
 flags, findings, the judge's reason, cost) and **⚠ lines** for what you must look at. Read the output as it comes
