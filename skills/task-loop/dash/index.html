@@ -134,13 +134,13 @@ button{font:inherit;color:inherit}
 <body data-view="1">
 <div class="bar">
   <span class="brand"><i></i>task-loop</span>
-  <div class="tabs" id="tabs"><button data-tab="tasks">Tasks</button><button data-tab="workers">Workers</button></div>
+  <div class="tabs" id="tabs"><button data-tab="tasks">Tasks</button><button data-tab="workers">Sessions</button></div>
   <span class="stats" id="stats"></span><span class="grow"></span><span class="lanes" id="lanes"></span><span class="clock" id="clock"></span>
 </div>
 <div class="wrap">
   <section class="pane" id="p1"><div class="ph" id="filters"></div><div class="scroll" id="list"></div></section>
   <section class="pane" id="p2"><div class="scroll" id="detail"><div class="empty">Pick a task</div></div></section>
-  <section class="pane" id="p3"><div class="lh" id="lh"><span class="note">Pick a session or a worker</span></div><div class="tl" id="tl"></div><button class="follow" id="follow">↓ follow</button></section>
+  <section class="pane" id="p3"><div class="lh" id="lh"><span class="note">Pick a run to see its live log</span></div><div class="tl" id="tl"></div><button class="follow" id="follow">↓ follow</button></section>
 </div>
 <script>
 const $=id=>document.getElementById(id);
@@ -243,15 +243,15 @@ function runRow(r){
 
 // ---- workers tab (every run on this machine, 24 h) ---------------------------------------------------------------
 function renderWorkerList(){
-  $('filters').innerHTML=`<span class="note" style="padding:2px 4px">Every worker run on this machine, last 24 h</span>`;
-  $('list').innerHTML=S.runs.map(runRow).join('')||'<div class="empty">No runs</div>';
+  $('filters').innerHTML=`<span class="note" style="padding:2px 4px">Every AI session on this Mac in the last 24 h: Claude sessions, Codex threads, claude -p workers. Pick one to follow its log.</span>`;
+  $('list').innerHTML=S.runs.map(runRow).join('')||`<div class="empty">${S.runsLoaded?'No runs':'Loading…'}</div>`;
 }
 
 // ---- live log ----------------------------------------------------------------------------------------------------
 function renderLog(){
   const r=S.runs.find(x=>x.id==S.run);
   $('lh').innerHTML=r?`<button class="back" data-back="${S.tab=='tasks'?2:1}">‹</button><span class="dot ${r.status}"></span><h3>${esc(r.title)}</h3><span class="k ${r.kind}">${r.kind=='claude'?'session':r.kind}</span>
-    <span class="time">${r.status}${r.updated?' · last output '+ago(r.updated):''}</span>`:'<span class="note">Pick a session or a worker</span>';
+    <span class="time">${r.status}${r.updated?' · last output '+ago(r.updated):''}</span>`:'<span class="note">Pick a run to see its live log</span>';
   const tl=$('tl'),atBottom=tl.scrollHeight-tl.scrollTop-tl.clientHeight<40;const t0=r?r.started:null;
   tl.innerHTML=S.events.map((e,i)=>{
     const off=e.t&&t0?fmt(e.t-t0):'';let ic,body,meta='';
@@ -272,16 +272,23 @@ function renderLog(){
 
 // ---- data --------------------------------------------------------------------------------------------------------
 const get=async u=>{const r=await fetch(u);if(!r.ok)throw new Error(u);return r.json()};
+// One poll at a time; a click starts a new generation, and an answer from an older one is dropped (a slow /api/runs
+// used to land after a tab or task switch and paint the old view over the new one).
+let gen=0,busy=false,again=false;
 async function poll(){
+  if(busy){again=true;return}
+  busy=true;again=false;const g=gen,tab=S.tab,task=S.task,run=S.run,stale=()=>g!=gen||tab!=S.tab||task!=S.task||run!=S.run;
   try{
-    S.sum=await get('/api/summary');renderLanes();
-    if(S.tab=='tasks'){renderTree();
-      if(S.task){S.detail=await get(`/api/task?repo=${encodeURIComponent(S.taskRepo||'')}&id=${encodeURIComponent(S.task)}`);renderDetail()}}
-    else{S.runs=await get('/api/runs?hours=24');renderWorkerList()}
-    if(S.run){S.events=await get('/api/events?id='+encodeURIComponent(S.run))}else S.events=[];
+    const sum=await get('/api/summary');if(stale())return;S.sum=sum;renderLanes();
+    if(tab=='tasks'){renderTree();
+      if(task){const d=await get(`/api/task?repo=${encodeURIComponent(S.taskRepo||'')}&id=${encodeURIComponent(task)}`);if(stale())return;S.detail=d;renderDetail()}}
+    else{const runs=await get('/api/runs?hours=24');if(stale())return;S.runs=runs;S.runsLoaded=true;renderWorkerList()}
+    const ev=run?await get('/api/events?id='+encodeURIComponent(run)):[];if(stale())return;S.events=ev;
     renderLog();
-  }catch(e){$('stats').innerHTML='<span style="color:var(--fail)">server unreachable</span>'}
+  }catch(e){if(!stale())$('stats').innerHTML='<span style="color:var(--fail)">server unreachable</span>'}
+  finally{busy=false;if(again||g!=gen)poll()}
 }
+function loop(){setTimeout(async()=>{if(!document.hidden)await poll();loop()},2500)}
 function renderLanes(){
   const ls=(S.sum&&S.sum.lanes)||[];
   $('lanes').innerHTML=ls.map(l=>{const out=l.out_until&&l.out_until>now();
@@ -290,22 +297,24 @@ function renderLanes(){
 }
 function tick(){$('clock').textContent=new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
   document.querySelectorAll('[data-since]').forEach(el=>el.textContent=fmt(now()-(+el.dataset.since)))}
-function setTab(t,keep){S.tab=t;if(!keep){S.run=null;S.events=[]}save();document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab==t));
-  $('p2').style.display=t=='workers'?'none':'';view(1);poll()}
+function setTab(t,keep){gen++;S.tab=t;if(!keep){S.run=null;S.events=[]}save();document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab==t));
+  $('p2').style.display=t=='workers'?'none':'';view(1);
+  if(t=='tasks'){if(S.sum)renderTree()}else renderWorkerList();  // draw what we have now; the poll refreshes it
+  poll()}
 
 document.addEventListener('click',e=>{
   const f=e.target.closest('[data-f]');if(f){S.filter=f.dataset.f;save();renderTree();return}
   const fo=e.target.closest('[data-fold]');if(fo){const k=fo.dataset.fold;S.fold[k]=!S.fold[k];save();renderList();return}
   const bk=e.target.closest('[data-back]');if(bk){view(+bk.dataset.back);return}
   const tb=e.target.closest('[data-tab]');if(tb){setTab(tb.dataset.tab);return}
-  const row=e.target.closest('.row[data-id],.card[data-id]');if(row){S.task=row.dataset.id;S.taskRepo=row.dataset.repo;S.run=null;S.events=[];save();renderList();view(2);poll();return}
-  const run=e.target.closest('[data-run]');if(run){S.run=run.dataset.run;S.open.clear();S.follow=true;save();
+  const row=e.target.closest('.row[data-id],.card[data-id]');if(row){gen++;S.task=row.dataset.id;S.taskRepo=row.dataset.repo;S.run=null;S.events=[];save();renderList();view(2);poll();return}
+  const run=e.target.closest('[data-run]');if(run){gen++;S.run=run.dataset.run;S.open.clear();S.follow=true;save();
     document.querySelectorAll('[data-run]').forEach(x=>x.classList.toggle('sel',x.dataset.run==S.run));view(3);poll();return}
   const ev=e.target.closest('.ev.click');if(ev){const i=+ev.dataset.i;S.open.has(i)?S.open.delete(i):S.open.add(i);renderLog()}
 });
 $('tl').onscroll=()=>{const tl=$('tl');S.follow=tl.scrollHeight-tl.scrollTop-tl.clientHeight<40;$('follow').style.display=S.follow?'none':'block'};
 $('follow').onclick=()=>{S.follow=true;$('tl').scrollTop=$('tl').scrollHeight;$('follow').style.display='none'};
-setTab(S.tab||'tasks',true);if(S.run)view(3);else if(S.task)view(2);setInterval(()=>{if(!document.hidden)poll()},2500);setInterval(tick,1000);tick();
+setTab(S.tab||'tasks',true);if(S.run)view(3);else if(S.task)view(2);loop();setInterval(tick,1000);tick();
 </script>
 </body>
 </html>
