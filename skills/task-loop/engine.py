@@ -61,8 +61,12 @@ SCHEMAS = {
                                                       "required": ["what", "check"],
                                                       "properties": {"what": S_STR, "check": S_STR}}},
                  "question": S_STR}},
-    "write": {"type": "object", "additionalProperties": False, "required": ["summary", "checks_run", "question"],
+    "write": {"type": "object", "additionalProperties": False,
+              "required": ["summary", "checks_run", "question", "bad_checks"],
               "properties": {"summary": S_STR, "question": S_STR,
+                             "bad_checks": {"type": "array", "items": {
+                                 "type": "object", "additionalProperties": False, "required": ["cmd", "why"],
+                                 "properties": {"cmd": S_STR, "why": S_STR}}},
                              "checks_run": {"type": "array", "items": {
                                  "type": "object", "additionalProperties": False, "required": ["cmd", "exit"],
                                  "properties": {"cmd": S_STR, "exit": {"type": "integer"}}}}}},
@@ -559,8 +563,17 @@ class Engine:
     def plan(self, again=False):
         extra = ("\n\nThe previous plan did not work; what failed is in %s. Plan again." %
                  (self.run_dir / "replan.md")) if again else ""
+        rules = []
+        if self.cfg["worker_rules"]:
+            rules.append("Read %s: this repo's rules for workers (what runs where, known pitfalls of its tools); the "
+                         "checks you write must follow them." % (Path(self.wt) / self.cfg["worker_rules"]))
+        rules.append("Checks run on the uncommitted working tree after each write. The engine runs the gate%s once, on "
+                     "the rebased tree at land: never put %s in a stage's checks." % (
+                         (" (`%s`)" % self.cfg["gate"]) if self.cfg["gate"] else "",
+                         ("`%s`" % self.cfg["gate"]) if self.cfg["gate"] else "it"))
         data, _ = self.ai("plan", "re-plan" if again else "plan", PLAN_PROMPT.format(brief=self.run_dir / "brief.md",
                                                                                      wt=self.wt) + extra +
+                          "\n\n" + "\n".join(rules) +
                           ("\n\n" + self.where("plan") if self.where("plan") else ""))
         self.plan_summary = data["summary"]
         self.plan_data = data
@@ -607,6 +620,14 @@ class Engine:
             if self.stats["tests_removed"]:
                 self.warn("the task's diff removes %d tests" % self.stats["tests_removed"])
             failed = [c for c in checks if c["exit"] not in (0, None)]
+            flagged = {b["cmd"].strip(): b["why"] for b in w["bad_checks"]}
+            wrong = [c for c in failed if c["cmd"].strip() in flagged]
+            if wrong:  # a check no code change can satisfy: retrying it is waste, the plan must change
+                self.stuck_why = "the writer says these stage checks are wrong: " + "; ".join(
+                    "`%s` (exit %s): %s" % (c["cmd"], c["exit"], flagged[c["cmd"].strip()]) for c in wrong)
+                self.warn("%s: %s" % (name, self.stuck_why[:300]))
+                (self.run_dir / "replan.md").write_text(self.stuck_why + "\n\nTheir output:\n" + compact(wrong))
+                return "replan"
             if failed:
                 red += 1
                 feedback = ("\nThese checks fail (run by the engine, outside your sandbox). Fix exactly this:\n%s\n"
@@ -984,6 +1005,9 @@ engine does that part.
 {feedback}
 Checks your sandbox cannot run (network, local ports, paths outside this folder) are run by the engine after you,
 outside the sandbox; say so in the summary and move on, never ask about permissions.
+bad_checks: a stage check that fails for a reason no code change can fix (wrong arguments, a guard that rejects the
+uncommitted work this stage must leave, a pattern that matches harmless text), each with why; else empty. The engine
+then asks for a new plan instead of retrying.
 A check that times out or fails only in your sandbox is not yours to retry; note it once and move on.
 Proof the engine cannot rerun (a test seen failing after a planted fault, then passing once restored; a manual
 measurement): save the exact commands and their output as files in {evidence}/ and name those files in the summary.

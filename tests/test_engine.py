@@ -22,7 +22,7 @@ HAS_F = PY + ' -c "import os,sys; sys.exit(0 if os.path.exists(\'f.txt\') else 1
 FALSE = PY + ' -c "import sys; sys.exit(1)"'
 PLAN = {"summary": "do it", "stages": [{"goal": "add f", "files": ["f.txt"], "checks": [HAS_F],
                                         "hard": False}], "risks": [], "question": ""}
-WRITE = {"summary": "wrote f", "checks_run": [{"cmd": "test -f f.txt", "exit": 0}], "question": ""}
+WRITE = {"summary": "wrote f", "checks_run": [{"cmd": "test -f f.txt", "exit": 0}], "question": "", "bad_checks": []}
 ROUTE = "/h/.claude/plugins/cache/m/iorlas-delegate/%s/skills/delegate/route.py"
 CLEAN = {"findings": [], "unmet": [], "question": "", "leftovers": []}
 
@@ -322,6 +322,20 @@ class EngineTest(unittest.TestCase):
         self.assertEqual([c[0] for c in s.calls].count("worker"), 4)
         self.assertIn("stuck", self.blocked[0])
         self.assertEqual((self.eng.stats["writes"], self.eng.stats["rounds"]), (4, 2))
+
+    def test_a_check_the_writer_flags_as_wrong_replans_at_once(self):
+        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[FALSE])])
+        flag = dict(WRITE, bad_checks=[{"cmd": FALSE, "why": "it exits 1 whatever the code does"}])
+        rc, s = self.run_engine({"plan": [plan, PLAN], "write": [flag, WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "planner", "worker", "reviewer"])
+        self.assertIn("exits 1 whatever the code does", (self.eng.run_dir / "replan.md").read_text())
+
+    def test_the_planner_gets_the_repo_rules_and_is_told_the_engine_owns_the_gate(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
+                                worker_rules="docs/agents/codex.md", gate="just check")
+        self.assertIn("docs/agents/codex.md", s.prompts[0])
+        self.assertIn("never put `just check` in a stage", s.prompts[0])
 
     def test_low_findings_are_noted_and_do_not_send_back(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [review(findings=[finding("low")])]})

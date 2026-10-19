@@ -429,8 +429,13 @@ def cmd_slot(a):
             print("WIP committed on " + br)
         git("fetch", "origin", cwd=d)
         base = cfg.get("base") or "origin/main"
-        if a.bead:
-            r = subprocess.run(["git", "-C", d, "checkout", "-B", "task/" + a.bead, base], capture_output=True, text=True, encoding="utf-8", errors="replace")
+        if a.bead and git("rev-parse", "--verify", "-q", "refs/heads/task/" + a.bead, cwd=d):
+            # the bead's branch holds its earlier runs' work: check it out as it is, never reset it to base (a forced
+            # reset here wiped lifesim-r32's reviewed work on 2026-10-19; the engine rebases at land)
+            r = subprocess.run(["git", "-C", d, "checkout", "task/" + a.bead], capture_output=True, text=True,
+                               encoding="utf-8", errors="replace")
+        elif a.bead:
+            r = subprocess.run(["git", "-C", d, "checkout", "-b", "task/" + a.bead, base], capture_output=True, text=True, encoding="utf-8", errors="replace")
         else:
             r = subprocess.run(["git", "-C", d, "checkout", "--detach", base], capture_output=True, text=True, encoding="utf-8", errors="replace")
         if r.returncode != 0:

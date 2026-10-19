@@ -258,6 +258,16 @@ class SlotReset(Base):
         self.assertEqual(tl.git("show", "task/t-0:new.txt", cwd=str(self.slot)), "new")
         self.assertEqual(tl.git("show", "task/t-0:a.txt", cwd=str(self.slot)), "changed by a dead session")
 
+    def test_reset_for_a_bead_keeps_its_existing_branch(self):
+        sh("git", "checkout", "-q", "-b", "task/t-1", cwd=self.slot)
+        (self.slot / "work.txt").write_text("reviewed work\n")
+        sh("git", "add", "-A", cwd=self.slot)
+        sh("git", "commit", "-qm", "wip (t-1): blocked", cwd=self.slot)
+        sh("git", "checkout", "-q", "--detach", "origin/main", cwd=self.slot)
+        self.assertEqual(self.reset("t-1"), 0)
+        self.assertEqual(tl.git("symbolic-ref", "--short", "HEAD", cwd=str(self.slot)), "task/t-1")
+        self.assertEqual((self.slot / "work.txt").read_text(), "reviewed work\n")
+
     def test_loop_folders_are_excluded_from_git_add(self):
         tl.exclude_local(str(self.repo), ".slots/", ".task/")
         tl.exclude_local(str(self.repo), ".slots/")
