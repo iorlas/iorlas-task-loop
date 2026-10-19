@@ -244,6 +244,26 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(count.read_text(), "11")
         self.assertFalse(again[0].get("cached"))
 
+    def test_checks_run_in_bash(self):
+        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        res = eng.run_checks({"checks": ['diff <(echo a) <(echo a)'], "files": []}, "s")
+        self.assertEqual(res[0]["exit"], 0, res[0]["tail"])
+
+    def test_a_worker_edit_to_the_plan_file_is_undone_before_the_next_step(self):
+        real = DelegateScript.__call__
+
+        def tamper(this, route, role, prompt, schema, cwd, *a, **kw):
+            if role == "worker":
+                (self.eng.run_dir / "plan.json").write_text('{"tampered": true}')
+            if role == "reviewer":
+                this.seen_plan = (self.eng.run_dir / "plan.json").read_text()
+            return real(this, route, role, prompt, schema, cwd, *a, **kw)
+        with mock.patch.object(DelegateScript, "__call__", tamper):
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0)
+        self.assertNotIn("tampered", s.seen_plan)
+        self.assertIn("add f", s.seen_plan)
+
     def test_tests_added_and_removed_come_from_the_diff(self):
         diff = ("+++ b/tests/test_a.py\n+def test_one():\n+    pass\n+def test_two():\n-def test_old():\n"
                 "+++ b/T.cs\n+    [Fact]\n+    [Test]\n")

@@ -347,6 +347,8 @@ class Engine:
         role = ROLES[node]
         writer = writer_family if node == "review" else None
         resume = self.writer.get("delegate") if resume_key else None
+        if getattr(self, "plan_data", None):  # an unsandboxed worker can write here: every step reads the engine's plan
+            (self.run_dir / "plan.json").write_text(json.dumps(self.plan_data, indent=1))
         free, why = unsandboxed(self.route, node, self.no_sandbox)
         if why and why not in self.sandbox_warned:
             self.sandbox_warned.add(why)
@@ -443,7 +445,9 @@ class Engine:
         self.log("cmd", cmd if isinstance(cmd, str) else " ".join(cmd))
         # Its own process group, so a timeout stops the whole tree (dotnet build nodes, Unity) and not just the shell;
         # the worker env, so a check never inherits this launcher's Claude session.
-        p = subprocess.Popen(cmd, shell=isinstance(cmd, str), cwd=self.wt, env=dict(child_env(), **(env or {})),
+        bash = shutil.which("bash") if isinstance(cmd, str) and os.name != "nt" else None  # plans write bash
+        p = subprocess.Popen(cmd, shell=isinstance(cmd, str), executable=bash, cwd=self.wt,
+                             env=dict(child_env(), **(env or {})),
                              stdin=subprocess.DEVNULL,
                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=(os.name != "nt"))
         try:
@@ -559,6 +563,7 @@ class Engine:
                                                                                      wt=self.wt) + extra +
                           ("\n\n" + self.where("plan") if self.where("plan") else ""))
         self.plan_summary = data["summary"]
+        self.plan_data = data
         if data["question"].strip():
             raise Blocked("owner decision needed", data["question"])
         if not data["stages"]:
