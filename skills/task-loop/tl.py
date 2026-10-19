@@ -90,8 +90,11 @@ def cmd_trace(a):
         return 0
     for r in runs:
         mins = (r.get("ended", 0) - r.get("started", 0)) / 60
-        print("%s  %s  %s  %d min  $%.2f  coordinator=%s" % (r.get("run"), r.get("bead"), r.get("outcome"), mins,
-                                                             r.get("cost") or 0, r.get("coordinator_session") or "-"))
+        st = r.get("stats") or {}
+        tok = ("  tokens in %.2fM (%.2fM cached) out %dk" % (st["tokens_in"] / 1e6, st.get("tokens_cached", 0) / 1e6,
+                                                            st.get("tokens_out", 0) // 1000)) if st.get("tokens_in") else ""
+        print("%s  %s  %s  %d min  $%.2f%s  coordinator=%s" % (r.get("run"), r.get("bead"), r.get("outcome"), mins,
+                                                               r.get("cost") or 0, tok, r.get("coordinator_session") or "-"))
         for s in r.get("sessions", []):
             print("  %-7s %-8s %-6s %-9s %s  %s" % (s.get("node"), s.get("role"), s.get("family") or "?", s.get("status"),
                                                    s.get("ref") or "-", s.get("transcript") or ""))

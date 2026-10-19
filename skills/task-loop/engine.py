@@ -266,7 +266,8 @@ class Engine:
         self.bead, self.wt, self.cfg, self.dry, self.verbose = bead, wt, cfg, dry_run, verbose
         self.t0 = time.time()
         self.cost = 0.0
-        self.stats = {"writes": 0, "rounds": 0, "reviews": 0, "replans": 0, "nodes": 0, "tests_added": 0, "tests_removed": 0}
+        self.stats = {"writes": 0, "rounds": 0, "reviews": 0, "replans": 0, "nodes": 0, "tests_added": 0, "tests_removed": 0,
+                      "tokens_in": 0, "tokens_cached": 0, "tokens_out": 0}
         self.session = tl.session_id()
         self.leftovers = []
         self.stuck_why = ""
@@ -308,7 +309,9 @@ class Engine:
                "ref": j.get("ref") or r.ref or "", "run_id": j.get("run_id") or "", "transcript": j.get("transcript") or "",
                "family": j.get("family") or "", "lane": j.get("lane") or "", "model": j.get("model") or "",
                "effort": j.get("effort") or "", "secs": round(r.secs or 0), "cost": r.cost or 0.0, "t": time.time(),
-               "no_sandbox": no_sandbox}
+               "no_sandbox": no_sandbox, "tokens": j.get("tokens")}  # delegate 0.22+: {in, cached, out}, in counts cached
+        for k in ("in", "cached", "out"):
+            self.stats["tokens_" + k] += int((rec["tokens"] or {}).get(k) or 0)
         self.sessions.append(rec)
         self.log("session", "%s: %s %s" % (node, rec["family"] or "?", rec["ref"] or "(no session)"), **rec)
 

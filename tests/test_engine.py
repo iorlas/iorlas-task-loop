@@ -57,7 +57,7 @@ class DelegateScript:
                 Path(cwd, "f.txt").write_text("d%d\n" % len(self.calls))
             j = {"v": 1, "status": "done", "data": a, "ref": "ref-" + node, "cost": 0.5, "secs": 1,
                  "family": "openai" if node == "write" else "claude", "lane": "L", "model": "m",
-                 "effort": "e", "git_violation": []}
+                 "effort": "e", "git_violation": [], "tokens": {"in": 1000, "cached": 800, "out": 50}}
         r = engine.Result(j.get("data"), "", j.get("ref") or "", float(j.get("cost") or 0), 1, "" if j["status"] == "done" else j["status"],
                           j.get("family") or "delegate")
         return r, j
@@ -334,6 +334,13 @@ class EngineTest(unittest.TestCase):
         self.assertEqual([x["role"] for x in r["sessions"]], ["planner", "worker", "reviewer"])
         self.assertEqual(r["sessions"][1]["ref"], "ref-write")
         self.assertTrue(any(c[:2] == ("comments", "add") and "trace=" + r["run"] in c[3] for c in self.bd_calls))
+
+    def test_a_run_counts_its_tokens_per_session_and_in_total(self):
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0)
+        r = json.loads((tl.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
+        self.assertEqual(r["sessions"][1]["tokens"], {"in": 1000, "cached": 800, "out": 50})
+        self.assertEqual((r["stats"]["tokens_in"], r["stats"]["tokens_cached"], r["stats"]["tokens_out"]), (3000, 2400, 150))
 
     def test_wip_from_an_earlier_run_lands_as_one_titled_commit(self):
         sh("git", "checkout", "-q", "-b", "task/t-1", cwd=self.wt)
