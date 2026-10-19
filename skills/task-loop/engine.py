@@ -190,12 +190,14 @@ def author_flag(route):
 
 
 def headless_args(route, timeout):
-    """delegate 0.18.0: an engine says --headless (no longer derived from the env) and passes no --timeout; the
-    engine's own node limit still kills the process (run_proc)."""
+    """How an engine says "no Claude session behind me": delegate 0.19.0 --unattended, 0.18.x --headless (both with no
+    --timeout: the engine's own node limit still kills the process, run_proc), before 0.18 --timeout and the env."""
     v = delegate_version(route)
     if v and v < (0, 18):
         return ["--timeout", str(int(timeout))]
-    return ["--headless"]
+    if v and v < (0, 19):
+        return ["--headless"]
+    return ["--unattended"]
 
 
 def call_delegate(route, role, prompt, schema, cwd, resume, timeout, log_path, writer=None, parent="", task="",
@@ -295,7 +297,7 @@ class Engine:
         resume = self.writer.get("delegate") if resume_key else None
         self.log("node", "%s: %s" % (node, title), node=node, backend="delegate", role=role, resume=bool(resume))
         timeout = float(self.cfg["node_timeout_min"]) * 60
-        waited, attempt_prompt, attempt, errs = 0.0, prompt, 1, ["not run"]
+        waited, attempt_prompt, attempt, errs, transient = 0.0, prompt, 1, ["not run"], 0
         while attempt <= 2:
             r, j = call_delegate(self.route, role, attempt_prompt, SCHEMAS[node], self.wt, resume, timeout,
                                  self.err_path, writer, self.session, self.bead, "%s · %s: %s" % (self.bead, node, title))
@@ -310,6 +312,11 @@ class Engine:
                 self.warn("%s waits %d min for a lane: %s" % (node, wait // 60, j.get("say") or st))
                 time.sleep(wait)
                 waited += wait
+                continue
+            if st == "error" and transient < 2:  # delegate 0.19: a state lock held >10 s answers error; try again
+                transient += 1
+                self.warn("%s: delegate error, retrying in 30 s: %s" % (node, (j or {}).get("say") or r.error))
+                time.sleep(30)
                 continue
             if st == "agent":
                 raise Blocked("failed: delegate answered `agent`; it does not see this engine as headless")

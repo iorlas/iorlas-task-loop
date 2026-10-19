@@ -260,6 +260,14 @@ class DelegateLauncher(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual([c[0] for c in s.calls].count("worker"), 2)
 
+    def test_delegate_error_is_retried_without_a_schema_reprompt(self):
+        err = {"v": 1, "status": "error", "say": "state lock held >10 s"}
+        rc, s = self.run_engine({"plan": [PLAN], "write": [err, WRITE], "verify": [ACCEPT_V], "judge": [judge("accept")]})
+        self.assertEqual(rc, 0)
+        workers = [p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker"]
+        self.assertEqual(len(workers), 2)
+        self.assertNotIn("did not match the required output schema", workers[1])
+
     def test_no_lane_for_too_long_blocks(self):
         stop = {"v": 1, "status": "stop", "retry_after": 0, "say": "no adequate model"}
         rc, _ = self.run_engine({"plan": [stop] * 3}, lane_wait_min=2)
@@ -293,14 +301,15 @@ class DelegateCall(unittest.TestCase):
         for flag, val in (("--resume", "r0"), ("--authored-by", "claude"), ("--parent", "p"), ("--task", "t-1")):
             self.assertEqual(argv[argv.index(flag) + 1], val)
         self.assertEqual((r.ref, r.backend, r.error), ("r1", "openai", ""))
-        self.assertIn("--headless", argv)
+        self.assertIn("--unattended", argv)
         self.assertNotIn("--timeout", argv)
 
     def test_headless_args_follow_the_installed_version(self):
         base = "/h/.claude/plugins/cache/m/iorlas-delegate/%s/skills/delegate/route.py"
         self.assertEqual(engine.headless_args(base % "0.17.0", 600), ["--timeout", "600"])
         self.assertEqual(engine.headless_args(base % "0.18.0", 600), ["--headless"])
-        self.assertEqual(engine.headless_args("/src/delegate/skills/delegate/route.py", 600), ["--headless"])
+        self.assertEqual(engine.headless_args(base % "0.19.0", 600), ["--unattended"])
+        self.assertEqual(engine.headless_args("/src/delegate/skills/delegate/route.py", 600), ["--unattended"])
 
     def test_author_flag_follows_the_installed_version(self):
         base = "/h/.claude/plugins/cache/m/iorlas-delegate/%s/skills/delegate/route.py"

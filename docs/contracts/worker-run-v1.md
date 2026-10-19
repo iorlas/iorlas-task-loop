@@ -20,7 +20,7 @@ Delegate already does the first four. The engine should not grow a second copy, 
 ```
 <python> <route.py> run ROLE --cwd DIR --brief FILE
         [--schema FILE] [--resume REF] [--authored-by openai|claude] [--failed I,J]
-        [--headless] [--timeout SECS] [--cap USD] [--parent SESSION] [--task ID] [--title TEXT]
+        [--unattended] [--timeout SECS] [--cap USD] [--parent SESSION] [--task ID] [--title TEXT]
 ```
 
 | flag | meaning |
@@ -28,7 +28,7 @@ Delegate already does the first four. The engine should not grow a second copy, 
 | `ROLE` | delegate role. Engine mapping: plan → planner, write → worker, verify → light (runs checks, reports), review → reviewer `--authored-by <family that wrote the thread, from the engine's record>` (`--writer` before delegate 0.17.0; the engine picks the flag by the installed version), judge → light, a hard stage → hard |
 | `--schema FILE` | JSON Schema for the answer. Codex: `--output-schema FILE`; claude: `--json-schema`. The producer parses the answer; it does not need to validate it (the engine does) |
 | `--resume REF` | continue the thread or session `REF` from an earlier result, on the same lane. Codex: `codex exec resume REF` takes no `-s`/`-C`: set the sandbox with `-c sandbox_mode=...` and the folder through the process cwd. Claude: `--resume REF`. A lane that is now out → `status: "lane_out"`, never a silent switch to another lane (a new thread loses the writer's context; the engine decides) |
-| `--headless` | the caller is an engine, not a Claude session (delegate 0.18.0+; required for engines). The engine passes it and no `--timeout`/`--cap` (delegate has no default limits since 0.18.0); before 0.18.0 the engine passes `--timeout` instead. The engine still kills a worker at its own `engine.node_timeout_min` |
+| `--unattended` | the caller is an engine, not a Claude session; required for engines (delegate 0.19.0+; `--headless` in 0.18.x, no alias). The engine passes it and no `--timeout`/`--cap` (delegate has no default limits since 0.18.0); before 0.18.0 the engine passes `--timeout` instead. The engine still kills a worker at its own `engine.node_timeout_min` |
 | `--cap USD` | spend cap for this call (credit lanes). Absent → the role's step cap |
 | `--parent`, `--task`, `--title` | written into the agent-runs record (`parent_session`, `task`, `title`). The engine strips `CLAUDE_*` from the child env, so `$CLAUDE_CODE_SESSION_ID` is not there to read |
 
@@ -38,7 +38,7 @@ The brief is passed as a file (or stdin when `--brief` is absent). The producer 
 
 - `run` always prints exactly one JSON object (below) on stdout, for every caller; worker chatter and diagnostics go
   to stderr.
-- Headless is `--headless` (delegate 0.18.0+). Before 0.18.0 it was derived from the environment: no
+- Unattended is `--unattended` (delegate 0.19.0+; `--headless` in 0.18.x). Before 0.18.0 it was derived from the environment: no
   `CLAUDE_CODE_ENTRYPOINT` (the engine strips `CLAUDE_*`, and still does for the child env). Then: never `agent`, never `ask_user`, never `needs_input`; Agent-tool lanes are
   unavailable; unknown subscription use does not block.
 
@@ -111,6 +111,11 @@ anyway, without the reserve.
 Left to the engine (delegate never does these): waiting until `retry_after` on `stop`/`lane_out`; `--failed I,J` for the
 `hard` role; acting on `git_violation`; staggering parallel `run` calls (delegate has no in-flight reservation yet, so N
 launches in the same second can overshoot a lane threshold together); a per-run log of its own (agent-runs records are
-deleted after 7 days and carry no token numbers).
+deleted after 7 days and carry no token numbers; delegate 0.19.0 keeps its own history.jsonl with tokens).
+
+delegate 0.19.0 behaviour the engine relies on: at most 4 runs in flight per lane (1 at 80%+ of the 5-hour window), a
+full lane answers `stop`/`lane_out` with a jittered `retry_after`; a second `run` with the same `--task` while the first
+is alive answers `stop`; killing route.py (SIGTERM, or the parent dying under `--unattended`) stops the worker; a state
+lock held over 10 s answers `error`, which the engine retries twice after 30 s.
 
 Version: the result's `v` is checked by the engine; another major blocks the task (update task-loop).
