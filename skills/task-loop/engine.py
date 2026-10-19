@@ -411,13 +411,24 @@ class Engine:
     def sh(self, cmd, timeout=3600, check=False):
         """A command: a string goes through the shell (profile commands), a list runs as is (no quoting rules)."""
         self.log("cmd", cmd if isinstance(cmd, str) else " ".join(cmd))
-        r = subprocess.run(cmd, shell=isinstance(cmd, str), cwd=self.wt, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout,
-                           stdin=subprocess.DEVNULL)
-        tail = "\n".join((r.stdout + r.stderr).strip().splitlines()[-15:])
-        self.log("note", "exit %d%s" % (r.returncode, (": " + tail[-600:]) if r.returncode else ""), exit=r.returncode)
-        if check and r.returncode:
-            raise Blocked("failed: `%s` exit %d\n%s" % (cmd, r.returncode, tail))
-        return r.returncode, tail
+        # Its own process group, so a timeout stops the whole tree (dotnet build nodes, Unity) and not just the shell;
+        # the worker env, so a check never inherits this launcher's Claude session.
+        p = subprocess.Popen(cmd, shell=isinstance(cmd, str), cwd=self.wt, env=child_env(), stdin=subprocess.DEVNULL,
+                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=(os.name != "nt"))
+        try:
+            out, _ = p.communicate(timeout=timeout)
+            rc = p.returncode
+        except subprocess.TimeoutExpired:
+            kill_tree(p)
+            out, _ = p.communicate()
+            out += b"\n(timed out after %d s: the engine stopped it and everything it started)" % int(timeout)
+            rc = 124
+        text = out.decode("utf-8", "replace")
+        tail = "\n".join(text.strip().splitlines()[-15:])
+        self.log("note", "exit %d%s" % (rc, (": " + tail[-600:]) if rc else ""), exit=rc)
+        if check and rc:
+            raise Blocked("failed: `%s` exit %d\n%s" % (cmd, rc, tail))
+        return rc, tail
 
     def base_sha(self):
         """Where the task's work starts: an earlier run's commits on the task branch count as the task's diff."""
@@ -845,6 +856,8 @@ the owner's answers). Read the code it names. Then plan.
   when it is risky or subtle. Every check is a shell command that exits 0 when it proves the goal and non-zero when it
   does not: the engine reads only the exit code. "Expect empty" is `test -z "$(...)"` or `! grep ...`, never a bare
   grep; a count is `test "$(... | wc -l)" -eq 25`, never a comment saying what to expect.
+- The engine sets every time limit and runs checks one at a time; never write timeouts, "run alone" or similar notes
+  into a check.
 - Name the risks ahead of time: what could break something users or other code rely on (a saved format, a public
   member, shared files), each with the check that proves it safe. None is fine.
 - question: empty, unless the task cannot be done without a decision only the owner can make (product direction,

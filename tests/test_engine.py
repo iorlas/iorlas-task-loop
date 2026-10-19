@@ -164,6 +164,27 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(count.read_text(), "11")
         self.assertEqual(first[0]["exit"], 0)
 
+    def test_a_check_that_times_out_is_red_and_leaves_no_process(self):
+        c = engine.load_cfg(str(self.wt))
+        c["node_timeout_min"] = 0.03  # under 2 s
+        eng = engine.Engine("t-1", str(self.wt), c)
+        res = eng.run_checks({"checks": ["bash -c 'sleep 61.234; true'"], "files": []}, "s")
+        self.assertEqual(res[0]["exit"], 124)
+        self.assertIn("timed out", res[0]["tail"])
+        left = subprocess.run(["pgrep", "-f", "sleep 61.234"], capture_output=True, text=True).stdout.strip()
+        self.assertEqual(left, "")
+
+    def test_checks_run_without_the_launchers_claude_session(self):
+        c = engine.load_cfg(str(self.wt))
+        eng = engine.Engine("t-1", str(self.wt), c)
+        with mock.patch.dict(os.environ, {"CLAUDE_CODE_ENTRYPOINT": "cli"}):
+            res = eng.run_checks({"checks": [PY + ' -c "import os,sys; sys.exit(1 if os.environ.get(\'CLAUDE_CODE_ENTRYPOINT\') else 0)"'],
+                                  "files": []}, "s")
+        self.assertEqual(res[0]["exit"], 0)
+
+    def test_planner_is_told_the_engine_owns_time_limits(self):
+        self.assertIn("The engine sets every time limit", engine.PLAN_PROMPT)
+
     def test_tests_added_and_removed_come_from_the_diff(self):
         diff = ("+++ b/tests/test_a.py\n+def test_one():\n+    pass\n+def test_two():\n-def test_old():\n"
                 "+++ b/T.cs\n+    [Fact]\n+    [Test]\n")
