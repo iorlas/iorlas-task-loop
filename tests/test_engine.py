@@ -155,12 +155,11 @@ class EngineTest(unittest.TestCase):
             self.assertTrue((run / f).exists(), f)
         self.assertIn(str(run / "brief.md"), s.prompts[0])
 
-    def test_checks_on_an_equal_tree_and_base_are_reused(self):
+    def test_repo_checks_on_an_equal_tree_and_base_are_reused(self):
         count = Path(self.tmp.name) / "count"
         bump = PY + ' -c "open(%r, \'a\').write(\'1\')"' % str(count)
-        c = engine.load_cfg(str(self.wt))
-        eng = engine.Engine("t-1", str(self.wt), c)
-        st = {"checks": [bump], "files": []}
+        eng = self.checks_engine(checks=[{"id": "bump", "cmd": bump, "group": "tests"}])
+        st = {"checks": [], "files": []}
         first = eng.run_checks(st, "s")
         again = eng.run_checks(st, "s")
         self.assertEqual(count.read_text(), "1")
@@ -234,6 +233,24 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(count.read_text(), "1")
         self.assertEqual(seen.read_text(), tl.git("rev-parse", "HEAD^{tree}", cwd=str(self.wt)))
+
+    def test_a_stage_check_always_reruns_it_can_read_state_outside_the_tree(self):
+        state = Path(self.tmp.name) / "editor-open"  # a running editor, a log, a bead comment: git cannot see them
+        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        st = {"checks": ['! test -e %s' % state], "files": []}
+        self.assertEqual(eng.run_checks(st, "s")[0]["exit"], 0)
+        state.write_text("x")
+        again = eng.run_checks(st, "s")
+        self.assertEqual(again[0]["exit"], 1)
+        self.assertFalse(again[0].get("cached"))
+
+    def test_a_repo_check_marked_cache_false_always_reruns(self):
+        count = Path(self.tmp.name) / "count"
+        bump = PY + ' -c "open(%r, \'a\').write(\'1\')"' % str(count)
+        eng = self.checks_engine(checks=[{"id": "bump", "cmd": bump, "group": "tests", "cache": False}])
+        eng.run_checks({"checks": [], "files": []}, "s")
+        eng.run_checks({"checks": [], "files": []}, "s")
+        self.assertEqual(count.read_text(), "11")
 
     def test_a_failed_check_is_never_reused(self):
         count = Path(self.tmp.name) / "count"

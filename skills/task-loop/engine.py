@@ -711,12 +711,14 @@ class Engine:
     def run_checks(self, st, name):
         """One engine step, no AI: the repo's checks (engine.checks) and the stage's acceptance checks, grouped
         static → tests → acceptance; a red group skips the groups after it. A repo check with `when` runs only when the
-        task changed a matching path; `retry` reruns a red one (known flaky). A check already run on the same tree and
-        base is not run again. The gate is not here: it runs once, on the rebased tree, at land."""
+        task changed a matching path; `retry` reruns a red one (known flaky). A repo check that passed on the same tree
+        and base is not run again, unless it says `"cache": false`; a stage check always runs, since a plan's check can
+        read what git cannot see (a running editor, a log, a bead comment). The gate is not here: it runs once, on the rebased tree, at land."""
         self.log("node", "checks: %s" % name)
         items = [{"id": c.get("id") or c["cmd"], "cmd": c["cmd"], "group": c.get("group") or "tests",
-                  "when": c.get("when") or [], "retry": int(c.get("retry") or 0)} for c in self.cfg["checks"]]
-        items += [{"id": c, "cmd": c, "group": "acceptance", "when": [], "retry": 0} for c in st["checks"]]
+                  "when": c.get("when") or [], "retry": int(c.get("retry") or 0),
+                  "cache": c.get("cache", True) is not False} for c in self.cfg["checks"]]
+        items += [{"id": c, "cmd": c, "group": "acceptance", "when": [], "retry": 0, "cache": False} for c in st["checks"]]
         items.sort(key=lambda c: GROUPS.index(c["group"]) if c["group"] in GROUPS else 1)
         cache_path = tl.config_dir() / "check-cache" / ("%s.json" % self.bead)
         try:
@@ -738,7 +740,7 @@ class Engine:
                     out.append(dict(base, exit=None, status="skipped", tail="",
                                     why="no change under %s" % ", ".join(c["when"])))
                     continue
-            hit = cache.get(key, {}).get(c["cmd"])
+            hit = c["cache"] and cache.get(key, {}).get(c["cmd"])
             if hit:
                 res = dict(base, **hit)
                 res.update(cached=True, status=hit.get("status") or ("ran" if hit["exit"] == 0 else "failed"))
@@ -753,7 +755,7 @@ class Engine:
                     self.warn("`%s` failed (exit %d), retrying: it is marked flaky" % (c["id"], rc))
                 res = dict(base, exit=rc, status="ran" if rc == 0 else "failed", tries=tries, tail=tail[-1500:],
                            secs=round(time.time() - t))
-                if rc == 0:  # only a pass is a fact about the tree; a failure can come from outside git (stale
+                if rc == 0 and c["cache"]:  # only a pass is a fact about the tree; a failure can come from outside git (stale
                     cache.setdefault(key, {})[c["cmd"]] = res  # build output, a held editor, a flake) and must rerun
             out.append(res)
             if res["exit"] != 0:
