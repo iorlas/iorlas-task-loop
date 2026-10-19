@@ -462,6 +462,9 @@ class Engine:
             out, _ = p.communicate()
             out += b"\n(timed out after %d s: the engine stopped it and everything it started)" % int(timeout)
             rc = 124
+        except BaseException:  # stopped: never leave a check (just check, Unity) running
+            kill_tree(p)
+            raise
         text = out.decode("utf-8", "replace")
         if save:
             Path(save).write_text(text, encoding="utf-8")

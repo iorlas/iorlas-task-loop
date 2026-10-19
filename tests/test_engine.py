@@ -3,6 +3,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -248,6 +249,35 @@ class EngineTest(unittest.TestCase):
         eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
         res = eng.run_checks({"checks": ['diff <(echo a) <(echo a)'], "files": []}, "s")
         self.assertEqual(res[0]["exit"], 0, res[0]["tail"])
+
+    def test_a_stop_during_a_check_stops_the_check_and_everything_it_started(self):
+        if os.name == "nt":
+            self.skipTest("POSIX process groups")
+        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        pidfile = Path(self.wt, "child.pid")
+        real = subprocess.Popen.communicate
+        started = []
+
+        def stopped(this, *a, **kw):
+            for _ in range(100):
+                if pidfile.exists() and pidfile.read_text().strip():
+                    break
+                time.sleep(0.05)
+            started.append(this.pid)
+            raise engine.Blocked("failed: stopped (SIGTERM)")
+        with mock.patch.object(subprocess.Popen, "communicate", stopped):
+            with self.assertRaises(engine.Blocked):
+                eng.sh("sleep 30 & echo $! > child.pid; wait")
+        child = int(pidfile.read_text())
+        for _ in range(50):
+            try:
+                os.kill(child, 0)
+            except ProcessLookupError:
+                break
+            time.sleep(0.05)
+        else:
+            os.killpg(started[0], 9)
+            self.fail("the check's child outlived the stop")
 
     def test_a_worker_edit_to_the_plan_file_is_undone_before_the_next_step(self):
         real = DelegateScript.__call__
