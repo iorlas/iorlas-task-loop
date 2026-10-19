@@ -26,6 +26,7 @@ PLAN = {"summary": "do it", "stages": [{"goal": "add f", "files": ["f.txt"], "ch
 WRITE = {"summary": "wrote f", "checks_run": [{"cmd": "test -f f.txt", "exit": 0}], "question": "", "bad_checks": []}
 ROUTE = "/h/.claude/plugins/cache/m/iorlas-delegate/%s/skills/delegate/route.py"
 CLEAN = {"findings": [], "unmet": [], "question": "", "leftovers": []}
+NS = "--no-sandbox"
 
 
 def review(unmet=(), findings=(), question=""):
@@ -41,13 +42,13 @@ class DelegateScript:
 
     def __init__(self, answers):
         self.answers, self.calls, self.prompts = {k: list(v) for k, v in answers.items()}, [], []
-        self.unsandboxed = []
+        self.access = []
 
     def __call__(self, route, role, prompt, schema, cwd, resume, timeout, log_path, writer=None, parent="", task="",
-                 title="", no_sandbox=False):
+                 title="", access=""):
         node = next(k for k, v in engine.SCHEMAS.items() if v is schema)
         self.calls.append((role, resume, writer))
-        self.unsandboxed.append((role, no_sandbox))
+        self.access.append((role, access))
         self.prompts.append(prompt)
         a = self.answers[node].pop(0)
         if isinstance(a, dict) and a.get("v") is not None:
@@ -588,39 +589,88 @@ class EngineTest(unittest.TestCase):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.21.0",
                                 no_sandbox=True)
         self.assertEqual(rc, 0)
-        self.assertEqual(s.unsandboxed, [("planner", True), ("worker", True), ("reviewer", True)])
+        self.assertEqual(s.access, [("planner", NS), ("worker", NS), ("reviewer", NS)])
         w = next(p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker")
         self.assertIn("outside a sandbox", w)
-        self.assertTrue(all(x["no_sandbox"] for x in self.eng.sessions))
+        self.assertTrue(all(x["host"] for x in self.eng.sessions))
 
     def test_no_sandbox_on_delegate_0_20_is_writer_only_with_a_warning(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.20.0",
                                 no_sandbox=True)
         self.assertEqual(rc, 0)
-        self.assertEqual(s.unsandboxed, [("planner", False), ("worker", True), ("reviewer", False)])
+        self.assertEqual(s.access, [("planner", ""), ("worker", NS), ("reviewer", "")])
         self.assertIn("delegate 0.21", self.eng.log_path.read_text())
 
     def test_no_sandbox_needs_delegate_0_20(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.19.0",
                                 no_sandbox=True)
         self.assertEqual(rc, 0)
-        self.assertFalse(any(u for _, u in s.unsandboxed))
+        self.assertFalse(any(u for _, u in s.access))
         self.assertIn("delegate 0.20", self.eng.log_path.read_text())
 
     def test_sandbox_is_the_default_and_a_bead_label_overrides_the_config(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.21.0")
-        self.assertFalse(any(u for _, u in s.unsandboxed))
+        self.assertFalse(any(u for _, u in s.access))
         w = next(p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker")
         self.assertNotIn("outside a sandbox", w)
         with mock.patch.object(tl, "show", return_value={"id": "t-1", "title": "Add f", "metadata": {},
                                                          "labels": ["no-sandbox"]}):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.21.0")
-        self.assertTrue(all(u for _, u in s.unsandboxed))
+        self.assertTrue(all(u for _, u in s.access))
         with mock.patch.object(tl, "show", return_value={"id": "t-1", "title": "Add f", "metadata": {},
                                                          "labels": ["sandbox"]}):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.21.0",
                                     no_sandbox=True)
-        self.assertFalse(any(u for _, u in s.unsandboxed))
+        self.assertFalse(any(u for _, u in s.access))
+
+    # -- delegate 0.23: --host on write steps only; --no-sandbox below it
+    def test_host_on_delegate_0_23_goes_to_the_write_step_only(self):
+        for cfg in ({"host": True}, {"no_sandbox": True}):  # no_sandbox: the 0.6 name, still read
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.23.0", **cfg)
+            self.assertEqual(rc, 0)
+            self.assertEqual(s.access, [("planner", ""), ("worker", "--host"), ("reviewer", "")], cfg)
+            w = next(p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker")
+            self.assertIn("outside a sandbox", w)
+            self.assertEqual([x["host"] for x in self.eng.sessions], [False, True, False])
+
+    def test_a_host_label_asks_for_the_host(self):
+        with mock.patch.object(tl, "show", return_value={"id": "t-1", "title": "Add f", "metadata": {}, "labels": ["host"]}):
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.23.0")
+        self.assertEqual(s.access[1], ("worker", "--host"))
+
+    def test_a_denied_command_with_a_valid_answer_is_a_warning_in_the_trace(self):
+        ok = {"v": 1, "status": "done", "data": WRITE, "ref": "w1", "family": "claude",
+              "denied": [{"tool": "Bash", "input": "curl -X POST https://x"}]}
+        rc, s = self.run_engine({"plan": [PLAN], "write": [ok, WRITE], "review": [CLEAN]}, route=ROUTE % "0.23.0")
+        self.assertEqual(rc, 0)  # (a raw answer writes no f.txt: the stage's check sends it to a second write)
+        self.assertIn("write was denied `curl -X POST https://x`", self.eng.log_path.read_text())
+        self.assertEqual(self.eng.sessions[1]["denied"], ok["denied"])
+
+    def test_a_denied_command_with_no_valid_answer_needs_a_human_at_once(self):
+        stuck = {"v": 1, "status": "done", "data": None, "text": "I could not run it", "ref": "w1", "family": "claude",
+                 "denied": [{"tool": "Bash", "input": "unity open client"}]}
+        rc, s = self.run_engine({"plan": [PLAN], "write": [stuck, WRITE], "review": [CLEAN]}, route=ROUTE % "0.23.0")
+        self.assertEqual(rc, 2)
+        self.assertEqual([c[0] for c in s.calls].count("worker"), 1)
+        self.assertIn("needs a human", self.blocked[0])
+        self.assertIn("unity open client", self.blocked[0])
+
+    def test_error_from_0_23_is_permanent(self):
+        err = {"v": 1, "status": "error", "say": "--host: the planner chain has no allowed lane"}
+        rc, s = self.run_engine({"plan": [err, PLAN]}, route=ROUTE % "0.23.0")
+        self.assertEqual(rc, 2)
+        self.assertEqual(len(s.calls), 1)
+        self.assertIn("no allowed lane", self.blocked[0])
+
+    def test_error_on_a_resume_from_0_23_retries_once_as_a_new_thread(self):
+        err = {"v": 1, "status": "error", "say": "--resume: the host flag differs from the original run"}
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, err, WRITE], "review": [review(unmet=["more"]), CLEAN]},
+                                route=ROUTE % "0.23.0")
+        self.assertEqual(rc, 0)
+        workers = [c for c in s.calls if c[0] == "worker"]
+        self.assertEqual(len(workers), 3)
+        self.assertIsNotNone(workers[1][1])  # the second write resumed the writer's thread
+        self.assertIsNone(workers[2][1])     # the error made it start a new one
 
     def test_child_env_drops_session_identity(self):
         with mock.patch.dict(os.environ, {"ANTHROPIC_BASE_URL": "x", "CLAUDE_CODE_SESSION_ID": "s"}):
@@ -645,9 +695,9 @@ class DelegateLauncher(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual([c[0] for c in s.calls].count("worker"), 2)
 
-    def test_delegate_error_is_retried_without_a_schema_reprompt(self):
+    def test_delegate_error_before_0_23_is_retried_without_a_schema_reprompt(self):
         err = {"v": 1, "status": "error", "say": "state lock held >10 s"}
-        rc, s = self.run_engine({"plan": [PLAN], "write": [err, WRITE], "review": [CLEAN]})
+        rc, s = self.run_engine({"plan": [PLAN], "write": [err, WRITE], "review": [CLEAN]}, route=ROUTE % "0.22.0")
         self.assertEqual(rc, 0)
         workers = [p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker"]
         self.assertEqual(len(workers), 2)
@@ -714,13 +764,13 @@ class DelegateCall(unittest.TestCase):
         self.assertNotIn("--timeout", argv)
         self.assertNotIn("--no-sandbox", argv)
 
-    def test_call_delegate_passes_no_sandbox(self):
+    def test_call_delegate_passes_the_access_flag(self):
         with tempfile.TemporaryDirectory() as d:
             route = Path(d, "route.py")
             route.write_text("import json,sys\nprint(json.dumps({'v': 1, 'status': 'done', 'data': {'argv': sys.argv[1:]}}))\n")
             r, _ = engine.call_delegate(str(route), "worker", "x", {"type": "object"}, d, None, 60, Path(d, "e.log"),
-                                        no_sandbox=True)
-        self.assertIn("--no-sandbox", r.data["argv"])
+                                        access="--host")
+        self.assertIn("--host", r.data["argv"])
 
     def test_headless_args_follow_the_installed_version(self):
         base = "/h/.claude/plugins/cache/m/iorlas-delegate/%s/skills/delegate/route.py"

@@ -20,7 +20,7 @@ Delegate already does the first four. The engine should not grow a second copy, 
 ```
 <python> <route.py> run ROLE --cwd DIR --brief FILE
         [--schema FILE] [--resume REF] [--authored-by openai|claude] [--failed I,J]
-        [--unattended] [--no-sandbox] [--timeout SECS] [--cap USD] [--parent SESSION] [--task ID] [--title TEXT]
+        [--unattended] [--host | --no-sandbox] [--timeout SECS] [--cap USD] [--parent SESSION] [--task ID] [--title TEXT]
 ```
 
 | flag | meaning |
@@ -29,7 +29,8 @@ Delegate already does the first four. The engine should not grow a second copy, 
 | `--schema FILE` | JSON Schema for the answer. Codex: `--output-schema FILE`; claude: `--json-schema`. The producer parses the answer; it does not need to validate it (the engine does) |
 | `--resume REF` | continue the thread or session `REF` from an earlier result, on the same lane. Codex: `codex exec resume REF` takes no `-s`/`-C`: set the sandbox with `-c sandbox_mode=...` and the folder through the process cwd. Claude: `--resume REF`. A lane that is now out → `status: "lane_out"`, never a silent switch to another lane (a new thread loses the writer's context; the engine decides) |
 | `--unattended` | the caller is an engine, not a Claude session; required for engines (delegate 0.19.0+; `--headless` in 0.18.x, no alias). The engine passes it and no `--timeout`/`--cap` (delegate has no default limits since 0.18.0); before 0.18.0 the engine passes `--timeout` instead. The engine still kills a worker at its own `engine.node_timeout_min` |
-| `--no-sandbox` | delegate 0.20.0+ (write steps) / 0.21.0+ (every mode): Codex runs `-s danger-full-access`, a read-only `claude -p` gets Bash. The engine passes it when `engine.no_sandbox` or the bead label `no-sandbox` asks, gated per step on the installed version (an older delegate: one ⚠, the step runs sandboxed) |
+| `--host` | delegate 0.23.0+: this work needs the host (Unity, an editor, devices); it cannot run in a sandbox. Which lanes may take it, and how they run, is delegate's own config (`host_lanes`); the caller learns nothing more. A role whose chain has no allowed lane, or a `--resume` whose host flag differs from the original run, answers `error`. The engine passes it on write steps only (a reviewer stays on its usual lane for a cross-family review) when `engine.host` or the bead label `host` asks |
+| `--no-sandbox` | delegate 0.20.0–0.22.x, removed in 0.23.0 (no alias): Codex runs `-s danger-full-access`, a read-only `claude -p` gets Bash; write steps from 0.20.0, every step from 0.21.0. The engine sends it instead of `--host` to a delegate older than 0.23.0, gated per step on the installed version (older still: one ⚠, the step runs sandboxed) |
 | `--cap USD` | spend cap for this call (credit lanes). Absent → the role's step cap |
 | `--parent`, `--task`, `--title` | written into the agent-runs record (`parent_session`, `task`, `title`). The engine strips `CLAUDE_*` from the child env, so `$CLAUDE_CODE_SESSION_ID` is not there to read |
 
@@ -48,7 +49,7 @@ The brief is passed as a file (or stdin when `--brief` is absent). The producer 
 | field | type | meaning |
 |---|---|---|
 | `v` | 1 | contract version |
-| `status` | `done` \| `failed` \| `timeout` \| `lane_out` \| `stop` \| `error` | `lane_out`: this lane hit a limit during the call (`retry_after` says when); `stop`: no lane can run the role now; `error`: bad call or setup |
+| `status` | `done` \| `failed` \| `timeout` \| `lane_out` \| `stop` \| `error` | `lane_out`: this lane hit a limit during the call (`retry_after` says when); `stop`: no lane can run the role now, or delegate's state is busy (a lock held over 10 s, from 0.23.0); `error`: bad call or setup, permanent (retrying the same call cannot help, from 0.23.0) |
 | `data` | object \| null | the parsed answer when `--schema` was given and the answer parsed |
 | `text` | string | the raw final answer |
 | `ref` | string \| null | thread id (codex) or session id (claude), for `--resume` and the live log |
@@ -61,6 +62,7 @@ The brief is passed as a file (or stdin when `--brief` is absent). The producer 
 | `retry_after` | number \| null | epoch seconds; with `lane_out` and `stop` |
 | `say` | string | one human line; with `stop`, `error`, `failed` |
 | `git_violation` | list of strings | git changes the worker made (see Git). Reported, never turned into a failure |
+| `denied` | list of `{tool, input}` | delegate 0.23.0+, Claude lanes: the exact commands the auto-mode classifier refused the worker (policy denials such as `git commit` are left out). No status of its own: it rides on `done` or `failed`. Engine: an answer that is still invalid with a denial blocks the task "needs a human: <command>"; a valid answer with a denial is a ⚠ and goes into the trace |
 
 Exit code: 0 when the object was printed, whatever `status` says; non-zero only when the producer itself crashed
 (then the engine treats the call as `error` and uses stderr).
@@ -118,6 +120,8 @@ deleted after 7 days and carry no token numbers; delegate 0.19.0 keeps its own h
 delegate 0.19.0 behaviour the engine relies on: at most 4 runs in flight per lane (1 at 80%+ of the 5-hour window), a
 full lane answers `stop`/`lane_out` with a jittered `retry_after`; a second `run` with the same `--task` while the first
 is alive answers `stop`; killing route.py (SIGTERM, or the parent dying under `--unattended`) stops the worker; a state
-lock held over 10 s answers `error`, which the engine retries twice after 30 s.
+lock held over 10 s answers `error`, which the engine retries twice after 30 s. From 0.23.0 that lock answers `stop` with
+`retry_after` and `error` is permanent: the engine retries an `error` only once, without `--resume` (a resume whose host
+flag differs from the original run is an `error`), and not at all otherwise.
 
 Version: the result's `v` is checked by the engine; another major blocks the task (update task-loop).

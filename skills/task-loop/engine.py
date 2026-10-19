@@ -37,8 +37,9 @@ DEFAULTS = {
     "delegate": "",                   # path to delegate's route.py; "" = the newest installed iorlas-delegate
     "lane_wait_min": 60,              # how long a step waits for a lane that is out before the task is blocked
     "checks": [],                     # repo checks: [{id, cmd, group: static|tests|acceptance, when: [globs], retry}]
-    "no_sandbox": False,              # workers run outside delegate's sandbox (delegate --no-sandbox); a bead label
-                                      # no-sandbox / sandbox overrides it for one bead
+    "host": False,                    # the work needs the host (Unity, an editor): write steps get delegate's --host
+                                      # (--no-sandbox below 0.23); a bead label host / sandbox overrides it for one bead
+    "no_sandbox": False,              # the 0.6 name of `host`, still read
     "worker_rules": "",               # repo file the writer reads first: what its sandbox can and cannot run
     "brief_kb": 5,
     "test_pattern": r"^\s*(def test_|async def test_|\[(Test|Fact|Theory|TestMethod|TestCase)\b|#\[test\]|(it|test)\(|func Test)",                    # a brief bigger than this gets a ⚠ (never cut: the bead may be too big)
@@ -185,17 +186,26 @@ def delegate_version(route):
     return (int(m.group(1)), int(m.group(2))) if m else None
 
 
-def unsandboxed(route, node, wanted):
-    """Whether this step runs with delegate's --no-sandbox: the write step from delegate 0.20.0, every step (plan and
-    review get Bash and the network) from 0.21.0. Returns (flag, the reason it is off although wanted, or "")."""
+def access(route, node, wanted):
+    """The flag that gives this step the host, when the task wants it. Delegate 0.23.0+: `--host`, on the write step
+    only (delegate's own config says which lanes take it; a reviewer stays on its usual lane). 0.20-0.22: `--no-sandbox`,
+    the write step from 0.20.0, every step from 0.21.0. Returns (flag or "", the reason it is off although wanted, or "")."""
     if not wanted:
-        return False, ""
+        return "", ""
     v = delegate_version(route)
+    if v is None or v >= (0, 23):
+        return ("--host" if node == "write" else ""), ""
     need = (0, 20) if node == "write" else (0, 21)
-    if v and v < need:
-        return False, "--no-sandbox for %s needs delegate %d.%d (installed %d.%d): it runs sandboxed" % (
+    if v < need:
+        return "", "--no-sandbox for %s needs delegate %d.%d (installed %d.%d): it runs sandboxed" % (
             node, need[0], need[1], v[0], v[1])
-    return True, ""
+    return "--no-sandbox", ""
+
+
+def permanent_errors(route):
+    """Delegate 0.23.0+ answers `error` only when retrying the same call cannot help (a busy lock is `stop`)."""
+    v = delegate_version(route)
+    return v is None or v >= (0, 23)
 
 
 def author_flag(route):
@@ -216,7 +226,7 @@ def headless_args(route, timeout):
 
 
 def call_delegate(route, role, prompt, schema, cwd, resume, timeout, log_path, writer=None, parent="", task="",
-                  title="", no_sandbox=False):
+                  title="", access=""):
     """One AI step through `route.py run` (worker-run v1). Returns (Result, the answer object or None)."""
     with tempfile.TemporaryDirectory() as d:
         bf, sf = os.path.join(d, "brief.md"), os.path.join(d, "schema.json")
@@ -228,8 +238,8 @@ def call_delegate(route, role, prompt, schema, cwd, resume, timeout, log_path, w
             cmd += ["--resume", resume]
         if writer:
             cmd += [author_flag(route), writer]
-        if no_sandbox:
-            cmd.append("--no-sandbox")
+        if access:
+            cmd.append(access)
         res, secs = run_proc(cmd, cwd, timeout + 120, log_path)
     if res is None:
         return Result(secs=secs, error="timeout", backend="delegate", ref=resume or ""), None
@@ -271,7 +281,7 @@ class Engine:
         self.session = tl.session_id()
         self.leftovers = []
         self.stuck_why = ""
-        self.no_sandbox = bool(cfg.get("no_sandbox"))
+        self.host = bool(cfg.get("host") or cfg.get("no_sandbox"))
         self.sandbox_warned = set()
         self.budget_warned = set()
         self.writer = {}  # backend -> thread/session id, so later rounds of a task resume the same writer
@@ -302,14 +312,14 @@ class Engine:
         if kind == "warn" or not (kind == "cmd" and not self.verbose):
             say("[%s] %s%s" % (time.strftime("%H:%M:%S"), "⚠ " if kind == "warn" else "", text))
 
-    def trace_call(self, node, role, attempt, r, j, no_sandbox=False):
+    def trace_call(self, node, role, attempt, r, j, host=False):
         """One AI call into the run's trace: which worker session did what, and where its transcript is."""
         j = j or {}
         rec = {"node": node, "role": role, "attempt": attempt, "status": j.get("status") or r.error or "none",
                "ref": j.get("ref") or r.ref or "", "run_id": j.get("run_id") or "", "transcript": j.get("transcript") or "",
                "family": j.get("family") or "", "lane": j.get("lane") or "", "model": j.get("model") or "",
                "effort": j.get("effort") or "", "secs": round(r.secs or 0), "cost": r.cost or 0.0, "t": time.time(),
-               "no_sandbox": no_sandbox, "tokens": j.get("tokens")}  # delegate 0.22+: {in, cached, out}, in counts cached
+               "host": host, "tokens": j.get("tokens"), "denied": j.get("denied") or []}  # delegate 0.22+: {in, cached, out}, in counts cached
         for k in ("in", "cached", "out"):
             self.stats["tokens_" + k] += int((rec["tokens"] or {}).get(k) or 0)
         self.sessions.append(rec)
@@ -321,7 +331,7 @@ class Engine:
                "repo": self.git("remote", "get-url", "origin") or str(self.wt), "worktree": str(self.wt),
                "branch": self.git("symbolic-ref", "--short", "-q", "HEAD"), "coordinator_session": self.session,
                "started": self.t0, "ended": time.time(), "outcome": outcome, "why": (why or "")[:500], "sha": sha or "",
-               "cost": self.cost, "stats": self.stats, "no_sandbox": self.no_sandbox, "delegate": self.route or "", "log": str(self.log_path),
+               "cost": self.cost, "stats": self.stats, "host": self.host, "delegate": self.route or "", "log": str(self.log_path),
                "stderr": str(self.err_path), "sessions": self.sessions}
         try:
             with open(tl.config_dir() / "traces.jsonl", "a", encoding="utf-8") as f:
@@ -356,22 +366,22 @@ class Engine:
         resume = self.writer.get("delegate") if resume_key else None
         if getattr(self, "plan_data", None):  # an unsandboxed worker can write here: every step reads the engine's plan
             (self.run_dir / "plan.json").write_text(json.dumps(self.plan_data, indent=1))
-        free, why = unsandboxed(self.route, node, self.no_sandbox)
+        flag, why = access(self.route, node, self.host)
         if why and why not in self.sandbox_warned:
             self.sandbox_warned.add(why)
             self.warn(why)
         self.log("node", "%s: %s" % (node, title), node=node, backend="delegate", role=role, resume=bool(resume))
         timeout = float(self.cfg["node_timeout_min"]) * 60
-        waited, attempt_prompt, attempt, errs, transient = 0.0, prompt, 1, ["not run"], 0
+        waited, attempt_prompt, attempt, errs, transient, fresh = 0.0, prompt, 1, ["not run"], 0, False
         while attempt <= 2:
             r, j = call_delegate(self.route, role, attempt_prompt, SCHEMAS[node], self.wt, resume, timeout,
                                  self.err_path, writer, self.session, self.bead, "%s · %s: %s" % (self.bead, node, title),
-                                 no_sandbox=free)
+                                 access=flag)
             if j is not None and j.get("v") != 1:
                 raise Blocked("failed: delegate answered worker-run v%s, this engine speaks v1 (update task-loop)"
                               % j.get("v"))
             st = (j or {}).get("status")
-            self.trace_call(node, role, attempt, r, j, free)
+            self.trace_call(node, role, attempt, r, j, bool(flag))
             if st in ("lane_out", "stop"):
                 wait = max(60.0, min(600.0, float(j.get("retry_after") or 0) - time.time()))
                 if waited + wait > float(self.cfg["lane_wait_min"]) * 60:
@@ -393,7 +403,13 @@ class Engine:
                 time.sleep(60)
                 waited += 60
                 continue
-            if st == "error" and transient < 2:  # delegate 0.19: a state lock held >10 s answers error; try again
+            if st == "error" and permanent_errors(self.route):
+                if resume and not fresh:  # e.g. a resume whose host flag differs from its first run: start a new thread
+                    fresh, resume, attempt_prompt = True, None, prompt
+                    self.warn("%s: delegate refused the resume, starting a new thread: %s" % (node, (j or {}).get("say") or r.error))
+                    continue
+                raise Blocked("failed: delegate error on %s: %s" % (node, (j or {}).get("say") or r.error))
+            if st == "error" and transient < 2:  # delegate 0.19-0.22: a state lock held >10 s answers error; try again
                 transient += 1
                 self.warn("%s: delegate error, retrying in 30 s: %s" % (node, (j or {}).get("say") or r.error))
                 time.sleep(30)
@@ -407,6 +423,12 @@ class Engine:
                 self.writer["delegate"] = resume = r.ref
             errs = validate(r.data, SCHEMAS[node]) if r.data is not None else [
                 "no structured output" + (": " + r.error if r.error else "")]
+            denied = "; ".join("`%s`" % (d.get("input") or d.get("tool")) for d in (j or {}).get("denied") or [])
+            if denied and errs:  # asking again meets the same refusal
+                raise Blocked("needs a human: the %s step was denied %s and gave no answer; run it or allow it, then "
+                              "rerun. (%s)" % (node, denied, ((j or {}).get("text") or r.error or "")[:200]))
+            if denied:
+                self.warn("%s was denied %s and found another way" % (node, denied))
             if not errs:
                 break
             self.log("note", "%s output invalid (try %d): %s" % (node, attempt, "; ".join(errs[:4])))
@@ -529,9 +551,9 @@ class Engine:
             if not bead:
                 raise Blocked("failed: bead %s not found" % self.bead)
             labels = bead.get("labels") or []
-            if "no-sandbox" in labels or "sandbox" in labels:
-                self.no_sandbox = "no-sandbox" in labels
-                self.log("note", "bead label: workers run %s" % ("outside the sandbox" if self.no_sandbox else "sandboxed"))
+            if {"host", "no-sandbox", "sandbox"} & set(labels):
+                self.host = "host" in labels or "no-sandbox" in labels
+                self.log("note", "bead label: the write step %s" % ("gets the host" if self.host else "runs sandboxed"))
             hb.start()
             if not self.route:
                 raise Blocked("failed: the engine needs the iorlas-delegate plugin (0.14.0 or later): "
@@ -682,7 +704,7 @@ class Engine:
 
     def where(self, node):
         """What the step may run, by whether it is sandboxed."""
-        free, _ = unsandboxed(self.route, node, self.no_sandbox)
+        free = bool(access(self.route, node, self.host)[0])
         if node == "write":
             return ("You run outside a sandbox, on this machine: run the tests and tools you need (unit tests, the editor's "
                     "batch tests, builds) to see your change work before you say it is done." if free else

@@ -49,9 +49,11 @@ writer reads first). The profile gives:
                         "retry": 1}]}}
 ```
 
-`engine.no_sandbox: true` (or the label `no-sandbox` on one bead; `sandbox` turns it off for one bead) runs workers
-outside delegate's sandbox (delegate 0.20+ for the writer, 0.21+ for planner and reviewer): the writer runs Unity and
-tests itself, the reviewer can open links and run a linter. It is the owner's call: those workers run on this machine.
+`engine.host: true` (the 0.6 name `no_sandbox` still works; the label `host` on one bead, `sandbox` turns it off for
+one bead) says the work needs the host: the writer runs Unity and tests itself, on this machine. Delegate 0.23+ gets
+`--host` on write steps only, and delegate's own config decides which lanes take it. Delegate 0.20-0.22 gets
+`--no-sandbox` instead (every step from 0.21). It is the owner's call. A command the worker was denied shows as a ⚠;
+denied with no answer blocks the bead "needs a human: <command>".
 
 Check groups run static → tests → acceptance (the plan's per-stage checks); a red group skips the rest. `when` runs a
 check only when the task changed a matching path; `retry` reruns a known flaky one. A repo check that passed on the
