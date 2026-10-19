@@ -25,7 +25,7 @@ Delegate already does the first four. The engine should not grow a second copy, 
 
 | flag | meaning |
 |---|---|
-| `ROLE` | delegate role. Engine mapping: plan → planner, write → worker, verify → light (runs checks, reports), review → reviewer `--authored-by <family that wrote the thread, from the engine's record>` (`--writer` before delegate 0.17.0; the engine picks the flag by the installed version), judge → light, a hard stage → hard |
+| `ROLE` | delegate role. Engine mapping (since task-loop 0.6.0, no verify or judge step): plan → planner, write → worker, review → reviewer `--authored-by <family that wrote the thread, from the engine's record>` (`--writer` before delegate 0.17.0; the engine picks the flag by the installed version), a hard stage → hard |
 | `--schema FILE` | JSON Schema for the answer. Codex: `--output-schema FILE`; claude: `--json-schema`. The producer parses the answer; it does not need to validate it (the engine does) |
 | `--resume REF` | continue the thread or session `REF` from an earlier result, on the same lane. Codex: `codex exec resume REF` takes no `-s`/`-C`: set the sandbox with `-c sandbox_mode=...` and the folder through the process cwd. Claude: `--resume REF`. A lane that is now out → `status: "lane_out"`, never a silent switch to another lane (a new thread loses the writer's context; the engine decides) |
 | `--unattended` | the caller is an engine, not a Claude session; required for engines (delegate 0.19.0+; `--headless` in 0.18.x, no alias). The engine passes it and no `--timeout`/`--cap` (delegate has no default limits since 0.18.0); before 0.18.0 the engine passes `--timeout` instead. The engine still kills a worker at its own `engine.node_timeout_min` |
@@ -99,8 +99,8 @@ calls per task as well. Workers get `DELEGATE_DEPTH=1`: they cannot delegate.
 
 Why delegate's roles and not an engine profile: routing.json roles say which model is adequate for a kind of work, true
 for any caller. The orchestrator rules (never delegate plan or acceptance, consent prompts) are skill text the engine
-never reads. In the engine, plan is an AI node because the plan lives in the bead; the judge's `accept` is a route, and
-acceptance is the engine's checks, a fresh verify and the gate. A role no orchestrator needs → a new role in routing.json,
+never reads. In the engine, plan is an AI node because the plan lives in the bead; acceptance is a rule over the engine's
+own checks, the cross-family review and the gate. A role no orchestrator needs → a new role in routing.json,
 never a second table.
 
 Usage feed (part of this contract): `route.py status --claude-usage '<get_usage plan.windows JSON>'` stores the reading;

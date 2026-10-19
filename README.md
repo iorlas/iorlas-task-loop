@@ -28,9 +28,9 @@ A Claude Code session (attended mode) picks ready beads and runs the **engine** 
 python3 skills/task-loop/tl.py run-task <bead id> --worktree <dir>
 ```
 
-The engine claims the bead and runs reset → plan → per stage (write → checks run by the engine → verify → review
-when risky → judge) → gate → land → close, each AI step a headless worker (Codex or `claude -p`) with a
-schema-checked answer. Code routes; the judge reads ambiguous results; close always runs. Its output is verbose with
+The engine claims the bead and runs reset → plan → per stage (write → checks run by the engine → review by the other
+model family) → gate → land → close, each AI step a headless worker (Codex or `claude -p`) with a schema-checked
+answer. Code routes and accepts by rule (checks green, nothing blocking in the review); close always runs. Its output is verbose with
 ⚠ lines for anything the watching session should react to. Settings: `.task-loop.json` → `engine`. Design:
 [docs/design/coordinator-less.md](docs/design/coordinator-less.md).
 

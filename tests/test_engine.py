@@ -23,13 +23,15 @@ FALSE = PY + ' -c "import sys; sys.exit(1)"'
 PLAN = {"summary": "do it", "stages": [{"goal": "add f", "files": ["f.txt"], "checks": [HAS_F],
                                         "hard": False}], "risks": [], "question": ""}
 WRITE = {"summary": "wrote f", "checks_run": [{"cmd": "test -f f.txt", "exit": 0}], "question": ""}
-ACCEPT_V = {"verdict": "accept", "checks": [{"cmd": "test -f f.txt", "exit": 0, "tail": ""}], "gaps": [],
-            "risk_flags": [], "outside_touches": [], "tests_added": 0, "tests_removed": 0}
-GAPS_V = dict(ACCEPT_V, verdict="gaps", gaps=["f.txt is empty"])
+CLEAN = {"findings": [], "unmet": [], "question": "", "leftovers": []}
 
 
-def judge(decision, question=""):
-    return {"decision": decision, "why": decision + " because", "question": question, "leftovers": []}
+def review(unmet=(), findings=(), question=""):
+    return dict(CLEAN, unmet=list(unmet), findings=list(findings), question=question)
+
+
+def finding(severity):
+    return {"file": "f.txt", "line": 1, "severity": severity, "fix": "a %s fix" % severity}
 
 
 class DelegateScript:
@@ -50,7 +52,7 @@ class DelegateScript:
             if node == "write":
                 Path(cwd, "f.txt").write_text("d%d\n" % len(self.calls))
             j = {"v": 1, "status": "done", "data": a, "ref": "ref-" + node, "cost": 0.5, "secs": 1,
-                 "family": "openai" if node in ("write", "verify", "judge") else "claude", "lane": "L", "model": "m",
+                 "family": "openai" if node == "write" else "claude", "lane": "L", "model": "m",
                  "effort": "e", "git_violation": []}
         r = engine.Result(j.get("data"), "", j.get("ref") or "", float(j.get("cost") or 0), 1, "" if j["status"] == "done" else j["status"],
                           j.get("family") or "delegate")
@@ -106,9 +108,9 @@ class EngineTest(unittest.TestCase):
         return rc, script
 
     def test_happy_path_lands_and_closes(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "verify": [ACCEPT_V], "judge": [judge("accept")]})
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
-        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "light", "light"])
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])
         self.assertTrue(self.closed and self.closed[0].startswith("merged "))
         self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
         self.assertTrue(any(c[:2] == ("comments", "add") and "Reflect (engine)" in c[3] for c in self.bd_calls))
@@ -123,7 +125,7 @@ class EngineTest(unittest.TestCase):
                     {"author": "tl-a", "text": "Blocked: failed: stopped (SIGTERM)"},
                     {"author": "denis", "text": "Use the old format, not the new one."}]
         with mock.patch.object(tl, "show", return_value=bead), mock.patch.object(tl, "comments", return_value=comments):
-            rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "verify": [ACCEPT_V], "judge": [judge("accept")]})
+            rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
         brief = (self.eng.run_dir / "brief.md").read_text()
         for kept in ("Add the file f.", "f.txt exists", "owner: keep it short", "Use the old format", "t-0 The epic",
@@ -139,7 +141,7 @@ class EngineTest(unittest.TestCase):
         (td / "evidence" / "seen-red.log").write_text("red then green\n")
         (td / "rechecks.json").write_text('{"exit": 124}')  # a writer's sandbox run from an earlier run
         (td / "verify-9.json").write_text("{}")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "verify": [ACCEPT_V], "judge": [judge("accept")]})
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
         self.assertEqual(sorted(p.name for p in td.iterdir()), ["evidence"])
         self.assertTrue((td / "evidence" / "seen-red.log").exists())
@@ -223,7 +225,7 @@ class EngineTest(unittest.TestCase):
         count, seen = Path(self.tmp.name) / "gates", Path(self.tmp.name) / "gated-tree"
         gate = PY + ' -c "open(%r, \'a\').write(\'1\')"' % str(count)
         land = PY + ' -c "import os; open(%r, \'w\').write(os.environ.get(\'TASK_LOOP_GATED_TREE\', \'\'))" && git push -q origin HEAD:main' % str(seen)
-        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "verify": [ACCEPT_V], "judge": [judge("accept")]},
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
                                 gate=gate, land=land)
         self.assertEqual(rc, 0)
         self.assertEqual(count.read_text(), "1")
@@ -235,7 +237,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(engine.count_tests(diff, engine.DEFAULTS["test_pattern"]), (4, 1))
 
     def test_writer_is_told_the_repo_worker_rules_and_never_to_run_the_gate(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "verify": [ACCEPT_V], "judge": [judge("accept")]},
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
                                 worker_rules="docs/agents/codex.md", gate=PY + ' -c "pass"')
         self.assertEqual(rc, 0)
         w = next(p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker")
@@ -243,13 +245,13 @@ class EngineTest(unittest.TestCase):
         self.assertIn('-c "pass"`), the issue tracker (bd)', w)
 
     def test_a_run_leaves_a_trace_of_every_worker_session(self):
-        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "verify": [ACCEPT_V], "judge": [judge("accept")]})
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
         runs = [json.loads(l) for l in (tl.config_dir() / "traces.jsonl").read_text().splitlines()]
         self.assertEqual(len(runs), 1)
         r = runs[0]
         self.assertEqual((r["bead"], r["outcome"], r["coordinator_session"]), ("t-1", "landed", "sess1234-x"))
-        self.assertEqual([x["role"] for x in r["sessions"]], ["planner", "worker", "light", "light"])
+        self.assertEqual([x["role"] for x in r["sessions"]], ["planner", "worker", "reviewer"])
         self.assertEqual(r["sessions"][1]["ref"], "ref-write")
         self.assertTrue(any(c[:2] == ("comments", "add") and "trace=" + r["run"] in c[3] for c in self.bd_calls))
 
@@ -258,50 +260,74 @@ class EngineTest(unittest.TestCase):
         Path(self.wt, "g.txt").write_text("from run 1\n")
         sh("git", "add", "-A", cwd=self.wt)
         sh("git", "commit", "-qm", "wip (t-1): blocked", cwd=self.wt)
-        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "verify": [ACCEPT_V], "judge": [judge("accept")]})
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
         log = tl.git("log", "--format=%s", "origin/main", cwd=str(self.wt)).splitlines()
         self.assertEqual(log, ["Add f (t-1)", "init"])
         self.assertEqual(tl.git("show", "origin/main:g.txt", cwd=str(self.wt)), "from run 1")
 
-    def test_rework_resumes_the_same_writer(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE], "verify": [GAPS_V, ACCEPT_V],
-                                 "judge": [judge("rework"), judge("accept")]})
+    def test_review_sends_an_unmet_requirement_back_to_the_same_writer(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE],
+                                 "review": [review(unmet=["cant-sit-still still carries example: true"]), CLEAN]})
         self.assertEqual(rc, 0)
         self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, "ref-write"])
+        self.assertIn("cant-sit-still still carries example: true", [p for (c, p) in zip(s.calls, s.prompts)
+                                                                     if c[0] == "worker"][1])
 
-    def test_replan_starts_over_once_then_blocks(self):
-        rc, s = self.run_engine({"plan": [PLAN, PLAN], "write": [WRITE, WRITE], "verify": [ACCEPT_V, ACCEPT_V],
-                                 "judge": [judge("replan"), judge("replan")]})
+    def test_rounds_used_up_replan_once_then_stuck(self):
+        rc, s = self.run_engine({"plan": [PLAN, PLAN], "write": [WRITE, WRITE],
+                                 "review": [review(unmet=["x"]), review(unmet=["x"])]}, max_rounds=1)
         self.assertEqual(rc, 2)
-        self.assertIn("re-plan", self.blocked[0])
+        self.assertEqual([c[0] for c in s.calls].count("planner"), 2)
+        self.assertIn("stuck", self.blocked[0])
 
-    def test_failed_engine_check_is_never_accepted(self):
+    def test_red_checks_never_reach_review_and_end_the_round(self):
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[FALSE])])
-        rc, s = self.run_engine({"plan": [plan], "write": [WRITE] * 2, "verify": [ACCEPT_V] * 2,
-                                 "judge": [judge("accept")] * 2}, max_rounds=2)
+        rc, s = self.run_engine({"plan": [plan], "write": [WRITE] * 4}, max_rounds=2, max_check_tries=2, max_replans=0)
         self.assertEqual(rc, 2)
-        self.assertIn("not accepted after 2 rounds", self.blocked[0])
+        self.assertNotIn("reviewer", [c[0] for c in s.calls])
+        self.assertEqual([c[0] for c in s.calls].count("worker"), 4)
+        self.assertIn("stuck", self.blocked[0])
+
+    def test_low_findings_are_noted_and_do_not_send_back(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [review(findings=[finding("low")])]})
+        self.assertEqual(rc, 0)
+        self.assertTrue(any(c[:2] == ("comments", "add") and "a low fix" in c[3] for c in self.bd_calls))
+
+    def test_a_medium_finding_sends_back(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE],
+                                 "review": [review(findings=[finding("medium")]), CLEAN]})
+        self.assertEqual(rc, 0)
+        self.assertEqual([c[0] for c in s.calls].count("worker"), 2)
+
+    def test_only_the_last_stages_review_checks_every_bead_requirement(self):
+        two = dict(PLAN, stages=[PLAN["stages"][0], dict(PLAN["stages"][0], goal="add f again")])
+        rc, s = self.run_engine({"plan": [two], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]})
+        self.assertEqual(rc, 0)
+        reviews = [p for (c, p) in zip(s.calls, s.prompts) if c[0] == "reviewer"]
+        self.assertNotIn("every requirement", reviews[0])
+        self.assertIn("every requirement", reviews[1])
+
+    def test_writer_question_is_an_owner_decision(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Keep the old save format?")]})
+        self.assertEqual(rc, 2)
+        self.assertIn("Keep the old save format?", self.blocked[0])
+        self.assertNotIn("reviewer", [c[0] for c in s.calls])
 
     def test_blocked_work_is_committed_on_the_task_branch(self):
-        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "verify": [ACCEPT_V],
-                                 "judge": [judge("block", "A or B?")]})
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [review(question="A or B?")]})
         self.assertEqual(rc, 2)
         self.assertEqual(tl.git("status", "--porcelain", cwd=str(self.wt)), "")
         self.assertIn("wip (t-1)", tl.git("log", "-1", "--format=%s", "task/t-1", cwd=str(self.wt)))
 
-    def test_verifier_diffs_from_the_merge_base(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "verify": [ACCEPT_V], "judge": [judge("accept")]})
+    def test_review_diffs_from_the_merge_base_and_gets_the_facts(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
-        base = tl.git("rev-parse", "origin/main~0", cwd=str(self.wt))
-        self.assertNotIn("git diff HEAD", s.prompts[2])
-        self.assertRegex(s.prompts[2], r"git diff [0-9a-f]{40}")
-
-    def test_judge_sees_the_engines_checks_not_the_verifiers_copy(self):
-        lying = dict(ACCEPT_V, checks=[{"cmd": "dotnet test", "exit": 124, "tail": "timeout"}])
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "verify": [lying], "judge": [judge("accept")]})
-        self.assertEqual(rc, 0)
-        self.assertNotIn('"exit": 124', s.prompts[3])
+        rv = s.prompts[2]
+        self.assertNotIn("git diff HEAD", rv)
+        self.assertRegex(rv, r"git diff [0-9a-f]{40}")
+        for fact in ("exit 0", "wrote f", "evidence", "add f"):
+            self.assertIn(fact, rv)
 
     def test_sigterm_still_closes(self):
         import signal as sig
@@ -319,26 +345,11 @@ class EngineTest(unittest.TestCase):
 
     def test_close_reason_says_what_landed_and_a_refused_close_is_a_warning(self):
         with mock.patch.object(tl, "cmd_close", side_effect=lambda a: self.closed.append(a.reason) or 1):
-            rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "verify": [ACCEPT_V], "judge": [judge("accept")]})
+            rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertIn("to main: do it", self.closed[0])
         self.assertGreater(len(self.closed[0]), 40)
         log = Path(sorted((Path(os.environ["XDG_CONFIG_HOME"]) / "task-loop" / "engine").glob("t-1-*.jsonl"))[-1])
         self.assertIn("bd refused to close", log.read_text())
-
-    def test_judge_block_without_a_question_is_an_engine_failure(self):
-        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "verify": [ACCEPT_V],
-                                 "judge": [judge("block")]})
-        self.assertEqual(rc, 2)
-        self.assertTrue(self.blocked[0].startswith("failed: judge blocked without an owner question"))
-
-    def test_verifier_and_judge_get_the_facts_in_the_prompt(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "verify": [ACCEPT_V], "judge": [judge("accept")]})
-        self.assertEqual(rc, 0)
-        verify, judge_prompt = s.prompts[2], s.prompts[3]
-        self.assertIn("exit 0", verify)
-        self.assertIn("wrote f", verify)
-        self.assertIn("evidence", verify)
-        self.assertIn('"checks_run_by_engine"', judge_prompt)
 
     def test_owner_question_blocks_with_the_question(self):
         rc, _ = self.run_engine({"plan": [dict(PLAN, question="Which format, A or B?")]})
@@ -353,10 +364,10 @@ class EngineTest(unittest.TestCase):
         self.assertTrue(self.blocked[0].startswith("failed: plan node"))
 
     def test_rounds_are_bounded(self):
-        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE] * 2, "verify": [GAPS_V] * 2,
-                                 "judge": [judge("rework")] * 2}, max_rounds=2)
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE] * 2, "review": [review(unmet=["x"])] * 2},
+                                max_rounds=2, max_replans=0)
         self.assertEqual(rc, 2)
-        self.assertIn("not accepted after 2 rounds", self.blocked[0])
+        self.assertIn("stuck after 2 rounds", self.blocked[0])
 
     def test_budget_blocks(self):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE]}, budget_usd=0.6)
@@ -369,10 +380,8 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertIn("engine error RuntimeError: boom", self.blocked[0])
 
-    def test_risky_stage_gets_a_cross_family_review(self):
-        plan = dict(PLAN, risks=[{"what": "saved format", "check": "load old file"}])
-        rc, s = self.run_engine({"plan": [plan], "write": [WRITE], "verify": [ACCEPT_V],
-                                 "review": [{"findings": []}], "judge": [judge("accept")]})
+    def test_every_green_stage_gets_a_cross_family_review(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
         self.assertIn(("reviewer", None, "openai"), s.calls)
 
@@ -388,23 +397,20 @@ class DelegateLauncher(unittest.TestCase):
     setUp, tearDown, fake_bd, run_engine = EngineTest.setUp, EngineTest.tearDown, EngineTest.fake_bd, EngineTest.run_engine
 
     def test_same_family_review_is_recorded(self):
-        plan = dict(PLAN, risks=[{"what": "saved format", "check": "load old file"}])
-        same = {"v": 1, "status": "done", "data": {"findings": []}, "ref": "r", "family": "openai", "flag": "same_family"}
-        rc, s = self.run_engine({"plan": [plan], "write": [WRITE], "verify": [ACCEPT_V], "review": [same],
-                                 "judge": [judge("accept")]})
+        same = {"v": 1, "status": "done", "data": CLEAN, "ref": "r", "family": "openai", "flag": "same_family"}
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [same]})
         self.assertEqual(rc, 0)
         self.assertTrue(any(c[:2] == ("comments", "add") and "same family as the writer" in c[3] for c in self.bd_calls))
-        self.assertIn('"same_family": true', s.prompts[-1])
 
     def test_lane_out_waits_then_runs(self):
         out = {"v": 1, "status": "lane_out", "retry_after": 0, "say": "codex out"}
-        rc, s = self.run_engine({"plan": [PLAN], "write": [out, WRITE], "verify": [ACCEPT_V], "judge": [judge("accept")]})
+        rc, s = self.run_engine({"plan": [PLAN], "write": [out, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
         self.assertEqual([c[0] for c in s.calls].count("worker"), 2)
 
     def test_delegate_error_is_retried_without_a_schema_reprompt(self):
         err = {"v": 1, "status": "error", "say": "state lock held >10 s"}
-        rc, s = self.run_engine({"plan": [PLAN], "write": [err, WRITE], "verify": [ACCEPT_V], "judge": [judge("accept")]})
+        rc, s = self.run_engine({"plan": [PLAN], "write": [err, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
         workers = [p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker"]
         self.assertEqual(len(workers), 2)
@@ -475,11 +481,12 @@ class DelegateCall(unittest.TestCase):
 
 class Validate(unittest.TestCase):
     def test_schema_subset(self):
-        s = engine.SCHEMAS["judge"]
-        self.assertEqual(engine.validate(judge("accept"), s), [])
-        self.assertTrue(engine.validate(dict(judge("accept"), decision="maybe"), s))
-        self.assertTrue(engine.validate({"decision": "accept"}, s))
-        self.assertTrue(engine.validate(dict(ACCEPT_V, tests_added=True), engine.SCHEMAS["verify"]))
+        s = engine.SCHEMAS["review"]
+        self.assertEqual(engine.validate(review(findings=[finding("high")]), s), [])
+        self.assertTrue(engine.validate(review(findings=[dict(finding("high"), severity="maybe")]), s))
+        self.assertTrue(engine.validate({"findings": []}, s))
+        self.assertTrue(engine.validate(dict(CLEAN, unmet="x"), s))
+        self.assertEqual(sorted(engine.SCHEMAS), ["plan", "review", "write"])
 
 
 if __name__ == "__main__":

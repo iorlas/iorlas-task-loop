@@ -21,8 +21,10 @@ records what the loop does for the dashboard, and runs slots. Python 3.8+, stand
 
 ## The loop profile
 
-`docs/agents/task-loop.md` in the repo (or the file the repo's AGENTS.md names), plus `.task-loop.json` at the repo
-root for what `tl` reads itself (slots). The profile gives:
+`docs/agents/task-loop.md` in the repo (or the file the repo's AGENTS.md names) is for you and for people; the engine
+reads only `.task-loop.json` at the repo root. Put everything the engine must act on there: `engine.gate`,
+`engine.checks` (repo checks with their group and the paths that trigger them), `engine.worker_rules` (the file the
+writer reads first). The profile gives:
 
 | key | what |
 |---|---|
@@ -30,8 +32,8 @@ root for what `tl` reads itself (slots). The profile gives:
 | pick | the `bd ready` filter: labels, lanes, what to exclude |
 | gate | the command that must be green, and whether the pre-push hook runs it |
 | land | the branch to land on and any rule about how (default: `git push origin HEAD:main`) |
-| workers | how workers run here (what a sandbox can and cannot run, build flags) and the checks each stage names |
-| verify | what the verifier runs beyond the stage's own checks, and the project's extra risk flags |
+| workers | how workers run here (what a sandbox can and cannot run, build flags): `engine.worker_rules` points at it |
+| checks | the repo's own checks beyond each stage's (Unity, screenshots, log greps), as `engine.checks` |
 | close | per-ticket cleanup (editors to close, caches) |
 | known | flaky checks (retry once) and other standing facts |
 
@@ -40,8 +42,16 @@ root for what `tl` reads itself (slots). The profile gives:
 ```json
 {"slots": {"count": 3, "dir": ".slots", "base": "origin/main",
            "setup": "just agent-setup", "setup_inputs": ["mise.toml", "client/Packages/manifest.json"],
-           "keep": [".task/"]}}
+           "keep": [".task/"]},
+ "engine": {"gate": "just check", "worker_rules": "docs/agents/codex.md",
+            "checks": [{"id": "fmt", "cmd": "just fmt-check", "group": "static"},
+                       {"id": "unity-tests", "cmd": "just unity-tests", "group": "tests", "when": ["client/**", "content/**"],
+                        "retry": 1}]}}
 ```
+
+Check groups run static → tests → acceptance (the plan's per-stage checks); a red group skips the rest. `when` runs a
+check only when the task changed a matching path; `retry` reruns a known flaky one. The gate runs once, on the rebased
+tree at land, and the push gets `TASK_LOOP_GATED_TREE` (the tree it passed) so a pre-push hook can skip a second run.
 
 No `slots` (or `count` 0): slots are off. No profile: say so in one line, use
 `bd ready --exclude-type epic --exclude-label slot`, the gate the repo's AGENTS.md names, and land on main by push.
@@ -87,7 +97,7 @@ bead's provenance.
 
 The engine does the task; you watch it. `tl run-task <id> --worktree "$WT" [--slot <name>]` in a background Bash job
 (several at once is fine, one per slot or worktree). It claims the bead, then: reset → plan → per stage (write →
-checks run by the engine → verify → review when risky → judge) → gate → land → close. Every AI step is a headless
+checks run by the engine → review by the other model family) → gate → land → close. Every AI step is a headless
 worker with a schema-checked answer; the close step always runs; the plan, findings and a Reflect line go into the
 bead. Engine settings: `.task-loop.json` → `engine` (gate, land, budgets). Every run appends one line to
 `<config dir>/task-loop/traces.jsonl` (never pruned): bead, repo, branch, outcome, your session id, and every worker
@@ -95,7 +105,7 @@ session (Codex thread, `claude -p` session) with its transcript. `tl trace <id>`
 are done by hand from these traces for now.
 
 Its output is verbose by default (`--quiet` for less): each step, the facts behind it (checks with exit codes, gaps,
-flags, findings, the judge's reason, cost) and **⚠ lines** for what you must look at. Read the output as it comes
+findings, unmet requirements, cost) and **⚠ lines** for what you must look at. Read the output as it comes
 (the job's output file, or the dashboard's Engine run). Never do a step's work yourself; change what makes the
 engine misbehave. Never stop a live run to apply an engine fix: the fix applies to the next bead (the running
 process loaded the old engine anyway; 3 of 5 lifesim-vbo restarts on 2026-10-18 were stops for fixes, one a step before
@@ -103,11 +113,11 @@ landing). Stop a run only when it is burning a paid lane or doing damage.
 
 | ⚠ line | what to do |
 |---|---|
-| judge says block / an owner question | owner decision: leave it blocked, report it at the end |
-| judge says replan, write round 2+, rounds exhausted | read the gaps and checks: a vague bead → sharpen its description and acceptance criteria, reopen; a wrong check in the plan → note it in the bead |
+| owner decision needed (a question from plan, writer or reviewer) | leave it blocked, report it at the end |
+| write 2+, stage stuck after N rounds | read the failing checks and the review's unmet list: a vague bead → sharpen its description and acceptance criteria, reopen; a wrong check in the plan → note it in the bead |
 | a check fails the same way every round | the environment or the profile (setup, a missing tool, a flaky test): fix it or file it, then reopen |
 | needed a retry / no valid output / engine error | an engine problem: file a bead in iorlas-task-loop with the engine log path, then reopen and rerun |
-| files outside the task, tests removed, high finding, verifier changed files | read the diff; if wrong, reopen with a note saying what must not change |
+| tests removed, high finding, a check marked flaky failed | read the diff; if wrong, reopen with a note saying what must not change |
 | budget 50% / 80% | fine once; on every task → the beads are too big (split them) or the budget too small |
 | push rejected | normal under parallel landings; five in a row → main is too busy, run fewer at once |
 
@@ -126,7 +136,7 @@ continues the task branch (its earlier work is kept) and the next plan reads the
 
 When the engine cannot run here (delegate missing or not set up, no Codex or `claude` CLI login), do the same steps
 yourself in the same order, with the same records: `tl claim`, `tl stage`, plan in the bead, write through workers, run the checks
-yourself, a fresh verifier, a reviewer from another model family on risky stages, `tl land`, `tl close` or `tl block`.
+yourself, a reviewer from another model family on every stage, `tl land`, `tl close` or `tl block`.
 
 ## 5. Stop
 
@@ -170,26 +180,25 @@ Finished tasks stay visible for 7 days.
 
 ## Workers
 
-The loop needs five kinds of worker; it does not care what runs them.
+The loop needs these kinds of worker; it does not care what runs them.
 
 | kind | does | never |
 |---|---|---|
 | reader | reads many files or logs, returns a conclusion | edits |
 | writer | one stage's code, runs the stage's checks | commits, pushes, branches |
-| verifier | reruns the checks on the diff, returns facts | sees the writer's report |
 | reviewer | reads the diff against the bead and its risks; another model family than the writer | fixes |
 | hard | a subtask two writers failed | |
 
 How to get them: from the **iorlas-delegate** plugin, which every task-loop install has. You don't talk to it; the
 engine does, one `route.py run ROLE` per AI step (contract: `docs/contracts/worker-run-v1.md` in this plugin's repo).
 Delegate picks lane, model and effort from its role table and live plan limits, and never spends API credit for the
-engine. Its role names (reader and verifier → `light`, writer → `worker`, reviewer → `reviewer` with the writer's
-family, hard → `hard`) matter only in §4 by hand, where you ask delegate's skill for each worker yourself.
+engine. Its role names (reader → `light`, writer → `worker`, reviewer → `reviewer` with the writer's family, hard →
+`hard`) matter only in §4 by hand, where you ask delegate's skill for each worker yourself. The engine has no verifier
+or judge: its own checks are the facts, and accept is a rule (checks green, nothing blocking in the review).
 
-The one thing the engine cannot do itself: read your Claude usage. Delegate spends the Claude subscription headless only
-with a reading under 30 minutes old, so before starting an engine and every 20 minutes while one runs: call
-`get_usage`, then `$TL usage '<plan.windows as JSON>'`. Without it Claude steps count as out: the engine waits for a lane
-(⚠ "waits for a lane"), then blocks the task.
+The one thing the engine cannot do itself: read your Claude usage. Since delegate 0.18 Claude steps run without a
+reading, but only a fresh reading keeps delegate's reserve for your own sessions, so while an engine runs feed it every
+20 minutes: call `get_usage`, then `$TL usage '<plan.windows as JSON>'`.
 
 Any launcher can put its runs on the dashboard by writing agent-runs v1 records
 (`docs/contracts/agent-runs-v1.md` in this plugin's repo); otherwise record them with `tl worker`.

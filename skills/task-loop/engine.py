@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The task engine: one bead through reset → plan → (write → verify → [review] → judge)* → gate → land → close.
+"""The task engine: one bead through reset → plan → (write → checks → review)* per stage → gate → land → close.
 
     tl.py run-task ID [--worktree DIR] [--dry-run]
 
@@ -30,7 +30,8 @@ DEFAULTS = {
     "base": "origin/main",
     "budget_usd": 15,
     "budget_min": 180,
-    "max_rounds": 3,                  # write rounds per stage before the task is blocked
+    "max_rounds": 3,                  # review send-backs per stage before a replan
+    "max_check_tries": 3,             # red checks in a row that end a round (checks never reach the reviewer red)
     "max_replans": 1,
     "node_timeout_min": 45,
     "delegate": "",                   # path to delegate's route.py; "" = the newest installed iorlas-delegate
@@ -63,24 +64,13 @@ SCHEMAS = {
                              "checks_run": {"type": "array", "items": {
                                  "type": "object", "additionalProperties": False, "required": ["cmd", "exit"],
                                  "properties": {"cmd": S_STR, "exit": {"type": "integer"}}}}}},
-    "verify": {"type": "object", "additionalProperties": False,
-               "required": ["verdict", "checks", "gaps", "risk_flags", "outside_touches", "tests_added",
-                            "tests_removed"],
-               "properties": {"verdict": {"type": "string", "enum": ["accept", "gaps"]},
-                              "checks": {"type": "array", "items": {
-                                  "type": "object", "additionalProperties": False, "required": ["cmd", "exit", "tail"],
-                                  "properties": {"cmd": S_STR, "exit": {"type": "integer"}, "tail": S_STR}}},
-                              "gaps": S_STRS, "risk_flags": S_STRS, "outside_touches": S_STRS,
-                              "tests_added": {"type": "integer"}, "tests_removed": {"type": "integer"}}},
-    "review": {"type": "object", "additionalProperties": False, "required": ["findings"],
+    "review": {"type": "object", "additionalProperties": False, "required": ["findings", "unmet", "question", "leftovers"],
                "properties": {"findings": {"type": "array", "items": {
                    "type": "object", "additionalProperties": False, "required": ["file", "line", "severity", "fix"],
                    "properties": {"file": S_STR, "line": {"type": "integer"},
                                   "severity": {"type": "string", "enum": ["high", "medium", "low"]},
-                                  "fix": S_STR}}}}},
-    "judge": {"type": "object", "additionalProperties": False, "required": ["decision", "why", "question", "leftovers"],
-              "properties": {"decision": {"type": "string", "enum": ["accept", "rework", "replan", "block"]},
-                             "why": S_STR, "question": S_STR, "leftovers": LEFTOVERS}},
+                                  "fix": S_STR}}},
+                   "unmet": S_STRS, "question": S_STR, "leftovers": LEFTOVERS}},
 }
 
 
@@ -168,7 +158,7 @@ def kill_tree(p):
     p.wait()
 
 
-ROLES = {"plan": "planner", "write": "worker", "verify": "light", "review": "reviewer", "judge": "light"}
+ROLES = {"plan": "planner", "write": "worker", "review": "reviewer"}
 
 
 def find_route(path=""):
@@ -252,6 +242,7 @@ class Engine:
         self.stats = {"rounds": 0, "reviews": 0, "replans": 0, "nodes": 0, "tests_added": 0, "tests_removed": 0}
         self.session = tl.session_id()
         self.leftovers = []
+        self.stuck_why = ""
         self.budget_warned = set()
         self.writer = {}  # backend -> thread/session id, so later rounds of a task resume the same writer
         self.sessions = []  # every AI call of this run: the trace a later reflection reads (traces.jsonl)
@@ -399,15 +390,8 @@ class Engine:
                 self.warn("%.0f%% of the task's budget is used" % (spent * 100))
         if node == "plan" and len(d["stages"]) > 4:
             self.warn("the plan has %d stages: the bead may be too big for one task" % len(d["stages"]))
-        if node == "verify":
-            if d["tests_removed"]:
-                self.warn("the diff removes %d tests" % d["tests_removed"])
-            if d["outside_touches"]:
-                self.warn("files outside the task: %s" % ", ".join(d["outside_touches"]))
         if node == "review" and any(f["severity"] == "high" for f in d["findings"]):
             self.warn("the reviewer found a high-severity problem")
-        if node == "judge" and d["decision"] in ("replan", "block"):
-            self.warn("judge says %s: %s" % (d["decision"], d["why"][:200]))
 
     # -- script helpers
     def sh(self, cmd, timeout=3600, check=False, save=None, env=None):
@@ -501,7 +485,9 @@ class Engine:
                     replans += 1
                     self.stats["replans"] = replans
                     if replans > int(self.cfg["max_replans"]):
-                        raise Blocked("judge asked to re-plan more than %s times" % self.cfg["max_replans"])
+                        raise Blocked("stage %d stuck after %s rounds and %d re-plan(s): it needs the owner's hint, "
+                                      "a split, or more budget. What failed: %s" % (
+                                          i + 1, self.cfg["max_rounds"], replans - 1, self.stuck_why[:600]))
                     plan = self.plan(again=True)
                     i = 0
                     continue
@@ -519,7 +505,7 @@ class Engine:
         return 0 if outcome in ("landed", "done") else 2
 
     def plan(self, again=False):
-        extra = ("\n\nThe previous plan did not work; the judge's findings are in %s. Plan again." %
+        extra = ("\n\nThe previous plan did not work; what failed is in %s. Plan again." %
                  (self.run_dir / "replan.md")) if again else ""
         data, _ = self.ai("plan", "re-plan" if again else "plan", PLAN_PROMPT.format(brief=self.run_dir / "brief.md",
                                                                                      wt=self.wt) + extra)
@@ -539,76 +525,76 @@ class Engine:
         return data
 
     def stage(self, plan, i):
+        """Write → checks → review until the review is clean. A red check goes straight back to the writer (it never
+        reaches the reviewer); max_check_tries red in a row, or a review that sends it back, use up a round; when the
+        rounds are used up the stage asks for a re-plan. Accept is a rule: checks green and nothing blocking in the
+        review (high/medium findings, unmet requirements). The writer's or the reviewer's question is the owner's."""
         st = plan["stages"][i]
+        last = i == len(plan["stages"]) - 1
         name = "stage %d/%d" % (i + 1, len(plan["stages"]))
-        feedback = ""
-        for rnd in range(1, int(self.cfg["max_rounds"]) + 1):
+        feedback, rounds, red, n = "", 0, 0, 0
+        while True:
+            n += 1
             self.stats["rounds"] += 1
-            if rnd >= 2:
-                self.warn("%s: write round %d" % (name, rnd))
-            w, wfam = self.ai("write", "%s round %d" % (name, rnd), WRITE_PROMPT.format(
+            if n >= 2:
+                self.warn("%s: write %d (round %d)" % (name, n, rounds + 1))
+            w, wfam = self.ai("write", "%s write %d" % (name, n), WRITE_PROMPT.format(
                 brief=self.run_dir / "brief.md", plan=self.run_dir / "plan.json", n=i + 1, goal=st["goal"],
                 files=", ".join(st["files"]), checks="\n".join("- " + c for c in st["checks"]) or "- (none named)",
                 feedback=feedback, evidence=self.evidence_dir, gate=(" (`%s`)" % self.cfg["gate"]) if self.cfg["gate"] else "",
                 rules=("\nRead %s first: this repo's rules for work in your sandbox (what runs there, what does not)."
                        % (Path(self.wt) / self.cfg["worker_rules"])) if self.cfg["worker_rules"] else ""),
                 resume_key="writer")
+            if w["question"].strip():
+                raise Blocked("owner decision needed", w["question"])
             checks = self.run_checks(st, name)
             (self.run_dir / "engine-checks.json").write_text(json.dumps(checks, indent=1))
-            diff_before = self.git("diff", "HEAD")
-            v, _ = self.ai("verify", name, VERIFY_PROMPT.format(goal=st["goal"], checks=compact(checks), base=self.base_sha(),
-                                                               evidence=self.evidence_dir, summary=w["summary"],
-                                                               brief=self.run_dir / "brief.md"))
-            v["checks"] = [dict(c, tail=c["tail"][-600:]) for c in checks]  # the facts are the engine's runs, never a copy
-            if self.git("diff", "HEAD") != diff_before:
-                v["risk_flags"].append("the verifier changed files")
-                self.warn("the verifier changed files")
             self.stats["tests_added"], self.stats["tests_removed"] = count_tests(self.task_diff(), self.cfg["test_pattern"])
             if self.stats["tests_removed"]:
                 self.warn("the task's diff removes %d tests" % self.stats["tests_removed"])
-            risky = bool(v["risk_flags"] or v["outside_touches"] or st["hard"] or rnd >= 3 or
-                         any(r for r in plan["risks"]))
-            review = {"findings": []}
-            if risky and v["verdict"] == "accept":
-                self.stats["reviews"] += 1
-                review, _ = self.ai("review", name, REVIEW_PROMPT.format(brief=self.run_dir / "brief.md", base=self.base_sha(),
-                                                                        plan=self.run_dir / "plan.json",
-                                                                        flags="; ".join(v["risk_flags"] +
-                                                                                       v["outside_touches"]) or "none"),
-                                    writer_family=wfam)
-                same = self.last_flag == "same_family"
-                if same:
-                    self.warn("%s: the review is from the writer's own model family (no other lane was free)" % name)
-                    review["same_family"] = True
-                if review["findings"] or same:
-                    self.comment("Review (engine, %s%s): " % (name, ", same family as the writer" if same else "") + "; ".join(
-                        "%s:%s [%s] %s" % (f["file"], f["line"], f["severity"], f["fix"]) for f in review["findings"])
-                                 or "no findings")
             failed = [c for c in checks if c["exit"] not in (0, None)]
-            facts = {"stage": st, "round": rnd, "writer": w, "checks_run_by_engine": checks, "verify": v,
-                     "review": review}
-            (self.run_dir / "judge-input.json").write_text(json.dumps(facts, indent=1))
-            j, _ = self.ai("judge", name, JUDGE_PROMPT.format(facts=json.dumps(dict(facts, checks_run_by_engine=[
-                dict(c, tail=c["tail"][-600:]) for c in checks]), indent=1)))
-            self.leftovers += j["leftovers"]
-            if j["decision"] == "accept" and failed:
-                self.warn("judge accepted with %d failed checks: rework instead" % len(failed))
-                j = dict(j, decision="rework", why="These checks fail: " + "; ".join(
-                    "`%s` exit %d: %s" % (c["cmd"], c["exit"], c["tail"][-300:]) for c in failed))
-            if j["decision"] == "accept":
+            if failed:
+                red += 1
+                feedback = ("\nThese checks fail (run by the engine, outside your sandbox). Fix exactly this:\n%s\n"
+                            % compact(failed))
+                if red < int(self.cfg["max_check_tries"]):
+                    continue
+                red, rounds = 0, rounds + 1
+                self.stuck_why = "checks still red after %s tries: %s" % (self.cfg["max_check_tries"], compact(failed))
+                if rounds >= int(self.cfg["max_rounds"]):
+                    (self.run_dir / "replan.md").write_text(self.stuck_why)
+                    return "replan"
+                continue
+            red = 0
+            self.stats["reviews"] += 1
+            review, _ = self.ai("review", name, REVIEW_PROMPT.format(
+                brief=self.run_dir / "brief.md", plan=self.run_dir / "plan.json", n=i + 1, goal=st["goal"],
+                base=self.base_sha(), checks=compact(checks), summary=w["summary"], evidence=self.evidence_dir,
+                added=self.stats["tests_added"], removed=self.stats["tests_removed"],
+                scope=("the stage goal and every requirement and acceptance criterion of the task" if last else
+                       "the stage goal (later stages cover the rest of the task)")), writer_family=wfam)
+            same = self.last_flag == "same_family"
+            if same:
+                self.warn("%s: the review is from the writer's own model family (no other lane was free)" % name)
+            if review["findings"] or review["unmet"] or same:
+                self.comment("Review (engine, %s%s): " % (name, ", same family as the writer" if same else "") + "; ".join(
+                    ["%s:%s [%s] %s" % (f["file"], f["line"], f["severity"], f["fix"]) for f in review["findings"]] +
+                    ["unmet: " + u for u in review["unmet"]]) or "no findings")
+            self.leftovers += review["leftovers"]
+            if review["question"].strip():
+                raise Blocked("owner decision needed", review["question"])
+            blocking = [f for f in review["findings"] if f["severity"] in ("high", "medium")]
+            if not blocking and not review["unmet"]:
                 return "accept"
-            if j["decision"] == "block":
-                if not j["question"].strip():  # a block is for the owner; one without a question is the engine's problem
-                    raise Blocked("failed: judge blocked without an owner question: " + j["why"])
-                raise Blocked(j["why"], j["question"])
-            if j["decision"] == "replan":
-                (self.run_dir / "replan.md").write_text(j["why"] + "\n\n" + json.dumps(facts, indent=1))
+            rounds += 1
+            self.stuck_why = "the review still sends it back: %s" % "; ".join(
+                review["unmet"] + ["%s:%s %s" % (f["file"], f["line"], f["fix"]) for f in blocking])
+            if rounds >= int(self.cfg["max_rounds"]):
+                (self.run_dir / "replan.md").write_text(self.stuck_why)
                 return "replan"
-            feedback = ("\nThe previous round was not accepted. Fix exactly this:\n%s\nGaps: %s\nFindings: %s\n"
-                        "Check results (run by the engine, outside your sandbox): %s\n" % (
-                            j["why"], "; ".join(v["gaps"]), "; ".join(f["fix"] for f in review["findings"]),
-                            compact(checks)))
-        raise Blocked("stage %d not accepted after %s rounds" % (i + 1, self.cfg["max_rounds"]))
+            feedback = ("\nThe reviewer sent the stage back. Fix exactly this:\n%s%s\n" % (
+                "".join("- unmet: %s\n" % u for u in review["unmet"]),
+                "".join("- %s:%s [%s] %s\n" % (f["file"], f["line"], f["severity"], f["fix"]) for f in blocking)))
 
     def tree_hash(self):
         """The worktree as git would commit it now, untracked files included, without touching the real index."""
@@ -868,14 +854,10 @@ def details(node, d):
     if node == "write":
         return ["ran `%s` exit %d" % (c["cmd"], c["exit"]) for c in d["checks_run"]] + (
             ["question: " + d["question"]] if d["question"].strip() else [])
-    if node == "verify":
-        return (["gap: " + g for g in d["gaps"]] + ["flag: " + f for f in d["risk_flags"]] +
-                ["tests +%d -%d" % (d["tests_added"], d["tests_removed"])])
     if node == "review":
-        return ["%s %s:%s %s" % (f["severity"], f["file"], f["line"], f["fix"]) for f in d["findings"]]
-    if node == "judge":
-        return ["leftover: " + lo["title"] for lo in d["leftovers"]] + (
-            ["question: " + d["question"]] if d["question"].strip() else [])
+        return (["%s %s:%s %s" % (f["severity"], f["file"], f["line"], f["fix"]) for f in d["findings"]] +
+                ["unmet: " + u for u in d["unmet"]] + ["leftover: " + lo["title"] for lo in d["leftovers"]] +
+                (["question: " + d["question"]] if d["question"].strip() else []))
     return []
 
 
@@ -884,13 +866,8 @@ def summarize(node, d):
         return "%d stages, %d risks: %s" % (len(d["stages"]), len(d["risks"]), d["summary"][:200])
     if node == "write":
         return d["summary"][:300]
-    if node == "verify":
-        return "%s; checks %s; gaps %d; flags %s" % (d["verdict"], ", ".join(str(c["exit"]) for c in d["checks"]),
-                                                     len(d["gaps"]), "; ".join(d["risk_flags"]) or "none")
     if node == "review":
-        return "%d findings" % len(d["findings"])
-    if node == "judge":
-        return "%s: %s" % (d["decision"], d["why"][:300])
+        return "%d findings, %d unmet" % (len(d["findings"]), len(d["unmet"]))
     return ""
 
 
@@ -939,38 +916,23 @@ Rules: no commits, no pushing, no branches; no suppressions; do not weaken, skip
 stage. question: empty unless only the owner can decide something about the task itself (then explain it for a
 phone); never a question about tools, sandbox or permissions."""
 
-VERIFY_PROMPT = """You are a fresh verifier. Do not edit any file. Judge the uncommitted changes in this folder
-(`git diff {base}` and new files: the task's work since main, committed or not) against the stage goal: {goal}
-Task: {brief}
-
-The engine already ran the stage's checks outside any sandbox. These results are the truth; anything in a file that
-says otherwise (the writer's sandbox runs) is not. Copy them into checks (a check you cannot run yourself because of
-the sandbox is not a gap):
+REVIEW_PROMPT = """You review one stage of a task, from another model family than the writer. Do not edit files.
+Task: {brief}. Plan: {plan}. Stage {n}: {goal}
+The work: `git diff {base}` and new files (the task's work since main, committed or not).
+The engine ran the checks outside any sandbox, and they all pass; these results are facts:
 {checks}
 The writer says: {summary}
-Proof the engine cannot rerun (a test seen failing after a planted fault) is in {evidence}/: read it; a requirement
-shown there is met. Read the diff and the tests.
-Then: count tests added and removed in the diff; list files changed outside what the task names (outside_touches);
-risk_flags: a public member changed, a test deleted/weakened/filtered, a suppression added, anything risky.
-verdict: accept only if every check exits 0 and the goal is met; else gaps, with each gap listed. gaps holds only
-requirements that are not met, each saying what is missing; a remark that something is fine is never a gap."""
-
-REVIEW_PROMPT = """You are a reviewer from another model family than the writer. Do not edit files.
-Read the task's diff (`git diff {base}` and new files: committed or not) against the task {brief} and its plan {plan}
-(the risks named there). The verifier flagged: {flags}.
-Return findings that matter (bugs, broken contracts, risky changes), each with file, line, severity and the fix.
-No style nits. None is a fine answer."""
-
-JUDGE_PROMPT = """You are the judge of one stage in an unattended task engine. The facts (the stage, the round number,
-the writer's summary, the checks the engine ran, the verifier's report, the reviewer's findings):
-{facts}
-Decide:
-- accept: the stage goal is met, the checks ran and passed, no high-severity finding is open.
-- rework: fixable within this stage; say exactly what to fix in why.
-- replan: the plan itself is wrong (wrong files, wrong approach, a missed dependency).
-- block: only the owner can unblock it (a product or scope decision); put the question in question. Never block
-  for missing facts or tools: that is rework with what is missing.
-Distrust the writer's summary; trust commands that were run. leftovers: real follow-up work noticed, else empty."""
+Proof the engine cannot rerun (a test seen failing after a planted fault) is in {evidence}/: a requirement shown
+there is met. The engine counted tests in the task's diff: {added} added, {removed} removed.
+Return:
+- findings: bugs, broken contracts, risky changes (a public member, a test weakened or removed, a suppression, a file
+  outside what the stage names), each with file, line, severity and the fix. high and medium send the stage back; low
+  is noted only. No style nits.
+- unmet: what in {scope} the work does not do yet, each saying what is missing. A requirement shown met by a check or
+  by the evidence is met; never list a remark that something is fine.
+- question: empty, unless only the owner can decide something about the task itself (then explain it for a phone:
+  what you found, the options, your recommendation).
+- leftovers: real follow-up work you noticed outside this task, else empty."""
 
 
 # ---- entry ----------------------------------------------------------------------------------------------------------

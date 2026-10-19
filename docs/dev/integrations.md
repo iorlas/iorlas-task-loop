@@ -22,7 +22,7 @@ delegate directly). The two touch in three places only:
 
 1. **agent-runs v1**: delegate publishes its `claude -p` runs and lane limits; the dashboard shows them. Delegate's
    side of it is described in its repo, `docs/dev/integrations.md`.
-2. **The Workers table in `skills/task-loop/SKILL.md`** maps the loop's worker kinds (reader, writer, verifier,
+2. **The Workers table in `skills/task-loop/SKILL.md`** maps the loop's worker kinds (reader, writer,
    reviewer, hard) to delegate's role names. That mapping is the only delegate vocabulary in this plugin. When
    delegate renames roles or changes how it is asked, update that table.
 

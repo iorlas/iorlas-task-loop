@@ -1,5 +1,10 @@
 # task-loop as our own AI factory: attended now, unattended later (design, 2026-10-18)
 
+> Changed 2026-10-19 (task-loop 0.6.0, epic tl-bxk.8): there is no verify node and no judge node. Six lifesim runs
+> showed the light verifier adding false gaps and the judge deciding from JSON with no tools; acceptance is now a rule
+> (engine checks green, nothing blocking in a cross-family review that also lists unmet requirements). The tables
+> below keep the original design for the record.
+
 Status: proposal, not built. Inputs: the lifesim AI factory (docs/ai-factory on lifesim origin/main: dispatcher,
 task and merge workflows, pilot and friction logs), today's task-loop, and a Fable review.
 
