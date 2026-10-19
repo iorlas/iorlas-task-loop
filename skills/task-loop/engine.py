@@ -8,6 +8,7 @@ A coordinator session may start it and watch it (attended mode); nothing here ne
 docs/design/coordinator-less.md. Python 3.8+, standard library only.
 """
 
+import fnmatch
 import json
 import os
 import re
@@ -34,6 +35,7 @@ DEFAULTS = {
     "node_timeout_min": 45,
     "delegate": "",                   # path to delegate's route.py; "" = the newest installed iorlas-delegate
     "lane_wait_min": 60,              # how long a step waits for a lane that is out before the task is blocked
+    "checks": [],                     # repo checks: [{id, cmd, group: static|tests|acceptance, when: [globs], retry}]
     "worker_rules": "",               # repo file the writer reads first: what its sandbox can and cannot run
     "brief_kb": 5,
     "test_pattern": r"^\s*(def test_|async def test_|\[(Test|Fact|Theory|TestMethod|TestCase)\b|#\[test\]|(it|test)\(|func Test)",                    # a brief bigger than this gets a ⚠ (never cut: the bead may be too big)
@@ -408,12 +410,13 @@ class Engine:
             self.warn("judge says %s: %s" % (d["decision"], d["why"][:200]))
 
     # -- script helpers
-    def sh(self, cmd, timeout=3600, check=False):
+    def sh(self, cmd, timeout=3600, check=False, save=None, env=None):
         """A command: a string goes through the shell (profile commands), a list runs as is (no quoting rules)."""
         self.log("cmd", cmd if isinstance(cmd, str) else " ".join(cmd))
         # Its own process group, so a timeout stops the whole tree (dotnet build nodes, Unity) and not just the shell;
         # the worker env, so a check never inherits this launcher's Claude session.
-        p = subprocess.Popen(cmd, shell=isinstance(cmd, str), cwd=self.wt, env=child_env(), stdin=subprocess.DEVNULL,
+        p = subprocess.Popen(cmd, shell=isinstance(cmd, str), cwd=self.wt, env=dict(child_env(), **(env or {})),
+                             stdin=subprocess.DEVNULL,
                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=(os.name != "nt"))
         try:
             out, _ = p.communicate(timeout=timeout)
@@ -424,6 +427,8 @@ class Engine:
             out += b"\n(timed out after %d s: the engine stopped it and everything it started)" % int(timeout)
             rc = 124
         text = out.decode("utf-8", "replace")
+        if save:
+            Path(save).write_text(text, encoding="utf-8")
         tail = "\n".join(text.strip().splitlines()[-15:])
         self.log("note", "exit %d%s" % (rc, (": " + tail[-600:]) if rc else ""), exit=rc)
         if check and rc:
@@ -579,7 +584,7 @@ class Engine:
                     self.comment("Review (engine, %s%s): " % (name, ", same family as the writer" if same else "") + "; ".join(
                         "%s:%s [%s] %s" % (f["file"], f["line"], f["severity"], f["fix"]) for f in review["findings"])
                                  or "no findings")
-            failed = [c for c in checks if c["exit"] != 0]
+            failed = [c for c in checks if c["exit"] not in (0, None)]
             facts = {"stage": st, "round": rnd, "writer": w, "checks_run_by_engine": checks, "verify": v,
                      "review": review}
             (self.run_dir / "judge-input.json").write_text(json.dumps(facts, indent=1))
@@ -619,34 +624,67 @@ class Engine:
         tree = self.tree_hash()
         return tl.git("diff", self.base_sha(), tree, cwd=self.wt) if tree else self.git("diff", self.base_sha())
 
+    def changed_paths(self):
+        """Paths the task changed since it started, untracked files included."""
+        tree = self.tree_hash()
+        out = tl.git("diff", "--name-only", self.base_sha(), tree, cwd=self.wt) if tree else ""
+        return [p for p in out.splitlines() if p]
+
     def run_checks(self, st, name):
-        """The stage's checks and the gate, run by the engine outside any sandbox: the results are facts. A check
-        already run on the same tree and base is not run again (reruns of finished work redid every check)."""
-        cmds = list(st["checks"])
-        if self.cfg["gate"] and self.cfg["gate"] not in cmds:
-            cmds.append(self.cfg["gate"])
+        """One engine step, no AI: the repo's checks (engine.checks) and the stage's acceptance checks, grouped
+        static → tests → acceptance; a red group skips the groups after it. A repo check with `when` runs only when the
+        task changed a matching path; `retry` reruns a red one (known flaky). A check already run on the same tree and
+        base is not run again. The gate is not here: it runs once, on the rebased tree, at land."""
         self.log("node", "checks: %s" % name)
+        items = [{"id": c.get("id") or c["cmd"], "cmd": c["cmd"], "group": c.get("group") or "tests",
+                  "when": c.get("when") or [], "retry": int(c.get("retry") or 0)} for c in self.cfg["checks"]]
+        items += [{"id": c, "cmd": c, "group": "acceptance", "when": [], "retry": 0} for c in st["checks"]]
+        items.sort(key=lambda c: GROUPS.index(c["group"]) if c["group"] in GROUPS else 1)
         cache_path = tl.config_dir() / "check-cache" / ("%s.json" % self.bead)
         try:
             cache = json.loads(cache_path.read_text())
         except (OSError, ValueError):
             cache = {}
         key = "%s %s" % (self.tree_hash(), self.git("rev-parse", self.cfg["base"]))
-        out = []
-        for c in cmds:
-            t = time.time()
-            hit = cache.get(key, {}).get(c)
-            if hit:
-                out.append(dict(hit, cached=True))
-                self.detail(["%s `%s` exit %d (same tree and base: earlier result)" % ("✓" if hit["exit"] == 0 else "✗",
-                                                                                        c, hit["exit"])])
+        logs = self.run_dir / "checks"
+        logs.mkdir(exist_ok=True)
+        out, red, changed = [], None, None
+        for n, c in enumerate(items):
+            base = {"cmd": c["cmd"], "id": c["id"], "group": c["group"]}
+            if red and c["group"] != red:
+                out.append(dict(base, exit=None, status="skipped", why="%s failed first" % red, tail=""))
                 continue
-            rc, tail = self.sh(c, timeout=float(self.cfg["node_timeout_min"]) * 60)
-            res = {"cmd": c, "exit": rc, "tail": tail[-1500:]}
+            if c["when"]:
+                changed = self.changed_paths() if changed is None else changed
+                if not any(fnmatch.fnmatch(p, g) for p in changed for g in c["when"]):
+                    out.append(dict(base, exit=None, status="skipped", tail="",
+                                    why="no change under %s" % ", ".join(c["when"])))
+                    continue
+            hit = cache.get(key, {}).get(c["cmd"])
+            if hit:
+                res = dict(base, **hit)
+                res.update(cached=True, status=hit.get("status") or ("ran" if hit["exit"] == 0 else "failed"))
+            else:
+                t, tries = time.time(), 0
+                while True:
+                    tries += 1
+                    rc, tail = self.sh(c["cmd"], timeout=float(self.cfg["node_timeout_min"]) * 60,
+                                       save=logs / ("%02d-%s.log" % (n, re.sub(r"[^\w.-]+", "_", c["id"])[:40])))
+                    if rc == 0 or tries > c["retry"]:
+                        break
+                    self.warn("`%s` failed (exit %d), retrying: it is marked flaky" % (c["id"], rc))
+                res = dict(base, exit=rc, status="ran" if rc == 0 else "failed", tries=tries, tail=tail[-1500:],
+                           secs=round(time.time() - t))
+                cache.setdefault(key, {})[c["cmd"]] = res
             out.append(res)
-            cache.setdefault(key, {})[c] = res
-            self.detail(["%s `%s` exit %d (%ds)" % ("✓" if rc == 0 else "✗", c, rc, time.time() - t)] +
-                        (tail.splitlines()[-3:] if rc else []))
+            if res["exit"] != 0:
+                red = c["group"]
+        for c in out:
+            mark = {"ran": "✓", "failed": "✗", "skipped": "–"}[c["status"]]
+            self.detail(["%s [%s] `%s` %s%s" % (mark, c["group"], c["id"], c["status"] if c["exit"] is None else
+                                                "exit %d" % c["exit"], " (" + c["why"] + ")" if c.get("why") else
+                                                " (same tree and base: earlier result)" if c.get("cached") else "")] +
+                        (c["tail"].splitlines()[-3:] if c["status"] == "failed" else []))
         cache_path.parent.mkdir(exist_ok=True)
         cache_path.write_text(json.dumps({key: cache[key]} if key in cache else {}))  # only the latest tree is worth keeping
         return out
@@ -680,7 +718,8 @@ class Engine:
                 rc, tail = self.sh(self.cfg["gate"])
                 if rc:
                     raise Blocked("gate red on the rebased tree\n" + tail)
-            rc, tail = self.sh(self.cfg["land"])
+            rc, tail = self.sh(self.cfg["land"], env={"TASK_LOOP_GATED_TREE": self.git("rev-parse", "HEAD^{tree}")}
+                               if self.cfg["gate"] else None)  # a pre-push hook may skip a gate this tree just passed
             if rc == 0:
                 sha = self.git("rev-parse", "HEAD")
                 tl.cmd_land(Args(id=self.bead, sha=sha, worktree=self.wt))
@@ -787,10 +826,25 @@ class Heartbeat:
         self.stop_ev.set()
 
 
+GROUPS = ("static", "tests", "acceptance")
+NOTABLE = re.compile(r"(?i)\b(skip|skipped|steps run|passed|failed|warnings?|errors?)\b")
+
+
 def compact(checks):
-    """Check results for a prompt: command, exit code and the last lines of output."""
-    return "\n".join("- `%s` exit %d%s" % (c["cmd"], c["exit"], (": " + c["tail"][-400:].replace("\n", " | "))
-                                          if c["exit"] else "") for c in checks) or "- (no checks)"
+    """Check results for a prompt: command, exit code, and the lines that say what ran (a passing gate that skipped
+    its Unity steps must not look like one that ran them), or the tail of a failure."""
+    out = []
+    for c in checks:
+        if c.get("exit") is None:
+            out.append("- `%s` skipped: %s" % (c["cmd"], c.get("why") or ""))
+            continue
+        lines = [ln.strip() for ln in c["tail"].splitlines() if ln.strip()]
+        if c["exit"]:
+            body = " | ".join(lines)[-400:]
+        else:
+            body = " | ".join(([ln for ln in lines[:-1] if NOTABLE.search(ln)][-3:] + lines[-1:]))[-300:]
+        out.append("- `%s` exit %d%s" % (c["cmd"], c["exit"], (": " + body) if body else ""))
+    return "\n".join(out) or "- (no checks)"
 
 
 def say(line):

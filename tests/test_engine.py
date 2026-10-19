@@ -185,6 +185,50 @@ class EngineTest(unittest.TestCase):
     def test_planner_is_told_the_engine_owns_time_limits(self):
         self.assertIn("The engine sets every time limit", engine.PLAN_PROMPT)
 
+    def checks_engine(self, **cfg):
+        c = engine.load_cfg(str(self.wt))
+        c.update(cfg)
+        return engine.Engine("t-1", str(self.wt), c)
+
+    def test_checks_run_in_groups_fastest_first_and_stop_at_a_red_group(self):
+        eng = self.checks_engine(checks=[{"id": "unit", "cmd": PY + ' -c "pass"', "group": "tests"},
+                                         {"id": "lint", "cmd": FALSE, "group": "static"}])
+        res = eng.run_checks({"checks": [PY + ' -c "pass"'], "files": []}, "s")
+        self.assertEqual([(c["group"], c["status"]) for c in res],
+                         [("static", "failed"), ("tests", "skipped"), ("acceptance", "skipped")])
+        self.assertIn("static failed", res[1]["why"])
+
+    def test_a_repo_check_runs_only_when_its_paths_changed(self):
+        eng = self.checks_engine(checks=[{"id": "unity", "cmd": PY + ' -c "pass"', "group": "tests", "when": ["client/**"]}])
+        eng.git("checkout", "-q", "-b", "task/t-1")
+        self.assertEqual(eng.run_checks({"checks": [], "files": []}, "s")[0]["status"], "skipped")
+        (self.wt / "client").mkdir()
+        (self.wt / "client" / "a.cs").write_text("x\n")
+        self.assertEqual(eng.run_checks({"checks": [], "files": []}, "s")[0]["status"], "ran")
+
+    def test_a_flaky_check_gets_its_retries(self):
+        mark = Path(self.tmp.name) / "seen"
+        flaky = PY + ' -c "import os,sys; p=%r; first=not os.path.exists(p); open(p,\'w\').close(); sys.exit(1 if first else 0)"' % str(mark)
+        eng = self.checks_engine(checks=[{"id": "flaky", "cmd": flaky, "group": "tests", "retry": 1}])
+        res = eng.run_checks({"checks": [], "files": []}, "s")
+        self.assertEqual((res[0]["exit"], res[0]["status"], res[0]["tries"]), (0, "ran", 2))
+
+    def test_a_passing_check_still_shows_its_notable_lines(self):
+        out = engine.compact([{"cmd": "just check", "exit": 0, "status": "ran", "group": "tests",
+                               "tail": "lane light: ok\nunity steps run: client changed\nfoo\nbar\n439 passed"}])
+        self.assertIn("unity steps run", out)
+        self.assertIn("439 passed", out)
+
+    def test_the_gate_runs_once_at_land_and_tells_the_push_which_tree_it_gated(self):
+        count, seen = Path(self.tmp.name) / "gates", Path(self.tmp.name) / "gated-tree"
+        gate = PY + ' -c "open(%r, \'a\').write(\'1\')"' % str(count)
+        land = PY + ' -c "import os; open(%r, \'w\').write(os.environ.get(\'TASK_LOOP_GATED_TREE\', \'\'))" && git push -q origin HEAD:main' % str(seen)
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "verify": [ACCEPT_V], "judge": [judge("accept")]},
+                                gate=gate, land=land)
+        self.assertEqual(rc, 0)
+        self.assertEqual(count.read_text(), "1")
+        self.assertEqual(seen.read_text(), tl.git("rev-parse", "HEAD^{tree}", cwd=str(self.wt)))
+
     def test_tests_added_and_removed_come_from_the_diff(self):
         diff = ("+++ b/tests/test_a.py\n+def test_one():\n+    pass\n+def test_two():\n-def test_old():\n"
                 "+++ b/T.cs\n+    [Fact]\n+    [Test]\n")
