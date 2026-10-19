@@ -20,7 +20,7 @@ Delegate already does the first four. The engine should not grow a second copy, 
 ```
 <python> <route.py> run ROLE --cwd DIR --brief FILE
         [--schema FILE] [--resume REF] [--authored-by openai|claude] [--failed I,J]
-        [--timeout SECS] [--cap USD] [--parent SESSION] [--task ID] [--title TEXT]
+        [--headless] [--timeout SECS] [--cap USD] [--parent SESSION] [--task ID] [--title TEXT]
 ```
 
 | flag | meaning |
@@ -28,17 +28,18 @@ Delegate already does the first four. The engine should not grow a second copy, 
 | `ROLE` | delegate role. Engine mapping: plan → planner, write → worker, verify → light (runs checks, reports), review → reviewer `--authored-by <family that wrote the thread, from the engine's record>` (`--writer` before delegate 0.17.0; the engine picks the flag by the installed version), judge → light, a hard stage → hard |
 | `--schema FILE` | JSON Schema for the answer. Codex: `--output-schema FILE`; claude: `--json-schema`. The producer parses the answer; it does not need to validate it (the engine does) |
 | `--resume REF` | continue the thread or session `REF` from an earlier result, on the same lane. Codex: `codex exec resume REF` takes no `-s`/`-C`: set the sandbox with `-c sandbox_mode=...` and the folder through the process cwd. Claude: `--resume REF`. A lane that is now out → `status: "lane_out"`, never a silent switch to another lane (a new thread loses the writer's context; the engine decides) |
+| `--headless` | the caller is an engine, not a Claude session (delegate 0.18.0+; required for engines). The engine passes it and no `--timeout`/`--cap` (delegate has no default limits since 0.18.0); before 0.18.0 the engine passes `--timeout` instead. The engine still kills a worker at its own `engine.node_timeout_min` |
 | `--cap USD` | spend cap for this call (credit lanes). Absent → the role's step cap |
 | `--parent`, `--task`, `--title` | written into the agent-runs record (`parent_session`, `task`, `title`). The engine strips `CLAUDE_*` from the child env, so `$CLAUDE_CODE_SESSION_ID` is not there to read |
 
 The brief is passed as a file (or stdin when `--brief` is absent). The producer may prepend its git rules.
 
-## Output and headless mode (no flags)
+## Output and headless mode
 
 - `run` always prints exactly one JSON object (below) on stdout, for every caller; worker chatter and diagnostics go
   to stderr.
-- Headless is derived from the environment: no `CLAUDE_CODE_ENTRYPOINT` (the engine strips `CLAUDE_*`) means no
-  Claude session behind the caller. Then: never `agent`, never `ask_user`, never `needs_input`; Agent-tool lanes are
+- Headless is `--headless` (delegate 0.18.0+). Before 0.18.0 it was derived from the environment: no
+  `CLAUDE_CODE_ENTRYPOINT` (the engine strips `CLAUDE_*`, and still does for the child env). Then: never `agent`, never `ask_user`, never `needs_input`; Agent-tool lanes are
   unavailable; unknown subscription use does not block.
 
 ## Result (stdout, one object)
@@ -89,9 +90,9 @@ Exit code: 0 when the object was printed, whatever `status` says; non-zero only 
 Engine Claude nodes run on the subscription, never on API credit. Headless, delegate runs `CLAUDE_SUBSCRIPTION` with
 `claude -p` on the logged-in subscription (no API key) and never picks `CLAUDE_CREDIT`; with no usable subscription
 lane the answer is `stop` with `retry_after`. Subscription use comes from delegate's usage feeds (state.json from an
-orchestrator, `~/.claude/state/max-limits.json` from the status line), and the orchestrator reserve applies. Headless
-with every feed stale → `stop`, never "unknown counts as usable": N slots could drain the weekly window and lock out
-interactive work. A limit refusal marks the lane out (`lane_out`). Needs `claude auth login` on the machine.
+orchestrator, `~/.claude/state/max-limits.json` from the status line), and the orchestrator reserve applies when a
+reading exists. Since delegate 0.18.0 (owner, 2026-10-19) a headless run no longer stops when every feed is stale: an
+unattended factory keeps running. Before 0.18.0 it answered `stop`. A limit refusal marks the lane out (`lane_out`). Needs `claude auth login` on the machine.
 
 `cost` is 0 on a subscription, so the engine's dollar budget does not see Claude nodes; the engine budgets minutes and
 calls per task as well. Workers get `DELEGATE_DEPTH=1`: they cannot delegate.
@@ -103,7 +104,13 @@ acceptance is the engine's checks, a fresh verify and the gate. A role no orches
 never a second table.
 
 Usage feed (part of this contract): `route.py status --claude-usage '<get_usage plan.windows JSON>'` stores the reading;
-a headless `run` uses it for 30 minutes. In attended mode the coordinator feeds it every 20 minutes (the status-line
-file exists only where a terminal session runs). Unattended has no feed yet, so Claude nodes stay off.
+delegate applies the reserve while the reading is fresh. In attended mode the coordinator feeds it every 20 minutes (the
+status-line file exists only where a terminal session runs). Unattended has no feed: since 0.18.0 Claude nodes run
+anyway, without the reserve.
+
+Left to the engine (delegate never does these): waiting until `retry_after` on `stop`/`lane_out`; `--failed I,J` for the
+`hard` role; acting on `git_violation`; staggering parallel `run` calls (delegate has no in-flight reservation yet, so N
+launches in the same second can overshoot a lane threshold together); a per-run log of its own (agent-runs records are
+deleted after 7 days and carry no token numbers).
 
 Version: the result's `v` is checked by the engine; another major blocks the task (update task-loop).

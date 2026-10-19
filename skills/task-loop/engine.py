@@ -177,10 +177,25 @@ def find_route(path=""):
     return max(found)[1] if found else None
 
 
-def author_flag(route):
-    """delegate renamed --writer to --authored-by in 0.17.0; a route.py outside a versioned plugin folder is new."""
+def delegate_version(route):
+    """(major, minor) of the installed delegate the route.py belongs to; None for a checkout (counts as newest)."""
     m = re.search(r"iorlas-delegate[/\\](\d+)\.(\d+)", route)
-    return "--writer" if m and (int(m.group(1)), int(m.group(2))) < (0, 17) else "--authored-by"
+    return (int(m.group(1)), int(m.group(2))) if m else None
+
+
+def author_flag(route):
+    """delegate renamed --writer to --authored-by in 0.17.0."""
+    v = delegate_version(route)
+    return "--writer" if v and v < (0, 17) else "--authored-by"
+
+
+def headless_args(route, timeout):
+    """delegate 0.18.0: an engine says --headless (no longer derived from the env) and passes no --timeout; the
+    engine's own node limit still kills the process (run_proc)."""
+    v = delegate_version(route)
+    if v and v < (0, 18):
+        return ["--timeout", str(int(timeout))]
+    return ["--headless"]
 
 
 def call_delegate(route, role, prompt, schema, cwd, resume, timeout, log_path, writer=None, parent="", task="",
@@ -191,7 +206,7 @@ def call_delegate(route, role, prompt, schema, cwd, resume, timeout, log_path, w
         Path(bf).write_text(prompt, encoding="utf-8")
         Path(sf).write_text(json.dumps(schema))
         cmd = [sys.executable, route, "run", role, "--brief", bf, "--cwd", cwd, "--schema", sf,
-               "--timeout", str(int(timeout)), "--parent", parent, "--task", task, "--title", title[:120]]
+               *headless_args(route, timeout), "--parent", parent, "--task", task, "--title", title[:120]]
         if resume:
             cmd += ["--resume", resume]
         if writer:

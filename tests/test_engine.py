@@ -293,6 +293,14 @@ class DelegateCall(unittest.TestCase):
         for flag, val in (("--resume", "r0"), ("--authored-by", "claude"), ("--parent", "p"), ("--task", "t-1")):
             self.assertEqual(argv[argv.index(flag) + 1], val)
         self.assertEqual((r.ref, r.backend, r.error), ("r1", "openai", ""))
+        self.assertIn("--headless", argv)
+        self.assertNotIn("--timeout", argv)
+
+    def test_headless_args_follow_the_installed_version(self):
+        base = "/h/.claude/plugins/cache/m/iorlas-delegate/%s/skills/delegate/route.py"
+        self.assertEqual(engine.headless_args(base % "0.17.0", 600), ["--timeout", "600"])
+        self.assertEqual(engine.headless_args(base % "0.18.0", 600), ["--headless"])
+        self.assertEqual(engine.headless_args("/src/delegate/skills/delegate/route.py", 600), ["--headless"])
 
     def test_author_flag_follows_the_installed_version(self):
         base = "/h/.claude/plugins/cache/m/iorlas-delegate/%s/skills/delegate/route.py"
