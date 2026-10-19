@@ -20,7 +20,7 @@ Delegate already does the first four. The engine should not grow a second copy, 
 ```
 <python> <route.py> run ROLE --cwd DIR --brief FILE
         [--schema FILE] [--resume REF] [--authored-by openai|claude] [--failed I,J]
-        [--unattended] [--timeout SECS] [--cap USD] [--parent SESSION] [--task ID] [--title TEXT]
+        [--unattended] [--no-sandbox] [--timeout SECS] [--cap USD] [--parent SESSION] [--task ID] [--title TEXT]
 ```
 
 | flag | meaning |
@@ -29,6 +29,7 @@ Delegate already does the first four. The engine should not grow a second copy, 
 | `--schema FILE` | JSON Schema for the answer. Codex: `--output-schema FILE`; claude: `--json-schema`. The producer parses the answer; it does not need to validate it (the engine does) |
 | `--resume REF` | continue the thread or session `REF` from an earlier result, on the same lane. Codex: `codex exec resume REF` takes no `-s`/`-C`: set the sandbox with `-c sandbox_mode=...` and the folder through the process cwd. Claude: `--resume REF`. A lane that is now out → `status: "lane_out"`, never a silent switch to another lane (a new thread loses the writer's context; the engine decides) |
 | `--unattended` | the caller is an engine, not a Claude session; required for engines (delegate 0.19.0+; `--headless` in 0.18.x, no alias). The engine passes it and no `--timeout`/`--cap` (delegate has no default limits since 0.18.0); before 0.18.0 the engine passes `--timeout` instead. The engine still kills a worker at its own `engine.node_timeout_min` |
+| `--no-sandbox` | delegate 0.20.0+ (write steps) / 0.21.0+ (every mode): Codex runs `-s danger-full-access`, a read-only `claude -p` gets Bash. The engine passes it when `engine.no_sandbox` or the bead label `no-sandbox` asks, gated per step on the installed version (an older delegate: one ⚠, the step runs sandboxed) |
 | `--cap USD` | spend cap for this call (credit lanes). Absent → the role's step cap |
 | `--parent`, `--task`, `--title` | written into the agent-runs record (`parent_session`, `task`, `title`). The engine strips `CLAUDE_*` from the child env, so `$CLAUDE_CODE_SESSION_ID` is not there to read |
 

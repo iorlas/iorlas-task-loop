@@ -23,6 +23,7 @@ FALSE = PY + ' -c "import sys; sys.exit(1)"'
 PLAN = {"summary": "do it", "stages": [{"goal": "add f", "files": ["f.txt"], "checks": [HAS_F],
                                         "hard": False}], "risks": [], "question": ""}
 WRITE = {"summary": "wrote f", "checks_run": [{"cmd": "test -f f.txt", "exit": 0}], "question": ""}
+ROUTE = "/h/.claude/plugins/cache/m/iorlas-delegate/%s/skills/delegate/route.py"
 CLEAN = {"findings": [], "unmet": [], "question": "", "leftovers": []}
 
 
@@ -39,11 +40,13 @@ class DelegateScript:
 
     def __init__(self, answers):
         self.answers, self.calls, self.prompts = {k: list(v) for k, v in answers.items()}, [], []
+        self.unsandboxed = []
 
     def __call__(self, route, role, prompt, schema, cwd, resume, timeout, log_path, writer=None, parent="", task="",
-                 title=""):
+                 title="", no_sandbox=False):
         node = next(k for k, v in engine.SCHEMAS.items() if v is schema)
         self.calls.append((role, resume, writer))
+        self.unsandboxed.append((role, no_sandbox))
         self.prompts.append(prompt)
         a = self.answers[node].pop(0)
         if isinstance(a, dict) and a.get("v") is not None:
@@ -97,11 +100,11 @@ class EngineTest(unittest.TestCase):
         self.bd_calls.append(a)
         return mock.Mock(returncode=0, stdout="bead t-1: Add f\n", stderr="")
 
-    def run_engine(self, answers, **cfg):
+    def run_engine(self, answers, route="/fake/route.py", **cfg):
         script = DelegateScript(answers)
         c = engine.load_cfg(str(self.wt))
         c.update(cfg)
-        with mock.patch.object(engine, "find_route", return_value="/fake/route.py"), \
+        with mock.patch.object(engine, "find_route", return_value=route), \
                 mock.patch.object(engine, "call_delegate", script), mock.patch.object(engine.time, "sleep"):
             self.eng = engine.Engine("t-1", str(self.wt), c)
             rc = self.eng.run()
@@ -242,7 +245,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 0)
         w = next(p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker")
         self.assertIn("docs/agents/codex.md", w)
-        self.assertIn('-c "pass"`), the issue tracker (bd)', w)
+        self.assertIn('-c "pass"`) or the issue tracker (bd)', w)
 
     def test_a_run_leaves_a_trace_of_every_worker_session(self):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
@@ -386,6 +389,44 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertIn(("reviewer", None, "openai"), s.calls)
 
+    def test_no_sandbox_reaches_every_role_on_delegate_0_21(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.21.0",
+                                no_sandbox=True)
+        self.assertEqual(rc, 0)
+        self.assertEqual(s.unsandboxed, [("planner", True), ("worker", True), ("reviewer", True)])
+        w = next(p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker")
+        self.assertIn("outside a sandbox", w)
+        self.assertTrue(all(x["no_sandbox"] for x in self.eng.sessions))
+
+    def test_no_sandbox_on_delegate_0_20_is_writer_only_with_a_warning(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.20.0",
+                                no_sandbox=True)
+        self.assertEqual(rc, 0)
+        self.assertEqual(s.unsandboxed, [("planner", False), ("worker", True), ("reviewer", False)])
+        self.assertIn("delegate 0.21", self.eng.log_path.read_text())
+
+    def test_no_sandbox_needs_delegate_0_20(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.19.0",
+                                no_sandbox=True)
+        self.assertEqual(rc, 0)
+        self.assertFalse(any(u for _, u in s.unsandboxed))
+        self.assertIn("delegate 0.20", self.eng.log_path.read_text())
+
+    def test_sandbox_is_the_default_and_a_bead_label_overrides_the_config(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.21.0")
+        self.assertFalse(any(u for _, u in s.unsandboxed))
+        w = next(p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker")
+        self.assertNotIn("outside a sandbox", w)
+        with mock.patch.object(tl, "show", return_value={"id": "t-1", "title": "Add f", "metadata": {},
+                                                         "labels": ["no-sandbox"]}):
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.21.0")
+        self.assertTrue(all(u for _, u in s.unsandboxed))
+        with mock.patch.object(tl, "show", return_value={"id": "t-1", "title": "Add f", "metadata": {},
+                                                         "labels": ["sandbox"]}):
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.21.0",
+                                    no_sandbox=True)
+        self.assertFalse(any(u for _, u in s.unsandboxed))
+
     def test_child_env_drops_session_identity(self):
         with mock.patch.dict(os.environ, {"ANTHROPIC_BASE_URL": "x", "CLAUDE_CODE_SESSION_ID": "s"}):
             env = engine.child_env()
@@ -452,6 +493,15 @@ class DelegateCall(unittest.TestCase):
         self.assertEqual((r.ref, r.backend, r.error), ("r1", "openai", ""))
         self.assertIn("--unattended", argv)
         self.assertNotIn("--timeout", argv)
+        self.assertNotIn("--no-sandbox", argv)
+
+    def test_call_delegate_passes_no_sandbox(self):
+        with tempfile.TemporaryDirectory() as d:
+            route = Path(d, "route.py")
+            route.write_text("import json,sys\nprint(json.dumps({'v': 1, 'status': 'done', 'data': {'argv': sys.argv[1:]}}))\n")
+            r, _ = engine.call_delegate(str(route), "worker", "x", {"type": "object"}, d, None, 60, Path(d, "e.log"),
+                                        no_sandbox=True)
+        self.assertIn("--no-sandbox", r.data["argv"])
 
     def test_headless_args_follow_the_installed_version(self):
         base = "/h/.claude/plugins/cache/m/iorlas-delegate/%s/skills/delegate/route.py"

@@ -49,6 +49,10 @@ writer reads first). The profile gives:
                         "retry": 1}]}}
 ```
 
+`engine.no_sandbox: true` (or the label `no-sandbox` on one bead; `sandbox` turns it off for one bead) runs workers
+outside delegate's sandbox (delegate 0.20+ for the writer, 0.21+ for planner and reviewer): the writer runs Unity and
+tests itself, the reviewer can open links and run a linter. It is the owner's call: those workers run on this machine.
+
 Check groups run static → tests → acceptance (the plan's per-stage checks); a red group skips the rest. `when` runs a
 check only when the task changed a matching path; `retry` reruns a known flaky one. The gate runs once, on the rebased
 tree at land, and the push gets `TASK_LOOP_GATED_TREE` (the tree it passed) so a pre-push hook can skip a second run.

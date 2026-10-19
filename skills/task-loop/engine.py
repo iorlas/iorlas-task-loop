@@ -37,6 +37,8 @@ DEFAULTS = {
     "delegate": "",                   # path to delegate's route.py; "" = the newest installed iorlas-delegate
     "lane_wait_min": 60,              # how long a step waits for a lane that is out before the task is blocked
     "checks": [],                     # repo checks: [{id, cmd, group: static|tests|acceptance, when: [globs], retry}]
+    "no_sandbox": False,              # workers run outside delegate's sandbox (delegate --no-sandbox); a bead label
+                                      # no-sandbox / sandbox overrides it for one bead
     "worker_rules": "",               # repo file the writer reads first: what its sandbox can and cannot run
     "brief_kb": 5,
     "test_pattern": r"^\s*(def test_|async def test_|\[(Test|Fact|Theory|TestMethod|TestCase)\b|#\[test\]|(it|test)\(|func Test)",                    # a brief bigger than this gets a ⚠ (never cut: the bead may be too big)
@@ -179,6 +181,19 @@ def delegate_version(route):
     return (int(m.group(1)), int(m.group(2))) if m else None
 
 
+def unsandboxed(route, node, wanted):
+    """Whether this step runs with delegate's --no-sandbox: the write step from delegate 0.20.0, every step (plan and
+    review get Bash and the network) from 0.21.0. Returns (flag, the reason it is off although wanted, or "")."""
+    if not wanted:
+        return False, ""
+    v = delegate_version(route)
+    need = (0, 20) if node == "write" else (0, 21)
+    if v and v < need:
+        return False, "--no-sandbox for %s needs delegate %d.%d (installed %d.%d): it runs sandboxed" % (
+            node, need[0], need[1], v[0], v[1])
+    return True, ""
+
+
 def author_flag(route):
     """delegate renamed --writer to --authored-by in 0.17.0."""
     v = delegate_version(route)
@@ -197,7 +212,7 @@ def headless_args(route, timeout):
 
 
 def call_delegate(route, role, prompt, schema, cwd, resume, timeout, log_path, writer=None, parent="", task="",
-                  title=""):
+                  title="", no_sandbox=False):
     """One AI step through `route.py run` (worker-run v1). Returns (Result, the answer object or None)."""
     with tempfile.TemporaryDirectory() as d:
         bf, sf = os.path.join(d, "brief.md"), os.path.join(d, "schema.json")
@@ -209,6 +224,8 @@ def call_delegate(route, role, prompt, schema, cwd, resume, timeout, log_path, w
             cmd += ["--resume", resume]
         if writer:
             cmd += [author_flag(route), writer]
+        if no_sandbox:
+            cmd.append("--no-sandbox")
         res, secs = run_proc(cmd, cwd, timeout + 120, log_path)
     if res is None:
         return Result(secs=secs, error="timeout", backend="delegate", ref=resume or ""), None
@@ -243,6 +260,8 @@ class Engine:
         self.session = tl.session_id()
         self.leftovers = []
         self.stuck_why = ""
+        self.no_sandbox = bool(cfg.get("no_sandbox"))
+        self.sandbox_warned = set()
         self.budget_warned = set()
         self.writer = {}  # backend -> thread/session id, so later rounds of a task resume the same writer
         self.sessions = []  # every AI call of this run: the trace a later reflection reads (traces.jsonl)
@@ -272,13 +291,14 @@ class Engine:
         if kind == "warn" or not (kind == "cmd" and not self.verbose):
             say("[%s] %s%s" % (time.strftime("%H:%M:%S"), "⚠ " if kind == "warn" else "", text))
 
-    def trace_call(self, node, role, attempt, r, j):
+    def trace_call(self, node, role, attempt, r, j, no_sandbox=False):
         """One AI call into the run's trace: which worker session did what, and where its transcript is."""
         j = j or {}
         rec = {"node": node, "role": role, "attempt": attempt, "status": j.get("status") or r.error or "none",
                "ref": j.get("ref") or r.ref or "", "run_id": j.get("run_id") or "", "transcript": j.get("transcript") or "",
                "family": j.get("family") or "", "lane": j.get("lane") or "", "model": j.get("model") or "",
-               "effort": j.get("effort") or "", "secs": round(r.secs or 0), "cost": r.cost or 0.0, "t": time.time()}
+               "effort": j.get("effort") or "", "secs": round(r.secs or 0), "cost": r.cost or 0.0, "t": time.time(),
+               "no_sandbox": no_sandbox}
         self.sessions.append(rec)
         self.log("session", "%s: %s %s" % (node, rec["family"] or "?", rec["ref"] or "(no session)"), **rec)
 
@@ -288,7 +308,7 @@ class Engine:
                "repo": self.git("remote", "get-url", "origin") or str(self.wt), "worktree": str(self.wt),
                "branch": self.git("symbolic-ref", "--short", "-q", "HEAD"), "coordinator_session": self.session,
                "started": self.t0, "ended": time.time(), "outcome": outcome, "why": (why or "")[:500], "sha": sha or "",
-               "cost": self.cost, "stats": self.stats, "delegate": self.route or "", "log": str(self.log_path),
+               "cost": self.cost, "stats": self.stats, "no_sandbox": self.no_sandbox, "delegate": self.route or "", "log": str(self.log_path),
                "stderr": str(self.err_path), "sessions": self.sessions}
         try:
             with open(tl.config_dir() / "traces.jsonl", "a", encoding="utf-8") as f:
@@ -321,17 +341,22 @@ class Engine:
         role = ROLES[node]
         writer = writer_family if node == "review" else None
         resume = self.writer.get("delegate") if resume_key else None
+        free, why = unsandboxed(self.route, node, self.no_sandbox)
+        if why and why not in self.sandbox_warned:
+            self.sandbox_warned.add(why)
+            self.warn(why)
         self.log("node", "%s: %s" % (node, title), node=node, backend="delegate", role=role, resume=bool(resume))
         timeout = float(self.cfg["node_timeout_min"]) * 60
         waited, attempt_prompt, attempt, errs, transient = 0.0, prompt, 1, ["not run"], 0
         while attempt <= 2:
             r, j = call_delegate(self.route, role, attempt_prompt, SCHEMAS[node], self.wt, resume, timeout,
-                                 self.err_path, writer, self.session, self.bead, "%s · %s: %s" % (self.bead, node, title))
+                                 self.err_path, writer, self.session, self.bead, "%s · %s: %s" % (self.bead, node, title),
+                                 no_sandbox=free)
             if j is not None and j.get("v") != 1:
                 raise Blocked("failed: delegate answered worker-run v%s, this engine speaks v1 (update task-loop)"
                               % j.get("v"))
             st = (j or {}).get("status")
-            self.trace_call(node, role, attempt, r, j)
+            self.trace_call(node, role, attempt, r, j, free)
             if st in ("lane_out", "stop"):
                 wait = max(60.0, min(600.0, float(j.get("retry_after") or 0) - time.time()))
                 if waited + wait > float(self.cfg["lane_wait_min"]) * 60:
@@ -470,6 +495,10 @@ class Engine:
             bead = tl.show(self.bead)
             if not bead:
                 raise Blocked("failed: bead %s not found" % self.bead)
+            labels = bead.get("labels") or []
+            if "no-sandbox" in labels or "sandbox" in labels:
+                self.no_sandbox = "no-sandbox" in labels
+                self.log("note", "bead label: workers run %s" % ("outside the sandbox" if self.no_sandbox else "sandboxed"))
             hb.start()
             if not self.route:
                 raise Blocked("failed: the engine needs the iorlas-delegate plugin (0.14.0 or later): "
@@ -508,7 +537,8 @@ class Engine:
         extra = ("\n\nThe previous plan did not work; what failed is in %s. Plan again." %
                  (self.run_dir / "replan.md")) if again else ""
         data, _ = self.ai("plan", "re-plan" if again else "plan", PLAN_PROMPT.format(brief=self.run_dir / "brief.md",
-                                                                                     wt=self.wt) + extra)
+                                                                                     wt=self.wt) + extra +
+                          ("\n\n" + self.where("plan") if self.where("plan") else ""))
         self.plan_summary = data["summary"]
         if data["question"].strip():
             raise Blocked("owner decision needed", data["question"])
@@ -541,7 +571,7 @@ class Engine:
             w, wfam = self.ai("write", "%s write %d" % (name, n), WRITE_PROMPT.format(
                 brief=self.run_dir / "brief.md", plan=self.run_dir / "plan.json", n=i + 1, goal=st["goal"],
                 files=", ".join(st["files"]), checks="\n".join("- " + c for c in st["checks"]) or "- (none named)",
-                feedback=feedback, evidence=self.evidence_dir, gate=(" (`%s`)" % self.cfg["gate"]) if self.cfg["gate"] else "",
+                feedback=feedback, evidence=self.evidence_dir, where=self.where("write"), gate=(" (`%s`)" % self.cfg["gate"]) if self.cfg["gate"] else "",
                 rules=("\nRead %s first: this repo's rules for work in your sandbox (what runs there, what does not)."
                        % (Path(self.wt) / self.cfg["worker_rules"])) if self.cfg["worker_rules"] else ""),
                 resume_key="writer")
@@ -573,7 +603,8 @@ class Engine:
                 base=self.base_sha(), checks=compact(checks), summary=w["summary"], evidence=self.evidence_dir,
                 added=self.stats["tests_added"], removed=self.stats["tests_removed"],
                 scope=("the stage goal and every requirement and acceptance criterion of the task" if last else
-                       "the stage goal (later stages cover the rest of the task)")), writer_family=wfam)
+                       "the stage goal (later stages cover the rest of the task)")) +
+                ("\n" + self.where("review") if self.where("review") else ""), writer_family=wfam)
             same = self.last_flag == "same_family"
             if same:
                 self.warn("%s: the review is from the writer's own model family (no other lane was free)" % name)
@@ -597,6 +628,17 @@ class Engine:
             feedback = ("\nThe reviewer sent the stage back. Fix exactly this:\n%s%s\n" % (
                 "".join("- unmet: %s\n" % u for u in review["unmet"]),
                 "".join("- %s:%s [%s] %s\n" % (f["file"], f["line"], f["severity"], f["fix"]) for f in blocking)))
+
+    def where(self, node):
+        """What the step may run, by whether it is sandboxed."""
+        free, _ = unsandboxed(self.route, node, self.no_sandbox)
+        if node == "write":
+            return ("You run outside a sandbox, on this machine: run the tests and tools you need (unit tests, the editor's "
+                    "batch tests, builds) to see your change work before you say it is done." if free else
+                    "Run only the quick checks (seconds, no build of the whole project, no editor) to see your change "
+                    "works; anything that needs the host is run by the engine after you.")
+        return ("You run outside a sandbox and may run commands to check facts (open cited links, run a linter or a "
+                "test); never edit, create or delete files." if free else "")
 
     def tree_hash(self):
         """The worktree as git would commit it now, untracked files included, without touching the real index."""
@@ -903,10 +945,10 @@ Task: {brief}. Plan: {plan}. Your stage: {n}: {goal}{rules}
 Files: {files}
 The stage's checks (the engine runs all of them after you, outside your sandbox):
 {checks}
-Run only the quick ones (seconds, no build of the whole project, no editor) to see your change works. Never run the
-gate{gate}, the issue tracker (bd), or a check that needs the host: the engine runs them, and its run is the one that
-counts. Repo instructions that say a change is done only when the full gate or test suite passes are for people
-working by hand; here the engine does that part.
+{where}
+Never run the gate{gate} or the issue tracker (bd): the engine runs the gate, and its run is the one that counts.
+Repo instructions that say a change is done only when the full gate passes are for people working by hand; here the
+engine does that part.
 {feedback}
 Checks your sandbox cannot run (network, local ports, paths outside this folder) are run by the engine after you,
 outside the sandbox; say so in the summary and move on, never ask about permissions.
