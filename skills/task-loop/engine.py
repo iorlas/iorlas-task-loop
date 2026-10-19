@@ -33,6 +33,8 @@ DEFAULTS = {
     "node_timeout_min": 45,
     "delegate": "",                   # path to delegate's route.py; "" = the newest installed iorlas-delegate
     "lane_wait_min": 60,              # how long a step waits for a lane that is out before the task is blocked
+    "worker_rules": "",               # repo file the writer reads first: what its sandbox can and cannot run
+    "brief_kb": 5,                    # a brief bigger than this gets a ⚠ (never cut: the bead may be too big)
 }
 
 # ---- output contracts -----------------------------------------------------------------------------------------------
@@ -440,8 +442,13 @@ class Engine:
         return branch
 
     def export_brief(self):
-        r = tl.bd("show", self.bead)
-        (self.task_dir / "brief.md").write_text(r.stdout, encoding="utf-8")
+        """The task as workers read it: the bead's own text and the people's comments, never the engine's own records
+        (plans, reviews, reflects pile up on every rerun: 40 of lifesim-vbo's 45 KB brief)."""
+        text = brief_digest(tl.show(self.bead) or {"id": self.bead}, tl.comments(self.bead))
+        (self.task_dir / "brief.md").write_text(text, encoding="utf-8")
+        kb = len(text.encode("utf-8")) / 1024
+        if kb > float(self.cfg["brief_kb"]):
+            self.warn("the brief is %.0f KB (over %s KB): the bead may be too big for one task" % (kb, self.cfg["brief_kb"]))
 
     def comment(self, text):
         if not self.dry:
@@ -517,7 +524,10 @@ class Engine:
             w, wfam = self.ai("write", "%s round %d" % (name, rnd), WRITE_PROMPT.format(
                 brief=self.task_dir / "brief.md", plan=self.task_dir / "plan.json", n=i + 1, goal=st["goal"],
                 files=", ".join(st["files"]), checks="\n".join("- " + c for c in st["checks"]) or "- (none named)",
-                feedback=feedback, evidence=self.evidence_dir), resume_key="writer")
+                feedback=feedback, evidence=self.evidence_dir, gate=(" (`%s`)" % self.cfg["gate"]) if self.cfg["gate"] else "",
+                rules=("\nRead %s first: this repo's rules for work in your sandbox (what runs there, what does not)."
+                       % (Path(self.wt) / self.cfg["worker_rules"])) if self.cfg["worker_rules"] else ""),
+                resume_key="writer")
             checks = self.run_checks(st, name)
             (self.task_dir / "engine-checks.json").write_text(json.dumps(checks, indent=1))
             diff_before = self.git("diff", "HEAD")
@@ -666,6 +676,35 @@ class Engine:
                                                                           else "close", self.bead, rc))
 
 
+ENGINE_NOTES = ("Plan (engine)", "Review (engine", "Reflect (engine)", "Blocked:")
+
+
+def brief_digest(bead, comments):
+    """Markdown brief: title, the bead's text fields whole, related beads by title, people's comments whole, and one
+    line on how the last engine run ended."""
+    out = ["# %s: %s" % (bead.get("id", ""), bead.get("title", ""))]
+    meta = [bead.get("issue_type"), "P%s" % bead["priority"] if bead.get("priority") is not None else "",
+            ", ".join(bead.get("labels") or [])]
+    if any(meta):
+        out.append(" · ".join(m for m in meta if m))
+    for key, head in (("description", "Description"), ("acceptance_criteria", "Acceptance criteria"),
+                      ("design", "Design"), ("notes", "Notes")):
+        if (bead.get(key) or "").strip():
+            out += ["", "## " + head, bead[key].strip()]
+    rel = [d for d in (bead.get("dependencies") or []) if isinstance(d, dict)]
+    if rel:
+        out += ["", "## Related beads (titles only)"] + ["- %s %s [%s]" % (d.get("id"), d.get("title"),
+                                                                           d.get("status") or "?") for d in rel]
+    people = [c for c in comments if not (c.get("text") or "").startswith(ENGINE_NOTES)]
+    if people:
+        out += ["", "## Comments"] + ["- %s: %s" % (c.get("author") or "?", (c.get("text") or "").strip())
+                                      for c in people]
+    last = [c for c in comments if (c.get("text") or "").startswith(("Reflect (engine)", "Blocked:"))]
+    if last:
+        out += ["", "## Last engine run", last[-1]["text"].strip()[:400]]
+    return "\n".join(out) + "\n"
+
+
 class Heartbeat:
     def __init__(self, bead):
         self.bead, self.stop_ev = bead, threading.Event()
@@ -759,12 +798,14 @@ the owner's answers). Read the code it names. Then plan.
 
 WRITE_PROMPT = """You are the writer for one stage of a task, in an unattended engine. Nobody is watching.
 
-Task: {brief}. Plan: {plan}. Your stage: {n}: {goal}
+Task: {brief}. Plan: {plan}. Your stage: {n}: {goal}{rules}
 Files: {files}
 The stage's checks (the engine runs all of them after you, outside your sandbox):
 {checks}
-Run only the quick ones (seconds, no build of the whole project, no editor) to see your change works; never run the
-full gate or a check that needs the host. The engine's run is the one that counts.
+Run only the quick ones (seconds, no build of the whole project, no editor) to see your change works. Never run the
+gate{gate}, the issue tracker (bd), or a check that needs the host: the engine runs them, and its run is the one that
+counts. Repo instructions that say a change is done only when the full gate or test suite passes are for people
+working by hand; here the engine does that part.
 {feedback}
 Checks your sandbox cannot run (network, local ports, paths outside this folder) are run by the engine after you,
 outside the sandbox; say so in the summary and move on, never ask about permissions.

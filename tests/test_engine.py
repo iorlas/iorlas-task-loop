@@ -78,6 +78,7 @@ class EngineTest(unittest.TestCase):
         patches = [
             mock.patch.object(tl, "bd", side_effect=self.fake_bd),
             mock.patch.object(tl, "show", return_value={"id": "t-1", "title": "Add f", "metadata": {}}),
+            mock.patch.object(tl, "comments", return_value=[]),
             mock.patch.object(tl, "cmd_close", side_effect=lambda a: self.closed.append(a.reason) or 0),
             mock.patch.object(tl, "cmd_block", side_effect=lambda a: self.blocked.append(a.why) or 0),
             mock.patch.object(tl, "cmd_land", return_value=0),
@@ -110,6 +111,34 @@ class EngineTest(unittest.TestCase):
         self.assertTrue(self.closed and self.closed[0].startswith("merged "))
         self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
         self.assertTrue(any(c[:2] == ("comments", "add") and "Reflect (engine)" in c[3] for c in self.bd_calls))
+
+    def test_brief_is_a_digest_without_engine_comments(self):
+        bead = {"id": "t-1", "title": "Add f", "metadata": {}, "description": "Add the file f.",
+                "acceptance_criteria": "f.txt exists", "notes": "owner: keep it short",
+                "dependencies": [{"id": "t-0", "title": "The epic", "description": "x" * 3000}]}
+        comments = [{"author": "tl-a", "text": "Plan (engine): " + "p" * 6000},
+                    {"author": "tl-a", "text": "Review (engine, stage 1/1): " + "r" * 2000},
+                    {"author": "tl-a", "text": "Reflect (engine): outcome=failed; minutes=26"},
+                    {"author": "tl-a", "text": "Blocked: failed: stopped (SIGTERM)"},
+                    {"author": "denis", "text": "Use the old format, not the new one."}]
+        with mock.patch.object(tl, "show", return_value=bead), mock.patch.object(tl, "comments", return_value=comments):
+            rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "verify": [ACCEPT_V], "judge": [judge("accept")]})
+        self.assertEqual(rc, 0)
+        brief = (self.wt / ".task" / "t-1" / "brief.md").read_text()
+        for kept in ("Add the file f.", "f.txt exists", "owner: keep it short", "Use the old format", "t-0 The epic",
+                     "Blocked: failed: stopped (SIGTERM)"):
+            self.assertIn(kept, brief)
+        for dropped in ("p" * 50, "r" * 50, "x" * 50, "minutes=26"):
+            self.assertNotIn(dropped, brief)
+        self.assertLess(len(brief.encode()), 5000)
+
+    def test_writer_is_told_the_repo_worker_rules_and_never_to_run_the_gate(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "verify": [ACCEPT_V], "judge": [judge("accept")]},
+                                worker_rules="docs/agents/codex.md", gate=PY + ' -c "pass"')
+        self.assertEqual(rc, 0)
+        w = next(p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker")
+        self.assertIn("docs/agents/codex.md", w)
+        self.assertIn('-c "pass"`), the issue tracker (bd)', w)
 
     def test_a_run_leaves_a_trace_of_every_worker_session(self):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "verify": [ACCEPT_V], "judge": [judge("accept")]})

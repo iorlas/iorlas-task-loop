@@ -229,6 +229,16 @@ def show(bead, cwd=None):
         return {}
 
 
+def comments(bead, cwd=None):
+    """A bead's comments, oldest first: [{author, text, created_at}]."""
+    r = bd("comments", bead, "--json", cwd=cwd)
+    try:
+        d = json.loads(r.stdout)
+        return d if isinstance(d, list) else []
+    except ValueError:
+        return []
+
+
 def cmd_claim(a):
     r = bd("update", a.id, "--claim")
     if r.returncode != 0:
