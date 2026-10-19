@@ -11,6 +11,7 @@ docs/design/coordinator-less.md. Python 3.8+, standard library only.
 import json
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -34,7 +35,8 @@ DEFAULTS = {
     "delegate": "",                   # path to delegate's route.py; "" = the newest installed iorlas-delegate
     "lane_wait_min": 60,              # how long a step waits for a lane that is out before the task is blocked
     "worker_rules": "",               # repo file the writer reads first: what its sandbox can and cannot run
-    "brief_kb": 5,                    # a brief bigger than this gets a ⚠ (never cut: the bead may be too big)
+    "brief_kb": 5,
+    "test_pattern": r"^\s*(def test_|async def test_|\[(Test|Fact|Theory|TestMethod|TestCase)\b|#\[test\]|(it|test)\(|func Test)",                    # a brief bigger than this gets a ⚠ (never cut: the bead may be too big)
 }
 
 # ---- output contracts -----------------------------------------------------------------------------------------------
@@ -256,7 +258,11 @@ class Engine:
         stamp = time.strftime("%Y%m%d-%H%M%S")
         self.log_path = d / ("%s-%s.jsonl" % (bead, stamp))
         self.err_path = d / ("%s-%s.stderr" % (bead, stamp))
-        self.task_dir = Path(wt) / ".task" / bead
+        # Engine files (brief, plan, node answers, check results) live outside the worktree, where no worker can write
+        # them; in lifesim-vbo a writer's sandbox runs kept in .task/ were read as engine results by four planners.
+        self.run_dir = tl.config_dir() / "runs" / self.log_path.stem
+        self.run_dir.mkdir(parents=True, exist_ok=True)
+        self.task_dir = Path(wt) / ".task" / bead  # the writer's: only evidence/ lives here
         self.task_dir.mkdir(parents=True, exist_ok=True)
         self.evidence_dir = self.task_dir / "evidence"  # the writer's proof of what the engine cannot rerun
         self.evidence_dir.mkdir(exist_ok=True)
@@ -370,7 +376,7 @@ class Engine:
         self.last_flag = (j or {}).get("flag")  # same_family | degraded | ...: delegate could not give the usual lane
         fam = r.backend  # openai | claude: the family that wrote, for the reviewer
         model = "%s %s on %s" % ((j or {}).get("model"), (j or {}).get("effort"), (j or {}).get("lane"))
-        (self.task_dir / ("%s-%d.json" % (node, self.stats["nodes"]))).write_text(json.dumps(r.data, indent=1))
+        (self.run_dir / ("%s-%d.json" % (node, self.stats["nodes"]))).write_text(json.dumps(r.data, indent=1))
         self.log("msg", "%s → %s  [%s%s, %ds, $%.2f, total $%.2f]" % (
             node, summarize(node, r.data), fam, (":" + model) if model else "", r.secs, r.cost, self.cost),
             node=node, data=r.data, cost=r.cost, secs=round(r.secs), backend=fam)
@@ -425,6 +431,10 @@ class Engine:
         self.log("node", "reset")
         branch = (bead.get("metadata") or {}).get("branch") or "task/" + self.bead
         self.sh(["git", "fetch", "-q", "origin"], check=True)
+        exclude = Path(self.git("rev-parse", "--path-format=absolute", "--git-common-dir")) / "info" / "exclude"
+        if ".task/" not in (exclude.read_text() if exclude.exists() else ""):
+            with open(exclude, "a") as f:
+                f.write("\n.task/\n")
         exists = bool(self.git("rev-parse", "--verify", "-q", "refs/heads/" + branch))
         if self.git("status", "--porcelain"):
             if self.git("symbolic-ref", "--short", "-q", "HEAD") != branch:
@@ -434,10 +444,9 @@ class Engine:
             self.sh(["git", "checkout", "-q", branch], check=True)
         else:
             self.sh(["git", "checkout", "-q", "-B", branch, self.cfg["base"]], check=True)
-        exclude = Path(self.git("rev-parse", "--path-format=absolute", "--git-common-dir")) / "info" / "exclude"
-        if ".task/" not in (exclude.read_text() if exclude.exists() else ""):
-            with open(exclude, "a") as f:
-                f.write("\n.task/\n")
+        for old in self.task_dir.iterdir():  # earlier runs' files are no facts; only the writer's evidence carries over
+            if old.name != "evidence":
+                shutil.rmtree(old) if old.is_dir() else old.unlink()
         self.export_brief()
         return branch
 
@@ -445,7 +454,7 @@ class Engine:
         """The task as workers read it: the bead's own text and the people's comments, never the engine's own records
         (plans, reviews, reflects pile up on every rerun: 40 of lifesim-vbo's 45 KB brief)."""
         text = brief_digest(tl.show(self.bead) or {"id": self.bead}, tl.comments(self.bead))
-        (self.task_dir / "brief.md").write_text(text, encoding="utf-8")
+        (self.run_dir / "brief.md").write_text(text, encoding="utf-8")
         kb = len(text.encode("utf-8")) / 1024
         if kb > float(self.cfg["brief_kb"]):
             self.warn("the brief is %.0f KB (over %s KB): the bead may be too big for one task" % (kb, self.cfg["brief_kb"]))
@@ -495,8 +504,8 @@ class Engine:
 
     def plan(self, again=False):
         extra = ("\n\nThe previous plan did not work; the judge's findings are in %s. Plan again." %
-                 (self.task_dir / "replan.md")) if again else ""
-        data, _ = self.ai("plan", "re-plan" if again else "plan", PLAN_PROMPT.format(brief=self.task_dir / "brief.md",
+                 (self.run_dir / "replan.md")) if again else ""
+        data, _ = self.ai("plan", "re-plan" if again else "plan", PLAN_PROMPT.format(brief=self.run_dir / "brief.md",
                                                                                      wt=self.wt) + extra)
         self.plan_summary = data["summary"]
         if data["question"].strip():
@@ -509,7 +518,7 @@ class Engine:
                   for n, s in enumerate(data["stages"])]
         lines += ["Risk: %s → %s" % (r["what"], r["check"]) for r in data["risks"]]
         self.comment("\n".join(lines))
-        (self.task_dir / "plan.json").write_text(json.dumps(data, indent=1))
+        (self.run_dir / "plan.json").write_text(json.dumps(data, indent=1))
         self.export_brief()
         return data
 
@@ -522,31 +531,32 @@ class Engine:
             if rnd >= 2:
                 self.warn("%s: write round %d" % (name, rnd))
             w, wfam = self.ai("write", "%s round %d" % (name, rnd), WRITE_PROMPT.format(
-                brief=self.task_dir / "brief.md", plan=self.task_dir / "plan.json", n=i + 1, goal=st["goal"],
+                brief=self.run_dir / "brief.md", plan=self.run_dir / "plan.json", n=i + 1, goal=st["goal"],
                 files=", ".join(st["files"]), checks="\n".join("- " + c for c in st["checks"]) or "- (none named)",
                 feedback=feedback, evidence=self.evidence_dir, gate=(" (`%s`)" % self.cfg["gate"]) if self.cfg["gate"] else "",
                 rules=("\nRead %s first: this repo's rules for work in your sandbox (what runs there, what does not)."
                        % (Path(self.wt) / self.cfg["worker_rules"])) if self.cfg["worker_rules"] else ""),
                 resume_key="writer")
             checks = self.run_checks(st, name)
-            (self.task_dir / "engine-checks.json").write_text(json.dumps(checks, indent=1))
+            (self.run_dir / "engine-checks.json").write_text(json.dumps(checks, indent=1))
             diff_before = self.git("diff", "HEAD")
             v, _ = self.ai("verify", name, VERIFY_PROMPT.format(goal=st["goal"], checks=compact(checks), base=self.base_sha(),
                                                                evidence=self.evidence_dir, summary=w["summary"],
-                                                               brief=self.task_dir / "brief.md"))
+                                                               brief=self.run_dir / "brief.md"))
             v["checks"] = [dict(c, tail=c["tail"][-600:]) for c in checks]  # the facts are the engine's runs, never a copy
             if self.git("diff", "HEAD") != diff_before:
                 v["risk_flags"].append("the verifier changed files")
                 self.warn("the verifier changed files")
-            self.stats["tests_added"] += v["tests_added"]
-            self.stats["tests_removed"] += v["tests_removed"]
+            self.stats["tests_added"], self.stats["tests_removed"] = count_tests(self.task_diff(), self.cfg["test_pattern"])
+            if self.stats["tests_removed"]:
+                self.warn("the task's diff removes %d tests" % self.stats["tests_removed"])
             risky = bool(v["risk_flags"] or v["outside_touches"] or st["hard"] or rnd >= 3 or
                          any(r for r in plan["risks"]))
             review = {"findings": []}
             if risky and v["verdict"] == "accept":
                 self.stats["reviews"] += 1
-                review, _ = self.ai("review", name, REVIEW_PROMPT.format(brief=self.task_dir / "brief.md", base=self.base_sha(),
-                                                                        plan=self.task_dir / "plan.json",
+                review, _ = self.ai("review", name, REVIEW_PROMPT.format(brief=self.run_dir / "brief.md", base=self.base_sha(),
+                                                                        plan=self.run_dir / "plan.json",
                                                                         flags="; ".join(v["risk_flags"] +
                                                                                        v["outside_touches"]) or "none"),
                                     writer_family=wfam)
@@ -561,7 +571,7 @@ class Engine:
             failed = [c for c in checks if c["exit"] != 0]
             facts = {"stage": st, "round": rnd, "writer": w, "checks_run_by_engine": checks, "verify": v,
                      "review": review}
-            (self.task_dir / "judge-input.json").write_text(json.dumps(facts, indent=1))
+            (self.run_dir / "judge-input.json").write_text(json.dumps(facts, indent=1))
             j, _ = self.ai("judge", name, JUDGE_PROMPT.format(facts=json.dumps(dict(facts, checks_run_by_engine=[
                 dict(c, tail=c["tail"][-600:]) for c in checks]), indent=1)))
             self.leftovers += j["leftovers"]
@@ -576,7 +586,7 @@ class Engine:
                     raise Blocked("failed: judge blocked without an owner question: " + j["why"])
                 raise Blocked(j["why"], j["question"])
             if j["decision"] == "replan":
-                (self.task_dir / "replan.md").write_text(j["why"] + "\n\n" + json.dumps(facts, indent=1))
+                (self.run_dir / "replan.md").write_text(j["why"] + "\n\n" + json.dumps(facts, indent=1))
                 return "replan"
             feedback = ("\nThe previous round was not accepted. Fix exactly this:\n%s\nGaps: %s\nFindings: %s\n"
                         "Check results (run by the engine, outside your sandbox): %s\n" % (
@@ -584,19 +594,50 @@ class Engine:
                             compact(checks)))
         raise Blocked("stage %d not accepted after %s rounds" % (i + 1, self.cfg["max_rounds"]))
 
+    def tree_hash(self):
+        """The worktree as git would commit it now, untracked files included, without touching the real index."""
+        with tempfile.TemporaryDirectory() as d:
+            env = dict(os.environ, GIT_INDEX_FILE=os.path.join(d, "index"))
+            for args in (["read-tree", "HEAD"], ["add", "-A"]):
+                subprocess.run(["git"] + args, cwd=self.wt, env=env, capture_output=True)
+            r = subprocess.run(["git", "write-tree"], cwd=self.wt, env=env, capture_output=True, text=True)
+            return r.stdout.strip()
+
+    def task_diff(self):
+        """The task's diff against where it started, untracked files included."""
+        tree = self.tree_hash()
+        return tl.git("diff", self.base_sha(), tree, cwd=self.wt) if tree else self.git("diff", self.base_sha())
+
     def run_checks(self, st, name):
-        """The stage's checks and the gate, run by the engine outside any sandbox: the results are facts."""
+        """The stage's checks and the gate, run by the engine outside any sandbox: the results are facts. A check
+        already run on the same tree and base is not run again (reruns of finished work redid every check)."""
         cmds = list(st["checks"])
         if self.cfg["gate"] and self.cfg["gate"] not in cmds:
             cmds.append(self.cfg["gate"])
         self.log("node", "checks: %s" % name)
+        cache_path = tl.config_dir() / "check-cache" / ("%s.json" % self.bead)
+        try:
+            cache = json.loads(cache_path.read_text())
+        except (OSError, ValueError):
+            cache = {}
+        key = "%s %s" % (self.tree_hash(), self.git("rev-parse", self.cfg["base"]))
         out = []
         for c in cmds:
             t = time.time()
+            hit = cache.get(key, {}).get(c)
+            if hit:
+                out.append(dict(hit, cached=True))
+                self.detail(["%s `%s` exit %d (same tree and base: earlier result)" % ("✓" if hit["exit"] == 0 else "✗",
+                                                                                        c, hit["exit"])])
+                continue
             rc, tail = self.sh(c, timeout=float(self.cfg["node_timeout_min"]) * 60)
-            out.append({"cmd": c, "exit": rc, "tail": tail[-1500:]})
+            res = {"cmd": c, "exit": rc, "tail": tail[-1500:]}
+            out.append(res)
+            cache.setdefault(key, {})[c] = res
             self.detail(["%s `%s` exit %d (%ds)" % ("✓" if rc == 0 else "✗", c, rc, time.time() - t)] +
                         (tail.splitlines()[-3:] if rc else []))
+        cache_path.parent.mkdir(exist_ok=True)
+        cache_path.write_text(json.dumps({key: cache[key]} if key in cache else {}))  # only the latest tree is worth keeping
         return out
 
     def finish(self, bead):
@@ -674,6 +715,20 @@ class Engine:
         if rc:  # a repo's bd rules can refuse (e.g. a minimum reason length): say so, never report a clean close
             self.warn("bd refused to %s %s (exit %s): close it by hand" % ("block" if outcome not in ("landed", "done")
                                                                           else "close", self.bead, rc))
+
+
+def count_tests(diff, pattern):
+    """Tests added and removed in a unified diff: lines matching the repo's test pattern (engine.test_pattern)."""
+    rx = re.compile(pattern)
+    added = removed = 0
+    for ln in diff.splitlines():
+        if ln.startswith(("+++", "---")):
+            continue
+        if ln.startswith("+") and rx.search(ln[1:]):
+            added += 1
+        elif ln.startswith("-") and rx.search(ln[1:]):
+            removed += 1
+    return added, removed
 
 
 ENGINE_NOTES = ("Plan (engine)", "Review (engine", "Reflect (engine)", "Blocked:")
@@ -813,7 +868,6 @@ A check that times out or fails only in your sandbox is not yours to retry; note
 Proof the engine cannot rerun (a test seen failing after a planted fault, then passing once restored; a manual
 measurement): save the exact commands and their output as files in {evidence}/ and name those files in the summary.
 Only that proof goes there, never your own runs of the checks.
-Never write the engine's files (engine-*.json, judge-input.json).
 Rules: no commits, no pushing, no branches; no suppressions; do not weaken, skip or delete tests; stay inside the
 stage. question: empty unless only the owner can decide something about the task itself (then explain it for a
 phone); never a question about tools, sandbox or permissions."""

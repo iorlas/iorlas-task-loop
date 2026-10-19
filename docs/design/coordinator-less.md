@@ -54,7 +54,7 @@ Python stdlib, macOS and Linux first.
 
 | node | kind | output |
 |---|---|---|
-| reset | script | slot on `task/<id>`, brief exported to `.task/<id>/` |
+| reset | script | slot on `task/<id>`; brief and every engine file in `<config dir>/task-loop/runs/<run>/` (no worker can write there); `.task/<id>/evidence/` is the writer's |
 | plan | AI (strong) | `{stages[{goal, files, checks, writer|hard}], risks[{what, check}], question?}` |
 | write | AI, one **resumed thread per task** | free text (counts as nothing) |
 | verify | AI, fresh | `{checks[{cmd, exit, tail}], stats, outside_touches[], risk_flags[], verdict: accept|gaps, gaps[]}` |

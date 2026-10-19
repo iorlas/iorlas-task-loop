@@ -101,7 +101,8 @@ class EngineTest(unittest.TestCase):
         c.update(cfg)
         with mock.patch.object(engine, "find_route", return_value="/fake/route.py"), \
                 mock.patch.object(engine, "call_delegate", script), mock.patch.object(engine.time, "sleep"):
-            rc = engine.Engine("t-1", str(self.wt), c).run()
+            self.eng = engine.Engine("t-1", str(self.wt), c)
+            rc = self.eng.run()
         return rc, script
 
     def test_happy_path_lands_and_closes(self):
@@ -124,13 +125,49 @@ class EngineTest(unittest.TestCase):
         with mock.patch.object(tl, "show", return_value=bead), mock.patch.object(tl, "comments", return_value=comments):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "verify": [ACCEPT_V], "judge": [judge("accept")]})
         self.assertEqual(rc, 0)
-        brief = (self.wt / ".task" / "t-1" / "brief.md").read_text()
+        brief = (self.eng.run_dir / "brief.md").read_text()
         for kept in ("Add the file f.", "f.txt exists", "owner: keep it short", "Use the old format", "t-0 The epic",
                      "Blocked: failed: stopped (SIGTERM)"):
             self.assertIn(kept, brief)
         for dropped in ("p" * 50, "r" * 50, "x" * 50, "minutes=26"):
             self.assertNotIn(dropped, brief)
         self.assertLess(len(brief.encode()), 5000)
+
+    def test_engine_files_live_outside_the_worktree_and_stale_ones_are_cleared(self):
+        td = self.wt / ".task" / "t-1"
+        (td / "evidence").mkdir(parents=True)
+        (td / "evidence" / "seen-red.log").write_text("red then green\n")
+        (td / "rechecks.json").write_text('{"exit": 124}')  # a writer's sandbox run from an earlier run
+        (td / "verify-9.json").write_text("{}")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "verify": [ACCEPT_V], "judge": [judge("accept")]})
+        self.assertEqual(rc, 0)
+        self.assertEqual(sorted(p.name for p in td.iterdir()), ["evidence"])
+        self.assertTrue((td / "evidence" / "seen-red.log").exists())
+        run = self.eng.run_dir
+        self.assertFalse(str(run).startswith(str(self.wt)))
+        for f in ("brief.md", "plan.json", "engine-checks.json"):
+            self.assertTrue((run / f).exists(), f)
+        self.assertIn(str(run / "brief.md"), s.prompts[0])
+
+    def test_checks_on_an_equal_tree_and_base_are_reused(self):
+        count = Path(self.tmp.name) / "count"
+        bump = PY + ' -c "open(%r, \'a\').write(\'1\')"' % str(count)
+        c = engine.load_cfg(str(self.wt))
+        eng = engine.Engine("t-1", str(self.wt), c)
+        st = {"checks": [bump], "files": []}
+        first = eng.run_checks(st, "s")
+        again = eng.run_checks(st, "s")
+        self.assertEqual(count.read_text(), "1")
+        self.assertTrue(again[0].get("cached"))
+        (self.wt / "new.txt").write_text("x\n")  # an untracked file changes the tree
+        eng.run_checks(st, "s")
+        self.assertEqual(count.read_text(), "11")
+        self.assertEqual(first[0]["exit"], 0)
+
+    def test_tests_added_and_removed_come_from_the_diff(self):
+        diff = ("+++ b/tests/test_a.py\n+def test_one():\n+    pass\n+def test_two():\n-def test_old():\n"
+                "+++ b/T.cs\n+    [Fact]\n+    [Test]\n")
+        self.assertEqual(engine.count_tests(diff, engine.DEFAULTS["test_pattern"]), (4, 1))
 
     def test_writer_is_told_the_repo_worker_rules_and_never_to_run_the_gate(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "verify": [ACCEPT_V], "judge": [judge("accept")]},
