@@ -195,13 +195,16 @@ def delegate_version(route):
 
 
 def access(route, node, wanted):
-    """The flag that gives this step the host, when the task wants it. Delegate 0.23.0+: `--host`, on the write step
-    only (delegate's own config says which lanes take it; a reviewer stays on its usual lane). 0.20-0.22: `--no-sandbox`,
-    the write step from 0.20.0, every step from 0.21.0. Returns (flag or "", the reason it is off although wanted, or "")."""
+    """The flag that gives this step the host, when the task wants it. Delegate 0.24.0+: `--host` on every step (any lane
+    takes it; a Claude planner or reviewer gets Bash with it, so it can look at what the writer will need). 0.23: on the
+    write step only (0.23 sent host work to Claude alone; a reviewer kept its usual lane). 0.20-0.22: `--no-sandbox`, the
+    write step from 0.20.0, every step from 0.21.0. Returns (flag or "", the reason it is off although wanted, or "")."""
     if not wanted:
         return "", ""
     v = delegate_version(route)
-    if v is None or v >= (0, 23):
+    if v is None or v >= (0, 24):
+        return "--host", ""
+    if v >= (0, 23):
         return ("--host" if node == "write" else ""), ""
     need = (0, 20) if node == "write" else (0, 21)
     if v < need:
@@ -857,12 +860,13 @@ class Engine:
         """What the step may run, by whether it is sandboxed."""
         free = bool(access(self.route, node, self.host)[0])
         if node == "write":
-            return ("You run outside a sandbox, on this machine: run the tests and tools you need (unit tests, the editor's "
-                    "batch tests, builds) to see your change work before you say it is done." if free else
+            return ("You have the host: run the tests and tools you need (unit tests, the editor's batch tests, builds) to "
+                    "see your change work before you say it is done. If a command is refused, do not reword it to get "
+                    "around the refusal: say which command and why you needed it." if free else
                     "Run only the quick checks (seconds, no build of the whole project, no editor) to see your change "
                     "works; anything that needs the host is run by the engine after you.")
-        return ("You run outside a sandbox and may run commands to check facts (open cited links, run a linter or a "
-                "test); never edit, create or delete files." if free else "")
+        return ("You have the host and may run commands to check facts (look at files the task names outside the "
+                "repo, open cited links, run a linter or a test); never edit, create or delete files." if free else "")
 
     def tree_hash(self):
         """The worktree as git would commit it now, untracked files included, without touching the real index."""

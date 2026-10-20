@@ -800,7 +800,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(s.access, [("planner", NS), ("worker", NS), ("reviewer", NS)])
         w = next(p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker")
-        self.assertIn("outside a sandbox", w)
+        self.assertIn("You have the host", w)
         self.assertTrue(all(x["host"] for x in self.eng.sessions))
 
     def test_no_sandbox_on_delegate_0_20_is_writer_only_with_a_warning(self):
@@ -821,7 +821,7 @@ class EngineTest(unittest.TestCase):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.21.0")
         self.assertFalse(any(u for _, u in s.access))
         w = next(p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker")
-        self.assertNotIn("outside a sandbox", w)
+        self.assertNotIn("You have the host", w)
         with mock.patch.object(tl, "show", return_value={"id": "t-1", "title": "Add f", "metadata": {},
                                                          "labels": ["no-sandbox"]}):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.21.0",
@@ -840,8 +840,15 @@ class EngineTest(unittest.TestCase):
             self.assertEqual(rc, 0)
             self.assertEqual(s.access, [("planner", ""), ("worker", "--host"), ("reviewer", "")], cfg)
             w = next(p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker")
-            self.assertIn("outside a sandbox", w)
+            self.assertIn("You have the host", w)
             self.assertEqual([x["host"] for x in self.eng.sessions], [False, True, False])
+
+    def test_host_on_delegate_0_24_goes_to_every_step(self):
+        # 0.24: any lane takes --host; Claude read steps get Bash with it (the planner can see what the writer will need)
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.24.0", host=True)
+        self.assertEqual(rc, 0)
+        self.assertEqual(s.access, [("planner", "--host"), ("worker", "--host"), ("reviewer", "--host")])
+        self.assertIn("may run commands to check facts", s.prompts[0])
 
     def test_a_host_label_alone_grants_nothing(self):
         # a worker with Bash can label its own bead: only the committed config on the base branch grants the host
