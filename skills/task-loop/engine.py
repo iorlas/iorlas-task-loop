@@ -411,7 +411,7 @@ class Engine:
             self.warn(why)
         self.log("node", "%s: %s" % (node, title), node=node, backend="delegate", role=role, resume=bool(resume))
         timeout = float(self.cfg["node_timeout_min"]) * 60
-        waited, attempt_prompt, attempt, errs, transient, fresh = 0.0, prompt, 1, ["not run"], 0, False
+        waited, attempt_prompt, attempt, errs, transient, fresh, quick = 0.0, prompt, 1, ["not run"], 0, False, 0
         while attempt <= 2:
             r, j = call_delegate(self.route, role, attempt_prompt, SCHEMAS[node], self.wt, resume, timeout,
                                  self.err_path, writer, self.session, self.bead, "%s · %s: %s" % (self.bead, node, title),
@@ -445,6 +445,19 @@ class Engine:
                 self.warn("%s: network down, retrying in 1 min: %s" % (node, said.strip()[:160]))
                 time.sleep(60)
                 waited += 60
+                continue
+            if (st == "failed" and r.data is None and not (j or {}).get("denied")
+                    and not ((j or {}).get("tokens") or {}).get("out") and r.secs < 90):
+                # failed before any work (no output tokens, seconds in): a vendor or network blip, e.g. right after the
+                # Mac wakes; delegate 0.27 answers stop for it, 0.26 and older failed. Back off, then pause, never fail
+                wait = min(240.0, 60.0 * 2 ** quick)
+                if waited + wait > float(self.cfg["lane_wait_min"]) * 60:
+                    raise Blocked("paused: %s failed before any work for %s min (%s)" % (
+                        node, self.cfg["lane_wait_min"], said.strip()[:200] or st))
+                quick += 1
+                self.warn("%s failed before any work, retrying in %d min: %s" % (node, wait // 60, said.strip()[:160]))
+                time.sleep(wait)
+                waited += wait
                 continue
             if st == "error" and permanent_errors(self.route):
                 if resume and not fresh:  # e.g. a resume whose host flag differs from its first run: start a new thread

@@ -1257,6 +1257,33 @@ class DelegateLauncher(unittest.TestCase):
         self.assertEqual([c[0] for c in s.calls].count("reviewer"), 2)
         self.assertIn("network", self.eng.log_path.read_text())
 
+    # lifesim 2026-10-20: woken from sleep, Codex ended its turn after 12 s with a vendor error and no tokens; delegate
+    # 0.26 answered failed and the engine closed two beads as failed
+    QUICK = {"v": 1, "status": "failed", "data": None, "ref": "w1", "family": "openai", "tokens": None,
+             "say": "failed: codex: workspace routing discovery failed"}
+
+    def test_a_failure_before_any_work_waits_and_retries(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [self.QUICK, self.QUICK, WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[0] for c in s.calls].count("worker"), 3)
+        log = self.eng.log_path.read_text()
+        self.assertIn("failed before any work", log)
+        self.assertNotIn("did not match the required output schema", "".join(s.prompts))
+
+    def test_a_failure_before_any_work_that_keeps_coming_pauses_the_bead_open(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [self.QUICK] * 20}, lane_wait_min=5)
+        self.assertEqual(rc, 2)
+        self.assertEqual(self.blocked, [])  # paused, not failed: the bead stays open for the next run
+        self.assertTrue(any(c[:1] == ("update",) and "open" in c for c in self.bd_calls))
+        self.assertIn("workspace routing discovery failed", self.eng.log_path.read_text())
+        self.assertLess([c[0] for c in s.calls].count("worker"), 20)
+
+    def test_a_failure_after_work_still_fails(self):
+        worked = dict(self.QUICK, tokens={"in": 90000, "cached": 0, "out": 4000})
+        rc, s = self.run_engine({"plan": [PLAN], "write": [worked, worked]})
+        self.assertEqual(rc, 2)
+        self.assertTrue(self.blocked and self.blocked[0].startswith("failed:"))
+
     def test_a_logged_out_worker_pauses_without_retry_and_leaves_the_bead_open(self):
         out = {"v": 1, "status": "failed", "say": "Failed to authenticate: OAuth session expired and could not be refreshed"}
         rc, s = self.run_engine({"plan": [out, out]})
