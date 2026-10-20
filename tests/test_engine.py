@@ -388,7 +388,7 @@ class EngineTest(unittest.TestCase):
 
     def test_the_planner_gets_the_repo_rules_and_is_told_the_engine_owns_the_gate(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
-                                worker_rules="docs/agents/codex.md", gate="just check")
+                                worker_rules="docs/agents/codex.md", gate="just check", max_fix_rounds=0)
         self.assertIn("docs/agents/codex.md", s.prompts[0])
         self.assertIn("never put `just check` in a stage", s.prompts[0])
 
@@ -519,8 +519,9 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(tl.git("status", "--porcelain", cwd=str(self.wt)), "")
 
     def test_a_rerun_after_a_red_land_gate_lands_the_reviewed_work_once(self):
-        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, gate=FALSE)
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, gate=FALSE, max_fix_rounds=0)
         self.assertEqual(rc, 2)
+        self.assertIn("gate red", self.blocked[0])
         first = tl.git("rev-parse", "task/t-1", cwd=str(self.wt))
         self.assertEqual(tl.git("show", "task/t-1:f.txt", cwd=str(self.wt)), "d2")
         idle = dict(WRITE, summary="re-proved, no change")
@@ -592,8 +593,8 @@ class EngineTest(unittest.TestCase):
 
     def test_a_red_gate_replans_with_its_output_and_keeps_the_accepted_stages(self):
         red = PY + ' -c "import sys; print(\'RS0016 ContentPack ctor\'); sys.exit(1)"'
-        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, gate=red)
-        self.assertEqual(rc, 2)
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE] * 3, "review": [CLEAN] * 3}, gate=red)
+        self.assertEqual(rc, 2)  # two fix rounds could not make it green: the next run re-plans with the gate's output
         self.assertEqual(self.checkpoint()["step"], "gate-red")
         fix = dict(PLAN, stages=[dict(PLAN["stages"][0], goal="reconcile the API file")])
         rc, s = self.run_engine({"plan": [fix], "write": [WRITE], "review": [CLEAN]})
@@ -661,6 +662,68 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])
         self.assertIn("already accepted", s.prompts[0])
+
+    # -- land: fix loop after a red gate or a conflict, one land at a time, limits across runs
+    def test_a_red_gate_goes_to_a_fix_round_and_lands(self):
+        gate = PY + ' -c "import sys; t=open(\'f.txt\').read().strip(); print(\'gate saw\', t); sys.exit(1 if t == \'d2\' else 0)"'
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]}, gate=gate)
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer", "worker", "reviewer"])
+        fix = s.prompts[3]
+        self.assertIn("gate saw d2", fix)
+        self.assertIn("fix", s.prompts[4].lower())
+        self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d4")
+        subjects = tl.git("log", "--format=%s", "origin/main", cwd=str(self.wt)).splitlines()
+        self.assertEqual(sum("(t-1)" in x for x in subjects), 1)
+
+    def test_fix_rounds_are_limited_then_the_bead_is_stuck(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE] * 3, "review": [CLEAN] * 3}, gate=FALSE)
+        self.assertEqual(rc, 2)
+        self.assertEqual([c[0] for c in s.calls].count("worker"), 3)  # the stage, then 2 fix rounds
+        self.assertIn("2 fix rounds", self.blocked[0])
+
+    def test_a_rebase_conflict_goes_to_a_fix_round_not_blocked(self):
+        other = Path(self.tmp.name, "other")
+        real = DelegateScript.__call__
+
+        def main_moves(this, route, role, *a, **kw):
+            if role == "reviewer" and not other.exists():  # another task lands f.txt while this one is reviewed
+                sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(other), cwd=self.tmp.name)
+                (other / "f.txt").write_text("theirs\n")
+                sh("git", "add", "-A", cwd=other)
+                sh("git", "commit", "-qm", "theirs", cwd=other)
+                sh("git", "push", "-q", "origin", "HEAD:main", cwd=other)
+            return real(this, route, role, *a, **kw)
+        with mock.patch.object(DelegateScript, "__call__", main_moves):
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertIn("conflict", s.prompts[3])
+        log = tl.git("log", "--format=%s", "origin/main", cwd=str(self.wt)).splitlines()
+        self.assertEqual(log[:2], ["Add f (t-1)", "theirs"])
+        self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d4")
+
+    def test_land_lock_is_one_per_repo_across_processes(self):
+        if os.name == "nt":
+            self.skipTest("POSIX flock")
+        eng = self.checks_engine()
+        probe = ("import fcntl,sys; f=open(sys.argv[1],'a')\n"
+                 "try:\n fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB); print('free')\n"
+                 "except OSError: print('held')")
+        with eng.land_lock() as path:
+            held = subprocess.run([sys.executable, "-c", probe, str(path)], capture_output=True, text=True).stdout
+        free = subprocess.run([sys.executable, "-c", probe, str(path)], capture_output=True, text=True).stdout
+        self.assertEqual((held.strip(), free.strip()), ("held", "free"))
+
+    def test_replans_count_across_runs(self):
+        with self.stop_at("reviewer", 3):  # stage 1 sent back twice -> replan; stopped in the new plan's review
+            self.run_engine({"plan": [PLAN, PLAN], "write": [WRITE] * 3,
+                             "review": [review(unmet=["a"]), review(unmet=["b"])]}, max_rounds=2)
+        self.assertEqual(self.checkpoint()["replans"], 1)
+        rc, s = self.run_engine({"write": [WRITE] * 2, "review": [review(unmet=["c"]), review(unmet=["d"])]},
+                                max_rounds=2)
+        self.assertEqual(rc, 2)
+        self.assertIn("re-plan", self.blocked[-1])
+        self.assertNotIn("planner", [c[0] for c in s.calls])
 
     def test_close_reason_says_what_landed_and_a_refused_close_is_a_warning(self):
         with mock.patch.object(tl, "cmd_close", side_effect=lambda a: self.closed.append(a.reason) or 1):

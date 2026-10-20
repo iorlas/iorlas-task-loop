@@ -62,6 +62,13 @@ red gate at land re-plans with the gate's output. A changed bead (an answered as
 stages and re-plans the rest. A commit or edit that is not the engine's starts over. `tl run-task ID --fresh` drops
 the checkpoint. A replan keeps the stages already accepted.
 
+Land is one bead at a time per repo (a lock across slots and sessions): fetch, rebase, gate, push. A red gate or a
+rebase conflict goes to a fix round outside the lock: the writer fixes it, every stage's checks run again (plus no
+conflict markers), and a review checks the fix only; then land tries again. `engine.max_fix_rounds` (2) per bead, then
+the bead is blocked and its next run re-plans with the gate's output. Limits per bead, across runs: `max_replans` (1;
+a changed bead never counts), `max_fix_rounds` (2); per stage: `max_rounds` (3), `max_check_tries` (3) red checks in a
+row per round.
+
 Check groups run static → tests → acceptance (the plan's per-stage checks); a red group skips the rest. `when` runs a
 check only when the task changed a matching path; `retry` reruns a known flaky one. A repo check that passed on the
 same tree and base is reused; mark one `"cache": false` when it reads state git cannot see. Stage checks always run. The gate runs once, on the rebased

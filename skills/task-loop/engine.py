@@ -8,6 +8,7 @@ A coordinator session may start it and watch it (attended mode); nothing here ne
 docs/design/coordinator-less.md. Python 3.8+, standard library only.
 """
 
+import contextlib
 import fnmatch
 import hashlib
 import json
@@ -19,6 +20,11 @@ import subprocess
 import sys
 import tempfile
 import threading
+
+try:
+    import fcntl
+except ImportError:  # Windows: one land at a time is not enforced
+    fcntl = None
 import time
 import uuid
 from pathlib import Path
@@ -33,7 +39,8 @@ DEFAULTS = {
     "budget_min": 180,
     "max_rounds": 3,                  # review send-backs per stage before a replan
     "max_check_tries": 3,             # red checks in a row that end a round (checks never reach the reviewer red)
-    "max_replans": 1,
+    "max_replans": 1,                 # per bead, across runs; a changed bead (an owner's answer) never counts
+    "max_fix_rounds": 2,              # per bead: a red gate or a conflict at land gets this many fix rounds
     "node_timeout_min": 45,
     "delegate": "",                   # path to delegate's route.py; "" = the newest installed iorlas-delegate
     "lane_wait_min": 60,              # how long a step waits for a lane that is out before the task is blocked
@@ -284,6 +291,8 @@ class Engine:
         self.done = []        # goals of the stages accepted on this branch, across plans and runs
         self.accepted = []    # their indices in the current plan
         self.brief_hash = ""
+        self.replans = 0
+        self.fixes = 0
         self.stuck_why = ""
         self.host = bool(cfg.get("host") or cfg.get("no_sandbox"))
         self.sandbox_warned = set()
@@ -571,13 +580,12 @@ class Engine:
             plan, i, state = self.resume_point()
             if plan is None:
                 plan, i, state = self.plan(again=self.replan_first), 0, None
-            replans = 0
             while i < len(plan["stages"]):
                 d = self.stage(plan, i, state)
                 state = None
                 if d == "replan":
-                    replans += 1
-                    self.stats["replans"] = replans
+                    self.replans += 1
+                    self.stats["replans"] = replans = self.replans
                     if replans > int(self.cfg["max_replans"]):
                         raise Blocked("stage %d stuck after %s rounds and %d re-plan(s): it needs the owner's hint, "
                                       "a split, or more budget. What failed: %s" % (
@@ -645,7 +653,7 @@ class Engine:
 
     def save_checkpoint(self, **at):
         rec = {"v": 1, "bead": self.bead, "branch": self.git("symbolic-ref", "--short", "-q", "HEAD"),
-               "plan": self.plan_data, "done": self.done, "accepted": self.accepted,
+               "plan": self.plan_data, "done": self.done, "accepted": self.accepted, "replans": self.replans, "fixes": self.fixes,
                "writer": self.writer.get("delegate") or "", "brief": self.brief_hash, "head": self.git("rev-parse", "HEAD"),
                "closed": False,
                "run": self.log_path.stem, "t": time.time(), **at}
@@ -694,6 +702,7 @@ class Engine:
             self.drop_checkpoint()
             return None, 0, None
         self.done = list(ck["done"])
+        self.replans, self.fixes = int(ck.get("replans") or 0), int(ck.get("fixes") or 0)
         if ck["writer"]:
             self.writer["delegate"] = ck["writer"]
         if ck["step"] == "gate-red":
@@ -725,11 +734,13 @@ class Engine:
         review (high/medium findings, unmet requirements). The writer's or the reviewer's question is the owner's."""
         st = plan["stages"][i]
         last = i == len(plan["stages"]) - 1
-        name = "stage %d/%d" % (i + 1, len(plan["stages"]))
         state = state or {}
+        fix = state.get("fix")
+        name = state.get("name") or "stage %d/%d" % (i + 1, len(plan["stages"]))
         feedback, rounds, red, n = state.get("feedback", ""), state.get("rounds", 0), 0, state.get("n", 0)
         while True:
-            self.save_checkpoint(stage=i, rounds=rounds, n=n, feedback=feedback, step="write")
+            if not fix:  # a fix runs at land: its checkpoint stays at land, and a resume lands again
+                self.save_checkpoint(stage=i, rounds=rounds, n=n, feedback=feedback, step="write")
             n += 1
             self.stats["writes"] += 1
             if n >= 2:
@@ -776,7 +787,8 @@ class Engine:
                 brief=self.run_dir / "brief.md", plan=self.run_dir / "plan.json", n=i + 1, goal=st["goal"],
                 base=self.base_sha(), checks=compact(checks), summary=w["summary"], evidence=self.evidence_dir,
                 added=self.stats["tests_added"], removed=self.stats["tests_removed"],
-                scope=("the stage goal and every requirement and acceptance criterion of the task" if last else
+                scope=(state["scope"] if fix else
+                       "the stage goal and every requirement and acceptance criterion of the task" if last else
                        "the stage goal (later stages cover the rest of the task)")) +
                 ("\n" + self.where("review") if self.where("review") else ""), writer_family=wfam)
             same = self.last_flag == "same_family"
@@ -913,28 +925,110 @@ class Engine:
         if self.dry:
             self.log("note", "dry run: not landing")
             return ""
-        for attempt in range(1, 6):
-            self.log("node", "land (try %d)" % attempt)
-            rc, tail = self.sh(["git", "fetch", "-q", "origin"])
-            if rc == 0:
-                rc, tail = self.sh(["git", "rebase", "-q", self.cfg["base"]])
+        pushes = 0
+        while True:  # one land at a time per repo: rebase, gate and push see the latest base; a fix runs outside the lock
+            problem = None
+            with self.land_lock():
+                self.log("node", "land (try %d)" % (pushes + 1))
+                rc, tail = self.sh(["git", "fetch", "-q", "origin"])
+                if rc == 0:
+                    rc, tail = self.sh(["git", "rebase", "-q", self.cfg["base"]])
+                if rc:
+                    unmerged = self.git("diff", "--name-only", "--diff-filter=U")
+                    if not unmerged:
+                        self.sh(["git", "rebase", "--abort"])
+                        raise Blocked("failed: fetch or rebase onto %s failed; branch kept\n%s" % (self.cfg["base"], tail))
+                    problem = ("conflict", "Conflicted files: %s\n%s" % (", ".join(unmerged.split()), tail))
+                elif self.cfg["gate"]:
+                    rc, tail = self.sh(self.cfg["gate"])
+                    if rc:
+                        problem = ("gate", tail)
+                if not problem:
+                    rc, tail = self.sh(self.cfg["land"], env={"TASK_LOOP_GATED_TREE": self.git("rev-parse", "HEAD^{tree}")}
+                                       if self.cfg["gate"] else None)  # a pre-push hook may skip a gate this tree passed
+                    if rc == 0:
+                        sha = self.git("rev-parse", "HEAD")
+                        tl.cmd_land(Args(id=self.bead, sha=sha, worktree=self.wt))
+                        return sha
+                    if not re.search(r"rejected|non-fast-forward|fetch first|stale info", tail):
+                        raise Blocked("land failed\n" + tail)
+                    pushes += 1
+                    if pushes >= 5:
+                        raise Blocked("land rejected 5 times: main moves too fast")
+                    self.warn("push rejected (main moved), try %d of 5" % pushes)
+                    continue
+            self.fix(*problem)
+
+    FIX = {"gate": ("make the gate pass on the tree rebased onto the latest base",
+                    "\nAll stages were accepted, then the gate%s failed on the tree rebased onto the latest base (another "
+                    "task may have landed first). Fix exactly this, without undoing what the stages built:\n%s\n"),
+           "conflict": ("resolve the merge conflict with the latest base",
+                        "\nAll stages were accepted, then rebasing onto the latest base hit a merge conflict (another task "
+                        "landed first)%s. The conflict markers are in the files: resolve every one, keeping both changes' "
+                        "intent. Do not run git.\n%s\n")}
+    MARKERS = "! git grep -n -I -E '^(<<<<<<<|>>>>>>>)( |$)' -- ."
+
+    def fix(self, kind, tail):
+        """One fix round at land: write → checks (every stage's checks, again) → a review of the fix only. A gate fix is
+        folded into the task's commit; a conflict fix continues the rebase. max_fix_rounds per bead, then stuck."""
+        self.fixes += 1
+        limit = int(self.cfg["max_fix_rounds"])
+        what = {"gate": "gate red on the rebased tree", "conflict": "merge conflict with main"}[kind]
+        if self.fixes > limit:
+            if kind == "conflict":
+                self.sh(["git", "rebase", "--abort"])
+            raise Blocked("%s after %d fix rounds: it needs the owner's hint\n%s" % (what, limit, tail[-3000:]))
+        self.warn("land: %s, fix round %d of %d" % (what, self.fixes, limit))
+        self.save_checkpoint(stage=len((self.plan_data or {}).get("stages") or []), rounds=0, n=0, feedback="", step="land")
+        checks = list(dict.fromkeys(c for s in (self.plan_data or {}).get("stages") or [] for c in s["checks"]))
+        if kind == "conflict":
+            checks.append(self.MARKERS)
+        goal, text = self.FIX[kind]
+        st = {"goal": "Fix: " + goal, "files": [], "checks": checks, "hard": False}
+        d = self.stage({"stages": [st]}, 0, {
+            "fix": True, "name": "fix %d/%d" % (self.fixes, limit),
+            "feedback": text % ((" (`%s`)" % self.cfg["gate"]) if kind == "gate" and self.cfg["gate"] else "",
+                                compact([{"cmd": self.cfg["gate"] or "rebase", "exit": 1, "status": "failed",
+                                          "group": "gate", "tail": tail[-4000:]}])),
+            "scope": "the fix only: it must %s without breaking what the accepted stages built" % goal})
+        if kind == "conflict":
+            if self.sh(self.MARKERS)[0]:
+                return self.fix("conflict", "conflict markers are still in the tree after the fix")
+            self.sh(["git", "add", "-A"], check=True)
+            rc, out = self.sh(["git", "-c", "core.editor=true", "rebase", "--continue"])
             if rc:
                 self.sh(["git", "rebase", "--abort"])
-                raise Blocked("merge conflict with main; branch kept\n" + tail)
-            if self.cfg["gate"]:
-                rc, tail = self.sh(self.cfg["gate"])
-                if rc:
-                    raise Blocked("gate red on the rebased tree\n" + tail)
-            rc, tail = self.sh(self.cfg["land"], env={"TASK_LOOP_GATED_TREE": self.git("rev-parse", "HEAD^{tree}")}
-                               if self.cfg["gate"] else None)  # a pre-push hook may skip a gate this tree just passed
-            if rc == 0:
-                sha = self.git("rev-parse", "HEAD")
-                tl.cmd_land(Args(id=self.bead, sha=sha, worktree=self.wt))
-                return sha
-            if not re.search(r"rejected|non-fast-forward|fetch first|stale info", tail):
-                raise Blocked("land failed\n" + tail)
-            self.warn("push rejected (main moved), try %d of 5" % attempt)
-        raise Blocked("land rejected 5 times: main moves too fast")
+                raise Blocked("failed: the rebase did not continue after the conflict fix\n" + out)
+        elif self.git("status", "--porcelain"):
+            self.sh(["git", "add", "-A"], check=True)
+            self.sh(["git", "commit", "-q", "--amend", "--no-edit"], check=True)
+        if d != "accept":
+            self.warn("land: the fix round did not pass its checks and review; landing tries the gate again")
+
+    @contextlib.contextmanager
+    def land_lock(self):
+        """One land at a time per repo, across slots and sessions: an flock the OS drops when the process dies."""
+        d = tl.config_dir() / "locks"
+        d.mkdir(exist_ok=True)
+        url = self.git("remote", "get-url", "origin") or str(self.wt)
+        path = d / ("land-%s.lock" % hashlib.sha1(url.encode()).hexdigest()[:12])
+        f = open(path, "a+")
+        try:
+            if fcntl:
+                try:
+                    fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except OSError:
+                    self.log("note", "waiting for the land lock (held by %s)" % (path.read_text().strip() or "?"))
+                    fcntl.flock(f, fcntl.LOCK_EX)
+            f.seek(0)
+            f.truncate()
+            f.write(self.bead)
+            f.flush()
+            yield path
+        finally:
+            if fcntl:
+                fcntl.flock(f, fcntl.LOCK_UN)
+            f.close()
 
     def wip(self, why):
         self.sh(["git", "add", "-A"])
@@ -946,6 +1040,9 @@ class Engine:
             signal.signal(signal.SIGTERM, signal.SIG_IGN)  # a second stop must not break the close-out
         why = why or ("stopped before a reason was recorded" if outcome == "failed" else "")
         mins = (time.time() - self.t0) / 60
+        gd = Path(self.git("rev-parse", "--absolute-git-dir") or ".")
+        if (gd / "rebase-merge").exists() or (gd / "rebase-apply").exists():  # stopped mid-conflict-fix: back to the branch
+            self.sh(["git", "rebase", "--abort"])
         branch = self.git("symbolic-ref", "--short", "-q", "HEAD")
         if outcome not in ("landed", "done") and branch and branch == getattr(self, "branch", None):
             if self.git("status", "--porcelain"):
