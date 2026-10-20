@@ -43,7 +43,7 @@ DEFAULTS = {
     "max_fix_rounds": 2,              # per bead: a red gate or a conflict at land gets this many fix rounds
     "node_timeout_min": 45,
     "delegate": "",                   # path to delegate's route.py; "" = the newest installed iorlas-delegate
-    "lane_wait_min": 60,              # how long a step waits for a lane that is out before the task is blocked
+    "lane_wait_min": 10,              # how long a step waits in its slot for a lane; longer: the run pauses (slot freed)
     "checks": [],                     # repo checks: [{id, cmd, group: static|tests|acceptance, when: [globs], retry}]
     "host": False,                    # the work needs the host (Unity, an editor): write steps get delegate's --host
                                       # (--no-sandbox below 0.23); a bead label host / sandbox overrides it for one bead
@@ -407,9 +407,13 @@ class Engine:
             st = (j or {}).get("status")
             self.trace_call(node, role, attempt, r, j, bool(flag))
             if st in ("lane_out", "stop"):
-                wait = max(60.0, min(600.0, float(j.get("retry_after") or 0) - time.time()))
-                if waited + wait > float(self.cfg["lane_wait_min"]) * 60:
-                    raise Blocked("paused: no lane for %s (%s)" % (node, j.get("say") or st))
+                due = float(j.get("retry_after") or 0)
+                wait = max(60.0, due - time.time())
+                if waited + wait > float(self.cfg["lane_wait_min"]) * 60:  # a long wait frees the slot; the checkpoint resumes
+                    raise Blocked("paused: no lane for %s until %s (%s)" % (
+                        node, time.strftime("%H:%M", time.localtime(due)) if due > time.time() else "a lane frees",
+                        j.get("say") or st))
+                wait = min(600.0, wait)
                 self.warn("%s waits %d min for a lane: %s" % (node, wait // 60, j.get("say") or st))
                 time.sleep(wait)
                 waited += wait
@@ -553,6 +557,7 @@ class Engine:
             self.wip("left from an earlier run")
             self.left_dirty = True
         if exists:
+            self.free_branch(branch)
             self.sh(["git", "checkout", "-q", branch], check=True)
         else:
             self.sh(["git", "checkout", "-q", "-B", branch, self.cfg["base"]], check=True)
@@ -562,6 +567,20 @@ class Engine:
         self.export_brief()
         self.branch = branch
         return branch
+
+    def free_branch(self, branch):
+        """A paused bead resumes in any free slot: the slot that last held its branch lets go of it (detached there),
+        unless that slot has uncommitted work, which is never touched."""
+        here, path = str(Path(self.wt).resolve()), None
+        for line in (self.git("worktree", "list", "--porcelain") or "").splitlines():
+            if line.startswith("worktree "):
+                path = line[len("worktree "):]
+            elif line == "branch refs/heads/" + branch and path and str(Path(path).resolve()) != here:
+                if tl.git("status", "--porcelain", cwd=path):
+                    raise Blocked("failed: %s is checked out in %s with uncommitted work; commit or clean it there" % (
+                        branch, path))
+                tl.git("checkout", "-q", "--detach", cwd=path)
+                self.log("note", "%s was checked out in %s: detached it there to resume here" % (branch, path))
 
     def export_brief(self):
         """The task as workers read it: the bead's own text and the people's comments, never the engine's own records

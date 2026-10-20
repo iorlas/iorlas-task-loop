@@ -86,7 +86,7 @@ Exit code: 0 when the object was printed, whatever `status` says; non-zero only 
 
 - route.py: `.task-loop.json → engine.delegate` (a path) when set, else the newest installed `iorlas-delegate` 0.14.0+.
   None → the task is blocked with the install command.
-- `lane_out` and `stop` make the step wait (up to `engine.lane_wait_min`, 60), then block the task.
+- `lane_out` and `stop` make the step wait in its slot up to `engine.lane_wait_min` (10); a longer wait pauses the run (the bead stays open, the slot is free, the checkpoint resumes it).
 - `docs/dev/integrations.md` names the call sites.
 
 ## Claude nodes (owner, 2026-10-18)

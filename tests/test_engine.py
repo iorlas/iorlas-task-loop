@@ -1055,6 +1055,38 @@ class DelegateLauncher(unittest.TestCase):
         self.assertTrue(any(c[:1] == ("update",) and "open" in c and any("paused: no lane for plan" in x for x in c)
                             for c in self.bd_calls))
 
+    def test_a_lane_out_for_long_pauses_at_once_and_frees_the_slot(self):
+        later = {"v": 1, "status": "lane_out", "retry_after": time.time() + 3 * 3600, "say": "codex out until 21:00"}
+        rc, s = self.run_engine({"plan": [PLAN], "write": [later]})
+        self.assertEqual(rc, 2)
+        self.assertEqual([c[0] for c in s.calls].count("worker"), 1)  # no hour of sleeping in the slot
+        self.assertEqual(self.blocked, [])
+        self.assertTrue(any(c[:1] == ("update",) and "open" in c and any("paused: no lane for write until" in x for x in c)
+                            for c in self.bd_calls))
+
+    def test_a_bead_branch_left_in_another_clean_slot_is_resumed_here(self):
+        sh("git", "checkout", "-q", "-b", "task/t-1", cwd=self.wt)
+        Path(self.wt, "g.txt").write_text("from slot s2\n")
+        sh("git", "add", "-A", cwd=self.wt)
+        sh("git", "commit", "-qm", "wip (t-1): paused", cwd=self.wt)
+        sh("git", "checkout", "-q", "--detach", cwd=self.wt)
+        other = Path(self.tmp.name, "s2")
+        sh("git", "worktree", "add", "-q", str(other), "task/t-1", cwd=self.wt)
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual(tl.git("show", "origin/main:g.txt", cwd=str(self.wt)), "from slot s2")
+        self.assertEqual(tl.git("symbolic-ref", "-q", "HEAD", cwd=str(other)), "")  # s2 let go of the branch
+
+    def test_a_bead_branch_with_uncommitted_work_in_another_slot_is_never_taken(self):
+        sh("git", "branch", "task/t-1", cwd=self.wt)
+        other = Path(self.tmp.name, "s2")
+        sh("git", "worktree", "add", "-q", str(other), "task/t-1", cwd=self.wt)
+        Path(other, "dirty.txt").write_text("someone's work\n")
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 2)
+        self.assertIn(str(other), self.blocked[0])
+        self.assertTrue(Path(other, "dirty.txt").exists())
+
     def test_another_contract_version_blocks(self):
         rc, _ = self.run_engine({"plan": [{"v": 2, "status": "done"}]})
         self.assertEqual(rc, 2)
