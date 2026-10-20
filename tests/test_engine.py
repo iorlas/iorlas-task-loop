@@ -893,6 +893,29 @@ class EngineTest(unittest.TestCase):
         self.assertIn("needs a human", self.blocked[0])
         self.assertIn("unity open client", self.blocked[0])
 
+    def test_a_second_denied_write_in_a_bead_needs_a_human_with_every_denied_command(self):
+        first = {"v": 1, "status": "done", "data": WRITE, "ref": "w1", "family": "claude",
+                 "denied": [{"tool": "Bash", "input": "git checkout x && pick"}]}
+        second = {"v": 1, "status": "done", "data": WRITE, "ref": "w2", "family": "openai",
+                  "denied": [{"tool": "shell", "input": "git restore x; pick"}]}
+        rc, s = self.run_engine({"plan": [PLAN], "write": [first, second, WRITE], "review": [CLEAN]}, route=ROUTE % "0.24.0")
+        self.assertEqual(rc, 2)
+        self.assertEqual([c[0] for c in s.calls].count("worker"), 2)
+        self.assertIn("needs a human", self.blocked[0])
+        for cmd in ("git checkout x && pick", "git restore x; pick"):
+            self.assertIn(cmd, self.blocked[0])
+
+    def test_denied_writes_count_across_runs_of_a_bead(self):
+        first = {"v": 1, "status": "done", "data": WRITE, "ref": "w1", "family": "claude",
+                 "denied": [{"tool": "Bash", "input": "curl -X POST x"}]}
+        with self.stop_at("worker", 2):
+            self.run_engine({"plan": [PLAN], "write": [first]}, route=ROUTE % "0.24.0")
+        again = dict(first, denied=[{"tool": "Bash", "input": "curl --data @f x"}])
+        rc, _ = self.run_engine({"write": [again, WRITE], "review": [CLEAN]}, route=ROUTE % "0.24.0")
+        self.assertEqual(rc, 2)
+        self.assertIn("curl -X POST x", self.blocked[-1])
+        self.assertIn("curl --data @f x", self.blocked[-1])
+
     def test_error_from_0_23_is_permanent(self):
         err = {"v": 1, "status": "error", "say": "--host: the planner chain has no allowed lane"}
         rc, s = self.run_engine({"plan": [err, PLAN]}, route=ROUTE % "0.23.0")

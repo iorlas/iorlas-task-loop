@@ -293,6 +293,7 @@ class Engine:
         self.brief_hash = ""
         self.replans = 0
         self.fixes = 0
+        self.denials = []     # commands refused to this bead's writers, across lanes and runs
         self.stuck_why = ""
         self.host = False  # granted after reset, from the base branch's .task-loop.json only (granted_host)
         self.sandbox_warned = set()
@@ -440,6 +441,12 @@ class Engine:
             if denied and errs:  # asking again meets the same refusal
                 raise Blocked("needs a human: the %s step was denied %s and gave no answer; run it or allow it, then "
                               "rerun. (%s)" % (node, denied, ((j or {}).get("text") or r.error or "")[:200]))
+            if denied and node == "write":  # once is a warning; twice in a bead is a pattern the owner must see
+                self.denials.append(denied)
+                if len(self.denials) >= 2:
+                    raise Blocked("needs a human: the writer was refused commands %d times in this task (a reworded "
+                                  "command may be a way around a refusal): %s. Run or allow them, then rerun."
+                                  % (len(self.denials), " | ".join(self.denials)))
             if denied:
                 self.warn("%s was denied %s and found another way" % (node, denied))
             if not errs:
@@ -683,7 +690,7 @@ class Engine:
 
     def save_checkpoint(self, **at):
         rec = {"v": 1, "bead": self.bead, "branch": self.git("symbolic-ref", "--short", "-q", "HEAD"),
-               "plan": self.plan_data, "done": self.done, "accepted": self.accepted, "replans": self.replans, "fixes": self.fixes,
+               "plan": self.plan_data, "done": self.done, "accepted": self.accepted, "replans": self.replans, "fixes": self.fixes, "denials": self.denials,
                "writer": self.writer.get("delegate") or "", "brief": self.brief_hash, "head": self.git("rev-parse", "HEAD"),
                "closed": False,
                "run": self.log_path.stem, "t": time.time(), **at}
@@ -733,6 +740,7 @@ class Engine:
             return None, 0, None
         self.done = list(ck["done"])
         self.replans, self.fixes = int(ck.get("replans") or 0), int(ck.get("fixes") or 0)
+        self.denials = list(ck.get("denials") or [])
         if ck["writer"]:
             self.writer["delegate"] = ck["writer"]
         if ck["step"] == "gate-red":
