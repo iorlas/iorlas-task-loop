@@ -821,6 +821,18 @@ class EngineTest(unittest.TestCase):
         self.assertEqual((a["kind"], a["status"], a["question"]), ("decision", "open", "Old format or new?"))
         self.assertTrue(any(c[:2] == ("comments", "add") and "%s (decision)" % a["id"] in c[3] for c in self.bd_calls))
 
+    def test_an_ask_names_its_repo_and_runs_the_owners_notify_command(self):
+        out = Path(self.tmp.name, "pushed")
+        (tl.config_dir()).mkdir(parents=True, exist_ok=True)
+        (tl.config_dir() / "notify").write_text('echo "$TL_ASK_KIND $TL_ASK_BEAD $TL_ASK_TEXT" > %s' % out)
+        self.run_engine({"plan": [dict(PLAN, question="Old format or new?")]})
+        self.assertEqual(Path(self.ask()["repo"]).resolve(), self.wt.resolve())
+        for _ in range(50):
+            if out.exists():
+                break
+            time.sleep(0.1)
+        self.assertEqual(out.read_text().strip(), "decision t-1 Old format or new?")
+
     def test_a_used_up_replan_is_a_stuck_ask(self):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [review(unmet=["a"])]},
                                 max_rounds=1, max_replans=0)

@@ -129,14 +129,23 @@ button{font:inherit;color:inherit}
   .back{display:inline-block}
   .ev{grid-template-columns:38px 18px 1fr;padding:3px 10px}.meta{grid-column:3}.detail{grid-column:3}
 }
+.banner{padding:6px 14px;background:var(--raise);border-bottom:1px solid var(--line);color:var(--fail);font-size:12px}
+#askn{color:var(--fail);font-weight:600}
+.ask{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:8px 10px;background:var(--raise)}
+.ask .top{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}.ask .kind{font-weight:600;text-transform:uppercase;font-size:11px}
+.ask .kind.stuck,.ask .kind.verify{color:var(--fail)}.ask .q{white-space:pre-wrap;margin:6px 0;font-size:13px}
+.ask textarea{width:100%;min-height:56px;box-sizing:border-box;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px;font:inherit}
+.ask button{margin-top:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:6px;padding:4px 12px;cursor:pointer}
+.ask .done{color:var(--mute);font-size:12px}
 </style>
 </head>
 <body data-view="1">
 <div class="bar">
   <span class="brand"><i></i>task-loop</span>
-  <div class="tabs" id="tabs"><button data-tab="tasks">Tasks</button><button data-tab="workers">Sessions</button></div>
+  <div class="tabs" id="tabs"><button data-tab="tasks">Tasks</button><button data-tab="workers">Sessions</button><button data-tab="asks">Asks <b id="askn"></b></button></div>
   <span class="stats" id="stats"></span><span class="grow"></span><span class="lanes" id="lanes"></span><span class="clock" id="clock"></span>
 </div>
+<div class="banner" id="banner" style="display:none"></div>
 <div class="wrap">
   <section class="pane" id="p1"><div class="ph" id="filters"></div><div class="scroll" id="list"></div></section>
   <section class="pane" id="p2"><div class="scroll" id="detail"><div class="empty">Pick a task</div></div></section>
@@ -151,6 +160,30 @@ function fmt(sec){if(sec==null||isNaN(sec))return'–';sec=Math.max(0,Math.round
 const ago=t=>t?fmt(now()-t)+' ago':'';
 const S={tab:'tasks',filter:'active',q:'',sum:null,task:null,taskRepo:null,detail:null,run:null,runs:[],events:[],open:new Set(),follow:true,fold:{}};
 try{Object.assign(S,JSON.parse(localStorage.getItem('tl.state')||'{}'));S.open=new Set();S.follow=true}catch(e){}
+(()=>{const u=new URLSearchParams(location.search);const tk=u.get('token');if(tk){try{localStorage.setItem('tl.token',tk)}catch(e){}
+  history.replaceState(null,'',location.pathname)}})();
+let ASKS={asks:[],delegate:{ok:true}};
+function renderAsks(){
+  const n=ASKS.asks.filter(a=>!a.answered_here&&!a.parked).length;$('askn').textContent=n||'';
+  const d=ASKS.delegate||{};const b=$('banner');
+  if(d.ok===false){b.style.display='';b.textContent='delegate: '+(d.say||[(d.out||[]).length?'lanes out: '+d.out.join(', '):'',(d.needs_input||[]).length?'needs setup: '+d.needs_input.map(x=>x.what||x).join(', '):''].filter(Boolean).join(' · '))}
+  else b.style.display='none';
+  if(S.tab!='asks')return;
+  $('filters').innerHTML='<span class="note">What the loop needs from you, most urgent first</span>';
+  $('list').innerHTML=ASKS.asks.length?ASKS.asks.map(a=>`<div class="ask"><div class="top"><span class="kind ${esc(a.kind)}">${esc(a.kind)}</span>
+    <span class="id">${esc(a.bead)}</span><span>${esc(a.title||'')}</span><span class="time">${fmt(a.age_s)} waiting${a.parked?' · parked':''}</span></div>
+    <div class="q">${esc(a.question)}</div>${a.answered_here?`<div class="done">answered: ${esc(a.answer)} — the next run picks it up</div>`:
+    `<textarea data-ans="${esc(a.id)}" placeholder="Your answer goes on the bead as a comment"></textarea><button data-send="${esc(a.id)}">Answer</button>`}</div>`).join('')
+    :'<div class="empty">Nothing needs you</div>';
+}
+async function sendAnswer(id){
+  const ta=document.querySelector(`[data-ans="${CSS.escape(id)}"]`);const text=(ta&&ta.value||'').trim();if(!text)return;
+  let tk='';try{tk=localStorage.getItem('tl.token')||''}catch(e){}
+  if(!tk){tk=prompt('Dashboard token (tl dash url prints a link with it)')||'';try{localStorage.setItem('tl.token',tk)}catch(e){}}
+  const r=await fetch('/api/answer',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+tk},body:JSON.stringify({ask:id,text})});
+  if(r.status==401){try{localStorage.removeItem('tl.token')}catch(e){};alert('Wrong token');return}
+  if(!r.ok){alert((await r.json().catch(()=>({}))).error||('error '+r.status))}
+  poll()}
 (()=>{const u=new URLSearchParams(location.search);if(u.get('task')){S.task=u.get('task');S.taskRepo=u.get('repo')||'';S.tab='tasks';S.run=u.get('run')}})();
 function save(){try{localStorage.setItem('tl.state',JSON.stringify({tab:S.tab,filter:S.filter,task:S.task,taskRepo:S.taskRepo,run:S.run,fold:S.fold}))}catch(e){}}
 function view(n){document.body.dataset.view=n}
@@ -280,6 +313,7 @@ async function poll(){
   busy=true;again=false;const g=gen,tab=S.tab,task=S.task,run=S.run,stale=()=>g!=gen||tab!=S.tab||task!=S.task||run!=S.run;
   try{
     const sum=await get('/api/summary');if(stale())return;S.sum=sum;renderLanes();
+    ASKS=await get('/api/asks');if(stale())return;renderAsks();if(tab=='asks')return;
     if(tab=='tasks'){renderTree();
       if(task){const d=await get(`/api/task?repo=${encodeURIComponent(S.taskRepo||'')}&id=${encodeURIComponent(task)}`);if(stale())return;S.detail=d;renderDetail()}}
     else{const runs=await get('/api/runs?hours=24');if(stale())return;S.runs=runs;S.runsLoaded=true;renderWorkerList()}
@@ -298,8 +332,8 @@ function renderLanes(){
 function tick(){$('clock').textContent=new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
   document.querySelectorAll('[data-since]').forEach(el=>el.textContent=fmt(now()-(+el.dataset.since)))}
 function setTab(t,keep){gen++;S.tab=t;if(!keep){S.run=null;S.events=[]}save();document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab==t));
-  $('p2').style.display=t=='workers'?'none':'';view(1);
-  if(t=='tasks'){if(S.sum)renderTree()}else renderWorkerList();  // draw what we have now; the poll refreshes it
+  $('p2').style.display=t=='tasks'?'':'none';$('p3').style.display=t=='asks'?'none':'';view(1);
+  if(t=='tasks'){if(S.sum)renderTree()}else if(t=='asks')renderAsks();else renderWorkerList();  // draw what we have now; the poll refreshes it
   poll()}
 
 document.addEventListener('click',e=>{
@@ -307,6 +341,7 @@ document.addEventListener('click',e=>{
   const fo=e.target.closest('[data-fold]');if(fo){const k=fo.dataset.fold;S.fold[k]=!S.fold[k];save();renderList();return}
   const bk=e.target.closest('[data-back]');if(bk){view(+bk.dataset.back);return}
   const tb=e.target.closest('[data-tab]');if(tb){setTab(tb.dataset.tab);return}
+  const sd=e.target.closest('[data-send]');if(sd){sendAnswer(sd.dataset.send);return}
   const row=e.target.closest('.row[data-id],.card[data-id]');if(row){gen++;S.task=row.dataset.id;S.taskRepo=row.dataset.repo;S.run=null;S.events=[];save();renderList();view(2);poll();return}
   const run=e.target.closest('[data-run]');if(run){gen++;S.run=run.dataset.run;S.open.clear();S.follow=true;save();
     document.querySelectorAll('[data-run]').forEach(x=>x.classList.toggle('sel',x.dataset.run==S.run));view(3);poll();return}

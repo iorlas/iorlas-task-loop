@@ -666,6 +666,7 @@ class Engine:
             bead = tl.show(self.bead)
             if not bead:
                 raise Blocked("failed: bead %s not found" % self.bead)
+            self.bead_title = bead.get("title") or ""
             hb.start()
             if not self.route:
                 raise Blocked("failed: the engine needs the iorlas-delegate plugin (0.14.0 or later): "
@@ -795,10 +796,32 @@ class Engine:
         a = {"v": 1, "id": "%s-%d" % (self.bead, n), "n": n, "bead": self.bead, "kind": kind,
              "question": (question or why)[:4000], "why": why[:4000], "run": self.log_path.stem, "t": time.time(),
              "parks_at": time.time() + 3 * 86400, "brief": self.brief_hash, "status": "open"}
+        common = self.git("rev-parse", "--path-format=absolute", "--git-common-dir")
+        a.update(repo=str(Path(common).parent) if common else str(self.wt),
+                 title=(getattr(self, "bead_title", "") or "")[:200])
         self.ask_path().parent.mkdir(exist_ok=True)
         self.ask_path().write_text(json.dumps(a, indent=1))
         self.comment("Ask (engine) %s (%s): %s" % (a["id"], kind, a["question"][:1500]))
+        self.notify(a)
         return a
+
+    def notify(self, a):
+        """The owner's push: ~/.config/task-loop/notify holds one shell command (ntfy, Pushover, a Telegram bot...);
+        it gets TL_ASK_KIND, TL_ASK_BEAD, TL_ASK_ID and TL_ASK_TEXT. Which service is the owner's choice."""
+        f = tl.config_dir() / "notify"
+        try:
+            cmd = f.read_text(encoding="utf-8").strip()
+        except OSError:
+            return
+        if not cmd:
+            return
+        env = dict(os.environ, TL_ASK_KIND=a["kind"], TL_ASK_BEAD=a["bead"], TL_ASK_ID=a["id"],
+                   TL_ASK_TEXT=a["question"][:500])
+        try:
+            subprocess.Popen(cmd, shell=True, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, start_new_session=(os.name != "nt"))
+        except OSError as e:
+            self.warn("notify failed: %s" % e)
 
     def checkpoint_path(self):
         return tl.config_dir() / "checkpoints" / ("%s.json" % self.bead)
@@ -1213,8 +1236,16 @@ class Engine:
         return rc == 0
 
     def close(self, outcome, why, sha, question):
+        old = None
         if hasattr(signal, "SIGTERM") and threading.current_thread() is threading.main_thread():
-            signal.signal(signal.SIGTERM, signal.SIG_IGN)  # a second stop must not break the close-out
+            old = signal.signal(signal.SIGTERM, signal.SIG_IGN)  # a second stop must not break the close-out
+        try:
+            self._close(outcome, why, sha, question)
+        finally:  # what the process starts after this (a notify command, the next test) must stay stoppable
+            if old is not None:
+                signal.signal(signal.SIGTERM, old)
+
+    def _close(self, outcome, why, sha, question):
         why = why or ("stopped before a reason was recorded" if outcome == "failed" else "")
         mins = (time.time() - self.t0) / 60
         gd = Path(self.git("rev-parse", "--absolute-git-dir") or ".")

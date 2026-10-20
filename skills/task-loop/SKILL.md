@@ -76,6 +76,12 @@ run on the last stage and again in every fix round at land. A writer may add cas
 added by the writer); none can be removed, since the plan is the engine's. Pictures under the task's `evidence/` are
 copied to the run dir at close and named on the bead.
 
+Dashboard Asks tab: open asks, most urgent first, each answerable in place (the answer goes on the bead as a comment and
+opens it; first answer wins). Answering needs the token in `~/.config/task-loop/dash.token`: `tl dash url` prints
+`ANSWER LINK`s with it, open one on the phone once. A red banner shows when delegate says a subscription lane is out.
+Push: put one shell command in `~/.config/task-loop/notify`; each new ask runs it with `TL_ASK_KIND`, `TL_ASK_BEAD`,
+`TL_ASK_ID`, `TL_ASK_TEXT`. A dashboard left on an older plugin version restarts at the next session start.
+
 Intake: a bead with no acceptance criteria (the field, or a `## Acceptance Criteria` section) is a ticket ask before any
 AI step; a plan of more than `engine.max_stages` (3) stages is a split ticket, unless the owner already answered one.
 

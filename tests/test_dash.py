@@ -6,6 +6,7 @@ import sys
 import tempfile
 import time
 import unittest
+import urllib.error
 import urllib.request
 from pathlib import Path
 from unittest import mock
@@ -180,6 +181,63 @@ class Live(unittest.TestCase):
                 self.assertEqual(s["repos"], [])
                 self.assertEqual(json.loads(urllib.request.urlopen(base + "/api/runs").read()), [])
                 self.assertIn(b"task-loop", urllib.request.urlopen(base + "/").read())
+            finally:
+                p.terminate()
+                p.wait(5)
+
+
+class Asks(unittest.TestCase):
+    """The owner answers an ask from the phone: only with the token, first answer wins, the bead is commented and opened."""
+
+    def test_answer_needs_the_token_and_reaches_the_bead_once(self):
+        with tempfile.TemporaryDirectory() as d:
+            port = free_port()
+            d = Path(d)
+            bin_ = d / "bin"
+            bin_.mkdir()
+            (bin_ / "bd").write_text("#!/bin/sh\necho \"$*\" >> %s\n" % (d / "bd.log"))
+            (bin_ / "bd").chmod(0o755)
+            asks = d / "task-loop" / "asks"
+            asks.mkdir(parents=True)
+            (asks / "x-1.json").write_text(json.dumps({"v": 1, "id": "x-1-1", "bead": "x-1", "kind": "decision",
+                                                       "question": "Old or new?", "t": time.time() - 3600,
+                                                       "parks_at": time.time() + 86400, "status": "open",
+                                                       "repo": str(d)}))
+            env = dict(os.environ, XDG_CONFIG_HOME=str(d), APPDATA=str(d), TASK_LOOP_DASH_BIND="127.0.0.1", HOME=str(d),
+                       USERPROFILE=str(d), PATH=str(bin_) + os.pathsep + os.environ["PATH"])
+            p = subprocess.Popen([sys.executable, str(ROOT / "skills" / "task-loop" / "dash" / "server.py"),
+                                  "--port", str(port)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            try:
+                base = "http://127.0.0.1:%d" % port
+                for _ in range(50):
+                    try:
+                        urllib.request.urlopen(base + "/api/version", timeout=1)
+                        break
+                    except OSError:
+                        time.sleep(0.1)
+                a = json.loads(urllib.request.urlopen(base + "/api/asks").read())
+                self.assertEqual([x["id"] for x in a["asks"]], ["x-1-1"])
+                self.assertGreater(a["asks"][0]["age_s"], 3000)
+                token = (d / "task-loop" / "dash.token").read_text().strip()
+
+                def post(tok, text):
+                    req = urllib.request.Request(base + "/api/answer", method="POST",
+                                                 data=json.dumps({"ask": "x-1-1", "text": text}).encode(),
+                                                 headers={"Content-Type": "application/json",
+                                                          **({"Authorization": "Bearer " + tok} if tok else {})})
+                    try:
+                        return urllib.request.urlopen(req).status
+                    except urllib.error.HTTPError as e:
+                        return e.code
+                self.assertEqual(post("", "new"), 401)
+                self.assertEqual(post("wrong", "new"), 401)
+                self.assertEqual(post(token, "New format."), 200)
+                self.assertEqual(post(token, "Old, actually."), 409)
+                log = (d / "bd.log").read_text()
+                self.assertIn("comments add x-1 New format.", log)
+                self.assertIn("update x-1 --status open", log)
+                self.assertNotIn("Old, actually", log)
+                self.assertIn(b"Asks", urllib.request.urlopen(base + "/").read())
             finally:
                 p.terminate()
                 p.wait(5)

@@ -734,6 +734,87 @@ def run_events(run_id, limit=800):
 
 # ---- server ---------------------------------------------------------------------------------------------------------
 
+# ---- asks: the owner's answers (the only writes this server makes) --------------------------------------------------
+
+def token():
+    """A secret for answer POSTs, made once (0600). `tl dash url` prints the links with it for the owner's phone."""
+    f = config_dir() / "dash.token"
+    try:
+        t = f.read_text().strip()
+        if t:
+            return t
+    except OSError:
+        pass
+    import secrets
+    config_dir().mkdir(parents=True, exist_ok=True)
+    t = secrets.token_urlsafe(24)
+    f.write_text(t)
+    try:
+        os.chmod(f, 0o600)
+    except OSError:
+        pass
+    return t
+
+
+def asks():
+    out, now = [], time.time()
+    for f in glob.glob(str(config_dir() / "asks" / "*.json")):
+        a = read_json(f, {}) or {}
+        if not isinstance(a, dict) or a.get("v") != 1 or a.get("status") != "open":
+            continue
+        a = {k: v for k, v in a.items() if k not in ("brief",)}
+        a["age_s"] = int(now - float(a.get("t") or now))
+        a["parked"] = now > float(a.get("parks_at") or now + 1)
+        a["answered_here"] = bool(a.get("answer"))
+        out.append(a)
+    order = {"stuck": 0, "verify": 1, "decision": 2, "ticket": 3}
+    out.sort(key=lambda a: (a["parked"], a["answered_here"], order.get(a.get("kind"), 9), -a["age_s"]))
+    return {"asks": out, "delegate": delegate_status()}
+
+
+def delegate_status():
+    """The banner: what delegate says about its lanes (route.py status --json v1); task-loop never reads vendors."""
+    def load():
+        routes = glob.glob(os.path.expanduser("~/.claude/plugins/cache/*/iorlas-delegate/*/skills/delegate/route.py"))
+        if not routes:
+            return {"ok": False, "say": "delegate is not installed"}
+        key = lambda p: [int(x) if x.isdigit() else 0 for x in p.split("/iorlas-delegate/")[1].split("/")[0].split(".")]
+        try:
+            r = subprocess.run([sys.executable, max(routes, key=key), "status", "--json", "--recent", "5"],
+                               capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=20)
+            out = r.stdout.strip()
+            j = json.loads(out[out.index("{"):])  # one object, pretty-printed or not
+        except (OSError, ValueError, IndexError, subprocess.SubprocessError) as e:
+            return {"ok": False, "say": "delegate status failed: %s" % e}
+        # a credit lane that is out, or unknown subscription use, does not stop an unattended run: no red banner
+        out = [n for n, ln in (j.get("lanes") or {}).items()
+               if isinstance(ln, dict) and ln.get("out") and ln.get("kind") != "credit"]
+        return {"ok": not out, "out": out, "needs_input": j.get("needs_input") or []}
+    return cached("delegate", 60, load)
+
+
+def answer(body):
+    """First answer wins: a comment on the bead (the engine reads it as the bead changing) and the bead opened."""
+    for f in glob.glob(str(config_dir() / "asks" / "*.json")):
+        a = read_json(f, {}) or {}
+        if a.get("id") != body.get("ask"):
+            continue
+        if a.get("status") != "open" or a.get("answer"):
+            return 409, {"error": "already answered"}
+        text = (body.get("text") or "").strip()
+        if not text:
+            return 400, {"error": "empty answer"}
+        cwd = a.get("repo") or None
+        r = subprocess.run(["bd", "comments", "add", a["bead"], text], cwd=cwd, capture_output=True, text=True)
+        if r.returncode:
+            return 502, {"error": "bd: " + (r.stderr or r.stdout)[-300:]}
+        subprocess.run(["bd", "update", a["bead"], "--status", "open"], cwd=cwd, capture_output=True, text=True)
+        a.update(answer=text, answer_t=time.time())
+        Path(f).write_text(json.dumps(a, indent=1))
+        return 200, {"ok": True}
+    return 404, {"error": "no such ask"}
+
+
 def tailscale_ip():
     exe = shutil.which("tailscale") or ("/Applications/Tailscale.app/Contents/MacOS/Tailscale"
                                           if os.path.exists("/Applications/Tailscale.app") else None)
@@ -804,6 +885,8 @@ def make_handler(port, addrs):
                     body = all_runs(float(q.get("hours", "24")))
                 elif u.path == "/api/events":
                     body = run_events(q.get("id", ""))
+                elif u.path == "/api/asks":
+                    body = asks()
                 elif u.path in ("/", "/index.html"):
                     return self.send(200, page.read_bytes(), "text/html; charset=utf-8")
                 else:
@@ -812,6 +895,20 @@ def make_handler(port, addrs):
                 body = {"error": "%s: %s" % (type(e).__name__, e)}
                 return self.send(500, json.dumps(body).encode(), "application/json")
             self.send(200, json.dumps(body, default=str).encode(), "application/json")
+        def do_POST(self):
+            import hmac
+            u = urlparse(self.path)
+            got = (self.headers.get("Authorization") or "").replace("Bearer ", "", 1).strip()
+            if not got or not hmac.compare_digest(got, token()):
+                return self.send(401, b'{"error": "token"}', "application/json")
+            try:
+                body = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 65536)) or b"{}")
+            except ValueError:
+                return self.send(400, b'{"error": "json"}', "application/json")
+            if u.path != "/api/answer":
+                return self.send(404, b"not found", "text/plain")
+            code, out = answer(body)
+            self.send(code, json.dumps(out).encode(), "application/json")
     return H
 
 
@@ -832,6 +929,7 @@ def main():
     ap.add_argument("--port", type=int, default=7878)
     a = ap.parse_args()
     addrs = bind_addrs()
+    token()
     handler = make_handler(a.port, addrs)
     servers = []
     for addr in addrs:

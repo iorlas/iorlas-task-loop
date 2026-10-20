@@ -587,6 +587,12 @@ def cmd_dash(a):
         return 0 if v else 1
     if a.op == "url":
         print_urls(v)
+        try:  # the links that may answer asks: open one on the phone once, the page keeps the token
+            t = (config_dir() / "dash.token").read_text().strip()
+        except OSError:
+            t = ""
+        for u in (v or {}).get("urls", []) if t else []:
+            print("ANSWER LINK %s/?token=%s" % (u, t))
         return 0
     # ensure: running and current, else (re)start detached
     if v and v.get("version") == code_version():
@@ -630,6 +636,13 @@ def cmd_hook(a):
             f.parent.mkdir(exist_ok=True)
             f.write_text(json.dumps({"session": sid, "transcript": d.get("transcript_path"), "cwd": d.get("cwd"),
                                      "source": d.get("source"), "t": now()}), encoding="utf-8")
+    except Exception:
+        pass
+    try:  # a dashboard left running by an older plugin version restarts on this code (it ran 0.5.3 for days)
+        v = ping()
+        if v and v.get("version") != code_version():
+            subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "dash", "ensure"], stdin=subprocess.DEVNULL,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=(os.name != "nt"))
     except Exception:
         pass
     return 0
