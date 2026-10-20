@@ -945,7 +945,7 @@ class Engine:
             w, wfam = self.ai("write", "%s write %d" % (name, n), WRITE_PROMPT.format(
                 brief=self.brief_text(), plan=self.plan_text(), n=i + 1, goal=st["goal"],
                 files=", ".join(st["files"]), checks="\n".join("- " + c for c in st["checks"]) or "- (none named)",
-                feedback=feedback, evidence=self.evidence_dir, where=self.where("write"), gate=(" (`%s`)" % self.cfg["gate"]) if self.cfg["gate"] else "",
+                feedback=feedback, evidence=self.evidence_dir, where=self.where("write"), blocked=self.blocked_line(), gate=(" (`%s`)" % self.cfg["gate"]) if self.cfg["gate"] else "",
                 rules=("\nRead %s first: this repo's rules for work in your sandbox (what runs there, what does not)."
                        % (Path(self.wt) / self.cfg["worker_rules"])) if self.cfg["worker_rules"] else "") +
                 "\nThe plan's acceptance cases run on the last stage. If you find a case they miss, add it to new_cases (the "
@@ -1025,13 +1025,36 @@ class Engine:
         """What the step may run, by whether it is sandboxed."""
         free = bool(access(self.route, node, self.host)[0])
         if node == "write":
-            return ("You have the host: run the tests and tools you need (unit tests, the editor's batch tests, builds) to "
-                    "see your change work before you say it is done. If a command is refused, do not reword it to get "
-                    "around the refusal: say which command and why you needed it." if free else
-                    "Run only the quick checks (seconds, no build of the whole project, no editor) to see your change "
+            if free:
+                return ("You have the host: run the tests and tools you need (unit tests, the editor's batch tests, "
+                        "builds) to see your change work before you say it is done. If a command is refused, do not "
+                        "reword it to get around the refusal: say which command and why you needed it.")
+            if self.escalates():
+                return ("Before you say it is done, compile your change and run the stage's checks yourself (the build, "
+                        "the analyzers, the editor's batch tests), so a compile or analyzer error never reaches the "
+                        "engine. When the sandbox blocks a command, ask once to run that exact command outside it, with "
+                        "a one-line reason; an automatic reviewer approves or refuses it. If it is refused, do not reword "
+                        "it: say which command and move on. The engine reruns every check after you.")
+            return ("Run only the quick checks (seconds, no build of the whole project, no editor) to see your change "
                     "works; anything that needs the host is run by the engine after you.")
         return ("You have the host and may run commands to check facts (look at files the task names outside the "
                 "repo, open cited links, run a linter or a test); never edit, create or delete files." if free else "")
+
+    def escalates(self):
+        """delegate 0.24.0+: a sandboxed Codex command the sandbox blocks may ask to run outside it, and an automatic
+        reviewer approves or refuses it (no human)."""
+        v = delegate_version(self.route)
+        return v is None or v >= (0, 24)
+
+    def blocked_line(self):
+        """What the writer does about a check its sandbox cannot run."""
+        if access(self.route, "write", self.host)[0]:
+            return ""
+        if self.escalates():
+            return ("A check still blocked after that one request (network, local ports, paths outside this folder) is "
+                    "run by the engine after you; say so in the summary and move on.")
+        return ("Checks your sandbox cannot run (network, local ports, paths outside this folder) are run by the engine "
+                "after you,\noutside the sandbox; say so in the summary and move on, never ask about permissions.")
 
     def tree_hash(self):
         """The worktree as git would commit it now, untracked files included, without touching the real index."""
@@ -1523,8 +1546,7 @@ Never run the gate{gate} or the issue tracker (bd): the engine runs the gate, an
 Repo instructions that say a change is done only when the full gate passes are for people working by hand; here the
 engine does that part.
 {feedback}
-Checks your sandbox cannot run (network, local ports, paths outside this folder) are run by the engine after you,
-outside the sandbox; say so in the summary and move on, never ask about permissions.
+{blocked}
 bad_checks: a stage check that fails for a reason no code change can fix (wrong arguments, a guard that rejects the
 uncommitted work this stage must leave, a pattern that matches harmless text), each with why; else empty. The engine
 then asks for a new plan instead of retrying.

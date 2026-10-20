@@ -1250,6 +1250,32 @@ class DelegateLauncher(unittest.TestCase):
         self.assertEqual(len(workers), 2)
         self.assertNotIn("did not match the required output schema", workers[1])
 
+    # lifesim 2026-10-20: "never ask about permissions" kept a sandboxed Codex from compiling; each bead lost 1-2 rounds
+    # to compile and analyzer errors the engine's checks then found
+    def write_prompt(self, version, **cfg):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % version, **cfg)
+        self.assertEqual(rc, 0, self.blocked)
+        return next(p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker")
+
+    def test_a_sandboxed_writer_on_delegate_0_24_runs_the_checks_and_may_escalate_one_command(self):
+        p = self.write_prompt("0.26.0")
+        self.assertIn("ask once to run that exact command outside it", p)
+        self.assertIn("compile", p)
+        self.assertNotIn("never ask about permissions", p)
+        self.assertNotIn("Run only the quick checks", p)
+
+    def test_a_sandboxed_writer_before_delegate_0_24_keeps_to_quick_checks(self):
+        p = self.write_prompt("0.22.0")
+        self.assertIn("Run only the quick checks", p)
+        self.assertIn("never ask about permissions", p)
+        self.assertNotIn("outside it", p)
+
+    def test_a_writer_with_the_host_is_told_it_has_the_host(self):
+        with mock.patch.object(engine.Engine, "granted_host", return_value=True):  # as if .task-loop.json granted it
+            p = self.write_prompt("0.26.0")
+        self.assertIn("You have the host", p)
+        self.assertNotIn("never ask about permissions", p)
+
     def test_network_down_waits_and_retries(self):
         down = {"v": 1, "status": "failed", "say": "API Error: Can't reach the API server — check your internet or DNS (ENOTFOUND)"}
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [down, CLEAN]})

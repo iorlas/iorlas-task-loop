@@ -54,7 +54,7 @@ host: the writer runs Unity and tests itself, on this machine. Only the `.task-l
 (`origin/main`) counts: a worker can label its own bead or edit a checkout's config, but not main without review and
 the gate. The labels `host` / `no-sandbox` alone grant nothing (a ⚠ says so); `sandbox` still turns it off for one bead.
 Delegate 0.24+ gets `--host` on every step and any lane takes it (Codex stays sandboxed; its automatic reviewer approves
-each command that must leave the sandbox); 0.23 on write steps only; 0.20-0.22 get `--no-sandbox`. A command the worker was denied shows as a ⚠; denied with no answer, or a second denied write in the bead (across lanes and runs), blocks it "needs a human:
+each command that must leave the sandbox); 0.23 on write steps only; 0.20-0.22 get `--no-sandbox`. Without the host, a writer on delegate 0.24+ compiles and runs the stage's checks itself, asking once per blocked command to run it outside the sandbox; before 0.24 it runs only quick checks and leaves the rest to the engine. A command the worker was denied shows as a ⚠; denied with no answer, or a second denied write in the bead (across lanes and runs), blocks it "needs a human:
 <command>". `tl run-task` refuses the main checkout as a worktree (it holds the bead database and the config).
 
 A rerun resumes, never restarts. Each step saves a checkpoint (`~/.config/task-loop/checkpoints/<bead>.json`): the
