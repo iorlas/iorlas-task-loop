@@ -933,7 +933,7 @@ class Engine:
                        % (Path(self.wt) / self.cfg["worker_rules"])) if self.cfg["worker_rules"] else "") +
                 "\nThe plan's acceptance cases run on the last stage. If you find a case they miss, add it to new_cases (the "
                 "criterion it proves, the check, why); never remove or weaken one." + UNCHECKED_TEXT, resume_key="writer")
-            self.unchecked += w.get("unchecked") or []
+            wrote_unchecked = w.get("unchecked") or []  # the review decides what is still unproven after the checks
             if w["question"].strip():
                 raise Blocked("owner decision needed", w["question"])
             self.add_cases(w.get("new_cases") or [])
@@ -973,7 +973,11 @@ class Engine:
                 scope=(state["scope"] if fix else
                        "the stage goal and every requirement and acceptance criterion of the task" if last else
                        "the stage goal (later stages cover the rest of the task)")) +
-                ("\n" + self.where("review") if self.where("review") else "") + self.cases_text() + UNCHECKED_TEXT,
+                ("\n" + self.where("review") if self.where("review") else "") + self.cases_text() +
+                ("\nThe writer could not check these itself (the engine's checks above ran after it); put in your "
+                 "unchecked only what is still unproven:\n" + "".join("- %s (%s)\n" % (u["what"], u["kind"])
+                                                                     for u in wrote_unchecked) if wrote_unchecked else "") +
+                UNCHECKED_TEXT,
                 writer_family=wfam)
             self.unchecked += review.get("unchecked") or []
             same = self.last_flag == "same_family"

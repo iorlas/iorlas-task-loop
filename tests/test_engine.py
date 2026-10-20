@@ -880,9 +880,16 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(s.calls, [])
         self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
 
+    def test_what_the_writer_could_not_check_goes_to_the_review_which_decides(self):
+        # lifesim-jjso: the writer could not run Unity, the engine's cases then did; the land must not stop on that
+        w = dict(WRITE, unchecked=[{"what": "the Unity tests need the host", "kind": "case"}])
+        rc, s = self.run_engine({"plan": [PLAN], "write": [w], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertIn("the Unity tests need the host", s.prompts[2])
+
     def test_an_unchecked_minor_item_lands_and_labels_the_bead_for_a_look(self):
-        w = dict(WRITE, unchecked=[{"what": "the tooltip wording on a phone", "kind": "other"}])
-        rc, _ = self.run_engine({"plan": [PLAN], "write": [w], "review": [CLEAN]})
+        r = dict(CLEAN, unchecked=[{"what": "the tooltip wording on a phone", "kind": "other"}])
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r]})
         self.assertEqual(rc, 0)
         self.assertIn(("label", "add", "t-1", "needs-owner-check"), [c[:4] for c in self.bd_calls])
 
