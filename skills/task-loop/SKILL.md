@@ -103,7 +103,7 @@ label the bead `needs-owner-check`.
 
 Check groups run static → tests → acceptance (the plan's per-stage checks); a red group skips the rest. `when` runs a
 check only when the task changed a matching path; `retry` reruns a known flaky one. A repo check that passed on the
-same tree and base is reused; mark one `"cache": false` when it reads state git cannot see. Stage checks always run. The gate runs once, on the rebased
+same tree and base is reused; mark one `"cache": false` when it reads state git cannot see. Stage checks always run, but a top-level part of one (`&&` or `;`) that is a repo check which ran and passed earlier in the same round is not run again (lifesim's `just unity-tests && grep ...` cases), unless an `rm` comes before it in that command. The gate runs once, on the rebased
 tree at land, and the push gets `TASK_LOOP_GATED_TREE` (the tree it passed) so a pre-push hook can skip a second run.
 
 No `slots` (or `count` 0): slots are off. No profile: say so in one line, use

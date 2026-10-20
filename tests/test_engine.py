@@ -269,6 +269,33 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(count.read_text(), "1")
         self.assertEqual(seen.read_text(), tl.git("rev-parse", "HEAD^{tree}", cwd=str(self.wt)))
 
+    # lifesim 2026-10-20: `just unity-tests` ran 5-6 times per round, once as the repo check, then again inside each stage
+    # check and case that starts with it (`just unity-tests && grep ...`), 2 min each
+    def test_a_repo_check_inside_a_stage_check_is_not_run_again_in_the_same_round(self):
+        count = Path(self.tmp.name) / "count"
+        bump = PY + ' -c "open(%r, \'a\').write(\'1\')"' % str(count)
+        eng = self.checks_engine(checks=[{"id": "ut", "cmd": bump, "group": "tests", "cache": False}])
+        st = {"checks": [bump + " && " + PY + ' -c "pass"', bump + "; " + PY + ' -c "pass"', bump], "files": []}
+        res = eng.run_checks(st, "s")
+        self.assertEqual(count.read_text(), "1")
+        self.assertEqual([c["exit"] for c in res], [0, 0, 0, 0])
+        self.assertIn("already passed", eng.log_path.read_text())
+        eng.run_checks(st, "s")  # the next round runs it again: the writer may have changed the tree
+        self.assertEqual(count.read_text(), "11")
+
+    def test_a_stage_check_that_deletes_first_or_quotes_the_command_runs_it(self):
+        count = Path(self.tmp.name) / "count"
+        bump = PY + ' -c "open(%r, \'a\').write(\'1\')"' % str(count)
+        eng = self.checks_engine(checks=[{"id": "ut", "cmd": bump, "group": "tests", "cache": False}])
+        st = {"checks": ["rm -f nothing.xml; " + bump, "echo '" + bump.replace("'", "") + " && x'"], "files": []}
+        eng.run_checks(st, "s")
+        self.assertEqual(count.read_text(), "11")  # the repo check, then the one after rm; the quoted text is no command
+
+    def test_a_red_part_after_the_reused_check_still_fails(self):
+        eng = self.checks_engine(checks=[{"id": "ut", "cmd": PY + ' -c "pass"', "group": "tests"}])
+        res = eng.run_checks({"checks": [PY + ' -c "pass" && ' + FALSE], "files": []}, "s")
+        self.assertEqual(res[-1]["exit"], 1)
+
     def test_a_stage_check_always_reruns_it_can_read_state_outside_the_tree(self):
         state = Path(self.tmp.name) / "editor-open"  # a running editor, a log, a bead comment: git cannot see them
         eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))

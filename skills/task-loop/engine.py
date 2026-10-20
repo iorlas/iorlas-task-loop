@@ -1096,7 +1096,7 @@ class Engine:
         key = "%s %s" % (self.tree_hash(), self.git("rev-parse", self.cfg["base"]))
         logs = self.run_dir / "checks"
         logs.mkdir(exist_ok=True)
-        out, red, changed = [], None, None
+        out, red, changed, passed = [], None, None, set()
         for n, c in enumerate(items):
             base = {"cmd": c["cmd"], "id": c["id"], "group": c["group"]}
             if red and c["group"] != red:
@@ -1108,6 +1108,11 @@ class Engine:
                     out.append(dict(base, exit=None, status="skipped", tail="",
                                     why="no change under %s" % ", ".join(c["when"])))
                     continue
+            cmd = c["cmd"]
+            if c["group"] == "acceptance":  # a repo check that passed this round is not run again inside a stage check
+                cmd, used = reuse_passed(c["cmd"], passed)
+                if used:
+                    self.log("note", "`%s` already passed this round: not run again in `%s`" % ("`, `".join(used), c["cmd"][:120]))
             hit = c["cache"] and cache.get(key, {}).get(c["cmd"])
             if hit:
                 res = dict(base, **hit)
@@ -1116,7 +1121,7 @@ class Engine:
                 t, tries = time.time(), 0
                 while True:
                     tries += 1
-                    rc, tail = self.sh(c["cmd"], timeout=float(self.cfg["node_timeout_min"]) * 60,
+                    rc, tail = self.sh(cmd, timeout=float(self.cfg["node_timeout_min"]) * 60,
                                        save=logs / ("%02d-%s.log" % (n, re.sub(r"[^\w.-]+", "_", c["id"])[:40])))
                     if rc == 0 or tries > c["retry"]:
                         break
@@ -1126,6 +1131,8 @@ class Engine:
                 if rc == 0 and c["cache"]:  # only a pass is a fact about the tree; a failure can come from outside git (stale
                     cache.setdefault(key, {})[c["cmd"]] = res  # build output, a held editor, a flake) and must rerun
             out.append(res)
+            if res["exit"] == 0 and c["group"] != "acceptance" and not res.get("cached"):  # its output files are fresh
+                passed.add(" ".join(c["cmd"].split()))
             if res["exit"] != 0:
                 red = c["group"]
         for c in out:
@@ -1440,6 +1447,58 @@ class Heartbeat:
 
 
 GROUPS = ("static", "tests", "acceptance")
+
+
+def split_top(cmd):
+    """A shell command's top-level parts and the `&&` or `;` after each, or None when quoting or nesting makes it
+    unclear (then nothing is reused)."""
+    parts, cur, sep, depth, q, i = [], "", [], 0, "", 0
+    while i < len(cmd):
+        ch = cmd[i]
+        if q:
+            if ch == "\\" and q == '"' and i + 1 < len(cmd):
+                cur += cmd[i:i + 2]
+                i += 2
+                continue
+            if ch == q:
+                q = ""
+        elif ch in "'\"":
+            q = ch
+        elif ch == "`":
+            return None
+        elif ch in "({":
+            depth += 1
+        elif ch in ")}":
+            depth -= 1
+        elif depth == 0 and (cmd.startswith("&&", i) or ch == ";"):
+            parts.append(cur)
+            sep.append("&&" if ch == "&" else ";")
+            cur, i = "", i + (2 if ch == "&" else 1)
+            continue
+        cur += ch
+        i += 1
+    if q or depth:
+        return None
+    parts.append(cur)
+    return list(zip(parts, sep + [""]))
+
+
+def reuse_passed(cmd, passed):
+    """cmd with each top-level part that is a repo check already passed this round replaced by `true`; an earlier
+    part that deletes files (rm) may remove that check's output, so from there on nothing is replaced."""
+    split = split_top(cmd)
+    if not split or not passed:
+        return cmd, []
+    out, used, deleting = [], [], False
+    for part, sep in split:
+        p = " ".join(part.split())
+        deleting = deleting or re.match(r"(?:\S*/)?rm\b", p) is not None
+        if p in passed and not deleting:
+            used.append(p)
+            out.append(" true " + sep)
+        else:
+            out.append(part + sep)
+    return "".join(out).strip(), used
 NOTABLE = re.compile(r"(?i)\b(skip|skipped|steps run|passed|failed|warnings?|errors?)\b")
 
 
