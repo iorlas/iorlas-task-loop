@@ -699,6 +699,108 @@ class EngineTest(unittest.TestCase):
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])
         self.assertIn("already accepted", s.prompts[0])
 
+    def test_a_failed_run_then_a_rerun_with_no_bead_edits_resumes_without_a_plan(self):
+        # lifesim 2026-10-20: the engine's own close lines changed the brief, so every rerun re-planned
+        with self.stop_at("reviewer", 3):
+            self.run_engine({"plan": [self.TWO], "write": [WRITE, WRITE, WRITE],
+                             "review": [CLEAN, review(unmet=["more"])]})
+        own = [{"author": "tl-sess1234", "text": "Blocked: failed: stopped (SIGTERM)", "created_at": "2026-10-20T21:11:48Z"},
+               {"author": "tl-sess1234", "text": "Reflect (engine): outcome=failed; minutes=83", "created_at": "2026-10-20T21:11:49Z"}]
+        labelled = dict(BEAD, labels=["needs-owner-check"])  # the engine's own label
+        with mock.patch.object(tl, "comments", return_value=own), mock.patch.object(tl, "show", return_value=labelled):
+            rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[0] for c in s.calls], ["worker", "reviewer"])
+        self.assertIn("outcome=failed", s.prompts[0])  # the worker still reads how the last run ended
+
+    def test_an_answered_ask_raised_in_a_conflict_fix_round_resumes_at_land(self):
+        # lifesim-6dq0: the fix round's checkpoint was saved mid-rebase (detached HEAD), so the rerun re-planned
+        other = Path(self.tmp.name, "other")
+        real = DelegateScript.__call__
+
+        def main_moves(this, route, role, *a, **kw):
+            if role == "reviewer" and not other.exists():
+                sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(other), cwd=self.tmp.name)
+                (other / "f.txt").write_text("theirs\n")
+                sh("git", "add", "-A", cwd=other)
+                sh("git", "commit", "-qm", "theirs", cwd=other)
+                sh("git", "push", "-q", "origin", "HEAD:main", cwd=other)
+            return real(this, route, role, *a, **kw)
+        denied = {"v": 1, "status": "failed", "data": None, "text": "", "ref": "w1", "family": "openai",
+                  "denied": [{"tool": "Bash", "input": "rg -n --glob '!**/.env*' '^<<<<<<<' ."}]}
+        with mock.patch.object(DelegateScript, "__call__", main_moves):
+            rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE, denied], "review": [CLEAN]}, route=ROUTE % "0.26.0")
+        self.assertEqual(rc, 2)
+        self.assertEqual(self.ask()["kind"], "verify")
+        ck = self.checkpoint()
+        self.assertEqual((ck["step"], ck["branch"]), ("land", tl.git("symbolic-ref", "--short", "HEAD", cwd=str(self.wt))))
+        answer = [{"author": "denis", "text": "False positive; rerun.", "created_at": "2026-10-20T23:25:00Z"}]
+        with mock.patch.object(tl, "comments", return_value=answer):
+            rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.26.0")
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[0] for c in s.calls], ["worker", "reviewer"])  # the fix round again, no plan
+        self.assertIn("conflict", s.prompts[0])
+
+    # -- reclaim: run-task takes back a bead the engine itself left blocked or claimed, never a person's
+    def reclaim(self, bead, comments=(), ask=None, live=()):
+        if ask:
+            p = tl.config_dir() / "asks" / "t-1.json"
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(json.dumps(ask))
+        with mock.patch.object(tl, "show", return_value=dict(BEAD, **bead)), \
+                mock.patch.object(tl, "comments", return_value=list(comments)), \
+                mock.patch.object(tl, "live_actors", return_value=set(live)):
+            ok, why = engine.reclaim("t-1", str(self.wt))
+        updates = [c for c in self.bd_calls if c[:1] == ("update",)]
+        return ok, why, updates
+
+    BLOCKED = {"author": "tl-61ba34e7", "text": "Blocked: failed: write node produced no valid output",
+               "created_at": "2026-10-20T21:11:48Z"}
+
+    def test_reclaim_releases_a_dead_engine_claim(self):
+        ok, _, up = self.reclaim({"status": "in_progress", "assignee": "tl-61ba34e7",
+                                  "lease_expires_at": "2020-01-01T00:00:00Z"})
+        self.assertTrue(ok)
+        self.assertIn(("update", "t-1", "--assignee", ""), up)
+
+    def test_reclaim_refuses_a_live_claim_and_a_persons_claim(self):
+        ok, why, up = self.reclaim({"status": "in_progress", "assignee": "tl-61ba34e7",
+                                    "lease_expires_at": "2999-01-01T00:00:00Z"})
+        self.assertFalse(ok)
+        self.assertIn("tl-61ba34e7", why)
+        ok, why, up = self.reclaim({"status": "in_progress", "assignee": "denis"})
+        self.assertFalse(ok)
+        self.assertEqual(up, [])
+
+    def test_reclaim_reopens_a_bead_the_engine_blocked_on_a_failed_run(self):
+        ok, _, up = self.reclaim({"status": "blocked", "assignee": "tl-61ba34e7"}, [self.BLOCKED])
+        self.assertTrue(ok)
+        self.assertIn(("update", "t-1", "--status", "open", "--assignee", ""), up)
+
+    def test_reclaim_reopens_when_a_comment_answers_the_open_ask(self):
+        ask = {"id": "t-1-1", "kind": "verify", "status": "open", "brief": "x", "t": 0}
+        ok, _, up = self.reclaim({"status": "blocked"}, [self.BLOCKED, {"author": "denis", "text": "Rerun.",
+                                                                      "created_at": "2026-10-20T23:25:00Z"}], ask)
+        self.assertTrue(ok)
+        self.assertIn(("update", "t-1", "--status", "open", "--assignee", ""), up)
+
+    def test_reclaim_leaves_blocked_what_a_person_parked_or_an_unanswered_ask_holds(self):
+        later = {"author": "denis", "text": "Parked until People is designed.", "created_at": "2026-10-21T00:05:00Z"}
+        ok, why, up = self.reclaim({"status": "blocked"}, [self.BLOCKED, later])
+        self.assertFalse(ok)
+        self.assertIn("commented after", why)
+        ask = {"id": "t-1-1", "kind": "decision", "status": "open", "brief": "x", "t": 0}
+        ok, why, up = self.reclaim({"status": "blocked"}, [self.BLOCKED], ask)
+        self.assertFalse(ok)
+        self.assertIn("t-1-1", why)
+        ok, why, up = self.reclaim({"status": "blocked"}, [])
+        self.assertFalse(ok)  # blocked by a person, not by the engine
+        ok, why, up = self.reclaim({"status": "blocked", "dependencies": [
+            {"id": "t-0", "title": "design", "status": "open", "dependency_type": "blocks"}]}, [self.BLOCKED])
+        self.assertFalse(ok)
+        self.assertIn("t-0", why)
+        self.assertEqual(up, [])
+
     # -- land: fix loop after a red gate or a conflict, one land at a time, limits across runs
     def test_a_red_gate_goes_to_a_fix_round_and_lands(self):
         gate = PY + ' -c "import sys; t=open(\'f.txt\').read().strip(); print(\'gate saw\', t); sys.exit(1 if t == \'d2\' else 0)"'

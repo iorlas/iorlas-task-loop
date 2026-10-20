@@ -61,8 +61,16 @@ A rerun resumes, never restarts. Each step saves a checkpoint (`~/.config/task-l
 plan, the accepted stages, the stage, round and feedback, the writer's thread, the branch head. The next run on that
 branch goes on at the same stage and round with the same thread, or straight to land when every stage was accepted. A
 red gate at land re-plans with the gate's output. A changed bead (an answered ask, a new comment) keeps the accepted
-stages and re-plans the rest. A commit or edit that is not the engine's starts over. `tl run-task ID --fresh` drops
-the checkpoint. A replan keeps the stages already accepted.
+stages and re-plans the rest; the engine's own close lines and labels (`needs-owner-check`) are no change, so a rerun
+after a failed or stopped run resumes without a plan. An ask raised in a land fix round resumes at land. A commit or
+edit that is not the engine's starts over. `tl run-task ID --fresh` drops the checkpoint. A replan keeps the stages
+already accepted.
+
+Before claiming, run-task takes back what the engine itself left: a `tl-` claim whose lease ran out (a restarted
+Claude session has a new actor name) is released, and a bead the engine blocked is reopened for a plain retry, or when
+a comment after the block answers the open ask. It stays blocked (`TAKEN: <why>`) while a person holds it, while an
+ask waits unanswered, when a person commented after the block with no ask open (they may have parked it), or while
+another bead blocks it.
 
 Land is one bead at a time per repo (a lock across slots and sessions): fetch, rebase, gate, push. A red gate or a
 rebase conflict goes to a fix round outside the lock: the writer fixes it, every stage's checks run again (plus no

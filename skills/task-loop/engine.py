@@ -598,9 +598,11 @@ class Engine:
     def export_brief(self):
         """The task as workers read it: the bead's own text and the people's comments, never the engine's own records
         (plans, reviews, reflects pile up on every rerun: 40 of lifesim-vbo's 45 KB brief)."""
-        text = brief_digest(tl.show(self.bead) or {"id": self.bead}, tl.comments(self.bead))
+        bead, comments = tl.show(self.bead) or {"id": self.bead}, tl.comments(self.bead)
+        text = brief_digest(bead, comments)
         (self.run_dir / "brief.md").write_text(text, encoding="utf-8")
-        self.brief_hash = hashlib.sha1(text.encode("utf-8")).hexdigest()
+        # the hash is what tells a rerun the owner changed something: the engine's own close line and labels are not that
+        self.brief_hash = hashlib.sha1(brief_digest(bead, comments, owner_only=True).encode("utf-8")).hexdigest()
         kb = len(text.encode("utf-8")) / 1024
         if kb > float(self.cfg["brief_kb"]):
             self.warn("the brief is %.0f KB (over %s KB): the bead may be too big for one task" % (kb, self.cfg["brief_kb"]))
@@ -827,7 +829,9 @@ class Engine:
         return tl.config_dir() / "checkpoints" / ("%s.json" % self.bead)
 
     def save_checkpoint(self, **at):
-        rec = {"v": 1, "bead": self.bead, "branch": self.git("symbolic-ref", "--short", "-q", "HEAD"),
+        # mid-rebase (a conflict fix) HEAD is detached: the checkpoint names the task branch the close goes back to
+        branch = self.git("symbolic-ref", "--short", "-q", "HEAD") or getattr(self, "task_branch", "")
+        rec = {"v": 1, "bead": self.bead, "branch": branch,
                "plan": self.plan_data, "done": self.done, "accepted": self.accepted, "replans": self.replans, "fixes": self.fixes, "denials": self.denials,
                "writer": self.writer.get("delegate") or "", "brief": self.brief_hash, "head": self.git("rev-parse", "HEAD"),
                "closed": False,
@@ -1116,6 +1120,7 @@ class Engine:
             self.log("note", "dry run: not landing")
             return ""
         pushes = 0
+        self.task_branch = self.git("symbolic-ref", "--short", "-q", "HEAD")
         while True:  # one land at a time per repo: rebase, gate and push see the latest base; a fix runs outside the lock
             problem = None
             with self.land_lock():
@@ -1351,12 +1356,17 @@ def ask_kind(why):
     return "stuck"
 
 
-def brief_digest(bead, comments):
+ENGINE_LABELS = ("needs-owner-check",)
+
+
+def brief_digest(bead, comments, owner_only=False):
     """Markdown brief: title, the bead's text fields whole, related beads by title, people's comments whole, and one
-    line on how the last engine run ended."""
+    line on how the last engine run ended. owner_only leaves out what the engine writes itself (that line, its
+    labels): the checkpoint compares that text, so an engine run never looks like the owner's edit."""
     out = ["# %s: %s" % (bead.get("id", ""), bead.get("title", ""))]
+    labels = [x for x in bead.get("labels") or [] if not (owner_only and x in ENGINE_LABELS)]
     meta = [bead.get("issue_type"), "P%s" % bead["priority"] if bead.get("priority") is not None else "",
-            ", ".join(bead.get("labels") or [])]
+            ", ".join(labels)]
     if any(meta):
         out.append(" · ".join(m for m in meta if m))
     for key, head in (("description", "Description"), ("acceptance_criteria", "Acceptance criteria"),
@@ -1372,7 +1382,7 @@ def brief_digest(bead, comments):
         out += ["", "## Comments"] + ["- %s: %s" % (c.get("author") or "?", (c.get("text") or "").strip())
                                       for c in people]
     last = [c for c in comments if (c.get("text") or "").startswith(("Reflect (engine)", "Blocked:"))]
-    if last:
+    if last and not owner_only:
         out += ["", "## Last engine run", last[-1]["text"].strip()[:400]]
     return "\n".join(out) + "\n"
 
@@ -1550,6 +1560,50 @@ def load_cfg(repo):
     return cfg
 
 
+def reclaim(bead_id, repo):
+    """(ok, why): run-task takes back what the engine itself left, never what a person holds. A claim by a tl- actor
+    whose lease ran out is released (a restarted Claude session gets a new actor name). A bead the engine blocked is
+    reopened for a plain retry, or when a comment after the block answers the open ask; it stays blocked when a person
+    commented after the block with no ask open (they may have parked it), while an ask waits unanswered, or while
+    another bead blocks it."""
+    b = tl.show(bead_id) or {}
+    who, me = b.get("assignee") or "", tl.actor()
+    release = False
+    if who and who != me:
+        if not who.startswith("tl-"):
+            return False, "claimed by %s" % who
+        if who in tl.live_actors(repo) or (b.get("lease_expires_at") or "") >= time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()):
+            return False, "claimed by %s, which is still running" % who
+        release = True
+    reopen = False
+    if b.get("status") == "blocked":
+        held = [d.get("id") for d in b.get("dependencies") or [] if isinstance(d, dict)
+                and d.get("dependency_type") == "blocks" and d.get("status") != "closed"]
+        if held:
+            return False, "blocked by %s" % ", ".join(held)
+        cs = tl.comments(bead_id)
+        blocks = [c for c in cs if (c.get("text") or "").startswith("Blocked:")]
+        if not blocks:
+            return False, "blocked by a person, not by the engine"
+        after = [c for c in cs if (c.get("created_at") or "") > (blocks[-1].get("created_at") or "")
+                 and not (c.get("text") or "").startswith(ENGINE_NOTES)]
+        try:
+            ask = json.loads((tl.config_dir() / "asks" / ("%s.json" % bead_id)).read_text())
+        except (OSError, ValueError):
+            ask = {}
+        asking = ask.get("status") == "open"
+        if asking and not after:
+            return False, "waiting for the answer to ask %s (%s)" % (ask.get("id"), ask.get("kind"))
+        if after and not asking:
+            return False, "%s commented after the engine blocked it; read that first" % (after[-1].get("author") or "someone")
+        reopen = True
+    if reopen:
+        tl.bd("update", bead_id, "--status", "open", "--assignee", "")
+    elif release:
+        tl.bd("update", bead_id, "--assignee", "")
+    return True, ("reopened" if reopen else "released %s" % who if release else "")
+
+
 def main(a):
     if hasattr(signal, "SIGTERM"):  # a stop (kill switch, coordinator) still runs the close step
         signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(Blocked("failed: stopped (SIGTERM)")))
@@ -1569,6 +1623,13 @@ def main(a):
         print("tl: %s is the main checkout; run a task in a slot or a worktree (tl slot / tl worktree start)" % wt,
               file=sys.stderr)
         return 1
+    if not a.dry_run:
+        ok, why = reclaim(a.id, repo)
+        if not ok:
+            print("TAKEN: %s" % why)
+            return 1
+        if why:
+            say("%s: %s" % (a.id, why))
     if not a.dry_run and tl.cmd_claim(Args(id=a.id, worktree=wt, slot=a.slot)) != 0:
         return 1  # bd lets this session re-claim its own bead (a reopened one); another session's claim stops here
     cfg["fresh"] = bool(getattr(a, "fresh", False))
