@@ -71,6 +71,11 @@ the bead is blocked and its next run re-plans with the gate's output. Limits per
 a changed bead never counts), `max_fix_rounds` (2); per stage: `max_rounds` (3), `max_check_tries` (3) red checks in a
 row per round.
 
+Acceptance cases: the plan has at least one per acceptance criterion of the bead (the criterion quoted, a check). They
+run on the last stage and again in every fix round at land. A writer may add cases it finds (the review sees them as
+added by the writer); none can be removed, since the plan is the engine's. Pictures under the task's `evidence/` are
+copied to the run dir at close and named on the bead.
+
 Check groups run static → tests → acceptance (the plan's per-stage checks); a red group skips the rest. `when` runs a
 check only when the task changed a matching path; `retry` reruns a known flaky one. A repo check that passed on the
 same tree and base is reused; mark one `"cache": false` when it reads state git cannot see. Stage checks always run. The gate runs once, on the rebased

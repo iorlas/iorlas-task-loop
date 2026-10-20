@@ -22,8 +22,9 @@ PY = '"%s"' % sys.executable
 HAS_F = PY + ' -c "import os,sys; sys.exit(0 if os.path.exists(\'f.txt\') else 1)"'
 FALSE = PY + ' -c "import sys; sys.exit(1)"'
 PLAN = {"summary": "do it", "stages": [{"goal": "add f", "files": ["f.txt"], "checks": [HAS_F],
-                                        "hard": False}], "risks": [], "question": ""}
-WRITE = {"summary": "wrote f", "checks_run": [{"cmd": "test -f f.txt", "exit": 0}], "question": "", "bad_checks": []}
+                                        "hard": False}], "risks": [], "question": "", "cases": []}
+WRITE = {"summary": "wrote f", "checks_run": [{"cmd": "test -f f.txt", "exit": 0}], "question": "", "bad_checks": [],
+         "new_cases": []}
 ROUTE = "/h/.claude/plugins/cache/m/iorlas-delegate/%s/skills/delegate/route.py"
 CLEAN = {"findings": [], "unmet": [], "question": "", "leftovers": []}
 NS = "--no-sandbox"
@@ -579,7 +580,7 @@ class EngineTest(unittest.TestCase):
     # -- checkpoints: a rerun resumes where the last run stopped, never from scratch
     TWO = {"summary": "two", "stages": [{"goal": "stage one", "files": ["f.txt"], "checks": [HAS_F], "hard": False},
                                         {"goal": "stage two", "files": ["f.txt"], "checks": [HAS_F], "hard": False}],
-           "risks": [], "question": ""}
+           "risks": [], "question": "", "cases": []}
 
     def stop_at(self, role, nth):
         """The nth call of a role is where the engine is stopped (SIGTERM raises Blocked in the main thread)."""
@@ -756,6 +757,54 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertIn("re-plan", self.blocked[-1])
         self.assertNotIn("planner", [c[0] for c in s.calls])
+
+    # -- acceptance cases: from the bead's criteria, run on the last stage and in fix rounds; the writer may add
+    def counter(self, name):
+        f = Path(self.tmp.name, name)
+        return f, PY + ' -c "open(%r, \'a\').write(\'1\')"' % str(f)
+
+    def test_acceptance_cases_run_on_the_last_stage_only(self):
+        seen, case = self.counter("case")
+        plan = dict(self.TWO, cases=[{"criterion": "f.txt exists", "check": case}])
+        rc, s = self.run_engine({"plan": [plan], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]})
+        self.assertEqual(rc, 0)
+        self.assertEqual(seen.read_text(), "1")  # stage 2 of 2, not stage 1
+        self.assertIn("f.txt exists", s.prompts[0] + s.prompts[3])
+
+    def test_the_writer_may_add_a_case_it_is_run_and_shown_to_the_review(self):
+        seen, extra = self.counter("extra")
+        w = dict(WRITE, new_cases=[{"criterion": "f.txt exists", "check": extra, "why": "found an edge"}])
+        rc, s = self.run_engine({"plan": [PLAN], "write": [w], "review": [CLEAN]})
+        self.assertEqual(rc, 0)
+        self.assertEqual(seen.read_text(), "1")
+        rv = s.prompts[2]
+        self.assertIn("added by the writer", rv)
+        self.assertIn("found an edge", rv)
+        self.assertEqual(self.eng.plan_data["cases"][0]["by"], "writer")
+
+    def test_a_fix_round_runs_the_acceptance_cases_again(self):
+        seen, case = self.counter("case")
+        plan = dict(PLAN, cases=[{"criterion": "f.txt exists", "check": case}])
+        gate = PY + ' -c "import sys; sys.exit(1 if open(\'f.txt\').read().strip() == \'d2\' else 0)"'
+        rc, s = self.run_engine({"plan": [plan], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]}, gate=gate)
+        self.assertEqual(rc, 0)
+        self.assertEqual(seen.read_text(), "11")
+
+    def test_screenshots_in_evidence_are_kept_outside_the_worktree_and_named_on_the_bead(self):
+        real = DelegateScript.__call__
+
+        def shoot(this, route, role, prompt, schema, cwd, *a, **kw):
+            if role == "worker":
+                ev = Path(cwd, ".task", "t-1", "evidence")
+                ev.mkdir(parents=True, exist_ok=True)
+                (ev / "traits.png").write_bytes(b"\x89PNG fake")
+            return real(this, route, role, prompt, schema, cwd, *a, **kw)
+        with mock.patch.object(DelegateScript, "__call__", shoot):
+            rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0)
+        kept = self.eng.run_dir / "evidence" / "traits.png"
+        self.assertTrue(kept.exists())
+        self.assertTrue(any(c[:2] == ("comments", "add") and str(kept) in c[3] for c in self.bd_calls))
 
     def test_close_reason_says_what_landed_and_a_refused_close_is_a_warning(self):
         with mock.patch.object(tl, "cmd_close", side_effect=lambda a: self.closed.append(a.reason) or 1):

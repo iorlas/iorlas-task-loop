@@ -60,7 +60,8 @@ S_STRS = {"type": "array", "items": S_STR}
 LEFTOVERS = {"type": "array", "items": {"type": "object", "additionalProperties": False,
                                         "properties": {"title": S_STR, "why": S_STR}, "required": ["title", "why"]}}
 SCHEMAS = {
-    "plan": {"type": "object", "additionalProperties": False, "required": ["summary", "stages", "risks", "question"],
+    "plan": {"type": "object", "additionalProperties": False,
+             "required": ["summary", "stages", "risks", "question", "cases"],
              "properties": {
                  "summary": S_STR,
                  "stages": {"type": "array", "items": {
@@ -69,10 +70,16 @@ SCHEMAS = {
                  "risks": {"type": "array", "items": {"type": "object", "additionalProperties": False,
                                                       "required": ["what", "check"],
                                                       "properties": {"what": S_STR, "check": S_STR}}},
-                 "question": S_STR}},
+                 "question": S_STR,
+                 "cases": {"type": "array", "items": {"type": "object", "additionalProperties": False,
+                                                      "required": ["criterion", "check"],
+                                                      "properties": {"criterion": S_STR, "check": S_STR}}}}},
     "write": {"type": "object", "additionalProperties": False,
-              "required": ["summary", "checks_run", "question", "bad_checks"],
+              "required": ["summary", "checks_run", "question", "bad_checks", "new_cases"],
               "properties": {"summary": S_STR, "question": S_STR,
+                             "new_cases": {"type": "array", "items": {
+                                 "type": "object", "additionalProperties": False, "required": ["criterion", "check", "why"],
+                                 "properties": {"criterion": S_STR, "check": S_STR, "why": S_STR}}},
                              "bad_checks": {"type": "array", "items": {
                                  "type": "object", "additionalProperties": False, "required": ["cmd", "why"],
                                  "properties": {"cmd": S_STR, "why": S_STR}}},
@@ -586,6 +593,28 @@ class Engine:
             self.log("note", "the write step gets the host (.task-loop.json on %s)" % self.cfg["base"])
         return granted
 
+    def add_cases(self, new):
+        """A writer may add the cases it discovers; it can never remove one (the plan is the engine's)."""
+        cases = self.plan_data.setdefault("cases", [])
+        have = {c["check"].strip() for c in cases}
+        for c in new:
+            if c["check"].strip() and c["check"].strip() not in have:
+                cases.append(dict(c, by="writer"))
+                have.add(c["check"].strip())
+                self.log("note", "the writer added a case: %s" % c["criterion"][:200])
+
+    def case_checks(self):
+        return [c["check"] for c in (getattr(self, "plan_data", None) or {}).get("cases") or []]
+
+    def cases_text(self):
+        cases = (getattr(self, "plan_data", None) or {}).get("cases") or []
+        if not cases:
+            return ""
+        return "\nThe task's acceptance cases (they run on the last stage; judge whether each proves its criterion):\n" + \
+            "".join("- %s: `%s`%s\n" % (c["criterion"], c["check"], " (added by the writer: %s; check it does not replace "
+                                                                   "a stronger case)" % c.get("why", "") if c.get("by") == "writer" else "")
+                    for c in cases)
+
     def brief_text(self):
         """Inline, never a path: a worker's file tools reach only its worktree (delegate 0.23), and the engine's files
         live outside it so the worker cannot change them."""
@@ -672,7 +701,10 @@ class Engine:
                                                                                      wt=self.wt) + extra +
                           "\n\n" + "\n".join(rules) +
                           ("\n\n" + self.where("plan") if self.where("plan") else ""))
+        data = json.loads(json.dumps(data))  # the engine's own copy: cases are added to it as the task runs
         self.plan_summary = data["summary"]
+        for c in data.get("cases") or []:
+            c.setdefault("by", "plan")
         self.plan_data = data
         if data["question"].strip():
             raise Blocked("owner decision needed", data["question"])
@@ -793,11 +825,13 @@ class Engine:
                 files=", ".join(st["files"]), checks="\n".join("- " + c for c in st["checks"]) or "- (none named)",
                 feedback=feedback, evidence=self.evidence_dir, where=self.where("write"), gate=(" (`%s`)" % self.cfg["gate"]) if self.cfg["gate"] else "",
                 rules=("\nRead %s first: this repo's rules for work in your sandbox (what runs there, what does not)."
-                       % (Path(self.wt) / self.cfg["worker_rules"])) if self.cfg["worker_rules"] else ""),
-                resume_key="writer")
+                       % (Path(self.wt) / self.cfg["worker_rules"])) if self.cfg["worker_rules"] else "") +
+                "\nThe plan's acceptance cases run on the last stage. If you find a case they miss, add it to new_cases (the "
+                "criterion it proves, the check, why); never remove or weaken one.", resume_key="writer")
             if w["question"].strip():
                 raise Blocked("owner decision needed", w["question"])
-            checks = self.run_checks(st, name)
+            self.add_cases(w.get("new_cases") or [])
+            checks = self.run_checks(dict(st, checks=st["checks"] + (self.case_checks() if last else [])), name)
             (self.run_dir / "engine-checks.json").write_text(json.dumps(checks, indent=1))
             self.stats["tests_added"], self.stats["tests_removed"] = count_tests(self.task_diff(), self.cfg["test_pattern"])
             if self.stats["tests_removed"]:
@@ -833,7 +867,7 @@ class Engine:
                 scope=(state["scope"] if fix else
                        "the stage goal and every requirement and acceptance criterion of the task" if last else
                        "the stage goal (later stages cover the rest of the task)")) +
-                ("\n" + self.where("review") if self.where("review") else ""), writer_family=wfam)
+                ("\n" + self.where("review") if self.where("review") else "") + self.cases_text(), writer_family=wfam)
             same = self.last_flag == "same_family"
             if same:
                 self.warn("%s: the review is from the writer's own model family (no other lane was free)" % name)
@@ -1074,6 +1108,20 @@ class Engine:
                 fcntl.flock(f, fcntl.LOCK_UN)
             f.close()
 
+    def keep_evidence(self):
+        """Pictures the writer saved as proof outlive the worktree: copied to the run dir, named on the bead."""
+        kept = []
+        if not self.evidence_dir.is_dir():
+            return kept
+        out = self.run_dir / "evidence"
+        for f in sorted(self.evidence_dir.rglob("*")):
+            if f.is_file() and f.suffix.lower() in (".png", ".jpg", ".jpeg", ".gif", ".webp"):
+                dst = out / f.relative_to(self.evidence_dir)
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(f, dst)
+                kept.append(dst)
+        return kept
+
     def wip(self, why):
         self.sh(["git", "add", "-A"])
         rc, _ = self.sh(["git", "commit", "-q", "-m", "wip (%s): %s" % (self.bead, why)])
@@ -1101,6 +1149,9 @@ class Engine:
         if self.dry:
             self.log("note", "dry run: bead left as it was. %s" % stats)
             return
+        shots = self.keep_evidence()
+        if shots:
+            self.comment("Evidence (engine): %s" % ", ".join(str(p) for p in shots))
         for lo in self.leftovers:
             tl.bd("create", lo["title"], "--type", "task", "--description", lo["why"],
                   "--deps", "discovered-from:" + self.bead)
@@ -1263,6 +1314,10 @@ Read the code it names. Then plan.
   grep; a count is `test "$(... | wc -l)" -eq 25`, never a comment saying what to expect.
 - The engine sets every time limit and runs checks one at a time; never write timeouts, "run alone" or similar notes
   into a check.
+- cases: the acceptance cases. At least one per acceptance criterion of the task, each with the criterion it proves
+  (quote it) and a check. They run on the last stage and again after any fix at land. A case about what users see uses
+  the host's tools and a fact the tool reports (a scenario script, a screenshot saved under the evidence folder, a count
+  the editor prints), never only "a screenshot exists".
 - Name the risks ahead of time: what could break something users or other code rely on (a saved format, a public
   member, shared files), each with the check that proves it safe. None is fine.
 - question: empty, unless the task cannot be done without a decision only the owner can make (product direction,
