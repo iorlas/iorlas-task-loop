@@ -49,11 +49,13 @@ writer reads first). The profile gives:
                         "retry": 1}]}}
 ```
 
-`engine.host: true` (the 0.6 name `no_sandbox` still works; the label `host` on one bead, `sandbox` turns it off for
-one bead) says the work needs the host: the writer runs Unity and tests itself, on this machine. Delegate 0.23+ gets
-`--host` on write steps only, and delegate's own config decides which lanes take it. Delegate 0.20-0.22 gets
-`--no-sandbox` instead (every step from 0.21). It is the owner's call. A command the worker was denied shows as a ⚠;
-denied with no answer blocks the bead "needs a human: <command>".
+`engine.host: true` (the 0.6 name `no_sandbox` still works) or `engine.host_beads: [ids]` says the work needs the
+host: the writer runs Unity and tests itself, on this machine. Only the `.task-loop.json` committed on the base branch
+(`origin/main`) counts: a worker can label its own bead or edit a checkout's config, but not main without review and
+the gate. The labels `host` / `no-sandbox` alone grant nothing (a ⚠ says so); `sandbox` still turns it off for one bead.
+Delegate 0.23+ gets `--host` on write steps only, and delegate's own config decides which lanes take it; 0.20-0.22 get
+`--no-sandbox`. A command the worker was denied shows as a ⚠; denied with no answer blocks the bead "needs a human:
+<command>". `tl run-task` refuses the main checkout as a worktree (it holds the bead database and the config).
 
 A rerun resumes, never restarts. Each step saves a checkpoint (`~/.config/task-loop/checkpoints/<bead>.json`): the
 plan, the accepted stages, the stage, round and feedback, the writer's thread, the branch head. The next run on that

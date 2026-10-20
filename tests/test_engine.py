@@ -94,6 +94,16 @@ class EngineTest(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
 
+    def commit_base_cfg(self, engine_cfg):
+        base = Path(self.tmp.name, "base-cfg")
+        if not base.exists():
+            sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(base), cwd=self.tmp.name)
+        sh("git", "pull", "-q", "origin", "main", cwd=base)
+        (base / ".task-loop.json").write_text(json.dumps({"engine": engine_cfg}))
+        sh("git", "add", "-A", cwd=base)
+        sh("git", "commit", "-qm", "engine config", "--allow-empty", cwd=base)
+        sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
+
     def tearDown(self):
         self.env.stop()
         self.tmp.cleanup()
@@ -102,10 +112,16 @@ class EngineTest(unittest.TestCase):
         self.bd_calls.append(a)
         return mock.Mock(returncode=0, stdout="bead t-1: Add f\n", stderr="")
 
-    def run_engine(self, answers, route="/fake/route.py", **cfg):
+    def run_engine(self, answers, route="/fake/route.py", raw=None, **cfg):
+        """Access keys (host, no_sandbox, host_beads) are committed to origin/main's .task-loop.json first: the engine
+        reads them only from there. `raw` puts keys in the loaded config without committing them."""
+        access = {k: cfg.pop(k) for k in ("host", "no_sandbox", "host_beads") if k in cfg}
+        if access:
+            self.commit_base_cfg(access)
         script = DelegateScript(answers)
         c = engine.load_cfg(str(self.wt))
         c.update(cfg)
+        c.update(raw or {})
         with mock.patch.object(engine, "find_route", return_value=route), \
                 mock.patch.object(engine, "call_delegate", script), mock.patch.object(engine.time, "sleep"):
             self.eng = engine.Engine("t-1", str(self.wt), c)
@@ -808,7 +824,8 @@ class EngineTest(unittest.TestCase):
         self.assertNotIn("outside a sandbox", w)
         with mock.patch.object(tl, "show", return_value={"id": "t-1", "title": "Add f", "metadata": {},
                                                          "labels": ["no-sandbox"]}):
-            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.21.0")
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.21.0",
+                                    host_beads=["t-1"])
         self.assertTrue(all(u for _, u in s.access))
         with mock.patch.object(tl, "show", return_value={"id": "t-1", "title": "Add f", "metadata": {},
                                                          "labels": ["sandbox"]}):
@@ -826,10 +843,38 @@ class EngineTest(unittest.TestCase):
             self.assertIn("outside a sandbox", w)
             self.assertEqual([x["host"] for x in self.eng.sessions], [False, True, False])
 
-    def test_a_host_label_asks_for_the_host(self):
-        with mock.patch.object(tl, "show", return_value={"id": "t-1", "title": "Add f", "metadata": {}, "labels": ["host"]}):
-            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.23.0")
+    def test_a_host_label_alone_grants_nothing(self):
+        # a worker with Bash can label its own bead: only the committed config on the base branch grants the host
+        for label in ("host", "no-sandbox"):
+            with mock.patch.object(tl, "show", return_value={"id": "t-1", "title": "Add f", "metadata": {}, "labels": [label]}):
+                rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.23.0")
+            self.assertEqual(s.access[1], ("worker", ""), label)
+            self.assertIn("label %s is ignored" % label, self.eng.log_path.read_text())
+
+    def test_host_beads_on_the_base_branch_grant_the_host_to_one_bead(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.23.0",
+                                host_beads=["t-1"])
         self.assertEqual(s.access[1], ("worker", "--host"))
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.23.0",
+                                host_beads=["t-2"])
+        self.assertEqual(s.access[1], ("worker", ""))
+
+    def test_host_in_a_checkout_config_is_not_enough(self):
+        # the main checkout's or the worktree's own .task-loop.json can be edited by a worker; origin/main cannot
+        (self.wt / ".task-loop.json").write_text(json.dumps({"engine": {"host": True}}))
+        sh("git", "add", "-A", cwd=self.wt)
+        sh("git", "commit", "-qm", "local only, never pushed", cwd=self.wt)
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.23.0",
+                                raw={"host": True, "host_beads": ["t-1"]})
+        self.assertEqual(s.access[1], ("worker", ""))
+
+    def test_run_task_refuses_the_main_checkout(self):
+        a = mock.Mock(id="t-1", worktree=str(self.wt), slot=None, dry_run=True, fresh=False, quiet=True)
+        with mock.patch.object(tl, "repo_root", return_value=str(self.wt)), \
+                mock.patch.object(engine, "Engine") as made:
+            rc = engine.main(a)
+        self.assertEqual(rc, 1)
+        made.assert_not_called()
 
     def test_a_denied_command_with_a_valid_answer_is_a_warning_in_the_trace(self):
         ok = {"v": 1, "status": "done", "data": WRITE, "ref": "w1", "family": "claude",

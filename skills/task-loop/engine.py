@@ -294,7 +294,7 @@ class Engine:
         self.replans = 0
         self.fixes = 0
         self.stuck_why = ""
-        self.host = bool(cfg.get("host") or cfg.get("no_sandbox"))
+        self.host = False  # granted after reset, from the base branch's .task-loop.json only (granted_host)
         self.sandbox_warned = set()
         self.budget_warned = set()
         self.writer = {}  # backend -> thread/session id, so later rounds of a task resume the same writer
@@ -556,6 +556,26 @@ class Engine:
         if kb > float(self.cfg["brief_kb"]):
             self.warn("the brief is %.0f KB (over %s KB): the bead may be too big for one task" % (kb, self.cfg["brief_kb"]))
 
+    def granted_host(self, labels):
+        """Whether write steps get the host. Only the committed config on the base branch grants it (engine.host for the
+        repo, engine.host_beads for listed beads): a worker with Bash can label its own bead, or edit a checkout's
+        .task-loop.json, but not origin/main without review and the gate. The label `sandbox` still turns it off."""
+        try:
+            base = json.loads(self.git("show", "%s:.task-loop.json" % self.cfg["base"]) or "{}").get("engine") or {}
+        except ValueError:
+            base = {}
+        granted = bool(base.get("host") or base.get("no_sandbox")) or self.bead in (base.get("host_beads") or [])
+        for label in ("host", "no-sandbox"):
+            if label in labels and not granted:
+                self.warn("label %s is ignored: the host is granted only by engine.host or engine.host_beads in "
+                          ".task-loop.json on %s" % (label, self.cfg["base"]))
+        if "sandbox" in labels and granted:
+            self.log("note", "bead label sandbox: the write step runs sandboxed")
+            granted = False
+        if granted:
+            self.log("note", "the write step gets the host (.task-loop.json on %s)" % self.cfg["base"])
+        return granted
+
     def brief_text(self):
         """Inline, never a path: a worker's file tools reach only its worktree (delegate 0.23), and the engine's files
         live outside it so the worker cannot change them."""
@@ -575,16 +595,13 @@ class Engine:
             bead = tl.show(self.bead)
             if not bead:
                 raise Blocked("failed: bead %s not found" % self.bead)
-            labels = bead.get("labels") or []
-            if {"host", "no-sandbox", "sandbox"} & set(labels):
-                self.host = "host" in labels or "no-sandbox" in labels
-                self.log("note", "bead label: the write step %s" % ("gets the host" if self.host else "runs sandboxed"))
             hb.start()
             if not self.route:
                 raise Blocked("failed: the engine needs the iorlas-delegate plugin (0.14.0 or later): "
                               "claude plugin install iorlas-delegate@iorlas-marketplace")
             self.log("note", "workers: delegate %s (worker-run v1)" % self.route)
             self.reset(bead)
+            self.host = self.granted_host(bead.get("labels") or [])
             plan, i, state = self.resume_point()
             if plan is None:
                 plan, i, state = self.plan(again=self.replan_first), 0, None
@@ -1320,6 +1337,10 @@ def main(a):
         if not wt:
             sys.exit("tl: no worktree: " + r.stderr)
     wt = str(Path(wt).resolve())
+    if (Path(wt) / ".git").is_dir():  # the main checkout holds the bead database and the config: never a worker's cwd
+        print("tl: %s is the main checkout; run a task in a slot or a worktree (tl slot / tl worktree start)" % wt,
+              file=sys.stderr)
+        return 1
     if not a.dry_run and tl.cmd_claim(Args(id=a.id, worktree=wt, slot=a.slot)) != 0:
         return 1  # bd lets this session re-claim its own bead (a reopened one); another session's claim stops here
     cfg["fresh"] = bool(getattr(a, "fresh", False))
