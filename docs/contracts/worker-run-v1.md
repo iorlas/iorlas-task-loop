@@ -55,7 +55,7 @@ The brief is passed as a file (or stdin when `--brief` is absent). The producer 
 | `ref` | string \| null | thread id (codex) or session id (claude), for `--resume` and the live log |
 | `lane`, `model`, `effort`, `family` | string | what ran; `family` is `openai` or `claude` |
 | `cost` | number | dollars charged by this call (0 on a subscription) |
-| `tokens` | object \| null | `{in, cached, out}`; `in` counts all input, cache reads (and Claude cache writes) included. Delegate 0.22.0+ |
+| `tokens` | object \| null | `{in, cached, out}`; `in` counts all input, cache reads (and Claude cache writes) included. Delegate 0.22.0+; from 0.26.0 Codex counts include its automatic reviewer's threads (earlier Codex runs under-count whenever a command escalated, so do not compare them as equal) |
 | `secs` | number | wall clock |
 | `run_id` | string | the agent-runs record id |
 | `transcript` | string \| null | path of the worker's log file, when known |
