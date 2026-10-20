@@ -147,6 +147,11 @@ class EngineTest(unittest.TestCase):
         self.assertIn("add f", s.prompts[0] + s.prompts[1])        # the plan, inline in the write
         self.assertIn("the review still sends it back", s.prompts[3])  # the replan's reason, inline
 
+    def test_the_planner_puts_proof_files_under_evidence(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertIn(str(self.eng.evidence_dir), s.prompts[0])
+        self.assertIn("screenshots", s.prompts[0])
+
     def test_brief_is_a_digest_without_engine_comments(self):
         bead = {"id": "t-1", "title": "Add f", "metadata": {}, "description": "Add the file f.",
                 "acceptance_criteria": "f.txt exists", "notes": "owner: keep it short",

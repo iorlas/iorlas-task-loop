@@ -658,6 +658,8 @@ class Engine:
         if self.cfg["worker_rules"]:
             rules.append("Read %s: this repo's rules for workers (what runs where, known pitfalls of its tools); the "
                          "checks you write must follow them." % (Path(self.wt) / self.cfg["worker_rules"]))
+        rules.append("Proof files that a check reads or a reviewer looks at (screenshots, logs, probe output) go under "
+                     "%s: it is kept across runs, and nothing else under %s is." % (self.evidence_dir, self.task_dir))
         rules.append("Checks run on the uncommitted working tree after each write. The engine runs the gate%s once, on "
                      "the rebased tree at land: never put %s in a stage's checks." % (
                          (" (`%s`)" % self.cfg["gate"]) if self.cfg["gate"] else "",
