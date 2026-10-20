@@ -76,6 +76,9 @@ run on the last stage and again in every fix round at land. A writer may add cas
 added by the writer); none can be removed, since the plan is the engine's. Pictures under the task's `evidence/` are
 copied to the run dir at close and named on the bead.
 
+Intake: a bead with no acceptance criteria (the field, or a `## Acceptance Criteria` section) is a ticket ask before any
+AI step; a plan of more than `engine.max_stages` (3) stages is a split ticket, unless the owner already answered one.
+
 Asks: every block is an owner ask, `~/.config/task-loop/asks/<bead>.json` plus an `Ask (engine)` comment: decision
 (a step's question), verify (a denial, or what the workers could not check), stuck (rounds, replans or fix rounds used up,
 budget, land failed), ticket (intake). A machine pause (login, network, lanes) is no ask. A rerun with the ask open and

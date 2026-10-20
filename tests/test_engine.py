@@ -28,6 +28,7 @@ WRITE = {"summary": "wrote f", "checks_run": [{"cmd": "test -f f.txt", "exit": 0
 ROUTE = "/h/.claude/plugins/cache/m/iorlas-delegate/%s/skills/delegate/route.py"
 CLEAN = {"findings": [], "unmet": [], "question": "", "leftovers": [], "unchecked": []}
 NS = "--no-sandbox"
+BEAD = {"id": "t-1", "title": "Add f", "metadata": {}, "acceptance_criteria": "f.txt exists"}
 
 
 def review(unmet=(), findings=(), question=""):
@@ -85,7 +86,7 @@ class EngineTest(unittest.TestCase):
         self.closed, self.blocked = [], []
         patches = [
             mock.patch.object(tl, "bd", side_effect=self.fake_bd),
-            mock.patch.object(tl, "show", return_value={"id": "t-1", "title": "Add f", "metadata": {}}),
+            mock.patch.object(tl, "show", return_value=BEAD),
             mock.patch.object(tl, "comments", return_value=[]),
             mock.patch.object(tl, "cmd_close", side_effect=lambda a: self.closed.append(a.reason) or 0),
             mock.patch.object(tl, "cmd_block", side_effect=lambda a: self.blocked.append(a.why) or 0),
@@ -690,7 +691,7 @@ class EngineTest(unittest.TestCase):
     def test_a_changed_bead_keeps_accepted_stages_and_replans_the_rest(self):
         with self.stop_at("reviewer", 2):
             self.run_engine({"plan": [self.TWO], "write": [WRITE, WRITE], "review": [CLEAN]})
-        bead = {"id": "t-1", "title": "Add f", "metadata": {}, "description": "Add the file f, and say hi."}
+        bead = dict(BEAD, description="Add the file f, and say hi.")
         one_left = dict(self.TWO, stages=[self.TWO["stages"][1]])
         with mock.patch.object(tl, "show", return_value=bead):
             rc, s = self.run_engine({"plan": [one_left], "write": [WRITE], "review": [CLEAN]})
@@ -873,6 +874,30 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertIn(("label", "add", "t-1", "needs-owner-check"), [c[:4] for c in self.bd_calls])
 
+    # -- intake: a bead the engine cannot judge is a ticket ask, before any AI step
+    def test_a_bead_without_acceptance_criteria_is_a_ticket_and_never_planned(self):
+        with mock.patch.object(tl, "show", return_value={"id": "t-1", "title": "Add f", "metadata": {}, "description": "Add f."}):
+            rc, s = self.run_engine({"plan": [PLAN]})
+        self.assertEqual(rc, 2)
+        self.assertEqual(s.calls, [])
+        self.assertEqual(self.ask()["kind"], "ticket")
+
+    def test_criteria_in_a_description_section_count(self):
+        bead = {"id": "t-1", "title": "Add f", "metadata": {},
+                "description": "Add f.\n\n## Acceptance Criteria\n\nf.txt exists.\n\n## Touches\n\nf.txt"}
+        with mock.patch.object(tl, "show", return_value=bead):
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+
+    def test_a_plan_of_more_than_three_stages_is_a_split_ticket(self):
+        four = dict(PLAN, stages=[dict(PLAN["stages"][0], goal="part %d" % k) for k in range(4)])
+        rc, s = self.run_engine({"plan": [four]})
+        self.assertEqual(rc, 2)
+        self.assertEqual([c[0] for c in s.calls], ["planner"])
+        a = self.ask()
+        self.assertEqual(a["kind"], "ticket")
+        self.assertIn("part 3", a["question"])
+
     def test_close_reason_says_what_landed_and_a_refused_close_is_a_warning(self):
         with mock.patch.object(tl, "cmd_close", side_effect=lambda a: self.closed.append(a.reason) or 1):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
@@ -943,12 +968,12 @@ class EngineTest(unittest.TestCase):
         self.assertFalse(any(u for _, u in s.access))
         w = next(p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker")
         self.assertNotIn("You have the host", w)
-        with mock.patch.object(tl, "show", return_value={"id": "t-1", "title": "Add f", "metadata": {},
+        with mock.patch.object(tl, "show", return_value={"id": "t-1", "title": "Add f", "metadata": {}, "acceptance_criteria": "f.txt exists",
                                                          "labels": ["no-sandbox"]}):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.21.0",
                                     host_beads=["t-1"])
         self.assertTrue(all(u for _, u in s.access))
-        with mock.patch.object(tl, "show", return_value={"id": "t-1", "title": "Add f", "metadata": {},
+        with mock.patch.object(tl, "show", return_value={"id": "t-1", "title": "Add f", "metadata": {}, "acceptance_criteria": "f.txt exists",
                                                          "labels": ["sandbox"]}):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.21.0",
                                     no_sandbox=True)
@@ -974,7 +999,7 @@ class EngineTest(unittest.TestCase):
     def test_a_host_label_alone_grants_nothing(self):
         # a worker with Bash can label its own bead: only the committed config on the base branch grants the host
         for label in ("host", "no-sandbox"):
-            with mock.patch.object(tl, "show", return_value={"id": "t-1", "title": "Add f", "metadata": {}, "labels": [label]}):
+            with mock.patch.object(tl, "show", return_value={"id": "t-1", "title": "Add f", "metadata": {}, "acceptance_criteria": "f.txt exists", "labels": [label]}):
                 rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.23.0")
             self.assertEqual(s.access[1], ("worker", ""), label)
             self.assertIn("label %s is ignored" % label, self.eng.log_path.read_text())
@@ -1043,6 +1068,18 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertIn("curl -X POST x", self.blocked[-1])
         self.assertIn("curl --data @f x", self.blocked[-1])
+
+    def test_the_secrets_tripwire_stops_the_bead_for_a_human_at_once(self):
+        # delegate 0.25: a Codex command on a credential path stops the worker: failed, the command in denied
+        trip = {"v": 1, "status": "failed", "data": None, "text": "", "ref": "w1", "family": "openai",
+                "say": "stopped: the command touches a credential file",
+                "denied": [{"tool": "shell", "input": "cat .env"}]}
+        rc, s = self.run_engine({"plan": [PLAN], "write": [trip, WRITE], "review": [CLEAN]}, route=ROUTE % "0.25.0")
+        self.assertEqual(rc, 2)
+        self.assertEqual([c[0] for c in s.calls].count("worker"), 1)
+        self.assertIn("needs a human", self.blocked[0])
+        self.assertIn("cat .env", self.blocked[0])
+        self.assertEqual(self.ask()["kind"], "verify")
 
     def test_error_from_0_23_is_permanent(self):
         err = {"v": 1, "status": "error", "say": "--host: the planner chain has no allowed lane"}

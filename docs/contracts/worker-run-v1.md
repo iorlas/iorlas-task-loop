@@ -62,7 +62,7 @@ The brief is passed as a file (or stdin when `--brief` is absent). The producer 
 | `retry_after` | number \| null | epoch seconds; with `lane_out` and `stop` |
 | `say` | string | one human line; with `stop`, `error`, `failed` |
 | `git_violation` | list of strings | git changes the worker made (see Git). Reported, never turned into a failure |
-| `denied` | list of `{tool, input}` | delegate 0.23.0+: commands the Claude classifier refused (git writes left out); 0.24.0+ also escalations Codex's reviewer refused (`input` is the raw shell line). No status of its own: it rides on `done` or `failed`. An accident filter, not a boundary. Engine: an answer still invalid with a denial blocks the task "needs a human: <command>"; a valid answer with a denial is a ⚠ in the trace; a second denied write in the task (any lane, any run) blocks it with every refused command listed |
+| `denied` | list of `{tool, input}` | delegate 0.23.0+: commands the Claude classifier refused (git writes left out); 0.24.0+ also escalations Codex's reviewer refused (`input` is the raw shell line). No status of its own: it rides on `done` or `failed`. 0.25.0+: the secrets tripwire adds blocked credential paths (Claude: a PreToolUse hook; Codex: the worker is stopped, `failed`). An accident filter, not a boundary. Engine: an answer still invalid with a denial blocks the task "needs a human: <command>"; a valid answer with a denial is a ⚠ in the trace; a second denied write in the task (any lane, any run) blocks it with every refused command listed |
 
 Exit code: 0 when the object was printed, whatever `status` says; non-zero only when the producer itself crashed
 (then the engine treats the call as `error` and uses stderr).

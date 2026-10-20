@@ -40,7 +40,8 @@ DEFAULTS = {
     "max_rounds": 3,                  # review send-backs per stage before a replan
     "max_check_tries": 3,             # red checks in a row that end a round (checks never reach the reviewer red)
     "max_replans": 1,                 # per bead, across runs; a changed bead (an owner's answer) never counts
-    "max_fix_rounds": 2,              # per bead: a red gate or a conflict at land gets this many fix rounds
+    "max_fix_rounds": 2,
+    "max_stages": 3,                  # a bigger plan is a split ask (ticket), unless the owner already answered one              # per bead: a red gate or a conflict at land gets this many fix rounds
     "node_timeout_min": 45,
     "delegate": "",                   # path to delegate's route.py; "" = the newest installed iorlas-delegate
     "lane_wait_min": 10,              # how long a step waits in its slot for a lane; longer: the run pauses (slot freed)
@@ -511,8 +512,6 @@ class Engine:
             if spent > mark and mark not in self.budget_warned:
                 self.budget_warned.add(mark)
                 self.warn("%.0f%% of the task's budget is used" % (spent * 100))
-        if node == "plan" and len(d["stages"]) > 4:
-            self.warn("the plan has %d stages: the bead may be too big for one task" % len(d["stages"]))
         if node == "review" and any(f["severity"] == "high" for f in d["findings"]):
             self.warn("the reviewer found a high-severity problem")
 
@@ -675,6 +674,9 @@ class Engine:
             self.reset(bead)
             self.host = self.granted_host(bead.get("labels") or [])
             self.check_ask()
+            if not has_criteria(bead):
+                raise Blocked("ticket: the bead has no acceptance criteria", "What proves this bead done? Add acceptance "
+                              "criteria (the field, or a ## Acceptance Criteria section), then rerun.")
             plan, i, state = self.resume_point()
             if plan is None:
                 plan, i, state = self.plan(again=self.replan_first), 0, None
@@ -749,6 +751,11 @@ class Engine:
             raise Blocked("owner decision needed", data["question"])
         if not data["stages"]:
             raise Blocked("failed: the plan has no stages")
+        big = int(self.cfg["max_stages"])
+        if len(data["stages"]) > big and (self.answered or {}).get("kind") != "ticket":
+            raise Blocked("ticket: the plan has %d stages (more than %d): the bead may be too big for one task" % (
+                len(data["stages"]), big), "Split the bead into these, or comment that it stays one bead:\n" + "\n".join(
+                "%d. %s" % (k + 1, s["goal"]) for k, s in enumerate(data["stages"])))
         lines = ["Plan (engine): " + data["summary"]]
         lines += ["%d. %s%s [files: %s] [checks: %s]" % (n + 1, s["goal"], " (hard)" if s["hard"] else "",
                                                           ", ".join(s["files"]), "; ".join(s["checks"]))
@@ -1286,6 +1293,14 @@ def count_tests(diff, pattern):
 
 
 ENGINE_NOTES = ("Plan (engine)", "Review (engine", "Reflect (engine)", "Blocked:", "Ask (engine)", "Evidence (engine)")
+
+
+def has_criteria(bead):
+    """Acceptance criteria in the bead's field, or in a ## Acceptance Criteria section of its description."""
+    if (bead.get("acceptance_criteria") or "").strip():
+        return True
+    m = re.search(r"^##\s*Acceptance Criteria\s*$(.*?)(?=^##\s|\Z)", bead.get("description") or "", re.M | re.S | re.I)
+    return bool(m and m.group(1).strip())
 
 
 def ask_kind(why):
