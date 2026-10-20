@@ -59,6 +59,11 @@ S_STR = {"type": "string"}
 S_STRS = {"type": "array", "items": S_STR}
 LEFTOVERS = {"type": "array", "items": {"type": "object", "additionalProperties": False,
                                         "properties": {"title": S_STR, "why": S_STR}, "required": ["title", "why"]}}
+UNCHECKED_KINDS = ("requirement", "number", "deletion", "link", "case", "tooling")  # one of these unchecked stops the land
+UNCHECKED_TEXT = ("\nunchecked: what you could not check yourself, each with its kind: requirement, number, deletion, link "
+                  "(a cited link you could not open), case (an acceptance case you could not run), tooling (a change to "
+                  "tools or build files the plan did not name), or other. Empty when you checked everything.")
+
 SCHEMAS = {
     "plan": {"type": "object", "additionalProperties": False,
              "required": ["summary", "stages", "risks", "question", "cases"],
@@ -75,8 +80,11 @@ SCHEMAS = {
                                                       "required": ["criterion", "check"],
                                                       "properties": {"criterion": S_STR, "check": S_STR}}}}},
     "write": {"type": "object", "additionalProperties": False,
-              "required": ["summary", "checks_run", "question", "bad_checks", "new_cases"],
+              "required": ["summary", "checks_run", "question", "bad_checks", "new_cases", "unchecked"],
               "properties": {"summary": S_STR, "question": S_STR,
+                             "unchecked": {"type": "array", "items": {
+                                 "type": "object", "additionalProperties": False, "required": ["what", "kind"],
+                                 "properties": {"what": S_STR, "kind": {"type": "string", "enum": list(UNCHECKED_KINDS) + ["other"]}}}},
                              "new_cases": {"type": "array", "items": {
                                  "type": "object", "additionalProperties": False, "required": ["criterion", "check", "why"],
                                  "properties": {"criterion": S_STR, "check": S_STR, "why": S_STR}}},
@@ -86,8 +94,12 @@ SCHEMAS = {
                              "checks_run": {"type": "array", "items": {
                                  "type": "object", "additionalProperties": False, "required": ["cmd", "exit"],
                                  "properties": {"cmd": S_STR, "exit": {"type": "integer"}}}}}},
-    "review": {"type": "object", "additionalProperties": False, "required": ["findings", "unmet", "question", "leftovers"],
-               "properties": {"findings": {"type": "array", "items": {
+    "review": {"type": "object", "additionalProperties": False,
+               "required": ["findings", "unmet", "question", "leftovers", "unchecked"],
+               "properties": {"unchecked": {"type": "array", "items": {
+                       "type": "object", "additionalProperties": False, "required": ["what", "kind"],
+                       "properties": {"what": S_STR, "kind": {"type": "string", "enum": list(UNCHECKED_KINDS) + ["other"]}}}},
+                   "findings": {"type": "array", "items": {
                    "type": "object", "additionalProperties": False, "required": ["file", "line", "severity", "fix"],
                    "properties": {"file": S_STR, "line": {"type": "integer"},
                                   "severity": {"type": "string", "enum": ["high", "medium", "low"]},
@@ -304,6 +316,8 @@ class Engine:
         self.replans = 0
         self.fixes = 0
         self.denials = []     # commands refused to this bead's writers, across lanes and runs
+        self.unchecked = []   # what the workers of this run could not check themselves
+        self.answered = None  # the owner ask this run starts from, once answered
         self.stuck_why = ""
         self.host = False  # granted after reset, from the base branch's .task-loop.json only (granted_host)
         self.sandbox_warned = set()
@@ -660,6 +674,7 @@ class Engine:
             self.log("note", "workers: delegate %s (worker-run v1)" % self.route)
             self.reset(bead)
             self.host = self.granted_host(bead.get("labels") or [])
+            self.check_ask()
             plan, i, state = self.resume_point()
             if plan is None:
                 plan, i, state = self.plan(again=self.replan_first), 0, None
@@ -681,6 +696,11 @@ class Engine:
                 self.done.append(plan["stages"][i]["goal"])
                 i += 1
                 self.save_checkpoint(stage=i, rounds=0, n=0, feedback="", step="write" if i < len(plan["stages"]) else "land")
+            gaps = [u for u in self.unchecked if u["kind"] in UNCHECKED_KINDS]
+            if gaps:
+                raise Blocked("verify: before land, the workers could not check: " + "; ".join(
+                    "%s (%s)" % (u["what"], u["kind"]) for u in gaps), "Check these yourself, then comment on the bead "
+                    "(right, or wrong and why): " + "; ".join(u["what"] for u in gaps))
             sha = self.finish(bead)
             outcome = "landed" if sha else "done"
             self.drop_checkpoint()
@@ -741,6 +761,38 @@ class Engine:
         return data
 
     # -- checkpoints: where a stopped run was, outside the worktree, so the next run goes on from there
+    def ask_path(self):
+        return tl.config_dir() / "asks" / ("%s.json" % self.bead)
+
+    def check_ask(self):
+        """An open ask is never asked again: with the bead unchanged the run waits; a change (the owner's comment or
+        edit) answers it, and the run goes on from its checkpoint."""
+        try:
+            a = json.loads(self.ask_path().read_text())
+        except (OSError, ValueError):
+            return
+        if a.get("status") != "open":
+            return
+        if a.get("brief") == self.brief_hash and not self.cfg.get("fresh"):
+            raise Blocked("waiting: for the owner's answer to ask %s (%s): %s" % (a["id"], a["kind"], a["question"][:200]))
+        a.update(status="answered", answered=time.time())
+        self.ask_path().write_text(json.dumps(a, indent=1))
+        self.answered = a
+        self.log("note", "ask %s (%s) is answered: the bead changed since it was asked" % (a["id"], a["kind"]))
+
+    def raise_ask(self, kind, why, question):
+        try:
+            n = int(json.loads(self.ask_path().read_text()).get("n", 0)) + 1
+        except (OSError, ValueError):
+            n = 1
+        a = {"v": 1, "id": "%s-%d" % (self.bead, n), "n": n, "bead": self.bead, "kind": kind,
+             "question": (question or why)[:4000], "why": why[:4000], "run": self.log_path.stem, "t": time.time(),
+             "parks_at": time.time() + 3 * 86400, "brief": self.brief_hash, "status": "open"}
+        self.ask_path().parent.mkdir(exist_ok=True)
+        self.ask_path().write_text(json.dumps(a, indent=1))
+        self.comment("Ask (engine) %s (%s): %s" % (a["id"], kind, a["question"][:1500]))
+        return a
+
     def checkpoint_path(self):
         return tl.config_dir() / "checkpoints" / ("%s.json" % self.bead)
 
@@ -807,6 +859,10 @@ class Engine:
                 "another task landed first). Plan the fix.\n\n" + ck.get("gate_tail", ""))
             self.replan_first = True
             return None, 0, None
+        if ck["brief"] != self.brief_hash and ck["step"] == "land" and (self.answered or {}).get("kind") == "verify":
+            self.plan_data, self.plan_summary = ck["plan"], ck["plan"]["summary"]
+            self.log("note", "the owner answered verify ask %s: going straight to land" % self.answered["id"])
+            return ck["plan"], len(ck["plan"]["stages"]), None
         if ck["brief"] != self.brief_hash:
             self.log("note", "the bead changed since the checkpoint of %s: keeping %d accepted stage(s), planning the rest"
                      % (ck["run"], len(self.done)))
@@ -846,7 +902,8 @@ class Engine:
                 rules=("\nRead %s first: this repo's rules for work in your sandbox (what runs there, what does not)."
                        % (Path(self.wt) / self.cfg["worker_rules"])) if self.cfg["worker_rules"] else "") +
                 "\nThe plan's acceptance cases run on the last stage. If you find a case they miss, add it to new_cases (the "
-                "criterion it proves, the check, why); never remove or weaken one.", resume_key="writer")
+                "criterion it proves, the check, why); never remove or weaken one." + UNCHECKED_TEXT, resume_key="writer")
+            self.unchecked += w.get("unchecked") or []
             if w["question"].strip():
                 raise Blocked("owner decision needed", w["question"])
             self.add_cases(w.get("new_cases") or [])
@@ -886,7 +943,9 @@ class Engine:
                 scope=(state["scope"] if fix else
                        "the stage goal and every requirement and acceptance criterion of the task" if last else
                        "the stage goal (later stages cover the rest of the task)")) +
-                ("\n" + self.where("review") if self.where("review") else "") + self.cases_text(), writer_family=wfam)
+                ("\n" + self.where("review") if self.where("review") else "") + self.cases_text() + UNCHECKED_TEXT,
+                writer_family=wfam)
+            self.unchecked += review.get("unchecked") or []
             same = self.last_flag == "same_family"
             if same:
                 self.warn("%s: the review is from the writer's own model family (no other lane was free)" % name)
@@ -1168,6 +1227,24 @@ class Engine:
         if self.dry:
             self.log("note", "dry run: bead left as it was. %s" % stats)
             return
+        if why.startswith("waiting:"):  # asked already: the bead stays as the ask left it, nothing is said twice
+            self.log("note", why)
+            return
+        kind = ask_kind(why) if outcome not in ("landed", "done") else None
+        if kind:
+            self.raise_ask(kind, why, question)
+        elif outcome in ("landed", "done") and self.ask_path().exists():
+            try:
+                a = json.loads(self.ask_path().read_text())
+                if a.get("status") == "open":
+                    a.update(status="closed", closed=time.time())
+                    self.ask_path().write_text(json.dumps(a, indent=1))
+            except (OSError, ValueError):
+                pass
+        look = [u for u in self.unchecked if u["kind"] == "other"]
+        if look and outcome in ("landed", "done"):
+            tl.bd("label", "add", self.bead, "needs-owner-check")
+            self.comment("Look (engine): landed, but nobody checked: " + "; ".join(u["what"] for u in look))
         shots = self.keep_evidence()
         if shots:
             self.comment("Evidence (engine): %s" % ", ".join(str(p) for p in shots))
@@ -1208,7 +1285,20 @@ def count_tests(diff, pattern):
     return added, removed
 
 
-ENGINE_NOTES = ("Plan (engine)", "Review (engine", "Reflect (engine)", "Blocked:")
+ENGINE_NOTES = ("Plan (engine)", "Review (engine", "Reflect (engine)", "Blocked:", "Ask (engine)", "Evidence (engine)")
+
+
+def ask_kind(why):
+    """The owner ask a block is, or None for the machine's own trouble (paused, waiting) and engine failures."""
+    if why.startswith(("paused:", "waiting:", "failed:")):
+        return None
+    if why.startswith("owner decision needed"):
+        return "decision"
+    if why.startswith(("needs a human", "verify:")):
+        return "verify"
+    if why.startswith("ticket:"):
+        return "ticket"
+    return "stuck"
 
 
 def brief_digest(bead, comments):

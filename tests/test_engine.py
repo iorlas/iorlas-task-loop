@@ -24,9 +24,9 @@ FALSE = PY + ' -c "import sys; sys.exit(1)"'
 PLAN = {"summary": "do it", "stages": [{"goal": "add f", "files": ["f.txt"], "checks": [HAS_F],
                                         "hard": False}], "risks": [], "question": "", "cases": []}
 WRITE = {"summary": "wrote f", "checks_run": [{"cmd": "test -f f.txt", "exit": 0}], "question": "", "bad_checks": [],
-         "new_cases": []}
+         "new_cases": [], "unchecked": []}
 ROUTE = "/h/.claude/plugins/cache/m/iorlas-delegate/%s/skills/delegate/route.py"
-CLEAN = {"findings": [], "unmet": [], "question": "", "leftovers": []}
+CLEAN = {"findings": [], "unmet": [], "question": "", "leftovers": [], "unchecked": []}
 NS = "--no-sandbox"
 
 
@@ -558,7 +558,8 @@ class EngineTest(unittest.TestCase):
         first = tl.git("rev-parse", "task/t-1", cwd=str(self.wt))
         self.assertEqual(tl.git("show", "task/t-1:f.txt", cwd=str(self.wt)), "d2")
         idle = dict(WRITE, summary="re-proved, no change")
-        with mock.patch.object(DelegateScript, "__call__", self.no_write(DelegateScript.__call__)):
+        with mock.patch.object(DelegateScript, "__call__", self.no_write(DelegateScript.__call__)), \
+                mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Rerun it."}]):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [idle], "review": [CLEAN]})
         self.assertEqual(rc, 0)
         self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
@@ -630,7 +631,8 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 2)  # two fix rounds could not make it green: the next run re-plans with the gate's output
         self.assertEqual(self.checkpoint()["step"], "gate-red")
         fix = dict(PLAN, stages=[dict(PLAN["stages"][0], goal="reconcile the API file")])
-        rc, s = self.run_engine({"plan": [fix], "write": [WRITE], "review": [CLEAN]})
+        with mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Main moved; reconcile it."}]):
+            rc, s = self.run_engine({"plan": [fix], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])
         self.assertIn("already accepted", s.prompts[0])
@@ -805,6 +807,71 @@ class EngineTest(unittest.TestCase):
         kept = self.eng.run_dir / "evidence" / "traits.png"
         self.assertTrue(kept.exists())
         self.assertTrue(any(c[:2] == ("comments", "add") and str(kept) in c[3] for c in self.bd_calls))
+
+    # -- asks: every block is an ask the owner answers; an unanswered ask is never asked again
+    def ask(self):
+        p = tl.config_dir() / "asks" / "t-1.json"
+        return json.loads(p.read_text()) if p.exists() else None
+
+    def test_a_planner_question_is_a_decision_ask_on_the_bead(self):
+        rc, _ = self.run_engine({"plan": [dict(PLAN, question="Old format or new?")]})
+        self.assertEqual(rc, 2)
+        a = self.ask()
+        self.assertEqual((a["kind"], a["status"], a["question"]), ("decision", "open", "Old format or new?"))
+        self.assertTrue(any(c[:2] == ("comments", "add") and "%s (decision)" % a["id"] in c[3] for c in self.bd_calls))
+
+    def test_a_used_up_replan_is_a_stuck_ask(self):
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [review(unmet=["a"])]},
+                                max_rounds=1, max_replans=0)
+        self.assertEqual(rc, 2)
+        self.assertEqual(self.ask()["kind"], "stuck")
+
+    def test_a_machine_pause_is_no_ask(self):
+        out = {"v": 1, "status": "failed", "say": "Failed to authenticate: OAuth session expired and could not be refreshed"}
+        self.run_engine({"plan": [out]})
+        self.assertIsNone(self.ask())
+
+    def test_an_open_ask_with_an_unchanged_bead_waits_without_any_ai_step(self):
+        self.run_engine({"plan": [dict(PLAN, question="Old format or new?")]})
+        blocks = len(self.blocked)
+        rc, s = self.run_engine({})
+        self.assertEqual(rc, 2)
+        self.assertEqual(s.calls, [])
+        self.assertEqual(len(self.blocked), blocks)  # the bead stays blocked as it was; nothing re-asked
+        self.assertIn("for the owner's answer", self.eng.log_path.read_text())
+        self.assertEqual(self.ask()["status"], "open")
+
+    def test_an_owner_comment_answers_the_ask_and_the_bead_goes_on(self):
+        self.run_engine({"plan": [dict(PLAN, question="Old format or new?")]})
+        with mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Old format."}]):
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0)
+        self.assertEqual(s.calls[0][0], "planner")
+        self.assertEqual(self.ask()["status"], "answered")
+
+    def test_an_unchecked_requirement_stops_the_land_with_a_verify_ask(self):
+        r = dict(CLEAN, unchecked=[{"what": "the cited spec link did not open", "kind": "link"}])
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r]})
+        self.assertEqual(rc, 2)
+        a = self.ask()
+        self.assertEqual(a["kind"], "verify")
+        self.assertIn("the cited spec link did not open", a["question"])
+        self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "")
+
+    def test_an_answered_verify_ask_goes_straight_to_land(self):
+        r = dict(CLEAN, unchecked=[{"what": "the cited spec link did not open", "kind": "link"}])
+        self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r]})
+        with mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Link is fine, checked."}]):
+            rc, s = self.run_engine({})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual(s.calls, [])
+        self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
+
+    def test_an_unchecked_minor_item_lands_and_labels_the_bead_for_a_look(self):
+        w = dict(WRITE, unchecked=[{"what": "the tooltip wording on a phone", "kind": "other"}])
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [w], "review": [CLEAN]})
+        self.assertEqual(rc, 0)
+        self.assertIn(("label", "add", "t-1", "needs-owner-check"), [c[:4] for c in self.bd_calls])
 
     def test_close_reason_says_what_landed_and_a_refused_close_is_a_warning(self):
         with mock.patch.object(tl, "cmd_close", side_effect=lambda a: self.closed.append(a.reason) or 1):

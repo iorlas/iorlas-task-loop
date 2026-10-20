@@ -76,6 +76,14 @@ run on the last stage and again in every fix round at land. A writer may add cas
 added by the writer); none can be removed, since the plan is the engine's. Pictures under the task's `evidence/` are
 copied to the run dir at close and named on the bead.
 
+Asks: every block is an owner ask, `~/.config/task-loop/asks/<bead>.json` plus an `Ask (engine)` comment: decision
+(a step's question), verify (a denial, or what the workers could not check), stuck (rounds, replans or fix rounds used up,
+budget, land failed), ticket (intake). A machine pause (login, network, lanes) is no ask. A rerun with the ask open and
+the bead unchanged waits (no AI step, the bead stays blocked); the owner answers by commenting on or editing the bead,
+and the rerun goes on from its checkpoint (an answered verify goes straight to land). Workers report `unchecked` items;
+a requirement, number, deletion, link, case or tooling item stops the land with a verify ask; `other` items land and
+label the bead `needs-owner-check`.
+
 Check groups run static → tests → acceptance (the plan's per-stage checks); a red group skips the rest. `when` runs a
 check only when the task changed a matching path; `retry` reruns a known flaky one. A repo check that passed on the
 same tree and base is reused; mark one `"cache": false` when it reads state git cannot see. Stage checks always run. The gate runs once, on the rebased
