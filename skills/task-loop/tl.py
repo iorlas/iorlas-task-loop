@@ -15,7 +15,7 @@
   tl.py worktree start|sunset ...               one worktree per loop session when slots are off
   tl.py usage '<plan.windows JSON>'             feed get_usage to delegate (every 20 min while an engine runs)
   tl.py trace [ID] [--last N] [--json]          engine runs and every worker session of each (for reflection)
-  tl.py run-task ID [--worktree DIR] [--slot S] [--dry-run]
+  tl.py run-task ID [--worktree DIR] [--slot S] [--dry-run] [--fresh]
                                                 one bead through the engine (engine.py), no judgement here
   tl.py dash ensure|stop|status|url             the dashboard server (one per machine)
   tl.py hook session-start                      SessionStart hook: index session id -> transcript path
@@ -688,6 +688,7 @@ def main(argv=None):
     p.add_argument("--worktree")
     p.add_argument("--slot")
     p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--fresh", action="store_true", help="drop the bead's checkpoint: plan again from the start")
     p.add_argument("--quiet", action="store_true", help="only steps and ⚠ lines (default: verbose, for a watching coordinator)")
     p = sp.add_parser("usage", help="pass get_usage's plan.windows (JSON) to delegate, so headless Claude steps may run")
     p.add_argument("windows")

@@ -543,6 +543,125 @@ class EngineTest(unittest.TestCase):
             return r
         return call
 
+    # -- checkpoints: a rerun resumes where the last run stopped, never from scratch
+    TWO = {"summary": "two", "stages": [{"goal": "stage one", "files": ["f.txt"], "checks": [HAS_F], "hard": False},
+                                        {"goal": "stage two", "files": ["f.txt"], "checks": [HAS_F], "hard": False}],
+           "risks": [], "question": ""}
+
+    def stop_at(self, role, nth):
+        """The nth call of a role is where the engine is stopped (SIGTERM raises Blocked in the main thread)."""
+        real, seen = DelegateScript.__call__, {"n": 0}
+
+        def call(this, route, r, *a, **kw):
+            if r == role:
+                seen["n"] += 1
+                if seen["n"] == nth:
+                    raise engine.Blocked("failed: stopped (SIGTERM)")
+            return real(this, route, r, *a, **kw)
+        return mock.patch.object(DelegateScript, "__call__", call)
+
+    def checkpoint(self):
+        p = tl.config_dir() / "checkpoints" / "t-1.json"
+        return json.loads(p.read_text()) if p.exists() else None
+
+    def test_a_stop_mid_stage_2_resumes_stage_2_at_its_round_with_the_same_thread(self):
+        with self.stop_at("reviewer", 3):  # stage 1 accepted; stage 2 sent back once; stopped in its second review
+            rc, _ = self.run_engine({"plan": [self.TWO], "write": [WRITE, WRITE, WRITE],
+                                     "review": [CLEAN, review(unmet=["more"])]})
+        self.assertEqual(rc, 2)
+        ck = self.checkpoint()
+        self.assertEqual((ck["stage"], ck["rounds"], ck["accepted"]), (1, 1, [0]))
+        self.assertEqual(ck["writer"], "ref-write")
+        rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0)
+        self.assertEqual([c[0] for c in s.calls], ["worker", "reviewer"])  # no plan, no stage 1
+        self.assertEqual(s.calls[0][1], "ref-write")                      # the writer's thread goes on
+        self.assertIn("stage two", s.prompts[0])
+        self.assertIn("round 2", self.eng.log_path.read_text())
+        self.assertIsNone(self.checkpoint())                                # landed: nothing left to resume
+
+    def test_reviewed_work_stopped_in_the_gate_goes_straight_to_land(self):
+        with self.stoppable():
+            rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, gate="kill -TERM $PPID; sleep 5")
+        self.assertEqual(rc, 2)
+        self.assertEqual(self.checkpoint()["step"], "land")
+        rc, s = self.run_engine({})
+        self.assertEqual(rc, 0)
+        self.assertEqual(s.calls, [])
+        self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
+
+    def test_a_red_gate_replans_with_its_output_and_keeps_the_accepted_stages(self):
+        red = PY + ' -c "import sys; print(\'RS0016 ContentPack ctor\'); sys.exit(1)"'
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, gate=red)
+        self.assertEqual(rc, 2)
+        self.assertEqual(self.checkpoint()["step"], "gate-red")
+        fix = dict(PLAN, stages=[dict(PLAN["stages"][0], goal="reconcile the API file")])
+        rc, s = self.run_engine({"plan": [fix], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])
+        self.assertIn("already accepted", s.prompts[0])
+        self.assertIn("RS0016 ContentPack ctor", (self.eng.run_dir / "replan.md").read_text())
+
+    def test_fresh_drops_the_checkpoint(self):
+        with self.stop_at("reviewer", 2):
+            self.run_engine({"plan": [self.TWO], "write": [WRITE, WRITE], "review": [CLEAN]})
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, fresh=True)
+        self.assertEqual(rc, 0)
+        self.assertEqual(s.calls[0][0], "planner")
+        self.assertNotIn("already accepted", s.prompts[0])
+
+    def test_leftovers_are_filed_once_across_a_resume(self):
+        lo = {"title": "Rename x", "why": "found in passing"}
+        with self.stop_at("reviewer", 2):
+            self.run_engine({"plan": [self.TWO], "write": [WRITE, WRITE], "review": [dict(CLEAN, leftovers=[lo])]})
+        self.run_engine({"write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(sum(1 for c in self.bd_calls if c[:2] == ("create", "Rename x")), 1)
+
+    def test_a_replan_keeps_the_stages_already_accepted(self):
+        one_left = dict(self.TWO, stages=[dict(self.TWO["stages"][1], goal="stage two, again")])
+        rc, s = self.run_engine({"plan": [self.TWO, one_left], "write": [WRITE] * 4,
+                                 "review": [CLEAN, review(unmet=["a"]), review(unmet=["b"]), CLEAN]}, max_rounds=2)
+        self.assertEqual(rc, 0)
+        roles = [c[0] for c in s.calls]
+        self.assertEqual(roles, ["planner", "worker", "reviewer", "worker", "reviewer", "worker", "reviewer",
+                                 "planner", "worker", "reviewer"])
+        replan = s.prompts[7]
+        self.assertIn("already accepted", replan)
+        self.assertIn("stage one", replan)
+        self.assertIn("stage two, again", s.prompts[8])
+
+    def test_a_run_killed_before_its_close_still_resumes_its_own_dirty_tree(self):
+        with self.stop_at("reviewer", 2):
+            self.run_engine({"plan": [self.TWO], "write": [WRITE, WRITE], "review": [CLEAN]})
+        p = tl.config_dir() / "checkpoints" / "t-1.json"  # as if kill -9: no close, no wip commit
+        ck = json.loads(p.read_text())
+        sh("git", "reset", "-q", "--soft", "HEAD~1", cwd=self.wt)
+        ck.update(closed=False, head=tl.git("rev-parse", "HEAD", cwd=str(self.wt)))
+        p.write_text(json.dumps(ck))
+        rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0)
+        self.assertEqual([c[0] for c in s.calls], ["worker", "reviewer"])
+
+    def test_a_tree_changed_since_the_checkpoint_starts_over(self):
+        with self.stop_at("reviewer", 2):
+            self.run_engine({"plan": [self.TWO], "write": [WRITE, WRITE], "review": [CLEAN]})
+        (self.wt / "f.txt").write_text("someone edited it\n")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0)
+        self.assertEqual(s.calls[0][0], "planner")
+        self.assertIn("changed since", self.eng.log_path.read_text())
+
+    def test_a_changed_bead_keeps_accepted_stages_and_replans_the_rest(self):
+        with self.stop_at("reviewer", 2):
+            self.run_engine({"plan": [self.TWO], "write": [WRITE, WRITE], "review": [CLEAN]})
+        bead = {"id": "t-1", "title": "Add f", "metadata": {}, "description": "Add the file f, and say hi."}
+        one_left = dict(self.TWO, stages=[self.TWO["stages"][1]])
+        with mock.patch.object(tl, "show", return_value=bead):
+            rc, s = self.run_engine({"plan": [one_left], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])
+        self.assertIn("already accepted", s.prompts[0])
+
     def test_close_reason_says_what_landed_and_a_refused_close_is_a_warning(self):
         with mock.patch.object(tl, "cmd_close", side_effect=lambda a: self.closed.append(a.reason) or 1):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})

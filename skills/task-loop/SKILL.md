@@ -55,6 +55,13 @@ one bead) says the work needs the host: the writer runs Unity and tests itself, 
 `--no-sandbox` instead (every step from 0.21). It is the owner's call. A command the worker was denied shows as a ⚠;
 denied with no answer blocks the bead "needs a human: <command>".
 
+A rerun resumes, never restarts. Each step saves a checkpoint (`~/.config/task-loop/checkpoints/<bead>.json`): the
+plan, the accepted stages, the stage, round and feedback, the writer's thread, the branch head. The next run on that
+branch goes on at the same stage and round with the same thread, or straight to land when every stage was accepted. A
+red gate at land re-plans with the gate's output. A changed bead (an answered ask, a new comment) keeps the accepted
+stages and re-plans the rest. A commit or edit that is not the engine's starts over. `tl run-task ID --fresh` drops
+the checkpoint. A replan keeps the stages already accepted.
+
 Check groups run static → tests → acceptance (the plan's per-stage checks); a red group skips the rest. `when` runs a
 check only when the task changed a matching path; `retry` reruns a known flaky one. A repo check that passed on the
 same tree and base is reused; mark one `"cache": false` when it reads state git cannot see. Stage checks always run. The gate runs once, on the rebased

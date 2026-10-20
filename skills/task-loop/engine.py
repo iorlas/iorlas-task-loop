@@ -9,6 +9,7 @@ docs/design/coordinator-less.md. Python 3.8+, standard library only.
 """
 
 import fnmatch
+import hashlib
 import json
 import os
 import re
@@ -280,6 +281,9 @@ class Engine:
                       "tokens_in": 0, "tokens_cached": 0, "tokens_out": 0}
         self.session = tl.session_id()
         self.leftovers = []
+        self.done = []        # goals of the stages accepted on this branch, across plans and runs
+        self.accepted = []    # their indices in the current plan
+        self.brief_hash = ""
         self.stuck_why = ""
         self.host = bool(cfg.get("host") or cfg.get("no_sandbox"))
         self.sandbox_warned = set()
@@ -516,10 +520,12 @@ class Engine:
             with open(exclude, "a") as f:
                 f.write("\n.task/\n")
         exists = bool(self.git("rev-parse", "--verify", "-q", "refs/heads/" + branch))
+        self.left_dirty = False
         if self.git("status", "--porcelain"):
             if self.git("symbolic-ref", "--short", "-q", "HEAD") != branch:
                 raise Blocked("failed: worktree %s has uncommitted work of another branch" % self.wt)
             self.wip("left from an earlier run")
+            self.left_dirty = True
         if exists:
             self.sh(["git", "checkout", "-q", branch], check=True)
         else:
@@ -528,6 +534,7 @@ class Engine:
             if old.name != "evidence":
                 shutil.rmtree(old) if old.is_dir() else old.unlink()
         self.export_brief()
+        self.branch = branch
         return branch
 
     def export_brief(self):
@@ -535,6 +542,7 @@ class Engine:
         (plans, reviews, reflects pile up on every rerun: 40 of lifesim-vbo's 45 KB brief)."""
         text = brief_digest(tl.show(self.bead) or {"id": self.bead}, tl.comments(self.bead))
         (self.run_dir / "brief.md").write_text(text, encoding="utf-8")
+        self.brief_hash = hashlib.sha1(text.encode("utf-8")).hexdigest()
         kb = len(text.encode("utf-8")) / 1024
         if kb > float(self.cfg["brief_kb"]):
             self.warn("the brief is %.0f KB (over %s KB): the bead may be too big for one task" % (kb, self.cfg["brief_kb"]))
@@ -560,11 +568,13 @@ class Engine:
                               "claude plugin install iorlas-delegate@iorlas-marketplace")
             self.log("note", "workers: delegate %s (worker-run v1)" % self.route)
             self.reset(bead)
-            plan = self.plan()
+            plan, i, state = self.resume_point()
+            if plan is None:
+                plan, i, state = self.plan(again=self.replan_first), 0, None
             replans = 0
-            i = 0
             while i < len(plan["stages"]):
-                d = self.stage(plan, i)
+                d = self.stage(plan, i, state)
+                state = None
                 if d == "replan":
                     replans += 1
                     self.stats["replans"] = replans
@@ -572,12 +582,17 @@ class Engine:
                         raise Blocked("stage %d stuck after %s rounds and %d re-plan(s): it needs the owner's hint, "
                                       "a split, or more budget. What failed: %s" % (
                                           i + 1, self.cfg["max_rounds"], replans - 1, self.stuck_why[:600]))
+                    self.accepted = []
                     plan = self.plan(again=True)
                     i = 0
                     continue
+                self.accepted.append(i)
+                self.done.append(plan["stages"][i]["goal"])
                 i += 1
+                self.save_checkpoint(stage=i, rounds=0, n=0, feedback="", step="write" if i < len(plan["stages"]) else "land")
             sha = self.finish(bead)
             outcome = "landed" if sha else "done"
+            self.drop_checkpoint()
         except Blocked as b:
             outcome = "failed" if b.why.startswith("failed:") else "blocked"
             why, question = b.why, b.question
@@ -599,6 +614,10 @@ class Engine:
                      "the rebased tree at land: never put %s in a stage's checks." % (
                          (" (`%s`)" % self.cfg["gate"]) if self.cfg["gate"] else "",
                          ("`%s`" % self.cfg["gate"]) if self.cfg["gate"] else "it"))
+        if self.done:
+            extra += ("\n\nThese stages are already accepted on this branch (reviewed, their work is in the tree): "
+                      "do not plan them again; plan only what the task still needs.\n" +
+                      "".join("- %s\n" % g for g in self.done))
         data, _ = self.ai("plan", "re-plan" if again else "plan", PLAN_PROMPT.format(brief=self.run_dir / "brief.md",
                                                                                      wt=self.wt) + extra +
                           "\n\n" + "\n".join(rules) +
@@ -617,9 +636,89 @@ class Engine:
         self.comment("\n".join(lines))
         (self.run_dir / "plan.json").write_text(json.dumps(data, indent=1))
         self.export_brief()
+        self.save_checkpoint(stage=0, rounds=0, n=0, feedback="", step="write")
         return data
 
-    def stage(self, plan, i):
+    # -- checkpoints: where a stopped run was, outside the worktree, so the next run goes on from there
+    def checkpoint_path(self):
+        return tl.config_dir() / "checkpoints" / ("%s.json" % self.bead)
+
+    def save_checkpoint(self, **at):
+        rec = {"v": 1, "bead": self.bead, "branch": self.git("symbolic-ref", "--short", "-q", "HEAD"),
+               "plan": self.plan_data, "done": self.done, "accepted": self.accepted,
+               "writer": self.writer.get("delegate") or "", "brief": self.brief_hash, "head": self.git("rev-parse", "HEAD"),
+               "closed": False,
+               "run": self.log_path.stem, "t": time.time(), **at}
+        p = self.checkpoint_path()
+        p.parent.mkdir(exist_ok=True)
+        p.write_text(json.dumps(rec, indent=1))
+
+    def mark_checkpoint_closed(self, why=""):
+        """The close step committed everything: the checkpoint's head is now exactly what the next run should find. A
+        red gate at land is no stop: the next run re-plans with the gate's output, or it would rerun the same red gate."""
+        try:
+            ck = json.loads(self.checkpoint_path().read_text())
+        except (OSError, ValueError):
+            return
+        ck.update(head=self.git("rev-parse", "HEAD"), closed=True)
+        if why.startswith("gate red"):
+            ck.update(step="gate-red", gate_tail=why[-3000:])
+        self.checkpoint_path().write_text(json.dumps(ck, indent=1))
+
+    def drop_checkpoint(self):
+        try:
+            self.checkpoint_path().unlink()
+        except OSError:
+            pass
+
+    def resume_point(self):
+        """(plan, stage index, stage state) from the last run's checkpoint, or (None, 0, None) to plan afresh. A tree
+        changed since (someone edited the branch) starts over; a changed bead keeps the accepted stages and re-plans
+        the rest; otherwise the run goes on at the same stage and round, with the same writer thread, or straight to
+        land when every stage was accepted."""
+        self.replan_first = False
+        if self.cfg.get("fresh"):
+            self.drop_checkpoint()
+        try:
+            ck = json.loads(self.checkpoint_path().read_text())
+        except (OSError, ValueError):
+            return None, 0, None
+        branch = self.git("symbolic-ref", "--short", "-q", "HEAD")
+        if ck.get("v") != 1 or ck.get("branch") != branch or not ck.get("plan"):
+            self.drop_checkpoint()
+            return None, 0, None
+        head = self.git("rev-parse", "HEAD")
+        ours = head == ck["head"] or (self.left_dirty and not ck["closed"] and self.git("rev-parse", "HEAD~1") == ck["head"])
+        if not ours:  # a commit, or an edit after a clean close, that is not this engine's: the plan may not fit it
+            self.log("note", "the branch changed since the checkpoint of %s: planning again from the start" % ck["run"])
+            self.drop_checkpoint()
+            return None, 0, None
+        self.done = list(ck["done"])
+        if ck["writer"]:
+            self.writer["delegate"] = ck["writer"]
+        if ck["step"] == "gate-red":
+            self.log("note", "the gate was red at land in %s: re-planning with its output, keeping %d accepted stage(s)"
+                     % (ck["run"], len(self.done)))
+            (self.run_dir / "replan.md").write_text(
+                "Every stage was accepted, then the gate failed on the tree rebased onto the latest base (often "
+                "another task landed first). Plan the fix.\n\n" + ck.get("gate_tail", ""))
+            self.replan_first = True
+            return None, 0, None
+        if ck["brief"] != self.brief_hash:
+            self.log("note", "the bead changed since the checkpoint of %s: keeping %d accepted stage(s), planning the rest"
+                     % (ck["run"], len(self.done)))
+            return None, 0, None
+        self.plan_data, self.plan_summary, self.accepted = ck["plan"], ck["plan"]["summary"], list(ck["accepted"])
+        (self.run_dir / "plan.json").write_text(json.dumps(ck["plan"], indent=1))
+        stages = ck["plan"]["stages"]
+        if ck["step"] == "land" or ck["stage"] >= len(stages):
+            self.log("note", "resuming %s: every stage was accepted, going straight to land" % ck["run"])
+            return ck["plan"], len(stages), None
+        self.log("note", "resuming %s at stage %d/%d, round %d (write %d)" % (
+            ck["run"], ck["stage"] + 1, len(stages), ck["rounds"] + 1, ck["n"] + 1))
+        return ck["plan"], ck["stage"], {"rounds": ck["rounds"], "n": ck["n"], "feedback": ck["feedback"]}
+
+    def stage(self, plan, i, state=None):
         """Write → checks → review until the review is clean. A red check goes straight back to the writer (it never
         reaches the reviewer); max_check_tries red in a row, or a review that sends it back, use up a round; when the
         rounds are used up the stage asks for a re-plan. Accept is a rule: checks green and nothing blocking in the
@@ -627,8 +726,10 @@ class Engine:
         st = plan["stages"][i]
         last = i == len(plan["stages"]) - 1
         name = "stage %d/%d" % (i + 1, len(plan["stages"]))
-        feedback, rounds, red, n = "", 0, 0, 0
+        state = state or {}
+        feedback, rounds, red, n = state.get("feedback", ""), state.get("rounds", 0), 0, state.get("n", 0)
         while True:
+            self.save_checkpoint(stage=i, rounds=rounds, n=n, feedback=feedback, step="write")
             n += 1
             self.stats["writes"] += 1
             if n >= 2:
@@ -845,9 +946,11 @@ class Engine:
             signal.signal(signal.SIGTERM, signal.SIG_IGN)  # a second stop must not break the close-out
         why = why or ("stopped before a reason was recorded" if outcome == "failed" else "")
         mins = (time.time() - self.t0) / 60
-        if outcome not in ("landed", "done") and self.git("status", "--porcelain") and \
-                self.git("symbolic-ref", "--short", "-q", "HEAD").startswith("task/"):
-            self.wip(outcome)  # the next run continues this branch
+        branch = self.git("symbolic-ref", "--short", "-q", "HEAD")
+        if outcome not in ("landed", "done") and branch and branch == getattr(self, "branch", None):
+            if self.git("status", "--porcelain"):
+                self.wip(outcome)  # the next run continues this branch
+            self.mark_checkpoint_closed(why)
         stats = "cost=$%.2f; minutes=%d; %s" % (self.cost, mins, "; ".join("%s=%s" % kv for kv in self.stats.items()))
         self.log("node", "close: %s" % outcome, outcome=outcome, why=why)
         self.write_trace(outcome, why, sha)
@@ -1094,6 +1197,7 @@ def main(a):
     wt = str(Path(wt).resolve())
     if not a.dry_run and tl.cmd_claim(Args(id=a.id, worktree=wt, slot=a.slot)) != 0:
         return 1  # bd lets this session re-claim its own bead (a reopened one); another session's claim stops here
+    cfg["fresh"] = bool(getattr(a, "fresh", False))
     eng = Engine(a.id, wt, cfg, dry_run=a.dry_run, verbose=not getattr(a, "quiet", False))
     say("engine log: %s" % eng.log_path)
     return eng.run()
