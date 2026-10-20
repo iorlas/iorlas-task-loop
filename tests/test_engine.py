@@ -120,6 +120,17 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
         self.assertTrue(any(c[:2] == ("comments", "add") and "Reflect (engine)" in c[3] for c in self.bd_calls))
 
+    def test_no_prompt_points_outside_the_worktree_the_brief_plan_and_replan_are_inline(self):
+        # delegate 0.23 keeps Claude's file tools in the worktree: a path to the run dir is a file no step can read
+        rc, s = self.run_engine({"plan": [PLAN, PLAN], "write": [WRITE, WRITE, WRITE],
+                                 "review": [review(unmet=["a"]), CLEAN]}, max_rounds=1)
+        self.assertEqual(rc, 0)
+        run = str(self.eng.run_dir)
+        for role, p in zip([c[0] for c in s.calls], s.prompts):
+            self.assertNotIn(run, p, role)
+        self.assertIn("add f", s.prompts[0] + s.prompts[1])        # the plan, inline in the write
+        self.assertIn("the review still sends it back", s.prompts[3])  # the replan's reason, inline
+
     def test_brief_is_a_digest_without_engine_comments(self):
         bead = {"id": "t-1", "title": "Add f", "metadata": {}, "description": "Add the file f.",
                 "acceptance_criteria": "f.txt exists", "notes": "owner: keep it short",
@@ -154,7 +165,7 @@ class EngineTest(unittest.TestCase):
         self.assertFalse(str(run).startswith(str(self.wt)))
         for f in ("brief.md", "plan.json", "engine-checks.json"):
             self.assertTrue((run / f).exists(), f)
-        self.assertIn(str(run / "brief.md"), s.prompts[0])
+        self.assertIn("Add f", s.prompts[0])  # the brief's text itself: a worker may not read outside its worktree
 
     def test_repo_checks_on_an_equal_tree_and_base_are_reused(self):
         count = Path(self.tmp.name) / "count"

@@ -556,6 +556,14 @@ class Engine:
         if kb > float(self.cfg["brief_kb"]):
             self.warn("the brief is %.0f KB (over %s KB): the bead may be too big for one task" % (kb, self.cfg["brief_kb"]))
 
+    def brief_text(self):
+        """Inline, never a path: a worker's file tools reach only its worktree (delegate 0.23), and the engine's files
+        live outside it so the worker cannot change them."""
+        return (self.run_dir / "brief.md").read_text(encoding="utf-8")
+
+    def plan_text(self):
+        return json.dumps(getattr(self, "plan_data", None) or {}, indent=1)
+
     def comment(self, text):
         if not self.dry:
             tl.bd("comments", "add", self.bead, text)
@@ -612,8 +620,13 @@ class Engine:
         return 0 if outcome in ("landed", "done") else 2
 
     def plan(self, again=False):
-        extra = ("\n\nThe previous plan did not work; what failed is in %s. Plan again." %
-                 (self.run_dir / "replan.md")) if again else ""
+        why = ""
+        if again:
+            try:
+                why = (self.run_dir / "replan.md").read_text(encoding="utf-8")[-6000:]
+            except OSError:
+                pass
+        extra = ("\n\nThe previous plan did not work. What failed:\n<failed>\n%s\n</failed>\nPlan again." % why) if again else ""
         rules = []
         if self.cfg["worker_rules"]:
             rules.append("Read %s: this repo's rules for workers (what runs where, known pitfalls of its tools); the "
@@ -626,7 +639,7 @@ class Engine:
             extra += ("\n\nThese stages are already accepted on this branch (reviewed, their work is in the tree): "
                       "do not plan them again; plan only what the task still needs.\n" +
                       "".join("- %s\n" % g for g in self.done))
-        data, _ = self.ai("plan", "re-plan" if again else "plan", PLAN_PROMPT.format(brief=self.run_dir / "brief.md",
+        data, _ = self.ai("plan", "re-plan" if again else "plan", PLAN_PROMPT.format(brief=self.brief_text(),
                                                                                      wt=self.wt) + extra +
                           "\n\n" + "\n".join(rules) +
                           ("\n\n" + self.where("plan") if self.where("plan") else ""))
@@ -746,7 +759,7 @@ class Engine:
             if n >= 2:
                 self.warn("%s: write %d (round %d)" % (name, n, rounds + 1))
             w, wfam = self.ai("write", "%s write %d" % (name, n), WRITE_PROMPT.format(
-                brief=self.run_dir / "brief.md", plan=self.run_dir / "plan.json", n=i + 1, goal=st["goal"],
+                brief=self.brief_text(), plan=self.plan_text(), n=i + 1, goal=st["goal"],
                 files=", ".join(st["files"]), checks="\n".join("- " + c for c in st["checks"]) or "- (none named)",
                 feedback=feedback, evidence=self.evidence_dir, where=self.where("write"), gate=(" (`%s`)" % self.cfg["gate"]) if self.cfg["gate"] else "",
                 rules=("\nRead %s first: this repo's rules for work in your sandbox (what runs there, what does not)."
@@ -784,7 +797,7 @@ class Engine:
             red = 0
             self.stats["reviews"] += 1
             review, _ = self.ai("review", name, REVIEW_PROMPT.format(
-                brief=self.run_dir / "brief.md", plan=self.run_dir / "plan.json", n=i + 1, goal=st["goal"],
+                brief=self.brief_text(), plan=self.plan_text(), n=i + 1, goal=st["goal"],
                 base=self.base_sha(), checks=compact(checks), summary=w["summary"], evidence=self.evidence_dir,
                 added=self.stats["tests_added"], removed=self.stats["tests_removed"],
                 scope=(state["scope"] if fix else
@@ -1206,8 +1219,11 @@ COMMON = ("You are one step of an unattended task engine. Nobody is watching; do
 
 PLAN_PROMPT = COMMON + """
 
-Read the task: {brief} (the bead, with its acceptance criteria and comments: earlier plans, review findings,
-the owner's answers). Read the code it names. Then plan.
+The task (the bead, with its acceptance criteria and comments: review findings, the owner's answers):
+<task>
+{brief}
+</task>
+Read the code it names. Then plan.
 
 - Split the work into stages, each one coherent piece that its checks can judge (often one stage is enough).
 - For each stage: goal, the files it changes, the exact commands that prove it (tests, linters), and hard=true only
@@ -1224,7 +1240,13 @@ the owner's answers). Read the code it names. Then plan.
 
 WRITE_PROMPT = """You are the writer for one stage of a task, in an unattended engine. Nobody is watching.
 
-Task: {brief}. Plan: {plan}. Your stage: {n}: {goal}{rules}
+<task>
+{brief}
+</task>
+<plan>
+{plan}
+</plan>
+Your stage: {n}: {goal}{rules}
 Files: {files}
 The stage's checks (the engine runs all of them after you, outside your sandbox):
 {checks}
@@ -1247,7 +1269,13 @@ stage. question: empty unless only the owner can decide something about the task
 phone); never a question about tools, sandbox or permissions."""
 
 REVIEW_PROMPT = """You review one stage of a task, from another model family than the writer. Do not edit files.
-Task: {brief}. Plan: {plan}. Stage {n}: {goal}
+<task>
+{brief}
+</task>
+<plan>
+{plan}
+</plan>
+Stage {n}: {goal}
 The work: `git diff {base}` and new files (the task's work since main, committed or not).
 The engine ran the checks outside any sandbox, and they all pass; these results are facts:
 {checks}
