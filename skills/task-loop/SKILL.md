@@ -100,12 +100,16 @@ Intake: a bead with no acceptance criteria (the field, or a `## Acceptance Crite
 AI step; a plan of more than `engine.max_stages` (3) stages is a split ticket, unless the owner already answered one. A decision or ticket ask takes the bead out of the unattended queue: with `engine.pick_label` set (lifesim: `auto`) the engine removes that label and adds `engine.needs_info_label` (`needs-info`), and the ask comment says so; answering does not relabel it, the owner does. Verify and stuck asks keep the label. Neither label change counts as an answer.
 
 Asks: every block is an owner ask, `~/.config/task-loop/asks/<bead>.json` plus an `Ask (engine)` comment: decision
-(a step's question), verify (a denial, or what the workers could not check), stuck (rounds, replans or fix rounds used up,
+(a step's question; a writer's or reviewer's question that an accepted requirement already answers, quoted in its
+`decided` field, is a fix round citing that requirement instead, and only two accepted requirements in conflict or a
+missing requirement reach the owner, lifesim-d5f.58), verify (a denial, or what the workers could not check), stuck (rounds, replans or fix rounds used up,
 budget, land failed), ticket (intake). A machine pause (a `retry` answer past the wait, or `owner` for a login or setup) is no ask. A rerun with the ask open and
 the bead unchanged waits (no AI step, the bead stays blocked); the owner answers by commenting on or editing the bead,
 and the rerun goes on from its checkpoint. An answered verify for a denial goes straight to land; one for what the
-workers could not check goes straight to land only when the answer is a plain yes (a few words, each a yes: `right`,
-`ok, land it`, `LGTM`); any other answer (`add a test that X, then land`, `wrong: ...`) goes to the planner with the
+workers could not check goes straight to land only when the answer is a yes (a few words, each a yes: `right`,
+`ok, land it`, `LGTM`), or opens with such a yes and then gives only evidence or reasons (`Right. The log shows X.`);
+an answer whose first clause is not a yes, that has a `?`, a turn word anywhere (`but`, `though`, `missing`, `don't`)
+or a work verb opening a clause (`Right. Fix ...`), or any other answer (`add a test that X, then land`, `wrong: ...`) goes to the planner with the
 answer in its prompt, keeping the accepted stages, and a plan of no stages (the answer asks for nothing more) lands.
 The writer's `unchecked` items go to the review, which reports what is still unproven after the checks.
 Unchecked items are per stage: each review is shown every item still open (earlier stages' and this writer's) and its

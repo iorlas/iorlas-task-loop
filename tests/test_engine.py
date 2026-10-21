@@ -23,10 +23,10 @@ HAS_F = PY + ' -c "import os,sys; sys.exit(0 if os.path.exists(\'f.txt\') else 1
 FALSE = PY + ' -c "import sys; sys.exit(1)"'
 PLAN = {"summary": "do it", "stages": [{"goal": "add f", "files": ["f.txt"], "checks": [HAS_F],
                                         "hard": False}], "risks": [], "question": "", "cases": []}
-WRITE = {"summary": "wrote f", "checks_run": [{"cmd": "test -f f.txt", "exit": 0}], "question": "", "bad_checks": [],
+WRITE = {"summary": "wrote f", "checks_run": [{"cmd": "test -f f.txt", "exit": 0}], "question": "", "decided": "", "bad_checks": [],
          "new_cases": [], "unchecked": []}
 ROUTE = "/h/.claude/plugins/cache/m/iorlas-delegate/%s/skills/delegate/route.py"
-CLEAN = {"findings": [], "unmet": [], "question": "", "leftovers": [], "unchecked": []}
+CLEAN = {"findings": [], "unmet": [], "question": "", "decided": "", "leftovers": [], "unchecked": []}
 CONTRACT = {"worker_run": 2, "features": ["reason", "next", "context"], "reasons": {},
             "lanes": {"codex": {"hidden": ["every skill"]}, "claude": {"hidden": ["skills"]}}}
 
@@ -37,8 +37,8 @@ def ans(status, reason, nxt, **kw):
 BEAD = {"id": "t-1", "title": "Add f", "metadata": {}, "acceptance_criteria": "f.txt exists"}
 
 
-def review(unmet=(), findings=(), question=""):
-    return dict(CLEAN, unmet=list(unmet), findings=list(findings), question=question)
+def review(unmet=(), findings=(), question="", decided=""):
+    return dict(CLEAN, unmet=list(unmet), findings=list(findings), question=question, decided=decided)
 
 
 def finding(severity):
@@ -493,6 +493,48 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertIn("Keep the old save format?", self.blocked[0])
         self.assertNotIn("reviewer", [c[0] for c in s.calls])
+
+    R10 = "R10: a general rule never names a single item"
+
+    def test_a_review_question_an_accepted_requirement_decides_is_a_fix_round_citing_it(self):
+        # lifesim-d5f.58: 'undo, or change R10?' became an owner decision ask; R10 already decides it
+        q = "The writer changed the general rule; it contradicts R10. (a) undo and fix the test another way, (b) change R10"
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE],
+                                 "review": [review(question=q, decided=self.R10), CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual(self.blocked, [])
+        self.assertIsNone(self.ask())
+        writes = [p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker"]
+        self.assertEqual(len(writes), 2)
+        self.assertIn(self.R10, writes[1])
+        self.assertIn("decided", s.prompts[2])
+
+    def test_a_writer_question_an_accepted_requirement_decides_is_a_fix_round_citing_it(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Undo or change R10?",
+                                                                decided=self.R10), WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        writes = [p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker"]
+        self.assertEqual(len(writes), 2)
+        self.assertIn(self.R10, writes[1])
+        self.assertIn("decided", writes[0])
+
+    def test_a_writer_that_keeps_asking_what_a_requirement_decides_uses_up_its_rounds(self):
+        ask = dict(WRITE, question="Undo or change R10?", decided=self.R10)
+        rc, s = self.run_engine({"plan": [PLAN, PLAN], "write": [ask] * 6}, max_rounds=2, max_replans=1)
+        self.assertEqual(rc, 2)
+        self.assertNotIn("owner decision needed", self.blocked[0])
+
+    def asks_the_owner(self, q):
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [review(question=q)]})
+        self.assertEqual(rc, 2)
+        self.assertEqual(self.ask()["kind"], "decision")
+        self.assertIn(q, self.blocked[-1])
+
+    def test_two_accepted_requirements_in_conflict_are_still_a_decision_ask(self):
+        self.asks_the_owner("R3 says keep saves forever, R7 says drop them after a week: which wins?")
+
+    def test_a_missing_requirement_is_still_a_decision_ask(self):
+        self.asks_the_owner("No requirement says what the empty filter shows: nothing, or everything?")
 
     def test_blocked_work_is_committed_on_the_task_branch(self):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [review(question="A or B?")]})
@@ -1128,6 +1170,20 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(s.calls, [])
         self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
 
+    def test_a_verify_answer_with_a_yes_and_evidence_goes_straight_to_land(self):
+        text = "Right. The log shows the link opens and returns the spec."
+        with mock.patch.object(tl, "comments", return_value=self.verify_then_answer(text)):
+            rc, s = self.run_engine({})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual(s.calls, [])
+
+    def test_a_verify_answer_with_a_yes_and_a_change_plans_it(self):
+        more = dict(PLAN, stages=[dict(PLAN["stages"][0], goal="test Y")])
+        with mock.patch.object(tl, "comments", return_value=self.verify_then_answer("right, but add a test for Y")):
+            rc, s = self.run_engine({"plan": [more], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])
+
     def test_a_verify_answer_asking_for_more_work_plans_it_keeping_the_accepted_stages(self):
         # lifesim-fld.26.15: 'add a test that ..., then land' went straight to land without the test
         text = "add a test that f.txt is not empty, then land"
@@ -1614,6 +1670,18 @@ class Confirms(unittest.TestCase):
             self.assertTrue(engine.confirms(t), t)
         for t in ("", "wrong", "not right", "add a test that X, then land", "right, but rename f", "no",
                   "Link is fine, checked."):
+            self.assertFalse(engine.confirms(t), t)
+
+    def test_a_yes_then_only_evidence_or_reasons_confirms(self):
+        # lifesim-gfr.31.1: 'Right. <evidence>' replanned and cost a write round
+        for t in ("Right. The log shows X.", "Correct. The cache entry is written before the lock is released.",
+                  "Yes, the log at /tmp/x shows 3 retries; the link opens.", "right: no errors in the log, it opens fine",
+                  "Right.\nThe screenshot shows the menu at 60 fps, because the shader is cached."):
+            self.assertTrue(engine.confirms(t), t)
+        for t in ("right, but add a test for Y", "wrong: the menu still flickers", "Right. Fix the typo in the doc.",
+                  "Yes, also rename f.", "Correct, though the log should name the file.", "Right, don't land yet",
+                  "Yes. Please add a case for the empty filter.", "Right? The log shows X.", "Right, it is missing a test.",
+                  "yes, change the default to 3", "Right, then remove the debug line."):
             self.assertFalse(engine.confirms(t), t)
 
 

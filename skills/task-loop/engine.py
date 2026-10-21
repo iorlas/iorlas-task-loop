@@ -86,8 +86,8 @@ SCHEMAS = {
                                                       "required": ["criterion", "check"],
                                                       "properties": {"criterion": S_STR, "check": S_STR}}}}},
     "write": {"type": "object", "additionalProperties": False,
-              "required": ["summary", "checks_run", "question", "bad_checks", "new_cases", "unchecked"],
-              "properties": {"summary": S_STR, "question": S_STR,
+              "required": ["summary", "checks_run", "question", "decided", "bad_checks", "new_cases", "unchecked"],
+              "properties": {"summary": S_STR, "question": S_STR, "decided": S_STR,
                              "unchecked": {"type": "array", "items": {
                                  "type": "object", "additionalProperties": False, "required": ["what", "kind"],
                                  "properties": {"what": S_STR, "kind": {"type": "string", "enum": list(UNCHECKED_KINDS) + ["other"]}}}},
@@ -101,7 +101,7 @@ SCHEMAS = {
                                  "type": "object", "additionalProperties": False, "required": ["cmd", "exit"],
                                  "properties": {"cmd": S_STR, "exit": {"type": "integer"}}}}}},
     "review": {"type": "object", "additionalProperties": False,
-               "required": ["findings", "unmet", "question", "leftovers", "unchecked"],
+               "required": ["findings", "unmet", "question", "decided", "leftovers", "unchecked"],
                "properties": {"unchecked": {"type": "array", "items": {
                        "type": "object", "additionalProperties": False, "required": ["what", "kind"],
                        "properties": {"what": S_STR, "kind": {"type": "string", "enum": list(UNCHECKED_KINDS) + ["other"]}}}},
@@ -110,7 +110,7 @@ SCHEMAS = {
                    "properties": {"file": S_STR, "line": {"type": "integer"},
                                   "severity": {"type": "string", "enum": ["high", "medium", "low"]},
                                   "fix": S_STR}}},
-                   "unmet": S_STRS, "question": S_STR, "leftovers": LEFTOVERS}},
+                   "unmet": S_STRS, "question": S_STR, "decided": S_STR, "leftovers": LEFTOVERS}},
 }
 
 
@@ -955,6 +955,16 @@ class Engine:
                 "criterion it proves, the check, why); never remove or weaken one." + ("" if last else LATER_CASES) +
                 UNCHECKED_TEXT, resume_key="writer")
             wrote_unchecked = w.get("unchecked") or []  # the review decides what is still unproven after the checks
+            if w["question"].strip() and w["decided"].strip():  # lifesim-d5f.58: an accepted requirement is no question
+                rounds += 1
+                self.stats["rounds"] += 1
+                self.stuck_why = "the writer asked what an accepted requirement decides: %s" % w["decided"]
+                self.warn("%s: %s" % (name, self.stuck_why[:300]))
+                if rounds >= int(self.cfg["max_rounds"]):
+                    (self.run_dir / "replan.md").write_text(self.stuck_why + "\n\nThe question: " + w["question"])
+                    return "replan"
+                feedback = DECIDED_TEXT % (w["question"], w["decided"])
+                continue
             if w["question"].strip():
                 raise Blocked("owner decision needed", w["question"])
             self.add_cases(w.get("new_cases") or [])
@@ -1016,7 +1026,12 @@ class Engine:
                     ["%s:%s [%s] %s" % (f["file"], f["line"], f["severity"], f["fix"]) for f in review["findings"]] +
                     ["unmet: " + u for u in review["unmet"]]) or "no findings")
             self.leftovers += review["leftovers"]
-            if review["question"].strip():
+            if review["question"].strip() and review["decided"].strip():  # lifesim-d5f.58: a fix round, not an ask
+                self.log("note", "%s: the review asked what an accepted requirement decides (%s): sending it back"
+                         % (name, review["decided"][:200]))
+                review["unmet"] = review["unmet"] + ["%s (an accepted requirement decides it: meet it) %s" % (
+                    review["decided"], review["question"])]
+            elif review["question"].strip():
                 raise Blocked("owner decision needed", review["question"])
             blocking = [f for f in review["findings"] if f["severity"] in ("high", "medium")]
             if not blocking and not review["unmet"]:
@@ -1368,11 +1383,34 @@ CONFIRM_WORDS = {"right", "yes", "yep", "yeah", "y", "is", "ok", "okay", "k", "c
                  "true", "done", "please", "works", "thanks"}
 
 
+# a yes followed by these asks for work: a turn ('but', 'though', 'missing') anywhere, or a work verb opening a clause
+TURN_WORDS = {"but", "however", "except", "instead", "though", "although", "also", "still", "wrong", "missing", "should",
+              "must", "need", "needs", "never", "don", "dont", "yet", "unless", "todo"}
+WORK_VERBS = {"add", "fix", "change", "rename", "remove", "drop", "delete", "replace", "move", "update", "rewrite",
+              "revert", "undo", "make", "use", "write", "run", "keep", "split", "do", "try", "test", "check"}
+LEAD_WORDS = {"please", "now", "just", "and", "then", "so"}
+
+
 def confirms(answer):
-    """True when an answer only says yes ('right', 'ok, land it', 'LGTM'): a few words, every one of them a yes. Any
-    other word ('add a test, then land', 'wrong', 'not right', a name) means the owner may want work done."""
+    """True when an answer says yes and asks for nothing: a few words, every one of them a yes ('right', 'ok, land
+    it', 'LGTM'), or such a yes first and then only evidence or reasons ('Right. The log shows X.'). A first clause
+    that is not a yes ('wrong: ...', 'not right'), a question mark, a turn word anywhere ('right, but ...') or a work
+    verb opening a clause ('Right. Fix ...') means the owner may want work done. When in doubt it is work: a needless
+    re-plan costs one planner call, a wrong land ships without what was asked."""
     words = re.findall(r"[a-z]+", answer.lower())
-    return 0 < len(words) <= 6 and all(w in CONFIRM_WORDS for w in words)
+    if 0 < len(words) <= 6 and all(w in CONFIRM_WORDS for w in words):
+        return True
+    clauses = [re.findall(r"[a-z]+", c) for c in re.split(r"[.!;:,\n]", answer.lower())]
+    clauses = [c for c in clauses if c]
+    if not clauses or "?" in answer or not all(w in CONFIRM_WORDS for w in clauses[0]):
+        return False
+    if any(w in TURN_WORDS for w in words):
+        return False
+    for c in clauses[1:]:
+        lead = [w for w in c if w not in LEAD_WORDS]
+        if not c or c[0] in WORK_VERBS or (lead and lead[0] in WORK_VERBS):
+            return False
+    return True
 
 
 def has_criteria(bead):
@@ -1536,11 +1574,13 @@ def details(node, d):
                  for n, s in enumerate(d["stages"])] + ["risk: %s → %s" % (r["what"], r["check"]) for r in d["risks"]])
     if node == "write":
         return ["ran `%s` exit %d" % (c["cmd"], c["exit"]) for c in d["checks_run"]] + (
-            ["question: " + d["question"]] if d["question"].strip() else [])
+            ["question: " + d["question"]] if d["question"].strip() else []) + (
+            ["decided by: " + d["decided"]] if d["decided"].strip() else [])
     if node == "review":
         return (["%s %s:%s %s" % (f["severity"], f["file"], f["line"], f["fix"]) for f in d["findings"]] +
                 ["unmet: " + u for u in d["unmet"]] + ["leftover: " + lo["title"] for lo in d["leftovers"]] +
-                (["question: " + d["question"]] if d["question"].strip() else []))
+                (["question: " + d["question"]] if d["question"].strip() else []) +
+                (["decided by: " + d["decided"]] if d["decided"].strip() else []))
     return []
 
 
@@ -1588,6 +1628,14 @@ Read the code it names. Then plan.
   scope, a hard-to-reverse architecture choice). Decide technical choices yourself. If you ask, write the question
   so it can be answered from a phone: what you found, the decision, 2-3 options with costs, your recommendation."""
 
+DECIDED_RULE = ("A change that contradicts an accepted requirement (in the task, its acceptance criteria, or a "
+                "requirement it cites) is never the owner's question: the fix is to meet the requirement. decided: the "
+                "accepted requirement, quoted, that already answers your question (the engine then sends the stage "
+                "back to meet it instead of asking the owner); empty when you have no question, when two accepted "
+                "requirements conflict, or when no requirement decides it yet (those are the owner's).")
+DECIDED_TEXT = ("\nYou asked: %s\nAn accepted requirement already decides it: %s\nMeet that requirement: change the "
+                "work, never the requirement.\n")
+
 WRITE_PROMPT = """You are the writer for one stage of a task, in an unattended engine. Nobody is watching.
 
 <task>
@@ -1614,7 +1662,7 @@ measurement): save the exact commands and their output as files in {evidence}/ a
 Only that proof goes there, never your own runs of the checks.
 Rules: no suppressions; do not weaken, skip or delete tests; stay inside the
 stage. question: empty unless only the owner can decide something about the task itself (then explain it for a
-phone); never a question about tools or access."""
+phone); never a question about tools or access.""" + "\n" + DECIDED_RULE
 
 REVIEW_PROMPT = """You review one stage of a task, from another model family than the writer. Do not edit files.
 <task>
@@ -1640,7 +1688,7 @@ Return:
   by the evidence is met; never list a remark that something is fine.
 - question: empty, unless only the owner can decide something about the task itself (then explain it for a phone:
   what you found, the options, your recommendation).
-- leftovers: real follow-up work you noticed outside this task, else empty."""
+- leftovers: real follow-up work you noticed outside this task, else empty.""" + "\n" + DECIDED_RULE
 
 
 # ---- entry ----------------------------------------------------------------------------------------------------------
