@@ -326,6 +326,7 @@ base and its local/remote twin). Exit 1 when any is lost.
 | landed | its patch is on the base (`git cherry`), or a land of its bead came after it: a base commit titled `... (<bead>)` or a trace's land sha on the base (squash lands are no ancestors) |
 | reclaimed | a later run of the bead started after it (that run continues the branch) |
 | pending | the bead is open, blocked or in progress and no run took it up yet: listed, not lost (a paused bead's wip) |
+| unknown | bd failed (tracker unreachable): listed, never counted as lost |
 | lost | the bead is closed or unknown and never landed after it, or a `wip/<slot>/<ts>` branch of a dead session |
 
 `tl report` counts `lost` against M2 and lists `pending` branches; `--since` limits both to commits made since T.

@@ -121,16 +121,28 @@ def prefix(bead):
 
 # ---- 10.2: lost work --------------------------------------------------------------------------------------------------
 
+def bead_status(bead, repo):
+    """The bead's status, None when the tracker has no such bead, "?" when bd itself failed (no false lost work)."""
+    r = tl.bd("show", bead, "--json", cwd=repo)
+    try:
+        d = json.loads(r.stdout)
+    except ValueError:
+        return None if r.returncode == 0 or "not found" in (r.stderr or "").lower() else "?"
+    d = d[0] if isinstance(d, list) and d else d
+    return d.get("status") if isinstance(d, dict) else None
+
+
 def lost_work(repo, since=None, base=None, status_of=None, traces=None):
     """Every commit on a task/<bead> or wip/* branch that is not on the base, classed:
     landed     its patch is on the base (git cherry), or a land of its bead came after it: a base commit titled
                '... (<bead>)' or the land sha a trace recorded, on the base (squash lands are no ancestors);
     reclaimed  a later run of the bead started after it (the engine continues the branch);
     pending    its bead is still open, blocked or in progress: the next run continues the branch;
+    unknown    bd failed, so the bead's state cannot be told (listed, never counted as lost);
     lost       its bead is closed (or unknown) with no land after it, or it is on a wip/* branch of a dead session."""
     base = base or default_base(repo)
     bases = bases_of(repo, base) or [base]
-    status_of = status_of or (lambda b: (tl.show(b, cwd=repo) or {}).get("status"))
+    status_of = status_of or (lambda b: bead_status(b, repo))
     traces = repo_traces(repo) if traces is None else traces
     lands = {}  # bead -> times its land reached the base
     for ln in git(repo, "log", "--format=%ct %s", *bases).splitlines():
@@ -168,7 +180,9 @@ def lost_work(repo, since=None, base=None, status_of=None, traces=None):
                     statuses[bead] = status_of(bead)
                 st = statuses[bead]
                 later = [r for r in traces if r.get("bead") == bead and (r.get("started") or 0) >= ct]
-                if st == "closed":
+                if st == "?":
+                    row.update({"class": "unknown", "why": "bd could not show %s: the tracker is unreachable" % bead})
+                elif st == "closed":
                     row.update({"class": "lost", "why": "%s is closed and never landed this commit" % bead})
                 elif not st:
                     row.update({"class": "lost", "why": "no bead %s in the tracker" % bead})
@@ -320,7 +334,7 @@ def scorecard(repo, since, until, base=None, comments_of=None, status_of=None, a
                 for k in d:
                     d[k] += int(tk.get(k) or 0)
     lost = [x for x in lost_work(repo, since=since, base=base, status_of=status_of, traces=traces)
-            if x["class"] in ("lost", "pending")]
+            if x["class"] in ("lost", "pending", "unknown")]
     mins = [x["minutes"] for x in rows if x["runs"]]
     c = {"repo": repo, "since": since, "until": until, "beads": len(rows),
          "landed": sum(x["state"] == "landed" for x in rows),
@@ -329,8 +343,8 @@ def scorecard(repo, since, until, base=None, comments_of=None, status_of=None, a
          "failed": sum(x["state"] == "failed" for x in rows), "asks": asks,
          "crashes": len(crash), "crash_list": crash,
          "lost": sum(x["class"] == "lost" for x in lost), "lost_list": [x for x in lost if x["class"] == "lost"],
-         "pending_list": [x for x in lost if x["class"] == "pending"],
-         "minutes": {"median": statistics.median(mins) if mins else 0, "p90": pctl(mins, 90)},
+         "pending_list": [x for x in lost if x["class"] in ("pending", "unknown")],
+         "minutes": {"median": round(statistics.median(mins), 1) if mins else 0, "p90": pctl(mins, 90)},
          "rounds": sum(x["rounds"] for x in rows), "replans": sum(x["replans"] for x in rows),
          "tokens": tokens, "runs": len(runs), "per_bead": rows}
     checks = {"beads": {"value": c["beads"], "want": ">=%d" % M2["beads"], "ok": c["beads"] >= M2["beads"]},
@@ -403,7 +417,7 @@ def cmd_lost(a):
         for x in rows:
             if x["class"] != "landed":
                 print("%-9s %-28s %s %s  %s" % (x["class"], x["branch"], x["sha"][:8], stamp(x["time"]), x["why"]))
-        n = {k: sum(x["class"] == k for x in rows) for k in ("landed", "reclaimed", "pending", "lost")}
-        print("%d lost, %d pending, %d reclaimed, %d landed (commits on task/* and wip/* not on the base)" % (
-            n["lost"], n["pending"], n["reclaimed"], n["landed"]))
+        n = {k: sum(x["class"] == k for x in rows) for k in ("landed", "reclaimed", "pending", "unknown", "lost")}
+        print("%d lost, %d pending, %d unknown, %d reclaimed, %d landed (commits on task/* and wip/* not on the base)" % (
+            n["lost"], n["pending"], n["unknown"], n["reclaimed"], n["landed"]))
     return 1 if any(x["class"] == "lost" for x in rows) else 0

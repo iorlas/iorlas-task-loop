@@ -157,6 +157,18 @@ class LostWork(Base):
                  "ended": T0 + 20 * MIN}
         self.assertEqual(set(self.by_class(self.lost({"t-1": "in_progress"}, [later]))), {"reclaimed"})
 
+    def test_a_tracker_outage_is_unknown_never_lost(self):
+        self.branch("task/t-1", [("f.txt", "work\n", "wip (t-1): paused")], T0)
+        self.assertEqual(set(self.by_class(self.lost({"t-1": "?"}))), {"unknown"})
+
+    def test_bd_failing_reads_as_unknown(self):
+        failed = subprocess.CompletedProcess([], 1, "", "dolt: connection refused")
+        with mock.patch.object(tl, "bd", return_value=failed):
+            self.assertEqual(report.bead_status("t-1", str(self.repo)), "?")
+        missing = subprocess.CompletedProcess([], 1, "", "Error: issue t-1 not found")
+        with mock.patch.object(tl, "bd", return_value=missing):
+            self.assertIsNone(report.bead_status("t-1", str(self.repo)))
+
     def test_a_slot_resets_wip_branch_is_lost(self):
         self.branch("wip/s1/1792540800", [("f.txt", "dead session\n", "wip: left in slot s1")], T0)
         self.assertEqual(set(self.by_class(self.lost({}))), {"lost"})
@@ -276,7 +288,7 @@ class Scorecard(Base):
         args = ["report", "--repo", str(self.repo), "--since", "2026-10-21T06:00", "--until", "2026-10-21T09:20"]
         with mock.patch.object(report, "default_base", return_value="main"), \
                 mock.patch.object(tl, "comments", lambda b, cwd=None: self.comments.get(b, [])), \
-                mock.patch.object(tl, "show", lambda b, cwd=None: {"status": self.status.get(b)}), \
+                mock.patch.object(report, "bead_status", lambda b, repo: self.status.get(b)), \
                 mock.patch.object(report, "run_alive", lambda bead: bead == "t-9"):
             out = io.StringIO()
             with redirect_stdout(out):
