@@ -1847,6 +1847,29 @@ class Outcome(unittest.TestCase):
             rc, rec, last = self.main(f)
         self.assertEqual((rc, rec["outcome"], last["outcome"]), (0, "landed", "landed"))
 
+    def test_a_hand_run_pause_prints_the_exact_resume_time_and_ends_with_the_outcome(self):
+        due = time.time() + 1800
+        made = mock.Mock()
+        made.return_value.run.return_value = 2
+        made.return_value.result.return_value = {"outcome": "paused", "bead": "t-1", "retry_after": due,
+                                                 "why": "paused: no lane for write until 09:36"}
+        a = mock.Mock(id="t-1", worktree=str(Path(self.tmp.name, "slot")), slot=None, dry_run=False, fresh=False,
+                      quiet=True, outcome_file=None)
+        Path(a.worktree).mkdir(exist_ok=True)
+        out = io.StringIO()
+        with mock.patch.object(engine, "reclaim", return_value=(True, "")), mock.patch.object(tl, "cmd_claim", return_value=0), \
+                mock.patch.object(engine, "Engine", made), mock.patch.object(tl, "repo_root", return_value=str(self.wt)), \
+                redirect_stdout(out), mock.patch.object(signal, "signal"):
+            engine.main(a)
+        lines = out.getvalue().strip().splitlines()
+        self.assertEqual(json.loads(lines[-1])["retry_after"], due)  # the loop reads the last line: still the outcome
+        self.assertTrue(any("PAUSED t-1: the lane is back at %s; rerun then: tl run-task t-1"
+                            % time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(due)) in ln for ln in lines), lines)
+
+    def test_a_pause_with_no_time_says_so(self):
+        self.assertIn("no time", engine.pause_line({"outcome": "paused", "bead": "t-1", "retry_after": 0}))
+        self.assertEqual(engine.pause_line({"outcome": "landed", "bead": "t-1"}), "")
+
     def test_a_refused_claim_is_taken_and_keeps_exit_1(self):
         f = Path(self.tmp.name, "out.json")
         with mock.patch.object(engine, "reclaim", return_value=(False, "claimed by denis")):

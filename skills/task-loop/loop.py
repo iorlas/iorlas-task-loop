@@ -14,6 +14,7 @@ import datetime
 import hashlib
 import json
 import os
+import random
 import re
 import signal
 import subprocess
@@ -35,6 +36,8 @@ PAUSE_RETRY = 900      # a pause with no time the lane frees (login, network), o
 FAILS_TO_STOP = 2      # failures in a row that stop the loop; parks and pauses never count, a landing ends the run
 PAUSES_TO_REST = 3     # a bead paused this often in one loop run rests for REST while the loop takes others
 REST = 3600
+MARGIN = (30, 90)      # a paused bead wakes this many seconds (random) after its retry_after: the lane is surely back,
+                       # and two loops paused on one lane do not knock in the same second (tl-bxk.10.6)
 
 clock = time.time
 STOP_NOW = threading.Event()  # SIGTERM or Ctrl-C to the loop itself: end the running bead as `tl stop --now` does
@@ -162,6 +165,10 @@ def nap(secs, repo=None, until=0):
     end = clock() + secs
     while clock() < end and not (repo and stop_mode(repo)) and not (until and clock() >= until):
         time.sleep(min(POLL, max(0.05, end - clock())))
+
+
+def margin():
+    return random.uniform(*MARGIN)
 
 
 def say(text):
@@ -371,7 +378,7 @@ def passes(repo, a, started):
             if ranked:
                 wake = min(later[b["id"]] for b, _ in ranked)
                 say("every ready bead waits for a lane or another session: sleeping until %s"
-                    % time.strftime("%H:%M", time.localtime(wake)))
+                    % time.strftime("%H:%M:%S", time.localtime(wake)))
                 nap(wake - now, repo, until)
                 continue
             if not a.wait_drained:
@@ -436,10 +443,12 @@ def passes(repo, a, started):
                 later[bid] = clock() + REST
                 say("%s paused %d times: it rests an hour, the next bead first" % (bid, PAUSES_TO_REST))
             elif due and due - clock() <= PAUSE_WAIT_MAX:
-                say("%s paused for a lane until %s: waiting for it" % (bid, time.strftime("%H:%M", time.localtime(due))))
-                nap(max(0, due - clock()), repo, until)
+                wake = due + margin()
+                say("%s paused for a lane until %s: waiting for it, retry at %s" % (
+                    bid, time.strftime("%H:%M:%S", time.localtime(due)), time.strftime("%H:%M:%S", time.localtime(wake))))
+                nap(max(0, wake - clock()), repo, until)
             else:
-                later[bid] = due or clock() + PAUSE_RETRY
+                later[bid] = due + margin() if due else clock() + PAUSE_RETRY
                 say("%s paused (%s): the next bead first" % (bid, (r.get("why") or "")[:120]))
 
 

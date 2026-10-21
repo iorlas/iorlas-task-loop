@@ -261,6 +261,7 @@ def rec(outcome, **kw):
 class Clock:
     def __init__(self):
         self.t, self.naps = 1_800_000_000.0, []
+        self.t0 = self.t
 
     def __call__(self):
         return self.t
@@ -303,6 +304,13 @@ class FakeChild:
         self.terminated = True
 
 
+class Margin(unittest.TestCase):
+    def test_the_wake_margin_is_a_jitter_of_30_to_90_seconds(self):
+        got = [loop.margin() for _ in range(200)]
+        self.assertTrue(all(30 <= m <= 90 for m in got))
+        self.assertGreater(len(set(got)), 1)  # two loops paused on one lane do not wake in the same second
+
+
 class LoopBase(Base):
     """The loop with run-task faked (FakeChild) and slot setup skipped; no tests of its own."""
 
@@ -311,6 +319,7 @@ class LoopBase(Base):
         self.clock = Clock()
         self.script, self.hold, self.started, self.during = {}, {}, [], []
         for p in (mock.patch.object(loop, "clock", self.clock), mock.patch.object(loop, "nap", self.clock.nap),
+                  mock.patch.object(loop, "margin", return_value=45),
                   mock.patch.object(loop, "spawn", side_effect=lambda cmd, log: FakeChild(self, cmd)),
                   mock.patch.object(loop, "prepare", return_value=0)):
             p.start()
@@ -491,7 +500,17 @@ class Loop(LoopBase):
         self.beads({"x-1": [rec("paused", retry_after=self.clock.t + 600), rec("landed")], "x-2": [rec("landed")]})
         self.assertEqual(self.run_loop(), 0)
         self.assertEqual([b for b, _ in self.started], ["x-1", "x-1", "x-2"])
-        self.assertIn(600, self.clock.naps)
+        self.assertIn(645, self.clock.naps)  # tl-bxk.10.6: retry_after plus a margin, never a fixed step
+
+    def test_a_pause_beyond_the_cap_is_retried_at_its_retry_after_plus_the_margin(self):
+        # lifesim-d5f.58 2026-10-21: Codex was back at 09:02 and the bead's first Codex call came 47 min later
+        self.beads({"x-1": [rec("paused", retry_after=self.clock.t + 2 * 3600), rec("landed")],
+                    "x-2": [rec("paused", retry_after=self.clock.t + 3 * 3600), rec("landed")]})
+        self.assertEqual(self.run_loop(), 0)
+        self.assertEqual([b for b, _ in self.started], ["x-1", "x-2", "x-1", "x-2"])
+        self.assertIn(2 * 3600 + 45, self.clock.naps)  # asleep until x-1's retry_after + margin, no fixed step
+        due = time.strftime("%H:%M:%S", time.localtime(self.clock.t0 + 2 * 3600 + 45))
+        self.assertIn("sleeping until %s" % due, self.out)
 
     def test_a_pause_with_no_time_tries_the_next_bead_and_when_all_pause_sleeps_to_the_earliest(self):
         self.beads({"x-1": [rec("paused"), rec("landed")], "x-2": [rec("paused"), rec("landed")]})

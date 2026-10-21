@@ -726,11 +726,11 @@ class Engine:
                     self.outcome_of("paused", reason)
                     self.transition("pause", "paused", "%s for %s until %s" % (
                         "no network" if reason == "network" else "no lane", node,
-                        time.strftime("%H:%M", time.localtime(due)) if due > time.time() else "a lane frees"),
+                        time.strftime("%H:%M:%S", time.localtime(due)) if due > time.time() else "a lane frees"),
                         until=self.retry_after, lane=j.get("lane") or "", reason=reason)
                     raise Blocked("paused: %s for %s until %s (%s: %s)" % (
                         "no network" if reason == "network" else "no lane", node,
-                        time.strftime("%H:%M", time.localtime(due)) if due > time.time() else "a lane frees",
+                        time.strftime("%H:%M:%S", time.localtime(due)) if due > time.time() else "a lane frees",
                         reason, said[:200]))
                 wait = min(600.0, wait)
                 self.warn("%s waits %d min (%s): %s" % (node, wait // 60, reason, said[:160]))
@@ -2391,6 +2391,18 @@ def append_output(stream):
         fcntl.fcntl(fd, fcntl.F_SETFL, fcntl.fcntl(fd, fcntl.F_GETFL) | os.O_APPEND)
 
 
+def pause_line(rec):
+    """A paused run's one line for whoever reran it by hand: the exact time the lane is back (tl-bxk.10.6)."""
+    if rec.get("outcome") != "paused":
+        return ""
+    due = float(rec.get("retry_after") or 0)
+    if not due:
+        return "PAUSED %s: no time the lane frees (login, network or setup); rerun when fixed: tl run-task %s" % (
+            rec.get("bead"), rec.get("bead"))
+    return "PAUSED %s: the lane is back at %s; rerun then: tl run-task %s" % (
+        rec.get("bead"), time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(due)), rec.get("bead"))
+
+
 def report(a, rec):
     """The outcome as the run's last stdout line, and in --outcome-file when the loop names one."""
     line = json.dumps(rec, ensure_ascii=False)
@@ -2496,5 +2508,8 @@ def run_bead(a, repo, cfg, wt):
         say("engine log: %s" % eng.log_path)
     rc = eng.run()
     with defer_stop(None):  # the outcome line is what the loop reads: a stop waits for it
-        report(a, eng.result())
+        rec = eng.result()
+        if pause_line(rec):
+            say(pause_line(rec))
+        report(a, rec)
     return rc
