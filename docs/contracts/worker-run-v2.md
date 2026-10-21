@@ -1,6 +1,6 @@
 # worker-run v2: how the engine asks delegate to run one AI step
 
-Status: pending (delegate 0.29.0 committed; task-loop 0.15.0 in progress, tl-bxk.8.32). Owner: task-loop (the consumer). Producer: delegate's
+Status: implemented (task-loop 0.15.0, delegate 0.29). Owner: task-loop (the consumer). Producer: delegate's
 `route.py run`. Replaces [worker-run v1](worker-run-v1.md); there is no v1 shim on either side.
 
 ## Why v2

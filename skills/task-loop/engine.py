@@ -282,6 +282,7 @@ class Engine:
         self.denials = []     # commands refused to this bead's writers, across lanes and runs
         self.unchecked = []   # what the workers of this run could not check themselves
         self.answered = None  # the owner ask this run starts from, once answered
+        self.verify_answer = ""  # the owner's answer to a verify ask, when it asks for more than a yes
         self.stuck_why = ""
         self.host = False  # granted after reset, from the base branch's .task-loop.json only (granted_host)
         self.contract = None  # delegate's worker-run v2 handshake: features, reasons, what each lane's workers see
@@ -581,6 +582,21 @@ class Engine:
                 have.add(c["check"].strip())
                 self.log("note", "the writer added a case: %s" % c["criterion"][:200])
 
+    def engine_unproven(self, unchecked, checks):
+        """The unchecked items the engine does not prove itself: one that names the gate (it runs at land, and a red gate
+        goes to a fix round) or a repo check that passed this round is dropped. lifesim-5ban.3 and lifesim-fld.27.3
+        stopped on verify asks for the gate, which the owner has nothing to add to."""
+        ran = [c["cmd"] for c in checks if c["exit"] == 0 and c["group"] != "acceptance"]
+        names = [" ".join(x.split()).lower() for x in [self.cfg["gate"]] + ran if x.strip()]
+        out = []
+        for u in unchecked:
+            what = " ".join(u["what"].split()).lower()
+            if any(x in what for x in names):
+                self.log("note", "unchecked item dropped, the engine runs it: %s" % u["what"][:200])
+            else:
+                out.append(u)
+        return out
+
     def case_checks(self):
         return [c["check"] for c in (getattr(self, "plan_data", None) or {}).get("cases") or []]
 
@@ -651,7 +667,7 @@ class Engine:
                 self.save_checkpoint(stage=i, rounds=0, n=0, feedback="", step="write" if i < len(plan["stages"]) else "land")
             gaps = [u for u in self.unchecked if u["kind"] in UNCHECKED_KINDS]
             if gaps:
-                raise Blocked("verify: before land, the workers could not check: " + "; ".join(
+                raise Blocked(VERIFY_GAPS + "the workers could not check: " + "; ".join(
                     "%s (%s)" % (u["what"], u["kind"]) for u in gaps), "Check these yourself, then comment on the bead "
                     "(right, or wrong and why): " + "; ".join(u["what"] for u in gaps))
             sha = self.finish(bead)
@@ -682,9 +698,14 @@ class Engine:
         rules.append("Proof files that a check reads or a reviewer looks at (screenshots, logs, probe output) go under "
                      "%s: it is kept across runs, and nothing else under %s is." % (self.evidence_dir, self.task_dir))
         rules.append("Checks run on the uncommitted working tree after each write. The engine runs the gate%s once, on "
-                     "the rebased tree at land: never put %s in a stage's checks." % (
+                     "the rebased tree at land: never put %s in a stage's checks, and a criterion that names it is proven "
+                     "by that land gate: write no case for it." % (
                          (" (`%s`)" % self.cfg["gate"]) if self.cfg["gate"] else "",
                          ("`%s`" % self.cfg["gate"]) if self.cfg["gate"] else "it"))
+        if self.verify_answer:
+            extra += ("\n\nEvery stage was accepted, then the owner checked the work and answered:\n<answer>\n%s\n</answer>\n"
+                      "Plan only the work this answer asks for. If it asks for nothing more (it says the work is right), "
+                      "return no stages: the engine then lands." % self.verify_answer)
         if self.done:
             extra += ("\n\nThese stages are already accepted on this branch (reviewed, their work is in the tree): "
                       "do not plan them again; plan only what the task still needs.\n" +
@@ -694,6 +715,9 @@ class Engine:
                           "\n\n" + "\n".join(rules) +
                           ("\n\n" + self.where("plan") if self.where("plan") else ""))
         data = json.loads(json.dumps(data))  # the engine's own copy: cases are added to it as the task runs
+        if self.verify_answer and not data["stages"] and not data["question"].strip():
+            self.log("note", "the planner finds the owner's answer asks for nothing more: landing")
+            return data
         self.plan_summary = data["summary"]
         for c in data.get("cases") or []:
             c.setdefault("by", "plan")
@@ -737,6 +761,16 @@ class Engine:
         self.ask_path().write_text(json.dumps(a, indent=1))
         self.answered = a
         self.log("note", "ask %s (%s) is answered: the bead changed since it was asked" % (a["id"], a["kind"]))
+
+    def answer_text(self, a):
+        """The owner's answer to ask a: the dashboard's, else the people's comments after the engine's ask comment."""
+        if (a.get("answer") or "").strip():
+            return a["answer"].strip()
+        comments = tl.comments(self.bead)
+        start = max([k + 1 for k, c in enumerate(comments)
+                     if (c.get("text") or "").startswith("Ask (engine) %s " % a["id"])] or [0])
+        return "\n".join((c.get("text") or "").strip() for c in comments[start:]
+                         if not (c.get("text") or "").startswith(ENGINE_NOTES)).strip()
 
     def raise_ask(self, kind, why, question):
         try:
@@ -857,8 +891,18 @@ class Engine:
             return None, 0, None
         if ck["brief"] != self.brief_hash and ck["step"] == "land" and (self.answered or {}).get("kind") == "verify":
             self.plan_data, self.plan_summary = ck["plan"], ck["plan"]["summary"]
-            self.log("note", "the owner answered verify ask %s: going straight to land" % self.answered["id"])
-            return ck["plan"], len(ck["plan"]["stages"]), None
+            answer = self.answer_text(self.answered)
+            gaps = (self.answered.get("why") or "").startswith(VERIFY_GAPS)  # not a denial's ask: its answer is a rerun
+            if not gaps or confirms(answer):
+                self.log("note", "the owner answered verify ask %s (%s): going straight to land" % (
+                    self.answered["id"], answer))
+                return ck["plan"], len(ck["plan"]["stages"]), None
+            # lifesim-fld.26.15: 'add a test that ..., then land' landed without the test; any answer but a plain yes
+            # goes to the planner, which plans what it asks for, or nothing (then the run lands)
+            self.verify_answer = answer or "(no comment: the owner edited the bead)"
+            self.log("note", "the owner answered verify ask %s with more than a yes: planning what it asks, keeping %d "
+                             "accepted stage(s)" % (self.answered["id"], len(self.done)))
+            return None, 0, None
         if ck["brief"] != self.brief_hash:
             self.log("note", "the bead changed since the checkpoint of %s: keeping %d accepted stage(s), planning the rest"
                      % (ck["run"], len(self.done)))
@@ -935,6 +979,7 @@ class Engine:
             review, _ = self.ai("review", name, REVIEW_PROMPT.format(
                 brief=self.brief_text(), plan=self.plan_text(), n=i + 1, goal=st["goal"],
                 base=self.base_sha(), checks=compact(checks), summary=w["summary"], evidence=self.evidence_dir,
+                gate=(" (`%s`)" % self.cfg["gate"]) if self.cfg["gate"] else "",
                 added=self.stats["tests_added"], removed=self.stats["tests_removed"],
                 scope=(state["scope"] if fix else
                        "the stage goal and every requirement and acceptance criterion of the task" if last else
@@ -945,7 +990,7 @@ class Engine:
                                                                      for u in wrote_unchecked) if wrote_unchecked else "") +
                 UNCHECKED_TEXT,
                 writer_family=wfam)
-            self.unchecked += review.get("unchecked") or []
+            self.unchecked += self.engine_unproven(review.get("unchecked") or [], checks)
             same = self.last_flag == "same_family"
             if same:
                 self.warn("%s: the review is from the writer's own model family (no other lane was free)" % name)
@@ -1300,6 +1345,19 @@ def count_tests(diff, pattern):
 ENGINE_NOTES = ("Plan (engine)", "Review (engine", "Reflect (engine)", "Blocked:", "Ask (engine)", "Evidence (engine)")
 
 
+VERIFY_GAPS = "verify: before land, "  # the ask for what the workers could not check; its answer may ask for work
+CONFIRM_WORDS = {"right", "yes", "yep", "yeah", "y", "is", "ok", "okay", "k", "correct", "confirmed", "confirm", "lgtm", "land",
+                 "it", "ship", "go", "ahead", "good", "fine", "looks", "all", "approved", "verified", "checked", "sure",
+                 "true", "done", "please", "works", "thanks"}
+
+
+def confirms(answer):
+    """True when an answer only says yes ('right', 'ok, land it', 'LGTM'): a few words, every one of them a yes. Any
+    other word ('add a test, then land', 'wrong', 'not right', a name) means the owner may want work done."""
+    words = re.findall(r"[a-z]+", answer.lower())
+    return 0 < len(words) <= 6 and all(w in CONFIRM_WORDS for w in words)
+
+
 def has_criteria(bead):
     """Acceptance criteria in the bead's field, or in a ## Acceptance Criteria section of its description."""
     if (bead.get("acceptance_criteria") or "").strip():
@@ -1549,6 +1607,8 @@ Stage {n}: {goal}
 The work: `git diff {base}` and new files (the task's work since main, committed or not).
 The engine ran the checks outside any sandbox, and they all pass; these results are facts:
 {checks}
+The engine runs the gate{gate} once, at land, on the tree rebased onto the latest base, before anything merges; a red
+gate (coverage included) goes to a fix round. The gate, the checks above and what they prove are never an unchecked item.
 The writer says: {summary}
 Proof the engine cannot rerun (a test seen failing after a planted fault) is in {evidence}/: a requirement shown
 there is met. The engine counted tests in the task's diff: {added} added, {removed} removed.

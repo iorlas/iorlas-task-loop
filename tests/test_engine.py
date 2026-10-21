@@ -1038,14 +1038,68 @@ class EngineTest(unittest.TestCase):
         self.assertIn("the cited spec link did not open", a["question"])
         self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "")
 
-    def test_an_answered_verify_ask_goes_straight_to_land(self):
+    def test_the_gate_named_as_unchecked_lands_without_an_ask(self):
+        # lifesim-5ban.3: 'the full gate and diff coverage, reserved for the engine' stopped the land; the gate runs there
+        gate = PY + ' -c "pass"'
+        r = dict(CLEAN, unchecked=[{"what": "the full `%s` gate and diff coverage" % gate, "kind": "requirement"}])
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r]}, gate=gate)
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertIsNone(self.ask())
+        self.assertIn("runs the gate (`%s`) once, at land" % gate, s.prompts[2])
+        self.assertIn("never an unchecked item", s.prompts[2])
+        self.assertIn("write no case for it", s.prompts[0])
+
+    def test_a_repo_check_that_passed_this_round_named_as_unchecked_lands_without_an_ask(self):
+        unit = PY + ' -c "print(1)"'
+        r = dict(CLEAN, unchecked=[{"what": "%s on the whole tree" % unit, "kind": "case"}])
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r]},
+                                checks=[{"id": "unit", "cmd": unit, "group": "tests"}])
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertIsNone(self.ask())
+
+    def verify_then_answer(self, text):
         r = dict(CLEAN, unchecked=[{"what": "the cited spec link did not open", "kind": "link"}])
         self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r]})
-        with mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Link is fine, checked."}]):
+        return [{"author": "engine", "text": "Ask (engine) t-1-1 (verify): check the link"},
+                {"author": "denis", "text": text}]
+
+    def test_an_answered_verify_ask_goes_straight_to_land(self):
+        with mock.patch.object(tl, "comments", return_value=self.verify_then_answer("Right.")):
             rc, s = self.run_engine({})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(s.calls, [])
         self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
+
+    def test_a_verify_answer_asking_for_more_work_plans_it_keeping_the_accepted_stages(self):
+        # lifesim-fld.26.15: 'add a test that ..., then land' went straight to land without the test
+        text = "add a test that f.txt is not empty, then land"
+        more = dict(PLAN, stages=[dict(PLAN["stages"][0], goal="test f.txt")])
+        with mock.patch.object(tl, "comments", return_value=self.verify_then_answer(text)):
+            rc, s = self.run_engine({"plan": [more], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])
+        self.assertIn(text, s.prompts[0])
+        self.assertIn("- add f\n", s.prompts[0])  # the accepted stage, not planned again
+        self.assertEqual(self.eng.replans, 0)
+
+    def test_a_verify_answer_the_planner_finds_needs_nothing_more_lands(self):
+        with mock.patch.object(tl, "comments", return_value=self.verify_then_answer("Link is fine, checked.")):
+            rc, s = self.run_engine({"plan": [dict(PLAN, stages=[], summary="nothing left")]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[0] for c in s.calls], ["planner"])
+        self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
+        self.assertEqual(self.eng.plan_summary, "do it")  # the commit is titled after the work, not the empty plan
+
+    def test_a_verify_answer_on_the_dashboard_counts_over_the_comments(self):
+        r = dict(CLEAN, unchecked=[{"what": "the cited spec link did not open", "kind": "link"}])
+        self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r]})
+        a = self.ask()
+        a["answer"] = "correct"
+        self.eng.ask_path().write_text(json.dumps(a))
+        with mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "correct"}]):
+            rc, s = self.run_engine({})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual(s.calls, [])
 
     def test_what_the_writer_could_not_check_goes_to_the_review_which_decides(self):
         # lifesim-jjso: the writer could not run Unity, the engine's cases then did; the land must not stop on that
@@ -1472,6 +1526,15 @@ class DelegateCall(unittest.TestCase):
         with tempfile.TemporaryDirectory() as home, mock.patch.object(engine.Path, "home", return_value=Path(home)):
             self.assertIsNone(engine.find_route())
             self.assertIsNone(engine.find_route(str(Path(home, "missing.py"))))
+
+
+class Confirms(unittest.TestCase):
+    def test_a_plain_yes_is_a_confirmation_anything_else_is_work(self):
+        for t in ("right", "Right.", "yes, land it", "ok", "LGTM", "correct", "looks good, ship it", "checked: fine"):
+            self.assertTrue(engine.confirms(t), t)
+        for t in ("", "wrong", "not right", "add a test that X, then land", "right, but rename f", "no",
+                  "Link is fine, checked."):
+            self.assertFalse(engine.confirms(t), t)
 
 
 class Validate(unittest.TestCase):

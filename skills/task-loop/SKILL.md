@@ -102,9 +102,15 @@ Asks: every block is an owner ask, `~/.config/task-loop/asks/<bead>.json` plus a
 (a step's question), verify (a denial, or what the workers could not check), stuck (rounds, replans or fix rounds used up,
 budget, land failed), ticket (intake). A machine pause (a `retry` answer past the wait, or `owner` for a login or setup) is no ask. A rerun with the ask open and
 the bead unchanged waits (no AI step, the bead stays blocked); the owner answers by commenting on or editing the bead,
-and the rerun goes on from its checkpoint (an answered verify goes straight to land). The writer's `unchecked` items go to the review, which reports what is still unproven after the checks;
+and the rerun goes on from its checkpoint. An answered verify for a denial goes straight to land; one for what the
+workers could not check goes straight to land only when the answer is a plain yes (a few words, each a yes: `right`,
+`ok, land it`, `LGTM`); any other answer (`add a test that X, then land`, `wrong: ...`) goes to the planner with the
+answer in its prompt, keeping the accepted stages, and a plan of no stages (the answer asks for nothing more) lands.
+The writer's `unchecked` items go to the review, which reports what is still unproven after the checks;
 a requirement, number, deletion, link, case or tooling item stops the land with a verify ask; `other` items land and
-label the bead `needs-owner-check`.
+label the bead `needs-owner-check`. The review is told the gate runs at land and the passed checks are facts, and the
+engine drops any unchecked item that names the gate or a repo check that passed that round: the owner has nothing to
+add to them. The planner writes no case for a criterion that names the gate.
 
 Check groups run static → tests → acceptance (the plan's per-stage checks); a red group skips the rest. `when` runs a
 check only when the task changed a matching path; `retry` reruns a known flaky one. A repo check that passed on the
