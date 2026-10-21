@@ -69,7 +69,13 @@ def os_lock(path, holder, waiting=None):
                 fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except OSError:
                 if waiting:
-                    waiting(Path(path).read_text().strip() or "?")
+                    who = ""
+                    for _ in range(20):  # the holder may be between its truncate and its write
+                        who = Path(path).read_text().strip()
+                        if who:
+                            break
+                        time.sleep(0.01)
+                    waiting(who or "?")
                 fcntl.flock(f, fcntl.LOCK_EX)
         f.seek(0)
         f.truncate()
