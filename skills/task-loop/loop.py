@@ -5,9 +5,9 @@
     tl.py loop status [--repo DIR] [--last N] what runs now and the last beads
     tl.py stop [--repo DIR] [--now]           every loop on the repo stops after its bead, or now (close runs)
 
-The queue rule lives in the repo's .task-loop.json (engine.pick_label, skip_labels, epic_order, epic_only): ready
-beads with the pick label, minus skip labels, epics and slots; then priority, epic order, lowest id. Python 3.8+,
-standard library only.
+The queue rule lives in the repo's .task-loop.json (engine.pick_label, skip_labels, epic_order, epic_only, areas,
+area_label_prefix): ready beads with the pick label, minus skip labels, epics, slots and beads whose area runs elsewhere;
+then priority, epic order, lowest id. Python 3.8+, standard library only.
 """
 
 import contextlib
@@ -37,6 +37,7 @@ PAUSE_RETRY = 900      # a pause with no time the lane frees (login, network), o
 FAILS_TO_STOP = 2      # failures in a row that stop the loop; parks and pauses never count, a landing ends the run
 PAUSES_TO_REST = 3     # a bead paused this often in one loop run rests for REST while the loop takes others
 REST = 3600
+AREA_POLL = 60         # every ready bead waits for its area: look again this often
 MARGIN = (30, 90)      # a paused bead wakes this many seconds (random) after its retry_after: the lane is surely back,
                        # and two loops paused on one lane do not knock in the same second (tl-bxk.10.6)
 
@@ -62,9 +63,84 @@ def epics_of(bead, cache):
     return out
 
 
+# ---- areas (tl-bxk.11.4): two beads of one area never run at once ---------------------------------------------------
+
+def has_areas(cfg):
+    return bool(cfg.get("areas") or cfg.get("area_label_prefix"))
+
+
+def area_of(b, cfg, cache):
+    """The bead's area, "" for none (unrestricted). engine.areas {area: [epic id or label, ...]} first, in its order:
+    the bead, any of its ancestors or one of its labels named; then the first label with engine.area_label_prefix
+    (lane:live is area live). First match wins."""
+    labels = b.get("labels") or []
+    ups = None
+    for name, members in (cfg.get("areas") or {}).items():
+        if ups is None:
+            ups = [b.get("id")] + epics_of(b, cache)
+        if any(m in ups or m in labels for m in members or []):
+            return name
+    prefix = cfg.get("area_label_prefix") or ""
+    if prefix:
+        for x in labels:
+            if x.startswith(prefix) and len(x) > len(prefix):
+                return x[len(prefix):]
+    return ""
+
+
+def lapsed(b):
+    t = b.get("lease_expires_at") or ""
+    return bool(t) and t < time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def running(repo):
+    """{bead: where} of the beads running now: a slot bead held for one (held_bead), or a live engine lock naming
+    one, in a slot or any worktree of the repo."""
+    out, slots = {}, tl.slot_beads(repo)
+    for b in slots:
+        bid = (b.get("metadata") or {}).get("held_bead")
+        if bid and b.get("status") == "in_progress" and not lapsed(b):
+            out[bid] = b["title"].split()[-1]
+    for wt in tl.worktrees(repo, slots):
+        lock = tl.read_engine_lock(wt)
+        if lock.get("bead") and lock.get("pid") and tl.proc_alive(lock["pid"], lock.get("start") or ""):
+            out.setdefault(lock["bead"], lock.get("slot") or Path(wt).name)
+    return out
+
+
+def busy_areas(repo, cfg, cache, but=""):
+    """{area: (bead, where)} of the areas a running bead (other than `but`) works in."""
+    out = {}
+    for bid, where in sorted(running(repo).items()):
+        if bid == but:
+            continue
+        a = area_of(tl.show(bid, cwd=repo) or {"id": bid}, cfg, cache)
+        if a:
+            out.setdefault(a, (bid, where))
+    return out
+
+
+def area_busy(repo, cfg, b, cache):
+    """(area, "area A busy: B in S") for a bead whose area runs elsewhere, (area, "") when it is free, ("", "")."""
+    a = area_of(b, cfg, cache)
+    if not a:
+        return "", ""
+    hit = busy_areas(repo, cfg, cache, but=b.get("id", "")).get(a)
+    return a, ("area %s busy: %s in %s" % (a, hit[0], hit[1]) if hit else "")
+
+
+def area_lock(repo, cfg):
+    """One area check and the mark that follows it at a time per repo (the loop's claim, run-task's engine lock): two
+    takers never both see an area free. A no-op without areas."""
+    if not has_areas(cfg):
+        return contextlib.nullcontext()
+    return tl.os_lock(tl.config_dir() / "locks" / ("area-%s.lock" % tl.repo_key(repo)), "pid %d" % os.getpid())
+
+
 def queue(repo):
     """([(bead, reason)] in the order the loop takes them, [(id, why skipped)]). A reason names the rule that puts a
-    bead before the next one. Fetches first: the rule is read from the base branch (engine.load_cfg)."""
+    bead before the next one. Fetches first: the rule is read from the base branch (engine.load_cfg). A bead whose
+    area runs elsewhere is skipped (`area A busy: B in S`); the claim checks again under the area lock."""
     tl.fetch(repo)
     cfg = engine.load_cfg(repo)
     args = ["ready", "--json", "-n", "0"] + (["--label", cfg["pick_label"]] if cfg.get("pick_label") else [])
@@ -90,6 +166,15 @@ def queue(repo):
         else:
             keep.append((int(b.get("priority") if b.get("priority") is not None else 2), rank, natural(b["id"]), b))
     keep.sort(key=lambda k: k[:3])
+    if has_areas(cfg) and keep:
+        busy, free = busy_areas(repo, cfg, cache), []
+        for k in keep:
+            hit = busy.get(area_of(k[3], cfg, cache))
+            if hit:
+                skipped.append((k[3]["id"], "area %s busy: %s in %s" % (area_of(k[3], cfg, cache), hit[0], hit[1])))
+            else:
+                free.append(k)
+        keep = free
     ranked = []
     for i, k in enumerate(keep):
         if i + 1 == len(keep):
@@ -322,20 +407,18 @@ def end_time(hhmm):
 
 
 def acquire(repo, cfg, wait_min, until):
-    """(name, dir, slot bead) of a free slot, waiting with backoff while none is; None on a stop or the end time."""
-    delay, told = 15, clock()
-    say_wait = True
-    while True:
-        got = tl.take_slot(repo, cfg)
-        if got:
-            return got
-        if stop_mode(repo) or (until and clock() >= until):
-            return None
-        if say_wait or clock() - told >= wait_min * 60:
-            say("no free slot%s; waiting" % ("" if say_wait else " for %d min" % ((clock() - told) // 60)))
-            say_wait, told = False, clock()
-        nap(delay, repo, until)
-        delay = min(delay * 2, 300, max(15, wait_min * 60))
+    """(name, dir, slot bead) of a free slot, waiting in the repo's slot line (tl.wait_slot: first come, first served)
+    with backoff while none is; None on a stop or the end time."""
+    since, told = clock(), [0.0]
+
+    def waiting(ahead):
+        if not told[0] or clock() - told[0] >= wait_min * 60:
+            say("no free slot%s%s; waiting" % (" for this loop: %d ahead in line" % ahead if ahead else "",
+                                               "" if not told[0] else " for %d min" % ((clock() - since) // 60)))
+            told[0] = clock()
+    return tl.wait_slot(repo, cfg, "tl loop", stop=lambda: bool(stop_mode(repo) or (until and clock() >= until)),
+                        sleep=lambda secs: nap(secs, repo, until), poll=(5, min(30, max(5, wait_min * 60))),
+                        on_wait=waiting)
 
 
 def reclaim(repo):
@@ -417,7 +500,7 @@ def passes(repo, a, started):
             say("%d bead(s) run (--max-beads)" % ran)
             return 0
         reclaim(repo)
-        ranked, _ = queue(repo)
+        ranked, skipped = queue(repo)
         now = clock()
         cands = [b for b, _ in ranked if later.get(b["id"], 0) <= now]
         if not cands:
@@ -426,6 +509,11 @@ def passes(repo, a, started):
                 say("every ready bead waits for a lane or another session: sleeping until %s"
                     % time.strftime("%H:%M:%S", time.localtime(wake)))
                 nap(wake - now, repo, until)
+                continue
+            areas = [w for _, w in skipped if w.startswith("area ")]
+            if areas:  # not drained: those beads run once their area frees
+                say("every ready bead waits for its area (%s): looking again in %d s" % ("; ".join(areas[:3]), AREA_POLL))
+                nap(AREA_POLL, repo, until)
                 continue
             if not a.wait_drained:
                 print("DRAINED: no ready bead after %d bead(s)" % ran)
@@ -441,14 +529,26 @@ def passes(repo, a, started):
         try:
             if os.path.isdir(d):  # from the take to run-task's own lock: no hand run gets in, the slot reset included
                 tl.loop_lock(d, name, slot_bead)
+            ecfg, cache = engine.load_cfg(repo), {}
             for b in cands:
                 bid = b["id"]
-                # a paused run leaves its bead open and still assigned: released here when that run is gone, as run-task does
-                ok, why = engine.reclaim(bid, repo)
-                if not ok or tl.cmd_claim(engine.Args(id=bid, worktree=d, slot=name)) != 0:
-                    record(repo, bid, name, {"outcome": "taken", "why": why if not ok else "claimed by another session"})
-                    later[bid] = clock() + PAUSE_RETRY
-                    continue
+                with area_lock(repo, ecfg):  # the area check, the claim and the mark that makes the area busy: as one
+                    area, busy = area_busy(repo, ecfg, b, cache) if has_areas(ecfg) else ("", "")
+                    if busy:  # another run took the area since the queue was read
+                        say("%s: %s; the next bead" % (bid, busy))
+                        continue
+                    # a paused run leaves its bead open and still assigned: released here when that run is gone, as
+                    # run-task does
+                    ok, why = engine.reclaim(bid, repo)
+                    if not ok or tl.cmd_claim(engine.Args(id=bid, worktree=d, slot=name)) != 0:
+                        record(repo, bid, name, {"outcome": "taken", "why": why if not ok else "claimed by another session"})
+                        later[bid] = clock() + PAUSE_RETRY
+                        continue
+                    if area:
+                        if os.path.isdir(d):
+                            tl.loop_lock(d, name, slot_bead, bead=bid)
+                        if slot_bead:
+                            tl.bd("update", slot_bead, "--set-metadata", "held_bead=" + bid, cwd=repo)
                 beat.add(bid)
                 rc = prepare(repo, name, b["id"]) if slots else 0
                 if rc != 0:
@@ -463,6 +563,10 @@ def passes(repo, a, started):
                 later[bid] = clock() + PAUSE_RETRY
                 beat.ids.remove(bid)
                 r = None
+                if slot_bead:  # the next candidate's area check must not see this one as running here
+                    tl.bd("update", slot_bead, "--unset-metadata", "held_bead", cwd=repo)
+                if os.path.isdir(d):
+                    tl.loop_lock(d, name, slot_bead)
         finally:
             beat.stop()
             tl.drop_engine_lock(d, os.getpid())

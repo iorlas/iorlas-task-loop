@@ -1,9 +1,11 @@
-"""Safe by construction (tl-bxk.11.1): two `tl loop`s, a hand `run-task --slot s1`, a `tl slot hold s2` and two
-`dev/release.py` at once, all real processes, on a fake repo (bare origin, fake bd, fake delegate, fake marketplace).
+"""Safe by construction (tl-bxk.11.1): two `tl loop`s, a hand `run-task --slot s1`, a hand `run-task --slot any --wait`,
+a `tl slot hold s2` and two `dev/release.py` at once, all real processes, on a fake repo (bare origin, fake bd, fake
+delegate, fake marketplace).
 
 Nothing may be shared that is not taken through a lock or lease: no bead claimed or run twice, no slot used by two at
-once (a hold included), no checkout in a worktree under another process's live engine lock, every land rebased onto
-the base and pushed once, every release a distinct version, and nothing left held after all exit.
+once (a hold included), no two beads of one area at once (tl-bxk.11.4), slots served in ticket order (tl-bxk.11.5), no
+checkout in a worktree under another process's live engine lock, every land rebased onto the base and pushed once,
+every release a distinct version, and nothing left held after all exit.
 
 RACE_SEED sets the jitter (default 1); every process gets one Claude session id, as when one coordinator starts them.
 """
@@ -30,8 +32,9 @@ import tl  # noqa: E402
 
 PY = sys.executable
 BEADS = ["w-%d" % i for i in range(1, 7)]
+AREA = {"w-1": "a", "w-2": "a", "w-3": "a", "w-4": "b", "w-5": "b"}  # a by label (lane:a), b by epic (ep-b); w-6: none
 SLOTS = ["s1", "s2", "s3"]
-DEADLINE = 100  # seconds for every process to end; the whole test stays under 2 minutes
+DEADLINE = 150  # seconds for every process to end (18-49 s seen; area a runs its 3 beads one after another)
 DROP = ("CLAUDE", "ANTHROPIC_", "TASK_LOOP_", "DELEGATE_", "CODEX", "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE",
         "XDG_", "APPDATA", "BD_", "BEADS_")
 
@@ -83,7 +86,9 @@ class Race(unittest.TestCase):
         r = self.repo
         sh("git", "checkout", "-q", "-B", "main", cwd=r, env=env)
         (r / ".task-loop.json").write_text(json.dumps({"slots": {"count": len(SLOTS)},
-                                                       "engine": {"delegate": str(FIX / "fake_route.py")}}, indent=1))
+                                                       "engine": {"delegate": str(FIX / "fake_route.py"),
+                                                                  "area_label_prefix": "lane:",
+                                                                  "areas": {"b": ["ep-b"]}}}, indent=1))
         (r / ".claude-plugin").mkdir()
         (r / ".claude-plugin" / "plugin.json").write_text(json.dumps({"name": "iorlas-task-loop", "version": "0.1.0"},
                                                                      indent=2) + "\n")
@@ -100,6 +105,13 @@ class Race(unittest.TestCase):
             sh("git", "worktree", "add", "-q", "--detach", str(r / ".slots" / s), "origin/main", cwd=r, env=env)
         beads = {b: {"id": b, "title": "bead " + b, "status": "open", "priority": 2, "issue_type": "task",
                      "acceptance_criteria": "f-%s.txt exists" % b, "labels": []} for b in BEADS}
+        for b, area in AREA.items():
+            if area == "a":
+                beads[b]["labels"] = ["lane:a"]
+            else:
+                beads[b]["parent"] = "ep-b"
+        beads["ep-b"] = {"id": "ep-b", "title": "epic b", "status": "open", "priority": 2, "issue_type": "epic",
+                         "labels": []}
         for i, s in enumerate(SLOTS, 1):
             beads["sl-%d" % i] = {"id": "sl-%d" % i, "title": "slot %s %s" % (tl.HOST, s), "status": "open",
                                   "priority": 4, "issue_type": "chore", "labels": ["slot"], "assignee": ""}
@@ -139,20 +151,26 @@ class Race(unittest.TestCase):
     def store(self):
         return json.loads((self.h / "bd" / "store.json").read_text())["beads"]
 
-    def hand_run(self, delay):
-        """A person's `tl run-task w-1 --slot s1`: w-1 is in the loops' queue too. Taken while s1 is busy: try again;
-        taken because a loop holds w-1: rightly refused, done."""
+    def hand_run(self, name, bead, delay, *args, fast=False):
+        """A person's `tl run-task BEAD ARGS`: the bead is in the loops' queue too. Taken while its slot or area is busy:
+        try again; taken because a loop holds the bead: rightly refused, done. fast: through loop_fast (short waits
+        in the slot line)."""
         time.sleep(delay)
-        out = self.h / "hand.outcome.json"
-        for n in range(200):
-            rc, _ = self.tl("hand-%d" % n, "run-task", "w-1", "--slot", "s1", "--outcome-file", str(out))
+        out = self.h / (name + ".outcome.json")
+        for n in range(400):
+            cmd = ["run-task", bead] + list(args) + ["--outcome-file", str(out)]
+            if fast:
+                p = self.spawn("%s-%d" % (name, n), [PY, str(FIX / "loop_fast.py"), self.seed] + cmd)
+                rc = p.wait()
+            else:
+                rc, _ = self.tl("%s-%d" % (name, n), *cmd)
             r = json.loads(out.read_text()) if out.exists() else {"outcome": "none", "rc": rc}
-            self.notes.setdefault("hand", []).append(r.get("outcome"))
-            b = self.store()["w-1"]
+            self.notes.setdefault(name, []).append(r.get("outcome"))
+            b = self.store()[bead]
             if r.get("outcome") != "taken" or b["status"] != "open" or b.get("assignee"):
                 return
             time.sleep(0.2)
-        self.errors.append("the hand run never got in")
+        self.errors.append("the hand run %s never got in" % name)
 
     def hold(self, delay):
         """A person holds s2 (screenshots), works in it for 3 s (the hold must still be on its bead), then releases it."""
@@ -208,7 +226,10 @@ class Race(unittest.TestCase):
     def test_two_loops_a_hand_run_a_hold_and_releases_at_once_share_nothing(self):
         t0 = time.time()
         threads = [threading.Thread(target=self.hold, args=(0,)),
-                   threading.Thread(target=self.hand_run, args=(self.rnd.uniform(0.1, 0.4),))]
+                   threading.Thread(target=self.hand_run, args=("hand", "w-1", self.rnd.uniform(0.1, 0.4), "--slot",
+                                                                "s1", "--exclusive-area")),
+                   threading.Thread(target=self.hand_run, args=("waiter", "w-6", self.rnd.uniform(0.1, 0.6), "--slot",
+                                                                "any", "--wait"), kwargs={"fast": True})]
         for t in threads:
             t.start()
         for i in (1, 2):
@@ -262,9 +283,29 @@ class Race(unittest.TestCase):
             for b in spans[i + 1:]:
                 if b[0] < a[1]:
                     self.assertNotEqual(a[2], b[2], "%s and %s in one slot at once%s" % (a[3], b[3], msg))
+        # areas: no two beads of one area held at once, from each won claim to the release that follows it
+        held = {}
+        for c in claims:
+            if c["op"] == "claim":
+                held.setdefault(c["bead"], []).append([c["t"], None])
+            elif c["op"].startswith("release:") and held.get(c["bead"]) and held[c["bead"]][-1][1] is None:
+                held[c["bead"]][-1][1] = c["t"]
+        spans_area = sorted((t0, t1 or 1e18, b) for b, ts in held.items() for t0, t1 in ts if AREA.get(b))
+        for i, (a0, a1, a) in enumerate(spans_area):
+            for b0, b1, b in spans_area[i + 1:]:
+                if b0 < a1 and AREA[a] == AREA[b]:
+                    self.fail("%s and %s of area %s held at once%s" % (a, b, AREA[a], msg))
+
+        # the slot line: takes by waiters in ticket order; no ticket left
+        events = jsonl(self.h / "cfg" / "task-loop" / "events.jsonl")
+        tickets = [e["ticket"] for e in events if e["kind"] == "slot-take" and "ticket" in e]
+        self.assertGreaterEqual(len(tickets), 2, msg)
+        self.assertEqual(tickets, sorted(set(tickets)), "slots not served in ticket order" + msg)
+        self.assertEqual(list((self.h / "cfg" / "task-loop" / "slots").glob("*/*.json")), [], msg)
+
         # the race happened: two slots were in use at once (from the slot takes and releases tl.py records)
         inuse, busy = {}, 0
-        for e in jsonl(self.h / "cfg" / "task-loop" / "events.jsonl"):
+        for e in events:
             if e["kind"] == "slot-take":  # a loop's or the hand run's, never the hold
                 inuse[e["slot"]] = True
             elif e["kind"] == "slot-release":

@@ -276,10 +276,11 @@ container); the session that starts it only watches it.
 
 - **Start:** `tl loop [--repo DIR] [--max-beads N] [--until HH:MM] [--wait-slot-min M] [--wait-drained]`. Several loops
   may run on one repo, each with its own actor (never its session's: bd lets an actor re-claim its own bead) and its
-  own state; the race test (tl-bxk.11.1) runs two with a hand run, a hold and releases at once. Each pass: `bd reclaim` of tl- actors' lapsed claims only (never a person's), take any free slot (none free: wait with backoff, a line every M minutes;
-  slots off: the loop's one worktree; never a held slot or one whose worktree has a live engine, see Slots), pick by the queue rule, claim (taken → the next bead), `tl slot reset`, then
+  own state; the race test (tl-bxk.11.1) runs two with a hand run, a hold and releases at once. Each pass: `bd reclaim` of tl- actors' lapsed claims only (never a person's), take any free slot (none free: wait in the repo's slot line, first come first served, a line every M minutes;
+  slots off: the loop's one worktree; never a held slot or one whose worktree has a live engine, see Slots), pick by the queue rule, check the bead's area and claim it under the area lock (area busy or taken → the next bead), `tl slot reset`, then
   `tl run-task` as a child with its own log, release the slot, record the outcome, next pass. `--until`: no bead
-  starts after that time. No ready bead: `DRAINED`, exit 0 (`--wait-drained`: look again every 5 minutes).
+  starts after that time. No ready bead: `DRAINED`, exit 0 (`--wait-drained`: look again every 5 minutes). Every
+  ready bead waiting for its area is not drained: the loop looks again every minute.
 - **Outcomes** (`run-task --outcome-file`, also its last stdout line as JSON): `landed` → next. `parked` (an ask was
   raised, or the bead is blocked for the owner) → next. `paused` (lane out, login, network; the bead stays open) → a
   lane back within an hour is waited for, otherwise the next bead first; either way the bead is retried at its
@@ -317,9 +318,19 @@ The queue rule is `.task-loop.json` → `engine`; the defaults take every ready 
 | `skip_labels` | never a bead with one of these (e.g. `["owner-taste", "needs-info"]`); epics and slots never either |
 | `epic_order` | epic ids: within one priority, beads under an earlier one (at any depth) first, beads under none last |
 | `epic_only` | `true`: beads under none of `epic_order` are not taken |
+| `areas` | `{"area": ["epic-id" or "label", ...]}`: a bead under one of the epics (at any depth), or with one of the labels, is in that area; first entry that matches wins |
+| `area_label_prefix` | e.g. `"lane:"`: after `areas`, the bead's first label with the prefix names its area (`lane:live` is area `live`) |
 
 Order: priority first, then `epic_order`, then the lowest id (natural: `fld.26.9` before `fld.26.10`). The loop does
 not look at `## Touches`; the land lock and the rebase before landing keep sequential loops safe.
+
+**Areas (tl-bxk.11.4):** two beads of one area never run at once (they edit the same files). A bead with no area is
+unrestricted. Running means a slot bead held for it (`held_bead` in its metadata, set by the loop and run-task) or a
+live engine lock naming it, in any slot or worktree of the repo. The queue skips a bead whose area runs elsewhere and
+`tl next` says why (`skip lifesim-2p02: area live busy: lifesim-fld.27.8 in s3`); the loop checks again and claims
+under one per-repo area lock (`<config dir>/locks/area-<repo>.lock`), so two loops never both see an area free. lifesim:
+`"area_label_prefix": "lane:", "areas": {"build": ["build"]}`. A hand `tl run-task` in a busy area warns
+(`⚠ area live busy: ...: running anyway beside it`) and runs; `--exclusive-area` refuses it (`taken`) instead.
 
 ## Report (the M2 scorecard)
 
@@ -371,7 +382,8 @@ local to one machine, hence the host in the title.
   once, the profile's setup command must queue itself (a lock or a slot limit of its own).
 - **A hand run holds its slot too:** `tl run-task ID --slot S` (no `--worktree` needed: the slot is the worktree) takes
   S's bead as the loop does, heartbeats it and releases it when the run ends, whatever the outcome (a stop included).
-  `--worktree` on a slot's folder is the same as `--slot`. A held slot bead is refused, also to the session's own actor
+  `--worktree` on a slot's folder is the same as `--slot`. `--slot any` takes the next free slot in line (none free:
+  `taken`; `--wait`: wait in line for one). A held slot bead is refused, also to the session's own actor
   (two hand runs from one session share its actor, and bd lets an actor re-claim its own bead): `TAKEN: slot S held by <holder> since <t>
   (<why>)`, nothing runs. Only a run the loop started (`TASK_LOOP_SLOT_BEAD` names that slot's bead) uses the loop's
   take and does not take or release again.
@@ -386,6 +398,14 @@ local to one machine, hence the host in the title.
   hold outlives the bead's lease; the loop, run-task and `tl slot reset` keep off it until it expires, the holder's own
   runs too (release it first; reset takes `--force`). An expired hold gives the slot bead back. A slot in use, or one
   whose claim another session wins, cannot be held.
+- **The slot line (tl-bxk.11.5):** every waiter for any slot (each `tl loop`, `run-task --slot any [--wait]`,
+  `tl slot take`) takes a ticket, `<config dir>/slots/<repo>/<seq>.json` (pid, start time, seq, why), made whole in
+  one step under the line's lock; numbers only grow. Only the first live ticket may take a slot, so a waiter with a
+  ticket ahead of it never steals one; a ticket whose process is gone (pid and start time) is dropped by the next
+  reader. A named take (`run-task --slot S`, `tl slot hold S`) does not queue. Every slot claim runs under one
+  per-repo lock with a fresh look at the slot bead: bd lets an actor re-claim its own bead, and hand runs of one
+  session share its actor. Windows: the OS locks are no-ops there (no fcntl), so these guards and the area lock hold on POSIX
+  only.
 - `tl slot list`: name, bead, status, holder, why (and since when, or until when for a hold), the live engine if any,
   folder.
 

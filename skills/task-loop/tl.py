@@ -16,7 +16,7 @@
   tl.py worktree start|sunset ...               one worktree per loop session when slots are off
   tl.py usage '<plan.windows JSON>'             feed get_usage to delegate (every 20 min while an engine runs)
   tl.py trace [ID] [--last N] [--json]          engine runs and every worker session of each (for reflection)
-  tl.py run-task ID [--worktree DIR] [--slot S] [--dry-run] [--fresh]
+  tl.py run-task ID [--worktree DIR] [--slot S|any [--wait]] [--exclusive-area] [--dry-run] [--fresh]
                                                 one bead through the engine (engine.py), no judgement here
   tl.py next [--repo DIR] [--json]              the bead the loop would take next and why (claims nothing)
   tl.py loop [--repo DIR] [--max-beads N] [--until HH:MM] [--wait-slot-min M] [--wait-drained]
@@ -501,20 +501,21 @@ def cmd_slot(a):
         if not a.name or not a.why:
             sys.exit("tl: tl slot hold NAME --why TEXT [--for MIN]")
         free_expired(repo)
-        b = slot_bead(repo, a.name)
-        if not b:
-            sys.exit("tl: no slot " + a.name)
-        hold = slot_hold(b)
-        busy = (engine_busy(slot_dir(repo, a.name, cfg)) or
-                ("held by %s until %s: %s" % (hold["by"], hold["until"], hold["why"]) if hold and hold["by"] != actor()
-                 else "" if hold or b.get("status") == "open" else "held by %s" % held_by(b)))
-        if not busy and b.get("status") == "open" and not claim_slot(repo, b["id"]):
-            busy = "claimed by another session just now"
-        if busy:  # renewing one's own hold is fine; anything else in use is never held
-            print("BUSY: slot %s %s" % (a.name, busy))
-            return 1
-        until = now() + float(a.for_min if a.for_min is not None else 60) * 60
-        mark_held(repo, b["id"], a.why, until)
+        with slot_lock(repo):
+            b = slot_bead(repo, a.name)
+            if not b:
+                sys.exit("tl: no slot " + a.name)
+            hold = slot_hold(b)
+            busy = (engine_busy(slot_dir(repo, a.name, cfg)) or
+                    ("held by %s until %s: %s" % (hold["by"], hold["until"], hold["why"]) if hold and hold["by"] != actor()
+                     else "" if hold or b.get("status") == "open" else "held by %s" % held_by(b)))
+            if not busy and b.get("status") == "open" and not claim_slot(repo, b["id"]):
+                busy = "claimed by another session just now"
+            if busy:  # renewing one's own hold is fine; anything else in use is never held
+                print("BUSY: slot %s %s" % (a.name, busy))
+                return 1
+            until = now() + float(a.for_min if a.for_min is not None else 60) * 60
+            mark_held(repo, b["id"], a.why, until)
         event("slot-hold", "", slot=a.name, slot_bead=b["id"], why=a.why, until=until, repo=repo)
         print("HELD %s until %s: %s" % (a.name, stamp(until), a.why))
         return 0
@@ -539,8 +540,8 @@ def cmd_slot(a):
                     sys.exit(r.stderr)
             print(name + "\t" + d)
         return 0
-    if a.op == "take":  # claim the first free slot; prints NAME DIR BEAD
-        got = take_slot(repo, cfg, "tl slot take")
+    if a.op == "take":  # claim the first free slot, never ahead of a waiter in line; prints NAME DIR BEAD
+        got = wait_slot(repo, cfg, "tl slot take", stop=lambda: True)
         print("\t".join(got) if got else "NONE")
         return 0 if got else 1
     if a.op == "release":
@@ -603,26 +604,131 @@ def cmd_slot(a):
     return 2
 
 
-def take_slot(repo, cfg, why="tl loop"):
+def take_slot(repo, cfg, why="tl loop", bead="", ticket=None):
     """(name, dir, slot bead) of the first free slot this session could claim, or None. Free: its bead open, no hold,
-    and no live engine or worker in its worktree (a run started without the slot bead, an older engine)."""
+    and no live engine or worker in its worktree (a run started without the slot bead, an older engine). A waiter
+    calls wait_slot, which takes its turn in the line first; `ticket` is its number, kept on the take's event."""
     free_expired(repo)
-    for b in slot_beads(repo):
-        name = b["title"].split()[-1]
-        d = slot_dir(repo, name, cfg)
-        if b.get("status") != "open" or slot_hold(b) or engine_busy(d) or not claim_slot(repo, b["id"]):
-            continue
-        mark_held(repo, b["id"], why)
-        event("slot-take", "", slot=name, slot_bead=b["id"], worktree=d, repo=repo)
-        return name, d, b["id"]
+    with slot_lock(repo):
+        for b in slot_beads(repo):
+            name = b["title"].split()[-1]
+            d = slot_dir(repo, name, cfg)
+            if b.get("status") != "open" or slot_hold(b) or engine_busy(d) or not claim_slot(repo, b["id"]):
+                continue
+            mark_held(repo, b["id"], why, bead=bead)
+            event("slot-take", "", slot=name, slot_bead=b["id"], worktree=d, repo=repo,
+                  **({"ticket": ticket} if ticket is not None else {}))
+            return name, d, b["id"]
     return None
 
 
-def take_named_slot(repo, name, cfg, why):
+def slot_lock(repo):
+    """Every slot claim (take, named take, hold) of the repo, one at a time, the look at the slot bead inside: bd lets
+    an actor re-claim its own bead, and hand runs of one session share its actor, so a claim alone never tells two of
+    them apart (race test: a --slot any won s1 a hand --slot s1 had just taken, then released it under that run)."""
+    return os_lock(config_dir() / "locks" / ("slot-take-%s.lock" % repo_key(repo)), "pid %d" % os.getpid())
+
+
+# ---- the slot line: waiters get free slots in arrival order (tl-bxk.11.5) ---------------------------------------------
+# A waiter (a loop, run-task --slot any) takes a ticket, a file <seq>.json {seq, pid, start, why, since} under the
+# repo's slot state; only the first live ticket may take a slot; a ticket whose process is gone (pid and start time) is
+# dropped by whoever reads the line.
+
+TICKET_POLL = (1, 5)  # run-task --slot any --wait: seconds between looks, first and at most
+
+
+def repo_key(repo):
+    return "%s-%s" % (Path(repo).name, hashlib.sha1(str(repo).encode()).hexdigest()[:8])
+
+
+def ticket_dir(repo):
+    d = config_dir() / "slots" / repo_key(repo)
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def take_ticket(repo, why):
+    """This process's place at the end of the line: numbers only grow (a counter file), and a ticket appears whole
+    (written aside, then linked in: a link never replaces a file another waiter made)."""
+    d = ticket_dir(repo)
+    me = {"pid": os.getpid(), "start": proc_start(os.getpid()), "why": why, "since": now()}
+    with os_lock(d / "line.lock", "pid %d" % os.getpid()):
+        try:
+            last = int((d / "seq").read_text().strip() or 0)
+        except (OSError, ValueError):
+            last = 0
+        seqs = [int(f.stem) for f in d.glob("*.json") if f.stem.isdigit()]
+        seq = max([last] + seqs) + 1
+        tmp = d / (".%d.%d.tmp" % (os.getpid(), seq))
+        while True:
+            t = dict(me, seq=seq, path=str(d / ("%012d.json" % seq)))
+            tmp.write_text(json.dumps(t), encoding="utf-8")
+            try:
+                os.link(str(tmp), t["path"])
+                break
+            except FileExistsError:  # without fcntl (Windows) the lock is a no-op: the link still decides
+                seq += 1
+            finally:
+                with contextlib.suppress(OSError):
+                    tmp.unlink()
+        (d / "seq").write_text(str(seq))
+    return t
+
+
+def drop_ticket(t):
+    with contextlib.suppress(OSError, TypeError):
+        os.unlink(t["path"])
+
+
+def waiting_line(repo):
+    """The live tickets, first in line first; a dead waiter's ticket is removed."""
+    out = []
+    for f in sorted(ticket_dir(repo).glob("*.json")):
+        try:
+            t = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue  # gone meanwhile
+        if not proc_alive(t.get("pid"), t.get("start") or ""):
+            with contextlib.suppress(OSError):
+                f.unlink()
+            continue
+        out.append(t)
+    return sorted(out, key=lambda t: t["seq"])
+
+
+def wait_slot(repo, cfg, why, bead="", stop=None, sleep=time.sleep, poll=None, on_wait=None):
+    """(name, dir, slot bead) once this waiter is first in line and a slot is free; None when stop() says so after a
+    look (stop=lambda: True: one look, no wait). on_wait(ahead) is called before each sleep. Never takes a slot while a
+    live ticket is ahead of it."""
+    first, most = poll or TICKET_POLL
+    t, delay = take_ticket(repo, why), first
+    try:
+        while True:
+            ahead = [x for x in waiting_line(repo) if x["seq"] < t["seq"]]
+            if not ahead:
+                got = take_slot(repo, cfg, why, bead=bead, ticket=t["seq"])
+                if got:
+                    return got
+            if stop and stop():
+                return None
+            if on_wait:
+                on_wait(len(ahead))
+            sleep(delay)
+            delay = min(delay * 2, most)
+    finally:
+        drop_ticket(t)
+
+
+def take_named_slot(repo, name, cfg, why, bead=""):
     """(slot bead, "") when this session now holds slot `name`, or (None, why not): `slot S held by X since T`. A held
     slot bead is refused even when this session's actor holds it (two hand runs from one session
     share its actor, and bd lets an actor re-claim its own bead); a hold too, its holder's own included."""
     free_expired(repo)
+    with slot_lock(repo):
+        return take_named_slot_locked(repo, name, cfg, why, bead)
+
+
+def take_named_slot_locked(repo, name, cfg, why, bead):
     b = slot_bead(repo, name)
     if not b:
         return None, "no slot %s on %s (tl slot list)" % (name, HOST)
@@ -637,7 +743,7 @@ def take_named_slot(repo, name, cfg, why):
         return None, "slot %s busy: %s" % (name, busy)
     if not claim_slot(repo, b["id"]):
         return None, "slot %s held by %s" % (name, held_by(show(b["id"], cwd=repo) or b))
-    mark_held(repo, b["id"], why)
+    mark_held(repo, b["id"], why, bead=bead)
     event("slot-take", "", slot=name, slot_bead=b["id"], worktree=slot_dir(repo, name, cfg), repo=repo)
     return b["id"], ""
 
@@ -691,19 +797,21 @@ def slot_bead(repo, name):
     return next((x for x in slot_beads(repo) if x["title"].split()[-1] == name), None)
 
 
-HELD_KEYS = ("held_by", "held_since", "held_why", "hold_until")
+HELD_KEYS = ("held_by", "held_since", "held_why", "hold_until", "held_bead")
 
 
 def stamp(t):
     return time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(t))
 
 
-def mark_held(repo, bead_id, why, until=0):
+def mark_held(repo, bead_id, why, until=0, bead=""):
     """Who holds a slot, since when and why, on its bead: tl slot list and a refused run-task read them. `until`: a hold
-    (tl slot hold), which outlives the bead's lease."""
+    (tl slot hold), which outlives the bead's lease. `bead`: the bead run there (held_bead), which makes its area busy."""
     sets = ["held_by=" + actor(), "held_since=" + stamp(now()), "held_why=" + why]
     args = sum((["--set-metadata", x] for x in sets), [])
     args += ["--set-metadata", "hold_until=%d" % until] if until else ["--unset-metadata", "hold_until"]
+    # unset when none: bd reclaim frees a dead holder's slot bead but keeps its metadata, its bead's area with it
+    args += ["--set-metadata", "held_bead=" + bead] if bead else ["--unset-metadata", "held_bead"]
     bd("update", bead_id, *args, cwd=repo)
 
 
@@ -759,10 +867,27 @@ def drop_engine_lock(wt, pid=None):
         pass
 
 
-def loop_lock(wt, slot, slot_bead):
-    """The loop's lock from its slot take to its run-task's own: no hand run gets in during the slot reset."""
-    write_engine_lock(wt, {"pid": os.getpid(), "start": proc_start(os.getpid()), "bead": "", "slot": slot or "",
+def loop_lock(wt, slot, slot_bead, bead=""):
+    """The loop's lock from its slot take to its run-task's own: no hand run gets in during the slot reset. `bead`, once
+    claimed: the area check sees it there."""
+    write_engine_lock(wt, {"pid": os.getpid(), "start": proc_start(os.getpid()), "bead": bead, "slot": slot or "",
                            "slot_bead": slot_bead or "", "by": "loop", "started": now()})
+
+
+def worktrees(repo, slots=None):
+    """Every worktree of the repo (git worktree list) and every slot folder (`slots`: the slot beads, when the caller
+    has them): where an engine lock may be."""
+    out = git("worktree", "list", "--porcelain", cwd=repo) or ""
+    found = [ln[9:] for ln in out.splitlines() if ln.startswith("worktree ")]
+    cfg = profile_slots(repo)
+    found += [slot_dir(repo, b["title"].split()[-1], cfg) for b in (slot_beads(repo) if slots is None else slots)]
+    seen, keep = set(), []
+    for d in found:
+        k = os.path.realpath(d)
+        if k not in seen and os.path.realpath(repo) != k:
+            seen.add(k)
+            keep.append(d)
+    return keep
 
 
 def engine_busy(wt, handoff=False):
@@ -1232,7 +1357,10 @@ def main(argv=None):
     p = sp.add_parser("run-task")
     p.add_argument("id")
     p.add_argument("--worktree")
-    p.add_argument("--slot")
+    p.add_argument("--slot", help="a slot name, or `any`: the next free slot in line (see --wait)")
+    p.add_argument("--wait", action="store_true", help="--slot any: wait in line for a free slot instead of refusing")
+    p.add_argument("--exclusive-area", action="store_true",
+                   help="refuse (taken) when the bead's area has a bead running elsewhere; default: warn and run")
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--fresh", action="store_true", help="drop the bead's checkpoint: plan again from the start")
     p.add_argument("--quiet", action="store_true", help="only steps and ⚠ lines (default: verbose, for a watching coordinator)")

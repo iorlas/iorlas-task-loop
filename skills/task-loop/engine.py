@@ -2630,6 +2630,60 @@ def run_main(a):
         os.environ["TASK_LOOP_SESSION"] = "engine-" + uuid.uuid4().hex[:12]
     repo = tl.repo_root()
     cfg = load_cfg(repo)
+    if a.slot == "any":
+        return run_any_slot(a, repo, cfg)
+    return run_in(a, repo, cfg)
+
+
+def run_any_slot(a, repo, cfg):
+    """--slot any: the next free slot, taken in the repo's slot line (first come, first served; --wait: wait in it),
+    run there as `--slot NAME`, given back at the end."""
+    if a.dry_run:
+        return {"v": 1, "outcome": "failed", "bead": a.id, "why": "failed: --slot any takes a slot; name one for --dry-run"}
+    wait = bool(getattr(a, "wait", False))
+    told = []
+
+    def waiting(ahead):
+        if not told:
+            say("no free slot%s; waiting in line" % (" (%d ahead)" % ahead if ahead else ""))
+            told.append(1)
+    got = tl.wait_slot(repo, tl.profile_slots(repo), "run-task " + a.id, bead=a.id, stop=lambda: not wait,
+                       on_wait=waiting)
+    if not got:
+        why = "no free slot (tl slot list); --wait waits in line for one"
+        print("TAKEN: %s" % why)
+        return {"v": 1, "outcome": "taken", "bead": a.id, "why": why}
+    a.slot, a.worktree, sb = got
+    os.environ["TASK_LOOP_SLOT_BEAD"] = sb  # run_in sees the slot as taken; the engine heartbeats it
+    try:
+        return run_in(a, repo, cfg)
+    finally:
+        old = signal.signal(signal.SIGTERM, signal.SIG_IGN) if hasattr(signal, "SIGTERM") and \
+            threading.current_thread() is threading.main_thread() else None
+        try:
+            os.environ.pop("TASK_LOOP_SLOT_BEAD", None)
+            tl.release_slot(repo, a.slot)
+        finally:
+            if old is not None:
+                signal.signal(signal.SIGTERM, old)
+
+
+def take_area(a, repo, cfg, lock):
+    """The engine lock, with the area check before it under the area lock (loop.area_lock): "" when this run holds the
+    worktree, else why not. A bead whose area runs elsewhere: a warning, or refused with --exclusive-area."""
+    import loop  # the queue rule; imports engine itself
+    if not loop.has_areas(cfg):
+        return lock.take()
+    with loop.area_lock(repo, cfg):
+        area, busy = loop.area_busy(repo, cfg, tl.show(a.id) or {"id": a.id}, {})
+        if busy and getattr(a, "exclusive_area", False):
+            return busy + " (--exclusive-area)"
+        if busy:
+            say("⚠ %s: running anyway beside it; --exclusive-area refuses instead" % busy)
+        return lock.take()
+
+
+def run_in(a, repo, cfg):
     wt = a.worktree
     if not wt and a.slot:  # the slot is the worktree
         wt = tl.slot_dir(repo, a.slot, tl.profile_slots(repo))
@@ -2655,15 +2709,15 @@ def run_main(a):
         slot = a.slot or tl.slot_of(repo, wt)
         sb = (tl.slot_bead(repo, slot) or {}).get("id") if slot else ""
         if slot and not (sb and os.environ.get("TASK_LOOP_SLOT_BEAD") == sb):
-            took, why = tl.take_named_slot(repo, slot, tl.profile_slots(repo), "run-task " + a.id)
+            took, why = tl.take_named_slot(repo, slot, tl.profile_slots(repo), "run-task " + a.id, bead=a.id)
             if not took:
                 print("TAKEN: %s" % why)
                 return {"v": 1, "outcome": "taken", "bead": a.id, "why": why}
             os.environ["TASK_LOOP_SLOT_BEAD"] = took  # the engine's heartbeat keeps it
         lock = EngineLock(wt, a.id, slot)
-        busy = lock.take()
+        busy = take_area(a, repo, cfg, lock)
         if busy:
-            why = "worktree %s: %s" % (wt, busy)
+            why = busy if busy.startswith("area ") else "worktree %s: %s" % (wt, busy)
             print("TAKEN: %s" % why)
             return {"v": 1, "outcome": "taken", "bead": a.id, "why": why}
         LOCK = lock

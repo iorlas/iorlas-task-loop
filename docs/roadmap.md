@@ -41,18 +41,19 @@ line; a message between sessions is never the guard. Clashes may happen; they mu
 | shared thing | guard | a second taker | gap |
 |---|---|---|---|
 | a bead | atomic `bd --claim`, each loop its own actor | the loop takes the next bead | |
-| a slot | slot bead + `<worktree>/.task/engine.lock` (pids with start times) + `tl slot hold` | the loop waits; a hand run refuses | fair queue for waiters, tl-bxk.11.5 |
+| a slot | slot bead + `<worktree>/.task/engine.lock` (pids with start times) + `tl slot hold`; every claim under one per-repo lock | waits in the slot line, served in ticket order (tl-bxk.11.5); a hand `--slot S` refuses | |
 | the base branch | land lock, rebase, retry; a fetch that loses a ref lock to a sibling worktree's is tried again | waits | |
 | Unity on the machine | the repo's OS counting locks (lifesim `tools/unity_slot.py`) | waits | |
 | a model lane | delegate's leases; busy answers `retry` | waits until `retry_after` | |
-| files two beads both edit | none: conflicts show at land as a rebase or fix round | | areas, tl-bxk.11.4 |
+| files two beads both edit | areas (tl-bxk.11.4): the area check, the claim and its mark under one area lock; files across areas: conflicts show at land as a rebase or fix round | the queue skips it for the next area's bead; a hand run warns (`--exclusive-area`: refuses) | |
 | the repo's `.task-loop.json` | read from the base branch after a fetch (`tl.profile`); the working tree only with no remote | the next fetch reads the new rule | |
 | an engine release | `dev/release.py`: an OS lock, the version from origin/main, the suite, the push under the land lock (a land during the suite: rebase, suite again, push) | waits in line, told who holds it | |
 | a slot's git | the engine's own git calls (`run_git`, `tl.git`, `Engine.git`, tree hash, staging, fetch, checkout, rebase, land) run with `GIT_DIR` = the slot's own gitdir and `GIT_WORK_TREE` = the slot, so a `core.worktree` in the shared `.git/config` (lifesim-1mm) cannot redirect them; workers, reviewers, verifiers and checks run unpinned (`GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE` stripped, so their git on other repos works); an unpinned `rev-parse --show-toplevel` must be the slot, `core.worktree` unset, `core.bare` not true, asserted before and after every node (write, hard, fix, checks) and before the land; land stages only the slot's own `git status` paths | a wrong tree stops the run with an owner ask naming the setting, its file and the fix (`git config --unset core.worktree`), before review or land; `tl doctor` warns when `extensions.worktreeConfig` is off (`tests/test_slot_git.py`, tl-bxk.10.12) | |
 | a stopped engine's worker | engine SIGTERMs route.py, which kills the worker's group; SIGKILL after a grace | | |
 
-All of it is proven together by one race test (tl-bxk.11.1, `tests/test_race.py`): two loops, a hand run, a slot
-hold and two releases at once, real processes on a fake repo, in under 30 s.
+All of it is proven together by one race test (tl-bxk.11.1, `tests/test_race.py`): two loops, a hand run, a
+`--slot any --wait` waiter, a slot hold and two releases at once, on beads in two areas, real processes on a fake repo,
+in under a minute.
 
 ## Not on the roadmap
 

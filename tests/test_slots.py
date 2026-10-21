@@ -64,11 +64,12 @@ class Slots(LoopBase):
                 rc = e.code
         return rc, out.getvalue()
 
-    def run_task(self, bead_id, slot=None, worktree=None, engine_run=None, **env):
-        """engine.main as `tl run-task` calls it, with the engine itself stubbed: engine_run(eng) is its run()."""
+    def run_task(self, bead_id, slot=None, worktree=None, engine_run=None, flags=None, **env):
+        """engine.main as `tl run-task` calls it, with the engine itself stubbed: engine_run(eng) is its run(). flags:
+        more run-task options (wait, exclusive_area)."""
         f = Path(self.home, "out-%s.json" % bead_id)
         a = engine.Args(id=bead_id, worktree=worktree, slot=slot, dry_run=False, fresh=False, quiet=True,
-                        outcome_file=str(f))
+                        outcome_file=str(f), **(flags or {}))
         made = mock.Mock()
         made.return_value.run.side_effect = lambda: (engine_run or (lambda: 0))()
         made.return_value.result.return_value = {"outcome": "landed", "bead": bead_id}
