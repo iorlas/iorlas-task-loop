@@ -404,8 +404,9 @@ class Engine:
                 nxt = None
             elif not j:
                 nxt, reason = "fail", "no_answer"  # route.py crashed, printed nothing, or the node timeout killed it
-            if nxt == "retry" and reason == "lane_out" and resume:
-                # delegate never moves a resumed thread to another lane; a new thread gets the role's next rung at once
+            if reason == "lane_out" and nxt in ("retry", "owner") and resume:
+                # delegate never moves a resumed thread to another lane; a new thread gets the role's next rung at once.
+                # next is owner when delegate cannot say when the lane frees (no retry_after): the same move (lifesim-5ar.6)
                 self.log("note", "%s: the resumed writer's lane is out (%s); going on at once as a new thread"
                          % (node, said[:160]))
                 resume, attempt_prompt = None, attempt_prompt + FRESH_WRITER_TEXT
@@ -426,6 +427,8 @@ class Engine:
             self.cost += r.cost
             denied = "; ".join("`%s`" % (d.get("input") or d.get("tool")) for d in j.get("denied") or [])
             if nxt == "owner" and not denied:
+                if reason == "lane_out":  # a new thread found no lane either and no time it frees: the bead waits, no ask
+                    raise Blocked("paused: no lane for %s (lane_out, no time it frees): %s" % (node, said[:200]))
                 if reason in ("logged_out", "setup"):  # the machine's to fix, not the bead's: it stays open, no ask
                     fix = ("run `codex login`" if j.get("family") == "openai" else "run `claude auth login`") \
                         if reason == "logged_out" else "set up delegate (/iorlas-delegate:init)"

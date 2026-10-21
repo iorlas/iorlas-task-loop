@@ -1657,6 +1657,28 @@ class DelegateLauncher(unittest.TestCase):
         self.assertTrue(any(c[:1] == ("update",) and "open" in c and any("paused: no lane for write until" in x for x in c)
                             for c in self.bd_calls))
 
+    # lifesim-5ar.6 2026-10-21: the resumed writer's lane_out came with no retry_after, so next was owner, and the bead
+    # blocked "needs a human" after 114 min of work
+    OUT_OWNER = ans("lane_out", "lane_out", "owner", retry_after=None, say="cannot say when OPENAI_SUBSCRIPTION frees")
+
+    def test_a_resumed_write_whose_lane_is_out_with_no_time_goes_on_at_once_as_a_new_thread(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_OWNER, self.FRESH],
+                                 "review": [review(unmet=["more"]), CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        workers = [(c, p) for c, p in zip(s.calls, s.prompts) if c[0] == "worker"]
+        self.assertEqual([c[1] for c, _ in workers], [None, "ref-write", None])
+        self.assertIn(engine.FRESH_WRITER_TEXT, workers[2][1])
+
+    def test_a_new_thread_whose_lane_is_out_with_no_time_pauses_without_an_ask(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_OWNER, self.OUT_OWNER],
+                                 "review": [review(unmet=["more"])]})
+        self.assertEqual(rc, 2)
+        self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, "ref-write", None])
+        self.assertEqual(self.blocked, [])
+        self.assertTrue(any(c[:1] == ("update",) and "open" in c and any("paused: no lane for write" in x for x in c)
+                            for c in self.bd_calls))
+        self.assertNotIn("needs a human", self.eng.log_path.read_text())
+
     def test_a_resumed_write_told_busy_waits_and_resumes_the_same_thread(self):
         busy = ans("stop", "busy", "retry", retry_after=0, say="state lock held")
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, busy, WRITE], "review": [review(unmet=["more"]), CLEAN]})

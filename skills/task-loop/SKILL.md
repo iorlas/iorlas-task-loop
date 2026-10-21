@@ -58,10 +58,10 @@ Workers go through delegate's worker-run v2 (`docs/contracts/worker-run-v2.md`, 
 `--host` on every step. Delegate, not the engine, tells each worker what its sandbox allows, how to ask for a blocked
 command and the git and credential rules; the engine's briefs say only what the step is for. Each answer's `next` is
 the whole policy: `retry` waits until `retry_after` (past `engine.lane_wait_min` the run pauses, bead open), except
-that a resumed writer answering `lane_out` goes on at once as a new thread (delegate gives it the role's next rung, e.g.
+that a resumed writer answering `lane_out` (`next` retry, or owner when delegate cannot say when the lane frees) goes on at once as a new thread (delegate gives it the role's next rung, e.g.
 Sonnet while Codex is out; its brief says to continue the earlier writer's work in the tree), which then becomes the
-writer later rounds resume and the review's `--authored-by`; only a retry from that new thread waits, `owner`
-pauses for a login or setup or raises a verify ask, `fail` tries once more as a new thread, then fails the task. The
+writer later rounds resume and the review's `--authored-by`; only a retry from that new thread waits, and its `lane_out`
+with no time pauses ("no lane", bead open, no ask); `owner` pauses for a login or setup or raises a verify ask, `fail` tries once more as a new thread, then fails the task. The
 trace keeps each session's `reason` and `context` (instruction files, env key names) and the run's lane manifest. A command the worker was denied shows as a ⚠; denied with no answer, or a second denied write in the bead (across lanes and runs), blocks it "needs a human:
 <command>". `tl run-task` refuses the main checkout as a worktree (it holds the bead database and the config).
 
