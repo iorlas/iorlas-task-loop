@@ -125,9 +125,9 @@ Asks: every block is an owner ask, `~/.config/task-loop/asks/<bead>.json` plus a
 (a step's question; a planner's, writer's or reviewer's question that an accepted requirement already answers, quoted
 in its `decided` field, is no ask: the planner plans again once with the requirement quoted (transition
 `planner_decided`), a writer or reviewer gets a fix round citing it. A test that an accepted requirement makes fail is
-no conflict between requirements, and an owner's answer in the comments decides as a requirement does. When `decided`
-is empty but the question names exactly one requirement id (`R10`) that the brief quotes, the engine takes the brief's
-lines naming it as `decided`, once per run, so a re-ask reaches the owner. Only two accepted requirements in conflict or a
+no conflict between requirements: it is fixed to match the requirement, never weakened or deleted to make the code
+pass (COMMON says the same); an owner's answer in the comments decides as a requirement does. The engine never fills
+`decided` itself: a question whether a requirement should change reaches the owner. Only two accepted requirements in conflict or a
 missing requirement reach the owner, lifesim-d5f.58, tl-bxk.10.3), verify (a denial, or what the workers could not check), stuck (rounds, replans or fix rounds used up,
 budget, land failed), ticket (intake). A machine pause (a `retry` answer past the wait, or `owner` for a login or setup) is no ask. A rerun with the ask open and
 the bead unchanged waits (no AI step, the bead stays blocked); the owner answers by commenting on or editing the bead,

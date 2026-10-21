@@ -625,39 +625,12 @@ class EngineTest(unittest.TestCase):
         causes = [json.loads(ln)["cause"] for ln in self.eng.log_path.read_text().splitlines() if '"transition"' in ln]
         self.assertIn("planner_decided", causes)
 
-    def test_the_d5f58_ask_with_no_decided_is_caught_by_the_requirement_the_brief_quotes(self):
-        owner = [{"author": "Denis Tomilin", "text": self.D5F58_OWNER}]
-        with mock.patch.object(tl, "comments", return_value=owner):
-            rc, s = self.run_engine({"plan": [dict(PLAN, question=self.D5F58_Q), PLAN], "write": [WRITE],
-                                     "review": [CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertIsNone(self.ask())
-        self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
-        self.assertIn("Accepted R10 stands", s.prompts[1].split("An accepted requirement already decides it:")[1])
-
     def test_a_planner_that_asks_again_after_the_requirement_is_quoted_reaches_the_owner(self):
         ask = dict(PLAN, question=self.D5F58_Q, decided=self.R10)
         rc, s = self.run_engine({"plan": [ask, ask]})
         self.assertEqual(rc, 2)
         self.assertEqual(self.ask()["kind"], "decision")
         self.assertEqual([c[0] for c in s.calls], ["planner", "planner"])
-
-    def test_a_writer_question_naming_a_requirement_the_brief_quotes_is_a_fix_round(self):
-        owner = [{"author": "Denis Tomilin", "text": self.D5F58_OWNER}]
-        with mock.patch.object(tl, "comments", return_value=owner):
-            rc, s = self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question=self.D5F58_Q), WRITE],
-                                     "review": [CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        writes = [p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker"]
-        self.assertIn("Accepted R10 stands", writes[1])
-
-    def test_the_engines_own_earlier_ask_in_the_brief_is_no_requirement(self):
-        old = [{"author": "tl-a", "text": "Blocked: owner decision needed\n\nQuestion: undo, or change R10?"}]
-        with mock.patch.object(tl, "comments", return_value=old):
-            rc, s = self.run_engine({"plan": [dict(PLAN, question=self.D5F58_Q)]})
-        self.assertEqual(rc, 2)
-        self.assertEqual(self.ask()["kind"], "decision")
-        self.assertEqual([c[0] for c in s.calls], ["planner"])
 
     def test_a_question_naming_two_requirements_the_brief_quotes_is_still_an_ask(self):
         owner = [{"author": "Denis Tomilin", "text": "Accepted: R3 keep saves forever; R7 drop them after a week."}]
@@ -667,9 +640,23 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(self.ask()["kind"], "decision")
 
     def test_every_step_is_told_a_test_against_a_requirement_is_no_conflict(self):
+        rule = "a test that contradicts an accepted requirement is fixed to match the requirement, never weakened or " \
+               "deleted to make the code pass"
         for prompt in (engine.PLAN_PROMPT, engine.WRITE_PROMPT, engine.REVIEW_PROMPT):
-            self.assertIn("a test", prompt.split("A change that contradicts")[1])
             self.assertIn("comments", prompt.split("A change that contradicts")[1])
+            self.assertIn(rule, " ".join(prompt.split("A change that contradicts")[1].lower().split()))
+        self.assertIn(rule, " ".join(engine.COMMON.lower().split()))
+
+    def test_a_question_whether_a_requirement_should_change_still_asks_the_owner(self):
+        # the engine never answers from the brief by itself: only the step's own decided field skips the owner
+        owner = [{"author": "Denis Tomilin", "text": self.D5F58_OWNER}]
+        for q in ("Should R10 be relaxed for a sole candidate?", "R10 vs criterion 3: which wins?"):
+            with mock.patch.object(tl, "comments", return_value=owner):
+                rc, s = self.run_engine({"plan": [dict(PLAN, question=q)]})
+            self.assertEqual(rc, 2, q)
+            self.assertEqual(self.ask()["kind"], "decision")
+            self.assertEqual([c[0] for c in s.calls], ["planner"])
+            (tl.config_dir() / "asks" / "t-1.json").unlink()
 
     def asks_the_owner(self, q):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [review(question=q)]})

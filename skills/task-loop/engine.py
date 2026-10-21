@@ -583,7 +583,6 @@ class Engine:
         self.writer = {}  # backend -> thread/session id, so later rounds of a task resume the same writer
         self.writer_family = None  # the family of the last write: the verifier comes from another one when it can
         self.plan_decided = False  # the planner was sent back once with the requirement that answers its question
-        self.auto_decided = False  # the brief's requirement answered a question once this run (brief_decides)
         self.fallback_lane = ""  # the lane a resumed writer was out on when the engine started a new thread elsewhere
         self.verified = []  # the verifier's answer per unchecked item at land: in the trace and on the bead
         self.sessions = []  # every AI call of this run: the trace a later reflection reads (traces.jsonl)
@@ -1024,21 +1023,6 @@ class Engine:
         live outside it so the worker cannot change them."""
         return (self.run_dir / "brief.md").read_text(encoding="utf-8")
 
-    def brief_decides(self, question):
-        """tl-bxk.10.3: the brief's lines naming the one requirement id (R10) a question cites, when the step left
-        decided empty: lifesim-d5f.58 asked "a test against R10" with the owner's "Accepted R10 stands" in the comments.
-        Two ids or more are a conflict between requirements (the owner's); once per run, so a re-ask reaches the owner."""
-        ids = set(REQ_ID.findall(question or ""))
-        if len(ids) != 1 or self.auto_decided:
-            return ""
-        rid = re.compile(r"\b%s\b" % ids.pop())
-        lines = [x for x in (ln.strip().lstrip("-* ").strip() for ln in self.brief_text().splitlines() if rid.search(ln))
-                 if not re.match(r"(\S+: )?(Blocked|Ask \(engine\)|Question|Engine paused|Reflect \(engine\))\b", x)]
-        if not lines:
-            return ""
-        self.auto_decided = True
-        return "; ".join(lines)[:800]
-
     def plan_text(self):
         return json.dumps(getattr(self, "plan_data", None) or {}, indent=1)
 
@@ -1272,7 +1256,7 @@ class Engine:
         step = "replan" if again else "plan"
         data = self.ask_plan(prompt, step, "re-plan" if again else "plan")
         q = data["question"].strip()
-        decided = (data["decided"].strip() or self.brief_decides(q)) if q else ""
+        decided = data["decided"].strip() if q else ""
         if decided and not self.plan_decided:  # tl-bxk.10.3: no owner ask, the planner plans again
             self.plan_decided = True
             self.warn("the planner asked what an accepted requirement decides: %s" % decided[:300])
@@ -1532,8 +1516,6 @@ class Engine:
                 UNCHECKED_TEXT, resume_key="writer", write=n, round=rounds + 1, **where)
             self.writer_family = wfam
             wrote_unchecked = w.get("unchecked") or []  # the review decides what is still unproven after the checks
-            if w["question"].strip() and not w["decided"].strip():
-                w["decided"] = self.brief_decides(w["question"])
             if w["question"].strip() and w["decided"].strip():  # lifesim-d5f.58: an accepted requirement is no question
                 rounds += 1
                 self.stats["rounds"] += 1
@@ -1617,8 +1599,6 @@ class Engine:
                     ["%s:%s [%s] %s" % (f["file"], f["line"], f["severity"], f["fix"]) for f in review["findings"]] +
                     ["unmet: " + u for u in review["unmet"]]) or "no findings")
             self.leftovers += review["leftovers"]
-            if review["question"].strip() and not review["decided"].strip():
-                review["decided"] = self.brief_decides(review["question"])
             if review["question"].strip() and review["decided"].strip():  # lifesim-d5f.58: a fix round, not an ask
                 self.log("note", "%s: the review asked what an accepted requirement decides (%s): sending it back"
                          % (name, review["decided"][:200]))
@@ -2303,13 +2283,14 @@ def summarize(node, d):
 
 COMMON = ("You are one step of an unattended task engine. Nobody is watching; do not ask for confirmation. "
           "Work only in {wt}. Never commit, push, branch, or change git state. Never add suppressions or weaken, skip "
-          "or delete tests. Answer with the structured result only.")
+          "or delete tests; a test that contradicts an accepted requirement is fixed to match the requirement, never "
+          "weakened or deleted to make the code pass. Answer with the structured result only.")
 
 DECIDED_RULE = ("A change that contradicts an accepted requirement (in the task, its acceptance criteria, or a "
                 "requirement it cites) is never the owner's question: the fix is to meet the requirement. Nor is a test, "
-                "check or scenario that an accepted requirement makes fail: that is no conflict between two "
-                "requirements; the requirement stands, and making the test agree with it (fixing the cause, or the test "
-                "where the test is what contradicts it) is the work. An owner's answer in the task's comments decides "
+                "check or scenario at odds with an accepted requirement: that is no conflict between two requirements. "
+                "A test that contradicts an accepted requirement is fixed to match the requirement, never weakened or "
+                "deleted to make the code pass. An owner's answer in the task's comments decides "
                 "as an accepted requirement does. decided: the "
                 "accepted requirement, quoted, that already answers your question (the engine then sends the stage "
                 "back to meet it instead of asking the owner); empty when you have no question, when two accepted "
@@ -2317,7 +2298,6 @@ DECIDED_RULE = ("A change that contradicts an accepted requirement (in the task,
 DECIDED_TEXT = ("\nYou asked: %s\nAn accepted requirement already decides it: %s\nMeet that requirement: change the "
                 "work, never the requirement.\n")
 PLAN_DECIDED_TEXT = "Plan the work that meets it; ask nothing it already answers.\n"
-REQ_ID = re.compile(r"\bR\d+\b")
 
 PLAN_PROMPT = COMMON + """
 
