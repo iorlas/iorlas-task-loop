@@ -53,3 +53,33 @@ results collapsed, follow mode).
 3. task-loop skill rewritten around `tl.py` (claim/close/worker/dash), hook shipped.
 4. Delegate: worker ids for `claude -p` and Codex; lanes panel.
 5. Later beads: pruning, multi-machine view, idle tuning.
+
+## Task view (v3, 2026-10-21, tl-bxk.12.3)
+The unit is the task. Home (`/`) lists every bead the engine ran in the last 7 days: live state and stage
+(planning, writing stage 2/3, checks, review, fix round 1 · writing, landing, waiting on you, paused: Codex out until
+HH:MM), slot, time. A task (`#task=<id>`) shows every run of the bead, oldest first, each headed by why it started; a
+run is a chain of blocks (one stage + one session), the arrow into each block says why the run moved there. A block
+(`#task=..&run=<run>&block=<node>.<k>&tab=transcript|checks|engine|answer`) opens a drawer: the session's
+transcript cut to the block's time, the checks of its round (command, exit, output tail, full log), the engine lines of
+the step. Asks are answered on the task (and on `#asks`). The old three-pane viewer is `/classic`.
+
+Endpoints: `/api/tasks`, `/api/task-timeline?repo&id`, `/api/block?run&node&k`, `/api/file?run&path` (a file of the
+run's folder only). `dash/timeline.py` builds runs -> blocks -> arrows.
+
+### Timeline records (engine log, since tl-bxk.12.3)
+The engine log `engine/<bead>-<YYYYMMDD-HHMMSS>.jsonl` keeps its old records and text; these are added, never printed:
+| kind | fields |
+|---|---|
+| `node` (existing) | + `id` (run-scoped, from 1), `step` reset/plan/replan/write/checks/review/verify/land/close, `stage`, `stages`, `write`, `round`, `fix`, `fixes`, `try` |
+| `end` | `id`, `step`, `outcome` (green, red, clean, sent back, asks, paused, landed, gate red, ...), `detail`, `secs`, `sessions` [refs] |
+| `transition` | `from` (node id), `to` (a step, `next`, `ask`, `pause`, `close`), `cause`, `detail`; `lane`, `until` on pauses |
+| `checks` | `node_id`, `round`, `items` [{id, cmd, group, exit, status, secs, tries, cached, why, log}] |
+| `run` | `run`, `bead`, `prev_run`, `started_because` first/answer/resume/retry/fresh, `ask`, `slot`, `worktree` |
+| `session`, `msg` (existing) | + `node_id`; session + `resume`, `flag` |
+
+Causes: checks_red, checks_green, review_sendback, accepted, bad_checks, rounds_used, writer_decided, plan_sent_back,
+invalid_output, lane_out (a new thread), lane_wait, paused, decision/verify/ticket/stuck/waiting (an ask), verify_open,
+verify_wrong, verified, gate_red, conflict, push_race, landed, done, failed, stopped. Check logs keep every round:
+`checks/NN-id.rK.log`, `engine-checks.rK.json` (`engine-checks.json` is the latest). `traces.jsonl` lines add
+`prev_run`, `started_because`, `ask`. Logs from before these records are read from their node/session/warn text.
+There is no `judge` step: the engine has none yet.

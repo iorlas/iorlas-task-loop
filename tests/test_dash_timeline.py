@@ -67,11 +67,18 @@ class LegacyRuns(unittest.TestCase):
                          ("answer", "lifesim-d5f.58-1", "lifesim-d5f.58-20261021-072411"))
         self.assertEqual(kinds(r), ["plan", "write", "checks", "replan", "write"])
         self.assertEqual(r["blocks"][3]["arrow"]["cause"], "bad_checks")
-        self.assertEqual(r["blocks"][3]["arrow"]["text"], "writer says the checks are wrong → re-plan")
+        self.assertEqual(r["blocks"][3]["arrow"]["text"], "writer: the checks are wrong → re-plan")
         self.assertEqual(r["blocks"][4]["result"]["status"], "wait")
         self.assertEqual(r["blocks"][4]["result"]["text"], "Codex out")
         self.assertEqual((r["end"]["outcome"], r["end"]["until"]), ("paused", "09:02"))
         self.assertEqual(r["end"]["text"], "Codex out → paused until 09:02")
+
+    def test_a_pause_says_what_it_waits_for(self):
+        self.assertEqual(timeline.pause_reason("paused: logged_out on plan; run `claude auth login` on this machine"),
+                         "Claude logged out")
+        self.assertEqual(timeline.pause_reason("paused: no network for write until 09:00 (network: dns)"), "no network")
+        self.assertEqual(timeline.pause_reason("paused: no lane for write until 09:02 (lane_out: OPENAI_SUBSCRIPTION)"),
+                         "Codex out")
 
     def test_run_3_resumes_after_the_pause_and_a_write_with_no_session_still_shows(self):
         r = self.run_of("090321")
@@ -101,7 +108,8 @@ class LegacyRuns(unittest.TestCase):
         self.assertEqual(kinds(r), ["plan", "write", "checks", "review", "land"])
         self.assertEqual(r["blocks"][4]["arrow"]["cause"], "accepted")
         self.assertEqual(r["end"]["outcome"], "landed")
-        self.assertEqual(r["end"]["text"], "landed " + time.strftime("%H:%M", time.localtime(r["end"]["t"])))
+        self.assertEqual(r["end"]["text"], "landed " + timeline.when(r["end"]["t"]))
+        self.assertTrue(timeline.when(r["end"]["t"]).endswith("11:20"))
 
     def test_block_detail_has_the_checks_of_its_round_and_the_engine_lines_of_its_step(self):
         r = self.run_of("072411")
@@ -161,6 +169,15 @@ class Api(unittest.TestCase):
         self.assertEqual(t["ask"]["id"], BEAD + "-3")
         self.assertEqual(t["title"], "Front approach")
 
+    def test_an_ask_already_answered_waits_for_the_next_run_not_for_you(self):
+        (self.cfg / "asks").mkdir()
+        (self.cfg / "asks" / (BEAD + ".json")).write_text(json.dumps({"v": 1, "id": BEAD + "-2", "bead": BEAD,
+                                                                   "status": "answered"}))
+        for s in RUNS[5:]:
+            os.unlink(str(self.cfg / "engine" / ("%s-20261021-%s.jsonl" % (BEAD, s))))
+        t = self.task()
+        self.assertEqual((t["state"], t["label"]), ("queued", "answered: waits for the next run"))
+
     def test_a_paused_run_says_which_lane_is_out_and_until_when(self):
         for s in RUNS[2:]:
             os.unlink(str(self.cfg / "engine" / ("%s-20261021-%s.jsonl" % (BEAD, s))))
@@ -217,6 +234,12 @@ class Api(unittest.TestCase):
         evs = server.run_events("codex-exec:%s@%s@%s" % (p, t, t + 3600))
         self.assertEqual([e["text"] for e in evs], ["round 2"])
         self.assertEqual(len(server.run_events("codex-exec:%s" % p)), 2)
+
+    def test_a_codex_exec_call_shows_its_shell_commands(self):
+        src = 'text(await tools.exec_command({cmd:"cat a.md; rg -n \\"x\\" src",max_output_tokens:6000}));\n' \
+              'text(await tools.exec_command({cmd:"git status"}));'
+        self.assertEqual(server.exec_cmds(src), ['cat a.md; rg -n "x" src', "git status"])
+        self.assertEqual(server.exec_cmds("ls"), [])
 
     def test_a_check_log_is_served_from_its_run_and_nothing_outside_it(self):
         run = "%s-20261021-072411" % BEAD

@@ -63,6 +63,26 @@ def hhmm(t):
     return time.strftime("%H:%M", time.localtime(t)) if t else ""
 
 
+def when(t):
+    """HH:MM today, else the weekday too."""
+    if not t:
+        return ""
+    same = time.strftime("%Y%m%d", time.localtime(t)) == time.strftime("%Y%m%d")
+    return hhmm(t) if same else time.strftime("%a %H:%M", time.localtime(t))
+
+
+def pause_reason(why):
+    """What a pause waits for, in a few words: "Codex out", "Claude logged out", "no network"."""
+    if "logged_out" in why:
+        return "%s logged out" % ("Codex" if "codex login" in why else "Claude")
+    if why.startswith("paused: no network") or "(network" in why:
+        return "no network"
+    if "setup on" in why or "(setup" in why:
+        return "delegate needs setup"
+    lane = lane_of(why)
+    return "%s out" % lane if lane else "no lane"
+
+
 # ---- old logs: the step and its counters from the node text ----------------------------------------------------------
 
 LEGACY = [
@@ -323,7 +343,7 @@ def arrow_text(cause, detail="", ctx=None):
     if cause == "planned":
         return detail or "planned"
     if cause == "bad_checks":
-        return "writer says the checks are wrong \u2192 re-plan"
+        return "writer: the checks are wrong \u2192 re-plan"
     if cause == "rounds_used":
         return "rounds used up \u2192 re-plan"
     if cause == "writer_decided":
@@ -338,8 +358,9 @@ def arrow_text(cause, detail="", ctx=None):
     if cause == "plan_sent_back":
         return "checks sent back \u2192 plan again"
     if cause == "paused":
-        lane, until = ctx.get("lane") or lane_of(detail), ctx.get("until") or until_of(detail)
-        return "%s \u2192 paused%s" % ("%s out" % lane if lane else "no lane", (" until " + until) if until else "")
+        what = ("%s out" % ctx["lane"]) if ctx.get("lane") else pause_reason(detail)
+        until = ctx.get("until") or until_of(detail)
+        return "%s \u2192 paused%s" % (what, (" until " + until) if until else "")
     if cause in ("decision", "verify", "ticket", "stuck", "waiting", "verify_open", "needs_human"):
         return {"decision": "decision needed", "verify": "needs your check", "ticket": "needs a split or criteria",
                 "stuck": "stuck", "waiting": "waiting for your answer", "verify_open": "needs your check",
@@ -559,10 +580,11 @@ def run_end(nodes, pending, alive):
     cause = mv.get("cause") if mv.get("to") in ("ask", "pause", "close") else cause
     end = {"t": close["t0"], "why": why[:600], "cause": cause}
     if outcome in ("landed", "done"):
-        end.update(outcome=outcome, status="ok", text="%s %s" % (outcome, hhmm(close["t0"])))
+        end.update(outcome=outcome, status="ok", text="%s %s" % (outcome, when(close["t0"])))
     elif why.startswith("paused:"):
         lane, until = lane_of(why), until_of(why)
-        end.update(outcome="paused", status="wait", lane=lane, until=until, text=arrow_text("paused", why))
+        end.update(outcome="paused", status="wait", lane=lane, until=until, reason=pause_reason(why),
+                   text=arrow_text("paused", why))
     elif why.startswith("waiting:"):
         end.update(outcome="waiting", status="ask", text=arrow_text("waiting"))
     elif outcome == "blocked" and ask_kind(why):

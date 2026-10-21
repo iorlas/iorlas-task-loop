@@ -322,6 +322,7 @@ def rollout_events(path, t0=None, t1=None):
                     out.append({"t": t, "kind": "msg", "text": text[:6000]})
             elif typ in ("function_call", "custom_tool_call", "local_shell_call"):
                 args = p.get("arguments") or p.get("input") or ""
+                cmds = exec_cmds(args)
                 try:
                     j = json.loads(args) if isinstance(args, str) else args
                     cmd = j.get("cmd") or j.get("command") or args
@@ -329,6 +330,8 @@ def rollout_events(path, t0=None, t1=None):
                         cmd = " ".join(cmd)
                 except (ValueError, AttributeError):
                     cmd = args
+                if cmds:
+                    cmd = "\n".join(cmds)
                 e = {"t": t, "kind": "cmd", "tool": p.get("name", "shell"), "text": clean_cmd(str(cmd))[:600], "state": "run"}
                 pending[p.get("call_id")] = e
                 out.append(e)
@@ -342,6 +345,22 @@ def rollout_events(path, t0=None, t1=None):
                     e["detail"] = o[:3000]
         elif d.get("type") == "event_msg" and typ == "user_message":
             out.append({"t": t, "kind": "user", "text": str(p.get("message", ""))[:4000]})
+    return out
+
+
+EXEC_CMD = re.compile(r'exec_command\(\{\s*"?cmd"?\s*:\s*("(?:[^"\\]|\\.)*")')
+
+
+def exec_cmds(src):
+    """The shell commands in a Codex `exec` tool call, whose input is code: text(await tools.exec_command({cmd:"..."}))."""
+    if not isinstance(src, str) or "exec_command(" not in src:
+        return []
+    out = []
+    for m in EXEC_CMD.finditer(src):
+        try:
+            out.append(json.loads(m.group(1)))
+        except ValueError:
+            out.append(m.group(1)[1:-1])
     return out
 
 
@@ -836,7 +855,7 @@ def repo_name(span, trace, ask):
     return re.sub(r"\.git$", "", os.path.basename(r)) if r else ""
 
 
-TASK_STATES = {"running": 0, "asks": 1, "paused": 2, "waiting": 3, "stopped": 4, "failed": 4, "blocked": 4,
+TASK_STATES = {"running": 0, "asks": 1, "paused": 2, "queued": 2, "waiting": 3, "stopped": 4, "failed": 4, "blocked": 4,
                "landed": 5, "done": 5}
 
 
@@ -855,9 +874,10 @@ def task_row(bead, paths, spans, tr):
         state, label = "running", timeline.live_label(timeline.last_node(newest))
     elif ask:
         state, label = "asks", "waiting on you"
+    elif state == "asks":  # the ask was answered (or closed) since: the loop's next run takes it
+        state, label = "queued", "answered: waits for the next run"
     elif state == "paused":
-        label = "paused: %s out until %s" % (end.get("lane") or "lane", end["until"]) if end.get("until") else \
-            "paused: " + (end.get("lane") + " out" if end.get("lane") else "no lane")
+        label = "paused: %s%s" % (end.get("reason") or "no lane", (" until " + end["until"]) if end.get("until") else "")
     elif state == "stopped":
         label = "stopped"
     started = run["started"] or 0
