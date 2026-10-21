@@ -78,14 +78,24 @@ class Records(Base):
         self.assertEqual([json.loads(l)["kind"] for l in f.read_text().splitlines()], ["new"])
 
     def test_hook_indexes_session(self):
-        with mock.patch("sys.stdin", io.StringIO(json.dumps({"session_id": "s1", "transcript_path": "/t.jsonl"}))):
+        # never the real dashboard: an installed one of another version on :7878 was restarted from this tree, with the
+        # test's empty config dir, and the owner's dashboard showed no tasks (2026-10-21)
+        with mock.patch("sys.stdin", io.StringIO(json.dumps({"session_id": "s1", "transcript_path": "/t.jsonl"}))), \
+                mock.patch.object(tl, "ping", return_value=None), mock.patch.object(tl.subprocess, "Popen") as po:
             self.assertEqual(tl.main(["hook", "session-start"]), 0)
+        po.assert_not_called()
         d = json.loads((tl.config_dir() / "sessions" / "s1.json").read_text())
         self.assertEqual(d["transcript"], "/t.jsonl")
 
     def test_hook_never_fails(self):
-        with mock.patch("sys.stdin", io.StringIO("not json")):
+        with mock.patch("sys.stdin", io.StringIO("not json")), mock.patch.object(tl, "ping", return_value=None):
             self.assertEqual(tl.main(["hook", "session-start"]), 0)
+
+    def test_hook_restarts_an_older_dashboard_without_touching_the_real_one(self):
+        with mock.patch("sys.stdin", io.StringIO("{}")), mock.patch.object(tl, "ping", return_value={"version": "0"}), \
+                mock.patch.object(tl.subprocess, "Popen") as po:
+            self.assertEqual(tl.main(["hook", "session-start"]), 0)
+        self.assertIn("ensure", po.call_args[0][0])
 
 
 class RegisterCLI(Base):
