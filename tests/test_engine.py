@@ -156,6 +156,26 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
         self.assertTrue(any(c[:2] == ("comments", "add") and "Reflect (engine)" in c[3] for c in self.bd_calls))
 
+    @unittest.skipIf(os.name == "nt", "the git shim is a shell script")
+    def test_a_fetch_that_loses_the_ref_lock_to_a_sibling_worktree_is_tried_again(self):
+        # race test (tl-bxk.11.1): worktrees share refs/remotes/origin/main; a fetch at the same time as another
+        # process's (a loop's queue, a slot reset, a release) fails "incorrect old value provided" though the ref is
+        # then right. The reset's fetch failed the bead; the land's failed it as "fetch or rebase ... failed".
+        bin_ = Path(self.tmp.name, "bin")
+        bin_.mkdir()
+        real = subprocess.run(["which", "git"], capture_output=True, text=True).stdout.strip()
+        mark = Path(self.tmp.name, "fetches")
+        (bin_ / "git").write_text(
+            '#!/bin/sh\ncase " $* " in *" fetch "*) echo x >> "%s"\n'
+            '  [ $(( $(wc -l < "%s") %% 2 )) -eq 1 ] && { echo "error: fetching ref refs/remotes/origin/main failed: '
+            'incorrect old value provided" >&2; exit 1; } ;;\nesac\nexec "%s" "$@"\n' % (mark, mark, real))
+        (bin_ / "git").chmod(0o755)
+        with mock.patch.dict(os.environ, {"PATH": "%s%s%s" % (bin_, os.pathsep, os.environ["PATH"])}):
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertGreaterEqual(len(mark.read_text().splitlines()), 4)  # reset and land: each lost once, then won
+        self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
+
     def test_no_prompt_points_outside_the_worktree_the_brief_plan_and_replan_are_inline(self):
         # delegate 0.23 keeps Claude's file tools in the worktree: a path to the run dir is a file no step can read
         rc, s = self.run_engine({"plan": [PLAN, PLAN], "write": [WRITE, WRITE, WRITE],

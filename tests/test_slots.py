@@ -395,6 +395,25 @@ class HoldRaces(Slots):
             self.run_loop("--max-beads", "1")
         self.assertEqual(self.started, [("x-1", "s1")])
 
+    def test_a_hold_taken_while_the_loop_releases_the_slot_is_kept(self):
+        # race test (tl-bxk.11.1): the release unclaimed the slot bead, a person's hold claimed it at once, and the
+        # release's own clean-up then wiped the hold's metadata: the hold was gone, the slot only leased
+        bd = self.beads({})
+        self.assertTrue(tl.take_slot(str(self.repo), {}))
+        real = bd.__call__
+
+        def racing(*a, **kw):
+            r = real(*a, **kw)
+            if a[:1] == ("unclaim",) and a[1] == "sl-1":
+                with mock.patch.dict(os.environ, {"TASK_LOOP_ACTOR": "tl-denis000"}):
+                    self.assertEqual(self.cli("slot", "hold", "s1", "--why", "screenshots")[0], 0)
+            return r
+        with mock.patch.object(tl, "bd", side_effect=racing):
+            tl.release_slot(str(self.repo), "s1")
+        self.assertEqual(bd.slots["sl-1"]["assignee"], "tl-denis000")
+        self.assertIn("hold_until", bd.slots["sl-1"].get("metadata", {}))
+        self.assertTrue(tl.slot_hold(bd.slots["sl-1"]))
+
     def test_ones_own_hold_keeps_ones_own_runs_and_resets_off_unless_forced(self):
         self.beads({"x-1": []})
         self.cli("slot", "hold", "s1", "--why", "screenshots")

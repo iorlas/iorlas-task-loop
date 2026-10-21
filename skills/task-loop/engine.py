@@ -905,6 +905,17 @@ class Engine:
             raise Blocked("failed: `%s` exit %d\n%s" % (cmd, rc, tail))
         return rc, tail
 
+    def fetch(self, check=False):
+        """git fetch, again while it loses a ref lock to another process's fetch into this repo (tl.REF_RACE)."""
+        for i in range(5):
+            rc, tail = self.sh(["git", "fetch", "-q", "origin"])
+            if rc == 0 or not tl.REF_RACE.search(tail):
+                break
+            time.sleep(0.1 * (i + 1))
+        if check and rc:
+            raise Blocked("failed: `git fetch -q origin` exit %d\n%s" % (rc, tail))
+        return rc, tail
+
     def base_sha(self):
         """Where the task's work starts: an earlier run's commits on the task branch count as the task's diff."""
         return self.git("merge-base", self.cfg["base"], "HEAD") or self.cfg["base"]
@@ -916,7 +927,7 @@ class Engine:
     def reset(self, bead):
         self.node("reset", "reset")
         branch = (bead.get("metadata") or {}).get("branch") or "task/" + self.bead
-        self.sh(["git", "fetch", "-q", "origin"], check=True)
+        self.fetch(check=True)
         exclude = Path(self.git("rev-parse", "--path-format=absolute", "--git-common-dir")) / "info" / "exclude"
         if ".task/" not in (exclude.read_text() if exclude.exists() else ""):
             with open(exclude, "a") as f:
@@ -1766,7 +1777,7 @@ class Engine:
             problem = None
             with self.land_lock():
                 self.node("land", "land (try %d)" % (pushes + 1), **{"try": pushes + 1})
-                rc, tail = self.sh(["git", "fetch", "-q", "origin"])
+                rc, tail = self.fetch()
                 if rc == 0:
                     rc, tail = self.sh(["git", "rebase", "-q", self.cfg["base"]])
                 if rc:
@@ -1866,9 +1877,7 @@ class Engine:
     @contextlib.contextmanager
     def land_lock(self):
         """One land at a time per repo, across slots and sessions: an flock the OS drops when the process dies."""
-        d = tl.config_dir() / "locks"
-        url = self.git("remote", "get-url", "origin") or str(self.wt)
-        path = d / ("land-%s.lock" % hashlib.sha1(url.encode()).hexdigest()[:12])
+        path = tl.land_lock_path(self.git("remote", "get-url", "origin") or str(self.wt))
         with tl.os_lock(path, self.bead, lambda who: self.log("note", "waiting for the land lock (held by %s)" % who)):
             yield path
 

@@ -8,8 +8,9 @@ Takes an OS lock (~/.config/task-loop/locks/release-*.lock): a second release wa
 Then, in the repo's main checkout (on main, clean, or refused): fetch, fast-forward to origin/main, fast-forward to B
 when given (a branch that is not a fast-forward is refused: rebase it first), bump the patch version of origin/main's
 .claude-plugin/plugin.json (--minor: the minor), run the full suite (red aborts and puts main back), commit only
-plugin.json as "<version>: <message>", push. A push race (origin/main moved) drops the bump, rebases, takes the next
-version, runs the suite again and pushes once more. Then close the bead, bump the plugin's entry in the marketplace
+plugin.json as "<version>: <message>", push under the land lock, so no loop lands in between. When origin/main moved
+since the bump (a land during the suite) it drops the bump, rebases, takes the next version and runs the suite again
+first, still under the lock; a push refused all the same gets one more such round. Then close the bead, bump the plugin's entry in the marketplace
 checkout, push it, `claude plugin marketplace update` and `claude plugin update`. Nothing is ever deleted: a plugin
 cache dir a live engine runs from stays.
 
@@ -50,6 +51,13 @@ def run(cmd, cwd, check=True):
 
 def git(cwd, *a, check=True):
     return run(["git"] + list(a), cwd, check).stdout.strip()
+
+
+def fetch(cwd):
+    """A fetch into the repo, again while it loses a ref lock to a loop's fetch at the same moment (tl.fetch)."""
+    r = tl.fetch(str(cwd))
+    if r.returncode:
+        raise Abort("git fetch failed in %s:\n%s" % (cwd, r.stderr.strip()[-2000:]))
 
 
 def say(msg):
@@ -99,26 +107,32 @@ def bump_and_commit(repo, message, minor):
 
 
 def push_main(repo, message, minor, version):
-    """Push; on a race (origin/main moved) drop the bump, rebase, take the next version, run the suite, push once."""
-    if not run(["git", "push", "-q", "origin", "HEAD:main"], repo, check=False).returncode:
-        return version
-    parent = git(repo, "rev-parse", "HEAD~1")
-    git(repo, "fetch", "-q", "origin")
-    if git(repo, "rev-parse", "origin/main") == parent:
-        raise Abort("the push was refused and origin/main did not move:\n"
-                    + run(["git", "push", "origin", "HEAD:main"], repo, check=False).stderr)
-    say("push race: origin/main moved; rebasing, taking the next version and running the suite again")
-    git(repo, "reset", "-q", "--hard", "HEAD~1")
-    if run(["git", "rebase", "-q", "origin/main"], repo, check=False).returncode:
-        run(["git", "rebase", "--abort"], repo, check=False)
-        raise Abort("the rebase onto origin/main after the push race failed")
-    version = bump_and_commit(repo, message, minor)
-    git(repo, "push", "-q", "origin", "HEAD:main")
-    return version
+    """Push, under the land lock (an engine lands only while it holds it): an origin/main that moved since the bump (a
+    land during the suite) is rebased onto, the version taken again and the suite run again, then pushed while no land
+    can get in. A push refused all the same (one that skipped the lock) gets one more round."""
+    url = git(repo, "remote", "get-url", "origin", check=False) or str(repo)
+    with tl.os_lock(tl.land_lock_path(url), "release: " + message,
+                    lambda who: say("waiting for the land lock (held by %s)" % who)):
+        for _ in range(2):
+            fetch(repo)
+            if git(repo, "rev-parse", "origin/main") != git(repo, "rev-parse", "HEAD~1"):
+                say("push race: origin/main moved; rebasing, taking the next version and running the suite again")
+                git(repo, "reset", "-q", "--hard", "HEAD~1")
+                if run(["git", "rebase", "-q", "origin/main"], repo, check=False).returncode:
+                    run(["git", "rebase", "--abort"], repo, check=False)
+                    raise Abort("the rebase onto origin/main after the push race failed")
+                version = bump_and_commit(repo, message, minor)
+            r = run(["git", "push", "-q", "origin", "HEAD:main"], repo, check=False)
+            if not r.returncode:
+                return version
+            fetch(repo)
+            if git(repo, "rev-parse", "origin/main") == git(repo, "rev-parse", "HEAD~1"):
+                raise Abort("the push was refused and origin/main did not move:\n" + r.stderr)
+    raise Abort("the push lost the race twice, the land lock held; nothing released")
 
 
 def bump_marketplace(market, version):
-    git(market, "fetch", "-q", "origin")
+    fetch(market)
     git(market, "merge", "-q", "--ff-only", "origin/main")
     f = Path(market) / MARKET
     text = f.read_text(encoding="utf-8")
@@ -141,7 +155,7 @@ def release(a, repo, market):
     require_clean_main(market, "marketplace")
     start = git(repo, "rev-parse", "HEAD")
     try:
-        git(repo, "fetch", "-q", "origin")
+        fetch(repo)
         git(repo, "merge", "-q", "--ff-only", "origin/main")
         if a.from_branch:
             b = a.from_branch

@@ -272,8 +272,9 @@ filed, beads blocked with their question, the dashboard address. Nothing else.
 `tl loop` runs the queue by itself, one bead at a time, in the foreground of any shell (a background job, tmux, a
 container); the session that starts it only watches it.
 
-- **Start:** `tl loop [--repo DIR] [--max-beads N] [--until HH:MM] [--wait-slot-min M] [--wait-drained]`. One loop per
-  repo per machine. Each pass: `bd reclaim` of tl- actors' lapsed claims only (never a person's), take any free slot (none free: wait with backoff, a line every M minutes;
+- **Start:** `tl loop [--repo DIR] [--max-beads N] [--until HH:MM] [--wait-slot-min M] [--wait-drained]`. Several loops
+  may run on one repo, each with its own actor (never its session's: bd lets an actor re-claim its own bead) and its
+  own state; the race test (tl-bxk.11.1) runs two with a hand run, a hold and releases at once. Each pass: `bd reclaim` of tl- actors' lapsed claims only (never a person's), take any free slot (none free: wait with backoff, a line every M minutes;
   slots off: the loop's one worktree; never a held slot or one whose worktree has a live engine, see Slots), pick by the queue rule, claim (taken → the next bead), `tl slot reset`, then
   `tl run-task` as a child with its own log, release the slot, record the outcome, next pass. `--until`: no bead
   starts after that time. No ready bead: `DRAINED`, exit 0 (`--wait-drained`: look again every 5 minutes).
@@ -286,11 +287,12 @@ container); the session that starts it only watches it.
   (exit 2); a landing ends the run, parks and pauses never count. `taken` (another live session holds it) → the next
   bead, that one again in 15 minutes. A bead a gone run left assigned (a pause keeps the bead open and assigned) is
   released first, as run-task does.
-- **Watch:** `tl loop status [--last N]`: pid, the bead running now, its slot and since when, then one line per
+- **Watch:** `tl loop status [--last N]`: per live loop its pid, the bead running now, its slot and since when, then one line per
   finished bead (outcome, minutes, rounds, tests added, ask, trace id). The log is `<config dir>/loop/<repo>-<hash>.jsonl`
   (fields `ts bead slot outcome minutes rounds tests_added asked trace engine_log run_log why`); each run's own output
   is beside it, one file per run. `tl next` prints what the loop would take next and why, claiming nothing.
-- **Stop:** `tl stop` ends the loop after the current bead. `tl stop --now` sends SIGTERM to the running bead (the
+- **Stop:** `tl stop` ends every loop on the repo after its current bead (a loop started after the stop does not
+  read it). `tl stop --now` sends SIGTERM to the running bead (the
   engine's close step still runs, then the loop puts the bead back in the queue unclaimed and releases the slot).
   A stop during the push waits for it: a push that went through closes the bead landed, and the loop never reopens a
   bead whose land commit is on the base. Ctrl-C or SIGTERM to the loop itself is `--now`.
@@ -367,7 +369,7 @@ local to one machine, hence the host in the title.
 - **A hand run holds its slot too:** `tl run-task ID --slot S` (no `--worktree` needed: the slot is the worktree) takes
   S's bead as the loop does, heartbeats it and releases it when the run ends, whatever the outcome (a stop included).
   `--worktree` on a slot's folder is the same as `--slot`. A held slot bead is refused, also to the session's own actor
-  (a hand run from the session that started the loop shares its actor): `TAKEN: slot S held by <holder> since <t>
+  (two hand runs from one session share its actor, and bd lets an actor re-claim its own bead): `TAKEN: slot S held by <holder> since <t>
   (<why>)`, nothing runs. Only a run the loop started (`TASK_LOOP_SLOT_BEAD` names that slot's bead) uses the loop's
   take and does not take or release again.
 - **Engine lock:** every run-task writes `<worktree>/.task/engine.lock` (pid and start time, bead, route.py and the

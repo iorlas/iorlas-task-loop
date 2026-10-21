@@ -69,6 +69,18 @@ class Records(Base):
         self.assertEqual(json.loads(lines[0])["session"], "abcdef12-3456")
         self.assertIn(str(self.home), json.loads((tl.config_dir() / "repos.json").read_text()))
 
+    @unittest.skipIf(os.name == "nt", "the registry lock is fcntl")
+    def test_processes_registering_at_once_neither_crash_nor_lose_a_repo(self):
+        # race test (tl-bxk.11.1): every process wrote repos.tmp; the second os.replace found it gone and the event
+        # (a claim's, a slot take's) raised. Each writer now has its own tmp file, under a lock, so none is lost.
+        code = ("import sys; sys.path.insert(0, %r); import tl\n"
+                "for i in range(15): tl.register_repo('/r/%%s-%%d' %% (sys.argv[1], i))" % str(ROOT / "skills" / "task-loop"))
+        ps = [subprocess.Popen([sys.executable, "-c", code, str(n)], stderr=subprocess.PIPE, text=True) for n in range(10)]
+        errs = [p.communicate(timeout=60)[1] for p in ps]
+        self.assertEqual([p.returncode for p in ps], [0] * 10, errs)
+        repos = json.loads((tl.config_dir() / "repos.json").read_text())
+        self.assertEqual(len(repos), 150)
+
     def test_prune_keeps_recent(self):
         f = tl.config_dir() / "events.jsonl"
         old = json.dumps({"t": 0, "kind": "old"})
@@ -120,7 +132,7 @@ class RegisterCLI(Base):
 
     def test_default_directory(self):
         self.assert_registered(self.cli("register", cwd=self.repo))
-        self.assertEqual(list(self.config.iterdir()), [self.registry])
+        self.assertEqual([p for p in self.config.iterdir() if p.name != "locks"], [self.registry])  # no tmp left
 
     def test_explicit_relative_subdirectory(self):
         (self.repo / "nested dir").mkdir()
@@ -173,7 +185,7 @@ class RegisterCLI(Base):
                     self.assertNotIn("Traceback", result.stderr)
                     if configured:
                         self.assertEqual(self.registry.read_bytes(), original)
-                        self.assertEqual(list(self.config.iterdir()), [self.registry])
+                        self.assertEqual([p for p in self.config.iterdir() if p.name != "locks"], [self.registry])  # no tmp left
                     else:
                         self.assertFalse(self.config.parent.exists())
 

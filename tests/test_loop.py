@@ -585,12 +585,58 @@ class Loop(LoopBase):
             self.assertEqual(tl.main(["stop", "--repo", str(self.repo)]), 1)
         self.assertIn("no loop", out.getvalue())
 
-    def test_a_second_loop_on_a_repo_is_refused(self):
+    def other_loop(self):
+        """A second live loop on the repo: its state names a live process that is not this one."""
+        k = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+        self.addCleanup(lambda: (k.kill(), k.wait()))
+        loop.write_state(str(self.repo), pid=k.pid, started=self.clock.t, bead="x-9", slot="s2", since=self.clock.t)
+        return k
+
+    def test_a_second_loop_on_a_repo_runs_beside_the_first_with_its_own_state(self):
+        # tl-bxk.11.1: N loops on one repo; the first's state, stop and log stay as they were
         self.beads({"x-1": [rec("landed")]})
-        loop.write_state(str(self.repo), pid=os.getpid(), started=self.clock.t)
-        self.assertEqual(self.run_loop(), 1)
-        self.assertIn("already", self.out)
-        self.assertEqual(self.started, [])
+        k = self.other_loop()
+        self.assertEqual(self.run_loop(), 0)
+        self.assertEqual(self.started, [("x-1", "s1")])
+        self.assertEqual([s["pid"] for s in loop.live_loops(str(self.repo))], [k.pid])
+        out = io.StringIO()
+        with redirect_stdout(out):
+            self.assertEqual(tl.main(["loop", "status", "--repo", str(self.repo)]), 0)
+        self.assertIn("pid %d" % k.pid, out.getvalue())
+        self.assertIn("x-9", out.getvalue())
+
+    def test_two_loops_started_from_one_session_claim_as_two_actors(self):
+        # one coordinator session starting two loops gave both its actor: bd lets an actor re-claim its own bead, so
+        # the second loop claimed the bead the first (or the session's hand run) was running (race test, tl-bxk.11.1)
+        seen = []
+        for _ in range(2):
+            bd = self.beads({"x-1": [rec("landed")]})
+            claims = []
+
+            def spy(*a, _bd=bd, _claims=claims, **kw):
+                if a[:1] == ("update",) and "--claim" in a and a[1] == "x-1":
+                    _claims.append(tl.actor())
+                return _bd(*a, **kw)
+            with mock.patch.object(tl, "bd", side_effect=spy):
+                self.run_loop()
+            seen.append(claims[0])
+            os.environ.pop("TASK_LOOP_ACTOR", None)
+        session_actor = tl.actor()
+        self.assertNotEqual(seen[0], seen[1])
+        self.assertNotIn(session_actor, seen)  # a hand run from the session claims as the session
+        self.assertTrue(all(a.startswith(session_actor + "-") for a in seen), seen)  # still names its session
+
+    def test_a_stop_reaches_every_loop_and_a_loop_started_later_ignores_it(self):
+        self.beads({"x-1": [rec("landed")]})
+        k = self.other_loop()
+        out = io.StringIO()
+        with redirect_stdout(out):
+            self.assertEqual(tl.main(["stop", "--repo", str(self.repo)]), 0)
+        self.assertIn(str(k.pid), out.getvalue())
+        time.sleep(0.05)
+        self.assertEqual(self.run_loop(), 0)  # started after the stop: runs
+        self.assertEqual(self.started, [("x-1", "s1")])
+        self.assertTrue(loop.paths(str(self.repo))["stop"].exists())  # still there for the loop it was meant for
 
     def test_status_shows_the_running_bead_and_the_last_lines(self):
         self.beads({"x-1": [rec("landed")], "x-2": [rec("parked")]})

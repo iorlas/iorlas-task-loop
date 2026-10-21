@@ -6,6 +6,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 
@@ -188,6 +189,44 @@ class Release(unittest.TestCase):
         self.assertEqual(self.git("log", "--format=%s", "-2", "main", cwd=self.origin).splitlines(),
                          ["0.1.2: mine", "0.1.1: racer"])
         self.assertEqual(self.market_versions()["iorlas-task-loop"], "0.1.2")
+
+    def test_a_loop_landing_during_every_suite_run_never_fails_the_release(self):
+        # race test (tl-bxk.11.1): loops land on the same origin; each lands when the land lock is free. A land during
+        # the suite moved origin/main, the retry's suite saw another land, and the release aborted. The release now
+        # pushes under the land lock: after the first suite no land gets in between its rebase, suite and push.
+        import hashlib
+        lock = self.home / "cfg" / "task-loop" / "locks" / (
+            "land-%s.lock" % hashlib.sha1(str(self.origin).encode()).hexdigest()[:12])
+        self.write(self.seed / "tests" / "test_land.py", textwrap.dedent('''
+            import fcntl, os, subprocess, time, unittest
+            LOCK, SIDE = %r, %r
+
+            class Land(unittest.TestCase):
+                def test_a_loop_lands_meanwhile(self):  # what an engine does at land, the lock taken as it takes it
+                    os.makedirs(os.path.dirname(LOCK), exist_ok=True)
+                    with open(LOCK, "a+") as f:
+                        try:
+                            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        except OSError:
+                            return  # a land would wait here
+                        env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_DIR")}
+                        run = lambda *a: subprocess.run(a, cwd=SIDE, env=env, check=True, capture_output=True)
+                        run("git", "pull", "-q", "--rebase", "origin", "main")
+                        name = "land-%%s.txt" %% time.time_ns()
+                        open(os.path.join(SIDE, name), "w").write("x")
+                        run("git", "add", name)
+                        run("git", "commit", "-qm", "a bead (x-%%s)" %% name)
+                        run("git", "push", "-q", "origin", "HEAD:main")
+            ''' % (str(lock), str(self.home / "side"))))
+        self.commit(self.seed, "a suite that sees a loop land")
+        self.git("clone", "-q", str(self.origin), str(self.home / "side"), cwd=self.home)
+        self.git("pull", "-q", "origin", "main", cwd=self.repo)
+        r = self.release("mine")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        subjects = self.git("log", "--format=%s", "main", cwd=self.origin).splitlines()
+        self.assertEqual(subjects[0], "0.1.1: mine")
+        self.assertTrue(any(s.startswith("a bead") for s in subjects), subjects)
+        self.assertEqual(self.git("rev-list", "--merges", "main", cwd=self.origin), "")
 
 
 if __name__ == "__main__":

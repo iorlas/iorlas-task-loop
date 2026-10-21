@@ -37,6 +37,7 @@ import contextlib
 import hashlib
 import json
 import os
+import re
 import shutil
 import signal
 import socket
@@ -89,6 +90,11 @@ def os_lock(path, holder, waiting=None):
         if fcntl:
             fcntl.flock(f, fcntl.LOCK_UN)
         f.close()
+
+
+def land_lock_path(url):
+    """The repo's land lock (one per origin URL): every land, and a release's push, take it (os_lock)."""
+    return config_dir() / "locks" / ("land-%s.lock" % hashlib.sha1(url.encode()).hexdigest()[:12])
 
 
 def config_dir():
@@ -158,6 +164,22 @@ def git(*args, cwd=None):
     return r.stdout.strip() if r.returncode == 0 else ""
 
 
+# another process fetching into the same repo (worktrees share refs/remotes) at the same moment: the ref is then where
+# it should be, the fetch only lost the lock (race test, tl-bxk.11.1: 150 of 180 fetches at once failed so)
+REF_RACE = re.compile(r"incorrect old value|cannot lock ref|unable to update local ref|Unable to create '[^']*\.lock'")
+
+
+def fetch(cwd=None, tries=5):
+    """`git fetch -q origin`, tried again while it loses a ref lock to a concurrent fetch; the last CompletedProcess."""
+    for i in range(tries):
+        r = subprocess.run(["git", "fetch", "-q", "origin"], cwd=cwd, capture_output=True, text=True, encoding="utf-8",
+                           errors="replace")
+        if r.returncode == 0 or not REF_RACE.search(r.stderr or ""):
+            break
+        time.sleep(0.1 * (i + 1))
+    return r
+
+
 def repo_root(cwd=None):
     """The main checkout of the repo (shared by all its worktrees), so every worktree maps to one repo."""
     common = git("rev-parse", "--path-format=absolute", "--git-common-dir", cwd=cwd)
@@ -224,16 +246,24 @@ def provenance(bead, kind, ref, ref_kind, payload=None, cwd=None):
 
 
 def register_repo(path):
+    """Add a repo to repos.json. Every process registers (each event does): the read and write go under a lock, each
+    through its own tmp file, so two at once neither crash nor drop a repo."""
     f = config_dir() / "repos.json"
-    try:
-        repos = json.loads(f.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        repos = {}
-    if path and path not in repos:
-        repos[path] = {"added": now()}
-        tmp = f.with_suffix(".tmp")
-        tmp.write_text(json.dumps(repos, indent=1), encoding="utf-8")
-        os.replace(tmp, f)
+
+    def read():
+        try:
+            return json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+    if not path or path in read():
+        return
+    with os_lock(config_dir() / "locks" / "repos.lock", "pid %d" % os.getpid()):
+        repos = read()
+        if path not in repos:
+            repos[path] = {"added": now()}
+            tmp = f.with_name("repos.%d.tmp" % os.getpid())
+            tmp.write_text(json.dumps(repos, indent=1), encoding="utf-8")
+            os.replace(tmp, f)
 
 
 def cmd_register(a):
@@ -262,7 +292,7 @@ def prune_events():
                 keep.append(ln)
         except ValueError:
             pass
-    tmp = f.with_suffix(".tmp")
+    tmp = f.with_name("events.%d.tmp" % os.getpid())
     tmp.write_text("\n".join(keep) + ("\n" if keep else ""), encoding="utf-8")
     os.replace(tmp, f)
 
@@ -472,7 +502,7 @@ def cmd_slot(a):
             d = slot_dir(repo, name, cfg)
             exclude_local(repo, ".slots/", ".task/")
             if not os.path.isdir(d):
-                git("fetch", "origin", cwd=repo)
+                fetch(repo)
                 r = subprocess.run(["git", "-C", repo, "worktree", "add", "--detach", d, "origin/main"],
                                    capture_output=True, text=True, encoding="utf-8", errors="replace")
                 if r.returncode != 0:
@@ -522,7 +552,7 @@ def cmd_slot(a):
                 print("DIRTY: could not commit the leftover work on %s\n%s" % (br, r.stderr))
                 return 3
             print("WIP committed on " + br)
-        git("fetch", "origin", cwd=d)
+        fetch(d)
         base = cfg.get("base") or "origin/main"
         if a.bead and git("rev-parse", "--verify", "-q", "refs/heads/task/" + a.bead, cwd=d):
             # the bead's branch holds its earlier runs' work: check it out as it is, never reset it to base (a forced
@@ -560,8 +590,8 @@ def take_slot(repo, cfg, why="tl loop"):
 
 def take_named_slot(repo, name, cfg, why):
     """(slot bead, "") when this session now holds slot `name`, or (None, why not): `slot S held by X since T`. A held
-    slot bead is refused even when this session's actor holds it (a hand run from the session that started the loop
-    shares its actor, and bd lets an actor re-claim its own bead); a hold too, its holder's own included."""
+    slot bead is refused even when this session's actor holds it (two hand runs from one session
+    share its actor, and bd lets an actor re-claim its own bead); a hold too, its holder's own included."""
     free_expired(repo)
     b = slot_bead(repo, name)
     if not b:
@@ -608,8 +638,10 @@ def release_slot(repo, name):
     b = slot_bead(repo, name)
     if not b:
         return False
-    bd("unclaim", b["id"], cwd=repo)
+    # the holder's marks go first, while the bead is still claimed: unclaimed first, a hold taken in between would lose
+    # its marks to this clean-up (race test, tl-bxk.11.1)
     bd("update", b["id"], *sum((["--unset-metadata", k] for k in HELD_KEYS), []), cwd=repo)
+    bd("unclaim", b["id"], cwd=repo)
     event("slot-release", "", slot=name, slot_bead=b["id"], repo=repo)
     return True
 
@@ -619,9 +651,9 @@ def free_expired(repo):
     for b in slot_beads(repo):
         m = b.get("metadata") or {}
         if hold_until(b) and not slot_hold(b):
+            bd("update", b["id"], *sum((["--unset-metadata", k] for k in HELD_KEYS), []), cwd=repo)  # first: see release_slot
             if b.get("status") == "in_progress" and (b.get("assignee") or "") in ("", m.get("held_by")):
                 bd("unclaim", b["id"], cwd=repo)
-            bd("update", b["id"], *sum((["--unset-metadata", k] for k in HELD_KEYS), []), cwd=repo)
             event("slot-hold-expired", "", slot=b["title"].split()[-1], slot_bead=b["id"], repo=repo)
 
 
@@ -884,7 +916,7 @@ def start_worktree(repo):
     exclude_local(repo, ".worktrees/", ".task/")
     d = Path(repo) / ".worktrees" / ("loop-" + actor()[3:])
     if not d.exists():
-        git("fetch", "origin", cwd=repo)
+        fetch(repo)
         r = subprocess.run(["git", "-C", repo, "worktree", "add", "--detach", str(d), "origin/main"],
                            capture_output=True, text=True, encoding="utf-8", errors="replace")
         if r.returncode != 0:

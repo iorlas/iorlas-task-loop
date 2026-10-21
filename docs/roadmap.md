@@ -40,18 +40,18 @@ line; a message between sessions is never the guard. Clashes may happen; they mu
 
 | shared thing | guard | a second taker | gap |
 |---|---|---|---|
-| a bead | atomic `bd --claim` | the loop takes the next bead | |
+| a bead | atomic `bd --claim`, each loop its own actor | the loop takes the next bead | |
 | a slot | slot bead + `<worktree>/.task/engine.lock` (pids with start times) + `tl slot hold` | the loop waits; a hand run refuses | fair queue for waiters, tl-bxk.11.5 |
-| the base branch | land lock, rebase, retry | waits | |
+| the base branch | land lock, rebase, retry; a fetch that loses a ref lock to a sibling worktree's is tried again | waits | |
 | Unity on the machine | the repo's OS counting locks (lifesim `tools/unity_slot.py`) | waits | |
 | a model lane | delegate's leases; busy answers `retry` | waits until `retry_after` | |
 | files two beads both edit | none: conflicts show at land as a rebase or fix round | | areas, tl-bxk.11.4 |
 | the repo's `.task-loop.json` | read from the base branch after a fetch (`tl.profile`); the working tree only with no remote | the next fetch reads the new rule | |
-| an engine release | `dev/release.py`: an OS lock, the version from origin/main, the suite, a push race retried once | waits in line, told who holds it | |
+| an engine release | `dev/release.py`: an OS lock, the version from origin/main, the suite, the push under the land lock (a land during the suite: rebase, suite again, push) | waits in line, told who holds it | |
 | a stopped engine's worker | engine SIGTERMs route.py, which kills the worker's group; SIGKILL after a grace | | |
 
-All of it is proven together by one race test (tl-bxk.11.1): two loops, a hand run, a slot hold and a release at
-once.
+All of it is proven together by one race test (tl-bxk.11.1, `tests/test_race.py`): two loops, a hand run, a slot
+hold and two releases at once, real processes on a fake repo, in under 30 s.
 
 ## Not on the roadmap
 

@@ -3,13 +3,14 @@
     tl.py next [--repo DIR] [--json]          what the loop would take next, and why (claims nothing)
     tl.py loop [--repo DIR] [--max-beads N] [--until HH:MM] [--wait-slot-min M] [--wait-drained]
     tl.py loop status [--repo DIR] [--last N] what runs now and the last beads
-    tl.py stop [--repo DIR] [--now]           stop after the current bead, or now (its close step still runs)
+    tl.py stop [--repo DIR] [--now]           every loop on the repo stops after its bead, or now (close runs)
 
 The queue rule lives in the repo's .task-loop.json (engine.pick_label, skip_labels, epic_order, epic_only): ready
 beads with the pick label, minus skip labels, epics and slots; then priority, epic order, lowest id. Python 3.8+,
 standard library only.
 """
 
+import contextlib
 import datetime
 import hashlib
 import json
@@ -64,7 +65,7 @@ def epics_of(bead, cache):
 def queue(repo):
     """([(bead, reason)] in the order the loop takes them, [(id, why skipped)]). A reason names the rule that puts a
     bead before the next one. Fetches first: the rule is read from the base branch (engine.load_cfg)."""
-    tl.git("fetch", "-q", "origin", cwd=repo)
+    tl.fetch(repo)
     cfg = engine.load_cfg(repo)
     args = ["ready", "--json", "-n", "0"] + (["--label", cfg["pick_label"]] if cfg.get("pick_label") else [])
     try:
@@ -124,13 +125,15 @@ def cmd_next(a):
     return 0 if ranked else 1
 
 
-# ---- state: one loop per repo, under the config dir ------------------------------------------------------------------
+# ---- state: per loop, under the config dir; several loops may run on one repo (tl-bxk.11.1) --------------------------
 
 def paths(repo):
+    """The repo's files: one stop file and one log for all its loops; `state` is this process's own."""
     d = tl.config_dir() / "loop"
     d.mkdir(exist_ok=True)
     key = "%s-%s" % (Path(repo).name, hashlib.sha1(repo.encode()).hexdigest()[:8])
-    return {"state": d / (key + ".json"), "stop": d / (key + ".stop"), "log": d / (key + ".jsonl"), "runs": d / key}
+    return {"state": d / ("%s.%d.json" % (key, os.getpid())), "states": (d, key),
+            "stop": d / (key + ".stop"), "log": d / (key + ".jsonl"), "runs": d / key}
 
 
 def read_state(repo):
@@ -141,21 +144,45 @@ def read_state(repo):
 
 
 def write_state(repo, **st):
-    f = paths(repo)["state"]
+    d, key = paths(repo)["states"]
+    f = d / ("%s.%d.json" % (key, st.get("pid") or os.getpid()))
     tmp = f.with_suffix(".tmp")
     tmp.write_text(json.dumps(dict(st, repo=repo)), encoding="utf-8")
     os.replace(tmp, f)
 
 
+def live_loops(repo, but=None):
+    """The states of the repo's live loops (`but`: leave this pid out), oldest first; a dead loop's file is removed."""
+    d, key = paths(repo)["states"]
+    out = []
+    for f in d.glob(key + ".*.json"):
+        try:
+            st = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not pid_alive(st.get("pid")):
+            with contextlib.suppress(OSError):
+                f.unlink()
+        elif st.get("pid") != but:
+            out.append(st)
+    return sorted(out, key=lambda st: st.get("started") or 0)
+
+
 pid_alive = tl.pid_alive
+
+
+STARTED = [0.0]  # wall time this loop started: a stop file written before it was meant for the loops then running
 
 
 def stop_mode(repo):
     """'now', 'after' (stop after the current bead) or '' (go on)."""
     if STOP_NOW.is_set():
         return "now"
+    f = paths(repo)["stop"]
     try:
-        return paths(repo)["stop"].read_text().strip() or "after"
+        if f.stat().st_mtime < STARTED[0]:
+            return ""
+        return f.read_text().strip() or "after"
     except OSError:
         return ""
 
@@ -219,7 +246,7 @@ def landed_on_base(repo, wt, bead_id):
         return False
     base = engine.load_cfg(repo)["base"]
     branch = (tl.show(bead_id).get("metadata") or {}).get("branch") or "task/" + bead_id
-    tl.git("fetch", "-q", "origin", cwd=wt)
+    tl.fetch(wt)
     tip = tl.git("rev-parse", "--verify", "-q", "refs/heads/" + branch, cwd=wt)
     if not tip or not tl.git("log", "-1", "--format=%s", tip, cwd=wt).endswith("(%s)" % bead_id):
         return False
@@ -326,14 +353,13 @@ def cmd_loop(a):
     if a.op == "status":
         return cmd_status(a)
     repo = tl.repo_root(a.repo)
-    st = read_state(repo)
-    if pid_alive(st.get("pid")):
-        print("tl: a loop already runs on %s (pid %s); tl stop, or tl loop status" % (repo, st["pid"]))
-        return 1
     os.chdir(repo)  # every tl helper and bd call works on the current directory's repo
     if not tl.session_id():  # without a Claude session the actor would be per folder: two loops would share it
         os.environ["TASK_LOOP_SESSION"] = "loop-" + uuid.uuid4().hex[:12]
-    os.environ["TASK_LOOP_ACTOR"] = tl.actor()  # run-task re-claims the bead this loop claimed: one actor for both
+    # an actor of its own, never the session's: bd lets an actor re-claim its own bead, so two loops (or a loop and a
+    # hand run) started from one session would both win one claim. run-task re-claims as this actor (one for both).
+    os.environ.pop("TASK_LOOP_ACTOR", None)
+    os.environ["TASK_LOOP_ACTOR"] = "%s-%s" % (tl.actor(), uuid.uuid4().hex[:6])
     old = {}
     if threading.current_thread() is threading.main_thread():
         for sig in ("SIGTERM", "SIGINT"):
@@ -341,16 +367,20 @@ def cmd_loop(a):
                 old[sig] = signal.signal(getattr(signal, sig), lambda *_: STOP_NOW.set())
     STOP_NOW.clear()
     p = paths(repo)
-    if p["stop"].exists():
-        p["stop"].unlink()
+    STARTED[0] = time.time()
+    if not live_loops(repo, but=os.getpid()):  # a stop no loop read: never meant for this one
+        with contextlib.suppress(OSError):
+            p["stop"].unlink()
     started = clock()
     write_state(repo, pid=os.getpid(), started=started)
     try:
         return passes(repo, a, started)
     finally:
-        for f in (p["state"], p["stop"]):
-            if f.exists():
-                f.unlink()
+        with contextlib.suppress(OSError):
+            p["state"].unlink()
+        if not live_loops(repo, but=os.getpid()):  # the other loops still read it
+            with contextlib.suppress(OSError):
+                p["stop"].unlink()
         for sig, h in old.items():
             signal.signal(getattr(signal, sig), h)
 
@@ -454,17 +484,18 @@ def passes(repo, a, started):
 
 def cmd_status(a):
     repo = tl.repo_root(a.repo)
-    st = read_state(repo)
-    if st.get("pid") and pid_alive(st["pid"]):
-        def t(x):
-            return time.strftime("%m-%d %H:%M", time.localtime(x))
+
+    def t(x):
+        return time.strftime("%m-%d %H:%M", time.localtime(x))
+    loops = live_loops(repo)
+    for st in loops:
         print("LOOP pid %s on %s since %s" % (st["pid"], repo, t(st.get("started") or 0)))
         if st.get("bead"):
             print("  now: %s in %s since %s; log %s" % (st["bead"], st.get("slot") or "its worktree", t(st["since"]),
                                                        st.get("run_log")))
-        if paths(repo)["stop"].exists():
-            print("  stop requested: %s" % stop_mode(repo))
-    else:
+    if loops and paths(repo)["stop"].exists():
+        print("  stop requested: %s" % (paths(repo)["stop"].read_text().strip() or "after"))
+    if not loops:
         print("no loop running on %s" % repo)
     f = paths(repo)["log"]
     lines = f.read_text(encoding="utf-8").splitlines()[-a.last:] if f.exists() else []
@@ -485,12 +516,14 @@ def cmd_status(a):
 
 
 def cmd_stop(a):
+    """Every loop running on the repo stops (a loop started later does not read this stop)."""
     repo = tl.repo_root(a.repo)
-    st = read_state(repo)
-    if not (st.get("pid") and pid_alive(st["pid"])):
+    loops = live_loops(repo)
+    if not loops:
         print("no loop running on %s" % repo)
         return 1
     paths(repo)["stop"].write_text("now" if a.now else "after")
-    print("STOP %s: loop pid %s%s" % ("NOW" if a.now else "after the current bead", st["pid"],
-                                      (", running " + st["bead"]) if st.get("bead") else ""))
+    for st in loops:
+        print("STOP %s: loop pid %s%s" % ("NOW" if a.now else "after the current bead", st["pid"],
+                                          (", running " + st["bead"]) if st.get("bead") else ""))
     return 0
