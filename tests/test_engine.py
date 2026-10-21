@@ -1,10 +1,13 @@
+import io
 import json
 import os
+import signal
 import subprocess
 import sys
 import tempfile
 import time
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -1525,7 +1528,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(s.access[1], ("worker", ""))
 
     def test_run_task_refuses_the_main_checkout(self):
-        a = mock.Mock(id="t-1", worktree=str(self.wt), slot=None, dry_run=True, fresh=False, quiet=True)
+        a = mock.Mock(id="t-1", worktree=str(self.wt), slot=None, dry_run=True, fresh=False, quiet=True, outcome_file=None)
         with mock.patch.object(tl, "repo_root", return_value=str(self.wt)), \
                 mock.patch.object(engine, "Engine") as made:
             rc = engine.main(a)
@@ -1654,6 +1657,73 @@ class EngineTest(unittest.TestCase):
         self.assertNotIn("ANTHROPIC_BASE_URL", env)
         self.assertNotIn("CLAUDE_CODE_SESSION_ID", env)
         self.assertEqual(env["DELEGATE_DEPTH"], "1")
+
+
+class Outcome(unittest.TestCase):
+    """What run-task tells the loop (tl loop): landed, parked, paused, failed or taken, as one JSON record."""
+    setUp, tearDown, fake_bd, run_engine = EngineTest.setUp, EngineTest.tearDown, EngineTest.fake_bd, EngineTest.run_engine
+
+    def test_a_landed_run_reports_its_stats_trace_and_log(self):
+        self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        r = self.eng.result()
+        self.assertEqual(r["outcome"], "landed")
+        self.assertEqual((r["bead"], r["run"], r["log"]), ("t-1", self.eng.log_path.stem, str(self.eng.log_path)))
+        self.assertFalse(r["asked"])
+        for k in ("minutes", "rounds", "tests_added", "retry_after"):
+            self.assertIn(k, r)
+
+    def test_an_owner_ask_is_parked(self):
+        self.run_engine({"plan": [dict(PLAN, question="Old format or new?")]})
+        r = self.eng.result()
+        self.assertEqual((r["outcome"], r["asked"]), ("parked", True))
+
+    def test_a_lane_out_for_long_is_paused_with_the_time_the_lane_is_back(self):
+        due = time.time() + 3 * 3600
+        self.run_engine({"plan": [PLAN], "write": [ans("lane_out", "lane_out", "retry", retry_after=due, say="out")]})
+        r = self.eng.result()
+        self.assertEqual(r["outcome"], "paused")
+        self.assertAlmostEqual(r["retry_after"], due, delta=1)
+
+    def test_a_logged_out_worker_is_paused_with_no_time(self):
+        out = ans("failed", "logged_out", "owner", family="claude", say="Failed to authenticate")
+        self.run_engine({"plan": [out]})
+        r = self.eng.result()
+        self.assertEqual((r["outcome"], r["retry_after"], r["asked"]), ("paused", 0, False))
+
+    def test_an_engine_error_is_failed(self):
+        with mock.patch.object(engine.Engine, "plan", side_effect=RuntimeError("boom")):
+            self.run_engine({})
+        r = self.eng.result()
+        self.assertEqual(r["outcome"], "failed")
+        self.assertIn("boom", r["why"])
+
+    def main(self, outcome_file, **kw):
+        a = mock.Mock(id="t-1", worktree=str(Path(self.tmp.name, "slot")), slot=None, dry_run=False, fresh=False,
+                      quiet=True, outcome_file=str(outcome_file))
+        Path(a.worktree).mkdir(exist_ok=True)
+        out = io.StringIO()
+        with mock.patch.object(tl, "repo_root", return_value=str(self.wt)), redirect_stdout(out), \
+                mock.patch.object(signal, "signal"):
+            rc = engine.main(a)
+        last = json.loads(out.getvalue().strip().splitlines()[-1])
+        return rc, json.loads(Path(outcome_file).read_text()), last
+
+    def test_run_task_writes_the_outcome_file_and_ends_with_it_as_a_json_line(self):
+        f = Path(self.tmp.name, "out.json")
+        made = mock.Mock()
+        made.return_value.run.return_value = 0
+        made.return_value.result.return_value = {"outcome": "landed", "bead": "t-1"}
+        with mock.patch.object(engine, "reclaim", return_value=(True, "")), \
+                mock.patch.object(tl, "cmd_claim", return_value=0), mock.patch.object(engine, "Engine", made):
+            rc, rec, last = self.main(f)
+        self.assertEqual((rc, rec["outcome"], last["outcome"]), (0, "landed", "landed"))
+
+    def test_a_refused_claim_is_taken_and_keeps_exit_1(self):
+        f = Path(self.tmp.name, "out.json")
+        with mock.patch.object(engine, "reclaim", return_value=(False, "claimed by denis")):
+            rc, rec, last = self.main(f)
+        self.assertEqual((rc, rec["outcome"]), (1, "taken"))
+        self.assertIn("denis", rec["why"])
 
 
 class DelegateLauncher(unittest.TestCase):

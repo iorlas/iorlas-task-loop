@@ -244,6 +244,43 @@ No candidate left: `tl bd dolt push`, the profile's close step; slots on: `tl sl
 `tl worktree sunset --self-too` (removes your worktree if it is clean). One report to the owner: beads closed, beads
 filed, beads blocked with their question, the dashboard address. Nothing else.
 
+## Loop (no session per bead)
+
+`tl loop` runs the queue by itself, one bead at a time, in the foreground of any shell (a background job, tmux, a
+container); the session that starts it only watches it.
+
+- **Start:** `tl loop [--repo DIR] [--max-beads N] [--until HH:MM] [--wait-slot-min M] [--wait-drained]`. One loop per
+  repo per machine. Each pass: `bd reclaim`, take any free slot (none free: wait with backoff, a line every M minutes;
+  slots off: the loop's one worktree), pick by the queue rule, claim (taken → the next bead), `tl slot reset`, then
+  `tl run-task` as a child with its own log, release the slot, record the outcome, next pass. `--until`: no bead
+  starts after that time. No ready bead: `DRAINED`, exit 0 (`--wait-drained`: look again every 5 minutes).
+- **Outcomes** (`run-task --outcome-file`, also its last stdout line as JSON): `landed` → next. `parked` (an ask was
+  raised, or the bead is blocked for the owner) → next. `paused` (lane out, login, network; the bead stays open) → a
+  lane back within an hour is waited for, otherwise the next bead first; when every ready bead is paused the loop
+  sleeps until the earliest is due. `failed` (anything else, an engine crash included) → 2 in a row stop the loop
+  (exit 2); a landing ends the run, parks and pauses never count. `taken` (another live session holds it) → the next
+  bead, that one again in 15 minutes. A bead a gone run left assigned (a pause keeps the bead open and assigned) is
+  released first, as run-task does.
+- **Watch:** `tl loop status [--last N]`: pid, the bead running now, its slot and since when, then one line per
+  finished bead (outcome, minutes, rounds, tests added, ask, trace id). The log is `<config dir>/loop/<repo>-<hash>.jsonl`
+  (fields `ts bead slot outcome minutes rounds tests_added asked trace engine_log run_log why`); each run's own output
+  is beside it, one file per run. `tl next` prints what the loop would take next and why, claiming nothing.
+- **Stop:** `tl stop` ends the loop after the current bead. `tl stop --now` sends SIGTERM to the running bead (the
+  engine's close step still runs, then the loop puts the bead back in the queue unclaimed and releases the slot).
+  Ctrl-C or SIGTERM to the loop itself is `--now`.
+
+The queue rule is `.task-loop.json` → `engine`; the defaults take every ready bead:
+
+| key | what |
+|---|---|
+| `pick_label` | only beads with this label (lifesim: `auto`) |
+| `skip_labels` | never a bead with one of these (e.g. `["owner-taste", "needs-info"]`); epics and slots never either |
+| `epic_order` | epic ids: within one priority, beads under an earlier one (at any depth) first, beads under none last |
+| `epic_only` | `true`: beads under none of `epic_order` are not taken |
+
+Order: priority first, then `epic_order`, then the lowest id (natural: `fld.26.9` before `fld.26.10`). The loop does
+not look at `## Touches`; the land lock and the rebase before landing keep sequential loops safe.
+
 ## Slots
 
 A slot is a persistent worktree, set up once and reused task after task, so a heavy setup (an engine import, a large

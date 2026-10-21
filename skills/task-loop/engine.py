@@ -44,6 +44,9 @@ DEFAULTS = {
     "max_fix_rounds": 2,              # per bead: a red gate, a conflict or what the check before land found wrong
     "pick_label": "",                 # the label an unattended runner picks by (lifesim: auto); a decision or ticket ask removes it
     "needs_info_label": "needs-info", # and adds this one, so the bead leaves the queue until the owner relabels it
+    "skip_labels": [],                # the loop's queue (tl next, tl loop) never takes a bead with one of these labels
+    "epic_order": [],                 # within a priority, beads under an earlier epic here (at any depth) come first
+    "epic_only": False,               # true: beads under none of epic_order's epics are not taken at all
     "max_stages": 3,                  # a bigger plan is a split ask (ticket), unless the owner already answered one
     "node_timeout_min": 45,
     "delegate": "",                   # path to delegate's route.py; "" = the newest installed iorlas-delegate
@@ -322,6 +325,8 @@ class Engine:
         self.writer_family = None  # the family of the last write: the verifier comes from another one when it can
         self.verified = []  # the verifier's answer per unchecked item at land: in the trace and on the bead
         self.sessions = []  # every AI call of this run: the trace a later reflection reads (traces.jsonl)
+        self.outcome, self.why, self.asked = "failed", "", False  # what result() tells the loop
+        self.retry_after = 0.0  # a pause for a lane: when delegate says it is back (epoch; 0 = unknown)
         d = tl.config_dir() / "engine"
         d.mkdir(exist_ok=True)
         stamp = time.strftime("%Y%m%d-%H%M%S")
@@ -433,6 +438,7 @@ class Engine:
                 due = float(j.get("retry_after") or 0)
                 wait = max(60.0, due - time.time())
                 if waited + wait > float(self.cfg["lane_wait_min"]) * 60:  # a long wait frees the slot; the checkpoint resumes
+                    self.retry_after = due if due > time.time() else 0.0
                     raise Blocked("paused: %s for %s until %s (%s: %s)" % (
                         "no network" if reason == "network" else "no lane", node,
                         time.strftime("%H:%M", time.localtime(due)) if due > time.time() else "a lane frees",
@@ -731,8 +737,19 @@ class Engine:
             outcome, why = "failed", "failed: engine error %s: %s" % (type(e).__name__, e)
         finally:
             hb.stop()
+            self.outcome, self.why = outcome, why
             self.close(outcome, why, sha, question)
         return 0 if outcome in ("landed", "done") else 2
+
+    def result(self):
+        """The run's outcome for the loop: landed (closed, done too), parked (blocked for the owner: an ask, or one
+        still open), paused (the machine's trouble: lanes, login, network; the bead stays open), failed."""
+        out = ("landed" if self.outcome in ("landed", "done") else "failed" if self.outcome == "failed"
+               else "paused" if self.why.startswith("paused:") else "parked")
+        return {"v": 1, "outcome": out, "bead": self.bead, "why": self.why[:500], "run": self.log_path.stem,
+                "log": str(self.log_path), "minutes": round((time.time() - self.t0) / 60, 1),
+                "rounds": self.stats["rounds"], "tests_added": self.stats["tests_added"], "asked": self.asked,
+                "retry_after": self.retry_after if out == "paused" else 0.0, "cost": round(self.cost, 2)}
 
     def self_verify(self, gaps):
         """One read-only verifier call before a verify ask; returns the items that still go to the owner. Per item:
@@ -1444,6 +1461,7 @@ class Engine:
             self.log("note", why)
             return
         kind = ask_kind(why) if outcome not in ("landed", "done") else None
+        self.asked = bool(kind)
         if kind:
             self.raise_ask(kind, why, question)
         elif outcome in ("landed", "done") and self.ask_path().exists():
@@ -1919,7 +1937,25 @@ def append_output(stream):
         fcntl.fcntl(fd, fcntl.F_SETFL, fcntl.fcntl(fd, fcntl.F_GETFL) | os.O_APPEND)
 
 
+def report(a, rec):
+    """The outcome as the run's last stdout line, and in --outcome-file when the loop names one."""
+    line = json.dumps(rec, ensure_ascii=False)
+    if getattr(a, "outcome_file", None):
+        tmp = Path(a.outcome_file + ".tmp")
+        tmp.write_text(line + "\n", encoding="utf-8")
+        os.replace(tmp, a.outcome_file)
+    say(line)
+
+
 def main(a):
+    rc = run_main(a)
+    if isinstance(rc, dict):  # stopped before the engine ran: nothing in the bead changed
+        report(a, rc)
+        return 1
+    return rc
+
+
+def run_main(a):
     for f in (sys.stdout, sys.stderr):
         append_output(f)
     if hasattr(signal, "SIGTERM"):  # a stop (kill switch, coordinator) still runs the close step
@@ -1934,22 +1970,26 @@ def main(a):
                            capture_output=True, text=True, encoding="utf-8", errors="replace")
         wt = r.stdout.strip().splitlines()[-1] if r.returncode == 0 and r.stdout.strip() else ""
         if not wt:
-            sys.exit("tl: no worktree: " + r.stderr)
+            print("tl: no worktree: " + r.stderr, file=sys.stderr)
+            return {"v": 1, "outcome": "failed", "bead": a.id, "why": "failed: no worktree: " + r.stderr[-300:]}
     wt = str(Path(wt).resolve())
     if (Path(wt) / ".git").is_dir():  # the main checkout holds the bead database and the config: never a worker's cwd
         print("tl: %s is the main checkout; run a task in a slot or a worktree (tl slot / tl worktree start)" % wt,
               file=sys.stderr)
-        return 1
+        return {"v": 1, "outcome": "failed", "bead": a.id, "why": "failed: %s is the main checkout" % wt}
     if not a.dry_run:
         ok, why = reclaim(a.id, repo)
         if not ok:
             print("TAKEN: %s" % why)
-            return 1
+            return {"v": 1, "outcome": "taken", "bead": a.id, "why": why}
         if why:
             say("%s: %s" % (a.id, why))
     if not a.dry_run and tl.cmd_claim(Args(id=a.id, worktree=wt, slot=a.slot)) != 0:
-        return 1  # bd lets this session re-claim its own bead (a reopened one); another session's claim stops here
+        # bd lets this session re-claim its own bead (a reopened one); another session's claim stops here
+        return {"v": 1, "outcome": "taken", "bead": a.id, "why": "claimed by another session"}
     cfg["fresh"] = bool(getattr(a, "fresh", False))
     eng = Engine(a.id, wt, cfg, dry_run=a.dry_run, verbose=not getattr(a, "quiet", False))
     say("engine log: %s" % eng.log_path)
-    return eng.run()
+    rc = eng.run()
+    report(a, eng.result())
+    return rc

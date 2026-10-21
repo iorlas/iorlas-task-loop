@@ -17,6 +17,11 @@
   tl.py trace [ID] [--last N] [--json]          engine runs and every worker session of each (for reflection)
   tl.py run-task ID [--worktree DIR] [--slot S] [--dry-run] [--fresh]
                                                 one bead through the engine (engine.py), no judgement here
+  tl.py next [--repo DIR] [--json]              the bead the loop would take next and why (claims nothing)
+  tl.py loop [--repo DIR] [--max-beads N] [--until HH:MM] [--wait-slot-min M] [--wait-drained]
+                                                run ready beads one after another, each in any free slot
+  tl.py loop status [--repo DIR] [--last N]     the running loop and its last beads
+  tl.py stop [--repo DIR] [--now]               stop the loop after its current bead, or now (SIGTERM)
   tl.py dash ensure|stop|status|url             the dashboard server (one per machine)
   tl.py hook session-start                      SessionStart hook: index session id -> transcript path
 
@@ -392,26 +397,12 @@ def cmd_slot(a):
             print(name + "\t" + d)
         return 0
     if a.op == "take":  # claim the first free slot; prints NAME DIR BEAD
-        for b in slot_beads(repo):
-            if b.get("status") != "open":
-                continue
-            if bd("update", b["id"], "--claim", cwd=repo).returncode != 0:
-                continue
-            if (show(b["id"], cwd=repo).get("assignee") or actor()) != actor():
-                continue
-            name = b["title"].split()[-1]
-            d = slot_dir(repo, name, cfg)
-            event("slot-take", "", slot=name, slot_bead=b["id"], worktree=d, repo=repo)
-            print("\t".join([name, d, b["id"]]))
-            return 0
-        print("NONE")
-        return 1
+        got = take_slot(repo, cfg)
+        print("\t".join(got) if got else "NONE")
+        return 0 if got else 1
     if a.op == "release":
-        b = next((x for x in slot_beads(repo) if x["title"].split()[-1] == a.name), None)
-        if not b:
+        if not release_slot(repo, a.name):
             sys.exit("tl: no slot " + str(a.name))
-        bd("unclaim", b["id"], cwd=repo)
-        event("slot-release", "", slot=a.name, slot_bead=b["id"], repo=repo)
         return 0
     if a.op == "reset":  # per task: a clean tree on a fresh task branch; ignored setup output stays
         d = slot_dir(repo, a.name, cfg)
@@ -449,6 +440,31 @@ def cmd_slot(a):
     if a.op == "setup":
         return cmd_slot_setup(repo, a.name, cfg, slot_dir(repo, a.name, cfg), force=True)
     return 2
+
+
+def take_slot(repo, cfg):
+    """(name, dir, slot bead) of the first free slot this session could claim, or None."""
+    for b in slot_beads(repo):
+        if b.get("status") != "open":
+            continue
+        if bd("update", b["id"], "--claim", cwd=repo).returncode != 0:
+            continue
+        if (show(b["id"], cwd=repo).get("assignee") or actor()) != actor():
+            continue
+        name = b["title"].split()[-1]
+        d = slot_dir(repo, name, cfg)
+        event("slot-take", "", slot=name, slot_bead=b["id"], worktree=d, repo=repo)
+        return name, d, b["id"]
+    return None
+
+
+def release_slot(repo, name):
+    b = next((x for x in slot_beads(repo) if x["title"].split()[-1] == name), None)
+    if not b:
+        return False
+    bd("unclaim", b["id"], cwd=repo)
+    event("slot-release", "", slot=name, slot_bead=b["id"], repo=repo)
+    return True
 
 
 def inputs_hash(d, patterns):
@@ -502,17 +518,7 @@ def cmd_worktree(a):
     repo = repo_root()
     root = Path(repo) / ".worktrees"
     if a.op == "start":
-        exclude_local(repo, ".worktrees/", ".task/")
-        name = "loop-" + actor()[3:]
-        d = root / name
-        if not d.exists():
-            git("fetch", "origin", cwd=repo)
-            r = subprocess.run(["git", "-C", repo, "worktree", "add", "--detach", str(d), "origin/main"],
-                               capture_output=True, text=True, encoding="utf-8", errors="replace")
-            if r.returncode != 0:
-                sys.exit(r.stderr)
-        event("worktree-start", "", worktree=str(d), repo=repo)
-        print(str(d))
+        print(start_worktree(repo))
         return 0
     if a.op == "sunset":  # remove loop worktrees whose session is gone; never a dirty one
         live = live_actors(repo)
@@ -531,6 +537,20 @@ def cmd_worktree(a):
         git("worktree", "prune", cwd=repo)
         return 0
     return 2
+
+
+def start_worktree(repo):
+    """This session's loop worktree, made once and reused for every task."""
+    exclude_local(repo, ".worktrees/", ".task/")
+    d = Path(repo) / ".worktrees" / ("loop-" + actor()[3:])
+    if not d.exists():
+        git("fetch", "origin", cwd=repo)
+        r = subprocess.run(["git", "-C", repo, "worktree", "add", "--detach", str(d), "origin/main"],
+                           capture_output=True, text=True, encoding="utf-8", errors="replace")
+        if r.returncode != 0:
+            sys.exit(r.stderr)
+    event("worktree-start", "", worktree=str(d), repo=repo)
+    return str(d)
 
 
 def live_actors(repo):
@@ -703,12 +723,27 @@ def main(argv=None):
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--fresh", action="store_true", help="drop the bead's checkpoint: plan again from the start")
     p.add_argument("--quiet", action="store_true", help="only steps and ⚠ lines (default: verbose, for a watching coordinator)")
+    p.add_argument("--outcome-file", help="also write the outcome (the last stdout line, JSON) to this file")
     p = sp.add_parser("usage", help="pass get_usage's plan.windows (JSON) to delegate, so headless Claude steps may run")
     p.add_argument("windows")
     p = sp.add_parser("trace", help="engine runs of a bead (or all) with every worker session and its transcript")
     p.add_argument("id", nargs="?", default="")
     p.add_argument("--last", type=int, default=0)
     p.add_argument("--json", action="store_true")
+    p = sp.add_parser("next", help="the bead the loop would take next and why (claims nothing)")
+    p.add_argument("--repo")
+    p.add_argument("--json", action="store_true")
+    p = sp.add_parser("loop", help="run ready beads one after another, each in any free slot (see SKILL.md, Loop)")
+    p.add_argument("op", nargs="?", choices=["run", "status"], default="run")
+    p.add_argument("--repo")
+    p.add_argument("--max-beads", type=int, default=0)
+    p.add_argument("--until", metavar="HH:MM", help="start no bead after this local time")
+    p.add_argument("--wait-slot-min", type=float, default=30, help="say so this often while no slot is free")
+    p.add_argument("--wait-drained", action="store_true", help="no ready bead: poll every 5 min instead of ending")
+    p.add_argument("--last", type=int, default=10, help="status: how many finished beads to show")
+    p = sp.add_parser("stop", help="stop the repo's loop after its current bead (--now: SIGTERM the bead's run)")
+    p.add_argument("--repo")
+    p.add_argument("--now", action="store_true")
     p = sp.add_parser("hook")
     p.add_argument("op", choices=["session-start"])
     a = ap.parse_args(argv)
@@ -735,6 +770,9 @@ def main(argv=None):
             print("delegate did not take the reading (exit %d): %s" % (r.returncode, (r.stderr or r.stdout)[-400:]))
             return 1
         return 0
+    if a.cmd in ("next", "loop", "stop"):
+        import loop
+        return {"next": loop.cmd_next, "loop": loop.cmd_loop, "stop": loop.cmd_stop}[a.cmd](a)
     if a.cmd == "trace":
         return cmd_trace(a)
     if a.cmd == "bd":

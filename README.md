@@ -34,6 +34,12 @@ answer. Code routes and accepts by rule (checks green, nothing blocking in the r
 ⚠ lines for anything the watching session should react to. Settings: `.task-loop.json` → `engine`. Design:
 [docs/design/coordinator-less.md](docs/design/coordinator-less.md).
 
+Or let the loop run the queue by itself, one bead after another, each in any free slot:
+
+```sh
+python3 skills/task-loop/tl.py loop [--max-beads N] [--until HH:MM]   # tl loop status to watch, tl stop [--now] to end
+```
+
 Everything is recorded in the bead (plan, review findings, reflect stats, provenance of who claimed and landed it).
 The method is [`skills/task-loop/SKILL.md`](skills/task-loop/SKILL.md); each repo's specifics go in its loop profile
 (`docs/agents/task-loop.md`) and `.task-loop.json`.
@@ -69,6 +75,7 @@ Code (`~/.claude/projects`) and Codex (`~/.codex/sessions`, the codex plugin's j
 ```
 skills/task-loop/SKILL.md        the method (read by the orchestrating session)
 skills/task-loop/tl.py           helper: actor, claim/stage/worker/land/close/block, slots, worktrees, dashboard
+skills/task-loop/loop.py         tl loop / next / stop: one sequential loop over the queue rule
 skills/task-loop/dash/server.py  dashboard server (stdlib)
 skills/task-loop/dash/index.html dashboard page (no build, no dependencies)
 hooks/hooks.json                 SessionStart: index session id -> transcript path
