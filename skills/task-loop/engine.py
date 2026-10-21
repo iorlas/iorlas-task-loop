@@ -527,6 +527,10 @@ class Engine:
         self.outcome, self.why, self.asked = "failed", "", False  # what result() tells the loop
         self.retry_after = 0.0  # a pause for a lane: when delegate says it is back (epoch; 0 = unknown)
         self.landed_sha = ""  # set the moment the push goes through: whatever stops the run after it, the bead landed
+        # the machine-readable trace the dashboard draws (docs/design/dashboard.md, Timeline records)
+        self.node_n, self.cur, self.last_node, self.moved_from, self.moved_to = 0, None, None, None, None
+        self.check_round = 0
+        self.prev_ck, self.ck_run, self.resumed, self.run_logged = "", "", False, False
         d = tl.config_dir() / "engine"
         d.mkdir(exist_ok=True)
         stamp = time.strftime("%Y%m%d-%H%M%S")
@@ -550,8 +554,63 @@ class Engine:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
         if kind == "node":
             tl.event("stage", self.bead, text=text)
+        if kind in QUIET_KINDS:
+            return
         if kind == "warn" or not (kind == "cmd" and not self.verbose):
             say("[%s] %s%s" % (time.strftime("%H:%M:%S"), "⚠ " if kind == "warn" else "", text))
+
+    def node(self, step, text, **kw):
+        """A node begins (the open one ends first): the old `node` record with its run-scoped id, step and counters."""
+        self.end_node()
+        self.node_n += 1
+        self.cur = {"id": self.node_n, "step": step, "t": time.time(), "sessions": [], "outcome": "", "detail": ""}
+        self.last_node = self.cur
+        self.log("node", text, id=self.node_n, step=step, **kw)
+        return self.node_n
+
+    def outcome_of(self, outcome, detail=""):
+        """What the open node came to, for its end record."""
+        if self.cur:
+            self.cur.update(outcome=outcome, detail=detail[:300])
+
+    def end_node(self, outcome=""):
+        c, self.cur = self.cur, None
+        if not c:
+            return
+        out = c["outcome"] or outcome or "done"
+        self.log("end", "%s %d: %s" % (c["step"], c["id"], out), id=c["id"], step=c["step"], outcome=out,
+                 detail=c["detail"], secs=round(time.time() - c["t"]), sessions=c["sessions"])
+
+    def transition(self, to, cause, detail="", **kw):
+        """A decision point: from the open (or last) node to the next step, with the cause and what it was."""
+        frm = (self.cur or self.last_node or {}).get("id", 0)
+        self.moved_from, self.moved_to = frm, to
+        rec = {"from": frm, "to": to, "cause": cause, "detail": (detail or "")[:300]}
+        rec.update(kw)
+        self.log("transition", "%s -> %s: %s" % (cause, to, (detail or "")[:200]), **rec)
+
+    def origin(self):
+        """Why this run started and the run before it: the checkpoint's run when there was one, else the bead's previous
+        engine log. answer: an owner's answer to an ask; resume: the checkpoint was used; retry: an earlier run, no
+        checkpoint used; fresh: --fresh; first: no earlier run."""
+        prev = self.ck_run or self.prev_ck
+        if not prev:
+            mine = self.log_path.name
+            older = sorted(p.stem for p in self.log_path.parent.glob("%s-*.jsonl" % self.bead)
+                           if p.name < mine and RUN_STEM.match(p.stem[len(self.bead) + 1:]))
+            prev = older[-1] if older else ""
+        why = ("fresh" if self.cfg.get("fresh") else "answer" if self.answered else "resume" if self.resumed
+               else "retry" if prev else "first")
+        return {"prev_run": prev, "started_because": why, "ask": (self.answered or {}).get("id") or ""}
+
+    def log_run(self):
+        """The run record: why it started, once that is known (after the checkpoint is read), or at the close."""
+        if self.run_logged:
+            return
+        self.run_logged = True
+        o = self.origin()
+        self.log("run", "run: %s" % o["started_because"], run=self.log_path.stem, bead=self.bead, worktree=str(self.wt),
+                 slot=(LOCK.data.get("slot") if LOCK else "") or "", **o)
 
     def trace_call(self, node, role, attempt, r, j, host=False):
         """One AI call into the run's trace: which worker session did what, and where its transcript is."""
@@ -561,7 +620,10 @@ class Engine:
                "family": j.get("family") or "", "lane": j.get("lane") or "", "model": j.get("model") or "",
                "effort": j.get("effort") or "", "secs": round(r.secs or 0), "cost": r.cost or 0.0, "t": time.time(),
                "host": host, "tokens": j.get("tokens"), "denied": j.get("denied") or [],  # tokens {in, cached, out}
-               "reason": j.get("reason"), "next": j.get("next"), "context": j.get("context")}
+               "reason": j.get("reason"), "next": j.get("next"), "context": j.get("context"),
+               "node_id": (self.cur or {}).get("id"), "resume": bool(getattr(self, "_resume", None)), "flag": j.get("flag")}
+        if self.cur and rec["ref"]:
+            self.cur["sessions"].append(rec["ref"])
         for k in ("in", "cached", "out"):
             self.stats["tokens_" + k] += int((rec["tokens"] or {}).get(k) or 0)
         self.sessions.append(rec)
@@ -576,6 +638,7 @@ class Engine:
                "cost": self.cost, "stats": self.stats, "host": self.host, "delegate": self.route or "", "log": str(self.log_path),
                "stderr": str(self.err_path), "lanes": (self.contract or {}).get("lanes"), "sessions": self.sessions,
                "verified": self.verified}
+        rec.update(self.origin())
         try:
             with open(tl.config_dir() / "traces.jsonl", "a", encoding="utf-8") as f:
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
@@ -600,7 +663,7 @@ class Engine:
                                                                         self.cfg["budget_min"]))
 
     # -- AI node
-    def ai(self, node, title, prompt, resume_key=None, writer_family=None):
+    def ai(self, node, title, prompt, resume_key=None, writer_family=None, step=None, **meta):
         """One AI node through delegate (worker-run v1): it picks lane and model, limits apply, it records the run."""
         self.budget_check()
         self.stats["nodes"] += 1
@@ -610,10 +673,12 @@ class Engine:
         if getattr(self, "plan_data", None):  # an unsandboxed worker can write here: every step reads the engine's plan
             (self.run_dir / "plan.json").write_text(json.dumps(self.plan_data, indent=1))
         flag = access(self.host)
-        self.log("node", "%s: %s" % (node, title), node=node, backend="delegate", role=role, resume=bool(resume))
+        self.node(step or node, "%s: %s" % (node, title), node=node, backend="delegate", role=role, resume=bool(resume),
+                  **meta)
         timeout = float(self.cfg["node_timeout_min"]) * 60
         waited, attempt_prompt, attempt, errs = 0.0, prompt, 1, ["not run"]
         while attempt <= 2:
+            self._resume = resume
             r, j = call_delegate(self.route, role, attempt_prompt, SCHEMAS[node], self.wt, resume, timeout,
                                  self.err_path, writer, self.session, self.bead, "%s · %s: %s" % (self.bead, node, title),
                                  access=flag)
@@ -632,6 +697,8 @@ class Engine:
                 # next is owner when delegate cannot say when the lane frees (no retry_after): the same move (lifesim-5ar.6)
                 self.log("note", "%s: the resumed writer's lane is out (%s); going on at once as a new thread"
                          % (node, said[:160]))
+                self.transition(step or node, "lane_out", "the resumed thread's lane is out: a new thread",
+                                lane=j.get("lane") or "")
                 resume, attempt_prompt = None, attempt_prompt + FRESH_WRITER_TEXT
                 continue
             if nxt == "retry":  # worker-run v2: delegate says when; how long a slot waits is this engine's policy
@@ -639,12 +706,19 @@ class Engine:
                 wait = max(60.0, due - time.time())
                 if waited + wait > float(self.cfg["lane_wait_min"]) * 60:  # a long wait frees the slot; the checkpoint resumes
                     self.retry_after = due if due > time.time() else 0.0
+                    self.outcome_of("paused", reason)
+                    self.transition("pause", "paused", "%s for %s until %s" % (
+                        "no network" if reason == "network" else "no lane", node,
+                        time.strftime("%H:%M", time.localtime(due)) if due > time.time() else "a lane frees"),
+                        until=self.retry_after, lane=j.get("lane") or "", reason=reason)
                     raise Blocked("paused: %s for %s until %s (%s: %s)" % (
                         "no network" if reason == "network" else "no lane", node,
                         time.strftime("%H:%M", time.localtime(due)) if due > time.time() else "a lane frees",
                         reason, said[:200]))
                 wait = min(600.0, wait)
                 self.warn("%s waits %d min (%s): %s" % (node, wait // 60, reason, said[:160]))
+                self.transition(step or node, "lane_wait", "waited %d min for a lane (%s)" % (wait // 60, reason),
+                                lane=j.get("lane") or "")
                 time.sleep(wait)
                 waited += wait
                 continue
@@ -652,6 +726,9 @@ class Engine:
             denied = "; ".join("`%s`" % (d.get("input") or d.get("tool")) for d in j.get("denied") or [])
             if nxt == "owner" and not denied:
                 if reason == "lane_out":  # a new thread found no lane either and no time it frees: the bead waits, no ask
+                    self.outcome_of("paused", reason)
+                    self.transition("pause", "paused", "no lane for %s, no time it frees" % node, lane=j.get("lane") or "",
+                                    reason=reason)
                     raise Blocked("paused: no lane for %s (lane_out, no time it frees): %s" % (node, said[:200]))
                 if reason in ("logged_out", "setup"):  # the machine's to fix, not the bead's: it stays open, no ask
                     fix = ("run `codex login`" if j.get("family") == "openai" else "run `claude auth login`") \
@@ -678,6 +755,8 @@ class Engine:
             if not errs:
                 break
             self.log("note", "%s output invalid (try %d): %s" % (node, attempt, "; ".join(errs[:4])))
+            if attempt < 2:
+                self.transition(step or node, "invalid_output", "; ".join(errs[:2]))
             if resume:  # one more try as a new thread: a refused or broken resume is not worth a second attempt
                 resume, attempt_prompt = None, prompt
             attempt += 1
@@ -689,7 +768,7 @@ class Engine:
         (self.run_dir / ("%s-%d.json" % (node, self.stats["nodes"]))).write_text(json.dumps(r.data, indent=1))
         self.log("msg", "%s → %s  [%s%s, %ds, $%.2f, total $%.2f]" % (
             node, summarize(node, r.data), fam, (":" + model) if model else "", r.secs, r.cost, self.cost),
-            node=node, data=r.data, cost=r.cost, secs=round(r.secs), backend=fam)
+            node=node, data=r.data, cost=r.cost, secs=round(r.secs), backend=fam, node_id=(self.cur or {}).get("id"))
         self.detail(details(node, r.data))
         self.anomalies(node, r, attempt)
         return r.data, fam
@@ -751,7 +830,7 @@ class Engine:
 
     # -- nodes
     def reset(self, bead):
-        self.log("node", "reset")
+        self.node("reset", "reset")
         branch = (bead.get("metadata") or {}).get("branch") or "task/" + self.bead
         self.sh(["git", "fetch", "-q", "origin"], check=True)
         exclude = Path(self.git("rev-parse", "--path-format=absolute", "--git-common-dir")) / "info" / "exclude"
@@ -879,6 +958,10 @@ class Engine:
         outcome, why, sha, question = "failed", "", "", ""
         hb = Heartbeat(self.bead, os.environ.get("TASK_LOOP_SLOT_BEAD", ""))
         try:
+            self.prev_ck = (json.loads(self.checkpoint_path().read_text()) or {}).get("run") or ""
+        except (OSError, ValueError, AttributeError):
+            self.prev_ck = ""
+        try:
             if getattr(self, "stop_pending", False):  # stopped during the claim (run_bead): close it as stopped
                 raise Blocked("failed: stopped (SIGTERM)")
             bead = tl.show(self.bead)
@@ -901,6 +984,7 @@ class Engine:
                 raise Blocked("ticket: the bead has no acceptance criteria", "What proves this bead done? Add acceptance "
                               "criteria (the field, or a ## Acceptance Criteria section), then rerun.")
             plan, i, state = self.resume_point()
+            self.log_run()
             if plan is None:
                 plan, i, state = self.plan(again=self.replan_first), 0, None
             while i < len(plan["stages"]):
@@ -967,7 +1051,7 @@ class Engine:
         try:
             d, _ = self.ai("verify", "%d unchecked item(s) before land" % len(gaps), VERIFY_PROMPT.format(
                 brief=self.brief_text(), work=self.work_summary(), evidence=self.evidence_dir,
-                where=self.where("verify"), items=items), writer_family=self.writer_family)
+                where=self.where("verify"), items=items), writer_family=self.writer_family, items=len(gaps))
         except Blocked as b:  # no verifier now is no reason to land unchecked: the owner checks them, as before
             self.warn("could not self-verify before land, the owner checks every item: %s" % b.why[:300])
             return gaps
@@ -985,15 +1069,23 @@ class Engine:
             self.verified.append({"what": u["what"], "kind": u["kind"], "verdict": v, "evidence": a["evidence"], "why": why})
             if v != "settled":
                 (wrong if v == "wrong" else still).append(dict(u, why=why))
-        self.log("verify", "before land: %s" % ", ".join("%d %s" % (sum(x["verdict"] == k for x in self.verified), k)
-                                                         for k in VERDICTS), verified=self.verified)
+        counts = ", ".join("%d %s" % (sum(x["verdict"] == k for x in self.verified), k) for k in VERDICTS)
+        self.log("verify", "before land: %s" % counts, verified=self.verified)
+        self.outcome_of("wrong" if wrong else "open" if still else "settled", counts)
         self.comment("Verify (engine): what the workers could not check, self-verified read-only before land: " + "; ".join(
             "%s: %s, %s" % (x["verdict"], x["what"], ('"%s"' % x["evidence"]) if x["verdict"] == "settled" else x["why"])
             for x in self.verified))
         if not wrong:
+            if still:
+                self.transition("ask", "verify_open", "%d item%s only the owner can check" % (
+                    len(still), "" if len(still) == 1 else "s"))
+            else:
+                self.transition("land", "verified", counts)
             return still
         if self.fixes >= int(self.cfg["max_fix_rounds"]):
+            self.transition("ask", "verify_wrong", "%d found wrong, no fix round left" % len(wrong))
             return still + [dict(u, why="found wrong: %s; no fix round left" % u["why"]) for u in wrong]
+        self.transition("fix", "verify_wrong", "%d found wrong: %s" % (len(wrong), "; ".join(u["why"] for u in wrong)))
         # the wrong items stay unchecked in the fix's checkpoint: a fix round that pauses resumes at land and verifies
         # them again, never lands them; the fix's review adds what it leaves unproven
         self.unchecked = [u for u in self.unchecked if u["kind"] not in UNCHECKED_KINDS] + still + wrong
@@ -1043,7 +1135,8 @@ class Engine:
                       "".join("- %s\n" % g for g in self.done))
         prompt = (PLAN_PROMPT.format(brief=self.brief_text(), wt=self.wt) + extra + "\n\n" + "\n".join(rules) +
                   ("\n\n" + self.where("plan") if self.where("plan") else ""))
-        data, _ = self.ai("plan", "re-plan" if again else "plan", prompt)
+        step = "replan" if again else "plan"
+        data, _ = self.ai("plan", "re-plan" if again else "plan", prompt, step=step)
         bad, gated = tracker_checks(data), gate_only_checks(data, self.cfg)
         if bad or gated:  # asked once to rewrite them, like an invalid answer
             why = ""
@@ -1054,7 +1147,10 @@ class Engine:
                 self.warn("the plan's checks run gate-only commands, sent back: %s" % "; ".join(
                     "%s (%s)" % g for g in gated)[:300])
                 why += GATE_ONLY_TEXT % "\n".join("- `%s`: %s" % g for g in gated)
-            data, _ = self.ai("plan", "rewrite checks", prompt + why)
+            self.outcome_of("sent back", "its checks read the tracker or run gate-only commands")
+            self.transition(step, "plan_sent_back", "checks %s" % "; ".join(
+                (["read the issue tracker"] if bad else []) + (["run gate-only commands"] if gated else [])))
+            data, _ = self.ai("plan", "rewrite checks", prompt + why, step=step)
             bad, gated = tracker_checks(data), gate_only_checks(data, self.cfg)
             if bad:
                 raise Blocked("failed: the plan's checks still read the issue tracker after one rewrite: %s"
@@ -1072,7 +1168,10 @@ class Engine:
             c.setdefault("by", "plan")
         self.plan_data = data
         if data["question"].strip():
+            self.outcome_of("asks", data["question"][:200])
             raise Blocked("owner decision needed", data["question"])
+        self.outcome_of("%d stage%s" % (len(data["stages"]), "" if len(data["stages"]) == 1 else "s"),
+                        data["summary"][:200])
         if not data["stages"]:
             raise Blocked("failed: the plan has no stages")
         big = int(self.cfg["max_stages"])
@@ -1223,6 +1322,7 @@ class Engine:
             ck = json.loads(self.checkpoint_path().read_text())
         except (OSError, ValueError):
             return None, 0, None
+        self.ck_run = ck.get("run") or "" if isinstance(ck, dict) else ""
         branch = self.git("symbolic-ref", "--short", "-q", "HEAD")
         if ck.get("v") != 1 or ck.get("branch") != branch or not ck.get("plan"):
             self.drop_checkpoint()
@@ -1233,6 +1333,7 @@ class Engine:
             self.log("note", "the branch changed since the checkpoint of %s: planning again from the start" % ck["run"])
             self.drop_checkpoint()
             return None, 0, None
+        self.resumed = True
         self.done = list(ck["done"])
         self.replans, self.fixes = int(ck.get("replans") or 0), int(ck.get("fixes") or 0)
         self.denials = list(ck.get("denials") or [])
@@ -1287,6 +1388,8 @@ class Engine:
         fix = state.get("fix")
         name = state.get("name") or "stage %d/%d" % (i + 1, len(plan["stages"]))
         feedback, rounds, red, n = state.get("feedback", ""), state.get("rounds", 0), 0, state.get("n", 0)
+        where = ({"fix": state.get("fix_n"), "fixes": state.get("fix_of")} if fix else
+                 {"stage": i + 1, "stages": len(plan["stages"])})
         while True:
             if not fix:  # a fix runs at land: its checkpoint stays at land, and a resume lands again
                 self.save_checkpoint(stage=i, rounds=rounds, n=n, feedback=feedback, step="write")
@@ -1302,7 +1405,7 @@ class Engine:
                        % (Path(self.wt) / self.cfg["worker_rules"])) if self.cfg["worker_rules"] else "") +
                 "\nThe plan's acceptance cases run on the last stage. If you find a case they miss, add it to new_cases (the "
                 "criterion it proves, the check, why); never remove or weaken one." + ("" if last else LATER_CASES) +
-                UNCHECKED_TEXT, resume_key="writer")
+                UNCHECKED_TEXT, resume_key="writer", write=n, round=rounds + 1, **where)
             self.writer_family = wfam
             wrote_unchecked = w.get("unchecked") or []  # the review decides what is still unproven after the checks
             if w["question"].strip() and w["decided"].strip():  # lifesim-d5f.58: an accepted requirement is no question
@@ -1312,14 +1415,19 @@ class Engine:
                 self.warn("%s: %s" % (name, self.stuck_why[:300]))
                 if rounds >= int(self.cfg["max_rounds"]):
                     (self.run_dir / "replan.md").write_text(self.stuck_why + "\n\nThe question: " + w["question"])
+                    self.transition("replan", "rounds_used", "%d rounds used: %s" % (rounds, self.stuck_why))
                     return "replan"
+                self.transition("write", "writer_decided", "an accepted requirement decides it: %s" % w["decided"])
                 feedback = DECIDED_TEXT % (w["question"], w["decided"])
                 continue
             if w["question"].strip():
+                self.outcome_of("asks", w["question"][:200])
                 raise Blocked("owner decision needed", w["question"])
             self.add_cases(w.get("new_cases") or [])
-            checks = self.run_checks(dict(st, checks=st["checks"] + (self.case_checks() if last else [])), name)
+            checks = self.run_checks(dict(st, checks=st["checks"] + (self.case_checks() if last else [])), name,
+                                     round=rounds + 1, **where)
             (self.run_dir / "engine-checks.json").write_text(json.dumps(checks, indent=1))
+            (self.run_dir / ("engine-checks.r%d.json" % self.check_round)).write_text(json.dumps(checks, indent=1))
             self.stats["tests_added"], self.stats["tests_removed"] = count_tests(self.task_diff(), self.cfg["test_pattern"])
             if self.stats["tests_removed"]:
                 self.warn("the task's diff removes %d tests" % self.stats["tests_removed"])
@@ -1331,21 +1439,28 @@ class Engine:
                     "`%s` (exit %s): %s" % (c["cmd"], c["exit"], flagged[c["cmd"].strip()]) for c in wrong)
                 self.warn("%s: %s" % (name, self.stuck_why[:300]))
                 (self.run_dir / "replan.md").write_text(self.stuck_why + "\n\nTheir output:\n" + compact(wrong))
+                self.transition("replan", "bad_checks", "the writer says %d check%s cannot pass: %s" % (
+                    len(wrong), "" if len(wrong) == 1 else "s", "; ".join(flagged[c["cmd"].strip()] for c in wrong)))
                 return "replan"
             if failed:
                 red += 1
                 feedback = ("\nThese checks fail (run by the engine, outside your sandbox). Fix exactly this:\n%s\n"
                             % compact(failed))
+                red_text = "%d failed: %s" % (len(failed), ", ".join(c["id"][:60] for c in failed))
                 if red < int(self.cfg["max_check_tries"]):
+                    self.transition("write", "checks_red", red_text)
                     continue
                 red, rounds = 0, rounds + 1
                 self.stats["rounds"] += 1
                 self.stuck_why = "checks still red after %s tries: %s" % (self.cfg["max_check_tries"], compact(failed))
                 if rounds >= int(self.cfg["max_rounds"]):
                     (self.run_dir / "replan.md").write_text(self.stuck_why)
+                    self.transition("replan", "rounds_used", "%s; %d rounds used" % (red_text, rounds))
                     return "replan"
+                self.transition("write", "checks_red", "%s; round %d used" % (red_text, rounds))
                 continue
             red = 0
+            self.transition("review", "checks_green", "%d passed" % sum(1 for c in checks if c["exit"] == 0))
             self.stats["reviews"] += 1
             open_items = list({u["what"]: u for u in ([] if fix else self.unchecked) + wrote_unchecked}.values())
             review, _ = self.ai("review", name, REVIEW_PROMPT.format(
@@ -1363,7 +1478,7 @@ class Engine:
                  "after them); put in your unchecked only what is still unproven:\n" + "".join(
                      "- %s (%s)\n" % (u["what"], u["kind"]) for u in open_items) if open_items else "") +
                 ("" if last else LATER_CASES) + UNCHECKED_TEXT,
-                writer_family=wfam)
+                writer_family=wfam, round=rounds + 1, **where)
             # lifesim-gfr.31.1: a stage-1 item that stage 2 ran green still stopped the land; each review re-judges what
             # is open, so its list replaces it. A fix at land reviews only the fix: it adds, never clears.
             judged = self.engine_unproven(review.get("unchecked") or [], checks)
@@ -1382,17 +1497,25 @@ class Engine:
                 review["unmet"] = review["unmet"] + ["%s (an accepted requirement decides it: meet it) %s" % (
                     review["decided"], review["question"])]
             elif review["question"].strip():
+                self.outcome_of("asks", review["question"][:200])
                 raise Blocked("owner decision needed", review["question"])
             blocking = [f for f in review["findings"] if f["severity"] in ("high", "medium")]
+            said = "%d finding%s, %d unmet" % (len(blocking), "" if len(blocking) == 1 else "s", len(review["unmet"]))
             if not blocking and not review["unmet"]:
+                low = len(review["findings"])
+                self.outcome_of("clean", "%d low finding%s" % (low, "" if low == 1 else "s") if low else "")
+                self.transition("next", "accepted", "%s accepted" % name)
                 return "accept"
+            self.outcome_of("sent back", said)
             rounds += 1
             self.stats["rounds"] += 1
             self.stuck_why = "the review still sends it back: %s" % "; ".join(
                 review["unmet"] + ["%s:%s %s" % (f["file"], f["line"], f["fix"]) for f in blocking])
             if rounds >= int(self.cfg["max_rounds"]):
                 (self.run_dir / "replan.md").write_text(self.stuck_why)
+                self.transition("replan", "rounds_used", "review sent it back: %s; %d rounds used" % (said, rounds))
                 return "replan"
+            self.transition("write", "review_sendback", "%s: round %d" % (said, rounds + 1))
             feedback = ("\nThe reviewer sent the stage back. Fix exactly this:\n%s%s\n" % (
                 "".join("- unmet: %s\n" % u for u in review["unmet"]),
                 "".join("- %s:%s [%s] %s\n" % (f["file"], f["line"], f["severity"], f["fix"]) for f in blocking)))
@@ -1425,13 +1548,14 @@ class Engine:
         out = tl.git("diff", "--name-only", self.base_sha(), tree, cwd=self.wt) if tree else ""
         return [p for p in out.splitlines() if p]
 
-    def run_checks(self, st, name):
+    def run_checks(self, st, name, **meta):
         """One engine step, no AI: the repo's checks (engine.checks) and the stage's acceptance checks, grouped
         static → tests → acceptance; a red group skips the groups after it. A repo check with `when` runs only when the
         task changed a matching path; `retry` reruns a red one (known flaky). A repo check that passed on the same tree
         and base is not run again, unless it says `"cache": false`; a stage check always runs, since a plan's check can
         read what git cannot see (a running editor, a log, a bead comment). The gate is not here: it runs once, on the rebased tree, at land."""
-        self.log("node", "checks: %s" % name)
+        self.node("checks", "checks: %s" % name, **meta)
+        self.check_round += 1
         items = [{"id": c.get("id") or c["cmd"], "cmd": c["cmd"], "group": c.get("group") or "tests",
                   "when": c.get("when") or [], "retry": int(c.get("retry") or 0),
                   "cache": c.get("cache", True) is not False} for c in self.cfg["checks"]]
@@ -1470,13 +1594,13 @@ class Engine:
                 t, tries = time.time(), 0
                 while True:
                     tries += 1
-                    rc, tail = self.sh(cmd, timeout=float(self.cfg["node_timeout_min"]) * 60,
-                                       save=logs / ("%02d-%s.log" % (n, re.sub(r"[^\w.-]+", "_", c["id"])[:40])))
+                    log_name = "%02d-%s.r%d.log" % (n, re.sub(r"[^\w.-]+", "_", c["id"])[:40], self.check_round)
+                    rc, tail = self.sh(cmd, timeout=float(self.cfg["node_timeout_min"]) * 60, save=logs / log_name)
                     if rc == 0 or tries > c["retry"]:
                         break
                     self.warn("`%s` failed (exit %d), retrying: it is marked flaky" % (c["id"], rc))
                 res = dict(base, exit=rc, status="ran" if rc == 0 else "failed", tries=tries, tail=tail[-1500:],
-                           secs=round(time.time() - t))
+                           secs=round(time.time() - t), log="checks/" + log_name)
                 if rc == 0 and c["cache"]:  # only a pass is a fact about the tree; a failure can come from outside git (stale
                     cache.setdefault(key, {})[c["cmd"]] = res  # build output, a held editor, a flake) and must rerun
             out.append(res)
@@ -1492,6 +1616,14 @@ class Engine:
                         (c["tail"].splitlines()[-3:] if c["status"] == "failed" else []))
         cache_path.parent.mkdir(exist_ok=True)
         cache_path.write_text(json.dumps({key: cache[key]} if key in cache else {}))  # only the latest tree is worth keeping
+        bad = [c for c in out if c["status"] == "failed"]
+        self.outcome_of("red" if bad else "green", "%d failed: %s" % (len(bad), ", ".join(c["id"][:60] for c in bad))
+                        if bad else "%d passed" % sum(1 for c in out if c["status"] == "ran"))
+        self.log("checks", "checks round %d: %s" % (self.check_round, "%d failed" % len(bad) if bad else "green"),
+                 node_id=(self.cur or {}).get("id"), round=self.check_round, items=[
+                     {"id": c["id"], "cmd": c["cmd"], "group": c["group"], "exit": c["exit"], "status": c["status"],
+                      "secs": c.get("secs"), "tries": c.get("tries"), "cached": bool(c.get("cached")),
+                      "why": c.get("why") or "", "log": "" if c.get("cached") else c.get("log") or ""} for c in out])
         return out
 
     def finish(self, bead):
@@ -1516,7 +1648,7 @@ class Engine:
         while True:  # one land at a time per repo: rebase, gate and push see the latest base; a fix runs outside the lock
             problem = None
             with self.land_lock():
-                self.log("node", "land (try %d)" % (pushes + 1))
+                self.node("land", "land (try %d)" % (pushes + 1), **{"try": pushes + 1})
                 rc, tail = self.sh(["git", "fetch", "-q", "origin"])
                 if rc == 0:
                     rc, tail = self.sh(["git", "rebase", "-q", self.cfg["base"]])
@@ -1526,10 +1658,12 @@ class Engine:
                         self.sh(["git", "rebase", "--abort"])
                         raise Blocked("failed: fetch or rebase onto %s failed; branch kept\n%s" % (self.cfg["base"], tail))
                     problem = ("conflict", "Conflicted files: %s\n%s" % (", ".join(unmerged.split()), tail))
+                    self.outcome_of("conflict", ", ".join(unmerged.split()))
                 elif self.cfg["gate"]:
                     rc, tail = self.sh(self.cfg["gate"])
                     if rc:
                         problem = ("gate", tail)
+                        self.outcome_of("gate red", (tail.strip().splitlines() or [""])[-1])
                 if not problem:
                     with self.stop_deferred() as stop:  # a push half done is no state to stop in: finish it, then stop
                         rc, tail = self.sh(self.cfg["land"], env={"TASK_LOOP_GATED_TREE": self.git(
@@ -1538,6 +1672,7 @@ class Engine:
                             self.landed_sha = sha = self.git("rev-parse", "HEAD")
                             tl.cmd_land(Args(id=self.bead, sha=sha, worktree=self.wt))
                     if rc == 0:
+                        self.outcome_of("landed", sha[:12])
                         if stop:
                             self.warn("a stop came during the land: landed first, closing now")
                         return sha
@@ -1546,10 +1681,16 @@ class Engine:
                     if not re.search(r"rejected|non-fast-forward|fetch first|stale info", tail):
                         raise Blocked("land failed\n" + tail)
                     pushes += 1
+                    self.outcome_of("rejected", "main moved")
                     if pushes >= 5:
                         raise Blocked("land rejected 5 times: main moves too fast")
                     self.warn("push rejected (main moved), try %d of 5" % pushes)
+                    self.transition("land", "push_race", "push rejected (main moved): try %d of 5" % (pushes + 1))
                     continue
+            if self.fixes < int(self.cfg["max_fix_rounds"]):
+                self.transition("fix", "gate_red" if problem[0] == "gate" else "conflict",
+                                "gate red on the rebased tree: %s" % (problem[1].strip().splitlines() or [""])[-1][:200]
+                                if problem[0] == "gate" else problem[1].splitlines()[0])
             self.fix(*problem)
 
     FIX = {"gate": ("make the gate pass on the tree rebased onto the latest base",
@@ -1584,7 +1725,7 @@ class Engine:
         goal, text = self.FIX[kind]
         st = {"goal": "Fix: " + goal, "files": [], "checks": checks, "hard": False}
         d = self.stage({"stages": [st]}, 0, {
-            "fix": True, "name": "fix %d/%d" % (self.fixes, limit),
+            "fix": True, "name": "fix %d/%d" % (self.fixes, limit), "fix_n": self.fixes, "fix_of": limit,
             "feedback": text % tail if kind == "verify" else text % (
                 (" (`%s`)" % self.cfg["gate"]) if kind == "gate" and self.cfg["gate"] else "",
                 compact([{"cmd": self.cfg["gate"] or "rebase", "exit": 1, "status": "failed", "group": "gate",
@@ -1670,7 +1811,16 @@ class Engine:
                 self.wip(outcome)  # the next run continues this branch
             self.mark_checkpoint_closed(why)
         stats = "cost=$%.2f; minutes=%d; %s" % (self.cost, mins, "; ".join("%s=%s" % kv for kv in self.stats.items()))
-        self.log("node", "close: %s" % outcome, outcome=outcome, why=why)
+        self.log_run()
+        last = self.cur or self.last_node
+        if last and (self.moved_from != last["id"] or self.moved_to not in ("ask", "pause", "close")):
+            # no move out of the run was logged from the last node: the close is it
+            to, cause = close_move(outcome, why)
+            self.transition(to, cause, why.splitlines()[0][:200] if why else outcome)
+        self.end_node(node_outcome(outcome, why))
+        self.node("close", "close: %s" % outcome, outcome=outcome, why=why)
+        self.outcome_of(outcome, why.splitlines()[0][:200] if why else "")
+        self.end_node()
         self.write_trace(outcome, why, sha)
         self.detail([stats] + ([why[:400]] if why else []) + (["question: " + question[:400]] if question else []))
         if outcome == "failed":
@@ -1726,6 +1876,39 @@ class Engine:
 
 
 GHERKIN_TEST = re.compile(r"^\s*Scenario( Outline)?:")  # a use-case scenario (Reqnroll, lifesim-fld.26.10)
+
+
+QUIET_KINDS = ("end", "transition", "checks", "run")  # trace records for the dashboard, never printed
+RUN_STEM = re.compile(r"^\d{8}-\d{6}$")  # <bead>-<YYYYMMDD-HHMMSS>: an engine log of that bead, not of a child bead
+
+
+def node_outcome(outcome, why):
+    """What a node still open at the close came to: the run's own end."""
+    if outcome in ("landed", "done"):
+        return outcome
+    if why.startswith("paused:"):
+        return "paused"
+    if why.startswith("waiting:"):
+        return "waiting"
+    if why.startswith("failed: stopped"):
+        return "stopped"
+    if outcome == "failed":
+        return "failed"
+    return "asks" if ask_kind(why) else "blocked"
+
+
+def close_move(outcome, why):
+    """(to, cause) of the last move, when no decision point logged one: landed, an ask, a pause, a wait, a failure."""
+    if outcome in ("landed", "done"):
+        return "close", outcome
+    if why.startswith("paused:"):
+        return "pause", "paused"
+    if why.startswith("waiting:"):
+        return "ask", "waiting"
+    kind = ask_kind(why)
+    if kind:
+        return "ask", kind
+    return "close", "stopped" if why.startswith("failed: stopped") else "failed"
 
 
 def count_tests(diff, pattern):

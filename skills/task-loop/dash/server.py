@@ -36,6 +36,9 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import timeline  # noqa: E402
+from timeline import block_detail, run_timeline  # noqa: E402,F401  (the engine tests read them here)
 HOME = Path.home()
 PROJECTS = HOME / ".claude" / "projects"
 CODEX_JOBS = HOME / ".claude" / "plugins" / "data" / "codex-openai-codex" / "state"
@@ -306,6 +309,10 @@ def rollout_events(path, t0=None, t1=None):
         except ValueError:
             continue
         t = parse_ts(d.get("timestamp"))
+        if t0 and t and t < t0:
+            continue
+        if t1 and t and t > t1:
+            break
         p = d.get("payload") or {}
         typ = p.get("type")
         if d.get("type") == "response_item":
@@ -718,18 +725,257 @@ def all_runs(hours):
     return runs[:300]
 
 
+def split_window(rest):
+    """`path@t0@t1` (either time may be empty) -> (path, t0, t1); a plain path has no window."""
+    parts = rest.rsplit("@", 2)
+    if len(parts) == 3:
+        try:
+            return parts[0], float(parts[1]) if parts[1] else None, float(parts[2]) if parts[2] else None
+        except ValueError:
+            pass
+    return rest, None, None
+
+
 def run_events(run_id, limit=800):
     kind, rest = run_id.split(":", 1)
-    t0 = t1 = None
-    path = rest
-    if kind == "claude" and "@" in rest:
-        path, a, b = rest.rsplit("@", 2)
-        t0, t1 = float(a) if a else None, float(b) if b else None
+    path, t0, t1 = split_window(rest)
     fn = ADAPTERS.get(kind)
     if not fn or not os.path.exists(path):
         return []
     evs = fn(path, t0, t1)
     return evs[-limit:]
+
+
+# ---- the task view: tasks, a task's runs, one block (timeline.py builds them from the engine logs) -----------------
+
+RUN_NAME = re.compile(r"^[\w.-]+-\d{8}-\d{6}$")
+STALE_RUN = 20 * 60  # a run with no close, no engine lock to ask and no log write for this long has stopped
+
+
+def engine_logs(retain=True):
+    """bead -> its engine logs, oldest first."""
+    cut = time.time() - RETAIN if retain else 0
+    out = {}
+    for p in glob.glob(str(config_dir() / "engine" / "*.jsonl")):
+        name = timeline.run_name(p)
+        bead = timeline.bead_of(name)
+        if not bead:
+            continue
+        try:
+            if os.path.getmtime(p) < cut:
+                continue
+        except OSError:
+            continue
+        out.setdefault(bead, []).append(p)
+    for v in out.values():
+        v.sort()
+    return out
+
+
+def traces():
+    """run -> its traces.jsonl line, re-read when the file changes."""
+    f = config_dir() / "traces.jsonl"
+    try:
+        m = f.stat().st_mtime
+    except OSError:
+        return {}
+    with _lock:
+        hit = _cache.get("traces")
+    if hit and hit[2] == m:
+        return hit[1]
+    out = {}
+    for ln in tail_lines(str(f), 20_000_000):
+        try:
+            r = json.loads(ln)
+        except ValueError:
+            continue
+        if isinstance(r, dict) and r.get("run"):
+            out[r["run"]] = r
+    with _lock:
+        _cache["traces"] = (time.time(), out, m)
+    return out
+
+
+def open_ask(bead):
+    a = read_json(config_dir() / "asks" / ("%s.json" % bead), {}) or {}
+    if not isinstance(a, dict) or a.get("status") != "open":
+        return None
+    return {k: a.get(k) for k in ("id", "kind", "question", "t", "title", "answer", "repo", "parks_at")}
+
+
+def run_alive(path, run, span):
+    """A run with no close: running while the engine lock in its worktree names a live process for its bead; without
+    a lock to read, while its log moved lately."""
+    bead = timeline.bead_of(timeline.run_name(path))
+    wt = (run or {}).get("worktree") or (span or {}).get("worktree") or ""
+    if wt:
+        lock = read_json(os.path.join(wt, ".task", "engine.lock"), {}) or {}
+        if lock:
+            return lock.get("bead") == bead and bool(lock.get("pid")) and pid_alive(lock.get("pid"))
+        if run:
+            return False
+    try:
+        m = max(os.path.getmtime(path), os.path.getmtime(path[:-6] + ".stderr") if os.path.exists(
+            path[:-6] + ".stderr") else 0)
+    except OSError:
+        return False
+    return time.time() - m < STALE_RUN
+
+
+def slot_of(run, span, trace):
+    for wt in ((run or {}).get("slot"), (span or {}).get("slot")):
+        if wt:
+            return wt
+    wt = (run or {}).get("worktree") or (trace or {}).get("worktree") or (span or {}).get("worktree") or ""
+    return os.path.basename(wt.rstrip("/\\")) if wt else ""
+
+
+def repo_name(span, trace, ask):
+    r = (span or {}).get("repo") or (ask or {}).get("repo") or (trace or {}).get("repo") or ""
+    r = r.rstrip("/\\")
+    return re.sub(r"\.git$", "", os.path.basename(r)) if r else ""
+
+
+TASK_STATES = {"running": 0, "asks": 1, "paused": 2, "waiting": 3, "stopped": 4, "failed": 4, "blocked": 4,
+               "landed": 5, "done": 5}
+
+
+def task_row(bead, paths, spans, tr):
+    newest = paths[-1]
+    name = timeline.run_name(newest)
+    span = (spans.get(bead) or [None])[-1]
+    recs = timeline.read(newest)
+    run_rec = next((r for r in reversed(recs) if r.get("kind") == "run"), None)
+    closed = any(r.get("kind") == "node" and str(r.get("text") or "").startswith("close:") for r in recs[-40:])
+    alive = not closed and run_alive(newest, run_rec, span)
+    run = timeline.run_timeline(newest, alive=alive)
+    end, ask = run["end"], open_ask(bead)
+    state, label = end["outcome"], end["text"]
+    if alive:
+        state, label = "running", timeline.live_label(timeline.last_node(newest))
+    elif ask:
+        state, label = "asks", "waiting on you"
+    elif state == "paused":
+        label = "paused: %s out until %s" % (end.get("lane") or "lane", end["until"]) if end.get("until") else \
+            "paused: " + (end.get("lane") + " out" if end.get("lane") else "no lane")
+    elif state == "stopped":
+        label = "stopped"
+    started = run["started"] or 0
+    total = sum((timeline.run_timeline(p)["secs"] or 0) for p in paths)
+    last_t = (recs[-1].get("t") if recs else None) or started
+    trace = tr.get(name)
+    return {"id": bead, "title": (span or {}).get("title") or (ask or {}).get("title") or "", "state": state,
+            "label": label, "slot": slot_of(run_rec, span, trace), "repo": repo_name(span, trace, ask),
+            "runs": len(paths), "run": name, "started": started, "updated": last_t,
+            "since": round(time.time() - started) if alive and started else None, "secs": total,
+            "run_secs": run["secs"], "ask": ask, "end": end, "tokens": run["tokens"],
+            "stage": timeline.live_label(timeline.last_node(newest)) if alive else ""}
+
+
+def api_tasks():
+    """The home page: one row per bead the engine ran in the last week, newest state first."""
+    _last_seen[0] = time.time()
+    spans, tr = task_spans(), traces()
+    rows = []
+    for bead, paths in engine_logs().items():
+        try:
+            rows.append(task_row(bead, paths, spans, tr))
+        except Exception as e:  # one broken log must not hide the others
+            rows.append({"id": bead, "title": "", "state": "failed", "label": "unreadable log: %s" % e, "runs": len(paths),
+                         "updated": 0, "slot": "", "repo": "", "ask": None})
+    rows.sort(key=lambda r: (TASK_STATES.get(r["state"], 4), -(r.get("updated") or 0)))
+    return {"version": VERSION, "now": time.time(), "host": socket.gethostname(), "tasks": rows,
+            "lanes": contract_lanes()}
+
+
+def api_task_timeline(repo, bead):
+    """Every run of the bead, oldest first, each with its blocks and arrows."""
+    paths = engine_logs(retain=False).get(bead, [])
+    spans, tr = task_spans(), traces()
+    runs = []
+    for p in paths:
+        alive = False
+        if p == paths[-1]:
+            recs = timeline.read(p)
+            rr = next((r for r in reversed(recs) if r.get("kind") == "run"), None)
+            closed = any(r.get("kind") == "node" and str(r.get("text") or "").startswith("close:") for r in recs[-40:])
+            alive = not closed and run_alive(p, rr, (spans.get(bead) or [None])[-1])
+        r = timeline.run_timeline(p, alive=alive)
+        r["because"] = timeline.because_text(r, runs[-1] if runs else None)
+        runs.append(r)
+    row = task_row(bead, paths, spans, tr) if paths else {"id": bead, "title": "", "state": "", "label": "no runs",
+                                                            "ask": open_ask(bead)}
+    return {"task": row, "runs": runs}
+
+
+def run_path(run):
+    if not isinstance(run, str) or not RUN_NAME.match(run):
+        return None
+    p = config_dir() / "engine" / (run + ".jsonl")
+    return str(p) if p.exists() else None
+
+
+def find_transcript(family, ref):
+    if not ref:
+        return ""
+    if family == "openai":
+        hits = glob.glob(str(CODEX_SESSIONS / "*" / "*" / "*" / ("rollout-*%s.jsonl" % ref)))
+    else:
+        hits = glob.glob(str(PROJECTS / "*" / ("%s.jsonl" % ref)))
+    return max(hits, key=os.path.getmtime) if hits else ""
+
+
+def api_block(run, node, k=0):
+    """One block: the transcript to show (an /api/events id, cut to the block's time), its round's checks with their
+    logs, the engine lines of its step."""
+    path = run_path(run)
+    if not path:
+        return {"error": "no such run"}
+    d = block_detail(path, node, k)
+    if d.get("error"):
+        return d
+    s, b = d.get("session") or {}, d["block"]
+    tr = s.get("transcript") if s.get("transcript") and os.path.exists(s["transcript"]) else \
+        find_transcript(s.get("family") or b["who"]["family"], s.get("ref"))
+    d["events_id"] = ("%s:%s@%s@%s" % ("codex-exec" if (s.get("family") or b["who"]["family"]) == "openai" else
+                                       "claude-p", tr, (b["t0"] or 0) - 30, (b["t1"] or 0) + 30)) if tr else ""
+    d["transcript"] = tr
+    rdir = config_dir() / "runs" / run
+    legacy_ids = {}
+    if d.get("checks_last"):
+        for c in read_json(rdir / "engine-checks.json", []) or []:
+            if isinstance(c, dict) and c.get("cmd"):
+                legacy_ids[c["cmd"]] = c.get("id") or c["cmd"]
+    files = sorted(os.listdir(str(rdir / "checks"))) if (rdir / "checks").is_dir() else []
+    for c in d["checks"]:
+        rel = c.get("log") or ""
+        if not rel and legacy_ids:
+            cid = legacy_ids.get(c["cmd"], c["cmd"])
+            if c["cmd"] in legacy_ids:
+                c["id"] = cid
+            safe = re.sub(r"[^\w.-]+", "_", cid)[:40]
+            hit = [f for f in files if re.match(r"^\d\d-%s\.log$" % re.escape(safe), f)]
+            rel = "checks/" + hit[0] if hit else ""
+        c["log_url"] = ("/api/file?run=%s&path=%s" % (run, rel)) if rel and (rdir / rel).is_file() else ""
+    return d
+
+
+def run_file(run, rel):
+    """A file of a run's folder (a check's full log), never anything outside it."""
+    if not isinstance(run, str) or not RUN_NAME.match(run) or not rel:
+        return None
+    base = (config_dir() / "runs" / run).resolve()
+    try:
+        p = (base / rel).resolve()
+    except (OSError, ValueError):
+        return None
+    if base not in p.parents or not p.is_file():
+        return None
+    with open(str(p), "rb") as f:
+        f.seek(0, 2)
+        size = f.tell()
+        f.seek(max(0, size - 4_000_000))
+        return f.read()
 
 
 # ---- server ---------------------------------------------------------------------------------------------------------
@@ -887,6 +1133,19 @@ def make_handler(port, addrs):
                     body = run_events(q.get("id", ""))
                 elif u.path == "/api/asks":
                     body = asks()
+                elif u.path == "/api/tasks":
+                    body = api_tasks()
+                elif u.path == "/api/task-timeline":
+                    body = api_task_timeline(q.get("repo", ""), q.get("id", ""))
+                elif u.path == "/api/block":
+                    body = api_block(q.get("run", ""), q.get("node", ""), q.get("k", "0"))
+                elif u.path == "/api/file":
+                    data = run_file(q.get("run", ""), q.get("path", ""))
+                    if data is None:
+                        return self.send(404, b"not found", "text/plain")
+                    return self.send(200, data, "text/plain; charset=utf-8")
+                elif u.path == "/classic":
+                    return self.send(200, (HERE / "classic.html").read_bytes(), "text/html; charset=utf-8")
                 elif u.path in ("/", "/index.html"):
                     return self.send(200, page.read_bytes(), "text/html; charset=utf-8")
                 else:

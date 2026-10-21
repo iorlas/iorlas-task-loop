@@ -1,0 +1,677 @@
+"""Engine logs -> the task timeline the dashboard draws: a run is a chain of blocks (one stage + one session), each
+block entered by an arrow that says why the run moved there. Python 3.8+, standard library only.
+
+The engine writes machine-readable records since 0.17 (docs/design/dashboard.md, Timeline records): `node` with id,
+step and counters, `end`, `transition`, `checks`, `run`. Older logs have only the node, session, msg, note and warn
+text; for those the same shapes are read from the text, best effort.
+"""
+
+import json
+import os
+import re
+import time
+
+_parsed = {}  # path -> ((mtime, size), records)
+
+RUN_STEM = re.compile(r"^(?P<bead>.+)-(?P<stamp>\d{8}-\d{6})$")
+META = ("stage", "stages", "write", "round", "fix", "fixes", "try", "items")
+LINE_KINDS = ("cmd", "note", "warn", "verify")
+FAMILY = {"openai": "Codex", "claude": "Claude"}
+
+
+def read(path):
+    """The log's records, re-read only when the file changed."""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return []
+    key = (st.st_mtime, st.st_size)
+    hit = _parsed.get(path)
+    if hit and hit[0] == key:
+        return hit[1]
+    recs = []
+    with open(path, encoding="utf-8", errors="replace") as f:
+        for ln in f:
+            try:
+                d = json.loads(ln)
+            except ValueError:
+                continue
+            if isinstance(d, dict):
+                recs.append(d)
+    _parsed[path] = (key, recs)
+    return recs
+
+
+def run_name(path):
+    return os.path.basename(path)[:-len(".jsonl")] if path.endswith(".jsonl") else os.path.basename(path)
+
+
+def bead_of(run):
+    m = RUN_STEM.match(run)
+    return m.group("bead") if m else ""
+
+
+def lane_name(lane="", family=""):
+    """Codex or Claude, from delegate's family or lane name."""
+    if family in FAMILY:
+        return FAMILY[family]
+    up = (lane or "").upper()
+    return "Codex" if "OPENAI" in up or "CODEX" in up else "Claude" if "CLAUDE" in up or "ANTHROPIC" in up else ""
+
+
+def hhmm(t):
+    return time.strftime("%H:%M", time.localtime(t)) if t else ""
+
+
+# ---- old logs: the step and its counters from the node text ----------------------------------------------------------
+
+LEGACY = [
+    (re.compile(r"^write: stage (\d+)/(\d+) write (\d+)"), "write", ("stage", "stages", "write")),
+    (re.compile(r"^write: fix (\d+)/(\d+) write (\d+)"), "write", ("fix", "fixes", "write")),
+    (re.compile(r"^checks: stage (\d+)/(\d+)"), "checks", ("stage", "stages")),
+    (re.compile(r"^checks: fix (\d+)/(\d+)"), "checks", ("fix", "fixes")),
+    (re.compile(r"^review: stage (\d+)/(\d+)"), "review", ("stage", "stages")),
+    (re.compile(r"^review: fix (\d+)/(\d+)"), "review", ("fix", "fixes")),
+    (re.compile(r"^land \(try (\d+)\)"), "land", ("try",)),
+]
+
+
+def legacy_step(text, prev_step=""):
+    for rx, step, keys in LEGACY:
+        m = rx.match(text)
+        if m:
+            return step, {k: int(v) for k, v in zip(keys, m.groups())}
+    if text == "reset":
+        return "reset", {}
+    if text.startswith("plan: re-plan"):
+        return "replan", {}
+    if text.startswith("plan: rewrite"):
+        return prev_step if prev_step in ("plan", "replan") else "plan", {}
+    if text.startswith("plan"):
+        return "plan", {}
+    if text.startswith("verify"):
+        return "verify", {}
+    if text.startswith("close"):
+        return "close", {}
+    return text.split(":")[0].split(" ")[0] or "step", {}
+
+
+LEGACY_MOVES = [  # warn or note text -> (cause, inside the node: another session of the same step follows)
+    (re.compile(r"the resumed writer's lane is out"), "lane_out", True),
+    (re.compile(r"^\w+ waits (\d+) min"), "lane_wait", True),
+    (re.compile(r"output invalid \(try 1\)"), "invalid_output", True),
+    (re.compile(r"the writer says these stage checks are wrong"), "bad_checks", False),
+    (re.compile(r"^land: gate red on the rebased tree"), "gate_red", False),
+    (re.compile(r"^land: merge conflict"), "conflict", False),
+    (re.compile(r"^land: the check before land found defects"), "verify_wrong", False),
+    (re.compile(r"^push rejected \(main moved\)"), "push_race", False),
+    (re.compile(r"the plan's checks (read the issue tracker|run gate-only)"), "plan_sent_back", True),
+]
+
+
+# ---- records -> nodes ------------------------------------------------------------------------------------------------
+
+def nodes_of(recs):
+    """(nodes, run record or None, structured). A node: one engine step with its sessions, lines and moves."""
+    out, by_id, cur, run, structured, ends = [], {}, None, None, False, {}
+    for i, r in enumerate(recs):
+        k = r.get("kind")
+        if k == "node":
+            if "id" in r and "step" in r:
+                structured = True
+                nid, step = r["id"], r["step"]
+                meta = {x: r[x] for x in META if r.get(x) is not None}
+            else:
+                nid = len(out) + 1
+                step, meta = legacy_step(r.get("text") or "", out[-1]["step"] if out else "")
+            if out and out[-1]["t1"] is None:
+                out[-1]["t1"] = r.get("t")
+            cur = {"id": nid, "step": step, "text": r.get("text") or "", "t0": r.get("t"), "t1": None, "meta": meta,
+                   "sessions": [], "msgs": [], "lines": [], "moves": [], "checks": None, "outcome": "", "detail": "",
+                   "rec": r}
+            out.append(cur)
+            by_id[nid] = cur
+            continue
+        if k == "run":
+            run = r
+            continue
+        if k == "end":
+            ends[r.get("id")] = r
+            continue
+        if k == "transition":
+            n = by_id.get(r.get("from")) or cur
+            if n is not None:
+                n["moves"].append(dict(r, _i=i))
+            continue
+        if cur is None:
+            continue
+        if k == "session":
+            n = by_id.get(r.get("node_id")) or cur
+            n["sessions"].append(dict(r, _i=i))
+        elif k == "msg":
+            (by_id.get(r.get("node_id")) or cur)["msgs"].append(r)
+        elif k == "checks":
+            (by_id.get(r.get("node_id")) or cur)["checks"] = r
+        elif k in LINE_KINDS:
+            cur["lines"].append(dict(r, _i=i))
+            if not structured:
+                for rx, cause, inside in LEGACY_MOVES:
+                    m = rx.search(r.get("text") or "")
+                    if m:
+                        cur["moves"].append({"from": cur["id"], "to": cur["step"] if inside else "", "cause": cause,
+                                             "detail": r.get("text") or "", "_i": i, "_inside": inside})
+    if out and out[-1]["t1"] is None:
+        out[-1]["t1"] = recs[-1].get("t") if recs else None
+    for n in out:
+        e = ends.get(n["id"])
+        if e:
+            n["t1"], n["outcome"], n["detail"] = e.get("t") or n["t1"], e.get("outcome") or "", e.get("detail") or ""
+    for i, n in enumerate(out):
+        if not n["outcome"]:
+            n["outcome"], n["detail"] = legacy_outcome(n)
+            nxt = out[i + 1] if i + 1 < len(out) else None
+            if n["step"] == "land" and nxt:
+                n["outcome"] = ("landed" if nxt["step"] == "close" and nxt["rec"].get("outcome") == "landed" else
+                                "rejected" if nxt["step"] == "land" else "gate red" if nxt["step"] == "write" else
+                                n["outcome"])
+    return out, run, structured
+
+
+def check_pairs(lines):
+    """[(cmd, exit, tail)] from a checks node's cmd records and the `exit N: tail` notes after them."""
+    out, last = [], None
+    for ln in lines:
+        if ln.get("kind") == "cmd":
+            last = [ln.get("text") or "", None, "", ln.get("t")]
+            out.append(last)
+        elif ln.get("kind") == "note" and last is not None and str(ln.get("text") or "").startswith("exit "):
+            m = re.match(r"exit (-?\d+)(?::\s*(.*))?$", ln["text"], re.S)
+            if m:
+                last[1] = ln.get("exit") if ln.get("exit") is not None else int(m.group(1))
+                last[2] = (m.group(2) or "").strip()
+                last[3] = (ln.get("t") or 0) - (last[3] or ln.get("t") or 0)
+            last = None
+    return out
+
+
+def msg_text(n):
+    """What the node's answer line says after the arrow: `plan → 2 stages, 4 risks: ...`."""
+    for m in reversed(n["msgs"]):
+        t = m.get("text") or ""
+        if "\u2192" in t:
+            return re.sub(r"\s+\[[^\]]*\]$", "", t.split("\u2192", 1)[1]).strip()
+    return ""
+
+
+def legacy_outcome(n):
+    step, said = n["step"], msg_text(n)
+    if step in ("plan", "replan"):
+        m = re.match(r"(\d+) stages?", said)
+        return ("%s stage%s" % (m.group(1), "" if m.group(1) == "1" else "s")) if m else "done", said.split(": ", 1)[-1]
+    if step == "checks":
+        pairs = check_pairs(n["lines"])
+        bad = [p for p in pairs if p[1]]
+        if bad:
+            return "red", "%d failed" % len(bad)
+        return "green", "%d passed" % len(pairs)
+    if step == "review":
+        m = re.match(r"(\d+) findings?, (\d+) unmet", said)
+        if m and m.group(1) == "0" and m.group(2) == "0":
+            return "clean", said
+        return ("reviewed", said) if m else ("done", said)
+    if step == "write":
+        s = n["sessions"][-1] if n["sessions"] else {}
+        if s and s.get("status") not in (None, "done"):
+            return s.get("reason") or s.get("status"), said
+        return "done", said
+    if step == "verify":
+        return ("wrong" if re.search(r"[1-9]\d* wrong", said) else "open" if re.search(r"[1-9]\d* open", said)
+                else "settled"), said
+    if step == "close":
+        return n["rec"].get("outcome") or "", (n["rec"].get("why") or "").split("\n")[0]
+    return "done", said
+
+
+# ---- nodes -> blocks and arrows --------------------------------------------------------------------------------------
+
+def ask_kind(why):
+    if why.startswith(("paused:", "waiting:", "failed:")):
+        return None
+    if why.startswith("owner decision needed"):
+        return "decision"
+    if why.startswith(("needs a human", "verify:")):
+        return "verify"
+    if why.startswith("ticket:"):
+        return "ticket"
+    return "stuck"
+
+
+def close_move(outcome, why):
+    if outcome in ("landed", "done"):
+        return "close", outcome
+    if why.startswith("paused:"):
+        return "pause", "paused"
+    if why.startswith("waiting:"):
+        return "ask", "waiting"
+    kind = ask_kind(why) if outcome == "blocked" else None
+    if kind:
+        return "ask", kind
+    return "close", "stopped" if why.startswith("failed: stopped") else "failed"
+
+
+def same_round(a, b):
+    """b writes again for the stage (or fix) a judged: a send-back, not the next stage."""
+    ka = (a["meta"].get("stage"), a["meta"].get("fix"))
+    kb = (b["meta"].get("stage"), b["meta"].get("fix"))
+    return ka == kb and (b["meta"].get("write") or 1) > 1
+
+
+def infer_move(a, b):
+    """The move from node a to node b when no transition record says it."""
+    sa, sb = a["step"], b["step"]
+    if sb == "close":
+        to, cause = close_move(b["rec"].get("outcome") or "", b["rec"].get("why") or "")
+        return {"to": to, "cause": cause, "detail": (b["rec"].get("why") or "").split("\n")[0]}
+    if sa == "checks":
+        if a["outcome"] == "red":
+            return {"to": sb, "cause": "checks_red" if sb == "write" else "rounds_used", "detail": a["detail"]}
+        return {"to": sb, "cause": "checks_green", "detail": a["detail"]} if sb == "review" else None
+    if sa == "review":
+        if sb == "write" and same_round(a, b):
+            return {"to": "write", "cause": "review_sendback", "detail": a["detail"]}
+        if sb in ("write", "verify", "land"):
+            return {"to": sb, "cause": "accepted", "detail": ""}
+        if sb in ("plan", "replan"):
+            return {"to": sb, "cause": "rounds_used", "detail": a["detail"]}
+    if sa in ("plan", "replan") and sb == "write":
+        return {"to": "write", "cause": "planned", "detail": a["outcome"]}
+    if sa == "land" and sb == "land":
+        return {"to": "land", "cause": "push_race", "detail": ""}
+    if sa == "land" and sb == "write":
+        return {"to": "fix", "cause": "gate_red", "detail": ""}
+    if sa == "verify":
+        return {"to": sb, "cause": "verify_wrong" if sb == "write" else "verified", "detail": a["detail"]}
+    return None
+
+
+def lane_of(why):
+    m = re.search(r"\b([A-Z]+)_[A-Z_]+\b", why or "")
+    return lane_name(m.group(0)) if m else ""
+
+
+def until_of(why):
+    m = re.search(r"until (\d\d:\d\d)", why or "")
+    return m.group(1) if m else ""
+
+
+def arrow_text(cause, detail="", ctx=None):
+    """What the arrow into a block (or the run's end) says."""
+    ctx = ctx or {}
+    detail = (detail or "").strip()
+    first = detail.split(";")[0]
+    m = re.match(r"(\d+) failed", first)
+    if cause == "checks_red":
+        return "checks red: %s \u2192 write again" % (("%s failed" % m.group(1)) if m else "failed")
+    if cause == "checks_green":
+        return "checks green"
+    if cause == "review_sendback":
+        n = re.match(r"(\d+ findings?, \d+ unmet)", detail)
+        r = re.search(r"round (\d+)", detail)
+        return "review sent back%s \u2192 round %s" % ((": " + n.group(1)) if n else "", r.group(1) if r else "again")
+    if cause == "accepted":
+        return "accepted"
+    if cause == "planned":
+        return detail or "planned"
+    if cause == "bad_checks":
+        return "writer says the checks are wrong \u2192 re-plan"
+    if cause == "rounds_used":
+        return "rounds used up \u2192 re-plan"
+    if cause == "writer_decided":
+        return "a requirement already decides it \u2192 write again"
+    if cause == "lane_out":
+        who = ctx.get("from_name") or "the lane"
+        return "%s out \u2192 new thread%s" % (who, (" on " + ctx["to_model"]) if ctx.get("to_model") else "")
+    if cause == "lane_wait":
+        return "waited for a lane"
+    if cause == "invalid_output":
+        return "invalid output \u2192 try again"
+    if cause == "plan_sent_back":
+        return "checks sent back \u2192 plan again"
+    if cause == "paused":
+        lane, until = ctx.get("lane") or lane_of(detail), ctx.get("until") or until_of(detail)
+        return "%s \u2192 paused%s" % ("%s out" % lane if lane else "no lane", (" until " + until) if until else "")
+    if cause in ("decision", "verify", "ticket", "stuck", "waiting", "verify_open", "needs_human"):
+        return {"decision": "decision needed", "verify": "needs your check", "ticket": "needs a split or criteria",
+                "stuck": "stuck", "waiting": "waiting for your answer", "verify_open": "needs your check",
+                "needs_human": "needs you"}[cause] + " \u2192 asks you"
+    if cause == "verify_wrong":
+        return "check before land found defects \u2192 fix round"
+    if cause == "verified":
+        return "verified \u2192 land"
+    if cause == "gate_red":
+        return "gate red \u2192 fix round"
+    if cause == "conflict":
+        return "merge conflict \u2192 fix round"
+    if cause == "push_race":
+        return "main moved \u2192 push again"
+    if cause in ("landed", "done"):
+        return cause
+    if cause == "stopped":
+        return "stopped"
+    if cause == "failed":
+        return "failed: " + detail[:120] if detail else "failed"
+    return cause.replace("_", " ")
+
+
+def label_of(n, k=0):
+    step, m = n["step"], n["meta"]
+    if step == "write":
+        base = "Fix %d \u00b7 write %d" % (m["fix"], m.get("write") or 1) if m.get("fix") else "Write %d" % (m.get("write") or 1)
+        return base
+    if step == "land":
+        return "Land" if (m.get("try") or 1) == 1 else "Land (try %d)" % m["try"]
+    return {"plan": "Plan", "replan": "Re-plan", "checks": "Checks", "review": "Review", "verify": "Verify"}.get(
+        step, step.capitalize())
+
+
+RESULT = {  # (step, outcome) -> status colour
+    "green": "ok", "clean": "ok", "landed": "ok", "done": "ok", "settled": "ok", "accepted": "ok",
+    "red": "fail", "gate red": "fail", "conflict": "fail", "wrong": "fail", "failed": "fail", "stopped": "fail",
+    "sent back": "warn", "reviewed": "warn", "rejected": "warn", "open": "ask", "asks": "ask",
+    "paused": "wait", "lane_out": "wait", "waiting": "wait",
+}
+
+
+def who_of(n, s):
+    if n["step"] in ("checks", "land", "reset", "close"):
+        return {"family": "engine", "name": "Engine", "model": "", "effort": "", "lane": "", "resumed": False,
+                "fallback": "", "flag": ""}
+    s = s or {}
+    fam = s.get("family") or ""
+    name = lane_name(s.get("lane") or "", fam)
+    fam = fam or {"Codex": "openai", "Claude": "claude"}.get(name, "")
+    if not name and n["step"] == "write":
+        name = ""  # not started yet: delegate had not picked a lane
+    resumed = s.get("resume") if "resume" in s else bool(n["rec"].get("resume")) and s is (n["sessions"] or [None])[0]
+    flag = s.get("flag") or ""
+    return {"family": fam, "name": name or ("" if n["step"] == "write" else "?"), "model": s.get("model") or "", "effort": s.get("effort") or "",
+            "lane": s.get("lane") or "", "resumed": bool(resumed), "flag": flag,
+            "fallback": {"same_family": "same family as the writer", "degraded": "not the usual lane"}.get(flag, "")}
+
+
+def session_result(s):
+    st = (s or {}).get("status") or ""
+    if not s or st == "done":
+        return None
+    if (s.get("reason") or st) == "lane_out":
+        return {"status": "wait", "text": "%s out" % (lane_name(s.get("lane"), s.get("family")) or "lane")}
+    return {"status": "fail", "text": s.get("reason") or st}
+
+
+def blocks_of(nodes, structured):
+    """Blocks in order, each with the arrow into it; and the move out of the last one."""
+    blocks, pending = [], None
+    work = [n for n in nodes if n["step"] not in ("reset", "close")]
+    for idx, n in enumerate(nodes):
+        if n["step"] in ("reset", "close"):
+            continue
+        sessions = n["sessions"] or [None]
+        for k, s in enumerate(sessions):
+            if k == 0:
+                arrow = pending
+            else:
+                prev_i = sessions[k - 1].get("_i", -1) if sessions[k - 1] else -1
+                inside = [m for m in n["moves"] if prev_i < m["_i"] < (s or {}).get("_i", 1 << 60)
+                          and m.get("to") in (n["step"], "") and m.get("cause") not in ("paused",)]
+                mv = inside[-1] if inside else {"cause": "retry", "detail": "another try"}
+                prev = sessions[k - 1] or {}
+                arrow = {"cause": mv["cause"], "detail": mv.get("detail") or "", "text": arrow_text(
+                    mv["cause"], mv.get("detail"), {"from_name": lane_name(prev.get("lane"), prev.get("family")),
+                                                    "to_model": nice_model((s or {}).get("model"))})}
+            last = k == len(sessions) - 1
+            res = session_result(s) if not last else None
+            if res is None:
+                out = n["outcome"]
+                if last and s and s.get("status") not in (None, "done") and n["step"] != "checks":
+                    res = session_result(s)
+                else:
+                    res = {"status": RESULT.get(out, "ok" if out else "info"), "text": n["detail"] if n["step"] in (
+                        "review", "checks") and n["detail"] else out}
+                    if n["step"] in ("plan", "replan"):
+                        res["text"] = out
+            t1 = (s or {}).get("t") if s and not last else n["t1"]
+            t0 = n["t0"] if k == 0 else (sessions[k - 1] or {}).get("t") or n["t0"]
+            secs = (s or {}).get("secs")
+            who = who_of(n, s)
+            if arrow and arrow.get("cause") == "lane_out" and k > 0:
+                who["fallback"] = "new thread: %s was out" % (arrow["text"].split(" out")[0])
+            blocks.append({
+                "node": n["id"], "k": k, "kind": n["step"], "label": label_of(n, k),
+                "stage": ("%d/%d" % (n["meta"]["stage"], n["meta"]["stages"])) if n["meta"].get("stages") else None,
+                "fix": n["meta"].get("fix"), "write": n["meta"].get("write"), "round": n["meta"].get("round"),
+                "t0": t0, "t1": t1, "secs": secs if secs is not None else (round(t1 - t0) if t0 and t1 else None),
+                "who": who, "tokens": (s or {}).get("tokens"), "result": res, "arrow": arrow,
+                "session": {"ref": (s or {}).get("ref") or None, "family": (s or {}).get("family") or "",
+                            "status": (s or {}).get("status") or "", "reason": (s or {}).get("reason") or "",
+                            "transcript": (s or {}).get("transcript") or ""} if n["step"] not in ("checks", "land") else None,
+            })
+        pending = exit_move(n, nodes[idx + 1] if idx + 1 < len(nodes) else None)
+    return blocks, pending, work
+
+
+def exit_move(n, nxt):
+    """The arrow out of node n: the last transition logged after its last session, else what the next node shows."""
+    last_s = max([s.get("_i", -1) for s in n["sessions"]] or [-1])
+    out = [m for m in n["moves"] if m["_i"] > last_s and not m.get("_inside")]
+    mv = out[-1] if out else (infer_move(n, nxt) if nxt else None)
+    if not mv:
+        return None
+    ctx = {"lane": lane_name(mv.get("lane") or "") or None,
+           "until": hhmm(mv["until"]) if isinstance(mv.get("until"), (int, float)) and mv.get("until") else None}
+    return {"cause": mv["cause"], "detail": mv.get("detail") or "", "to": mv.get("to") or "",
+            "text": arrow_text(mv["cause"], mv.get("detail"), ctx)}
+
+
+def nice_model(m):
+    if not m:
+        return ""
+    m = str(m)
+    for name in ("opus", "sonnet", "haiku", "fable"):
+        if m.lower().startswith(name):
+            rest = m[len(name):].strip("-_ ")
+            return name.capitalize() + ((" " + rest.replace("-", ".")) if rest else "")
+    return m
+
+
+# ---- why a run started -----------------------------------------------------------------------------------------------
+
+ORIGIN_NOTES = [
+    (re.compile(r"^ask (\S+) \(\w+\) is answered"), "answer"),
+    (re.compile(r"^the owner answered verify ask (\S+)"), "answer"),
+    (re.compile(r"^resuming (\S+) "), "resume"),
+    (re.compile(r"^resuming (\S+):"), "resume"),
+    (re.compile(r"^the bead changed since the checkpoint of (\S+):"), "resume"),
+    (re.compile(r"^the gate was red at land in (\S+):"), "resume"),
+    (re.compile(r"^the branch changed since the checkpoint of (\S+):"), "retry"),
+]
+
+
+def sibling_before(path):
+    """The bead's engine log before this one, by name (a name is the run's start second)."""
+    run = run_name(path)
+    bead = bead_of(run)
+    d = os.path.dirname(path)
+    try:
+        names = os.listdir(d)
+    except OSError:
+        return ""
+    older = [run_name(x) for x in names if x.endswith(".jsonl") and bead_of(run_name(x)) == bead and run_name(x) < run]
+    return max(older) if older else ""
+
+
+def legacy_origin(path, nodes):
+    because, prev, ask = "", "", ""
+    for n in nodes[:2]:
+        for ln in n["lines"]:
+            for rx, why in ORIGIN_NOTES:
+                m = rx.match(ln.get("text") or "")
+                if not m:
+                    continue
+                if why == "answer":
+                    because, ask = "answer", m.group(1)
+                else:
+                    prev = prev or m.group(1).rstrip(":")
+                    because = because or why
+    prev = prev or sibling_before(path)
+    return {"started_because": because or ("retry" if prev else "first"), "prev_run": prev, "ask": ask}
+
+
+def because_text(run, prev=None):
+    b = run.get("started_because")
+    pe = (prev or {}).get("end") or {}
+    if b == "first":
+        return "first run"
+    if b == "answer":
+        return "you answered" + (" ask %s" % run["ask"].rsplit("-", 1)[-1] if run.get("ask") else "")
+    if b == "fresh":
+        return "fresh start"
+    after = {"paused": "after pause" + ((": %s was out" % pe["lane"]) if pe.get("lane") else ""),
+             "stopped": "after a stop", "failed": "after a failure", "asks": "after the bead changed"}.get(
+        pe.get("outcome"), "")
+    if b == "resume":
+        return "resumed " + (after or "from the checkpoint")
+    return "retry" + ((" " + after) if after else "")
+
+
+# ---- a run, a block ----------------------------------------------------------------------------------------------------
+
+def run_end(nodes, pending, alive):
+    close = next((n for n in reversed(nodes) if n["step"] == "close"), None)
+    if not close:
+        t = nodes[-1]["t1"] if nodes else None
+        if alive:
+            return {"outcome": "running", "status": "run", "cause": "running", "text": "running", "t": t}
+        return {"outcome": "stopped", "status": "fail", "cause": "stopped", "t": t,
+                "text": "stopped: the run ended without a close record"}
+    outcome, why = close["rec"].get("outcome") or "", close["rec"].get("why") or ""
+    mv = pending or {}
+    to, cause = close_move(outcome, why)
+    cause = mv.get("cause") if mv.get("to") in ("ask", "pause", "close") else cause
+    end = {"t": close["t0"], "why": why[:600], "cause": cause}
+    if outcome in ("landed", "done"):
+        end.update(outcome=outcome, status="ok", text="%s %s" % (outcome, hhmm(close["t0"])))
+    elif why.startswith("paused:"):
+        lane, until = lane_of(why), until_of(why)
+        end.update(outcome="paused", status="wait", lane=lane, until=until, text=arrow_text("paused", why))
+    elif why.startswith("waiting:"):
+        end.update(outcome="waiting", status="ask", text=arrow_text("waiting"))
+    elif outcome == "blocked" and ask_kind(why):
+        end.update(outcome="asks", status="ask", text=arrow_text(cause if cause in (
+            "decision", "verify", "ticket", "stuck", "verify_open", "needs_human") else ask_kind(why)))
+    elif why.startswith("failed: stopped"):
+        end.update(outcome="stopped", status="fail", text="stopped")
+    else:
+        end.update(outcome="failed" if outcome == "failed" else "blocked", status="fail",
+                   text=arrow_text("failed", why.split("\n")[0]))
+    return end
+
+
+def run_timeline(path, alive=False, trace=None):
+    """One run of a bead: why it started, its blocks with the arrows between them, how it ended."""
+    recs = read(path)
+    nodes, run, structured = nodes_of(recs)
+    blocks, pending, _ = blocks_of(nodes, structured)
+    origin = ({k: run.get(k) or "" for k in ("started_because", "prev_run", "ask")} if run
+              else legacy_origin(path, nodes))
+    t0 = recs[0].get("t") if recs else None
+    t1 = recs[-1].get("t") if recs else None
+    tokens = {"in": 0, "cached": 0, "out": 0}
+    for b in blocks:
+        for k in tokens:
+            tokens[k] += int((b.get("tokens") or {}).get(k) or 0)
+    end = run_end(nodes, pending, alive)
+    if blocks and end["outcome"] in ("running", "stopped"):  # the step it was in when it stopped, or is in now
+        b = blocks[-1]
+        if not (b["session"] or {}).get("ref") or b["kind"] in ("checks", "land"):
+            b["result"] = {"status": end["status"], "text": end["outcome"]}
+    name = run_name(path)
+    return dict(origin, run=name, bead=bead_of(name), structured=structured, started=t0, ended=t1,
+                secs=round(t1 - t0) if t0 and t1 else None, blocks=blocks, end=end,
+                tokens=tokens, slot=(run or {}).get("slot") or "", worktree=(run or {}).get("worktree") or "")
+
+
+def last_node(path):
+    nodes, _, _ = nodes_of(read(path))
+    return nodes[-1] if nodes else None
+
+
+def live_label(n):
+    """What a running task is doing, from its last node."""
+    if not n:
+        return "starting"
+    step, m = n["step"], n["meta"]
+    stage = (" stage %d/%d" % (m["stage"], m["stages"])) if m.get("stages") and m["stages"] > 1 else ""
+    fix = "fix round %d \u00b7 " % m["fix"] if m.get("fix") else ""
+    if step == "write":
+        return fix + "writing" + stage + ((" (write %d)" % m["write"]) if (m.get("write") or 1) > 1 else "")
+    if step == "checks":
+        return fix + "checks" + stage
+    if step == "review":
+        return fix + "review" + stage
+    return {"reset": "starting", "plan": "planning", "replan": "re-planning", "verify": "checking before land",
+            "land": "landing", "close": "closing"}.get(step, step)
+
+
+def block_detail(path, node_id, k=0):
+    """One block: its session, the checks of its round, the engine lines of its step, the step's answer."""
+    recs = read(path)
+    nodes, _, structured = nodes_of(recs)
+    blocks, _, _ = blocks_of(nodes, structured)
+    try:
+        node_id, k = int(node_id), int(k or 0)
+    except (TypeError, ValueError):
+        return {"error": "no such block"}
+    blk = next((b for b in blocks if b["node"] == node_id and b["k"] == k), None)
+    idx = next((i for i, n in enumerate(nodes) if n["id"] == node_id), None)
+    if blk is None or idx is None:
+        return {"error": "no such block"}
+    n = nodes[idx]
+    judge = n if n["step"] == "checks" else None
+    if n["step"] == "write":  # a write shows the checks that judged it
+        for m in nodes[idx + 1:]:
+            if m["step"] == "checks":
+                judge = m
+                break
+            if m["step"] in ("write", "plan", "replan", "close"):
+                break
+    checks = checks_of(judge) if judge else []
+    last_checks = max([m["id"] for m in nodes if m["step"] == "checks"] or [0])
+    lines = [{"t": ln.get("t"), "kind": ln.get("kind"), "text": str(ln.get("text") or "")[:2000], "exit": ln.get("exit")}
+             for ln in n["lines"]][:400]
+    answer = next((m.get("data") for m in reversed(n["msgs"]) if m.get("data") is not None), None)
+    sess = next((s for i, s in enumerate(n["sessions"]) if i == k), None) or {}
+    return {"block": blk, "session": {key: sess.get(key) for key in (
+        "ref", "family", "model", "effort", "lane", "status", "reason", "transcript", "tokens", "secs", "resume",
+        "flag", "attempt")} if sess else None, "checks": checks, "checks_node": judge["id"] if judge else None,
+        "checks_last": bool(judge and judge["id"] == last_checks), "lines": lines, "answer": answer,
+        "structured": structured, "node_text": n["text"]}
+
+
+def checks_of(n):
+    pairs = check_pairs(n["lines"])
+    rec = n.get("checks")
+    if not rec:
+        return [{"id": cmd, "cmd": cmd, "exit": ex, "status": "ran" if ex == 0 else "failed" if ex else "?",
+                 "secs": round(secs) if isinstance(secs, (int, float)) else None, "tries": 1, "tail": tail, "log": ""}
+                for cmd, ex, tail, secs in pairs]
+    out, used = [], set()
+    for it in rec.get("items") or []:
+        tail = ""
+        for j, p in enumerate(pairs):
+            if j not in used and it.get("exit") is not None and p[1] == it.get("exit") and (
+                    p[0] == it.get("cmd") or p[0].endswith(str(it.get("cmd"))[-40:])):
+                used.add(j)
+                tail = p[2]
+                break
+        out.append(dict(it, tail=tail))
+    return out
