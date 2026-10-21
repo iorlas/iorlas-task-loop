@@ -41,6 +41,8 @@ DEFAULTS = {
     "max_check_tries": 3,             # red checks in a row that end a round (checks never reach the reviewer red)
     "max_replans": 1,                 # per bead, across runs; a changed bead (an owner's answer) never counts
     "max_fix_rounds": 2,
+    "pick_label": "",                 # the label an unattended runner picks by (lifesim: auto); a decision or ticket ask removes it
+    "needs_info_label": "needs-info", # and adds this one, so the bead leaves the queue until the owner relabels it
     "max_stages": 3,                  # a bigger plan is a split ask (ticket), unless the owner already answered one              # per bead: a red gate or a conflict at land gets this many fix rounds
     "node_timeout_min": 45,
     "delegate": "",                   # path to delegate's route.py; "" = the newest installed iorlas-delegate
@@ -615,7 +617,8 @@ class Engine:
         text = brief_digest(bead, comments)
         (self.run_dir / "brief.md").write_text(text, encoding="utf-8")
         # the hash is what tells a rerun the owner changed something: the engine's own close line and labels are not that
-        self.brief_hash = hashlib.sha1(brief_digest(bead, comments, owner_only=True).encode("utf-8")).hexdigest()
+        ours = [x for x in (self.cfg.get("pick_label"), self.cfg.get("needs_info_label")) if x]
+        self.brief_hash = hashlib.sha1(brief_digest(bead, comments, owner_only=True, ignore=ours).encode("utf-8")).hexdigest()
         kb = len(text.encode("utf-8")) / 1024
         if kb > float(self.cfg["brief_kb"]):
             self.warn("the brief is %.0f KB (over %s KB): the bead may be too big for one task" % (kb, self.cfg["brief_kb"]))
@@ -816,9 +819,23 @@ class Engine:
                  title=(getattr(self, "bead_title", "") or "")[:200])
         self.ask_path().parent.mkdir(exist_ok=True)
         self.ask_path().write_text(json.dumps(a, indent=1))
-        self.comment("Ask (engine) %s (%s): %s" % (a["id"], kind, a["question"][:1500]))
+        moved = self.leave_queue() if kind in ("decision", "ticket") else ""
+        self.comment("Ask (engine) %s (%s): %s%s" % (a["id"], kind, a["question"][:1500], moved))
         self.notify(a)
         return a
+
+    def leave_queue(self):
+        """A decision or ticket ask means the bead lacks what it needs to be done unattended: drop the pick label so no
+        runner takes it again, add needs-info. Answering does not put it back; the owner relabels it (an answer can
+        split the bead). Verify and stuck asks keep it: the work is there, a fact or a hint is missing."""
+        pick, info = self.cfg.get("pick_label") or "", self.cfg.get("needs_info_label") or ""
+        if not pick or self.dry or pick not in ((tl.show(self.bead) or {}).get("labels") or []):
+            return ""
+        tl.bd("label", "remove", self.bead, pick)
+        if info:
+            tl.bd("label", "add", self.bead, info)
+        return "\n(Out of the %s queue: label %s removed%s; relabel it %s once it can be done unattended.)" % (
+            pick, pick, ", %s added" % info if info else "", pick)
 
     def notify(self, a):
         """The owner's push: ~/.config/task-loop/notify holds one shell command (ntfy, Pushover, a Telegram bot...);
@@ -1402,12 +1419,12 @@ def ask_kind(why):
 ENGINE_LABELS = ("needs-owner-check",)
 
 
-def brief_digest(bead, comments, owner_only=False):
+def brief_digest(bead, comments, owner_only=False, ignore=()):
     """Markdown brief: title, the bead's text fields whole, related beads by title, people's comments whole, and one
     line on how the last engine run ended. owner_only leaves out what the engine writes itself (that line, its
     labels): the checkpoint compares that text, so an engine run never looks like the owner's edit."""
     out = ["# %s: %s" % (bead.get("id", ""), bead.get("title", ""))]
-    labels = [x for x in bead.get("labels") or [] if not (owner_only and x in ENGINE_LABELS)]
+    labels = [x for x in bead.get("labels") or [] if not (owner_only and (x in ENGINE_LABELS or x in ignore))]
     meta = [bead.get("issue_type"), "P%s" % bead["priority"] if bead.get("priority") is not None else "",
             ", ".join(labels)]
     if any(meta):

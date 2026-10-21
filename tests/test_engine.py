@@ -950,6 +950,36 @@ class EngineTest(unittest.TestCase):
         self.assertEqual((a["kind"], a["status"], a["question"]), ("decision", "open", "Old format or new?"))
         self.assertTrue(any(c[:2] == ("comments", "add") and "%s (decision)" % a["id"] in c[3] for c in self.bd_calls))
 
+    # Denis 2026-10-21 (lifesim-s28t): a bead that lacks the information to do it leaves the unattended queue
+    def test_a_decision_ask_takes_the_bead_out_of_the_pick_queue(self):
+        with mock.patch.object(tl, "show", return_value=dict(BEAD, labels=["auto", "lane:sim"])):
+            rc, _ = self.run_engine({"plan": [dict(PLAN, question="Build dreams now or park?")]}, pick_label="auto")
+        self.assertEqual(rc, 2)
+        self.assertIn(("label", "remove", "t-1", "auto"), self.bd_calls)
+        self.assertIn(("label", "add", "t-1", "needs-info"), self.bd_calls)
+        ask_comment = next(c[3] for c in self.bd_calls if c[:2] == ("comments", "add") and "Ask (engine)" in c[3])
+        self.assertIn("needs-info", ask_comment)
+
+    def test_a_verify_ask_keeps_the_bead_in_the_pick_queue(self):
+        r = dict(CLEAN, unchecked=[{"what": "the cited spec link did not open", "kind": "link"}])
+        with mock.patch.object(tl, "show", return_value=dict(BEAD, labels=["auto"])):
+            rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r]}, pick_label="auto")
+        self.assertEqual(self.ask()["kind"], "verify")
+        self.assertFalse(any(c[:2] == ("label", "remove") for c in self.bd_calls))
+
+    def test_the_label_swap_does_not_answer_the_ask(self):
+        with mock.patch.object(tl, "show", return_value=dict(BEAD, labels=["auto"])):
+            self.run_engine({"plan": [dict(PLAN, question="Build dreams now or park?")]}, pick_label="auto")
+        with mock.patch.object(tl, "show", return_value=dict(BEAD, labels=["needs-info"])):
+            rc, s = self.run_engine({}, pick_label="auto")
+        self.assertEqual(s.calls, [])
+        self.assertEqual(self.ask()["status"], "open")
+
+    def test_no_pick_label_configured_touches_no_labels(self):
+        with mock.patch.object(tl, "show", return_value=dict(BEAD, labels=["auto"])):
+            self.run_engine({"plan": [dict(PLAN, question="Build dreams now or park?")]})
+        self.assertFalse(any(c[:1] == ("label",) for c in self.bd_calls))
+
     def test_an_ask_names_its_repo_and_runs_the_owners_notify_command(self):
         out = Path(self.tmp.name, "pushed")
         (tl.config_dir()).mkdir(parents=True, exist_ok=True)
