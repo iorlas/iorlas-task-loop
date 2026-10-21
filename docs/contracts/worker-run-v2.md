@@ -65,7 +65,7 @@ delegate prepends its own rules for those, per lane.
 
 | `next` | reasons | engine |
 |---|---|---|
-| `retry` | lane_out, busy, duplicate_task, lock, vendor_prework, network, no_lane | wait in the slot until `retry_after`, up to `engine.lane_wait_min`; longer, pause (bead open, slot freed, checkpoint resumes it) |
+| `retry` | lane_out, busy, duplicate_task, lock, vendor_prework, network, no_lane | wait in the slot until `retry_after`, up to `engine.lane_wait_min`; longer, pause (bead open, slot freed, checkpoint resumes it). Except `lane_out` on a `--resume` call: at once, once, the same call without `--resume` (a new thread gets the role's next rung; the brief says to continue the earlier writer's work in the tree); its thread and `family` become the writer's. A retry from that call waits as above |
 | `owner` | logged_out, setup, secrets, bad_request, crash | `logged_out`, `setup`: pause with the fix ("run claude auth login"), no ask. `secrets`, `bad_request`, `crash`: block with a verify ask naming `say` |
 | `fail` | caller, timeout, worker_failed, schema_invalid | one more try: without `--resume` when the call resumed a thread (a refused resume is `caller`), else the same call once more; a second `fail` fails the task |
 

@@ -69,6 +69,9 @@ UNCHECKED_TEXT = ("\nunchecked: what you could not check yourself, each with its
                   "tools or build files the plan did not name), or other. Empty when you checked everything.")
 
 LATER_CASES = ("\nAn acceptance case this stage cannot run is not unchecked: it is checked when the last stage runs it.")
+FRESH_WRITER_TEXT = ("\nYou take over from an earlier writer of this task whose model is out for now. Its work is in this "
+                     "tree, committed on this branch or not: read `git status` and the diff from main first, then go on "
+                     "from there; do not start over.")
 
 SCHEMAS = {
     "plan": {"type": "object", "additionalProperties": False,
@@ -391,6 +394,12 @@ class Engine:
                 nxt = None
             elif not j:
                 nxt, reason = "fail", "no_answer"  # route.py crashed, printed nothing, or the node timeout killed it
+            if nxt == "retry" and reason == "lane_out" and resume:
+                # delegate never moves a resumed thread to another lane; a new thread gets the role's next rung at once
+                self.log("note", "%s: the resumed writer's lane is out (%s); going on at once as a new thread"
+                         % (node, said[:160]))
+                resume, attempt_prompt = None, attempt_prompt + FRESH_WRITER_TEXT
+                continue
             if nxt == "retry":  # worker-run v2: delegate says when; how long a slot waits is this engine's policy
                 due = float(j.get("retry_after") or 0)
                 wait = max(60.0, due - time.time())

@@ -1502,6 +1502,40 @@ class DelegateLauncher(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual([c[0] for c in s.calls].count("worker"), 2)
 
+    # lifesim-d5f.58 2026-10-21: a resumed Codex writer answered lane_out for an hour and the bead paused; delegate never
+    # switches lanes on a resume, but a fresh call gets the role's next rung (Sonnet on the claude lane) at once
+    OUT_LONG = ans("lane_out", "lane_out", "retry", retry_after=time.time() + 3600, say="cannot continue t now")
+    FRESH = {"v": 2, "status": "done", "reason": None, "next": None, "data": WRITE, "ref": "w2", "cost": 0.5, "secs": 1,
+             "family": "claude", "lane": "C", "model": "sonnet", "effort": "e", "git_violation": [],
+             "tokens": {"in": 1000, "cached": 800, "out": 50}, "context": {"instructions": [], "env_keys": []}}
+
+    def test_a_resumed_write_whose_lane_is_out_goes_on_at_once_as_a_new_thread(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_LONG, self.FRESH, self.FRESH],
+                                 "review": [review(unmet=["more"]), review(unmet=["more"]), CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)  # no wait: the lane is out for an hour, past lane_wait_min
+        workers = [(c, p) for c, p in zip(s.calls, s.prompts) if c[0] == "worker"]
+        self.assertEqual([c[1] for c, _ in workers], [None, "ref-write", None, "w2"])  # later rounds resume the new one
+        self.assertEqual([c[2] for c in s.calls if c[0] == "reviewer"], ["openai", "claude", "claude"])
+        self.assertNotIn(engine.FRESH_WRITER_TEXT, workers[1][1])
+        self.assertIn(engine.FRESH_WRITER_TEXT, workers[2][1])
+        self.assertNotIn(engine.FRESH_WRITER_TEXT, workers[3][1])
+        self.assertIn("lane_out", self.eng.log_path.read_text())
+
+    def test_a_new_thread_whose_lane_is_out_too_follows_the_wait_policy(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_LONG, self.OUT_LONG],
+                                 "review": [review(unmet=["more"])]})
+        self.assertEqual(rc, 2)
+        self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, "ref-write", None])
+        self.assertEqual(self.blocked, [])
+        self.assertTrue(any(c[:1] == ("update",) and "open" in c and any("paused: no lane for write until" in x for x in c)
+                            for c in self.bd_calls))
+
+    def test_a_resumed_write_told_busy_waits_and_resumes_the_same_thread(self):
+        busy = ans("stop", "busy", "retry", retry_after=0, say="state lock held")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, busy, WRITE], "review": [review(unmet=["more"]), CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, "ref-write", "ref-write"])
+
     def test_the_writer_brief_has_no_sandbox_or_git_text(self):
         # delegate 0.29 owns what the worker is told about its sandbox, escalation and git (worker-run v2)
         for host in (False, True):
