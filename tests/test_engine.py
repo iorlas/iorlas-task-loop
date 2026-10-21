@@ -1540,6 +1540,16 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertIn("ruff", self.ask()["question"])
 
+    def test_a_backticked_name_in_the_code_is_no_tool(self):
+        self.assertEqual(engine.tools_named("`UseCellBeside` handles a rotated slot; `justfile` has the recipe"), [])
+        self.assertEqual(engine.tools_named("nobody ran `shellcheck -x hooks/*.sh` or ruff"), ["shellcheck", "ruff"])
+        item = {"what": "`UseCellBeside` handles a rotated slot", "kind": "requirement"}
+        with mock.patch.object(engine, "tool_on_path", side_effect=self.no_ruff):
+            rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, unchecked=[item])],
+                                     "verify": [STILL_OPEN]})
+        self.assertEqual(rc, 2)
+        self.assertIn("UseCellBeside", self.ask()["question"])
+
     def test_only_the_unused_tool_item_is_dropped_the_rest_go_to_the_verifier(self):
         with mock.patch.object(engine, "tool_on_path", side_effect=self.no_ruff):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE],

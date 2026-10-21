@@ -89,12 +89,13 @@ TOOL_FILES = ("justfile", "Justfile", ".justfile", "Makefile", "makefile", ".tas
 
 
 def tools_named(what):
-    """The tools an unchecked item names: a known linter or formatter, or the first word of a backticked command."""
+    """The tools an unchecked item names: a known linter or formatter, or the first word of a backticked command with
+    arguments (`ruff check tools`); a single backticked word (`UseCellBeside`) is a name in the code, no command."""
     found = [w for w in re.findall(r"[a-z][a-z0-9+-]*", what.lower()) if w in KNOWN_TOOLS]
     for cmd in re.findall(r"`([^`]+)`", what):
-        w = cmd.split()[0] if cmd.split() else ""
-        if re.fullmatch(r"[A-Za-z][\w+-]*", w):
-            found.append(w)
+        words = cmd.split()
+        if len(words) > 1 and re.fullmatch(r"[a-z][a-z0-9+-]*", words[0]):
+            found.append(words[0])
     return list(dict.fromkeys(found))
 
 
