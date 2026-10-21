@@ -33,6 +33,26 @@ M2 blocks M3 and M4. Passing M2 is what "runs reliably" means.
   reviews it while the next bead runs. Engine fixes still go tests first.
 - **A Claude session is still needed until M4** to feed delegate the Claude usage windows (`tl.py usage`, tl-bxk.2).
 
+## Safe by construction
+
+Rule (owner, 2026-10-21): every shared thing is taken through a lock or lease in code, and a second taker waits in
+line; a message between sessions is never the guard. Clashes may happen; they must resolve themselves.
+
+| shared thing | guard | a second taker | gap |
+|---|---|---|---|
+| a bead | atomic `bd --claim` | the loop takes the next bead | |
+| a slot | slot bead + `<worktree>/.task/engine.lock` (pids with start times) + `tl slot hold` | the loop waits; a hand run refuses | fair queue for waiters, tl-bxk.11.5 |
+| the base branch | land lock, rebase, retry | waits | |
+| Unity on the machine | the repo's OS counting locks (lifesim `tools/unity_slot.py`) | waits | |
+| a model lane | delegate's leases; busy answers `retry` | waits until `retry_after` | |
+| files two beads both edit | none: conflicts show at land as a rebase or fix round | | areas, tl-bxk.11.4 |
+| the repo's `.task-loop.json` | read from the main checkout's working tree | | read from the base branch, tl-bxk.10.7 |
+| an engine release | none: kept apart by messages | | release lock, tl-bxk.10.8 |
+| a stopped engine's worker | engine SIGTERMs route.py, which kills the worker's group; SIGKILL after a grace | | |
+
+All of it is proven together by one race test (tl-bxk.11.1): two loops, a hand run, a slot hold and a release at
+once.
+
 ## Not on the roadmap
 
 tl-sq8 (blueprint), tl-bl5 (improve from reflections), tl-4af (dashboard across machines), tl-65w (old transcript
