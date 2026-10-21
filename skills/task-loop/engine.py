@@ -45,6 +45,7 @@ DEFAULTS = {
     "gate_only": [],                  # commands no plan check may run, only the gate at land: "cmd" or {cmd, why}
     "max_stages": 3,                  # a bigger plan is a split ask (ticket), unless the owner already answered one
     "node_timeout_min": 45,
+    "writer_check_max_s": 60,         # a check whose last run took longer is the engine's, never the writer's to run
     "delegate": "",                   # path to delegate's route.py; "" = the newest installed iorlas-delegate
     "lane_wait_min": 10,              # how long a step waits in its slot for a lane; longer: the run pauses (slot freed)
     "checks": [],                     # repo checks: [{id, cmd, group: static|tests|acceptance, when: [globs], retry}]
@@ -626,6 +627,7 @@ class Engine:
                                       # as a new thread after a lane_out the engine saw
         self.fallback_lane = ""  # that writer's first-choice lane, when known: delegate's first_lane, or the lane seen out
         self.verified = []  # the verifier's answer per unchecked item at land: in the trace and on the bead
+        self.write_rounds = []  # per write round: resumed, input tokens, turns (the next measure of a fix round's cost)
         self.sessions = []  # every AI call of this run: the trace a later reflection reads (traces.jsonl)
         self.outcome, self.why, self.asked = "failed", "", False  # what result() tells the loop
         self.retry_after = 0.0  # a pause for a lane: when delegate says it is back (epoch; 0 = unknown)
@@ -724,7 +726,7 @@ class Engine:
         rec = {"node": node, "role": role, "attempt": attempt, "status": j.get("status") or r.error or "none",
                "ref": j.get("ref") or r.ref or "", "run_id": j.get("run_id") or "", "transcript": j.get("transcript") or "",
                "family": j.get("family") or "", "lane": j.get("lane") or "", "model": j.get("model") or "",
-               "effort": j.get("effort") or "", "secs": round(r.secs or 0), "cost": r.cost or 0.0, "t": time.time(),
+               "effort": j.get("effort") or "", "turns": j.get("turns"), "secs": round(r.secs or 0), "cost": r.cost or 0.0, "t": time.time(),
                "host": host, "tokens": j.get("tokens"), "denied": j.get("denied") or [],  # tokens {in, cached, out}
                "reason": j.get("reason"), "next": j.get("next"), "context": j.get("context"),
                "node_id": (self.cur or {}).get("id"), "resume": bool(getattr(self, "_resume", None)), "flag": j.get("flag")}
@@ -743,7 +745,7 @@ class Engine:
                "started": self.t0, "ended": time.time(), "outcome": outcome, "why": (why or "")[:500], "sha": sha or "",
                "cost": self.cost, "stats": self.stats, "host": self.host, "delegate": self.route or "", "log": str(self.log_path),
                "stderr": str(self.err_path), "lanes": (self.contract or {}).get("lanes"), "sessions": self.sessions,
-               "verified": self.verified}
+               "verified": self.verified, "write_rounds": self.write_rounds}
         rec.update(self.origin())
         try:
             with open(tl.config_dir() / "traces.jsonl", "a", encoding="utf-8") as f:
@@ -1599,6 +1601,7 @@ class Engine:
         fix = state.get("fix")
         name = state.get("name") or "stage %d/%d" % (i + 1, len(plan["stages"]))
         feedback, rounds, red, n = state.get("feedback", ""), state.get("rounds", 0), 0, state.get("n", 0)
+        failed_cmds = state.get("failed")  # the commands the last engine run found red (None: no check ran red yet)
         where = ({"fix": state.get("fix_n"), "fixes": state.get("fix_of")} if fix else
                  {"stage": i + 1, "stages": len(plan["stages"])})
         while True:
@@ -1611,13 +1614,17 @@ class Engine:
             w, wfam = self.ai("write", "%s write %d" % (name, n), WRITE_PROMPT.format(
                 brief=self.brief_text(), plan=self.plan_text(), n=i + 1, goal=st["goal"],
                 files=", ".join(st["files"]), checks="\n".join("- " + c for c in st["checks"]) or "- (none named)",
-                feedback=feedback, evidence=self.evidence_dir, where=self.where("write"), gate=(" (`%s`)" % self.cfg["gate"]) if self.cfg["gate"] else "",
+                feedback=feedback, evidence=self.evidence_dir, where=self.where("write", [c["cmd"] for c in self.cfg["checks"]] + st["checks"], failed_cmds), gate=(" (`%s`)" % self.cfg["gate"]) if self.cfg["gate"] else "",
                 rules=("\nRead %s first: this repo's rules for work in your sandbox (what runs there, what does not)."
                        % (Path(self.wt) / self.cfg["worker_rules"])) if self.cfg["worker_rules"] else "") +
                 "\nThe plan's acceptance cases run on the last stage. If you find a case they miss, add it to new_cases (the "
                 "criterion it proves, the check, why); never remove or weaken one." + ("" if last else LATER_CASES) +
                 UNCHECKED_TEXT, resume_key="writer", write=n, round=rounds + 1, **where)
             self.writer_family = wfam
+            wr = self.sessions[-1] if self.sessions else {}
+            self.write_rounds.append({"write": n, "round": rounds + 1, "node_id": wr.get("node_id"), "ref": wr.get("ref"),
+                                      "resumed": "yes" if wr.get("resume") else "no",
+                                      "input_tokens": (wr.get("tokens") or {}).get("in"), "turns": wr.get("turns")})
             wrote_unchecked = w.get("unchecked") or []  # the review decides what is still unproven after the checks
             if w["question"].strip() and w["decided"].strip():  # lifesim-d5f.58: an accepted requirement is no question
                 rounds += 1
@@ -1655,8 +1662,9 @@ class Engine:
                 return "replan"
             if failed:
                 red += 1
+                failed_cmds = [c["cmd"] for c in failed]
                 feedback = ("\nThese checks fail (run by the engine, outside your sandbox). Fix exactly this:\n%s\n"
-                            % compact(failed))
+                            % failure_brief(failed, self.run_dir))
                 red_text = "%d failed: %s" % (len(failed), ", ".join(c["id"][:60] for c in failed))
                 if red < int(self.cfg["max_check_tries"]):
                     self.transition("write", "checks_red", red_text)
@@ -1726,17 +1734,63 @@ class Engine:
                 (self.run_dir / "replan.md").write_text(self.stuck_why)
                 self.transition("replan", "rounds_used", "review sent it back: %s; %d rounds used" % (said, rounds))
                 return "replan"
+            failed_cmds = None
             self.transition("write", "review_sendback", "%s: round %d" % (said, rounds + 1))
             feedback = ("\nThe reviewer sent the stage back. Fix exactly this:\n%s%s\n" % (
                 "".join("- unmet: %s\n" % u for u in review["unmet"]),
                 "".join("- %s:%s [%s] %s\n" % (f["file"], f["line"], f["severity"], f["fix"]) for f in blocking)))
 
-    def where(self, node):
-        """What the step is for, never what its sandbox allows: delegate tells each worker that (worker-run v2)."""
+    def check_secs(self):
+        """{cmd: seconds of its last run}, from the checks records of this bead's run logs (this run and earlier ones)."""
+        secs = {}
+        logs = sorted(self.log_path.parent.glob("%s-*.jsonl" % self.bead))
+        for path in logs:
+            try:
+                lines = path.read_text(encoding="utf-8").splitlines()
+            except OSError:
+                continue
+            for ln in lines:
+                if '"kind": "checks"' not in ln:
+                    continue
+                try:
+                    items = json.loads(ln).get("items") or []
+                except ValueError:
+                    continue
+                for c in items:
+                    if c.get("secs") is not None and not c.get("cached") and c.get("cmd"):
+                        secs[c["cmd"]] = c["secs"]
+        return secs
+
+    def engine_only(self, cmd, secs):
+        """A check the writer must not run: its last run took over engine.writer_check_max_s, or it never ran and
+        looks like a Unity, play or full test run."""
+        s = secs.get(cmd)
+        if cmd == self.cfg.get("gate"):
+            return True
+        return s > float(self.cfg["writer_check_max_s"]) if s is not None else bool(SLOW_CMD.search(cmd))
+
+    def where(self, node, checks=(), failed=None):
+        """What the step is for, never what its sandbox allows: delegate tells each worker that (worker-run v2).
+        For the writer: which checks it may run (fast ones) and which are the engine's (slow ones)."""
         if node == "write":
-            return ("Before you say it is done, run the stage's checks you can (the build, the tests the stage names), so "
-                    "an error never reaches the engine; the engine reruns every check after you. If a command is "
-                    "refused, do not reword it to get around the refusal: say which command and why you needed it.")
+            secs = self.check_secs()
+            pool = list(dict.fromkeys(checks)) if failed is None else list(dict.fromkeys(failed))
+            slow = [c for c in pool if self.engine_only(c, secs)]
+            fast = [c for c in pool if c not in slow]
+            if failed is None:
+                text = ("Before you say it is done, run the stage's fast checks so an error never reaches the engine; the "
+                        "engine reruns every check after you.")
+            else:
+                text = "Only the failed checks that are fast are yours to rerun; the engine reruns every check after you."
+            if slow:
+                text += ("\nThe engine runs these after you; do not run them:\n" if failed is None else
+                         "\nThese failed checks are slow: the engine re-runs them; fix from the output above, do not run them:\n"
+                         ) + "".join("- %s\n" % c for c in slow).rstrip("\n")
+            if fast:
+                text += "\nYou may run these:\n" + "\n".join("- %s" % c for c in fast)
+            return (text + "\nIf a command is refused, do not reword it to get around the refusal: say which command and "
+                    "why you needed it.\nNever start a command you expect to take over a minute; never poll a running "
+                    "command more than 3 times.")
         return "You may run commands to check facts (read files, run a linter or a test); never edit, create or delete files."
 
     def tree_hash(self):
@@ -1876,7 +1930,8 @@ class Engine:
                     problem = ("conflict", "Conflicted files: %s\n%s" % (", ".join(unmerged.split()), tail))
                     self.outcome_of("conflict", ", ".join(unmerged.split()))
                 elif self.cfg["gate"]:
-                    rc, tail = self.sh(self.cfg["gate"])
+                    self.gate_log = self.run_dir / ("gate.r%d.log" % (self.fixes + 1))
+                    rc, tail = self.sh(self.cfg["gate"], save=self.gate_log)
                     if rc:
                         problem = ("gate", tail)
                         self.outcome_of("gate red", (tail.strip().splitlines() or [""])[-1])
@@ -1942,10 +1997,13 @@ class Engine:
         st = {"goal": "Fix: " + goal, "files": [], "checks": checks, "hard": False}
         d = self.stage({"stages": [st]}, 0, {
             "fix": True, "name": "fix %d/%d" % (self.fixes, limit), "fix_n": self.fixes, "fix_of": limit,
+            "failed": [self.cfg["gate"] or "rebase"] if kind == "gate" else None,
             "feedback": text % tail if kind == "verify" else text % (
                 (" (`%s`)" % self.cfg["gate"]) if kind == "gate" and self.cfg["gate"] else "",
-                compact([{"cmd": self.cfg["gate"] or "rebase", "exit": 1, "status": "failed", "group": "gate",
-                          "tail": tail[-4000:]}])),
+                failure_brief([{"cmd": self.cfg["gate"] or "rebase", "exit": 1, "status": "failed", "group": "gate",
+                                "tail": tail[-4000:], "log": str(getattr(self, "gate_log", "") or "")}], self.run_dir)
+                if kind == "gate" else compact([{"cmd": "rebase", "exit": 1, "status": "failed", "group": "gate",
+                                                 "tail": tail[-4000:]}])),
             "scope": "the fix only: it must %s without breaking what the accepted stages built" % goal})
         if kind == "conflict":
             if self.sh(self.MARKERS, pin=True)[0]:
@@ -2338,6 +2396,35 @@ def compact(checks):
         else:
             body = " | ".join(([ln for ln in lines[:-1] if NOTABLE.search(ln)][-3:] + lines[-1:]))[-300:]
         out.append("- `%s` exit %d%s" % (c["cmd"], c["exit"], (": " + body) if body else ""))
+    return "\n".join(out) or "- (no checks)"
+
+
+SLOW_CMD = re.compile(r"(?i)(?<![a-z])(unity|play|test[-_]all)")
+ERR_LINE = re.compile(r"(?i:error|fail|exception|assert)|: E")
+
+
+def failure_brief(checks, run_dir, each=6000, total=12000, lines=40):
+    """The failing checks for a fix brief: command, log path, then the error lines of the saved log (deduplicated, up to
+    `lines`, newline layout kept), else its last `lines` lines. `each` bytes per check, `total` for all."""
+    out, left = [], total
+    for c in checks:
+        log = Path(run_dir, c["log"]) if c.get("log") else None
+        try:
+            text = log.read_text(encoding="utf-8", errors="replace") if log else c.get("tail") or ""
+        except OSError:
+            text = c.get("tail") or ""
+        rows = [ln.rstrip() for ln in text.splitlines() if ln.strip()]
+        hits = list(dict.fromkeys(ln for ln in rows if ERR_LINE.search(ln)))[:lines]
+        body = "\n".join(hits or rows[-lines:])
+        head = "- `%s` exit %s\n  log: %s" % (c["cmd"], c.get("exit"), log or "(none saved)")
+        room = min(each, left)
+        if room <= 0:
+            out.append(head + "\n  (output left out: see the log)")
+            continue
+        if len(body) > room:
+            body = body[:room] + "\n... (cut: see the log)"
+        left -= len(body)
+        out.append(head + ("\n" + body if body else ""))
     return "\n".join(out) or "- (no checks)"
 
 

@@ -1178,6 +1178,64 @@ class EngineTest(unittest.TestCase):
         subjects = tl.git("log", "--format=%s", "origin/main", cwd=str(self.wt)).splitlines()
         self.assertEqual(sum("(t-1)" in x for x in subjects), 1)
 
+    ERRORS = PY + ' -c "import sys; [print(\'src/F.cs(%d,1): error CS%04d: analyzer says no\' % (i % 18, i % 18)) for i in range(36)]; ' \
+                 'print(\'Build FAILED\'); sys.exit(1 if open(\'f.txt\').read().strip() == \'d2\' else 0)"'
+
+    def plan_with(self, *checks):
+        return dict(PLAN, stages=[dict(PLAN["stages"][0], checks=list(checks))])
+
+    def test_a_fix_brief_carries_every_error_line_and_the_log_path_not_a_400_char_cut(self):
+        rc, s = self.run_engine({"plan": [self.plan_with(self.ERRORS)], "write": [WRITE, WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        fix = s.prompts[2]
+        for i in range(18):
+            self.assertEqual(fix.count("src/F.cs(%d,1): error CS%04d: analyzer says no" % (i, i)), 1, i)
+        self.assertIn("Build FAILED", fix)
+        self.assertRegex(fix, r"log: \S+checks/00-.*\.r1\.log")
+        self.assertGreater(len(fix[fix.index("These checks fail"):]), 500)
+
+    def test_a_slow_check_is_the_engines_and_a_fast_failed_check_is_the_writers_to_rerun(self):
+        slow = PY + ' -c "pass" unity-tests'
+        fast = PY + ' -c "import sys; sys.exit(1 if open(\'f.txt\').read().strip() == \'d2\' else 0)" fast-one'
+        rc, s = self.run_engine({"plan": [self.plan_with(slow, fast)], "write": [WRITE, WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        first, again = s.prompts[1], s.prompts[2]
+        self.assertIn("The engine runs these after you; do not run them:\n- " + slow, first)
+        self.assertIn("You may run these:\n- " + fast, first)
+        self.assertIn("never start a command you expect to take over a minute; never poll a running command more than 3 times",
+                      first.replace("Never", "never"))
+        you_may = again[again.index("Only the failed checks"):]
+        self.assertIn("You may run these:\n- " + fast, you_may)
+        self.assertNotIn("- " + slow, you_may.split("You may run these:")[1].split("If a command")[0])
+        self.assertNotIn("do not run them:\n- " + slow, again)
+
+    def test_a_check_is_engine_only_by_its_last_duration_else_by_its_name(self):
+        e = mock.Mock(cfg={"writer_check_max_s": 60})
+        only = lambda cmd, secs: engine.Engine.engine_only(e, cmd, secs)
+        self.assertTrue(only("just lint", {"just lint": 61}))
+        self.assertFalse(only("just unity-tests", {"just unity-tests": 60}))
+        self.assertTrue(only("just play-tests", {}))
+        self.assertTrue(only("just test-all", {}))
+        self.assertFalse(only("just display", {}))
+
+    def test_a_gate_fix_brief_has_the_gate_error_lines_its_log_and_the_engine_reruns_the_gate(self):
+        gate = PY + (' -c "import sys; t=open(\'f.txt\').read().strip(); '
+                     '[print(\'error E%03d: gate no\' % i) for i in range(18) if t == \'d2\']; '
+                     'sys.exit(1 if t == \'d2\' else 0)"')
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]}, gate=gate)
+        self.assertEqual(rc, 0, self.blocked)
+        fix = s.prompts[3]
+        for i in range(18):
+            self.assertIn("error E%03d: gate no" % i, fix)
+        self.assertRegex(fix, r"log: \S+gate\.r1\.log")
+        self.assertIn("the engine re-runs them; fix from the output above", fix)
+
+    def test_a_write_round_leaves_its_resume_and_tokens_in_the_trace(self):
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0)
+        r = json.loads((tl.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
+        self.assertEqual([(w["write"], w["resumed"], w["input_tokens"]) for w in r["write_rounds"]], [(1, "no", 1000)])
+
     def test_fix_rounds_are_limited_then_the_bead_is_stuck(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE] * 3, "review": [CLEAN] * 3}, gate=FALSE)
         self.assertEqual(rc, 2)
