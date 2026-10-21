@@ -292,7 +292,8 @@ container); the session that starts it only watches it.
   (fields `ts bead slot outcome minutes rounds tests_added asked trace engine_log run_log why`); each run's own output
   is beside it, one file per run. `tl next` prints what the loop would take next and why, claiming nothing.
 - **Stop:** `tl stop` ends every loop on the repo after its current bead (a loop started after the stop does not
-  read it). `tl stop --now` sends SIGTERM to the running bead (the
+  read it). Slots off: each loop start reuses its session's worktree (`.worktrees/loop-<session>`); a second loop of
+  the session at the same time gets its own. `tl stop --now` sends SIGTERM to the running bead (the
   engine's close step still runs, then the loop puts the bead back in the queue unclaimed and releases the slot).
   A stop during the push waits for it: a push that went through closes the bead landed, and the loop never reopens a
   bead whose land commit is on the base. Ctrl-C or SIGTERM to the loop itself is `--now`.

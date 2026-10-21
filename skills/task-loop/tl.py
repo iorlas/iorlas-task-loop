@@ -898,8 +898,8 @@ def cmd_worktree(a):
             owner = "tl-" + d.name[5:]
             if owner == actor() and not a.self_too:
                 continue
-            if owner in live and owner != actor():
-                continue
+            if owner != actor() and any(w == owner or w.startswith(owner + "-") for w in live if w):
+                continue  # a loop of that session claims as <owner>-<suffix>
             if git("status", "--porcelain", cwd=str(d)):
                 print("KEEP dirty " + str(d))
                 continue
@@ -911,10 +911,10 @@ def cmd_worktree(a):
     return 2
 
 
-def start_worktree(repo):
-    """This session's loop worktree, made once and reused for every task."""
+def start_worktree(repo, name=None):
+    """This session's loop worktree (`name`: the loop's pick, default this actor's), made once and reused."""
     exclude_local(repo, ".worktrees/", ".task/")
-    d = Path(repo) / ".worktrees" / ("loop-" + actor()[3:])
+    d = Path(repo) / ".worktrees" / ("loop-" + (name or actor()[3:]))
     if not d.exists():
         fetch(repo)
         r = subprocess.run(["git", "-C", repo, "worktree", "add", "--detach", str(d), "origin/main"],

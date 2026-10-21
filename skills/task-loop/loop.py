@@ -155,7 +155,7 @@ def live_loops(repo, but=None):
     """The states of the repo's live loops (`but`: leave this pid out), oldest first; a dead loop's file is removed."""
     d, key = paths(repo)["states"]
     out = []
-    for f in d.glob(key + ".*.json"):
+    for f in [d / (key + ".json")] + list(d.glob(key + ".*.json")):  # <key>.json: a loop of the code before tl-bxk.11.1
         try:
             st = json.loads(f.read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -171,6 +171,7 @@ def live_loops(repo, but=None):
 pid_alive = tl.pid_alive
 
 
+SESSION_ACTOR = [""]  # the session's actor, without this loop's suffix: names the session's slots-off worktree
 STARTED = [0.0]  # wall time this loop started: a stop file written before it was meant for the loops then running
 
 
@@ -266,7 +267,7 @@ def run_bead(repo, b, slot, wt, slot_bead, started):
     with open(log_path, "ab") as log:  # append: a rerun of the same stem never cuts a log another reader follows
         p = spawn(cmd, log)
         write_state(repo, pid=os.getpid(), started=started, bead=b["id"], slot=slot, since=t0, child=p.pid,
-                    run_log=str(log_path))
+                    run_log=str(log_path), worktree=None if slot else wt)
         say("%s in %s (log %s)" % (b["id"], slot or wt, log_path))
         stopped = False
         try:
@@ -359,7 +360,8 @@ def cmd_loop(a):
     # an actor of its own, never the session's: bd lets an actor re-claim its own bead, so two loops (or a loop and a
     # hand run) started from one session would both win one claim. run-task re-claims as this actor (one for both).
     os.environ.pop("TASK_LOOP_ACTOR", None)
-    os.environ["TASK_LOOP_ACTOR"] = "%s-%s" % (tl.actor(), uuid.uuid4().hex[:6])
+    SESSION_ACTOR[0] = tl.actor()
+    os.environ["TASK_LOOP_ACTOR"] = "%s-%s" % (SESSION_ACTOR[0], uuid.uuid4().hex[:6])
     old = {}
     if threading.current_thread() is threading.main_thread():
         for sig in ("SIGTERM", "SIGINT"):
@@ -385,10 +387,24 @@ def cmd_loop(a):
             signal.signal(getattr(signal, sig), h)
 
 
+def worktree_name(repo):
+    """Slots off: the session's worktree (loop-<session>), reused by each loop start; one another live loop of the
+    repo works in gets this loop's own (loop-<session>-<suffix>): two loops in one tree reset it under each other."""
+    name = SESSION_ACTOR[0][3:]
+    taken = {st.get("worktree") for st in live_loops(repo, but=os.getpid())}
+    if str(Path(repo) / ".worktrees" / ("loop-" + name)) in taken:
+        return tl.actor()[3:]
+    return name
+
+
 def passes(repo, a, started):
     cfg, until = tl.profile_slots(repo), end_time(a.until)
     slots = int(cfg.get("count") or 0) > 0
-    wt = None if slots else tl.start_worktree(repo)
+    wt = None
+    if not slots:  # the pick and the state that names it, under a lock: two loops starting at once never pick one tree
+        with tl.os_lock(tl.config_dir() / "locks" / ("worktree-%s.lock" % paths(repo)["states"][1]), "pid %d" % os.getpid()):
+            wt = tl.start_worktree(repo, worktree_name(repo))
+            write_state(repo, pid=os.getpid(), started=started, worktree=wt)
     fails, ran, later, pauses = [], 0, {}, {}  # later: a paused or taken bead -> when to try it again
     while True:
         if stop_mode(repo):
@@ -452,7 +468,7 @@ def passes(repo, a, started):
             tl.drop_engine_lock(d, os.getpid())
             if slots:
                 tl.release_slot(repo, name)
-            write_state(repo, pid=os.getpid(), started=started)
+            write_state(repo, pid=os.getpid(), started=started, worktree=wt)
         if r is None:  # every candidate is held by another session: the next pass sleeps until one is due
             continue
         ran += 1

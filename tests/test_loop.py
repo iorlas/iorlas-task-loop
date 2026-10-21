@@ -626,6 +626,56 @@ class Loop(LoopBase):
         self.assertNotIn(session_actor, seen)  # a hand run from the session claims as the session
         self.assertTrue(all(a.startswith(session_actor + "-") for a in seen), seen)  # still names its session
 
+    def test_a_loop_started_on_the_old_code_is_seen_by_stop_and_status(self):
+        # before tl-bxk.11.1 the state was <key>.json, one per repo: a loop still running from then is a live loop
+        k = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+        self.addCleanup(lambda: (k.kill(), k.wait()))
+        d, key = loop.paths(str(self.repo))["states"]
+        (d / (key + ".json")).write_text(json.dumps({"pid": k.pid, "started": self.clock.t, "repo": str(self.repo)}))
+        self.assertEqual([s["pid"] for s in loop.live_loops(str(self.repo))], [k.pid])
+        out = io.StringIO()
+        with redirect_stdout(out):
+            self.assertEqual(tl.main(["loop", "status", "--repo", str(self.repo)]), 0)
+            self.assertEqual(tl.main(["stop", "--repo", str(self.repo)]), 0)
+        self.assertIn("LOOP pid %d" % k.pid, out.getvalue())
+        self.assertIn("STOP after the current bead: loop pid %d" % k.pid, out.getvalue())
+
+    def test_without_slots_each_loop_start_reuses_its_sessions_worktree(self):
+        (self.repo / ".task-loop.json").write_text(json.dumps({"engine": {}}))
+        names = []
+        with mock.patch.object(tl, "start_worktree", side_effect=lambda repo, name=None: names.append(name) or
+                               str(self.home / "wt")):
+            for _ in range(2):
+                self.beads({"x-1": [rec("landed")]}, slots=0)
+                self.run_loop()
+                os.environ.pop("TASK_LOOP_ACTOR", None)
+        self.assertEqual(names, ["abcdef12"] * 2)  # tl-abcdef12: the session's actor, not the per-loop one
+
+    def test_without_slots_a_second_loop_of_the_session_takes_its_own_worktree(self):
+        # two loops in one worktree would reset it under each other's engine
+        (self.repo / ".task-loop.json").write_text(json.dumps({"engine": {}}))
+        self.beads({"x-1": [rec("landed")]}, slots=0)
+        k = self.other_loop()
+        d, key = loop.paths(str(self.repo))["states"]
+        f = d / ("%s.%d.json" % (key, k.pid))
+        f.write_text(json.dumps(dict(json.loads(f.read_text()), worktree=str(self.repo / ".worktrees" / "loop-abcdef12"))))
+        names = []
+        with mock.patch.object(tl, "start_worktree", side_effect=lambda repo, name=None: names.append(name) or
+                               str(self.home / "wt")):
+            self.run_loop()
+        self.assertNotEqual(names[0], "abcdef12")
+        self.assertTrue(names[0].startswith("abcdef12-"), names)
+
+    def test_sunset_keeps_a_sessions_worktree_while_a_loop_of_that_session_holds_a_lease(self):
+        bd = self.beads({"x-1": []}, slots=0)
+        bd.beads["x-1"].update(status="in_progress", assignee="tl-other000-a1b2c3", lease_expires_at="2999-01-01T00:00:00Z")
+        wt = self.repo / ".worktrees" / "loop-other000"
+        wt.mkdir(parents=True)
+        with mock.patch.object(tl, "git", return_value=""), mock.patch.object(tl.subprocess, "run") as run, \
+                redirect_stdout(io.StringIO()):
+            tl.main(["worktree", "sunset"])
+        self.assertFalse([c for c in run.call_args_list if "remove" in c[0][0]])
+
     def test_a_stop_reaches_every_loop_and_a_loop_started_later_ignores_it(self):
         self.beads({"x-1": [rec("landed")]})
         k = self.other_loop()
