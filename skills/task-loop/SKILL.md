@@ -61,7 +61,11 @@ command and the git and credential rules; the engine's briefs say only what the 
 the whole policy: `retry` waits until `retry_after` (past `engine.lane_wait_min` the run pauses, bead open), except
 that a resumed writer answering `lane_out` (`next` retry, or owner when delegate cannot say when the lane frees) goes on at once as a new thread (delegate gives it the role's next rung, e.g.
 Sonnet while Codex is out; its brief says to continue the earlier writer's work in the tree), which then becomes the
-writer later rounds resume and the review's `--authored-by`; only a retry from that new thread waits, and its `lane_out`
+writer for that round and the review's `--authored-by`. A writer thread that is a fallback (started on that `lane_out`,
+or on another family than the role's first rung in delegate's `routing.json`) is not resumed: each later write round,
+in this run or after a pause, asks delegate fresh with the same continue-the-work brief, so Codex takes over again once
+it is usable (transition `fallback_retake`; the checkpoint keeps `writer_fallback`, tl-bxk.10.5); a first-choice writer
+is resumed as before. Only a retry from that new thread waits, and its `lane_out`
 with no time pauses ("no lane", bead open, no ask); `owner` pauses for a login or setup or raises a verify ask, `fail` tries once more as a new thread, then fails the task. The
 trace keeps each session's `reason` and `context` (instruction files, env key names) and the run's lane manifest. A command the worker was denied shows as a ⚠; denied with no answer, or a second denied write in the bead (across lanes and runs), blocks it "needs a human:
 <command>". `tl run-task` refuses the main checkout as a worktree (it holds the bead database and the config).

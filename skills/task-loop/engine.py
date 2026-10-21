@@ -117,7 +117,7 @@ def gate_only_checks(plan, cfg):
 
 
 LATER_CASES = ("\nAn acceptance case this stage cannot run is not unchecked: it is checked when the last stage runs it.")
-FRESH_WRITER_TEXT = ("\nYou take over from an earlier writer of this task whose model is out for now. Its work is in this "
+FRESH_WRITER_TEXT = ("\nYou take over from an earlier writer of this task, on another model. Its work is in this "
                      "tree, committed on this branch or not: read `git status` and the diff from main first, then go on "
                      "from there; do not start over.")
 
@@ -441,6 +441,16 @@ def find_route(path=""):
     return max(found)[1] if found else None
 
 
+def first_family(route, role):
+    """The family of a role's first rung in delegate's routing.json beside route.py, or None when it cannot be read
+    (the handshake does not carry it). A writer on another family is a fallback."""
+    try:
+        steps = json.loads((Path(route).parent / "routing.json").read_text(encoding="utf-8"))["roles"][role]["steps"]
+        return steps[0].get("on") or None
+    except (OSError, ValueError, KeyError, IndexError, TypeError, AttributeError):
+        return None
+
+
 def contract(route):
     """delegate's worker-run handshake (`route.py contract --json`): the answer when it speaks v2, else None."""
     try:
@@ -522,6 +532,7 @@ class Engine:
         self.budget_warned = set()
         self.writer = {}  # backend -> thread/session id, so later rounds of a task resume the same writer
         self.writer_family = None  # the family of the last write: the verifier comes from another one when it can
+        self.writer_fallback = False  # the writer's thread is not on the role's first choice: the next round asks fresh
         self.verified = []  # the verifier's answer per unchecked item at land: in the trace and on the bead
         self.sessions = []  # every AI call of this run: the trace a later reflection reads (traces.jsonl)
         self.outcome, self.why, self.asked = "failed", "", False  # what result() tells the loop
@@ -671,6 +682,11 @@ class Engine:
         role = ROLES[node]
         writer = writer_family if node in ("review", "verify") else None
         resume = self.writer.get("delegate") if resume_key else None
+        if resume and self.writer_fallback:  # tl-bxk.10.5: a fallback writer would keep the bead off Codex for good
+            self.transition(step or node, "fallback_retake", "the writer (%s) is a fallback: delegate routes afresh"
+                            % (self.writer_family or "?"), family=self.writer_family or "")
+            resume, prompt = None, prompt + FRESH_WRITER_TEXT
+        retake, outed = bool(resume_key and self.writer_fallback), False
         if getattr(self, "plan_data", None):  # an unsandboxed worker can write here: every step reads the engine's plan
             (self.run_dir / "plan.json").write_text(json.dumps(self.plan_data, indent=1))
         flag = access(self.host)
@@ -700,7 +716,7 @@ class Engine:
                          % (node, said[:160]))
                 self.transition(step or node, "lane_out", "the resumed thread's lane is out: a new thread",
                                 lane=j.get("lane") or "")
-                resume, attempt_prompt = None, attempt_prompt + FRESH_WRITER_TEXT
+                resume, attempt_prompt, outed = None, attempt_prompt + FRESH_WRITER_TEXT, True
                 continue
             if nxt == "retry":  # worker-run v2: delegate says when; how long a slot waits is this engine's policy
                 due = float(j.get("retry_after") or 0)
@@ -739,6 +755,10 @@ class Engine:
             if j.get("git_violation"):
                 self.warn("%s changed git: %s" % (node, "; ".join(j["git_violation"])))
             if resume_key and r.ref and j.get("status") == "done":
+                if r.ref != resume:  # a new thread: is it on the role's first choice?
+                    first, fam = first_family(self.route or "", role), j.get("family") or r.backend
+                    self.writer_fallback = (fam != first) if first else (
+                        outed or (retake and fam == self.writer_family))
                 self.writer["delegate"] = resume = r.ref
             errs = validate(r.data, SCHEMAS[node]) if (r.data is not None and nxt is None) else [
                 "%s: %s" % (reason or "no structured output", said[:300])]
@@ -1285,7 +1305,8 @@ class Engine:
         branch = self.git("symbolic-ref", "--short", "-q", "HEAD") or getattr(self, "task_branch", "")
         rec = {"v": 1, "bead": self.bead, "branch": branch,
                "plan": self.plan_data, "done": self.done, "accepted": self.accepted, "replans": self.replans, "fixes": self.fixes, "denials": self.denials,
-               "writer": self.writer.get("delegate") or "", "brief": self.brief_hash, "head": self.git("rev-parse", "HEAD"),
+               "writer": self.writer.get("delegate") or "", "writer_fallback": self.writer_fallback,
+               "writer_family": self.writer_family or "", "brief": self.brief_hash, "head": self.git("rev-parse", "HEAD"),
                "unchecked": self.unchecked, "filed": self.filed,
                "closed": False,
                "run": self.log_path.stem, "t": time.time(), **at}
@@ -1341,6 +1362,8 @@ class Engine:
         self.filed = list(ck.get("filed") or [])
         if ck["writer"]:
             self.writer["delegate"] = ck["writer"]
+            self.writer_fallback = bool(ck.get("writer_fallback"))
+            self.writer_family = ck.get("writer_family") or None
         if ck["step"] == "gate-red":
             self.log("note", "the gate was red at land in %s: re-planning with its output, keeping %d accepted stage(s)"
                      % (ck["run"], len(self.done)))
