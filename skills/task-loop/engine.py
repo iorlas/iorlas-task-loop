@@ -540,6 +540,7 @@ class Engine:
         # them; in lifesim-vbo a writer's sandbox runs kept in .task/ were read as engine results by four planners.
         self.run_dir = tl.config_dir() / "runs" / self.log_path.stem
         self.run_dir.mkdir(parents=True, exist_ok=True)
+        prune_check_rounds(tl.config_dir() / "runs")
         self.task_dir = Path(wt) / ".task" / bead  # the writer's: only evidence/ lives here
         self.task_dir.mkdir(parents=True, exist_ok=True)
         self.evidence_dir = self.task_dir / "evidence"  # the writer's proof of what the engine cannot rerun
@@ -1880,6 +1881,20 @@ GHERKIN_TEST = re.compile(r"^\s*Scenario( Outline)?:")  # a use-case scenario (R
 
 QUIET_KINDS = ("end", "transition", "checks", "run")  # trace records for the dashboard, never printed
 RUN_STEM = re.compile(r"^\d{8}-\d{6}$")  # <bead>-<YYYYMMDD-HHMMSS>: an engine log of that bead, not of a child bead
+
+
+CHECK_ROUNDS_DAYS = 14
+
+
+def prune_check_rounds(runs, days=CHECK_ROUNDS_DAYS):
+    """Every round's check log (NN-id.rK.log) of a run older than `days` goes; plans, briefs and evidence stay."""
+    cut = time.time() - days * 86400
+    for f in runs.glob("*/checks/*.r*.log"):
+        try:
+            if re.search(r"\.r\d+\.log$", f.name) and f.stat().st_mtime < cut:
+                f.unlink()
+        except OSError:
+            pass
 
 
 def node_outcome(outcome, why):

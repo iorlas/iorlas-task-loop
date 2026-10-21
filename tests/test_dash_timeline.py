@@ -248,6 +248,36 @@ class Api(unittest.TestCase):
         self.assertEqual(server.run_file(run, "checks/00-fmt.log"), b"all formatted\n")
         self.assertIsNone(server.run_file(run, "../../traces.jsonl"))
         self.assertIsNone(server.run_file("../x", "checks/00-fmt.log"))
+        (self.cfg / "runs" / run / "plan.json").write_text("{}")
+        self.assertEqual(server.run_file(run, "plan.json"), b"{}")
+        (self.cfg / "runs" / run / "brief.md").write_text("the bead")
+        (self.cfg / "runs" / run / "evidence").mkdir()
+        (self.cfg / "runs" / run / "evidence" / "a.log").write_text("x")
+        self.assertIsNone(server.run_file(run, "brief.md"))  # only check logs and the plan are served
+        self.assertIsNone(server.run_file(run, "evidence/a.log"))
+        self.assertIsNone(server.run_file(run, "checks/../brief.md"))
+
+    def test_a_symlink_in_checks_that_leaves_the_run_folder_is_refused(self):
+        run = "%s-20261021-072411" % BEAD
+        (self.cfg / "runs" / run / "checks").mkdir(parents=True)
+        secret = Path(self.tmp.name) / "secret.txt"
+        secret.write_text("token")
+        os.symlink(str(secret), str(self.cfg / "runs" / run / "checks" / "00-x.log"))
+        self.assertIsNone(server.run_file(run, "checks/00-x.log"))
+
+    def test_the_log_cache_forgets_gone_files_and_stays_small(self):
+        p = Path(self.tmp.name) / "x-1-20261021-120000.jsonl"
+        p.write_text('{"kind": "note", "text": "a"}\n')
+        timeline.read(str(p))
+        self.assertIn(str(p), timeline._parsed)
+        p.unlink()
+        self.assertEqual(timeline.read(str(p)), [])
+        self.assertNotIn(str(p), timeline._parsed)
+        for i in range(timeline.CACHE_MAX + 20):
+            q = Path(self.tmp.name) / ("y-%d.jsonl" % i)
+            q.write_text("{}\n")
+            timeline.read(str(q))
+        self.assertLessEqual(len(timeline._parsed), timeline.CACHE_MAX)
 
 
 class LiveTaskView(unittest.TestCase):
@@ -283,6 +313,8 @@ class LiveTaskView(unittest.TestCase):
                 page = urllib.request.urlopen(base + "/").read()
                 self.assertIn(b"task-loop", page)
                 self.assertIn(b"Asks", page)
+                r = urllib.request.urlopen(base + "/api/tasks")
+                self.assertEqual(r.headers.get("X-Content-Type-Options"), "nosniff")
                 self.assertIn(b"task-loop", urllib.request.urlopen(base + "/classic").read())
             finally:
                 p.terminate()

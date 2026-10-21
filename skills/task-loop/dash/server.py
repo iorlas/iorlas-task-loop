@@ -983,9 +983,12 @@ def api_block(run, node, k=0):
 
 
 def run_file(run, rel):
-    """A file of a run's folder (a check's full log), never anything outside it."""
-    if not isinstance(run, str) or not RUN_NAME.match(run) or not rel:
+    """A check log or the plan of a run, never anything else (a symlink out of the folder included)."""
+    if not isinstance(run, str) or not RUN_NAME.match(run) or not isinstance(rel, str):
         return None
+    parts = rel.replace("\\", "/").split("/")
+    if ".." in parts or not (rel == "plan.json" or (len(parts) >= 2 and parts[0] == "checks" and all(parts))):
+        return None  # check logs and the plan only: brief and evidence stay off an unauthenticated page
     base = (config_dir() / "runs" / run).resolve()
     try:
         p = (base / rel).resolve()
@@ -1135,6 +1138,7 @@ def make_handler(port, addrs):
             self.send_response(code)
             self.send_header("Content-Type", ctype)
             self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
             self.end_headers()
             self.wfile.write(body)
 

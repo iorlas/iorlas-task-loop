@@ -181,6 +181,21 @@ class TraceRecords(unittest.TestCase):
         run = records(self.eng, "run")[-1]
         self.assertEqual((run["started_because"], run["prev_run"]), ("retry", first))
 
+    def test_check_logs_of_runs_older_than_two_weeks_are_pruned_at_start(self):
+        import os
+        old = tl.config_dir() / "runs" / "t-0-20261001-000000" / "checks"
+        old.mkdir(parents=True)
+        for name in ("00-a.r1.log", "00-a.log"):
+            (old / name).write_text("x")
+            os.utime(str(old / name), (time.time() - 15 * 86400,) * 2)
+        new = tl.config_dir() / "runs" / "t-0-20261020-000000" / "checks"
+        new.mkdir(parents=True)
+        (new / "00-a.r1.log").write_text("x")
+        engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        self.assertFalse((old / "00-a.r1.log").exists())
+        self.assertTrue((old / "00-a.log").exists())  # an old run's single log is its only one: kept
+        self.assertTrue((new / "00-a.r1.log").exists())
+
     def test_tl_trace_still_reads_the_new_trace(self):
         self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         out = te.io.StringIO()

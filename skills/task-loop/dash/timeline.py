@@ -9,9 +9,13 @@ text; for those the same shapes are read from the text, best effort.
 import json
 import os
 import re
+import threading
 import time
+from collections import OrderedDict
 
-_parsed = {}  # path -> ((mtime, size), records)
+_parsed = OrderedDict()  # path -> ((mtime, size), records), least recently read first
+_plock = threading.Lock()
+CACHE_MAX = 500
 
 RUN_STEM = re.compile(r"^(?P<bead>.+)-(?P<stamp>\d{8}-\d{6})$")
 META = ("stage", "stages", "write", "round", "fix", "fixes", "try", "items")
@@ -24,11 +28,15 @@ def read(path):
     try:
         st = os.stat(path)
     except OSError:
+        with _plock:
+            _parsed.pop(path, None)
         return []
     key = (st.st_mtime, st.st_size)
-    hit = _parsed.get(path)
-    if hit and hit[0] == key:
-        return hit[1]
+    with _plock:
+        hit = _parsed.get(path)
+        if hit and hit[0] == key:
+            _parsed.move_to_end(path)
+            return hit[1]
     recs = []
     with open(path, encoding="utf-8", errors="replace") as f:
         for ln in f:
@@ -38,7 +46,11 @@ def read(path):
                 continue
             if isinstance(d, dict):
                 recs.append(d)
-    _parsed[path] = (key, recs)
+    with _plock:
+        _parsed[path] = (key, recs)
+        _parsed.move_to_end(path)
+        while len(_parsed) > CACHE_MAX:
+            _parsed.popitem(last=False)
     return recs
 
 
