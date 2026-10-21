@@ -22,7 +22,8 @@ records what the loop does for the dashboard, and runs slots. Python 3.8+, stand
 ## The loop profile
 
 `docs/agents/task-loop.md` in the repo (or the file the repo's AGENTS.md names) is for you and for people; the engine
-reads only `.task-loop.json` at the repo root. Put everything the engine must act on there: `engine.gate`,
+reads only `.task-loop.json` at the repo root, as committed on the base branch (`engine.base`): a rule counts once
+pushed, after the next fetch; the working tree only when there is no remote. Put everything the engine must act on there: `engine.gate`,
 `engine.checks` (repo checks with their group and the paths that trigger them), `engine.worker_rules` (the file the
 writer reads first). The profile gives:
 

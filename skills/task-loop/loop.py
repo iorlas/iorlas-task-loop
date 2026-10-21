@@ -60,7 +60,8 @@ def epics_of(bead, cache):
 
 def queue(repo):
     """([(bead, reason)] in the order the loop takes them, [(id, why skipped)]). A reason names the rule that puts a
-    bead before the next one."""
+    bead before the next one. Fetches first: the rule is read from the base branch (engine.load_cfg)."""
+    tl.git("fetch", "-q", "origin", cwd=repo)
     cfg = engine.load_cfg(repo)
     args = ["ready", "--json", "-n", "0"] + (["--label", cfg["pick_label"]] if cfg.get("pick_label") else [])
     try:

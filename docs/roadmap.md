@@ -46,8 +46,8 @@ line; a message between sessions is never the guard. Clashes may happen; they mu
 | Unity on the machine | the repo's OS counting locks (lifesim `tools/unity_slot.py`) | waits | |
 | a model lane | delegate's leases; busy answers `retry` | waits until `retry_after` | |
 | files two beads both edit | none: conflicts show at land as a rebase or fix round | | areas, tl-bxk.11.4 |
-| the repo's `.task-loop.json` | read from the main checkout's working tree | | read from the base branch, tl-bxk.10.7 |
-| an engine release | none: kept apart by messages | | release lock, tl-bxk.10.8 |
+| the repo's `.task-loop.json` | read from the base branch after a fetch (`tl.profile`); the working tree only with no remote | the next fetch reads the new rule | |
+| an engine release | `dev/release.py`: an OS lock, the version from origin/main, the suite, a push race retried once | waits in line, told who holds it | |
 | a stopped engine's worker | engine SIGTERMs route.py, which kills the worker's group; SIGKILL after a grace | | |
 
 All of it is proven together by one race test (tl-bxk.11.1): two loops, a hand run, a slot hold and a release at

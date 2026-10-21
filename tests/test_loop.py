@@ -198,6 +198,61 @@ class Queue(Base):
         self.assertIn("NONE", buf.getvalue())
 
 
+class QueueRuleFromBase(Base):
+    """The queue rule is read from the base branch after a fetch, not from a main checkout nobody pulled."""
+
+    def setUp(self):
+        super().setUp()
+        os.environ.update(GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
+        self.origin, self.other = self.home / "o.git", self.home / "other"
+        self.repo.rmdir()
+        self.sh("git", "init", "-q", "--bare", "-b", "main", str(self.origin), cwd=self.home)
+        self.sh("git", "clone", "-q", str(self.origin), str(self.other), cwd=self.home)
+        self.push_rule({"engine": {"skip_labels": ["owner-taste"]}})
+        self.sh("git", "clone", "-q", str(self.origin), str(self.repo), cwd=self.home)
+
+    def sh(self, *a, cwd):
+        subprocess.run(list(a), cwd=cwd, check=True, capture_output=True)
+
+    def push_rule(self, cfg):
+        """Another worktree pushes a new .task-loop.json; the main checkout is not pulled."""
+        (self.other / ".task-loop.json").write_text(json.dumps(cfg))
+        self.sh("git", "add", "-A", cwd=self.other)
+        self.sh("git", "commit", "-qm", "queue rule", cwd=self.other)
+        self.sh("git", "push", "-q", "origin", "HEAD:main", cwd=self.other)
+
+    def test_tl_next_uses_the_rule_pushed_to_the_base_branch_not_the_stale_working_tree(self):
+        self.push_rule({"engine": {"skip_labels": ["later"]}})
+        self.fake(bead("x-1", labels=["later"]), bead("x-2", labels=["owner-taste"]))
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            self.assertEqual(tl.main(["next", "--repo", str(self.repo)]), 0)
+        out = buf.getvalue()
+        self.assertIn("NEXT x-2", out)
+        self.assertIn("skip x-1: label later", out)
+        self.assertIn("owner-taste", (self.repo / ".task-loop.json").read_text())  # the working tree stays behind
+
+    def test_the_loop_queue_fetches_before_it_reads_the_rule(self):
+        self.push_rule({"engine": {"epic_order": [], "pick_label": "go"}})
+        self.fake(bead("x-1"), bead("x-2", labels=["go"]))
+        ranked, _ = loop.queue(str(self.repo))
+        self.assertEqual([b["id"] for b, _ in ranked], ["x-2"])
+
+    def test_engine_load_cfg_reads_the_base_branch_with_the_base_the_working_tree_names(self):
+        self.push_rule({"engine": {"brief_kb": 7}})
+        self.sh("git", "fetch", "-q", "origin", cwd=self.repo)
+        (self.repo / ".task-loop.json").write_text(json.dumps({"engine": {"brief_kb": 99}}))
+        self.assertEqual(loop.engine.load_cfg(str(self.repo))["brief_kb"], 7)
+
+    def test_no_remote_falls_back_to_the_working_tree(self):
+        self.sh("git", "remote", "remove", "origin", cwd=self.repo)
+        (self.repo / ".task-loop.json").write_text(json.dumps({"engine": {"skip_labels": ["later"]}}))
+        self.fake(bead("x-1", labels=["later"]), bead("x-2"))
+        ranked, skipped = loop.queue(str(self.repo))
+        self.assertEqual([b["id"] for b, _ in ranked], ["x-2"])
+        self.assertEqual(skipped, [("x-1", "label later")])
+
+
 def rec(outcome, **kw):
     return dict({"v": 1, "outcome": outcome, "why": "", "run": "run-1", "log": "/e.jsonl", "minutes": 1.0, "rounds": 1,
                  "tests_added": 2, "asked": outcome == "parked", "retry_after": 0.0}, **kw)

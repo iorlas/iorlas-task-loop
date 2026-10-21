@@ -83,4 +83,6 @@ agent-runs), its one reader, and how delegate connects (worker-run v1, agent-run
 - The engine requires the iorlas-delegate plugin (worker-run v1) and has no launcher of its own; never add one back.
   Only the contract is shared: never read delegate's files or call anything but `route.py run` and `status`.
 - Never touch a transcript or another tool's state: the dashboard reads, `tl.py` writes only `~/.config/task-loop` and bd.
-- Bump `.claude-plugin/plugin.json` version and the entry in iorlas-marketplace on every release.
+- Release only through `python3 dev/release.py "message" [--bead ID --reason R] [--from-branch B]`: it takes the
+  release lock, bumps `.claude-plugin/plugin.json` from origin/main and the iorlas-marketplace entry, runs the suite,
+  pushes and installs. Never bump a version by hand.

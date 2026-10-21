@@ -21,11 +21,6 @@ import subprocess
 import sys
 import tempfile
 import threading
-
-try:
-    import fcntl
-except ImportError:  # Windows: one land at a time is not enforced
-    fcntl = None
 import time
 import uuid
 from pathlib import Path
@@ -813,10 +808,8 @@ class Engine:
         """Whether write steps get the host. Only the committed config on the base branch grants it (engine.host for the
         repo, engine.host_beads for listed beads): a worker with Bash can label its own bead, or edit a checkout's
         .task-loop.json, but not origin/main without review and the gate. The label `sandbox` still turns it off."""
-        try:
-            base = json.loads(self.git("show", "%s:.task-loop.json" % self.cfg["base"]) or "{}").get("engine") or {}
-        except ValueError:
-            base = {}
+        committed = self.git("rev-parse", "--verify", "-q", self.cfg["base"] + "^{commit}")  # never the working tree
+        base = (tl.profile(str(self.wt), self.cfg["base"]).get("engine") or {}) if committed else {}
         granted = bool(base.get("host") or base.get("no_sandbox")) or self.bead in (base.get("host_beads") or [])
         for label in ("host", "no-sandbox"):
             if label in labels and not granted:
@@ -1613,26 +1606,10 @@ class Engine:
     def land_lock(self):
         """One land at a time per repo, across slots and sessions: an flock the OS drops when the process dies."""
         d = tl.config_dir() / "locks"
-        d.mkdir(exist_ok=True)
         url = self.git("remote", "get-url", "origin") or str(self.wt)
         path = d / ("land-%s.lock" % hashlib.sha1(url.encode()).hexdigest()[:12])
-        f = open(path, "a+")
-        try:
-            if fcntl:
-                try:
-                    fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                except OSError:
-                    self.log("note", "waiting for the land lock (held by %s)" % (path.read_text().strip() or "?"))
-                    fcntl.flock(f, fcntl.LOCK_EX)
-            f.seek(0)
-            f.truncate()
-            f.write(self.bead)
-            f.flush()
+        with tl.os_lock(path, self.bead, lambda who: self.log("note", "waiting for the land lock (held by %s)" % who)):
             yield path
-        finally:
-            if fcntl:
-                fcntl.flock(f, fcntl.LOCK_UN)
-            f.close()
 
     def keep_evidence(self):
         """Pictures the writer saved as proof outlive the worktree: copied to the run dir, named on the bead."""
@@ -2110,12 +2087,13 @@ When in doubt, it is open: never settle an item you did not prove."""
 # ---- entry ----------------------------------------------------------------------------------------------------------
 
 def load_cfg(repo):
+    """DEFAULTS plus the `engine` block of the repo's .task-loop.json as committed on the base branch (tl.profile).
+    The base is itself a key: the working tree (or DEFAULTS) names it, then the base's copy is read. A caller fetches
+    first (the loop's queue does; run-task reads the last fetch, and resets onto the base anyway)."""
     cfg = json.loads(json.dumps(DEFAULTS))
-    try:
-        user = json.loads((Path(repo) / ".task-loop.json").read_text(encoding="utf-8")).get("engine") or {}
-    except (OSError, ValueError):
-        user = {}
-    cfg.update(user)
+    local = tl.profile(repo).get("engine") or {}
+    base = local.get("base") or cfg["base"]
+    cfg.update(tl.profile(repo, base).get("engine") or {})
     return cfg
 
 

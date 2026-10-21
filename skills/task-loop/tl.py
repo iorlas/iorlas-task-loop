@@ -30,6 +30,7 @@ State: ~/.config/task-loop (%APPDATA%\\task-loop on Windows): repos.json, events
 """
 
 import argparse
+import contextlib
 import hashlib
 import json
 import os
@@ -42,6 +43,11 @@ import time
 import urllib.request
 from pathlib import Path
 
+try:
+    import fcntl
+except ImportError:  # Windows
+    fcntl = None
+
 HERE = Path(__file__).resolve().parent
 DASH = HERE / "dash" / "server.py"
 PORT = int(os.environ.get("TASK_LOOP_DASH_PORT", "7878"))
@@ -50,6 +56,31 @@ RETAIN_DAYS = 7
 
 
 # ---- paths and identity -------------------------------------------------------------------------------------------
+
+@contextlib.contextmanager
+def os_lock(path, holder, waiting=None):
+    """One holder at a time, across processes: an flock the OS drops when the process dies; a second taker waits in
+    line. The file names the holder; `waiting(text)` is called with it once, before blocking. No-op without fcntl."""
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    f = open(path, "a+")
+    try:
+        if fcntl:
+            try:
+                fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError:
+                if waiting:
+                    waiting(Path(path).read_text().strip() or "?")
+                fcntl.flock(f, fcntl.LOCK_EX)
+        f.seek(0)
+        f.truncate()
+        f.write(holder)
+        f.flush()
+        yield path
+    finally:
+        if fcntl:
+            fcntl.flock(f, fcntl.LOCK_UN)
+        f.close()
+
 
 def config_dir():
     if os.name == "nt":
@@ -339,6 +370,21 @@ def cmd_block(a):
 # ---- slots --------------------------------------------------------------------------------------------------------
 # A slot is a persistent worktree, set up once and reused task after task. Each slot is a bead labelled `slot`
 # (never picked as work); holding a slot = claiming its bead, so the lease, heartbeat and reclaim come from bd.
+
+def profile(repo, base=None):
+    """The repo's loop profile (.task-loop.json, parsed). With `base` (a ref such as origin/main), the copy committed
+    there, so a pushed rule counts after a fetch even when nobody pulled the checkout; the working tree only when
+    `base` does not resolve here (no remote). A file missing on the base is {}: committed wins."""
+    if base and git("rev-parse", "--verify", "-q", base + "^{commit}", cwd=repo):
+        try:
+            return json.loads(git("show", "%s:.task-loop.json" % base, cwd=repo) or "{}")
+        except ValueError:
+            return {}
+    try:
+        return json.loads((Path(repo) / ".task-loop.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
 
 def profile_slots(repo):
     """The `slots` block of the repo's loop profile, as JSON in .task-loop.json (generic, read by tl.py)."""
