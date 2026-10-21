@@ -27,7 +27,13 @@ WRITE = {"summary": "wrote f", "checks_run": [{"cmd": "test -f f.txt", "exit": 0
          "new_cases": [], "unchecked": []}
 ROUTE = "/h/.claude/plugins/cache/m/iorlas-delegate/%s/skills/delegate/route.py"
 CLEAN = {"findings": [], "unmet": [], "question": "", "leftovers": [], "unchecked": []}
-NS = "--no-sandbox"
+CONTRACT = {"worker_run": 2, "features": ["reason", "next", "context"], "reasons": {},
+            "lanes": {"codex": {"hidden": ["every skill"]}, "claude": {"hidden": ["skills"]}}}
+
+
+def ans(status, reason, nxt, **kw):
+    """A v2 answer that is not done."""
+    return dict({"v": 2, "status": status, "reason": reason, "next": nxt, "data": None, "family": "openai"}, **kw)
 BEAD = {"id": "t-1", "title": "Add f", "metadata": {}, "acceptance_criteria": "f.txt exists"}
 
 
@@ -58,9 +64,10 @@ class DelegateScript:
         else:
             if node == "write":
                 Path(cwd, "f.txt").write_text("d%d\n" % len(self.calls))
-            j = {"v": 1, "status": "done", "data": a, "ref": "ref-" + node, "cost": 0.5, "secs": 1,
-                 "family": "openai" if node == "write" else "claude", "lane": "L", "model": "m",
-                 "effort": "e", "git_violation": [], "tokens": {"in": 1000, "cached": 800, "out": 50}}
+            j = {"v": 2, "status": "done", "reason": None, "next": None, "data": a, "ref": "ref-" + node, "cost": 0.5,
+                 "secs": 1, "family": "openai" if node == "write" else "claude", "lane": "L", "model": "m",
+                 "effort": "e", "git_violation": [], "tokens": {"in": 1000, "cached": 800, "out": 50},
+                 "context": {"instructions": ["/repo/AGENTS.md"], "env_keys": ["PATH"]}}
         r = engine.Result(j.get("data"), "", j.get("ref") or "", float(j.get("cost") or 0), 1, "" if j["status"] == "done" else j["status"],
                           j.get("family") or "delegate")
         return r, j
@@ -125,6 +132,7 @@ class EngineTest(unittest.TestCase):
         c.update(cfg)
         c.update(raw or {})
         with mock.patch.object(engine, "find_route", return_value=route), \
+                mock.patch.object(engine, "contract", return_value=CONTRACT), \
                 mock.patch.object(engine, "call_delegate", script), mock.patch.object(engine.time, "sleep"):
             self.eng = engine.Engine("t-1", str(self.wt), c)
             rc = self.eng.run()
@@ -753,17 +761,17 @@ class EngineTest(unittest.TestCase):
                 sh("git", "commit", "-qm", "theirs", cwd=other)
                 sh("git", "push", "-q", "origin", "HEAD:main", cwd=other)
             return real(this, route, role, *a, **kw)
-        denied = {"v": 1, "status": "failed", "data": None, "text": "", "ref": "w1", "family": "openai",
+        denied = {"v": 2, "status": "failed", "reason": "secrets", "next": "owner", "data": None, "text": "", "ref": "w1", "family": "openai",
                   "denied": [{"tool": "Bash", "input": "rg -n --glob '!**/.env*' '^<<<<<<<' ."}]}
         with mock.patch.object(DelegateScript, "__call__", main_moves):
-            rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE, denied], "review": [CLEAN]}, route=ROUTE % "0.26.0")
+            rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE, denied], "review": [CLEAN]})
         self.assertEqual(rc, 2)
         self.assertEqual(self.ask()["kind"], "verify")
         ck = self.checkpoint()
         self.assertEqual((ck["step"], ck["branch"]), ("land", tl.git("symbolic-ref", "--short", "HEAD", cwd=str(self.wt))))
         answer = [{"author": "denis", "text": "False positive; rerun.", "created_at": "2026-10-20T23:25:00Z"}]
         with mock.patch.object(tl, "comments", return_value=answer):
-            rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.26.0")
+            rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual([c[0] for c in s.calls], ["worker", "reviewer"])  # the fix round again, no plan
         self.assertIn("conflict", s.prompts[0])
@@ -999,7 +1007,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(self.ask()["kind"], "stuck")
 
     def test_a_machine_pause_is_no_ask(self):
-        out = {"v": 1, "status": "failed", "say": "Failed to authenticate: OAuth session expired and could not be refreshed"}
+        out = ans("failed", "logged_out", "owner", family="claude", say="Failed to authenticate: OAuth session expired")
         self.run_engine({"plan": [out]})
         self.assertIsNone(self.ask())
 
@@ -1093,7 +1101,7 @@ class EngineTest(unittest.TestCase):
     def test_invalid_output_retries_once_then_fails_and_still_closes(self):
         rc, s = self.run_engine({"plan": [{"summary": "x"}, {"summary": "x"}]})
         self.assertEqual(rc, 2)
-        self.assertEqual([c[:2] for c in s.calls], [("planner", None), ("planner", "ref-plan")])
+        self.assertEqual([c[:2] for c in s.calls], [("planner", None), ("planner", None)])  # delegate re-asked in-thread already
         self.assertTrue(self.blocked[0].startswith("failed: plan node"))
 
     def test_rounds_are_bounded(self):
@@ -1118,75 +1126,33 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertIn(("reviewer", None, "openai"), s.calls)
 
-    def test_no_sandbox_reaches_every_role_on_delegate_0_21(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.21.0",
-                                no_sandbox=True)
-        self.assertEqual(rc, 0)
-        self.assertEqual(s.access, [("planner", NS), ("worker", NS), ("reviewer", NS)])
-        w = next(p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker")
-        self.assertIn("You have the host", w)
-        self.assertTrue(all(x["host"] for x in self.eng.sessions))
-
-    def test_no_sandbox_on_delegate_0_20_is_writer_only_with_a_warning(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.20.0",
-                                no_sandbox=True)
-        self.assertEqual(rc, 0)
-        self.assertEqual(s.access, [("planner", ""), ("worker", NS), ("reviewer", "")])
-        self.assertIn("delegate 0.21", self.eng.log_path.read_text())
-
-    def test_no_sandbox_needs_delegate_0_20(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.19.0",
-                                no_sandbox=True)
-        self.assertEqual(rc, 0)
-        self.assertFalse(any(u for _, u in s.access))
-        self.assertIn("delegate 0.20", self.eng.log_path.read_text())
-
-    def test_sandbox_is_the_default_and_a_bead_label_overrides_the_config(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.21.0")
-        self.assertFalse(any(u for _, u in s.access))
-        w = next(p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker")
-        self.assertNotIn("You have the host", w)
-        with mock.patch.object(tl, "show", return_value={"id": "t-1", "title": "Add f", "metadata": {}, "acceptance_criteria": "f.txt exists",
-                                                         "labels": ["no-sandbox"]}):
-            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.21.0",
-                                    host_beads=["t-1"])
-        self.assertTrue(all(u for _, u in s.access))
-        with mock.patch.object(tl, "show", return_value={"id": "t-1", "title": "Add f", "metadata": {}, "acceptance_criteria": "f.txt exists",
-                                                         "labels": ["sandbox"]}):
-            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.21.0",
-                                    no_sandbox=True)
-        self.assertFalse(any(u for _, u in s.access))
-
-    # -- delegate 0.23: --host on write steps only; --no-sandbox below it
-    def test_host_on_delegate_0_23_goes_to_the_write_step_only(self):
+    def test_host_from_the_base_config_goes_to_every_step(self):
         for cfg in ({"host": True}, {"no_sandbox": True}):  # no_sandbox: the 0.6 name, still read
-            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.23.0", **cfg)
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, **cfg)
             self.assertEqual(rc, 0)
-            self.assertEqual(s.access, [("planner", ""), ("worker", "--host"), ("reviewer", "")], cfg)
-            w = next(p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker")
-            self.assertIn("You have the host", w)
-            self.assertEqual([x["host"] for x in self.eng.sessions], [False, True, False])
+            self.assertEqual(s.access, [("planner", "--host"), ("worker", "--host"), ("reviewer", "--host")], cfg)
+            self.assertTrue(all(x["host"] for x in self.eng.sessions))
 
-    def test_host_on_delegate_0_24_goes_to_every_step(self):
-        # 0.24: any lane takes --host; Claude read steps get Bash with it (the planner can see what the writer will need)
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.24.0", host=True)
-        self.assertEqual(rc, 0)
-        self.assertEqual(s.access, [("planner", "--host"), ("worker", "--host"), ("reviewer", "--host")])
-        self.assertIn("may run commands to check facts", s.prompts[0])
+    def test_sandbox_is_the_default_and_the_sandbox_label_turns_the_host_off(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertFalse(any(u for _, u in s.access))
+        with mock.patch.object(tl, "show", return_value=dict(BEAD, labels=["sandbox"])):
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, host=True)
+        self.assertFalse(any(u for _, u in s.access))
 
     def test_a_host_label_alone_grants_nothing(self):
         # a worker with Bash can label its own bead: only the committed config on the base branch grants the host
         for label in ("host", "no-sandbox"):
             with mock.patch.object(tl, "show", return_value={"id": "t-1", "title": "Add f", "metadata": {}, "acceptance_criteria": "f.txt exists", "labels": [label]}):
-                rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.23.0")
+                rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
             self.assertEqual(s.access[1], ("worker", ""), label)
             self.assertIn("label %s is ignored" % label, self.eng.log_path.read_text())
 
     def test_host_beads_on_the_base_branch_grant_the_host_to_one_bead(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.23.0",
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
                                 host_beads=["t-1"])
         self.assertEqual(s.access[1], ("worker", "--host"))
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.23.0",
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
                                 host_beads=["t-2"])
         self.assertEqual(s.access[1], ("worker", ""))
 
@@ -1195,7 +1161,7 @@ class EngineTest(unittest.TestCase):
         (self.wt / ".task-loop.json").write_text(json.dumps({"engine": {"host": True}}))
         sh("git", "add", "-A", cwd=self.wt)
         sh("git", "commit", "-qm", "local only, never pushed", cwd=self.wt)
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % "0.23.0",
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
                                 raw={"host": True, "host_beads": ["t-1"]})
         self.assertEqual(s.access[1], ("worker", ""))
 
@@ -1208,28 +1174,28 @@ class EngineTest(unittest.TestCase):
         made.assert_not_called()
 
     def test_a_denied_command_with_a_valid_answer_is_a_warning_in_the_trace(self):
-        ok = {"v": 1, "status": "done", "data": WRITE, "ref": "w1", "family": "claude",
+        ok = {"v": 2, "status": "done", "data": WRITE, "ref": "w1", "family": "claude",
               "denied": [{"tool": "Bash", "input": "curl -X POST https://x"}]}
-        rc, s = self.run_engine({"plan": [PLAN], "write": [ok, WRITE], "review": [CLEAN]}, route=ROUTE % "0.23.0")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [ok, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)  # (a raw answer writes no f.txt: the stage's check sends it to a second write)
         self.assertIn("write was denied `curl -X POST https://x`", self.eng.log_path.read_text())
         self.assertEqual(self.eng.sessions[1]["denied"], ok["denied"])
 
     def test_a_denied_command_with_no_valid_answer_needs_a_human_at_once(self):
-        stuck = {"v": 1, "status": "done", "data": None, "text": "I could not run it", "ref": "w1", "family": "claude",
+        stuck = {"v": 2, "status": "done", "data": None, "text": "I could not run it", "ref": "w1", "family": "claude",
                  "denied": [{"tool": "Bash", "input": "unity open client"}]}
-        rc, s = self.run_engine({"plan": [PLAN], "write": [stuck, WRITE], "review": [CLEAN]}, route=ROUTE % "0.23.0")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [stuck, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 2)
         self.assertEqual([c[0] for c in s.calls].count("worker"), 1)
         self.assertIn("needs a human", self.blocked[0])
         self.assertIn("unity open client", self.blocked[0])
 
     def test_a_second_denied_write_in_a_bead_needs_a_human_with_every_denied_command(self):
-        first = {"v": 1, "status": "done", "data": WRITE, "ref": "w1", "family": "claude",
+        first = {"v": 2, "status": "done", "data": WRITE, "ref": "w1", "family": "claude",
                  "denied": [{"tool": "Bash", "input": "git checkout x && pick"}]}
-        second = {"v": 1, "status": "done", "data": WRITE, "ref": "w2", "family": "openai",
+        second = {"v": 2, "status": "done", "data": WRITE, "ref": "w2", "family": "openai",
                   "denied": [{"tool": "shell", "input": "git restore x; pick"}]}
-        rc, s = self.run_engine({"plan": [PLAN], "write": [first, second, WRITE], "review": [CLEAN]}, route=ROUTE % "0.24.0")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [first, second, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 2)
         self.assertEqual([c[0] for c in s.calls].count("worker"), 2)
         self.assertIn("needs a human", self.blocked[0])
@@ -1237,44 +1203,91 @@ class EngineTest(unittest.TestCase):
             self.assertIn(cmd, self.blocked[0])
 
     def test_denied_writes_count_across_runs_of_a_bead(self):
-        first = {"v": 1, "status": "done", "data": WRITE, "ref": "w1", "family": "claude",
+        first = {"v": 2, "status": "done", "data": WRITE, "ref": "w1", "family": "claude",
                  "denied": [{"tool": "Bash", "input": "curl -X POST x"}]}
         with self.stop_at("worker", 2):
-            self.run_engine({"plan": [PLAN], "write": [first]}, route=ROUTE % "0.24.0")
+            self.run_engine({"plan": [PLAN], "write": [first]})
         again = dict(first, denied=[{"tool": "Bash", "input": "curl --data @f x"}])
-        rc, _ = self.run_engine({"write": [again, WRITE], "review": [CLEAN]}, route=ROUTE % "0.24.0")
+        rc, _ = self.run_engine({"write": [again, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 2)
         self.assertIn("curl -X POST x", self.blocked[-1])
         self.assertIn("curl --data @f x", self.blocked[-1])
 
     def test_the_secrets_tripwire_stops_the_bead_for_a_human_at_once(self):
         # delegate 0.25: a Codex command on a credential path stops the worker: failed, the command in denied
-        trip = {"v": 1, "status": "failed", "data": None, "text": "", "ref": "w1", "family": "openai",
+        trip = {"v": 2, "status": "failed", "reason": "secrets", "next": "owner", "data": None, "text": "", "ref": "w1", "family": "openai",
                 "say": "stopped: the command touches a credential file",
                 "denied": [{"tool": "shell", "input": "cat .env"}]}
-        rc, s = self.run_engine({"plan": [PLAN], "write": [trip, WRITE], "review": [CLEAN]}, route=ROUTE % "0.25.0")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [trip, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 2)
         self.assertEqual([c[0] for c in s.calls].count("worker"), 1)
         self.assertIn("needs a human", self.blocked[0])
         self.assertIn("cat .env", self.blocked[0])
         self.assertEqual(self.ask()["kind"], "verify")
 
-    def test_error_from_0_23_is_permanent(self):
-        err = {"v": 1, "status": "error", "say": "--host: the planner chain has no allowed lane"}
-        rc, s = self.run_engine({"plan": [err, PLAN]}, route=ROUTE % "0.23.0")
+    def test_fail_on_a_plan_tries_once_more_then_fails_the_task(self):
+        bad = ans("failed", "worker_failed", "fail", say="the worker exited 1")
+        rc, s = self.run_engine({"plan": [bad, bad]})
         self.assertEqual(rc, 2)
-        self.assertEqual(len(s.calls), 1)
-        self.assertIn("no allowed lane", self.blocked[0])
+        self.assertEqual(len(s.calls), 2)
+        self.assertTrue(self.blocked[0].startswith("failed:"))
+        self.assertIn("the worker exited 1", self.blocked[0])
 
-    def test_error_on_a_resume_from_0_23_retries_once_as_a_new_thread(self):
-        err = {"v": 1, "status": "error", "say": "--resume: the host flag differs from the original run"}
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, err, WRITE], "review": [review(unmet=["more"]), CLEAN]},
-                                route=ROUTE % "0.23.0")
-        self.assertEqual(rc, 0)
+    def test_fail_on_a_resumed_write_retries_once_as_a_new_thread(self):
+        refused = ans("error", "caller", "fail", say="--resume: the host flag differs from the original run")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, refused, WRITE], "review": [review(unmet=["more"]), CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
         workers = [c for c in s.calls if c[0] == "worker"]
         self.assertEqual(len(workers), 3)
         self.assertIsNotNone(workers[1][1])  # the second write resumed the writer's thread
-        self.assertIsNone(workers[2][1])     # the error made it start a new one
+        self.assertIsNone(workers[2][1])     # the fail made it start a new one
+
+    def test_no_answer_object_counts_as_fail(self):
+        real = DelegateScript.__call__
+
+        def crash(this, route, role, *a, **kw):
+            if role == "planner" and not this.calls:
+                this.calls.append((role, None, None))
+                this.prompts.append("")
+                return engine.Result(error="route.py exit 1, no answer object", backend="delegate"), None
+            return real(this, route, role, *a, **kw)
+        with mock.patch.object(DelegateScript, "__call__", crash):
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)  # one more try, then it went on
+
+    def test_secrets_raise_one_verify_ask(self):
+        trip = ans("failed", "secrets", "owner", say="stopped: credential path", denied=[{"tool": "shell", "input": "cat .env"}])
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [trip]})
+        self.assertEqual(rc, 2)
+        self.assertEqual(self.ask()["n"], 1)
+        self.assertIn("cat .env", self.blocked[0])
+
+    def test_an_owner_reason_without_denied_is_a_verify_ask_quoting_say(self):
+        bad = ans("error", "bad_request", "owner", say="HTTP 400: model gpt-x is not supported")
+        rc, _ = self.run_engine({"plan": [bad]})
+        self.assertEqual(rc, 2)
+        self.assertEqual(self.ask()["kind"], "verify")
+        self.assertIn("model gpt-x is not supported", self.blocked[0])
+
+    def test_the_trace_records_reason_context_and_the_lanes(self):
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [ans("lane_out", "lane_out", "retry", retry_after=0), WRITE],
+                                 "review": [CLEAN]})
+        self.assertEqual(rc, 0)
+        self.assertEqual(self.eng.sessions[1]["reason"], "lane_out")
+        self.assertEqual(self.eng.sessions[-1]["context"]["instructions"], ["/repo/AGENTS.md"])
+        trace = [json.loads(l) for l in (tl.config_dir() / "traces.jsonl").read_text().splitlines()][-1]
+        self.assertEqual(trace["lanes"], CONTRACT["lanes"])
+
+    def test_a_delegate_that_speaks_worker_run_v1_blocks_before_any_step(self):
+        c = engine.load_cfg(str(self.wt))
+        with mock.patch.object(engine, "find_route", return_value="/fake/route.py"), \
+                mock.patch.object(engine, "contract", return_value=None), \
+                mock.patch.object(engine, "call_delegate") as called:
+            rc = engine.Engine("t-1", str(self.wt), c).run()
+        self.assertEqual(rc, 2)
+        called.assert_not_called()
+        self.assertIn("worker-run v2", self.blocked[0])
+        self.assertIn("update", self.blocked[0])
 
     def test_child_env_drops_session_identity(self):
         with mock.patch.dict(os.environ, {"ANTHROPIC_BASE_URL": "x", "CLAUDE_CODE_SESSION_ID": "s"}):
@@ -1288,53 +1301,30 @@ class DelegateLauncher(unittest.TestCase):
     setUp, tearDown, fake_bd, run_engine = EngineTest.setUp, EngineTest.tearDown, EngineTest.fake_bd, EngineTest.run_engine
 
     def test_same_family_review_is_recorded(self):
-        same = {"v": 1, "status": "done", "data": CLEAN, "ref": "r", "family": "openai", "flag": "same_family"}
+        same = {"v": 2, "status": "done", "data": CLEAN, "ref": "r", "family": "openai", "flag": "same_family"}
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [same]})
         self.assertEqual(rc, 0)
         self.assertTrue(any(c[:2] == ("comments", "add") and "same family as the writer" in c[3] for c in self.bd_calls))
 
     def test_lane_out_waits_then_runs(self):
-        out = {"v": 1, "status": "lane_out", "retry_after": 0, "say": "codex out"}
+        out = ans("lane_out", "lane_out", "retry", retry_after=0, say="codex out")
         rc, s = self.run_engine({"plan": [PLAN], "write": [out, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
         self.assertEqual([c[0] for c in s.calls].count("worker"), 2)
 
-    def test_delegate_error_before_0_23_is_retried_without_a_schema_reprompt(self):
-        err = {"v": 1, "status": "error", "say": "state lock held >10 s"}
-        rc, s = self.run_engine({"plan": [PLAN], "write": [err, WRITE], "review": [CLEAN]}, route=ROUTE % "0.22.0")
-        self.assertEqual(rc, 0)
-        workers = [p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker"]
-        self.assertEqual(len(workers), 2)
-        self.assertNotIn("did not match the required output schema", workers[1])
-
-    # lifesim 2026-10-20: "never ask about permissions" kept a sandboxed Codex from compiling; each bead lost 1-2 rounds
-    # to compile and analyzer errors the engine's checks then found
-    def write_prompt(self, version, **cfg):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, route=ROUTE % version, **cfg)
-        self.assertEqual(rc, 0, self.blocked)
-        return next(p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker")
-
-    def test_a_sandboxed_writer_on_delegate_0_24_runs_the_checks_and_may_escalate_one_command(self):
-        p = self.write_prompt("0.26.0")
-        self.assertIn("ask once to run that exact command outside it", p)
-        self.assertIn("compile", p)
-        self.assertNotIn("never ask about permissions", p)
-        self.assertNotIn("Run only the quick checks", p)
-
-    def test_a_sandboxed_writer_before_delegate_0_24_keeps_to_quick_checks(self):
-        p = self.write_prompt("0.22.0")
-        self.assertIn("Run only the quick checks", p)
-        self.assertIn("never ask about permissions", p)
-        self.assertNotIn("outside it", p)
-
-    def test_a_writer_with_the_host_is_told_it_has_the_host(self):
-        with mock.patch.object(engine.Engine, "granted_host", return_value=True):  # as if .task-loop.json granted it
-            p = self.write_prompt("0.26.0")
-        self.assertIn("You have the host", p)
-        self.assertNotIn("never ask about permissions", p)
+    def test_the_writer_brief_has_no_sandbox_or_git_text(self):
+        # delegate 0.29 owns what the worker is told about its sandbox, escalation and git (worker-run v2)
+        for host in (False, True):
+            with mock.patch.object(engine.Engine, "granted_host", return_value=host):
+                rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+            self.assertEqual(rc, 0, self.blocked)
+            w = next(p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker")
+            for gone in ("sandbox", "escalat", "permissions", "You have the host", "no commits", "no pushing"):
+                self.assertNotIn(gone, w, (host, gone))
+            self.assertIn("Never run the gate", w)
 
     def test_network_down_waits_and_retries(self):
-        down = {"v": 1, "status": "failed", "say": "API Error: Can't reach the API server — check your internet or DNS (ENOTFOUND)"}
+        down = ans("failed", "network", "retry", retry_after=0, say="ENOTFOUND api.anthropic.com")
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [down, CLEAN]})
         self.assertEqual(rc, 0)
         self.assertEqual([c[0] for c in s.calls].count("reviewer"), 2)
@@ -1342,15 +1332,15 @@ class DelegateLauncher(unittest.TestCase):
 
     # lifesim 2026-10-20: woken from sleep, Codex ended its turn after 12 s with a vendor error and no tokens; delegate
     # 0.26 answered failed and the engine closed two beads as failed
-    QUICK = {"v": 1, "status": "failed", "data": None, "ref": "w1", "family": "openai", "tokens": None,
-             "say": "failed: codex: workspace routing discovery failed"}
+    QUICK = ans("stop", "vendor_prework", "retry", retry_after=0, ref="w1", tokens=None,
+                say="codex failed before any work: workspace routing discovery failed")
 
     def test_a_failure_before_any_work_waits_and_retries(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [self.QUICK, self.QUICK, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual([c[0] for c in s.calls].count("worker"), 3)
         log = self.eng.log_path.read_text()
-        self.assertIn("failed before any work", log)
+        self.assertIn("vendor_prework", log)
         self.assertNotIn("did not match the required output schema", "".join(s.prompts))
 
     def test_a_failure_before_any_work_that_keeps_coming_pauses_the_bead_open(self):
@@ -1362,13 +1352,13 @@ class DelegateLauncher(unittest.TestCase):
         self.assertLess([c[0] for c in s.calls].count("worker"), 20)
 
     def test_a_failure_after_work_still_fails(self):
-        worked = dict(self.QUICK, tokens={"in": 90000, "cached": 0, "out": 4000})
+        worked = ans("failed", "worker_failed", "fail", tokens={"in": 90000, "cached": 0, "out": 4000}, say="codex: turn failed")
         rc, s = self.run_engine({"plan": [PLAN], "write": [worked, worked]})
         self.assertEqual(rc, 2)
         self.assertTrue(self.blocked and self.blocked[0].startswith("failed:"))
 
     def test_a_logged_out_worker_pauses_without_retry_and_leaves_the_bead_open(self):
-        out = {"v": 1, "status": "failed", "say": "Failed to authenticate: OAuth session expired and could not be refreshed"}
+        out = ans("failed", "logged_out", "owner", family="claude", say="Failed to authenticate: OAuth session expired")
         rc, s = self.run_engine({"plan": [out, out]})
         self.assertEqual(rc, 2)
         self.assertEqual([c[0] for c in s.calls], ["planner"])
@@ -1383,7 +1373,7 @@ class DelegateLauncher(unittest.TestCase):
         self.assertTrue(self.blocked)
 
     def test_no_lane_for_too_long_blocks(self):
-        stop = {"v": 1, "status": "stop", "retry_after": 0, "say": "no adequate model"}
+        stop = ans("stop", "no_lane", "retry", retry_after=0, say="no adequate model")
         rc, _ = self.run_engine({"plan": [stop] * 3}, lane_wait_min=2)
         self.assertEqual(rc, 2)
         self.assertEqual(self.blocked, [])  # a machine-wide wait is not the bead's fault: it stays open
@@ -1391,7 +1381,7 @@ class DelegateLauncher(unittest.TestCase):
                             for c in self.bd_calls))
 
     def test_a_lane_out_for_long_pauses_at_once_and_frees_the_slot(self):
-        later = {"v": 1, "status": "lane_out", "retry_after": time.time() + 3 * 3600, "say": "codex out until 21:00"}
+        later = ans("lane_out", "lane_out", "retry", retry_after=time.time() + 3 * 3600, say="codex out until 21:00")
         rc, s = self.run_engine({"plan": [PLAN], "write": [later]})
         self.assertEqual(rc, 2)
         self.assertEqual([c[0] for c in s.calls].count("worker"), 1)  # no hour of sleeping in the slot
@@ -1422,10 +1412,10 @@ class DelegateLauncher(unittest.TestCase):
         self.assertIn(str(other), self.blocked[0])
         self.assertTrue(Path(other, "dirty.txt").exists())
 
-    def test_another_contract_version_blocks(self):
-        rc, _ = self.run_engine({"plan": [{"v": 2, "status": "done"}]})
+    def test_another_answer_version_blocks(self):
+        rc, _ = self.run_engine({"plan": [{"v": 3, "status": "done"}]})
         self.assertEqual(rc, 2)
-        self.assertIn("worker-run v2", self.blocked[0])
+        self.assertIn("worker-run v3", self.blocked[0])
 
     def test_no_delegate_blocks_with_the_install_command(self):
         c = engine.load_cfg(str(self.wt))
@@ -1440,7 +1430,7 @@ class DelegateCall(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             route = Path(d, "route.py")
             route.write_text("import json,sys\nprint('chatter', file=sys.stderr)\n"
-                             "print(json.dumps({'v': 1, 'status': 'done', 'data': {'argv': sys.argv[1:]}, 'ref': 'r1',"
+                             "print(json.dumps({'v': 2, 'status': 'done', 'data': {'argv': sys.argv[1:]}, 'ref': 'r1',"
                              " 'cost': 0, 'family': 'openai'}))\n")
             r, j = engine.call_delegate(str(route), "worker", "do it", {"type": "object"}, d, "r0", 60,
                                         Path(d, "err.log"), writer="claude", parent="p", task="t-1", title="x")
@@ -1456,33 +1446,29 @@ class DelegateCall(unittest.TestCase):
     def test_call_delegate_passes_the_access_flag(self):
         with tempfile.TemporaryDirectory() as d:
             route = Path(d, "route.py")
-            route.write_text("import json,sys\nprint(json.dumps({'v': 1, 'status': 'done', 'data': {'argv': sys.argv[1:]}}))\n")
+            route.write_text("import json,sys\nprint(json.dumps({'v': 2, 'status': 'done', 'data': {'argv': sys.argv[1:]}}))\n")
             r, _ = engine.call_delegate(str(route), "worker", "x", {"type": "object"}, d, None, 60, Path(d, "e.log"),
                                         access="--host")
         self.assertIn("--host", r.data["argv"])
 
-    def test_headless_args_follow_the_installed_version(self):
-        base = "/h/.claude/plugins/cache/m/iorlas-delegate/%s/skills/delegate/route.py"
-        self.assertEqual(engine.headless_args(base % "0.17.0", 600), ["--timeout", "600"])
-        self.assertEqual(engine.headless_args(base % "0.18.0", 600), ["--headless"])
-        self.assertEqual(engine.headless_args(base % "0.19.0", 600), ["--unattended"])
-        self.assertEqual(engine.headless_args("/src/delegate/skills/delegate/route.py", 600), ["--unattended"])
-
-    def test_author_flag_follows_the_installed_version(self):
-        base = "/h/.claude/plugins/cache/m/iorlas-delegate/%s/skills/delegate/route.py"
-        self.assertEqual(engine.author_flag(base % "0.16.0"), "--writer")
-        self.assertEqual(engine.author_flag(base % "0.17.0"), "--authored-by")
-        self.assertEqual(engine.author_flag(base % "1.2.0"), "--authored-by")
-        self.assertEqual(engine.author_flag("/src/delegate/skills/delegate/route.py"), "--authored-by")
+    def test_contract_reads_the_handshake_and_refuses_another_version(self):
+        with tempfile.TemporaryDirectory() as d:
+            route = Path(d, "route.py")
+            route.write_text("import json\nprint(json.dumps({'worker_run': 2, 'lanes': {'codex': {}}}))\n")
+            self.assertEqual(engine.contract(str(route))["worker_run"], 2)
+            route.write_text("import sys\nprint('usage: route.py {run,status}', file=sys.stderr); sys.exit(2)\n")
+            self.assertIsNone(engine.contract(str(route)))
+            route.write_text("import json\nprint(json.dumps({'worker_run': 3}))\n")
+            self.assertIsNone(engine.contract(str(route)))
 
     def test_find_route_picks_the_newest_contract_version(self):
         with tempfile.TemporaryDirectory() as home:
-            for v in ("0.9.1", "0.14.0", "0.15.2", "0.2.0"):
+            for v in ("0.9.1", "0.29.0", "0.30.2", "0.2.0"):
                 p = Path(home, ".claude/plugins/cache/m/iorlas-delegate", v, "skills/delegate")
                 p.mkdir(parents=True)
                 (p / "route.py").write_text("")
             with mock.patch.object(engine.Path, "home", return_value=Path(home)):
-                self.assertIn("0.15.2", engine.find_route())
+                self.assertIn("0.30.2", engine.find_route())
         with tempfile.TemporaryDirectory() as home, mock.patch.object(engine.Path, "home", return_value=Path(home)):
             self.assertIsNone(engine.find_route())
             self.assertIsNone(engine.find_route(str(Path(home, "missing.py"))))

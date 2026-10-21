@@ -723,7 +723,7 @@ def main(argv=None):
         import engine
         route = engine.find_route()
         if not route:
-            print("no delegate with worker-run v1 installed: nothing to feed")
+            print("no delegate installed: nothing to feed")
             return 0
         r = subprocess.run([sys.executable, route, "status", "--claude-usage", a.windows, "--json"], capture_output=True,
                            text=True, encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL)

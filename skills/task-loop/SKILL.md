@@ -53,8 +53,13 @@ writer reads first). The profile gives:
 host: the writer runs Unity and tests itself, on this machine. Only the `.task-loop.json` committed on the base branch
 (`origin/main`) counts: a worker can label its own bead or edit a checkout's config, but not main without review and
 the gate. The labels `host` / `no-sandbox` alone grant nothing (a ⚠ says so); `sandbox` still turns it off for one bead.
-Delegate 0.24+ gets `--host` on every step and any lane takes it (Codex stays sandboxed; its automatic reviewer approves
-each command that must leave the sandbox); 0.23 on write steps only; 0.20-0.22 get `--no-sandbox`. Without the host, a writer on delegate 0.24+ compiles and runs the stage's checks itself, asking once per blocked command to run it outside the sandbox; before 0.24 it runs only quick checks and leaves the rest to the engine. A command the worker was denied shows as a ⚠; denied with no answer, or a second denied write in the bead (across lanes and runs), blocks it "needs a human:
+Workers go through delegate's worker-run v2 (`docs/contracts/worker-run-v2.md`, delegate 0.29+): the engine checks
+`route.py contract --json` before any step and blocks the task when delegate speaks another version. A granted host is
+`--host` on every step. Delegate, not the engine, tells each worker what its sandbox allows, how to ask for a blocked
+command and the git and credential rules; the engine's briefs say only what the step is for. Each answer's `next` is
+the whole policy: `retry` waits until `retry_after` (past `engine.lane_wait_min` the run pauses, bead open), `owner`
+pauses for a login or setup or raises a verify ask, `fail` tries once more as a new thread, then fails the task. The
+trace keeps each session's `reason` and `context` (instruction files, env key names) and the run's lane manifest. A command the worker was denied shows as a ⚠; denied with no answer, or a second denied write in the bead (across lanes and runs), blocks it "needs a human:
 <command>". `tl run-task` refuses the main checkout as a worktree (it holds the bead database and the config).
 
 A rerun resumes, never restarts. Each step saves a checkpoint (`~/.config/task-loop/checkpoints/<bead>.json`): the
@@ -95,7 +100,7 @@ AI step; a plan of more than `engine.max_stages` (3) stages is a split ticket, u
 
 Asks: every block is an owner ask, `~/.config/task-loop/asks/<bead>.json` plus an `Ask (engine)` comment: decision
 (a step's question), verify (a denial, or what the workers could not check), stuck (rounds, replans or fix rounds used up,
-budget, land failed), ticket (intake). A machine pause (login, network, lanes, a step that failed before any work: no output tokens, seconds in, e.g. a vendor error right after the Mac wakes; retried after 1, 2, 4 min, then paused with the vendor's message) is no ask. A rerun with the ask open and
+budget, land failed), ticket (intake). A machine pause (a `retry` answer past the wait, or `owner` for a login or setup) is no ask. A rerun with the ask open and
 the bead unchanged waits (no AI step, the bead stays blocked); the owner answers by commenting on or editing the bead,
 and the rerun goes on from its checkpoint (an answered verify goes straight to land). The writer's `unchecked` items go to the review, which reports what is still unproven after the checks;
 a requirement, number, deletion, link, case or tooling item stops the land with a verify ask; `other` items land and

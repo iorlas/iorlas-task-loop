@@ -49,9 +49,9 @@ DEFAULTS = {
     "lane_wait_min": 10,              # how long a step waits in its slot for a lane; longer: the run pauses (slot freed)
     "checks": [],                     # repo checks: [{id, cmd, group: static|tests|acceptance, when: [globs], retry}]
     "host": False,                    # the work needs the host (Unity, an editor): write steps get delegate's --host
-                                      # (--no-sandbox below 0.23); a bead label host / sandbox overrides it for one bead
+                                      # a bead label `sandbox` turns it off for one bead
     "no_sandbox": False,              # the 0.6 name of `host`, still read
-    "worker_rules": "",               # repo file the writer reads first: what its sandbox can and cannot run
+    "worker_rules": "",               # repo file the planner and writer read first (lifesim: docs/agents/codex.md)
     "brief_kb": 5,
     "test_pattern": r"^\s*(def test_|async def test_|\[(Test|Fact|Theory|TestMethod|TestCase)\b|#\[test\]|(it|test)\(|func Test)",                    # a brief bigger than this gets a ⚠ (never cut: the bead may be too big)
 }
@@ -199,78 +199,45 @@ ROLES = {"plan": "planner", "write": "worker", "review": "reviewer"}
 
 
 def find_route(path=""):
-    """delegate's route.py: `path` when given (engine.delegate), else the newest installed delegate with worker-run v1."""
+    """delegate's route.py: `path` when given (engine.delegate), else the newest installed delegate. Whether it speaks
+    worker-run v2 is the handshake's to say (contract)."""
     if path:
         return path if os.path.exists(path) else None
     found = []
     for p in (Path.home() / ".claude" / "plugins" / "cache").glob("*/iorlas-delegate/*/skills/delegate/route.py"):
-        ver = tuple(int(x) for x in re.findall(r"\d+", p.parents[2].name)[:3])
-        if ver >= (0, 14):  # worker-run v1 starts at delegate 0.14.0
-            found.append((ver, str(p)))
+        found.append((tuple(int(x) for x in re.findall(r"\d+", p.parents[2].name)[:3]), str(p)))
     return max(found)[1] if found else None
 
 
-def delegate_version(route):
-    """(major, minor) of the installed delegate the route.py belongs to; None for a checkout (counts as newest)."""
-    m = re.search(r"iorlas-delegate[/\\](\d+)\.(\d+)", route)
-    return (int(m.group(1)), int(m.group(2))) if m else None
+def contract(route):
+    """delegate's worker-run handshake (`route.py contract --json`): the answer when it speaks v2, else None."""
+    try:
+        r = subprocess.run([sys.executable, route, "contract", "--json"], capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=60, env=child_env())
+        j = json.loads(r.stdout.strip().splitlines()[-1]) if r.returncode == 0 and r.stdout.strip() else None
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+    return j if isinstance(j, dict) and j.get("worker_run") == 2 else None
 
 
-def access(route, node, wanted):
-    """The flag that gives this step the host, when the task wants it. Delegate 0.24.0+: `--host` on every step (any lane
-    takes it; a Claude planner or reviewer gets Bash with it, so it can look at what the writer will need). 0.23: on the
-    write step only (0.23 sent host work to Claude alone; a reviewer kept its usual lane). 0.20-0.22: `--no-sandbox`, the
-    write step from 0.20.0, every step from 0.21.0. Returns (flag or "", the reason it is off although wanted, or "")."""
-    if not wanted:
-        return "", ""
-    v = delegate_version(route)
-    if v is None or v >= (0, 24):
-        return "--host", ""
-    if v >= (0, 23):
-        return ("--host" if node == "write" else ""), ""
-    need = (0, 20) if node == "write" else (0, 21)
-    if v < need:
-        return "", "--no-sandbox for %s needs delegate %d.%d (installed %d.%d): it runs sandboxed" % (
-            node, need[0], need[1], v[0], v[1])
-    return "--no-sandbox", ""
-
-
-def permanent_errors(route):
-    """Delegate 0.23.0+ answers `error` only when retrying the same call cannot help (a busy lock is `stop`)."""
-    v = delegate_version(route)
-    return v is None or v >= (0, 23)
-
-
-def author_flag(route):
-    """delegate renamed --writer to --authored-by in 0.17.0."""
-    v = delegate_version(route)
-    return "--writer" if v and v < (0, 17) else "--authored-by"
-
-
-def headless_args(route, timeout):
-    """How an engine says "no Claude session behind me": delegate 0.19.0 --unattended, 0.18.x --headless (both with no
-    --timeout: the engine's own node limit still kills the process, run_proc), before 0.18 --timeout and the env."""
-    v = delegate_version(route)
-    if v and v < (0, 18):
-        return ["--timeout", str(int(timeout))]
-    if v and v < (0, 19):
-        return ["--headless"]
-    return ["--unattended"]
+def access(wanted):
+    """The flag that gives a step the host, when the task was granted it (worker-run v2: every step takes `--host`)."""
+    return "--host" if wanted else ""
 
 
 def call_delegate(route, role, prompt, schema, cwd, resume, timeout, log_path, writer=None, parent="", task="",
                   title="", access=""):
-    """One AI step through `route.py run` (worker-run v1). Returns (Result, the answer object or None)."""
+    """One AI step through `route.py run` (worker-run v2). Returns (Result, the answer object or None)."""
     with tempfile.TemporaryDirectory() as d:
         bf, sf = os.path.join(d, "brief.md"), os.path.join(d, "schema.json")
         Path(bf).write_text(prompt, encoding="utf-8")
         Path(sf).write_text(json.dumps(schema))
         cmd = [sys.executable, route, "run", role, "--brief", bf, "--cwd", cwd, "--schema", sf,
-               *headless_args(route, timeout), "--parent", parent, "--task", task, "--title", title[:120]]
+               "--unattended", "--parent", parent, "--task", task, "--title", title[:120]]
         if resume:
             cmd += ["--resume", resume]
         if writer:
-            cmd += [author_flag(route), writer]
+            cmd += ["--authored-by", writer]
         if access:
             cmd.append(access)
         res, secs = run_proc(cmd, cwd, timeout + 120, log_path)
@@ -291,12 +258,6 @@ def call_delegate(route, role, prompt, schema, cwd, resume, timeout, log_path, w
 
 
 # ---- the engine -----------------------------------------------------------------------------------------------------
-
-LOGGED_OUT = re.compile(r"(?i)failed to authenticate|oauth session expired|not logged in|please run .*login|"
-                        r"invalid api key|authentication_error")
-NETWORK_DOWN = re.compile(r"(?i)ENOTFOUND|EAI_AGAIN|ECONNRESET|ECONNREFUSED|ETIMEDOUT|can't reach the api server|"
-                          r"network is unreachable|could not resolve host|dns error|connection reset")
-
 
 class Blocked(Exception):
     def __init__(self, why, question=""):
@@ -323,7 +284,7 @@ class Engine:
         self.answered = None  # the owner ask this run starts from, once answered
         self.stuck_why = ""
         self.host = False  # granted after reset, from the base branch's .task-loop.json only (granted_host)
-        self.sandbox_warned = set()
+        self.contract = None  # delegate's worker-run v2 handshake: features, reasons, what each lane's workers see
         self.budget_warned = set()
         self.writer = {}  # backend -> thread/session id, so later rounds of a task resume the same writer
         self.sessions = []  # every AI call of this run: the trace a later reflection reads (traces.jsonl)
@@ -360,7 +321,8 @@ class Engine:
                "ref": j.get("ref") or r.ref or "", "run_id": j.get("run_id") or "", "transcript": j.get("transcript") or "",
                "family": j.get("family") or "", "lane": j.get("lane") or "", "model": j.get("model") or "",
                "effort": j.get("effort") or "", "secs": round(r.secs or 0), "cost": r.cost or 0.0, "t": time.time(),
-               "host": host, "tokens": j.get("tokens"), "denied": j.get("denied") or []}  # delegate 0.22+: {in, cached, out}, in counts cached
+               "host": host, "tokens": j.get("tokens"), "denied": j.get("denied") or [],  # tokens {in, cached, out}
+               "reason": j.get("reason"), "next": j.get("next"), "context": j.get("context")}
         for k in ("in", "cached", "out"):
             self.stats["tokens_" + k] += int((rec["tokens"] or {}).get(k) or 0)
         self.sessions.append(rec)
@@ -373,7 +335,7 @@ class Engine:
                "branch": self.git("symbolic-ref", "--short", "-q", "HEAD"), "coordinator_session": self.session,
                "started": self.t0, "ended": time.time(), "outcome": outcome, "why": (why or "")[:500], "sha": sha or "",
                "cost": self.cost, "stats": self.stats, "host": self.host, "delegate": self.route or "", "log": str(self.log_path),
-               "stderr": str(self.err_path), "sessions": self.sessions}
+               "stderr": str(self.err_path), "lanes": (self.contract or {}).get("lanes"), "sessions": self.sessions}
         try:
             with open(tl.config_dir() / "traces.jsonl", "a", encoding="utf-8") as f:
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
@@ -407,84 +369,54 @@ class Engine:
         resume = self.writer.get("delegate") if resume_key else None
         if getattr(self, "plan_data", None):  # an unsandboxed worker can write here: every step reads the engine's plan
             (self.run_dir / "plan.json").write_text(json.dumps(self.plan_data, indent=1))
-        flag, why = access(self.route, node, self.host)
-        if why and why not in self.sandbox_warned:
-            self.sandbox_warned.add(why)
-            self.warn(why)
+        flag = access(self.host)
         self.log("node", "%s: %s" % (node, title), node=node, backend="delegate", role=role, resume=bool(resume))
         timeout = float(self.cfg["node_timeout_min"]) * 60
-        waited, attempt_prompt, attempt, errs, transient, fresh, quick = 0.0, prompt, 1, ["not run"], 0, False, 0
+        waited, attempt_prompt, attempt, errs = 0.0, prompt, 1, ["not run"]
         while attempt <= 2:
             r, j = call_delegate(self.route, role, attempt_prompt, SCHEMAS[node], self.wt, resume, timeout,
                                  self.err_path, writer, self.session, self.bead, "%s · %s: %s" % (self.bead, node, title),
                                  access=flag)
-            if j is not None and j.get("v") != 1:
-                raise Blocked("failed: delegate answered worker-run v%s, this engine speaks v1 (update task-loop)"
-                              % j.get("v"))
-            st = (j or {}).get("status")
+            if j is not None and j.get("v") != 2:
+                raise Blocked("failed: delegate answered worker-run v%s, this engine speaks v2 (update task-loop or "
+                              "delegate)" % j.get("v"))
             self.trace_call(node, role, attempt, r, j, bool(flag))
-            if st in ("lane_out", "stop"):
+            j = j or {}
+            nxt, reason, said = j.get("next"), j.get("reason") or "", (j.get("say") or r.error or "").strip()
+            if j and j.get("status") == "done":
+                nxt = None
+            elif not j:
+                nxt, reason = "fail", "no_answer"  # route.py crashed, printed nothing, or the node timeout killed it
+            if nxt == "retry":  # worker-run v2: delegate says when; how long a slot waits is this engine's policy
                 due = float(j.get("retry_after") or 0)
                 wait = max(60.0, due - time.time())
                 if waited + wait > float(self.cfg["lane_wait_min"]) * 60:  # a long wait frees the slot; the checkpoint resumes
-                    raise Blocked("paused: no lane for %s until %s (%s)" % (
-                        node, time.strftime("%H:%M", time.localtime(due)) if due > time.time() else "a lane frees",
-                        j.get("say") or st))
+                    raise Blocked("paused: %s for %s until %s (%s: %s)" % (
+                        "no network" if reason == "network" else "no lane", node,
+                        time.strftime("%H:%M", time.localtime(due)) if due > time.time() else "a lane frees",
+                        reason, said[:200]))
                 wait = min(600.0, wait)
-                self.warn("%s waits %d min for a lane: %s" % (node, wait // 60, j.get("say") or st))
+                self.warn("%s waits %d min (%s): %s" % (node, wait // 60, reason, said[:160]))
                 time.sleep(wait)
                 waited += wait
                 continue
-            said = "%s %s" % ((j or {}).get("say") or "", r.error or "")
-            if LOGGED_OUT.search(said):  # retrying cannot help: the owner must log in (Setup), the bead stays open
-                login = "codex login" if "codex" in said.lower() or (j or {}).get("family") == "openai" else "claude auth login"
-                raise Blocked("paused: a worker CLI is logged out; run `%s` on this machine, then rerun. (%s)"
-                              % (login, said.strip()[:200]))
-            if NETWORK_DOWN.search(said):  # the machine lost the network (asleep, Wi-Fi): wait like for a lane
-                if waited + 60 > float(self.cfg["lane_wait_min"]) * 60:
-                    raise Blocked("paused: no network for %s for %s min (%s)" % (node, self.cfg["lane_wait_min"],
-                                                                                 said.strip()[:200]))
-                self.warn("%s: network down, retrying in 1 min: %s" % (node, said.strip()[:160]))
-                time.sleep(60)
-                waited += 60
-                continue
-            if (st == "failed" and r.data is None and not (j or {}).get("denied")
-                    and not ((j or {}).get("tokens") or {}).get("out") and r.secs < 90):
-                # failed before any work (no output tokens, seconds in): a vendor or network blip, e.g. right after the
-                # Mac wakes; delegate 0.27 answers stop for it, 0.26 and older failed. Back off, then pause, never fail
-                wait = min(240.0, 60.0 * 2 ** quick)
-                if waited + wait > float(self.cfg["lane_wait_min"]) * 60:
-                    raise Blocked("paused: %s failed before any work for %s min (%s)" % (
-                        node, self.cfg["lane_wait_min"], said.strip()[:200] or st))
-                quick += 1
-                self.warn("%s failed before any work, retrying in %d min: %s" % (node, wait // 60, said.strip()[:160]))
-                time.sleep(wait)
-                waited += wait
-                continue
-            if st == "error" and permanent_errors(self.route):
-                if resume and not fresh:  # e.g. a resume whose host flag differs from its first run: start a new thread
-                    fresh, resume, attempt_prompt = True, None, prompt
-                    self.warn("%s: delegate refused the resume, starting a new thread: %s" % (node, (j or {}).get("say") or r.error))
-                    continue
-                raise Blocked("failed: delegate error on %s: %s" % (node, (j or {}).get("say") or r.error))
-            if st == "error" and transient < 2:  # delegate 0.19-0.22: a state lock held >10 s answers error; try again
-                transient += 1
-                self.warn("%s: delegate error, retrying in 30 s: %s" % (node, (j or {}).get("say") or r.error))
-                time.sleep(30)
-                continue
-            if st == "agent":
-                raise Blocked("failed: delegate answered `agent`; it does not see this engine as headless")
             self.cost += r.cost
-            if j and j.get("git_violation"):
+            denied = "; ".join("`%s`" % (d.get("input") or d.get("tool")) for d in j.get("denied") or [])
+            if nxt == "owner" and not denied:
+                if reason in ("logged_out", "setup"):  # the machine's to fix, not the bead's: it stays open, no ask
+                    fix = ("run `codex login`" if j.get("family") == "openai" else "run `claude auth login`") \
+                        if reason == "logged_out" else "set up delegate (/iorlas-delegate:init)"
+                    raise Blocked("paused: %s on %s; %s on this machine, then rerun. (%s)" % (reason, node, fix, said[:200]))
+                raise Blocked("needs a human: delegate stopped the %s step (%s): %s" % (node, reason, said[:400]))
+            if j.get("git_violation"):
                 self.warn("%s changed git: %s" % (node, "; ".join(j["git_violation"])))
-            if resume_key and r.ref and st == "done":
+            if resume_key and r.ref and j.get("status") == "done":
                 self.writer["delegate"] = resume = r.ref
-            errs = validate(r.data, SCHEMAS[node]) if r.data is not None else [
-                "no structured output" + (": " + r.error if r.error else "")]
-            denied = "; ".join("`%s`" % (d.get("input") or d.get("tool")) for d in (j or {}).get("denied") or [])
+            errs = validate(r.data, SCHEMAS[node]) if (r.data is not None and nxt is None) else [
+                "%s: %s" % (reason or "no structured output", said[:300])]
             if denied and errs:  # asking again meets the same refusal
                 raise Blocked("needs a human: the %s step was denied %s and gave no answer; run it or allow it, then "
-                              "rerun. (%s)" % (node, denied, ((j or {}).get("text") or r.error or "")[:200]))
+                              "rerun. (%s)" % (node, denied, (j.get("text") or said or "")[:200]))
             if denied and node == "write":  # once is a warning; twice in a bead is a pattern the owner must see
                 self.denials.append(denied)
                 if len(self.denials) >= 2:
@@ -496,12 +428,8 @@ class Engine:
             if not errs:
                 break
             self.log("note", "%s output invalid (try %d): %s" % (node, attempt, "; ".join(errs[:4])))
-            fix = ("Your previous answer did not match the required output schema: %s. Answer again with only the "
-                   "structured result." % "; ".join(errs[:6]))
-            if r.ref and st == "done":
-                resume, attempt_prompt = r.ref, fix
-            else:
-                resume, attempt_prompt = None, prompt + "\n\n" + fix
+            if resume:  # one more try as a new thread: a refused or broken resume is not worth a second attempt
+                resume, attempt_prompt = None, prompt
             attempt += 1
         if errs:
             raise Blocked("failed: %s node produced no valid output (%s)" % (node, "; ".join(errs[:3])))
@@ -689,7 +617,11 @@ class Engine:
             if not self.route:
                 raise Blocked("failed: the engine needs the iorlas-delegate plugin (0.14.0 or later): "
                               "claude plugin install iorlas-delegate@iorlas-marketplace")
-            self.log("note", "workers: delegate %s (worker-run v1)" % self.route)
+            self.contract = contract(self.route)
+            if not self.contract:
+                raise Blocked("failed: delegate at %s does not speak worker-run v2; update delegate (claude plugin "
+                              "update iorlas-delegate@iorlas-marketplace) or this engine" % self.route)
+            self.log("note", "workers: delegate %s (worker-run v2)" % self.route)
             self.reset(bead)
             self.host = self.granted_host(bead.get("labels") or [])
             self.check_ask()
@@ -962,7 +894,7 @@ class Engine:
             w, wfam = self.ai("write", "%s write %d" % (name, n), WRITE_PROMPT.format(
                 brief=self.brief_text(), plan=self.plan_text(), n=i + 1, goal=st["goal"],
                 files=", ".join(st["files"]), checks="\n".join("- " + c for c in st["checks"]) or "- (none named)",
-                feedback=feedback, evidence=self.evidence_dir, where=self.where("write"), blocked=self.blocked_line(), gate=(" (`%s`)" % self.cfg["gate"]) if self.cfg["gate"] else "",
+                feedback=feedback, evidence=self.evidence_dir, where=self.where("write"), gate=(" (`%s`)" % self.cfg["gate"]) if self.cfg["gate"] else "",
                 rules=("\nRead %s first: this repo's rules for work in your sandbox (what runs there, what does not)."
                        % (Path(self.wt) / self.cfg["worker_rules"])) if self.cfg["worker_rules"] else "") +
                 "\nThe plan's acceptance cases run on the last stage. If you find a case they miss, add it to new_cases (the "
@@ -1039,39 +971,12 @@ class Engine:
                 "".join("- %s:%s [%s] %s\n" % (f["file"], f["line"], f["severity"], f["fix"]) for f in blocking)))
 
     def where(self, node):
-        """What the step may run, by whether it is sandboxed."""
-        free = bool(access(self.route, node, self.host)[0])
+        """What the step is for, never what its sandbox allows: delegate tells each worker that (worker-run v2)."""
         if node == "write":
-            if free:
-                return ("You have the host: run the tests and tools you need (unit tests, the editor's batch tests, "
-                        "builds) to see your change work before you say it is done. If a command is refused, do not "
-                        "reword it to get around the refusal: say which command and why you needed it.")
-            if self.escalates():
-                return ("Before you say it is done, compile your change and run the stage's checks yourself (the build, "
-                        "the analyzers, the editor's batch tests), so a compile or analyzer error never reaches the "
-                        "engine. When the sandbox blocks a command, ask once to run that exact command outside it, with "
-                        "a one-line reason; an automatic reviewer approves or refuses it. If it is refused, do not reword "
-                        "it: say which command and move on. The engine reruns every check after you.")
-            return ("Run only the quick checks (seconds, no build of the whole project, no editor) to see your change "
-                    "works; anything that needs the host is run by the engine after you.")
-        return ("You have the host and may run commands to check facts (look at files the task names outside the "
-                "repo, open cited links, run a linter or a test); never edit, create or delete files." if free else "")
-
-    def escalates(self):
-        """delegate 0.24.0+: a sandboxed Codex command the sandbox blocks may ask to run outside it, and an automatic
-        reviewer approves or refuses it (no human)."""
-        v = delegate_version(self.route)
-        return v is None or v >= (0, 24)
-
-    def blocked_line(self):
-        """What the writer does about a check its sandbox cannot run."""
-        if access(self.route, "write", self.host)[0]:
-            return ""
-        if self.escalates():
-            return ("A check still blocked after that one request (network, local ports, paths outside this folder) is "
-                    "run by the engine after you; say so in the summary and move on.")
-        return ("Checks your sandbox cannot run (network, local ports, paths outside this folder) are run by the engine "
-                "after you,\noutside the sandbox; say so in the summary and move on, never ask about permissions.")
+            return ("Before you say it is done, run the stage's checks you can (the build, the tests the stage names), so "
+                    "an error never reaches the engine; the engine reruns every check after you. If a command is "
+                    "refused, do not reword it to get around the refusal: say which command and why you needed it.")
+        return "You may run commands to check facts (read files, run a linter or a test); never edit, create or delete files."
 
     def tree_hash(self):
         """The worktree as git would commit it now, untracked files included, without touching the real index."""
@@ -1615,24 +1520,23 @@ WRITE_PROMPT = """You are the writer for one stage of a task, in an unattended e
 </plan>
 Your stage: {n}: {goal}{rules}
 Files: {files}
-The stage's checks (the engine runs all of them after you, outside your sandbox):
+The stage's checks (the engine runs all of them after you):
 {checks}
 {where}
 Never run the gate{gate} or the issue tracker (bd): the engine runs the gate, and its run is the one that counts.
 Repo instructions that say a change is done only when the full gate passes are for people working by hand; here the
 engine does that part.
 {feedback}
-{blocked}
 bad_checks: a stage check that fails for a reason no code change can fix (wrong arguments, a guard that rejects the
 uncommitted work this stage must leave, a pattern that matches harmless text), each with why; else empty. The engine
 then asks for a new plan instead of retrying.
-A check that times out or fails only in your sandbox is not yours to retry; note it once and move on.
+A check that times out or fails only where you run it is not yours to retry; note it once and move on.
 Proof the engine cannot rerun (a test seen failing after a planted fault, then passing once restored; a manual
 measurement): save the exact commands and their output as files in {evidence}/ and name those files in the summary.
 Only that proof goes there, never your own runs of the checks.
-Rules: no commits, no pushing, no branches; no suppressions; do not weaken, skip or delete tests; stay inside the
+Rules: no suppressions; do not weaken, skip or delete tests; stay inside the
 stage. question: empty unless only the owner can decide something about the task itself (then explain it for a
-phone); never a question about tools, sandbox or permissions."""
+phone); never a question about tools or access."""
 
 REVIEW_PROMPT = """You review one stage of a task, from another model family than the writer. Do not edit files.
 <task>

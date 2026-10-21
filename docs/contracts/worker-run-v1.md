@@ -1,6 +1,6 @@
 # worker-run v1: how the engine asks a launcher to run one AI step
 
-Status: implemented (delegate 0.14.0, task-loop 0.4.0). Owner: task-loop (the consumer), like agent-runs v1. Producer:
+Status: superseded by [worker-run v2](worker-run-v2.md) from task-loop 0.15.0 and delegate 0.29.0 (no v1 shim). Was implemented in delegate 0.14.0-0.28.x, task-loop 0.4.0-0.14.x. Owner: task-loop (the consumer), like agent-runs v1. Producer:
 delegate's `route.py run`. Since task-loop 0.5.0 the engine has no launcher of its own: delegate is required.
 
 ## Why
