@@ -123,9 +123,9 @@ FRESH_WRITER_TEXT = ("\nYou take over from an earlier writer of this task, on an
 
 SCHEMAS = {
     "plan": {"type": "object", "additionalProperties": False,
-             "required": ["summary", "stages", "risks", "question", "cases", "leftovers"],
+             "required": ["summary", "stages", "risks", "question", "decided", "cases", "leftovers"],
              "properties": {
-                 "summary": S_STR,
+                 "summary": S_STR, "decided": S_STR,
                  "stages": {"type": "array", "items": {
                      "type": "object", "additionalProperties": False, "required": ["goal", "files", "checks", "hard"],
                      "properties": {"goal": S_STR, "files": S_STRS, "checks": S_STRS, "hard": {"type": "boolean"}}}},
@@ -532,6 +532,8 @@ class Engine:
         self.budget_warned = set()
         self.writer = {}  # backend -> thread/session id, so later rounds of a task resume the same writer
         self.writer_family = None  # the family of the last write: the verifier comes from another one when it can
+        self.plan_decided = False  # the planner was sent back once with the requirement that answers its question
+        self.auto_decided = False  # the brief's requirement answered a question once this run (brief_decides)
         self.writer_fallback = False  # the writer's thread is not on the role's first choice: the next round asks fresh
         self.verified = []  # the verifier's answer per unchecked item at land: in the trace and on the bead
         self.sessions = []  # every AI call of this run: the trace a later reflection reads (traces.jsonl)
@@ -968,6 +970,20 @@ class Engine:
         live outside it so the worker cannot change them."""
         return (self.run_dir / "brief.md").read_text(encoding="utf-8")
 
+    def brief_decides(self, question):
+        """tl-bxk.10.3: the brief's lines naming the one requirement id (R10) a question cites, when the step left
+        decided empty: lifesim-d5f.58 asked "a test against R10" with the owner's "Accepted R10 stands" in the comments.
+        Two ids or more are a conflict between requirements (the owner's); once per run, so a re-ask reaches the owner."""
+        ids = set(REQ_ID.findall(question or ""))
+        if len(ids) != 1 or self.auto_decided:
+            return ""
+        rid = re.compile(r"\b%s\b" % ids.pop())
+        lines = [ln.strip().lstrip("-* ").strip() for ln in self.brief_text().splitlines() if rid.search(ln)]
+        if not lines:
+            return ""
+        self.auto_decided = True
+        return "; ".join(lines)[:800]
+
     def plan_text(self):
         return json.dumps(getattr(self, "plan_data", None) or {}, indent=1)
 
@@ -1123,6 +1139,32 @@ class Engine:
         tree = self.tree_hash()
         return (tl.git("diff", "--stat", self.base_sha(), tree, cwd=self.wt) if tree else "") or "(no files changed)"
 
+    def ask_plan(self, prompt, step, title):
+        """One planner answer, its checks sent back once when they read the tracker or run gate-only commands."""
+        data, _ = self.ai("plan", title, prompt, step=step)
+        bad, gated = tracker_checks(data), gate_only_checks(data, self.cfg)
+        if bad or gated:  # asked once to rewrite them, like an invalid answer
+            why = ""
+            if bad:
+                self.warn("the plan's checks read the issue tracker, sent back: %s" % "; ".join(bad)[:300])
+                why += TRACKER_TEXT % "\n".join("- `%s`" % c for c in bad)
+            if gated:
+                self.warn("the plan's checks run gate-only commands, sent back: %s" % "; ".join(
+                    "%s (%s)" % g for g in gated)[:300])
+                why += GATE_ONLY_TEXT % "\n".join("- `%s`: %s" % g for g in gated)
+            self.outcome_of("sent back", "its checks read the tracker or run gate-only commands")
+            self.transition(step, "plan_sent_back", "checks %s" % "; ".join(
+                (["read the issue tracker"] if bad else []) + (["run gate-only commands"] if gated else [])))
+            data, _ = self.ai("plan", "rewrite checks", prompt + why, step=step)
+            bad, gated = tracker_checks(data), gate_only_checks(data, self.cfg)
+            if bad:
+                raise Blocked("failed: the plan's checks still read the issue tracker after one rewrite: %s"
+                              % "; ".join(bad)[:400])
+            if gated:
+                raise Blocked("failed: the plan's checks still run gate-only commands after one rewrite: %s"
+                              % "; ".join("%s (%s)" % g for g in gated)[:400])
+        return data
+
     def plan(self, again=False):
         why = ""
         if again:
@@ -1157,28 +1199,15 @@ class Engine:
         prompt = (PLAN_PROMPT.format(brief=self.brief_text(), wt=self.wt) + extra + "\n\n" + "\n".join(rules) +
                   ("\n\n" + self.where("plan") if self.where("plan") else ""))
         step = "replan" if again else "plan"
-        data, _ = self.ai("plan", "re-plan" if again else "plan", prompt, step=step)
-        bad, gated = tracker_checks(data), gate_only_checks(data, self.cfg)
-        if bad or gated:  # asked once to rewrite them, like an invalid answer
-            why = ""
-            if bad:
-                self.warn("the plan's checks read the issue tracker, sent back: %s" % "; ".join(bad)[:300])
-                why += TRACKER_TEXT % "\n".join("- `%s`" % c for c in bad)
-            if gated:
-                self.warn("the plan's checks run gate-only commands, sent back: %s" % "; ".join(
-                    "%s (%s)" % g for g in gated)[:300])
-                why += GATE_ONLY_TEXT % "\n".join("- `%s`: %s" % g for g in gated)
-            self.outcome_of("sent back", "its checks read the tracker or run gate-only commands")
-            self.transition(step, "plan_sent_back", "checks %s" % "; ".join(
-                (["read the issue tracker"] if bad else []) + (["run gate-only commands"] if gated else [])))
-            data, _ = self.ai("plan", "rewrite checks", prompt + why, step=step)
-            bad, gated = tracker_checks(data), gate_only_checks(data, self.cfg)
-            if bad:
-                raise Blocked("failed: the plan's checks still read the issue tracker after one rewrite: %s"
-                              % "; ".join(bad)[:400])
-            if gated:
-                raise Blocked("failed: the plan's checks still run gate-only commands after one rewrite: %s"
-                              % "; ".join("%s (%s)" % g for g in gated)[:400])
+        data = self.ask_plan(prompt, step, "re-plan" if again else "plan")
+        q = data["question"].strip()
+        decided = (data["decided"].strip() or self.brief_decides(q)) if q else ""
+        if decided and not self.plan_decided:  # tl-bxk.10.3: no owner ask, the planner plans again
+            self.plan_decided = True
+            self.warn("the planner asked what an accepted requirement decides: %s" % decided[:300])
+            self.outcome_of("sent back", "an accepted requirement decides its question")
+            self.transition(step, "planner_decided", "an accepted requirement decides it: %s" % decided)
+            data = self.ask_plan(prompt + DECIDED_TEXT % (q, decided) + PLAN_DECIDED_TEXT, step, "plan to meet it")
         data = json.loads(json.dumps(data))  # the engine's own copy: cases are added to it as the task runs
         if self.verify_answer and not data["stages"] and not data["question"].strip():
             self.log("note", "the planner finds the owner's answer asks for nothing more: landing")
@@ -1432,6 +1461,8 @@ class Engine:
                 UNCHECKED_TEXT, resume_key="writer", write=n, round=rounds + 1, **where)
             self.writer_family = wfam
             wrote_unchecked = w.get("unchecked") or []  # the review decides what is still unproven after the checks
+            if w["question"].strip() and not w["decided"].strip():
+                w["decided"] = self.brief_decides(w["question"])
             if w["question"].strip() and w["decided"].strip():  # lifesim-d5f.58: an accepted requirement is no question
                 rounds += 1
                 self.stats["rounds"] += 1
@@ -1515,6 +1546,8 @@ class Engine:
                     ["%s:%s [%s] %s" % (f["file"], f["line"], f["severity"], f["fix"]) for f in review["findings"]] +
                     ["unmet: " + u for u in review["unmet"]]) or "no findings")
             self.leftovers += review["leftovers"]
+            if review["question"].strip() and not review["decided"].strip():
+                review["decided"] = self.brief_decides(review["question"])
             if review["question"].strip() and review["decided"].strip():  # lifesim-d5f.58: a fix round, not an ask
                 self.log("note", "%s: the review asked what an accepted requirement decides (%s): sending it back"
                          % (name, review["decided"][:200]))
@@ -2201,6 +2234,20 @@ COMMON = ("You are one step of an unattended task engine. Nobody is watching; do
           "Work only in {wt}. Never commit, push, branch, or change git state. Never add suppressions or weaken, skip "
           "or delete tests. Answer with the structured result only.")
 
+DECIDED_RULE = ("A change that contradicts an accepted requirement (in the task, its acceptance criteria, or a "
+                "requirement it cites) is never the owner's question: the fix is to meet the requirement. Nor is a test, "
+                "check or scenario that an accepted requirement makes fail: that is no conflict between two "
+                "requirements; the requirement stands, and making the test agree with it (fixing the cause, or the test "
+                "where the test is what contradicts it) is the work. An owner's answer in the task's comments decides "
+                "as an accepted requirement does. decided: the "
+                "accepted requirement, quoted, that already answers your question (the engine then sends the stage "
+                "back to meet it instead of asking the owner); empty when you have no question, when two accepted "
+                "requirements conflict, or when no requirement decides it yet (those are the owner's).")
+DECIDED_TEXT = ("\nYou asked: %s\nAn accepted requirement already decides it: %s\nMeet that requirement: change the "
+                "work, never the requirement.\n")
+PLAN_DECIDED_TEXT = "Plan the work that meets it; ask nothing it already answers.\n"
+REQ_ID = re.compile(r"\bR\d+\b")
+
 PLAN_PROMPT = COMMON + """
 
 The task (the bead, with its acceptance criteria and comments: review findings, the owner's answers):
@@ -2231,15 +2278,8 @@ Read the code it names. Then plan.
   and no check or case asks for them.
 - question: empty, unless the task cannot be done without a decision only the owner can make (product direction,
   scope, a hard-to-reverse architecture choice). Decide technical choices yourself. If you ask, write the question
-  so it can be answered from a phone: what you found, the decision, 2-3 options with costs, your recommendation."""
-
-DECIDED_RULE = ("A change that contradicts an accepted requirement (in the task, its acceptance criteria, or a "
-                "requirement it cites) is never the owner's question: the fix is to meet the requirement. decided: the "
-                "accepted requirement, quoted, that already answers your question (the engine then sends the stage "
-                "back to meet it instead of asking the owner); empty when you have no question, when two accepted "
-                "requirements conflict, or when no requirement decides it yet (those are the owner's).")
-DECIDED_TEXT = ("\nYou asked: %s\nAn accepted requirement already decides it: %s\nMeet that requirement: change the "
-                "work, never the requirement.\n")
+  so it can be answered from a phone: what you found, the decision, 2-3 options with costs, your recommendation.
+""" + DECIDED_RULE
 
 WRITE_PROMPT = """You are the writer for one stage of a task, in an unattended engine. Nobody is watching.
 

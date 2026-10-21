@@ -25,7 +25,7 @@ PY = '"%s"' % sys.executable
 HAS_F = PY + ' -c "import os,sys; sys.exit(0 if os.path.exists(\'f.txt\') else 1)"'
 FALSE = PY + ' -c "import sys; sys.exit(1)"'
 PLAN = {"summary": "do it", "stages": [{"goal": "add f", "files": ["f.txt"], "checks": [HAS_F],
-                                        "hard": False}], "risks": [], "question": "", "cases": [], "leftovers": []}
+                                        "hard": False}], "risks": [], "question": "", "decided": "", "cases": [], "leftovers": []}
 WRITE = {"summary": "wrote f", "checks_run": [{"cmd": "test -f f.txt", "exit": 0}], "question": "", "decided": "", "bad_checks": [],
          "new_cases": [], "unchecked": []}
 ROUTE = "/h/.claude/plugins/cache/m/iorlas-delegate/%s/skills/delegate/route.py"
@@ -605,6 +605,64 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertNotIn("owner decision needed", self.blocked[0])
 
+    # tl-bxk.10.3: lifesim-d5f.58 run 3 (0.15.5) asked again, from the re-plan: the plan had no decided field, and the
+    # ask was worded as a test against R10 although the owner's answer in the comments already said R10 stands
+    D5F58_Q = ("One older test stays red, and I need your call on it. Rule R10 says a lifer never idles while something "
+               "is available, but that test says never repeat within the hour, no exceptions. Options: A) the test allows "
+               "a sole-candidate repeat, B) raise min_score, C) change the seed. My recommendation is A.")
+    D5F58_OWNER = ("(a). Accepted R10 stands: undo the general rule change (a lifer must not stand idle while something "
+                   "is available) and fix the two-person home test another way.")
+
+    def test_a_planner_question_an_accepted_requirement_decides_is_planned_again_citing_it(self):
+        rc, s = self.run_engine({"plan": [dict(PLAN, question=self.D5F58_Q, decided=self.R10), PLAN],
+                                 "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertIsNone(self.ask())
+        self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
+        self.assertIn(self.R10, s.prompts[1])
+        self.assertIn("never the requirement", s.prompts[1])
+        self.assertIn("decided", s.prompts[0])
+        causes = [json.loads(ln)["cause"] for ln in self.eng.log_path.read_text().splitlines() if '"transition"' in ln]
+        self.assertIn("planner_decided", causes)
+
+    def test_the_d5f58_ask_with_no_decided_is_caught_by_the_requirement_the_brief_quotes(self):
+        owner = [{"author": "Denis Tomilin", "text": self.D5F58_OWNER}]
+        with mock.patch.object(tl, "comments", return_value=owner):
+            rc, s = self.run_engine({"plan": [dict(PLAN, question=self.D5F58_Q), PLAN], "write": [WRITE],
+                                     "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertIsNone(self.ask())
+        self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
+        self.assertIn("Accepted R10 stands", s.prompts[1].split("An accepted requirement already decides it:")[1])
+
+    def test_a_planner_that_asks_again_after_the_requirement_is_quoted_reaches_the_owner(self):
+        ask = dict(PLAN, question=self.D5F58_Q, decided=self.R10)
+        rc, s = self.run_engine({"plan": [ask, ask]})
+        self.assertEqual(rc, 2)
+        self.assertEqual(self.ask()["kind"], "decision")
+        self.assertEqual([c[0] for c in s.calls], ["planner", "planner"])
+
+    def test_a_writer_question_naming_a_requirement_the_brief_quotes_is_a_fix_round(self):
+        owner = [{"author": "Denis Tomilin", "text": self.D5F58_OWNER}]
+        with mock.patch.object(tl, "comments", return_value=owner):
+            rc, s = self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question=self.D5F58_Q), WRITE],
+                                     "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        writes = [p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker"]
+        self.assertIn("Accepted R10 stands", writes[1])
+
+    def test_a_question_naming_two_requirements_the_brief_quotes_is_still_an_ask(self):
+        owner = [{"author": "Denis Tomilin", "text": "Accepted: R3 keep saves forever; R7 drop them after a week."}]
+        with mock.patch.object(tl, "comments", return_value=owner):
+            rc, _ = self.run_engine({"plan": [dict(PLAN, question="R3 and R7 conflict here: which wins?")]})
+        self.assertEqual(rc, 2)
+        self.assertEqual(self.ask()["kind"], "decision")
+
+    def test_every_step_is_told_a_test_against_a_requirement_is_no_conflict(self):
+        for prompt in (engine.PLAN_PROMPT, engine.WRITE_PROMPT, engine.REVIEW_PROMPT):
+            self.assertIn("a test", prompt.split("A change that contradicts")[1])
+            self.assertIn("comments", prompt.split("A change that contradicts")[1])
+
     def asks_the_owner(self, q):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [review(question=q)]})
         self.assertEqual(rc, 2)
@@ -837,7 +895,7 @@ class EngineTest(unittest.TestCase):
     # -- checkpoints: a rerun resumes where the last run stopped, never from scratch
     TWO = {"summary": "two", "stages": [{"goal": "stage one", "files": ["f.txt"], "checks": [HAS_F], "hard": False},
                                         {"goal": "stage two", "files": ["f.txt"], "checks": [HAS_F], "hard": False}],
-           "risks": [], "question": "", "cases": [], "leftovers": []}
+           "risks": [], "question": "", "decided": "", "cases": [], "leftovers": []}
 
     def stop_at(self, role, nth):
         """The nth call of a role is where the engine is stopped (SIGTERM raises Blocked in the main thread)."""
