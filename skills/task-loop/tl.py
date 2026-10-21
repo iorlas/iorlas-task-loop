@@ -914,32 +914,121 @@ def code_version():
     return h.hexdigest()[:12]
 
 
-def ping():
+_dash_mod = []
+
+
+def dash_module():
+    if not _dash_mod:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("tl_dash_server", DASH)
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        _dash_mod.append(m)
+    return _dash_mod[0]
+
+
+def expected_binds():
+    """The addresses the installed server would bind now."""
+    return dash_module().plan(None, None, dev=False)[0]
+
+
+def is_dev_checkout():
+    return dash_module().is_dev_checkout(HERE)
+
+
+def free_port():
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def ping(port=None):
     try:
-        with urllib.request.urlopen("http://127.0.0.1:%d/api/version" % PORT, timeout=1.5) as r:
+        with urllib.request.urlopen("http://127.0.0.1:%d/api/version" % (port or PORT), timeout=1.5) as r:
             return json.loads(r.read())
     except Exception:
         return None
 
 
-def stop_server():
-    """Stop the server that answers on the port (its own pid, never a stale pidfile's)."""
-    v = ping()
-    if not v or not v.get("pid"):
+def is_dash_server(v):
+    """Shape of a task-loop dashboard's /api/version: the only thing ensure may stop."""
+    return isinstance(v, dict) and all(k in v for k in ("version", "pid", "urls", "started"))
+
+
+def stale_reason(v, version, want):
+    """Why a running dashboard must be replaced, else None."""
+    script = v.get("script")
+    if not script:
+        return "it predates script/binds reporting"
+    if not Path(script).exists():
+        return "its script is gone: " + script
+    if v.get("version") != version:
+        return "version %s differs from installed %s" % (v.get("version"), version)
+    missing = [a for a in want if a not in (v.get("binds") or [])]
+    if missing:
+        return "it does not serve " + ", ".join(missing)
+    return None
+
+
+def stop_server(v=None, port=None):
+    """Stop the task-loop server that answers on the port (its own pid, never a stale pidfile's)."""
+    v = v or ping(port)
+    if not is_dash_server(v) or not v.get("pid"):
         return
     try:
         os.kill(int(v["pid"]), signal.SIGTERM)
     except (OSError, ValueError):
         pass
     for _ in range(20):
-        if not ping():
+        if not ping(port):
             return
         time.sleep(0.2)
 
 
+def log_tail(n=5):
+    try:
+        return "\n".join((config_dir() / "dash.log").read_text(errors="replace").strip().splitlines()[-n:])
+    except OSError:
+        return ""
+
+
+def start_server(port, bind=None):
+    """Start detached; wait until it answers. Returns (version dict or None, failure text)."""
+    log = open(config_dir() / "dash.log", "ab")
+    env = {k: val for k, val in os.environ.items()
+           if not k.startswith(("CLAUDE_CODE_SESSION", "DELEGATE_", "CODEX_COMPANION"))}
+    kw = {"stdin": subprocess.DEVNULL, "stdout": log, "stderr": log, "env": env, "cwd": str(config_dir()), "close_fds": True}
+    if os.name == "nt":
+        kw["creationflags"] = 0x00000008 | 0x00000200  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+    else:
+        kw["start_new_session"] = True
+    cmd = [sys.executable, str(DASH), "--port", str(port)] + (["--bind", bind] if bind else [])
+    proc = subprocess.Popen(cmd, **kw)
+    for _ in range(40):
+        if proc.poll() not in (None, 0):
+            return None, "dashboard exited %s: %s" % (proc.poll(), log_tail() or "see " + str(config_dir() / "dash.log"))
+        v = ping(port)
+        if v:
+            return v, ""
+        time.sleep(0.25)
+    return None, "dashboard did not start; see " + str(config_dir() / "dash.log")
+
+
 def cmd_dash(a):
+    dev = is_dev_checkout() and "TASK_LOOP_DASH_PORT" not in os.environ
+    if dev and a.op == "ensure":  # tests/dev: own random loopback port; the installed server on :7878 stays untouched
+        port = free_port()
+        v, err = start_server(port, "127.0.0.1")
+        if not v:
+            print("tl: " + err)
+            return 1
+        print_urls(v)
+        return 0
     if a.op == "stop":
-        stop_server()
+        v = ping()
+        if dev and v and v.get("script") != str(DASH):
+            return 0  # never stop the installed server from a dev checkout
+        stop_server(v)
         return 0
     v = ping()
     if a.op == "status":
@@ -954,29 +1043,26 @@ def cmd_dash(a):
         for u in (v or {}).get("urls", []) if t else []:
             print("ANSWER LINK %s/?token=%s" % (u, t))
         return 0
-    # ensure: running and current, else (re)start detached
-    if v and v.get("version") == code_version():
-        print_urls(v)
-        return 0
+    # ensure: running and current, else replace it (a stale one: files deleted, old version, or missing an address)
+    if v and not is_dash_server(v):
+        print("tl: port %d is held by something that is not a task-loop dashboard; not touching it" % PORT)
+        return 1
     if v:
-        stop_server()
-    log = open(config_dir() / "dash.log", "ab")
-    env = {k: val for k, val in os.environ.items()
-           if not k.startswith(("CLAUDE_CODE_SESSION", "DELEGATE_", "CODEX_COMPANION"))}
-    kw = {"stdin": subprocess.DEVNULL, "stdout": log, "stderr": log, "env": env, "cwd": str(config_dir()), "close_fds": True}
-    if os.name == "nt":
-        kw["creationflags"] = 0x00000008 | 0x00000200  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
-    else:
-        kw["start_new_session"] = True
-    subprocess.Popen([sys.executable, str(DASH), "--port", str(PORT)], **kw)
-    for _ in range(40):
-        v = ping()
-        if v:
+        why = stale_reason(v, code_version(), expected_binds())
+        if not why:
             print_urls(v)
             return 0
-        time.sleep(0.25)
-    print("tl: dashboard did not start; see " + str(config_dir() / "dash.log"))
-    return 1
+        print("tl: replacing the running dashboard (pid %s): %s" % (v.get("pid"), why))
+        stop_server(v)
+        if ping():
+            print("tl: could not stop the running dashboard (pid %s)" % v.get("pid"))
+            return 1
+    v, err = start_server(PORT)
+    if not v:
+        print("tl: " + err)
+        return 1
+    print_urls(v)
+    return 0
 
 
 def print_urls(v):

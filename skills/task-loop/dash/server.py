@@ -1117,6 +1117,54 @@ def bind_addrs():
     return ["127.0.0.1"] + ([ts] if ts else [])
 
 
+def is_dev_checkout(here=None):
+    """A git checkout or worktree (tests, dev) rather than the installed plugin cache."""
+    here = Path(here or HERE).resolve()
+    if "cache" in here.parts and "plugins" in here.parts:
+        return False
+    return any((d / ".git").exists() for d in [here, *here.parents])
+
+
+def plan(port, bind, dev):
+    """(addresses, port): installed copy = loopback + Tailscale on 7878; a dev checkout = loopback on a random port."""
+    if bind:
+        addrs = [x.strip() for x in bind.split(",") if x.strip()]
+    elif dev and not os.environ.get("TASK_LOOP_DASH_BIND"):
+        addrs = ["127.0.0.1"]
+    else:
+        addrs = bind_addrs()
+    return addrs, (port if port is not None else (0 if dev else 7878))
+
+
+class BindError(Exception):
+    pass
+
+
+def holder_pid(addr, port):
+    try:
+        r = subprocess.run(["lsof", "-nP", "-iTCP@%s:%d" % (addr, port), "-sTCP:LISTEN", "-t"],
+                           capture_output=True, text=True, timeout=5)
+        return (r.stdout.split() or [None])[0]
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def open_servers(addrs, port, handler):
+    """Bind every address or none: a partial set would silently serve a subset (tl-bxk.12.4)."""
+    servers = []
+    for addr in addrs:
+        try:
+            # port 0: every address after the first reuses the port the first was given
+            servers.append(ThreadingHTTPServer((addr, servers[0].server_address[1] if servers else port), handler))
+        except OSError as e:
+            p = servers[0].server_address[1] if servers else port
+            for s in servers:
+                s.server_close()
+            pid = holder_pid(addr, p)
+            raise BindError("bind %s:%d failed: %s%s" % (addr, p, e, " (held by pid %s)" % pid if pid else ""))
+    return servers
+
+
 def urls(addrs, port):
     out = []
     for a in addrs:
@@ -1147,7 +1195,8 @@ def make_handler(port, addrs):
             q = {k: v[0] for k, v in parse_qs(u.query).items()}
             try:
                 if u.path == "/api/version":
-                    body = {"version": VERSION, "pid": os.getpid(), "urls": urls(addrs, port), "started": STARTED}
+                    body = {"version": VERSION, "pid": os.getpid(), "urls": urls(addrs, port), "started": STARTED,
+                            "script": str(Path(__file__).resolve()), "binds": list(addrs), "port": port}
                 elif u.path == "/api/summary":
                     _last_seen[0] = time.time()
                     body = summary()
@@ -1211,25 +1260,28 @@ def idle_watch(hours):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--port", type=int, default=7878)
+    ap.add_argument("--port", type=int, default=None)
+    ap.add_argument("--bind", default=None, help="comma-separated addresses (default: loopback + Tailscale; dev checkout: loopback)")
     a = ap.parse_args()
-    addrs = bind_addrs()
+    dev = is_dev_checkout()
+    addrs, port = plan(a.port, a.bind, dev)
     token()
-    handler = make_handler(a.port, addrs)
-    servers = []
-    for addr in addrs:
-        try:
-            servers.append(ThreadingHTTPServer((addr, a.port), handler))
-        except OSError as e:
-            print("bind %s:%d failed: %s" % (addr, a.port, e), file=sys.stderr)
-    if not servers:
-        sys.exit(1)
-    config_dir().mkdir(parents=True, exist_ok=True)
-    (config_dir() / "dash.pid").write_text(str(os.getpid()))
+    try:
+        servers = open_servers(addrs, port, None)  # handler set below: it needs the real port
+    except BindError as e:
+        print(e, file=sys.stderr, flush=True)
+        sys.exit(2)
+    port = servers[0].server_address[1]
+    handler = make_handler(port, addrs)
+    for s in servers:
+        s.RequestHandlerClass = handler
+    if not dev:  # a dev server must not claim the shared pid file
+        config_dir().mkdir(parents=True, exist_ok=True)
+        (config_dir() / "dash.pid").write_text(str(os.getpid()))
     for s in servers[1:]:
         threading.Thread(target=s.serve_forever, daemon=True).start()
     threading.Thread(target=idle_watch, args=(float(os.environ.get("TASK_LOOP_DASH_IDLE_H", "6")),), daemon=True).start()
-    print("task-loop dashboard %s on %s" % (VERSION, ", ".join(urls(addrs, a.port))), flush=True)
+    print("task-loop dashboard %s on %s" % (VERSION, ", ".join(urls(addrs, port))), flush=True)
     servers[0].serve_forever()
 
 

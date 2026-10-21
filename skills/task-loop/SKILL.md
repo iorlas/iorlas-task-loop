@@ -378,7 +378,9 @@ one, and never a worktree the loop did not make.
 `tl dash ensure` starts one server per machine (`tl dash url` prints its addresses, `tl dash stop` stops it; it
 restarts by itself when the plugin's code changes and exits after hours without a loop). It listens on 127.0.0.1 and,
 when Tailscale is up, on the machine's Tailscale address; `TASK_LOOP_DASH_BIND=0.0.0.0` (e.g. in a container with a
-published port) overrides; `TASK_LOOP_DASH_PORT` changes the port (default 7878).
+published port) overrides; `TASK_LOOP_DASH_PORT` changes the port (default 7878). `ensure` replaces a running server whose
+files are gone, whose version differs, or that lacks an address the installed one would bind; a bind failure exits non-zero
+naming the address and holder pid. A copy run from a git checkout (tests, dev) uses a random loopback port unless `--port`/`--bind` are given.
 
 It shows every repo the loop touched: the bead tree (epics and children; live, open, blocked, done), each task's
 sessions and workers (the orchestrating session, its Agent-tool subagents, Codex runs, recorded `claude -p` runs) and
