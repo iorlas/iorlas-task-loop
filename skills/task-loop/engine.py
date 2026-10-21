@@ -70,6 +70,22 @@ UNCHECKED_TEXT = ("\nunchecked: what you could not check yourself, each with its
 
 VERDICTS = ("settled", "wrong", "open")  # the verifier's answer per unchecked item, before a verify ask
 
+# a check that runs bd or reads the beads files proves the tracker, not the code: no writer can satisfy it (writers cannot
+# run bd), so it burns every round (lifesim-fld.26.12, lifesim-fld.27.9: 3 rounds, 2 replans, 89 min, stuck)
+TRACKER_CHECK = re.compile(r"(?:^|[;&|(`!{]|\b(?:then|do|else|xargs|exec|command|env|time)\b)\s*bd(?=\s|$|[;&|)`])|"
+                           r"(?<![\w-])\.beads\b")
+TRACKER_TEXT = ("\n\nYour plan was sent back: these checks read the issue tracker (they run bd or read .beads/), which "
+                "no writer can run and no code change can satisfy:\n%s\nRewrite them to prove the code and the tree only. "
+                "Follow-up work the task wants filed goes in leftovers: the engine files it.")
+
+
+def tracker_checks(plan):
+    """The plan's checks (stages, risks, cases) that read the issue tracker instead of the code."""
+    cmds = [c for s in plan.get("stages") or [] for c in s["checks"]] + [
+        x["check"] for k in ("risks", "cases") for x in plan.get(k) or []]
+    return list(dict.fromkeys(c for c in cmds if TRACKER_CHECK.search(c)))
+
+
 LATER_CASES = ("\nAn acceptance case this stage cannot run is not unchecked: it is checked when the last stage runs it.")
 FRESH_WRITER_TEXT = ("\nYou take over from an earlier writer of this task whose model is out for now. Its work is in this "
                      "tree, committed on this branch or not: read `git status` and the diff from main first, then go on "
@@ -77,7 +93,7 @@ FRESH_WRITER_TEXT = ("\nYou take over from an earlier writer of this task whose 
 
 SCHEMAS = {
     "plan": {"type": "object", "additionalProperties": False,
-             "required": ["summary", "stages", "risks", "question", "cases"],
+             "required": ["summary", "stages", "risks", "question", "cases", "leftovers"],
              "properties": {
                  "summary": S_STR,
                  "stages": {"type": "array", "items": {
@@ -89,7 +105,8 @@ SCHEMAS = {
                  "question": S_STR,
                  "cases": {"type": "array", "items": {"type": "object", "additionalProperties": False,
                                                       "required": ["criterion", "check"],
-                                                      "properties": {"criterion": S_STR, "check": S_STR}}}}},
+                                                      "properties": {"criterion": S_STR, "check": S_STR}}},
+                 "leftovers": LEFTOVERS}},
     "write": {"type": "object", "additionalProperties": False,
               "required": ["summary", "checks_run", "question", "decided", "bad_checks", "new_cases", "unchecked"],
               "properties": {"summary": S_STR, "question": S_STR, "decided": S_STR,
@@ -287,6 +304,7 @@ class Engine:
                       "tokens_in": 0, "tokens_cached": 0, "tokens_out": 0}
         self.session = tl.session_id()
         self.leftovers = []
+        self.filed = []       # leftover titles filed by an earlier run on this checkpoint: a replan naming one again is no new bead
         self.done = []        # goals of the stages accepted on this branch, across plans and runs
         self.accepted = []    # their indices in the current plan
         self.brief_hash = ""
@@ -798,13 +816,21 @@ class Engine:
             extra += ("\n\nThese stages are already accepted on this branch (reviewed, their work is in the tree): "
                       "do not plan them again; plan only what the task still needs.\n" +
                       "".join("- %s\n" % g for g in self.done))
-        data, _ = self.ai("plan", "re-plan" if again else "plan", PLAN_PROMPT.format(brief=self.brief_text(),
-                                                                                     wt=self.wt) + extra +
-                          "\n\n" + "\n".join(rules) +
-                          ("\n\n" + self.where("plan") if self.where("plan") else ""))
+        prompt = (PLAN_PROMPT.format(brief=self.brief_text(), wt=self.wt) + extra + "\n\n" + "\n".join(rules) +
+                  ("\n\n" + self.where("plan") if self.where("plan") else ""))
+        data, _ = self.ai("plan", "re-plan" if again else "plan", prompt)
+        bad = tracker_checks(data)
+        if bad:  # asked once to rewrite them, like an invalid answer
+            self.warn("the plan's checks read the issue tracker, sent back: %s" % "; ".join(bad)[:300])
+            data, _ = self.ai("plan", "rewrite tracker checks", prompt + TRACKER_TEXT % "\n".join("- `%s`" % c for c in bad))
+            bad = tracker_checks(data)
+            if bad:
+                raise Blocked("failed: the plan's checks still read the issue tracker after one rewrite: %s"
+                              % "; ".join(bad)[:400])
         data = json.loads(json.dumps(data))  # the engine's own copy: cases are added to it as the task runs
         if self.verify_answer and not data["stages"] and not data["question"].strip():
             self.log("note", "the planner finds the owner's answer asks for nothing more: landing")
+            self.plan_leftovers(data)
             return data
         self.plan_summary = data["summary"]
         for c in data.get("cases") or []:
@@ -819,6 +845,7 @@ class Engine:
             raise Blocked("ticket: the plan has %d stages (more than %d): the bead may be too big for one task" % (
                 len(data["stages"]), big), "Split the bead into these, or comment that it stays one bead:\n" + "\n".join(
                 "%d. %s" % (k + 1, s["goal"]) for k, s in enumerate(data["stages"])))
+        self.plan_leftovers(data)
         lines = ["Plan (engine): " + data["summary"]]
         lines += ["%d. %s%s [files: %s] [checks: %s]" % (n + 1, s["goal"], " (hard)" if s["hard"] else "",
                                                           ", ".join(s["files"]), "; ".join(s["checks"]))
@@ -829,6 +856,12 @@ class Engine:
         self.export_brief()
         self.save_checkpoint(stage=0, rounds=0, n=0, feedback="", step="write")
         return data
+
+    def plan_leftovers(self, data):
+        """The follow-up work the plan wants filed: filed at the close with the reviews' leftovers. Only a plan the run
+        goes on with adds them, so a plan that asks the owner is not filed twice by the plan after the answer."""
+        have = {lo["title"] for lo in self.leftovers}
+        self.leftovers += [lo for lo in data["leftovers"] if lo["title"] not in have]
 
     # -- checkpoints: where a stopped run was, outside the worktree, so the next run goes on from there
     def ask_path(self):
@@ -918,7 +951,7 @@ class Engine:
         rec = {"v": 1, "bead": self.bead, "branch": branch,
                "plan": self.plan_data, "done": self.done, "accepted": self.accepted, "replans": self.replans, "fixes": self.fixes, "denials": self.denials,
                "writer": self.writer.get("delegate") or "", "brief": self.brief_hash, "head": self.git("rev-parse", "HEAD"),
-               "unchecked": self.unchecked,
+               "unchecked": self.unchecked, "filed": self.filed,
                "closed": False,
                "run": self.log_path.stem, "t": time.time(), **at}
         p = self.checkpoint_path()
@@ -932,7 +965,7 @@ class Engine:
             ck = json.loads(self.checkpoint_path().read_text())
         except (OSError, ValueError):
             return
-        ck.update(head=self.git("rev-parse", "HEAD"), closed=True)
+        ck.update(head=self.git("rev-parse", "HEAD"), closed=True, filed=self.filed)
         if why.startswith("gate red"):
             ck.update(step="gate-red", gate_tail=why[-3000:])
         self.checkpoint_path().write_text(json.dumps(ck, indent=1))
@@ -968,6 +1001,7 @@ class Engine:
         self.done = list(ck["done"])
         self.replans, self.fixes = int(ck.get("replans") or 0), int(ck.get("fixes") or 0)
         self.denials = list(ck.get("denials") or [])
+        self.filed = list(ck.get("filed") or [])
         if ck["writer"]:
             self.writer["delegate"] = ck["writer"]
         if ck["step"] == "gate-red":
@@ -1391,6 +1425,8 @@ class Engine:
         if (gd / "rebase-merge").exists() or (gd / "rebase-apply").exists():  # stopped mid-conflict-fix: back to the branch
             self.sh(["git", "rebase", "--abort"])
         branch = self.git("symbolic-ref", "--short", "-q", "HEAD")
+        new = [lo for lo in self.leftovers if lo["title"] not in self.filed]
+        self.filed += [lo["title"] for lo in new]  # into the checkpoint before it is marked closed
         if outcome not in ("landed", "done") and branch and branch == getattr(self, "branch", None):
             if self.git("status", "--porcelain"):
                 self.wip(outcome)  # the next run continues this branch
@@ -1425,13 +1461,13 @@ class Engine:
         shots = self.keep_evidence()
         if shots:
             self.comment("Evidence (engine): %s" % ", ".join(str(p) for p in shots))
-        for lo in self.leftovers:
+        for lo in new:
             tl.bd("create", lo["title"], "--type", "task", "--description", lo["why"],
                   "--deps", "discovered-from:" + self.bead)
         verified = ("; self-verified=" + ", ".join("%d %s" % (sum(x["verdict"] == k for x in self.verified), k)
                                                    for k in VERDICTS)) if self.verified else ""
         self.comment("Reflect (engine): outcome=%s; filed=%d; %s%s%s; trace=%s (tl trace %s)" % (
-            outcome, len(self.leftovers), stats, verified, ("; why=" + why) if why else "", self.log_path.stem, self.bead))
+            outcome, len(new), stats, verified, ("; why=" + why) if why else "", self.log_path.stem, self.bead))
         summary = (getattr(self, "plan_summary", "") or "")[:300]
         if outcome == "landed":
             rc = tl.cmd_close(Args(id=self.bead, reason="merged %s to %s: %s; %s" % (
@@ -1718,6 +1754,10 @@ Read the code it names. Then plan.
   the editor prints), never only "a screenshot exists".
 - Name the risks ahead of time: what could break something users or other code rely on (a saved format, a public
   member, shared files), each with the check that proves it safe. None is fine.
+- A check proves the code and the tree only: it never reads the tracker (no `bd`, nothing under `.beads/`) nor
+  anything outside the worktree; the writers cannot run bd, so such a check fails whatever they do. Follow-up work the
+  task wants filed (a new bead, a later task) goes in leftovers, each a title and why: the engine files them itself,
+  and no check or case asks for them.
 - question: empty, unless the task cannot be done without a decision only the owner can make (product direction,
   scope, a hard-to-reverse architecture choice). Decide technical choices yourself. If you ask, write the question
   so it can be answered from a phone: what you found, the decision, 2-3 options with costs, your recommendation."""

@@ -93,6 +93,13 @@ run on the last stage and again in every fix round at land. A writer may add cas
 added by the writer); none can be removed, since the plan is the engine's. Pictures under the task's `evidence/` are
 copied to the run dir at close and named on the bead.
 
+A check proves the code and the tree only, never the tracker: the planner is told no check runs `bd` or reads `.beads/`
+(writers cannot run bd, so no code change satisfies one; lifesim-fld.26.12 and fld.27.9 burned 3 rounds, 2 replans and
+89 min on a `bd list | jq` check for a follow-up bead). Follow-up work the plan wants filed goes in its `leftovers`
+(title, why), filed at the close with the reviews' (the Reflect `filed=` count); the checkpoint keeps the filed
+titles, so a replan in a later run that names one again files no second bead. A plan with such a check in a stage,
+risk or case is sent back to the planner once naming them; a second such plan fails the run.
+
 Dashboard Asks tab: open asks, most urgent first, each answerable in place (the answer goes on the bead as a comment and
 opens it; first answer wins). Answering needs the token in `~/.config/task-loop/dash.token`: `tl dash url` prints
 `ANSWER LINK`s with it, open one on the phone once. A red banner shows when delegate says a subscription lane is out.

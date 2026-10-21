@@ -22,7 +22,7 @@ PY = '"%s"' % sys.executable
 HAS_F = PY + ' -c "import os,sys; sys.exit(0 if os.path.exists(\'f.txt\') else 1)"'
 FALSE = PY + ' -c "import sys; sys.exit(1)"'
 PLAN = {"summary": "do it", "stages": [{"goal": "add f", "files": ["f.txt"], "checks": [HAS_F],
-                                        "hard": False}], "risks": [], "question": "", "cases": []}
+                                        "hard": False}], "risks": [], "question": "", "cases": [], "leftovers": []}
 WRITE = {"summary": "wrote f", "checks_run": [{"cmd": "test -f f.txt", "exit": 0}], "question": "", "decided": "", "bad_checks": [],
          "new_cases": [], "unchecked": []}
 ROUTE = "/h/.claude/plugins/cache/m/iorlas-delegate/%s/skills/delegate/route.py"
@@ -470,6 +470,37 @@ class EngineTest(unittest.TestCase):
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "planner", "worker", "reviewer"])
         self.assertIn("exits 1 whatever the code does", (self.eng.run_dir / "replan.md").read_text())
 
+    BEAD_CHECK = "bd list --label lane:live --json | jq -e 'any(.title | test(\"hard[-_ ]to[-_ ]undo\"))'"
+
+    def test_a_check_that_reads_the_tracker_is_sent_back_to_the_planner_once(self):
+        # lifesim-fld.26.12: a stage check ran `bd list` for a follow-up bead; writers cannot run bd, so no code passed it
+        bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[HAS_F, self.BEAD_CHECK])])
+        rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
+        self.assertIn("read the issue tracker", s.prompts[1])
+        self.assertIn(self.BEAD_CHECK, s.prompts[1])
+        self.assertIn("leftovers", s.prompts[1])
+
+    def test_a_plan_still_reading_the_tracker_after_one_rewrite_fails(self):
+        bad = dict(PLAN, cases=[{"criterion": "a follow-up exists", "check": "test -n \"$(cat .beads/issues.jsonl)\""}])
+        rc, s = self.run_engine({"plan": [bad, bad]})
+        self.assertEqual([c[0] for c in s.calls], ["planner", "planner"])
+        self.assertTrue(self.blocked and "read the issue tracker" in self.blocked[0])
+
+    def test_tracker_checks_are_told_apart_from_code_that_mentions_bd(self):
+        self.assertEqual(engine.tracker_checks(dict(PLAN, risks=[{"what": "x", "check": "cd sub && bd show t-1"}])),
+                         ["cd sub && bd show t-1"])
+        for ok in (HAS_F, "! grep -rn 'bd list' src", "pytest tests/test_bd.py", "test -f abd"):
+            self.assertEqual(engine.tracker_checks(dict(PLAN, risks=[{"what": "x", "check": ok}])), [], ok)
+
+    def test_follow_up_work_in_the_plan_is_filed_by_the_engine(self):
+        lo = {"title": "Track hard-to-undo moves", "why": "the plan wants it filed"}
+        rc, s = self.run_engine({"plan": [dict(PLAN, leftovers=[lo])], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0)
+        self.assertEqual(sum(1 for c in self.bd_calls if c[:2] == ("create", lo["title"])), 1)
+        self.assertIn("never reads the tracker", engine.PLAN_PROMPT)
+
     def test_the_planner_gets_the_repo_rules_and_is_told_the_engine_owns_the_gate(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
                                 worker_rules="docs/agents/codex.md", gate="just check", max_fix_rounds=0)
@@ -674,7 +705,7 @@ class EngineTest(unittest.TestCase):
     # -- checkpoints: a rerun resumes where the last run stopped, never from scratch
     TWO = {"summary": "two", "stages": [{"goal": "stage one", "files": ["f.txt"], "checks": [HAS_F], "hard": False},
                                         {"goal": "stage two", "files": ["f.txt"], "checks": [HAS_F], "hard": False}],
-           "risks": [], "question": "", "cases": []}
+           "risks": [], "question": "", "cases": [], "leftovers": []}
 
     def stop_at(self, role, nth):
         """The nth call of a role is where the engine is stopped (SIGTERM raises Blocked in the main thread)."""
@@ -745,6 +776,17 @@ class EngineTest(unittest.TestCase):
             self.run_engine({"plan": [self.TWO], "write": [WRITE, WRITE], "review": [dict(CLEAN, leftovers=[lo])]})
         self.run_engine({"write": [WRITE], "review": [CLEAN]})
         self.assertEqual(sum(1 for c in self.bd_calls if c[:2] == ("create", "Rename x")), 1)
+
+    def test_follow_up_work_a_replan_names_again_is_not_filed_twice(self):
+        lo = {"title": "Track hard-to-undo moves", "why": "the plan wants it filed"}
+        with self.stop_at("reviewer", 2):
+            self.run_engine({"plan": [dict(self.TWO, leftovers=[lo])], "write": [WRITE, WRITE], "review": [CLEAN]})
+        with mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Stage two: keep it small."}]):
+            rc, s = self.run_engine({"plan": [dict(self.TWO, stages=self.TWO["stages"][1:], leftovers=[lo])],
+                                     "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0)
+        self.assertEqual(s.calls[0][0], "planner")  # the changed bead re-planned, naming the same follow-up
+        self.assertEqual(sum(1 for c in self.bd_calls if c[:2] == ("create", lo["title"])), 1)
 
     def test_a_replan_keeps_the_stages_already_accepted(self):
         one_left = dict(self.TWO, stages=[dict(self.TWO["stages"][1], goal="stage two, again")])
