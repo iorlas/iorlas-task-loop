@@ -159,8 +159,38 @@ def session_id():
             or os.environ.get("CLAUDE_SESSION_ID") or "")
 
 
+def pinned_env(path):
+    """GIT_DIR and GIT_WORK_TREE of the checkout at `path` (its nearest parent with a .git), read from its own `.git`
+    (a slot's `.git` file says `gitdir: <its dir under the repo's .git/worktrees>`). With both set git ignores the
+    repo's shared config: a core.worktree written into .git/config (lifesim-1mm) pointed every slot at another folder.
+    {} when `path` is no checkout."""
+    p = Path(path).resolve()
+    for d in (p, *p.parents):
+        g = d / ".git"
+        if g.is_dir():
+            return {"GIT_DIR": str(g), "GIT_WORK_TREE": str(d)}
+        if g.is_file():
+            try:
+                m = re.match(r"gitdir:\s*(.+)", g.read_text(encoding="utf-8", errors="replace").strip())
+            except OSError:
+                return {}
+            return {"GIT_DIR": str((d / m.group(1)).resolve()), "GIT_WORK_TREE": str(d)} if m else {}
+    return {}
+
+
+def git_env(path):
+    """The environment for a git command on the checkout at `path`: the process's, pinned to that checkout."""
+    return dict(os.environ, **pinned_env(path))
+
+
+def run_git(path, *args, **kw):
+    """`git -C path args`, pinned to the checkout at `path` (the one helper for subprocess git calls on a checkout)."""
+    return subprocess.run(["git", "-C", str(path)] + list(args), env=git_env(path), **kw)
+
+
 def git(*args, cwd=None):
-    r = subprocess.run(["git"] + list(args), cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    r = subprocess.run(["git"] + list(args), cwd=cwd, env=git_env(cwd) if cwd else None, capture_output=True, text=True,
+                       encoding="utf-8", errors="replace")
     return r.stdout.strip() if r.returncode == 0 else ""
 
 
@@ -172,8 +202,8 @@ REF_RACE = re.compile(r"incorrect old value|cannot lock ref|unable to update loc
 def fetch(cwd=None, tries=5):
     """`git fetch -q origin`, tried again while it loses a ref lock to a concurrent fetch; the last CompletedProcess."""
     for i in range(tries):
-        r = subprocess.run(["git", "fetch", "-q", "origin"], cwd=cwd, capture_output=True, text=True, encoding="utf-8",
-                           errors="replace")
+        r = subprocess.run(["git", "fetch", "-q", "origin"], cwd=cwd, env=git_env(cwd) if cwd else None,
+                           capture_output=True, text=True, encoding="utf-8", errors="replace")
         if r.returncode == 0 or not REF_RACE.search(r.stderr or ""):
             break
         time.sleep(0.1 * (i + 1))
@@ -503,7 +533,7 @@ def cmd_slot(a):
             exclude_local(repo, ".slots/", ".task/")
             if not os.path.isdir(d):
                 fetch(repo)
-                r = subprocess.run(["git", "-C", repo, "worktree", "add", "--detach", d, "origin/main"],
+                r = run_git(repo, "worktree", "add", "--detach", d, "origin/main",
                                    capture_output=True, text=True, encoding="utf-8", errors="replace")
                 if r.returncode != 0:
                     sys.exit(r.stderr)
@@ -546,7 +576,7 @@ def cmd_slot(a):
                 br = "wip/%s/%d" % (a.name, int(now()))
                 git("checkout", "-b", br, cwd=d)
             git("add", "-A", cwd=d)
-            r = subprocess.run(["git", "-C", d, "commit", "-qm", "wip: left in slot %s" % a.name],
+            r = run_git(d, "commit", "-qm", "wip: left in slot %s" % a.name,
                                capture_output=True, text=True, encoding="utf-8", errors="replace")
             if r.returncode != 0:
                 print("DIRTY: could not commit the leftover work on %s\n%s" % (br, r.stderr))
@@ -557,16 +587,16 @@ def cmd_slot(a):
         if a.bead and git("rev-parse", "--verify", "-q", "refs/heads/task/" + a.bead, cwd=d):
             # the bead's branch holds its earlier runs' work: check it out as it is, never reset it to base (a forced
             # reset here wiped lifesim-r32's reviewed work on 2026-10-19; the engine rebases at land)
-            r = subprocess.run(["git", "-C", d, "checkout", "task/" + a.bead], capture_output=True, text=True,
+            r = run_git(d, "checkout", "task/" + a.bead, capture_output=True, text=True,
                                encoding="utf-8", errors="replace")
         elif a.bead:
-            r = subprocess.run(["git", "-C", d, "checkout", "-b", "task/" + a.bead, base], capture_output=True, text=True, encoding="utf-8", errors="replace")
+            r = run_git(d, "checkout", "-b", "task/" + a.bead, base, capture_output=True, text=True, encoding="utf-8", errors="replace")
         else:
-            r = subprocess.run(["git", "-C", d, "checkout", "--detach", base], capture_output=True, text=True, encoding="utf-8", errors="replace")
+            r = run_git(d, "checkout", "--detach", base, capture_output=True, text=True, encoding="utf-8", errors="replace")
         if r.returncode != 0:
             sys.stderr.write(r.stderr)
             return r.returncode
-        subprocess.run(["git", "-C", d, "clean", "-fdq"] + sum((["-e", k] for k in cfg.get("keep", [])), []))
+        run_git(d, "clean", "-fdq", *sum((["-e", k] for k in cfg.get("keep", [])), []))
         return cmd_slot_setup(repo, a.name, cfg, d)
     if a.op == "setup":
         return cmd_slot_setup(repo, a.name, cfg, slot_dir(repo, a.name, cfg), force=True)
@@ -903,7 +933,7 @@ def cmd_worktree(a):
             if git("status", "--porcelain", cwd=str(d)):
                 print("KEEP dirty " + str(d))
                 continue
-            subprocess.run(["git", "-C", repo, "worktree", "remove", str(d)], capture_output=True)
+            run_git(repo, "worktree", "remove", str(d), capture_output=True)
             event("worktree-sunset", "", worktree=str(d), repo=repo)
             print("REMOVED " + str(d))
         git("worktree", "prune", cwd=repo)
@@ -917,7 +947,7 @@ def start_worktree(repo, name=None):
     d = Path(repo) / ".worktrees" / ("loop-" + (name or actor()[3:]))
     if not d.exists():
         fetch(repo)
-        r = subprocess.run(["git", "-C", repo, "worktree", "add", "--detach", str(d), "origin/main"],
+        r = run_git(repo, "worktree", "add", "--detach", str(d), "origin/main",
                            capture_output=True, text=True, encoding="utf-8", errors="replace")
         if r.returncode != 0:
             sys.exit(r.stderr)
@@ -1126,12 +1156,35 @@ def cmd_hook(a):
     return 0
 
 
+# ---- doctor -------------------------------------------------------------------------------------------------------
+
+def doctor_warnings(repo):
+    """What is off in the repo's git setup for slots (tl-bxk.10.12), one line each."""
+    out = []
+    if git("config", "--get", "extensions.worktreeConfig", cwd=repo).lower() != "true":
+        out.append("extensions.worktreeConfig is off in %s: per-worktree settings (core.worktree, core.bare) then live in "
+                   "the one .git/config every slot shares, so a stray one redirects all slots; `git config "
+                   "extensions.worktreeConfig true` gives each worktree its own config file." % repo)
+    return out
+
+
+def cmd_doctor(a):
+    repo = repo_root()
+    warns = doctor_warnings(repo)
+    for w in warns:
+        print("WARN " + w)
+    if not warns:
+        print("ok: no setup problems found in " + repo)
+    return 0
+
+
 # ---- main ---------------------------------------------------------------------------------------------------------
 
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="tl.py", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sp = ap.add_subparsers(dest="cmd", required=True)
     sp.add_parser("actor")
+    sp.add_parser("doctor", help="warn about git settings that let a slot's git leave the slot")
     p = sp.add_parser("register", help="add a repository to the dashboard")
     p.add_argument("directory", nargs="?", default=".", metavar="DIR",
                    help="Git working directory (default: current directory)")
@@ -1252,7 +1305,7 @@ def main(argv=None):
         return r.returncode
     return {"register": cmd_register, "claim": cmd_claim, "heartbeat": cmd_heartbeat, "stage": cmd_stage, "worker": cmd_worker,
             "land": cmd_land, "close": cmd_close, "block": cmd_block, "slot": cmd_slot, "worktree": cmd_worktree,
-            "dash": cmd_dash, "hook": cmd_hook}[a.cmd](a)
+            "dash": cmd_dash, "hook": cmd_hook, "doctor": cmd_doctor}[a.cmd](a)
 
 
 if __name__ == "__main__":

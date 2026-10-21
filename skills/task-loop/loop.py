@@ -251,7 +251,7 @@ def landed_on_base(repo, wt, bead_id):
     tip = tl.git("rev-parse", "--verify", "-q", "refs/heads/" + branch, cwd=wt)
     if not tip or not tl.git("log", "-1", "--format=%s", tip, cwd=wt).endswith("(%s)" % bead_id):
         return False
-    return subprocess.run(["git", "-C", wt, "merge-base", "--is-ancestor", tip, base], capture_output=True).returncode == 0
+    return tl.run_git(wt, "merge-base", "--is-ancestor", tip, base, capture_output=True).returncode == 0
 
 
 def run_bead(repo, b, slot, wt, slot_bead, started):

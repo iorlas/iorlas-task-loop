@@ -48,6 +48,7 @@ line; a message between sessions is never the guard. Clashes may happen; they mu
 | files two beads both edit | none: conflicts show at land as a rebase or fix round | | areas, tl-bxk.11.4 |
 | the repo's `.task-loop.json` | read from the base branch after a fetch (`tl.profile`); the working tree only with no remote | the next fetch reads the new rule | |
 | an engine release | `dev/release.py`: an OS lock, the version from origin/main, the suite, the push under the land lock (a land during the suite: rebase, suite again, push) | waits in line, told who holds it | |
+| a slot's git | every engine git call and every worker, reviewer, verifier and check runs with `GIT_DIR` = the slot's own gitdir and `GIT_WORK_TREE` = the slot, so a `core.worktree` in the shared `.git/config` (lifesim-1mm) cannot redirect it; before each step and the land an unpinned `rev-parse --show-toplevel` must be the slot, `core.worktree` unset, `core.bare` not true; land stages only the slot's own `git status` paths | a wrong tree stops the run with an owner ask naming the setting, its file and the fix (`git config --unset core.worktree`); `tl doctor` warns when `extensions.worktreeConfig` is off (`tests/test_slot_git.py`, tl-bxk.10.12) | |
 | a stopped engine's worker | engine SIGTERMs route.py, which kills the worker's group; SIGKILL after a grace | | |
 
 All of it is proven together by one race test (tl-bxk.11.1, `tests/test_race.py`): two loops, a hand run, a slot

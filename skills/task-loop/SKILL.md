@@ -88,6 +88,8 @@ ask waits unanswered, when a person commented after the block with no ask open (
 another bead blocks it. A `tl-` claim whose lease is live is another run-task of the bead, still running: `TAKEN`
 names it and its engine log; wait for it, never start a second one.
 
+A slot's git can only touch that slot: the engine runs every git call, worker, reviewer, verifier and check with `GIT_DIR` and `GIT_WORK_TREE` pinned to the slot, and before each step and the land checks that ambient git agrees (`core.worktree` unset, `core.bare` not true); otherwise it stops with an owner ask. `tl doctor` warns when `extensions.worktreeConfig` is off.
+
 Land is one bead at a time per repo (a lock across slots and sessions): fetch, rebase, gate, push. A red gate or a
 rebase conflict goes to a fix round outside the lock: the writer fixes it, every stage's checks run again (plus no
 conflict markers), and a review checks the fix only; then land tries again. `engine.max_fix_rounds` (2) per bead, then

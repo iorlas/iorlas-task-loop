@@ -114,8 +114,8 @@ def unused_tool(what, root, cfg):
     engine_text = " ".join([cfg.get("gate") or ""] + [str(c) for c in cfg.get("checks") or []])
     said = []
     for t in tools:
-        r = subprocess.run(["git", "grep", "-w", "-I", "-l", "-F", t], cwd=str(root), capture_output=True, text=True,
-                           encoding="utf-8", errors="replace")
+        r = tl.run_git(root, "grep", "-w", "-I", "-l", "-F", t, capture_output=True, text=True, encoding="utf-8",
+                       errors="replace")
         if r.returncode not in (0, 1):  # no git tree to read: no evidence, the item stays
             return ""
         if r.stdout.strip() or re.search(r"(?<![\w-])%s(?![\w-])" % re.escape(t), engine_text) or tool_on_path(t):
@@ -264,12 +264,12 @@ class Result:
 WORKER_LINE = re.compile(r"delegate: worker pid=(\d+) pgid=(\d+)")  # route.py 0.31.1+, on stderr when it starts one
 
 
-def run_proc(cmd, cwd, timeout, log_path, on_line=None):
+def run_proc(cmd, cwd, timeout, log_path, on_line=None, env=None):
     t = time.time()
     lines, worker = [], {}
     with open(log_path, "ab") as log:
-        p = subprocess.Popen(cmd, cwd=cwd, env=child_env(), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE, start_new_session=(os.name != "nt"))
+        p = subprocess.Popen(cmd, cwd=cwd, env=dict(child_env(), **(env or {})), stdin=subprocess.DEVNULL,
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=(os.name != "nt"))
         if LOCK:
             LOCK.note(route_pid=p.pid)
 
@@ -516,6 +516,34 @@ def access(wanted):
     return "--host" if wanted else ""
 
 
+def tree_problem(wt):
+    """(what is wrong, the owner's fix) when git at `wt`, read as ambient config has it, is not that checkout; else None."""
+    clean = {k: v for k, v in os.environ.items() if k not in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR")}
+
+    def g(*a):
+        r = subprocess.run(["git", "-C", str(wt)] + list(a), env=clean, capture_output=True, text=True, encoding="utf-8",
+                           errors="replace")
+        return r.stdout.strip() if r.returncode == 0 else ""
+
+    repo = str(Path(g("rev-parse", "--path-format=absolute", "--git-common-dir") or ".").parent)
+    origin = g("config", "--show-origin", "--get", "core.worktree")
+    if origin:
+        where = origin.split("\t")[0].replace("file:", "")
+        return ("core.worktree is set (%s)" % origin.replace("\t", " = ", 1),
+                "core.worktree redirects every worktree of this repo to another folder. Remove it: "
+                "`git config --unset core.worktree` in %s (it was set in %s), then rerun." % (repo, where))
+    if g("config", "--get", "core.bare").lower() == "true":
+        return ("core.bare is true",
+                "core.bare=true in the repo's config makes git refuse the work tree. Fix: `git config core.bare false` "
+                "in %s, then rerun." % repo)
+    top = g("rev-parse", "--show-toplevel")
+    if not top or os.path.realpath(top) != os.path.realpath(str(wt)):
+        return ("git's top-level folder is %s, not the slot %s" % (top or "(none)", wt),
+                "Something redirects git away from the slot. Check `git config --show-origin --list` in %s for "
+                "core.worktree or core.bare; `git config --unset core.worktree` in %s if set." % (wt, repo))
+    return None
+
+
 def call_delegate(route, role, prompt, schema, cwd, resume, timeout, log_path, writer=None, parent="", task="",
                   title="", access=""):
     """One AI step through `route.py run` (worker-run v2). Returns (Result, the answer object or None)."""
@@ -531,7 +559,8 @@ def call_delegate(route, role, prompt, schema, cwd, resume, timeout, log_path, w
             cmd += ["--authored-by", writer]
         if access:
             cmd.append(access)
-        res, secs = run_proc(cmd, cwd, timeout + 120, log_path)
+        # GIT_DIR/GIT_WORK_TREE: the worker's git sees this checkout only (delegate passes GIT_* through)
+        res, secs = run_proc(cmd, cwd, timeout + 120, log_path, env=tl.pinned_env(cwd))
     if res is None:
         return Result(secs=secs, error="timeout", backend="delegate", ref=resume or ""), None
     code, out = res
@@ -625,6 +654,8 @@ class Engine:
 
     def node(self, step, text, **kw):
         """A node begins (the open one ends first): the old `node` record with its run-scoped id, step and counters."""
+        if step != "close":
+            self.assert_tree(step)
         self.end_node()
         self.node_n += 1
         self.cur = {"id": self.node_n, "step": step, "t": time.time(), "sessions": [], "outcome": "", "detail": ""}
@@ -872,6 +903,16 @@ class Engine:
             self.warn("the reviewer found a high-severity problem")
 
     # -- script helpers
+    def assert_tree(self, step):
+        """Before every step and the land: this slot's git is the slot (lifesim-1mm: a core.worktree in the shared
+        .git/config pointed every slot's git at another folder). Unpinned, as a worker's git would see it. A wrong tree
+        stops the run with an owner ask, never a skip."""
+        bad = tree_problem(self.wt)
+        if bad:
+            why = "tree: %s (before %s)" % (bad[0], step)
+            self.transition("ask", "wrong_tree", bad[0])
+            raise Blocked(why, bad[1])
+
     def sh(self, cmd, timeout=3600, check=False, save=None, env=None):
         """A command: a string goes through bash with -e and pipefail (checks, profile commands), so a red command in a
         `;` list or a pipe fails it (lifesim-gfr.31.1: `just unity-check > log; ! grep ...` passed with unity-check
@@ -882,7 +923,7 @@ class Engine:
         bash = shutil.which("bash") if isinstance(cmd, str) and os.name != "nt" else None  # plans write bash
         run = [bash, "-e", "-o", "pipefail", "-c", cmd] if bash else cmd  # Windows: cmd.exe, as before
         p = subprocess.Popen(run, shell=isinstance(run, str), cwd=self.wt,
-                             env=dict(child_env(), **(env or {})),
+                             env=dict(child_env(), **tl.pinned_env(self.wt), **(env or {})),
                              stdin=subprocess.DEVNULL,
                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=(os.name != "nt"))
         try:
@@ -904,6 +945,30 @@ class Engine:
         if check and rc:
             raise Blocked("failed: `%s` exit %d\n%s" % (cmd, rc, tail))
         return rc, tail
+
+    def stage_all(self, check=False):
+        """Stage the slot's own changes: exactly the paths `git status --porcelain` lists under the pinned env, never a
+        bare `git add -A` (tl-bxk.10.12). Returns the exit code."""
+        self.log("cmd", "git add -A (the slot's own status paths)")
+        st = tl.run_git(self.wt, "status", "--porcelain", "-z", "--untracked-files=all", capture_output=True)
+        parts, paths = st.stdout.decode("utf-8", "surrogateescape").split("\0"), []
+        k = 0
+        while k < len(parts):
+            e = parts[k]
+            k += 1
+            if len(e) > 3:
+                paths.append(e[3:])
+                if e[0] in "RC":  # the next entry is the path it came from: gone from the tree, staged already
+                    k += 1
+        rc = st.returncode
+        if rc == 0 and paths:
+            r = tl.run_git(self.wt, "--literal-pathspecs", "add", "-A", "--pathspec-from-file=-", "--pathspec-file-nul",
+                           input="\0".join(paths).encode("utf-8", "surrogateescape"), capture_output=True)
+            rc = r.returncode
+            st = r
+        if check and rc:
+            raise Blocked("failed: staging the slot's paths exit %d\n%s" % (rc, st.stderr.decode("utf-8", "replace")[-600:]))
+        return rc
 
     def fetch(self, check=False):
         """git fetch, again while it loses a ref lock to another process's fetch into this repo (tl.REF_RACE)."""
@@ -1659,7 +1724,7 @@ class Engine:
     def tree_hash(self):
         """The worktree as git would commit it now, untracked files included, without touching the real index."""
         with tempfile.TemporaryDirectory() as d:
-            env = dict(os.environ, GIT_INDEX_FILE=os.path.join(d, "index"))
+            env = dict(tl.git_env(self.wt), GIT_INDEX_FILE=os.path.join(d, "index"))
             for args in (["read-tree", "HEAD"], ["add", "-A"]):
                 subprocess.run(["git"] + args, cwd=self.wt, env=env, capture_output=True)
             r = subprocess.run(["git", "write-tree"], cwd=self.wt, env=env, capture_output=True, text=True)
@@ -1763,7 +1828,7 @@ class Engine:
         base = self.git("merge-base", "HEAD", self.cfg["base"])
         if base:
             self.sh(["git", "reset", "-q", "--soft", base], check=True)
-        self.sh(["git", "add", "-A"], check=True)
+        self.stage_all(check=True)
         msg = "%s (%s)" % (bead.get("title", self.bead)[:72], self.bead)
         rc, tail = self.sh(["git", "commit", "-q", "-m", msg])
         if rc:
@@ -1862,13 +1927,13 @@ class Engine:
         if kind == "conflict":
             if self.sh(self.MARKERS)[0]:
                 return self.fix("conflict", "conflict markers are still in the tree after the fix")
-            self.sh(["git", "add", "-A"], check=True)
+            self.stage_all(check=True)
             rc, out = self.sh(["git", "-c", "core.editor=true", "rebase", "--continue"])
             if rc:
                 self.sh(["git", "rebase", "--abort"])
                 raise Blocked("failed: the rebase did not continue after the conflict fix\n" + out)
         elif kind == "gate" and self.git("status", "--porcelain"):
-            self.sh(["git", "add", "-A"], check=True)
+            self.stage_all(check=True)
             self.sh(["git", "commit", "-q", "--amend", "--no-edit"], check=True)
         if d != "accept" and kind != "verify":
             self.warn("land: the fix round did not pass its checks and review; landing tries the gate again")
@@ -1909,7 +1974,7 @@ class Engine:
             signal.signal(signal.SIGTERM, old)
 
     def wip(self, why):
-        self.sh(["git", "add", "-A"])
+        self.stage_all()
         rc, _ = self.sh(["git", "commit", "-q", "-m", "wip (%s): %s" % (self.bead, why)])
         return rc == 0
 

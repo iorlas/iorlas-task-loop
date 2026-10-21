@@ -64,8 +64,7 @@ def stamp(t):
 # ---- inputs -----------------------------------------------------------------------------------------------------------
 
 def git(repo, *args):
-    r = subprocess.run(["git", "-C", repo] + list(args), capture_output=True, text=True, encoding="utf-8",
-                       errors="replace")
+    r = tl.run_git(repo, *args, capture_output=True, text=True, encoding="utf-8", errors="replace")
     return r.stdout.strip() if r.returncode == 0 else ""
 
 
@@ -157,8 +156,8 @@ def lost_work(repo, since=None, base=None, status_of=None, traces=None):
             lands.setdefault(m.group(1), []).append(int(t))
     for r in traces:
         if r.get("outcome") == "landed" and r.get("sha") and any(
-                subprocess.run(["git", "-C", repo, "merge-base", "--is-ancestor", r["sha"], b],
-                               capture_output=True).returncode == 0 for b in bases):
+                tl.run_git(repo, "merge-base", "--is-ancestor", r["sha"], b,
+                           capture_output=True).returncode == 0 for b in bases):
             lands.setdefault(r.get("bead"), []).append(r.get("ended") or 0)
     rows, statuses = [], {}
     refs = git(repo, "for-each-ref", "--format=%(refname:short)", "refs/heads/task/", "refs/heads/wip/").splitlines()
