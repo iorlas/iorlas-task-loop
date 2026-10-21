@@ -646,8 +646,66 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertIn("stopped (SIGTERM)", self.blocked[0])
 
+    def test_sigterm_between_the_run_and_its_close_still_closes(self):  # it escaped with no trace (M2 review)
+        import signal as sig
+        if not hasattr(sig, "SIGTERM") or os.name == "nt":
+            self.skipTest("POSIX signal")
+        with self.stoppable(), mock.patch.object(engine.Heartbeat, "stop",
+                                                 side_effect=lambda *a: os.kill(os.getpid(), sig.SIGTERM)):
+            rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0)
+        runs = [json.loads(l) for l in (tl.config_dir() / "traces.jsonl").read_text().splitlines()]
+        self.assertEqual([r["outcome"] for r in runs], ["landed"])
+
+    def test_a_stop_before_the_engine_ran_still_closes_with_a_trace(self):
+        with mock.patch.object(engine.Engine, "stop_pending", True, create=True):
+            rc, s = self.run_engine({"plan": [PLAN]})
+        self.assertEqual((rc, s.calls), (2, []))
+        self.assertIn("stopped (SIGTERM)", self.blocked[0])
+        runs = [json.loads(l) for l in (tl.config_dir() / "traces.jsonl").read_text().splitlines()]
+        self.assertEqual(runs[-1]["why"], "failed: stopped (SIGTERM)")
+
+    def run_bead_stopped_in(self, where):
+        """engine.run_bead with a SIGTERM sent inside `where` (claim or report): the stop waits, the run still reports."""
+        import signal as sig
+        if not hasattr(sig, "SIGTERM") or os.name == "nt":
+            self.skipTest("POSIX signal")
+        said = []
+
+        def claim(*a, **k):
+            if where == "claim":
+                os.kill(os.getpid(), sig.SIGTERM)
+            return 0
+
+        def say(text):
+            said.append(text)
+            if where == "report" and text.startswith("{"):
+                os.kill(os.getpid(), sig.SIGTERM)
+        a = mock.Mock(id="t-1", slot=None, dry_run=False, fresh=False, quiet=True, outcome_file=None)
+        made = mock.Mock()
+        made.return_value.run.return_value = 2
+        made.return_value.result.return_value = {"v": 1, "outcome": "failed", "why": "failed: stopped (SIGTERM)"}
+        made.return_value.stop_pending = False
+        with self.stoppable(), mock.patch.object(engine, "Engine", made), \
+                mock.patch.object(engine, "reclaim", return_value=(True, "")), \
+                mock.patch.object(tl, "cmd_claim", side_effect=claim), mock.patch.object(engine, "say", side_effect=say):
+            rc = engine.run_bead(a, str(self.wt), {}, str(self.wt))
+        return rc, made, said
+
+    def test_a_stop_during_the_claim_waits_and_the_engine_closes_it(self):
+        rc, made, said = self.run_bead_stopped_in("claim")
+        self.assertEqual(rc, 2)
+        self.assertTrue(made.return_value.stop_pending)
+        made.return_value.run.assert_called_once()
+        self.assertTrue(any(t.startswith("{") for t in said))
+
+    def test_a_stop_during_the_outcome_line_waits_for_it(self):
+        rc, made, said = self.run_bead_stopped_in("report")
+        self.assertEqual(rc, 2)
+        self.assertTrue(any(t.startswith("{") for t in said))
+
     # -- what live runs found: real process trees, real signals, reruns on a branch that already has the work
-    SPAWN = "sleep 30 & echo $! > %s; "
+    SPAWN ="sleep 30 & echo $! > %s; "
 
     def child_of(self, pidfile):
         for _ in range(100):

@@ -80,6 +80,12 @@ class ParseTime(unittest.TestCase):
         self.assertEqual(report.parse_time("2026-10-20", self.NOW), datetime(2026, 10, 20).timestamp())
         self.assertEqual(report.parse_time("2026-10-21T03:00:00Z", self.NOW), 1792551600.0)
 
+    def test_since_hh_mm_rolls_back_until_rolls_forward(self):
+        morning = datetime(2026, 10, 21, 7, 0).timestamp()
+        self.assertEqual(report.parse_time("22:00", morning), datetime(2026, 10, 20, 22, 0).timestamp())
+        self.assertEqual(report.parse_time("22:00", morning, forward=True), datetime(2026, 10, 21, 22, 0).timestamp())
+        self.assertEqual(report.parse_time("06:00", morning, forward=True), datetime(2026, 10, 22, 6, 0).timestamp())
+
     def test_nonsense_is_refused(self):
         with self.assertRaises(ValueError):
             report.parse_time("yesterday-ish", self.NOW)
@@ -181,13 +187,14 @@ class LostWork(Base):
 
 # ---- 10.1: the scorecard ----------------------------------------------------------------------------------------------
 
-def trace(bead, outcome, start_min, end_min, why="", sha="", rounds=0, replans=0, sessions=(), worktree=None, run=None):
+def trace(bead, outcome, start_min, end_min, why="", sha="", rounds=0, replans=0, sessions=(), worktree=None, run=None,
+          stderr=None):
     started, ended = T0 + start_min * MIN, T0 + end_min * MIN
     stem = run or "%s-%s" % (bead, time.strftime("%Y%m%d-%H%M%S", time.localtime(started)))
     return {"v": 1, "run": stem, "bead": bead, "repo": "https://example.invalid/r.git", "worktree": worktree,
             "started": started, "ended": ended, "outcome": outcome, "why": why, "sha": sha,
             "stats": {"rounds": rounds, "replans": replans}, "log": str(tl.config_dir() / "engine" / (stem + ".jsonl")),
-            "sessions": list(sessions)}
+            "sessions": list(sessions), "stderr": stderr}
 
 
 def session(role, family, tin, cached, out):
@@ -202,7 +209,7 @@ class Scorecard(Base):
         w = self.wt
         runs = [
             trace("t-0", "landed", -200, -150, sha="x", worktree=w),  # before the window: not counted
-            trace("t-1", "landed", 10, 40, sha="a1", rounds=1, worktree=w,
+            trace("t-1", "landed", 10, 40, sha="a1", rounds=1, worktree=w, stderr=str(self.home / "t-1.stderr"),
                   sessions=[session("planner", "claude", 100, 80, 10), session("worker", "openai", 1000, 900, 50)]),
             trace("t-2", "blocked", 20, 50, why="verify: before land, the workers could not check: x", worktree=w),
             trace("t-2", "landed", 55, 70, sha="a2", worktree=w, sessions=[session("reviewer", "openai", 10, 0, 1)]),
@@ -212,13 +219,17 @@ class Scorecard(Base):
             trace("t-5", "blocked", 60, 61, why="paused: logged_out on plan", worktree=w),
             trace("t-6", "failed", 60, 70, why="failed: plan node produced no valid output", worktree=w),
             trace("t-7", "landed", 80, 100, sha="a7", worktree=w),
+            trace("t-11", "failed", 100, 110, why="failed: stopped (SIGTERM)", worktree=w),  # tl stop --now: no crash
+            trace("t-12", "failed", 110, 112, why="failed: engine error KeyError: 'x'", worktree=w),  # a caught crash
             trace("o-1", "landed", 10, 20, sha="z", worktree="/elsewhere/repo"),  # another repo
         ]
         with open(tl.config_dir() / "traces.jsonl", "w") as f:
             for r in runs:
                 f.write(json.dumps(r) + "\n")
+        # route.py's stderr carries a worker's test traceback: no engine crash
+        (self.home / "t-1.stderr").write_text("Traceback (most recent call last):\n  File x\nAssertionError\n")
         # t-7's landing run resumed after an answer given before the window: it landed with an ask
-        (tl.config_dir() / "engine" / (runs[-2]["run"] + ".jsonl")).write_text(json.dumps(
+        (tl.config_dir() / "engine" / (runs[-4]["run"] + ".jsonl")).write_text(json.dumps(
             {"t": T0, "kind": "note", "text": "ask t-7-1 (verify) is answered: the bead changed since it was asked"}) + "\n")
         # a crash: an engine log with no close and no trace, long quiet
         dead = tl.config_dir() / "engine" / ("t-8-%s.jsonl" % time.strftime("%Y%m%d-%H%M%S", time.localtime(T0 + 5 * MIN)))
@@ -236,6 +247,11 @@ class Scorecard(Base):
         git(self.repo, "checkout", "-q", "-b", "task/t-6")
         commit(self.repo, "f.txt", "x\n", "wip (t-6): failed", T0 + 70 * MIN)
         git(self.repo, "checkout", "-q", "main")
+        # t-1 squash-landed: its branch's wip is folded into one base commit titled after the bead
+        git(self.repo, "checkout", "-q", "-b", "task/t-1")
+        commit(self.repo, "h.txt", "draft\n", "wip (t-1): blocked", T0 + 20 * MIN)
+        git(self.repo, "checkout", "-q", "main")
+        commit(self.repo, "h.txt", "final\n", "Do the thing (t-1)", T0 + 40 * MIN)
         self.comments = {
             "t-2": [{"text": "Ask (engine) t-2-1 (verify): x", "created_at": "2026-10-21T03:50:00Z", "author": "tl-x"},
                     {"text": "Right. (Claude, supervising.)", "created_at": "2026-10-21T03:51:00Z", "author": "D"}],
@@ -253,15 +269,16 @@ class Scorecard(Base):
 
     def test_the_six_counts(self):
         c = self.card()
-        self.assertEqual(c["beads"], 9)  # t-1..t-8 and t-10 (t-9 still runs); not t-0, not o-1
+        self.assertEqual(c["beads"], 11)  # t-1..t-8, t-10..t-12 (t-9 still runs); not t-0, not o-1
         self.assertEqual(c["landed"], 4)
         self.assertEqual(c["landed_no_ask"], 1)  # t-1; t-2, t-3 and t-7 landed after an ask
         self.assertEqual(c["parked"], 1)  # t-4
         self.assertEqual(c["paused"], 1)  # t-5
-        self.assertEqual(c["failed"], 3)  # t-6, and the crashed t-8 and t-10
-        self.assertEqual(c["crashes"], 2)
-        self.assertEqual(sorted(x["bead"] for x in c["crash_list"]), ["t-10", "t-8"])
-        self.assertEqual(c["lost"], 1)
+        self.assertEqual(c["failed"], 5)  # t-6, the stopped t-11, and the crashed t-8, t-10 and t-12
+        self.assertEqual(c["crashes"], 3)  # not t-1 (a traceback in route.py's stderr), not t-11 (a stop)
+        self.assertEqual(sorted(x["bead"] for x in c["crash_list"]), ["t-10", "t-12", "t-8"])
+        self.assertEqual(c["lost"], 1)  # t-6; t-1's squash-landed wip is no loss
+        self.assertEqual(c["pending_list"], [])
 
     def test_who_answered_the_asks(self):
         a = self.card()["asks"]
@@ -270,7 +287,7 @@ class Scorecard(Base):
 
     def test_minutes_rounds_and_tokens(self):
         c = self.card()
-        self.assertEqual(c["minutes"]["median"], 30)  # traced beads: 1 10 20 30 30 30 45
+        self.assertEqual(c["minutes"]["median"], 20)  # traced beads: 1 2 10 10 20 30 30 30 45
         self.assertEqual(c["minutes"]["p90"], 45)
         self.assertEqual(c["rounds"], 1)
         self.assertEqual(c["replans"], 1)
@@ -282,7 +299,7 @@ class Scorecard(Base):
         c = self.card()
         self.assertFalse(c["m2"]["pass"])
         failed = {k for k, v in c["m2"]["checks"].items() if not v["ok"]}
-        self.assertEqual(failed, {"beads", "landed_no_ask", "lost", "crashes"})
+        self.assertEqual(failed, {"landed_no_ask", "lost", "crashes"})
 
     def test_the_cli_prints_a_table_and_a_verdict_and_json(self):
         args = ["report", "--repo", str(self.repo), "--since", "2026-10-21T06:00", "--until", "2026-10-21T09:20"]
@@ -296,7 +313,7 @@ class Scorecard(Base):
             self.assertEqual(rc, 1)  # M2 failed
             text = out.getvalue()
             self.assertIn("M2 FAIL", text)
-            self.assertIn("crashes 2", text)
+            self.assertIn("crashes 3", text)
             out = io.StringIO()
             with redirect_stdout(out):
                 tl.main(args + ["--json"])

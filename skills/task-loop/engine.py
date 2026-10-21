@@ -879,6 +879,8 @@ class Engine:
         outcome, why, sha, question = "failed", "", "", ""
         hb = Heartbeat(self.bead, os.environ.get("TASK_LOOP_SLOT_BEAD", ""))
         try:
+            if getattr(self, "stop_pending", False):  # stopped during the claim (run_bead): close it as stopped
+                raise Blocked("failed: stopped (SIGTERM)")
             bead = tl.show(self.bead)
             if not bead:
                 raise Blocked("failed: bead %s not found" % self.bead)
@@ -934,12 +936,13 @@ class Engine:
         except Exception as e:  # the close-out must run whatever broke
             outcome, why = "failed", "failed: engine error %s: %s" % (type(e).__name__, e)
         finally:
-            if self.landed_sha and outcome != "landed":  # stopped after the push: it is on the base, close it as landed
-                self.warn("%s after the land went through; closing it landed" % (why or outcome))
-                outcome, why, sha, question = "landed", "", self.landed_sha, ""
-            hb.stop()
-            self.outcome, self.why = outcome, why
-            self.close(outcome, why, sha, question)
+            with self.stop_deferred():  # a stop here would skip the close: no trace, no bead update
+                if self.landed_sha and outcome != "landed":  # stopped after the push: on the base, close it as landed
+                    self.warn("%s after the land went through; closing it landed" % (why or outcome))
+                    outcome, why, sha, question = "landed", "", self.landed_sha, ""
+                hb.stop()
+                self.outcome, self.why = outcome, why
+                self.close(outcome, why, sha, question)
         return 0 if outcome in ("landed", "done") else 2
 
     def result(self):
@@ -2250,20 +2253,27 @@ def run_main(a):
                 signal.signal(signal.SIGTERM, old)
 
 
+defer_stop = Engine.stop_deferred  # it uses no state: also before an Engine exists, as defer_stop(None)
+
+
 def run_bead(a, repo, cfg, wt):
-    if not a.dry_run:
-        ok, why = reclaim(a.id, repo)
-        if not ok:
-            print("TAKEN: %s" % why)
-            return {"v": 1, "outcome": "taken", "bead": a.id, "why": why}
-        if why:
-            say("%s: %s" % (a.id, why))
-    if not a.dry_run and tl.cmd_claim(Args(id=a.id, worktree=wt, slot=a.slot)) != 0:
-        # bd lets this session re-claim its own bead (a reopened one); another session's claim stops here
-        return {"v": 1, "outcome": "taken", "bead": a.id, "why": "claimed by another session"}
-    cfg["fresh"] = bool(getattr(a, "fresh", False))
-    eng = Engine(a.id, wt, cfg, dry_run=a.dry_run, verbose=not getattr(a, "quiet", False))
-    say("engine log: %s" % eng.log_path)
+    # a stop during the reclaim and claim waits for them, then the engine closes the run as stopped (trace, bead)
+    with defer_stop(None) as stop:
+        if not a.dry_run:
+            ok, why = reclaim(a.id, repo)
+            if not ok:
+                print("TAKEN: %s" % why)
+                return {"v": 1, "outcome": "taken", "bead": a.id, "why": why}
+            if why:
+                say("%s: %s" % (a.id, why))
+        if not a.dry_run and tl.cmd_claim(Args(id=a.id, worktree=wt, slot=a.slot)) != 0:
+            # bd lets this session re-claim its own bead (a reopened one); another session's claim stops here
+            return {"v": 1, "outcome": "taken", "bead": a.id, "why": "claimed by another session"}
+        cfg["fresh"] = bool(getattr(a, "fresh", False))
+        eng = Engine(a.id, wt, cfg, dry_run=a.dry_run, verbose=not getattr(a, "quiet", False))
+        eng.stop_pending = bool(stop)
+        say("engine log: %s" % eng.log_path)
     rc = eng.run()
-    report(a, eng.result())
+    with defer_stop(None):  # the outcome line is what the loop reads: a stop waits for it
+        report(a, eng.result())
     return rc

@@ -34,8 +34,9 @@ STEM = re.compile(r"^(.+)-(\d{8}-\d{6})$")
 
 # ---- the window -------------------------------------------------------------------------------------------------------
 
-def parse_time(text, now=None):
-    """Epoch seconds for T: a duration back from now (90m, 12h, 2d), HH:MM today, or ISO (naive = local time)."""
+def parse_time(text, now=None, forward=False):
+    """Epoch seconds for T: a duration back from now (90m, 12h, 2d), ISO (naive = local time), or HH:MM: its last
+    past occurrence (a morning --since 22:00 is last night), with forward its next one (--until)."""
     now = time.time() if now is None else now
     s = (text or "").strip()
     m = re.match(r"^(\d+(?:\.\d+)?)\s*([mhd])$", s)
@@ -43,8 +44,12 @@ def parse_time(text, now=None):
         return now - float(m.group(1)) * {"m": 60, "h": 3600, "d": 86400}[m.group(2)]
     m = re.match(r"^(\d{1,2}):(\d{2})$", s)
     if m:
-        day = datetime.fromtimestamp(now)
-        return day.replace(hour=int(m.group(1)), minute=int(m.group(2)), second=0, microsecond=0).timestamp()
+        t = datetime.fromtimestamp(now).replace(hour=int(m.group(1)), minute=int(m.group(2)), second=0, microsecond=0)
+        if forward and t.timestamp() < now:
+            t += timedelta(days=1)
+        elif not forward and t.timestamp() > now:
+            t -= timedelta(days=1)
+        return t.timestamp()
     try:
         d = datetime.fromisoformat(s[:-1] + "+00:00" if s.endswith("Z") else s)
     except ValueError:
@@ -197,8 +202,9 @@ def lost_work(repo, since=None, base=None, status_of=None, traces=None):
 # ---- 10.1: the scorecard ----------------------------------------------------------------------------------------------
 
 def crashes(repo, since, until, traces, alive=None, now=None):
-    """Runs that ended with no outcome: the loop saw run-task exit with none; an engine log in the window with no close
-    record and no trace, quiet for QUIET_MIN and with no live run-task; or a Python traceback in a run's stderr."""
+    """Engine crashes: the loop saw run-task exit with no outcome; an engine log in the window with no close record and
+    no trace, quiet for QUIET_MIN and with no live run-task; or a trace closed as 'failed: engine error' (an exception
+    the engine caught). A run's .stderr is route.py's, where a worker's test tracebacks land too: never read."""
     alive = alive or run_alive
     now = time.time() if now is None else now
     out = {}
@@ -234,16 +240,10 @@ def crashes(repo, since, until, traces, alive=None, now=None):
         last = (recs[-1].get("text") or "") if recs else ""
         out[f.stem] = {"bead": m.group(1), "t": t, "run": f.stem,
                        "why": "the engine log ends with no close: %s" % last[:120]}
-    for r in traces:
-        if not overlaps(r, since, until) or not r.get("stderr"):
-            continue
-        try:
-            err = Path(r["stderr"]).read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
-        if "Traceback (most recent call last)" in err:
-            out.setdefault(r.get("run"), {"bead": r.get("bead"), "t": r.get("started") or 0, "run": r.get("run"),
-                                          "why": "a traceback in its stderr: %s" % err.strip().splitlines()[-1][:120]})
+    for r in traces:  # the engine caught it and closed (engine.py: Engine.run): an engine bug all the same
+        if overlaps(r, since, until) and (r.get("why") or "").startswith("failed: engine error"):
+            out[r.get("run")] = {"bead": r.get("bead"), "t": r.get("started") or 0, "run": r.get("run"),
+                                 "why": (r.get("why") or "")[:200]}
     return sorted(out.values(), key=lambda c: c["t"])
 
 
@@ -392,7 +392,7 @@ def print_card(c):
 def window(a):
     now = time.time()
     since = parse_time(a.since, now) if getattr(a, "since", None) else now - 86400
-    until = parse_time(a.until, now) if getattr(a, "until", None) else now
+    until = parse_time(a.until, now, forward=True) if getattr(a, "until", None) else now
     return since, until
 
 
