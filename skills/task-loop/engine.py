@@ -41,10 +41,10 @@ DEFAULTS = {
     "max_rounds": 3,                  # review send-backs per stage before a replan
     "max_check_tries": 3,             # red checks in a row that end a round (checks never reach the reviewer red)
     "max_replans": 1,                 # per bead, across runs; a changed bead (an owner's answer) never counts
-    "max_fix_rounds": 2,
+    "max_fix_rounds": 2,              # per bead: a red gate, a conflict or what the check before land found wrong
     "pick_label": "",                 # the label an unattended runner picks by (lifesim: auto); a decision or ticket ask removes it
     "needs_info_label": "needs-info", # and adds this one, so the bead leaves the queue until the owner relabels it
-    "max_stages": 3,                  # a bigger plan is a split ask (ticket), unless the owner already answered one              # per bead: a red gate or a conflict at land gets this many fix rounds
+    "max_stages": 3,                  # a bigger plan is a split ask (ticket), unless the owner already answered one
     "node_timeout_min": 45,
     "delegate": "",                   # path to delegate's route.py; "" = the newest installed iorlas-delegate
     "lane_wait_min": 10,              # how long a step waits in its slot for a lane; longer: the run pauses (slot freed)
@@ -67,6 +67,8 @@ UNCHECKED_KINDS = ("requirement", "number", "deletion", "link", "case", "tooling
 UNCHECKED_TEXT = ("\nunchecked: what you could not check yourself, each with its kind: requirement, number, deletion, link "
                   "(a cited link you could not open), case (an acceptance case you could not run), tooling (a change to "
                   "tools or build files the plan did not name), or other. Empty when you checked everything.")
+
+VERDICTS = ("settled", "wrong", "open")  # the verifier's answer per unchecked item, before a verify ask
 
 LATER_CASES = ("\nAn acceptance case this stage cannot run is not unchecked: it is checked when the last stage runs it.")
 FRESH_WRITER_TEXT = ("\nYou take over from an earlier writer of this task whose model is out for now. Its work is in this "
@@ -114,6 +116,11 @@ SCHEMAS = {
                                   "severity": {"type": "string", "enum": ["high", "medium", "low"]},
                                   "fix": S_STR}}},
                    "unmet": S_STRS, "question": S_STR, "decided": S_STR, "leftovers": LEFTOVERS}},
+    "verify": {"type": "object", "additionalProperties": False, "required": ["items"],
+               "properties": {"items": {"type": "array", "items": {
+                   "type": "object", "additionalProperties": False, "required": ["n", "verdict", "evidence", "why"],
+                   "properties": {"n": {"type": "integer"}, "verdict": {"type": "string", "enum": list(VERDICTS)},
+                                  "evidence": S_STR, "why": S_STR}}}}},
 }
 
 
@@ -201,7 +208,7 @@ def kill_tree(p):
     p.wait()
 
 
-ROLES = {"plan": "planner", "write": "worker", "review": "reviewer"}
+ROLES = {"plan": "planner", "write": "worker", "review": "reviewer", "verify": "reviewer"}  # reviewer: read-only rungs
 
 
 def find_route(path=""):
@@ -294,6 +301,8 @@ class Engine:
         self.contract = None  # delegate's worker-run v2 handshake: features, reasons, what each lane's workers see
         self.budget_warned = set()
         self.writer = {}  # backend -> thread/session id, so later rounds of a task resume the same writer
+        self.writer_family = None  # the family of the last write: the verifier comes from another one when it can
+        self.verified = []  # the verifier's answer per unchecked item at land: in the trace and on the bead
         self.sessions = []  # every AI call of this run: the trace a later reflection reads (traces.jsonl)
         d = tl.config_dir() / "engine"
         d.mkdir(exist_ok=True)
@@ -342,7 +351,8 @@ class Engine:
                "branch": self.git("symbolic-ref", "--short", "-q", "HEAD"), "coordinator_session": self.session,
                "started": self.t0, "ended": time.time(), "outcome": outcome, "why": (why or "")[:500], "sha": sha or "",
                "cost": self.cost, "stats": self.stats, "host": self.host, "delegate": self.route or "", "log": str(self.log_path),
-               "stderr": str(self.err_path), "lanes": (self.contract or {}).get("lanes"), "sessions": self.sessions}
+               "stderr": str(self.err_path), "lanes": (self.contract or {}).get("lanes"), "sessions": self.sessions,
+               "verified": self.verified}
         try:
             with open(tl.config_dir() / "traces.jsonl", "a", encoding="utf-8") as f:
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
@@ -372,7 +382,7 @@ class Engine:
         self.budget_check()
         self.stats["nodes"] += 1
         role = ROLES[node]
-        writer = writer_family if node == "review" else None
+        writer = writer_family if node in ("review", "verify") else None
         resume = self.writer.get("delegate") if resume_key else None
         if getattr(self, "plan_data", None):  # an unsandboxed worker can write here: every step reads the engine's plan
             (self.run_dir / "plan.json").write_text(json.dumps(self.plan_data, indent=1))
@@ -684,11 +694,12 @@ class Engine:
                 self.done.append(plan["stages"][i]["goal"])
                 i += 1
                 self.save_checkpoint(stage=i, rounds=0, n=0, feedback="", step="write" if i < len(plan["stages"]) else "land")
-            gaps = [u for u in self.unchecked if u["kind"] in UNCHECKED_KINDS]
+            gaps = self.self_verify([u for u in self.unchecked if u["kind"] in UNCHECKED_KINDS])
             if gaps:
                 raise Blocked(VERIFY_GAPS + "the workers could not check: " + "; ".join(
-                    "%s (%s)" % (u["what"], u["kind"]) for u in gaps), "Check these yourself, then comment on the bead "
-                    "(right, or wrong and why): " + "; ".join(u["what"] for u in gaps))
+                    "%s (%s%s)" % (u["what"], u["kind"], ("; " + u["why"]) if u.get("why") else "") for u in gaps),
+                    "Check these yourself, then comment on the bead (right, or wrong and why): " + "; ".join(
+                        u["what"] for u in gaps))
             sha = self.finish(bead)
             outcome = "landed" if sha else "done"
             self.drop_checkpoint()
@@ -701,6 +712,61 @@ class Engine:
             hb.stop()
             self.close(outcome, why, sha, question)
         return 0 if outcome in ("landed", "done") else 2
+
+    def self_verify(self, gaps):
+        """One read-only verifier call before a verify ask; returns the items that still go to the owner. Per item:
+        settled with quoted evidence drops it, wrong goes to one fix round at land (max_fix_rounds; none left: to the
+        owner, naming the defect), open goes to the owner. The 2026-10-21 lifesim night: lifesim-d5f.46 (a hand-written
+        .meta against its siblings), lifesim-fld.26.15 (a call site) and lifesim-gfr.31.1 (an evidence file that proved
+        it) each waited hours for an ask a supervisor settled in a minute by reading."""
+        if not gaps:
+            return gaps
+        items = "".join("%d. %s (%s)\n" % (n, u["what"], u["kind"]) for n, u in enumerate(gaps, 1))
+        try:
+            d, _ = self.ai("verify", "%d unchecked item(s) before land" % len(gaps), VERIFY_PROMPT.format(
+                brief=self.brief_text(), work=self.work_summary(), evidence=self.evidence_dir,
+                where=self.where("verify"), items=items), writer_family=self.writer_family)
+        except Blocked as b:  # no verifier now is no reason to land unchecked: the owner checks them, as before
+            self.warn("could not self-verify before land, the owner checks every item: %s" % b.why[:300])
+            return gaps
+        if self.last_flag == "same_family":
+            self.warn("the check before land is from the writer's own model family (no other lane was free)")
+        said = {}
+        for a in d["items"]:
+            said.setdefault(a["n"], a)
+        still, wrong = [], []
+        for n, u in enumerate(gaps, 1):
+            a = said.get(n) or {"verdict": "open", "evidence": "", "why": "the verifier did not answer it"}
+            v, why = a["verdict"], a["why"]
+            if v == "settled" and not a["evidence"].strip():
+                v, why = "open", "settled without quoted evidence"
+            self.verified.append({"what": u["what"], "kind": u["kind"], "verdict": v, "evidence": a["evidence"], "why": why})
+            if v != "settled":
+                (wrong if v == "wrong" else still).append(dict(u, why=why))
+        self.log("verify", "before land: %s" % ", ".join("%d %s" % (sum(x["verdict"] == k for x in self.verified), k)
+                                                         for k in VERDICTS), verified=self.verified)
+        self.comment("Verify (engine): what the workers could not check, self-verified read-only before land: " + "; ".join(
+            "%s: %s, %s" % (x["verdict"], x["what"], ('"%s"' % x["evidence"]) if x["verdict"] == "settled" else x["why"])
+            for x in self.verified))
+        if not wrong:
+            return still
+        if self.fixes >= int(self.cfg["max_fix_rounds"]):
+            return still + [dict(u, why="found wrong: %s; no fix round left" % u["why"]) for u in wrong]
+        # the wrong items stay unchecked in the fix's checkpoint: a fix round that pauses resumes at land and verifies
+        # them again, never lands them; the fix's review adds what it leaves unproven
+        self.unchecked = [u for u in self.unchecked if u["kind"] not in UNCHECKED_KINDS] + still + wrong
+        done = self.fix("verify", "".join("- %s: %s\n" % (u["what"], u["why"]) for u in wrong))
+        fixed = {u["what"] for u in wrong}
+        self.unchecked = [u for u in self.unchecked if u["what"] not in fixed]
+        left = [u for u in self.unchecked if u["kind"] in UNCHECKED_KINDS]
+        if done != "accept":
+            left += [dict(u, why="found wrong: %s; the fix round did not pass" % u["why"]) for u in wrong]
+        return left
+
+    def work_summary(self):
+        """The task's changed files with their line counts, untracked files included."""
+        tree = self.tree_hash()
+        return (tl.git("diff", "--stat", self.base_sha(), tree, cwd=self.wt) if tree else "") or "(no files changed)"
 
     def plan(self, again=False):
         why = ""
@@ -849,6 +915,7 @@ class Engine:
         rec = {"v": 1, "bead": self.bead, "branch": branch,
                "plan": self.plan_data, "done": self.done, "accepted": self.accepted, "replans": self.replans, "fixes": self.fixes, "denials": self.denials,
                "writer": self.writer.get("delegate") or "", "brief": self.brief_hash, "head": self.git("rev-parse", "HEAD"),
+               "unchecked": self.unchecked,
                "closed": False,
                "run": self.log_path.stem, "t": time.time(), **at}
         p = self.checkpoint_path()
@@ -930,6 +997,7 @@ class Engine:
         (self.run_dir / "plan.json").write_text(json.dumps(ck["plan"], indent=1))
         stages = ck["plan"]["stages"]
         if ck["step"] == "land" or ck["stage"] >= len(stages):
+            self.unchecked = list(ck.get("unchecked") or [])  # still unproven: verified again before land
             self.log("note", "resuming %s: every stage was accepted, going straight to land" % ck["run"])
             return ck["plan"], len(stages), None
         self.log("note", "resuming %s at stage %d/%d, round %d (write %d)" % (
@@ -963,6 +1031,7 @@ class Engine:
                 "\nThe plan's acceptance cases run on the last stage. If you find a case they miss, add it to new_cases (the "
                 "criterion it proves, the check, why); never remove or weaken one." + ("" if last else LATER_CASES) +
                 UNCHECKED_TEXT, resume_key="writer")
+            self.writer_family = wfam
             wrote_unchecked = w.get("unchecked") or []  # the review decides what is still unproven after the checks
             if w["question"].strip() and w["decided"].strip():  # lifesim-d5f.58: an accepted requirement is no question
                 rounds += 1
@@ -1211,15 +1280,20 @@ class Engine:
            "conflict": ("resolve the merge conflict with the latest base",
                         "\nAll stages were accepted, then rebasing onto the latest base hit a merge conflict (another task "
                         "landed first)%s. The conflict markers are in the files: resolve every one, keeping both changes' "
-                        "intent. Do not run git.\n%s\n")}
+                        "intent. Do not run git.\n%s\n"),
+           "verify": ("fix what the check before land found wrong",
+                      "\nAll stages were accepted; then a check before land found these wrong. Fix exactly this, without "
+                      "undoing what the stages built:\n%s\n")}
     MARKERS = "! git grep -n -I -E '^(<<<<<<<|>>>>>>>)( |$)' -- ."
 
     def fix(self, kind, tail):
         """One fix round at land: write → checks (every stage's checks, again) → a review of the fix only. A gate fix is
-        folded into the task's commit; a conflict fix continues the rebase. max_fix_rounds per bead, then stuck."""
+        folded into the task's commit; a conflict fix continues the rebase; a verify fix (what the verifier found wrong,
+        before the task's commit) stays in the tree. max_fix_rounds per bead, then stuck. Returns the fix stage's end."""
         self.fixes += 1
         limit = int(self.cfg["max_fix_rounds"])
-        what = {"gate": "gate red on the rebased tree", "conflict": "merge conflict with main"}[kind]
+        what = {"gate": "gate red on the rebased tree", "conflict": "merge conflict with main",
+                "verify": "the check before land found defects"}[kind]
         if self.fixes > limit:
             if kind == "conflict":
                 self.sh(["git", "rebase", "--abort"])
@@ -1233,9 +1307,10 @@ class Engine:
         st = {"goal": "Fix: " + goal, "files": [], "checks": checks, "hard": False}
         d = self.stage({"stages": [st]}, 0, {
             "fix": True, "name": "fix %d/%d" % (self.fixes, limit),
-            "feedback": text % ((" (`%s`)" % self.cfg["gate"]) if kind == "gate" and self.cfg["gate"] else "",
-                                compact([{"cmd": self.cfg["gate"] or "rebase", "exit": 1, "status": "failed",
-                                          "group": "gate", "tail": tail[-4000:]}])),
+            "feedback": text % tail if kind == "verify" else text % (
+                (" (`%s`)" % self.cfg["gate"]) if kind == "gate" and self.cfg["gate"] else "",
+                compact([{"cmd": self.cfg["gate"] or "rebase", "exit": 1, "status": "failed", "group": "gate",
+                          "tail": tail[-4000:]}])),
             "scope": "the fix only: it must %s without breaking what the accepted stages built" % goal})
         if kind == "conflict":
             if self.sh(self.MARKERS)[0]:
@@ -1245,11 +1320,12 @@ class Engine:
             if rc:
                 self.sh(["git", "rebase", "--abort"])
                 raise Blocked("failed: the rebase did not continue after the conflict fix\n" + out)
-        elif self.git("status", "--porcelain"):
+        elif kind == "gate" and self.git("status", "--porcelain"):
             self.sh(["git", "add", "-A"], check=True)
             self.sh(["git", "commit", "-q", "--amend", "--no-edit"], check=True)
-        if d != "accept":
+        if d != "accept" and kind != "verify":
             self.warn("land: the fix round did not pass its checks and review; landing tries the gate again")
+        return d
 
     @contextlib.contextmanager
     def land_lock(self):
@@ -1349,8 +1425,10 @@ class Engine:
         for lo in self.leftovers:
             tl.bd("create", lo["title"], "--type", "task", "--description", lo["why"],
                   "--deps", "discovered-from:" + self.bead)
-        self.comment("Reflect (engine): outcome=%s; filed=%d; %s%s; trace=%s (tl trace %s)" % (
-            outcome, len(self.leftovers), stats, ("; why=" + why) if why else "", self.log_path.stem, self.bead))
+        verified = ("; self-verified=" + ", ".join("%d %s" % (sum(x["verdict"] == k for x in self.verified), k)
+                                                   for k in VERDICTS)) if self.verified else ""
+        self.comment("Reflect (engine): outcome=%s; filed=%d; %s%s%s; trace=%s (tl trace %s)" % (
+            outcome, len(self.leftovers), stats, verified, ("; why=" + why) if why else "", self.log_path.stem, self.bead))
         summary = (getattr(self, "plan_summary", "") or "")[:300]
         if outcome == "landed":
             rc = tl.cmd_close(Args(id=self.bead, reason="merged %s to %s: %s; %s" % (
@@ -1590,6 +1668,8 @@ def details(node, d):
                 ["unmet: " + u for u in d["unmet"]] + ["leftover: " + lo["title"] for lo in d["leftovers"]] +
                 (["question: " + d["question"]] if d["question"].strip() else []) +
                 (["decided by: " + d["decided"]] if d["decided"].strip() else []))
+    if node == "verify":
+        return ["%d %s: %s" % (a["n"], a["verdict"], a["evidence"] or a["why"]) for a in d["items"]]
     return []
 
 
@@ -1600,6 +1680,8 @@ def summarize(node, d):
         return d["summary"][:300]
     if node == "review":
         return "%d findings, %d unmet" % (len(d["findings"]), len(d["unmet"]))
+    if node == "verify":
+        return ", ".join("%d %s" % (sum(a["verdict"] == k for a in d["items"]), k) for k in VERDICTS)
     return ""
 
 
@@ -1698,6 +1780,25 @@ Return:
 - question: empty, unless only the owner can decide something about the task itself (then explain it for a phone:
   what you found, the options, your recommendation).
 - leftovers: real follow-up work you noticed outside this task, else empty.""" + "\n" + DECIDED_RULE
+
+VERIFY_PROMPT = """Before a task lands, you check what its workers could not check themselves. Do not edit files.
+<task>
+{brief}
+</task>
+The work (files the task changed, with line counts):
+{work}
+Proof the workers saved (command output, logs, pictures) is in {evidence}/.
+{where}
+Nobody has checked these items yet:
+{items}
+Settle each one yourself where you can: read the code, its call sites, sibling files and the saved proof, and run
+read-only commands (search, list, compare, count). Answer one entry per item, n its number:
+- settled: you proved it right; evidence quotes exactly what proves it (the file and lines, or the command and its
+  output).
+- wrong: you found a real defect; why says what is wrong and where, so a writer can fix it.
+- open: only a person can judge it (taste, a device or a screen you cannot reach, the owner's call); why says what they
+  must look at.
+When in doubt, it is open: never settle an item you did not prove."""
 
 
 # ---- entry ----------------------------------------------------------------------------------------------------------

@@ -41,6 +41,13 @@ def review(unmet=(), findings=(), question="", decided=""):
     return dict(CLEAN, unmet=list(unmet), findings=list(findings), question=question, decided=decided)
 
 
+def verdict(n, v, evidence="", why=""):
+    return {"n": n, "verdict": v, "evidence": evidence, "why": why}
+
+
+STILL_OPEN = {"items": [verdict(1, "open", why="only the owner can open it")]}
+
+
 def finding(severity):
     return {"file": "f.txt", "line": 1, "severity": severity, "fix": "a %s fix" % severity}
 
@@ -1046,7 +1053,8 @@ class EngineTest(unittest.TestCase):
     def test_a_verify_ask_keeps_the_bead_in_the_pick_queue(self):
         r = dict(CLEAN, unchecked=[{"what": "the cited spec link did not open", "kind": "link"}])
         with mock.patch.object(tl, "show", return_value=dict(BEAD, labels=["auto"])):
-            rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r]}, pick_label="auto")
+            rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r], "verify": [STILL_OPEN]},
+                                    pick_label="auto")
         self.assertEqual(self.ask()["kind"], "verify")
         self.assertFalse(any(c[:2] == ("label", "remove") for c in self.bd_calls))
 
@@ -1106,7 +1114,7 @@ class EngineTest(unittest.TestCase):
 
     def test_an_unchecked_requirement_stops_the_land_with_a_verify_ask(self):
         r = dict(CLEAN, unchecked=[{"what": "the cited spec link did not open", "kind": "link"}])
-        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r]})
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r], "verify": [STILL_OPEN]})
         self.assertEqual(rc, 2)
         a = self.ask()
         self.assertEqual(a["kind"], "verify")
@@ -1147,7 +1155,7 @@ class EngineTest(unittest.TestCase):
 
     def test_a_case_item_with_no_case_in_the_plan_still_stops_the_land(self):
         r = dict(CLEAN, unchecked=[{"what": "the filter that selects nothing", "kind": "case"}])
-        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r]})
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r], "verify": [STILL_OPEN]})
         self.assertEqual(rc, 2)
         self.assertEqual(self.ask()["kind"], "verify")
 
@@ -1159,7 +1167,7 @@ class EngineTest(unittest.TestCase):
 
     def verify_then_answer(self, text):
         r = dict(CLEAN, unchecked=[{"what": "the cited spec link did not open", "kind": "link"}])
-        self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r]})
+        self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r], "verify": [STILL_OPEN]})
         return [{"author": "engine", "text": "Ask (engine) t-1-1 (verify): check the link"},
                 {"author": "denis", "text": text}]
 
@@ -1206,7 +1214,7 @@ class EngineTest(unittest.TestCase):
 
     def test_a_verify_answer_on_the_dashboard_counts_over_the_comments(self):
         r = dict(CLEAN, unchecked=[{"what": "the cited spec link did not open", "kind": "link"}])
-        self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r]})
+        self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r], "verify": [STILL_OPEN]})
         a = self.ask()
         a["answer"] = "correct"
         self.eng.ask_path().write_text(json.dumps(a))
@@ -1234,7 +1242,8 @@ class EngineTest(unittest.TestCase):
     def test_an_earlier_stage_unchecked_item_a_later_review_keeps_stops_the_land(self):
         item = {"what": "the cited spec link did not open", "kind": "link"}
         rc, _ = self.run_engine({"plan": [self.TWO], "write": [WRITE, WRITE],
-                                 "review": [dict(CLEAN, unchecked=[item]), dict(CLEAN, unchecked=[item])]})
+                                 "review": [dict(CLEAN, unchecked=[item]), dict(CLEAN, unchecked=[item])],
+                                 "verify": [STILL_OPEN]})
         self.assertEqual(rc, 2)
         self.assertEqual(self.ask()["kind"], "verify")
         self.assertEqual(self.ask()["question"].count("the cited spec link did not open"), 1)
@@ -1249,6 +1258,124 @@ class EngineTest(unittest.TestCase):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r]})
         self.assertEqual(rc, 0)
         self.assertIn(("label", "add", "t-1", "needs-owner-check"), [c[:4] for c in self.bd_calls])
+
+    # -- self-verify: before a verify ask, one read-only verifier settles what reading and read-only commands can
+    GAPS = [{"what": "the hand-written .meta matches its siblings and its guid is unique", "kind": "tooling"},
+            {"what": "Boot() calls the new Wire()", "kind": "requirement"},
+            {"what": "the menu reads well on a phone", "kind": "requirement"}]
+
+    def verified(self, answer, **kw):
+        answers = {"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, unchecked=self.GAPS)], "verify": [answer]}
+        for k, v in kw.items():
+            answers[k] = v
+        return self.run_engine(answers)
+
+    def test_unchecked_items_the_verifier_settles_land_without_an_ask(self):
+        # lifesim-d5f.46, lifesim-fld.26.15: the supervisor settled each in a minute with read-only commands
+        settled = {"items": [verdict(1, "settled", "rg -c 'guid: 3f2a' Assets → 1 match; fileFormatVersion: 2 as the siblings"),
+                             verdict(2, "settled", "Boot.cs:14 `Wire();`"),
+                             verdict(3, "settled", "evidence/menu.png shows the menu at 390px")]}
+        rc, s = self.verified(settled)
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertIsNone(self.ask())
+        self.assertEqual(s.calls[3], ("reviewer", None, "openai"))  # read-only, another family than the writer
+        brief = s.prompts[3]
+        for item in self.GAPS:
+            self.assertIn(item["what"], brief)
+        self.assertIn(str(self.eng.evidence_dir), brief)
+        self.assertIn("f.txt", brief)  # the diff summary
+        self.assertIn("Add f", brief)  # the task
+        for word in ("sandbox", "escalat", "git"):
+            self.assertNotIn(word, brief.lower())
+        said = [c[3] for c in self.bd_calls if c[:2] == ("comments", "add")]
+        verify = next(c for c in said if c.startswith("Verify (engine)"))
+        self.assertIn("Boot.cs:14 `Wire();`", verify)
+        self.assertIn("settled", verify)
+        reflect = next(c for c in said if c.startswith("Reflect (engine)"))
+        self.assertIn("self-verified=3 settled, 0 wrong, 0 open", reflect)
+        trace = json.loads((tl.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
+        self.assertEqual([v["verdict"] for v in trace["verified"]], ["settled"] * 3)
+        self.assertEqual(trace["verified"][1]["evidence"], "Boot.cs:14 `Wire();`")
+        self.assertEqual(trace["verified"][1]["what"], "Boot() calls the new Wire()")
+
+    def test_only_the_items_the_verifier_leaves_open_go_to_the_owner(self):
+        answer = {"items": [verdict(1, "settled", "guid: 3f2a is unique"), verdict(2, "settled", "Boot.cs:14"),
+                            verdict(3, "open", why="taste: it needs a phone and the owner's eye")]}
+        rc, _ = self.verified(answer)
+        self.assertEqual(rc, 2)
+        a = self.ask()
+        self.assertEqual(a["kind"], "verify")
+        self.assertIn("the menu reads well on a phone", a["question"])
+        self.assertIn("the owner's eye", a["why"])
+        self.assertNotIn("Boot() calls", a["why"])
+        self.assertNotIn(".meta", a["question"])
+
+    def test_a_settled_item_without_quoted_evidence_or_an_unanswered_one_stays_open(self):
+        answer = {"items": [verdict(1, "settled", "  "), verdict(2, "settled", "Boot.cs:14"), verdict(7, "settled", "x")]}
+        rc, _ = self.verified(answer)
+        self.assertEqual(rc, 2)
+        q = self.ask()["question"]
+        self.assertIn(".meta", q)
+        self.assertIn("the menu reads well on a phone", q)
+        self.assertNotIn("Boot() calls", q)
+
+    def test_an_item_the_verifier_finds_wrong_goes_to_a_fix_round_then_lands(self):
+        answer = {"items": [verdict(1, "wrong", why="the .meta guid 3f2a is also in Old.cs.meta: make it unique"),
+                            verdict(2, "settled", "Boot.cs:14"), verdict(3, "settled", "evidence/menu.png")]}
+        rc, s = self.verified(answer, write=[WRITE, WRITE], review=[dict(CLEAN, unchecked=self.GAPS), CLEAN])
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer", "reviewer", "worker", "reviewer"])
+        self.assertIn("also in Old.cs.meta: make it unique", s.prompts[4])
+        self.assertEqual(self.eng.fixes, 1)
+        self.assertIsNone(self.ask())
+        verify = next(c[3] for c in self.bd_calls if c[:2] == ("comments", "add") and c[3].startswith("Verify (engine)"))
+        self.assertIn("wrong", verify)
+
+    def test_the_verifier_runs_once_and_what_its_fix_leaves_unchecked_goes_to_the_owner(self):
+        answer = {"items": [verdict(1, "wrong", why="the guid is not unique"), verdict(2, "settled", "Boot.cs:14"),
+                            verdict(3, "open", why="taste")]}
+        left = dict(CLEAN, unchecked=[{"what": "the new guid is unique across Assets", "kind": "tooling"}])
+        rc, s = self.verified(answer, write=[WRITE, WRITE], review=[dict(CLEAN, unchecked=self.GAPS), left])
+        self.assertEqual(rc, 2)
+        self.assertEqual([c[0] for c in s.calls].count("reviewer"), 3)  # stage review, the verifier, the fix's review
+        q = self.ask()["question"]
+        self.assertIn("the menu reads well on a phone", q)
+        self.assertIn("the new guid is unique across Assets", q)
+
+    def test_a_verify_fix_round_that_pauses_verifies_its_items_again_on_resume_never_lands_them(self):
+        answer = {"items": [verdict(1, "wrong", why="the guid is also in Old.cs.meta"), verdict(2, "settled", "Boot.cs:14"),
+                            verdict(3, "open", why="taste")]}
+        busy = ans("failed", "busy", "retry", retry_after=time.time() + 7200, say="lane busy")
+        rc, _ = self.verified(answer, write=[WRITE, busy])
+        self.assertEqual(rc, 2)
+        self.assertTrue(self.blocked == [] and self.ask() is None)  # paused: the bead stays open, nothing asked
+        rc, s = self.run_engine({"verify": [{"items": [verdict(1, "settled", "rg guid → 1 match"),
+                                                       verdict(2, "settled", "evidence/menu.png")]}]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[0] for c in s.calls], ["reviewer"])
+        self.assertIn("the hand-written .meta matches", s.prompts[0])
+        self.assertIn("the menu reads well on a phone", s.prompts[0])
+        self.assertNotIn("Boot() calls", s.prompts[0])
+
+    def test_a_wrong_item_with_no_fix_round_left_goes_to_the_owner_naming_the_defect(self):
+        answer = {"items": [verdict(1, "wrong", why="the guid is also in Old.cs.meta"), verdict(2, "settled", "Boot.cs:14"),
+                            verdict(3, "settled", "evidence/menu.png")]}
+        answers = {"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, unchecked=self.GAPS)], "verify": [answer]}
+        rc, s = self.run_engine(answers, max_fix_rounds=0)
+        self.assertEqual(rc, 2)
+        self.assertEqual([c[0] for c in s.calls].count("worker"), 1)
+        a = self.ask()
+        self.assertEqual(a["kind"], "verify")
+        self.assertIn("the guid is also in Old.cs.meta", a["why"])
+
+    def test_a_verifier_that_cannot_run_leaves_every_item_to_the_owner(self):
+        out = ans("failed", "lane_out", "retry", retry_after=time.time() + 7200, say="no lane")
+        rc, _ = self.verified(out)
+        self.assertEqual(rc, 2)
+        q = self.ask()["question"]
+        for item in self.GAPS:
+            self.assertIn(item["what"], q)
+        self.assertIn("could not self-verify", self.eng.log_path.read_text())
 
     # -- intake: a bead the engine cannot judge is a ticket ask, before any AI step
     def test_a_bead_without_acceptance_criteria_is_a_ticket_and_never_planned(self):
@@ -1726,7 +1853,10 @@ class Validate(unittest.TestCase):
         self.assertTrue(engine.validate(review(findings=[dict(finding("high"), severity="maybe")]), s))
         self.assertTrue(engine.validate({"findings": []}, s))
         self.assertTrue(engine.validate(dict(CLEAN, unmet="x"), s))
-        self.assertEqual(sorted(engine.SCHEMAS), ["plan", "review", "write"])
+        self.assertEqual(sorted(engine.SCHEMAS), ["plan", "review", "verify", "write"])
+        v = engine.SCHEMAS["verify"]
+        self.assertEqual(engine.validate({"items": [verdict(1, "settled", "a.cs:3")]}, v), [])
+        self.assertTrue(engine.validate({"items": [verdict(1, "maybe")]}, v))
 
 
 if __name__ == "__main__":

@@ -15,6 +15,10 @@ failures came from that layer. v2 moves each of these to delegate and gives the 
 - Running checks and the gate (outside any sandbox), rounds, replans, routing, landing, close.
 - Git: the engine commits, squashes and lands. Workers leave changes uncommitted.
 - Policy: how long to wait, when to pause, what to ask the owner. Delegate says what happened; the engine decides.
+- Steps and roles: plan → `planner`, write → `worker`, review → `reviewer`; before a verify ask at land (0.15.6), one
+  verify step → `reviewer` (read-only rungs) with `--authored-by` the writer's family and the `verify` schema
+  (`items: [{n, verdict: settled|wrong|open, evidence, why}]`). A verify step that pauses or fails lands nothing: every
+  item goes to the owner.
 
 ## Handshake
 

@@ -125,6 +125,16 @@ engine drops any unchecked item that names the gate or a check (repo or stage) t
 nothing to add to them. Once a round ran every acceptance case green (the last stage, a fix) it also drops every
 `case` item, and that review is told a case is never unchecked (a case whose check does not prove its criterion is a
 finding). The planner writes no case for a criterion that names the gate.
+Before that verify ask, one verifier call (delegate role `reviewer`: read-only on every rung, `--authored-by` the
+writer's family) gets the task, the changed files, the evidence folder and the items, and answers per item: `settled`
+with the evidence quoted (the item is dropped), `wrong` with the defect (one fix round at land, counted in
+`engine.max_fix_rounds`; none left, the item goes to the owner naming the defect) or `open` (only a person can judge
+it). A `settled` without quoted evidence, or an item it does not answer, is open. Only open items, and what the fix's
+review leaves unchecked, reach the owner; all settled lands. It runs once per land; if it cannot run (no lane, budget)
+every item goes to the owner as before. The checkpoint keeps what is unchecked, wrong items included until their fix
+is accepted, so a run that pauses in the fix round verifies them again on resume and never lands them. Its answers are a `Verify (engine)` comment, the trace's `verified` and the
+Reflect comment's `self-verified=` count, so the owner can audit what nobody asked him (the 2026-10-21 lifesim night:
+lifesim-d5f.46, lifesim-fld.26.15, lifesim-gfr.31.1 each waited hours on an ask settled by reading in a minute).
 
 Check groups run static → tests → acceptance (the plan's per-stage checks), one at a time; a red group skips the rest.
 Every string command (checks, gate, land) runs under `bash -e -o pipefail`: a red command before a `;` or inside a pipe
