@@ -2026,85 +2026,88 @@ class DelegateLauncher(unittest.TestCase):
              "tokens": {"in": 1000, "cached": 800, "out": 50}, "context": {"instructions": [], "env_keys": []}}
 
     def test_a_resumed_write_whose_lane_is_out_goes_on_at_once_as_a_new_thread(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_LONG, self.FRESH, self.BACK],
-                                 "review": [review(unmet=["more"]), review(unmet=["more"]), CLEAN]})
+        with self.lanes(OPENAI_SUBSCRIPTION=True):
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_L, self.FRESH, self.FRESH],
+                                     "review": [review(unmet=["more"]), review(unmet=["more"]), CLEAN]})
         self.assertEqual(rc, 0, self.blocked)  # no wait: the lane is out for an hour, past lane_wait_min
         workers = [(c, p) for c, p in zip(s.calls, s.prompts) if c[0] == "worker"]
-        self.assertEqual([c[1] for c, _ in workers], [None, "ref-write", None, None])
-        self.assertEqual([c[2] for c in s.calls if c[0] == "reviewer"], ["openai", "claude", "openai"])
+        self.assertEqual([c[1] for c, _ in workers], [None, "ref-write", None, "w2"])  # Codex still out: resumed
+        self.assertEqual([c[2] for c in s.calls if c[0] == "reviewer"], ["openai", "claude", "claude"])
         self.assertNotIn(engine.FRESH_WRITER_TEXT, workers[1][1])
         self.assertIn(engine.FRESH_WRITER_TEXT, workers[2][1])
+        self.assertNotIn(engine.FRESH_WRITER_TEXT, workers[3][1])
         self.assertIn("lane_out", self.eng.log_path.read_text())
 
     # tl-bxk.10.5 2026-10-21: after a real outage the Sonnet thread stayed the writer for every later round of
     # lifesim-fld.27.7, d5f.33, 1eg2 and d5f.54 while Codex was usable again
-    BACK = dict(FRESH, ref="w3", family="openai", lane="O", model="gpt")
+    BACK = dict(FRESH, ref="w3", family="openai", lane="OPENAI_SUBSCRIPTION", model="gpt")
+    OUT_L = dict(OUT_LONG, lane="OPENAI_SUBSCRIPTION")
 
     def transitions(self):
         return [json.loads(ln) for ln in self.eng.log_path.read_text().splitlines() if '"transition"' in ln]
 
-    def test_a_fallback_writer_is_asked_fresh_next_round_and_codex_takes_back_over(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_LONG, self.FRESH, self.BACK, WRITE],
-                                 "review": [review(unmet=["more"]), review(unmet=["more"]), review(unmet=["more"]),
-                                            CLEAN]}, max_rounds=5)
+    def lanes(self, **out):
+        """`route.py status --json` lanes: name -> {out}."""
+        return mock.patch.object(engine, "lane_status", return_value={k: {"out": v} for k, v in out.items()})
+
+    def test_a_fallback_writer_is_asked_fresh_once_its_lane_is_back_and_codex_takes_over(self):
+        with self.lanes(OPENAI_SUBSCRIPTION=False, CLAUDE_SUBSCRIPTION=False):
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_L, self.FRESH, self.BACK, WRITE],
+                                     "review": [review(unmet=["more"])] * 3 + [CLEAN]}, max_rounds=5)
         self.assertEqual(rc, 0, self.blocked)
         workers = [(c, p) for c, p in zip(s.calls, s.prompts) if c[0] == "worker"]
-        # round 3: the Sonnet thread is a fallback, so delegate routes afresh (Codex); round 4 resumes Codex's thread
+        # round 3: Codex's lane is back, so delegate routes afresh; round 4 resumes Codex's new thread
         self.assertEqual([c[1] for c, _ in workers], [None, "ref-write", None, None, "w3"])
         self.assertIn(engine.FRESH_WRITER_TEXT, workers[3][1])
         self.assertNotIn(engine.FRESH_WRITER_TEXT, workers[4][1])
         self.assertEqual([c[2] for c in s.calls if c[0] == "reviewer"], ["openai", "claude", "openai", "openai"])
         self.assertTrue(any(t["cause"] == "fallback_retake" and t["to"] == "write" for t in self.transitions()))
 
-    def test_a_fallback_writer_stays_fresh_while_codex_is_still_out(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_LONG, self.FRESH, self.FRESH, self.BACK],
-                                 "review": [review(unmet=["more"])] * 3 + [CLEAN]}, max_rounds=5)
+    def test_a_fallback_writer_is_resumed_while_its_lane_is_still_out(self):
+        with self.lanes(OPENAI_SUBSCRIPTION=True, CLAUDE_SUBSCRIPTION=False):
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_L, self.FRESH, self.FRESH],
+                                     "review": [review(unmet=["more"])] * 2 + [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, "ref-write", None, None, None])
-
-    def test_the_first_choice_writer_still_resumes(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE, WRITE],
-                                 "review": [review(unmet=["more"]), review(unmet=["more"]), CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, "ref-write", "ref-write"])
+        self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, "ref-write", None, "w2"])
         self.assertFalse(any(t["cause"] == "fallback_retake" for t in self.transitions()))
 
-    def routing(self, first):
-        d = Path(self.tmp.name, "delegate")
-        d.mkdir(exist_ok=True)
-        (d / "routing.json").write_text(json.dumps({"roles": {"worker": {"steps": [{"on": first}, {"on": "claude"}]}}}))
-        return str(d / "route.py")
-
-    def test_a_writer_off_the_roles_first_choice_family_is_a_fallback_without_any_lane_out(self):
-        # delegate moved the very first write to Sonnet itself (Codex busy): no lane_out reached the engine
-        no_checks = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[])])  # FRESH writes no f.txt
-        rc, s = self.run_engine({"plan": [no_checks], "write": [self.FRESH, self.BACK, WRITE],
-                                 "review": [review(unmet=["more"]), review(unmet=["more"]), CLEAN]},
-                                route=self.routing("openai"))
+    def test_a_lane_the_status_does_not_know_never_makes_a_fallback(self):
+        with self.lanes(CLAUDE_SUBSCRIPTION=False):  # Codex is not configured on this machine at all
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_L, self.FRESH, self.FRESH],
+                                     "review": [review(unmet=["more"])] * 2 + [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, None, "w3"])
-        self.assertEqual([c[2] for c in s.calls if c[0] == "reviewer"], ["claude", "openai", "openai"])
+        self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, "ref-write", None, "w2"])
 
-    def test_a_fallback_writer_is_asked_fresh_in_the_next_run_too(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_LONG, self.FRESH, self.OUT_LONG],
-                                 "review": [review(unmet=["more"]), review(unmet=["more"])]})
-        self.assertEqual(rc, 2)  # round 3 asked fresh, the lane was out: paused
+    def test_the_first_choice_writer_still_resumes_and_no_status_is_read(self):
+        with mock.patch.object(engine, "lane_status") as st:
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE, WRITE],
+                                     "review": [review(unmet=["more"]), review(unmet=["more"]), CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, "ref-write", "ref-write"])
+        st.assert_not_called()
+
+    def test_a_fallback_writer_is_retaken_in_the_next_run_once_its_lane_is_back(self):
+        with self.lanes(OPENAI_SUBSCRIPTION=True):
+            busy = ans("stop", "busy", "retry", retry_after=time.time() + 3600, family="claude")
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_L, self.FRESH, busy],
+                                     "review": [review(unmet=["more"]), review(unmet=["more"])]})
+        self.assertEqual(rc, 2)  # round 3 resumed the fallback (Codex still out) and paused
         ck = json.loads((tl.config_dir() / "checkpoints" / "t-1.json").read_text())
-        self.assertEqual((ck["writer"], ck["writer_fallback"]), ("w2", True))
-        rc, s = self.run_engine({"write": [self.BACK], "review": [CLEAN]})
+        self.assertEqual((ck["writer"], ck["fallback_lane"]), ("w2", "OPENAI_SUBSCRIPTION"))
+        with self.lanes(OPENAI_SUBSCRIPTION=False):
+            rc, s = self.run_engine({"write": [self.BACK], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(s.calls[0][:2], ("worker", None))
         self.assertIn(engine.FRESH_WRITER_TEXT, s.prompts[0])
         self.assertEqual(s.calls[1], ("reviewer", None, "openai"))
 
-    def test_a_new_thread_whose_lane_is_out_too_follows_the_wait_policy(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_LONG, self.OUT_LONG],
-                                 "review": [review(unmet=["more"])]})
-        self.assertEqual(rc, 2)
-        self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, "ref-write", None])
-        self.assertEqual(self.blocked, [])
-        self.assertTrue(any(c[:1] == ("update",) and "open" in c and any("paused: no lane for write until" in x for x in c)
-                            for c in self.bd_calls))
+    def test_lane_status_reads_route_status_json(self):
+        out = json.dumps({"v": 1, "lanes": {"OPENAI_SUBSCRIPTION": {"out": True}}})
+        with mock.patch.object(engine.subprocess, "run", return_value=mock.Mock(returncode=0, stdout=out + "\n")) as run:
+            self.assertEqual(engine.lane_status("/r/route.py"), {"OPENAI_SUBSCRIPTION": {"out": True}})
+        self.assertEqual(run.call_args[0][0][1:], ["/r/route.py", "status", "--json"])
+        with mock.patch.object(engine.subprocess, "run", side_effect=OSError("gone")):
+            self.assertEqual(engine.lane_status("/r/route.py"), {})
 
     # lifesim-5ar.6 2026-10-21: the resumed writer's lane_out came with no retry_after, so next was owner, and the bead
     # blocked "needs a human" after 114 min of work
