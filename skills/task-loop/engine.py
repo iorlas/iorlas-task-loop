@@ -78,6 +78,53 @@ TRACKER_TEXT = ("\n\nYour plan was sent back: these checks read the issue tracke
                 "Follow-up work the task wants filed goes in leftovers: the engine files it.")
 
 
+# tl-bxk.10.9: an unchecked item naming one of these, or a backticked command, is a check only where the repo uses it
+KNOWN_TOOLS = {"ruff", "black", "flake8", "pylint", "mypy", "pyright", "isort", "bandit", "eslint", "prettier", "tsc",
+               "biome", "stylelint", "shellcheck", "shfmt", "hadolint", "yamllint", "markdownlint", "actionlint",
+               "golangci-lint", "gofmt", "staticcheck", "clippy", "rustfmt", "rubocop", "ktlint", "detekt", "swiftlint",
+               "clang-tidy", "clang-format", "cppcheck", "csharpier", "semgrep", "codespell", "vale", "pre-commit", "prek"}
+TOOL_FILES = ("justfile", "Justfile", ".justfile", "Makefile", "makefile", ".task-loop.json", ".pre-commit-config.yaml",
+              ".pre-commit-config.yml", "prek.toml", ".gitlab-ci.yml", "azure-pipelines.yml", ".circleci/config.yml",
+              "mise.toml", ".mise.toml", ".tool-versions", "package.json", "pyproject.toml", "setup.cfg", "tox.ini")
+
+
+def tools_named(what):
+    """The tools an unchecked item names: a known linter or formatter, or the first word of a backticked command."""
+    found = [w for w in re.findall(r"[a-z][a-z0-9+-]*", what.lower()) if w in KNOWN_TOOLS]
+    for cmd in re.findall(r"`([^`]+)`", what):
+        w = cmd.split()[0] if cmd.split() else ""
+        if re.fullmatch(r"[A-Za-z][\w+-]*", w):
+            found.append(w)
+    return list(dict.fromkeys(found))
+
+
+def tool_on_path(name):
+    return shutil.which(name)
+
+
+def unused_tool(what, root, cfg):
+    """The evidence that every tool an item names is one the repo neither configures (task files, gate, checks,
+    pre-commit, CI, toolchain, a config file named after it) nor installs (PATH); "" when it names none or uses one."""
+    tools = tools_named(what)
+    if not tools:
+        return ""
+    root = Path(root)
+    files = [root / f for f in TOOL_FILES] + sorted((root / ".github" / "workflows").glob("*.y*ml"))
+    files = [f for f in files if f.is_file()]
+    text = {str(f.relative_to(root)): f.read_text(encoding="utf-8", errors="replace") for f in files}
+    text["engine gate/checks"] = " ".join([cfg.get("gate") or ""] + [str(c) for c in cfg.get("checks") or []])
+    said = []
+    for t in tools:
+        rx = re.compile(r"(?<![\w-])%s(?![\w-])" % re.escape(t))
+        hits = [n for n, body in text.items() if rx.search(body)]
+        named = [p.name for p in root.iterdir() if t in p.name.lower()] if root.is_dir() else []
+        if hits or named or tool_on_path(t):
+            return ""
+        said.append("`%s`: grep -w %s in %s: no match; no file named after it; which %s: not found" % (
+            t, t, ", ".join(sorted(text)), t))
+    return "not a check here: the repo neither configures nor installs it (%s)" % "; ".join(said)
+
+
 def plan_checks(plan):
     """The plan's checks: stages, risks, cases."""
     return list(dict.fromkeys([c for s in plan.get("stages") or [] for c in s["checks"]] + [
@@ -1084,6 +1131,22 @@ class Engine:
         it) each waited hours for an ask a supervisor settled in a minute by reading."""
         if not gaps:
             return gaps
+        unused = [(u, unused_tool(u["what"], self.wt, self.cfg)) for u in gaps]
+        for u, ev in unused:
+            if ev:
+                self.verified.append({"what": u["what"], "kind": u["kind"], "verdict": "settled", "evidence": ev,
+                                      "why": "not a check here"})
+        if any(ev for _, ev in unused):
+            gaps = [u for u, ev in unused if not ev]
+            n_drop = len(unused) - len(gaps)
+            self.transition("verify" if gaps else "land", "not_a_check", "%d item%s name a tool the repo does not use" % (
+                n_drop, "" if n_drop == 1 else "s"))
+            if not gaps:
+                counts = ", ".join("%d %s" % (sum(x["verdict"] == k for x in self.verified), k) for k in VERDICTS)
+                self.log("verify", "before land: %s" % counts, verified=self.verified)
+                self.comment("Verify (engine): what the workers could not check, before land: " + "; ".join(
+                    "%s: %s, %s" % (x["verdict"], x["what"], '"%s"' % x["evidence"]) for x in self.verified))
+                return []
         items = "".join("%d. %s (%s)\n" % (n, u["what"], u["kind"]) for n, u in enumerate(gaps, 1))
         try:
             d, _ = self.ai("verify", "%d unchecked item(s) before land" % len(gaps), VERIFY_PROMPT.format(

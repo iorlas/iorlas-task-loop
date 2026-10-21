@@ -1502,6 +1502,55 @@ class EngineTest(unittest.TestCase):
             answers[k] = v
         return self.run_engine(answers)
 
+    # tl-bxk.10.9: lifesim-gfr.31.3 asked the owner 'nobody ran ruff on tools/*.py'; lifesim has no ruff anywhere
+    RUFF = {"what": "nobody ran ruff on tools/*.py", "kind": "tooling"}
+
+    def no_ruff(self, name):
+        return None if name == "ruff" else "/usr/bin/" + name
+
+    def test_an_unchecked_item_for_a_tool_the_repo_does_not_use_is_dropped_with_the_evidence(self):
+        with mock.patch.object(engine, "tool_on_path", side_effect=self.no_ruff):
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, unchecked=[self.RUFF])]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertIsNone(self.ask())
+        self.assertNotIn("reviewer", [c[0] for c in s.calls][3:])  # no verifier call for it
+        verify = next(c[3] for c in self.bd_calls if c[:2] == ("comments", "add") and c[3].startswith("Verify (engine)"))
+        self.assertIn("not a check here", verify)
+        self.assertIn("which ruff: not found", verify)
+        self.assertIn("grep -w ruff", verify)
+        causes = [json.loads(ln) for ln in self.eng.log_path.read_text().splitlines() if '"transition"' in ln]
+        self.assertTrue(any(t["cause"] == "not_a_check" for t in causes))
+
+    def test_an_unchecked_item_for_a_tool_the_repo_configures_still_goes_to_the_verifier(self):
+        (self.wt / "justfile").write_text("lint:\n    ruff check tools\n")
+        sh("git", "add", "-A", cwd=self.wt)
+        sh("git", "commit", "-qm", "justfile", cwd=self.wt)
+        sh("git", "push", "-q", "origin", "HEAD:main", cwd=self.wt)
+        with mock.patch.object(engine, "tool_on_path", side_effect=self.no_ruff):
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, unchecked=[self.RUFF])],
+                                     "verify": [STILL_OPEN]})
+        self.assertEqual(rc, 2)
+        self.assertEqual(self.ask()["kind"], "verify")
+        self.assertIn("ruff", self.ask()["question"])
+
+    def test_an_unchecked_item_for_a_tool_on_the_path_still_goes_to_the_verifier(self):
+        with mock.patch.object(engine, "tool_on_path", return_value="/opt/bin/ruff"):
+            rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, unchecked=[self.RUFF])],
+                                     "verify": [STILL_OPEN]})
+        self.assertEqual(rc, 2)
+        self.assertIn("ruff", self.ask()["question"])
+
+    def test_only_the_unused_tool_item_is_dropped_the_rest_go_to_the_verifier(self):
+        with mock.patch.object(engine, "tool_on_path", side_effect=self.no_ruff):
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE],
+                                     "review": [dict(CLEAN, unchecked=[self.RUFF, self.GAPS[1]])], "verify": [STILL_OPEN]})
+        self.assertEqual(rc, 2)
+        q = self.ask()["question"]
+        self.assertIn("Boot() calls", q)
+        self.assertNotIn("ruff", q)
+        brief = [p for (c, p) in zip(s.calls, s.prompts) if c[0] == "reviewer"][-1]
+        self.assertNotIn("ruff", brief)
+
     def test_unchecked_items_the_verifier_settles_land_without_an_ask(self):
         # lifesim-d5f.46, lifesim-fld.26.15: the supervisor settled each in a minute with read-only commands
         settled = {"items": [verdict(1, "settled", "rg -c 'guid: 3f2a' Assets → 1 match; fileFormatVersion: 2 as the siblings"),
