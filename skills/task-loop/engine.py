@@ -47,6 +47,7 @@ DEFAULTS = {
     "skip_labels": [],                # the loop's queue (tl next, tl loop) never takes a bead with one of these labels
     "epic_order": [],                 # within a priority, beads under an earlier epic here (at any depth) come first
     "epic_only": False,               # true: beads under none of epic_order's epics are not taken at all
+    "gate_only": [],                  # commands no plan check may run, only the gate at land: "cmd" or {cmd, why}
     "max_stages": 3,                  # a bigger plan is a split ask (ticket), unless the owner already answered one
     "node_timeout_min": 45,
     "delegate": "",                   # path to delegate's route.py; "" = the newest installed iorlas-delegate
@@ -82,11 +83,42 @@ TRACKER_TEXT = ("\n\nYour plan was sent back: these checks read the issue tracke
                 "Follow-up work the task wants filed goes in leftovers: the engine files it.")
 
 
+def plan_checks(plan):
+    """The plan's checks: stages, risks, cases."""
+    return list(dict.fromkeys([c for s in plan.get("stages") or [] for c in s["checks"]] + [
+        x["check"] for k in ("risks", "cases") for x in plan.get(k) or []]))
+
+
 def tracker_checks(plan):
-    """The plan's checks (stages, risks, cases) that read the issue tracker instead of the code."""
-    cmds = [c for s in plan.get("stages") or [] for c in s["checks"]] + [
-        x["check"] for k in ("risks", "cases") for x in plan.get(k) or []]
-    return list(dict.fromkeys(c for c in cmds if TRACKER_CHECK.search(c)))
+    """The plan's checks that read the issue tracker instead of the code."""
+    return [c for c in plan_checks(plan) if TRACKER_CHECK.search(c)]
+
+
+# a command the repo runs only in the gate (the gate itself, engine.gate_only) is red by design on the uncommitted tree a
+# writer leaves, so a check running it burns every round (lifesim-fld.27.9: `just unity-check`, 68 min, stuck)
+CMD_LEAD = r"(?:^|[;&|(`!{]|\b(?:then|do|else|xargs|exec|command|env|time)\b)\s*"
+GATE_ONLY_TEXT = ("\n\nYour plan was sent back: these checks run a command that runs only in the gate at land (the engine "
+                  "runs it once, on the rebased tree), never on a stage's uncommitted tree:\n%s\nRewrite them without "
+                  "it: the land gate proves what it proves.")
+
+
+def gate_only(cfg):
+    """[(cmd, why)]: the gate command and engine.gate_only's entries ("cmd" or {cmd, why})."""
+    out = [(cfg.get("gate") or "", "the engine runs the gate once, on the rebased tree")]
+    out += [(x, "") if isinstance(x, str) else (x.get("cmd") or "", x.get("why") or "") for x in cfg.get("gate_only") or []]
+    return [(" ".join(c.split()), why) for c, why in out if c.strip()]
+
+
+def gate_only_checks(plan, cfg):
+    """[(check, reason)]: the plan's checks that run a gate-only command."""
+    rules = [(re.compile(CMD_LEAD + r"\s+".join(map(re.escape, c.split())) + r"(?=\s|$|[;&|)`])"),
+              "%s runs only in the gate at land%s" % (c, ": " + why if why else "")) for c, why in gate_only(cfg)]
+    out = []
+    for c in plan_checks(plan):
+        hit = next((why for rx, why in rules if rx.search(c)), None)
+        if hit:
+            out.append((c, hit))
+    return out
 
 
 LATER_CASES = ("\nAn acceptance case this stage cannot run is not unchecked: it is checked when the last stage runs it.")
@@ -829,6 +861,10 @@ class Engine:
                      "by that land gate: write no case for it." % (
                          (" (`%s`)" % self.cfg["gate"]) if self.cfg["gate"] else "",
                          ("`%s`" % self.cfg["gate"]) if self.cfg["gate"] else "it"))
+        extra_gated = [(c, why) for c, why in gate_only(self.cfg) if c != " ".join(self.cfg["gate"].split())]
+        if extra_gated:
+            rules.append("These run only in the gate at land too, never in a check: " + "; ".join(
+                "`%s`%s" % (c, " (%s)" % why if why else "") for c, why in extra_gated) + ".")
         if self.verify_answer:
             extra += ("\n\nEvery stage was accepted, then the owner checked the work and answered:\n<answer>\n%s\n</answer>\n"
                       "Plan only the work this answer asks for. If it asks for nothing more (it says the work is right), "
@@ -840,14 +876,24 @@ class Engine:
         prompt = (PLAN_PROMPT.format(brief=self.brief_text(), wt=self.wt) + extra + "\n\n" + "\n".join(rules) +
                   ("\n\n" + self.where("plan") if self.where("plan") else ""))
         data, _ = self.ai("plan", "re-plan" if again else "plan", prompt)
-        bad = tracker_checks(data)
-        if bad:  # asked once to rewrite them, like an invalid answer
-            self.warn("the plan's checks read the issue tracker, sent back: %s" % "; ".join(bad)[:300])
-            data, _ = self.ai("plan", "rewrite tracker checks", prompt + TRACKER_TEXT % "\n".join("- `%s`" % c for c in bad))
-            bad = tracker_checks(data)
+        bad, gated = tracker_checks(data), gate_only_checks(data, self.cfg)
+        if bad or gated:  # asked once to rewrite them, like an invalid answer
+            why = ""
+            if bad:
+                self.warn("the plan's checks read the issue tracker, sent back: %s" % "; ".join(bad)[:300])
+                why += TRACKER_TEXT % "\n".join("- `%s`" % c for c in bad)
+            if gated:
+                self.warn("the plan's checks run gate-only commands, sent back: %s" % "; ".join(
+                    "%s (%s)" % g for g in gated)[:300])
+                why += GATE_ONLY_TEXT % "\n".join("- `%s`: %s" % g for g in gated)
+            data, _ = self.ai("plan", "rewrite checks", prompt + why)
+            bad, gated = tracker_checks(data), gate_only_checks(data, self.cfg)
             if bad:
                 raise Blocked("failed: the plan's checks still read the issue tracker after one rewrite: %s"
                               % "; ".join(bad)[:400])
+            if gated:
+                raise Blocked("failed: the plan's checks still run gate-only commands after one rewrite: %s"
+                              % "; ".join("%s (%s)" % g for g in gated)[:400])
         data = json.loads(json.dumps(data))  # the engine's own copy: cases are added to it as the task runs
         if self.verify_answer and not data["stages"] and not data["question"].strip():
             self.log("note", "the planner finds the owner's answer asks for nothing more: landing")

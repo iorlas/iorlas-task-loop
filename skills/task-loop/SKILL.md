@@ -100,6 +100,13 @@ A check proves the code and the tree only, never the tracker: the planner is tol
 titles, so a replan in a later run that names one again files no second bead. A plan with such a check in a stage,
 risk or case is sent back to the planner once naming them; a second such plan fails the run.
 
+A check never runs a gate-only command either: the gate (`engine.gate`) always, and each command prefix in
+`engine.gate_only` (`"just unity-check"` or `{"cmd": "just unity-check", "why": "fails on uncommitted client/"}`),
+for commands red by design on the uncommitted tree a writer leaves (lifesim-fld.27.9: 68 min stuck on
+`just unity-check`). The planner is told the list; a plan with one as a command (at the start, or after `&&`, `;`,
+`|`, `then`...; `just check-fmt` is another command) is sent back once with `<cmd> runs only in the gate at land:
+<why>`, and a second such plan fails the run.
+
 Dashboard Asks tab: open asks, most urgent first, each answerable in place (the answer goes on the bead as a comment and
 opens it; first answer wins). Answering needs the token in `~/.config/task-loop/dash.token`: `tl dash url` prints
 `ANSWER LINK`s with it, open one on the phone once. A red banner shows when delegate says a subscription lane is out.

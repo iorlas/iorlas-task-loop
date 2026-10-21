@@ -497,6 +497,34 @@ class EngineTest(unittest.TestCase):
         for ok in (HAS_F, "! grep -rn 'bd list' src", "pytest tests/test_bd.py", "test -f abd"):
             self.assertEqual(engine.tracker_checks(dict(PLAN, risks=[{"what": "x", "check": ok}])), [], ok)
 
+    UNITY = {"cmd": "just unity-check", "why": "it fails on uncommitted client/ changes"}
+
+    def test_a_check_running_a_gate_only_command_is_sent_back_to_the_planner_once(self):
+        # lifesim-fld.27.9: a stage check ran `just unity-check`, red by design on the uncommitted tree: stuck, 68 min
+        bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[HAS_F, "just fmt && just unity-check"])])
+        rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]}, gate_only=[self.UNITY])
+        self.assertEqual(rc, 0)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
+        self.assertIn("just unity-check runs only in the gate at land: it fails on uncommitted client/ changes",
+                      s.prompts[1])
+        self.assertIn("just unity-check", s.prompts[0])  # the planner is told up front too
+
+    def test_the_gate_command_is_always_gate_only(self):
+        bad = dict(PLAN, cases=[{"criterion": "the repo is green", "check": "just  check"}])
+        rc, s = self.run_engine({"plan": [bad, bad]}, gate="just check")
+        self.assertEqual([c[0] for c in s.calls], ["planner", "planner"])
+        self.assertIn("just check runs only in the gate at land", s.prompts[1])
+        self.assertTrue(self.blocked and "gate" in self.blocked[0])
+
+    def test_gate_only_checks_match_a_command_not_a_longer_name_or_an_argument(self):
+        cfg = {"gate": "just check", "gate_only": ["just unity-check", self.UNITY]}
+        bad = ["just check", "cd x && just unity-check --fast", "true; just check | tail"]
+        ok = [HAS_F, "just check-fmt", "just unity-checks", "grep 'just check' AGENTS.md", "just fmt"]
+        got = engine.gate_only_checks(dict(PLAN, risks=[{"what": "x", "check": c} for c in bad + ok]), cfg)
+        self.assertEqual([c for c, _ in got], bad)
+        self.assertEqual(engine.gate_only_checks(dict(PLAN, risks=[{"what": "x", "check": "just check"}]),
+                                                 dict(engine.DEFAULTS)), [])
+
     def test_follow_up_work_in_the_plan_is_filed_by_the_engine(self):
         lo = {"title": "Track hard-to-undo moves", "why": "the plan wants it filed"}
         rc, s = self.run_engine({"plan": [dict(PLAN, leftovers=[lo])], "write": [WRITE], "review": [CLEAN]})
