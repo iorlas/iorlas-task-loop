@@ -187,7 +187,7 @@ class LoudBind(unittest.TestCase):
         port = free_port()
         r = subprocess.run([sys.executable, str(SERVER), "--port", str(port), "--bind", "127.0.0.1,203.0.113.9"],
                            capture_output=True, text=True, timeout=30,
-                           env={**os.environ, "XDG_CONFIG_HOME": tempfile.mkdtemp(), "APPDATA": tempfile.mkdtemp()})
+                           env={**os.environ, "TASK_LOOP_DASH_DEV_PUBLIC": "1", "XDG_CONFIG_HOME": tempfile.mkdtemp(), "APPDATA": tempfile.mkdtemp()})
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("203.0.113.9:%d" % port, r.stderr)
         s = socket.socket()
