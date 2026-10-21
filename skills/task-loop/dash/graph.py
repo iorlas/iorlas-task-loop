@@ -1,11 +1,11 @@
 """The Plan tab's data: open beads as a dependency graph with one state each. Pure: server.py gathers the inputs
-(bd list, the loop's queue, running beads, open asks) and calls build(). Python 3.8+, standard library only."""
+(bd list, the loop's queue, beads held by a slot, open asks) and calls build(). Python 3.8+, standard library only."""
 
 import calendar
 import time
 
 OWNER_LABELS = ("owner-taste", "needs-info")
-STATES = ("running", "queued", "blocked", "waits", "not_auto", "epic", "done", "deferred")
+STATES = ("running", "stuck", "queued", "blocked", "waits", "not_auto", "epic", "done", "deferred")
 DAY = 86400
 
 
@@ -80,8 +80,10 @@ def build(beads, cfg, queued, running=(), asks=(), now=None, repo=""):
             return "deferred", "deferred"
         if b.get("issue_type") == "epic":
             return "epic", "epic"
-        if i in running or b.get("status") == "in_progress":
-            return "running", "in a slot or claimed"
+        if i in running:
+            return "running", "held by a slot now"
+        if b.get("status") == "in_progress":
+            return "stuck", "in_progress in bd, but no slot holds it: nothing runs it"
         if i in asks:
             return "waits", "an ask is open"
         if labels & set(OWNER_LABELS):
@@ -127,7 +129,7 @@ def build(beads, cfg, queued, running=(), asks=(), now=None, repo=""):
     sc = {s: 0 for s in STATES}
     for n in nodes:
         sc[n["state"]] += 1
-    summary = {"ready": sc["queued"], "running": sc["running"], "blocked": sc["blocked"], "waits": sc["waits"],
+    summary = {"ready": sc["queued"], "running": sc["running"], "stuck": sc["stuck"], "blocked": sc["blocked"], "waits": sc["waits"],
                "not_auto": sc["not_auto"], "epic": sc["epic"], "deferred": sc["deferred"], "done_today": done_today,
                "done": sc["done"]}
     return {"repo": repo, "now": now, "nodes": nodes, "edges": flat, "summary": summary, "pick_label": pick}

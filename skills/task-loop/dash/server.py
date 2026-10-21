@@ -1180,7 +1180,11 @@ def delegate_status():
         # a credit lane that is out, or unknown subscription use, does not stop an unattended run: no red banner
         out = [n for n, ln in (j.get("lanes") or {}).items()
                if isinstance(ln, dict) and ln.get("out") and ln.get("kind") != "credit"]
-        return {"ok": not out, "out": out, "needs_input": j.get("needs_input") or []}
+        det = {n: {"until": ln.get("out_until"), "reason": ln.get("reason")}
+               for n, ln in (j.get("lanes") or {}).items() if isinstance(ln, dict)
+               and (ln.get("out") or ln.get("reason") == "logged_out") and ln.get("kind") != "credit"}
+        out = sorted(set(out) | set(det))
+        return {"ok": not out, "out": out, "detail": det, "needs_input": j.get("needs_input") or []}
     return cached("delegate", 60, load)
 
 

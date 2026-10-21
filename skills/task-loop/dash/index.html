@@ -273,9 +273,9 @@ pre.tail{margin:0;background:var(--sunk);border-radius:8px;padding:9px 10px;font
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 /* ---- plan tab ---- */
-:root{--p-running:#2a7de1;--p-queued:#1f8f4e;--p-blocked:#cf3a3a;--p-waits:#b7791f;--p-not_auto:#8a909a;--p-epic:#8a5cd0;--p-done:#5aa876;--p-deferred:#a3a6ad}
-:root[data-theme="dark"]{--p-running:#6cb0ff;--p-queued:#4fd087;--p-blocked:#ff7b7b;--p-waits:#f2b84b;--p-not_auto:#8d94a0;--p-epic:#b79cf0;--p-done:#6fbf8c;--p-deferred:#62656c}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--p-running:#6cb0ff;--p-queued:#4fd087;--p-blocked:#ff7b7b;--p-waits:#f2b84b;--p-not_auto:#8d94a0;--p-epic:#b79cf0;--p-done:#6fbf8c;--p-deferred:#62656c}}
+:root{--p-stuck:#d9480f;--p-running:#2a7de1;--p-queued:#1f8f4e;--p-blocked:#cf3a3a;--p-waits:#b7791f;--p-not_auto:#8a909a;--p-epic:#8a5cd0;--p-done:#5aa876;--p-deferred:#a3a6ad}
+:root[data-theme="dark"]{--p-stuck:#ff9a52;--p-running:#6cb0ff;--p-queued:#4fd087;--p-blocked:#ff7b7b;--p-waits:#f2b84b;--p-not_auto:#8d94a0;--p-epic:#b79cf0;--p-done:#6fbf8c;--p-deferred:#62656c}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--p-stuck:#ff9a52;--p-running:#6cb0ff;--p-queued:#4fd087;--p-blocked:#ff7b7b;--p-waits:#f2b84b;--p-not_auto:#8d94a0;--p-epic:#b79cf0;--p-done:#6fbf8c;--p-deferred:#62656c}}
 main.wide{max-width:none;padding-bottom:24px}
 .pbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 10px}
 .pbar .lb{color:var(--mute);font-size:12.5px;font-weight:600;margin-right:2px}
@@ -296,8 +296,10 @@ button.pc.on{box-shadow:inset 0 0 0 2px var(--ring)}
 .ptop b{color:var(--run)}
 #cywrap{position:relative;border:1px solid var(--line);border-radius:12px;background:var(--surface);overflow:hidden}
 #cy{width:100%;height:calc(100vh - 330px);min-height:420px;touch-action:none}
+.pnote{position:absolute;left:10px;top:10px;z-index:3;max-width:calc(100% - 70px);font-size:12.5px;padding:5px 10px;border-radius:9px;background:var(--bg);color:var(--ink2);box-shadow:inset 0 0 0 1px var(--line2)}
 .pzoom{position:absolute;right:10px;top:10px;display:flex;flex-direction:column;gap:6px;z-index:3}
 .pzoom button{width:34px;height:34px;border-radius:9px;background:var(--bg);box-shadow:inset 0 0 0 1px var(--line2);font-size:17px;line-height:1;display:grid;place-items:center}
+.pzoom button[data-pz=fit]{width:auto;padding:0 9px}
 .pzoom button:hover{background:var(--hover)}
 .pempty{position:absolute;inset:0;display:grid;place-items:center;color:var(--mute);pointer-events:none;text-align:center;padding:20px}
 .psheet{position:absolute;left:10px;bottom:10px;width:min(380px,calc(100% - 20px));max-height:60%;overflow:auto;background:var(--bg);border-radius:12px;box-shadow:var(--shadow2),inset 0 0 0 1px var(--line2);padding:12px 14px;z-index:4;font-size:13px}
@@ -404,7 +406,11 @@ function render(){if(S.view=='tasks')renderTasks();else if(S.view=='task')render
 function renderTop(){const open=(S.asks.asks||[]).filter(a=>!a.answered_here&&!a.parked).length;$('askn').textContent=open||'';
   if(S.tasks&&S.tasks.host)$('host').textContent=S.tasks.host;
   const out=(S.asks.delegate&&S.asks.delegate.out)||[];
-  paint($('lanes'),'lanes',out.map(n=>`<span class="lane" title="delegate says this lane is out"><i></i>${esc(laneName(n))} out</span>`).join(''))}
+  const det=(S.asks.delegate&&S.asks.delegate.detail)||{};
+  paint($('lanes'),'lanes',out.map(n=>{const d=det[n]||{};
+    if(d.reason=='logged_out')return `<span class="lane" title="delegate says this lane is logged out"><i></i>${esc(laneName(n))} logged out: run <span class="mono">${esc(String(n).toUpperCase().includes('CLAUDE')?'claude auth login':'login')}</span></span>`;
+    const u=d.until?new Date(d.until*1000):null,hm=u&&!isNaN(u)?u.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:false}):'';
+    return `<span class="lane" title="delegate says this lane is out"><i></i>${esc(laneName(n))} out${hm?' until '+hm:''}</span>`}).join(''))}
 function laneName(n){n=String(n).toUpperCase();return n.includes('OPENAI')||n.includes('CODEX')?'Codex':n.includes('CLAUDE')?'Claude':n.toLowerCase()}
 
 function matches(t){if(!S.q)return true;return (t.id+' '+t.title+' '+t.repo+' '+t.label+' '+t.slot).toLowerCase().includes(S.q.toLowerCase())}
@@ -562,8 +568,8 @@ function answerHtml(a){if(!a)return'';let h='';
   return h||`<pre class="tail">${esc(JSON.stringify(a,null,1))}</pre>`}
 
 // ---- plan: open beads as a dependency graph (cytoscape + dagre, vendored under /vendor) ----------------------------
-const PST=[['running','running'],['queued','ready'],['blocked','blocked'],['waits','waits on you'],['not_auto','not auto'],['epic','epic'],['done','done recently'],['deferred','deferred']];
-const P={d:null,raw:'',cy:null,libs:null,by:{},filter:null,top:false,alone:false,open:{},collapsedAll:null,sel:null,struct:'',pick:{}};
+const PST=[['running','running'],['stuck','stuck'],['queued','ready'],['blocked','blocked'],['waits','waits on you'],['not_auto','not auto'],['epic','epic'],['done','done recently'],['deferred','deferred']];
+const P={d:null,raw:'',cy:null,libs:null,by:{},filter:null,top:false,alone:false,notAuto:false,showDone:false,capped:false,fitAll:false,open:{},collapsedAll:null,sel:null,struct:'',pick:{}};
 function loadLibs(){if(P.libs)return P.libs;const one=src=>new Promise((ok,no)=>{const e=document.createElement('script');e.src=src;e.onload=ok;e.onerror=()=>no(new Error('could not load '+src));document.head.appendChild(e)});
   P.libs=one('/vendor/cytoscape.min.js').then(()=>one('/vendor/dagre.min.js')).then(()=>one('/vendor/cytoscape-dagre.js')).then(()=>{cytoscape.use(cytoscapeDagre)});
   P.libs.catch(()=>{P.libs=null});return P.libs}
@@ -572,7 +578,15 @@ function cssv(n){return getComputedStyle(document.documentElement).getPropertyVa
 function mix(a,b,t){const h=x=>{x=x.replace('#','');if(x.length==3)x=x.replace(/./g,'$&$&');return[0,2,4].map(i=>parseInt(x.substr(i,2),16))};
   try{const A=h(a),B=h(b);return 'rgb('+A.map((v,i)=>Math.round(v*t+B[i]*(1-t))).join(',')+')'}catch(e){return b}}
 function planData(d){const raw=JSON.stringify(d);if(raw==P.raw)return;P.raw=raw;P.d=d;P.by={};d.nodes.forEach(n=>P.by[n.id]=n);
-  if(P.collapsedAll===null&&d.nodes.length)P.collapsedAll=d.nodes.length>80;renderPlan()}
+  if(P.collapsedAll===null&&d.nodes.length)P.collapsedAll=[...workSet()].filter(i=>!P.by[i].is_epic).length>40;renderPlan()}
+// the loop's work and what holds it up: running, stuck, ready, blocked, waits on you, plus blockers and their epics
+const WORK=['running','stuck','queued','blocked','waits'],FS=16;
+function workSet(){const d=P.d,inE={};d.edges.forEach(e=>{(inE[e.target]=inE[e.target]||[]).push(e.source)});
+  const keep=new Set(d.nodes.filter(n=>!n.is_epic&&WORK.includes(n.state)).map(n=>n.id)),st=[...keep];
+  while(st.length){const t=st.pop();(inE[t]||[]).forEach(x=>{const n=P.by[x];if(!n||n.is_epic||n.state=='done'||keep.has(x))return;keep.add(x);st.push(x)})}
+  d.nodes.forEach(n=>{if(!n.is_epic&&((n.state=='not_auto'&&P.notAuto)||(n.state=='done'&&P.showDone)))keep.add(n.id)});
+  d.nodes.forEach(n=>{if(!n.is_epic&&keep.has(n.id))chainOf(n.id).forEach(e=>keep.add(e))});
+  return keep}
 function chainOf(id){const out=[];let p=P.by[id]&&P.by[id].epic;while(p&&!out.includes(p)){out.push(p);p=P.by[p]&&P.by[p].epic}return out}
 function isCollapsed(id){return P.collapsedAll?P.open[id]!==true:P.open[id]===false}
 function repOf(id){const ch=chainOf(id).reverse();for(const e of ch)if(isCollapsed(e))return e;return id}
@@ -581,34 +595,35 @@ function renderPlan(){
   if(!$('plan-root')){if(P.cy){try{P.cy.destroy()}catch(e){}P.cy=null}P.struct='';S.sig.main=null;
     $('main').innerHTML=`<div id="plan-root"><div class="hero"><div><h1>Plan</h1><div class="sum" id="psum"></div></div></div>
       <div class="pbar" id="pbar"></div><div class="ptools" id="ptools"></div><div class="pleg" id="pleg"></div><div class="ptop" id="ptop"></div>
-      <div id="cywrap"><div id="cy"></div><div class="pzoom"><button data-pz="in" aria-label="Zoom in">+</button><button data-pz="out" aria-label="Zoom out">−</button><button data-pz="fit" aria-label="Fit to screen" style="font-size:12px">fit</button></div>
-      <div class="pempty" id="pempty">Loading the plan…</div><div class="psheet" id="psheet" hidden></div></div></div>`}
+      <div id="cywrap"><div id="cy"></div><div class="pzoom"><button data-pz="in" aria-label="Zoom in">+</button><button data-pz="out" aria-label="Zoom out">−</button><button data-pz="fit" aria-label="Fit to screen" style="font-size:12px">fit all</button></div>
+      <div class="pnote" id="pnote" hidden></div><div class="pempty" id="pempty">Loading the plan…</div><div class="psheet" id="psheet" hidden></div></div></div>`}
   const d=P.d;if(!d)return;
   const sm=d.summary||{};
   $('psum').textContent=d.error?d.error:(d.repo||'')+' · '+d.nodes.length+' beads shown'+(d.pick_label?' · the loop takes “'+d.pick_label+'”':'');
   const chip=(k,n,lab,col)=>`<button class="pc ${P.filter==k?'on':''}" data-pf="${k}" aria-pressed="${P.filter==k}"><i style="background:${col}"></i><b>${n}</b> ${lab}</button>`;
-  $('pbar').innerHTML=`<span class="lb">queue:</span>`+chip('queued',sm.ready||0,'ready','var(--p-queued)')+chip('running',sm.running||0,'running','var(--p-running)')+chip('blocked',sm.blocked||0,'blocked','var(--p-blocked)')
+  $('pbar').innerHTML=`<span class="lb">queue:</span>`+chip('queued',sm.ready||0,'ready','var(--p-queued)')+chip('running',sm.running||0,'running','var(--p-running)')+(sm.stuck?chip('stuck',sm.stuck,'stuck','var(--p-stuck)'):'')+chip('blocked',sm.blocked||0,'blocked','var(--p-blocked)')
     +chip('waits',sm.waits||0,'wait on you','var(--p-waits)')+chip('not_auto',sm.not_auto||0,'not auto','var(--p-not_auto)')+chip('done',sm.done_today||0,'done today','var(--p-done)');
   const names=d.repos||[];
   $('ptools').innerHTML=(names.length>1?`<select id="prepo" aria-label="Repo">${names.map(n=>`<option ${n==d.repo?'selected':''}>${esc(n)}</option>`).join('')}</select>`:'')
-    +`<button class="pc ${P.top?'on':''}" data-pt="top">only beads that unblock others</button><button class="pc ${P.alone?'on':''}" data-pt="alone">show standalone</button>`
+    +`<button class="pc ${P.notAuto?'on':''}" data-pt="notauto" aria-pressed="${P.notAuto}">show not auto</button><button class="pc ${P.showDone?'on':''}" data-pt="done" aria-pressed="${P.showDone}">show done</button><button class="pc ${P.top?'on':''}" data-pt="top">only beads that unblock others</button><button class="pc ${P.alone?'on':''}" data-pt="alone">show standalone</button>`
     +`<button class="pc" data-pt="collapse">collapse epics</button><button class="pc" data-pt="expand">expand epics</button>`;
   $('pleg').innerHTML=PST.map(([k,l])=>`<span><i style="border-color:${pcol(k)};background:${mix(pcol(k),cssv('--surface')||'#fff',.2)};${k=='deferred'?'border-style:dashed;':''}${k=='epic'?'border-radius:6px;':''}"></i>${l}</span>`).join('');
   const tops=d.nodes.filter(n=>n.unblocks>0&&!n.is_epic).sort((a,b)=>b.unblocks-a.unblocks||(a.id<b.id?-1:1)).slice(0,P.top?40:10);
   $('ptop').innerHTML=tops.length?`<span class="lb" style="align-self:center;color:var(--mute);font-weight:600;flex:none">unblocks most:</span>`+tops.map(n=>`<button data-pn="${esc(n.id)}"><b>${n.unblocks}</b><span class="mono">${esc(n.id)}</span>${esc(shortT(n.title,28))}</button>`).join(''):'';
   loadLibs().then(drawGraph).catch(e=>{$('pempty').textContent=e.message})}
 function pstructure(){
-  const d=P.d,f=P.filter,flat=!!(f||P.top);
+  const d=P.d,f=P.filter,allowed=workSet(),flat=!!(f||P.top||P.capped);
   const deg={};d.edges.forEach(e=>{deg[e.source]=(deg[e.source]||0)+1;deg[e.target]=(deg[e.target]||0)+1});
   let vis=new Set(),ctx=new Set();
   if(flat){let base=d.nodes.filter(n=>!n.is_epic||f=='epic');
-    if(f)base=base.filter(n=>n.state==f);
+    if(f)base=base.filter(n=>n.state==f);else base=base.filter(n=>allowed.has(n.id));
+    if(P.capped)base=base.slice().sort((a,b)=>b.unblocks-a.unblocks||(a.id<b.id?-1:1)).slice(0,40);
     if(P.top){const ids=new Set(base.filter(n=>n.unblocks>0).map(n=>n.id));base=base.filter(n=>ids.has(n.id));
       d.edges.forEach(e=>{if(ids.has(e.source)&&P.by[e.target]&&!P.by[e.target].is_epic&&!ids.has(e.target)){ctx.add(e.target)}});
       ctx.forEach(i=>base.push(P.by[i]))}
     base.forEach(n=>vis.add(n.id))}
-  else d.nodes.forEach(n=>{if(repOf(n.id)!=n.id)return;
-    const lone=!n.is_epic&&!deg[n.id]&&!P.alone&&!chainOf(n.id).some(e=>P.pick[e]);if(lone)return;vis.add(n.id)});
+  else d.nodes.forEach(n=>{if(repOf(n.id)!=n.id||!allowed.has(n.id))return;
+    const lone=!n.is_epic&&!deg[n.id]&&!P.alone&&!WORK.includes(n.state)&&!chainOf(n.id).some(e=>P.pick[e]);if(lone)return;vis.add(n.id)});
   const rep=id=>flat?id:repOf(id);
   const nodes=[...vis].map(id=>P.by[id]);
   const seen=new Set(),edges=[];
@@ -621,11 +636,11 @@ function label(n,flat){
   if(n.is_epic&&(flat||isCollapsed(n.id))){const o=descOf(n.id);const bits=[o.n+' open'];if(o.queued)bits.push(o.queued+' ready');if(o.blocked)bits.push(o.blocked+' blocked');if(o.running)bits.push(o.running+' running');
     return (flat?'':'▸ ')+n.id+'\n'+shortT(n.title,34)+'\n'+bits.join(' · ')}
   if(n.is_epic)return '▾ '+n.id+' · '+shortT(n.title,40);
-  return n.id+'\n'+shortT(n.title,34)+(n.unblocks>0?'\nunblocks '+n.unblocks:'')}
+  return n.id+(n.unblocks>0?' · unblocks '+n.unblocks:'')+'\n'+shortT(n.title,28)}
 function cystyle(){
   const ink=cssv('--ink'),surf=cssv('--surface'),mute=cssv('--mute'),line=cssv('--line2');
-  const st=[{selector:'node',style:{shape:'round-rectangle',width:190,height:'label',padding:'7px','background-color':surf,'border-width':2,'border-color':line,label:'data(lbl)','text-wrap':'wrap','text-max-width':176,
-      'font-size':11,'font-family':cssv('--mono')||'monospace',color:ink,'text-valign':'center','text-halign':'center','min-zoomed-font-size':4}},
+  const st=[{selector:'node',style:{shape:'round-rectangle',width:214,height:'label',padding:'8px','background-color':surf,'border-width':2,'border-color':line,label:'data(lbl)','text-wrap':'wrap','text-max-width':198,
+      'font-size':FS,'font-family':cssv('--sans')||'sans-serif',color:ink,'text-valign':'center','text-halign':'center','min-zoomed-font-size':4}},
     {selector:'node:parent',style:{'text-valign':'top','text-halign':'center','padding':'12px','background-opacity':.35,shape:'round-rectangle','text-margin-y':-2,width:'label',height:'label'}},
     {selector:'edge',style:{width:1.6,'line-color':mute,'target-arrow-color':mute,'target-arrow-shape':'triangle','curve-style':'bezier','arrow-scale':.9,opacity:.75}},
     {selector:'node.ctx',style:{opacity:.55}},{selector:'node.done',style:{opacity:.5}},{selector:'node:selected',style:{'border-width':4,'overlay-opacity':0}},
@@ -650,8 +665,15 @@ function drawGraph(){
   cy.style(cystyle());
   if(sig!=P.struct){P.struct=sig;cy.elements().remove();cy.add(els);
     const lay=w.edges.length?{name:'dagre',rankDir:'LR',nodeSep:12,rankSep:70,edgeSep:8,ranker:'network-simplex',animate:false,fit:true,padding:24}:{name:'grid',cols:Math.max(1,Math.round(Math.sqrt(w.nodes.length*0.9))),fit:true,padding:24,avoidOverlap:true,animate:false};
-    cy.layout(lay).run();cy.resize();cy.fit(undefined,24)}
+    const lone=w.edges.length?cy.nodes().filter(n=>!n.isParent()&&!n.parent().length&&!n.connectedEdges().length):cy.collection();
+    (lone.length?cy.elements().difference(lone):cy.elements()).layout(lay).run();
+    if(lone.length){const bb=cy.elements().difference(lone).boundingBox(),W=box.clientWidth||1200,H=box.clientHeight||500;
+      const cw=232,rh=64,cols=Math.max(1,Math.min(lone.length,Math.ceil(Math.sqrt(lone.length*(W/H)*rh/cw))));
+      const below=W<H*1.2;lone.forEach((n,i)=>n.position(below?{x:bb.x1+(i%cols)*cw,y:bb.y2+rh*2+Math.floor(i/cols)*rh}:{x:bb.x2+cw+(i%cols)*cw,y:bb.y1+Math.floor(i/cols)*rh}))}
+    cy.resize();cy.fit(undefined,24)
+    if(!P.capped&&!P.fitAll&&w.nodes.length>40&&cy.zoom()*FS<9){P.capped=true;P.struct='';return drawGraph()}}
   else els.filter(e=>e.group=='nodes').forEach(e=>{const n=cy.getElementById(e.data.id);n.data('state',e.data.state);n.data('lbl',e.data.lbl)});
+  $('pnote').hidden=!P.capped;$('pnote').textContent=P.capped?'showing the 40 that unblock most; zoom out or tap fit all':'';
   if(P.sel&&cy.getElementById(P.sel).length)cy.getElementById(P.sel).select();planSheet()}
 function planTap(id){const n=P.by[id];if(!n)return;
   if(n.is_epic&&!P.filter&&!P.top){const c=isCollapsed(id);P.open[id]=c;P.pick[id]=c;renderPlan();return}
@@ -673,11 +695,11 @@ function planFocus(id){const n=P.by[id];if(!n)return;
   let rid=id;if(!P.filter&&!P.top){const r=repOf(id);if(r!=id){chainOf(id).forEach(e=>{P.open[e]=true;P.pick[e]=true});rid=id;renderPlan()}}
   setTimeout(()=>{planSel(id);const e=P.cy&&P.cy.getElementById(id);if(e&&e.length){P.cy.animate({fit:{eles:e.union(e.successors()),padding:40}},{duration:250,complete:()=>{if(P.cy.zoom()>1.3)P.cy.zoom({level:1.3,position:e.position()})}})}},60)}
 function planClick(e){
-  const f=e.target.closest('[data-pf]');if(f){P.filter=P.filter==f.dataset.pf?null:f.dataset.pf;P.sel=null;renderPlan();return true}
-  const t=e.target.closest('[data-pt]');if(t){const k=t.dataset.pt;
-    if(k=='top')P.top=!P.top;else if(k=='alone')P.alone=!P.alone;else if(k=='collapse'){P.collapsedAll=true;P.open={};P.pick={}}else if(k=='expand'){P.collapsedAll=false;P.open={};P.pick={}}
+  const f=e.target.closest('[data-pf]');if(f){P.capped=false;P.fitAll=false;P.filter=P.filter==f.dataset.pf?null:f.dataset.pf;P.sel=null;renderPlan();return true}
+  const t=e.target.closest('[data-pt]');if(t){const k=t.dataset.pt;P.capped=false;P.fitAll=false;
+    if(k=='notauto')P.notAuto=!P.notAuto;else if(k=='done')P.showDone=!P.showDone;else if(k=='top')P.top=!P.top;else if(k=='alone')P.alone=!P.alone;else if(k=='collapse'){P.collapsedAll=true;P.open={};P.pick={}}else if(k=='expand'){P.collapsedAll=false;P.open={};P.pick={}}
     P.sel=null;renderPlan();return true}
-  const z=e.target.closest('[data-pz]');if(z&&P.cy){const k=z.dataset.pz,c=P.cy;if(k=='fit')c.fit(undefined,24);else c.zoom({level:c.zoom()*(k=='in'?1.35:1/1.35),renderedPosition:{x:c.width()/2,y:c.height()/2}});return true}
+  const z=e.target.closest('[data-pz]');if(z&&P.cy){const k=z.dataset.pz,c=P.cy;if(k=='fit'){if(P.capped){P.capped=false;P.fitAll=true;P.struct='';drawGraph()}else c.fit(undefined,24)}else c.zoom({level:c.zoom()*(k=='in'?1.35:1/1.35),renderedPosition:{x:c.width()/2,y:c.height()/2}});return true}
   const n=e.target.closest('[data-pn]');if(n){planFocus(n.dataset.pn);return true}
   if(e.target.closest('[data-ps]')){planSel(null);return true}
   return false}

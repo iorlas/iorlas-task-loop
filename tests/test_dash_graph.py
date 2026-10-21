@@ -53,6 +53,12 @@ class States(unittest.TestCase):
         self.assertEqual((s["ready"], s["running"], s["blocked"], s["waits"], s["not_auto"], s["done_today"]),
                          (1, 1, 1, 4, 1, 1))
 
+    def test_in_progress_without_slot_is_stuck(self):
+        beads = [bead("held", status="in_progress"), bead("ghost", status="in_progress"), bead("ghost2", status="in_progress")]
+        n, g = states(beads, running={"held"})
+        self.assertEqual((n["held"]["state"], n["ghost"]["state"]), ("running", "stuck"))
+        self.assertEqual((g["summary"]["running"], g["summary"]["stuck"]), (1, 2))
+
     def test_closed_blocker_does_not_block(self):
         n, _ = states([bead("a", status="closed", closed_at=ts(60)), bead("b", blocks=["a"])], queued={"b"})
         self.assertEqual(n["b"]["state"], "queued")
