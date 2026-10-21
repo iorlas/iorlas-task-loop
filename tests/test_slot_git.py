@@ -114,22 +114,74 @@ class SlotGitTest(unittest.TestCase):
         self.assertEqual(sh("git", "diff", "--cached", "--name-status", cwd=self.wt).split("\n"),
                          ["D\ta.txt", "A\tnew file.txt"])
 
-    def test_the_pinned_env_reaches_a_route_run_and_a_check(self):
-        gitdir = os.path.realpath(str(self.repo / ".git" / "worktrees" / "s1"))
+    def test_workers_and_checks_are_not_pinned_but_the_engines_own_git_is(self):
         route = Path(self.tmp.name) / "route.py"
-        route.write_text("import json, os\nprint(json.dumps({'v': 2, 'status': 'done', 'data': {'git_dir': "
-                         "os.environ.get('GIT_DIR'), 'work_tree': os.environ.get('GIT_WORK_TREE')}}))\n")
-        r, j = engine.call_delegate(str(route), "worker", "p", {"type": "object"}, str(self.wt), None, 30,
-                                    Path(self.tmp.name) / "err.log")
-        self.assertEqual(os.path.realpath(j["data"]["git_dir"]), gitdir)
-        self.assertEqual(os.path.realpath(j["data"]["work_tree"]), str(self.wt))
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
-        rc, tail = eng.sh('echo "$GIT_DIR|$GIT_WORK_TREE"')
-        self.assertEqual(rc, 0)
+        route.write_text("import json, os\nprint(json.dumps({'v': 2, 'status': 'done', 'data': {'env': [k for k in "
+                         "('GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE') if k in os.environ]}}))\n")
+        with mock.patch.dict(os.environ, {"GIT_DIR": "/x", "GIT_WORK_TREE": "/y", "GIT_INDEX_FILE": "/z"}):
+            r, j = engine.call_delegate(str(route), "worker", "p", {"type": "object"}, str(self.wt), None, 30,
+                                        Path(self.tmp.name) / "err.log")
+            eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+            rc, tail = eng.sh('echo "[$GIT_DIR|$GIT_WORK_TREE|$GIT_INDEX_FILE]"')
+            self.assertEqual(j["data"]["env"], [])
+            self.assertEqual((rc, tail), (0, "[||]"))
+            rc, tail = eng.sh('echo "$GIT_DIR|$GIT_WORK_TREE"', pin=True)
+        gitdir = os.path.realpath(str(self.repo / ".git" / "worktrees" / "s1"))
         d, w = tail.split("|")
         self.assertEqual((os.path.realpath(d), os.path.realpath(w)), (gitdir, str(self.wt)))
-        # the main checkout is pinned to its own repo, not to a slot
         self.assertEqual(tl.pinned_env(self.repo)["GIT_DIR"], str(self.repo / ".git"))
+
+    def test_a_check_runs_git_on_another_repo(self):
+        other = Path(self.tmp.name) / "other"
+        sh("git", "init", "-q", "-b", "main", str(other), cwd=self.tmp.name)
+        (other / "o.txt").write_text("o\n")
+        sh("git", "add", "-A", cwd=other)
+        sh("git", "commit", "-qm", "o", cwd=other)
+        sha = sh("git", "rev-parse", "HEAD", cwd=other)
+        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        rc, tail = eng.sh("git -C '%s' rev-parse HEAD && git -C '%s' cat-file -e %s && echo ok" % (other, other, sha))
+        self.assertEqual((rc, tail), (0, sha + "\nok"))
+
+    def test_a_worker_that_redirects_git_is_caught_after_its_node(self):
+        decoy = self.decoy
+
+        class Planting(te.DelegateScript):
+            def __call__(self, route, role, prompt, schema, cwd, *a, **kw):
+                out = super().__call__(route, role, prompt, schema, cwd, *a, **kw)
+                if role == "worker":
+                    sh("git", "config", "core.worktree", str(decoy), cwd=cwd)
+                return out
+
+        script = Planting({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
+        before = self.decoy_state()
+        landed = []
+        with mock.patch.object(tl, "bd", return_value=mock.Mock(returncode=0, stdout="", stderr="")), \
+                mock.patch.object(tl, "show", return_value=te.BEAD), mock.patch.object(tl, "comments", return_value=[]), \
+                mock.patch.object(tl, "cmd_close", side_effect=lambda a: landed.append(1) or 0), \
+                mock.patch.object(tl, "cmd_land", side_effect=lambda a: landed.append(1) or 0), \
+                mock.patch.object(tl, "cmd_block", return_value=0), \
+                mock.patch.object(engine, "find_route", return_value="/fake/route.py"), \
+                mock.patch.object(engine, "contract", return_value=te.CONTRACT), \
+                mock.patch.object(engine, "call_delegate", script), mock.patch.object(engine.time, "sleep"):
+            eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+            rc = eng.run()
+        self.assertEqual(rc, 2)
+        self.assertIn("after write", eng.why)
+        self.assertTrue(eng.why.startswith("tree: core.worktree is set"), eng.why)
+        self.assertNotIn("review", [c[0] for c in script.calls])
+        self.assertEqual(landed, [])
+        self.assertEqual(self.decoy_state(), before)
+        self.assertNotIn("decoy.txt", self.all_committed_paths())
+        # only the engine's pinned wip checkpoint of the slot's own file; nothing reached origin
+        self.assertEqual(sorted(self.all_committed_paths().split()), ["a.txt", "f.txt"])
+        self.assertNotIn("task/", sh("git", "ls-remote", "origin", cwd=self.wt))
+
+    def test_samefile_compares_folders_and_falls_back_to_realpath(self):
+        link = Path(self.tmp.name) / "link"
+        link.symlink_to(self.wt)
+        self.assertTrue(engine.same_dir(link, self.wt))
+        self.assertFalse(engine.same_dir(self.decoy, self.wt))
+        self.assertTrue(engine.same_dir(link / "nope", self.wt / "nope"))
 
     def test_doctor_warns_when_worktree_config_is_off(self):
         self.assertTrue(any("extensions.worktreeConfig" in w for w in tl.doctor_warnings(str(self.repo))))

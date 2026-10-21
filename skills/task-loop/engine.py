@@ -245,11 +245,14 @@ def validate(data, schema, path="$"):
 
 # ---- workers --------------------------------------------------------------------------------------------------------
 
+GIT_PIN_VARS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")  # the engine's own git is pinned; no child inherits a pin
+
+
 def child_env():
     """Workers never inherit the launcher's session (a leaked CLAUDE_* broke claude children in the factory)."""
     drop = ("CLAUDE_CODE_", "CLAUDECODE", "ANTHROPIC_", "DELEGATE_", "CODEX_COMPANION", "CLAUDE_PID",
             "CLAUDE_AGENT_SDK", "CLAUDE_PLUGIN", "TASK_LOOP_")
-    env = {k: v for k, v in os.environ.items() if not k.startswith(drop)}
+    env = {k: v for k, v in os.environ.items() if not k.startswith(drop) and k not in GIT_PIN_VARS}
     env["TASK_LOOP_WORKER"] = "1"
     env["DELEGATE_DEPTH"] = "1"  # a worker never delegates further
     return env
@@ -516,6 +519,14 @@ def access(wanted):
     return "--host" if wanted else ""
 
 
+def same_dir(a, b):
+    """The same folder: os.path.samefile, realpath equality when either path is missing."""
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return os.path.realpath(str(a)) == os.path.realpath(str(b))
+
+
 def tree_problem(wt):
     """(what is wrong, the owner's fix) when git at `wt`, read as ambient config has it, is not that checkout; else None."""
     clean = {k: v for k, v in os.environ.items() if k not in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR")}
@@ -537,7 +548,7 @@ def tree_problem(wt):
                 "core.bare=true in the repo's config makes git refuse the work tree. Fix: `git config core.bare false` "
                 "in %s, then rerun." % repo)
     top = g("rev-parse", "--show-toplevel")
-    if not top or os.path.realpath(top) != os.path.realpath(str(wt)):
+    if not top or not same_dir(top, wt):
         return ("git's top-level folder is %s, not the slot %s" % (top or "(none)", wt),
                 "Something redirects git away from the slot. Check `git config --show-origin --list` in %s for "
                 "core.worktree or core.bare; `git config --unset core.worktree` in %s if set." % (wt, repo))
@@ -559,8 +570,8 @@ def call_delegate(route, role, prompt, schema, cwd, resume, timeout, log_path, w
             cmd += ["--authored-by", writer]
         if access:
             cmd.append(access)
-        # GIT_DIR/GIT_WORK_TREE: the worker's git sees this checkout only (delegate passes GIT_* through)
-        res, secs = run_proc(cmd, cwd, timeout + 120, log_path, env=tl.pinned_env(cwd))
+        # unpinned: a worker's git may run on other repos; engine.assert_tree catches a redirect after the node
+        res, secs = run_proc(cmd, cwd, timeout + 120, log_path)
     if res is None:
         return Result(secs=secs, error="timeout", backend="delegate", ref=resume or ""), None
     code, out = res
@@ -758,7 +769,13 @@ class Engine:
                                                                         self.cfg["budget_min"]))
 
     # -- AI node
-    def ai(self, node, title, prompt, resume_key=None, writer_family=None, step=None, **meta):
+    def ai(self, node, title, prompt, *a, **kw):
+        """One AI node, then the tree check: a worker that wrote core.worktree is caught before review or land."""
+        out = self._ai(node, title, prompt, *a, **kw)
+        self.assert_tree(kw.get("step") or node, "after")
+        return out
+
+    def _ai(self, node, title, prompt, resume_key=None, writer_family=None, step=None, **meta):
         """One AI node through delegate (worker-run v1): it picks lane and model, limits apply, it records the run."""
         self.budget_check()
         self.stats["nodes"] += 1
@@ -903,27 +920,28 @@ class Engine:
             self.warn("the reviewer found a high-severity problem")
 
     # -- script helpers
-    def assert_tree(self, step):
-        """Before every step and the land: this slot's git is the slot (lifesim-1mm: a core.worktree in the shared
-        .git/config pointed every slot's git at another folder). Unpinned, as a worker's git would see it. A wrong tree
+    def assert_tree(self, step, when="before"):
+        """Before and after every node, and before the land: this slot's git is the slot (lifesim-1mm: a core.worktree in the shared
+        .git/config pointed every slot's git at another folder). Unpinned, as a worker's or check's git would see it. A wrong tree
         stops the run with an owner ask, never a skip."""
         bad = tree_problem(self.wt)
         if bad:
-            why = "tree: %s (before %s)" % (bad[0], step)
+            why = "tree: %s (%s %s)" % (bad[0], when, step)
             self.transition("ask", "wrong_tree", bad[0])
             raise Blocked(why, bad[1])
 
-    def sh(self, cmd, timeout=3600, check=False, save=None, env=None):
+    def sh(self, cmd, timeout=3600, check=False, save=None, env=None, pin=False):
         """A command: a string goes through bash with -e and pipefail (checks, profile commands), so a red command in a
         `;` list or a pipe fails it (lifesim-gfr.31.1: `just unity-check > log; ! grep ...` passed with unity-check
-        red); `! cmd` and `cmd || true` still pass. A list runs as is (no quoting rules)."""
+        red); `! cmd` and `cmd || true` still pass. A list runs as is (no quoting rules). pin=True: an engine git command, run
+        with GIT_DIR/GIT_WORK_TREE of the slot; checks and gates run unpinned (they may run git on other repos)."""
         self.log("cmd", cmd if isinstance(cmd, str) else " ".join(cmd))
         # Its own process group, so a timeout stops the whole tree (dotnet build nodes, Unity) and not just the shell;
         # the worker env, so a check never inherits this launcher's Claude session.
         bash = shutil.which("bash") if isinstance(cmd, str) and os.name != "nt" else None  # plans write bash
         run = [bash, "-e", "-o", "pipefail", "-c", cmd] if bash else cmd  # Windows: cmd.exe, as before
         p = subprocess.Popen(run, shell=isinstance(run, str), cwd=self.wt,
-                             env=dict(child_env(), **tl.pinned_env(self.wt), **(env or {})),
+                             env=dict(child_env(), **(tl.pinned_env(self.wt) if pin else {}), **(env or {})),
                              stdin=subprocess.DEVNULL,
                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=(os.name != "nt"))
         try:
@@ -973,7 +991,7 @@ class Engine:
     def fetch(self, check=False):
         """git fetch, again while it loses a ref lock to another process's fetch into this repo (tl.REF_RACE)."""
         for i in range(5):
-            rc, tail = self.sh(["git", "fetch", "-q", "origin"])
+            rc, tail = self.sh(["git", "fetch", "-q", "origin"], pin=True)
             if rc == 0 or not tl.REF_RACE.search(tail):
                 break
             time.sleep(0.1 * (i + 1))
@@ -1006,9 +1024,9 @@ class Engine:
             self.left_dirty = True
         if exists:
             self.free_branch(branch)
-            self.sh(["git", "checkout", "-q", branch], check=True)
+            self.sh(["git", "checkout", "-q", branch], check=True, pin=True)
         else:
-            self.sh(["git", "checkout", "-q", "-B", branch, self.cfg["base"]], check=True)
+            self.sh(["git", "checkout", "-q", "-B", branch, self.cfg["base"]], check=True, pin=True)
         for old in self.task_dir.iterdir():  # earlier runs' files are no facts; only the writer's evidence carries over
             if old.name != "evidence":
                 shutil.rmtree(old) if old.is_dir() else old.unlink()
@@ -1742,6 +1760,11 @@ class Engine:
         return [p for p in out.splitlines() if p]
 
     def run_checks(self, st, name, **meta):
+        out = self._run_checks(st, name, **meta)
+        self.assert_tree("checks", "after")
+        return out
+
+    def _run_checks(self, st, name, **meta):
         """One engine step, no AI: the repo's checks (engine.checks) and the stage's acceptance checks, grouped
         static → tests → acceptance; a red group skips the groups after it. A repo check with `when` runs only when the
         task changed a matching path; `retry` reruns a red one (known flaky). A repo check that passed on the same tree
@@ -1827,10 +1850,10 @@ class Engine:
         # one commit per task, titled after the bead: earlier runs' wip commits are folded in
         base = self.git("merge-base", "HEAD", self.cfg["base"])
         if base:
-            self.sh(["git", "reset", "-q", "--soft", base], check=True)
+            self.sh(["git", "reset", "-q", "--soft", base], check=True, pin=True)
         self.stage_all(check=True)
         msg = "%s (%s)" % (bead.get("title", self.bead)[:72], self.bead)
-        rc, tail = self.sh(["git", "commit", "-q", "-m", msg])
+        rc, tail = self.sh(["git", "commit", "-q", "-m", msg], pin=True)
         if rc:
             raise Blocked("failed: commit refused (hooks)\n" + tail)
         if self.dry:
@@ -1844,11 +1867,11 @@ class Engine:
                 self.node("land", "land (try %d)" % (pushes + 1), **{"try": pushes + 1})
                 rc, tail = self.fetch()
                 if rc == 0:
-                    rc, tail = self.sh(["git", "rebase", "-q", self.cfg["base"]])
+                    rc, tail = self.sh(["git", "rebase", "-q", self.cfg["base"]], pin=True)
                 if rc:
                     unmerged = self.git("diff", "--name-only", "--diff-filter=U")
                     if not unmerged:
-                        self.sh(["git", "rebase", "--abort"])
+                        self.sh(["git", "rebase", "--abort"], pin=True)
                         raise Blocked("failed: fetch or rebase onto %s failed; branch kept\n%s" % (self.cfg["base"], tail))
                     problem = ("conflict", "Conflicted files: %s\n%s" % (", ".join(unmerged.split()), tail))
                     self.outcome_of("conflict", ", ".join(unmerged.split()))
@@ -1859,7 +1882,7 @@ class Engine:
                         self.outcome_of("gate red", (tail.strip().splitlines() or [""])[-1])
                 if not problem:
                     with self.stop_deferred() as stop:  # a push half done is no state to stop in: finish it, then stop
-                        rc, tail = self.sh(self.cfg["land"], env={"TASK_LOOP_GATED_TREE": self.git(
+                        rc, tail = self.sh(self.cfg["land"], pin=True, env={"TASK_LOOP_GATED_TREE": self.git(
                             "rev-parse", "HEAD^{tree}")} if self.cfg["gate"] else None)  # a pre-push hook may skip a gate this tree passed
                         if rc == 0:
                             self.landed_sha = sha = self.git("rev-parse", "HEAD")
@@ -1908,7 +1931,7 @@ class Engine:
                 "verify": "the check before land found defects"}[kind]
         if self.fixes > limit:
             if kind == "conflict":
-                self.sh(["git", "rebase", "--abort"])
+                self.sh(["git", "rebase", "--abort"], pin=True)
             raise Blocked("%s after %d fix rounds: it needs the owner's hint\n%s" % (what, limit, tail[-3000:]))
         self.warn("land: %s, fix round %d of %d" % (what, self.fixes, limit))
         self.save_checkpoint(stage=len((self.plan_data or {}).get("stages") or []), rounds=0, n=0, feedback="", step="land")
@@ -1925,16 +1948,16 @@ class Engine:
                           "tail": tail[-4000:]}])),
             "scope": "the fix only: it must %s without breaking what the accepted stages built" % goal})
         if kind == "conflict":
-            if self.sh(self.MARKERS)[0]:
+            if self.sh(self.MARKERS, pin=True)[0]:
                 return self.fix("conflict", "conflict markers are still in the tree after the fix")
             self.stage_all(check=True)
-            rc, out = self.sh(["git", "-c", "core.editor=true", "rebase", "--continue"])
+            rc, out = self.sh(["git", "-c", "core.editor=true", "rebase", "--continue"], pin=True)
             if rc:
-                self.sh(["git", "rebase", "--abort"])
+                self.sh(["git", "rebase", "--abort"], pin=True)
                 raise Blocked("failed: the rebase did not continue after the conflict fix\n" + out)
         elif kind == "gate" and self.git("status", "--porcelain"):
             self.stage_all(check=True)
-            self.sh(["git", "commit", "-q", "--amend", "--no-edit"], check=True)
+            self.sh(["git", "commit", "-q", "--amend", "--no-edit"], check=True, pin=True)
         if d != "accept" and kind != "verify":
             self.warn("land: the fix round did not pass its checks and review; landing tries the gate again")
         return d
@@ -1975,7 +1998,7 @@ class Engine:
 
     def wip(self, why):
         self.stage_all()
-        rc, _ = self.sh(["git", "commit", "-q", "-m", "wip (%s): %s" % (self.bead, why)])
+        rc, _ = self.sh(["git", "commit", "-q", "-m", "wip (%s): %s" % (self.bead, why)], pin=True)
         return rc == 0
 
     def close(self, outcome, why, sha, question):
@@ -1993,7 +2016,7 @@ class Engine:
         mins = (time.time() - self.t0) / 60
         gd = Path(self.git("rev-parse", "--absolute-git-dir") or ".")
         if (gd / "rebase-merge").exists() or (gd / "rebase-apply").exists():  # stopped mid-conflict-fix: back to the branch
-            self.sh(["git", "rebase", "--abort"])
+            self.sh(["git", "rebase", "--abort"], pin=True)
         branch = self.git("symbolic-ref", "--short", "-q", "HEAD")
         new = [lo for lo in self.leftovers if lo["title"] not in self.filed]
         self.filed += [lo["title"] for lo in new]  # into the checkpoint before it is marked closed
