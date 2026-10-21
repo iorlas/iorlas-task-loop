@@ -299,6 +299,37 @@ The queue rule is `.task-loop.json` → `engine`; the defaults take every ready 
 Order: priority first, then `epic_order`, then the lowest id (natural: `fld.26.9` before `fld.26.10`). The loop does
 not look at `## Touches`; the land lock and the rebase before landing keep sequential loops safe.
 
+## Report (the M2 scorecard)
+
+`tl report [--repo DIR] [--since T] [--until T] [--json]` scores a window; read-only (traces.jsonl, the loop log,
+engine logs, git refs never fetched, bd show/comments). T: ISO (`2026-10-21T06:00`, `...Z`), `HH:MM` today, or a
+duration back (`90m`, `12h`, `2d`); default the last 24 h. A run counts when it overlaps the window, so a bead asked at
+05:43 and landed at 06:18 is a landing with an ask. Exit 0 on M2 PASS, 1 on FAIL.
+
+- **Per bead:** `landed` (any run landed), else the last run decides: `parked` (an owner ask: decision, verify, stuck,
+  ticket), `paused` (`paused:`/`waiting:`), `failed` (everything else, crashes included).
+- **Asks:** every blocked run with an ask, plus a run that went on from an ask raised earlier (its log's `ask X is
+  answered` note). An answer by anyone counts as an ask. Who answered is the first person's comment after the ask
+  comment: signed `(Claude, supervising.)`, `checked by Claude` or `delegated the call to Claude` is the supervisor,
+  anything else the owner, none is open.
+- **Crashes:** the loop saw run-task exit with no outcome; an engine log with no `close:` and no trace, quiet 30 min
+  with no live `run-task <bead>`; or a Python traceback in a run's stderr.
+- **Also:** minutes per bead (median, p90; all its runs in the window), fix rounds, replans, tokens by lane (codex,
+  claude) and by role.
+- **Verdict:** `M2 PASS` or `M2 FAIL: <what>` against >=10 beads, >=7 landed with no ask, 0 lost, 0 crashes.
+
+`tl lost [--repo DIR] [--since T] [--json]` classes every commit on `task/*` and `wip/*` that is not on the base (the
+base and its local/remote twin). Exit 1 when any is lost.
+
+| class | when |
+|---|---|
+| landed | its patch is on the base (`git cherry`), or a land of its bead came after it: a base commit titled `... (<bead>)` or a trace's land sha on the base (squash lands are no ancestors) |
+| reclaimed | a later run of the bead started after it (that run continues the branch) |
+| pending | the bead is open, blocked or in progress and no run took it up yet: listed, not lost (a paused bead's wip) |
+| lost | the bead is closed or unknown and never landed after it, or a `wip/<slot>/<ts>` branch of a dead session |
+
+`tl report` counts `lost` against M2 and lists `pending` branches; `--since` limits both to commits made since T.
+
 ## Slots
 
 A slot is a persistent worktree, set up once and reused task after task, so a heavy setup (an engine import, a large

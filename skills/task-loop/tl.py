@@ -23,6 +23,9 @@
                                                 run ready beads one after another, each in any free slot
   tl.py loop status [--repo DIR] [--last N]     the running loop and its last beads
   tl.py stop [--repo DIR] [--now]               stop the loop after its current bead, or now (SIGTERM)
+  tl.py report [--repo DIR] [--since T] [--until T] [--json]
+                                                the M2 scorecard of a window (see SKILL.md, Report)
+  tl.py lost [--repo DIR] [--since T] [--json]  bead-branch commits that are not landed, reclaimed or pending
   tl.py dash ensure|stop|status|url             the dashboard server (one per machine)
   tl.py hook session-start                      SessionStart hook: index session id -> transcript path
 
@@ -1083,6 +1086,15 @@ def main(argv=None):
     p = sp.add_parser("stop", help="stop the repo's loop after its current bead (--now: SIGTERM the bead's run)")
     p.add_argument("--repo")
     p.add_argument("--now", action="store_true")
+    p = sp.add_parser("report", help="the M2 scorecard: landed, asks, parked, paused, failed, crashes, lost work")
+    p.add_argument("--repo")
+    p.add_argument("--since", metavar="T", help="ISO, HH:MM (today) or a duration back (12h); default 24h")
+    p.add_argument("--until", metavar="T", help="as --since; default now")
+    p.add_argument("--json", action="store_true")
+    p = sp.add_parser("lost", help="task/* and wip/* commits not on the base: landed, reclaimed, pending or lost")
+    p.add_argument("--repo")
+    p.add_argument("--since", metavar="T")
+    p.add_argument("--json", action="store_true")
     p = sp.add_parser("hook")
     p.add_argument("op", choices=["session-start"])
     a = ap.parse_args(argv)
@@ -1112,6 +1124,9 @@ def main(argv=None):
     if a.cmd in ("next", "loop", "stop"):
         import loop
         return {"next": loop.cmd_next, "loop": loop.cmd_loop, "stop": loop.cmd_stop}[a.cmd](a)
+    if a.cmd in ("report", "lost"):
+        import report
+        return {"report": report.cmd_report, "lost": report.cmd_lost}[a.cmd](a)
     if a.cmd == "trace":
         return cmd_trace(a)
     if a.cmd == "bd":
