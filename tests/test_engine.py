@@ -142,7 +142,7 @@ class EngineTest(unittest.TestCase):
         c.update(cfg)
         c.update(raw or {})
         with mock.patch.object(engine, "find_route", return_value=route), \
-                mock.patch.object(engine, "contract", return_value=CONTRACT), \
+                mock.patch.object(engine, "contract", return_value=getattr(self, "contract_answer", CONTRACT)), \
                 mock.patch.object(engine, "call_delegate", script), mock.patch.object(engine.time, "sleep"):
             self.eng = engine.Engine("t-1", str(self.wt), c)
             rc = self.eng.run()
@@ -2109,6 +2109,57 @@ class DelegateLauncher(unittest.TestCase):
         self.assertEqual(s.calls[0][:2], ("worker", None))
         self.assertIn(engine.FRESH_WRITER_TEXT, s.prompts[0])
         self.assertEqual(s.calls[1], ("reviewer", None, "openai"))
+
+    # delegate 0.32: an answer that picked a lane says whether it is a fallback (and from which first lane, when it can)
+    V032 = dict(CONTRACT, features=CONTRACT["features"] + ["rung", "fallback", "busy_wait"])
+    SONNET_FB = dict(FRESH, rung=1, fallback=True, fallback_reason="ceiling", first_lane="OPENAI_SUBSCRIPTION")
+    CODEX_FIRST = dict(BACK, rung=0, fallback=False, fallback_reason=None)
+    no_checks = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[])])  # FRESH writes no f.txt
+
+    def test_v032_a_fallback_answer_is_retaken_fresh_once_its_first_lane_is_back(self):
+        self.contract_answer = self.V032
+        with self.lanes(OPENAI_SUBSCRIPTION=False):
+            rc, s = self.run_engine({"plan": [self.no_checks], "write": [self.SONNET_FB, self.CODEX_FIRST, self.CODEX_FIRST],
+                                     "review": [review(unmet=["more"])] * 2 + [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, None, "w3"])
+        self.assertEqual([c[2] for c in s.calls if c[0] == "reviewer"], ["claude", "openai", "openai"])
+
+    def test_v032_a_fallback_answer_is_resumed_while_its_first_lane_is_out(self):
+        self.contract_answer = self.V032
+        with self.lanes(OPENAI_SUBSCRIPTION=True):
+            rc, s = self.run_engine({"plan": [self.no_checks], "write": [self.SONNET_FB, self.SONNET_FB],
+                                     "review": [review(unmet=["more"]), CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, "w2"])
+
+    def test_v032_a_fallback_answer_with_no_lane_known_is_asked_fresh_next_round(self):
+        self.contract_answer = self.V032
+        anon = dict(self.SONNET_FB)
+        anon.pop("first_lane")
+        with mock.patch.object(engine, "lane_status") as st:
+            rc, s = self.run_engine({"plan": [self.no_checks], "write": [anon, self.CODEX_FIRST],
+                                     "review": [review(unmet=["more"]), CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, None])
+        st.assert_not_called()
+
+    def test_v032_a_first_choice_answer_is_resumed(self):
+        self.contract_answer = self.V032
+        with mock.patch.object(engine, "lane_status") as st:
+            rc, s = self.run_engine({"plan": [self.no_checks], "write": [self.CODEX_FIRST, self.CODEX_FIRST],
+                                     "review": [review(unmet=["more"]), CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, "w3"])
+        st.assert_not_called()
+
+    def test_without_the_fallback_feature_the_fields_are_not_read(self):
+        with mock.patch.object(engine, "lane_status") as st:  # CONTRACT has no fallback feature: the answer's field is ignored
+            rc, s = self.run_engine({"plan": [self.no_checks], "write": [self.SONNET_FB, self.SONNET_FB],
+                                     "review": [review(unmet=["more"]), CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, "w2"])
+        st.assert_not_called()
 
     def test_lane_status_reads_route_status_json(self):
         out = json.dumps({"v": 1, "lanes": {"OPENAI_SUBSCRIPTION": {"out": True}}})

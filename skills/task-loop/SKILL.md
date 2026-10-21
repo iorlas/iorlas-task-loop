@@ -61,11 +61,13 @@ command and the git and credential rules; the engine's briefs say only what the 
 the whole policy: `retry` waits until `retry_after` (past `engine.lane_wait_min` the run pauses, bead open), except
 that a resumed writer answering `lane_out` (`next` retry, or owner when delegate cannot say when the lane frees) goes on at once as a new thread (delegate gives it the role's next rung, e.g.
 Sonnet while Codex is out; its brief says to continue the earlier writer's work in the tree), which then becomes the
-writer and the review's `--authored-by`. That thread is a fallback for the lane that was out (the checkpoint keeps it
-as `fallback_lane`): each later write round, in this run or after a pause, reads `route.py status --json`; once that
-lane is no longer out it asks delegate fresh with the same continue-the-work brief, so Codex takes over again
-(transition `fallback_retake`); while it is out the fallback thread is resumed (no context lost); a lane the status
-does not list makes it no fallback (tl-bxk.10.5). A writer that never met a `lane_out` is resumed as before. Only a retry from that new thread waits, and its `lane_out`
+writer and the review's `--authored-by`. A writer is a fallback when delegate's answer says `fallback: true` (0.32,
+feature `fallback`), else when it is that new thread; its first-choice lane is the answer's `first_lane`, else the lane
+seen out (the checkpoint keeps `writer_fallback` and `fallback_lane`). Each later write round, in this run or after a
+pause, reads `route.py status --json`: while that lane is out the fallback thread is resumed (no context lost); once it
+is not, or when no lane is known, it asks delegate fresh with the same continue-the-work brief, so Codex takes over
+again (transition `fallback_retake`); a lane the status does not list makes it no fallback (tl-bxk.10.5). Any other
+writer is resumed as before. Only a retry from that new thread waits, and its `lane_out`
 with no time pauses ("no lane", bead open, no ask); `owner` pauses for a login or setup or raises a verify ask, `fail` tries once more as a new thread, then fails the task. The
 trace keeps each session's `reason` and `context` (instruction files, env key names) and the run's lane manifest. A command the worker was denied shows as a ⚠; denied with no answer, or a second denied write in the bead (across lanes and runs), blocks it "needs a human:
 <command>". `tl run-task` refuses the main checkout as a worktree (it holds the bead database and the config).

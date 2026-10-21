@@ -582,7 +582,9 @@ class Engine:
         self.writer = {}  # backend -> thread/session id, so later rounds of a task resume the same writer
         self.writer_family = None  # the family of the last write: the verifier comes from another one when it can
         self.plan_decided = False  # the planner was sent back once with the requirement that answers its question
-        self.fallback_lane = ""  # the lane a resumed writer was out on when the engine started a new thread elsewhere
+        self.writer_fallback = False  # the writer's thread is a fallback: delegate's answer said so, or it went on
+                                      # as a new thread after a lane_out the engine saw
+        self.fallback_lane = ""  # that writer's first-choice lane, when known: delegate's first_lane, or the lane seen out
         self.verified = []  # the verifier's answer per unchecked item at land: in the trace and on the bead
         self.sessions = []  # every AI call of this run: the trace a later reflection reads (traces.jsonl)
         self.outcome, self.why, self.asked = "failed", "", False  # what result() tells the loop
@@ -732,13 +734,15 @@ class Engine:
         role = ROLES[node]
         writer = writer_family if node in ("review", "verify") else None
         resume = self.writer.get("delegate") if resume_key else None
-        if resume and self.fallback_lane:  # tl-bxk.10.5: a fallback writer would keep the bead off Codex for good
-            lane = lane_status(self.route or "").get(self.fallback_lane)
-            if not isinstance(lane, dict):  # that lane is not configured here (any more): the writer is no fallback
-                self.fallback_lane = ""
-            elif lane.get("out") is False:
-                self.transition(step or node, "fallback_retake", "%s is usable again: delegate routes afresh instead of "
-                                "resuming the fallback writer (%s)" % (self.fallback_lane, self.writer_family or "?"),
+        if resume and self.writer_fallback:  # tl-bxk.10.5: a fallback writer would keep the bead off Codex for good
+            lane = lane_status(self.route or "").get(self.fallback_lane) if self.fallback_lane else None
+            if self.fallback_lane and not isinstance(lane, dict):  # that lane is not configured here: no fallback
+                self.writer_fallback, self.fallback_lane = False, ""
+            elif lane is None or lane.get("out") is False:  # back again, or no lane known to wait for
+                self.transition(step or node, "fallback_retake", "%s: delegate routes afresh instead of resuming the "
+                                "fallback writer (%s)" % ("%s is usable again" % self.fallback_lane if self.fallback_lane
+                                                          else "its first-choice lane is not known",
+                                                          self.writer_family or "?"),
                                 lane=self.fallback_lane, family=self.writer_family or "")
                 resume, prompt = None, prompt + FRESH_WRITER_TEXT
         out_on = ""
@@ -810,9 +814,14 @@ class Engine:
             if j.get("git_violation"):
                 self.warn("%s changed git: %s" % (node, "; ".join(j["git_violation"])))
             if resume_key and r.ref and j.get("status") == "done":
-                if r.ref != resume:  # a new thread: a fallback only when it runs elsewhere than a lane seen out
+                said_fb = j.get("fallback") if "fallback" in ((self.contract or {}).get("features") or []) else None
+                if isinstance(said_fb, bool):  # delegate 0.32 says it on every answer, a resumed one too
+                    self.writer_fallback = said_fb
+                    self.fallback_lane = (j.get("first_lane") or out_on or self.fallback_lane) if said_fb else ""
+                elif r.ref != resume:  # a new thread: a fallback only when it runs elsewhere than a lane seen out
                     gone = out_on or self.fallback_lane
                     self.fallback_lane = gone if gone and (j.get("lane") or "") != gone else ""
+                    self.writer_fallback = bool(self.fallback_lane)
                 self.writer["delegate"] = resume = r.ref
             errs = validate(r.data, SCHEMAS[node]) if (r.data is not None and nxt is None) else [
                 "%s: %s" % (reason or "no structured output", said[:300])]
@@ -1388,7 +1397,7 @@ class Engine:
         branch = self.git("symbolic-ref", "--short", "-q", "HEAD") or getattr(self, "task_branch", "")
         rec = {"v": 1, "bead": self.bead, "branch": branch,
                "plan": self.plan_data, "done": self.done, "accepted": self.accepted, "replans": self.replans, "fixes": self.fixes, "denials": self.denials,
-               "writer": self.writer.get("delegate") or "", "fallback_lane": self.fallback_lane,
+               "writer": self.writer.get("delegate") or "", "writer_fallback": self.writer_fallback, "fallback_lane": self.fallback_lane,
                "writer_family": self.writer_family or "", "brief": self.brief_hash, "head": self.git("rev-parse", "HEAD"),
                "unchecked": self.unchecked, "filed": self.filed,
                "closed": False,
@@ -1446,6 +1455,7 @@ class Engine:
         if ck["writer"]:
             self.writer["delegate"] = ck["writer"]
             self.fallback_lane = ck.get("fallback_lane") or ""
+            self.writer_fallback = bool(ck.get("writer_fallback", bool(self.fallback_lane)))
             self.writer_family = ck.get("writer_family") or None
         if ck["step"] == "gate-red":
             self.log("note", "the gate was red at land in %s: re-planning with its output, keeping %d accepted stage(s)"
