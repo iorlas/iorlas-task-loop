@@ -327,6 +327,7 @@ class Engine:
         self.sessions = []  # every AI call of this run: the trace a later reflection reads (traces.jsonl)
         self.outcome, self.why, self.asked = "failed", "", False  # what result() tells the loop
         self.retry_after = 0.0  # a pause for a lane: when delegate says it is back (epoch; 0 = unknown)
+        self.landed_sha = ""  # set the moment the push goes through: whatever stops the run after it, the bead landed
         d = tl.config_dir() / "engine"
         d.mkdir(exist_ok=True)
         stamp = time.strftime("%Y%m%d-%H%M%S")
@@ -679,7 +680,7 @@ class Engine:
 
     def run(self):
         outcome, why, sha, question = "failed", "", "", ""
-        hb = Heartbeat(self.bead)
+        hb = Heartbeat(self.bead, os.environ.get("TASK_LOOP_SLOT_BEAD", ""))
         try:
             bead = tl.show(self.bead)
             if not bead:
@@ -736,6 +737,9 @@ class Engine:
         except Exception as e:  # the close-out must run whatever broke
             outcome, why = "failed", "failed: engine error %s: %s" % (type(e).__name__, e)
         finally:
+            if self.landed_sha and outcome != "landed":  # stopped after the push: it is on the base, close it as landed
+                self.warn("%s after the land went through; closing it landed" % (why or outcome))
+                outcome, why, sha, question = "landed", "", self.landed_sha, ""
             hb.stop()
             self.outcome, self.why = outcome, why
             self.close(outcome, why, sha, question)
@@ -1313,12 +1317,18 @@ class Engine:
                     if rc:
                         problem = ("gate", tail)
                 if not problem:
-                    rc, tail = self.sh(self.cfg["land"], env={"TASK_LOOP_GATED_TREE": self.git("rev-parse", "HEAD^{tree}")}
-                                       if self.cfg["gate"] else None)  # a pre-push hook may skip a gate this tree passed
+                    with self.stop_deferred() as stop:  # a push half done is no state to stop in: finish it, then stop
+                        rc, tail = self.sh(self.cfg["land"], env={"TASK_LOOP_GATED_TREE": self.git(
+                            "rev-parse", "HEAD^{tree}")} if self.cfg["gate"] else None)  # a pre-push hook may skip a gate this tree passed
+                        if rc == 0:
+                            self.landed_sha = sha = self.git("rev-parse", "HEAD")
+                            tl.cmd_land(Args(id=self.bead, sha=sha, worktree=self.wt))
                     if rc == 0:
-                        sha = self.git("rev-parse", "HEAD")
-                        tl.cmd_land(Args(id=self.bead, sha=sha, worktree=self.wt))
+                        if stop:
+                            self.warn("a stop came during the land: landed first, closing now")
                         return sha
+                    if stop:
+                        raise Blocked("failed: stopped (SIGTERM)")
                     if not re.search(r"rejected|non-fast-forward|fetch first|stale info", tail):
                         raise Blocked("land failed\n" + tail)
                     pushes += 1
@@ -1419,6 +1429,19 @@ class Engine:
                 shutil.copy2(f, dst)
                 kept.append(dst)
         return kept
+
+    @contextlib.contextmanager
+    def stop_deferred(self):
+        """SIGTERM inside this block is only noted (the yielded list gets an item); the caller stops after it."""
+        got = []
+        if not (hasattr(signal, "SIGTERM") and threading.current_thread() is threading.main_thread()):
+            yield got
+            return
+        old = signal.signal(signal.SIGTERM, lambda *_: got.append(True))
+        try:
+            yield got
+        finally:
+            signal.signal(signal.SIGTERM, old)
 
     def wip(self, why):
         self.sh(["git", "add", "-A"])
@@ -1610,8 +1633,11 @@ def brief_digest(bead, comments, owner_only=False, ignore=()):
 
 
 class Heartbeat:
-    def __init__(self, bead):
-        self.bead, self.stop_ev = bead, threading.Event()
+    """The bead's lease, and the slot bead's when tl loop runs this (TASK_LOOP_SLOT_BEAD): a loop killed with SIGKILL
+    leaves its slot held while this run lives."""
+
+    def __init__(self, bead, slot_bead=""):
+        self.beads, self.stop_ev = [b for b in (bead, slot_bead) if b], threading.Event()
         self.th = threading.Thread(target=self.loop, daemon=True)
 
     def start(self):
@@ -1619,7 +1645,8 @@ class Heartbeat:
 
     def loop(self):
         while not self.stop_ev.wait(60):
-            tl.bd("heartbeat", self.bead)
+            for b in self.beads:
+                tl.bd("heartbeat", b)
 
     def stop(self):
         self.stop_ev.set()

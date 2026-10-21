@@ -678,6 +678,37 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "")
         self.assertEqual(tl.git("status", "--porcelain", cwd=str(self.wt)), "")
 
+    def test_a_stop_during_the_push_waits_for_it_and_the_bead_lands(self):
+        # a stop between the push and cmd_land left a landed bead failed, and the loop reopened it
+        with self.stoppable():
+            rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
+                                    land="kill -TERM $PPID; sleep 0.3; git push -q origin HEAD:main")
+        self.assertEqual(rc, 0)
+        self.assertEqual(self.eng.result()["outcome"], "landed")
+        self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
+        self.assertTrue(self.closed and self.closed[0].startswith("merged "))
+        self.assertEqual(self.blocked, [])
+
+    def test_a_stop_while_the_land_is_recorded_still_closes_it_landed(self):
+        import signal as sig
+        with self.stoppable(), mock.patch.object(tl, "cmd_land", side_effect=lambda a: os.kill(os.getpid(), sig.SIGTERM)):
+            rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual((rc, self.eng.result()["outcome"]), (0, "landed"))
+        self.assertEqual(self.blocked, [])
+
+    def test_a_stop_during_a_rejected_push_stops_after_it(self):
+        with self.stoppable():
+            rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
+                                    land="kill -TERM $PPID; sleep 0.3; echo '! [rejected] (fetch first)' >&2; exit 1")
+        self.assertEqual(rc, 2)
+        self.assertIn("stopped (SIGTERM)", self.blocked[0])
+
+    def test_the_heartbeat_keeps_the_slot_bead_the_loop_names(self):
+        hb = engine.Heartbeat("t-1", "sl-1")
+        with mock.patch.object(hb.stop_ev, "wait", side_effect=[False, True]):
+            hb.loop()
+        self.assertEqual([c for c in self.bd_calls if c[0] == "heartbeat"], [("heartbeat", "t-1"), ("heartbeat", "sl-1")])
+
     def test_a_rerun_after_a_red_land_gate_lands_the_reviewed_work_once(self):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, gate=FALSE, max_fix_rounds=0)
         self.assertEqual(rc, 2)

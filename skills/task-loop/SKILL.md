@@ -250,14 +250,14 @@ filed, beads blocked with their question, the dashboard address. Nothing else.
 container); the session that starts it only watches it.
 
 - **Start:** `tl loop [--repo DIR] [--max-beads N] [--until HH:MM] [--wait-slot-min M] [--wait-drained]`. One loop per
-  repo per machine. Each pass: `bd reclaim`, take any free slot (none free: wait with backoff, a line every M minutes;
+  repo per machine. Each pass: `bd reclaim` of tl- actors' lapsed claims only (never a person's), take any free slot (none free: wait with backoff, a line every M minutes;
   slots off: the loop's one worktree), pick by the queue rule, claim (taken → the next bead), `tl slot reset`, then
   `tl run-task` as a child with its own log, release the slot, record the outcome, next pass. `--until`: no bead
   starts after that time. No ready bead: `DRAINED`, exit 0 (`--wait-drained`: look again every 5 minutes).
 - **Outcomes** (`run-task --outcome-file`, also its last stdout line as JSON): `landed` → next. `parked` (an ask was
   raised, or the bead is blocked for the owner) → next. `paused` (lane out, login, network; the bead stays open) → a
-  lane back within an hour is waited for, otherwise the next bead first; when every ready bead is paused the loop
-  sleeps until the earliest is due. `failed` (anything else, an engine crash included) → 2 in a row stop the loop
+  lane back within an hour is waited for, otherwise the next bead first; a bead paused 3 times rests an hour; when
+  every ready bead is paused the loop sleeps until the earliest is due. `failed` (anything else, an engine crash included) → 2 in a row stop the loop
   (exit 2); a landing ends the run, parks and pauses never count. `taken` (another live session holds it) → the next
   bead, that one again in 15 minutes. A bead a gone run left assigned (a pause keeps the bead open and assigned) is
   released first, as run-task does.
@@ -267,7 +267,11 @@ container); the session that starts it only watches it.
   is beside it, one file per run. `tl next` prints what the loop would take next and why, claiming nothing.
 - **Stop:** `tl stop` ends the loop after the current bead. `tl stop --now` sends SIGTERM to the running bead (the
   engine's close step still runs, then the loop puts the bead back in the queue unclaimed and releases the slot).
-  Ctrl-C or SIGTERM to the loop itself is `--now`.
+  A stop during the push waits for it: a push that went through closes the bead landed, and the loop never reopens a
+  bead whose land commit is on the base. Ctrl-C or SIGTERM to the loop itself is `--now`.
+- **Leases:** the loop heartbeats the slot bead and the task bead from the slot take to the release (a slow slot
+  setup included); run-task heartbeats both too (`TASK_LOOP_SLOT_BEAD`), so a loop killed with SIGKILL leaves its
+  slot held until the running bead ends, then the lease lapses and `bd reclaim` frees it.
 
 The queue rule is `.task-loop.json` → `engine`; the defaults take every ready bead:
 

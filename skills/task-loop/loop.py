@@ -33,6 +33,8 @@ PAUSE_WAIT_MAX = 3600  # a lane back within this long is waited for; later, the 
 PAUSE_RETRY = 900      # a pause with no time the lane frees (login, network), or a bead another session holds:
                        # try that bead again after this
 FAILS_TO_STOP = 2      # failures in a row that stop the loop; parks and pauses never count, a landing ends the run
+PAUSES_TO_REST = 3     # a bead paused this often in one loop run rests for REST while the loop takes others
+REST = 3600
 
 clock = time.time
 STOP_NOW = threading.Event()  # SIGTERM or Ctrl-C to the loop itself: end the running bead as `tl stop --now` does
@@ -179,6 +181,27 @@ def say(text):
 
 # ---- one bead -------------------------------------------------------------------------------------------------------
 
+class Beat:
+    """Keeps the slot bead's and the task bead's leases alive from the slot take to the release: a slow slot setup
+    (lifesim: 5-12 min) outlasts a 5-minute lease. run-task heartbeats both too, so a SIGKILLed loop leaves no slot free
+    under a live run."""
+
+    def __init__(self, *ids):
+        self.ids, self.every, self.ev = [i for i in ids if i], HEARTBEAT, threading.Event()
+        self.th = threading.Thread(target=self.loop, daemon=True)
+        self.th.start()
+
+    def add(self, bead_id):
+        self.ids.append(bead_id)
+
+    def loop(self):
+        while not self.ev.wait(self.every):
+            for i in list(self.ids):
+                tl.bd("heartbeat", i)
+
+    def stop(self):
+        self.ev.set()
+
 def spawn(cmd, log):
     """run-task as a child in its own process group: Ctrl-C to the loop reaches it only as the loop's SIGTERM."""
     kw = {"stdin": subprocess.DEVNULL, "stdout": log, "stderr": subprocess.STDOUT}
@@ -194,6 +217,19 @@ def prepare(repo, slot, bead_id):
     return tl.cmd_slot(engine.Args(op="reset", name=slot, bead=bead_id, n=None, force=False))
 
 
+def landed_on_base(repo, wt, bead_id):
+    """True when the bead's land commit (titled `... (<id>)`) is the tip of its branch and already on the base."""
+    if not os.path.isdir(wt):
+        return False
+    base = engine.load_cfg(repo)["base"]
+    branch = (tl.show(bead_id).get("metadata") or {}).get("branch") or "task/" + bead_id
+    tl.git("fetch", "-q", "origin", cwd=wt)
+    tip = tl.git("rev-parse", "--verify", "-q", "refs/heads/" + branch, cwd=wt)
+    if not tip or not tl.git("log", "-1", "--format=%s", tip, cwd=wt).endswith("(%s)" % bead_id):
+        return False
+    return subprocess.run(["git", "-C", wt, "merge-base", "--is-ancestor", tip, base], capture_output=True).returncode == 0
+
+
 def run_bead(repo, b, slot, wt, slot_bead, started):
     """One bead through `tl run-task` as a child; returns its outcome record (failed when it gave none)."""
     runs = paths(repo)["runs"]
@@ -203,31 +239,37 @@ def run_bead(repo, b, slot, wt, slot_bead, started):
     cmd = [sys.executable, str(tl.HERE / "tl.py"), "run-task", b["id"], "--worktree", wt, "--outcome-file", str(out)]
     cmd += ["--slot", slot] if slot else []
     t0 = clock()
+    os.environ["TASK_LOOP_SLOT_BEAD"] = slot_bead or ""  # the engine heartbeats it too (see Beat)
     with open(log_path, "ab") as log:  # append: a rerun of the same stem never cuts a log another reader follows
         p = spawn(cmd, log)
         write_state(repo, pid=os.getpid(), started=started, bead=b["id"], slot=slot, since=t0, child=p.pid,
                     run_log=str(log_path))
         say("%s in %s (log %s)" % (b["id"], slot or wt, log_path))
-        stopped, beat = False, clock()
-        while True:
-            try:
-                rc = p.wait(timeout=POLL)
-                break
-            except subprocess.TimeoutExpired:
-                pass
-            if not stopped and stop_mode(repo) == "now":
-                say("stop now: SIGTERM to %s (its close step still runs)" % b["id"])
-                p.terminate()  # SIGTERM on POSIX, which the engine traps; TerminateProcess on Windows
-                stopped = True
-            if slot_bead and clock() - beat >= HEARTBEAT:
-                tl.bd("heartbeat", slot_bead, cwd=repo)
-                beat = clock()
+        stopped = False
+        try:
+            while True:
+                try:
+                    rc = p.wait(timeout=POLL)
+                    break
+                except subprocess.TimeoutExpired:
+                    pass
+                if not stopped and stop_mode(repo) == "now":
+                    say("stop now: SIGTERM to %s (its close step still runs)" % b["id"])
+                    p.terminate()  # SIGTERM on POSIX, which the engine traps; TerminateProcess on Windows
+                    stopped = True
+        except BaseException:  # the loop itself broke: the run ends (its close step runs) before the slot is freed
+            p.terminate()
+            p.wait()
+            raise
     try:
         r = json.loads(out.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         r = {"outcome": "failed", "why": "failed: no outcome from run-task (exit %s); see %s" % (rc, log_path)}
-    if stopped and r.get("outcome") == "failed":  # a stop is no verdict on the bead: back to the queue, unclaimed
-        tl.bd("update", b["id"], "--status", "open", "--assignee", "", cwd=repo)
+    if stopped and r.get("outcome") == "failed":  # a stop is no verdict on the bead: back to the queue, unclaimed,
+        if landed_on_base(repo, wt, b["id"]):     # unless the stop came during a land that went through
+            r["why"] = "%s; its land commit is on the base: not reopened, close it by hand" % (r.get("why") or "stopped")
+        else:
+            tl.bd("update", b["id"], "--status", "open", "--assignee", "", cwd=repo)
     r.setdefault("minutes", round((clock() - t0) / 60, 1))
     r["run_log"] = str(log_path)
     return r
@@ -272,6 +314,18 @@ def acquire(repo, cfg, wait_min, until):
         delay = min(delay * 2, 300, max(15, wait_min * 60))
 
 
+def reclaim(repo):
+    """A dead loop's or session's beads and slots back to ready: only claims of tl- actors (bd's lease rule decides
+    which are dead), never a person's hand claim."""
+    try:
+        held = json.loads(tl.bd("list", "--json", "--status", "in_progress", "-n", "0", cwd=repo).stdout or "[]")
+    except ValueError:
+        held = []
+    who = sorted({b.get("assignee") for b in held if (b.get("assignee") or "").startswith("tl-")})
+    if who:
+        tl.bd("reclaim", "--older-than", "15m", *sum((["--assignee", w] for w in who), []), cwd=repo)
+
+
 def cmd_loop(a):
     if a.op == "status":
         return cmd_status(a)
@@ -309,7 +363,7 @@ def passes(repo, a, started):
     cfg, until = tl.profile_slots(repo), end_time(a.until)
     slots = int(cfg.get("count") or 0) > 0
     wt = None if slots else tl.start_worktree(repo)
-    fails, ran, later = [], 0, {}  # later: a paused or taken bead -> when to try it again
+    fails, ran, later, pauses = [], 0, {}, {}  # later: a paused or taken bead -> when to try it again
     while True:
         if stop_mode(repo):
             say("stopped on request after %d bead(s)" % ran)
@@ -320,7 +374,7 @@ def passes(repo, a, started):
         if a.max_beads and ran >= a.max_beads:
             say("%d bead(s) run (--max-beads)" % ran)
             return 0
-        tl.bd("reclaim", "--older-than", "15m", cwd=repo)  # a dead session's beads and slots come back to ready
+        reclaim(repo)
         ranked, _ = queue(repo)
         now = clock()
         cands = [b for b, _ in ranked if later.get(b["id"], 0) <= now]
@@ -341,6 +395,7 @@ def passes(repo, a, started):
             continue
         name, d, slot_bead = got
         r, bid = None, ""
+        beat = Beat(slot_bead)
         try:
             for b in cands:
                 bid = b["id"]
@@ -350,6 +405,7 @@ def passes(repo, a, started):
                     record(repo, bid, name, {"outcome": "taken", "why": why if not ok else "claimed by another session"})
                     later[bid] = clock() + PAUSE_RETRY
                     continue
+                beat.add(bid)
                 if slots and prepare(repo, name, b["id"]) != 0:
                     tl.bd("unclaim", b["id"], cwd=repo)
                     r = {"outcome": "failed", "why": "failed: tl slot reset %s did not give a clean tree" % name}
@@ -358,8 +414,11 @@ def passes(repo, a, started):
                 record(repo, b["id"], name, r)
                 if r.get("outcome") != "taken":
                     break
+                later[bid] = clock() + PAUSE_RETRY
+                beat.ids.remove(bid)
                 r = None
         finally:
+            beat.stop()
             if slots:
                 tl.release_slot(repo, name)
             write_state(repo, pid=os.getpid(), started=started)
@@ -377,7 +436,12 @@ def passes(repo, a, started):
                 return 2
         elif out == "paused":
             due = float(r.get("retry_after") or 0)
-            if due and due - clock() <= PAUSE_WAIT_MAX:
+            pauses[bid] = pauses.get(bid, 0) + 1
+            if pauses[bid] >= PAUSES_TO_REST:
+                pauses[bid] = 0
+                later[bid] = clock() + REST
+                say("%s paused %d times: it rests an hour, the next bead first" % (bid, PAUSES_TO_REST))
+            elif due and due - clock() <= PAUSE_WAIT_MAX:
                 say("%s paused for a lane until %s: waiting for it" % (bid, time.strftime("%H:%M", time.localtime(due))))
                 nap(max(0, due - clock()), repo, until)
             else:
