@@ -280,6 +280,112 @@ class Api(unittest.TestCase):
         self.assertLessEqual(len(timeline._parsed), timeline.CACHE_MAX)
 
 
+STAGED = "lifesim-d5f.56"
+STAGED_RUN = STAGED + "-20261021-224641"
+
+
+def staged_log(root=FIXTURE):
+    return str(Path(root) / "engine" / (STAGED_RUN + ".jsonl"))
+
+
+def legacy_copy(src, dst):
+    """The same run as an old engine would have logged it: no ids, steps, counters, node_id or flag."""
+    with open(src) as f, open(dst, "w") as out:
+        for ln in f:
+            r = json.loads(ln)
+            if r.get("kind") in ("end", "transition", "checks", "run"):
+                continue
+            for k in ("id", "step", "stage", "stages", "write", "round", "fix", "fixes", "node_id", "flag"):
+                r.pop(k, None)
+            out.write(json.dumps(r) + "\n")
+
+
+class Stages(unittest.TestCase):
+    """lifesim-d5f.56 (2026-10-21): plan -> stage 1 write, checks, review (clean, same family) -> stage 2 write 1. Each
+    block names its stage, with the title from the run's plan.json, and a review by the writer's family says so."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name) / "task-loop"
+        shutil.copytree(str(FIXTURE), str(self.root))
+        timeline._parsed.clear()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_every_stage_block_has_its_index_count_and_plan_title(self):
+        r = timeline.run_timeline(staged_log())
+        self.assertTrue(r["structured"])
+        self.assertEqual(kinds(r), ["plan", "write", "checks", "review", "write"])
+        self.assertEqual([(b["stage_index"], b["stage_count"]) for b in r["blocks"]],
+                         [(None, None), (1, 2), (1, 2), (1, 2), (2, 2)])
+        self.assertEqual(r["blocks"][1]["stage_title"], "Add the knob")
+        self.assertEqual(r["blocks"][3]["stage_title"], "Add the knob")
+        self.assertEqual(r["blocks"][4]["stage_title"], "Add the layout test, building the HUD the way the screen does")
+        self.assertIsNone(r["blocks"][0]["stage_title"])
+        self.assertEqual([b["label"] for b in r["blocks"]], ["Plan", "Write 1", "Checks", "Review", "Write 1"])
+        self.assertEqual(r["blocks"][4]["stage"], "2/2")
+
+    def test_a_review_by_the_writers_family_is_marked(self):
+        b = timeline.run_timeline(staged_log())["blocks"]
+        self.assertTrue(b[3]["same_family"])
+        self.assertEqual(b[3]["result"]["text"], "clean")
+        self.assertFalse(b[1]["same_family"])
+        self.assertFalse(b[2]["same_family"])
+
+    def test_a_review_by_another_family_is_not_marked(self):
+        r = timeline.run_timeline(log("072411"))
+        rev = r["blocks"][5]
+        self.assertEqual((rev["kind"], rev["who"]["family"]), ("review", "claude"))
+        self.assertFalse(rev["same_family"])  # the writer was Codex
+
+    def test_an_old_log_reads_the_stage_from_its_node_text_and_the_title_from_plan_json(self):
+        legacy_copy(staged_log(), staged_log(self.root))
+        r = timeline.run_timeline(staged_log(self.root))
+        self.assertFalse(r["structured"])
+        self.assertEqual(kinds(r), ["plan", "write", "checks", "review", "write"])
+        self.assertEqual([(b["stage_index"], b["stage_count"]) for b in r["blocks"]],
+                         [(None, None), (1, 2), (1, 2), (1, 2), (2, 2)])
+        self.assertEqual(r["blocks"][4]["stage_title"], "Add the layout test, building the HUD the way the screen does")
+        self.assertTrue(r["blocks"][3]["same_family"])  # from the families, without the session flag
+
+    def test_without_plan_json_the_title_comes_from_the_plan_in_the_log_and_else_is_empty(self):
+        shutil.rmtree(str(self.root / "runs" / STAGED_RUN))
+        b = timeline.run_timeline(staged_log(self.root))["blocks"]
+        self.assertEqual(b[1]["stage_title"], "Add the knob")
+        legacy = staged_log(self.root) + ".tmp"
+        recs = [json.loads(x) for x in open(staged_log(self.root))]
+        with open(legacy, "w") as f:
+            for r in recs:
+                if r.get("kind") == "msg":
+                    r.pop("data", None)
+                f.write(json.dumps(r) + "\n")
+        os.replace(legacy, staged_log(self.root))
+        timeline._parsed.clear()
+        b = timeline.run_timeline(staged_log(self.root))["blocks"]
+        self.assertEqual((b[4]["stage_index"], b[4]["stage_count"], b[4]["stage_title"]), (2, 2, ""))
+
+    def test_stage_title_is_the_goals_first_sentence_cut_short(self):
+        t = timeline.stage_title
+        self.assertEqual(t("Add the knob: in content/ui/default.yaml under `live:`"), "Add the knob")
+        self.assertEqual(t("Add the layout test.\n\n(1) Pull"), "Add the layout test")
+        long = t("word " * 40)
+        self.assertLessEqual(len(long), 81)
+        self.assertTrue(long.endswith("\u2026"))
+        self.assertEqual(t(""), "")
+        self.assertEqual(t(None), "")
+
+    def test_the_task_timeline_endpoint_carries_the_stage_fields(self):
+        home = Path(self.tmp.name)
+        with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(home), "APPDATA": str(home)}):
+            server._cache.clear()
+            d = server.api_task_timeline("", STAGED)
+        b = d["runs"][0]["blocks"]
+        self.assertEqual((b[4]["stage_index"], b[4]["stage_count"]), (2, 2))
+        self.assertTrue(b[4]["stage_title"].startswith("Add the layout test"))
+        self.assertTrue(b[3]["same_family"])
+
+
 class LiveTaskView(unittest.TestCase):
     """The real server process over the fixture: the task view's endpoints and both pages answer."""
 
@@ -304,7 +410,7 @@ class LiveTaskView(unittest.TestCase):
 
                 def get(u):
                     return json.loads(urllib.request.urlopen(base + u).read())
-                self.assertEqual([t["id"] for t in get("/api/tasks")["tasks"]], [BEAD])
+                self.assertEqual(sorted(t["id"] for t in get("/api/tasks")["tasks"]), sorted([BEAD, STAGED]))
                 tl_ = get("/api/task-timeline?id=" + BEAD)
                 self.assertEqual(len(tl_["runs"]), 6)
                 run = tl_["runs"][0]
@@ -313,6 +419,7 @@ class LiveTaskView(unittest.TestCase):
                 page = urllib.request.urlopen(base + "/").read()
                 self.assertIn(b"task-loop", page)
                 self.assertIn(b"Asks", page)
+                self.assertIn(b"same family as writer", page)
                 r = urllib.request.urlopen(base + "/api/tasks")
                 self.assertEqual(r.headers.get("X-Content-Type-Options"), "nosniff")
                 self.assertIn(b"task-loop", urllib.request.urlopen(base + "/classic").read())

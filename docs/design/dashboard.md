@@ -65,6 +65,12 @@ the step. Asks are answered on the task (and on `#asks`). The old three-pane vie
 
 Endpoints: `/api/tasks`, `/api/task-timeline?repo&id`, `/api/block?run&node&k`, `/api/file?run&path` (a file of the
 run's folder only). `dash/timeline.py` builds runs -> blocks -> arrows.
+Stages: a write, checks or review block carries `stage_index`, `stage_count`, `stage_title` (the first sentence of the
+stage's goal, from the plan node's answer in the log, else `runs/<run>/plan.json`; old logs read `stage i/N` from the
+node text). The run is drawn in sections, "Stage i of N · title" (fix rounds: "Fix round k"); plan, verify and land sit
+outside them, and each block also shows an `i/N` chip. A review or verify block has `same_family: true` when its
+session's family is the family of the last write before it (or delegate flagged `same_family`): it shows "same family
+as writer — weaker review".
 
 ### Timeline records (engine log, since tl-bxk.12.3)
 The engine log `engine/<bead>-<YYYYMMDD-HHMMSS>.jsonl` keeps its old records and text; these are added, never printed:

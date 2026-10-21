@@ -158,6 +158,15 @@ main{max-width:1180px;margin:0 auto;padding:22px 20px 80px}
 .conn .lbl{font-size:11px;line-height:1.3;text-align:center;font-weight:560;max-width:100%}
 .c-fail{color:var(--fail)}.c-warn{color:var(--warn)}.c-ask{color:var(--ask)}.c-wait{color:var(--wait)}.c-ok{color:var(--ok)}.c-info{color:var(--faint)}
 .c-info .lbl{color:var(--mute)}
+.sec{flex-basis:100%;min-width:0;margin:4px 0 0;padding-top:10px;border-top:1px dashed var(--line2)}
+.sec:first-child{border-top:0;padding-top:0;margin-top:0}
+.sechd{display:flex;align-items:baseline;gap:8px;margin:0 0 9px 2px;font-size:12px;color:var(--mute);min-width:0}
+.sechd b{font-weight:640;color:var(--ink2);white-space:nowrap;flex:none}
+.sechd .tt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.sec .chain{row-gap:12px}
+.tag.stg{background:var(--sunk);color:var(--ink2);font-variant-numeric:tabular-nums;margin-left:auto;flex:none}
+.bksf{font-size:11px;line-height:1.35;color:var(--warn);font-weight:560;display:flex;align-items:flex-start;gap:5px;margin-top:2px}
+.bksf::before{content:"";width:6px;height:6px;border-radius:50%;border:1.5px solid currentColor;flex:none;margin-top:3px}
 .endp{align-self:center;display:flex;align-items:center;gap:7px;padding:7px 12px;border-radius:10px;font-size:12.5px;font-weight:620;max-width:240px}
 .endp .d{width:8px;height:8px;border-radius:50%;background:currentColor;flex:none}
 
@@ -256,6 +265,8 @@ pre.tail{margin:0;background:var(--sunk);border-radius:8px;padding:9px 10px;font
   .conn .ln::after{right:auto;left:-4px;top:auto;bottom:-2px;border:5px solid transparent;border-top:7px solid currentColor;border-bottom:0}
   .conn .lbl{text-align:left;padding:3px 0}
   .endp{align-self:flex-start;max-width:none}
+  .sec .chain{flex-direction:column;flex-wrap:nowrap;row-gap:0}
+  .sechd{margin-bottom:6px;flex-wrap:wrap;row-gap:0}.sechd .tt{white-space:normal}
   .drawer{width:100vw}
   .dh{padding:14px 12px 10px 14px}
   .db{padding:12px 14px 40px}
@@ -389,13 +400,24 @@ function whoLine(w){if(!w)return'';if(w.family=='engine')return'<span class="fam
   const bits=[model(w.model),effort(w.effort)].filter(Boolean).join(' · ');return `<span class="fam">${esc(w.name)}</span>${bits?'<span>· '+esc(bits)+'</span>':''}`}
 function blockHtml(r,b){const w=b.who||{};const sel=S.block&&S.block.node==b.node&&S.block.k==b.k&&(S.run||lastRun(S.tl))==r.run;
   const tags=[];if(w.resumed)tags.push('<span class="tag" title="Resumed the previous writer\'s thread">resumed</span>');
-  if(w.fallback)tags.push(`<span class="tag fb" title="${esc(w.fallback)}">${esc(w.fallback.indexOf('new thread')==0?'new thread':'fallback')}</span>`);
+  if(w.fallback&&!b.same_family)tags.push(`<span class="tag fb" title="${esc(w.fallback)}">${esc(w.fallback.indexOf('new thread')==0?'new thread':'fallback')}</span>`);
   const res=b.result||{};const meta=[dur(b.secs),tok(b.tokens)].filter(Boolean).join(' · ');
-  const sub=b.stage&&b.stage!='1/1'?b.stage:'';
-  return `<button class="blk f-${esc(w.family||'engine')}${sel?' sel':''}" data-run="${esc(r.run)}" data-node="${b.node}" data-k="${b.k}" aria-label="${esc(b.label)}: details">
-    <div class="bk1"><span class="bkk">${esc(b.label)}</span>${sub?`<span class="bks">stage ${esc(sub)}</span>`:''}</div>
-    <div class="bkw">${whoLine(w)}</div>${meta||tags.length?`<div class="bkm"><span>${esc(meta)}</span>${tags.join('')}</div>`:''}
+  const stg=b.stage_count?`<span class="tag stg" title="${esc(stageName(b))}">${b.stage_index}/${b.stage_count}</span>`:'';
+  const sf=b.same_family?`<div class="bksf" title="${esc(SAMEFAM)}">same family as writer — weaker review</div>`:'';
+  return `<button class="blk f-${esc(w.family||'engine')}${sel?' sel':''}" data-run="${esc(r.run)}" data-node="${b.node}" data-k="${b.k}" aria-label="${esc(b.label+(b.stage_count?', '+stageName(b):''))}: details">
+    <div class="bk1"><span class="bkk">${esc(b.label)}</span>${stg}</div>
+    <div class="bkw">${whoLine(w)}</div>${meta||tags.length?`<div class="bkm"><span>${esc(meta)}</span>${tags.join('')}</div>`:''}${sf}
     <div class="bkr">${chip('s-'+(res.status||'info'),res.text||'—')}</div></button>`}
+const SAMEFAM='The reviewer is the same model family as the writer of this stage, usually because no other lane was free. A reviewer from the same family tends to share the writer\'s blind spots, so this review is weaker evidence.';
+function stageName(b){return 'Stage '+b.stage_index+' of '+b.stage_count+(b.stage_title?' · '+b.stage_title:'')}
+function secKey(b){return b.stage_count?'s'+b.stage_index+'/'+b.stage_count:b.kind!='land'&&b.kind!='verify'&&b.fix?'f'+b.fix:null}
+function secHead(b){return b.stage_count?`<div class="sechd"><b>Stage ${b.stage_index} of ${b.stage_count}</b>${b.stage_title?`<span class="tt" title="${esc(b.stage_title)}">${esc(b.stage_title)}</span>`:''}</div>`:
+  `<div class="sechd"><b>Fix round ${b.fix}${b.fixes?' of '+b.fixes:''}</b><span class="tt">after land</span></div>`}
+function chainHtml(r){let out='',sec=null,inner='';const close=()=>{if(sec!==null)out+=`<div class="sec">${inner}</div></div>`;sec=null;inner=''};
+  r.blocks.forEach((b,j)=>{const key=secKey(b),step=`<div class="step">${j?connHtml(b.arrow):''}${blockHtml(r,b)}</div>`;
+    if(key!==sec){close();if(key!==null){sec=key;inner=secHead(b)+'<div class="chain">'}}
+    if(sec!==null)inner+=step;else out+=step});
+  close();return out+`<div class="step">${endHtml(r.end)}</div>`}
 function connHtml(a){if(!a||!a.text)return '<div class="conn short c-info" aria-hidden="true"><span class="ln"></span></div>';
   return `<div class="conn c-${CAUSE[a.cause]||'info'}" title="${esc(a.detail||a.text)}"><span class="lbl">${esc(a.text)}</span><span class="ln"></span></div>`}
 function endHtml(e){if(!e)return'';const cls={landed:'s-ok',done:'s-ok',asks:'s-ask',waiting:'s-ask',paused:'s-wait',running:'s-run'}[e.outcome]||'s-fail';
@@ -418,7 +440,7 @@ function renderTask(){const d=S.tl;if(!d||!d.task||d.task.id!=S.task){paint($('m
     const live=r.end&&r.end.outcome=='running';
     const meta=[hm(r.started)+(r.ended&&!live?'–'+hm(r.ended,true):''),dur(r.secs),tok(r.tokens)].filter(Boolean).join(' · ');
     html+=`<section class="run"><div class="rh"><span class="rn">Run ${i+1}</span><span class="because ${bcls}">${esc(r.because||r.started_because)}</span><span class="rt">${esc(meta)}</span></div>
-      <div class="chain">${r.blocks.map((b,j)=>`<div class="step">${j?connHtml(b.arrow):''}${blockHtml(r,b)}</div>`).join('')}<div class="step">${endHtml(r.end)}</div></div></section>`});
+      <div class="chain">${chainHtml(r)}</div></section>`});
   const ae=document.activeElement,keep=ae&&ae.tagName=='TEXTAREA'?[ae.dataset.ans,ae.value,ae.selectionStart]:null;
   if(paint($('main'),'main',html)&&keep){const ta=document.querySelector(`textarea[data-ans="${CSS.escape(keep[0])}"]`);if(ta){ta.value=keep[1];ta.focus();try{ta.setSelectionRange(keep[2],keep[2])}catch(e){}}}}
 
@@ -459,7 +481,7 @@ function renderDrawer(){const dr=$('drawer'),on=S.view=='task'&&!!S.block;dr.cla
     ['engine','Engine log',d?d.lines.length:null],d&&d.answer?['answer',b.kind=='review'?'Findings':b.kind.indexOf('plan')>=0?'Plan':'Answer',null]:null].filter(Boolean);
   const tab=S.tab&&tabs.some(x=>x[0]==S.tab)?S.tab:(b.kind=='checks'||b.kind=='land'?(b.kind=='land'?'engine':'checks'):ai?'transcript':'engine');
   const sub=[w.family=='engine'?'Engine':[w.name,model(w.model),effort(w.effort)].filter(Boolean).join(' · '),
-    b.stage?'stage '+b.stage:'',b.fix?'fix round '+b.fix:'',w.resumed?'resumed thread':'',w.fallback,
+    b.stage_count?stageName(b):b.stage?'stage '+b.stage:'',b.same_family?'same family as writer — weaker review':'',b.fix?'fix round '+b.fix:'',w.resumed?'resumed thread':'',b.same_family?'':w.fallback,
     hm(b.t0)+(b.t1?'–'+hm(b.t1,true):''),dur(b.secs),tok(b.tokens)].filter(Boolean);
   let body;
   if(!d)body='<div class="loading">Loading…</div>';

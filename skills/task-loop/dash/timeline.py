@@ -441,13 +441,73 @@ def session_result(s):
     return {"status": "fail", "text": s.get("reason") or st}
 
 
-def blocks_of(nodes, structured):
-    """Blocks in order, each with the arrow into it; and the move out of the last one."""
+def stage_title(goal, cap=80):
+    """A stage's title from its plan goal: the first sentence, before a leading `Name:`, cut at a word."""
+    t = str(goal or "").strip().split("\n")[0].strip()
+    t = re.split(r"(?<=[^.\s])\.(?:\s|$)", t)[0].strip()
+    m = re.match(r"^([^:`]{3,40}):\s", t)
+    if m:
+        t = m.group(1).strip()
+    if len(t) > cap:
+        t = t[:cap].rsplit(" ", 1)[0].rstrip(",;:- ") + "\u2026"
+    return t
+
+
+_plans = {}  # plan.json path -> ((mtime, size), titles)
+
+
+def plan_file_titles(path):
+    """Stage titles from runs/<run>/plan.json next to the engine log, [] when there is none."""
+    pj = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(path))), "runs", run_name(path), "plan.json")
+    try:
+        st = os.stat(pj)
+    except OSError:
+        _plans.pop(pj, None)
+        return []
+    key = (st.st_mtime, st.st_size)
+    hit = _plans.get(pj)
+    if hit and hit[0] == key:
+        return hit[1]
+    try:
+        with open(pj, encoding="utf-8") as f:
+            stages = (json.load(f) or {}).get("stages") or []
+        titles = [stage_title(x.get("goal") if isinstance(x, dict) else x) for x in stages]
+    except (OSError, ValueError, AttributeError):
+        titles = []
+    if len(_plans) > CACHE_MAX:
+        _plans.clear()
+    _plans[pj] = (key, titles)
+    return titles
+
+
+def plan_titles_in_log(n):
+    """Stage titles from a plan node's answer in the log, None when it kept none."""
+    for m in reversed(n["msgs"]):
+        d = m.get("data")
+        if isinstance(d, dict) and isinstance(d.get("stages"), list):
+            return [stage_title(x.get("goal") if isinstance(x, dict) else x) for x in d["stages"]]
+    return None
+
+
+STAGED = ("write", "checks", "review")
+
+
+def blocks_of(nodes, structured, plan_titles=()):
+    """Blocks in order, each with the arrow into it; and the move out of the last one. A write, checks or review
+    block names its stage (index, count, title: the plan in force, else plan.json); a review or verify block by the
+    family that wrote the last write is marked same_family."""
     blocks, pending = [], None
+    titles, writer = list(plan_titles or []), ""
     work = [n for n in nodes if n["step"] not in ("reset", "close")]
     for idx, n in enumerate(nodes):
         if n["step"] in ("reset", "close"):
             continue
+        if n["step"] in ("plan", "replan"):
+            titles = plan_titles_in_log(n) or titles
+        m = n["meta"]
+        si = m.get("stage") if n["step"] in STAGED and m.get("stages") else None
+        sn = m.get("stages") if si else None
+        st = (titles[si - 1] if si and len(titles) >= si else "") if si else None
         sessions = n["sessions"] or [None]
         for k, s in enumerate(sessions):
             if k == 0:
@@ -478,10 +538,16 @@ def blocks_of(nodes, structured):
             who = who_of(n, s)
             if arrow and arrow.get("cause") == "lane_out" and k > 0:
                 who["fallback"] = "new thread: %s was out" % (arrow["text"].split(" out")[0])
+            fam = (s or {}).get("family") or who.get("family") or ""
+            same = n["step"] in ("review", "verify") and bool(
+                (s or {}).get("flag") == "same_family" or (fam and writer and fam == writer))
+            if n["step"] == "write" and fam in FAMILY:
+                writer = fam
             blocks.append({
                 "node": n["id"], "k": k, "kind": n["step"], "label": label_of(n, k),
                 "stage": ("%d/%d" % (n["meta"]["stage"], n["meta"]["stages"])) if n["meta"].get("stages") else None,
-                "fix": n["meta"].get("fix"), "write": n["meta"].get("write"), "round": n["meta"].get("round"),
+                "stage_index": si, "stage_count": sn, "stage_title": st, "same_family": same,
+                "fix": n["meta"].get("fix"), "fixes": n["meta"].get("fixes"), "write": n["meta"].get("write"), "round": n["meta"].get("round"),
                 "t0": t0, "t1": t1, "secs": secs if secs is not None else (round(t1 - t0) if t0 and t1 else None),
                 "who": who, "tokens": (s or {}).get("tokens"), "result": res, "arrow": arrow,
                 "session": {"ref": (s or {}).get("ref") or None, "family": (s or {}).get("family") or "",
@@ -614,7 +680,7 @@ def run_timeline(path, alive=False, trace=None):
     """One run of a bead: why it started, its blocks with the arrows between them, how it ended."""
     recs = read(path)
     nodes, run, structured = nodes_of(recs)
-    blocks, pending, _ = blocks_of(nodes, structured)
+    blocks, pending, _ = blocks_of(nodes, structured, plan_file_titles(path))
     origin = ({k: run.get(k) or "" for k in ("started_because", "prev_run", "ask")} if run
               else legacy_origin(path, nodes))
     t0 = recs[0].get("t") if recs else None
@@ -660,7 +726,7 @@ def block_detail(path, node_id, k=0):
     """One block: its session, the checks of its round, the engine lines of its step, the step's answer."""
     recs = read(path)
     nodes, _, structured = nodes_of(recs)
-    blocks, _, _ = blocks_of(nodes, structured)
+    blocks, _, _ = blocks_of(nodes, structured, plan_file_titles(path))
     try:
         node_id, k = int(node_id), int(k or 0)
     except (TypeError, ValueError):
