@@ -1512,7 +1512,7 @@ class EngineTest(unittest.TestCase):
         verify = next(c[3] for c in self.bd_calls if c[:2] == ("comments", "add") and c[3].startswith("Verify (engine)"))
         self.assertIn("not a check here", verify)
         self.assertIn("which ruff: not found", verify)
-        self.assertIn("grep -w ruff", verify)
+        self.assertIn("git grep -w -I ruff", verify)
         causes = [json.loads(ln) for ln in self.eng.log_path.read_text().splitlines() if '"transition"' in ln]
         self.assertTrue(any(t["cause"] == "not_a_check" for t in causes))
 
@@ -1535,15 +1535,37 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertIn("ruff", self.ask()["question"])
 
-    def test_a_backticked_name_in_the_code_is_no_tool(self):
+    def test_a_tool_counts_only_backticked_or_after_a_run_verb(self):
         self.assertEqual(engine.tools_named("`UseCellBeside` handles a rotated slot; `justfile` has the recipe"), [])
-        self.assertEqual(engine.tools_named("nobody ran `shellcheck -x hooks/*.sh` or ruff"), ["shellcheck", "ruff"])
-        item = {"what": "`UseCellBeside` handles a rotated slot", "kind": "requirement"}
-        with mock.patch.object(engine, "tool_on_path", side_effect=self.no_ruff):
+        self.assertEqual(engine.tools_named("nobody ran `shellcheck -x hooks/*.sh` or linted with ruff"),
+                         ["shellcheck", "ruff"])
+        self.assertEqual(engine.tools_named("the biome transition fades in; no black screen between lots"), [])
+        self.assertEqual(engine.tools_named("`mypy` was not run; nobody checked with eslint"), ["mypy", "eslint"])
+
+    def test_prose_that_happens_to_name_a_tool_still_goes_to_the_verifier(self):
+        items = [{"what": "the biome transition fades in", "kind": "requirement"},
+                 {"what": "no black screen between lots", "kind": "requirement"}]
+        with mock.patch.object(engine, "tool_on_path", return_value=None):
+            rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, unchecked=items)],
+                                     "verify": [{"items": [verdict(1, "open", why="x"), verdict(2, "open", why="y")]}]})
+        self.assertEqual(rc, 2)
+        q = self.ask()["question"]
+        self.assertIn("biome transition", q)
+        self.assertIn("black screen", q)
+
+    def test_a_tool_the_tree_mentions_anywhere_still_goes_to_the_verifier(self):
+        cfg = self.wt / ".config"
+        cfg.mkdir()
+        (cfg / "dotnet-tools.json").write_text(json.dumps({"tools": {"csharpier": {"version": "0.30.0"}}}))
+        sh("git", "add", "-A", cwd=self.wt)
+        sh("git", "commit", "-qm", "tools", cwd=self.wt)
+        sh("git", "push", "-q", "origin", "HEAD:main", cwd=self.wt)
+        item = {"what": "nobody ran csharpier on src/", "kind": "tooling"}
+        with mock.patch.object(engine, "tool_on_path", return_value=None):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, unchecked=[item])],
                                      "verify": [STILL_OPEN]})
         self.assertEqual(rc, 2)
-        self.assertIn("UseCellBeside", self.ask()["question"])
+        self.assertIn("csharpier", self.ask()["question"])
 
     def test_only_the_unused_tool_item_is_dropped_the_rest_go_to_the_verifier(self):
         with mock.patch.object(engine, "tool_on_path", side_effect=self.no_ruff):

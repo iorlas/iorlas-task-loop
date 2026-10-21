@@ -148,11 +148,12 @@ engine drops any unchecked item that names the gate or a check (repo or stage) t
 nothing to add to them. Once a round ran every acceptance case green (the last stage, a fix) it also drops every
 `case` item, and that review is told a case is never unchecked (a case whose check does not prove its criterion is a
 finding). The planner writes no case for a criterion that names the gate.
-Before that verify ask, an item naming a tool (a known linter or formatter such as ruff, or a backticked command) that
-the repo neither configures (justfile, Makefile, `.task-loop.json`, the gate and checks, pre-commit/prek, CI workflows,
-mise or `.tool-versions`, package.json/pyproject, a config file named after it) nor installs (PATH) is dropped as
-`not a check here`, the grep and `which` result quoted in the Verify comment (transition `not_a_check`; lifesim-gfr.31.3
-'nobody ran ruff', tl-bxk.10.9); an item for a tool the repo uses goes on as before. Then one verifier call (delegate role `reviewer`: read-only on every rung, `--authored-by` the
+Before that verify ask, an item naming a tool (a backticked command, or a known linter or formatter such as ruff
+backticked or right after a run, lint, format or check verb; prose like "the biome transition" names none) that nothing
+in the tracked tree mentions (`git grep -w -I`, dot directories, CI, toolchain and agent files included), nor the
+engine's gate and checks, and that is not on PATH is dropped as `not a check here`, the grep and `which` result quoted
+in the Verify comment (transition `not_a_check`; lifesim-gfr.31.3 'nobody ran ruff', tl-bxk.10.9); an item for a
+tool the repo uses goes on as before. Then one verifier call (delegate role `reviewer`: read-only on every rung, `--authored-by` the
 writer's family) gets the task, the changed files, the evidence folder and the items, and answers per item: `settled`
 with the evidence quoted (the item is dropped), `wrong` with the defect (one fix round at land, counted in
 `engine.max_fix_rounds`; none left, the item goes to the owner naming the defect) or `open` (only a person can judge

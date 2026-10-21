@@ -83,19 +83,20 @@ KNOWN_TOOLS = {"ruff", "black", "flake8", "pylint", "mypy", "pyright", "isort", 
                "biome", "stylelint", "shellcheck", "shfmt", "hadolint", "yamllint", "markdownlint", "actionlint",
                "golangci-lint", "gofmt", "staticcheck", "clippy", "rustfmt", "rubocop", "ktlint", "detekt", "swiftlint",
                "clang-tidy", "clang-format", "cppcheck", "csharpier", "semgrep", "codespell", "vale", "pre-commit", "prek"}
-TOOL_FILES = ("justfile", "Justfile", ".justfile", "Makefile", "makefile", ".task-loop.json", ".pre-commit-config.yaml",
-              ".pre-commit-config.yml", "prek.toml", ".gitlab-ci.yml", "azure-pipelines.yml", ".circleci/config.yml",
-              "mise.toml", ".mise.toml", ".tool-versions", "package.json", "pyproject.toml", "setup.cfg", "tox.ini")
+RUN_VERB = r"(?:run|runs|ran|running|lint|lints|linted|linting|format|formats|formatted|check|checks|checked)"
 
 
 def tools_named(what):
-    """The tools an unchecked item names: a known linter or formatter, or the first word of a backticked command with
-    arguments (`ruff check tools`); a single backticked word (`UseCellBeside`) is a name in the code, no command."""
-    found = [w for w in re.findall(r"[a-z][a-z0-9+-]*", what.lower()) if w in KNOWN_TOOLS]
+    """The tools an unchecked item names: the first word of a backticked command with arguments (`ruff check tools`),
+    or a known linter or formatter backticked (`mypy`) or right after a run, lint, format or check verb ("ran ruff",
+    "checked with eslint"). Prose that only contains a tool's name ("the biome transition") names none."""
+    found = []
     for cmd in re.findall(r"`([^`]+)`", what):
         words = cmd.split()
-        if len(words) > 1 and re.fullmatch(r"[a-z][a-z0-9+-]*", words[0]):
-            found.append(words[0])
+        if (len(words) > 1 and re.fullmatch(r"[a-z][a-z0-9+-]*", words[0])) or cmd.strip().lower() in KNOWN_TOOLS:
+            found.append(words[0].lower())
+    rx = re.compile(r"\b%s\s+(?:(?:with|by|using|the)\s+)?([a-z][a-z0-9+-]*)" % RUN_VERB)
+    found += [w for w in rx.findall(what.lower()) if w in KNOWN_TOOLS]
     return list(dict.fromkeys(found))
 
 
@@ -104,26 +105,24 @@ def tool_on_path(name):
 
 
 def unused_tool(what, root, cfg):
-    """The evidence that every tool an item names is one the repo neither configures (task files, gate, checks,
-    pre-commit, CI, toolchain, a config file named after it) nor installs (PATH); "" when it names none or uses one."""
+    """The evidence that every tool an item names is one the repo does not use: nothing in the tracked tree mentions
+    it (`git grep -w -I`, dot directories, CI, toolchain and agent files included), nor the engine's gate and checks,
+    and it is not on PATH; "" when it names none or the repo uses one."""
     tools = tools_named(what)
     if not tools:
         return ""
-    root = Path(root)
-    files = [root / f for f in TOOL_FILES] + sorted((root / ".github" / "workflows").glob("*.y*ml"))
-    files = [f for f in files if f.is_file()]
-    text = {str(f.relative_to(root)): f.read_text(encoding="utf-8", errors="replace") for f in files}
-    text["engine gate/checks"] = " ".join([cfg.get("gate") or ""] + [str(c) for c in cfg.get("checks") or []])
+    engine_text = " ".join([cfg.get("gate") or ""] + [str(c) for c in cfg.get("checks") or []])
     said = []
     for t in tools:
-        rx = re.compile(r"(?<![\w-])%s(?![\w-])" % re.escape(t))
-        hits = [n for n, body in text.items() if rx.search(body)]
-        named = [p.name for p in root.iterdir() if t in p.name.lower()] if root.is_dir() else []
-        if hits or named or tool_on_path(t):
+        r = subprocess.run(["git", "grep", "-w", "-I", "-l", "-F", t], cwd=str(root), capture_output=True, text=True,
+                           encoding="utf-8", errors="replace")
+        if r.returncode not in (0, 1):  # no git tree to read: no evidence, the item stays
             return ""
-        said.append("`%s`: grep -w %s in %s: no match; no file named after it; which %s: not found" % (
-            t, t, ", ".join(sorted(text)), t))
-    return "not a check here: the repo neither configures nor installs it (%s)" % "; ".join(said)
+        if r.stdout.strip() or re.search(r"(?<![\w-])%s(?![\w-])" % re.escape(t), engine_text) or tool_on_path(t):
+            return ""
+        said.append("git grep -w -I %s: no match in the tracked tree nor the engine's gate and checks; which %s: "
+                    "not found" % (t, t))
+    return "not a check here: the repo does not use it (%s)" % "; ".join(said)
 
 
 def plan_checks(plan):
