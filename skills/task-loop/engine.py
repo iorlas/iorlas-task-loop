@@ -53,7 +53,7 @@ DEFAULTS = {
     "no_sandbox": False,              # the 0.6 name of `host`, still read
     "worker_rules": "",               # repo file the planner and writer read first (lifesim: docs/agents/codex.md)
     "brief_kb": 5,
-    "test_pattern": r"^\s*(def test_|async def test_|\[(Test|Fact|Theory|TestMethod|TestCase)\b|#\[test\]|(it|test)\(|func Test)",                    # a brief bigger than this gets a ⚠ (never cut: the bead may be too big)
+    "test_pattern": r"^\s*(def test_|async def test_|\[(Test|UnityTest|Fact|Theory|TestMethod|TestCase)\b|#\[test\]|(it|test)\(|func Test)",                    # a brief bigger than this gets a ⚠ (never cut: the bead may be too big)
 }
 
 # ---- output contracts -----------------------------------------------------------------------------------------------
@@ -1722,16 +1722,23 @@ class Engine:
                                                                           else "close", self.bead, rc))
 
 
+GHERKIN_TEST = re.compile(r"^\s*Scenario( Outline)?:")  # a use-case scenario (Reqnroll, lifesim-fld.26.10)
+
+
 def count_tests(diff, pattern):
-    """Tests added and removed in a unified diff: lines matching the repo's test pattern (engine.test_pattern)."""
-    rx = re.compile(pattern)
+    """Tests added and removed in a unified diff: lines matching the repo's test pattern (engine.test_pattern), and
+    Gherkin scenarios in .feature files."""
+    rx, feature = re.compile(pattern), False
     added = removed = 0
     for ln in diff.splitlines():
         if ln.startswith(("+++", "---")):
+            if not ln.rstrip().endswith("/dev/null"):  # a deleted file names itself on its --- line only
+                feature = ln.rstrip().endswith(".feature")
             continue
-        if ln.startswith("+") and rx.search(ln[1:]):
+        hit = (GHERKIN_TEST if feature else rx).search(ln[1:])
+        if ln.startswith("+") and hit:
             added += 1
-        elif ln.startswith("-") and rx.search(ln[1:]):
+        elif ln.startswith("-") and hit:
             removed += 1
     return added, removed
 

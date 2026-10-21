@@ -404,6 +404,18 @@ class EngineTest(unittest.TestCase):
                 "+++ b/T.cs\n+    [Fact]\n+    [Test]\n")
         self.assertEqual(engine.count_tests(diff, engine.DEFAULTS["test_pattern"]), (4, 1))
 
+    def test_a_unity_play_mode_test_counts(self):  # lifesim-d5f.59: a [UnityTest] read as tests_added=0
+        diff = ("+++ b/client/Assets/Tests/PlayMode/LiveSpeedBarTests.cs\n+        [UnityTest]\n"
+                "+        public IEnumerator SpeedButtonsChooseAndLightTheHostSpeed()\n")
+        self.assertEqual(engine.count_tests(diff, engine.DEFAULTS["test_pattern"]), (1, 0))
+
+    def test_gherkin_scenarios_count_in_feature_files_only(self):  # lifesim-fld.26.10: four scenarios read as 0
+        diff = ("+++ b/specs/Build.feature\n+  Scenario: a wall is painted\n+    Given a room\n"
+                "+  Scenario Outline: <tint> paint\n-  Scenario: an old one\n"
+                "+++ b/docs/notes.md\n+Scenario: prose, not a test\n"
+                "+++ b/T.cs\n+    [Test]\n")
+        self.assertEqual(engine.count_tests(diff, engine.DEFAULTS["test_pattern"]), (3, 1))
+
     def test_writer_is_told_the_repo_worker_rules_and_never_to_run_the_gate(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
                                 worker_rules="docs/agents/codex.md", gate=PY + ' -c "pass"')
