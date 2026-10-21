@@ -1,5 +1,8 @@
 # task-loop as our own AI factory: attended now, unattended later (design, 2026-10-18)
 
+> Superseded for planning by [the roadmap](../roadmap.md) (2026-10-21): a sequential `tl loop` replaces the central
+> dispatcher below.
+
 > Changed 2026-10-19 (task-loop 0.6.0, epic tl-bxk.8): there is no verify node and no judge node. Six lifesim runs
 > showed the light verifier adding false gaps and the judge deciding from JSON with no tools; acceptance is now a rule
 > (engine checks green, nothing blocking in a cross-family review that also lists unmet requirements). The tables
