@@ -77,7 +77,9 @@ skills/task-loop/SKILL.md        the method (read by the orchestrating session)
 skills/task-loop/tl.py           helper: actor, claim/stage/worker/land/close/block, slots, worktrees, dashboard
 skills/task-loop/loop.py         tl loop / next / stop: one sequential loop over the queue rule
 skills/task-loop/dash/server.py  dashboard server (stdlib)
-skills/task-loop/dash/index.html dashboard page (no build, no dependencies)
+skills/task-loop/dash/index.html dashboard page: the task view (no build, no dependencies)
+skills/task-loop/dash/timeline.py engine logs -> runs, blocks, arrows for the task view
+skills/task-loop/dash/classic.html the three-pane log viewer (/classic)
 hooks/hooks.json                 SessionStart: index session id -> transcript path
 tests/                           python3 -m unittest discover -s tests   (CI: 3 OS x Python 3.8 and 3.12)
 dev/release.py                   the only way to release: release lock, version from origin, suite, marketplace, install

@@ -380,6 +380,8 @@ def engine_events(path, t0=None, t1=None):
             d = json.loads(ln)
         except ValueError:
             continue
+        if d.get("kind") in ("end", "transition", "checks", "run"):  # the task view's records
+            continue
         e = {"t": d.get("t"), "kind": d.get("kind", "note"), "text": d.get("text", "")}
         if e["kind"] == "cmd":
             e["tool"], e["state"] = "sh", "ok"
@@ -402,7 +404,7 @@ def engine_runs(bead, t0, t1):
         start = first.get("t") or os.path.getmtime(path)
         if start < t0 - 5 or (t1 and start > t1 + 5):
             continue
-        tail = "\n".join(tail_lines(path, 4000)[-3:])
+        tail = "\n".join(tail_lines(path, 8000)[-8:])  # end, transition and warn records may follow the close
         closed = '"close: ' in tail
         st, m = status_of(path, closed)
         if closed:
