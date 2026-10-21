@@ -336,7 +336,7 @@ def stop_named(p, log, w):
     except subprocess.TimeoutExpired:
         with contextlib.suppress(OSError):
             os.killpg(p.pid, 9)
-    if tl.proc_alive(w["pid"], w.get("start") or ""):  # still the worker it named: its group id is still its own
+    if w["pgid"] != os.getpgrp() and tl.proc_alive(w["pid"], w.get("start") or ""):  # still the worker it named; never our own group
         with contextlib.suppress(OSError):
             os.killpg(w["pgid"], 9)
     with contextlib.suppress(Exception):
