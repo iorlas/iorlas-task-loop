@@ -37,6 +37,7 @@ from urllib.parse import parse_qs, urlparse
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+import graph  # noqa: E402
 import timeline  # noqa: E402
 from timeline import block_detail, run_timeline  # noqa: E402,F401  (the engine tests read them here)
 HOME = Path.home()
@@ -946,6 +947,89 @@ def api_tasks():
             "lanes": contract_lanes()}
 
 
+_queue_lock = threading.Lock()
+VENDOR = ("cytoscape.min.js", "dagre.min.js", "cytoscape-dagre.js")
+
+
+def _engine_dir():
+    d = str(HERE.parent)
+    if d not in sys.path:
+        sys.path.insert(0, d)
+
+
+def loop_queue(repo, beads, cfg):
+    """The queue rule costs seconds (bd ready, one bd show per epic) and beads change all day, so a page view never
+    waits for it: it gets the last answer (refreshed in the background every minute), or graph.local_queue() until
+    the first answer is in."""
+    key = "queue:" + repo
+    with _lock:
+        hit = _cache.get(key)
+        fresh = hit and time.time() - hit[0] < 60
+        if not fresh and key not in _busy:
+            _busy.add(key)
+            threading.Thread(target=_refresh_queue, args=(key, repo, beads, cfg), daemon=True).start()
+    return hit[1] if hit else graph.local_queue(beads, cfg)
+
+
+_busy = set()
+
+
+def _refresh_queue(key, repo, beads, cfg):
+    try:
+        val = _loop_queue(repo, beads, cfg)
+        with _lock:
+            _cache[key] = (time.time(), val)
+    finally:
+        with _lock:
+            _busy.discard(key)
+
+
+def _loop_queue(repo, beads, cfg):
+    """Ids the loop would take: loop.queue(), the loop's own rule, with its git fetch switched off (a page view
+    writes nothing); graph.local_queue() when loop.py cannot be loaded or bd fails."""
+    try:
+        _engine_dir()
+        import loop
+        import tl
+        with _queue_lock:
+            real, tl.fetch = tl.fetch, lambda *a, **k: None
+            try:
+                ranked, _ = loop.queue(repo)
+            finally:
+                tl.fetch = real
+        return {b["id"] for b, _ in ranked}
+    except Exception:
+        return graph.local_queue(beads, cfg)
+    except SystemExit:  # tl.bd exits when bd is not on PATH
+        return graph.local_queue(beads, cfg)
+
+
+def api_graph(repo=""):
+    """The Plan tab: one repo's open beads (plus the last day's closes) as nodes, blocking dependencies as edges."""
+    _last_seen[0] = time.time()
+    known = repos()
+    path = resolve_repo(repo, "") if repo else (known[0] if known else "")
+    names = [os.path.basename(p.rstrip("/\\")) for p in known]
+    if not path:
+        return {"repo": "", "repos": names, "nodes": [], "edges": [], "summary": {}, "error": "no such repo"}
+    beads = beads_of(path)
+
+    def build():
+        try:
+            _engine_dir()
+            import engine
+            cfg = engine.load_cfg(path)
+        except Exception:
+            cfg = {"pick_label": "auto", "skip_labels": []}
+        run = {t["id"] for t in api_tasks()["tasks"] if t.get("state") == "running"}
+        ask_ids = {b["id"] for b in beads if b.get("status") != "closed" and open_ask(b["id"])}
+        return graph.build(beads, cfg, loop_queue(path, beads, cfg), run, ask_ids,
+                           repo=os.path.basename(path.rstrip("/\\")))
+
+    out = cached("graph:" + path, 5, build)
+    return dict(out, repos=names)
+
+
 def api_task_timeline(repo, bead):
     """Every run of the bead, oldest first, each with its blocks and arrows."""
     paths = engine_logs(retain=False).get(bead, [])
@@ -1279,6 +1363,11 @@ def make_handler(port, addrs):
                     body = asks()
                 elif u.path == "/api/tasks":
                     body = api_tasks()
+                elif u.path == "/api/graph":
+                    body = api_graph(q.get("repo", ""))
+                elif u.path.startswith("/vendor/") and u.path[8:] in VENDOR:
+                    return self.send(200, (HERE / "vendor" / u.path[8:]).read_bytes(),
+                                     "application/javascript; charset=utf-8")
                 elif u.path == "/api/task-timeline":
                     body = api_task_timeline(q.get("repo", ""), q.get("id", ""))
                 elif u.path == "/api/block":
