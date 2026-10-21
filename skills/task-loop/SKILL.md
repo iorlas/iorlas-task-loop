@@ -75,7 +75,8 @@ Before claiming, run-task takes back what the engine itself left: a `tl-` claim 
 Claude session has a new actor name) is released, and a bead the engine blocked is reopened for a plain retry, or when
 a comment after the block answers the open ask. It stays blocked (`TAKEN: <why>`) while a person holds it, while an
 ask waits unanswered, when a person commented after the block with no ask open (they may have parked it), or while
-another bead blocks it.
+another bead blocks it. A `tl-` claim whose lease is live is another run-task of the bead, still running: `TAKEN`
+names it and its engine log; wait for it, never start a second one.
 
 Land is one bead at a time per repo (a lock across slots and sessions): fetch, rebase, gate, push. A red gate or a
 rebase conflict goes to a fix round outside the lock: the writer fixes it, every stage's checks run again (plus no
@@ -113,10 +114,15 @@ stops the land (lifesim-gfr.31.1 stopped on a stage-1 case that stage 2 ran gree
 Non-final stages are told a case the last stage runs is not unchecked;
 a requirement, number, deletion, link, case or tooling item stops the land with a verify ask; `other` items land and
 label the bead `needs-owner-check`. The review is told the gate runs at land and the passed checks are facts, and the
-engine drops any unchecked item that names the gate or a repo check that passed that round: the owner has nothing to
-add to them. The planner writes no case for a criterion that names the gate.
+engine drops any unchecked item that names the gate or a check (repo or stage) that passed that round: the owner has
+nothing to add to them. Once a round ran every acceptance case green (the last stage, a fix) it also drops every
+`case` item, and that review is told a case is never unchecked (a case whose check does not prove its criterion is a
+finding). The planner writes no case for a criterion that names the gate.
 
-Check groups run static → tests → acceptance (the plan's per-stage checks); a red group skips the rest. `when` runs a
+Check groups run static → tests → acceptance (the plan's per-stage checks), one at a time; a red group skips the rest.
+Every string command (checks, gate, land) runs under `bash -e -o pipefail`: a red command before a `;` or inside a pipe
+fails it; `! cmd` and `cmd || true` still pass. The planner is told to grep a file, not `cmd | grep -q` (an early
+exit kills `cmd` with SIGPIPE, exit 141). `when` runs a
 check only when the task changed a matching path; `retry` reruns a known flaky one. A repo check that passed on the
 same tree and base is reused; mark one `"cache": false` when it reads state git cannot see. Stage checks always run, but a top-level part of one (`&&` or `;`) that is a repo check which ran and passed earlier in the same round is not run again (lifesim's `just unity-tests && grep ...` cases), unless an `rm` comes before it in that command. The gate runs once, on the rebased
 tree at land, and the push gets `TASK_LOOP_GATED_TREE` (the tree it passed) so a pre-push hook can skip a second run.
@@ -164,7 +170,9 @@ bead's provenance.
 ## 2. Run the engine (per task)
 
 The engine does the task; you watch it. `tl run-task <id> --worktree "$WT" [--slot <name>]` in a background Bash job
-(several at once is fine, one per slot or worktree). It claims the bead, then: reset → plan → per stage (write →
+(several at once is fine, one per slot or worktree). Send its output to a log with `>>` or to one file per run: a
+second `> log` on the same path truncates a live run's log (the engine writes in append mode, so it then goes on from
+the cut, without a hole). It claims the bead, then: reset → plan → per stage (write →
 checks run by the engine → review by the other model family) → gate → land → close. Every AI step is a headless
 worker with a schema-checked answer; the close step always runs; the plan, findings and a Reflect line go into the
 bead. Engine settings: `.task-loop.json` → `engine` (gate, land, budgets). Every run appends one line to

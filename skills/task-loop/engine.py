@@ -16,6 +16,7 @@ import os
 import re
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -463,12 +464,15 @@ class Engine:
 
     # -- script helpers
     def sh(self, cmd, timeout=3600, check=False, save=None, env=None):
-        """A command: a string goes through the shell (profile commands), a list runs as is (no quoting rules)."""
+        """A command: a string goes through bash with -e and pipefail (checks, profile commands), so a red command in a
+        `;` list or a pipe fails it (lifesim-gfr.31.1: `just unity-check > log; ! grep ...` passed with unity-check
+        red); `! cmd` and `cmd || true` still pass. A list runs as is (no quoting rules)."""
         self.log("cmd", cmd if isinstance(cmd, str) else " ".join(cmd))
         # Its own process group, so a timeout stops the whole tree (dotnet build nodes, Unity) and not just the shell;
         # the worker env, so a check never inherits this launcher's Claude session.
         bash = shutil.which("bash") if isinstance(cmd, str) and os.name != "nt" else None  # plans write bash
-        p = subprocess.Popen(cmd, shell=isinstance(cmd, str), executable=bash, cwd=self.wt,
+        run = [bash, "-e", "-o", "pipefail", "-c", cmd] if bash else cmd  # Windows: cmd.exe, as before
+        p = subprocess.Popen(run, shell=isinstance(run, str), cwd=self.wt,
                              env=dict(child_env(), **(env or {})),
                              stdin=subprocess.DEVNULL,
                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=(os.name != "nt"))
@@ -586,14 +590,18 @@ class Engine:
 
     def engine_unproven(self, unchecked, checks):
         """The unchecked items the engine does not prove itself: one that names the gate (it runs at land, and a red gate
-        goes to a fix round) or a repo check that passed this round is dropped. lifesim-5ban.3 and lifesim-fld.27.3
-        stopped on verify asks for the gate, which the owner has nothing to add to."""
-        ran = [c["cmd"] for c in checks if c["exit"] == 0 and c["group"] != "acceptance"]
+        goes to a fix round) or a check that passed this round is dropped, and so is every case item once this round ran
+        all the plan's cases green (only the last stage and a fix run them). lifesim-5ban.3 and lifesim-fld.27.3 stopped
+        on verify asks for the gate; lifesim-gfr.31.1 on 'there is no nographics.out in evidence yet' after the case
+        that writes it passed."""
+        ran = [c["cmd"] for c in checks if c["exit"] == 0]
         names = [" ".join(x.split()).lower() for x in [self.cfg["gate"]] + ran if x.strip()]
+        cases = self.case_checks()
+        cases_ran = bool(cases) and all(c in ran for c in cases)
         out = []
         for u in unchecked:
             what = " ".join(u["what"].split()).lower()
-            if any(x in what for x in names):
+            if any(x in what for x in names) or (cases_ran and u["kind"] == "case"):
                 self.log("note", "unchecked item dropped, the engine runs it: %s" % u["what"][:200])
             else:
                 out.append(u)
@@ -989,6 +997,8 @@ class Engine:
                        "the stage goal and every requirement and acceptance criterion of the task" if last else
                        "the stage goal (later stages cover the rest of the task)")) +
                 ("\n" + self.where("review") if self.where("review") else "") + self.cases_text() +
+                ("The engine ran every case above with the checks, so a case is never an unchecked item; a case whose "
+                 "check does not prove its criterion is a finding.\n" if last and self.case_checks() else "") +
                 ("\nNobody has checked these yet (earlier stages or the writer could not; the engine's checks above ran "
                  "after them); put in your unchecked only what is still unproven:\n" + "".join(
                      "- %s (%s)\n" % (u["what"], u["kind"]) for u in open_items) if open_items else "") +
@@ -1562,7 +1572,10 @@ Read the code it names. Then plan.
 - For each stage: goal, the files it changes, the exact commands that prove it (tests, linters), and hard=true only
   when it is risky or subtle. Every check is a shell command that exits 0 when it proves the goal and non-zero when it
   does not: the engine reads only the exit code. "Expect empty" is `test -z "$(...)"` or `! grep ...`, never a bare
-  grep; a count is `test "$(... | wc -l)" -eq 25`, never a comment saying what to expect.
+  grep; a count is `test "$(... | wc -l)" -eq 25`, never a comment saying what to expect. A check runs under
+  `bash -e -o pipefail`: a red command before a `;` or inside a pipe fails it; `cmd || true` for one whose exit does
+  not matter. Grep a command's output from a file (`cmd > f 2>&1 && grep -q x f`), not a pipe: `grep -q` ends the
+  pipe early and the command dies of SIGPIPE (exit 141).
 - The engine sets every time limit and runs checks one at a time; never write timeouts, "run alone" or similar notes
   into a check.
 - cases: the acceptance cases. At least one per acceptance criterion of the task, each with the criterion it proves
@@ -1612,7 +1625,7 @@ REVIEW_PROMPT = """You review one stage of a task, from another model family tha
 </plan>
 Stage {n}: {goal}
 The work: `git diff {base}` and new files (the task's work since main, committed or not).
-The engine ran the checks outside any sandbox, and they all pass; these results are facts:
+The engine ran the checks outside any sandbox, one at a time, and they all pass; these results are facts:
 {checks}
 The engine runs the gate{gate} once, at land, on the tree rebased onto the latest base, before anything merges; a red
 gate (coverage included) goes to a fix round. The gate, the checks above and what they prove are never an unchecked item.
@@ -1655,7 +1668,9 @@ def reclaim(bead_id, repo):
         if not who.startswith("tl-"):
             return False, "claimed by %s" % who
         if who in tl.live_actors(repo) or (b.get("lease_expires_at") or "") >= time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()):
-            return False, "claimed by %s, which is still running" % who
+            logs = sorted((tl.config_dir() / "engine").glob("%s-*.jsonl" % bead_id))
+            return False, "another run of %s is still running as %s (a live claim)%s" % (
+                bead_id, who, "; its engine log: %s" % logs[-1] if logs else "")
         release = True
     reopen = False
     if b.get("status") == "blocked":
@@ -1686,7 +1701,26 @@ def reclaim(bead_id, repo):
     return True, ("reopened" if reopen else "released %s" % who if release else "")
 
 
+def append_output(stream):
+    """Write a stream that is a file at the end of that file, wherever another writer left it: a second
+    `run-task ... > log` on the same log truncates it, and a live run writing on at its old offset leaves a hole of NUL
+    bytes (lifesim-gfr.31.1). A terminal, a pipe or a stream with no descriptor is left as it is."""
+    try:
+        import fcntl
+    except ImportError:  # Windows: no file status flags
+        return
+    try:
+        fd = stream.fileno()
+        regular = stat.S_ISREG(os.fstat(fd).st_mode)
+    except (OSError, ValueError):  # no descriptor (a captured stream) or a closed one: nothing to keep in order
+        return
+    if regular:
+        fcntl.fcntl(fd, fcntl.F_SETFL, fcntl.fcntl(fd, fcntl.F_GETFL) | os.O_APPEND)
+
+
 def main(a):
+    for f in (sys.stdout, sys.stderr):
+        append_output(f)
     if hasattr(signal, "SIGTERM"):  # a stop (kill switch, coordinator) still runs the close step
         signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(Blocked("failed: stopped (SIGTERM)")))
     if not os.environ.get("TASK_LOOP_SESSION") and not tl.session_id():

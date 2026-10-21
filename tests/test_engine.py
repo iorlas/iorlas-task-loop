@@ -337,6 +337,14 @@ class EngineTest(unittest.TestCase):
         res = eng.run_checks({"checks": ['diff <(echo a) <(echo a)'], "files": []}, "s")
         self.assertEqual(res[0]["exit"], 0, res[0]["tail"])
 
+    def test_a_failing_command_in_a_check_fails_it_wherever_it_sits(self):
+        # lifesim-gfr.31.1: `just unity-check > log; ! grep 'error CS' log` passed with unity-check red: `;` dropped it
+        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        cases = {FALSE + "; true": 1, FALSE + " | cat": 1, "! " + FALSE: 0, FALSE + " || true": 0,
+                 "if " + FALSE + "; then exit 3; fi": 0, "true; true": 0}
+        res = eng.run_checks({"checks": list(cases), "files": []}, "s")
+        self.assertEqual({c["cmd"]: c["exit"] != 0 for c in res}, {k: v != 0 for k, v in cases.items()})
+
     def test_a_stop_during_a_check_stops_the_check_and_everything_it_started(self):
         if os.name == "nt":
             self.skipTest("POSIX process groups")
@@ -807,6 +815,31 @@ class EngineTest(unittest.TestCase):
         self.assertFalse(ok)
         self.assertEqual(up, [])
 
+    def test_a_live_claim_says_another_run_of_the_bead_holds_it_and_where_its_log_is(self):
+        # lifesim-gfr.31.1: a restarted session relaunched the bead; TAKEN read like a stale claim of its own session
+        logs = tl.config_dir() / "engine"
+        logs.mkdir(parents=True, exist_ok=True)
+        (logs / "t-1-20261021-063408.jsonl").write_text("")
+        ok, why, _ = self.reclaim({"status": "in_progress", "assignee": "tl-61ba34e7"}, live=["tl-61ba34e7"])
+        self.assertFalse(ok)
+        self.assertIn("another run of t-1 is still running as tl-61ba34e7", why)
+        self.assertIn(str(logs / "t-1-20261021-063408.jsonl"), why)
+
+    def test_the_engines_output_survives_another_writer_truncating_its_log(self):
+        # lifesim-gfr.31.1: a second `run-task ... > log` truncated the live run's log; the live engine kept writing at
+        # its old offset and the log began with TAKEN and a run of NUL bytes
+        if os.name == "nt":
+            self.skipTest("POSIX file status flags")
+        log = Path(self.tmp.name, "run.log")
+        with open(log, "w") as f:
+            f.write("CLAIMED t-1\n" * 50)
+            f.flush()
+            engine.append_output(f)
+            with open(log, "w") as other:
+                other.write("TAKEN\n")
+            f.write("[07:00] review\n")
+        self.assertEqual(log.read_bytes(), b"TAKEN\n[07:00] review\n")
+
     def test_reclaim_reopens_a_bead_the_engine_blocked_on_a_failed_run(self):
         ok, _, up = self.reclaim({"status": "blocked", "assignee": "tl-61ba34e7"}, [self.BLOCKED])
         self.assertTrue(ok)
@@ -1054,6 +1087,31 @@ class EngineTest(unittest.TestCase):
         r = dict(CLEAN, unchecked=[{"what": "%s on the whole tree" % unit, "kind": "case"}])
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r]},
                                 checks=[{"id": "unit", "cmd": unit, "group": "tests"}])
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertIsNone(self.ask())
+
+    def test_a_case_named_as_unchecked_once_the_last_stage_ran_every_case_lands_without_an_ask(self):
+        # lifesim-gfr.31.1: 'there is no nographics.out in evidence yet' reached the owner after the case writing it passed
+        plan = dict(PLAN, cases=[{"criterion": "f.txt exists", "check": HAS_F + " > evidence.out"}])
+        r = dict(CLEAN, unchecked=[{"what": "I could not run the case 'f.txt exists': there is no evidence.out yet",
+                                    "kind": "case"}])
+        rc, s = self.run_engine({"plan": [plan], "write": [WRITE], "review": [r]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertIsNone(self.ask())
+        self.assertIn("unchecked item dropped", self.eng.log_path.read_text())
+        self.assertIn("one at a time", s.prompts[2])
+        self.assertIn("a case is never an unchecked item", s.prompts[2])
+        self.assertIn("bash -e -o pipefail", s.prompts[0])
+
+    def test_a_case_item_with_no_case_in_the_plan_still_stops_the_land(self):
+        r = dict(CLEAN, unchecked=[{"what": "the filter that selects nothing", "kind": "case"}])
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r]})
+        self.assertEqual(rc, 2)
+        self.assertEqual(self.ask()["kind"], "verify")
+
+    def test_a_stage_check_that_passed_named_as_unchecked_lands_without_an_ask(self):
+        r = dict(CLEAN, unchecked=[{"what": "`%s` on the final tree" % HAS_F, "kind": "requirement"}])
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertIsNone(self.ask())
 
