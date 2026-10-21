@@ -1026,7 +1026,8 @@ class Engine:
         if len(ids) != 1 or self.auto_decided:
             return ""
         rid = re.compile(r"\b%s\b" % ids.pop())
-        lines = [ln.strip().lstrip("-* ").strip() for ln in self.brief_text().splitlines() if rid.search(ln)]
+        lines = [x for x in (ln.strip().lstrip("-* ").strip() for ln in self.brief_text().splitlines() if rid.search(ln))
+                 if not re.match(r"(\S+: )?(Blocked|Ask \(engine\)|Question|Engine paused|Reflect \(engine\))\b", x)]
         if not lines:
             return ""
         self.auto_decided = True

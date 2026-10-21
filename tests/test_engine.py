@@ -651,6 +651,14 @@ class EngineTest(unittest.TestCase):
         writes = [p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker"]
         self.assertIn("Accepted R10 stands", writes[1])
 
+    def test_the_engines_own_earlier_ask_in_the_brief_is_no_requirement(self):
+        old = [{"author": "tl-a", "text": "Blocked: owner decision needed\n\nQuestion: undo, or change R10?"}]
+        with mock.patch.object(tl, "comments", return_value=old):
+            rc, s = self.run_engine({"plan": [dict(PLAN, question=self.D5F58_Q)]})
+        self.assertEqual(rc, 2)
+        self.assertEqual(self.ask()["kind"], "decision")
+        self.assertEqual([c[0] for c in s.calls], ["planner"])
+
     def test_a_question_naming_two_requirements_the_brief_quotes_is_still_an_ask(self):
         owner = [{"author": "Denis Tomilin", "text": "Accepted: R3 keep saves forever; R7 drop them after a week."}]
         with mock.patch.object(tl, "comments", return_value=owner):
