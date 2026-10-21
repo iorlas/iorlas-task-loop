@@ -41,6 +41,14 @@ class FakeBd:
     def __call__(self, *a, cwd=None, check=False):
         self.calls.append(a)
         out, rc = "", 0
+        if a[0] == "update" and ("--set-metadata" in a or "--unset-metadata" in a):
+            meta = (self.beads.get(a[1]) or self.slots.get(a[1]) or {}).setdefault("metadata", {})
+            for i, x in enumerate(a[:-1]):
+                if x == "--set-metadata":
+                    k, _, v = a[i + 1].partition("=")
+                    meta[k] = v
+                elif x == "--unset-metadata":
+                    meta.pop(a[i + 1], None)
         if a[0] == "ready":
             label = a[a.index("--label") + 1] if "--label" in a else None
             out = json.dumps([b for b in self.beads.values() if b["status"] == "open"
@@ -64,7 +72,7 @@ class FakeBd:
         elif a[0] == "update" and ("--status" in a or "--assignee" in a):
             for flag, key in (("--status", "status"), ("--assignee", "assignee")):
                 if flag in a:
-                    self.beads[a[1]][key] = a[a.index(flag) + 1]
+                    (self.beads.get(a[1]) or self.slots[a[1]])[key] = a[a.index(flag) + 1]
         return mock.Mock(returncode=rc, stdout=out, stderr="")
 
 
@@ -240,7 +248,9 @@ class FakeChild:
         self.terminated = True
 
 
-class Loop(Base):
+class LoopBase(Base):
+    """The loop with run-task faked (FakeChild) and slot setup skipped; no tests of its own."""
+
     def setUp(self):
         super().setUp()
         self.clock = Clock()
@@ -269,6 +279,8 @@ class Loop(Base):
         f = loop.paths(str(self.repo))["log"]
         return [json.loads(x) for x in f.read_text().splitlines()] if f.exists() else []
 
+
+class Loop(LoopBase):
     def test_runs_ready_beads_in_a_row_each_in_a_free_slot_then_drains(self):
         bd = self.beads({"x-1": [rec("landed")], "x-2": [rec("landed")], "x-3": [rec("landed")]})
         self.assertEqual(self.run_loop(), 0)

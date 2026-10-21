@@ -12,6 +12,7 @@
   tl.py close ID [--reason R]                   close the bead, record it
   tl.py block ID --why TEXT                     block the bead with a question, record it
   tl.py slot list|take|release|reset|setup ...  slots (see SKILL.md, Slots)
+  tl.py slot hold S --why TEXT [--for MIN]      keep the loop and run-task off a slot (a person, screenshots)
   tl.py worktree start|sunset ...               one worktree per loop session when slots are off
   tl.py usage '<plan.windows JSON>'             feed get_usage to delegate (every 20 min while an engine runs)
   tl.py trace [ID] [--last N] [--json]          engine runs and every worker session of each (for reflection)
@@ -370,10 +371,38 @@ def slot_beads(repo):
 def cmd_slot(a):
     repo = repo_root()
     cfg = profile_slots(repo)
-    if a.op == "list":
+    if a.op == "list":  # NAME BEAD STATUS HOLDER WHY ENGINE DIR
         for b in slot_beads(repo):
             name = b["title"].split()[-1]
-            print("\t".join([name, b["id"], b.get("status", ""), b.get("assignee") or "-", slot_dir(repo, name, cfg)]))
+            m, hold, d = b.get("metadata") or {}, slot_hold(b), slot_dir(repo, name, cfg)
+            held = b.get("status") == "in_progress" or hold
+            holder = (m.get("held_by") or b.get("assignee") or "?") if held else "-"
+            why = ("%s (hold until %s)" % (hold["why"], hold["until"]) if hold else
+                   "%s since %s" % (m.get("held_why") or "?", m.get("held_since") or "?") if held else "-")
+            print("\t".join([name, b["id"], b.get("status", ""), holder, why, engine_busy(d) or "-", d]))
+        return 0
+    if a.op == "hold":  # a slot for something that is no bead (screenshots, a person): the loop and run-task keep off
+        if not a.name or not a.why:
+            sys.exit("tl: tl slot hold NAME --why TEXT [--for MIN]")
+        b = slot_bead(repo, a.name)
+        if not b:
+            sys.exit("tl: no slot " + a.name)
+        d = slot_dir(repo, a.name, cfg)
+        mine = (b.get("metadata") or {}).get("held_by") == actor()
+        busy = engine_busy(d) or ("" if mine or b.get("status") == "open" else
+                                  "held by %s" % ((b.get("metadata") or {}).get("held_by") or b.get("assignee")))
+        hold = slot_hold(b)
+        if not busy and hold and not mine:
+            busy = "held by %s until %s: %s" % (hold["by"], hold["until"], hold["why"])
+        if busy:
+            print("BUSY: slot %s %s" % (a.name, busy))
+            return 1
+        if b.get("status") == "open":
+            bd("update", b["id"], "--claim", cwd=repo)
+        until = now() + float(a.for_min if a.for_min is not None else 60) * 60
+        mark_held(repo, b["id"], a.why, until)
+        event("slot-hold", "", slot=a.name, slot_bead=b["id"], why=a.why, until=until, repo=repo)
+        print("HELD %s until %s: %s" % (a.name, stamp(until), a.why))
         return 0
     if a.op == "init":  # once per repo: the slot beads and their worktrees
         n = int(a.n or cfg.get("count") or 0)
@@ -397,15 +426,26 @@ def cmd_slot(a):
             print(name + "\t" + d)
         return 0
     if a.op == "take":  # claim the first free slot; prints NAME DIR BEAD
-        got = take_slot(repo, cfg)
+        got = take_slot(repo, cfg, "tl slot take")
         print("\t".join(got) if got else "NONE")
         return 0 if got else 1
     if a.op == "release":
+        busy = engine_busy(slot_dir(repo, a.name, cfg)) if a.name else ""
+        if busy and not a.force:
+            print("BUSY: slot %s: %s; it frees itself when that run ends (--force to release anyway)" % (a.name, busy))
+            return 1
         if not release_slot(repo, a.name):
             sys.exit("tl: no slot " + str(a.name))
         return 0
     if a.op == "reset":  # per task: a clean tree on a fresh task branch; ignored setup output stays
         d = slot_dir(repo, a.name, cfg)
+        busy = engine_busy(d)  # never commit or switch branches under a running engine (2026-10-21, lifesim-5ar.7)
+        hold = slot_hold(slot_bead(repo, a.name) or {})
+        if not busy and hold and hold["by"] != actor() and not a.force:
+            busy = "held by %s until %s: %s" % (hold["by"], hold["until"], hold["why"])
+        if busy:
+            print("BUSY: slot %s: %s; not reset" % (a.name, busy))
+            return 4
         gd = git("rev-parse", "--git-dir", cwd=d)
         if gd and any(os.path.isdir(os.path.join(d, gd, x)) for x in ("rebase-merge", "rebase-apply")):
             git("rebase", "--abort", cwd=d)
@@ -442,29 +482,128 @@ def cmd_slot(a):
     return 2
 
 
-def take_slot(repo, cfg):
-    """(name, dir, slot bead) of the first free slot this session could claim, or None."""
+def take_slot(repo, cfg, why="tl loop"):
+    """(name, dir, slot bead) of the first free slot this session could claim, or None. Free: its bead open, no hold,
+    and no live engine or worker in its worktree (a run started without the slot bead, an older engine)."""
     for b in slot_beads(repo):
-        if b.get("status") != "open":
+        name = b["title"].split()[-1]
+        d = slot_dir(repo, name, cfg)
+        if b.get("status") != "open" or slot_hold(b) or engine_busy(d):
             continue
         if bd("update", b["id"], "--claim", cwd=repo).returncode != 0:
             continue
         if (show(b["id"], cwd=repo).get("assignee") or actor()) != actor():
             continue
-        name = b["title"].split()[-1]
-        d = slot_dir(repo, name, cfg)
+        mark_held(repo, b["id"], why)
         event("slot-take", "", slot=name, slot_bead=b["id"], worktree=d, repo=repo)
         return name, d, b["id"]
     return None
 
 
+def take_named_slot(repo, name, cfg, why):
+    """(slot bead, "") when this session now holds slot `name`, or (None, why not): `slot S held by X since T`."""
+    b = slot_bead(repo, name)
+    if not b:
+        return None, "no slot %s on %s (tl slot list)" % (name, HOST)
+    m, hold = b.get("metadata") or {}, slot_hold(b)
+    if hold and hold["by"] != actor():
+        return None, "slot %s held by %s since %s until %s: %s" % (name, hold["by"], hold["since"], hold["until"],
+                                                                    hold["why"])
+    busy = engine_busy(slot_dir(repo, name, cfg))
+    if busy:
+        return None, "slot %s busy: %s" % (name, busy)
+    if b.get("status") != "open" and (b.get("assignee") or "") != actor() or \
+            bd("update", b["id"], "--claim", cwd=repo).returncode != 0 or \
+            (show(b["id"], cwd=repo).get("assignee") or actor()) != actor():
+        b = show(b["id"], cwd=repo) or b
+        m = b.get("metadata") or {}
+        return None, "slot %s held by %s since %s (%s)" % (name, m.get("held_by") or b.get("assignee") or "?",
+                                                           m.get("held_since") or "?", m.get("held_why") or "no reason")
+    mark_held(repo, b["id"], why)
+    event("slot-take", "", slot=name, slot_bead=b["id"], worktree=slot_dir(repo, name, cfg), repo=repo)
+    return b["id"], ""
+
+
 def release_slot(repo, name):
-    b = next((x for x in slot_beads(repo) if x["title"].split()[-1] == name), None)
+    b = slot_bead(repo, name)
     if not b:
         return False
     bd("unclaim", b["id"], cwd=repo)
+    bd("update", b["id"], *sum((["--unset-metadata", k] for k in HELD_KEYS), []), cwd=repo)
     event("slot-release", "", slot=name, slot_bead=b["id"], repo=repo)
     return True
+
+
+def slot_bead(repo, name):
+    return next((x for x in slot_beads(repo) if x["title"].split()[-1] == name), None)
+
+
+HELD_KEYS = ("held_by", "held_since", "held_why", "hold_until")
+
+
+def stamp(t):
+    return time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(t))
+
+
+def mark_held(repo, bead_id, why, until=0):
+    """Who holds a slot, since when and why, on its bead: tl slot list and a refused run-task read them. `until`: a hold
+    (tl slot hold), which outlives the bead's lease."""
+    sets = ["held_by=" + actor(), "held_since=" + stamp(now()), "held_why=" + why]
+    args = sum((["--set-metadata", x] for x in sets), [])
+    args += ["--set-metadata", "hold_until=%d" % until] if until else ["--unset-metadata", "hold_until"]
+    bd("update", bead_id, *args, cwd=repo)
+
+
+def slot_hold(b):
+    """{by, since, why, until} of a slot's hold that has not expired, else None."""
+    m = (b or {}).get("metadata") or {}
+    try:
+        until = float(m.get("hold_until") or 0)
+    except ValueError:
+        until = 0
+    if until <= now():
+        return None
+    return {"by": m.get("held_by") or "?", "since": m.get("held_since") or "?", "why": m.get("held_why") or "",
+            "until": stamp(until)}
+
+
+# ---- the engine lock: a running engine in a worktree ------------------------------------------------------------------
+# run-task writes <worktree>/.task/engine.lock (pid, bead, the delegate call's pid); the loop, tl slot reset and another
+# run-task keep off a worktree whose lock names a live process, whatever the slot bead says.
+
+def engine_lock_path(wt):
+    return Path(wt) / ".task" / "engine.lock"
+
+
+def engine_busy(wt):
+    """What runs in this worktree ("engine pid N runs BEAD since T", "worker pid N of BEAD outlived its engine"), or ""."""
+    try:
+        lock = json.loads(engine_lock_path(wt).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    pid = lock.get("pid")
+    if pid and int(pid) != os.getpid() and pid_alive(pid):
+        return "engine pid %s runs %s since %s" % (pid, lock.get("bead") or "?", stamp(float(lock.get("started") or 0)))
+    left = [w for w in [lock.get("route_pid")] + list(lock.get("workers") or []) if w and int(w) != os.getpid()
+            and pid_alive(w)]
+    if left:
+        return "worker pid %s of %s outlived its engine" % (",".join(str(w) for w in left), lock.get("bead") or "?")
+    return ""
+
+
+def pid_alive(pid):
+    if not pid:
+        return False
+    if os.name == "nt":  # os.kill(pid, 0) terminates a process on Windows instead of probing it
+        r = subprocess.run(["tasklist", "/FI", "PID eq %d" % int(pid), "/NH"], capture_output=True, text=True)
+        return str(pid) in r.stdout
+    try:
+        os.kill(int(pid), 0)
+        return True
+    except PermissionError:
+        return True
+    except (OSError, ValueError):
+        return False
 
 
 def inputs_hash(d, patterns):
@@ -706,11 +845,13 @@ def main(argv=None):
     p.add_argument("id")
     p.add_argument("--why", required=True)
     p = sp.add_parser("slot")
-    p.add_argument("op", choices=["list", "init", "take", "release", "reset", "setup"])
+    p.add_argument("op", choices=["list", "init", "take", "release", "reset", "setup", "hold"])
     p.add_argument("name", nargs="?")
     p.add_argument("--bead")
     p.add_argument("--n")
     p.add_argument("--force", action="store_true")
+    p.add_argument("--why", help="hold: what the slot is held for (shown by tl slot list)")
+    p.add_argument("--for", dest="for_min", type=float, help="hold: minutes until it expires (default 60); hold again to renew")
     p = sp.add_parser("worktree")
     p.add_argument("op", choices=["start", "sunset"])
     p.add_argument("--self-too", action="store_true")

@@ -258,7 +258,7 @@ container); the session that starts it only watches it.
 
 - **Start:** `tl loop [--repo DIR] [--max-beads N] [--until HH:MM] [--wait-slot-min M] [--wait-drained]`. One loop per
   repo per machine. Each pass: `bd reclaim` of tl- actors' lapsed claims only (never a person's), take any free slot (none free: wait with backoff, a line every M minutes;
-  slots off: the loop's one worktree), pick by the queue rule, claim (taken → the next bead), `tl slot reset`, then
+  slots off: the loop's one worktree; never a held slot or one whose worktree has a live engine, see Slots), pick by the queue rule, claim (taken → the next bead), `tl slot reset`, then
   `tl run-task` as a child with its own log, release the slot, record the outcome, next pass. `--until`: no bead
   starts after that time. No ready bead: `DRAINED`, exit 0 (`--wait-drained`: look again every 5 minutes).
 - **Outcomes** (`run-task --outcome-file`, also its last stdout line as JSON): `landed` → next. `parked` (an ask was
@@ -279,6 +279,9 @@ container); the session that starts it only watches it.
 - **Leases:** the loop heartbeats the slot bead and the task bead from the slot take to the release (a slow slot
   setup included); run-task heartbeats both too (`TASK_LOOP_SLOT_BEAD`), so a loop killed with SIGKILL leaves its
   slot held until the running bead ends, then the lease lapses and `bd reclaim` frees it.
+- **Stopped means stopped:** a SIGTERM to the engine (`tl stop --now`, Ctrl-C to the loop) sends SIGTERM to the running
+  delegate call (route.py stops its worker, which runs in a process group of its own), waits 10 s, then SIGKILLs every
+  process of that call's tree. A worker that still lives is logged and keeps the slot busy (engine lock) until it ends.
 
 The queue rule is `.task-loop.json` → `engine`; the defaults take every ready bead:
 
@@ -305,7 +308,20 @@ local to one machine, hence the host in the title.
   `wip/<slot>/<time>` if detached) before the next task's branch is checked out.
 - Setup runs again only when a file in `setup_inputs` changed; when it is heavy and several slots could rerun it at
   once, the profile's setup command must queue itself (a lock or a slot limit of its own).
-- `tl slot list` shows each slot, its bead, holder and folder.
+- **A hand run holds its slot too:** `tl run-task ID --slot S` (no `--worktree` needed: the slot is the worktree) takes
+  S's bead as the loop does, heartbeats it and releases it when the run ends, whatever the outcome (a stop included).
+  Someone else holding S: `TAKEN: slot S held by <holder> since <t> (<why>)`, nothing runs. A run the loop started
+  (`TASK_LOOP_SLOT_BEAD` set) uses the loop's take and does not take or release again.
+- **Engine lock:** every run-task writes `<worktree>/.task/engine.lock` (pid, bead, the delegate call's pid) and removes
+  it at the end. The loop's slot choice, `tl slot reset` (exit 4, `BUSY`), `tl slot release` (without `--force`) and
+  another run-task keep off a worktree whose lock names a live process, even when the slot bead is open: a run started
+  without `--slot`, or by an older engine, is never committed over or switched to another branch.
+- **Hold** a slot for something that is no bead (screenshots, a person working in it):
+  `tl slot hold S --why TEXT [--for MIN]` (default 60 minutes; hold again to renew), `tl slot release S` to end it. A
+  hold outlives the bead's lease; the loop, run-task and `tl slot reset` keep off it until it expires. A slot in use
+  cannot be held.
+- `tl slot list`: name, bead, status, holder, why (and since when, or until when for a hold), the live engine if any,
+  folder.
 
 Slots off: one worktree per loop session (`.worktrees/loop-<session>`), made at start and reused for every task;
 never one worktree per task. `tl worktree sunset` removes loop worktrees whose session holds no lease, never a dirty

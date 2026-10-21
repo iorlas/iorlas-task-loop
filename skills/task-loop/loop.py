@@ -143,19 +143,7 @@ def write_state(repo, **st):
     os.replace(tmp, f)
 
 
-def pid_alive(pid):
-    if not pid:
-        return False
-    if os.name == "nt":  # os.kill(pid, 0) terminates a process on Windows instead of probing it
-        r = subprocess.run(["tasklist", "/FI", "PID eq %d" % int(pid), "/NH"], capture_output=True, text=True)
-        return str(pid) in r.stdout
-    try:
-        os.kill(int(pid), 0)
-        return True
-    except PermissionError:
-        return True
-    except (OSError, ValueError):
-        return False
+pid_alive = tl.pid_alive
 
 
 def stop_mode(repo):
@@ -406,9 +394,11 @@ def passes(repo, a, started):
                     later[bid] = clock() + PAUSE_RETRY
                     continue
                 beat.add(bid)
-                if slots and prepare(repo, name, b["id"]) != 0:
+                rc = prepare(repo, name, b["id"]) if slots else 0
+                if rc != 0:
                     tl.bd("unclaim", b["id"], cwd=repo)
-                    r = {"outcome": "failed", "why": "failed: tl slot reset %s did not give a clean tree" % name}
+                    r = {"outcome": "failed", "why": "failed: tl slot reset %s %s" % (
+                        name, "found the slot busy (a live engine or a hold)" if rc == 4 else "did not give a clean tree")}
                 else:
                     r = run_bead(repo, b, name, d, slot_bead, started)
                 record(repo, b["id"], name, r)

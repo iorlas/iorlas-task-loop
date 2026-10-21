@@ -225,6 +225,8 @@ def run_proc(cmd, cwd, timeout, log_path, on_line=None):
     with open(log_path, "ab") as log:
         p = subprocess.Popen(cmd, cwd=cwd, env=child_env(), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                              stderr=log, start_new_session=(os.name != "nt"))
+        if LOCK:
+            LOCK.note(route_pid=p.pid)
 
         def read():
             for raw in p.stdout:
@@ -240,13 +242,132 @@ def run_proc(cmd, cwd, timeout, log_path, on_line=None):
         try:
             p.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
-            kill_tree(p)
+            stop_tree(p, log)
             return None, time.time() - t
         except BaseException:  # stopped: never leave the worker running
-            kill_tree(p)
+            stop_tree(p, log)
             raise
+        finally:
+            if LOCK:
+                LOCK.note(route_pid=None)
         reader.join(10)
     return (p.returncode, "".join(lines)), time.time() - t
+
+
+STOP_GRACE = 10  # seconds route.py gets to stop its worker after a SIGTERM, before everything is SIGKILLed
+
+
+def stop_tree(p, log=None):
+    """Stop a delegate call and its worker. route.py runs the worker in a process group of its own and stops it on
+    SIGTERM, never on SIGKILL: a SIGKILL to route.py's group alone orphaned the lifesim-5ar.7 writer, which kept editing
+    the slot after its engine stopped (2026-10-21). So: note the whole tree first, SIGTERM route.py, give it STOP_GRACE,
+    then SIGKILL the group of every process in the tree. A survivor is written to the log and kept in the engine lock,
+    so the slot stays busy while it lives. delegate does not tell its caller the worker's pid; the tree is the way."""
+    if os.name == "nt":
+        kill_tree(p)
+        return []
+    tree = descendants(p.pid)
+    with contextlib.suppress(OSError):
+        os.killpg(p.pid, signal.SIGTERM)
+    try:
+        p.wait(timeout=STOP_GRACE)
+    except subprocess.TimeoutExpired:
+        pass
+    for pid, pgid in [(p.pid, p.pid)] + tree:
+        for kill in (lambda: os.killpg(pgid, 9), lambda: os.kill(pid, 9)):
+            with contextlib.suppress(OSError):
+                kill()
+    with contextlib.suppress(Exception):
+        p.wait(timeout=5)
+    end, left = time.time() + 2, [pid for pid, _ in tree]
+    while left and time.time() < end:
+        left = [pid for pid in left if tl.pid_alive(pid) and not zombie(pid)]
+        if left:
+            time.sleep(0.05)
+    if left:
+        if log:
+            log.write(("\u26a0 worker pid %s outlived the stop of its delegate call\n" % left).encode())
+        if LOCK:
+            LOCK.note(workers=left)
+    return left
+
+
+def descendants(pid):
+    """[(pid, pgid)] of every process under `pid`, from one `ps` (POSIX)."""
+    try:
+        out = subprocess.run(["ps", "-A", "-o", "pid=,ppid=,pgid="], capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return []
+    kids = {}
+    for ln in out.splitlines():
+        f = ln.split()
+        if len(f) == 3 and all(x.isdigit() for x in f):
+            kids.setdefault(int(f[1]), []).append((int(f[0]), int(f[2])))
+    found, todo = [], [pid]
+    while todo:
+        for k in kids.get(todo.pop(), []):
+            if k not in found:
+                found.append(k)
+                todo.append(k[0])
+    return found
+
+
+def zombie(pid):
+    try:
+        r = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return r.stdout.strip().startswith("Z")
+
+
+class EngineLock:
+    """<worktree>/.task/engine.lock while run-task runs there: {pid, bead, slot, started, route_pid, workers}. Another
+    run-task, the loop and tl slot reset read it (tl.engine_busy) and keep off a live one. A worker that outlived its
+    stop keeps the lock (pid 0) until it is gone."""
+
+    def __init__(self, wt, bead, slot=""):
+        self.path, self.data = tl.engine_lock_path(wt), {"pid": os.getpid(), "bead": bead, "slot": slot or "",
+                                                         "started": time.time(), "route_pid": None, "workers": []}
+
+    def take(self):
+        """"" when this run holds the worktree now, else what holds it."""
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        for _ in range(3):
+            busy = tl.engine_busy(self.path.parent.parent)
+            if busy:
+                return busy
+            try:  # created only if absent: two runs starting at once cannot both win
+                os.close(os.open(str(self.path), os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+            except FileExistsError:
+                with contextlib.suppress(OSError):  # a dead run's lock (engine_busy said so): replaced
+                    if not tl.engine_busy(self.path.parent.parent):
+                        self.path.unlink()
+                continue
+            self.write()
+            return ""
+        return "another run took the engine lock at the same time"
+
+    def write(self):
+        tmp = self.path.with_name(self.path.name + ".%d.tmp" % os.getpid())
+        tmp.write_text(json.dumps(self.data), encoding="utf-8")
+        os.replace(tmp, self.path)
+
+    def note(self, **kw):
+        self.data.update(kw)
+        with contextlib.suppress(OSError):
+            self.write()
+
+    def release(self):
+        left = [w for w in self.data.get("workers") or [] if tl.pid_alive(w)]
+        with contextlib.suppress(OSError):
+            if left:
+                self.data.update(pid=0, route_pid=None, workers=left)
+                self.write()
+            else:
+                self.path.unlink()
+
+
+LOCK = None  # this process's EngineLock while run-task runs
 
 
 def kill_tree(p):
@@ -2021,7 +2142,10 @@ def report(a, rec):
 
 
 def main(a):
-    rc = run_main(a)
+    try:
+        rc = run_main(a)
+    except Blocked as b:  # a stop (SIGTERM) before the engine ran: the slot and the lock are already given back
+        rc = {"v": 1, "outcome": "failed", "bead": a.id, "why": b.why}
     if isinstance(rc, dict):  # stopped before the engine ran: nothing in the bead changed
         report(a, rc)
         return 1
@@ -2038,6 +2162,8 @@ def run_main(a):
     repo = tl.repo_root()
     cfg = load_cfg(repo)
     wt = a.worktree
+    if not wt and a.slot:  # the slot is the worktree
+        wt = tl.slot_dir(repo, a.slot, tl.profile_slots(repo))
     if not wt:
         r = subprocess.run([sys.executable, str(Path(__file__).with_name("tl.py")), "worktree", "start"],
                            capture_output=True, text=True, encoding="utf-8", errors="replace")
@@ -2050,6 +2176,42 @@ def run_main(a):
         print("tl: %s is the main checkout; run a task in a slot or a worktree (tl slot / tl worktree start)" % wt,
               file=sys.stderr)
         return {"v": 1, "outcome": "failed", "bead": a.id, "why": "failed: %s is the main checkout" % wt}
+    if a.dry_run:
+        return run_bead(a, repo, cfg, wt)
+    global LOCK
+    took = ""
+    try:
+        # a hand run takes its slot's bead as the loop does; one the loop started (TASK_LOOP_SLOT_BEAD) has it already
+        if a.slot and not os.environ.get("TASK_LOOP_SLOT_BEAD"):
+            took, why = tl.take_named_slot(repo, a.slot, tl.profile_slots(repo), "run-task " + a.id)
+            if not took:
+                print("TAKEN: %s" % why)
+                return {"v": 1, "outcome": "taken", "bead": a.id, "why": why}
+            os.environ["TASK_LOOP_SLOT_BEAD"] = took  # the engine's heartbeat keeps it
+        lock = EngineLock(wt, a.id, a.slot)
+        busy = lock.take()
+        if busy:
+            why = "worktree %s: %s" % (wt, busy)
+            print("TAKEN: %s" % why)
+            return {"v": 1, "outcome": "taken", "bead": a.id, "why": why}
+        LOCK = lock
+        return run_bead(a, repo, cfg, wt)
+    finally:
+        old = signal.signal(signal.SIGTERM, signal.SIG_IGN) if hasattr(signal, "SIGTERM") and \
+            threading.current_thread() is threading.main_thread() else None
+        try:
+            if LOCK:
+                LOCK.release()
+                LOCK = None
+            if took:
+                os.environ.pop("TASK_LOOP_SLOT_BEAD", None)
+                tl.release_slot(repo, a.slot)
+        finally:
+            if old is not None:
+                signal.signal(signal.SIGTERM, old)
+
+
+def run_bead(a, repo, cfg, wt):
     if not a.dry_run:
         ok, why = reclaim(a.id, repo)
         if not ok:
