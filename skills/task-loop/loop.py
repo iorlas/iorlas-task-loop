@@ -385,6 +385,8 @@ def passes(repo, a, started):
         r, bid = None, ""
         beat = Beat(slot_bead)
         try:
+            if os.path.isdir(d):  # from the take to run-task's own lock: no hand run gets in, the slot reset included
+                tl.loop_lock(d, name, slot_bead)
             for b in cands:
                 bid = b["id"]
                 # a paused run leaves its bead open and still assigned: released here when that run is gone, as run-task does
@@ -409,6 +411,7 @@ def passes(repo, a, started):
                 r = None
         finally:
             beat.stop()
+            tl.drop_engine_lock(d, os.getpid())
             if slots:
                 tl.release_slot(repo, name)
             write_state(repo, pid=os.getpid(), started=started)

@@ -280,8 +280,11 @@ container); the session that starts it only watches it.
   setup included); run-task heartbeats both too (`TASK_LOOP_SLOT_BEAD`), so a loop killed with SIGKILL leaves its
   slot held until the running bead ends, then the lease lapses and `bd reclaim` frees it.
 - **Stopped means stopped:** a SIGTERM to the engine (`tl stop --now`, Ctrl-C to the loop) sends SIGTERM to the running
-  delegate call (route.py stops its worker, which runs in a process group of its own), waits 10 s, then SIGKILLs every
-  process of that call's tree. A worker that still lives is logged and keeps the slot busy (engine lock) until it ends.
+  delegate call (route.py stops its worker, which runs in a process group of its own; 0.31.1+ names it on stderr,
+  `delegate: worker pid=N pgid=N`, kept in the engine lock), waits 10 s, then SIGKILLs a route.py still alive and the
+  worker's group. A route.py that named no worker: the process tree is looked at before and after the wait and only
+  processes unchanged in both (pid, group, start time) are SIGKILLed. A worker that still lives is logged and keeps the
+  slot busy (engine lock) until it ends.
 
 The queue rule is `.task-loop.json` → `engine`; the defaults take every ready bead:
 
@@ -310,16 +313,21 @@ local to one machine, hence the host in the title.
   once, the profile's setup command must queue itself (a lock or a slot limit of its own).
 - **A hand run holds its slot too:** `tl run-task ID --slot S` (no `--worktree` needed: the slot is the worktree) takes
   S's bead as the loop does, heartbeats it and releases it when the run ends, whatever the outcome (a stop included).
-  Someone else holding S: `TAKEN: slot S held by <holder> since <t> (<why>)`, nothing runs. A run the loop started
-  (`TASK_LOOP_SLOT_BEAD` set) uses the loop's take and does not take or release again.
-- **Engine lock:** every run-task writes `<worktree>/.task/engine.lock` (pid, bead, the delegate call's pid) and removes
-  it at the end. The loop's slot choice, `tl slot reset` (exit 4, `BUSY`), `tl slot release` (without `--force`) and
-  another run-task keep off a worktree whose lock names a live process, even when the slot bead is open: a run started
-  without `--slot`, or by an older engine, is never committed over or switched to another branch.
+  `--worktree` on a slot's folder is the same as `--slot`. A held slot bead is refused, also to the session's own actor
+  (a hand run from the session that started the loop shares its actor): `TAKEN: slot S held by <holder> since <t>
+  (<why>)`, nothing runs. Only a run the loop started (`TASK_LOOP_SLOT_BEAD` names that slot's bead) uses the loop's
+  take and does not take or release again.
+- **Engine lock:** every run-task writes `<worktree>/.task/engine.lock` (pid and start time, bead, route.py and the
+  worker) and removes it at the end; the loop writes its own from the slot take through the slot reset until its
+  run-task takes it over. The loop's slot choice, `tl slot reset` (exit 4, `BUSY`, with the lock's path and pid),
+  `tl slot release` and another run-task keep off a worktree whose lock names a live process, even when the slot bead
+  is open. A pid whose start time differs (reused) or a zombie is dead. `--force` on reset or release drops the lock.
+  Windows: start times are not read, so a reused pid there keeps the slot busy until `--force`.
 - **Hold** a slot for something that is no bead (screenshots, a person working in it):
   `tl slot hold S --why TEXT [--for MIN]` (default 60 minutes; hold again to renew), `tl slot release S` to end it. A
-  hold outlives the bead's lease; the loop, run-task and `tl slot reset` keep off it until it expires. A slot in use
-  cannot be held.
+  hold outlives the bead's lease; the loop, run-task and `tl slot reset` keep off it until it expires, the holder's own
+  runs too (release it first; reset takes `--force`). An expired hold gives the slot bead back. A slot in use, or one
+  whose claim another session wins, cannot be held.
 - `tl slot list`: name, bead, status, holder, why (and since when, or until when for a hold), the live engine if any,
   folder.
 

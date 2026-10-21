@@ -10,12 +10,14 @@ import subprocess
 import sys
 import textwrap
 import time
+import types
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-from test_loop import LoopBase, rec
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # python3 -m unittest tests.test_slots, from the repo root
+from test_loop import LoopBase, rec  # noqa: E402
 
 import engine  # noqa: E402  (test_loop put skills/task-loop on sys.path)
 import loop  # noqa: E402
@@ -266,11 +268,183 @@ class Hold(Slots):
         self.assertEqual(bd.slots["sl-1"]["status"], "in_progress")
 
 
+@unittest.skipUnless(POSIX, "ps start times and zombies")
+class StaleLocks(Slots):
+    """A lock outlives a SIGKILLed engine: its pid may be reused or a zombie; neither keeps the slot busy forever."""
+
+    def test_a_reused_pid_with_another_start_time_is_dead(self):
+        k = sleeper()
+        self.kids.append(k)
+        f = tl.engine_lock_path(self.slot("s1"))
+        f.parent.mkdir(parents=True)
+        f.write_text(json.dumps({"pid": k.pid, "start": "Mon Jan  1 00:00:00 2001", "bead": "x-0"}))
+        self.assertEqual(tl.engine_busy(self.slot("s1")), "")
+        f.write_text(json.dumps({"pid": k.pid, "start": tl.proc_start(k.pid), "bead": "x-0"}))
+        self.assertIn("pid %d" % k.pid, tl.engine_busy(self.slot("s1")))
+        f.write_text(json.dumps({"pid": 0, "workers": [[k.pid, "Mon Jan  1 00:00:00 2001"]]}))
+        self.assertEqual(tl.engine_busy(self.slot("s1")), "")
+
+    def test_a_zombie_is_dead(self):
+        z = subprocess.Popen([sys.executable, "-c", "pass"])
+        try:
+            for _ in range(100):
+                if tl.zombie(z.pid):
+                    break
+                time.sleep(0.05)
+            self.assertTrue(tl.zombie(z.pid))
+            f = tl.engine_lock_path(self.slot("s1"))
+            f.parent.mkdir(parents=True)
+            f.write_text(json.dumps({"pid": z.pid, "bead": "x-0"}))
+            self.assertEqual(tl.engine_busy(self.slot("s1")), "")
+        finally:
+            z.wait()
+
+    def test_busy_names_the_lock_and_force_drops_it_on_reset_and_release(self):
+        self.beads({})
+        k = self.live_lock("s1")
+        rc, out = self.cli("slot", "reset", "s1")
+        self.assertEqual(rc, 4)
+        self.assertIn(str(tl.engine_lock_path(self.slot("s1"))), out)
+        self.assertIn(str(k.pid), out)
+        rc, out = self.cli("slot", "reset", "s1", "--force")
+        self.assertNotEqual(rc, 4)
+        self.assertIn("FORCED", out)
+        self.assertFalse(tl.engine_lock_path(self.slot("s1")).exists())
+        self.live_lock("s2")
+        self.assertEqual(self.cli("slot", "release", "s2", "--force")[0], 0)
+        self.assertFalse(tl.engine_lock_path(self.slot("s2")).exists())
+
+
+class SameActor(Slots):
+    """A hand run from the session that started the loop shares the loop's actor: bd lets it re-claim the slot bead."""
+
+    def test_a_held_slot_bead_is_refused_to_its_own_actor_unless_it_is_the_runs_own_slot_bead(self):
+        bd = self.beads({"x-1": []})
+        bd.slots["sl-1"].update(status="in_progress", assignee=tl.actor(),
+                                metadata={"held_by": tl.actor(), "held_since": "2026-10-21T18:17:00",
+                                          "held_why": "tl loop"})
+        rc, r, _ = self.run_task("x-1", slot="s1")
+        self.assertEqual(r["outcome"], "taken")
+        self.assertIn("slot s1 held by %s since 2026-10-21T18:17:00 (tl loop)" % tl.actor(), r["why"])
+        rc, r, _ = self.run_task("x-1", slot="s1", TASK_LOOP_SLOT_BEAD="sl-2")  # another slot's bead: no pass
+        self.assertEqual(r["outcome"], "taken")
+        rc, r, _ = self.run_task("x-1", slot="s1", TASK_LOOP_SLOT_BEAD="sl-1")
+        self.assertEqual(rc, 0)
+
+    def test_a_hand_run_with_only_a_worktree_that_is_a_slot_takes_that_slot(self):
+        bd = self.beads({"x-1": []})
+        bd.slots["sl-1"].update(status="in_progress", assignee="tl-loop0000")
+        rc, r, _ = self.run_task("x-1", worktree=self.slot("s1"))
+        self.assertEqual(r["outcome"], "taken")
+        self.assertIn("held by tl-loop0000", r["why"])
+        bd.slots["sl-1"].update(status="open", assignee="")
+        seen = {}
+        rc, r, _ = self.run_task("x-1", worktree=self.slot("s1"),
+                                 engine_run=lambda: seen.update(bd.slots["sl-1"]) or 0)
+        self.assertEqual((rc, seen["status"]), (0, "in_progress"))
+        self.assertEqual(bd.slots["sl-1"]["status"], "open")
+
+    def test_the_loop_locks_the_slot_from_its_take_through_the_reset(self):
+        bd = self.beads({"x-1": [rec("landed")], "x-2": []})
+        seen = {}
+
+        def reset(repo, slot, bead_id):
+            seen["lock"] = tl.read_engine_lock(self.slot(slot))
+            hand = os.getpid() + 1  # another process of this very session (same actor)
+            with mock.patch.dict(os.environ, {"TASK_LOOP_SLOT_BEAD": ""}), mock.patch.object(os, "getpid", return_value=hand):
+                bd.slots["sl-1"]["status"] = "open"  # even were its bead open
+                rc, r, _ = self.run_task("x-2", worktree=self.slot(slot))
+                bd.slots["sl-1"].update(status="in_progress", assignee=tl.actor())
+            seen["hand"] = r
+            return 0
+        with mock.patch.object(loop, "prepare", reset):
+            self.run_loop("--max-beads", "1")
+        self.assertEqual((seen["lock"]["by"], seen["lock"]["pid"], seen["lock"]["slot_bead"]),
+                         ("loop", os.getpid(), "sl-1"))
+        self.assertEqual(seen["hand"]["outcome"], "taken")
+        self.assertIn("loop pid %d" % os.getpid(), seen["hand"]["why"])
+        self.assertFalse(tl.engine_lock_path(self.slot("s1")).exists())
+
+    def test_the_loops_child_takes_over_its_lock_and_nobody_else_does(self):
+        tl.write_engine_lock(self.slot("s1"), {"pid": os.getppid(), "start": tl.proc_start(os.getppid()), "by": "loop",
+                                               "slot_bead": "sl-1"})
+        with mock.patch.dict(os.environ, {"TASK_LOOP_SLOT_BEAD": "sl-1"}):
+            self.assertEqual(tl.engine_busy(self.slot("s1"), handoff=True), "")
+            self.assertTrue(tl.engine_busy(self.slot("s1")))
+        with mock.patch.dict(os.environ, {"TASK_LOOP_SLOT_BEAD": "sl-2"}):
+            self.assertTrue(tl.engine_busy(self.slot("s1"), handoff=True))
+
+
+class HoldRaces(Slots):
+    def test_a_hold_that_loses_the_claim_is_refused(self):
+        bd = self.beads({})
+        bd.taken_by_other.add("sl-1")
+        rc, out = self.cli("slot", "hold", "s1", "--why", "x")
+        self.assertEqual(rc, 1)
+        self.assertIn("BUSY", out)
+        self.assertNotIn("hold_until", bd.slots["sl-1"].get("metadata", {}))
+
+    def test_an_expired_hold_gives_the_slot_bead_back(self):
+        bd = self.beads({"x-1": [rec("landed")]})
+        t = [time.time()]
+        with mock.patch.object(tl, "now", lambda: t[0]):
+            with mock.patch.dict(os.environ, {"TASK_LOOP_ACTOR": "tl-denis000"}):
+                self.cli("slot", "hold", "s1", "--why", "a person", "--for", "10")
+            self.assertEqual((bd.slots["sl-1"]["status"], bd.slots["sl-1"]["assignee"]), ("in_progress", "tl-denis000"))
+            t[0] += 11 * 60
+            self.run_loop("--max-beads", "1")
+        self.assertEqual(self.started, [("x-1", "s1")])
+
+    def test_ones_own_hold_keeps_ones_own_runs_and_resets_off_unless_forced(self):
+        self.beads({"x-1": []})
+        self.cli("slot", "hold", "s1", "--why", "screenshots")
+        rc, r, _ = self.run_task("x-1", slot="s1")
+        self.assertEqual(r["outcome"], "taken")
+        self.assertIn("screenshots", r["why"])
+        self.assertEqual(self.cli("slot", "reset", "s1")[0], 4)
+        self.assertNotEqual(self.cli("slot", "reset", "s1", "--force")[0], 4)
+
+
+@unittest.skipUnless(POSIX, "process groups")
+class TreeKillAndPidReuse(unittest.TestCase):
+    def test_only_processes_still_the_same_in_both_looks_are_killed(self):
+        route = 700
+        before = {route: (1, route, "t0"), 500: (route, 500, "A"), 600: (500, 600, "B"), 650: (route, 650, "C")}
+        after = {500: (1, 500, "A"), 600: (1, 600, "OTHER"), 650: (1, 999, "C")}  # 600 reused, 650 another group
+        looks = [before, after]
+        p = mock.Mock(pid=route, returncode=0)
+        p.wait.side_effect = [subprocess.TimeoutExpired("r", 1), 0]
+        kills = []
+        with mock.patch.object(tl, "proc_table", side_effect=lambda: looks.pop(0)), \
+                mock.patch.object(engine.os, "killpg", side_effect=lambda g, s: kills.append(("pg", g, s))), \
+                mock.patch.object(engine.os, "kill", side_effect=lambda q, s: kills.append(("p", q, s))), \
+                mock.patch.object(tl, "proc_alive", return_value=False):
+            engine.stop_tree(p)
+        self.assertIn(("pg", route, signal.SIGTERM), kills)
+        hit = {k[1] for k in kills if k[2] == 9}
+        self.assertIn(500, hit)
+        self.assertNotIn(600, hit)
+        self.assertFalse({650, 999} & hit)
+        self.assertNotIn(route, hit)  # reaped: its group id may be someone else's now
+
+
+class WindowsPidAlive(unittest.TestCase):
+    def test_the_pid_column_is_matched_exactly(self):
+        out = '"python.exe","1234","Console","1","10,000 K"\n'
+        with mock.patch.object(tl, "os", types.SimpleNamespace(name="nt")), \
+                mock.patch.object(tl.subprocess, "run", return_value=mock.Mock(stdout=out)):
+            self.assertFalse(tl.pid_alive(12))
+            self.assertTrue(tl.pid_alive(1234))
+
+
 ROUTE = textwrap.dedent('''
     import os, signal, subprocess, sys, time
     w = subprocess.Popen([sys.executable, "-c", "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(60)"],
                          start_new_session=True)
     open(sys.argv[1], "w").write(str(w.pid))
+    if len(sys.argv) > 3:  # delegate 0.31.1+: the worker named on stderr
+        sys.stderr.write("delegate: worker pid=%d pgid=%d run_id=r1\\n" % (w.pid, w.pid))
+        sys.stderr.flush()
     def bye(*_):
         if sys.argv[2] == "kills":
             os.killpg(w.pid, 9)
@@ -310,8 +484,8 @@ class StoppedEngineKillsItsWorker(unittest.TestCase):
             time.sleep(0.05)
         return False
 
-    def stop_during(self, mode, how):
-        cmd = [sys.executable, str(self.d / "route.py"), str(self.d / "w.pid"), mode]
+    def stop_during(self, mode, how, names=False):
+        cmd = [sys.executable, str(self.d / "route.py"), str(self.d / "w.pid"), mode] + (["names"] if names else [])
         log = self.d / "err.log"
         if how == "timeout":
             with mock.patch.object(engine, "STOP_GRACE", 1):
@@ -334,6 +508,17 @@ class StoppedEngineKillsItsWorker(unittest.TestCase):
 
     def test_a_route_py_that_ignores_the_stop_still_loses_its_worker(self):
         self.stop_during("ignores", "sigterm")
+        self.assertTrue(self.gone(self.worker_pid()))
+
+    def test_a_named_worker_goes_with_route_py_and_no_tree_walk_is_needed(self):
+        with mock.patch.object(tl, "proc_table", side_effect=AssertionError("walked the tree")):
+            self.stop_during("kills", "sigterm", names=True)
+        self.assertTrue(self.gone(self.worker_pid()))
+        self.assertIn("delegate: worker pid=", (self.d / "err.log").read_text())
+
+    def test_a_named_worker_of_a_route_py_that_ignores_the_stop_is_killed_by_its_group(self):
+        with mock.patch.object(tl, "proc_table", side_effect=AssertionError("walked the tree")):
+            self.stop_during("ignores", "sigterm", names=True)
         self.assertTrue(self.gone(self.worker_pid()))
 
     def test_a_node_timeout_kills_the_worker_too(self):
