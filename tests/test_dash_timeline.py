@@ -165,7 +165,7 @@ class Api(unittest.TestCase):
             "v": 1, "id": BEAD + "-3", "bead": BEAD, "kind": "decision", "question": "A or B?", "status": "open",
             "t": time.time(), "title": "Front approach"}))
         t = self.task()
-        self.assertEqual((t["state"], t["label"]), ("asks", "waiting on you"))
+        self.assertEqual((t["state"], t["label"]), ("asks", "waiting for your answer"))
         self.assertEqual(t["ask"]["id"], BEAD + "-3")
         self.assertEqual(t["title"], "Front approach")
 
@@ -177,6 +177,65 @@ class Api(unittest.TestCase):
             os.unlink(str(self.cfg / "engine" / ("%s-20261021-%s.jsonl" % (BEAD, s))))
         t = self.task()
         self.assertEqual((t["state"], t["label"]), ("queued", "answered: waits for the next run"))
+
+    def ended_on_an_ask(self, ask_status, blocker_status="open"):
+        """The bead's last run ended asking (run 5); its ask file says ask_status; bd says it is blocked by a design
+        bead in blocker_status (lifesim-s28t, 2026-10-21)."""
+        for s in RUNS[5:]:
+            os.unlink(str(self.cfg / "engine" / ("%s-20261021-%s.jsonl" % (BEAD, s))))
+        (self.cfg / "asks").mkdir()
+        (self.cfg / "asks" / (BEAD + ".json")).write_text(json.dumps({
+            "v": 1, "id": BEAD + "-1", "bead": BEAD, "kind": "decision", "question": "A or B?", "status": ask_status,
+            "t": time.time(), "repo": "/r/lifesim", "title": "Front approach"}))
+        beads = [{"id": BEAD, "title": "Front approach", "status": "blocked", "dependencies": [
+                     {"issue_id": BEAD, "depends_on_id": "lifesim-5ban.33", "type": "parent-child"},
+                     {"issue_id": BEAD, "depends_on_id": "lifesim-5ban.23", "type": "blocks"}]},
+                 {"id": "lifesim-5ban.33", "title": "Epic", "status": "open"},
+                 {"id": "lifesim-5ban.23", "title": "People design", "status": blocker_status}]
+        for name, val in (("repos", lambda: ["/r/lifesim"]), ("beads_of", lambda repo: beads if repo == "/r/lifesim" else [])):
+            p = mock.patch.object(server, name, side_effect=val)
+            p.start()
+            self.addCleanup(p.stop)
+        return self.task()
+
+    def test_an_open_ask_wins_over_a_blocker(self):
+        t = self.ended_on_an_ask("open")
+        self.assertEqual((t["state"], t["label"]), ("asks", "waiting for your answer"))
+
+    def test_a_closed_ask_and_an_open_blocker_say_blocked_by_it(self):
+        t = self.ended_on_an_ask("closed")
+        self.assertEqual((t["state"], t["label"]), ("blocked_by", "blocked by lifesim-5ban.23 (People design)"))
+        self.assertIsNone(t["ask"])
+        self.assertEqual(t["blocked_by"], {"id": "lifesim-5ban.23", "title": "People design"})
+
+    def test_a_parent_is_no_blocker_and_a_closed_blocker_is_none(self):
+        t = self.ended_on_an_ask("closed", blocker_status="closed")
+        self.assertNotIn("waiting", t["label"])
+        self.assertNotIn("answer", t["label"])
+        self.assertEqual(t["label"], "ask closed: owner decision needed")
+        self.assertIsNone(t["blocked_by"])
+
+    def test_no_ask_is_ever_waited_for_when_none_is_open(self):
+        for s in RUNS[5:]:
+            os.unlink(str(self.cfg / "engine" / ("%s-20261021-%s.jsonl" % (BEAD, s))))
+        t = self.task()  # no ask file at all
+        self.assertNotIn("waiting", t["label"])
+        self.assertNotIn("answer", t["label"])
+        self.assertNotEqual(t["state"], "asks")
+
+    def test_one_bd_call_per_repo_however_many_tasks_and_polls(self):
+        calls = []
+
+        def run(cmd, **kw):
+            calls.append(cmd)
+            return mock.Mock(returncode=0, stdout=json.dumps([{"id": BEAD, "status": "open", "dependencies": []}]))
+        with mock.patch.object(server, "repos", return_value=["/r/lifesim"]), \
+                mock.patch.object(server.shutil, "which", return_value="/bin/bd"), \
+                mock.patch.object(server.subprocess, "run", side_effect=run):
+            for _ in range(3):
+                server.api_tasks()
+                server.api_task_timeline("", BEAD)
+        self.assertEqual(len([c for c in calls if c[:2] == ["/bin/bd", "list"]]), 1)
 
     def test_a_paused_run_says_which_lane_is_out_and_until_when(self):
         for s in RUNS[2:]:

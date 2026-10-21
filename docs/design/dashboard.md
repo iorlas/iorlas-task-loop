@@ -71,6 +71,10 @@ node text). The run is drawn in sections, "Stage i of N · title" (fix rounds: "
 outside them, and each block also shows an `i/N` chip. A review or verify block has `same_family: true` when its
 session's family is the family of the last write before it (or delegate flagged `same_family`): it shows "same family
 as writer — weaker review".
+A task's status, in order: running; an open ask ("waiting for your answer"); an open bead it depends on with a
+`blocks` dependency ("blocked by <id> (<title>)", state `blocked_by`, from the repo's cached `bd list`: one bd call per
+repo per refresh); else the last run's close reason. A run that ended asking whose ask is no longer open never reads as
+waiting: "answered: waits for the next run" when answered, else "ask closed: <why>".
 
 ### Timeline records (engine log, since tl-bxk.12.3)
 The engine log `engine/<bead>-<YYYYMMDD-HHMMSS>.jsonl` keeps its old records and text; these are added, never printed:

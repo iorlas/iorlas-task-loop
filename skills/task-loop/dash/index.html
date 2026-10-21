@@ -98,7 +98,7 @@ main{max-width:1180px;margin:0 auto;padding:22px 20px 80px}
 .task .right b{font-weight:560;color:var(--ink2)}
 .task .stagecol{max-width:300px;min-width:0;display:flex;justify-content:flex-end}
 .slot{font-family:var(--mono);font-size:11px;padding:1px 6px;border-radius:5px;background:var(--sunk);color:var(--ink2)}
-.st-running .sd{background:var(--run);animation:pulse 1.6s ease-in-out infinite}.st-asks .sd{background:var(--ask)}.st-paused .sd,.st-waiting .sd,.st-queued .sd{background:var(--wait)}
+.st-running .sd{background:var(--run);animation:pulse 1.6s ease-in-out infinite}.st-asks .sd{background:var(--ask)}.st-paused .sd,.st-waiting .sd,.st-queued .sd,.st-blocked_by .sd{background:var(--wait)}
 .st-landed .sd,.st-done .sd{background:var(--ok)}.st-failed .sd,.st-stopped .sd,.st-blocked .sd{background:var(--fail)}
 .empty{padding:48px 20px;text-align:center;color:var(--mute)}
 .empty b{display:block;color:var(--ink);font-weight:600;margin-bottom:4px;font-size:15px}
@@ -307,7 +307,7 @@ function tok(t){if(!t)return'';const n=(t.in||0)+(t.out||0);if(!n)return'';retur
 function model(m){if(!m)return'';m=String(m);const k=m.match(/^(opus|sonnet|haiku|fable)[-_ ]?(.*)$/i);
   if(k)return k[1][0].toUpperCase()+k[1].slice(1).toLowerCase()+(k[2]?' '+k[2].replace(/-/g,'.'):'');return m.replace(/^gpt-/i,'GPT-')}
 function effort(e){return e?({medium:'med'}[e]||e):''}
-const STATE={queued:'s-wait',running:'s-run',asks:'s-ask',paused:'s-wait',waiting:'s-wait',landed:'s-ok',done:'s-ok',failed:'s-fail',stopped:'s-fail',blocked:'s-fail'};
+const STATE={queued:'s-wait',blocked_by:'s-wait',running:'s-run',asks:'s-ask',paused:'s-wait',waiting:'s-wait',landed:'s-ok',done:'s-ok',failed:'s-fail',stopped:'s-fail',blocked:'s-fail'};
 const CAUSE={checks_red:'fail',gate_red:'fail',conflict:'fail',verify_wrong:'fail',failed:'fail',stopped:'fail',
   review_sendback:'warn',rounds_used:'warn',bad_checks:'warn',writer_decided:'warn',plan_sent_back:'warn',invalid_output:'warn',push_race:'warn',
   lane_out:'wait',paused:'wait',lane_wait:'wait',retry:'wait',decision:'ask',verify:'ask',ticket:'ask',stuck:'ask',waiting:'ask',verify_open:'ask',needs_human:'ask',
@@ -379,7 +379,7 @@ function taskRow(t){const st=t.state||'';
       <div class="t2"><span class="mono">${esc(t.id)}</span>${t.repo?'<span>·</span><span>'+esc(t.repo)+'</span>':''}</div></div>
     <div class="stagecol">${chip(STATE[st]||'s-info',t.label||st)}</div>
     <div class="right">${when}<span>${t.slot?'<span class="slot">'+esc(t.slot)+'</span> · ':''}${esc(runs)}</span></div></a>`}
-const GROUPS=[['Running',x=>x.state=='running'],['Waiting on you',x=>x.state=='asks'||x.state=='waiting'],['Paused or queued',x=>x.state=='paused'||x.state=='queued'],
+const GROUPS=[['Running',x=>x.state=='running'],['Waiting on you',x=>x.state=='asks'||x.state=='waiting'],['Paused, queued or blocked',x=>x.state=='paused'||x.state=='queued'||x.state=='blocked_by'],
   ['Stopped or failed',x=>['stopped','failed','blocked'].includes(x.state)],['Landed',x=>x.state=='landed'||x.state=='done']];
 function renderTasks(){if(!S.tasks)return;
   const all=S.tasks.tasks,ts=all.filter(matches),n=f=>all.filter(f).length;

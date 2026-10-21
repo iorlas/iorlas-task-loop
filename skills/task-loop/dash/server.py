@@ -824,6 +824,33 @@ def open_ask(bead):
     return {k: a.get(k) for k in ("id", "kind", "question", "t", "title", "answer", "repo", "parks_at")}
 
 
+def ask_file(bead):
+    a = read_json(config_dir() / "asks" / ("%s.json" % bead), {}) or {}
+    return a if isinstance(a, dict) else {}
+
+
+def blocker_of(bead, repo_hint=""):
+    """The first open bead this one depends on with a `blocks` dependency, as {id, title}; None when there is none.
+    Reads the repo's cached `bd list` (beads_of): one bd call per repo per refresh, never one per task."""
+    repo = repo_hint if repo_hint in repos() else ""
+    if not repo:
+        name = re.sub(r"\.git$", "", os.path.basename((repo_hint or "").rstrip("/\\")))
+        repo = resolve_repo(name, bead) if name else resolve_repo("", bead)
+    if not repo:
+        return None
+    by_id = {b.get("id"): b for b in beads_of(repo)}
+    me = by_id.get(bead) or {}
+    if me.get("status") == "closed":
+        return None
+    for d in me.get("dependencies") or []:
+        if d.get("type") != "blocks":
+            continue
+        dep = by_id.get(d.get("depends_on_id")) or {}
+        if dep and dep.get("status") != "closed":
+            return {"id": dep["id"], "title": dep.get("title") or ""}
+    return None
+
+
 def run_alive(path, run, span):
     """A run with no close: running while the engine lock in its worktree names a live process for its bead; without
     a lock to read, while its log moved lately."""
@@ -857,7 +884,7 @@ def repo_name(span, trace, ask):
     return re.sub(r"\.git$", "", os.path.basename(r)) if r else ""
 
 
-TASK_STATES = {"running": 0, "asks": 1, "paused": 2, "queued": 2, "waiting": 3, "stopped": 4, "failed": 4, "blocked": 4,
+TASK_STATES = {"running": 0, "asks": 1, "paused": 2, "queued": 2, "blocked_by": 2, "waiting": 3, "stopped": 4, "failed": 4, "blocked": 4,
                "landed": 5, "done": 5}
 
 
@@ -872,12 +899,22 @@ def task_row(bead, paths, spans, tr):
     run = timeline.run_timeline(newest, alive=alive)
     end, ask = run["end"], open_ask(bead)
     state, label = end["outcome"], end["text"]
+    trace = tr.get(name)
+    # the status, in order: running; an open ask; an open `blocks` dependency; the last run's close reason
+    blocked = None if alive or ask else blocker_of(bead, (span or {}).get("repo") or ask_file(bead).get("repo") or
+                                                    (trace or {}).get("repo") or "")
     if alive:
         state, label = "running", timeline.live_label(timeline.last_node(newest))
     elif ask:
-        state, label = "asks", "waiting on you"
-    elif state == "asks":  # the ask was answered (or closed) since: the loop's next run takes it
-        state, label = "queued", "answered: waits for the next run"
+        state, label = "asks", "waiting for your answer"
+    elif blocked:
+        state, label = "blocked_by", "blocked by %s%s" % (blocked["id"], (" (%s)" % blocked["title"]) if blocked["title"] else "")
+    elif state in ("asks", "waiting"):  # no ask is open: never say it waits for one
+        if ask_file(bead).get("status") == "answered":
+            state, label = "queued", "answered: waits for the next run"
+        else:
+            why = (end.get("why") or "").split("\n")[0].strip()
+            state, label = "stopped", "ask closed" + (": " + why[:120] if why else "")
     elif state == "paused":
         label = "paused: %s%s" % (end.get("reason") or "no lane", (" until " + end["until"]) if end.get("until") else "")
     elif state == "stopped":
@@ -885,12 +922,11 @@ def task_row(bead, paths, spans, tr):
     started = run["started"] or 0
     total = sum((timeline.run_timeline(p)["secs"] or 0) for p in paths)
     last_t = (recs[-1].get("t") if recs else None) or started
-    trace = tr.get(name)
     return {"id": bead, "title": (span or {}).get("title") or (ask or {}).get("title") or "", "state": state,
             "label": label, "slot": slot_of(run_rec, span, trace), "repo": repo_name(span, trace, ask),
             "runs": len(paths), "run": name, "started": started, "updated": last_t,
             "since": round(time.time() - started) if alive and started else None, "secs": total,
-            "run_secs": run["secs"], "ask": ask, "end": end, "tokens": run["tokens"],
+            "run_secs": run["secs"], "ask": ask, "blocked_by": blocked, "end": end, "tokens": run["tokens"],
             "stage": timeline.live_label(timeline.last_node(newest)) if alive else ""}
 
 
