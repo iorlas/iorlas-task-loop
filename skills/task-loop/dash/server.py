@@ -1140,6 +1140,39 @@ class BindError(Exception):
     pass
 
 
+def is_installed_copy(here=None, home=None):
+    """True only when this file really lives (symlinks resolved) under ~/.claude/plugins/cache/."""
+    cache = (Path(home or HOME) / ".claude" / "plugins" / "cache").resolve()
+    try:
+        Path(here or HERE).resolve().relative_to(cache)
+    except ValueError:
+        return False
+    return True
+
+
+def is_loopback(addr):
+    if addr == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(addr).is_loopback
+    except ValueError:
+        return False
+
+
+def bind_refusal(addrs, port, here=None, home=None, state=None):
+    """Why this server must not bind, else None (tl-bxk.12.5): a dev copy once took :7878 on the Tailscale address
+    with an empty state dir and blanked the phone dashboard. Only TASK_LOOP_DASH_DEV_PUBLIC=1 overrides."""
+    if not is_installed_copy(here, home) and os.environ.get("TASK_LOOP_DASH_DEV_PUBLIC") != "1":
+        bad = [a for a in addrs if not is_loopback(a)]
+        if bad or port == 7878:
+            return ("refusing to bind %s: only the installed plugin copy (under ~/.claude/plugins/cache/) may serve "
+                    "a non-loopback address or port 7878; set TASK_LOOP_DASH_DEV_PUBLIC=1 to override"
+                    % (", ".join(bad) if bad else "port 7878"))
+    if port == 7878 and not ((Path(state) if state else config_dir()) / "repos.json").is_file():
+        return "refusing to start on port 7878: no repos.json in the state dir (run `tl register` first)"
+    return None
+
+
 def holder_pid(addr, port):
     try:
         r = subprocess.run(["lsof", "-nP", "-iTCP@%s:%d" % (addr, port), "-sTCP:LISTEN", "-t"],
@@ -1265,6 +1298,10 @@ def main():
     a = ap.parse_args()
     dev = is_dev_checkout()
     addrs, port = plan(a.port, a.bind, dev)
+    why = bind_refusal(addrs, port)
+    if why:
+        print(why, file=sys.stderr, flush=True)
+        sys.exit(2)
     token()
     try:
         servers = open_servers(addrs, port, None)  # handler set below: it needs the real port
