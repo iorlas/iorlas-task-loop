@@ -67,6 +67,8 @@ UNCHECKED_TEXT = ("\nunchecked: what you could not check yourself, each with its
                   "(a cited link you could not open), case (an acceptance case you could not run), tooling (a change to "
                   "tools or build files the plan did not name), or other. Empty when you checked everything.")
 
+LATER_CASES = ("\nAn acceptance case this stage cannot run is not unchecked: it is checked when the last stage runs it.")
+
 SCHEMAS = {
     "plan": {"type": "object", "additionalProperties": False,
              "required": ["summary", "stages", "risks", "question", "cases"],
@@ -280,7 +282,7 @@ class Engine:
         self.replans = 0
         self.fixes = 0
         self.denials = []     # commands refused to this bead's writers, across lanes and runs
-        self.unchecked = []   # what the workers of this run could not check themselves
+        self.unchecked = []   # what the last review of this run says nobody checked (each review re-judges it)
         self.answered = None  # the owner ask this run starts from, once answered
         self.verify_answer = ""  # the owner's answer to a verify ask, when it asks for more than a yes
         self.stuck_why = ""
@@ -942,7 +944,8 @@ class Engine:
                 rules=("\nRead %s first: this repo's rules for work in your sandbox (what runs there, what does not)."
                        % (Path(self.wt) / self.cfg["worker_rules"])) if self.cfg["worker_rules"] else "") +
                 "\nThe plan's acceptance cases run on the last stage. If you find a case they miss, add it to new_cases (the "
-                "criterion it proves, the check, why); never remove or weaken one." + UNCHECKED_TEXT, resume_key="writer")
+                "criterion it proves, the check, why); never remove or weaken one." + ("" if last else LATER_CASES) +
+                UNCHECKED_TEXT, resume_key="writer")
             wrote_unchecked = w.get("unchecked") or []  # the review decides what is still unproven after the checks
             if w["question"].strip():
                 raise Blocked("owner decision needed", w["question"])
@@ -976,6 +979,7 @@ class Engine:
                 continue
             red = 0
             self.stats["reviews"] += 1
+            open_items = list({u["what"]: u for u in ([] if fix else self.unchecked) + wrote_unchecked}.values())
             review, _ = self.ai("review", name, REVIEW_PROMPT.format(
                 brief=self.brief_text(), plan=self.plan_text(), n=i + 1, goal=st["goal"],
                 base=self.base_sha(), checks=compact(checks), summary=w["summary"], evidence=self.evidence_dir,
@@ -985,12 +989,15 @@ class Engine:
                        "the stage goal and every requirement and acceptance criterion of the task" if last else
                        "the stage goal (later stages cover the rest of the task)")) +
                 ("\n" + self.where("review") if self.where("review") else "") + self.cases_text() +
-                ("\nThe writer could not check these itself (the engine's checks above ran after it); put in your "
-                 "unchecked only what is still unproven:\n" + "".join("- %s (%s)\n" % (u["what"], u["kind"])
-                                                                     for u in wrote_unchecked) if wrote_unchecked else "") +
-                UNCHECKED_TEXT,
+                ("\nNobody has checked these yet (earlier stages or the writer could not; the engine's checks above ran "
+                 "after them); put in your unchecked only what is still unproven:\n" + "".join(
+                     "- %s (%s)\n" % (u["what"], u["kind"]) for u in open_items) if open_items else "") +
+                ("" if last else LATER_CASES) + UNCHECKED_TEXT,
                 writer_family=wfam)
-            self.unchecked += self.engine_unproven(review.get("unchecked") or [], checks)
+            # lifesim-gfr.31.1: a stage-1 item that stage 2 ran green still stopped the land; each review re-judges what
+            # is open, so its list replaces it. A fix at land reviews only the fix: it adds, never clears.
+            judged = self.engine_unproven(review.get("unchecked") or [], checks)
+            self.unchecked = self.unchecked + judged if fix else judged
             same = self.last_flag == "same_family"
             if same:
                 self.warn("%s: the review is from the writer's own model family (no other lane was free)" % name)

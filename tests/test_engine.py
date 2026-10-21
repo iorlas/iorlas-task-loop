@@ -1108,6 +1108,28 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 0, self.blocked)
         self.assertIn("the Unity tests need the host", s.prompts[2])
 
+    def test_an_earlier_stage_unchecked_item_a_later_review_clears_lands_without_an_ask(self):
+        # lifesim-gfr.31.1: stage 1 could not run the last stage's case; stage 2 ran it green, its review was clean,
+        # and the land still stopped on the stale stage-1 item
+        r1 = dict(CLEAN, unchecked=[{"what": "the -nographics run, the last stage's job", "kind": "case"}])
+        rc, s = self.run_engine({"plan": [self.TWO], "write": [WRITE, WRITE], "review": [r1, CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertIsNone(self.ask())
+        self.assertIn("the -nographics run, the last stage's job", s.prompts[4])  # re-judged by the later review
+
+    def test_an_earlier_stage_unchecked_item_a_later_review_keeps_stops_the_land(self):
+        item = {"what": "the cited spec link did not open", "kind": "link"}
+        rc, _ = self.run_engine({"plan": [self.TWO], "write": [WRITE, WRITE],
+                                 "review": [dict(CLEAN, unchecked=[item]), dict(CLEAN, unchecked=[item])]})
+        self.assertEqual(rc, 2)
+        self.assertEqual(self.ask()["kind"], "verify")
+        self.assertEqual(self.ask()["question"].count("the cited spec link did not open"), 1)
+
+    def test_only_non_final_stages_are_told_a_later_stage_case_is_not_unchecked(self):
+        rc, s = self.run_engine({"plan": [self.TWO], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual(["is not unchecked" in p for p in s.prompts[1:5]], [True, True, False, False])
+
     def test_an_unchecked_minor_item_lands_and_labels_the_bead_for_a_look(self):
         r = dict(CLEAN, unchecked=[{"what": "the tooltip wording on a phone", "kind": "other"}])
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r]})

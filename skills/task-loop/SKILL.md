@@ -106,7 +106,11 @@ and the rerun goes on from its checkpoint. An answered verify for a denial goes 
 workers could not check goes straight to land only when the answer is a plain yes (a few words, each a yes: `right`,
 `ok, land it`, `LGTM`); any other answer (`add a test that X, then land`, `wrong: ...`) goes to the planner with the
 answer in its prompt, keeping the accepted stages, and a plan of no stages (the answer asks for nothing more) lands.
-The writer's `unchecked` items go to the review, which reports what is still unproven after the checks;
+The writer's `unchecked` items go to the review, which reports what is still unproven after the checks.
+Unchecked items are per stage: each review is shown every item still open (earlier stages' and this writer's) and its
+list replaces them, so the last stage's review, which sees the whole tree and the acceptance cases run, decides what
+stops the land (lifesim-gfr.31.1 stopped on a stage-1 case that stage 2 ran green); a fix round at land only adds.
+Non-final stages are told a case the last stage runs is not unchecked;
 a requirement, number, deletion, link, case or tooling item stops the land with a verify ask; `other` items land and
 label the bead `needs-owner-check`. The review is told the gate runs at land and the passed checks are facts, and the
 engine drops any unchecked item that names the gate or a repo check that passed that round: the owner has nothing to
