@@ -1056,6 +1056,7 @@ class Engine:
         # the machine-readable trace the dashboard draws (docs/design/dashboard.md, Timeline records)
         self.node_n, self.cur, self.last_node, self.moved_from, self.moved_to = 0, None, None, None, None
         self.check_round = 0
+        self.last_checks, self.checks_tree = None, ""  # the last engine check results and the tree they ran on (tl-bxk.10.25)
         self.prev_ck, self.ck_run, self.resumed, self.run_logged = "", "", False, False
         d = tl.config_dir() / "engine"
         d.mkdir(exist_ok=True)
@@ -1807,7 +1808,7 @@ class Engine:
             try:
                 d, _ = self.ai("verify", "%d unchecked item(s) before land" % len(gaps), VERIFY_PROMPT.format(
                     brief=self.brief_text(), work=self.work_summary(), evidence=self.evidence_dir,
-                    where=self.where("verify"), items=items), writer_family=self.writer_family, items=len(gaps))
+                    checks=self.checks_evidence(), where=self.where("verify"), items=items), writer_family=self.writer_family, items=len(gaps))
             except Blocked as b:  # no verifier now is no reason to land unchecked: the owner checks them, as before
                 self.warn("could not self-verify before land, the owner checks every item: %s" % b.why[:300])
                 return gaps + failed
@@ -1883,6 +1884,7 @@ class Engine:
         run it, and lifesim-5ban.1 stopped on 'could not check: unity-analyzers/unity-tests/unity-play-tests'. An item naming
         a linter the repo has (ruff) is run here; its exit code settles it, a red one goes to a fix round."""
         names, left, failed = self.gate_names(), [], []
+        results, current = self.checks_now()
         for u in gaps:
             what = " ".join(u["what"].split()).lower()
             hit = None
@@ -1892,6 +1894,11 @@ class Engine:
                 self.verified.append({"what": u["what"], "kind": u["kind"], "verdict": "settled", "why": "the gate runs it at land",
                                       "evidence": "`%s` is a gate or stage check: the engine runs it, the gate at land (a red one "
                                                   "goes to a fix round)" % hit})
+                continue
+            proof = None if self.is_look(u) or not current else self.engine_proof(u["what"], results)
+            if proof:
+                self.verified.append({"what": u["what"], "kind": u["kind"], "verdict": "settled", "evidence": proof,
+                                      "why": "the engine's own check results settle it"})
                 continue
             cmd = self.lint_command(u["what"])
             if not cmd:
@@ -1907,6 +1914,93 @@ class Engine:
             if rc:
                 failed.append(dict(u, why=out))
         return left, failed
+
+    # tl-bxk.10.25: an item that only doubts a check the engine ran green, or skipped because no changed path matches its
+    # trigger, is answered by the engine's own result. Anything else it raises (a behaviour, a look, a missing test) keeps it.
+    RAN_DOUBT = re.compile(r"\b(re-?run|re-?ran|run|runs|ran|running|passe[sd]?|passing|green|skipped|skips?|executed|exit(?:s|ed)?|"
+                           r"logs?|prove|proved|proof)\b")
+    OTHER_DOUBT = re.compile(r"\b(behaviou?rs?|looks?|visual(?:ly)?|screens?|screenshots?|layout|render\w*|devices?|manual(?:ly)?|by hand|"
+                             r"ui|ux|taste|feels?|edge cases?|regress\w*|race|crash\w*|no (?:new )?tests?|missing|nothing tests?|"
+                             r"a tests? for|should (?:also )?(?:test|cover|have)|untested|not tested|coverage|covers?|covered|fake|"
+                             r"false green|wrong|bug|but|however|although|except)\b")
+    SKIP_SEGMENTS = {"bin", "obj", "debug", "release", "src", "tests", "test", "lib", "build", "out", "dist"}
+
+    def check_names(self, c):
+        """Names an item can use for a check result: its id, its command, the command without its runner, and the suite or
+        test project its command runs (a path segment such as Sim.Properties, a --filter value such as SleepSkipTests)."""
+        cmd = " ".join(str(c.get("cmd") or "").split())
+        names = [str(c.get("id") or ""), cmd, self.GATE_RUNNER.sub("", cmd)]
+        for tok in cmd.split():
+            tok = tok.strip("'\"*")
+            if "/" in tok or "\\" in tok:
+                names += [seg for seg in re.split(r"[/\\]", tok) if seg.lower() not in self.SKIP_SEGMENTS
+                          and not re.match(r"(net\d|-|\d)", seg) and re.search(r"[A-Za-z]", seg)]
+            elif tok.startswith("--filter") or names[-1:] == ["--filter"]:
+                names.append(tok.split("=", 1)[-1])
+        return [n.lower() for n in dict.fromkeys(names) if len(n) >= 4 and not n.startswith("-")]
+
+    def engine_proof(self, what, results):
+        """The evidence text when every check the item names was run by the engine and passed, or skipped by its path
+        trigger (proven by design: the check does not apply), and the item raises nothing else; else ''."""
+        what = " ".join(what.split()).lower()
+        if self.OTHER_DOUBT.search(what) or not self.RAN_DOUBT.search(what):
+            return ""
+        globs = re.findall(r"(?<![\w*-])[\w.-]{3,}\*", what)
+        hits = []
+        for c in results:
+            names = self.check_names(c)
+            rest = [self.GATE_RUNNER.sub("", n) for n in names]
+            if any(re.search(r"(?<![\w-])%s(?![\w-])" % re.escape(n), what) for n in names) or any(
+                    fnmatch.fnmatch(n, g) for g in globs for n in names + rest):
+                hits.append(c)
+        parts = []
+        for c in hits:
+            idn = c["id"][:80]
+            if c.get("status") == "ran" and c.get("exit") == 0:
+                parts.append("`%s` [%s] passed: exit 0, %s s, log %s" % (idn, c["group"], c.get("secs", "?"), self.log_path_of(c)))
+            elif c.get("status") == "skipped" and str(c.get("why") or "").startswith("no change under"):
+                parts.append("`%s` [%s] skipped: %s, so the check does not apply to this change" % (idn, c["group"], c["why"]))
+            else:
+                return ""
+        return ("the engine's own check results for this tree: " + "; ".join(parts)) if parts else ""
+
+    def log_path_of(self, c, full=True):
+        """The saved log of a check: absolute in the trace; in a prompt relative to the engine's run folder, since a path
+        into it is a file no step can read (the brief is inline, never a path outside the worktree)."""
+        return str(self.run_dir / c["log"] if full else c["log"]) if c.get("log") else "none (cached: same tree and base, earlier result)"
+
+    def checks_now(self):
+        """(the engine's last check results, whether they ran on the tree as it is now). After a resume the saved
+        engine-checks.json stands in; its tree is unknown and counts as current."""
+        checks, tree = self.last_checks, self.checks_tree
+        if checks is None:
+            try:
+                checks, tree = json.loads((self.run_dir / "engine-checks.json").read_text()), ""
+            except (OSError, ValueError):
+                return [], True
+        return checks, not tree or tree == self.tree_hash()
+
+    def checks_evidence(self, checks=None, current=None):
+        """The engine's check results as brief text: per check id, group, command, status (pass, fail, skipped and why),
+        exit code, duration, log path; said plainly to be the engine's evidence the reader may cite. '' when none ran."""
+        if checks is None:
+            checks, current = self.checks_now()
+        if not checks:
+            return ""
+        out = []
+        for c in checks:
+            st = c.get("status")
+            if st == "skipped" or c.get("exit") is None:
+                what = "skipped (%s)" % (c.get("why") or "no reason given")
+            else:
+                what = "%s, exit %s, %s s, log %s" % ("pass" if c["exit"] == 0 else "fail", c["exit"], c.get("secs", "?"),
+                                                      self.log_path_of(c, False))
+            cmd = "" if c.get("cmd") == c.get("id") else "; command `%s`" % c.get("cmd", "")[:300]
+            out.append("- `%s` [%s] %s%s" % (str(c.get("id"))[:300], c.get("group"), what, cmd))
+        return ("The engine's own check results for %s (the engine's evidence, run by the engine itself: you may cite them as "
+                "proof; a log path is relative to the engine's run folder, which you cannot open. A check skipped for "
+                "'no change under ...' matched no changed path, so it does not apply to this change):\n%s\n" % ("the tree as it is now" if current else
+                                      "an earlier tree (files changed since: weigh them accordingly)", "\n".join(out)))
 
     def lint_command(self, what):
         """The command the engine runs for an item naming a linter this repo uses: the backticked command if it is plain
@@ -2390,6 +2484,7 @@ class Engine:
                                      round=rounds + 1, **where)
             (self.run_dir / "engine-checks.json").write_text(json.dumps(checks, indent=1))
             (self.run_dir / ("engine-checks.r%d.json" % self.check_round)).write_text(json.dumps(checks, indent=1))
+            self.last_checks, self.checks_tree = checks, self.tree_hash()
             self.stats["tests_added"], self.stats["tests_removed"] = count_tests(self.task_diff(), self.cfg["test_pattern"])
             if self.stats["tests_removed"]:
                 self.warn("the task's diff removes %d tests" % self.stats["tests_removed"])
@@ -2429,7 +2524,8 @@ class Engine:
             kinds = self.new_by_kind()
             review, _ = self.ai("review", name, REVIEW_PROMPT.format(
                 brief=self.brief_text(), plan=self.plan_text(), n=i + 1, goal=st["goal"],
-                work=self.stage_work(kinds["unexplained"], kinds["ignored"]), checks=compact(checks), summary=w["summary"], evidence=self.evidence_dir,
+                work=self.stage_work(kinds["unexplained"], kinds["ignored"]), checks=compact(checks),
+                engine_checks=self.checks_evidence(checks, True), summary=w["summary"], evidence=self.evidence_dir,
                 gate=(" (`%s`)" % self.cfg["gate"]) if self.cfg["gate"] else "",
                 added=self.stats["tests_added"], removed=self.stats["tests_removed"],
                 scope=(state["scope"] if fix else
@@ -3663,7 +3759,7 @@ Stage {n}: {goal}
 {work}
 The engine ran the checks outside any sandbox, one at a time, and they all pass; these results are facts:
 {checks}
-The engine runs the gate{gate} once, at land, on the tree rebased onto the latest base, before anything merges; a red
+{engine_checks}The engine runs the gate{gate} once, at land, on the tree rebased onto the latest base, before anything merges; a red
 gate (coverage included) goes to a fix round. The gate, the checks above and what they prove are never an unchecked item.
 The writer says: {summary}
 Proof the engine cannot rerun (a test seen failing after a planted fault) is in {evidence}/: a requirement shown
@@ -3692,10 +3788,11 @@ VERIFY_PROMPT = """Before a task lands, you check what its workers could not che
 The work (files the task changed, with line counts):
 {work}
 Proof the workers saved (command output, logs, pictures) is in {evidence}/.
-{where}
+{checks}{where}
 Nobody has checked these items yet:
 {items}
-Settle each one yourself where you can: read the code, its call sites, sibling files and the saved proof, and run
+Settle each one yourself where you can: read the code, its call sites, sibling files, the saved proof and the engine's check
+results above, and run
 read-only commands (search, list, compare, count). Answer one entry per item, n its number:
 - settled: you proved it right; evidence quotes exactly what proves it (the file and lines, or the command and its
   output).

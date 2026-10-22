@@ -2606,6 +2606,89 @@ class LandReview(EngineTest):
             self.assertEqual(e.lint_command("`ruff check . ; rm -rf ~` was not run"), "ruff check .")
             self.assertEqual(e.lint_command("`ruff check tools` was not run"), "ruff check tools")
 
+    # -- tl-bxk.10.25
+    YXBB6 = ("I did not re-run the whole Sim.Properties suite or the just unity-* checks. The engine ran the suite, and it "
+             "passed. The unity checks were skipped because nothing changed under client/**... the claim that the engine ran "
+             "the suite has no saved log, so I cannot prove it.")
+    SUITE = "tests/Sim.Properties/bin/Debug/net10.0/Sim.Properties --filter-class '*SleepSkipTests'"
+
+    def engine_checks(self, **over):
+        rows = [{"id": "fmt", "cmd": "just fmt-check", "group": "static", "exit": 0, "status": "ran", "secs": 4,
+                 "log": "checks/00-fmt.r1.log", "tail": ""},
+                {"id": "unity-analyzers", "cmd": "just unity-analyzers", "group": "static", "exit": None, "status": "skipped",
+                 "why": "no change under client/**", "tail": ""},
+                {"id": "unity-tests", "cmd": "just unity-tests", "group": "tests", "exit": None, "status": "skipped",
+                 "why": "no change under client/**, content/**", "tail": ""},
+                {"id": self.SUITE, "cmd": self.SUITE, "group": "acceptance", "exit": 0, "status": "ran", "secs": 3,
+                 "log": "checks/06-tests_Sim.Properties.r2.log", "tail": "succeeded: 4"}]
+        return [dict(r, **over.get(r["id"], {})) for r in rows]
+
+    def evidenced(self, checks=None):
+        e = self.verifier(checks=self.CFG_CHECKS[:2], gate="just check")
+        e.last_checks, e.checks_tree = (checks or self.engine_checks()), e.tree_hash()
+        return e
+
+    def test_an_item_naming_the_suite_the_engine_ran_and_checks_it_skipped_by_path_is_settled_not_asked(self):
+        e = self.evidenced()
+        with mock.patch.object(e, "ai") as ai:
+            self.assertEqual(e.self_verify([{"what": self.YXBB6, "kind": "tooling"}]), [])
+        ai.assert_not_called()
+        v = e.verified[0]
+        self.assertEqual(v["verdict"], "settled")
+        self.assertIn("Sim.Properties", v["evidence"])
+        self.assertIn("exit 0", v["evidence"])
+        self.assertIn("06-tests_Sim.Properties.r2.log", v["evidence"])
+        self.assertIn("no change under client/**", v["evidence"])
+        self.assertIn("does not apply", v["evidence"])
+        self.assertEqual(v["why"], "the engine's own check results settle it")
+        self.assertIn("Sim.Properties", e.comment.call_args[0][0])
+
+    def test_a_red_or_unrelated_skip_or_a_missing_check_never_settles_the_item(self):
+        for over in ({self.SUITE: {"exit": 1, "status": "failed"}},
+                     {"unity-tests": {"why": "static failed first"}}):
+            e = self.evidenced(self.engine_checks(**over))
+            with mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="x")]}, None)) as ai:
+                self.assertEqual(len(e.self_verify([{"what": self.YXBB6, "kind": "tooling"}])), 1)
+            self.assertEqual(ai.call_count, 1)
+        e = self.evidenced()
+        item = {"what": "I did not re-run the Other.Suite tests; the engine ran them", "kind": "tooling"}
+        with mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="x")]}, None)) as ai:
+            self.assertEqual(len(e.self_verify([item])), 1)
+        self.assertEqual(ai.call_count, 1)
+
+    def test_an_item_that_also_raises_a_behaviour_a_look_or_a_missing_test_is_never_settled(self):
+        extra = ["The engine ran the Sim.Properties suite and it passed, but nothing tests the empty-sleep case.",
+                 "I did not re-run Sim.Properties; the engine ran it. The sleep skip behaviour on a real device is unchecked.",
+                 "Sim.Properties passed in the engine, but the sleep screen looks wrong and the layout needs a look.",
+                 "Sim.Properties passed; a test for the SkipStop edge case is missing."]
+        for what in extra:
+            e = self.evidenced()
+            with mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="x")]}, None)) as ai:
+                self.assertEqual(len(e.self_verify([{"what": what, "kind": "tooling"}])), 1, what)
+            self.assertEqual(ai.call_count, 1, what)
+
+    def test_checks_of_an_earlier_tree_settle_nothing(self):
+        e = self.evidenced()
+        e.checks_tree = "0" * 40
+        with mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="x")]}, None)) as ai:
+            self.assertEqual(len(e.self_verify([{"what": self.YXBB6, "kind": "tooling"}])), 1)
+        self.assertEqual(ai.call_count, 1)
+
+    def test_the_verify_and_review_briefs_carry_the_engines_check_results(self):
+        e = self.evidenced()
+        e.run_dir = Path("/runs/x")
+        text = e.checks_evidence()
+        self.assertIn("the engine's evidence", text)
+        self.assertIn("may cite", text)
+        self.assertIn("`unity-tests` [tests] skipped (no change under client/**, content/**)", text)
+        self.assertIn("`fmt` [static] pass, exit 0, 4 s, log checks/00-fmt.r1.log", text)
+        item = {"what": "the menu reads well", "kind": "requirement"}
+        with mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="taste")]}, None)) as ai:
+            e.self_verify([item])
+        self.assertIn("unity-analyzers", ai.call_args[0][2])
+        self.assertIn("no change under client/**", ai.call_args[0][2])
+        self.assertIn("{engine_checks}", engine.REVIEW_PROMPT)
+
     # -- tl-bxk.10.18
     def reviewer_brief(self, cap=40000):
         script = DelegateScript({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
