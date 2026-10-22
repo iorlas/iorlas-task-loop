@@ -487,7 +487,8 @@ def cmd_slot(a):
     repo = repo_root()
     cfg = profile_slots(repo)
     if a.op == "list":  # NAME BEAD STATUS HOLDER WHY ENGINE DIR
-        free_expired(repo)
+        with slot_lock(repo):
+            free_expired(repo)
         for b in slot_beads(repo):
             name = b["title"].split()[-1]
             m, hold, d = b.get("metadata") or {}, slot_hold(b), slot_dir(repo, name, cfg)
@@ -500,8 +501,8 @@ def cmd_slot(a):
     if a.op == "hold":  # a slot for something that is no bead (screenshots, a person): the loop and run-task keep off
         if not a.name or not a.why:
             sys.exit("tl: tl slot hold NAME --why TEXT [--for MIN]")
-        free_expired(repo)
         with slot_lock(repo):
+            free_expired(repo)
             b = slot_bead(repo, a.name)
             if not b:
                 sys.exit("tl: no slot " + a.name)
@@ -608,8 +609,8 @@ def take_slot(repo, cfg, why="tl loop", bead="", ticket=None):
     """(name, dir, slot bead) of the first free slot this session could claim, or None. Free: its bead open, no hold,
     and no live engine or worker in its worktree (a run started without the slot bead, an older engine). A waiter
     calls wait_slot, which takes its turn in the line first; `ticket` is its number, kept on the take's event."""
-    free_expired(repo)
     with slot_lock(repo):
+        free_expired(repo)
         for b in slot_beads(repo):
             name = b["title"].split()[-1]
             d = slot_dir(repo, name, cfg)
@@ -683,17 +684,21 @@ def drop_ticket(t):
 def waiting_line(repo):
     """The live tickets, first in line first; a dead waiter's ticket is removed."""
     out = []
+    for f in ticket_dir(repo).glob(".*.tmp"):  # a waiter that died between writing and linking its ticket
+        with contextlib.suppress(OSError):
+            if time.time() - f.stat().st_mtime > 600:
+                f.unlink()
     for f in sorted(ticket_dir(repo).glob("*.json")):
         try:
             t = json.loads(f.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue  # gone meanwhile
-        if not proc_alive(t.get("pid"), t.get("start") or ""):
+        if not isinstance(t, dict) or not proc_alive(t.get("pid"), t.get("start") or ""):
             with contextlib.suppress(OSError):
                 f.unlink()
             continue
         out.append(t)
-    return sorted(out, key=lambda t: t["seq"])
+    return sorted(out, key=lambda t: t.get("seq", 0))
 
 
 def wait_slot(repo, cfg, why, bead="", stop=None, sleep=time.sleep, poll=None, on_wait=None):
@@ -704,7 +709,7 @@ def wait_slot(repo, cfg, why, bead="", stop=None, sleep=time.sleep, poll=None, o
     t, delay = take_ticket(repo, why), first
     try:
         while True:
-            ahead = [x for x in waiting_line(repo) if x["seq"] < t["seq"]]
+            ahead = [x for x in waiting_line(repo) if x.get("seq", 0) < t["seq"]]
             if not ahead:
                 got = take_slot(repo, cfg, why, bead=bead, ticket=t["seq"])
                 if got:
@@ -723,8 +728,8 @@ def take_named_slot(repo, name, cfg, why, bead=""):
     """(slot bead, "") when this session now holds slot `name`, or (None, why not): `slot S held by X since T`. A held
     slot bead is refused even when this session's actor holds it (two hand runs from one session
     share its actor, and bd lets an actor re-claim its own bead); a hold too, its holder's own included."""
-    free_expired(repo)
     with slot_lock(repo):
+        free_expired(repo)
         return take_named_slot_locked(repo, name, cfg, why, bead)
 
 
@@ -770,10 +775,24 @@ def held_by(b):
                                  m.get("held_why") or "no reason")
 
 
-def release_slot(repo, name):
+def release_slot(repo, name, bead=None, mine=False):
+    """Frees slot `name`. mine=True (a run ending): under slot_lock, and only while the slot's marks still name this
+    actor (and `bead`, when it is marked): a slot reclaimed and retaken is the new holder's, left alone."""
+    with slot_lock(repo):
+        return release_slot_locked(repo, name, bead, mine)
+
+
+def release_slot_locked(repo, name, bead, mine):
     b = slot_bead(repo, name)
     if not b:
         return False
+    if mine:
+        m = b.get("metadata") or {}
+        if m.get("held_by") != actor() or (bead is not None and m.get("held_bead") not in (None, "", bead)):
+            print("tl: slot %s is no longer held by %s%s (now %s): left alone" % (
+                name, actor(), " for " + bead if bead else "", held_by(b) if b.get("status") != "open" else "free"),
+                file=sys.stderr)
+            return True
     # the holder's marks go first, while the bead is still claimed: unclaimed first, a hold taken in between would lose
     # its marks to this clean-up (race test, tl-bxk.11.1)
     bd("update", b["id"], *sum((["--unset-metadata", k] for k in HELD_KEYS), []), cwd=repo)
@@ -783,7 +802,8 @@ def release_slot(repo, name):
 
 
 def free_expired(repo):
-    """An expired hold gives its slot bead back (the holder's claim with it), so the slot is free at once."""
+    """An expired hold gives its slot bead back (the holder's claim with it), so the slot is free at once. Takes no
+    lock: the caller holds slot_lock, so a stale look never wipes a slot another session took meanwhile."""
     for b in slot_beads(repo):
         m = b.get("metadata") or {}
         if hold_until(b) and not slot_hold(b):

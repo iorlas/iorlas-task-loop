@@ -2647,7 +2647,7 @@ def run_any_slot(a, repo, cfg):
         if not told:
             say("no free slot%s; waiting in line" % (" (%d ahead)" % ahead if ahead else ""))
             told.append(1)
-    got = tl.wait_slot(repo, tl.profile_slots(repo), "run-task " + a.id, bead=a.id, stop=lambda: not wait,
+    got = tl.wait_slot(repo, tl.profile_slots(repo), "run-task " + a.id, stop=lambda: not wait,
                        on_wait=waiting)
     if not got:
         why = "no free slot (tl slot list); --wait waits in line for one"
@@ -2662,25 +2662,35 @@ def run_any_slot(a, repo, cfg):
             threading.current_thread() is threading.main_thread() else None
         try:
             os.environ.pop("TASK_LOOP_SLOT_BEAD", None)
-            tl.release_slot(repo, a.slot)
+            tl.release_slot(repo, a.slot, bead=a.id, mine=True)
         finally:
             if old is not None:
                 signal.signal(signal.SIGTERM, old)
 
 
-def take_area(a, repo, cfg, lock):
+def take_area(a, repo, cfg, lock, sb=""):
     """The engine lock, with the area check before it under the area lock (loop.area_lock): "" when this run holds the
     worktree, else why not. A bead whose area runs elsewhere: a warning, or refused with --exclusive-area."""
     import loop  # the queue rule; imports engine itself
+
+    def mark():  # the slot says which bead runs in it (held_bead makes its area busy): only once the area is decided
+        if sb:
+            tl.bd("update", sb, "--set-metadata", "held_bead=" + a.id, cwd=repo)
     if not loop.has_areas(cfg):
-        return lock.take()
+        why = lock.take()
+        if not why:
+            mark()
+        return why
     with loop.area_lock(repo, cfg):
         area, busy = loop.area_busy(repo, cfg, tl.show(a.id) or {"id": a.id}, {})
         if busy and getattr(a, "exclusive_area", False):
             return busy + " (--exclusive-area)"
         if busy:
             say("⚠ %s: running anyway beside it; --exclusive-area refuses instead" % busy)
-        return lock.take()
+        why = lock.take()
+        if not why:
+            mark()
+        return why
 
 
 def run_in(a, repo, cfg):
@@ -2709,13 +2719,13 @@ def run_in(a, repo, cfg):
         slot = a.slot or tl.slot_of(repo, wt)
         sb = (tl.slot_bead(repo, slot) or {}).get("id") if slot else ""
         if slot and not (sb and os.environ.get("TASK_LOOP_SLOT_BEAD") == sb):
-            took, why = tl.take_named_slot(repo, slot, tl.profile_slots(repo), "run-task " + a.id, bead=a.id)
+            took, why = tl.take_named_slot(repo, slot, tl.profile_slots(repo), "run-task " + a.id)
             if not took:
                 print("TAKEN: %s" % why)
                 return {"v": 1, "outcome": "taken", "bead": a.id, "why": why}
             os.environ["TASK_LOOP_SLOT_BEAD"] = took  # the engine's heartbeat keeps it
         lock = EngineLock(wt, a.id, slot)
-        busy = take_area(a, repo, cfg, lock)
+        busy = take_area(a, repo, cfg, lock, sb=took or sb if slot else "")
         if busy:
             why = busy if busy.startswith("area ") else "worktree %s: %s" % (wt, busy)
             print("TAKEN: %s" % why)
@@ -2731,7 +2741,7 @@ def run_in(a, repo, cfg):
                 LOCK = None
             if took:
                 os.environ.pop("TASK_LOOP_SLOT_BEAD", None)
-                tl.release_slot(repo, slot)
+                tl.release_slot(repo, slot, bead=a.id, mine=True)
         finally:
             if old is not None:
                 signal.signal(signal.SIGTERM, old)

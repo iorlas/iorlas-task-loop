@@ -9,6 +9,7 @@ import signal
 import subprocess
 import sys
 import textwrap
+import threading
 import time
 import types
 import unittest
@@ -401,16 +402,25 @@ class HoldRaces(Slots):
         # release's own clean-up then wiped the hold's metadata: the hold was gone, the slot only leased
         bd = self.beads({})
         self.assertTrue(tl.take_slot(str(self.repo), {}))
-        real = bd.__call__
+        real, holds = bd.__call__, []
 
-        def racing(*a, **kw):
+        def hold():
+            with mock.patch.dict(os.environ, {"TASK_LOOP_ACTOR": "tl-denis000"}):
+                holds.append(self.cli("slot", "hold", "s1", "--why", "screenshots")[0])
+
+        def racing(*a, **kw):  # the release runs under slot_lock: the hold waits for it, never lands in between
             r = real(*a, **kw)
             if a[:1] == ("unclaim",) and a[1] == "sl-1":
-                with mock.patch.dict(os.environ, {"TASK_LOOP_ACTOR": "tl-denis000"}):
-                    self.assertEqual(self.cli("slot", "hold", "s1", "--why", "screenshots")[0], 0)
+                th = threading.Thread(target=hold)
+                th.start()
+                th.join(0.3)
+                self.assertEqual(holds, [])
+                racing.th = th
             return r
         with mock.patch.object(tl, "bd", side_effect=racing):
             tl.release_slot(str(self.repo), "s1")
+        racing.th.join(10)
+        self.assertEqual(holds, [0])
         self.assertEqual(bd.slots["sl-1"]["assignee"], "tl-denis000")
         self.assertIn("hold_until", bd.slots["sl-1"].get("metadata", {}))
         self.assertTrue(tl.slot_hold(bd.slots["sl-1"]))

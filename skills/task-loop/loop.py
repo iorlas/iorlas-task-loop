@@ -108,13 +108,23 @@ def running(repo):
     return out
 
 
+AREA_WAIT_SAY = 600  # seconds between the "still waiting on an area" lines
+
+ANY_AREA = "*"  # busy_areas key for a running bead that could not be read
+
+
 def busy_areas(repo, cfg, cache, but=""):
     """{area: (bead, where)} of the areas a running bead (other than `but`) works in."""
     out = {}
     for bid, where in sorted(running(repo).items()):
         if bid == but:
             continue
-        a = area_of(tl.show(bid, cwd=repo) or {"id": bid}, cfg, cache)
+        held = tl.show(bid, cwd=repo)
+        if not held:  # its area is unknown: it may be any, so every area waits (a slot hung on a bd error stays visible)
+            say("running bead %s in %s is unreadable (bd show failed): every area counts as busy" % (bid, where))
+            out.setdefault(ANY_AREA, (bid, where))
+            continue
+        a = area_of(held, cfg, cache)
         if a:
             out.setdefault(a, (bid, where))
     return out
@@ -125,7 +135,8 @@ def area_busy(repo, cfg, b, cache):
     a = area_of(b, cfg, cache)
     if not a:
         return "", ""
-    hit = busy_areas(repo, cfg, cache, but=b.get("id", "")).get(a)
+    busy = busy_areas(repo, cfg, cache, but=b.get("id", ""))
+    hit = busy.get(a) or busy.get(ANY_AREA)
     return a, ("area %s busy: %s in %s" % (a, hit[0], hit[1]) if hit else "")
 
 
@@ -169,7 +180,7 @@ def queue(repo):
     if has_areas(cfg) and keep:
         busy, free = busy_areas(repo, cfg, cache), []
         for k in keep:
-            hit = busy.get(area_of(k[3], cfg, cache))
+            hit = busy.get(area_of(k[3], cfg, cache)) or (busy.get(ANY_AREA) if area_of(k[3], cfg, cache) else None)
             if hit:
                 skipped.append((k[3]["id"], "area %s busy: %s in %s" % (area_of(k[3], cfg, cache), hit[0], hit[1])))
             else:
@@ -488,6 +499,7 @@ def passes(repo, a, started):
         with tl.os_lock(tl.config_dir() / "locks" / ("worktree-%s.lock" % paths(repo)["states"][1]), "pid %d" % os.getpid()):
             wt = tl.start_worktree(repo, worktree_name(repo))
             write_state(repo, pid=os.getpid(), started=started, worktree=wt)
+    area_wait = [0.0, 0.0]  # when every ready bead began waiting for an area, and when that was last said
     fails, ran, later, pauses = [], 0, {}, {}  # later: a paused or taken bead -> when to try it again
     while True:
         if stop_mode(repo):
@@ -503,6 +515,8 @@ def passes(repo, a, started):
         ranked, skipped = queue(repo)
         now = clock()
         cands = [b for b, _ in ranked if later.get(b["id"], 0) <= now]
+        if cands:
+            area_wait[0] = 0.0
         if not cands:
             if ranked:
                 wake = min(later[b["id"]] for b, _ in ranked)
@@ -511,10 +525,18 @@ def passes(repo, a, started):
                 nap(wake - now, repo, until)
                 continue
             areas = [w for _, w in skipped if w.startswith("area ")]
-            if areas:  # not drained: those beads run once their area frees
-                say("every ready bead waits for its area (%s): looking again in %d s" % ("; ".join(areas[:3]), AREA_POLL))
+            if areas:  # not drained: those beads run once their area frees; --until still ends the loop
+                t = clock()
+                if not area_wait[0]:
+                    area_wait[0] = area_wait[1] = t
+                    say("every ready bead waits for its area (%s): looking again in %d s" % ("; ".join(areas[:3]), AREA_POLL))
+                elif t - area_wait[1] >= AREA_WAIT_SAY:  # a hung but live holder never frees it: say how long
+                    area_wait[1] = t
+                    m = re.match(r"area (\S+) busy: (\S+) in (\S+)", areas[0])
+                    say("waiting %d min on area %s held by %s in %s" % ((t - area_wait[0]) // 60, *(m.groups() if m else (areas[0], "?", "?"))))
                 nap(AREA_POLL, repo, until)
                 continue
+            area_wait[0] = 0.0
             if not a.wait_drained:
                 print("DRAINED: no ready bead after %d bead(s)" % ran)
                 return 0
@@ -571,7 +593,7 @@ def passes(repo, a, started):
             beat.stop()
             tl.drop_engine_lock(d, os.getpid())
             if slots:
-                tl.release_slot(repo, name)
+                tl.release_slot(repo, name, mine=True)
             write_state(repo, pid=os.getpid(), started=started, worktree=wt)
         if r is None:  # every candidate is held by another session: the next pass sleeps until one is due
             continue

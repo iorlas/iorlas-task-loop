@@ -4,6 +4,7 @@ The slot line (tl-bxk.11.5): waiters for a slot are served in arrival order; a d
 import io
 import json
 import os
+import signal
 import subprocess
 import sys
 import threading
@@ -17,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))  # python3 -m unittest 
 from test_loop import bead, rec  # noqa: E402
 from test_slots import Slots  # noqa: E402
 
+import engine  # noqa: E402
 import loop  # noqa: E402
 import tl  # noqa: E402
 
@@ -34,7 +36,7 @@ class AreaOf(unittest.TestCase):
         self.assertEqual(loop.area_of(bead("x-5", labels=["lane:live"]), {}, cache), "")  # no area config: none
 
 
-class Areas(Slots):
+class AreasBase(Slots):
     def setUp(self):
         super().setUp()
         (self.repo / ".task-loop.json").write_text(json.dumps({"slots": {"count": 2}, "engine": AREAS}))
@@ -54,6 +56,8 @@ class Areas(Slots):
         ranked, skipped = loop.queue(str(self.repo))
         return [b["id"] for b, _ in ranked], dict(skipped)
 
+
+class Areas(AreasBase):
     def test_the_queue_skips_a_bead_whose_area_runs_in_another_slot_and_keeps_the_order_of_the_rest(self):
         bd = self.lanes({"x-1": [], "x-2": [], "x-3": [], "x-4": []}, {"x-1": "live", "x-2": "live", "x-3": "shell"})
         self.running(bd, "x-1")
@@ -322,3 +326,128 @@ class Line(Slots):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReviewFixes(AreasBase):
+    """Review of the areas and the slot line: the expired-hold clean-up, release by the holder only, an unreadable
+    holder, a ticket without seq, a long area wait, two exclusive hand runs."""
+
+    def expired(self, bd, sb="sl-1"):
+        bd.slots[sb].update(status="in_progress", assignee="tl-old", metadata={
+            "held_by": "tl-old", "held_since": "2026-10-21T10:00:00", "held_why": "screenshots", "hold_until": "1"})
+
+    def test_two_freers_of_one_expired_hold_and_a_taker_never_wipe_the_takers_slot(self):
+        bd = self.beads({}, slots=1)
+        self.expired(bd)
+        repo, cfg = str(self.repo), tl.profile_slots(str(self.repo))
+        real_bd, paused, go, won = tl.bd, threading.Event(), threading.Event(), {}
+
+        def bd_pause(*a, **kw):  # P2 has read the expired hold and stops before it wipes the marks
+            if a[0] == "update" and "--unset-metadata" in a and threading.current_thread().name == "P2" \
+                    and not paused.is_set():
+                paused.set()
+                go.wait(1.0)
+            return real_bd(*a, **kw)
+
+        def taker(name):
+            won[name] = tl.take_slot(repo, cfg, name)
+        with mock.patch.object(tl, "bd", side_effect=bd_pause), \
+                mock.patch.object(tl, "actor", side_effect=lambda: threading.current_thread().name):
+            p2 = threading.Thread(target=taker, args=("P2",), name="P2")
+            p2.start()
+            self.assertTrue(paused.wait(5))
+            p1 = threading.Thread(target=taker, args=("P1",), name="P1")
+            p1.start()
+            p1.join(0.4)  # unfixed: P1 frees the slot and takes it meanwhile; fixed: it waits for P2's lock
+            go.set()
+            p1.join(10)
+            p2.join(10)
+        winners = [n for n, v in won.items() if v]
+        self.assertEqual(len(winners), 1, won)
+        slot = bd.slots["sl-1"]
+        self.assertEqual((slot["status"], slot["assignee"], slot["metadata"].get("held_by")),
+                         ("in_progress", winners[0], winners[0]))
+
+    def test_a_release_from_a_run_whose_slot_was_retaken_leaves_the_new_holders_slot(self):
+        bd = self.beads({}, slots=1)
+        repo = str(self.repo)
+        with mock.patch.dict(os.environ, {"TASK_LOOP_ACTOR": "tl-new00000"}):
+            self.assertTrue(tl.take_slot(repo, tl.profile_slots(repo), "loop", bead="x-2"))
+        before = json.loads(json.dumps(bd.slots["sl-1"]))
+        err = io.StringIO()
+        with mock.patch.dict(os.environ, {"TASK_LOOP_ACTOR": "tl-old00000"}), mock.patch.object(sys, "stderr", err):
+            self.assertTrue(tl.release_slot(repo, "s1", bead="x-1", mine=True))
+        self.assertEqual(bd.slots["sl-1"], before)
+        self.assertIn("left alone", err.getvalue())
+        with mock.patch.dict(os.environ, {"TASK_LOOP_ACTOR": "tl-new00000"}):  # the right bead of the right actor
+            tl.release_slot(repo, "s1", bead="x-2", mine=True)
+        self.assertEqual((bd.slots["sl-1"]["status"], bd.slots["sl-1"].get("metadata")), ("open", {}))
+
+    def test_an_unreadable_holder_makes_every_area_busy_and_is_logged(self):
+        bd = self.lanes({"x-1": [], "x-2": [], "x-3": [], "x-4": []}, {"x-1": "live", "x-2": "live", "x-3": "shell"})
+        self.running(bd, "x-1")
+        real = tl.show
+        err = io.StringIO()
+        with mock.patch.object(tl, "show", side_effect=lambda i, **kw: {} if i == "x-1" else real(i, **kw)), \
+                mock.patch.object(loop.engine, "say", side_effect=err.write):
+            ids, skipped = self.order()
+        self.assertEqual(ids, ["x-4"])  # a bead of no area is unrestricted
+        self.assertIn("area live busy: x-1 in s1", skipped["x-2"])
+        self.assertIn("area shell busy: x-1 in s1", skipped["x-3"])
+        self.assertIn("x-1", err.getvalue())
+
+    def test_a_ticket_without_seq_does_not_break_the_line_and_stale_tmp_files_are_swept(self):
+        self.beads({}, slots=1)
+        repo = str(self.repo)
+        d = tl.ticket_dir(repo)
+        (d / ("%012d.json" % 7)).write_text(json.dumps({"pid": os.getpid(), "start": tl.proc_start(os.getpid())}))
+        old, fresh = d / ".1.2.tmp", d / ".1.3.tmp"
+        old.write_text("{")
+        fresh.write_text("{")
+        os.utime(old, (time.time() - 700, time.time() - 700))
+        self.assertEqual([t.get("seq", 0) for t in tl.waiting_line(repo)], [0])
+        self.assertTrue(tl.wait_slot(repo, tl.profile_slots(repo), "x", stop=lambda: True) is None)  # behind it
+        self.assertFalse(old.exists())
+        self.assertTrue(fresh.exists())
+
+    def test_a_long_area_wait_says_how_long_and_who_holds_it_and_until_still_ends_the_loop(self):
+        import datetime
+        bd = self.lanes({"x-1": [], "x-2": []}, {"x-1": "live", "x-2": "live"})
+        self.running(bd, "x-1")  # a hung but live holder
+        until = (datetime.datetime.fromtimestamp(self.clock()) + datetime.timedelta(minutes=25)).strftime("%H:%M")
+        self.assertEqual(self.run_loop("--until", until), 0)
+        self.assertIn("waiting 10 min on area live held by x-1 in s1", self.out)
+        self.assertIn("waiting 20 min on area live held by x-1 in s1", self.out)
+        self.assertIn("reached", self.out)
+        self.assertEqual(self.started, [])
+
+    def test_two_exclusive_hand_runs_in_one_area_let_the_first_in_win(self):
+        bd = self.lanes({"x-1": [], "x-2": []}, {"x-1": "live", "x-2": "live"})
+        outs, real, gate, done = {}, engine.take_area, threading.Barrier(2, timeout=5), threading.Barrier(2, timeout=5)
+
+        def area(*a, **kw):  # both runs hold their slots before either decides, and neither lets go before both did
+            gate.wait()
+            try:
+                return real(*a, **kw)
+            finally:
+                done.wait()
+
+        def run(b, slot):
+            f = Path(self.home, "out-%s.json" % b)
+            a = engine.Args(id=b, worktree=None, slot=slot, dry_run=False, fresh=False, quiet=True,
+                            outcome_file=str(f), exclusive_area=True)
+            engine.main(a)
+            outs[b] = json.loads(f.read_text())["outcome"]
+        made = mock.Mock()
+        made.return_value.run.return_value = 0
+        made.return_value.result.side_effect = lambda: {"outcome": "landed"}
+        made.return_value.log_path = Path(self.home, "e.jsonl")
+        with mock.patch.object(engine, "reclaim", return_value=(True, "")), mock.patch.object(tl, "cmd_claim", return_value=0), \
+                mock.patch.object(engine, "Engine", made), mock.patch.object(signal, "signal"), \
+                mock.patch.object(engine, "take_area", side_effect=area), redirect_stdout(io.StringIO()):
+            ths = [threading.Thread(target=run, args=("x-1", "s1")), threading.Thread(target=run, args=("x-2", "s2"))]
+            for t in ths:
+                t.start()
+            for t in ths:
+                t.join(15)
+        self.assertEqual(sorted(outs.values()), ["landed", "taken"], outs)
