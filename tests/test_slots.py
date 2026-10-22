@@ -523,13 +523,24 @@ class StoppedEngineKillsItsWorker(unittest.TestCase):
             self.assertIsNone(res)
             return
         old = signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(engine.Blocked("failed: stopped (SIGTERM)")))
-        t = __import__("threading").Timer(1.0, lambda: os.kill(os.getpid(), signal.SIGTERM))
+        done = __import__("threading").Event()
+
+        def stop_once_the_worker_runs():  # under a loaded machine route.py can take over a second to start it
+            f = self.d / "w.pid"
+            for _ in range(400):
+                if done.is_set() or (f.exists() and f.read_text()):
+                    break
+                time.sleep(0.05)
+            if not done.wait(0.3):
+                os.kill(os.getpid(), signal.SIGTERM)
+        t = __import__("threading").Timer(0, stop_once_the_worker_runs)
         t.start()
         try:
             with mock.patch.object(engine, "STOP_GRACE", 1), self.assertRaises(engine.Blocked):
                 engine.run_proc(cmd, str(self.d), 60, log)
         finally:
-            t.cancel()
+            done.set()
+            t.join()
             signal.signal(signal.SIGTERM, old)
 
     def test_a_stop_lets_route_py_end_its_worker(self):
