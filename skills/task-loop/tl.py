@@ -1183,8 +1183,14 @@ def stop_server(v=None, port=None):
     if not is_dash_server(v) or not v.get("pid"):
         return
     try:
-        os.kill(int(v["pid"]), signal.SIGTERM)
-    except (OSError, ValueError):
+        pid = int(v["pid"])
+    except ValueError:
+        return
+    if pid in (os.getpid(), os.getppid()) or pid <= 1:  # a server that names this very process is a test's, not ours to stop
+        return
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except OSError:
         pass
     for _ in range(20):
         if not ping(port):

@@ -247,10 +247,11 @@ class EngineTest(unittest.TestCase):
         c = engine.load_cfg(str(self.wt))
         c["check_timeout_min"] = 0.03  # under 2 s
         eng = engine.Engine("t-1", str(self.wt), c)
-        res = eng.run_checks({"checks": ["bash -c 'sleep 61.234; true'"], "files": []}, "s")
+        mark = "61.%d" % os.getpid()  # unique: a second suite running at once has its own sleep
+        res = eng.run_checks({"checks": ["bash -c 'sleep %s; true'" % mark], "files": []}, "s")
         self.assertEqual(res[0]["exit"], 124)
         self.assertIn("timed out", res[0]["tail"])
-        left = subprocess.run(["pgrep", "-f", "sleep 61.234"], capture_output=True, text=True).stdout.strip()
+        left = subprocess.run(["pgrep", "-f", "sleep " + mark], capture_output=True, text=True).stdout.strip()
         self.assertEqual(left, "")
 
     def test_checks_run_without_the_launchers_claude_session(self):

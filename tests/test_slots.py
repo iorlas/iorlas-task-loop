@@ -583,3 +583,54 @@ class KillTreeGroupTest(unittest.TestCase):
         finally:
             p.kill()
             p.wait()
+
+
+@unittest.skipUnless(POSIX, "process groups")
+class NeverSignalOneself(unittest.TestCase):
+    """A recorded or parsed pid or group id is a claim: no stop, reap or kill path may act on it when it is ours."""
+
+    def test_send_group_refuses_our_group_and_our_parents(self):
+        for gid in (os.getpgrp(), os.getpid(), os.getppid(), 0, 1):
+            with mock.patch.object(engine.os, "killpg") as kp, self.assertRaises(RuntimeError):
+                engine.send_group(gid, signal.SIGTERM)
+            kp.assert_not_called()
+
+    def test_send_pid_refuses_ourselves_and_our_parent(self):
+        for pid in (os.getpid(), os.getppid(), 0, 1):
+            with mock.patch.object(engine.os, "kill") as k, self.assertRaises(RuntimeError):
+                engine.send_pid(pid, signal.SIGTERM)
+            k.assert_not_called()
+
+    def test_a_named_worker_must_still_be_that_process_in_that_group(self):
+        w = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], start_new_session=True)
+        try:
+            with mock.patch.object(engine.os, "killpg") as kp:
+                self.assertFalse(engine.send_group(w.pid, 9, pid=w.pid, start="not when it started"))  # pid reused
+                self.assertFalse(engine.send_group(os.getpgid(w.pid), 9, pid=os.getpid(), start=""))   # not in that group
+                kp.assert_not_called()
+            self.assertTrue(engine.send_group(w.pid, 9, pid=w.pid, start=tl.proc_start(w.pid)))
+        finally:
+            w.kill()
+            w.wait()
+
+    def test_stop_named_with_a_worker_naming_our_own_group_leaves_the_runner_alone(self):
+        p = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], start_new_session=True)
+        w = {"pid": os.getpid(), "pgid": os.getpgrp(), "start": tl.proc_start(os.getpid())}
+        try:
+            with mock.patch.object(engine, "STOP_GRACE", 1):
+                engine.stop_named(p, None, w)  # a route.py that names the runner as its worker
+        finally:
+            p.kill()
+            p.wait()
+
+    def test_stop_server_never_stops_the_calling_process(self):
+        v = {"version": "1", "pid": os.getpid(), "urls": [], "started": 0}
+        with mock.patch.object(tl.os, "kill") as k, mock.patch.object(tl, "ping", return_value=None):
+            tl.stop_server(v)
+        k.assert_not_called()
+
+    def test_run_main_leaves_no_sigterm_handler_behind(self):
+        before = signal.getsignal(signal.SIGTERM)
+        with mock.patch.object(engine, "run_main_stoppable", return_value=0):
+            engine.run_main(mock.Mock())
+        self.assertIs(signal.getsignal(signal.SIGTERM), before)

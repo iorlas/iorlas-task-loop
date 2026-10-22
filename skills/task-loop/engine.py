@@ -439,6 +439,62 @@ def run_proc(cmd, cwd, timeout, log_path, on_line=None, env=None):
 STOP_GRACE = 10  # seconds route.py gets to stop its worker after a SIGTERM, before everything is SIGKILLed
 
 
+def own_ids():
+    """Pids and group ids this process must never signal: itself, its group, its parent and the parent's group."""
+    ids = {os.getpid(), os.getpgrp(), os.getppid()}
+    with contextlib.suppress(OSError):
+        ids.add(os.getpgid(os.getppid()))
+    return ids
+
+
+def send_group(pgid, sig, pid=None, start=""):
+    """killpg that never signals the caller's own group (or its parent's): a recorded or parsed group id is only a claim.
+    pid (+ start): the member that names the group; it must still be that process and still sit in that group."""
+    if not pgid or pgid <= 1 or pgid in own_ids():
+        raise RuntimeError("refusing to signal process group %s: it is ours or our parent's" % pgid)
+    if pid is not None:
+        if not tl.proc_alive(pid, start):
+            return False
+        try:
+            if os.getpgid(pid) != pgid:
+                return False
+        except OSError:
+            return False
+    try:
+        os.killpg(pgid, sig)
+    except OSError:
+        return False
+    return True
+
+
+def send_pid(pid, sig, start=""):
+    """kill that never signals the caller itself or its parent, and only the process that started at `start`."""
+    if not pid or pid <= 1 or pid in own_ids():
+        raise RuntimeError("refusing to signal pid %s: it is ours or our parent's" % pid)
+    if start and not tl.proc_alive(pid, start):
+        return False
+    try:
+        os.kill(pid, sig)
+    except OSError:
+        return False
+    return True
+
+
+def signal_child(p, sig):
+    """Signal a child's whole group when it leads a group of its own, else the child alone: a child that shares our
+    group (no new session) is never reached through the group id, which is ours."""
+    try:
+        led = os.getpgid(p.pid) == p.pid
+    except OSError:
+        led = True  # gone or mocked: its pid is the group id it would have led
+    try:
+        if led:
+            return send_group(p.pid, sig)
+        return send_pid(p.pid, sig)
+    except RuntimeError:
+        return False
+
+
 def stop_tree(p, log=None, worker=None):
     """Stop a delegate call and its worker. route.py runs the worker in a process group of its own and stops it on
     SIGTERM, never on SIGKILL: a SIGKILL to route.py's group alone orphaned the lifesim-5ar.7 writer, which kept editing
@@ -455,22 +511,20 @@ def stop_tree(p, log=None, worker=None):
         return stop_named(p, log, worker)
     before = tl.proc_table()
     tree = descendants(p.pid, before)
-    with contextlib.suppress(OSError):
-        os.killpg(p.pid, signal.SIGTERM)
+    signal_child(p, signal.SIGTERM)
     try:
         p.wait(timeout=STOP_GRACE)
     except subprocess.TimeoutExpired:
         pass
     if p.returncode is None:  # unreaped, its pid and group id cannot have been reused
-        with contextlib.suppress(OSError):
-            os.killpg(p.pid, 9)
+        signal_child(p, 9)
     after = tl.proc_table()
     same = [(pid, pgid, st) for pid, pgid, st in tree if after.get(pid, (None, None, None))[1:] == (pgid, st)]
-    for pid, pgid, _ in same:
-        with contextlib.suppress(OSError):
-            os.killpg(pgid, 9)  # a group with a member still in it keeps its id
-        with contextlib.suppress(OSError):
-            os.kill(pid, 9)
+    for pid, pgid, st in same:
+        with contextlib.suppress(RuntimeError):
+            send_group(pgid, 9)  # a group with a member still in it keeps its id; never our own or our parent's
+        with contextlib.suppress(RuntimeError):
+            send_pid(pid, 9)
     with contextlib.suppress(Exception):
         p.wait(timeout=5)
     end, left = time.time() + 2, same
@@ -487,16 +541,13 @@ def stop_tree(p, log=None, worker=None):
 
 
 def stop_named(p, log, w):
-    with contextlib.suppress(OSError):
-        os.killpg(p.pid, signal.SIGTERM)
+    signal_child(p, signal.SIGTERM)
     try:
         p.wait(timeout=STOP_GRACE)
     except subprocess.TimeoutExpired:
-        with contextlib.suppress(OSError):
-            os.killpg(p.pid, 9)
-    if w["pgid"] != os.getpgrp() and tl.proc_alive(w["pid"], w.get("start") or ""):  # still the worker it named; never our own group
-        with contextlib.suppress(OSError):
-            os.killpg(w["pgid"], 9)
+        signal_child(p, 9)
+    with contextlib.suppress(RuntimeError):  # the worker route.py named: still that process, still in that group, never ours
+        send_group(w["pgid"], 9, pid=w["pid"], start=w.get("start") or "")
     with contextlib.suppress(Exception):
         p.wait(timeout=5)
     end = time.time() + 2
@@ -584,16 +635,14 @@ def kill_tree(p):
         if os.name == "nt":
             subprocess.run(["taskkill", "/PID", str(p.pid), "/T", "/F"], capture_output=True)
         else:
-            own = os.getpgrp()
-            if p.pid == own or (p.returncode is None and os.getpgid(p.pid) == own):
+            if p.pid in own_ids() or (p.returncode is None and os.getpgid(p.pid) in own_ids()):
                 raise RuntimeError("kill_tree: child %s is in our own process group; refusing to kill it" % p.pid)
-            os.killpg(p.pid, signal.SIGTERM)  # Unity removes Temp/UnityLockfile on SIGTERM
-            try:
-                p.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                pass
-            if p.pid != own:  # a group id is only ours to kill while it is the child's own
-                os.killpg(p.pid, signal.SIGKILL)  # stragglers in the group
+            send_group(p.pid, signal.SIGTERM)  # Unity removes Temp/UnityLockfile on SIGTERM
+            end = time.time() + 10
+            while time.time() < end and tl.proc_alive(p.pid):  # not p.wait(): a reaped leader frees its pid, and its
+                time.sleep(0.1)                                # group id with it, for any new process to take
+            if p.returncode is None:
+                send_group(p.pid, signal.SIGKILL)  # stragglers; p is still unreaped, so the group id is still its own
     except OSError:
         pass
     p.wait()
@@ -3119,10 +3168,21 @@ def main(a):
 
 
 def run_main(a):
+    """The SIGTERM handler lives only as long as the run: an engine called in a process that goes on (a test runner, a
+    host) must not leave it behind, turning any later stray SIGTERM there into a Blocked."""
+    old = None
+    if hasattr(signal, "SIGTERM") and threading.current_thread() is threading.main_thread():
+        old = signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(Blocked("failed: stopped (SIGTERM)")))
+    try:
+        return run_main_stoppable(a)
+    finally:
+        if old is not None:
+            signal.signal(signal.SIGTERM, old)
+
+
+def run_main_stoppable(a):
     for f in (sys.stdout, sys.stderr):
         append_output(f)
-    if hasattr(signal, "SIGTERM"):  # a stop (kill switch, coordinator) still runs the close step
-        signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(Blocked("failed: stopped (SIGTERM)")))
     if not os.environ.get("TASK_LOOP_SESSION") and not tl.session_id():
         os.environ["TASK_LOOP_SESSION"] = "engine-" + uuid.uuid4().hex[:12]
     repo = tl.repo_root()
