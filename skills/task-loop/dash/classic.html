@@ -179,9 +179,8 @@ function renderAsks(){
 async function sendAnswer(id){
   const ta=document.querySelector(`[data-ans="${CSS.escape(id)}"]`);const text=(ta&&ta.value||'').trim();if(!text)return;
   let tk='';try{tk=localStorage.getItem('tl.token')||''}catch(e){}
-  if(!tk){tk=prompt('Dashboard token (tl dash url prints a link with it)')||'';try{localStorage.setItem('tl.token',tk)}catch(e){}}
-  const r=await fetch('/api/answer',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+tk},body:JSON.stringify({ask:id,text})});
-  if(r.status==401){try{localStorage.removeItem('tl.token')}catch(e){};alert('Wrong token');return}
+  const r=await fetch('/api/answer',{method:'POST',headers:{'Content-Type':'application/json',...(tk?{'Authorization':'Bearer '+tk}:{})},body:JSON.stringify({ask:id,text})});
+  if(r.status==401){alert('This address needs the token: open the link `tl dash url` prints (ANSWER LINK)');return}
   if(!r.ok){alert((await r.json().catch(()=>({}))).error||('error '+r.status))}
   poll()}
 (()=>{const u=new URLSearchParams(location.search);if(u.get('task')){S.task=u.get('task');S.taskRepo=u.get('repo')||'';S.tab='tasks';S.run=u.get('run')}})();

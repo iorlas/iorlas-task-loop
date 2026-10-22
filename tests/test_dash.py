@@ -186,8 +186,41 @@ class Live(unittest.TestCase):
                 p.wait(5)
 
 
+class PostAuth(unittest.TestCase):
+    """Denis 2026-10-22: the queue is local, so no token from loopback or Tailscale (100.64.0.0/10); any other source needs it."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.env = mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": self.tmp.name, "APPDATA": self.tmp.name,
+                                                "HOME": self.tmp.name, "USERPROFILE": self.tmp.name})
+        self.env.start()
+        self.tok = server.token()
+
+    def tearDown(self):
+        self.env.stop()
+        self.tmp.cleanup()
+
+    def test_loopback_and_tailscale_need_no_token(self):
+        for addr in ("127.0.0.1", "127.5.5.5", "::1", "::ffff:127.0.0.1", "100.64.0.1", "100.101.102.103", "100.127.255.254"):
+            self.assertTrue(server.post_allowed(addr, None), addr)
+            self.assertTrue(server.post_allowed(addr, "Bearer wrong"), addr)
+
+    def test_any_other_source_needs_the_token(self):
+        for addr in ("192.168.1.20", "10.0.0.5", "172.17.0.2", "100.63.255.255", "100.128.0.1", "8.8.8.8", "fe80::1", "junk", ""):
+            self.assertFalse(server.post_allowed(addr, None), addr)
+            self.assertFalse(server.post_allowed(addr, "Bearer wrong"), addr)
+            self.assertFalse(server.post_allowed(addr, "Bearer "), addr)
+            self.assertTrue(server.post_allowed(addr, "Bearer " + self.tok), addr)
+
+    def test_the_address_comes_from_the_socket_not_a_header(self):
+        src = (ROOT / "skills" / "task-loop" / "dash" / "server.py").read_text()
+        self.assertIn("post_allowed(self.client_address[0]", src)
+        self.assertNotIn("X-Forwarded-For", src)
+
+
 class Asks(unittest.TestCase):
-    """The owner answers an ask from the phone: only with the token, first answer wins, the bead is commented and opened."""
+    """The owner answers an ask from the phone: a token only from outside loopback and Tailscale, first answer wins,
+    the bead is commented and opened."""
 
     def test_answer_needs_the_token_and_reaches_the_bead_once(self):
         with tempfile.TemporaryDirectory() as d:
@@ -229,18 +262,49 @@ class Asks(unittest.TestCase):
                         return urllib.request.urlopen(req).status
                     except urllib.error.HTTPError as e:
                         return e.code
-                self.assertEqual(post("", "new"), 401)
-                self.assertEqual(post("wrong", "new"), 401)
-                self.assertEqual(post(token, "New format."), 200)
+                self.assertEqual(post("", "new"), 200)  # loopback: no token
                 self.assertEqual(post(token, "Old, actually."), 409)
                 log = (d / "bd.log").read_text()
-                self.assertIn("comments add x-1 New format.", log)
+                self.assertIn("comments add x-1 new", log)
                 self.assertIn("update x-1 --status open", log)
                 self.assertNotIn("Old, actually", log)
                 self.assertIn(b"Asks", urllib.request.urlopen(base + "/").read())
+                self.assertNotIn(b"prompt(", urllib.request.urlopen(base + "/").read())
             finally:
                 p.terminate()
                 p.wait(5)
+
+
+class AskOptions(unittest.TestCase):
+    """An option is one click: it posts its answer text through /api/answer, and bd gets that exact text."""
+
+    def test_an_option_answer_reaches_bd_with_the_exact_text_and_shows_as_answered(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            (d / "bin").mkdir()
+            (d / "bin" / "bd").write_text("#!/bin/sh\nfor a in \"$@\"; do printf '[%s]' \"$a\"; done >> " + str(d / "bd.log") + "\necho >> " + str(d / "bd.log") + "\n")
+            (d / "bin" / "bd").chmod(0o755)
+            asks = d / "task-loop" / "asks"
+            asks.mkdir(parents=True)
+            text = "B: keep it parked; relabel sim-later (no new code)"
+            opts = [{"label": "Build it", "answer": "A: build now", "note": "4 stages"},
+                    {"label": "Keep parked", "answer": text, "note": "none", "recommended": True}]
+            (asks / "x-1.json").write_text(json.dumps({"v": 1, "id": "x-1-1", "bead": "x-1", "kind": "decision",
+                                                       "question": "Build or park?", "t": time.time(), "status": "open",
+                                                       "parks_at": time.time() + 86400, "repo": str(d), "options": opts}))
+            env = {"XDG_CONFIG_HOME": str(d), "APPDATA": str(d), "HOME": str(d), "USERPROFILE": str(d),
+                   "PATH": str(d / "bin") + os.pathsep + os.environ["PATH"]}
+            with mock.patch.dict(os.environ, env):
+                shown = server.asks()["asks"][0]
+                self.assertEqual(shown["options"], opts)  # the page renders these
+                self.assertEqual(server.open_ask("x-1")["options"], opts)
+                clicked = shown["options"][1]["answer"]
+                self.assertEqual(server.answer({"ask": "x-1-1", "text": clicked}), (200, {"ok": True}))
+                self.assertEqual(server.answer({"ask": "x-1-1", "text": "A: build now"})[0], 409)
+                self.assertEqual(server.asks()["asks"][0]["answer"], text)
+            log = (d / "bd.log").read_text().splitlines()
+            self.assertEqual(log[0], "[comments][add][x-1][%s]" % text)
+            self.assertEqual(log[1], "[update][x-1][--status][open]")
 
 
 class LaneBanner(unittest.TestCase):

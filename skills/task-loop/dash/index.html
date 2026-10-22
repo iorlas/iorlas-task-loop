@@ -124,6 +124,15 @@ main{max-width:1180px;margin:0 auto;padding:22px 20px 80px}
 .askbox .q{white-space:pre-wrap;font-size:14px;line-height:1.6;color:var(--ink2);max-height:340px;overflow:auto}
 .askbox textarea{display:block;width:100%;min-height:80px;margin:12px 0 10px;border-radius:10px;border:1px solid var(--line2);background:var(--raise);color:var(--ink);font:inherit;padding:10px 12px;resize:vertical;outline:none}
 .askbox textarea:focus{border-color:var(--ring);box-shadow:0 0 0 3px rgba(79,107,237,.16)}
+.askbox .opts{display:flex;flex-direction:column;gap:8px;margin:12px 0 0}
+.askbox .opt{display:block;width:100%;text-align:left;padding:9px 12px;border-radius:10px;border:1px solid var(--line2);background:var(--raise);color:var(--ink);font:inherit;font-size:13px;line-height:1.45;cursor:pointer}
+.askbox .opt:hover{border-color:var(--ring)}
+.askbox .opt[disabled]{opacity:.5;cursor:default}
+.askbox .opt b{font-weight:620}
+.askbox .opt small{display:block;color:var(--mute);font-size:12px;margin-top:2px}
+.askbox .opt.rec{border-color:var(--ask);box-shadow:inset 0 0 0 1px var(--ask)}
+.askbox .opt .tag{font-size:11px;font-weight:620;color:var(--ask);margin-left:8px;text-transform:uppercase;letter-spacing:.03em}
+.askbox .asknote{font-size:12px;color:var(--p-blocked);margin:6px 0 0}
 .btn{height:34px;padding:0 14px;border-radius:9px;background:var(--ink);color:var(--bg);font-weight:600;font-size:13px;transition:opacity .15s}
 .btn:hover{opacity:.88}
 .btn[disabled]{opacity:.5;cursor:default}
@@ -380,7 +389,7 @@ function setTheme(t,nosave){if(!ICON[t])t='auto';if(t=='auto')document.documentE
   $('theme').innerHTML=ICON[t];$('theme').title='Theme: '+t;if(!nosave)try{localStorage.setItem('tl.theme',t)}catch(e){}}
 $('theme').onclick=()=>{const cur=document.documentElement.dataset.theme||'auto';setTheme({auto:'light',light:'dark',dark:'auto'}[cur])};
 (()=>{let t='auto';try{t=localStorage.getItem('tl.theme')||'auto'}catch(e){}setTheme(t,true)})();
-(()=>{const u=new URLSearchParams(location.search);const tk=u.get('token');if(tk){try{localStorage.setItem('tl.token',tk)}catch(e){}}})();
+(()=>{const u=new URLSearchParams(location.search);const tk=u.get('token');if(tk){try{localStorage.setItem('tl.token',tk)}catch(e){}}})();  // loopback and Tailscale need none; the link's token is for any other address
 
 // ---- data ---------------------------------------------------------------------------------------------------------
 const get=async u=>{const r=await fetch(u,{cache:'no-store'});if(!r.ok)throw new Error(u+' '+r.status);return r.json()};
@@ -490,25 +499,32 @@ function renderTask(){const d=S.tl;if(!d||!d.task||d.task.id!=S.task){paint($('m
   if(paint($('main'),'main',html)&&keep){const ta=document.querySelector(`textarea[data-ans="${CSS.escape(keep[0])}"]`);if(ta){ta.value=keep[1];ta.focus();try{ta.setSelectionRange(keep[2],keep[2])}catch(e){}}}}
 
 const ASKK={decision:'Decision needed',verify:'Please check',ticket:'Split or criteria needed',stuck:'Stuck: a hint is needed'};
+function optsHtml(a){const os=(a.options||[]).map((o,i)=>[o,i]).sort((x,y)=>!!y[0].recommended-!!x[0].recommended);
+  return os.length?`<div class="opts">`+os.map(([o,i])=>`<button class="opt${o.recommended?' rec':''}" data-opt="${i}" data-ask="${esc(a.id)}"><b>${esc(o.label)}</b>${o.recommended?'<span class="tag">Recommended</span>':''}${o.note?`<small>${esc(o.note)}</small>`:''}</button>`).join('')+`</div>`:''}
 function askBox(a,withLink){
   return `<div class="askbox"><h3>${chip('s-ask',ASKK[a.kind]||a.kind||'Ask')}${withLink?`<a href="#task=${encodeURIComponent(a.bead)}">${esc(a.title||a.bead)}</a>`:'<span>The engine asks you</span>'}</h3>
     ${withLink?`<div class="meta"><span class="mono">${esc(a.bead)}</span> · asked ${esc(ago(a.t))}</div>`:''}
     <div class="q">${esc(a.question)}</div>${a.answer?`<div class="answered">Answered: ${esc(a.answer)} · the next run starts from it</div>`:
-    `<textarea data-ans="${esc(a.id)}" placeholder="Your answer goes on the bead as a comment; the next run starts from it"></textarea><button class="btn" data-send="${esc(a.id)}">Send answer</button>`}</div>`}
+    `${optsHtml(a)}<textarea data-ans="${esc(a.id)}" placeholder="Your answer goes on the bead as a comment; the next run starts from it"></textarea><button class="btn" data-send="${esc(a.id)}">Send answer</button>`}</div>`}
 function renderAsks(){const as=S.asks.asks||[];
   let html=`<div class="hero"><div><h1>Asks</h1><div class="sum">${as.length?as.length+' open':'nothing waits on you'}</div></div></div><div class="asks">`;
   html+=as.length?as.map(a=>askBox(a,true)).join(''):`<div class="list"><div class="empty"><b>Nothing waits on you</b>When the engine needs a decision it shows here and on its task.</div></div>`;
   const ae=document.activeElement,keep=ae&&ae.tagName=='TEXTAREA'?[ae.dataset.ans,ae.value]:null;
   if(paint($('main'),'main',html+'</div>')&&keep){const ta=document.querySelector(`textarea[data-ans="${CSS.escape(keep[0])}"]`);if(ta){ta.value=keep[1];ta.focus()}}}
-async function sendAnswer(id,btn){const ta=document.querySelector(`textarea[data-ans="${CSS.escape(id)}"]`);const text=(ta&&ta.value||'').trim();if(!text){ta&&ta.focus();return}
+async function sendAnswer(id,btn,given){const ta=document.querySelector(`textarea[data-ans="${CSS.escape(id)}"]`);const text=(given!=null?given:ta&&ta.value||'').trim();if(!text){ta&&ta.focus();return}
   let tk='';try{tk=localStorage.getItem('tl.token')||''}catch(e){}
-  if(!tk){tk=prompt('Dashboard token (tl dash url prints a link with it)')||'';try{localStorage.setItem('tl.token',tk)}catch(e){}}
-  btn.disabled=true;btn.textContent='Sending…';
-  const r=await fetch('/api/answer',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+tk},body:JSON.stringify({ask:id,text})}).catch(()=>null);
-  btn.disabled=false;btn.textContent='Send answer';if(!r){alert('The server did not answer');return}
-  if(r.status==401){try{localStorage.removeItem('tl.token')}catch(e){};alert('Wrong token: open the link tl dash url prints');return}
-  if(!r.ok){const j=await r.json().catch(()=>({}));alert(j.error||'Failed');return}
+  const label=btn.textContent;btn.disabled=true;if(given==null)btn.textContent='Sending…';
+  const r=await fetch('/api/answer',{method:'POST',headers:{'Content-Type':'application/json',...(tk?{'Authorization':'Bearer '+tk}:{})},body:JSON.stringify({ask:id,text})}).catch(()=>null);
+  btn.disabled=false;if(given==null)btn.textContent=label;
+  const box=btn.closest('.askbox'),note=box&&(box.querySelector('.asknote')||box.appendChild(Object.assign(document.createElement('div'),{className:'asknote'})));
+  const say=m=>{if(note)note.textContent=m};
+  if(!r){say('The server did not answer');return}
+  if(r.status==401){say('This address needs the token: open the link `tl dash url` prints (ANSWER LINK)');return}
+  if(!r.ok){const j=await r.json().catch(()=>({}));say(j.error||'Failed');return}
   if(ta)ta.value='';S.sig={};poll()}
+function pickOption(o){const a=((S.asks||{}).asks||[]).find(x=>x.id==o.dataset.ask),opt=a&&(a.options||[])[+o.dataset.opt];if(!opt)return;
+  if(opt.edit){const ta=document.querySelector(`textarea[data-ans="${CSS.escape(a.id)}"]`);if(ta){ta.value=opt.answer;ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length)}return}
+  sendAnswer(a.id,o,opt.answer)}
 
 // ---- drawer -------------------------------------------------------------------------------------------------------
 const X='<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m5 5 10 10M15 5 5 15"/></svg>';
@@ -714,6 +730,7 @@ document.addEventListener('click',e=>{if(S.view=='plan'&&planClick(e))return;con
   if(e.target.closest('[data-close]')||e.target.id=='scrim'){closeDrawer();return}
   const t=e.target.closest('[data-tab]');if(t){S.tab=t.dataset.tab;const h=new URLSearchParams(location.hash.slice(1));h.set('tab',S.tab);history.replaceState(null,'','#'+h);renderDrawer();return}
   const s=e.target.closest('[data-send]');if(s){sendAnswer(s.dataset.send,s);return}
+  const op=e.target.closest('[data-opt]');if(op){pickOption(op);return}
   if(e.target.closest('[data-more]')){S.showAll=true;renderTasks()}});
 document.addEventListener('input',e=>{if(e.target.id=='q'){S.q=e.target.value;renderTasks()}});
 document.addEventListener('keydown',e=>{const tag=(document.activeElement||{}).tagName;

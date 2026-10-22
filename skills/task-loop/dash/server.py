@@ -822,7 +822,7 @@ def open_ask(bead):
     a = read_json(config_dir() / "asks" / ("%s.json" % bead), {}) or {}
     if not isinstance(a, dict) or a.get("status") != "open":
         return None
-    return {k: a.get(k) for k in ("id", "kind", "question", "t", "title", "answer", "repo", "parks_at")}
+    return {k: a.get(k) for k in ("id", "kind", "question", "t", "title", "answer", "repo", "parks_at", "options")}
 
 
 def ask_file(bead):
@@ -1138,7 +1138,7 @@ def run_file(run, rel):
 # ---- asks: the owner's answers (the only writes this server makes) --------------------------------------------------
 
 def token():
-    """A secret for answer POSTs, made once (0600). `tl dash url` prints the links with it for the owner's phone."""
+    """A secret for answer POSTs from outside loopback and Tailscale, made once (0600). `tl dash url` prints the links with it."""
     f = config_dir() / "dash.token"
     try:
         t = f.read_text().strip()
@@ -1238,6 +1238,30 @@ def answer(body):
         Path(f).write_text(json.dumps(a, indent=1))
         return 200, {"ok": True}
     return 404, {"error": "no such ask"}
+
+
+CGNAT = ipaddress.ip_network("100.64.0.0/10")  # Tailscale's range
+
+
+def trusted_source(addr):
+    """True for loopback and the Tailscale CGNAT range: the owner's own machines, which answer asks with no token.
+    addr is the socket's peer (client_address), never a header: a proxy header is the client's to forge."""
+    try:
+        ip = ipaddress.ip_address(str(addr).split("%")[0])
+    except ValueError:
+        return False
+    if ip.version == 6 and ip.ipv4_mapped:
+        ip = ip.ipv4_mapped
+    return ip.is_loopback or ip in CGNAT
+
+
+def post_allowed(addr, authorization):
+    """A POST needs no token from a trusted source; any other source (a container bound to 0.0.0.0, the LAN) needs it."""
+    import hmac
+    if trusted_source(addr):
+        return True
+    got = (authorization or "").replace("Bearer ", "", 1).strip()
+    return bool(got) and hmac.compare_digest(got, token())
 
 
 def tailscale_ip():
@@ -1422,10 +1446,8 @@ def make_handler(port, addrs):
                 return self.send(500, json.dumps(body).encode(), "application/json")
             self.send(200, json.dumps(body, default=str).encode(), "application/json")
         def do_POST(self):
-            import hmac
             u = urlparse(self.path)
-            got = (self.headers.get("Authorization") or "").replace("Bearer ", "", 1).strip()
-            if not got or not hmac.compare_digest(got, token()):
+            if not post_allowed(self.client_address[0], self.headers.get("Authorization")):
                 return self.send(401, b'{"error": "token"}', "application/json")
             try:
                 body = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 65536)) or b"{}")

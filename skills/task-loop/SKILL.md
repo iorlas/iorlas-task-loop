@@ -117,8 +117,16 @@ for commands red by design on the uncommitted tree a writer leaves (lifesim-fld.
 <why>`, and a second such plan fails the run.
 
 Dashboard Asks tab: open asks, most urgent first, each answerable in place (the answer goes on the bead as a comment and
-opens it; first answer wins). Answering needs the token in `~/.config/task-loop/dash.token`: `tl dash url` prints
-`ANSWER LINK`s with it, open one on the phone once. A red banner shows when delegate says a subscription lane is out.
+opens it; first answer wins). Answering needs no token from loopback or Tailscale (100.64.0.0/10), judged by the socket's
+peer address, never a header; a POST from any other address (a container bound to 0.0.0.0, the LAN) needs the token in
+`~/.config/task-loop/dash.token`: `tl dash url` prints `ANSWER LINK`s with it. The page never asks for a token up front;
+on a 401 it shows one inline hint. Every ask record has `options`, a list of `{label, answer, note?, recommended?, edit?}`,
+shown as buttons above the text box (recommended first); a click posts its `answer` through the same path. verify: "Right"
+(`right`, which the engine reads as accept) and "Wrong" (opens the box with `wrong: `). stuck: only answers the engine
+handles: "Run again" on an over-budget ask (any answer resumes from the checkpoint, and the budget counts per run) and
+"Allow one more planner run" on the re-plan cap; other stuck asks and tickets have the text box only. decision: the
+planner, writer or reviewer returns `options` (2-4, each label, cost, exact answer, one `recommended`; a required schema
+field, empty with no question) and the engine copies them into the record. A red banner shows when delegate says a subscription lane is out.
 Push: put one shell command in `~/.config/task-loop/notify`; each new ask runs it with `TL_ASK_KIND`, `TL_ASK_BEAD`,
 `TL_ASK_ID`, `TL_ASK_TEXT`. A dashboard left on an older plugin version restarts at the next session start.
 
