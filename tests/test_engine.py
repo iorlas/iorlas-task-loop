@@ -2628,66 +2628,66 @@ class LandReview(EngineTest):
         e.last_checks, e.checks_tree = (checks or self.engine_checks()), e.tree_hash()
         return e
 
-    def test_an_item_naming_the_suite_the_engine_ran_and_checks_it_skipped_by_path_is_settled_not_asked(self):
+    def test_the_yxbb6_item_is_not_settled_by_a_suite_name_but_the_brief_carries_the_evidence_and_the_skip_rule(self):
         e = self.evidenced()
-        with mock.patch.object(e, "ai") as ai:
-            self.assertEqual(e.self_verify([{"what": self.YXBB6, "kind": "tooling"}]), [])
-        ai.assert_not_called()
-        v = e.verified[0]
-        self.assertEqual(v["verdict"], "settled")
-        self.assertIn("Sim.Properties", v["evidence"])
-        self.assertIn("exit 0", v["evidence"])
-        self.assertIn("06-tests_Sim.Properties.r2.log", v["evidence"])
-        self.assertIn("no change under client/**", v["evidence"])
-        self.assertIn("does not apply", v["evidence"])
-        self.assertEqual(v["why"], "the engine's own check results settle it")
-        self.assertIn("Sim.Properties", e.comment.call_args[0][0])
-
-    def test_a_red_or_unrelated_skip_or_a_missing_check_never_settles_the_item(self):
-        for over in ({self.SUITE: {"exit": 1, "status": "failed"}},
-                     {"unity-tests": {"why": "static failed first"}}):
-            e = self.evidenced(self.engine_checks(**over))
-            with mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="x")]}, None)) as ai:
-                self.assertEqual(len(e.self_verify([{"what": self.YXBB6, "kind": "tooling"}])), 1)
-            self.assertEqual(ai.call_count, 1)
-        e = self.evidenced()
-        item = {"what": "I did not re-run the Other.Suite tests; the engine ran them", "kind": "tooling"}
+        e.run_dir = Path("/runs/x")
         with mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="x")]}, None)) as ai:
-            self.assertEqual(len(e.self_verify([item])), 1)
-        self.assertEqual(ai.call_count, 1)
+            self.assertEqual(len(e.self_verify([{"what": self.YXBB6, "kind": "tooling"}])), 1)
+        brief = ai.call_args[0][2]
+        self.assertIn("`unity-tests` [tests] skipped (no change under client/**, content/**)", brief)
+        self.assertIn("Sim.Properties", brief)
+        self.assertIn("proven by design", brief)
+        self.assertIn("log checks/06-tests_Sim.Properties.r2.log", brief)
+        self.assertNotIn("/runs/x", brief)
 
-    def test_an_item_that_also_raises_a_behaviour_a_look_or_a_missing_test_is_never_settled(self):
-        extra = ["The engine ran the Sim.Properties suite and it passed, but nothing tests the empty-sleep case.",
-                 "I did not re-run Sim.Properties; the engine ran it. The sleep skip behaviour on a real device is unchecked.",
-                 "Sim.Properties passed in the engine, but the sleep screen looks wrong and the layout needs a look.",
-                 "Sim.Properties passed; a test for the SkipStop edge case is missing."]
-        for what in extra:
+    def test_an_item_whose_only_doubt_is_the_log_of_a_green_or_path_skipped_check_id_is_settled(self):
+        for what in ("`unity-tests`: no saved log, so I cannot prove it", "unity-analyzers: there is no log, so I cannot prove it"):
             e = self.evidenced()
+            with mock.patch.object(e, "ai") as ai:
+                self.assertEqual(e.self_verify([{"what": what, "kind": "tooling"}]), [], what)
+            ai.assert_not_called()
+            v = e.verified[0]
+            self.assertEqual(v["verdict"], "settled")
+            self.assertIn("does not apply", v["evidence"])
+            self.assertEqual(v["why"], "the engine's own check results settle it")
+
+    def test_wrong_settles_are_refused(self):
+        cannot = ", so I cannot prove it"
+        asks = ["unity-tests did not run the new test", "Sim.Properties ran, new property test isn't in it",
+                "unity-tests passed, though test X is flaky",
+                "unity-tests skipped, yet I changed client/Assets via a symlink", "unity-tests was not run",
+                "ruff and unity-play-tests passed" + cannot, "unity-tests passed" + cannot + ", but test X is flaky",
+                "unity-tests passed, no saved log, but nothing tests the new case",
+                "unit tests for the new function were never run" + cannot,
+                "unity-tests and unity-*: no saved log" + cannot, "the Sim.Properties suite passed" + cannot]
+        for what in asks:
+            e = self.evidenced(self.engine_checks() + [{"id": "test", "cmd": "pytest tests/unit", "group": "tests", "exit": 0,
+                                                       "status": "ran", "secs": 1, "log": "checks/x.log", "tail": ""}])
             with mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="x")]}, None)) as ai:
                 self.assertEqual(len(e.self_verify([{"what": what, "kind": "tooling"}])), 1, what)
             self.assertEqual(ai.call_count, 1, what)
 
-    def test_checks_of_an_earlier_tree_settle_nothing(self):
-        e = self.evidenced()
-        e.checks_tree = "0" * 40
-        with mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="x")]}, None)) as ai:
-            self.assertEqual(len(e.self_verify([{"what": self.YXBB6, "kind": "tooling"}])), 1)
-        self.assertEqual(ai.call_count, 1)
+    def test_a_red_check_an_older_tree_or_an_unknown_tree_settles_nothing(self):
+        what = "`unity-tests`: no saved log, so I cannot prove it"
+        for how in ("red", "older", "unknown"):
+            e = self.evidenced(self.engine_checks(**({"unity-tests": {"exit": 1, "status": "failed"}} if how == "red" else {})))
+            if how == "older":
+                e.checks_tree = "0" * 40
+            if how == "unknown":
+                e.last_checks = None
+                e.run_dir = Path(self.tmp.name, "nope")
+            with mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="x")]}, None)) as ai:
+                self.assertEqual(len(e.self_verify([{"what": what, "kind": "tooling"}])), 1, how)
+            self.assertEqual(ai.call_count, 1, how)
 
-    def test_the_verify_and_review_briefs_carry_the_engines_check_results(self):
-        e = self.evidenced()
-        e.run_dir = Path("/runs/x")
+    def test_the_brief_lists_at_most_30_checks_of_300_characters(self):
+        e = self.evidenced([{"id": "c%d" % i, "cmd": "x" * 900, "group": "tests", "exit": 0, "status": "ran", "secs": 1,
+                             "log": "checks/l.log", "tail": ""} for i in range(40)])
         text = e.checks_evidence()
-        self.assertIn("the engine's evidence", text)
-        self.assertIn("may cite", text)
-        self.assertIn("`unity-tests` [tests] skipped (no change under client/**, content/**)", text)
-        self.assertIn("`fmt` [static] pass, exit 0, 4 s, log checks/00-fmt.r1.log", text)
-        item = {"what": "the menu reads well", "kind": "requirement"}
-        with mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="taste")]}, None)) as ai:
-            e.self_verify([item])
-        self.assertIn("unity-analyzers", ai.call_args[0][2])
-        self.assertIn("no change under client/**", ai.call_args[0][2])
-        self.assertIn("{engine_checks}", engine.REVIEW_PROMPT)
+        rows = [ln for ln in text.splitlines() if ln.startswith("- ")]
+        self.assertEqual(len(rows), 31)
+        self.assertTrue(all(len(ln) <= 300 for ln in rows))
+        self.assertIn("10 more checks", rows[-1])
 
     # -- tl-bxk.10.18
     def reviewer_brief(self, cap=40000):

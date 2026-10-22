@@ -1874,6 +1874,7 @@ class Engine:
 
     # tl-bxk.10.19: an item is settled only when it names a configured check and says it passes or runs; an item about
     # coverage, skips, fakes or a check that never ran is a claim about the check, not its result.
+    HEDGE_LIGHT = re.compile(r"\b(?:flaky|stale|though|but|yet|however|although|unless|except|new tests?)\b")
     PROVES = re.compile(r"\b(passe[sd]?|passing|is green|stays? green|green|runs?|ran|exits? 0)\b|engine-run")
     NOT_PROOF = re.compile(r"\b(covers?|covered|coverage|a tests? for|skipped|false green|never (?:been )?run|not run|only tested|"
                            r"fake|untested|not tested)\b")
@@ -1888,14 +1889,17 @@ class Engine:
         for u in gaps:
             what = " ".join(u["what"].split()).lower()
             hit = None
-            if not self.NOT_PROOF.search(what) and self.PROVES.search(what):
+            if not self.NOT_PROOF.search(what) and not self.HEDGE_LIGHT.search(what) and self.PROVES.search(what):
                 hit = next((n for n in names if re.search(r"(?<![\w-])%s(?![\w-])" % re.escape(n), what)), None)
+                if hit and any(c.get("status") == "failed" and hit in (str(c.get("id")).lower(), " ".join(c["cmd"].split()).lower())
+                               for c in results):
+                    hit = None  # the engine saw it red: nothing is proven
             if hit:
                 self.verified.append({"what": u["what"], "kind": u["kind"], "verdict": "settled", "why": "the gate runs it at land",
                                       "evidence": "`%s` is a gate or stage check: the engine runs it, the gate at land (a red one "
                                                   "goes to a fix round)" % hit})
                 continue
-            proof = None if self.is_look(u) or not current else self.engine_proof(u["what"], results)
+            proof = None if self.is_look(u) else self.engine_proof(u["what"], results, current)
             if proof:
                 self.verified.append({"what": u["what"], "kind": u["kind"], "verdict": "settled", "evidence": proof,
                                       "why": "the engine's own check results settle it"})
@@ -1915,44 +1919,31 @@ class Engine:
                 failed.append(dict(u, why=out))
         return left, failed
 
-    # tl-bxk.10.25: an item that only doubts a check the engine ran green, or skipped because no changed path matches its
-    # trigger, is answered by the engine's own result. Anything else it raises (a behaviour, a look, a missing test) keeps it.
-    RAN_DOUBT = re.compile(r"\b(re-?run|re-?ran|run|runs|ran|running|passe[sd]?|passing|green|skipped|skips?|executed|exit(?:s|ed)?|"
-                           r"logs?|prove|proved|proof)\b")
-    OTHER_DOUBT = re.compile(r"\b(behaviou?rs?|looks?|visual(?:ly)?|screens?|screenshots?|layout|render\w*|devices?|manual(?:ly)?|by hand|"
-                             r"ui|ux|taste|feels?|edge cases?|regress\w*|race|crash\w*|no (?:new )?tests?|missing|nothing tests?|"
-                             r"a tests? for|should (?:also )?(?:test|cover|have)|untested|not tested|coverage|covers?|covered|fake|"
-                             r"false green|wrong|bug|but|however|although|except)\b")
-    SKIP_SEGMENTS = {"bin", "obj", "debug", "release", "src", "tests", "test", "lib", "build", "out", "dist"}
+    # tl-bxk.10.25: an item settles from the engine's results only in one narrow form: its sole doubt is that the verifier
+    # cannot prove the engine ran or passed check X, every check-like name in it is a known check id, and each such check
+    # passed or was skipped by its own path trigger on the current tree. A wrong settle lands broken work unseen; an ask
+    # costs a minute. Everything else goes to the verifier, whose brief carries the results (checks_evidence).
+    OTHER_DOUBT = re.compile(r"\b(behaviou?rs?|looks?|visual(?:ly)?|screens?|screenshots?|layout|render\w*|devices?|manual(?:ly)?|"
+                             r"by hand|ui|ux|taste|feels?|edge cases?|regress\w*|race|crash\w*|coverage|covers?|covered|fake|"
+                             r"false green|bug)\b")
+    CANNOT_PROVE = re.compile(r"\b(?:cannot|can not|unable to) (?:prove|verify|confirm|see)\b|\bno (?:saved )?logs?\b")
+    HEDGE = re.compile(r"\b(?:not|never|no|nor|none|nothing|without|flaky|stale|only|yet|though|but|unless|except|missing|"
+                       r"still|also|however|although|wrong|fails?|failed|new tests?)\b|n't")
+    CHECK_LIKE = re.compile(r"`([^`]+)`|(?<![\w.-])([\w.]*[-_./*][\w.*/-]*)")
 
-    def check_names(self, c):
-        """Names an item can use for a check result: its id, its command, the command without its runner, and the suite or
-        test project its command runs (a path segment such as Sim.Properties, a --filter value such as SleepSkipTests)."""
-        cmd = " ".join(str(c.get("cmd") or "").split())
-        names = [str(c.get("id") or ""), cmd, self.GATE_RUNNER.sub("", cmd)]
-        for tok in cmd.split():
-            tok = tok.strip("'\"*")
-            if "/" in tok or "\\" in tok:
-                names += [seg for seg in re.split(r"[/\\]", tok) if seg.lower() not in self.SKIP_SEGMENTS
-                          and not re.match(r"(net\d|-|\d)", seg) and re.search(r"[A-Za-z]", seg)]
-            elif tok.startswith("--filter") or names[-1:] == ["--filter"]:
-                names.append(tok.split("=", 1)[-1])
-        return [n.lower() for n in dict.fromkeys(names) if len(n) >= 4 and not n.startswith("-")]
-
-    def engine_proof(self, what, results):
-        """The evidence text when every check the item names was run by the engine and passed, or skipped by its path
-        trigger (proven by design: the check does not apply), and the item raises nothing else; else ''."""
+    def engine_proof(self, what, results, current):
+        """The evidence text when the item names only known check ids, each green or skipped by its path trigger, on the
+        current known tree, and doubts nothing but whether the engine ran or passed them; else ''."""
         what = " ".join(what.split()).lower()
-        if self.OTHER_DOUBT.search(what) or not self.RAN_DOUBT.search(what):
+        if not current or not results or not self.CANNOT_PROVE.search(what) or self.OTHER_DOUBT.search(what):
             return ""
-        globs = re.findall(r"(?<![\w*-])[\w.-]{3,}\*", what)
-        hits = []
-        for c in results:
-            names = self.check_names(c)
-            rest = [self.GATE_RUNNER.sub("", n) for n in names]
-            if any(re.search(r"(?<![\w-])%s(?![\w-])" % re.escape(n), what) for n in names) or any(
-                    fnmatch.fnmatch(n, g) for g in globs for n in names + rest):
-                hits.append(c)
+        if self.HEDGE.search(self.CANNOT_PROVE.sub(" ", what)):
+            return ""
+        ids = {str(c.get("id") or "").lower(): c for c in results}
+        hits = [c for i, c in ids.items() if len(i) >= 4 and re.search(r"(?<![\w-])%s(?![\w-])" % re.escape(i), what)]
+        like = [(m.group(1) or m.group(2)).strip(".,;:").lower() for m in self.CHECK_LIKE.finditer(what)]
+        if not hits or any(n not in ids for n in like) or tools_named(what):
+            return ""
         parts = []
         for c in hits:
             idn = c["id"][:80]
@@ -1962,7 +1953,7 @@ class Engine:
                 parts.append("`%s` [%s] skipped: %s, so the check does not apply to this change" % (idn, c["group"], c["why"]))
             else:
                 return ""
-        return ("the engine's own check results for this tree: " + "; ".join(parts)) if parts else ""
+        return "the engine's own check results for this tree: " + "; ".join(parts)
 
     def log_path_of(self, c, full=True):
         """The saved log of a check: absolute in the trace; in a prompt relative to the engine's run folder, since a path
@@ -1971,14 +1962,14 @@ class Engine:
 
     def checks_now(self):
         """(the engine's last check results, whether they ran on the tree as it is now). After a resume the saved
-        engine-checks.json stands in; its tree is unknown and counts as current."""
+        engine-checks.json stands in for the brief; its tree is unknown, so it settles nothing."""
         checks, tree = self.last_checks, self.checks_tree
         if checks is None:
             try:
-                checks, tree = json.loads((self.run_dir / "engine-checks.json").read_text()), ""
+                return json.loads((self.run_dir / "engine-checks.json").read_text()), False
             except (OSError, ValueError):
-                return [], True
-        return checks, not tree or tree == self.tree_hash()
+                return [], False
+        return checks, bool(tree) and tree == self.tree_hash()
 
     def checks_evidence(self, checks=None, current=None):
         """The engine's check results as brief text: per check id, group, command, status (pass, fail, skipped and why),
@@ -1988,7 +1979,7 @@ class Engine:
         if not checks:
             return ""
         out = []
-        for c in checks:
+        for c in checks[:30]:
             st = c.get("status")
             if st == "skipped" or c.get("exit") is None:
                 what = "skipped (%s)" % (c.get("why") or "no reason given")
@@ -1996,10 +1987,13 @@ class Engine:
                 what = "%s, exit %s, %s s, log %s" % ("pass" if c["exit"] == 0 else "fail", c["exit"], c.get("secs", "?"),
                                                       self.log_path_of(c, False))
             cmd = "" if c.get("cmd") == c.get("id") else "; command `%s`" % c.get("cmd", "")[:300]
-            out.append("- `%s` [%s] %s%s" % (str(c.get("id"))[:300], c.get("group"), what, cmd))
+            out.append(("- `%s` [%s] %s%s" % (str(c.get("id"))[:100], c.get("group"), what, cmd))[:300])
+        if len(checks) > 30:
+            out.append("- (%d more checks not listed)" % (len(checks) - 30))
         return ("The engine's own check results for %s (the engine's evidence, run by the engine itself: you may cite them as "
                 "proof; a log path is relative to the engine's run folder, which you cannot open. A check skipped for "
-                "'no change under ...' matched no changed path, so it does not apply to this change):\n%s\n" % ("the tree as it is now" if current else
+                "'no change under ...' matched no changed path: it is proven by design that the check does not apply, so an item "
+                "whose only doubt is such a skipped check, or a check listed here as pass, is settled; cite this list):\n%s\n" % ("the tree as it is now" if current else
                                       "an earlier tree (files changed since: weigh them accordingly)", "\n".join(out)))
 
     def lint_command(self, what):
@@ -2524,8 +2518,7 @@ class Engine:
             kinds = self.new_by_kind()
             review, _ = self.ai("review", name, REVIEW_PROMPT.format(
                 brief=self.brief_text(), plan=self.plan_text(), n=i + 1, goal=st["goal"],
-                work=self.stage_work(kinds["unexplained"], kinds["ignored"]), checks=compact(checks),
-                engine_checks=self.checks_evidence(checks, True), summary=w["summary"], evidence=self.evidence_dir,
+                work=self.stage_work(kinds["unexplained"], kinds["ignored"]), checks=compact(checks), summary=w["summary"], evidence=self.evidence_dir,
                 gate=(" (`%s`)" % self.cfg["gate"]) if self.cfg["gate"] else "",
                 added=self.stats["tests_added"], removed=self.stats["tests_removed"],
                 scope=(state["scope"] if fix else
@@ -3759,7 +3752,7 @@ Stage {n}: {goal}
 {work}
 The engine ran the checks outside any sandbox, one at a time, and they all pass; these results are facts:
 {checks}
-{engine_checks}The engine runs the gate{gate} once, at land, on the tree rebased onto the latest base, before anything merges; a red
+The engine runs the gate{gate} once, at land, on the tree rebased onto the latest base, before anything merges; a red
 gate (coverage included) goes to a fix round. The gate, the checks above and what they prove are never an unchecked item.
 The writer says: {summary}
 Proof the engine cannot rerun (a test seen failing after a planted fault) is in {evidence}/: a requirement shown
