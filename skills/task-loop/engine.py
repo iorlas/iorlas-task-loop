@@ -85,13 +85,27 @@ LEFTOVERS = {"type": "array", "items": {"type": "object", "additionalProperties"
 # checkpoint or a worker still sends them): an open one is asked, as before.
 ROUTED_KINDS = ("engine_step", "checkable", "external_fact", "taste", "owner_decision")
 LEGACY_KINDS = ("requirement", "number", "deletion", "link", "case", "tooling")
+# a kind may move only toward a stricter route (never to a looser one): the engine settles the loosest, asks the strictest
+KIND_RANK = dict({"engine_step": 0, "external_fact": 1, "taste": 1, "checkable": 2, "owner_decision": 3},
+                 **{k: 2 for k in LEGACY_KINDS})
+CODE_EXT = re.compile(r"\.(?:py|cs|js|jsx|ts|tsx|go|rs|java|kt|rb|sh|c|h|cpp|hpp|json|ya?ml|toml|md|txt|csv|sql|css|html|gd|"
+                      r"lua|swift|asmdef|unity|prefab)$", re.I)
+SYMBOL = re.compile(r"\b(?:[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]*)+|[a-z][a-z0-9]*(?:_[a-z0-9]+)+)\b")
+# what the engine itself does for a bead; an engine_step item settles only when it names one of these and the engine will
+ENGINE_FILES = re.compile(r"\b(?:fil(?:e|es|ed|ing)|creat(?:e|es|ed|ing)|open(?:s|ed|ing)?)\b.*\b(?:follow-?ups?|leftovers?)\b|"
+                          r"\b(?:follow-?ups?|leftovers?)\b.*\b(?:not filed|filed|files?|creat\w+)\b", re.I)
+ENGINE_LANDS = re.compile(r"\b(?:at|after|before|on) (?:the )?land(?:ing)?\b|\bthe engine (?:lands|merges|pushes|runs the gate)\b|"
+                          r"\bthe (?:land )?gate (?:runs|will run)\b", re.I)
+ENGINE_SHOTS = re.compile(r"\b(?:screenshots?|shots|pictures)\b.*\b(?:copi\w+|committed|kept|saved into the repo)\b|"
+                          r"\b(?:copi\w+|commit\w*|keeps?)\b.*\b(?:screenshots?|shots|pictures)\b", re.I)
+ENGINE_CLOSES = re.compile(r"\bclos(?:e|es|ed|ing)\b[^.]*\bbead\b|\bbead\b[^.]*\bclos(?:e|es|ed|ing)\b", re.I)
 UNCHECKED_KINDS = ROUTED_KINDS + LEGACY_KINDS  # one of these unchecked is verified before the land
 KIND_LINES = (
     "engine_step: something the engine itself does after this point (files leftover or follow-up beads, lands, runs the "
     "gate, copies screenshots, closes the bead)",
     "checkable: a behaviour, a number the code computes or a rate holding across cases: a test or check could prove it",
     "external_fact: a fact from outside the repo (a price, a licence, a size quoted from a web page or a file the repo "
-    "does not hold) that no check here can prove",
+    "does not hold) that no check here can prove; give its source (a URL or the named outside document)",
     "taste: a look, a feel or a judgement call only a person can make",
     "owner_decision: needs the owner to decide: a change to the contract or requirements, money, an account or a login",
     "case: an acceptance case you could not run",
@@ -383,7 +397,8 @@ SCHEMAS = {
               "properties": {"summary": S_STR, "question": S_STR, "options": OPTIONS, "decided": S_STR,
                              "unchecked": {"type": "array", "items": {
                                  "type": "object", "additionalProperties": False, "required": ["what", "kind"],
-                                 "properties": {"what": S_STR, "kind": {"type": "string", "enum": list(UNCHECKED_KINDS) + ["other"]}}}},
+                                 "properties": {"what": S_STR, "kind": {"type": "string", "enum": list(UNCHECKED_KINDS) + ["other"]},
+                                                "source": S_STR}}},
                              "new_cases": {"type": "array", "items": {
                                  "type": "object", "additionalProperties": False, "required": ["criterion", "check", "why"],
                                  "properties": {"criterion": S_STR, "check": S_STR, "why": S_STR}}},
@@ -397,7 +412,8 @@ SCHEMAS = {
                "required": ["findings", "unmet", "question", "options", "decided", "leftovers", "unchecked"],
                "properties": {"unchecked": {"type": "array", "items": {
                        "type": "object", "additionalProperties": False, "required": ["what", "kind"],
-                       "properties": {"what": S_STR, "kind": {"type": "string", "enum": list(UNCHECKED_KINDS) + ["other"]}}}},
+                       "properties": {"what": S_STR, "kind": {"type": "string", "enum": list(UNCHECKED_KINDS) + ["other"]},
+                                                "source": S_STR}}},
                    "findings": {"type": "array", "items": {
                    "type": "object", "additionalProperties": False, "required": ["file", "line", "severity", "fix"],
                    "properties": {"file": S_STR, "line": {"type": "integer"},
@@ -407,10 +423,10 @@ SCHEMAS = {
                    "accept_files": S_STRS, "reject_files": S_STRS}},  # optional: unexplained new files the review accepts into the commit / rejects as strays
     "verify": {"type": "object", "additionalProperties": False, "required": ["items"],
                "properties": {"items": {"type": "array", "items": {
-                   "type": "object", "additionalProperties": False, "required": ["n", "verdict", "evidence", "why", "kind"],
+                   "type": "object", "additionalProperties": False, "required": ["n", "verdict", "evidence", "why", "kind", "source"],
                    "properties": {"n": {"type": "integer"}, "verdict": {"type": "string", "enum": list(VERDICTS)},
                                   "evidence": S_STR, "why": S_STR,
-                                  "kind": {"type": "string", "enum": list(UNCHECKED_KINDS) + ["other"]}}}}}},
+                                  "kind": {"type": "string", "enum": list(UNCHECKED_KINDS) + ["other"]}, "source": S_STR}}}}},
 }
 
 
@@ -1057,7 +1073,7 @@ class Engine:
         self.look_notes, self.look_paths, self.bead_parent = [], [], ""  # tl-bxk.10.23
         self.look_filed = False
         self.look_unjudged, self.look_retried, self.shots_skipped = {}, set(), set()  # unjudged: item -> why
-        self.unverified, self.proof_asked = [], set()  # tl-bxk.10.28: items that land for the owner; items sent for a test once
+        self.unverified = []  # tl-bxk.10.28: items that land for the owner
         self.filed = []       # leftover titles filed by an earlier run on this checkpoint: a replan naming one again is no new bead
         self.stage_tree = ""  # the tree the current stage started from ("" = the task's base): the review's diff runs from here
         self.writer_said = "" # the writer's answers so far: a new file they name is meant (tl-bxk.10.24)
@@ -1944,8 +1960,8 @@ class Engine:
                 v, why = "open", "settled without quoted evidence"
             if self.is_look(u):
                 v, a, why = self.look_verdict(u, v, a, why)
-            kind = a.get("kind") if a.get("kind") in UNCHECKED_KINDS else u["kind"]  # the verifier read the code: its kind wins
-            u = dict(u, kind=kind)
+            kind, source = self.resolve_kind(u, a)
+            u = dict(u, kind=kind, source=source)
             route = ""
             if v == "open":
                 v, a, why, route = self.route_open(u, a, why)
@@ -1975,25 +1991,86 @@ class Engine:
             self.transition("ask", "verify_wrong", "%d found wrong, no fix round left" % len(wrong))
             return still + [dict(u, why="found wrong: %s; no fix round left" % u["why"]) for u in wrong]
         self.transition("fix", "verify_wrong", "%d found wrong: %s" % (len(wrong), "; ".join(u["why"] for u in wrong)))
-        # the wrong items stay unchecked in the fix's checkpoint: a fix round that pauses resumes at land and verifies
-        # them again, never lands them; the fix's review adds what it leaves unproven
-        self.unchecked = [u for u in self.unchecked if u["kind"] not in UNCHECKED_KINDS] + still + wrong
-        before = len(self.unchecked)
-        done = self.fix("verify", "".join("- %s: %s\n" % (u["what"], u["why"]) for u in wrong))
-        fixed = {u["what"] for u in wrong}
-        self.unchecked = [u for u in self.unchecked[:before] if u["what"] not in fixed] + self.unchecked[before:]  # what the fix's review added stays
-        left = [u for u in self.unchecked if u["kind"] in UNCHECKED_KINDS]
-        if done != "accept":
-            left += [dict(u, why="found wrong: %s; the fix round did not pass" % u["why"]) for u in wrong]
-        return self.route_left(left)
+        pending = wrong
+        while True:
+            # the pending items stay unchecked in the fix's checkpoint: a fix round that pauses resumes at land and verifies
+            # them again, never lands them; the fix's review adds what it leaves unproven
+            self.unchecked = [u for u in self.unchecked if u["kind"] not in UNCHECKED_KINDS] + still + pending
+            before = len(self.unchecked)
+            pending = [dict(u, why=u.get("why") or "add a test or check that proves: %s" % u["what"]) for u in pending]
+            done = self.fix("verify", "".join("- %s: %s\n" % (u["what"], u["why"]) for u in pending))
+            fixed = {u["what"] for u in pending}
+            self.unchecked = [u for u in self.unchecked[:before] if u["what"] not in fixed] + self.unchecked[before:]  # what the fix's review added stays
+            left = [u for u in self.unchecked if u["kind"] in UNCHECKED_KINDS]
+            if done != "accept":
+                left += [dict(u, why="found wrong: %s; the fix round did not pass" % u["why"]) for u in pending]
+            left = self.route_left(left)
+            pending = [u for u in left if u.get("proof_round")]
+            if not pending:
+                return left
+            if self.fixes >= int(self.cfg["max_fix_rounds"]):  # a bead with an unproven checkable item never lands
+                raise self.proof_stuck(pending)
+            still = [u for u in left if not u.get("proof_round")]
+            self.transition("fix", "verify_unproven", "%d still unproven after the fix round" % len(pending))
+
+    def proof_stuck(self, items):
+        return Blocked("the check before land: nothing proves %s after %d fix rounds: it needs the owner's hint" % (
+            "; ".join(u["what"] for u in items)[:600], int(self.cfg["max_fix_rounds"])))
+
+    def diff_text(self):
+        tree = self.tree_hash()
+        return (tl.git("diff", self.base_sha(), tree, cwd=self.wt) if tree else "") or ""
+
+    def names_code(self, what):
+        """True when the item names something a check can reach: a repo path, a code or config file, or a code symbol
+        (CamelCase or snake_case) that is in the task's diff."""
+        text = re.sub(r"https?://\S+", " ", what)
+        files = set(tl.git("ls-files", cwd=self.wt).splitlines()) | set(self.changed_paths())
+        names = {Path(f).name for f in files}
+        for t in re.findall(r"[\w][\w./-]*[\w]", text):
+            if t in files or t in names or CODE_EXT.search(t):
+                return True
+        syms = {t for t in SYMBOL.findall(text.replace(".", " "))}
+        if syms:
+            diff = self.diff_text()
+            return any(x in diff for x in syms)
+        return False
+
+    def engine_does(self, what):
+        """True when the item names an action the engine will in fact perform for this bead."""
+        w = " ".join(what.split())
+        if ENGINE_FILES.search(w):
+            return bool(self.leftovers or ((getattr(self, "plan_data", None) or {}).get("leftovers")))
+        if ENGINE_SHOTS.search(w):
+            vp = self.visual_cfg()
+            return bool(vp and visual_hit(vp, self.changed_paths()))
+        return bool(ENGINE_LANDS.search(w) or ENGINE_CLOSES.search(w))
+
+    def resolve_kind(self, u, a):
+        """(kind, source) for an item: the verifier's kind (it read the code) when it is as strict as the writer's, else the
+        writer's. An engine_step the engine will not do, an external_fact with no source, and a taste or external_fact that
+        names a path, a code file or a symbol in the diff is checkable, whatever its label."""
+        old = u["kind"]
+        new = a.get("kind") if a.get("kind") in UNCHECKED_KINDS else old
+        if KIND_RANK.get(new, 2) < KIND_RANK.get(old, 2):
+            new = old
+        source = (a.get("source") or u.get("source") or "").strip()
+        if new == "engine_step" and not self.engine_does(u["what"]):
+            new = "checkable"
+        elif new in ("external_fact", "taste") and (self.names_code(u["what"]) or (new == "external_fact" and not source)):
+            new = "checkable"
+        return new, source
 
     def engine_steps(self, gaps):
-        """tl-bxk.10.28: an item the writer calls an engine step (filing follow-up beads, landing, the gate, copying
-        shots) is settled here, no verifier call: lifesim-yxbb.7 and lifesim-fld.16 parked on 'the engine files them'."""
+        """tl-bxk.10.28: an item the writer calls an engine step is settled here, no verifier call, only when it names an
+        action the engine will do for this bead (engine_does): lifesim-yxbb.7 and lifesim-fld.25.16 parked on 'the engine
+        files them'. A claim about the result ('the beads cover all nine objects') goes to the verifier."""
         out = []
         for u in gaps:
-            if u["kind"] == "engine_step":
+            if u["kind"] == "engine_step" and self.engine_does(u["what"]):
                 self.settle_engine_step(u)
+            elif u["kind"] in ("engine_step", "external_fact", "taste"):
+                out.append(dict(u, kind=self.resolve_kind(u, {"kind": u["kind"], "source": "x"})[0]))  # source is the verifier's to give
             else:
                 out.append(u)
         return out
@@ -2003,35 +2080,42 @@ class Engine:
                               "evidence": "the engine does this at land"})
 
     def route_open(self, u, a, why):
-        """tl-bxk.10.28: where an item the verifier left open goes, by its kind: (verdict, answer, why, route). An
-        engine step is settled; a checkable item goes to the writer once, for a test (a fix round, only while one is left);
-        an item no check can prove lands for the owner (route 'unverified'); an owner decision, or an old kind, is asked."""
+        """tl-bxk.10.28: where an item the verifier left open goes, by its (resolved) kind: (verdict, answer, why, route).
+        An engine step is settled; a checkable item goes to the writer for a test (a fix round, counted in max_fix_rounds;
+        none left: the bead is stuck, never landed); an item no check can prove lands for the owner (route 'unverified');
+        an owner decision, or an old kind, is asked."""
         k = u["kind"]
         if k == "engine_step":
             return "settled", dict(a, evidence="the engine does this at land"), "the engine does this at land", ""
-        if k == "checkable" and u["what"] not in self.proof_asked and self.fixes < int(self.cfg["max_fix_rounds"]):
-            self.proof_asked.add(u["what"])
+        if k == "checkable":
+            if self.fixes >= int(self.cfg["max_fix_rounds"]):
+                raise self.proof_stuck([u])
             return "wrong", a, "add a test or check that proves: %s" % u["what"], "proof"
-        if k in ("external_fact", "taste", "checkable"):
+        if k in ("external_fact", "taste"):
             self.add_unverified(u, why)
             return "open", a, why, "unverified"
         return "open", a, why, ""
 
     def add_unverified(self, u, why):
         if u["what"] not in {x["what"] for x in self.unverified}:
-            self.unverified.append({"what": u["what"], "kind": u["kind"], "why": why})
+            self.unverified.append({"what": u["what"], "kind": u["kind"], "why": why, "source": u.get("source") or ""})
 
     def route_left(self, left):
-        """The items still unchecked after a verify fix round, routed: an engine step is settled, one that no check can
-        prove (or a checkable one the test round left unproven) lands unverified; the rest still asks."""
+        """The items still unchecked after a verify fix round, routed: an engine step the engine does is settled; one that
+        no check can prove (external_fact with a source, taste) lands unverified; a checkable one (or one a failed proving
+        round left) comes back flagged proof_round, to be sent again while a fix round is left; the rest still asks."""
         out = []
         for u in left:
-            k = u["kind"]
+            k = self.resolve_kind(u, {})[0] if not u.get("proof_round") else "checkable"
             defect = str(u.get("why") or "").startswith("found wrong:") and not u.get("proof_round")
-            if k == "engine_step" and not defect:
+            if defect:
+                out.append(u)
+            elif k == "engine_step":
                 self.settle_engine_step(u)
-            elif k in ("external_fact", "taste") or (k == "checkable" and not defect):
-                self.add_unverified(u, u.get("why") or "")
+            elif k in ("external_fact", "taste"):
+                self.add_unverified(dict(u, kind=k), u.get("why") or "")
+            elif k == "checkable":
+                out.append(dict(u, kind=k, proof_round=True))
             else:
                 out.append(u)
         return out
@@ -3327,7 +3411,7 @@ class Engine:
             rows = json.loads(r.stdout or "[]")
         except ValueError:
             return "", ""
-        epic, by_epic = self.look_epic(), ("", "")
+        epic, by_epic = self.look_epic() or self.bead, ("", "")
         for row in rows if isinstance(rows, list) else []:
             d = tl.show(row.get("id") or "") or {}
             if any(x.get("id") == self.bead for x in d.get("dependencies") or []):
@@ -3351,6 +3435,18 @@ class Engine:
         if self.unverified:
             parts.append(self.unverified_text())
         section = "\n".join(parts)
+        with self.review_lock():  # list + create/update is one step: three beads of an epic landing together file one bead
+            self.file_review(section)
+
+    @contextlib.contextmanager
+    def review_lock(self):
+        """One filer at a time per (repo, epic), across slots and sessions."""
+        key = "%s|%s" % (self.git("remote", "get-url", "origin") or str(self.wt), self.look_epic() or self.bead)
+        with tl.os_lock(tl.config_dir() / "locks" / ("review-%s.lock" % hashlib.sha1(key.encode()).hexdigest()[:12]), self.bead):
+            yield
+
+    def file_review(self, section):
+        head = section.split("\n", 1)[0]
         have, old = self.existing_owner_look()
         if have:
             kept = [x for x in re.split(r"\n\n(?=## )", old.strip()) if x and not x.startswith(head.split(":")[0] + ":")]
@@ -3359,9 +3455,7 @@ class Engine:
             args = ["create", ("Look review: " if self.look_paths or self.look_unjudged else "Owner review: ") +
                     (self.bead_title or self.bead), "--type", "task", "--labels", LOOK_LABEL, "--no-inherit-labels",
                     "--description", section, "--deps", "related:" + self.bead]
-            epic = self.look_epic()
-            if epic:
-                args += ["--parent", epic]
+            args += ["--parent", self.look_epic() or self.bead]  # no epic: the review bead sits under the bead itself
         r = tl.bd(*args)
         if r.returncode != 0:
             self.warn("owner-look bead %s failed: %s" % ("update" if have else "create", (r.stderr or r.stdout or "")[:300]))
@@ -3370,7 +3464,8 @@ class Engine:
 
     def unverified_text(self):
         return "Unverified, for the owner:\n" + "\n".join(
-            "- %s (%s)%s" % (u["what"], u["kind"], (": " + u["why"]) if u.get("why") else "") for u in self.unverified)
+            "- %s (%s%s)%s" % (u["what"], u["kind"], (", source: " + u["source"]) if u.get("source") else "",
+                               (": " + u["why"]) if u.get("why") else "") for u in self.unverified)
 
     def keep_evidence(self):
         """Pictures the writer saved as proof outlive the worktree: copied to the run dir, named on the bead."""

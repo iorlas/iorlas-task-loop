@@ -2,6 +2,8 @@
 parked lifesim on 2026-10-22 (~/.config/task-loop/asks/lifesim-*.json), each item with the kind the engine now routes by."""
 import json
 import sys
+import threading
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -28,9 +30,15 @@ FLD_25_19 = {"what": "Mesh sizes (73x91x16, 73x212x69) and the claim that only f
                      "from the FBX files", "kind": "external_fact"}
 
 
-def open_as(*kinds):
-    """The verifier leaves every item open, with its own kind (n counts from 1)."""
-    return {"items": [verdict(n, "open", why="cannot check here", kind=k) for n, k in enumerate(kinds, 1)]}
+SOURCE = "https://example.com/pack-page"
+LEFT = [{"title": "Table and chairs", "why": "the catalogue needs them"}]  # the plan's leftovers: the engine files them
+PLAN_LEFT = dict(PLAN, leftovers=LEFT)
+
+
+def open_as(*kinds, source=SOURCE):
+    """The verifier leaves every item open, with its own kind (n counts from 1) and, for an outside fact, its source."""
+    return {"items": [verdict(n, "open", why="cannot check here", kind=k, source=source if k == "external_fact" else "")
+                      for n, k in enumerate(kinds, 1)]}
 
 
 class NoBlock(unittest.TestCase):
@@ -38,18 +46,28 @@ class NoBlock(unittest.TestCase):
         T.EngineTest.setUp, T.EngineTest.tearDown, T.EngineTest.commit_base_cfg, T.EngineTest.fake_bd,
         T.EngineTest.run_engine, T.EngineTest.ask)
 
-    def go(self, items, verify=None, extra_reviews=(), bead=BEAD, writes=1, **cfg):
-        answers = {"plan": [PLAN], "write": [WRITE] * writes, "review": [dict(CLEAN, unchecked=items)] + list(extra_reviews)}
+    def go(self, items, verify=None, extra_reviews=(), bead=BEAD, writes=1, plan=PLAN_LEFT, **cfg):
+        answers = {"plan": [plan], "write": [WRITE] * writes, "review": [dict(CLEAN, unchecked=items)] + list(extra_reviews)}
         if verify:
             answers["verify"] = verify
         with mock.patch.object(tl, "show", return_value=bead):
             return self.run_engine(answers, **cfg)
 
+    def unit(self):
+        """An engine at land with the verifier's plumbing stubbed (no model, no tree)."""
+        e = T.LandReview.engine_at_land(self)
+        e.unchecked, e.verified, e.transition, e.comment, e.outcome_of = [], [], mock.Mock(), mock.Mock(), mock.Mock()
+        e.brief_text, e.last_flag, e.work_summary = (lambda: "the task"), "", (lambda: "f.txt")
+        e.names_code = e.names_code  # real
+        e.changed_paths = lambda: []
+        e.diff_text = lambda: ""
+        return e
+
     def comments(self):
         return [c[3] for c in self.bd_calls if c[:2] == ("comments", "add")]
 
     def creates(self):
-        return [c for c in self.bd_calls if c[0] == "create"]
+        return [c for c in self.bd_calls if c[0] == "create" and "--labels" in c]  # review beads (leftovers have no label)
 
     def test_an_engine_step_is_settled_by_the_engine_with_no_verifier_and_no_ask(self):
         for item in (YXBB_7, FLD_25_16):
@@ -62,14 +80,7 @@ class NoBlock(unittest.TestCase):
             self.assertEqual((v["verdict"], v["why"]), ("settled", "the engine does this at land"))
             self.assertEqual(self.creates(), [])
 
-    def test_an_engine_step_the_verifier_reclassifies_is_settled_too(self):
-        item = dict(YXBB_7, kind="tooling")
-        rc, _ = self.go([item], verify=[open_as("engine_step")])
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertIsNone(self.ask())
-        self.assertEqual(self.eng.verified[0]["why"], "the engine does this at land")
-
-    def test_a_checkable_item_goes_back_to_the_writer_once_for_a_test_never_to_the_owner(self):
+    def test_a_checkable_item_goes_back_to_the_writer_for_a_test_never_to_the_owner(self):
         rc, s = self.go([IQAD], verify=[open_as("checkable")], extra_reviews=[CLEAN], writes=2)
         self.assertEqual(rc, 0, self.blocked)
         self.assertIsNone(self.ask())
@@ -77,20 +88,37 @@ class NoBlock(unittest.TestCase):
         self.assertTrue(any("add a test or check that proves: " + IQAD["what"] in p for p in s.prompts))
         self.assertEqual(self.eng.unverified, [])  # the round proved it (its review lists nothing)
 
-    def test_a_checkable_item_the_round_leaves_unproven_lands_unverified(self):
+    def test_a_checkable_item_the_round_leaves_unproven_goes_again_then_the_bead_is_stuck_not_landed(self):
         again = dict(CLEAN, unchecked=[IQAD])
-        rc, s = self.go([IQAD], verify=[open_as("checkable")], extra_reviews=[again], writes=2)
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertIsNone(self.ask())
-        self.assertEqual([c[0] for c in s.calls].count("worker"), 2)  # once, not again
-        self.assertEqual([u["what"] for u in self.eng.unverified], [IQAD["what"]])
+        rc, s = self.go([IQAD], verify=[open_as("checkable")], extra_reviews=[again, again], writes=3)
+        self.assertEqual(rc, 2)
+        self.assertEqual([c[0] for c in s.calls].count("worker"), 3)  # the first write and max_fix_rounds (2) fix rounds
+        self.assertEqual(self.closed, [])
+        self.assertIn("it needs the owner's hint", self.blocked[0])
+        self.assertNotIn("verify: before land", self.blocked[0])  # a stuck bead, not a verify ask
+        self.assertEqual(self.eng.unverified, [])
 
-    def test_a_checkable_item_with_no_fix_round_left_lands_unverified_without_a_round(self):
+    def test_a_checkable_item_with_no_fix_round_left_is_stuck_not_landed(self):
         rc, s = self.go([IQAD], verify=[open_as("checkable")], max_fix_rounds=0)
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertIsNone(self.ask())
+        self.assertEqual(rc, 2)
+        self.assertEqual(self.closed, [])
         self.assertEqual([c[0] for c in s.calls].count("worker"), 1)
-        self.assertEqual(len(self.eng.unverified), 1)
+        self.assertIn("it needs the owner's hint", self.blocked[0])
+
+    def test_a_failed_proving_round_does_not_land(self):
+        e = self.unit()
+        rounds = []
+
+        def fix(kind, tail):
+            e.fixes += 1
+            rounds.append(tail)
+            return "stuck"  # the fix round did not pass its checks and review
+        with mock.patch.object(e, "ai", return_value=(open_as("checkable"), None)), mock.patch.object(e, "fix", side_effect=fix):
+            with self.assertRaises(engine.Blocked) as ctx:
+                e.self_verify([IQAD])
+        self.assertEqual(len(rounds), 2)  # one per round of the budget, then stuck
+        self.assertIn("it needs the owner's hint", ctx.exception.why)
+        self.assertEqual(e.unverified, [])
 
     def lands_unverified(self, items):
         rc, _ = self.go(items, verify=[open_as(*["external_fact"] * len(items))], bead=dict(BEAD, parent="t-0"))
@@ -139,11 +167,69 @@ class NoBlock(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertIn("menu reads well", self.ask()["question"])
 
+    def test_an_engine_step_is_settled_only_when_the_engine_will_do_it(self):
+        e = self.unit()
+        claim = "the follow-up beads cover all nine objects correctly"
+        self.assertFalse(e.engine_does(claim))
+        self.assertFalse(e.engine_does(YXBB_7["what"]))  # the plan has no leftovers: nothing is filed
+        e.plan_data = PLAN_LEFT
+        self.assertFalse(e.engine_does(claim))  # a claim about the result, not about the filing
+        self.assertTrue(e.engine_does(YXBB_7["what"]))
+        self.assertTrue(e.engine_does(FLD_25_16["what"]))
+        self.assertTrue(e.engine_does("The gate runs at land"))
+        self.assertTrue(e.engine_does("the engine closes the bead"))
+        self.assertFalse(e.engine_does("screenshots are copied into the repo"))  # no visual paths set
+        with mock.patch.object(e, "ai", return_value=(open_as("engine_step"), None)) as ai, \
+                mock.patch.object(e, "fix", return_value="accept") as fix:
+            e.plan_data = PLAN
+            e.self_verify([{"what": claim, "kind": "engine_step"}])
+        ai.assert_called_once()  # sent to the verifier, not settled blindly
+        fix.assert_called_once()  # and, unproven, treated as checkable
+
+    def test_an_item_naming_code_is_checkable_whatever_its_label(self):
+        e = self.unit()
+        item = {"what": "LotGrids.UseCellBeside picks the facing side", "kind": "external_fact"}
+        diff = "+    public Cell UseCellBeside(Lot lot) {\n"
+        with mock.patch.object(e, "diff_text", return_value=diff):
+            self.assertEqual(e.resolve_kind(item, {"kind": "external_fact", "source": SOURCE})[0], "checkable")
+            self.assertEqual(e.resolve_kind(dict(item, kind="taste"), {})[0], "checkable")
+            with mock.patch.object(e, "ai", return_value=(open_as("external_fact"), None)), \
+                    mock.patch.object(e, "fix", return_value="accept") as fix:
+                e.self_verify([item])
+        fix.assert_called_once()  # a proving round, not an unverified landing
+        self.assertEqual(e.unverified, [])
+        for what in ("see src/lots/grid.py for the rule", "the config.yaml key is read", "snake_case_name is unchanged in the diff"):
+            with mock.patch.object(e, "diff_text", return_value="+ snake_case_name = 1\n"):
+                self.assertEqual(e.resolve_kind({"what": what, "kind": "taste"}, {})[0], "checkable", what)
+        with mock.patch.object(e, "diff_text", return_value=""):  # a symbol not in the diff is no code of this task
+            self.assertEqual(e.resolve_kind({"what": "the MakeHuman licence is CC0", "kind": "external_fact"},
+                                            {"source": SOURCE})[0], "external_fact")
+
+    def test_an_external_fact_without_a_source_is_checkable(self):
+        e = self.unit()
+        item = {"what": "the dread pack costs 12 dollars", "kind": "external_fact"}
+        self.assertEqual(e.resolve_kind(item, {"kind": "external_fact", "source": ""})[0], "checkable")
+        self.assertEqual(e.resolve_kind(item, {"kind": "external_fact", "source": SOURCE})[0], "external_fact")
+        self.assertEqual(e.resolve_kind(dict(item, source=SOURCE), {})[0], "external_fact")
+
+    def test_a_kind_only_moves_toward_a_stricter_route(self):
+        e = self.unit()
+        fact = {"what": "the dread pack costs 12 dollars", "kind": "checkable"}
+        self.assertEqual(e.resolve_kind(fact, {"kind": "external_fact", "source": SOURCE})[0], "checkable")  # never looser
+        self.assertEqual(e.resolve_kind(fact, {"kind": "owner_decision"})[0], "owner_decision")
+        for legacy in ("requirement", "case", "number", "tooling"):
+            for loose in ("taste", "external_fact", "engine_step"):
+                u = {"what": "the menu reads well", "kind": legacy}
+                self.assertEqual(e.resolve_kind(u, {"kind": loose, "source": SOURCE})[0], legacy)
+        taste = {"what": "the menu reads well", "kind": "taste"}
+        self.assertEqual(e.resolve_kind(taste, {"kind": "checkable"})[0], "checkable")  # stricter is allowed
+
     def test_the_schemas_and_briefs_name_the_kinds(self):
         for node in ("write", "review"):
             sch = engine.SCHEMAS[node]["properties"]["unchecked"]["items"]["properties"]["kind"]["enum"]
             self.assertTrue(set(engine.ROUTED_KINDS) <= set(sch))
         self.assertIn("kind", engine.SCHEMAS["verify"]["properties"]["items"]["items"]["required"])
+        self.assertIn("source", engine.SCHEMAS["verify"]["properties"]["items"]["items"]["required"])
         for k in engine.ROUTED_KINDS:
             self.assertIn(k + ":", engine.VERIFY_PROMPT)
             self.assertIn(k + ":", engine.UNCHECKED_TEXT)
@@ -183,6 +269,56 @@ class NoBlock(unittest.TestCase):
         (u2,) = [c for c in self.bd_calls if c[0] == "update"]
         self.assertEqual(u2[3].count("## t-2: Second"), 1)
         self.assertEqual(u2[3].count("## t-1: First"), 1)
+
+    def test_three_beads_of_one_epic_landing_together_file_one_review_bead_with_all_sections(self):
+        store, lock = {}, threading.Lock()
+        epic = {"id": "t-0", "issue_type": "epic"}
+
+        def bd(*a, **kw):
+            self.bd_calls.append(a)
+            out = mock.Mock(returncode=0, stdout="", stderr="")
+            with lock:
+                rows = list(store.values())
+            if a[0] == "list":
+                out.stdout = json.dumps([{"id": r["id"]} for r in rows])
+            elif a[0] == "create":
+                time.sleep(0.05)  # the window a race needs: list is done, create is not
+                with lock:
+                    store["t-9%d" % len(store)] = {"id": "t-9%d" % len(store), "parent": a[a.index("--parent") + 1], "status": "open",
+                                                   "description": a[a.index("--description") + 1], "dependencies": []}
+            elif a[0] == "update":
+                with lock:
+                    store[a[1]]["description"] = a[a.index("--description") + 1]
+            return out
+
+        def show(i, **kw):
+            with lock:
+                return epic if i == "t-0" else dict(store.get(i, {}))
+
+        def land(n):
+            eng = engine.Engine("t-%d" % n, str(self.wt), engine.load_cfg(str(self.wt)))
+            eng.bead_title, eng.bead_parent = "Bead %d" % n, "t-0"
+            eng.unverified = [{"what": "price %d" % n, "kind": "external_fact", "why": "", "source": SOURCE}]
+            eng.file_owner_look()
+
+        with mock.patch.object(tl, "bd", side_effect=bd), mock.patch.object(tl, "show", side_effect=show):
+            threads = [threading.Thread(target=land, args=(n,)) for n in (1, 2, 3)]
+            [t.start() for t in threads]
+            [t.join() for t in threads]
+        self.assertEqual(len(store), 1)  # exactly one review bead for the epic
+        (row,) = store.values()
+        for n in (1, 2, 3):
+            self.assertIn("## t-%d: Bead %d" % (n, n), row["description"])
+            self.assertIn("price %d" % n, row["description"])
+
+    def test_a_bead_with_no_epic_files_its_review_bead_under_itself(self):
+        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        eng.bead_title = "Lone"
+        eng.unverified = [{"what": "price", "kind": "external_fact", "why": "", "source": SOURCE}]
+        with mock.patch.object(tl, "show", return_value={}):
+            eng.file_owner_look()
+        (c,) = self.creates()
+        self.assertEqual(c[c.index("--parent") + 1], "t-1")
 
 
 if __name__ == "__main__":
