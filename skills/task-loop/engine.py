@@ -73,6 +73,42 @@ UNCHECKED_TEXT = ("\nunchecked: what you could not check yourself, each with its
 
 VERDICTS = ("settled", "wrong", "open")  # the verifier's answer per unchecked item, before a verify ask
 
+# tl-bxk.10.23: engine.visual_paths {include, exclude} (globs) says which changes are visual; absent, no look rules at all
+IMAGE_EXT = (".png", ".jpg", ".jpeg", ".gif", ".webp")
+LOOK_ITEM = re.compile(r"owner\b[^.]{0,40}\b(?:judge|check|decide|assess|review|verify)\b[^.]*\b"
+                       r"(?:looks?|visual\w*|appearance|screenshots?)\b", re.I)  # 'Only the owner can judge the look.'
+LOOK_LABEL = "owner-look"
+
+
+def glob_re(g):
+    """A repo path glob: ** crosses folders, * and ? stay in one, {a,b} is either."""
+    out, i, depth = "", 0, 0
+    while i < len(g):
+        c = g[i]
+        if g.startswith("**/", i):
+            out, i = out + "(?:.*/)?", i + 3
+            continue
+        if c == "*":
+            out, i = out + (".*" if g.startswith("**", i) else "[^/]*"), i + (2 if g.startswith("**", i) else 1)
+            continue
+        if c == "{":
+            out, depth = out + "(?:", depth + 1
+        elif c == "}" and depth:
+            out, depth = out + ")", depth - 1
+        elif c == "," and depth:
+            out += "|"
+        else:
+            out += "[^/]" if c == "?" else re.escape(c)
+        i += 1
+    return re.compile(out + r"\Z")
+
+
+def visual_hit(vp, paths):
+    """True when a path matches an include glob and no exclude glob."""
+    inc = [glob_re(g) for g in (vp or {}).get("include") or []]
+    exc = [glob_re(g) for g in (vp or {}).get("exclude") or []]
+    return any(any(r.match(p) for r in inc) and not any(r.match(p) for r in exc) for p in paths)
+
 # a check that runs bd or reads the beads files proves the tracker, not the code: no writer can satisfy it (writers cannot
 # run bd), so it burns every round (lifesim-fld.26.12, lifesim-fld.27.9: 3 rounds, 2 replans, 89 min, stuck)
 TRACKER_CHECK = re.compile(r"(?:^|[;&|(`!{]|\b(?:then|do|else|xargs|exec|command|env|time)\b)\s*bd(?=\s|$|[;&|)`])|"
@@ -298,8 +334,8 @@ SCHEMAS = {
                                                       "properties": {"criterion": S_STR, "check": S_STR}}},
                  "leftovers": LEFTOVERS}},
     "write": {"type": "object", "additionalProperties": False,
-              "required": ["summary", "checks_run", "question", "decided", "bad_checks", "new_cases", "unchecked"],
-              "properties": {"summary": S_STR, "question": S_STR, "decided": S_STR,
+              "required": ["summary", "checks_run", "question", "decided", "bad_checks", "new_cases", "unchecked", "logic_only"],
+              "properties": {"summary": S_STR, "question": S_STR, "decided": S_STR, "logic_only": S_STR,
                              "unchecked": {"type": "array", "items": {
                                  "type": "object", "additionalProperties": False, "required": ["what", "kind"],
                                  "properties": {"what": S_STR, "kind": {"type": "string", "enum": list(UNCHECKED_KINDS) + ["other"]}}}},
@@ -313,8 +349,8 @@ SCHEMAS = {
                                  "type": "object", "additionalProperties": False, "required": ["cmd", "exit"],
                                  "properties": {"cmd": S_STR, "exit": {"type": "integer"}}}}}},
     "review": {"type": "object", "additionalProperties": False,
-               "required": ["findings", "unmet", "question", "decided", "leftovers", "unchecked"],
-               "properties": {"unchecked": {"type": "array", "items": {
+               "required": ["findings", "unmet", "question", "decided", "leftovers", "unchecked", "look"],
+               "properties": {"look": S_STR, "unchecked": {"type": "array", "items": {
                        "type": "object", "additionalProperties": False, "required": ["what", "kind"],
                        "properties": {"what": S_STR, "kind": {"type": "string", "enum": list(UNCHECKED_KINDS) + ["other"]}}}},
                    "findings": {"type": "array", "items": {
@@ -776,6 +812,7 @@ class Engine:
                       "tokens_in": 0, "tokens_cached": 0, "tokens_out": 0}
         self.session = tl.session_id()
         self.leftovers = []
+        self.look_notes, self.look_paths, self.bead_parent = [], [], ""  # tl-bxk.10.23
         self.filed = []       # leftover titles filed by an earlier run on this checkpoint: a replan naming one again is no new bead
         self.done = []        # goals of the stages accepted on this branch, across plans and runs
         self.accepted = []    # their indices in the current plan
@@ -1350,6 +1387,7 @@ class Engine:
             if not bead:
                 raise Blocked("failed: bead %s not found" % self.bead)
             self.bead_title = bead.get("title") or ""
+            self.bead_parent = bead.get("parent") or ""
             hb.start()
             if not self.route:
                 raise Blocked("failed: the engine needs the iorlas-delegate plugin (0.14.0 or later): "
@@ -1387,7 +1425,7 @@ class Engine:
                 self.done.append(plan["stages"][i]["goal"])
                 i += 1
                 self.save_checkpoint(stage=i, rounds=0, n=0, feedback="", step="write" if i < len(plan["stages"]) else "land")
-            gaps = self.self_verify([u for u in self.unchecked if u["kind"] in UNCHECKED_KINDS])
+            gaps = self.self_verify([u for u in self.unchecked if u["kind"] in UNCHECKED_KINDS or self.is_look(u)])
             if gaps:
                 raise Blocked(VERIFY_GAPS + "the workers could not check: " + "; ".join(
                     "%s (%s%s)" % (u["what"], u["kind"], ("; " + u["why"]) if u.get("why") else "") for u in gaps),
@@ -1446,6 +1484,7 @@ class Engine:
                     "%s: %s, %s" % (x["verdict"], x["what"], '"%s"' % x["evidence"]) for x in self.verified))
                 return []
         items = "".join("%d. %s (%s)\n" % (n, u["what"], u["kind"]) for n, u in enumerate(gaps, 1))
+        items += self.look_verify(gaps)
         try:
             d, _ = self.ai("verify", "%d unchecked item(s) before land" % len(gaps), VERIFY_PROMPT.format(
                 brief=self.brief_text(), work=self.work_summary(), evidence=self.evidence_dir,
@@ -1464,6 +1503,8 @@ class Engine:
             v, why = a["verdict"], a["why"]
             if v == "settled" and not a["evidence"].strip():
                 v, why = "open", "settled without quoted evidence"
+            if self.is_look(u):
+                v, a, why = self.look_verdict(v, a, why)
             self.verified.append({"what": u["what"], "kind": u["kind"], "verdict": v, "evidence": a["evidence"], "why": why})
             if v != "settled":
                 (wrong if v == "wrong" else still).append(dict(u, why=why))
@@ -1927,7 +1968,7 @@ class Engine:
                        % (Path(self.wt) / self.cfg["worker_rules"])) if self.cfg["worker_rules"] else "") +
                 "\nThe plan's acceptance cases run on the last stage. If you find a case they miss, add it to new_cases (the "
                 "criterion it proves, the check, why); never remove or weaken one." + ("" if last else LATER_CASES) +
-                UNCHECKED_TEXT, resume_key="writer", write=n, round=rounds + 1, **where)
+                UNCHECKED_TEXT + self.look_write(st), resume_key="writer", write=n, round=rounds + 1, **where)
             self.writer_family = wfam
             wr = self.sessions[-1] if self.sessions else {}
             self.write_rounds.append({"write": n, "round": rounds + 1, "node_id": wr.get("node_id"), "ref": wr.get("ref"),
@@ -2004,12 +2045,13 @@ class Engine:
                 ("\nNobody has checked these yet (earlier stages or the writer could not; the engine's checks above ran "
                  "after them); put in your unchecked only what is still unproven:\n" + "".join(
                      "- %s (%s)\n" % (u["what"], u["kind"]) for u in open_items) if open_items else "") +
-                ("" if last else LATER_CASES) + UNCHECKED_TEXT,
+                ("" if last else LATER_CASES) + UNCHECKED_TEXT + self.look_review(st, w, fix),
                 writer_family=wfam, round=rounds + 1, **where)
             # lifesim-gfr.31.1: a stage-1 item that stage 2 ran green still stopped the land; each review re-judges what
             # is open, so its list replaces it. A fix at land reviews only the fix: it adds, never clears.
             judged = self.engine_unproven(review.get("unchecked") or [], checks)
             self.unchecked = self.unchecked + judged if fix else judged
+            self.look_judged(review, st, w, fix)
             same = self.last_flag == "same_family"
             if same:
                 self.warn("%s: the review is from the writer's own model family (no other lane was free)" % name)
@@ -2279,6 +2321,7 @@ class Engine:
         base = self.git("merge-base", "HEAD", self.cfg["base"])
         if base:
             self.sh(["git", "reset", "-q", "--soft", base], check=True, pin=True)
+        self.copy_looks()
         self.stage_all(check=True)
         msg = "%s (%s)" % (bead.get("title", self.bead)[:72], self.bead)
         rc, tail = self.sh(["git", "commit", "-q", "-m", msg], pin=True)
@@ -2401,6 +2444,109 @@ class Engine:
         with tl.os_lock(path, self.bead, lambda who: self.log("note", "waiting for the land lock (held by %s)" % who)):
             yield path
 
+    # -- look and feel (tl-bxk.10.23): screenshots for a visual change, judged by the agent, held for the owner's batch
+    def visual_cfg(self):
+        vp = self.cfg.get("visual_paths")
+        return vp if isinstance(vp, dict) and vp.get("include") else None
+
+    def is_look(self, u):
+        return bool(self.visual_cfg()) and bool(LOOK_ITEM.search(u["what"]))
+
+    def shots(self):
+        """The pictures the writer saved under the evidence dir, relative to it."""
+        if not self.evidence_dir.is_dir():
+            return []
+        return sorted(str(f.relative_to(self.evidence_dir)) for f in self.evidence_dir.rglob("*")
+                      if f.is_file() and f.suffix.lower() in IMAGE_EXT)
+
+    def stage_visual(self, st):
+        vp = self.visual_cfg()
+        return bool(vp) and visual_hit(vp, list(st.get("files") or []) + self.changed_paths())
+
+    def look_write(self, st):
+        if not self.stage_visual(st):
+            return ""
+        return ("\nThis stage changes how something looks (it touches visual paths). Save a screenshot of every changed "
+                "screen or state in %s/ with a descriptive name (screen-state.png), and name them in the summary. If the "
+                "change is clearly logic-only and nothing on screen differs, put a one-line reason in logic_only; "
+                "otherwise leave logic_only empty." % self.evidence_dir)
+
+    def look_review(self, st, w, fix=False):
+        if fix or not self.stage_visual(st):
+            return ""
+        shots = self.shots()
+        text = ("\nThis stage changes how something looks. ")
+        if shots:
+            text += ("Screenshots the writer saved: %s. Open every one and judge it against the task's done-when and any "
+                     "linked decision or reference image, honestly: put what you see, and whether it matches, in one "
+                     "paragraph in look; a mismatch is a finding." % ", ".join("%s/%s" % (self.evidence_dir, s) for s in shots))
+        else:
+            text += "The writer saved no screenshots. "
+        if (w.get("logic_only") or "").strip():
+            text += ("\nThe writer says this change is logic-only: \"%s\". Accept it only if nothing on screen can differ; "
+                     "if not, give a medium finding." % w["logic_only"].strip())
+        return text + "\nlook: empty when nothing here is visual.\n"
+
+    def look_judged(self, review, st, w, fix):
+        """No screenshot and no logic-only reason on a visual stage is a medium finding; the reviewer's look is kept."""
+        if fix or not self.stage_visual(st):
+            return
+        if (review.get("look") or "").strip() and self.shots():
+            self.look_notes.append(review["look"].strip())
+        if not self.shots() and not (w.get("logic_only") or "").strip():
+            review["findings"] = review["findings"] + [{
+                "file": str(self.evidence_dir), "line": 0, "severity": "medium",
+                "fix": "this stage changes visual paths but saved no screenshot of any changed screen or state: save them "
+                       "in %s/ (descriptive names), or say in logic_only why nothing on screen differs" % self.evidence_dir}]
+
+    def look_verify(self, gaps):
+        looks = [n for n, u in enumerate(gaps, 1) if self.is_look(u)]
+        if not looks:
+            return ""
+        shots = self.shots()
+        return ("\nItems %s are about how it looks. They are never open: judge them from the screenshots (%s), against "
+                "the task's done-when and any linked decision or reference image. Open each one. settled when it matches "
+                "(evidence names the screenshot and what you saw); wrong when it does not (why says what differs).\n" % (
+                    ", ".join(map(str, looks)), ", ".join("%s/%s" % (self.evidence_dir, s) for s in shots) or "none saved"))
+
+    def look_verdict(self, v, a, why):
+        if v != "open":
+            return v, a, why
+        if self.shots():
+            self.warn("a look item came back open; the owner is not asked, it waits in the owner-look bead")
+            return "settled", dict(a, evidence="judged from the screenshots: " + (why or "no mismatch found")), why
+        return "wrong", a, "no screenshot to judge the look from: save them in %s/" % self.evidence_dir
+
+    def copy_looks(self):
+        """The screenshots of a visual change go into the repo (engine.evidence_dir/<bead>/), in the land's commit."""
+        self.look_paths = []
+        vp, dest = self.visual_cfg(), (self.cfg.get("evidence_dir") or "").strip("/")
+        shots = self.shots()
+        if not (vp and shots and visual_hit(vp, self.changed_paths())):
+            return
+        if not dest:
+            self.warn("screenshots saved but engine.evidence_dir is not set: they are not kept in the repo")
+            return
+        for s in shots:
+            to = Path(self.wt) / dest / self.bead / s
+            to.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(self.evidence_dir / s, to)
+            self.look_paths.append("%s/%s/%s" % (dest, self.bead, s))
+
+    def file_owner_look(self):
+        """After the land: one bead for the owner's later look-and-feel round; none without committed screenshots."""
+        if not self.look_paths:
+            return
+        title = "Look review: " + (self.bead_title or self.bead)
+        body = ("Screenshots of %s (%s), committed with its land:\n%s\n\nWhat the agent judged: %s\n\nNot automatable: the "
+                "owner reviews the look and feel in a later batch." % (self.bead, self.bead_title, "\n".join(
+                    "- " + p for p in self.look_paths), " ".join(self.look_notes) or "(the reviewer gave no judgement)"))
+        args = ["create", title, "--type", "task", "--labels", LOOK_LABEL, "--no-inherit-labels", "--description", body,
+                "--deps", "related:" + self.bead]
+        if self.bead_parent:
+            args += ["--parent", self.bead_parent]
+        tl.bd(*args)
+
     def keep_evidence(self):
         """Pictures the writer saved as proof outlive the worktree: copied to the run dir, named on the bead."""
         kept = []
@@ -2489,7 +2635,7 @@ class Engine:
                     self.ask_path().write_text(json.dumps(a, indent=1))
             except (OSError, ValueError):
                 pass
-        look = [u for u in self.unchecked if u["kind"] == "other"]
+        look = [u for u in self.unchecked if u["kind"] == "other" and not self.is_look(u)]
         if look and outcome in ("landed", "done"):
             tl.bd("label", "add", self.bead, "needs-owner-check")
             self.comment("Look (engine): landed, but nobody checked: " + "; ".join(u["what"] for u in look))
@@ -2499,6 +2645,8 @@ class Engine:
         for lo in new:
             tl.bd("create", lo["title"], "--type", "task", "--description", lo["why"],
                   "--deps", "discovered-from:" + self.bead)
+        if outcome == "landed":
+            self.file_owner_look()
         verified = ("; self-verified=" + ", ".join("%d %s" % (sum(x["verdict"] == k for x in self.verified), k)
                                                    for k in VERDICTS)) if self.verified else ""
         self.comment("Reflect (engine): outcome=%s; filed=%d; %s%s%s; trace=%s (tl trace %s)" % (

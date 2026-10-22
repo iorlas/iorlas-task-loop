@@ -57,10 +57,10 @@ def main(a):
                                 "start": start, "end": {"t": time.time(), "branch": branch(cwd),
                                                         "lock": lock_pid(cwd)}}) + "\n")
         data = {"summary": "wrote " + name, "checks_run": [{"cmd": "test -f " + name, "exit": 0}], "question": "",
-                "decided": "", "bad_checks": [], "new_cases": [], "unchecked": []}
+                "decided": "", "bad_checks": [], "new_cases": [], "unchecked": [], "logic_only": ""}
     else:
         node, data = "review", {"findings": [], "unmet": [], "question": "", "decided": "", "leftovers": [],
-                                "unchecked": []}
+                                "unchecked": [], "look": ""}
     print(json.dumps({"v": 2, "status": "done", "reason": None, "next": None, "data": data, "ref": "ref-%s-%s" % (
         node, bead), "cost": 0.0, "secs": 1, "family": "openai" if node == "write" else "claude", "lane": "L",
         "model": "m", "effort": "e", "git_violation": [], "tokens": {"in": 1, "cached": 0, "out": 1},

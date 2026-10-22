@@ -4,7 +4,7 @@
 import calendar
 import time
 
-OWNER_LABELS = ("owner-taste", "needs-info")
+OWNER_LABELS = ("owner-taste", "needs-info", "owner-look")
 STATES = ("running", "stuck", "queued", "blocked", "waits", "not_auto", "epic", "done", "deferred")
 DAY = 86400
 

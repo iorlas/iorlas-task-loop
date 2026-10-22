@@ -28,9 +28,9 @@ FALSE = PY + ' -c "import sys; sys.exit(1)"'
 PLAN = {"summary": "do it", "stages": [{"goal": "add f", "files": ["f.txt"], "checks": [HAS_F],
                                         "hard": False}], "risks": [], "question": "", "decided": "", "cases": [], "leftovers": []}
 WRITE = {"summary": "wrote f", "checks_run": [{"cmd": "test -f f.txt", "exit": 0}], "question": "", "decided": "", "bad_checks": [],
-         "new_cases": [], "unchecked": []}
+         "new_cases": [], "unchecked": [], "logic_only": ""}
 ROUTE = "/h/.claude/plugins/cache/m/iorlas-delegate/%s/skills/delegate/route.py"
-CLEAN = {"findings": [], "unmet": [], "question": "", "decided": "", "leftovers": [], "unchecked": []}
+CLEAN = {"findings": [], "unmet": [], "question": "", "decided": "", "leftovers": [], "unchecked": [], "look": ""}
 CONTRACT = {"worker_run": 2, "features": ["reason", "next", "context"], "reasons": {},
             "lanes": {"codex": {"hidden": ["every skill"]}, "claude": {"hidden": ["skills"]}}}
 

@@ -332,6 +332,22 @@ under one per-repo area lock (`<config dir>/locks/area-<repo>.lock`), so two loo
 `"area_label_prefix": "lane:", "areas": {"build": ["build"]}`. A hand `tl run-task` in a busy area warns
 (`⚠ area live busy: ...: running anyway beside it`) and runs; `--exclusive-area` refuses it (`taken`) instead.
 
+**Look and feel (tl-bxk.10.23):** `engine.visual_paths` `{"include": [globs], "exclude": [globs]}` (`**` crosses
+folders, `{a,b}` is either; read from the base branch like the other engine keys; absent = none of the rules below) and
+`engine.evidence_dir` (a repo folder, lifesim `design/look-reviews`). A stage whose planned files or diff match an include
+and no exclude is visual: the writer is told to save a screenshot of every changed screen or state in
+`.task/<bead>/evidence/` (descriptive names) or give a one-line `logic_only` reason; the reviewer gets the screenshot
+paths, opens and judges them against done-when and linked decisions or reference images (`look`, one paragraph) and
+sees any `logic_only` reason, which it may reject (medium finding). No screenshot and no reason is a medium finding the
+engine adds. A verify item of the kind 'only the owner can judge the look' is never asked: the verifier judges it from
+the screenshots; a mismatch is `wrong` (writer fix round), `open` counts as no mismatch (none saved: `wrong`). At land the
+screenshots are copied to `<evidence_dir>/<bead>/` and committed with the work (the repo's LFS attributes apply); after
+the land one bead is filed: label `owner-look` (not `auto`), parent = the source bead's parent, title `Look review:
+<title>`, body = each committed path plus the reviewer's look paragraph, `related` to the source bead. No screenshots, no
+bead. The Plan tab counts `owner-look` beads as 'waits on you'; add `owner-look` to `skip_labels` where `pick_label` is
+unset. lifesim: `"visual_paths": {"include": ["client/Assets/Features/**", ...], "exclude": ["client/Assets/Tests/**",
+"**/*.meta", "**/*.md"]}, "evidence_dir": "design/look-reviews"`.
+
 ## Report (the M2 scorecard)
 
 `tl report --planner [--prefix P] [--since T]` is the planner's cost per bead (calls, first plan / full plans again /
