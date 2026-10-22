@@ -87,12 +87,38 @@ def set_version(text, new, after=0):
     return text[:m.start()] + m.group(1) + new + m.group(2) + text[m.end():]
 
 
+def failure_report(out):
+    """Every "FAIL:" and "ERROR:" section of unittest output with its traceback, then the "Ran N tests" and "FAILED (..)" lines."""
+    keep, in_section = [], False
+    for line in out.splitlines():
+        if line.startswith(("FAIL: ", "ERROR: ")):
+            in_section = True
+        elif line.startswith("Ran ") or line.startswith("FAILED ("):
+            in_section = False
+            keep.append(line)
+            continue
+        if in_section:
+            keep.append(line)
+    return "\n".join(keep)
+
+
+def save_output(out):
+    """The full suite output, in the config dir: a file inside the checkout would make the tree dirty and block the release."""
+    d = tl.config_dir() / "releases"
+    d.mkdir(parents=True, exist_ok=True)
+    f = d / ("suite-%s-%d.log" % (datetime.datetime.now().strftime("%Y%m%d-%H%M%S"), os.getpid()))
+    f.write_text(out, encoding="utf-8")
+    return f
+
+
 def suite(repo):
     say("running the full suite")
     r = run([sys.executable, "-m", "unittest", "discover", "-s", "tests"], repo, check=False)
-    tail = (r.stdout + r.stderr).strip().splitlines()
+    out = (r.stdout + r.stderr).strip()
+    tail = out.splitlines()
     if r.returncode:
-        raise Abort("the suite is red; nothing released:\n" + "\n".join(tail[-40:]))
+        report = failure_report(out) or "\n".join(tail[-40:])
+        raise Abort("the suite is red; nothing released:\n%s\nfull output: %s" % (report, save_output(out)))
     say("suite green: " + " ".join(x for x in tail[-3:] if x.strip()))
 
 

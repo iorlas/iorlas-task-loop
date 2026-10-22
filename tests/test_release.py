@@ -1,6 +1,7 @@
 """dev/release.py against a fake remote: bare git repos in a temp dir, the claude and bd CLIs faked on PATH."""
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -189,6 +190,58 @@ class Release(unittest.TestCase):
         self.assertEqual(self.git("log", "--format=%s", "-2", "main", cwd=self.origin).splitlines(),
                          ["0.1.2: mine", "0.1.1: racer"])
         self.assertEqual(self.market_versions()["iorlas-task-loop"], "0.1.2")
+
+    def test_a_red_suite_prints_each_failing_test_and_saves_the_full_output_outside_the_repo(self):
+        self.write(self.seed / "tests" / "test_red.py", "import unittest\n\n\nclass R(unittest.TestCase):\n"
+                                                        "    def test_red_one(self):\n        self.fail('boom')\n"
+                                                        "    def test_red_two(self):\n        raise ValueError('bang')\n")
+        self.commit(self.seed, "red")
+        self.git("pull", "-q", "origin", "main", cwd=self.repo)
+        r = self.release("fix")
+        self.assertNotEqual(r.returncode, 0)
+        for want in ("FAIL: test_red_one", "ERROR: test_red_two", "AssertionError: boom", "ValueError: bang",
+                     "Ran 3 tests", "FAILED (failures=1, errors=1)"):
+            self.assertIn(want, r.stderr)
+        m = re.search(r"full output: (\S+)", r.stderr)
+        self.assertTrue(m, r.stderr)
+        saved = Path(m.group(1))
+        self.assertIn(str(self.home / "cfg" / "task-loop" / "releases"), str(saved))
+        self.assertIn("FAIL: test_red_one", saved.read_text())
+        self.assertEqual(self.git("status", "--porcelain", cwd=self.repo), "")
+
+    def test_failure_report_keeps_every_fail_and_error_section_and_the_summary_lines(self):
+        sys.path.insert(0, str(ROOT / "dev"))
+        import release
+        out = textwrap.dedent("""\
+            ..E.F.
+            ======================================================================
+            ERROR: test_a (tests.test_x.X.test_a)
+            ----------------------------------------------------------------------
+            Traceback (most recent call last):
+              File "x.py", line 1, in test_a
+            ValueError: bang
+
+            ======================================================================
+            FAIL: test_b (tests.test_x.X.test_b)
+            ----------------------------------------------------------------------
+            Traceback (most recent call last):
+            AssertionError: 1 != 2
+
+            ----------------------------------------------------------------------
+            Ran 6 tests in 0.010s
+
+            FAILED (failures=1, errors=1)
+            sys:1: ResourceWarning: unclosed file
+            """)
+        rep = release.failure_report(out)
+        self.assertIn("ERROR: test_a", rep)
+        self.assertIn("ValueError: bang", rep)
+        self.assertIn("FAIL: test_b", rep)
+        self.assertIn("AssertionError: 1 != 2", rep)
+        self.assertIn("Ran 6 tests in 0.010s", rep)
+        self.assertIn("FAILED (failures=1, errors=1)", rep)
+        self.assertNotIn("ResourceWarning", rep)
+        self.assertNotIn("..E.F.", rep)
 
     def test_a_loop_landing_during_every_suite_run_never_fails_the_release(self):
         # race test (tl-bxk.11.1): loops land on the same origin; each lands when the land lock is free. A land during
