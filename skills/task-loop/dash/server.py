@@ -896,7 +896,7 @@ def wait_label(recs):
     if not last or last.get("cause") != "lane_wait" or float(last.get("until") or 0) <= time.time():
         return ""
     who = timeline.lane_name(last.get("lane") or "", "")
-    return ("waiting for %s until %s" % (who, timeline.hhmm(last["until"]))) if who else ""
+    return ("waiting for %s until %s" % (who, timeline.when(last["until"]))) if who else ""
 
 
 def task_row(bead, paths, spans, tr):
@@ -1193,7 +1193,9 @@ def lane_banners(j):
         if gone:
             text = "%s logged out: run %s" % (who, "codex login" if who == "Codex" else "claude auth login")
         else:
-            text = "%s out%s" % (who, (" until " + timeline.hhmm(until)) if until else "")
+            past = until and until < time.time()  # delegate still says out after its own end: say so, never a bare old time
+            text = "%s out%s" % (who, (" (its end, %s, has passed)" % timeline.when(until)) if past
+                                 else (" until " + timeline.when(until)) if until else "")
         out[n] = {"until": until, "reason": "logged_out" if gone else ln.get("reason"), "text": text}
     return out
 

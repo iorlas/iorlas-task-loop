@@ -329,7 +329,19 @@ class LaneBanner(unittest.TestCase):
         until = 1793104732
         b = self.banners({"OPENAI_SUBSCRIPTION": self.lane(family="openai", out=True, out_until=until,
                                                            notes=["limit refusal: try again later"])})
+        self.assertEqual(b["OPENAI_SUBSCRIPTION"]["text"], "Codex out until " + time.strftime("%a %H:%M", time.localtime(until)))
+
+    def test_a_limit_ending_today_says_only_the_time(self):
+        until = time.time() + 60
+        if time.strftime("%Y%m%d", time.localtime(until)) != time.strftime("%Y%m%d"):
+            self.skipTest("a minute before midnight")
+        b = self.banners({"OPENAI_SUBSCRIPTION": self.lane(family="openai", out=True, out_until=until)})
         self.assertEqual(b["OPENAI_SUBSCRIPTION"]["text"], "Codex out until " + time.strftime("%H:%M", time.localtime(until)))
+
+    def test_an_end_that_has_passed_is_called_out(self):
+        until = time.time() - 3600
+        b = self.banners({"OPENAI_SUBSCRIPTION": self.lane(family="openai", out=True, out_until=until)})
+        self.assertIn("has passed", b["OPENAI_SUBSCRIPTION"]["text"])
 
     def test_an_out_lane_with_no_time_says_only_out(self):
         b = self.banners({"CLAUDE_SUBSCRIPTION": self.lane(out=True)})
