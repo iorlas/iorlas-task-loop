@@ -47,6 +47,8 @@ DEFAULTS = {
     "max_stages": 3,                  # a bigger plan is a split ask (ticket), unless the owner already answered one
     "node_timeout_min": 45,
     "writer_check_max_s": 60,         # a check whose last run took longer is the engine's, never the writer's to run
+    "check_timeout_min": 15,          # one check (engine.checks, a stage's check) running longer is killed, process group and all: exit 124
+    "gate_timeout_min": 30,           # the same for the gate at land
     "delegate": "",                   # path to delegate's route.py; "" = the newest installed iorlas-delegate
     "lane_wait_min": 10,              # how long a step waits in its slot for a lane; longer: the run pauses (slot freed)
     "checks": [],                     # repo checks: [{id, cmd, group: static|tests|acceptance, when: [globs], retry}]
@@ -1084,7 +1086,7 @@ class Engine:
         except subprocess.TimeoutExpired:
             kill_tree(p)
             out, _ = p.communicate()
-            out += b"\n(timed out after %d s: the engine stopped it and everything it started)" % int(timeout)
+            out += b"\n(timed out after %g min: the engine stopped it and everything it started)" % round(timeout / 60, 2)
             rc = 124
         except BaseException:  # stopped: never leave a check (just check, Unity) running
             kill_tree(p)
@@ -2146,7 +2148,7 @@ class Engine:
                 while True:
                     tries += 1
                     log_name = "%02d-%s.r%d.log" % (n, re.sub(r"[^\w.-]+", "_", c["id"])[:40], self.check_round)
-                    rc, tail = self.sh(cmd, timeout=float(self.cfg["node_timeout_min"]) * 60, save=logs / log_name)
+                    rc, tail = self.sh(cmd, timeout=float(self.cfg["check_timeout_min"]) * 60, save=logs / log_name)
                     if rc == 0 or tries > c["retry"]:
                         break
                     self.warn("`%s` failed (exit %d), retrying: it is marked flaky" % (c["id"], rc))
@@ -2212,7 +2214,7 @@ class Engine:
                     self.outcome_of("conflict", ", ".join(unmerged.split()))
                 elif self.cfg["gate"]:
                     self.gate_log = self.run_dir / ("gate.r%d.log" % (self.fixes + 1))
-                    rc, tail = self.sh(self.cfg["gate"], save=self.gate_log)
+                    rc, tail = self.sh(self.cfg["gate"], save=self.gate_log, timeout=float(self.cfg["gate_timeout_min"]) * 60)
                     if rc:
                         problem = ("gate", tail)
                         self.outcome_of("gate red", (tail.strip().splitlines() or [""])[-1])

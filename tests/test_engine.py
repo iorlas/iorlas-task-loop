@@ -297,6 +297,15 @@ class EngineTest(unittest.TestCase):
         self.assertIn("unity steps run", out)
         self.assertIn("439 passed", out)
 
+    def test_a_hung_gate_is_cut_at_gate_timeout_min_and_goes_red(self):
+        gate = PY + ' -c "import time; time.sleep(30)"'
+        t = time.time()
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, gate=gate,
+                                gate_timeout_min=0.02, max_fix_rounds=0)
+        self.assertLess(time.time() - t, 20)
+        self.assertNotEqual(rc, 0)
+        self.assertIn("timed out after 0.02 min", self.eng.log_path.read_text())
+
     def test_the_gate_runs_once_at_land_and_tells_the_push_which_tree_it_gated(self):
         count, seen = Path(self.tmp.name) / "gates", Path(self.tmp.name) / "gated-tree"
         gate = PY + ' -c "open(%r, \'a\').write(\'1\')"' % str(count)
@@ -818,13 +827,25 @@ class EngineTest(unittest.TestCase):
         if os.name == "nt":
             self.skipTest("POSIX process groups")
         pidfile = Path(self.tmp.name, "child.pid")
-        eng = self.checks_engine(node_timeout_min=0.03)
+        eng = self.checks_engine(check_timeout_min=0.03)
         t = time.time()
         res = eng.run_checks({"checks": [self.SPAWN % pidfile + "wait"], "files": []}, "s")
         self.assertLess(time.time() - t, 15, "the engine waited for the check's child to end by itself")
         self.assertEqual(res[0]["exit"], 124)
-        self.assertIn("timed out", res[0]["tail"])
+        self.assertIn("timed out after 0.03 min", res[0]["tail"])
+        self.assertEqual(res[0]["status"], "failed")
         self.assertDead(self.child_of(pidfile))
+
+    def test_check_timeout_defaults_to_15_min_and_the_gate_to_30(self):
+        self.assertEqual((engine.DEFAULTS["check_timeout_min"], engine.DEFAULTS["gate_timeout_min"]), (15, 30))
+
+    def test_a_sleeping_check_is_cut_at_check_timeout_min_not_node_timeout_min(self):
+        eng = self.checks_engine(check_timeout_min=0.02, node_timeout_min=45)
+        t = time.time()
+        res = eng.run_checks({"checks": [PY + ' -c "import time; time.sleep(30)"'], "files": []}, "s")
+        self.assertLess(time.time() - t, 15)
+        self.assertEqual((res[0]["exit"], res[0]["status"]), (124, "failed"))
+        self.assertIn("timed out after 0.02 min", res[0]["tail"])
 
     def test_sigterm_during_a_stage_check_stops_its_tree_and_still_closes(self):
         pidfile = Path(self.tmp.name, "child.pid")
