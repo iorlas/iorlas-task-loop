@@ -187,9 +187,23 @@ class Release(unittest.TestCase):
         r = self.release("mine")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("push race", r.stdout)
+        self.assertRegex(r.stdout, r"origin/main [0-9a-f]{40} is not the base [0-9a-f]{40}")
         self.assertEqual(self.git("log", "--format=%s", "-2", "main", cwd=self.origin).splitlines(),
                          ["0.1.2: mine", "0.1.1: racer"])
         self.assertEqual(self.market_versions()["iorlas-task-loop"], "0.1.2")
+
+    def test_a_branch_release_with_nothing_landed_meanwhile_is_no_push_race(self):
+        # tl-bxk.12.8: the check compared origin/main with HEAD~1, which is the branch tip once a --from-branch fast-forwarded
+        self.git("checkout", "-q", "-b", "task/y", cwd=self.repo)
+        self.write(self.repo / "a.txt", "a")
+        self.git("add", "-A", cwd=self.repo)
+        self.git("commit", "-qm", "a branch commit", cwd=self.repo)
+        self.git("checkout", "-q", "main", cwd=self.repo)
+        r = self.release("fix", "--from-branch", "task/y")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertNotIn("push race", r.stdout)
+        self.assertEqual(self.git("log", "--format=%s", "-2", "main", cwd=self.origin).splitlines(),
+                         ["0.1.1: fix", "a branch commit"])
 
     def test_a_red_suite_prints_each_failing_test_and_saves_the_full_output_outside_the_repo(self):
         self.write(self.seed / "tests" / "test_red.py", "import unittest\n\n\nclass R(unittest.TestCase):\n"

@@ -132,27 +132,31 @@ def bump_and_commit(repo, message, minor):
     return version
 
 
-def push_main(repo, message, minor, version):
+def push_main(repo, message, minor, version, base):
     """Push, under the land lock (an engine lands only while it holds it): an origin/main that moved since the bump (a
     land during the suite) is rebased onto, the version taken again and the suite run again, then pushed while no land
-    can get in. A push refused all the same (one that skipped the lock) gets one more round."""
+    can get in. A push refused all the same (one that skipped the lock) gets one more round. `base` is the origin/main the
+    bump was built on: HEAD~1 is not, a --from-branch fast-forward puts the branch's commits between them."""
     url = git(repo, "remote", "get-url", "origin", check=False) or str(repo)
     with tl.os_lock(tl.land_lock_path(url), "release: " + message,
                     lambda who: say("waiting for the land lock (held by %s)" % who)):
         for _ in range(2):
             fetch(repo)
-            if git(repo, "rev-parse", "origin/main") != git(repo, "rev-parse", "HEAD~1"):
-                say("push race: origin/main moved; rebasing, taking the next version and running the suite again")
+            head = git(repo, "rev-parse", "origin/main")
+            if head != base:
+                say("push race: origin/main %s is not the base %s; rebasing, taking the next version and running the suite again"
+                    % (head, base))
                 git(repo, "reset", "-q", "--hard", "HEAD~1")
                 if run(["git", "rebase", "-q", "origin/main"], repo, check=False).returncode:
                     run(["git", "rebase", "--abort"], repo, check=False)
                     raise Abort("the rebase onto origin/main after the push race failed")
+                base = head
                 version = bump_and_commit(repo, message, minor)
             r = run(["git", "push", "-q", "origin", "HEAD:main"], repo, check=False)
             if not r.returncode:
                 return version
             fetch(repo)
-            if git(repo, "rev-parse", "origin/main") == git(repo, "rev-parse", "HEAD~1"):
+            if git(repo, "rev-parse", "origin/main") == base:
                 raise Abort("the push was refused and origin/main did not move:\n" + r.stderr)
     raise Abort("the push lost the race twice, the land lock held; nothing released")
 
@@ -183,6 +187,7 @@ def release(a, repo, market):
     try:
         fetch(repo)
         git(repo, "merge", "-q", "--ff-only", "origin/main")
+        base = git(repo, "rev-parse", "origin/main")
         if a.from_branch:
             b = a.from_branch
             if not git(repo, "rev-parse", "--verify", "-q", b + "^{commit}", check=False):
@@ -191,7 +196,7 @@ def release(a, repo, market):
                 raise Abort("%s is not a fast-forward of origin/main: rebase %s onto origin/main first"
                             % (a.from_branch, a.from_branch))
         version = bump_and_commit(repo, a.message, a.minor)
-        version = push_main(repo, a.message, a.minor, version)
+        version = push_main(repo, a.message, a.minor, version, base)
     except Abort:
         run(["git", "rebase", "--abort"], repo, check=False)
         run(["git", "reset", "-q", "--hard", start], repo, check=False)
