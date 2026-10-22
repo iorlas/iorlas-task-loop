@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import shlex
 import signal
 import subprocess
 import sys
@@ -244,7 +245,7 @@ class EngineTest(unittest.TestCase):
 
     def test_a_check_that_times_out_is_red_and_leaves_no_process(self):
         c = engine.load_cfg(str(self.wt))
-        c["node_timeout_min"] = 0.03  # under 2 s
+        c["check_timeout_min"] = 0.03  # under 2 s
         eng = engine.Engine("t-1", str(self.wt), c)
         res = eng.run_checks({"checks": ["bash -c 'sleep 61.234; true'"], "files": []}, "s")
         self.assertEqual(res[0]["exit"], 124)
@@ -290,6 +291,77 @@ class EngineTest(unittest.TestCase):
         eng = self.checks_engine(checks=[{"id": "flaky", "cmd": flaky, "group": "tests", "retry": 1}])
         res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertEqual((res[0]["exit"], res[0]["status"], res[0]["tries"]), (0, "ran", 2))
+
+    # tl-bxk.10.17: real lines from lifesim check logs, and the messages the bead names
+    COMPILE = ["CSC : error CS2001: Source file '/s/client/A.cs' could not be found. [/s/client/L.csproj]",
+               "/s/client/Assets/T.cs(90,28): error MA0051: Method is too long (95 lines; maximum allowed: 60) [/s/L.csproj]",
+               "Assets/Foo.cs(180,32): error CS0246: The type or namespace name 'X' could not be found",
+               "  File \"a.py\", line 1\nSyntaxError: invalid syntax", "ModuleNotFoundError: No module named 'foo'",
+               "FileNotFoundError: [Errno 2] No such file or directory: '.task/x/evidence/live-place.txt'"]
+    LOCK = ["Unable to create project: It looks like another Unity instance is running with this project open.",
+            "an editor holds client/ (another Unity instance)", "Multiple Unity instances: Temp/UnityLockfile in use"]
+
+    def test_failure_kind_sorts_compile_errors_missing_files_and_locks(self):
+        for line in self.COMPILE:
+            self.assertEqual(engine.failure_kind(line), "deterministic", line)
+        for line in self.LOCK:
+            self.assertEqual(engine.failure_kind(line), "lock", line)
+        for line in ("AssertionError: 1 != 2", "Curl error 42", "Connection reset by peer", ""):
+            self.assertEqual(engine.failure_kind(line), "flaky", line)
+
+    def test_lock_waits_are_15_30_60_and_add_up_to_5_min(self):
+        w = engine.lock_waits()
+        self.assertEqual(w[:4], [15, 30, 60, 60])
+        self.assertEqual(sum(w), 300)
+
+    def counting_check(self, line, ok_after=None):
+        """A check that prints `line` and exits 1, counting its runs in a file; green from run ok_after on."""
+        n = Path(self.tmp.name) / ("runs-%s" % self._testMethodName)
+        code = ("import sys,os; p=%r; k=(int(open(p).read()) if os.path.exists(p) else 0)+1; open(p,'w').write(str(k)); "
+                "print(%r); sys.exit(0 if %r and k>=%r else 1)" % (str(n), line, ok_after is not None, ok_after))
+        return PY + " -c " + shlex.quote(code), n
+
+    def test_a_compile_error_is_not_retried(self):
+        cmd, n = self.counting_check(self.COMPILE[1])
+        eng = self.checks_engine(checks=[{"id": "an", "cmd": cmd, "group": "tests", "retry": 3}])
+        res = eng.run_checks({"checks": [], "files": []}, "s")
+        self.assertEqual((res[0]["status"], res[0]["tries"], n.read_text()), ("failed", 1, "1"))
+
+    def test_a_missing_file_is_not_retried(self):
+        cmd, n = self.counting_check(self.COMPILE[5])
+        eng = self.checks_engine(checks=[{"id": "ev", "cmd": cmd, "group": "tests", "retry": 3}])
+        self.assertEqual(eng.run_checks({"checks": [], "files": []}, "s")[0]["tries"], 1)
+
+    def test_an_unclassified_failure_keeps_the_retry(self):
+        cmd, n = self.counting_check("AssertionError: 1 != 2")
+        eng = self.checks_engine(checks=[{"id": "u", "cmd": cmd, "group": "tests", "retry": 2}])
+        res = eng.run_checks({"checks": [], "files": []}, "s")
+        self.assertEqual((res[0]["tries"], n.read_text()), (3, "3"))
+
+    def test_a_locked_editor_is_waited_for_with_backoff_then_passes(self):
+        cmd, n = self.counting_check(self.LOCK[0], ok_after=3)
+        eng = self.checks_engine(checks=[{"id": "unity", "cmd": cmd, "group": "tests", "retry": 1}])
+        with mock.patch.object(engine.time, "sleep") as sleep:
+            res = eng.run_checks({"checks": [], "files": []}, "s")
+        self.assertEqual((res[0]["exit"], res[0]["status"], n.read_text()), (0, "ran", "3"))
+        self.assertEqual([c[0][0] for c in sleep.call_args_list if c[0][0] >= 15], [15, 30])  # other threads may sleep too
+
+    def test_a_lock_that_stays_fails_after_5_min_with_the_holder_pid(self):
+        cmd, n = self.counting_check(self.LOCK[2])
+        proj = self.wt / "client" / "Temp"
+        proj.mkdir(parents=True)
+        lockfile = proj / "UnityLockfile"
+        lockfile.write_text("")
+        eng = self.checks_engine(checks=[{"id": "unity", "cmd": cmd, "group": "tests", "retry": 1}])
+        real = engine.subprocess.run
+        with mock.patch.object(engine.time, "sleep") as sleep, mock.patch.object(
+                engine.subprocess, "run", side_effect=lambda a, *k, **kw: (
+                    mock.Mock(stdout="4242\n") if a[0] == "lsof" else real(a, *k, **kw))):
+            res = eng.run_checks({"checks": [], "files": []}, "s")
+        self.assertEqual((res[0]["status"], sum(c[0][0] for c in sleep.call_args_list if c[0][0] >= 15)),
+                         ("failed", 300))
+        self.assertIn("lock holder is pid 4242", res[0]["tail"])
+        self.assertEqual(n.read_text(), str(1 + len(engine.lock_waits())))
 
     def test_a_passing_check_still_shows_its_notable_lines(self):
         out = engine.compact([{"cmd": "just check", "exit": 0, "status": "ran", "group": "tests",

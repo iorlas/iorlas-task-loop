@@ -2151,6 +2151,27 @@ class Engine:
                     rc, tail = self.sh(cmd, timeout=float(self.cfg["check_timeout_min"]) * 60, save=logs / log_name)
                     if rc == 0 or tries > c["retry"]:
                         break
+                    try:
+                        seen = (logs / log_name).read_text(encoding="utf-8", errors="replace")
+                    except OSError:
+                        seen = tail
+                    kind = failure_kind(seen)
+                    if kind == "deterministic":  # a rerun fails the same way, seconds later (tl-bxk.10.17)
+                        self.warn("`%s` failed (exit %d) with a compile or missing-file error: not retried" % (c["id"], rc))
+                        break
+                    if kind == "lock":
+                        for n, wait in enumerate(lock_waits(), 1):
+                            self.warn("`%s` is held by an editor or project lock; waiting %d s (%d)" % (c["id"], wait, n))
+                            time.sleep(wait)
+                            rc, tail = self.sh(cmd, timeout=float(self.cfg["check_timeout_min"]) * 60, save=logs / log_name)
+                            seen = (logs / log_name).read_text(encoding="utf-8", errors="replace")
+                            if rc == 0 or failure_kind(seen) != "lock":
+                                break
+                        if rc and failure_kind(seen) == "lock":
+                            pid = lock_holder(seen, self.wt)
+                            tail += "\n(still locked after %d s of waiting%s)" % (
+                                LOCK_WAIT_MAX, "; the lock holder is pid " + pid if pid else "")
+                        break
                     self.warn("`%s` failed (exit %d), retrying: it is marked flaky" % (c["id"], rc))
                 res = dict(base, exit=rc, status="ran" if rc == 0 else "failed", tries=tries, tail=tail[-1500:],
                            secs=round(time.time() - t), log="checks/" + log_name)
@@ -2644,6 +2665,50 @@ def split_top(cmd):
         return None
     parts.append(cur)
     return list(zip(parts, sep + [""]))
+
+
+# tl-bxk.10.17: what a red check's output says about whether running it again could change anything
+COMPILE_FAIL = re.compile(r"error CS\d+|error [A-Z]+\d+:|SyntaxError|ModuleNotFoundError|FileNotFoundError"
+                          r"|No such file or directory|file not found|could not be found", re.I)
+LOCK_FAIL = re.compile(r"another Unity instance|It looks like another Unity|editor holds|Temp/UnityLockfile", re.I)
+LOCK_BACKOFF = (15, 30, 60)  # seconds; the last repeats until LOCK_WAIT_MAX
+LOCK_WAIT_MAX = 300
+
+
+def failure_kind(text):
+    """'lock' (an editor or project lock: wait, then rerun), 'deterministic' (compile error, missing file: a rerun
+    fails the same way), else 'flaky' (today's retry)."""
+    if LOCK_FAIL.search(text):
+        return "lock"
+    return "deterministic" if COMPILE_FAIL.search(text) else "flaky"
+
+
+def lock_waits():
+    """The sleeps before each rerun of a check held by a lock: 15, 30, 60, 60 ... s, 5 min in all."""
+    out, total = [], 0
+    while total < LOCK_WAIT_MAX:
+        d = min(LOCK_BACKOFF[min(len(out), len(LOCK_BACKOFF) - 1)], LOCK_WAIT_MAX - total)
+        out.append(d)
+        total += d
+    return out
+
+
+def lock_holder(text, cwd):
+    """Pids that have the project lockfile open (lsof), '' when none or lsof is missing. The path is the one the
+    output names, else Temp/UnityLockfile under the tree."""
+    names = re.findall(r"(\S*Temp/UnityLockfile)", text)
+    cands = [Path(n) if os.path.isabs(n) else Path(cwd) / n for n in names] + sorted(Path(cwd).glob("*/Temp/UnityLockfile"))
+    for f in cands:
+        if not f.exists():
+            continue
+        try:
+            r = subprocess.run(["lsof", "-t", str(f)], capture_output=True, text=True, timeout=20)
+        except (OSError, subprocess.SubprocessError):
+            return ""
+        pids = [x for x in r.stdout.split() if x.isdigit()]
+        if pids:
+            return ",".join(pids)
+    return ""
 
 
 def reuse_passed(cmd, passed):
