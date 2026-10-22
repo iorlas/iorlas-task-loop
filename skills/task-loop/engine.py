@@ -584,12 +584,16 @@ def kill_tree(p):
         if os.name == "nt":
             subprocess.run(["taskkill", "/PID", str(p.pid), "/T", "/F"], capture_output=True)
         else:
+            own = os.getpgrp()
+            if p.pid == own or (p.returncode is None and os.getpgid(p.pid) == own):
+                raise RuntimeError("kill_tree: child %s is in our own process group; refusing to kill it" % p.pid)
             os.killpg(p.pid, signal.SIGTERM)  # Unity removes Temp/UnityLockfile on SIGTERM
             try:
                 p.wait(timeout=10)
             except subprocess.TimeoutExpired:
                 pass
-            os.killpg(p.pid, signal.SIGKILL)  # stragglers in the group
+            if p.pid != own:  # a group id is only ours to kill while it is the child's own
+                os.killpg(p.pid, signal.SIGKILL)  # stragglers in the group
     except OSError:
         pass
     p.wait()

@@ -563,3 +563,23 @@ def zombie(pid):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(POSIX, "process groups")
+class KillTreeGroupTest(unittest.TestCase):
+    def test_kill_tree_kills_a_check_and_the_runner_survives(self):
+        p = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], start_new_session=True)
+        self.assertNotEqual(os.getpgid(p.pid), os.getpgrp())
+        engine.kill_tree(p)
+        self.assertIsNotNone(p.returncode)
+
+    def test_kill_tree_refuses_a_child_in_our_own_group(self):
+        p = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])  # no new session: our group
+        try:
+            self.assertEqual(os.getpgid(p.pid), os.getpgrp())
+            with mock.patch.object(engine.os, "killpg") as kp, self.assertRaises(RuntimeError):
+                engine.kill_tree(p)
+            kp.assert_not_called()
+        finally:
+            p.kill()
+            p.wait()
