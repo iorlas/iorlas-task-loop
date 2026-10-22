@@ -1178,11 +1178,11 @@ LOGGED_OUT = re.compile(r"logged[ _]out|not logged in", re.I)
 
 def lane_banners(j):
     """name -> {until, reason, text} for each lane of `route.py status --json` that stops an unattended run. A credit lane
-    that is out, or unknown subscription use, does not: no banner. delegate 0.35 has no reason field: a logout shows as
-    out with a note."""
+    that is out, a lane only busy (all slots taken), or unknown subscription use, does not: no banner. delegate 0.35.1+
+    says why in `reason`; 0.35.0 has none, so a logout there is out with a note."""
     out = {}
     for n, ln in (j.get("lanes") or {}).items():
-        if not isinstance(ln, dict) or ln.get("kind") == "credit":
+        if not isinstance(ln, dict) or ln.get("kind") == "credit" or ln.get("reason") == "busy":
             continue
         notes = " ".join(str(x) for x in ln.get("notes") or [])
         gone = ln.get("reason") == "logged_out" or (ln.get("out") and LOGGED_OUT.search(notes))

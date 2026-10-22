@@ -275,6 +275,13 @@ class LaneBanner(unittest.TestCase):
         b = self.banners({"CLAUDE_SUBSCRIPTION": self.lane(), "CLAUDE_CREDIT": self.lane(kind="credit", out=True)})
         self.assertEqual(b, {})
 
+    def test_a_logged_out_reason_needs_no_note(self):
+        b = self.banners({"CLAUDE_SUBSCRIPTION": self.lane(out=True, reason="logged_out")})
+        self.assertEqual(b["CLAUDE_SUBSCRIPTION"]["text"], "Claude logged out: run claude auth login")
+
+    def test_a_busy_lane_gets_no_banner(self):
+        self.assertEqual(self.banners({"CLAUDE_SUBSCRIPTION": self.lane(out=True, reason="busy")}), {})
+
     def test_delegate_status_carries_the_text(self):
         j = {"v": 1, "lanes": {"CLAUDE_SUBSCRIPTION": self.lane(out=True, notes=["claude is logged out: run `claude auth login`"])}}
         server._cache.clear()
