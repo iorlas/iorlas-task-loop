@@ -335,43 +335,60 @@ class EngineTest(unittest.TestCase):
         self.assertEqual([bool(c.get("reused")) for c in res], [False, True, True])
         self.assertEqual(n.read_text(), "1")
 
-    def test_a_wrapper_around_a_configured_check_reads_its_log_and_does_not_rerun_it(self):
-        cmd, n = self.counting_check("suite output line", ok_after=1)
-        wrap = "mkdir -p ev && %s > ev/out.txt 2>&1 && grep -q 'suite output line' ev/out.txt" % cmd
-        eng = self.checks_engine(checks=[{"id": "unit", "cmd": cmd, "group": "tests"}])
-        res = eng.run_checks({"checks": [wrap], "files": []}, "s")
+    def test_a_configured_checks_log_and_exit_reach_the_checks_after_it(self):
+        cmd, n = self.counting_check("Passed: 12", ok_after=1)
+        eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests"}])
+        res = eng.run_checks({"checks": ["grep -q 'Passed: 12' \"$TL_CHECK_LOG_UNITY_TESTS\" && test \"$TL_CHECK_RC_UNITY_TESTS\" = 0"],
+                              "files": []}, "s")
         self.assertEqual([c["exit"] for c in res], [0, 0])
         self.assertEqual(n.read_text(), "1")
-        self.assertIn("suite output line", (self.wt / "ev" / "out.txt").read_text())
 
-    def test_a_wrapper_around_a_check_that_did_not_run_here_runs_in_full(self):
-        cmd, n = self.counting_check("suite output line", ok_after=1)
-        wrap = "%s > out.txt 2>&1 && grep -q 'suite output line' out.txt" % cmd
-        eng = self.checks_engine(checks=[])
-        res = eng.run_checks({"checks": [wrap], "files": []}, "s")
-        self.assertEqual((res[0]["exit"], n.read_text()), (0, "1"))
+    def test_the_commands_the_review_found_unsafe_run_as_written(self):
+        (self.wt / "client").mkdir()
+        cmd, n = self.counting_check("PASSED", ok_after=1)
+        eng = self.checks_engine(checks=[{"id": "t", "cmd": cmd, "group": "tests", "cache": False}])
+        marks = []
+        for wrap in ("cd client && %s > f 2>&1 && grep -q PASSED f",
+                     "export X=1; %s > f 2>&1; grep -q PASSED f",
+                     "git clean -fdq client && %s > f && grep -q PASSED f",
+                     "%s > f; grep -q PASSED f"):
+            n.write_text("1")
+            res = eng.run_checks({"checks": [wrap % cmd], "files": []}, "s")
+            marks.append((res[1]["exit"], n.read_text()))
+        self.assertEqual(marks, [(0, "3")] * 4)  # 1 + the configured check + the wrapper, which ran itself
 
-    def test_reuse_passed_reads_the_log_only_for_a_redirected_or_piped_part(self):
-        log = Path(self.tmp.name) / "r.log"
-        log.write_text("x\n")
-        got, used = engine.reuse_passed("just t > f 2>&1 && grep x f; just tt > g; echo just t", {"just t": log})
-        self.assertIn("cat %s > f 2>&1" % log, got)
-        self.assertIn("just tt > g", got)
-        self.assertIn("echo just t", got)
-        self.assertEqual(used, ["just t"])
+    def test_a_plan_check_that_re_runs_a_configured_check_is_found(self):
+        cfg = {"checks": [{"id": "unity-tests", "cmd": "just unity-tests"}]}
+        plan = dict(PLAN, risks=[{"what": "x", "check": "mkdir -p x && just unity-tests > x/f && grep -q a x/f"},
+                                 {"what": "y", "check": "just unity-tests-extra"}])
+        self.assertEqual([i for _, i in engine.rerun_checks(plan, cfg)], ["unity-tests"])
+        self.assertEqual(engine.check_env_name("unity-tests"), "TL_CHECK_LOG_UNITY_TESTS")
 
-    def test_a_slot_wait_in_a_check_is_not_counted_in_the_budget(self):
-        cmd, n = self.counting_check("unity-slot: unity-tests got slot 0 after 600s", ok_after=1)
-        eng = self.checks_engine(checks=[{"id": "u", "cmd": cmd, "group": "tests"}], budget_min=5)
+    def test_the_same_command_with_another_timeout_is_not_a_duplicate(self):
+        cmd, n = self.counting_check("ok", ok_after=1)
+        eng = self.checks_engine(checks=[{"id": "a", "cmd": cmd, "group": "static", "timeout_min": 1, "cache": False},
+                                         {"id": "b", "cmd": cmd, "group": "tests", "timeout_min": 2, "cache": False}])
+        eng.run_checks({"checks": [], "files": []}, "s")
+        self.assertEqual(n.read_text(), "2")
+
+    def test_a_slot_wait_in_a_check_is_read_and_capped_at_its_wall_time(self):
+        cmd, n = self.counting_check("unity-slot: x got slot 0 after 99999999s", ok_after=1)
+        eng = self.checks_engine(checks=[{"id": "u", "cmd": cmd, "group": "tests"}])
+        eng.run_checks({"checks": [], "files": []}, "s")
+        self.assertTrue(0 < eng.waited < 60)
+        eng.add_wait(99999999, "x")
+        self.assertLessEqual(eng.waited, time.time() - eng.t0)
+
+    def test_a_wait_is_not_counted_in_the_budget(self):
+        eng = self.checks_engine(budget_min=5)
         eng.t0 -= 8 * 60  # eight minutes wall
         self.assertRaises(engine.Blocked, eng.budget_check)
-        eng.run_checks({"checks": [], "files": []}, "s")
-        self.assertEqual(eng.waited, 600)
-        eng.budget_check()  # 8 min wall - 10 min waited: inside the budget
-        eng.t0 -= 8 * 60
+        eng.add_wait(600, "a Unity slot")  # capped at the 8 min there are: inside the budget
+        eng.budget_check()
+        eng.t0 -= 16 * 60
         with self.assertRaises(engine.Blocked) as e:
             eng.budget_check()
-        self.assertIn("16 min wall, 10 min waiting", str(e.exception))
+        self.assertIn("24 min wall, 8 min waiting", str(e.exception))
 
     def test_budget_min_by_label_raises_the_budget_for_a_labelled_bead(self):
         eng = self.checks_engine(budget_min=5, budget_min_by_label={"unity": 300})
@@ -491,20 +508,6 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(count.read_text(), "1")
         self.assertEqual(seen.read_text(), tl.git("rev-parse", "HEAD^{tree}", cwd=str(self.wt)))
-
-    # lifesim 2026-10-20: `just unity-tests` ran 5-6 times per round, once as the repo check, then again inside each stage
-    # check and case that starts with it (`just unity-tests && grep ...`), 2 min each
-    def test_a_repo_check_inside_a_stage_check_is_not_run_again_in_the_same_round(self):
-        count = Path(self.tmp.name) / "count"
-        bump = PY + ' -c "open(%r, \'a\').write(\'1\')"' % str(count)
-        eng = self.checks_engine(checks=[{"id": "ut", "cmd": bump, "group": "tests", "cache": False}])
-        st = {"checks": [bump + " && " + PY + ' -c "pass"', bump + "; " + PY + ' -c "pass"', bump], "files": []}
-        res = eng.run_checks(st, "s")
-        self.assertEqual(count.read_text(), "1")
-        self.assertEqual([c["exit"] for c in res], [0, 0, 0, 0])
-        self.assertIn("already passed", eng.log_path.read_text())
-        eng.run_checks(st, "s")  # the next round runs it again: the writer may have changed the tree
-        self.assertEqual(count.read_text(), "11")
 
     def test_a_stage_check_that_deletes_first_or_quotes_the_command_runs_it(self):
         count = Path(self.tmp.name) / "count"

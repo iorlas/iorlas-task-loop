@@ -208,6 +208,22 @@ def gate_only(cfg):
     return [(" ".join(c.split()), why) for c, why in out if c.strip()]
 
 
+def rerun_checks(plan, cfg):
+    """[(check, id)]: the plan's checks that contain a configured check's command as a whole word."""
+    out = []
+    for c in plan_checks(plan):
+        for k in cfg.get("checks") or []:
+            words = (k.get("cmd") or "").split()
+            if words and re.search(r"(?<![\w-])" + r"\s+".join(map(re.escape, words)) + r"(?![\w-])", c):
+                out.append((c, k.get("id") or k["cmd"]))
+                break
+    return out
+
+
+def check_env_name(check_id):
+    return "TL_CHECK_LOG_" + re.sub(r"\W+", "_", check_id).upper()
+
+
 def gate_only_checks(plan, cfg):
     """[(check, reason)]: the plan's checks that run a gate-only command."""
     rules = [(re.compile(CMD_LEAD + r"\s+".join(map(re.escape, c.split())) + r"(?=\s|$|[;&|)`])"),
@@ -1206,14 +1222,16 @@ class Engine:
         return (time.time() - self.t0 - self.waited) / 60
 
     def add_wait(self, secs, what):
+        secs = min(secs, time.time() - self.t0 - self.waited)  # never more than the wall time there is
         if secs > 0:
             self.waited += secs
             self.log("note", "waited %d min for %s: not counted in budget_min" % (secs // 60, what))
 
-    def note_slot_waits(self, text):
-        """A check's output says how long it queued for a Unity slot ("unity-slot: x got slot 0 after 686s")."""
-        for m in SLOT_WAIT.finditer(text or ""):
-            self.add_wait(int(m.group(1)), "a Unity slot")
+    def note_slot_waits(self, text, wall):
+        """A check's output says how long it queued for a Unity slot ("unity-slot: x got slot 0 after 686s"). The output
+        is not trusted: all the waits in one run together are at most that run's wall time."""
+        total = sum(int(m.group(1)) for m in SLOT_WAIT.finditer(text or ""))
+        self.add_wait(min(total, wall), "a Unity slot")
 
     def budget_check(self):
         mins, limit = self.spent_min(), self.budget_limit_min()
@@ -2083,6 +2101,8 @@ class Engine:
             dry = dry_check(data, self.wt)
             if dry:  # a heuristic: the writer's bad_checks flag decides from here, no second send-back
                 self.warn("the plan's checks may still not run after one rewrite: %s" % "; ".join(dry)[:300])
+        for c, i in rerun_checks(data, self.cfg):  # still runs as written: a send-back costs a re-plan
+            self.warn("`%s` re-runs %s; use $%s" % (c[:100], i, check_env_name(i)))
         return data
 
     def cap_blocked(self, detail=""):
@@ -2757,7 +2777,7 @@ class Engine:
         key = "%s %s" % (self.tree_hash(), self.git("rev-parse", self.cfg["base"]))
         logs = self.run_dir / "checks"
         logs.mkdir(exist_ok=True)
-        out, red, changed, passed, ran = [], None, None, {}, {}  # passed, ran: command -> its log, its result in this block
+        out, red, changed, ran, env_logs = [], None, None, {}, {}  # ran: what ran in this block -> its result; env_logs: its logs, for later checks
         for n, c in enumerate(items):
             base = {"cmd": c["cmd"], "id": c["id"], "group": c["group"]}
             if red and c["group"] != red:
@@ -2770,18 +2790,15 @@ class Engine:
                                     why="no change under %s" % ", ".join(c["when"])))
                     continue
             cmd = c["cmd"]
-            if cmd.strip() in ran:  # each distinct command runs once per block (tl-bxk.10.27)
+            same = (cmd.strip(), str(self.wt), c["timeout"])  # what a result is a fact about: command, directory, limit
+            if same in ran:  # each distinct command runs once per block (tl-bxk.10.27)
                 self.log("note", "`%s` already ran in this block: its result is reused" % cmd[:120])
-                res = dict(ran[cmd.strip()], **base)
+                res = dict(ran[same], **base)
                 res.update(cached=False, reused=True)
                 out.append(res)
                 if res["exit"] != 0:
                     red = c["group"]
                 continue
-            if c["group"] == "acceptance":  # a repo check that passed this round is not run again inside a stage check
-                cmd, used = reuse_passed(c["cmd"], passed)
-                if used:
-                    self.log("note", "`%s` already passed this round: not run again in `%s`" % ("`, `".join(used), c["cmd"][:120]))
             hit = c["cache"] and cache.get(key, {}).get(c["cmd"])
             if hit:
                 res = dict(base, **hit)
@@ -2792,12 +2809,12 @@ class Engine:
                     tries += 1
                     log_name = "%02d-%s.r%d.log" % (n, re.sub(r"[^\w.-]+", "_", c["id"])[:40], self.check_round)
                     t_try = time.time()
-                    rc, tail = self.sh(cmd, timeout=c["timeout"] * 60, save=logs / log_name)
+                    rc, tail = self.sh(cmd, timeout=c["timeout"] * 60, save=logs / log_name, env=env_logs)
                     try:
                         seen = (logs / log_name).read_text(encoding="utf-8", errors="replace")
                     except OSError:
                         seen = tail
-                    self.note_slot_waits(seen)
+                    self.note_slot_waits(seen, time.time() - t_try)
                     if rc == 0:
                         break
                     if rc == 124:  # the engine's timeout or the command's own: a rerun hangs the same way
@@ -2815,9 +2832,9 @@ class Engine:
                             self.warn("`%s` is held by an editor or project lock; waiting %d s (%d)" % (c["id"], wait, w_n))
                             time.sleep(wait)
                             self.add_wait(wait, "an editor lock")
-                            rc, tail = self.sh(cmd, timeout=c["timeout"] * 60, save=logs / log_name)
+                            rc, tail = self.sh(cmd, timeout=c["timeout"] * 60, save=logs / log_name, env=env_logs)
                             seen = (logs / log_name).read_text(encoding="utf-8", errors="replace")
-                            self.note_slot_waits(seen)
+                            self.note_slot_waits(seen, time.time() - t_try)
                             if rc == 0 or failure_kind(seen) != "lock":
                                 break
                         if rc and failure_kind(seen) == "lock":
@@ -2833,9 +2850,11 @@ class Engine:
                 if rc == 0 and c["cache"]:  # only a pass is a fact about the tree; a failure can come from outside git (stale
                     cache.setdefault(key, {})[c["cmd"]] = res  # build output, a held editor, a flake) and must rerun
             out.append(res)
-            ran[c["cmd"].strip()] = res
-            if res["exit"] == 0 and c["group"] != "acceptance" and not res.get("cached"):  # its output files are fresh
-                passed[" ".join(c["cmd"].split())] = logs / log_name
+            ran[same] = res
+            if c["group"] != "acceptance" and res.get("exit") is not None:  # later checks read its log: $TL_CHECK_LOG_<ID>
+                lp = (logs / log_name) if not res.get("cached") else self.run_dir / res.get("log", "")
+                if lp.is_file():
+                    env_logs[check_env_name(c["id"])], env_logs[check_env_name(c["id"]).replace("_LOG_", "_RC_")] = str(lp), str(res["exit"])
             if res["exit"] != 0:
                 red = c["group"]
         for c in out:
@@ -3605,36 +3624,6 @@ def lock_holder(text, cwd):
     return ""
 
 
-def reuse_passed(cmd, passed):
-    """cmd with each top-level part that is a repo check already passed this round replaced by `true`; a part that wraps
-    one, the check's command followed by a redirection or pipe (`just t > f 2>&1`), reads its saved log instead
-    (`cat LOG > f 2>&1`) when `passed` maps the command to that log. An earlier part that deletes files (rm) may remove
-    that check's output, so from there on nothing is replaced."""
-    split = split_top(cmd)
-    if not split or not passed:
-        return cmd, []
-    out, used, deleting = [], [], False
-    logs = passed if isinstance(passed, dict) else {}
-    for part, sep in split:
-        p = " ".join(part.split())
-        deleting = deleting or re.match(r"(?:\S*/)?rm\b", p) is not None
-        wrapped = None
-        if p not in passed and not deleting:
-            for known in sorted(logs, key=len, reverse=True):
-                m = re.match(r"\s*" + r"\s+".join(map(re.escape, known.split())) + r"(?=\s)(?P<rest>\s*(?:\d?>>?|&>|\|(?!\|)).*)$",
-                             part, re.S)
-                if m and Path(logs[known]).exists():
-                    wrapped = (known, m.group("rest"))
-                    break
-        if p in passed and not deleting:
-            used.append(p)
-            out.append(" true " + sep)
-        elif wrapped:
-            used.append(wrapped[0])
-            out.append(" cat %s %s" % (shlex.quote(str(logs[wrapped[0]])), wrapped[1].lstrip()) + sep)
-        else:
-            out.append(part + sep)
-    return "".join(out).strip(), used
 SLOT_WAIT = re.compile(r"\bgot slot \S+ after (\d+) ?s\b")
 NOTABLE = re.compile(r"(?i)\b(skip|skipped|steps run|passed|failed|warnings?|errors?)\b")
 
@@ -3793,6 +3782,9 @@ each stage has its files and its checks. Budget: about 12 tool calls. Then plan.
   `bash -e -o pipefail`: a red command before a `;` or inside a pipe fails it; `cmd || true` for one whose exit does
   not matter. Grep a command's output from a file (`cmd > f 2>&1 && grep -q x f`), not a pipe: `grep -q` ends the
   pipe early and the command dies of SIGPIPE (exit 141).
+- To assert on what a repo check printed, do not run its command again in a plan check: the engine exports the log of
+  each repo check that ran before yours as `$TL_CHECK_LOG_<ID>` (its id upper-cased, other characters `_`; its exit code is
+  `$TL_CHECK_RC_<ID>`). Example: `grep -q 'Passed: 12' "$TL_CHECK_LOG_UNITY_TESTS"`.
 - The engine sets every time limit and runs checks one at a time; never write timeouts, "run alone" or similar notes
   into a check.
 - cases: the acceptance cases. At least one per acceptance criterion of the task, each with the criterion it proves
