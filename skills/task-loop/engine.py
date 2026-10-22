@@ -835,6 +835,7 @@ class Engine:
         self.look_filed = False
         self.look_unjudged, self.look_retried, self.shots_skipped = {}, set(), set()  # unjudged: item -> why
         self.filed = []       # leftover titles filed by an earlier run on this checkpoint: a replan naming one again is no new bead
+        self.stage_tree = ""  # the tree the current stage started from ("" = the task's base): the review's diff runs from here
         self.writer_said = "" # the writer's answers so far: a new file they name is meant (tl-bxk.10.24)
         self.accepted_new = []  # untracked files a review accepted into the commit
         self.done = []        # goals of the stages accepted on this branch, across plans and runs
@@ -1266,6 +1267,26 @@ class Engine:
         for p in self.slot_status()[1]:
             out[self.new_file_kind(p)].append(p)
         return out
+
+    STAGE_DIFF_CAP = 40000
+
+    def stage_work(self, unexplained, ignored):
+        """tl-bxk.10.18: the review brief's account of the work: this stage's diff (the tree the stage started from to the
+        tree now; the task's base for the first stage), inline up to STAGE_DIFF_CAP chars; over it, the --stat and the
+        instruction to read only the changed files plus the plan. Untracked files not meant for the commit are left out."""
+        tree = self.tree_hash()
+        base = self.stage_tree or self.base_sha()
+        if not tree:
+            return "The work: `git diff %s` and new files." % base
+        skip = ["--", "."] + [":(exclude,literal)" + p for p in unexplained + ignored]
+        diff = tl.git("diff", base, tree, *skip, cwd=self.wt)
+        if len(diff) <= self.STAGE_DIFF_CAP:
+            return ("The work of this stage (the diff from where the stage started to now; earlier stages are in the tree "
+                    "but not in this diff):\n<diff>\n%s</diff>" % (diff if diff.endswith("\n") or not diff else diff + "\n")
+                    if diff else "The work of this stage: no file changed.")
+        stat = tl.git("diff", "--stat", base, tree, *skip, cwd=self.wt)
+        return ("The work of this stage is too big to inline (%d chars; the cap is %d). Its changed files:\n%s\nRead only "
+                "the changed files plus the plan; do not diff the whole task." % (len(diff), self.STAGE_DIFF_CAP, stat))
 
     def stage_all(self, check=False):
         """Stage the slot's own changes: exactly the paths `git status --porcelain` lists under the pinned env, never a
@@ -1949,7 +1970,7 @@ class Engine:
                "writer_family": self.writer_family or "", "brief": self.brief_hash, "head": self.git("rev-parse", "HEAD"),
                "unchecked": self.unchecked, "filed": self.filed,
                "look_paths": self.look_paths, "look_notes": self.look_notes, "look_unjudged": self.look_unjudged,
-               "writer_said": self.writer_said, "accepted_new": self.accepted_new,
+               "stage_tree": self.stage_tree, "writer_said": self.writer_said, "accepted_new": self.accepted_new,
                "closed": False,
                "run": self.log_path.stem, "t": time.time(), **at}
         p = self.checkpoint_path()
@@ -2010,7 +2031,7 @@ class Engine:
         self.replans, self.fixes = int(ck.get("replans") or 0), int(ck.get("fixes") or 0)
         self.denials = list(ck.get("denials") or [])
         self.filed = list(ck.get("filed") or [])
-        self.writer_said = ck.get("writer_said") or ""
+        self.stage_tree, self.writer_said = ck.get("stage_tree") or "", ck.get("writer_said") or ""
         self.accepted_new = list(ck.get("accepted_new") or [])
         if ck["writer"]:
             self.writer["delegate"] = ck["writer"]
@@ -2075,6 +2096,8 @@ class Engine:
         last = i == len(plan["stages"]) - 1
         state = state or {}
         fix = state.get("fix")
+        if not state or fix:  # a resumed stage keeps the checkpoint's start; the first stage starts at the task's base
+            self.stage_tree = self.tree_hash() if (i or fix) else ""
         name = state.get("name") or "stage %d/%d" % (i + 1, len(plan["stages"]))
         feedback, rounds, red, n = state.get("feedback", ""), state.get("rounds", 0), 0, state.get("n", 0)
         failed_cmds = state.get("failed")  # the commands the last engine run found red (None: no check ran red yet)
@@ -2162,7 +2185,7 @@ class Engine:
             kinds = self.new_by_kind()
             review, _ = self.ai("review", name, REVIEW_PROMPT.format(
                 brief=self.brief_text(), plan=self.plan_text(), n=i + 1, goal=st["goal"],
-                base=self.base_sha(), checks=compact(checks), summary=w["summary"], evidence=self.evidence_dir,
+                work=self.stage_work(kinds["unexplained"], kinds["ignored"]), checks=compact(checks), summary=w["summary"], evidence=self.evidence_dir,
                 gate=(" (`%s`)" % self.cfg["gate"]) if self.cfg["gate"] else "",
                 added=self.stats["tests_added"], removed=self.stats["tests_removed"],
                 scope=(state["scope"] if fix else
@@ -3387,7 +3410,7 @@ REVIEW_PROMPT = """You review one stage of a task, from another model family tha
 {plan}
 </plan>
 Stage {n}: {goal}
-The work: `git diff {base}` and new files (the task's work since main, committed or not).
+{work}
 The engine ran the checks outside any sandbox, one at a time, and they all pass; these results are facts:
 {checks}
 The engine runs the gate{gate} once, at land, on the tree rebased onto the latest base, before anything merges; a red
@@ -3397,7 +3420,8 @@ Proof the engine cannot rerun (a test seen failing after a planted fault) is in 
 there is met. The engine counted tests in the task's diff: {added} added, {removed} removed.
 Return:
 - findings: bugs, broken contracts, risky changes (a public member, a test weakened or removed, a suppression, a file
-  outside what the stage names), each with file, line, severity and the fix. high and medium send the stage back; low
+  outside what the stage names, a break of this repo's own conventions: the rules in its AGENTS.md or CLAUDE.md, checked
+  on the changed lines), each with file, line, severity and the fix. high and medium send the stage back; low
   is noted only. No style nits.
 - unmet: what in {scope} the work does not do yet, each saying what is missing. A requirement shown met by a check or
   by the evidence is met; never list a remark that something is fine.

@@ -801,7 +801,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 0)
         rv = s.prompts[2]
         self.assertNotIn("git diff HEAD", rv)
-        self.assertRegex(rv, r"git diff [0-9a-f]{40}")
+        self.assertIn("<diff>\ndiff --git a/f.txt b/f.txt", rv)  # the stage's diff, inline (tl-bxk.10.18)
         for fact in ("exit 0", "wrote f", "evidence", "add f"):
             self.assertIn(fact, rv)
 
@@ -2538,6 +2538,45 @@ class LandReview(EngineTest):
             self.assertEqual(e.lint_command("`ruff check . ; rm -rf ~` was not run"), "ruff check .")
             self.assertEqual(e.lint_command("`ruff check tools` was not run"), "ruff check tools")
 
+    # -- tl-bxk.10.18
+    def reviewer_brief(self, cap=40000):
+        script = DelegateScript({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        with mock.patch.object(engine.Engine, "STAGE_DIFF_CAP", cap):
+            self.assertEqual(self.run_with(script), 0)
+        return next(p for c, p in zip(script.calls, script.prompts) if c[0] == "reviewer")
+
+    def test_the_review_brief_inlines_the_stage_diff_ahead_of_the_checks(self):
+        brief = self.reviewer_brief()
+        self.assertIn("<diff>", brief)
+        self.assertIn("+d2", brief)  # the writer's f.txt
+        self.assertLess(brief.index("<diff>"), brief.index("The engine ran the checks"))
+        self.assertNotIn("git diff", brief)
+        self.assertIn("AGENTS.md or CLAUDE.md", brief)
+
+    def test_over_the_cap_the_brief_gives_the_stat_and_tells_the_reviewer_to_read_only_the_changed_files(self):
+        brief = self.reviewer_brief(cap=5)
+        self.assertNotIn("<diff>", brief)
+        self.assertIn("too big to inline", brief)
+        self.assertIn("f.txt | 1 +", brief)
+        self.assertIn("Read only the changed files plus the plan", brief)
+
+    def test_the_diff_of_a_later_stage_starts_where_that_stage_started(self):
+        e = self.engine_at_land()
+        (self.wt / "one.txt").write_text("stage one\n")
+        self.assertIn("one.txt", e.stage_work([], []))
+        e.stage_tree = e.tree_hash()  # stage 2 starts here
+        self.assertIn("no file changed", e.stage_work([], []))
+        (self.wt / "two.txt").write_text("stage two\n")
+        work = e.stage_work([], [])
+        self.assertIn("two.txt", work)
+        self.assertNotIn("one.txt", work)
+
+    def test_a_stray_file_is_not_in_the_stage_diff(self):
+        e = self.engine_at_land()
+        self.make_files("f.txt", *self.STRAY)
+        work = e.stage_work(self.STRAY, [])
+        self.assertIn("f.txt", work)
+        self.assertNotIn("InitTestScene", work)
 
 
 for _name in [n for n in dir(EngineTest) if n.startswith("test_")]:
