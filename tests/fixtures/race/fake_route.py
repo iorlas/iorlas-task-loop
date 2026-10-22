@@ -43,7 +43,7 @@ def main(a):
     if "stages" in props:
         node, data = "plan", {"summary": "add " + name, "stages": [{"goal": "add " + name, "files": [name],
                                                                    "checks": ["test -f " + name], "hard": False}],
-                              "risks": [], "question": "", "decided": "", "cases": [], "leftovers": []}
+                              "risks": [], "question": "", "options": [], "decided": "", "cases": [], "leftovers": []}
     elif "checks_run" in props:
         node = "write"
         start = {"t": time.time(), "branch": branch(cwd), "lock": lock_pid(cwd)}
@@ -57,9 +57,9 @@ def main(a):
                                 "start": start, "end": {"t": time.time(), "branch": branch(cwd),
                                                         "lock": lock_pid(cwd)}}) + "\n")
         data = {"summary": "wrote " + name, "checks_run": [{"cmd": "test -f " + name, "exit": 0}], "question": "",
-                "decided": "", "bad_checks": [], "new_cases": [], "unchecked": [], "logic_only": ""}
+                "options": [], "decided": "", "bad_checks": [], "new_cases": [], "unchecked": [], "logic_only": ""}
     else:
-        node, data = "review", {"findings": [], "unmet": [], "question": "", "decided": "", "leftovers": [],
+        node, data = "review", {"findings": [], "unmet": [], "question": "", "options": [], "decided": "", "leftovers": [],
                                 "unchecked": [], "look": ""}
     print(json.dumps({"v": 2, "status": "done", "reason": None, "next": None, "data": data, "ref": "ref-%s-%s" % (
         node, bead), "cost": 0.0, "secs": 1, "family": "openai" if node == "write" else "claude", "lane": "L",
