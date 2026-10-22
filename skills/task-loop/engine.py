@@ -51,6 +51,8 @@ DEFAULTS = {
     "write_idle_warn_min": 15,        # a write whose worker has been silent this long (session file, process output) is warned about
     "write_idle_stop_min": 25,        # and stopped at this; a write whose activity cannot be seen keeps node_timeout_min
     "write_cap_min": 120,             # a write is stopped at this however active the worker is
+    "write_fresh_above_k": {"claude": 150, "codex": 200},  # a writer session whose context ended above this (k tokens, by its family;
+                                      # a number sets both, 0 = never) is not resumed: a fresh writer gets the brief and what is done
     "writer_check_max_s": 60,         # a check whose last run took longer is the engine's, never the writer's to run
     "check_timeout_min": 60,          # one check (engine.checks, a stage's check) running longer is killed, process group and all: exit 124
     "gate_timeout_min": 90,           # the same for the gate at land
@@ -1074,7 +1076,8 @@ class Engine:
                                       # as a new thread after a lane_out the engine saw
         self.fallback_lane = ""  # that writer's first-choice lane, when known: delegate's first_lane, or the lane seen out
         self.verified = []  # the verifier's answer per unchecked item at land: in the trace and on the bead
-        self.write_rounds = []  # per write round: resumed, input tokens, turns (the next measure of a fix round's cost)
+        self.write_rounds = []  # per write round: resumed, input tokens, turns, prompt chars, context k, why fresh (a fix round's cost)
+        self.last_summary = ""  # the last write's summary: a fresh writer is told it
         self.sessions = []  # every AI call of this run: the trace a later reflection reads (traces.jsonl)
         self.outcome, self.why, self.asked = "failed", "", False  # what result() tells the loop
         self.retry_after = 0.0  # a pause for a lane: when delegate says it is back (epoch; 0 = unknown)
@@ -1096,6 +1099,7 @@ class Engine:
         prune_check_rounds(tl.config_dir() / "runs")
         self.task_dir = Path(wt) / ".task" / bead  # the writer's: only evidence/ lives here
         self.task_dir.mkdir(parents=True, exist_ok=True)
+        self.brief_file = self.task_dir / "brief.md"  # the brief as the writer can re-read it: the engine's copy stays in run_dir
         self.evidence_dir = self.task_dir / "evidence"  # the writer's proof of what the engine cannot rerun
         self.evidence_dir.mkdir(exist_ok=True)
         self.route = find_route(cfg.get("delegate", ""))
@@ -1177,7 +1181,11 @@ class Engine:
                "effort": j.get("effort") or "", "turns": j.get("turns"), "secs": round(r.secs or 0), "cost": r.cost or 0.0, "t": time.time(),
                "host": host, "stopped": r.stop, "tokens": j.get("tokens"), "denied": j.get("denied") or [],  # tokens {in, cached, out}
                "reason": j.get("reason"), "next": j.get("next"), "context": j.get("context"),
-               "node_id": (self.cur or {}).get("id"), "resume": bool(getattr(self, "_resume", None)), "flag": j.get("flag")}
+               "node_id": (self.cur or {}).get("id"), "resume": bool(getattr(self, "_resume", None)), "flag": j.get("flag"),
+               "prompt_chars": getattr(self, "_prompt_chars", None)}
+        if node == "write":  # where the session's context stands now: what the next round weighs against write_fresh_above_k
+            tok = context_tokens(rec["transcript"])
+            rec["context_k"] = round(tok / 1000) if tok else None
         if self.cur and rec["ref"]:
             self.cur["sessions"].append(rec["ref"])
         for k in ("in", "cached", "out"):
@@ -1247,8 +1255,9 @@ class Engine:
         self.assert_tree(kw.get("step") or node, "after")
         return out
 
-    def _ai(self, node, title, prompt, resume_key=None, writer_family=None, step=None, resume_ref=None, visual=False, **meta):
-        """One AI node through delegate (worker-run v1): it picks lane and model, limits apply, it records the run."""
+    def _ai(self, node, title, prompt, resume_key=None, writer_family=None, step=None, resume_ref=None, visual=False, delta=None, **meta):
+        """One AI node through delegate (worker-run v1): it picks lane and model, limits apply, it records the run.
+        `delta`: what a resumed writer is sent instead of `prompt` (a new thread always gets `prompt`)."""
         self.budget_check()
         self.stats["nodes"] += 1
         role = ROLES[node]
@@ -1272,7 +1281,7 @@ class Engine:
         self.node(step or node, "%s: %s" % (node, title), node=node, backend="delegate", role=role, resume=bool(resume),
                   **meta)
         timeout = float(self.cfg["node_timeout_min"]) * 60
-        waited, attempt_prompt, attempt, errs = 0.0, prompt, 1, ["not run"]
+        waited, attempt_prompt, attempt, errs = 0.0, delta if (delta and resume and resume_key) else prompt, 1, ["not run"]
         login_note = ""  # set once a lane answered logged_out and the engine retried afresh (delegate puts that lane out 15 min)
         while attempt <= 2:
             self._resume = resume
@@ -1286,6 +1295,7 @@ class Engine:
             if j is not None and j.get("v") != 2:
                 raise Blocked("failed: delegate answered worker-run v%s, this engine speaks v2 (update task-loop or "
                               "delegate)" % j.get("v"))
+            self._prompt_chars = len(attempt_prompt)
             self.trace_call(node, role, attempt, r, j, bool(flag))
             if r.alive:  # a retry would write into the tree the old worker still writes in
                 raise Blocked("failed: the %s worker (pid %s) is still alive after the stop (%s), SIGTERM and SIGKILL; "
@@ -1306,7 +1316,7 @@ class Engine:
                 self.transition(step or node, "logged_out", login_note, lane=j.get("lane") or "")
                 resume, out_on = None, j.get("lane") or ""
                 if self._resume:
-                    attempt_prompt += FRESH_WRITER_TEXT
+                    attempt_prompt = prompt + FRESH_WRITER_TEXT
                 continue
             if reason == "lane_out" and nxt in ("retry", "owner") and resume:
                 # delegate never moves a resumed thread to another lane; a new thread gets the role's next rung at once.
@@ -1315,7 +1325,7 @@ class Engine:
                          % (node, said[:160]))
                 self.transition(step or node, "lane_out", "the resumed thread's lane is out: a new thread",
                                 lane=j.get("lane") or "")
-                resume, attempt_prompt, out_on = None, attempt_prompt + FRESH_WRITER_TEXT, j.get("lane") or ""
+                resume, attempt_prompt, out_on = None, prompt + FRESH_WRITER_TEXT, j.get("lane") or ""
                 continue
             if nxt == "retry":  # worker-run v2: delegate says when; how long a slot waits is this engine's policy
                 due = float(j.get("retry_after") or 0)
@@ -1365,6 +1375,8 @@ class Engine:
                     self.fallback_lane = gone if gone and (j.get("lane") or "") != gone else ""
                     self.writer_fallback = bool(self.fallback_lane)
                 self.writer["delegate"] = resume = r.ref
+                self.writer["ctx"] = (self.sessions[-1] if self.sessions else {}).get("context_k")  # k tokens, None = unknown
+                self.writer["seen"] = self.seen_now()  # the brief and plan this session now holds
             errs = validate(r.data, schema_for(node, visual)) if (r.data is not None and nxt is None) else [
                 "%s: %s" % (reason or "no structured output", said[:300])]
             if denied and errs:  # asking again meets the same refusal
@@ -1659,6 +1671,7 @@ class Engine:
         text = brief_digest(bead, comments) + linked_text(self.bead, bead, comments, tl.show, tl.comments)
         self.snap = bead_snapshot(bead, comments)
         (self.run_dir / "brief.md").write_text(text, encoding="utf-8")
+        self.brief_file.write_text(text, encoding="utf-8")  # a resumed writer is told where to re-read it (tl-bxk.10.29)
         # the hash is what tells a rerun the owner changed something: the engine's own close line and labels are not that
         ours = [x for x in (self.cfg.get("pick_label"), self.cfg.get("needs_info_label")) if x]
         self.brief_hash = hashlib.sha1(brief_digest(bead, comments, owner_only=True, ignore=ours).encode("utf-8")).hexdigest()
@@ -1732,6 +1745,46 @@ class Engine:
 
     def plan_text(self):
         return json.dumps(getattr(self, "plan_data", None) or {}, indent=1)
+
+    def seen_now(self):
+        """What a writer session holds of the task once it has answered: the brief's and the plan's hash."""
+        h = lambda t: hashlib.sha1(t.encode("utf-8")).hexdigest()  # noqa: E731
+        return [h(self.brief_text()), h(self.plan_text())]
+
+    def fresh_above_k(self, family):
+        v = self.cfg.get("write_fresh_above_k", DEFAULTS["write_fresh_above_k"])
+        if isinstance(v, dict):
+            key = "codex" if family == "openai" else family
+            v = v.get(key, DEFAULTS["write_fresh_above_k"].get(key, 0))
+        return float(v or 0)
+
+    def drop_big_writer(self):
+        """tl-bxk.10.29: -> why a new writer starts, or "". The session's last context is above write_fresh_above_k for its
+        family: it is not resumed (every later turn would carry it all); the next write is a new session."""
+        ref, ctx = self.writer.get("delegate"), self.writer.get("ctx")
+        limit = self.fresh_above_k(self.writer_family or "")
+        if not ref or not ctx or not limit or ctx <= limit:
+            return ""
+        self.writer.pop("delegate")
+        why = "session at %dk" % ctx
+        self.log("note", "fresh writer: %s (above %gk for %s)" % (why, limit, self.writer_family))
+        return why
+
+    def done_so_far(self):
+        """What a fresh writer is told its predecessor did: the diff --stat of the stage so far, and its last summary."""
+        tree = self.tree_hash()
+        stat = tl.git("diff", "--stat", self.stage_tree or self.base_sha(), tree, cwd=self.wt) if tree else ""
+        return DONE_SO_FAR % ((stat or "(no file changed yet)").strip(), (self.last_summary or "(none)").strip())
+
+    def write_delta(self, n, goal, files, checks, where, feedback, tail):
+        """The prompt of a resumed writer: what changed since its session last saw the brief and the plan. None when the brief
+        changed (the owner edited it, an answer came in): that session gets the whole prompt again."""
+        seen = self.writer.get("seen")
+        if not seen or seen[0] != self.seen_now()[0]:
+            return None
+        plan = "The plan is unchanged." if seen[1] == self.seen_now()[1] else "The plan changed:\n<plan>\n%s\n</plan>" % self.plan_text()
+        return WRITE_RESUME_PROMPT.format(brief=self.brief_file, plan=plan, n=n, goal=goal, files=files, checks=checks,
+                                          where=where, feedback=feedback) + tail
 
     def comment(self, text):
         if not self.dry:
@@ -2352,7 +2405,8 @@ class Engine:
                "plan": self.plan_data, "planner_ref": self.planner_ref, "planned": self.planned, "extra": self.extra, "plan_log": self.plan_log, "snap": self.snap,
                "done": self.done, "accepted": self.accepted, "replans": self.replans, "fixes": self.fixes, "denials": self.denials,
                "writer": self.writer.get("delegate") or "", "writer_fallback": self.writer_fallback, "fallback_lane": self.fallback_lane,
-               "writer_family": self.writer_family or "", "brief": self.brief_hash, "head": self.git("rev-parse", "HEAD"),
+               "writer_family": self.writer_family or "", "writer_ctx": self.writer.get("ctx"), "writer_seen": self.writer.get("seen"),
+               "brief": self.brief_hash, "head": self.git("rev-parse", "HEAD"),
                "unchecked": self.unchecked, "filed": self.filed,
                "look_paths": self.look_paths, "look_notes": self.look_notes, "look_unjudged": self.look_unjudged,
                "stage_tree": self.stage_tree, "writer_said": self.writer_said, "accepted_new": self.accepted_new,
@@ -2420,6 +2474,7 @@ class Engine:
         self.accepted_new = list(ck.get("accepted_new") or [])
         if ck["writer"]:
             self.writer["delegate"] = ck["writer"]
+            self.writer["ctx"], self.writer["seen"] = ck.get("writer_ctx"), ck.get("writer_seen")
             self.fallback_lane = ck.get("fallback_lane") or ""
             self.writer_fallback = bool(ck.get("writer_fallback", bool(self.fallback_lane)))
             self.writer_family = ck.get("writer_family") or None
@@ -2495,21 +2550,32 @@ class Engine:
             self.stats["writes"] += 1
             if n >= 2:
                 self.warn("%s: write %d (round %d)" % (name, n, rounds + 1))
-            w, wfam = self.ai("write", "%s write %d" % (name, n), WRITE_PROMPT.format(
+            fresh = self.drop_big_writer()
+            stage_checks = self.stage_checks_text(st["checks"])
+            where_text = self.where("write", [c["cmd"] for c in self.cfg["checks"]] + st["checks"], failed_cmds)
+            tail = ("\nThe plan's acceptance cases run on the last stage. If you find a case they miss, add it to new_cases (the "
+                    "criterion it proves, the check, why); never remove or weaken one." + ("" if last else LATER_CASES) +
+                    UNCHECKED_TEXT + self.look_write(st))
+            prompt = WRITE_PROMPT.format(
                 brief=self.brief_text(), plan=self.plan_text(), n=i + 1, goal=st["goal"],
-                files=", ".join(st["files"]), checks=self.stage_checks_text(st["checks"]),
-                feedback=feedback, evidence=self.evidence_dir, where=self.where("write", [c["cmd"] for c in self.cfg["checks"]] + st["checks"], failed_cmds), gate=(" (`%s`)" % self.cfg["gate"]) if self.cfg["gate"] else "",
+                files=", ".join(st["files"]), checks=stage_checks,
+                feedback=feedback, evidence=self.evidence_dir, where=where_text, gate=(" (`%s`)" % self.cfg["gate"]) if self.cfg["gate"] else "",
                 rules=("\nRead %s first: this repo's rules for work in your sandbox (what runs there, what does not)."
-                       % (Path(self.wt) / self.cfg["worker_rules"])) if self.cfg["worker_rules"] else "") +
-                "\nThe plan's acceptance cases run on the last stage. If you find a case they miss, add it to new_cases (the "
-                "criterion it proves, the check, why); never remove or weaken one." + ("" if last else LATER_CASES) +
-                UNCHECKED_TEXT + self.look_write(st), resume_key="writer", write=n, visual=self.stage_visual(st), round=rounds + 1, **where)
+                       % (Path(self.wt) / self.cfg["worker_rules"])) if self.cfg["worker_rules"] else "") + tail
+            if fresh:
+                prompt += self.done_so_far()
+            delta = None if fresh else self.write_delta(i + 1, st["goal"], ", ".join(st["files"]), stage_checks, where_text, feedback,
+                                                        self.look_write(st))
+            w, wfam = self.ai("write", "%s write %d" % (name, n), prompt, delta=delta, resume_key="writer", write=n,
+                              visual=self.stage_visual(st), round=rounds + 1, **where)
             self.writer_family = wfam
             wr = self.sessions[-1] if self.sessions else {}
             self.write_rounds.append({"write": n, "round": rounds + 1, "node_id": wr.get("node_id"), "ref": wr.get("ref"),
                                       "resumed": "yes" if wr.get("resume") else "no",
-                                      "input_tokens": (wr.get("tokens") or {}).get("in"), "turns": wr.get("turns")})
+                                      "input_tokens": (wr.get("tokens") or {}).get("in"), "turns": wr.get("turns"),
+                                      "prompt_chars": wr.get("prompt_chars"), "context_k": wr.get("context_k"), "fresh": fresh})
             self.writer_said += "\n" + w["summary"]
+            self.last_summary = w["summary"]
             wrote_unchecked = w.get("unchecked") or []  # the review decides what is still unproven after the checks
             if w["question"].strip() and w["decided"].strip():  # lifesim-d5f.58: an accepted requirement is no question
                 rounds += 1
@@ -3656,6 +3722,31 @@ def norm_cmd(cmd):
     return " ".join(str(cmd).split())
 
 
+def context_tokens(path, tail=1 << 20):
+    """-> the input tokens (cache included) of the last turn in a worker's transcript, or None: Claude's last assistant message
+    usage, Codex's last token_count. The answer's own `tokens` add up every turn of the call, so they say nothing of the size."""
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, 2)
+            f.seek(max(0, f.tell() - tail))
+            lines = f.read().decode("utf-8", "replace").splitlines()
+    except (OSError, TypeError, ValueError):
+        return None
+    for line in reversed(lines):
+        if '"usage"' not in line and '"token_count"' not in line:
+            continue
+        try:
+            rec = json.loads(line)
+            if rec.get("type") == "assistant" and not rec.get("isSidechain"):
+                u = rec["message"]["usage"]
+                return sum(int(u.get(k) or 0) for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
+            if (rec.get("payload") or {}).get("type") == "token_count":
+                return int(rec["payload"]["info"]["last_token_usage"]["input_tokens"])
+        except (ValueError, KeyError, TypeError, AttributeError):
+            continue
+    return None
+
+
 def failure_brief(checks, run_dir, each=6000, total=12000, lines=40):
     """The failing checks for a fix brief: command (cut at 300 chars), log path ("none" when no log), then the error lines
     of the saved log (noise dropped, real compiler errors first, deduplicated, up to `lines`, newline layout kept), else
@@ -3829,6 +3920,25 @@ Only that proof goes there, never your own runs of the checks.
 Rules: no suppressions; do not weaken, skip or delete tests; stay inside the
 stage. question: empty unless only the owner can decide something about the task itself (then explain it for a
 phone); never a question about tools or access.""" + "\n" + OPTIONS_RULE + "\n" + DECIDED_RULE
+
+WRITE_RESUME_PROMPT = """You are still the writer of this task, in an unattended engine. Nobody is watching. This session has the
+task, the plan and your rules from before; only what changed is below.
+The brief is unchanged; it is in {brief}; re-read it if unsure.
+{plan}
+Your stage: {n}: {goal}
+Files: {files}
+The stage's checks (the engine runs all of them after you; the split says which you may run):
+{checks}
+{where}
+{feedback}"""
+
+DONE_SO_FAR = """
+You take over from an earlier writer of this task, whose session grew too large to go on. Its work is in this tree, committed
+on this branch or not: do not start over.
+Done so far (git diff --stat from where this stage started):
+%s
+Its last summary: %s
+"""
 
 REVIEW_PROMPT = """You review one stage of a task, from another model family than the writer. Do not edit files.
 <task>

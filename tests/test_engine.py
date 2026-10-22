@@ -59,9 +59,10 @@ def finding(severity):
 class DelegateScript:
     """Fake `route.py run`: answers per role from a queue; a write creates the file like a real writer."""
 
-    def __init__(self, answers):
+    def __init__(self, answers, j_extra=None):
         self.answers, self.calls, self.prompts = {k: list(v) for k, v in answers.items()}, [], []
         self.access = []
+        self.j_extra = {k: list(v) for k, v in (j_extra or {}).items()}  # per node, per call: fields the answer gains
 
     def __call__(self, route, role, prompt, schema, cwd, resume, timeout, log_path, writer=None, parent="", task="",
                  title="", access="", idle=None):
@@ -81,6 +82,8 @@ class DelegateScript:
                  "secs": 1, "family": "openai" if node == "write" else "claude", "lane": "L", "model": "m",
                  "effort": "e", "git_violation": [], "tokens": {"in": 1000, "cached": 800, "out": 50},
                  "context": {"instructions": ["/repo/AGENTS.md"], "env_keys": ["PATH"]}}
+            if self.j_extra.get(node):
+                j.update(self.j_extra[node].pop(0))
         r = engine.Result(j.get("data"), "", j.get("ref") or "", float(j.get("cost") or 0), 1, "" if j["status"] == "done" else j["status"],
                           j.get("family") or "delegate")
         return r, j
@@ -134,13 +137,13 @@ class EngineTest(unittest.TestCase):
         self.bd_calls.append(a)
         return mock.Mock(returncode=0, stdout="bead t-1: Add f\n", stderr="")
 
-    def run_engine(self, answers, route="/fake/route.py", raw=None, **cfg):
+    def run_engine(self, answers, route="/fake/route.py", raw=None, j_extra=None, **cfg):
         """Access keys (host, no_sandbox, host_beads) are committed to origin/main's .task-loop.json first: the engine
         reads them only from there. `raw` puts keys in the loaded config without committing them."""
         access = {k: cfg.pop(k) for k in ("host", "no_sandbox", "host_beads") if k in cfg}
         if access:
             self.commit_base_cfg(access)
-        script = DelegateScript(answers)
+        script = DelegateScript(answers, j_extra)
         c = engine.load_cfg(str(self.wt))
         c.update(cfg)
         c.update(raw or {})
@@ -223,7 +226,8 @@ class EngineTest(unittest.TestCase):
         (td / "verify-9.json").write_text("{}")
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
-        self.assertEqual(sorted(p.name for p in td.iterdir()), ["evidence"])
+        self.assertEqual(sorted(p.name for p in td.iterdir()), ["brief.md", "evidence"])
+        self.assertIn("Add f", (td / "brief.md").read_text())  # the copy a resumed writer is pointed to
         self.assertTrue((td / "evidence" / "seen-red.log").exists())
         run = self.eng.run_dir
         self.assertFalse(str(run).startswith(str(self.wt)))
@@ -1435,6 +1439,74 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 0)
         r = json.loads((tl.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
         self.assertEqual([(w["write"], w["resumed"], w["input_tokens"]) for w in r["write_rounds"]], [(1, "no", 1000)])
+
+    # tl-bxk.10.29: a resumed writer gets only what changed; a session past its family's size starts fresh
+    RED_ONCE = PY + ' -c "import sys; sys.exit(0 if open(\'f.txt\').read().strip() == \'d3\' else 1)"'
+    MARK = "BRIEF-MARKER-4f1c"
+
+    def two_writes(self, family="claude", ctx_k=None, **cfg):
+        """A red check sends the stage back to the same writer once. ctx_k: how big the first session ended, in k."""
+        path = Path(self.tmp.name, "session.jsonl")
+        if ctx_k is not None:
+            n = int(ctx_k * 1000) - 100
+            line = ({"type": "assistant", "message": {"usage": {"input_tokens": 3, "cache_read_input_tokens": n,
+                                                                "cache_creation_input_tokens": 97}}} if family == "claude" else
+                    {"type": "event_msg", "payload": {"type": "token_count", "info": {"last_token_usage": {"input_tokens": n + 100}}}})
+            path.write_text(json.dumps({"type": "user"}) + "\n" + json.dumps(line) + "\n" + json.dumps({"type": "system"}) + "\n")
+        extra = {"family": family, "transcript": str(path) if ctx_k is not None else ""}
+        with mock.patch.object(tl, "show", return_value=dict(BEAD, description="Add the file f. " + self.MARK)):
+            return self.run_engine({"plan": [self.plan_with(self.RED_ONCE)], "write": [WRITE, WRITE], "review": [CLEAN]},
+                                   j_extra={"write": [extra, extra]}, **cfg)
+
+    def test_a_resumed_round_holds_the_failing_block_and_the_brief_path_not_the_brief(self):
+        rc, s = self.two_writes(ctx_k=40)
+        self.assertEqual(rc, 0, self.blocked)
+        first, again = s.prompts[1], s.prompts[2]
+        self.assertEqual(s.calls[2][1], "ref-write")  # resumed
+        self.assertIn(self.MARK, first)
+        self.assertNotIn(self.MARK, again)
+        self.assertIn("These checks fail", again)
+        self.assertIn("The brief is unchanged; it is in %s; re-read it if unsure" % (Path(self.wt) / ".task" / "t-1" / "brief.md"), again)
+        self.assertIn(self.MARK, (Path(self.wt) / ".task" / "t-1" / "brief.md").read_text())
+        self.assertLess(len(again), len(first) - 800)
+
+    def test_a_fresh_round_holds_the_whole_brief(self):
+        rc, s = self.two_writes(ctx_k=40)
+        self.assertEqual(s.calls[1][1], None)
+        self.assertIn(self.MARK, s.prompts[1])
+        self.assertIn("<plan>", s.prompts[1])
+
+    def test_a_session_over_the_threshold_gives_way_to_a_fresh_writer_with_brief_and_done_so_far(self):
+        rc, s = self.two_writes(ctx_k=160)  # claude: 150
+        self.assertEqual(rc, 0, self.blocked)
+        again = s.prompts[2]
+        self.assertIsNone(s.calls[2][1])  # a new session
+        for part in (self.MARK, "<plan>", "These checks fail", "Done so far", "f.txt", "wrote f"):
+            self.assertIn(part, again)
+        self.assertIn("fresh writer: session at 160k", self.eng.log_path.read_text())
+        a, b = self.eng.write_rounds
+        self.assertEqual((a["resumed"], a["context_k"], b["resumed"], b["fresh"]), ("no", 160, "no", "session at 160k"))
+        self.assertEqual(b["prompt_chars"], len(again))
+
+    def test_a_session_under_the_threshold_is_resumed_and_the_trace_has_its_size(self):
+        rc, s = self.two_writes(ctx_k=149)
+        self.assertEqual(s.calls[2][1], "ref-write")
+        a, b = self.eng.write_rounds
+        self.assertEqual((b["resumed"], b["context_k"], b["fresh"]), ("yes", 149, ""))
+        self.assertLess(b["prompt_chars"], a["prompt_chars"])
+
+    def test_the_threshold_defaults_by_the_session_family(self):
+        rc, s = self.two_writes(family="openai", ctx_k=190)  # codex: 200, claude would start fresh
+        self.assertEqual(s.calls[2][1], "ref-write")
+        rc, s = self.two_writes(family="openai", ctx_k=210)
+        self.assertIsNone(s.calls[2][1])
+        self.assertIn("fresh writer: session at 210k", self.eng.log_path.read_text())
+
+    def test_write_fresh_above_k_is_the_repos_to_set(self):
+        rc, s = self.two_writes(ctx_k=60, write_fresh_above_k=50)
+        self.assertIsNone(s.calls[2][1])
+        rc, s = self.two_writes(ctx_k=500, write_fresh_above_k=0)  # 0: never
+        self.assertEqual(s.calls[2][1], "ref-write")
 
     def test_fix_rounds_are_limited_then_the_bead_is_stuck(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE] * 3, "review": [CLEAN] * 3}, gate=FALSE)
