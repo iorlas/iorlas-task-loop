@@ -362,7 +362,7 @@ SCHEMAS = {
                                   "severity": {"type": "string", "enum": ["high", "medium", "low"]},
                                   "fix": S_STR}}},
                    "unmet": S_STRS, "question": S_STR, "decided": S_STR, "leftovers": LEFTOVERS,
-                   "accept_files": S_STRS}},  # optional: unexplained new files the review accepts into the commit
+                   "accept_files": S_STRS, "reject_files": S_STRS}},  # optional: unexplained new files the review accepts into the commit / rejects as strays
     "verify": {"type": "object", "additionalProperties": False, "required": ["items"],
                "properties": {"items": {"type": "array", "items": {
                    "type": "object", "additionalProperties": False, "required": ["n", "verdict", "evidence", "why"],
@@ -838,6 +838,8 @@ class Engine:
         self.stage_tree = ""  # the tree the current stage started from ("" = the task's base): the review's diff runs from here
         self.writer_said = "" # the writer's answers so far: a new file they name is meant (tl-bxk.10.24)
         self.accepted_new = []  # untracked files a review accepted into the commit
+        self.amended = False  # a plan was amended or replanned: its first stage does not start at the task's base
+        self.strays = []  # unaccepted untracked files moved to evidence/strays before the land gate (tl-bxk.10.24)
         self.done = []        # goals of the stages accepted on this branch, across plans and runs
         self.accepted = []    # their indices in the current plan
         self.brief_hash = ""
@@ -983,7 +985,7 @@ class Engine:
                "started": self.t0, "ended": time.time(), "outcome": outcome, "why": (why or "")[:500], "sha": sha or "",
                "cost": self.cost, "stats": self.stats, "host": self.host, "delegate": self.route or "", "log": str(self.log_path),
                "stderr": str(self.err_path), "lanes": (self.contract or {}).get("lanes"), "sessions": self.sessions,
-               "verified": self.verified, "write_rounds": self.write_rounds}
+               "verified": self.verified, "write_rounds": self.write_rounds, "strays": self.strays}
         rec.update(self.origin())
         try:
             with open(tl.config_dir() / "traces.jsonl", "a", encoding="utf-8") as f:
@@ -1252,7 +1254,7 @@ class Engine:
         if p in self.look_paths or p.startswith(".task/"):  # the look flow's own screenshot copies (copy_looks) are meant
             return "meant" if p in self.look_paths else "ignored"
         for q in (p, p[:-5]) if p.endswith(".meta") else (p,):
-            if q in self.accepted_new or q + ".meta" in self.accepted_new or q in self.writer_said:
+            if q in self.accepted_new or q + ".meta" in self.accepted_new or self.writer_names(q):
                 return "meant"
             for st in (getattr(self, "plan_data", None) or {}).get("stages") or []:
                 for f in st["files"]:
@@ -1262,11 +1264,58 @@ class Engine:
                         return "meant"
         return "unexplained"
 
+    def writer_names(self, path):
+        """The writer's answers name this file: its full path or its basename, on word boundaries (not `ab.md` for `b.md`)."""
+        for n in dict.fromkeys((path, path.rsplit("/", 1)[-1])):
+            if re.search(r"(?<![\w.-])%s(?![\w-]|\.\w)" % re.escape(n), self.writer_said):
+                return True
+        return False
+
     def new_by_kind(self):
         out = {"ignored": [], "meant": [], "unexplained": []}
         for p in self.slot_status()[1]:
             out[self.new_file_kind(p)].append(p)
         return out
+
+    STRAY_LINES, STRAY_CHARS = 80, 6000
+
+    def new_file_view(self, path):
+        """tl-bxk.10.24: what the review brief shows of an unexplained new file: its first 80 lines, or "binary, N bytes"."""
+        f = Path(self.wt) / path
+        try:
+            data = f.read_bytes()
+        except OSError:
+            return "(unreadable)"
+        if b"\0" in data[:8000]:
+            return "binary, %d bytes" % len(data)
+        lines = data.decode("utf-8", "replace").splitlines()
+        text = "\n".join(lines[:self.STRAY_LINES])[:self.STRAY_CHARS]
+        more = len(lines) - self.STRAY_LINES
+        return text + ("\n... (%d more lines)" % more if more > 0 else "")
+
+    def new_files_brief(self, unexplained):
+        return NEW_FILES_TEXT + "".join("- %s\n<content>\n%s\n</content>\n" % (p, self.new_file_view(p)) for p in unexplained)
+
+    def undecided_new(self, unexplained, review):
+        """The unexplained files the review neither accepted nor rejected (a .meta follows the file it belongs to)."""
+        said = set(review.get("accept_files") or []) | set(review.get("reject_files") or [])
+        return [p for p in unexplained if p not in said and not (p.endswith(".meta") and p[:-5] in said)]
+
+    def quarantine_strays(self):
+        """tl-bxk.10.24: before the land gate, every untracked file that is neither meant nor ignored leaves the tree for
+        .task/<bead>/evidence/strays/ (kept), so the gate runs on exactly what is committed. Listed in the trace and on the bead."""
+        moved = []
+        for p in self.new_by_kind()["unexplained"]:
+            dst = self.evidence_dir / "strays" / p
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(Path(self.wt) / p), str(dst))
+            moved.append(p)
+        if moved:
+            self.strays += [p for p in moved if p not in self.strays]
+            self.log("note", "stray untracked files moved out of the tree to %s: %s" % (self.evidence_dir / "strays", ", ".join(moved)))
+            self.comment("Land (engine): untracked files no stage or review accepted were left out of the commit and the gate, "
+                         "kept in %s: %s" % (self.evidence_dir / "strays", ", ".join(moved)))
+        return moved
 
     STAGE_DIFF_CAP = 40000
 
@@ -1634,6 +1683,12 @@ class Engine:
             names += [c] + ([rest] if rest != c and ("-" in rest or "_" in rest) else [])
         return [n.lower() for n in dict.fromkeys(names) if len(n) >= 4]
 
+    # tl-bxk.10.19: an item is settled only when it names a configured check and says it passes or runs; an item about
+    # coverage, skips, fakes or a check that never ran is a claim about the check, not its result.
+    PROVES = re.compile(r"\b(passe[sd]?|passing|is green|stays? green|green|runs?|ran|exits? 0)\b|engine-run")
+    NOT_PROOF = re.compile(r"\b(covers?|covered|coverage|a tests? for|skipped|false green|never (?:been )?run|not run|only tested|"
+                           r"fake|untested|not tested)\b")
+
     def engine_settles(self, gaps):
         """tl-bxk.10.19: (items still to verify, items the engine found wrong). An item whose proof is the gate or a stage
         check (matched by check id or command name) is settled as 'the gate runs it at land': the read-only verifier cannot
@@ -1642,9 +1697,9 @@ class Engine:
         names, left, failed = self.gate_names(), [], []
         for u in gaps:
             what = " ".join(u["what"].split()).lower()
-            hit = next((n for n in names if re.search(r"(?<![\w-])%s(?![\w-])" % re.escape(n), what)), None)
-            if hit is None and re.search(r"\bscenarios?\b", what) and any("scenario" in n for n in names):
-                hit = "scenario"
+            hit = None
+            if not self.NOT_PROOF.search(what) and self.PROVES.search(what):
+                hit = next((n for n in names if re.search(r"(?<![\w-])%s(?![\w-])" % re.escape(n), what)), None)
             if hit:
                 self.verified.append({"what": u["what"], "kind": u["kind"], "verdict": "settled", "why": "the gate runs it at land",
                                       "evidence": "`%s` is a gate or stage check: the engine runs it, the gate at land (a red one "
@@ -1760,6 +1815,7 @@ class Engine:
 
     def plan(self, again=False):
         old = self.old_plan or (self.plan_data if again and getattr(self, "plan_data", None) else None)
+        self.amended = self.amended or bool(old)  # tl-bxk.10.24: work exists before this plan's first stage
         mode = "amend" if old else "plan"
         why = ""
         if again:
@@ -2097,7 +2153,7 @@ class Engine:
         state = state or {}
         fix = state.get("fix")
         if not state or fix:  # a resumed stage keeps the checkpoint's start; the first stage starts at the task's base
-            self.stage_tree = self.tree_hash() if (i or fix) else ""
+            self.stage_tree = self.tree_hash() if (i or fix or self.amended) else ""
         name = state.get("name") or "stage %d/%d" % (i + 1, len(plan["stages"]))
         feedback, rounds, red, n = state.get("feedback", ""), state.get("rounds", 0), 0, state.get("n", 0)
         failed_cmds = state.get("failed")  # the commands the last engine run found red (None: no check ran red yet)
@@ -2197,10 +2253,14 @@ class Engine:
                 ("\nNobody has checked these yet (earlier stages or the writer could not; the engine's checks above ran "
                  "after them); put in your unchecked only what is still unproven:\n" + "".join(
                      "- %s (%s)\n" % (u["what"], u["kind"]) for u in open_items) if open_items else "") +
-                ("" if last else LATER_CASES) + UNCHECKED_TEXT + self.look_review(st, w, fix) + (NEW_FILES_TEXT + "".join(
-                    "- %s\n" % p for p in kinds["unexplained"]) if kinds["unexplained"] else ""),
+                ("" if last else LATER_CASES) + UNCHECKED_TEXT + self.look_review(st, w, fix) +
+                (self.new_files_brief(kinds["unexplained"]) if kinds["unexplained"] else ""),
                 writer_family=wfam, visual=not fix and self.stage_visual(st), round=rounds + 1, **where)
             self.accepted_new += [p for p in review.get("accept_files") or [] if p in kinds["unexplained"] and p not in self.accepted_new]
+            review = dict(review, findings=list(review["findings"]))
+            for p in self.undecided_new(kinds["unexplained"], review):  # never a silent drop: the writer names it or deletes it
+                review["findings"].append({"file": p, "line": 0, "severity": "medium", "fix":
+                    "decide: unexplained new file %s (name it in your summary if the task needs it, else delete it)" % p})
             # lifesim-gfr.31.1: a stage-1 item that stage 2 ran green still stopped the land; each review re-judges what
             # is open, so its list replaces it. A fix at land reviews only the fix: it adds, never clears.
             judged = self.engine_unproven(review.get("unchecked") or [], checks)
@@ -2477,6 +2537,7 @@ class Engine:
             self.sh(["git", "reset", "-q", "--soft", base], check=True, pin=True)
         self.copy_looks()
         self.stage_all(check=True)
+        self.quarantine_strays()
         msg = "%s (%s)" % (bead.get("title", self.bead)[:72], self.bead)
         rc, tail = self.sh(["git", "commit", "-q", "-m", msg], pin=True)
         if rc:
@@ -2490,6 +2551,7 @@ class Engine:
             problem = None
             with self.land_lock():
                 self.node("land", "land (try %d)" % (pushes + 1), **{"try": pushes + 1})
+                self.quarantine_strays()
                 rc, tail = self.fetch()
                 if rc == 0:
                     rc, tail = self.sh(["git", "rebase", "-q", self.cfg["base"]], pin=True)
@@ -3430,8 +3492,10 @@ Return:
 - leftovers: real follow-up work you noticed outside this task, else empty.""" + "\n" + DECIDED_RULE
 
 NEW_FILES_TEXT = ("\nUnexplained new files: untracked, and no stage lists them nor the writer names them. They are NOT in the "
-                  "commit unless you accept them. For each, put its path in accept_files if the task needs it (it is staged), "
-                  "or leave it out if it is a stray (a test run's leftover): it stays out of the commit, no finding. These files:\n")
+                  "commit unless you accept them, and they are moved out of the tree before the land gate. Decide EVERY one: "
+                  "put its path in accept_files if the task needs it (it is staged), or in reject_files if it is a stray (a "
+                  "test run's leftover). One you do not decide becomes a medium finding that sends the stage back. Each file "
+                  "with its first 80 lines (or its size, if binary):\n")
 
 VERIFY_PROMPT = """Before a task lands, you check what its workers could not check themselves. Do not edit files.
 <task>

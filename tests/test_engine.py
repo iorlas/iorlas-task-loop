@@ -1559,7 +1559,7 @@ class EngineTest(unittest.TestCase):
 
     def test_a_case_named_as_unchecked_once_the_last_stage_ran_every_case_lands_without_an_ask(self):
         # lifesim-gfr.31.1: 'there is no nographics.out in evidence yet' reached the owner after the case writing it passed
-        plan = dict(PLAN, cases=[{"criterion": "f.txt exists", "check": HAS_F + " > evidence.out"}])
+        plan = dict(PLAN, cases=[{"criterion": "f.txt exists", "check": HAS_F + " > /dev/null"}])
         r = dict(CLEAN, unchecked=[{"what": "I could not run the case 'f.txt exists': there is no evidence.out yet",
                                     "kind": "case"}])
         rc, s = self.run_engine({"plan": [plan], "write": [WRITE], "review": [r]})
@@ -2433,6 +2433,25 @@ class LandReview(EngineTest):
         e.stage_all()
         self.assertEqual(self.staged(), sorted(["g.txt"] + self.STRAY))
 
+    def test_writer_said_matches_the_path_or_basename_on_word_boundaries(self):
+        e = self.engine_at_land()
+        e.writer_said = "added tools/g.txt, and `h.cfg`. Not ab.md or c.txt.bak"
+        self.assertTrue(e.writer_names("tools/g.txt"))
+        self.assertTrue(e.writer_names("other/g.txt"))  # the basename
+        self.assertTrue(e.writer_names("h.cfg"))
+        self.assertFalse(e.writer_names("b.md"))
+        self.assertFalse(e.writer_names("c.txt"))
+        self.assertFalse(e.writer_names("tools/g"))
+
+    def test_a_replanned_first_stage_starts_from_the_current_tree_not_the_task_base(self):
+        e = self.engine_at_land()
+        e.stage_tree = "old"
+        e.amended = True
+        with mock.patch.object(e, "tree_hash", return_value="T"), mock.patch.object(e, "save_checkpoint", side_effect=RuntimeError("stop")):
+            with self.assertRaises(RuntimeError):
+                e.stage({"stages": [{"goal": "g", "files": [], "checks": [], "hard": False}]}, 0)
+        self.assertEqual(e.stage_tree, "T")
+
     def test_untracked_ignore_globs_are_never_staged_nor_listed_even_when_a_stage_lists_the_folder(self):
         self.make_files("docs/keep.md", "docs/junk.tmp", *self.STRAY)
         e = self.engine_at_land(untracked_ignore=["client/Assets/InitTestScene*.unity*", "*.tmp"])
@@ -2443,13 +2462,47 @@ class LandReview(EngineTest):
         self.assertEqual((kinds["unexplained"], sorted(kinds["ignored"])), ([], sorted(["docs/junk.tmp"] + self.STRAY)))
 
     def test_a_stray_scene_is_listed_for_the_review_and_left_out_of_the_land(self):
-        script = StrayWriteScript({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        script = StrayWriteScript({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, reject_files=[self.STRAY[0]])]})
         self.assertEqual(self.run_with(script), 0)
         brief = next(p for c, p in zip(script.calls, script.prompts) if c[0] == "reviewer")
         self.assertIn("Unexplained new files", brief)
         for p in self.STRAY:
             self.assertIn("- " + p, brief)
+        self.assertIn("scene", brief)  # the content is in the brief
         self.assertEqual(self.landed(), ["f.txt"])
+
+    def test_a_stray_the_review_does_not_decide_is_a_finding_never_a_silent_drop(self):
+        script = StrayWriteScript({"plan": [PLAN], "write": [WRITE, WRITE], "review": [CLEAN, dict(CLEAN, reject_files=[self.STRAY[0]])]})
+        self.assertEqual(self.run_with(script), 0)
+        writes = [p for c, p in zip(script.calls, script.prompts) if c[0] == "worker"]
+        self.assertIn("decide: unexplained new file " + self.STRAY[0], writes[1])
+
+    def test_the_gate_runs_without_the_stray_which_is_kept_in_evidence_and_traced(self):
+        self.make_files("f.txt", "docs/x.md", *self.STRAY)
+        (self.wt / "bin.dat").write_bytes(b"\0\1\2")
+        e = self.engine_at_land()
+        self.assertEqual(e.new_file_view("bin.dat"), "binary, 3 bytes")
+        (self.wt / "long.txt").write_text("".join("l%d\n" % i for i in range(100)))
+        v = e.new_file_view("long.txt")
+        self.assertIn("l79", v)
+        self.assertNotIn("l80\n", v)
+        self.assertIn("20 more lines", v)
+        e.comment = mock.Mock()
+        moved = e.quarantine_strays()
+        self.assertEqual(sorted(moved), sorted(self.STRAY + ["bin.dat", "long.txt"]))
+        for p in self.STRAY:
+            self.assertFalse((self.wt / p).exists())
+            self.assertTrue((e.evidence_dir / "strays" / p).is_file())
+        self.assertTrue((self.wt / "f.txt").exists())
+        self.assertEqual(e.strays, moved)
+        self.assertIn("kept", e.comment.call_args[0][0])
+
+    def test_untracked_ignore_files_are_never_moved(self):
+        self.make_files(*self.STRAY)
+        e = self.engine_at_land(untracked_ignore=["client/Assets/InitTestScene*.unity*"])
+        e.comment = mock.Mock()
+        self.assertEqual(e.quarantine_strays(), [])
+        self.assertTrue((self.wt / self.STRAY[0]).exists())
 
     def test_a_stray_scene_the_reviewer_accepts_lands_with_its_meta(self):
         script = StrayWriteScript({"plan": [PLAN], "write": [WRITE],
@@ -2481,7 +2534,7 @@ class LandReview(EngineTest):
         self.assertIn("gate", e.verified[0]["evidence"])
 
     def test_scenario_items_are_settled_only_when_a_scenario_check_is_configured(self):
-        item = [{"what": "the scenario run passes", "kind": "tooling"}]
+        item = [{"what": "just scenarios passes", "kind": "tooling"}]
         e = self.verifier(checks=self.CFG_CHECKS)
         with mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="a person")]}, None)):
             self.assertEqual(len(e.self_verify(item)), 1)
@@ -2490,10 +2543,25 @@ class LandReview(EngineTest):
             self.assertEqual(e.self_verify(item), [])
         ai.assert_not_called()
 
+    def test_items_about_coverage_skips_or_fakes_are_never_settled_but_a_pass_is(self):
+        asks = ["An editor left open makes just unity-tests at the land gate exit 0 as SKIPPED (a false green)",
+                "A real Unity rebuild through `just unity-check` ... only the fake-UNITY path is tested",
+                "Diff coverage: ... must be covered by tests, or just coverage fails"]
+        cfg = self.CFG_CHECKS + [{"id": "coverage", "cmd": "just coverage", "group": "tests"},
+                                 {"id": "unity-check", "cmd": "just unity-check", "group": "tests"}]
+        e = self.verifier(checks=cfg, gate="just check")
+        with mock.patch.object(e, "ai", return_value=({"items": [verdict(i + 1, "open", why="x") for i in range(3)]}, None)):
+            left = e.self_verify([{"what": a, "kind": "tooling"} for a in asks])
+        self.assertEqual(len(left), 3)
+        e = self.verifier(checks=cfg, gate="just check")
+        with mock.patch.object(e, "ai") as ai:
+            self.assertEqual(e.self_verify([{"what": "just unity-tests passes", "kind": "tooling"}]), [])
+        ai.assert_not_called()
+
     def test_a_stage_check_of_the_plan_settles_an_item_naming_it(self):
         e = self.verifier()
         e.plan_data["stages"][0]["checks"] = ["python3 tools/check_design.py"]
-        items = [{"what": "python3 tools/check_design.py was not run", "kind": "tooling"},
+        items = [{"what": "python3 tools/check_design.py passes", "kind": "tooling"},
                  {"what": "the menu reads well", "kind": "requirement"}]
         with mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="taste")]}, None)) as ai:
             left = e.self_verify(items)
