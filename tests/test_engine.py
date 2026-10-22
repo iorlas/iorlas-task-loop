@@ -1508,6 +1508,64 @@ class EngineTest(unittest.TestCase):
         rc, s = self.two_writes(ctx_k=500, write_fresh_above_k=0)  # 0: never
         self.assertEqual(s.calls[2][1], "ref-write")
 
+    def test_a_missing_or_empty_transcript_resumes_as_before(self):
+        for path in ("", "/nonexistent/s.jsonl"):
+            extra = {"transcript": path}
+            with mock.patch.object(tl, "show", return_value=dict(BEAD, description=self.MARK)):
+                rc, s = self.run_engine({"plan": [self.plan_with(self.RED_ONCE)], "write": [WRITE, WRITE], "review": [CLEAN]},
+                                        j_extra={"write": [extra, extra]})
+            self.assertEqual(s.calls[2][1], "ref-write", path)
+            self.assertNotIn(self.MARK, s.prompts[2])
+            self.assertIsNone(self.eng.write_rounds[0]["context_k"])
+        empty = Path(self.tmp.name, "empty.jsonl")
+        empty.write_text("")
+        self.assertIsNone(engine.context_tokens(str(empty)))
+
+    def test_a_brief_the_owner_changed_or_a_checkpoint_without_writer_seen_gets_the_full_prompt(self):
+        rc, s = self.two_writes(ctx_k=40)
+        args = (1, "g", "f.txt", "checks", "where", "fb", "")
+        self.assertIn("The brief is unchanged", self.eng.write_delta(*args))
+        (self.eng.run_dir / "brief.md").write_text("the owner answered: use X\n")  # an answer came in
+        self.assertIsNone(self.eng.write_delta(*args))
+        (self.eng.run_dir / "brief.md").write_text(self.eng.brief_file.read_text())
+        self.eng.writer["seen"] = None  # a checkpoint of before this existed
+        self.assertIsNone(self.eng.write_delta(*args))
+
+    def test_round_three_after_a_fresh_start_resumes_the_fresh_session(self):
+        big, small = Path(self.tmp.name, "big.jsonl"), Path(self.tmp.name, "small.jsonl")
+        for f, k in ((big, 160), (small, 40)):
+            f.write_text(json.dumps({"type": "assistant", "message": {"usage": {"input_tokens": k * 1000}}}) + "\n")
+        red = PY + ' -c "import sys; sys.exit(0 if open(\'f.txt\').read().strip() == \'d4\' else 1)"'
+        ex = [{"family": "claude", "transcript": str(f)} for f in (big, small, small)]
+        with mock.patch.object(tl, "show", return_value=dict(BEAD, description=self.MARK)):
+            rc, s = self.run_engine({"plan": [self.plan_with(red)], "write": [WRITE] * 3, "review": [CLEAN]}, j_extra={"write": ex})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[1] for c in s.calls[1:4]], [None, None, "ref-write"])  # fresh at 160k, then resumed
+        self.assertIn(self.MARK, s.prompts[2])
+        self.assertNotIn(self.MARK, s.prompts[3])
+
+    def test_the_last_stage_note_reaches_a_resumed_writer(self):
+        two = dict(PLAN, stages=[dict(PLAN["stages"][0], goal="first"), dict(PLAN["stages"][0], goal="second")])
+        rc, s = self.run_engine({"plan": [two], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]},
+                                j_extra={"write": [{"family": "claude"}] * 2}, worker_rules="a.txt")
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual(s.calls[3][1], "ref-write")
+        self.assertIn("acceptance cases run on this last stage", s.prompts[3])
+        self.assertIn("new_cases", s.prompts[3])
+        self.assertNotIn("acceptance cases run on this last stage", s.prompts[1])
+        self.assertIn(str(Path(self.wt) / "a.txt"), s.prompts[3])  # the rules, short, every time
+
+    def test_a_resumed_write_gets_the_engines_brief_back_in_the_worktree(self):
+        brief = Path(self.wt) / ".task" / "t-1" / "brief.md"
+        red = PY + (' -c "import sys; t=open(\'f.txt\').read().strip(); '
+                    't == \'d2\' and open(\'%s\', \'w\').write(\'tampered\'); sys.exit(0 if t == \'d3\' else 1)"'
+                    % str(brief).replace("\\", "/"))
+        with mock.patch.object(tl, "show", return_value=dict(BEAD, description=self.MARK)):
+            rc, s = self.run_engine({"plan": [self.plan_with(red)], "write": [WRITE, WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertIn(self.MARK, s.prompts[1])
+        self.assertIn(self.MARK, brief.read_text())  # tampered after write 1, restored before write 2
+
     def test_fix_rounds_are_limited_then_the_bead_is_stuck(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE] * 3, "review": [CLEAN] * 3}, gate=FALSE)
         self.assertEqual(rc, 2)

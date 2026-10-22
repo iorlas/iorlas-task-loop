@@ -2564,11 +2564,21 @@ class Engine:
                        % (Path(self.wt) / self.cfg["worker_rules"])) if self.cfg["worker_rules"] else "") + tail
             if fresh:
                 prompt += self.done_so_far()
+            dtail = ""  # what a resumed writer still needs that its first prompt did not say for this stage
+            if last and not self.writer.get("last_stage"):  # the acceptance cases run now: it has not been told
+                dtail += "\nThe plan's acceptance cases run on this last stage. If you find a case they miss, add it to new_cases (the criterion it proves, the check, why); never remove or weaken one."
+            if self.unchecked:
+                dtail += UNCHECKED_TEXT
+            if self.cfg["worker_rules"]:
+                dtail += "\nRead %s first: this repo's rules for work in your sandbox." % (Path(self.wt) / self.cfg["worker_rules"])
             delta = None if fresh else self.write_delta(i + 1, st["goal"], ", ".join(st["files"]), stage_checks, where_text, feedback,
-                                                        self.look_write(st))
+                                                        dtail + self.look_write(st))
+            if delta:  # the writer may have edited its copy: the engine's brief goes back before it reads it again
+                self.brief_file.write_text(self.brief_text(), encoding="utf-8")
             w, wfam = self.ai("write", "%s write %d" % (name, n), prompt, delta=delta, resume_key="writer", write=n,
                               visual=self.stage_visual(st), round=rounds + 1, **where)
             self.writer_family = wfam
+            self.writer["last_stage"] = last
             wr = self.sessions[-1] if self.sessions else {}
             self.write_rounds.append({"write": n, "round": rounds + 1, "node_id": wr.get("node_id"), "ref": wr.get("ref"),
                                       "resumed": "yes" if wr.get("resume") else "no",
