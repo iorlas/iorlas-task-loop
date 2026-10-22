@@ -47,8 +47,8 @@ DEFAULTS = {
     "max_stages": 3,                  # a bigger plan is a split ask (ticket), unless the owner already answered one
     "node_timeout_min": 45,
     "writer_check_max_s": 60,         # a check whose last run took longer is the engine's, never the writer's to run
-    "check_timeout_min": 15,          # one check (engine.checks, a stage's check) running longer is killed, process group and all: exit 124
-    "gate_timeout_min": 30,           # the same for the gate at land
+    "check_timeout_min": 60,          # one check (engine.checks, a stage's check) running longer is killed, process group and all: exit 124
+    "gate_timeout_min": 90,           # the same for the gate at land
     "delegate": "",                   # path to delegate's route.py; "" = the newest installed iorlas-delegate
     "lane_wait_min": 10,              # how long a step waits in its slot for a lane; longer: the run pauses (slot freed)
     "checks": [],                     # repo checks: [{id, cmd, group: static|tests|acceptance, when: [globs], retry}]
@@ -584,7 +584,12 @@ def kill_tree(p):
         if os.name == "nt":
             subprocess.run(["taskkill", "/PID", str(p.pid), "/T", "/F"], capture_output=True)
         else:
-            os.killpg(p.pid, 9)
+            os.killpg(p.pid, signal.SIGTERM)  # Unity removes Temp/UnityLockfile on SIGTERM
+            try:
+                p.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                pass
+            os.killpg(p.pid, signal.SIGKILL)  # stragglers in the group
     except OSError:
         pass
     p.wait()
@@ -2167,11 +2172,11 @@ class Engine:
                     kind = failure_kind(seen)
                     if kind == "deterministic":  # a rerun fails the same way, seconds later (tl-bxk.10.17)
                         if c["retry"]:
-                            self.warn("`%s` failed (exit %d) with a compile or missing-file error: not retried" % (c["id"], rc))
+                            self.warn("`%s` failed (exit %d) with a compile error: not retried" % (c["id"], rc))
                         break
                     if kind == "lock":
-                        for n, wait in enumerate(lock_waits(), 1):
-                            self.warn("`%s` is held by an editor or project lock; waiting %d s (%d)" % (c["id"], wait, n))
+                        for w_n, wait in enumerate(lock_waits(), 1):
+                            self.warn("`%s` is held by an editor or project lock; waiting %d s (%d)" % (c["id"], wait, w_n))
                             time.sleep(wait)
                             rc, tail = self.sh(cmd, timeout=float(self.cfg["check_timeout_min"]) * 60, save=logs / log_name)
                             seen = (logs / log_name).read_text(encoding="utf-8", errors="replace")
@@ -2182,7 +2187,7 @@ class Engine:
                             tail += "\n(still locked after %d s of waiting%s)" % (
                                 LOCK_WAIT_MAX, "; the lock holder is pid " + pid if pid else "")
                         break
-                    if tries > c["retry"]:
+                    if tries > (max(c["retry"], 1) if kind == "import" else c["retry"]):
                         break
                     self.warn("`%s` failed (exit %d), retrying: it is marked flaky" % (c["id"], rc))
                 res = dict(base, exit=rc, status="ran" if rc == 0 else "failed", tries=tries, tail=tail[-1500:],
@@ -2680,9 +2685,11 @@ def split_top(cmd):
 
 
 # tl-bxk.10.17: what a red check's output says about whether running it again could change anything
-COMPILE_FAIL = re.compile(r"error CS\d+|error [A-Z]+\d+:|SyntaxError|ModuleNotFoundError|FileNotFoundError"
-                          r"|No such file or directory|file not found|could not be found", re.I)
-LOCK_FAIL = re.compile(r"another Unity instance|It looks like another Unity|editor holds|Temp/UnityLockfile", re.I)
+COMPILE_FAIL = re.compile(r"error CS(?!0006\b|2001\b)\d+|SyntaxError")
+IMPORT_RACE = re.compile(r"Library/|Temp/|asset import|importing asset|refresh", re.I)
+LOCK_FAIL = re.compile(r"another Unity instance|Multiple Unity instances|It looks like another Unity instance is running", re.I)
+
+
 def login_fix(j):
     """The trace note for a logged-out lane: which login to run."""
     lane = j.get("lane") or ""
@@ -2696,11 +2703,14 @@ LOCK_WAIT_MAX = 300
 
 
 def failure_kind(text):
-    """'lock' (an editor or project lock: wait, then rerun), 'deterministic' (compile error, missing file: a rerun
-    fails the same way), else 'flaky' (today's retry)."""
+    """'lock' (an editor or project lock: wait, then rerun), 'deterministic' (a CS compile error or SyntaxError: a rerun
+    fails the same way), 'import' (the same, but the log mentions Library/, Temp/ or an asset import: retry once anyway),
+    else 'flaky' (today's retry)."""
     if LOCK_FAIL.search(text):
         return "lock"
-    return "deterministic" if COMPILE_FAIL.search(text) else "flaky"
+    if COMPILE_FAIL.search(text):
+        return "import" if IMPORT_RACE.search(text) else "deterministic"
+    return "flaky"
 
 
 def lock_waits():

@@ -293,21 +293,35 @@ class EngineTest(unittest.TestCase):
         self.assertEqual((res[0]["exit"], res[0]["status"], res[0]["tries"]), (0, "ran", 2))
 
     # tl-bxk.10.17: real lines from lifesim check logs, and the messages the bead names
-    COMPILE = ["CSC : error CS2001: Source file '/s/client/A.cs' could not be found. [/s/client/L.csproj]",
-               "/s/client/Assets/T.cs(90,28): error MA0051: Method is too long (95 lines; maximum allowed: 60) [/s/L.csproj]",
-               "Assets/Foo.cs(180,32): error CS0246: The type or namespace name 'X' could not be found",
-               "  File \"a.py\", line 1\nSyntaxError: invalid syntax", "ModuleNotFoundError: No module named 'foo'",
-               "FileNotFoundError: [Errno 2] No such file or directory: '.task/x/evidence/live-place.txt'"]
+    COMPILE = ["Assets/Foo.cs(180,32): error CS0246: The type or namespace name 'X' could not be found",
+               "Assets/Foo.cs(1,1): error CS1002: ; expected",
+               "  File \"a.py\", line 1\nSyntaxError: invalid syntax"]
     LOCK = ["Unable to create project: It looks like another Unity instance is running with this project open.",
-            "an editor holds client/ (another Unity instance)", "Multiple Unity instances: Temp/UnityLockfile in use"]
+            "Multiple Unity instances: Temp/UnityLockfile in use", "another Unity instance has the project open"]
+    ECHO = "an editor holds client/; compiling in it"  # lifesim unity-check's normal path (justfile:342)
 
-    def test_failure_kind_sorts_compile_errors_missing_files_and_locks(self):
+    def test_failure_kind_sorts_compile_errors_and_locks(self):
         for line in self.COMPILE:
             self.assertEqual(engine.failure_kind(line), "deterministic", line)
         for line in self.LOCK:
             self.assertEqual(engine.failure_kind(line), "lock", line)
-        for line in ("AssertionError: 1 != 2", "Curl error 42", "Connection reset by peer", ""):
+        for line in ("AssertionError: 1 != 2", "Curl error 42", "Connection reset by peer", "", self.ECHO,
+                     "error NU1301: Unable to load the service index",
+                     "error MSB3021: Unable to copy file",
+                     "CSC : error CS0006: Metadata file 'X.dll' could not be found",
+                     "CSC : error CS2001: Source file 'A.cs' could not be found",
+                     "ModuleNotFoundError: No module named 'foo'", "No such file or directory"):
             self.assertEqual(engine.failure_kind(line), "flaky", line)
+
+    def test_the_normal_editor_echo_with_a_real_compile_error_is_compile_not_lock(self):
+        self.assertEqual(engine.failure_kind(self.ECHO + "\nAssets/A.cs(1,1): error CS1002: ; expected"), "deterministic")
+
+    def test_a_compile_error_amid_library_or_asset_import_lines_is_retried_once(self):
+        for ctx in ("Refreshing asset database", "Library/Bee/x.dll locked", "Temp/y missing"):
+            self.assertEqual(engine.failure_kind(ctx + "\nA.cs(1,1): error CS1002: ; expected"), "import", ctx)
+        cmd, n = self.counting_check("Library/x\nA.cs(1,1): error CS1002: ; expected")
+        eng = self.checks_engine(checks=[{"id": "imp", "cmd": cmd, "group": "tests", "retry": 0}])
+        self.assertEqual(eng.run_checks({"checks": [], "files": []}, "s")[0]["tries"], 2)
 
     def test_lock_waits_are_15_30_60_and_add_up_to_5_min(self):
         w = engine.lock_waits()
@@ -326,11 +340,6 @@ class EngineTest(unittest.TestCase):
         eng = self.checks_engine(checks=[{"id": "an", "cmd": cmd, "group": "tests", "retry": 3}])
         res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertEqual((res[0]["status"], res[0]["tries"], n.read_text()), ("failed", 1, "1"))
-
-    def test_a_missing_file_is_not_retried(self):
-        cmd, n = self.counting_check(self.COMPILE[5])
-        eng = self.checks_engine(checks=[{"id": "ev", "cmd": cmd, "group": "tests", "retry": 3}])
-        self.assertEqual(eng.run_checks({"checks": [], "files": []}, "s")[0]["tries"], 1)
 
     def test_an_unclassified_failure_keeps_the_retry(self):
         cmd, n = self.counting_check("AssertionError: 1 != 2")
@@ -915,8 +924,8 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(res[0]["status"], "failed")
         self.assertDead(self.child_of(pidfile))
 
-    def test_check_timeout_defaults_to_15_min_and_the_gate_to_30(self):
-        self.assertEqual((engine.DEFAULTS["check_timeout_min"], engine.DEFAULTS["gate_timeout_min"]), (15, 30))
+    def test_check_timeout_defaults_to_60_min_and_the_gate_to_90(self):
+        self.assertEqual((engine.DEFAULTS["check_timeout_min"], engine.DEFAULTS["gate_timeout_min"]), (60, 90))
 
     def test_a_sleeping_check_is_cut_at_check_timeout_min_not_node_timeout_min(self):
         eng = self.checks_engine(check_timeout_min=0.02, node_timeout_min=45)
