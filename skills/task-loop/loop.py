@@ -224,12 +224,13 @@ def cmd_next(a):
 # ---- state: per loop, under the config dir; several loops may run on one repo (tl-bxk.11.1) --------------------------
 
 def paths(repo):
-    """The repo's files: one stop file and one log for all its loops; `state` is this process's own."""
+    """The repo's files: one stop file, one log and one rest file for all its loops; `state` is this process's own.
+    (`rest` is not <key>.*.json: live_loops reads those as loop states.)"""
     d = tl.config_dir() / "loop"
     d.mkdir(exist_ok=True)
     key = "%s-%s" % (Path(repo).name, hashlib.sha1(repo.encode()).hexdigest()[:8])
     return {"state": d / ("%s.%d.json" % (key, os.getpid())), "states": (d, key),
-            "stop": d / (key + ".stop"), "log": d / (key + ".jsonl"), "runs": d / key}
+            "stop": d / (key + ".stop"), "rest": d / (key + "-rest.json"), "log": d / (key + ".jsonl"), "runs": d / key}
 
 
 def read_state(repo):
@@ -245,6 +246,25 @@ def write_state(repo, **st):
     tmp = f.with_suffix(".tmp")
     tmp.write_text(json.dumps(dict(st, repo=repo)), encoding="utf-8")
     os.replace(tmp, f)
+
+
+def read_rests(repo):
+    """{bead: when it may run again} for the beads that failed before their engine started, shared by every loop on the repo."""
+    try:
+        rests = json.loads(paths(repo)["rest"].read_text(encoding="utf-8"))
+        return {b: float(t) for b, t in rests.items() if float(t) > clock()}
+    except (OSError, ValueError, AttributeError):
+        return {}
+
+
+def rest_bead(repo, bead_id, until):
+    f = paths(repo)["rest"]
+    with tl.os_lock(f.with_name(f.name + ".lock"), "pid %d" % os.getpid()):
+        rests = read_rests(repo)
+        rests[bead_id] = until
+        tmp = f.with_name(f.name + ".%d.tmp" % os.getpid())
+        tmp.write_text(json.dumps(rests), encoding="utf-8")
+        os.replace(tmp, f)
 
 
 def live_loops(repo, but=None):
@@ -333,8 +353,11 @@ def spawn(cmd, log):
 
 
 def prepare(repo, slot, bead_id):
-    """A slot gets a clean tree on the bead's branch (leftover work committed, never wiped); see tl slot reset."""
-    return tl.cmd_slot(engine.Args(op="reset", name=slot, bead=bead_id, n=None, force=False))
+    """A slot gets a clean tree on the bead's branch (leftover work committed, never wiped); see tl slot reset.
+    Returns (rc, why): why is git's error line when the reset failed."""
+    a = engine.Args(op="reset", name=slot, bead=bead_id, n=None, force=False)
+    rc = tl.cmd_slot(a)
+    return rc, getattr(a, "error", "")
 
 
 def landed_on_base(repo, wt, bead_id):
@@ -514,6 +537,8 @@ def passes(repo, a, started):
         reclaim(repo)
         ranked, skipped = queue(repo)
         now = clock()
+        for rested, until in read_rests(repo).items():  # another loop's pre-engine failure rests the bead here too
+            later[rested] = max(later.get(rested, 0), until)
         cands = [b for b, _ in ranked if later.get(b["id"], 0) <= now]
         if cands:
             area_wait[0] = 0.0
@@ -572,11 +597,15 @@ def passes(repo, a, started):
                         if slot_bead:
                             tl.bd("update", slot_bead, "--set-metadata", "held_bead=" + bid, cwd=repo)
                 beat.add(bid)
-                rc = prepare(repo, name, b["id"]) if slots else 0
+                rc, err = prepare(repo, name, b["id"]) if slots else (0, "")
                 if rc != 0:
                     tl.bd("unclaim", b["id"], cwd=repo)
-                    r = {"outcome": "failed", "why": "failed: tl slot reset %s %s" % (
-                        name, "found the slot busy (a live engine or a hold)" if rc == 4 else "did not give a clean tree")}
+                    if rc == 5:  # a live run holds the bead's branch: not this loop's failure
+                        r = {"outcome": "taken", "why": err}
+                    else:  # before the engine: the bead rests for every loop, no failure of this loop's
+                        r = {"outcome": "failed", "pre_engine": True, "why": "failed before the engine: %s" % (
+                            "tl slot reset %s for %s found the slot busy (a live engine or a hold)" % (name, b["id"]) if rc == 4
+                            else "tl slot reset %s for %s did not give a clean tree: %s" % (name, b["id"], err or "exit %d" % rc))}
                 else:
                     r = run_bead(repo, b, name, d, slot_bead, started)
                 record(repo, b["id"], name, r)
@@ -596,6 +625,11 @@ def passes(repo, a, started):
                 tl.release_slot(repo, name, mine=True)
             write_state(repo, pid=os.getpid(), started=started, worktree=wt)
         if r is None:  # every candidate is held by another session: the next pass sleeps until one is due
+            continue
+        if r.get("pre_engine"):  # the engine never started: no verdict on the run, so no failure toward the stop
+            rest_bead(repo, bid, clock() + REST)
+            later[bid] = clock() + REST
+            say("%s failed before its engine started: it rests an hour for every loop on the repo, the next bead first" % bid)
             continue
         ran += 1
         out = r.get("outcome")

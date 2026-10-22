@@ -204,7 +204,7 @@ class LiveEngineBackstop(Slots):
         self.assertIn("BUSY", out)
         with mock.patch.object(tl, "git", side_effect=AssertionError("git ran in a live slot")), \
                 redirect_stdout(io.StringIO()):
-            self.assertNotEqual(REAL_PREPARE(str(self.repo), "s1", "x-1"), 0)
+            self.assertNotEqual(REAL_PREPARE(str(self.repo), "s1", "x-1")[0], 0)
 
     def test_slot_list_shows_the_live_engine(self):
         self.beads({})
@@ -358,7 +358,7 @@ class SameActor(Slots):
                 rc, r, _ = self.run_task("x-2", worktree=self.slot(slot))
                 bd.slots["sl-1"].update(status="in_progress", assignee=tl.actor())
             seen["hand"] = r
-            return 0
+            return 0, ""
         with mock.patch.object(loop, "prepare", reset):
             self.run_loop("--max-beads", "1")
         self.assertEqual((seen["lock"]["by"], seen["lock"]["pid"], seen["lock"]["slot_bead"]),

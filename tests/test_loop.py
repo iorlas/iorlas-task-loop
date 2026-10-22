@@ -321,7 +321,7 @@ class LoopBase(Base):
         for p in (mock.patch.object(loop, "clock", self.clock), mock.patch.object(loop, "nap", self.clock.nap),
                   mock.patch.object(loop, "margin", return_value=45),
                   mock.patch.object(loop, "spawn", side_effect=lambda cmd, log: FakeChild(self, cmd)),
-                  mock.patch.object(loop, "prepare", return_value=0)):
+                  mock.patch.object(loop, "prepare", return_value=(0, ""))):
             p.start()
             self.addCleanup(p.stop)
         (self.repo / ".task-loop.json").write_text(json.dumps({"slots": {"count": 2}, "engine": {}}))
@@ -421,7 +421,7 @@ class Loop(LoopBase):
             while time.time() - t < 2 and not ({("heartbeat", "x-1"), ("heartbeat", "sl-1")} <= set(bd.calls)):
                 time.sleep(0.02)
             beats.extend(c for c in bd.calls if c[0] == "heartbeat")
-            return 0
+            return 0, ""
         with mock.patch.object(loop, "HEARTBEAT", 0.05), mock.patch.object(loop, "prepare", slow):
             self.run_loop()
         self.assertIn(("heartbeat", "x-1"), beats)
@@ -757,7 +757,7 @@ class LoopStopNow(Base):
             t.start()
             threads.append(t)
             return p
-        with mock.patch.object(loop, "spawn", spawn), mock.patch.object(loop, "prepare", return_value=0), \
+        with mock.patch.object(loop, "spawn", spawn), mock.patch.object(loop, "prepare", return_value=(0, "")), \
                 mock.patch.object(tl, "start_worktree", return_value=str(self.home)), redirect_stdout(io.StringIO()):
             t0 = time.time()
             self.assertEqual(tl.main(["loop", "--repo", str(self.repo)]), 0)

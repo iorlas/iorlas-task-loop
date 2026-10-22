@@ -582,6 +582,7 @@ def cmd_slot(a):
                                capture_output=True, text=True, encoding="utf-8", errors="replace")
             if r.returncode != 0:
                 print("DIRTY: could not commit the leftover work on %s\n%s" % (br, r.stderr))
+                a.error = "could not commit the leftover work on %s: %s" % (br, error_line(r.stderr))
                 return 3
             print("WIP committed on " + br)
         fetch(d)
@@ -589,6 +590,11 @@ def cmd_slot(a):
         if a.bead and git("rev-parse", "--verify", "-q", "refs/heads/task/" + a.bead, cwd=d):
             # the bead's branch holds its earlier runs' work: check it out as it is, never reset it to base (a forced
             # reset here wiped lifesim-r32's reviewed work on 2026-10-19; the engine rebases at land)
+            held = free_branch(repo, d, "task/" + a.bead)
+            if held:  # a live run has it: this bead is not for this slot now (never a failure)
+                print("TAKEN: " + held)
+                a.error = held
+                return 5
             r = run_git(d, "checkout", "task/" + a.bead, capture_output=True, text=True,
                                encoding="utf-8", errors="replace")
         elif a.bead:
@@ -597,9 +603,13 @@ def cmd_slot(a):
             r = run_git(d, "checkout", "--detach", base, capture_output=True, text=True, encoding="utf-8", errors="replace")
         if r.returncode != 0:
             sys.stderr.write(r.stderr)
+            a.error = error_line(r.stderr)
             return r.returncode
         run_git(d, "clean", "-fdq", *sum((["-e", k] for k in cfg.get("keep", [])), []))
-        return cmd_slot_setup(repo, a.name, cfg, d)
+        rc = cmd_slot_setup(repo, a.name, cfg, d)
+        if rc != 0:
+            a.error = "setup exited %d" % rc
+        return rc
     if a.op == "setup":
         return cmd_slot_setup(repo, a.name, cfg, slot_dir(repo, a.name, cfg), force=True)
     return 2
@@ -908,6 +918,40 @@ def worktrees(repo, slots=None):
             seen.add(k)
             keep.append(d)
     return keep
+
+
+def error_line(text):
+    """The line of git's stderr that says what went wrong: the first fatal/error one, else the last."""
+    lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+    return next((ln for ln in lines if ln.startswith(("fatal:", "error:"))), lines[-1] if lines else "no message from git")
+
+
+def free_branch(repo, d, branch):
+    """Make `branch` free to check out in `d`. Another worktree holding it (a pre-slot worktree, a dead run's) is
+    removed when clean, else detached where it stands: its files and commits stay (tl-bxk.10.26, lifesim 2026-10-22).
+    Returns "" when free, else why a live run keeps it (the repo's own checkout counts as live)."""
+    out = git("worktree", "list", "--porcelain", cwd=d) or ""
+    here, held = os.path.realpath(d), []
+    for i, block in enumerate(out.split("\n\n")):
+        wt = next((ln[9:] for ln in block.splitlines() if ln.startswith("worktree ")), "")
+        if wt and "branch refs/heads/%s" % branch in block.splitlines() and os.path.realpath(wt) != here:
+            held.append((wt, i == 0))
+    for wt, main in held:
+        busy = engine_busy(wt)
+        if busy or main:
+            return "branch %s is checked out in %s%s" % (branch, wt, ": " + busy if busy else " (the repo's own checkout)")
+    for wt, _ in held:
+        if not git("status", "--porcelain", cwd=wt):
+            r = run_git(repo, "worktree", "remove", wt, capture_output=True, text=True, encoding="utf-8", errors="replace")
+            if r.returncode == 0:
+                print("FREED: branch %s: removed the clean worktree %s" % (branch, wt))
+                continue
+        r = run_git(wt, "checkout", "--detach", capture_output=True, text=True, encoding="utf-8", errors="replace")
+        if r.returncode == 0:
+            print("FREED: branch %s: detached HEAD in %s (its files and commits stay)" % (branch, wt))
+        else:
+            return "branch %s is checked out in %s and cannot be detached: %s" % (branch, wt, error_line(r.stderr))
+    return ""
 
 
 def engine_busy(wt, handoff=False):
