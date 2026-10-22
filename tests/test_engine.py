@@ -2374,6 +2374,26 @@ class EngineTest(unittest.TestCase):
         self.assertLessEqual(len(r["why"].split("bad_request: ", 1)[1]), 200)
         self.assertIn("infrastructure", self.eng.log_path.read_text())
 
+    def test_an_owner_reason_without_denied_is_a_verify_ask_quoting_say(self):
+        bad = ans("failed", "worker_failed", "owner", say="HTTP 500: upstream error")
+        rc, _ = self.run_engine({"plan": [bad]})
+        self.assertEqual(rc, 2)
+        self.assertEqual(self.ask()["kind"], "verify")
+        self.assertIn("HTTP 500", self.blocked[0])
+
+    def test_a_done_answer_whose_text_says_unknown_argument_lands_normally(self):
+        said = "the CLI printed: error: unknown argument; schema note: \"code\":\"invalid_json_schema\""
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [dict(WRITE, text=said, say=said)], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertTrue(self.closed and self.closed[0].startswith("merged "))
+
+    def test_an_infrastructure_failure_in_verify_fails_the_run_instead_of_being_swallowed(self):
+        # lifesim 2026-10-22: the 53 beads failed in the verify step, whose Blocked used to mean "the owner checks them"
+        r = dict(CLEAN, unchecked=[{"what": "the cited spec link did not open", "kind": "link"}])
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r], "verify": [self.bad_request()]})
+        self.assertEqual((rc, self.ask(), self.blocked), (2, None, []))
+        self.assertTrue(self.eng.result()["why"].startswith("failed: infrastructure: bad_request"))
+
     def test_an_invalid_json_schema_in_the_text_is_infrastructure_whatever_the_reason(self):
         out = self.bad_request(reason="worker_failed", status="failed", next="fail")
         rc, _ = self.run_engine({"plan": [out]})

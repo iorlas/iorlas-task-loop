@@ -495,7 +495,7 @@ class Loop(LoopBase):
         self.assertEqual([self.bd.beads[b]["status"] for b in ("x-1", "x-2")], ["open", "open"])
         self.assertEqual([l["outcome"] for l in self.lines()], ["failed", "failed"])
         self.assertIn("infrastructure", self.lines()[0]["why"])
-        self.assertFalse(loop.read_rests(str(self.repo)))  # not a pre-engine rest: the engine ran
+        self.assertEqual(sorted(loop.read_rests(str(self.repo))), ["x-1", "x-2"])  # rests an hour for every loop
 
     def test_a_landed_bead_ends_a_run_of_failures(self):
         self.beads({"x-1": [rec("failed")], "x-2": [rec("landed")], "x-3": [rec("failed")], "x-4": [rec("landed")]})

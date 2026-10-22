@@ -1085,7 +1085,7 @@ def call_delegate(route, role, prompt, schema, cwd, resume, timeout, log_path, w
 
 # tl-bxk.10.31: delegate reasons (route.py REASONS) that say the request itself is malformed, and the words a lane uses for it
 INFRA_REASONS = ("bad_request",)  # not "caller": a refused resume is retried as a new thread
-INFRA_TEXT = re.compile(r"invalid_json_schema|invalid schema for response_format|unrecognized arguments|unknown argument", re.I)
+INFRA_TEXT = re.compile(r"\"code\":\s*\"invalid_json_schema\"|invalid schema for response_format|unrecognized arguments:|error: unknown argument", re.I)
 
 
 class Blocked(Exception):
@@ -1415,8 +1415,7 @@ class Engine:
                 waited += wait
                 self.add_wait(wait, "a lane")
                 continue
-            said = said or (j.get("text") or "").strip()
-            if reason in INFRA_REASONS or INFRA_TEXT.search(said):
+            if j.get("status") != "done" and (reason in INFRA_REASONS or INFRA_TEXT.search(said)):  # `said` is the lane's error, never the model's text
                 # tl-bxk.10.31: the lane rejected the request itself (a schema it cannot take, an argument it does not
                 # know): the same call fails for every bead, so it is the engine's or the config's fault, never the bead's
                 self.cost += r.cost
@@ -1988,7 +1987,10 @@ class Engine:
                 d, _ = self.ai("verify", "%d unchecked item(s) before land" % len(gaps), VERIFY_PROMPT.format(
                     brief=self.brief_text(), work=self.work_summary(), evidence=self.evidence_dir,
                     checks=self.checks_evidence(), where=self.where("verify"), items=items), writer_family=self.writer_family, items=len(gaps))
-            except Blocked as b:  # no verifier now is no reason to land unchecked: the owner checks them, as before
+            except Blocked as b:
+                if b.why.startswith("failed: infrastructure"):  # tl-bxk.10.31: the request is malformed for every bead
+                    raise
+                # no verifier now is no reason to land unchecked: the owner checks them, as before
                 self.warn("could not self-verify before land, the owner checks every item: %s" % b.why[:300])
                 return gaps + failed
             if self.last_flag == "same_family":
