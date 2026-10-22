@@ -346,6 +346,13 @@ class EngineTest(unittest.TestCase):
         self.assertEqual((res[0]["exit"], res[0]["status"], n.read_text()), (0, "ran", "3"))
         self.assertEqual([c[0][0] for c in sleep.call_args_list if c[0][0] >= 15], [15, 30])  # other threads may sleep too
 
+    def test_a_lock_is_waited_for_even_on_a_check_with_no_retry(self):
+        cmd, n = self.counting_check(self.LOCK[0], ok_after=2)
+        eng = self.checks_engine(checks=[{"id": "unity", "cmd": cmd, "group": "tests", "retry": 0}])
+        with mock.patch.object(engine.time, "sleep"):
+            res = eng.run_checks({"checks": [], "files": []}, "s")
+        self.assertEqual((res[0]["exit"], n.read_text()), (0, "2"))
+
     def test_a_lock_that_stays_fails_after_5_min_with_the_holder_pid(self):
         cmd, n = self.counting_check(self.LOCK[2])
         proj = self.wt / "client" / "Temp"
@@ -2461,7 +2468,7 @@ class Outcome(unittest.TestCase):
 
     def test_a_logged_out_worker_is_paused_with_no_time(self):
         out = ans("failed", "logged_out", "owner", family="claude", say="Failed to authenticate")
-        self.run_engine({"plan": [out]})
+        self.run_engine({"plan": [out, out]})
         r = self.eng.result()
         self.assertEqual((r["outcome"], r["retry_after"], r["asked"]), ("paused", 0, False))
 
@@ -2758,29 +2765,47 @@ class DelegateLauncher(unittest.TestCase):
         out = ans("failed", "logged_out", "owner", family="claude", say="Failed to authenticate: OAuth session expired")
         rc, s = self.run_engine({"plan": [out, out]})
         self.assertEqual(rc, 2)
-        self.assertEqual([c[0] for c in s.calls], ["planner"])
+        self.assertEqual([c[0] for c in s.calls], ["planner", "planner"])
         self.assertEqual(self.blocked, [])
         self.assertTrue(any(c[:1] == ("update",) and "open" in c for c in self.bd_calls))
         self.assertIn("claude auth login", self.eng.log_path.read_text())
 
     # tl-bxk.10.15, delegate 0.35: logged_out answers lane_out/retry; every lane out answers stop/no_lane
-    def test_a_logged_out_lane_on_a_write_pauses_with_the_login_note_and_no_ask(self):
+    def test_a_logged_out_lane_is_retried_at_once_with_a_login_note(self):
         out = ans("lane_out", "logged_out", "retry", retry_after=time.time() + 60, family="claude",
                   say="claude is not logged in (claude auth login)")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [out, WRITE]})
+        rc, s = self.run_engine({"plan": [PLAN], "write": [out, WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0)
+        self.assertEqual([c[0] for c in s.calls].count("worker"), 2)  # write twice; no wait
+        log = self.eng.log_path.read_text()
+        self.assertIn("Claude logged out: run `claude auth login`", log)
+
+    def test_a_logged_out_lane_twice_pauses_with_the_login_note_and_no_ask(self):
+        out = ans("lane_out", "logged_out", "retry", retry_after=time.time() + 60, family="claude",
+                  say="claude is not logged in (claude auth login)")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [out, out, WRITE]})
         self.assertEqual(rc, 2)
-        self.assertEqual([c[0] for c in s.calls].count("worker"), 1)  # no wait, no second call
+        self.assertEqual([c[0] for c in s.calls].count("worker"), 2)
         self.assertEqual(self.blocked, [])
         self.assertTrue(any(c[:1] == ("update",) and "open" in c and any("run `claude auth login`" in x for x in c)
                             for c in self.bd_calls))
         self.assertIn("claude auth login", self.eng.log_path.read_text())
 
-    def test_a_resumed_write_on_a_logged_out_lane_pauses_without_an_ask(self):
+    def test_a_resumed_write_on_a_logged_out_lane_retried_fresh_then_paused_without_an_ask(self):
         out = ans("lane_out", "logged_out", "retry", retry_after=time.time() + 60, family="openai", say="codex login")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, out], "review": [review(unmet=["more"])]})
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, out, out], "review": [review(unmet=["more"])]})
         self.assertEqual(rc, 2)
         self.assertEqual(self.blocked, [])
         self.assertTrue(any(c[:1] == ("update",) and "open" in c and any("run `codex login`" in x for x in c)
+                            for c in self.bd_calls))
+
+    def test_a_logged_out_retry_that_meets_no_lane_pauses_with_the_note_kept(self):
+        out = ans("lane_out", "logged_out", "retry", retry_after=time.time() + 60, family="claude", say="login")
+        stop = ans("stop", "no_lane", "owner", retry_after=None, say="every lane is out")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [out, stop]})
+        self.assertEqual(rc, 2)
+        self.assertEqual(self.blocked, [])
+        self.assertTrue(any(c[:1] == ("update",) and "open" in c and any("Claude logged out" in x for x in c)
                             for c in self.bd_calls))
 
     def test_every_lane_out_with_no_time_pauses_a_resumed_write_without_an_ask(self):

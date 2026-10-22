@@ -922,6 +922,7 @@ class Engine:
                   **meta)
         timeout = float(self.cfg["node_timeout_min"]) * 60
         waited, attempt_prompt, attempt, errs = 0.0, prompt, 1, ["not run"]
+        login_note = ""  # set once a lane answered logged_out and the engine retried afresh (delegate puts that lane out 15 min)
         while attempt <= 2:
             self._resume = resume
             r, j = call_delegate(self.route, role, attempt_prompt, SCHEMAS[node], self.wt, resume, timeout,
@@ -938,9 +939,17 @@ class Engine:
             elif not j:
                 nxt, reason = "fail", "no_answer"  # route.py crashed, printed nothing, or the node timeout killed it
             if reason == "logged_out" and nxt in ("retry", "owner"):
-                # delegate 0.35: a logged-out lane answers lane_out/retry with a 60 s retry_after; waiting does not fix a
-                # login, so the bead pauses with the fix, no ask (tl-bxk.10.15)
-                self.pause_logged_out(node, j, said)
+                # delegate 0.35 marks a logged-out lane out for 15 min on purpose: the next fresh call goes to the role's
+                # next rung. Retry once at once, note the fix for the dashboard; a second logged_out pauses (tl-bxk.10.15)
+                if login_note:
+                    self.pause_logged_out(node, j, said)
+                login_note = login_fix(j)
+                self.log("note", "%s: %s; retrying at once as a fresh call" % (node, login_note))
+                self.transition(step or node, "logged_out", login_note, lane=j.get("lane") or "")
+                resume, out_on = None, j.get("lane") or ""
+                if self._resume:
+                    attempt_prompt += FRESH_WRITER_TEXT
+                continue
             if reason == "lane_out" and nxt in ("retry", "owner") and resume:
                 # delegate never moves a resumed thread to another lane; a new thread gets the role's next rung at once.
                 # next is owner when delegate cannot say when the lane frees (no retry_after): the same move (lifesim-5ar.6)
@@ -963,7 +972,7 @@ class Engine:
                     raise Blocked("paused: %s for %s until %s (%s: %s)" % (
                         "no network" if reason == "network" else "no lane", node,
                         time.strftime("%H:%M:%S", time.localtime(due)) if due > time.time() else "a lane frees",
-                        reason, said[:200]))
+                        reason, said[:200]) + (" [%s]" % login_note if login_note else ""))
                 wait = min(600.0, wait)
                 self.warn("%s waits %d min (%s): %s" % (node, wait // 60, reason, said[:160]))
                 self.transition(step or node, "lane_wait", "waited %d min for a lane (%s)" % (wait // 60, reason),
@@ -978,7 +987,8 @@ class Engine:
                     self.outcome_of("paused", reason)
                     self.transition("pause", "paused", "no lane for %s, no time it frees" % node, lane=j.get("lane") or "",
                                     reason=reason)
-                    raise Blocked("paused: no lane for %s (%s, no time it frees): %s" % (node, reason, said[:200]))
+                    raise Blocked("paused: no lane for %s (%s, no time it frees): %s" % (node, reason, said[:200])
+                                  + (" [%s]" % login_note if login_note else ""))
                 if reason in ("logged_out", "setup"):  # the machine's to fix, not the bead's: it stays open, no ask
                     fix = ("run `codex login`" if j.get("family") == "openai" else "run `claude auth login`") \
                         if reason == "logged_out" else "set up delegate (/iorlas-delegate:init)"
@@ -1032,11 +1042,10 @@ class Engine:
         self.anomalies(node, r, attempt)
         return r.data, fam
 
-    def pause_logged_out(self, node, j, said):
+    def pause_logged_out(self, node, j, said):  # the retry was logged out too
         """A lane that needs a login: the bead stays open and the run pauses with the fix, never an owner ask."""
         lane = j.get("lane") or ""
-        fix = "run `codex login`" if j.get("family") == "openai" or lane.upper().startswith("OPENAI") \
-            else "run `claude auth login`"
+        fix = "run `codex login`" if login_fix(j).endswith("`codex login`") else "run `claude auth login`"
         self.outcome_of("paused", "logged_out")
         self.transition("pause", "paused", "logged out for %s: %s" % (node, fix), lane=lane, reason="logged_out")
         raise Blocked("paused: logged_out on %s; %s on this machine, then rerun. (%s)" % (node, fix, said[:200]))
@@ -2149,7 +2158,7 @@ class Engine:
                     tries += 1
                     log_name = "%02d-%s.r%d.log" % (n, re.sub(r"[^\w.-]+", "_", c["id"])[:40], self.check_round)
                     rc, tail = self.sh(cmd, timeout=float(self.cfg["check_timeout_min"]) * 60, save=logs / log_name)
-                    if rc == 0 or tries > c["retry"]:
+                    if rc == 0:
                         break
                     try:
                         seen = (logs / log_name).read_text(encoding="utf-8", errors="replace")
@@ -2157,7 +2166,8 @@ class Engine:
                         seen = tail
                     kind = failure_kind(seen)
                     if kind == "deterministic":  # a rerun fails the same way, seconds later (tl-bxk.10.17)
-                        self.warn("`%s` failed (exit %d) with a compile or missing-file error: not retried" % (c["id"], rc))
+                        if c["retry"]:
+                            self.warn("`%s` failed (exit %d) with a compile or missing-file error: not retried" % (c["id"], rc))
                         break
                     if kind == "lock":
                         for n, wait in enumerate(lock_waits(), 1):
@@ -2171,6 +2181,8 @@ class Engine:
                             pid = lock_holder(seen, self.wt)
                             tail += "\n(still locked after %d s of waiting%s)" % (
                                 LOCK_WAIT_MAX, "; the lock holder is pid " + pid if pid else "")
+                        break
+                    if tries > c["retry"]:
                         break
                     self.warn("`%s` failed (exit %d), retrying: it is marked flaky" % (c["id"], rc))
                 res = dict(base, exit=rc, status="ran" if rc == 0 else "failed", tries=tries, tail=tail[-1500:],
@@ -2671,6 +2683,14 @@ def split_top(cmd):
 COMPILE_FAIL = re.compile(r"error CS\d+|error [A-Z]+\d+:|SyntaxError|ModuleNotFoundError|FileNotFoundError"
                           r"|No such file or directory|file not found|could not be found", re.I)
 LOCK_FAIL = re.compile(r"another Unity instance|It looks like another Unity|editor holds|Temp/UnityLockfile", re.I)
+def login_fix(j):
+    """The trace note for a logged-out lane: which login to run."""
+    lane = j.get("lane") or ""
+    if j.get("family") == "openai" or lane.upper().startswith("OPENAI"):
+        return "Codex logged out: run `codex login`"
+    return "Claude logged out: run `claude auth login`"
+
+
 LOCK_BACKOFF = (15, 30, 60)  # seconds; the last repeats until LOCK_WAIT_MAX
 LOCK_WAIT_MAX = 300
 
