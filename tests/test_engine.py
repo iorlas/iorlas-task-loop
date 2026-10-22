@@ -45,8 +45,8 @@ def review(unmet=(), findings=(), question="", decided=""):
     return dict(CLEAN, unmet=list(unmet), findings=list(findings), question=question, decided=decided)
 
 
-def verdict(n, v, evidence="", why=""):
-    return {"n": n, "verdict": v, "evidence": evidence, "why": why}
+def verdict(n, v, evidence="", why="", kind="other"):
+    return {"n": n, "verdict": v, "evidence": evidence, "why": why, "kind": kind}
 
 
 STILL_OPEN = {"items": [verdict(1, "open", why="only the owner can open it")]}

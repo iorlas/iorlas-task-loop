@@ -81,10 +81,23 @@ OPTIONS_RULE = ("options: with a question, 2-4 answers the owner can click, each
                 "answer text the next run will read, and recommended (true for exactly one: yours); empty with no question.")
 LEFTOVERS = {"type": "array", "items": {"type": "object", "additionalProperties": False,
                                         "properties": {"title": S_STR, "why": S_STR}, "required": ["title", "why"]}}
-UNCHECKED_KINDS = ("requirement", "number", "deletion", "link", "case", "tooling")  # one of these unchecked stops the land
-UNCHECKED_TEXT = ("\nunchecked: what you could not check yourself, each with its kind: requirement, number, deletion, link "
-                  "(a cited link you could not open), case (an acceptance case you could not run), tooling (a change to "
-                  "tools or build files the plan did not name), or other. Empty when you checked everything.")
+# tl-bxk.10.28: the AI classifies an unchecked item, the engine routes it. The first six are the old kinds (an old
+# checkpoint or a worker still sends them): an open one is asked, as before.
+ROUTED_KINDS = ("engine_step", "checkable", "external_fact", "taste", "owner_decision")
+LEGACY_KINDS = ("requirement", "number", "deletion", "link", "case", "tooling")
+UNCHECKED_KINDS = ROUTED_KINDS + LEGACY_KINDS  # one of these unchecked is verified before the land
+KIND_LINES = (
+    "engine_step: something the engine itself does after this point (files leftover or follow-up beads, lands, runs the "
+    "gate, copies screenshots, closes the bead)",
+    "checkable: a behaviour, a number the code computes or a rate holding across cases: a test or check could prove it",
+    "external_fact: a fact from outside the repo (a price, a licence, a size quoted from a web page or a file the repo "
+    "does not hold) that no check here can prove",
+    "taste: a look, a feel or a judgement call only a person can make",
+    "owner_decision: needs the owner to decide: a change to the contract or requirements, money, an account or a login",
+    "case: an acceptance case you could not run",
+)
+UNCHECKED_TEXT = ("\nunchecked: what you could not check yourself, each with its kind: " + "; ".join(KIND_LINES) +
+                  "; or other. Empty when you checked everything.")
 
 VERDICTS = ("settled", "wrong", "open")  # the verifier's answer per unchecked item, before a verify ask
 
@@ -394,9 +407,10 @@ SCHEMAS = {
                    "accept_files": S_STRS, "reject_files": S_STRS}},  # optional: unexplained new files the review accepts into the commit / rejects as strays
     "verify": {"type": "object", "additionalProperties": False, "required": ["items"],
                "properties": {"items": {"type": "array", "items": {
-                   "type": "object", "additionalProperties": False, "required": ["n", "verdict", "evidence", "why"],
+                   "type": "object", "additionalProperties": False, "required": ["n", "verdict", "evidence", "why", "kind"],
                    "properties": {"n": {"type": "integer"}, "verdict": {"type": "string", "enum": list(VERDICTS)},
-                                  "evidence": S_STR, "why": S_STR}}}}},
+                                  "evidence": S_STR, "why": S_STR,
+                                  "kind": {"type": "string", "enum": list(UNCHECKED_KINDS) + ["other"]}}}}}},
 }
 
 
@@ -1043,6 +1057,7 @@ class Engine:
         self.look_notes, self.look_paths, self.bead_parent = [], [], ""  # tl-bxk.10.23
         self.look_filed = False
         self.look_unjudged, self.look_retried, self.shots_skipped = {}, set(), set()  # unjudged: item -> why
+        self.unverified, self.proof_asked = [], set()  # tl-bxk.10.28: items that land for the owner; items sent for a test once
         self.filed = []       # leftover titles filed by an earlier run on this checkpoint: a replan naming one again is no new bead
         self.stage_tree = ""  # the tree the current stage started from ("" = the task's base): the review's diff runs from here
         self.writer_said = "" # the writer's answers so far: a new file they name is meant (tl-bxk.10.24)
@@ -1904,6 +1919,7 @@ class Engine:
                     "%s: %s, %s" % (x["verdict"], x["what"], '"%s"' % x["evidence"]) for x in self.verified))
                 return []
         gaps, failed = self.engine_settles(gaps)  # tl-bxk.10.19: what the engine proves itself is never asked
+        gaps = self.engine_steps(gaps)
         items = "".join("%d. %s (%s)\n" % (n, u["what"], u["kind"]) for n, u in enumerate(gaps, 1))
         items += self.look_verify(gaps)
         d = {"items": []}
@@ -1928,8 +1944,16 @@ class Engine:
                 v, why = "open", "settled without quoted evidence"
             if self.is_look(u):
                 v, a, why = self.look_verdict(u, v, a, why)
-            self.verified.append({"what": u["what"], "kind": u["kind"], "verdict": v, "evidence": a["evidence"], "why": why})
-            if v != "settled":
+            kind = a.get("kind") if a.get("kind") in UNCHECKED_KINDS else u["kind"]  # the verifier read the code: its kind wins
+            u = dict(u, kind=kind)
+            route = ""
+            if v == "open":
+                v, a, why, route = self.route_open(u, a, why)
+            self.verified.append({"what": u["what"], "kind": u["kind"], "verdict": "open" if route == "unverified" else v,
+                                  "evidence": a["evidence"], "why": why})
+            if route == "proof":
+                wrong.append(dict(u, why=why, proof_round=True))
+            elif v != "settled" and route != "unverified":
                 (wrong if v == "wrong" else still).append(dict(u, why=why))
         counts = ", ".join("%d %s" % (sum(x["verdict"] == k for x in self.verified), k) for k in VERDICTS)
         self.log("verify", "before land: %s" % counts, verified=self.verified)
@@ -1939,8 +1963,11 @@ class Engine:
             for x in self.verified))
         if not wrong:
             if still:
-                self.transition("ask", "verify_open", "%d item%s only the owner can check" % (
+                self.transition("ask", "verify_open", "%d item%s only the owner can decide" % (
                     len(still), "" if len(still) == 1 else "s"))
+            elif self.unverified:
+                self.transition("land", "unverified", "%d item%s land unverified, for the owner" % (
+                    len(self.unverified), "" if len(self.unverified) == 1 else "s"))
             else:
                 self.transition("land", "verified", counts)
             return still
@@ -1951,13 +1978,63 @@ class Engine:
         # the wrong items stay unchecked in the fix's checkpoint: a fix round that pauses resumes at land and verifies
         # them again, never lands them; the fix's review adds what it leaves unproven
         self.unchecked = [u for u in self.unchecked if u["kind"] not in UNCHECKED_KINDS] + still + wrong
+        before = len(self.unchecked)
         done = self.fix("verify", "".join("- %s: %s\n" % (u["what"], u["why"]) for u in wrong))
         fixed = {u["what"] for u in wrong}
-        self.unchecked = [u for u in self.unchecked if u["what"] not in fixed]
+        self.unchecked = [u for u in self.unchecked[:before] if u["what"] not in fixed] + self.unchecked[before:]  # what the fix's review added stays
         left = [u for u in self.unchecked if u["kind"] in UNCHECKED_KINDS]
         if done != "accept":
             left += [dict(u, why="found wrong: %s; the fix round did not pass" % u["why"]) for u in wrong]
-        return left
+        return self.route_left(left)
+
+    def engine_steps(self, gaps):
+        """tl-bxk.10.28: an item the writer calls an engine step (filing follow-up beads, landing, the gate, copying
+        shots) is settled here, no verifier call: lifesim-yxbb.7 and lifesim-fld.16 parked on 'the engine files them'."""
+        out = []
+        for u in gaps:
+            if u["kind"] == "engine_step":
+                self.settle_engine_step(u)
+            else:
+                out.append(u)
+        return out
+
+    def settle_engine_step(self, u):
+        self.verified.append({"what": u["what"], "kind": u["kind"], "verdict": "settled", "why": "the engine does this at land",
+                              "evidence": "the engine does this at land"})
+
+    def route_open(self, u, a, why):
+        """tl-bxk.10.28: where an item the verifier left open goes, by its kind: (verdict, answer, why, route). An
+        engine step is settled; a checkable item goes to the writer once, for a test (a fix round, only while one is left);
+        an item no check can prove lands for the owner (route 'unverified'); an owner decision, or an old kind, is asked."""
+        k = u["kind"]
+        if k == "engine_step":
+            return "settled", dict(a, evidence="the engine does this at land"), "the engine does this at land", ""
+        if k == "checkable" and u["what"] not in self.proof_asked and self.fixes < int(self.cfg["max_fix_rounds"]):
+            self.proof_asked.add(u["what"])
+            return "wrong", a, "add a test or check that proves: %s" % u["what"], "proof"
+        if k in ("external_fact", "taste", "checkable"):
+            self.add_unverified(u, why)
+            return "open", a, why, "unverified"
+        return "open", a, why, ""
+
+    def add_unverified(self, u, why):
+        if u["what"] not in {x["what"] for x in self.unverified}:
+            self.unverified.append({"what": u["what"], "kind": u["kind"], "why": why})
+
+    def route_left(self, left):
+        """The items still unchecked after a verify fix round, routed: an engine step is settled, one that no check can
+        prove (or a checkable one the test round left unproven) lands unverified; the rest still asks."""
+        out = []
+        for u in left:
+            k = u["kind"]
+            defect = str(u.get("why") or "").startswith("found wrong:") and not u.get("proof_round")
+            if k == "engine_step" and not defect:
+                self.settle_engine_step(u)
+            elif k in ("external_fact", "taste") or (k == "checkable" and not defect):
+                self.add_unverified(u, u.get("why") or "")
+            else:
+                out.append(u)
+        return out
 
     GATE_RUNNER = re.compile(r"^(?:just|make|npm run|npm|yarn|pnpm run|pnpm|cargo|task|poe|tox|nox)\s+")
     LINT_DEFAULT = {"ruff": "ruff check .", "flake8": "flake8", "shellcheck": None}
@@ -2409,7 +2486,7 @@ class Engine:
                "brief": self.brief_hash, "head": self.git("rev-parse", "HEAD"),
                "unchecked": self.unchecked, "filed": self.filed,
                "look_paths": self.look_paths, "look_notes": self.look_notes, "look_unjudged": self.look_unjudged,
-               "stage_tree": self.stage_tree, "writer_said": self.writer_said, "accepted_new": self.accepted_new,
+               "unverified": self.unverified, "stage_tree": self.stage_tree, "writer_said": self.writer_said, "accepted_new": self.accepted_new,
                "closed": False,
                "run": self.log_path.stem, "t": time.time(), **at}
         p = self.checkpoint_path()
@@ -2453,6 +2530,7 @@ class Engine:
             return None, 0, None
         self.look_paths, self.look_notes = list(ck.get("look_paths") or []), list(ck.get("look_notes") or [])
         self.look_unjudged = dict(ck.get("look_unjudged") or {})
+        self.unverified = list(ck.get("unverified") or [])
         self.planned = int(ck.get("planned") or 1 + int(ck.get("replans") or 0))  # checkpoints before the count: plan + replans
         self.extra, self.plan_log = self.extra + int(ck.get("extra") or 0), list(ck.get("plan_log") or [])
         self.planner_ref = ck.get("planner_ref") or self.planner_ref
@@ -3202,7 +3280,8 @@ class Engine:
         """What the owner-look bead needs goes into the checkpoint, so a crash after the land still files it."""
         try:
             ck = json.loads(self.checkpoint_path().read_text())
-            ck.update(look_paths=self.look_paths, look_notes=self.look_notes, look_unjudged=self.look_unjudged)
+            ck.update(look_paths=self.look_paths, look_notes=self.look_notes, look_unjudged=self.look_unjudged,
+                      unverified=self.unverified)
             self.checkpoint_path().write_text(json.dumps(ck, indent=1))
         except (OSError, ValueError):
             pass
@@ -3241,33 +3320,45 @@ class Engine:
         return self.bead_parent
 
     def existing_owner_look(self):
-        """The owner-look bead already linked (related) to this bead, or ''."""
+        """(id, description) of the owner-look bead to reuse: one already linked (related) to this bead, else the one
+        under this bead's epic (tl-bxk.10.28: one review bead per epic, appended to); ('', '') when there is none."""
         r = tl.bd("list", "--label", LOOK_LABEL, "--json", "-n", "0")
         try:
             rows = json.loads(r.stdout or "[]")
         except ValueError:
-            return ""
+            return "", ""
+        epic, by_epic = self.look_epic(), ("", "")
         for row in rows if isinstance(rows, list) else []:
             d = tl.show(row.get("id") or "") or {}
             if any(x.get("id") == self.bead for x in d.get("dependencies") or []):
-                return row["id"]
-        return ""
+                return row["id"], d.get("description") or ""
+            if epic and not by_epic[0] and d.get("parent") == epic and d.get("status", "open") != "closed":
+                by_epic = (row["id"], d.get("description") or "")
+        return by_epic
 
     def file_owner_look(self):
-        """After the land: one bead for the owner's later look-and-feel round, filed once (a re-land updates it)."""
-        if self.look_filed or not (self.look_paths or self.look_unjudged):
+        """After the land: one bead per epic for the owner's later round (look and feel, and what no check could prove),
+        filed once and appended to by each later bead of the epic (a re-land replaces its own section)."""
+        if self.look_filed or not (self.look_paths or self.look_unjudged or self.unverified):
             return
-        title = "Look review: " + (self.bead_title or self.bead)
-        body = ("Screenshots of %s (%s), committed with its land:\n%s\n\nWhat the agent judged: %s\n%s\nNot automatable: "
-                "the owner reviews the look and feel in a later batch." % (self.bead, self.bead_title, "\n".join(
-                    "- " + p for p in self.look_paths) or "(none)", " ".join(self.look_notes) or "(the reviewer gave no judgement)",
-                    ("\n" + "\n".join("%s (%s)" % (w, u) for u, w in self.look_unjudged.items()) + "\n") if self.look_unjudged else ""))
-        have = self.existing_owner_look()
+        head = "## %s: %s" % (self.bead, self.bead_title)
+        parts = [head]
+        if self.look_paths or self.look_unjudged or not self.unverified:
+            parts.append("Screenshots of %s (%s), committed with its land:\n%s\n\nWhat the agent judged: %s\n%s\nNot automatable: "
+                         "the owner reviews the look and feel in a later batch." % (self.bead, self.bead_title, "\n".join(
+                             "- " + p for p in self.look_paths) or "(none)", " ".join(self.look_notes) or "(the reviewer gave no judgement)",
+                             ("\n" + "\n".join("%s (%s)" % (w, u) for u, w in self.look_unjudged.items()) + "\n") if self.look_unjudged else ""))
+        if self.unverified:
+            parts.append(self.unverified_text())
+        section = "\n".join(parts)
+        have, old = self.existing_owner_look()
         if have:
-            args = ["update", have, "--description", body]
+            kept = [x for x in re.split(r"\n\n(?=## )", old.strip()) if x and not x.startswith(head.split(":")[0] + ":")]
+            args = ["update", have, "--description", "\n\n".join(kept + [section])]
         else:
-            args = ["create", title, "--type", "task", "--labels", LOOK_LABEL, "--no-inherit-labels", "--description", body,
-                    "--deps", "related:" + self.bead]
+            args = ["create", ("Look review: " if self.look_paths or self.look_unjudged else "Owner review: ") +
+                    (self.bead_title or self.bead), "--type", "task", "--labels", LOOK_LABEL, "--no-inherit-labels",
+                    "--description", section, "--deps", "related:" + self.bead]
             epic = self.look_epic()
             if epic:
                 args += ["--parent", epic]
@@ -3276,6 +3367,10 @@ class Engine:
             self.warn("owner-look bead %s failed: %s" % ("update" if have else "create", (r.stderr or r.stdout or "")[:300]))
         else:
             self.look_filed = True
+
+    def unverified_text(self):
+        return "Unverified, for the owner:\n" + "\n".join(
+            "- %s (%s)%s" % (u["what"], u["kind"], (": " + u["why"]) if u.get("why") else "") for u in self.unverified)
 
     def keep_evidence(self):
         """Pictures the writer saved as proof outlive the worktree: copied to the run dir, named on the bead."""
@@ -3365,6 +3460,8 @@ class Engine:
                     self.ask_path().write_text(json.dumps(a, indent=1))
             except (OSError, ValueError):
                 pass
+        if self.unverified and outcome in ("landed", "done"):
+            self.comment("Land (engine): " + self.unverified_text())
         look = [u for u in self.unchecked if u["kind"] == "other" and not self.is_look(u)]
         if look and outcome in ("landed", "done"):
             tl.bd("label", "add", self.bead, "needs-owner-check")
@@ -4001,7 +4098,10 @@ read-only commands (search, list, compare, count). Answer one entry per item, n 
 - wrong: you found a real defect; why says what is wrong and where, so a writer can fix it.
 - open: only a person can judge it (taste, a device or a screen you cannot reach, the owner's call); why says what they
   must look at.
-When in doubt, it is open: never settle an item you did not prove."""
+When in doubt, it is open: never settle an item you did not prove.
+Also give each item its kind (the engine routes by it; an open item of the wrong kind is asked or lands unseen):
+- """ + "\n- ".join(KIND_LINES) + """
+- other: none of these."""
 
 
 # ---- entry ----------------------------------------------------------------------------------------------------------
