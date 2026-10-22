@@ -66,9 +66,9 @@ class DelegateScript:
 
     def __call__(self, route, role, prompt, schema, cwd, resume, timeout, log_path, writer=None, parent="", task="",
                  title="", access="", idle=None):
-        look = tuple(engine.LOOK_FIELDS.values())  # a visual stage's schema is a copy with one more field
-        node = next(k for k, v in engine.SCHEMAS.items() if v is schema or (
-            v["required"] == [r for r in schema.get("required", []) if r not in look] and v["required"] != schema["required"]))
+        # the engine sends each contract in strict form (engine.strict), a visual stage's with its look field too
+        node = next(k for k in engine.SCHEMAS if schema in (engine.strict(engine.schema_for(k)),
+                                                             engine.strict(engine.schema_for(k, True))))
         self.calls.append((role, resume, writer))
         self.access.append((role, access))
         self.prompts.append(prompt)
@@ -3620,6 +3620,33 @@ class Validate(unittest.TestCase):
         v = engine.SCHEMAS["verify"]
         self.assertEqual(engine.validate({"items": [verdict(1, "settled", "a.cs:3")]}, v), [])
         self.assertTrue(engine.validate({"items": [verdict(1, "maybe")]}, v))
+
+    def test_every_contract_sent_is_strict_mode_valid(self):
+        """Codex (strict structured output) rejects an object whose `required` misses a property: 53 lifesim runs
+        stopped on 'Missing source' / 'Missing accept_files' (2026-10-22)."""
+        def walk(sch, path):
+            if sch.get("type") == "object":
+                self.assertIs(sch.get("additionalProperties"), False, path)
+                self.assertEqual(sorted(sch.get("required", [])), sorted(sch.get("properties", {})), path)
+                for k, v in sch.get("properties", {}).items():
+                    walk(v, path + "." + k)
+            if sch.get("type") == "array":
+                walk(sch.get("items") or {}, path + "[]")
+        for node in engine.SCHEMAS:
+            for visual in (False, True):
+                walk(engine.strict(engine.schema_for(node, visual)), "%s%s" % (node, " (visual)" if visual else ""))
+
+    def test_a_strict_answer_with_null_optionals_validates_against_the_contract(self):
+        s = engine.SCHEMAS["review"]
+        sent = engine.strict(s)
+        self.assertEqual(sent["properties"]["accept_files"]["type"], ["array", "null"])
+        got = dict(CLEAN, accept_files=None, reject_files=None,
+                   unchecked=[{"what": "x", "kind": "other", "source": None}])
+        back = engine.unstrict(got, s)
+        self.assertNotIn("accept_files", back)
+        self.assertNotIn("source", back["unchecked"][0])
+        self.assertEqual(engine.validate(back, s), [])
+        self.assertEqual(engine.SCHEMAS["review"], s)  # the contract itself is untouched
 
 
 if __name__ == "__main__":

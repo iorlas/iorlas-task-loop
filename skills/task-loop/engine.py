@@ -445,6 +445,36 @@ def schema_for(node, visual=False):
     return sch
 
 
+def strict(schema):
+    """The contract as Codex's strict structured output takes it: every object requires all its properties, and one the
+    contract leaves optional may be null instead. 53 lifesim runs stopped on 'Missing source' (2026-10-22)."""
+    sch = copy.deepcopy(schema)
+    if sch.get("type") == "object":
+        props = sch.get("properties", {})
+        for k, v in props.items():
+            v = props[k] = strict(v)
+            if k not in sch.get("required", []):
+                if isinstance(v.get("type"), str):
+                    v["type"] = [v["type"], "null"]
+                if "enum" in v:
+                    v["enum"] = list(v["enum"]) + [None]
+        sch["required"] = list(props)
+    if sch.get("type") == "array" and isinstance(sch.get("items"), dict):
+        sch["items"] = strict(sch["items"])
+    return sch
+
+
+def unstrict(data, schema):
+    """A strict answer back in the contract's shape: an optional field the worker sent as null is left out."""
+    if schema.get("type") == "object" and isinstance(data, dict):
+        props, req = schema.get("properties", {}), set(schema.get("required", []))
+        return {k: unstrict(v, props[k]) if k in props else v for k, v in data.items()
+                if not (v is None and k in props and k not in req)}
+    if schema.get("type") == "array" and isinstance(data, list):
+        return [unstrict(v, schema.get("items") or {}) for v in data]
+    return data
+
+
 def validate(data, schema, path="$"):
     """The subset of JSON Schema the contracts above use. Returns a list of errors."""
     t = schema.get("type")
@@ -1320,7 +1350,7 @@ class Engine:
             if node == "write":  # a write follows its worker's activity; the other nodes keep the wall-clock limit
                 idle = Idle(*(float(self.cfg[k]) * 60 for k in ("write_idle_warn_min", "write_idle_stop_min", "write_cap_min")),
                             on_warn=self.warn)
-            r, j = call_delegate(self.route, role, attempt_prompt, schema_for(node, visual), self.wt, resume, timeout,
+            r, j = call_delegate(self.route, role, attempt_prompt, strict(schema_for(node, visual)), self.wt, resume, timeout,
                                  self.err_path, writer, self.session, self.bead, "%s · %s: %s" % (self.bead, node, title),
                                  access=flag, **({"idle": idle} if idle else {}))
             if j is not None and j.get("v") != 2:
@@ -1408,6 +1438,8 @@ class Engine:
                 self.writer["delegate"] = resume = r.ref
                 self.writer["ctx"] = (self.sessions[-1] if self.sessions else {}).get("context_k")  # k tokens, None = unknown
                 self.writer["seen"] = self.seen_now()  # the brief and plan this session now holds
+            if r.data is not None:
+                r.data = unstrict(r.data, schema_for(node, visual))
             errs = validate(r.data, schema_for(node, visual)) if (r.data is not None and nxt is None) else [
                 "%s: %s" % (reason or "no structured output", said[:300])]
             if denied and errs:  # asking again meets the same refusal
