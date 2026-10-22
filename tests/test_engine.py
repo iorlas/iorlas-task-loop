@@ -295,6 +295,91 @@ class EngineTest(unittest.TestCase):
         res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertEqual((res[0]["exit"], res[0]["status"], res[0]["tries"]), (0, "ran", 2))
 
+    # tl-bxk.10.27: a timeout is never retried, one command runs once per block, shared waits are not budget
+    def sleeping_check(self, secs, counter):
+        code = "import time,os; p=%r; k=(int(open(p).read()) if os.path.exists(p) else 0)+1; open(p,'w').write(str(k)); time.sleep(%r)" % (
+            str(counter), secs)
+        return PY + " -c " + shlex.quote(code)
+
+    def test_a_timed_out_check_is_never_retried(self):
+        n = Path(self.tmp.name) / "runs-timeout"
+        eng = self.checks_engine(checks=[{"id": "hang", "cmd": self.sleeping_check(30, n), "group": "tests", "retry": 1}],
+                                 check_timeout_min=0.02)
+        with mock.patch.object(eng, "warn") as warn:
+            res = eng.run_checks({"checks": [], "files": []}, "s")
+        self.assertEqual((res[0]["exit"], res[0]["tries"], n.read_text()), (124, 1, "1"))
+        self.assertIn("no retry: timed out after", warn.call_args[0][0])
+
+    def test_exit_124_from_the_command_itself_is_not_retried_either(self):
+        cmd, n = self.counting_check("timeout: the command ran too long", ok_after=1)
+        cmd = cmd.replace("sys.exit(0 if", "sys.exit(124 if").replace(" else 1)", " else 124)")
+        eng = self.checks_engine(checks=[{"id": "t", "cmd": cmd, "group": "tests", "retry": 2}])
+        res = eng.run_checks({"checks": [], "files": []}, "s")
+        self.assertEqual((res[0]["tries"], n.read_text()), (1, "1"))
+
+    def test_a_checks_own_timeout_min_overrides_the_global_one(self):
+        n = Path(self.tmp.name) / "runs-own"
+        slow = self.sleeping_check(2, n)
+        eng = self.checks_engine(checks=[{"id": "short", "cmd": slow, "group": "tests", "timeout_min": 0.01}],
+                                 check_timeout_min=5)
+        self.assertEqual(eng.run_checks({"checks": [], "files": []}, "s")[0]["exit"], 124)
+        eng2 = self.checks_engine(checks=[{"id": "long", "cmd": slow, "group": "tests", "timeout_min": 0.5}],
+                                  check_timeout_min=0.01)
+        self.assertEqual(eng2.run_checks({"checks": [], "files": []}, "s")[0]["exit"], 0)
+
+    def test_a_command_repeated_in_one_block_runs_once(self):
+        cmd, n = self.counting_check("ok", ok_after=1)
+        eng = self.checks_engine(checks=[{"id": "unit", "cmd": cmd, "group": "tests"}])
+        res = eng.run_checks({"checks": [cmd, "  " + cmd + "  "], "files": []}, "s")
+        self.assertEqual([c["exit"] for c in res], [0, 0, 0])
+        self.assertEqual([bool(c.get("reused")) for c in res], [False, True, True])
+        self.assertEqual(n.read_text(), "1")
+
+    def test_a_wrapper_around_a_configured_check_reads_its_log_and_does_not_rerun_it(self):
+        cmd, n = self.counting_check("suite output line", ok_after=1)
+        wrap = "mkdir -p ev && %s > ev/out.txt 2>&1 && grep -q 'suite output line' ev/out.txt" % cmd
+        eng = self.checks_engine(checks=[{"id": "unit", "cmd": cmd, "group": "tests"}])
+        res = eng.run_checks({"checks": [wrap], "files": []}, "s")
+        self.assertEqual([c["exit"] for c in res], [0, 0])
+        self.assertEqual(n.read_text(), "1")
+        self.assertIn("suite output line", (self.wt / "ev" / "out.txt").read_text())
+
+    def test_a_wrapper_around_a_check_that_did_not_run_here_runs_in_full(self):
+        cmd, n = self.counting_check("suite output line", ok_after=1)
+        wrap = "%s > out.txt 2>&1 && grep -q 'suite output line' out.txt" % cmd
+        eng = self.checks_engine(checks=[])
+        res = eng.run_checks({"checks": [wrap], "files": []}, "s")
+        self.assertEqual((res[0]["exit"], n.read_text()), (0, "1"))
+
+    def test_reuse_passed_reads_the_log_only_for_a_redirected_or_piped_part(self):
+        log = Path(self.tmp.name) / "r.log"
+        log.write_text("x\n")
+        got, used = engine.reuse_passed("just t > f 2>&1 && grep x f; just tt > g; echo just t", {"just t": log})
+        self.assertIn("cat %s > f 2>&1" % log, got)
+        self.assertIn("just tt > g", got)
+        self.assertIn("echo just t", got)
+        self.assertEqual(used, ["just t"])
+
+    def test_a_slot_wait_in_a_check_is_not_counted_in_the_budget(self):
+        cmd, n = self.counting_check("unity-slot: unity-tests got slot 0 after 600s", ok_after=1)
+        eng = self.checks_engine(checks=[{"id": "u", "cmd": cmd, "group": "tests"}], budget_min=5)
+        eng.t0 -= 8 * 60  # eight minutes wall
+        self.assertRaises(engine.Blocked, eng.budget_check)
+        eng.run_checks({"checks": [], "files": []}, "s")
+        self.assertEqual(eng.waited, 600)
+        eng.budget_check()  # 8 min wall - 10 min waited: inside the budget
+        eng.t0 -= 8 * 60
+        with self.assertRaises(engine.Blocked) as e:
+            eng.budget_check()
+        self.assertIn("16 min wall, 10 min waiting", str(e.exception))
+
+    def test_budget_min_by_label_raises_the_budget_for_a_labelled_bead(self):
+        eng = self.checks_engine(budget_min=5, budget_min_by_label={"unity": 300})
+        eng.t0 -= 8 * 60
+        self.assertRaises(engine.Blocked, eng.budget_check)
+        eng.labels = ["unity"]
+        eng.budget_check()
+
     # tl-bxk.10.17: real lines from lifesim check logs, and the messages the bead names
     COMPILE = ["Assets/Foo.cs(180,32): error CS0246: The type or namespace name 'X' could not be found",
                "Assets/Foo.cs(1,1): error CS1002: ; expected",

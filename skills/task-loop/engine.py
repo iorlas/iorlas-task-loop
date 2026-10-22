@@ -16,6 +16,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import signal
 import stat
@@ -53,10 +54,11 @@ DEFAULTS = {
     "writer_check_max_s": 60,         # a check whose last run took longer is the engine's, never the writer's to run
     "check_timeout_min": 60,          # one check (engine.checks, a stage's check) running longer is killed, process group and all: exit 124
     "gate_timeout_min": 90,           # the same for the gate at land
+    "budget_min_by_label": {},        # {label: minutes}: a bead with a label here gets that budget_min if larger (the largest of its labels)
     "delegate": "",                   # path to delegate's route.py; "" = the newest installed iorlas-delegate
     "lane_wait_min": 10,              # how long a step waits in its slot for a lane; longer: the run pauses (slot freed)
     "untracked_ignore": [],           # globs of untracked files never staged and never listed for the review (lifesim: client/Assets/InitTestScene*.unity*)
-    "checks": [],                     # repo checks: [{id, cmd, group: static|tests|acceptance, when: [globs], retry}]
+    "checks": [],                     # repo checks: [{id, cmd, group: static|tests|acceptance, when: [globs], retry, timeout_min}]
     "host": False,                    # the work needs the host (Unity, an editor): write steps get delegate's --host
                                       # a bead label `sandbox` turns it off for one bead
     "no_sandbox": False,              # the 0.6 name of `host`, still read
@@ -1013,6 +1015,8 @@ class Engine:
     def __init__(self, bead, wt, cfg, dry_run=False, verbose=True):
         self.bead, self.wt, self.cfg, self.dry, self.verbose = bead, wt, cfg, dry_run, verbose
         self.t0 = time.time()
+        self.waited = 0.0  # seconds spent waiting for a shared resource (Unity slot, lane, editor lock): not budget_min's
+        self.labels = []
         self.cost = 0.0
         self.stats = {"writes": 0, "rounds": 0, "reviews": 0, "replans": 0, "nodes": 0, "tests_added": 0, "tests_removed": 0,
                       "tokens_in": 0, "tokens_cached": 0, "tokens_out": 0}
@@ -1192,11 +1196,31 @@ class Engine:
                 if ln:
                     say("           %s" % ln[:400])
 
+    def budget_limit_min(self):
+        """budget_min, or the largest budget_min_by_label of this bead's labels."""
+        by = self.cfg.get("budget_min_by_label") or {}
+        return max([float(self.cfg["budget_min"])] + [float(by[x]) for x in self.labels if x in by])
+
+    def spent_min(self):
+        """Minutes against the budget: wall clock without the time spent waiting for a shared resource."""
+        return (time.time() - self.t0 - self.waited) / 60
+
+    def add_wait(self, secs, what):
+        if secs > 0:
+            self.waited += secs
+            self.log("note", "waited %d min for %s: not counted in budget_min" % (secs // 60, what))
+
+    def note_slot_waits(self, text):
+        """A check's output says how long it queued for a Unity slot ("unity-slot: x got slot 0 after 686s")."""
+        for m in SLOT_WAIT.finditer(text or ""):
+            self.add_wait(int(m.group(1)), "a Unity slot")
+
     def budget_check(self):
-        mins = (time.time() - self.t0) / 60
-        if self.cost > float(self.cfg["budget_usd"]) or mins > float(self.cfg["budget_min"]):
-            raise Blocked("over budget: $%.2f of $%s, %d of %s min" % (self.cost, self.cfg["budget_usd"], mins,
-                                                                        self.cfg["budget_min"]))
+        mins, limit = self.spent_min(), self.budget_limit_min()
+        if self.cost > float(self.cfg["budget_usd"]) or mins > limit:
+            wall = (time.time() - self.t0) / 60
+            raise Blocked("over budget: $%.2f of $%s, %d of %g min (%d min wall, %d min waiting for shared resources)" % (
+                self.cost, self.cfg["budget_usd"], mins, limit, wall, self.waited // 60))
 
     # -- AI node
     def ai(self, node, title, prompt, *a, **kw):
@@ -1295,6 +1319,7 @@ class Engine:
                                 lane=j.get("lane") or "", until=time.time() + wait)
                 time.sleep(wait)
                 waited += wait
+                self.add_wait(wait, "a lane")
                 continue
             self.cost += r.cost
             denied = "; ".join("`%s`" % (d.get("input") or d.get("tool")) for d in j.get("denied") or [])
@@ -1372,7 +1397,7 @@ class Engine:
             self.warn("%s needed a retry to produce valid output" % node)
         if node != "write" and r.secs > float(self.cfg["node_timeout_min"]) * 60 * 0.6:  # a write follows its worker's activity
             self.warn("%s took %d min, close to the %s min limit" % (node, r.secs // 60, self.cfg["node_timeout_min"]))
-        spent = max(self.cost / float(self.cfg["budget_usd"]), (time.time() - self.t0) / 60 / float(self.cfg["budget_min"]))
+        spent = max(self.cost / float(self.cfg["budget_usd"]), self.spent_min() / self.budget_limit_min())
         for mark in (0.5, 0.8):
             if spent > mark and mark not in self.budget_warned:
                 self.budget_warned.add(mark)
@@ -1719,7 +1744,8 @@ class Engine:
                               "update iorlas-delegate@iorlas-marketplace) or this engine" % self.route)
             self.log("note", "workers: delegate %s (worker-run v2)" % self.route)
             self.reset(bead)
-            self.host = self.granted_host(bead.get("labels") or [])
+            self.labels = list(bead.get("labels") or [])
+            self.host = self.granted_host(self.labels)
             self.check_ask()
             self.grant_cap()
             if not has_criteria(bead):
@@ -2718,8 +2744,10 @@ class Engine:
         self.check_round += 1
         items = [{"id": c.get("id") or c["cmd"], "cmd": c["cmd"], "group": c.get("group") or "tests",
                   "when": c.get("when") or [], "retry": int(c.get("retry") or 0),
+                  "timeout": float(c.get("timeout_min") or self.cfg["check_timeout_min"]),
                   "cache": c.get("cache", True) is not False} for c in self.cfg["checks"]]
-        items += [{"id": c, "cmd": c, "group": "acceptance", "when": [], "retry": 0, "cache": False} for c in st["checks"]]
+        items += [{"id": c, "cmd": c, "group": "acceptance", "when": [], "retry": 0,
+                   "timeout": float(self.cfg["check_timeout_min"]), "cache": False} for c in st["checks"]]
         items.sort(key=lambda c: GROUPS.index(c["group"]) if c["group"] in GROUPS else 1)
         cache_path = tl.config_dir() / "check-cache" / ("%s.json" % self.bead)
         try:
@@ -2729,7 +2757,7 @@ class Engine:
         key = "%s %s" % (self.tree_hash(), self.git("rev-parse", self.cfg["base"]))
         logs = self.run_dir / "checks"
         logs.mkdir(exist_ok=True)
-        out, red, changed, passed = [], None, None, set()
+        out, red, changed, passed, ran = [], None, None, {}, {}  # passed, ran: command -> its log, its result in this block
         for n, c in enumerate(items):
             base = {"cmd": c["cmd"], "id": c["id"], "group": c["group"]}
             if red and c["group"] != red:
@@ -2742,6 +2770,14 @@ class Engine:
                                     why="no change under %s" % ", ".join(c["when"])))
                     continue
             cmd = c["cmd"]
+            if cmd.strip() in ran:  # each distinct command runs once per block (tl-bxk.10.27)
+                self.log("note", "`%s` already ran in this block: its result is reused" % cmd[:120])
+                res = dict(ran[cmd.strip()], **base)
+                res.update(cached=False, reused=True)
+                out.append(res)
+                if res["exit"] != 0:
+                    red = c["group"]
+                continue
             if c["group"] == "acceptance":  # a repo check that passed this round is not run again inside a stage check
                 cmd, used = reuse_passed(c["cmd"], passed)
                 if used:
@@ -2755,13 +2791,20 @@ class Engine:
                 while True:
                     tries += 1
                     log_name = "%02d-%s.r%d.log" % (n, re.sub(r"[^\w.-]+", "_", c["id"])[:40], self.check_round)
-                    rc, tail = self.sh(cmd, timeout=float(self.cfg["check_timeout_min"]) * 60, save=logs / log_name)
-                    if rc == 0:
-                        break
+                    t_try = time.time()
+                    rc, tail = self.sh(cmd, timeout=c["timeout"] * 60, save=logs / log_name)
                     try:
                         seen = (logs / log_name).read_text(encoding="utf-8", errors="replace")
                     except OSError:
                         seen = tail
+                    self.note_slot_waits(seen)
+                    if rc == 0:
+                        break
+                    if rc == 124:  # the engine's timeout or the command's own: a rerun hangs the same way
+                        if c["retry"]:
+                            self.warn("`%s` failed (exit 124), no retry: timed out after %g min" % (
+                                c["id"], round((time.time() - t_try) / 60, 1)))
+                        break
                     kind = failure_kind(seen)
                     if kind == "deterministic":  # a rerun fails the same way, seconds later (tl-bxk.10.17)
                         if c["retry"]:
@@ -2771,8 +2814,10 @@ class Engine:
                         for w_n, wait in enumerate(lock_waits(), 1):
                             self.warn("`%s` is held by an editor or project lock; waiting %d s (%d)" % (c["id"], wait, w_n))
                             time.sleep(wait)
-                            rc, tail = self.sh(cmd, timeout=float(self.cfg["check_timeout_min"]) * 60, save=logs / log_name)
+                            self.add_wait(wait, "an editor lock")
+                            rc, tail = self.sh(cmd, timeout=c["timeout"] * 60, save=logs / log_name)
                             seen = (logs / log_name).read_text(encoding="utf-8", errors="replace")
+                            self.note_slot_waits(seen)
                             if rc == 0 or failure_kind(seen) != "lock":
                                 break
                         if rc and failure_kind(seen) == "lock":
@@ -2788,15 +2833,17 @@ class Engine:
                 if rc == 0 and c["cache"]:  # only a pass is a fact about the tree; a failure can come from outside git (stale
                     cache.setdefault(key, {})[c["cmd"]] = res  # build output, a held editor, a flake) and must rerun
             out.append(res)
+            ran[c["cmd"].strip()] = res
             if res["exit"] == 0 and c["group"] != "acceptance" and not res.get("cached"):  # its output files are fresh
-                passed.add(" ".join(c["cmd"].split()))
+                passed[" ".join(c["cmd"].split())] = logs / log_name
             if res["exit"] != 0:
                 red = c["group"]
         for c in out:
             mark = {"ran": "✓", "failed": "✗", "skipped": "–"}[c["status"]]
             self.detail(["%s [%s] `%s` %s%s" % (mark, c["group"], c["id"], c["status"] if c["exit"] is None else
                                                 "exit %d" % c["exit"], " (" + c["why"] + ")" if c.get("why") else
-                                                " (same tree and base: earlier result)" if c.get("cached") else "")] +
+                                                " (same tree and base: earlier result)" if c.get("cached") else
+                                                " (same command ran earlier in this block)" if c.get("reused") else "")] +
                         (c["tail"].splitlines()[-3:] if c["status"] == "failed" else []))
         cache_path.parent.mkdir(exist_ok=True)
         cache_path.write_text(json.dumps({key: cache[key]} if key in cache else {}))  # only the latest tree is worth keeping
@@ -2806,8 +2853,8 @@ class Engine:
         self.log("checks", "checks round %d: %s" % (self.check_round, "%d failed" % len(bad) if bad else "green"),
                  node_id=(self.cur or {}).get("id"), round=self.check_round, items=[
                      {"id": c["id"], "cmd": c["cmd"], "group": c["group"], "exit": c["exit"], "status": c["status"],
-                      "secs": c.get("secs"), "tries": c.get("tries"), "cached": bool(c.get("cached")),
-                      "why": c.get("why") or "", "log": "" if c.get("cached") else c.get("log") or ""} for c in out])
+                      "secs": c.get("secs"), "tries": c.get("tries"), "cached": bool(c.get("cached")), "reused": bool(c.get("reused")),
+                      "why": c.get("why") or "", "log": "" if c.get("cached") or c.get("reused") else c.get("log") or ""} for c in out])
         return out
 
     def finish(self, bead):
@@ -3559,21 +3606,36 @@ def lock_holder(text, cwd):
 
 
 def reuse_passed(cmd, passed):
-    """cmd with each top-level part that is a repo check already passed this round replaced by `true`; an earlier
-    part that deletes files (rm) may remove that check's output, so from there on nothing is replaced."""
+    """cmd with each top-level part that is a repo check already passed this round replaced by `true`; a part that wraps
+    one, the check's command followed by a redirection or pipe (`just t > f 2>&1`), reads its saved log instead
+    (`cat LOG > f 2>&1`) when `passed` maps the command to that log. An earlier part that deletes files (rm) may remove
+    that check's output, so from there on nothing is replaced."""
     split = split_top(cmd)
     if not split or not passed:
         return cmd, []
     out, used, deleting = [], [], False
+    logs = passed if isinstance(passed, dict) else {}
     for part, sep in split:
         p = " ".join(part.split())
         deleting = deleting or re.match(r"(?:\S*/)?rm\b", p) is not None
+        wrapped = None
+        if p not in passed and not deleting:
+            for known in sorted(logs, key=len, reverse=True):
+                m = re.match(r"\s*" + r"\s+".join(map(re.escape, known.split())) + r"(?=\s)(?P<rest>\s*(?:\d?>>?|&>|\|(?!\|)).*)$",
+                             part, re.S)
+                if m and Path(logs[known]).exists():
+                    wrapped = (known, m.group("rest"))
+                    break
         if p in passed and not deleting:
             used.append(p)
             out.append(" true " + sep)
+        elif wrapped:
+            used.append(wrapped[0])
+            out.append(" cat %s %s" % (shlex.quote(str(logs[wrapped[0]])), wrapped[1].lstrip()) + sep)
         else:
             out.append(part + sep)
     return "".join(out).strip(), used
+SLOT_WAIT = re.compile(r"\bgot slot \S+ after (\d+) ?s\b")
 NOTABLE = re.compile(r"(?i)\b(skip|skipped|steps run|passed|failed|warnings?|errors?)\b")
 
 
