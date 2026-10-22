@@ -2457,6 +2457,87 @@ class LandReview(EngineTest):
         self.assertEqual(self.run_with(script), 0)
         self.assertEqual(self.landed(), sorted(["f.txt"] + self.STRAY))
 
+    # -- tl-bxk.10.19
+    CFG_CHECKS = [{"id": "unity-analyzers", "cmd": "just unity-analyzers", "group": "static"},
+                  {"id": "unity-tests", "cmd": "just unity-tests", "group": "tests"},
+                  {"id": "unity-play-tests", "cmd": "just unity-play-tests", "group": "tests"}]
+
+    def verifier(self, **cfg):
+        e = self.engine_at_land(**cfg)
+        e.unchecked, e.verified, e.transition, e.comment, e.outcome_of = [], [], mock.Mock(), mock.Mock(), mock.Mock()
+        e.brief_text, e.last_flag, e.work_summary = (lambda: "the task"), "", (lambda: "f.txt")
+        return e
+
+    def test_items_whose_proof_is_the_gate_or_a_stage_check_are_settled_and_never_asked(self):
+        # lifesim-5ban.1, 10-22 05:32: blocked on 'could not check: unity-analyzers/unity-tests/unity-play-tests'
+        e = self.verifier(checks=self.CFG_CHECKS, gate="just check")
+        items = [{"what": w, "kind": "tooling"} for w in (
+            "just unity-analyzers, unity-tests, unity-play-tests: engine-run, no client changes",
+            "unity-play-tests ran green", "just check is green")]
+        with mock.patch.object(e, "ai") as ai:
+            self.assertEqual(e.self_verify(items), [])
+        ai.assert_not_called()  # no verifier call: the engine proves them
+        self.assertEqual([v["verdict"] for v in e.verified], ["settled"] * 3)
+        self.assertIn("gate", e.verified[0]["evidence"])
+
+    def test_scenario_items_are_settled_only_when_a_scenario_check_is_configured(self):
+        item = [{"what": "the scenario run passes", "kind": "tooling"}]
+        e = self.verifier(checks=self.CFG_CHECKS)
+        with mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="a person")]}, None)):
+            self.assertEqual(len(e.self_verify(item)), 1)
+        e = self.verifier(checks=[{"id": "scenarios", "cmd": "just scenarios", "group": "tests"}])
+        with mock.patch.object(e, "ai") as ai:
+            self.assertEqual(e.self_verify(item), [])
+        ai.assert_not_called()
+
+    def test_a_stage_check_of_the_plan_settles_an_item_naming_it(self):
+        e = self.verifier()
+        e.plan_data["stages"][0]["checks"] = ["python3 tools/check_design.py"]
+        items = [{"what": "python3 tools/check_design.py was not run", "kind": "tooling"},
+                 {"what": "the menu reads well", "kind": "requirement"}]
+        with mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="taste")]}, None)) as ai:
+            left = e.self_verify(items)
+        self.assertEqual([u["what"] for u in left], ["the menu reads well"])
+        self.assertEqual(ai.call_count, 1)
+        self.assertNotIn("check_design", ai.call_args[0][2])
+
+    def test_an_item_naming_a_linter_the_repo_has_is_run_and_its_exit_settles_it(self):
+        (self.wt / "justfile").write_text("lint:\n    ruff check tools\n")
+        e = self.verifier()
+        item = {"what": "nobody ran `ruff check tools` on the new module", "kind": "tooling"}
+        with mock.patch.object(engine, "tool_on_path", return_value="/bin/ruff"), \
+                mock.patch.object(e, "sh", return_value=(0, "")) as sh_, mock.patch.object(e, "ai") as ai:
+            self.assertEqual(e.self_verify([item]), [])
+        self.assertEqual(sh_.call_args[0][0], "ruff check tools")
+        ai.assert_not_called()
+        self.assertEqual(e.verified[0]["verdict"], "settled")
+        self.assertIn("exit 0", e.verified[0]["evidence"])
+
+    def test_a_linter_that_fails_is_wrong_and_one_that_cannot_start_stays_with_the_verifier(self):
+        (self.wt / "justfile").write_text("lint:\n    ruff check tools\n")
+        item = {"what": "nobody ran ruff on tools/*.py", "kind": "tooling"}
+        for rc in (1, 127):
+            e = self.verifier(max_fix_rounds=0)
+            with mock.patch.object(engine, "tool_on_path", return_value="/bin/ruff"), \
+                    mock.patch.object(e, "sh", return_value=(rc, "E501 line too long")) as sh_, \
+                    mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="x")]}, None)) as ai:
+                left = e.self_verify([item])
+            self.assertEqual(sh_.call_args[0][0], "ruff check .")
+            self.assertEqual(len(left), 1)
+            if rc == 1:
+                ai.assert_not_called()
+                self.assertEqual(e.verified[0]["verdict"], "wrong")
+                self.assertIn("E501", left[0]["why"])
+            else:
+                self.assertEqual(ai.call_count, 1)
+
+    def test_shell_syntax_in_a_backticked_command_is_never_run(self):
+        e = self.engine_at_land()
+        (self.wt / "justfile").write_text("lint:\n    ruff check tools\n")
+        with mock.patch.object(engine, "tool_on_path", return_value="/bin/ruff"):
+            self.assertEqual(e.lint_command("`ruff check . ; rm -rf ~` was not run"), "ruff check .")
+            self.assertEqual(e.lint_command("`ruff check tools` was not run"), "ruff check tools")
+
 
 
 for _name in [n for n in dir(EngineTest) if n.startswith("test_")]:

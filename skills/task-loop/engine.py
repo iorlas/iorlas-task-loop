@@ -1541,21 +1541,24 @@ class Engine:
                 self.comment("Verify (engine): what the workers could not check, before land: " + "; ".join(
                     "%s: %s, %s" % (x["verdict"], x["what"], '"%s"' % x["evidence"]) for x in self.verified))
                 return []
+        gaps, failed = self.engine_settles(gaps)  # tl-bxk.10.19: what the engine proves itself is never asked
         items = "".join("%d. %s (%s)\n" % (n, u["what"], u["kind"]) for n, u in enumerate(gaps, 1))
         items += self.look_verify(gaps)
-        try:
-            d, _ = self.ai("verify", "%d unchecked item(s) before land" % len(gaps), VERIFY_PROMPT.format(
-                brief=self.brief_text(), work=self.work_summary(), evidence=self.evidence_dir,
-                where=self.where("verify"), items=items), writer_family=self.writer_family, items=len(gaps))
-        except Blocked as b:  # no verifier now is no reason to land unchecked: the owner checks them, as before
-            self.warn("could not self-verify before land, the owner checks every item: %s" % b.why[:300])
-            return gaps
-        if self.last_flag == "same_family":
-            self.warn("the check before land is from the writer's own model family (no other lane was free)")
+        d = {"items": []}
+        if gaps:
+            try:
+                d, _ = self.ai("verify", "%d unchecked item(s) before land" % len(gaps), VERIFY_PROMPT.format(
+                    brief=self.brief_text(), work=self.work_summary(), evidence=self.evidence_dir,
+                    where=self.where("verify"), items=items), writer_family=self.writer_family, items=len(gaps))
+            except Blocked as b:  # no verifier now is no reason to land unchecked: the owner checks them, as before
+                self.warn("could not self-verify before land, the owner checks every item: %s" % b.why[:300])
+                return gaps + failed
+            if self.last_flag == "same_family":
+                self.warn("the check before land is from the writer's own model family (no other lane was free)")
         said = {}
         for a in d["items"]:
             said.setdefault(a["n"], a)
-        still, wrong = [], []
+        still, wrong = [], list(failed)
         for n, u in enumerate(gaps, 1):
             a = said.get(n) or {"verdict": "open", "evidence": "", "why": "the verifier did not answer it"}
             v, why = a["verdict"], a["why"]
@@ -1593,6 +1596,66 @@ class Engine:
         if done != "accept":
             left += [dict(u, why="found wrong: %s; the fix round did not pass" % u["why"]) for u in wrong]
         return left
+
+    GATE_RUNNER = re.compile(r"^(?:just|make|npm run|npm|yarn|pnpm run|pnpm|cargo|task|poe|tox|nox)\s+")
+    LINT_DEFAULT = {"ruff": "ruff check .", "flake8": "flake8", "shellcheck": None}
+    SAFE_CMD = re.compile(r"[\w./=:,@+*~ -]+")
+
+    def gate_names(self):
+        """Names a verify item can use for a check the engine runs by itself (the gate, a configured check, a plan stage
+        check or case): its id, its command, and the command without its runner (`just unity-tests` -> unity-tests)."""
+        cmds = [self.cfg.get("gate") or ""] + [c.get("cmd", "") for c in self.cfg.get("checks") or []] + [
+            c for st in (getattr(self, "plan_data", None) or {}).get("stages") or [] for c in st["checks"]] + self.case_checks()
+        names = [str(c.get("id") or "") for c in self.cfg.get("checks") or []]
+        for c in cmds:
+            c = " ".join(c.split())
+            rest = self.GATE_RUNNER.sub("", c)
+            names += [c] + ([rest] if rest != c and ("-" in rest or "_" in rest) else [])
+        return [n.lower() for n in dict.fromkeys(names) if len(n) >= 4]
+
+    def engine_settles(self, gaps):
+        """tl-bxk.10.19: (items still to verify, items the engine found wrong). An item whose proof is the gate or a stage
+        check (matched by check id or command name) is settled as 'the gate runs it at land': the read-only verifier cannot
+        run it, and lifesim-5ban.1 stopped on 'could not check: unity-analyzers/unity-tests/unity-play-tests'. An item naming
+        a linter the repo has (ruff) is run here; its exit code settles it, a red one goes to a fix round."""
+        names, left, failed = self.gate_names(), [], []
+        for u in gaps:
+            what = " ".join(u["what"].split()).lower()
+            hit = next((n for n in names if re.search(r"(?<![\w-])%s(?![\w-])" % re.escape(n), what)), None)
+            if hit is None and re.search(r"\bscenarios?\b", what) and any("scenario" in n for n in names):
+                hit = "scenario"
+            if hit:
+                self.verified.append({"what": u["what"], "kind": u["kind"], "verdict": "settled", "why": "the gate runs it at land",
+                                      "evidence": "`%s` is a gate or stage check: the engine runs it, the gate at land (a red one "
+                                                  "goes to a fix round)" % hit})
+                continue
+            cmd = self.lint_command(u["what"])
+            if not cmd:
+                left.append(u)
+                continue
+            rc, tail = self.sh(cmd, timeout=600)
+            if rc in (126, 127):  # the tool cannot start here: nothing was proven, the verifier and the owner still judge it
+                left.append(u)
+                continue
+            out = "ran `%s`: exit %d%s" % (cmd, rc, (" " + tail[-300:]) if rc else "")
+            self.verified.append({"what": u["what"], "kind": u["kind"], "verdict": "settled" if rc == 0 else "wrong",
+                                  "evidence": out, "why": out})
+            if rc:
+                failed.append(dict(u, why=out))
+        return left, failed
+
+    def lint_command(self, what):
+        """The command the engine runs for an item naming a linter this repo uses: the backticked command if it is plain
+        words (no shell syntax), else the linter's default; "" when it names none, or the repo does not use it."""
+        for tool in tools_named(what):
+            if tool not in KNOWN_TOOLS or unused_tool("`%s`" % tool, self.wt, self.cfg):
+                continue
+            for c in re.findall(r"`([^`]+)`", what):
+                if c.split()[:1] == [tool] and self.SAFE_CMD.fullmatch(c):
+                    return c.strip()
+            if self.LINT_DEFAULT.get(tool):
+                return self.LINT_DEFAULT[tool]
+        return ""
 
     def work_summary(self):
         """The task's changed files with their line counts, untracked files included."""
