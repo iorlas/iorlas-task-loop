@@ -2351,12 +2351,34 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(self.ask()["n"], 1)
         self.assertIn("cat .env", self.blocked[0])
 
-    def test_an_owner_reason_without_denied_is_a_verify_ask_quoting_say(self):
-        bad = ans("error", "bad_request", "owner", say="HTTP 400: model gpt-x is not supported")
-        rc, _ = self.run_engine({"plan": [bad]})
+    # tl-bxk.10.31 (lifesim 2026-10-22: Codex rejected the output schema, 53 beads blocked "needs a human"): a lane that
+    # rejects the request itself is the engine's or the config's fault, never the bead's
+    BAD_SCHEMA = ("codex rejected the request: {\"type\":\"error\",\"error\":{\"message\":\"Invalid schema for response_format "
+                  "'codex_output_schema': Missing 'accept_files'.\",\"code\":\"invalid_json_schema\"},\"status\":400}")
+
+    def bad_request(self, **kw):
+        return dict({"v": 2, "status": "error", "reason": "bad_request", "next": "owner", "data": None, "family": "openai",
+                     "text": self.BAD_SCHEMA, "say": self.BAD_SCHEMA}, **kw)
+
+    def test_a_rejected_request_is_an_infrastructure_failure_that_leaves_the_bead_open_with_no_ask(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [self.bad_request()]})
         self.assertEqual(rc, 2)
-        self.assertEqual(self.ask()["kind"], "verify")
-        self.assertIn("model gpt-x is not supported", self.blocked[0])
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker"])  # no retry of a request that is malformed
+        self.assertIsNone(self.ask())
+        self.assertEqual(self.blocked, [])  # no `status blocked`, no "Blocked:" comment
+        self.assertFalse(any(c[:1] == ("update",) and "blocked" in c for c in self.bd_calls))
+        self.assertTrue(any(c[:1] == ("update",) and "open" in c and "--assignee" in c for c in self.bd_calls))
+        r = self.eng.result()
+        self.assertEqual(r["outcome"], "failed")
+        self.assertTrue(r["why"].startswith("failed: infrastructure: bad_request: codex rejected the request"), r["why"])
+        self.assertLessEqual(len(r["why"].split("bad_request: ", 1)[1]), 200)
+        self.assertIn("infrastructure", self.eng.log_path.read_text())
+
+    def test_an_invalid_json_schema_in_the_text_is_infrastructure_whatever_the_reason(self):
+        out = self.bad_request(reason="worker_failed", status="failed", next="fail")
+        rc, _ = self.run_engine({"plan": [out]})
+        self.assertEqual((rc, self.ask(), self.blocked), (2, None, []))
+        self.assertIn("infrastructure", self.eng.result()["why"])
 
     def test_the_trace_records_reason_context_and_the_lanes(self):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [ans("lane_out", "lane_out", "retry", retry_after=0), WRITE],

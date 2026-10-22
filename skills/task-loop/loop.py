@@ -636,7 +636,9 @@ def passes(repo, a, started):
         if out == "landed":
             fails = []
         elif out == "failed":
-            fails.append(bid)
+            fails.append(bid)  # an infrastructure failure counts too: one config bug stops the loop after 2 beads
+            if (r.get("why") or "").startswith("failed: infrastructure"):  # the bead is open again: others first
+                later[bid] = clock() + REST
             if len(fails) >= FAILS_TO_STOP:
                 print("STOPPED: %d failures in a row (%s); look at their logs (tl loop status) before starting again"
                       % (len(fails), ", ".join(fails)))

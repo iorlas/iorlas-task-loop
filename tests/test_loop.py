@@ -294,7 +294,7 @@ class FakeChild:
         if r is not None:
             Path(self.out).write_text(json.dumps(dict(r, bead=self.bead)))
             b = self.test.bd.beads[self.bead]
-            b["status"] = self.AFTER.get(r["outcome"], b["status"])
+            b["status"] = "open" if "infrastructure" in r.get("why", "") else self.AFTER.get(r["outcome"], b["status"])
             if b["status"] != "in_progress":
                 b["assignee"] = b["assignee"] if b["status"] == "blocked" else ""
         self.returncode = 0 if r and r["outcome"] == "landed" else 2
@@ -484,6 +484,18 @@ class Loop(LoopBase):
         self.assertEqual(self.run_loop(), 2)
         self.assertEqual([b for b, _ in self.started], ["x-1", "x-2", "x-3"])
         self.assertIn("2 failures in a row", self.out)
+
+    def test_two_infrastructure_failures_in_a_row_stop_the_loop_and_leave_the_beads_open(self):
+        # tl-bxk.10.31: Codex rejected the schema for every bead; the loop drained 53 of them. Two stop it.
+        infra = lambda: rec("failed", why="failed: infrastructure: bad_request: codex rejected the request: Invalid schema ...")
+        self.beads({"x-1": [infra()], "x-2": [infra()], "x-3": [rec("landed")]})
+        self.assertEqual(self.run_loop(), 2)
+        self.assertEqual([b for b, _ in self.started], ["x-1", "x-2"])
+        self.assertIn("2 failures in a row", self.out)
+        self.assertEqual([self.bd.beads[b]["status"] for b in ("x-1", "x-2")], ["open", "open"])
+        self.assertEqual([l["outcome"] for l in self.lines()], ["failed", "failed"])
+        self.assertIn("infrastructure", self.lines()[0]["why"])
+        self.assertFalse(loop.read_rests(str(self.repo)))  # not a pre-engine rest: the engine ran
 
     def test_a_landed_bead_ends_a_run_of_failures(self):
         self.beads({"x-1": [rec("failed")], "x-2": [rec("landed")], "x-3": [rec("failed")], "x-4": [rec("landed")]})

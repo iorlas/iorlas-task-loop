@@ -1083,6 +1083,11 @@ def call_delegate(route, role, prompt, schema, cwd, resume, timeout, log_path, w
 
 # ---- the engine -----------------------------------------------------------------------------------------------------
 
+# tl-bxk.10.31: delegate reasons (route.py REASONS) that say the request itself is malformed, and the words a lane uses for it
+INFRA_REASONS = ("bad_request",)  # not "caller": a refused resume is retried as a new thread
+INFRA_TEXT = re.compile(r"invalid_json_schema|invalid schema for response_format|unrecognized arguments|unknown argument", re.I)
+
+
 class Blocked(Exception):
     def __init__(self, why, question="", options=None):
         super().__init__(why)
@@ -1410,6 +1415,13 @@ class Engine:
                 waited += wait
                 self.add_wait(wait, "a lane")
                 continue
+            said = said or (j.get("text") or "").strip()
+            if reason in INFRA_REASONS or INFRA_TEXT.search(said):
+                # tl-bxk.10.31: the lane rejected the request itself (a schema it cannot take, an argument it does not
+                # know): the same call fails for every bead, so it is the engine's or the config's fault, never the bead's
+                self.cost += r.cost
+                self.warn("INFRASTRUCTURE FAILURE: delegate answered %s on the %s step: %s" % (reason, node, said[:300]))
+                raise Blocked("failed: infrastructure: %s: %s" % (reason, said[:200]))
             self.cost += r.cost
             denied = "; ".join("`%s`" % (d.get("input") or d.get("tool")) for d in j.get("denied") or [])
             if nxt == "owner" and not denied:
@@ -3611,6 +3623,9 @@ class Engine:
                 sha[:12], self.cfg["base"].split("/")[-1], summary or "the task's stages passed", stats)))
         elif outcome == "done":
             rc = tl.cmd_close(Args(id=self.bead, reason="done with nothing to land: " + (summary or stats)))
+        elif why.startswith("failed: infrastructure"):  # the engine's or the config's fault: the bead is as it was
+            r = tl.bd("update", self.bead, "--status", "open", "--assignee", "", "--append-notes", "Engine failed: " + why[:400])
+            rc = getattr(r, "returncode", 0)
         elif why.startswith("paused:"):  # the machine's problem (login, network, lanes), not the bead's: keep it open
             self.warn(why)
             r = tl.bd("update", self.bead, "--status", "open", "--append-notes", "Engine paused: " + why[:400])
