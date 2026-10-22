@@ -243,5 +243,48 @@ class Asks(unittest.TestCase):
                 p.wait(5)
 
 
+class LaneBanner(unittest.TestCase):
+    """What the banner says of delegate's `route.py status --json` lanes (tl-bxk.10.22)."""
+
+    def banners(self, lanes):
+        return server.lane_banners({"v": 1, "lanes": lanes})
+
+    def lane(self, **kw):
+        return dict({"family": "claude", "kind": "subscription", "out": False, "out_until": None, "notes": []}, **kw)
+
+    def test_a_logged_out_claude_lane_says_to_log_in(self):
+        b = self.banners({"CLAUDE_SUBSCRIPTION": self.lane(out=True, notes=["claude is logged out: run `claude auth login`"])})
+        self.assertEqual(b["CLAUDE_SUBSCRIPTION"]["text"], "Claude logged out: run claude auth login")
+
+    def test_a_logged_out_codex_lane_says_to_log_in(self):
+        b = self.banners({"OPENAI_SUBSCRIPTION": self.lane(family="openai", out=True, out_until=time.time() + 60,
+                                                           notes=["codex is not logged in: run codex login"])})
+        self.assertEqual(b["OPENAI_SUBSCRIPTION"]["text"], "Codex logged out: run codex login")
+
+    def test_a_limit_says_the_local_time_it_ends(self):
+        until = 1793104732
+        b = self.banners({"OPENAI_SUBSCRIPTION": self.lane(family="openai", out=True, out_until=until,
+                                                           notes=["limit refusal: try again later"])})
+        self.assertEqual(b["OPENAI_SUBSCRIPTION"]["text"], "Codex out until " + time.strftime("%H:%M", time.localtime(until)))
+
+    def test_an_out_lane_with_no_time_says_only_out(self):
+        b = self.banners({"CLAUDE_SUBSCRIPTION": self.lane(out=True)})
+        self.assertEqual(b["CLAUDE_SUBSCRIPTION"]["text"], "Claude out")
+
+    def test_a_usable_lane_and_an_out_credit_lane_get_no_banner(self):
+        b = self.banners({"CLAUDE_SUBSCRIPTION": self.lane(), "CLAUDE_CREDIT": self.lane(kind="credit", out=True)})
+        self.assertEqual(b, {})
+
+    def test_delegate_status_carries_the_text(self):
+        j = {"v": 1, "lanes": {"CLAUDE_SUBSCRIPTION": self.lane(out=True, notes=["claude is logged out: run `claude auth login`"])}}
+        server._cache.clear()
+        with mock.patch.object(server.glob, "glob", return_value=["/x/iorlas-delegate/0.35.0/skills/delegate/route.py"]), \
+                mock.patch.object(server.subprocess, "run", return_value=mock.Mock(stdout=json.dumps(j))):
+            d = server.delegate_status()
+        server._cache.clear()
+        self.assertFalse(d["ok"])
+        self.assertEqual(d["detail"]["CLAUDE_SUBSCRIPTION"]["text"], "Claude logged out: run claude auth login")
+
+
 if __name__ == "__main__":
     unittest.main()

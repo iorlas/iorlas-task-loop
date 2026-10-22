@@ -889,6 +889,16 @@ TASK_STATES = {"running": 0, "asks": 1, "paused": 2, "queued": 2, "blocked_by": 
                "landed": 5, "done": 5}
 
 
+def wait_label(recs):
+    """"waiting for Codex until 09:02" while the engine sleeps in its slot for a lane, else "". The engine logs the
+    lane_wait transition (lane, until) before it sleeps; the next step's node or transition ends the wait."""
+    last = next((r for r in reversed(recs) if r.get("kind") in ("transition", "node")), None)
+    if not last or last.get("cause") != "lane_wait" or float(last.get("until") or 0) <= time.time():
+        return ""
+    who = timeline.lane_name(last.get("lane") or "", "")
+    return ("waiting for %s until %s" % (who, timeline.hhmm(last["until"]))) if who else ""
+
+
 def task_row(bead, paths, spans, tr):
     newest = paths[-1]
     name = timeline.run_name(newest)
@@ -905,7 +915,7 @@ def task_row(bead, paths, spans, tr):
     blocked = None if alive or ask else blocker_of(bead, (span or {}).get("repo") or ask_file(bead).get("repo") or
                                                     (trace or {}).get("repo") or "")
     if alive:
-        state, label = "running", timeline.live_label(timeline.last_node(newest))
+        state, label = "running", wait_label(recs) or timeline.live_label(timeline.last_node(newest))
     elif ask:
         state, label = "asks", "waiting for your answer"
     elif blocked:
@@ -1163,6 +1173,31 @@ def asks():
     return {"asks": out, "delegate": delegate_status()}
 
 
+LOGGED_OUT = re.compile(r"logged[ _]out|not logged in", re.I)
+
+
+def lane_banners(j):
+    """name -> {until, reason, text} for each lane of `route.py status --json` that stops an unattended run. A credit lane
+    that is out, or unknown subscription use, does not: no banner. delegate 0.35 has no reason field: a logout shows as
+    out with a note."""
+    out = {}
+    for n, ln in (j.get("lanes") or {}).items():
+        if not isinstance(ln, dict) or ln.get("kind") == "credit":
+            continue
+        notes = " ".join(str(x) for x in ln.get("notes") or [])
+        gone = ln.get("reason") == "logged_out" or (ln.get("out") and LOGGED_OUT.search(notes))
+        if not (ln.get("out") or gone):
+            continue
+        who = timeline.lane_name(n, ln.get("family") or "") or str(n).lower()
+        until = ln.get("out_until")
+        if gone:
+            text = "%s logged out: run %s" % (who, "codex login" if who == "Codex" else "claude auth login")
+        else:
+            text = "%s out%s" % (who, (" until " + timeline.hhmm(until)) if until else "")
+        out[n] = {"until": until, "reason": "logged_out" if gone else ln.get("reason"), "text": text}
+    return out
+
+
 def delegate_status():
     """The banner: what delegate says about its lanes (route.py status --json v1); task-loop never reads vendors."""
     def load():
@@ -1177,13 +1212,8 @@ def delegate_status():
             j = json.loads(out[out.index("{"):])  # one object, pretty-printed or not
         except (OSError, ValueError, IndexError, subprocess.SubprocessError) as e:
             return {"ok": False, "say": "delegate status failed: %s" % e}
-        # a credit lane that is out, or unknown subscription use, does not stop an unattended run: no red banner
-        out = [n for n, ln in (j.get("lanes") or {}).items()
-               if isinstance(ln, dict) and ln.get("out") and ln.get("kind") != "credit"]
-        det = {n: {"until": ln.get("out_until"), "reason": ln.get("reason")}
-               for n, ln in (j.get("lanes") or {}).items() if isinstance(ln, dict)
-               and (ln.get("out") or ln.get("reason") == "logged_out") and ln.get("kind") != "credit"}
-        out = sorted(set(out) | set(det))
+        det = lane_banners(j)
+        out = sorted(det)
         return {"ok": not out, "out": out, "detail": det, "needs_input": j.get("needs_input") or []}
     return cached("delegate", 60, load)
 

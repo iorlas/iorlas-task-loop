@@ -55,7 +55,8 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .badge{min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--ask);color:#fff;font-size:11px;font-weight:650;display:inline-flex;align-items:center;justify-content:center}
 .badge:empty{display:none}
 .sp{flex:1}
-.lanes{display:flex;gap:6px}
+.lanes{display:flex;flex-wrap:wrap;gap:6px;max-width:1180px;margin:0 auto;padding:0 20px}
+.lanes:not(:empty){padding-top:12px}
 .lane{font-size:12px;color:var(--mute);display:flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line)}
 .lane i{width:7px;height:7px;border-radius:50%;background:var(--fail)}
 .iconbtn{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;color:var(--mute);flex:none}
@@ -237,7 +238,9 @@ pre.tail{margin:0;background:var(--sunk);border-radius:8px;padding:9px 10px;font
 /* ---- phone ---- */
 @media (max-width:720px){
   .bar-in{padding:0 12px;gap:8px;height:50px}
-  .host,.lanes{display:none}
+  .host{display:none}
+  .lanes{padding:0 12px}
+  .lanes:not(:empty){padding-top:10px}
   .nav{margin-left:auto}
   .nav a{padding:6px 9px}
   main{padding:16px 12px 70px}
@@ -322,9 +325,9 @@ button.pc.on{box-shadow:inset 0 0 0 2px var(--ring)}
     <a href="/classic" title="The three-pane log viewer">Logs</a>
   </nav>
   <span class="sp"></span>
-  <div class="lanes" id="lanes"></div>
   <button class="iconbtn" id="theme" title="Theme: auto" aria-label="Switch theme"></button>
 </div></header>
+<div class="lanes" id="lanes"></div>
 <main id="main"><div class="loading">Loading…</div></main>
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer" aria-hidden="true" role="dialog" aria-label="Block details"></aside>
@@ -408,9 +411,7 @@ function renderTop(){const open=(S.asks.asks||[]).filter(a=>!a.answered_here&&!a
   const out=(S.asks.delegate&&S.asks.delegate.out)||[];
   const det=(S.asks.delegate&&S.asks.delegate.detail)||{};
   paint($('lanes'),'lanes',out.map(n=>{const d=det[n]||{};
-    if(d.reason=='logged_out')return `<span class="lane" title="delegate says this lane is logged out"><i></i>${esc(laneName(n))} logged out: run <span class="mono">${esc(String(n).toUpperCase().includes('CLAUDE')?'claude auth login':'login')}</span></span>`;
-    const u=d.until?new Date(d.until*1000):null,hm=u&&!isNaN(u)?u.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:false}):'';
-    return `<span class="lane" title="delegate says this lane is out"><i></i>${esc(laneName(n))} out${hm?' until '+hm:''}</span>`}).join(''))}
+    return `<span class="lane" title="delegate says this lane is ${d.reason=='logged_out'?'logged out':'out'}"><i></i>${esc(d.text||laneName(n)+' out')}</span>`}).join(''))}
 function laneName(n){n=String(n).toUpperCase();return n.includes('OPENAI')||n.includes('CODEX')?'Codex':n.includes('CLAUDE')?'Claude':n.toLowerCase()}
 
 function matches(t){if(!S.q)return true;return (t.id+' '+t.title+' '+t.repo+' '+t.label+' '+t.slot).toLowerCase().includes(S.q.toLowerCase())}

@@ -243,6 +243,28 @@ class Api(unittest.TestCase):
         t = self.task()
         self.assertEqual((t["state"], t["label"]), ("paused", "paused: Codex out until 09:02"))
 
+    def test_a_running_run_waiting_for_a_lane_says_which_and_until_when(self):
+        wt = Path(self.tmp.name) / "slots" / "s1"
+        (wt / ".task").mkdir(parents=True)
+        (wt / ".task" / "engine.lock").write_text(json.dumps({"pid": os.getpid(), "bead": "x-1", "slot": "s1"}))
+        due = time.time() + 300
+        recs = [{"t": time.time() - 600, "kind": "run", "text": "run: first", "run": "x-1-20261021-120000", "bead": "x-1",
+                 "worktree": str(wt), "slot": "s1", "started_because": "first", "prev_run": "", "ask": ""},
+                {"t": time.time() - 590, "kind": "node", "text": "write: stage 1/1 write 1", "id": 3, "step": "write",
+                 "stage": 1, "stages": 1, "write": 1, "round": 1},
+                {"t": time.time() - 10, "kind": "transition", "text": "lane_wait -> write: waited", "from": 3, "to": "write",
+                 "cause": "lane_wait", "detail": "waited 5 min for a lane (lane_out)", "lane": "OPENAI_SUBSCRIPTION",
+                 "until": due}]
+        path = self.cfg / "engine" / "x-1-20261021-120000.jsonl"
+        path.write_text("".join(json.dumps(r) + "\n" for r in recs))
+        t = self.task("x-1")
+        self.assertEqual((t["state"], t["label"]), ("running", "waiting for Codex until " + timeline.hhmm(due)))
+        recs[-1]["until"] = time.time() - 5  # the wait is over: back to what the run is doing
+        path.write_text("".join(json.dumps(r) + "\n" for r in recs))
+        server._cache.clear()
+        timeline._parsed.clear()
+        self.assertEqual(self.task("x-1")["label"], "writing")
+
     def test_a_running_run_shows_its_stage_from_its_engine_lock(self):
         wt = Path(self.tmp.name) / "slots" / "s1"
         (wt / ".task").mkdir(parents=True)

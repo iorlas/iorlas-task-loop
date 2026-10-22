@@ -1097,7 +1097,7 @@ class Engine:
                 wait = min(600.0, wait)
                 self.warn("%s waits %d min (%s): %s" % (node, wait // 60, reason, said[:160]))
                 self.transition(step or node, "lane_wait", "waited %d min for a lane (%s)" % (wait // 60, reason),
-                                lane=j.get("lane") or "")
+                                lane=j.get("lane") or "", until=time.time() + wait)
                 time.sleep(wait)
                 waited += wait
                 continue

@@ -3041,6 +3041,15 @@ class DelegateLauncher(unittest.TestCase):
         self.assertIn("workspace routing discovery failed", self.eng.log_path.read_text())
         self.assertLess([c[0] for c in s.calls].count("worker"), 20)
 
+    # tl-bxk.10.22: the dashboard says which lane a run waits for and until when
+    def test_a_wait_for_a_lane_records_the_lane_and_when_it_ends(self):
+        out = ans("lane_out", "lane_out", "retry", retry_after=time.time() + 120, lane="OPENAI_SUBSCRIPTION")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [out, WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        waits = [json.loads(ln) for ln in self.eng.log_path.read_text().splitlines() if '"lane_wait"' in ln and '"transition"' in ln]
+        self.assertEqual([w["lane"] for w in waits], ["OPENAI_SUBSCRIPTION"])
+        self.assertGreater(waits[0]["until"], time.time() + 30)
+
     def test_a_failure_after_work_still_fails(self):
         worked = ans("failed", "worker_failed", "fail", tokens={"in": 90000, "cached": 0, "out": 4000}, say="codex: turn failed")
         rc, s = self.run_engine({"plan": [PLAN], "write": [worked, worked]})
