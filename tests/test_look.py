@@ -1,5 +1,6 @@
 """tl-bxk.10.23: look and feel. A visual change saves screenshots; the agent judges them; the land keeps them in the repo
 and files an owner-look bead for the owner's later round."""
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -91,11 +92,12 @@ class LookTest(unittest.TestCase):
     def test_a_look_item_is_never_asked_and_a_mismatch_goes_to_the_writer(self):
         item = {"what": LOOK_ASK, "kind": "other"}
         r = dict(CLEAN, unchecked=[item], look="front smile matches")
-        rc, s = self.go({"plan": [PLAN], "write": [WRITE], "review": [r], "verify": [
+        rc, s = self.go({"plan": [PLAN], "write": [WRITE, WRITE], "review": [r, CLEAN], "verify": [
             {"items": [verdict(1, "open", why="I cannot tell the rung")]}]}, first_shot=1, visual_paths=VISUAL)
         self.assertEqual(rc, 0, self.blocked)
         self.assertIsNone(self.ask())
         self.assertIn("never open", s.prompts[3])
+        self.assertIn("open each one and name the file", s.prompts[4])
         self.assertNotIn(("label", "add", "t-1", "needs-owner-check"), [c[:4] for c in self.bd_calls])
         # a mismatch: one fix round, no ask
         self.bd_calls.clear()
@@ -130,6 +132,115 @@ class LookTest(unittest.TestCase):
         body = c[c.index("--description") + 1]
         self.assertIn(shot, body)
         self.assertIn("matching the reference", body)
+
+    def test_a_non_visual_answer_needs_no_look_field_and_a_visual_one_does(self):
+        w = {k: v for k, v in WRITE.items() if k != "logic_only"}
+        r = {k: v for k, v in CLEAN.items() if k != "look"}
+        self.assertEqual(engine.validate(w, engine.schema_for("write")), [])
+        self.assertEqual(engine.validate(r, engine.schema_for("review")), [])
+        self.assertEqual(engine.schema_for("write"), engine.SCHEMAS["write"])
+        self.assertEqual(engine.validate(w, engine.schema_for("write", True)), ["$.logic_only: missing"])
+        self.assertEqual(engine.validate(r, engine.schema_for("review", True)), ["$.look: missing"])
+        self.assertEqual(engine.validate(WRITE, engine.schema_for("write", True)), [])
+        self.assertNotIn("logic_only", engine.SCHEMAS["write"]["properties"])  # the shared contract is not changed
+
+    def test_a_settled_look_item_must_name_a_screenshot(self):
+        item = {"what": LOOK_ASK, "kind": "other"}
+        r = dict(CLEAN, unchecked=[item], look="ok")
+        rc, s = self.go({"plan": [PLAN], "write": [WRITE, WRITE], "review": [r, CLEAN], "verify": [
+            {"items": [verdict(1, "settled", evidence="looks fine to me")]}]}, first_shot=1, visual_paths=VISUAL)
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertIsNone(self.ask())
+        self.assertIn("names no screenshot file", s.prompts[4])  # back to the writer once
+        rc, s = self.go({"plan": [PLAN], "write": [WRITE], "review": [r], "verify": [
+            {"items": [verdict(1, "settled", evidence="home-screen.png shows the button")]}]}, first_shot=1,
+            visual_paths=VISUAL)
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer", "reviewer"])
+
+    def test_an_open_look_item_goes_back_once_then_the_run_moves_on_and_the_bead_says_so(self):
+        item = {"what": LOOK_ASK, "kind": "other"}
+        r = dict(CLEAN, unchecked=[item], look="front smile")
+        opn = {"items": [verdict(1, "open", why="cannot tell the rung")]}
+        rc, s = self.go({"plan": [PLAN], "write": [WRITE, WRITE], "review": [r, r], "verify": [opn, opn]},
+                        first_shot=1, visual_paths=VISUAL, evidence_dir="design/look-reviews")
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertIsNone(self.ask())
+        self.assertEqual(len([c for c in s.calls if c[0] == "worker"]), 2)  # one fix round, not more
+        (c,) = self.creates()
+        self.assertIn("agent could not judge: cannot tell the rung", c[c.index("--description") + 1])
+
+    def test_a_re_land_updates_the_owner_look_bead_instead_of_filing_again(self):
+        bead = dict(BEAD, parent="t-0")
+        rc, s = self.go({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, first_shot=1, bead=bead,
+                        visual_paths=VISUAL, evidence_dir="design/look-reviews")
+        self.assertEqual(rc, 0, self.blocked)
+        self.bd_calls.clear()
+        self.eng.look_notes, self.eng.look_filed = ["second look"], False  # a later run
+        rows = [{"id": "t-9"}]
+        shows = {"t-9": {"id": "t-9", "dependencies": [{"id": "t-1", "dependency_type": "related"}]}}
+        real = self.fake_bd
+        def bd(*a, **kw):
+            r = real(*a, **kw)
+            if a[0] == "list":
+                r.stdout = json.dumps(rows)
+            return r
+        with mock.patch.object(tl, "bd", side_effect=bd), mock.patch.object(tl, "show", side_effect=lambda i, **k: shows.get(i, {})):
+            self.eng.file_owner_look()
+        self.assertEqual(self.creates(), [])
+        (u,) = [c for c in self.bd_calls if c[0] == "update"]
+        self.assertEqual(u[1], "t-9")
+        self.assertIn("second look", u[3])
+
+    def test_the_look_survives_a_crash_after_the_land(self):
+        with mock.patch.object(engine.Engine, "close"), mock.patch.object(engine.Engine, "file_owner_look",
+                                                                          side_effect=SystemExit):
+            with self.assertRaises(SystemExit):  # the process died after the push: no close, the checkpoint stays
+                self.go({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, look="matches")]}, first_shot=1,
+                        visual_paths=VISUAL, evidence_dir="design/look-reviews")
+        self.assertEqual(self.creates(), [])
+        saved = json.loads(self.eng.checkpoint_path().read_text())
+        self.assertEqual(saved["look_paths"], ["design/look-reviews/t-1/home-screen.png"])
+        eng2 = engine.Engine("t-1", str(self.wt), dict(self.eng.cfg))
+        eng2.reset(BEAD)
+        eng2.bead_title = "Add f"
+        eng2.resume_point()
+        self.assertEqual(eng2.look_paths, saved["look_paths"])
+        self.assertEqual(eng2.look_notes, ["matches"])
+        with mock.patch.object(tl, "show", return_value=BEAD):
+            eng2.file_owner_look()
+        self.assertEqual(len(self.creates()), 1)
+
+    def test_the_epic_is_found_by_walking_the_parents(self):
+        self.eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        self.eng.bead_parent = "t-3"
+        shows = {"t-3": {"id": "t-3", "issue_type": "feature", "parent": "t-2"},
+                 "t-2": {"id": "t-2", "issue_type": "epic", "parent": "t-0"}}
+        with mock.patch.object(tl, "show", side_effect=lambda i, **k: shows.get(i, {})):
+            self.assertEqual(self.eng.look_epic(), "t-2")
+        with mock.patch.object(tl, "show", side_effect=lambda i, **k: {}):
+            self.assertEqual(self.eng.look_epic(), "t-3")
+
+    def test_shots_are_images_capped_and_sized(self):
+        self.eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        d = self.eng.evidence_dir
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "a.png").write_bytes(b"x")
+        (d / "b.gif").write_bytes(b"x")
+        (d / "big.jpg").write_bytes(b"x" * (engine.MAX_SHOT_BYTES + 1))
+        self.assertEqual(self.eng.shots(), ["a.png"])
+        for i in range(25):
+            (d / ("m%02d.png" % i)).write_bytes(b"x")
+        self.assertEqual(len(self.eng.shots()), engine.MAX_SHOTS)
+
+    def test_no_lfs_means_no_copy(self):
+        self.eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        Path(self.wt, ".gitattributes").write_text("*.png filter=lfs diff=lfs merge=lfs -text\n")
+        with mock.patch.object(self.eng, "sh", return_value=(1, "")):
+            self.assertFalse(self.eng.lfs_ok(["a.png"]))
+        with mock.patch.object(self.eng, "sh", return_value=(0, "")):
+            self.assertTrue(self.eng.lfs_ok(["a.png"]))
+        self.assertTrue(self.eng.lfs_ok(["a.jpg"]))
 
     def test_the_dashboard_counts_owner_look_as_waits_on_you(self):
         sys.path.insert(0, str(T.ROOT / "skills" / "task-loop"))

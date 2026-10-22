@@ -65,7 +65,9 @@ class DelegateScript:
 
     def __call__(self, route, role, prompt, schema, cwd, resume, timeout, log_path, writer=None, parent="", task="",
                  title="", access=""):
-        node = next(k for k, v in engine.SCHEMAS.items() if v is schema)
+        look = tuple(engine.LOOK_FIELDS.values())  # a visual stage's schema is a copy with one more field
+        node = next(k for k, v in engine.SCHEMAS.items() if v is schema or (
+            v["required"] == [r for r in schema.get("required", []) if r not in look] and v["required"] != schema["required"]))
         self.calls.append((role, resume, writer))
         self.access.append((role, access))
         self.prompts.append(prompt)
