@@ -46,7 +46,10 @@ DEFAULTS = {
     "epic_only": False,               # true: beads under none of epic_order's epics are not taken at all
     "gate_only": [],                  # commands no plan check may run, only the gate at land: "cmd" or {cmd, why}
     "max_stages": 3,                  # a bigger plan is a split ask (ticket), unless the owner already answered one
-    "node_timeout_min": 45,
+    "node_timeout_min": 45,           # a plan, review or verify call running longer is stopped; a write follows the keys below
+    "write_idle_warn_min": 15,        # a write whose worker has been silent this long (session file, process output) is warned about
+    "write_idle_stop_min": 25,        # and stopped at this; a write whose activity cannot be seen keeps node_timeout_min
+    "write_cap_min": 120,             # a write is stopped at this however active the worker is
     "writer_check_max_s": 60,         # a check whose last run took longer is the engine's, never the writer's to run
     "check_timeout_min": 60,          # one check (engine.checks, a stage's check) running longer is killed, process group and all: exit 124
     "gate_timeout_min": 90,           # the same for the gate at land
@@ -427,15 +430,96 @@ def child_env():
 
 
 class Result:
-    def __init__(self, data=None, text="", ref="", cost=0.0, secs=0.0, error="", backend=""):
+    def __init__(self, data=None, text="", ref="", cost=0.0, secs=0.0, error="", backend="", alive=None, stop=""):
         self.data, self.text, self.ref, self.cost, self.secs, self.error, self.backend = (
             data, text, ref, cost, secs, error, backend)
+        self.alive = alive or []  # pids of a stopped call's worker that outlived every signal
+        self.stop = stop          # why the engine stopped the call ("" = it was not stopped)
 
 
-WORKER_LINE = re.compile(r"delegate: worker pid=(\d+) pgid=(\d+)")  # route.py 0.31.1+, on stderr when it starts one
+WORKER_LINE = re.compile(r"delegate: worker pid=(\d+) pgid=(\d+)(?: run_id=(\S+))?")  # route.py 0.31.1+, on stderr when it starts one
+POLL = 5  # seconds between the engine's looks at a running delegate call
 
 
-def run_proc(cmd, cwd, timeout, log_path, on_line=None, env=None):
+def agent_run_session(run_id):
+    """The worker's session file, from delegate's agent-runs v1 record of the run (docs/contracts/agent-runs-v1.md):
+    its transcript, else its Claude session or Codex thread. "" while the record or the file is not there."""
+    try:
+        rec = json.loads((tl.config_dir().parent / "agent-runs" / "runs" / (run_id + ".json")).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    if not isinstance(rec, dict):
+        return ""
+    if rec.get("transcript") and os.path.exists(rec["transcript"]):
+        return rec["transcript"]
+    if rec.get("session"):
+        return tl.transcript_of("claude", str(rec["session"]))
+    return tl.transcript_of("openai", str(rec["thread"])) if rec.get("thread") else ""
+
+
+def file_mtime(path):
+    try:
+        return os.stat(path).st_mtime
+    except OSError:
+        return None
+
+
+class Idle:
+    """The write timeout, following the worker (tl-bxk.10.20): fld.27.10, ae6v and fld.6 lost 47 min of live work to a
+    wall-clock cap while the worker waited on 5 min Unity runs. Activity is the worker's session file moving or any
+    output of the call. warn / stop: seconds without it; cap: seconds in all, active or not. A call whose session file
+    cannot be found keeps the wall-clock limit it had."""
+
+    def __init__(self, warn, stop, cap, on_warn=None, clock=time.time, mtime=file_mtime, session=agent_run_session):
+        self.warn, self.stop, self.cap, self.on_warn = warn, stop, cap, on_warn
+        self.clock, self.mtime, self.session = clock, mtime, session
+        self.t0 = self.out = 0.0
+        self.warned, self.path = None, ""
+
+    def begin(self):
+        self.t0 = self.out = self.clock()
+        self.warned, self.path = None, ""
+
+    def touch(self):  # the call printed something
+        self.out = self.clock()
+
+    def check(self, worker, wall):
+        """"" while the call may go on, else why it is stopped. worker: what route.py named (run_id once it has)."""
+        now = self.clock()
+        rid = worker.get("run_id")
+        if rid and not self.path:
+            self.path = self.session(rid)
+        seen = self.mtime(self.path) if self.path else None
+        if seen is None:
+            return "timeout %d min" % (wall // 60) if now - self.t0 >= wall else ""
+        if now - self.t0 >= self.cap:
+            return "hard cap %d min" % (self.cap // 60)
+        last = max(self.t0, self.out, seen)
+        quiet = now - last
+        if quiet >= self.stop:
+            return "no worker output for %d min" % (quiet // 60)
+        if quiet >= self.warn and self.warned != last:
+            self.warned = last
+            if self.on_warn:
+                self.on_warn("write: no worker output for %d min" % (quiet // 60))
+        return ""
+
+    def wait(self, p, worker, wall):
+        """Wait for the call to end: "" when it did, else why the engine must stop it."""
+        while True:
+            try:
+                p.wait(timeout=POLL)
+                return ""
+            except subprocess.TimeoutExpired:
+                why = self.check(worker, wall)
+                if why:
+                    return why
+
+
+def run_proc(cmd, cwd, timeout, log_path, on_line=None, env=None, idle=None, stop=None):
+    """Run a delegate call. timeout: the wall-clock limit; with `idle` (a write) it holds only while the worker's activity
+    cannot be seen. A call stopped by a limit returns (None, secs) and, in `stop`, why and the pids of its worker that
+    outlived the stop (prove_dead): the caller must not start another worker in the same tree while any lives."""
     t = time.time()
     lines, worker = [], {}
     with open(log_path, "ab") as log:
@@ -448,6 +532,8 @@ def run_proc(cmd, cwd, timeout, log_path, on_line=None, env=None):
             for raw in p.stdout:
                 ln = raw.decode("utf-8", "replace")
                 lines.append(ln)
+                if idle:
+                    idle.touch()
                 if on_line:
                     try:
                         on_line(ln)
@@ -456,6 +542,8 @@ def run_proc(cmd, cwd, timeout, log_path, on_line=None, env=None):
 
         def read_err():  # route.py's stderr to the log; its worker line says which process group to stop
             for raw in p.stderr:
+                if idle:
+                    idle.touch()
                 try:
                     log.write(raw)
                     log.flush()
@@ -464,25 +552,30 @@ def run_proc(cmd, cwd, timeout, log_path, on_line=None, env=None):
                 m = WORKER_LINE.search(raw.decode("utf-8", "replace"))
                 if m:
                     pid = int(m.group(1))
-                    worker.update(pid=pid, pgid=int(m.group(2)), start=tl.proc_start(pid))
+                    worker.update(pid=pid, pgid=int(m.group(2)), start=tl.proc_start(pid), run_id=m.group(3) or "")
                     if LOCK:
                         LOCK.note(workers=[[pid, worker["start"]]])
+        if idle:
+            idle.begin()
         readers = [threading.Thread(target=f, daemon=True) for f in (read, read_err)]
         for r in readers:
             r.start()
         stopped = False
         try:
-            p.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            stopped = True
-            stop_tree(p, log, worker)
-            for r in readers:
-                r.join(2)
-            return None, time.time() - t
-        except BaseException:  # stopped: never leave the worker running
-            stopped = True
-            stop_tree(p, log, worker)
-            raise
+            try:
+                why = idle.wait(p, worker, timeout) if idle else wait_wall(p, timeout)
+            except BaseException:  # stopped: never leave the worker running
+                stopped = True
+                stop_and_prove(p, log, worker)
+                raise
+            if why:
+                stopped = True
+                alive = stop_and_prove(p, log, worker)
+                if stop is not None:
+                    stop.update(why=why, alive=alive)
+                for r in readers:
+                    r.join(2)
+                return None, time.time() - t
         finally:
             if LOCK:
                 LOCK.note(route_pid=None, **({} if stopped else {"workers": []}))
@@ -491,7 +584,17 @@ def run_proc(cmd, cwd, timeout, log_path, on_line=None, env=None):
     return (p.returncode, "".join(lines)), time.time() - t
 
 
+def wait_wall(p, timeout):
+    """"" when the call ended within `timeout` seconds, else why it is stopped."""
+    try:
+        p.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return "timeout %d min" % (timeout // 60)
+    return ""
+
+
 STOP_GRACE = 10  # seconds route.py gets to stop its worker after a SIGTERM, before everything is SIGKILLed
+PROOF_TERM, PROOF_KILL = 5, 10  # seconds a worker that outlived the stop gets after a SIGTERM, then after a SIGKILL
 
 
 def own_ids():
@@ -592,6 +695,77 @@ def stop_tree(p, log=None, worker=None):
             log.write(("\u26a0 worker pid %s outlived the stop of its delegate call\n" % [x[0] for x in left]).encode())
         if LOCK:
             LOCK.note(workers=[[x[0], x[2]] for x in left])
+    return [x[0] for x in left]
+
+
+def stop_and_prove(p, log, worker):
+    """stop_tree, then the proof that nothing of the call is left (prove_dead). -> pids still alive."""
+    alive = stop_tree(p, log, worker)
+    if os.name != "nt":
+        alive = prove_dead(alive, worker, log)
+    if LOCK:
+        LOCK.note(workers=[[pid, tl.proc_start(pid)] for pid in alive])  # a survivor keeps the slot busy; none: free
+    return alive
+
+
+def lingering(pids, worker):
+    """[(pid, start)] of the stopped call's processes still alive: `pids`, the worker route.py named with everything under
+    it, and the members of its group. Never ours, our group's or our parent's."""
+    table = tl.proc_table()
+    ours = own_ids()
+    want = set(pids)
+    if worker.get("pid") and tl.proc_alive(worker["pid"], worker.get("start") or ""):
+        want.add(worker["pid"])
+    for pid in list(want):
+        want.update(k[0] for k in descendants(pid, table))
+    pgid = worker.get("pgid")
+    if pgid and pgid > 1 and pgid not in ours:
+        want.update(pid for pid, (_, pg, _) in table.items() if pg == pgid)
+    return [(pid, table[pid][2]) for pid in sorted(want - ours) if pid in table and tl.proc_alive(pid, table[pid][2])]
+
+
+def group_empty(pgid):
+    """No process is left in group `pgid` (a signal 0 finds nobody). False for our own group and when unsure."""
+    if not pgid or pgid <= 1 or pgid in own_ids():
+        return False
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return True
+    except OSError:
+        return False
+    return False
+
+
+def prove_dead(pids, worker, log=None):
+    """After a delegate call was stopped: look until its worker's whole tree is gone, SIGTERM then SIGKILL to what is not.
+    A group id named by route.py is only a claim (the worker may sit in another group: lifesim-fld.27.10's Claude writer
+    survived the stop and wrote on under the retry), so every survivor is also signalled by pid. -> pids still alive:
+    the caller does not start another worker in this tree."""
+    worker = worker or {}
+    if not pids and not worker.get("pid"):
+        return []  # route.py named no worker and the tree walk found none alive
+    if not pids and group_empty(worker.get("pgid")):
+        return []  # the named worker is gone and so is its group: no process-table walk needed
+    left = lingering(pids, worker)
+    for sig, secs in ((signal.SIGTERM, PROOF_TERM), (signal.SIGKILL, PROOF_KILL)):
+        if not left:
+            break
+        for pid, start in left:
+            with contextlib.suppress(RuntimeError, OSError):
+                if os.getpgid(pid) == pid:  # it leads its own group: the group is its tree
+                    send_group(pid, sig, pid=pid, start=start)
+            with contextlib.suppress(RuntimeError):
+                send_pid(pid, sig, start)
+        end = time.time() + secs
+        while left and time.time() < end:
+            left = [x for x in left if tl.proc_alive(*x)]
+            if left:
+                time.sleep(0.05)
+        left = lingering([x[0] for x in left], worker)
+    if left and log:
+        log.write(("\u26a0 worker pid %s outlived SIGTERM and SIGKILL after the stop of its delegate call\n"
+                   % [x[0] for x in left]).encode())
     return [x[0] for x in left]
 
 
@@ -782,7 +956,7 @@ def tree_problem(wt):
 
 
 def call_delegate(route, role, prompt, schema, cwd, resume, timeout, log_path, writer=None, parent="", task="",
-                  title="", access=""):
+                  title="", access="", idle=None):
     """One AI step through `route.py run` (worker-run v2). Returns (Result, the answer object or None)."""
     with tempfile.TemporaryDirectory() as d:
         bf, sf = os.path.join(d, "brief.md"), os.path.join(d, "schema.json")
@@ -797,9 +971,12 @@ def call_delegate(route, role, prompt, schema, cwd, resume, timeout, log_path, w
         if access:
             cmd.append(access)
         # unpinned: a worker's git may run on other repos; engine.assert_tree catches a redirect after the node
-        res, secs = run_proc(cmd, cwd, timeout + 120, log_path)
+        stop = {}
+        res, secs = run_proc(cmd, cwd, timeout + 120, log_path, idle=idle, stop=stop)
     if res is None:
-        return Result(secs=secs, error="timeout", backend="delegate", ref=resume or ""), None
+        why = stop.get("why") or "timeout"
+        return Result(secs=secs, error="timeout (%s)" % why, backend="delegate", ref=resume or "", alive=stop.get("alive"),
+                      stop=why), None
     code, out = res
     try:
         j = json.loads(out.strip().splitlines()[-1]) if out.strip() else None
@@ -967,7 +1144,7 @@ class Engine:
                "ref": j.get("ref") or r.ref or "", "run_id": j.get("run_id") or "", "transcript": j.get("transcript") or "",
                "family": j.get("family") or "", "lane": j.get("lane") or "", "model": j.get("model") or "",
                "effort": j.get("effort") or "", "turns": j.get("turns"), "secs": round(r.secs or 0), "cost": r.cost or 0.0, "t": time.time(),
-               "host": host, "tokens": j.get("tokens"), "denied": j.get("denied") or [],  # tokens {in, cached, out}
+               "host": host, "stopped": r.stop, "tokens": j.get("tokens"), "denied": j.get("denied") or [],  # tokens {in, cached, out}
                "reason": j.get("reason"), "next": j.get("next"), "context": j.get("context"),
                "node_id": (self.cur or {}).get("id"), "resume": bool(getattr(self, "_resume", None)), "flag": j.get("flag")}
         if self.cur and rec["ref"]:
@@ -1046,13 +1223,20 @@ class Engine:
         login_note = ""  # set once a lane answered logged_out and the engine retried afresh (delegate puts that lane out 15 min)
         while attempt <= 2:
             self._resume = resume
+            idle = None
+            if node == "write":  # a write follows its worker's activity; the other nodes keep the wall-clock limit
+                idle = Idle(*(float(self.cfg[k]) * 60 for k in ("write_idle_warn_min", "write_idle_stop_min", "write_cap_min")),
+                            on_warn=self.warn)
             r, j = call_delegate(self.route, role, attempt_prompt, schema_for(node, visual), self.wt, resume, timeout,
                                  self.err_path, writer, self.session, self.bead, "%s · %s: %s" % (self.bead, node, title),
-                                 access=flag)
+                                 access=flag, **({"idle": idle} if idle else {}))
             if j is not None and j.get("v") != 2:
                 raise Blocked("failed: delegate answered worker-run v%s, this engine speaks v2 (update task-loop or "
                               "delegate)" % j.get("v"))
             self.trace_call(node, role, attempt, r, j, bool(flag))
+            if r.alive:  # a retry would write into the tree the old worker still writes in
+                raise Blocked("failed: the %s worker (pid %s) is still alive after the stop (%s), SIGTERM and SIGKILL; "
+                              "not retrying into this worktree. Kill it, then rerun." % (node, ", ".join(map(str, r.alive)), r.stop))
             j = j or {}
             nxt, reason, said = j.get("next"), j.get("reason") or "", (j.get("say") or r.error or "").strip()
             if j and j.get("status") == "done":
