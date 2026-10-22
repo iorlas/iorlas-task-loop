@@ -69,6 +69,12 @@ DEFAULTS = {
 
 S_STR = {"type": "string"}
 S_STRS = {"type": "array", "items": S_STR}
+OPTIONS = {"type": "array", "items": {"type": "object", "additionalProperties": False,
+                                      "required": ["label", "cost", "answer", "recommended"],
+                                      "properties": {"label": S_STR, "cost": S_STR, "answer": S_STR,
+                                                     "recommended": {"type": "boolean"}}}}
+OPTIONS_RULE = ("options: with a question, 2-4 answers the owner can click, each a short label, a one-line cost, the exact "
+                "answer text the next run will read, and recommended (true for exactly one: yours); empty with no question.")
 LEFTOVERS = {"type": "array", "items": {"type": "object", "additionalProperties": False,
                                         "properties": {"title": S_STR, "why": S_STR}, "required": ["title", "why"]}}
 UNCHECKED_KINDS = ("requirement", "number", "deletion", "link", "case", "tooling")  # one of these unchecked stops the land
@@ -325,7 +331,7 @@ FRESH_WRITER_TEXT = ("\nYou take over from an earlier writer of this task, on an
 
 SCHEMAS = {
     "plan": {"type": "object", "additionalProperties": False,
-             "required": ["summary", "stages", "risks", "question", "decided", "cases", "leftovers"],
+             "required": ["summary", "stages", "risks", "question", "options", "decided", "cases", "leftovers"],
              "properties": {
                  "summary": S_STR, "decided": S_STR,
                  "stages": {"type": "array", "items": {
@@ -334,14 +340,14 @@ SCHEMAS = {
                  "risks": {"type": "array", "items": {"type": "object", "additionalProperties": False,
                                                       "required": ["what", "check"],
                                                       "properties": {"what": S_STR, "check": S_STR}}},
-                 "question": S_STR,
+                 "question": S_STR, "options": OPTIONS,
                  "cases": {"type": "array", "items": {"type": "object", "additionalProperties": False,
                                                       "required": ["criterion", "check"],
                                                       "properties": {"criterion": S_STR, "check": S_STR}}},
                  "leftovers": LEFTOVERS}},
     "write": {"type": "object", "additionalProperties": False,
-              "required": ["summary", "checks_run", "question", "decided", "bad_checks", "new_cases", "unchecked"],
-              "properties": {"summary": S_STR, "question": S_STR, "decided": S_STR,
+              "required": ["summary", "checks_run", "question", "options", "decided", "bad_checks", "new_cases", "unchecked"],
+              "properties": {"summary": S_STR, "question": S_STR, "options": OPTIONS, "decided": S_STR,
                              "unchecked": {"type": "array", "items": {
                                  "type": "object", "additionalProperties": False, "required": ["what", "kind"],
                                  "properties": {"what": S_STR, "kind": {"type": "string", "enum": list(UNCHECKED_KINDS) + ["other"]}}}},
@@ -355,7 +361,7 @@ SCHEMAS = {
                                  "type": "object", "additionalProperties": False, "required": ["cmd", "exit"],
                                  "properties": {"cmd": S_STR, "exit": {"type": "integer"}}}}}},
     "review": {"type": "object", "additionalProperties": False,
-               "required": ["findings", "unmet", "question", "decided", "leftovers", "unchecked"],
+               "required": ["findings", "unmet", "question", "options", "decided", "leftovers", "unchecked"],
                "properties": {"unchecked": {"type": "array", "items": {
                        "type": "object", "additionalProperties": False, "required": ["what", "kind"],
                        "properties": {"what": S_STR, "kind": {"type": "string", "enum": list(UNCHECKED_KINDS) + ["other"]}}}},
@@ -364,7 +370,7 @@ SCHEMAS = {
                    "properties": {"file": S_STR, "line": {"type": "integer"},
                                   "severity": {"type": "string", "enum": ["high", "medium", "low"]},
                                   "fix": S_STR}}},
-                   "unmet": S_STRS, "question": S_STR, "decided": S_STR, "leftovers": LEFTOVERS,
+                   "unmet": S_STRS, "question": S_STR, "options": OPTIONS, "decided": S_STR, "leftovers": LEFTOVERS,
                    "accept_files": S_STRS, "reject_files": S_STRS}},  # optional: unexplained new files the review accepts into the commit / rejects as strays
     "verify": {"type": "object", "additionalProperties": False, "required": ["items"],
                "properties": {"items": {"type": "array", "items": {
@@ -998,9 +1004,9 @@ def call_delegate(route, role, prompt, schema, cwd, resume, timeout, log_path, w
 # ---- the engine -----------------------------------------------------------------------------------------------------
 
 class Blocked(Exception):
-    def __init__(self, why, question=""):
+    def __init__(self, why, question="", options=None):
         super().__init__(why)
-        self.why, self.question = why, question
+        self.why, self.question, self.options = why, question, options or []
 
 
 class Engine:
@@ -1753,7 +1759,7 @@ class Engine:
             self.drop_checkpoint()
         except Blocked as b:
             outcome = "failed" if b.why.startswith("failed:") else "blocked"
-            why, question = b.why, b.question
+            why, question, self.blocked_options = b.why, b.question, b.options
         except Exception as e:  # the close-out must run whatever broke
             outcome, why = "failed", "failed: engine error %s: %s" % (type(e).__name__, e)
         finally:
@@ -2177,7 +2183,7 @@ class Engine:
         self.plan_data = data
         if data["question"].strip():
             self.outcome_of("asks", data["question"][:200])
-            raise Blocked("owner decision needed", data["question"])
+            raise Blocked("owner decision needed", data["question"], data.get("options"))
         self.outcome_of("%d stage%s" % (len(data["stages"]), "" if len(data["stages"]) == 1 else "s"),
                         data["summary"][:200])
         if not data["stages"]:
@@ -2247,7 +2253,8 @@ class Engine:
             n = 1
         a = {"v": 1, "id": "%s-%d" % (self.bead, n), "n": n, "bead": self.bead, "kind": kind,
              "question": (question or why)[:4000], "why": why[:4000], "run": self.log_path.stem, "t": time.time(),
-             "parks_at": time.time() + 3 * 86400, "brief": self.brief_hash, "status": "open"}
+             "parks_at": time.time() + 3 * 86400, "brief": self.brief_hash, "status": "open",
+             "options": ask_options(kind, why, getattr(self, "blocked_options", None))}
         common = self.git("rev-parse", "--path-format=absolute", "--git-common-dir")
         a.update(repo=str(Path(common).parent) if common else str(self.wt),
                  title=(getattr(self, "bead_title", "") or "")[:200])
@@ -2472,7 +2479,7 @@ class Engine:
                 continue
             if w["question"].strip():
                 self.outcome_of("asks", w["question"][:200])
-                raise Blocked("owner decision needed", w["question"])
+                raise Blocked("owner decision needed", w["question"], w.get("options"))
             self.add_cases(w.get("new_cases") or [])
             checks = self.run_checks(dict(st, checks=st["checks"] + (self.case_checks() if last else [])), name,
                                      round=rounds + 1, **where)
@@ -2558,7 +2565,7 @@ class Engine:
                     review["decided"], review["question"])]
             elif review["question"].strip():
                 self.outcome_of("asks", review["question"][:200])
-                raise Blocked("owner decision needed", review["question"])
+                raise Blocked("owner decision needed", review["question"], review.get("options"))
             blocking = [f for f in review["findings"] if f["severity"] in ("high", "medium")]
             said = "%d finding%s, %d unmet" % (len(blocking), "" if len(blocking) == 1 else "s", len(review["unmet"]))
             if not blocking and not review["unmet"]:
@@ -3378,6 +3385,34 @@ def ask_kind(why):
     return "stuck"
 
 
+def ask_options(kind, why, given=None):
+    """The answers the dashboard offers as buttons: {label, answer, note?, recommended?, edit?}. Only answers the engine
+    handles: a verify ask's "right" lands it (confirms); the re-plan cap's "allow one more" is read by grant_cap; any
+    other answer to an over-budget ask resumes the run from its checkpoint with a fresh budget. A decision's come from
+    the model, which writes the answer text; the rest have no button: the free text box only."""
+    if kind == "decision":
+        out = []
+        for o in given or []:
+            if not isinstance(o, dict) or not str(o.get("label") or "").strip() or not str(o.get("answer") or "").strip():
+                continue
+            out.append({"label": o["label"].strip()[:120], "answer": o["answer"].strip()[:1000]})
+            if str(o.get("cost") or "").strip():
+                out[-1]["note"] = o["cost"].strip()[:300]
+            if o.get("recommended"):
+                out[-1]["recommended"] = True
+        return out[:4]
+    if kind == "verify":
+        return [{"label": "Right", "answer": "right", "recommended": True},
+                {"label": "Wrong", "answer": "wrong: ", "edit": True, "note": "Opens the text box: say what is wrong"}]
+    if kind == "stuck" and why.startswith(REPLAN_CAP):
+        return [{"label": "Allow one more planner run", "answer": "allow one more",
+                 "note": "The bead plans once more; or split it, or comment what the plan keeps missing"}]
+    if kind == "stuck" and why.startswith("over budget"):
+        return [{"label": "Run again", "answer": "run again",
+                 "note": "Goes on from where it stopped, with a fresh budget (the budget counts per run)"}]
+    return []
+
+
 ENGINE_LABELS = ("needs-owner-check",)
 
 
@@ -3711,7 +3746,7 @@ each stage has its files and its checks. Budget: about 12 tool calls. Then plan.
 - question: empty, unless the task cannot be done without a decision only the owner can make (product direction,
   scope, a hard-to-reverse architecture choice). Decide technical choices yourself. If you ask, write the question
   so it can be answered from a phone: what you found, the decision, 2-3 options with costs, your recommendation.
-""" + DECIDED_RULE
+""" + OPTIONS_RULE + "\n" + DECIDED_RULE
 
 WRITE_PROMPT = """You are the writer for one stage of a task, in an unattended engine. Nobody is watching.
 
@@ -3739,7 +3774,7 @@ measurement): save the exact commands and their output as files in {evidence}/ a
 Only that proof goes there, never your own runs of the checks.
 Rules: no suppressions; do not weaken, skip or delete tests; stay inside the
 stage. question: empty unless only the owner can decide something about the task itself (then explain it for a
-phone); never a question about tools or access.""" + "\n" + DECIDED_RULE
+phone); never a question about tools or access.""" + "\n" + OPTIONS_RULE + "\n" + DECIDED_RULE
 
 REVIEW_PROMPT = """You review one stage of a task, from another model family than the writer. Do not edit files.
 <task>
@@ -3766,7 +3801,7 @@ Return:
   by the evidence is met; never list a remark that something is fine.
 - question: empty, unless only the owner can decide something about the task itself (then explain it for a phone:
   what you found, the options, your recommendation).
-- leftovers: real follow-up work you noticed outside this task, else empty.""" + "\n" + DECIDED_RULE
+- leftovers: real follow-up work you noticed outside this task, else empty.""" + "\n" + OPTIONS_RULE + "\n" + DECIDED_RULE
 
 NEW_FILES_TEXT = ("\nUnexplained new files: untracked, and no stage lists them nor the writer names them. They are NOT in the "
                   "commit unless you accept them, and they are moved out of the tree before the land gate. Decide EVERY one: "

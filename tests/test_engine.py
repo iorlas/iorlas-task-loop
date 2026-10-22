@@ -26,11 +26,11 @@ PY = '"%s"' % sys.executable
 HAS_F = PY + ' -c "import os,sys; sys.exit(0 if os.path.exists(\'f.txt\') else 1)"'
 FALSE = PY + ' -c "import sys; sys.exit(1)"'
 PLAN = {"summary": "do it", "stages": [{"goal": "add f", "files": ["f.txt"], "checks": [HAS_F],
-                                        "hard": False}], "risks": [], "question": "", "decided": "", "cases": [], "leftovers": []}
-WRITE = {"summary": "wrote f", "checks_run": [{"cmd": "test -f f.txt", "exit": 0}], "question": "", "decided": "", "bad_checks": [],
+                                        "hard": False}], "risks": [], "question": "", "options": [], "decided": "", "cases": [], "leftovers": []}
+WRITE = {"summary": "wrote f", "checks_run": [{"cmd": "test -f f.txt", "exit": 0}], "question": "", "options": [], "decided": "", "bad_checks": [],
          "new_cases": [], "unchecked": [], "logic_only": ""}
 ROUTE = "/h/.claude/plugins/cache/m/iorlas-delegate/%s/skills/delegate/route.py"
-CLEAN = {"findings": [], "unmet": [], "question": "", "decided": "", "leftovers": [], "unchecked": [], "look": ""}
+CLEAN = {"findings": [], "unmet": [], "question": "", "options": [], "decided": "", "leftovers": [], "unchecked": [], "look": ""}
 CONTRACT = {"worker_run": 2, "features": ["reason", "next", "context"], "reasons": {},
             "lanes": {"codex": {"hidden": ["every skill"]}, "claude": {"hidden": ["skills"]}}}
 
@@ -1022,7 +1022,7 @@ class EngineTest(unittest.TestCase):
     # -- checkpoints: a rerun resumes where the last run stopped, never from scratch
     TWO = {"summary": "two", "stages": [{"goal": "stage one", "files": ["f.txt"], "checks": [HAS_F], "hard": False},
                                         {"goal": "stage two", "files": ["f.txt"], "checks": [HAS_F], "hard": False}],
-           "risks": [], "question": "", "decided": "", "cases": [], "leftovers": []}
+           "risks": [], "question": "", "options": [], "decided": "", "cases": [], "leftovers": []}
 
     def stop_at(self, role, nth):
         """The nth call of a role is where the engine is stopped (SIGTERM raises Blocked in the main thread)."""
@@ -1528,6 +1528,62 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(s.calls[0][0], "planner")
         self.assertEqual(self.ask()["status"], "answered")
+
+    # Denis 2026-10-22: every ask offers answers to click
+    CHOICES = [{"label": "Build it", "cost": "about 4 stages", "answer": "A: build the slice now", "recommended": False},
+               {"label": "Keep parked", "cost": "none", "answer": "B: keep it parked", "recommended": True},
+               {"label": "", "cost": "x", "answer": "dropped: no label", "recommended": False}]
+
+    def test_a_decision_ask_carries_the_options_the_planner_gave(self):
+        rc, _ = self.run_engine({"plan": [dict(PLAN, question="Build now or park?", options=self.CHOICES)]})
+        self.assertEqual(rc, 2)
+        self.assertEqual(self.ask()["options"], [
+            {"label": "Build it", "answer": "A: build the slice now", "note": "about 4 stages"},
+            {"label": "Keep parked", "answer": "B: keep it parked", "note": "none", "recommended": True}])
+
+    def test_a_writer_or_reviewer_decision_carries_its_options_too(self):
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which?", options=self.CHOICES[:2])]})
+        self.assertEqual(rc, 2)
+        self.assertEqual([o["answer"] for o in self.ask()["options"]], ["A: build the slice now", "B: keep it parked"])
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, question="Which?", options=self.CHOICES[:2])]})
+        self.assertEqual(rc, 2)
+        self.assertEqual(len(self.ask()["options"]), 2)
+
+    def test_a_decision_without_options_gets_the_text_box_only(self):
+        self.run_engine({"plan": [dict(PLAN, question="Old format or new?")]})
+        self.assertEqual(self.ask()["options"], [])
+
+    def test_the_decision_schemas_require_options(self):
+        for node in ("plan", "write", "review"):
+            sch = engine.SCHEMAS[node]
+            self.assertIn("options", sch["required"])
+            self.assertEqual(sch["properties"]["options"]["items"]["required"], ["label", "cost", "answer", "recommended"])
+            self.assertIn("options: with a question, 2-4 answers", {"plan": engine.PLAN_PROMPT, "write": engine.WRITE_PROMPT,
+                                                                     "review": engine.REVIEW_PROMPT}[node])
+        ok = {"label": "A", "cost": "c", "answer": "a", "recommended": True}
+        self.assertEqual(engine.validate(dict(PLAN, options=[ok]), engine.SCHEMAS["plan"]), [])
+        bare = {k: v for k, v in PLAN.items() if k != "options"}
+        self.assertEqual(engine.validate(bare, engine.SCHEMAS["plan"]), ["$.options: missing"])
+        self.assertEqual(engine.validate(dict(PLAN, options=[{"label": "A"}]), engine.SCHEMAS["plan"]),
+                         ["$.options[0].cost: missing", "$.options[0].answer: missing", "$.options[0].recommended: missing"])
+
+    def test_a_verify_ask_offers_right_and_a_wrong_that_opens_the_box(self):
+        r = dict(CLEAN, unchecked=[{"what": "the cited spec link did not open", "kind": "link"}])
+        self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r], "verify": [STILL_OPEN]})
+        right, wrong = self.ask()["options"]
+        self.assertEqual((right["label"], right["answer"]), ("Right", "right"))
+        self.assertTrue(engine.confirms(right["answer"]))  # the engine reads it as accept
+        self.assertEqual((wrong["label"], wrong["answer"], wrong["edit"]), ("Wrong", "wrong: ", True))
+        self.assertFalse(engine.confirms(wrong["answer"] + "the link is dead"))
+
+    def test_an_over_budget_ask_offers_a_rerun_and_the_cap_ask_offers_one_more(self):
+        self.run_engine({"plan": [PLAN], "write": [WRITE]}, budget_usd=0.6)
+        self.assertEqual([o["answer"] for o in self.ask()["options"]], ["run again"])
+        a = engine.ask_options("stuck", engine.REPLAN_CAP + "3 times")
+        self.assertEqual([o["answer"] for o in a], ["allow one more"])
+        self.assertIn("allow", a[0]["answer"])  # what grant_cap reads
+        self.assertEqual(engine.ask_options("stuck", "stage 1 stuck: checks red"), [])
+        self.assertEqual(engine.ask_options("ticket", "ticket: no criteria"), [])
 
     def test_an_unchecked_requirement_stops_the_land_with_a_verify_ask(self):
         r = dict(CLEAN, unchecked=[{"what": "the cited spec link did not open", "kind": "link"}])
