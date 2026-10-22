@@ -2000,6 +2000,82 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(env["DELEGATE_DEPTH"], "1")
 
 
+class FailureBriefAndDurations(unittest.TestCase):
+    FIX = Path(__file__).parent / "fixtures" / "checks"
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.home = Path(self.tmp.name)
+        self.env = mock.patch.dict(os.environ, {"HOME": str(self.home), "XDG_CONFIG_HOME": str(self.home / "cfg"),
+                                                "APPDATA": str(self.home / "cfg")})
+        self.env.start()
+        self.run_dir = self.home / "run"
+        (self.run_dir / "checks").mkdir(parents=True)
+        for f in self.FIX.glob("*.log"):
+            (self.run_dir / "checks" / f.name).write_text(f.read_text())
+
+    def tearDown(self):
+        self.env.stop()
+        self.tmp.cleanup()
+
+    def test_analyzer_noise_is_dropped_and_the_real_error_comes_first(self):
+        out = engine.failure_brief([dict(cmd="c", exit=1, log="checks/unity-analyzers.log")], self.run_dir, lines=2)
+        self.assertIn("error MA0051", out)
+        self.assertNotIn("UAC0005", out)
+
+    def test_zero_errors_line_is_not_a_hit(self):
+        out = engine.failure_brief([dict(cmd="c", exit=1, log="checks/unity-analyzers.log")], self.run_dir)
+        self.assertEqual(out.count("0 Error(s)"), 1)  # only as the log's last line, never ranked as an error
+
+    def test_a_timeout_says_so_and_keeps_the_logs_last_line(self):
+        out = engine.failure_brief([dict(cmd="just check", exit=124, secs=600, log="checks/timeout.log")], self.run_dir)
+        self.assertIn("timed out after 600 s", out)
+        self.assertIn("(timed out after 600 s: the engine stopped it", out)
+        killed = engine.failure_brief([dict(cmd="just check", exit=-9, secs=30, log="checks/timeout.log")], self.run_dir)
+        self.assertIn("timed out after 30 s", killed)
+
+    def test_a_missing_log_says_none_and_a_long_cmd_is_cut(self):
+        out = engine.failure_brief([dict(cmd="x" * 500, exit=1, tail="boom: error")], self.run_dir)
+        self.assertIn("log: none", out)
+        self.assertNotIn("x" * 301, out)
+
+    def test_the_last_traceback_frame_is_kept(self):
+        (self.run_dir / "tb.log").write_text(
+            'Traceback (most recent call last):\n  File "a.py", line 1, in <module>\n    f()\n'
+            '  File "b.py", line 9, in f\n    g()\nValueError: bad\n')
+        out = engine.failure_brief([dict(cmd="c", exit=1, log="tb.log")], self.run_dir)
+        self.assertIn('File "b.py", line 9, in f\n    g()', out)
+
+    def _runs(self, *items):
+        d = self.home / "cfg" / "task-loop" / "runs" / ("r%d" % len(list((self.home / "cfg" / "task-loop").glob("runs/*"))))
+        d.mkdir(parents=True)
+        (d / "engine-checks.json").write_text(json.dumps(list(items)))
+
+    def _secs(self):
+        e = mock.Mock(log_path=self.home / "none" / "t-1.jsonl", bead="t")
+        return engine.Engine.check_secs(e, self.home / "cfg" / "task-loop")
+
+    def test_durations_come_from_all_runs_and_a_quick_failure_does_not_hide_a_slow_pass(self):
+        self._runs({"cmd": "just  unity-analyzers", "exit": 0, "secs": 140})
+        self._runs({"cmd": "just unity-analyzers", "exit": 1, "secs": 9})
+        self._runs({"cmd": "just lint", "exit": 1, "secs": 40}, {"cmd": "just lint", "exit": 1, "secs": 7})
+        cache = self.home / "cfg" / "task-loop" / "check-cache"
+        cache.mkdir()
+        (cache / "b.json").write_text(json.dumps({"k": {"just fmt": {"cmd": "just fmt", "exit": 0, "secs": 3}}}))
+        secs = self._secs()
+        self.assertEqual(secs["just unity-analyzers"], 140)
+        self.assertEqual(secs["just lint"], 40)  # nothing passed: the longest run
+        self.assertEqual(secs["just fmt"], 3)
+        e = mock.Mock(cfg={"writer_check_max_s": 60})
+        self.assertTrue(engine.Engine.engine_only(e, "just unity-analyzers", secs))
+        self.assertFalse(engine.Engine.engine_only(e, "just lint", secs))
+
+    def test_check_build_and_dotnet_commands_without_history_are_engine_only(self):
+        e = mock.Mock(cfg={"writer_check_max_s": 60})
+        for cmd in ("just check", "dotnet test", "dotnet build", "just build"):
+            self.assertTrue(engine.Engine.engine_only(e, cmd, {}), cmd)
+
+
 class Outcome(unittest.TestCase):
     """What run-task tells the loop (tl loop): landed, parked, paused, failed or taken, as one JSON record."""
     setUp, tearDown, fake_bd, run_engine = EngineTest.setUp, EngineTest.tearDown, EngineTest.fake_bd, EngineTest.run_engine

@@ -1613,7 +1613,7 @@ class Engine:
                 self.warn("%s: write %d (round %d)" % (name, n, rounds + 1))
             w, wfam = self.ai("write", "%s write %d" % (name, n), WRITE_PROMPT.format(
                 brief=self.brief_text(), plan=self.plan_text(), n=i + 1, goal=st["goal"],
-                files=", ".join(st["files"]), checks="\n".join("- " + c for c in st["checks"]) or "- (none named)",
+                files=", ".join(st["files"]), checks=self.stage_checks_text(st["checks"]),
                 feedback=feedback, evidence=self.evidence_dir, where=self.where("write", [c["cmd"] for c in self.cfg["checks"]] + st["checks"], failed_cmds), gate=(" (`%s`)" % self.cfg["gate"]) if self.cfg["gate"] else "",
                 rules=("\nRead %s first: this repo's rules for work in your sandbox (what runs there, what does not)."
                        % (Path(self.wt) / self.cfg["worker_rules"])) if self.cfg["worker_rules"] else "") +
@@ -1740,11 +1740,39 @@ class Engine:
                 "".join("- unmet: %s\n" % u for u in review["unmet"]),
                 "".join("- %s:%s [%s] %s\n" % (f["file"], f["line"], f["severity"], f["fix"]) for f in blocking)))
 
-    def check_secs(self):
-        """{cmd: seconds of its last run}, from the checks records of this bead's run logs (this run and earlier ones)."""
-        secs = {}
-        logs = sorted(self.log_path.parent.glob("%s-*.jsonl" % self.bead))
-        for path in logs:
+    def check_secs(self, config_dir=None):
+        """{normalized cmd: seconds}: the longest run that passed, else the longest run at all. Read from every run's
+        engine-checks*.json and every check-cache file under the config dir (all beads), else from the checks records
+        of this bead's run logs."""
+        base = Path(config_dir) if config_dir else tl.config_dir()
+        seen = {}  # cmd -> ([passed secs], [all secs])
+
+        def add(c):
+            if not isinstance(c, dict) or c.get("secs") is None or not c.get("cmd") or c.get("exit") is None:
+                return
+            try:
+                secs = float(c["secs"])
+            except (TypeError, ValueError):
+                return
+            got = seen.setdefault(norm_cmd(c["cmd"]), ([], []))
+            got[1].append(secs)
+            if c["exit"] == 0:
+                got[0].append(secs)
+
+        def load(path):
+            try:
+                return json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                return None
+
+        for path in sorted(base.glob("runs/*/engine-checks*.json")):
+            for c in load(path) or []:
+                add(c)
+        for path in sorted(base.glob("check-cache/*.json")):
+            for by_cmd in (load(path) or {}).values():
+                for c in by_cmd.values() if isinstance(by_cmd, dict) else ():
+                    add(c)
+        for path in sorted(self.log_path.parent.glob("%s-*.jsonl" % self.bead)):
             try:
                 lines = path.read_text(encoding="utf-8").splitlines()
             except OSError:
@@ -1757,17 +1785,31 @@ class Engine:
                 except ValueError:
                     continue
                 for c in items:
-                    if c.get("secs") is not None and not c.get("cached") and c.get("cmd"):
-                        secs[c["cmd"]] = c["secs"]
-        return secs
+                    if not c.get("cached"):
+                        add(c)
+        return {cmd: max(p or a) for cmd, (p, a) in seen.items()}
 
     def engine_only(self, cmd, secs):
-        """A check the writer must not run: its last run took over engine.writer_check_max_s, or it never ran and
-        looks like a Unity, play or full test run."""
-        s = secs.get(cmd)
+        """A check the writer must not run: its longest passing run (else longest run) took over engine.writer_check_max_s,
+        or it never ran and looks like a Unity, play, full test, check or build run."""
+        s = secs.get(norm_cmd(cmd), secs.get(cmd))
         if cmd == self.cfg.get("gate"):
             return True
         return s > float(self.cfg["writer_check_max_s"]) if s is not None else bool(SLOW_CMD.search(cmd))
+
+    def stage_checks_text(self, checks):
+        """The stage's check list split for the writer: the fast ones it may run, the slow ones the engine runs alone."""
+        if not checks:
+            return "- (none named)"
+        secs = self.check_secs()
+        slow = [c for c in checks if self.engine_only(c, secs)]
+        fast = [c for c in checks if c not in slow]
+        text = ""
+        if fast:
+            text += "You may run these:\n" + "\n".join("- " + c for c in fast)
+        if slow:
+            text += ("\n" if text else "") + "The engine runs these, do not run them:\n" + "\n".join("- " + c for c in slow)
+        return text
 
     def where(self, node, checks=(), failed=None):
         """What the step is for, never what its sandbox allows: delegate tells each worker that (worker-run v2).
@@ -2399,32 +2441,56 @@ def compact(checks):
     return "\n".join(out) or "- (no checks)"
 
 
-SLOW_CMD = re.compile(r"(?i)(?<![a-z])(unity|play|test[-_]all)")
+SLOW_CMD = re.compile(r"(?i)(?<![a-z])(unity|play|test[-_]all|check|build|dotnet)")
 ERR_LINE = re.compile(r"(?i:error|fail|exception|assert)|: E")
+NOISE_LINE = re.compile(r"\b0 Error|\bwarning [A-Z]+\d+:")
+STRONG_LINE = re.compile(r"\berror [A-Z]*\d+|: error")
+FRAME_LINE = re.compile(r'^\s*File ".*", line \d+')
+
+
+def norm_cmd(cmd):
+    return " ".join(str(cmd).split())
 
 
 def failure_brief(checks, run_dir, each=6000, total=12000, lines=40):
-    """The failing checks for a fix brief: command, log path, then the error lines of the saved log (deduplicated, up to
-    `lines`, newline layout kept), else its last `lines` lines. `each` bytes per check, `total` for all."""
+    """The failing checks for a fix brief: command (cut at 300 chars), log path ("none" when no log), then the error lines
+    of the saved log (noise dropped, real compiler errors first, deduplicated, up to `lines`, newline layout kept), else
+    its last `lines` lines; the last python traceback frame; then always the log's last line (a timeout says so there).
+    `each` bytes per check, `total` for all; a cut never drops that last part."""
     out, left = [], total
     for c in checks:
         log = Path(run_dir, c["log"]) if c.get("log") else None
         try:
             text = log.read_text(encoding="utf-8", errors="replace") if log else c.get("tail") or ""
         except OSError:
-            text = c.get("tail") or ""
+            text, log = c.get("tail") or "", None
         rows = [ln.rstrip() for ln in text.splitlines() if ln.strip()]
-        hits = list(dict.fromkeys(ln for ln in rows if ERR_LINE.search(ln)))[:lines]
-        body = "\n".join(hits or rows[-lines:])
-        head = "- `%s` exit %s\n  log: %s" % (c["cmd"], c.get("exit"), log or "(none saved)")
+        hits = list(dict.fromkeys(ln for ln in rows if ERR_LINE.search(ln) and not NOISE_LINE.search(ln)))
+        hits = ([ln for ln in hits if STRONG_LINE.search(ln)] + [ln for ln in hits if not STRONG_LINE.search(ln)])[:lines]
+        body = hits or [ln for ln in rows if not NOISE_LINE.search(ln)][-lines:]
+        frames = [i for i, ln in enumerate(rows) if FRAME_LINE.match(ln)]
+        if frames:
+            body = [ln for ln in rows[frames[-1]:frames[-1] + 2] if ln not in body] + body
+        code = c.get("exit")
+        end = []
+        if isinstance(code, int) and (code == 124 or code < 0):
+            secs = c.get("secs")
+            end.append("timed out after %s s" % (int(secs) if isinstance(secs, (int, float)) else "?"))
+        if rows and rows[-1] not in body:
+            end.append(rows[-1])
+        cmd = c["cmd"] if len(c["cmd"]) <= 300 else c["cmd"][:300] + "..."
+        head = "- `%s` exit %s\n  log: %s" % (cmd, code, log or "none")
         room = min(each, left)
         if room <= 0:
             out.append(head + "\n  (output left out: see the log)")
             continue
-        if len(body) > room:
-            body = body[:room] + "\n... (cut: see the log)"
-        left -= len(body)
-        out.append(head + ("\n" + body if body else ""))
+        tail = "\n".join(end)
+        main = "\n".join(body)
+        if len(main) > max(room - len(tail), 0):
+            main = main[:max(room - len(tail), 0)] + "\n... (cut: see the log)"
+        text = "\n".join(x for x in (main, tail) if x)
+        left -= len(text)
+        out.append(head + ("\n" + text if text else ""))
     return "\n".join(out) or "- (no checks)"
 
 
@@ -2535,7 +2601,7 @@ WRITE_PROMPT = """You are the writer for one stage of a task, in an unattended e
 </plan>
 Your stage: {n}: {goal}{rules}
 Files: {files}
-The stage's checks (the engine runs all of them after you):
+The stage's checks (the engine runs all of them after you; the split says which you may run):
 {checks}
 {where}
 Never run the gate{gate} or the issue tracker (bd): the engine runs the gate, and its run is the one that counts.
