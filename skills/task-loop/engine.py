@@ -478,7 +478,7 @@ class Idle:
 
     def begin(self):
         self.t0 = self.out = self.clock()
-        self.warned, self.path = None, ""
+        self.warned, self.path, self.active = None, "", None
 
     def touch(self):  # the call printed something
         self.out = self.clock()
@@ -490,11 +490,12 @@ class Idle:
         if rid and not self.path:
             self.path = self.session(rid)
         seen = self.mtime(self.path) if self.path else None
-        if seen is None:
-            return "timeout %d min" % (wall // 60) if now - self.t0 >= wall else ""
+        if seen is None:  # never seen, or lost: the wall limit from the start, and no sooner than `stop` after the last sign
+            end = self.t0 + wall if self.active is None else max(self.t0 + wall, self.active + self.stop)
+            return "timeout %d min" % (wall // 60) if now >= end else ""
         if now - self.t0 >= self.cap:
             return "hard cap %d min" % (self.cap // 60)
-        last = max(self.t0, self.out, seen)
+        last = self.active = max(self.t0, self.out, seen)
         quiet = now - last
         if quiet >= self.stop:
             return "no worker output for %d min" % (quiet // 60)
@@ -700,26 +701,31 @@ def stop_tree(p, log=None, worker=None):
 
 def stop_and_prove(p, log, worker):
     """stop_tree, then the proof that nothing of the call is left (prove_dead). -> pids still alive."""
+    tree = []
+    if os.name != "nt":  # looked at before the stop: a child in a session of its own is reparented to init by it
+        tree = descendants(p.pid, tl.proc_table())
     alive = stop_tree(p, log, worker)
     if os.name != "nt":
-        alive = prove_dead(alive, worker, log)
+        alive = prove_dead(alive, worker, log, tree)
     if LOCK:
         LOCK.note(workers=[[pid, tl.proc_start(pid)] for pid in alive])  # a survivor keeps the slot busy; none: free
     return alive
 
 
-def lingering(pids, worker):
-    """[(pid, start)] of the stopped call's processes still alive: `pids`, the worker route.py named with everything under
-    it, and the members of its group. Never ours, our group's or our parent's."""
+def lingering(pids, worker, tree=()):
+    """[(pid, start)] of the stopped call's processes still alive: `pids`, `tree` (what ran under route.py before the stop,
+    as descendants() lists it: still the same process when the start time matches), the worker route.py named with
+    everything under it, and the members of its group while the worker leads it. Never ours, our group's or our parent's."""
     table = tl.proc_table()
     ours = own_ids()
-    want = set(pids)
+    want = set(pids) | {pid for pid, _, start in tree if tl.proc_alive(pid, start)}
     if worker.get("pid") and tl.proc_alive(worker["pid"], worker.get("start") or ""):
         want.add(worker["pid"])
     for pid in list(want):
         want.update(k[0] for k in descendants(pid, table))
     pgid = worker.get("pgid")
-    if pgid and pgid > 1 and pgid not in ours:
+    if pgid and pgid > 1 and pgid not in ours and tl.proc_alive(worker.get("pid"), worker.get("start") or ""):
+        # only while the leader is the process route.py named: a dead worker's group id may be an unrelated group's now
         want.update(pid for pid, (_, pg, _) in table.items() if pg == pgid)
     return [(pid, table[pid][2]) for pid in sorted(want - ours) if pid in table and tl.proc_alive(pid, table[pid][2])]
 
@@ -737,24 +743,22 @@ def group_empty(pgid):
     return False
 
 
-def prove_dead(pids, worker, log=None):
+def prove_dead(pids, worker, log=None, tree=()):
     """After a delegate call was stopped: look until its worker's whole tree is gone, SIGTERM then SIGKILL to what is not.
     A group id named by route.py is only a claim (the worker may sit in another group: lifesim-fld.27.10's Claude writer
     survived the stop and wrote on under the retry), so every survivor is also signalled by pid. -> pids still alive:
     the caller does not start another worker in this tree."""
     worker = worker or {}
-    if not pids and not worker.get("pid"):
-        return []  # route.py named no worker and the tree walk found none alive
-    if not pids and group_empty(worker.get("pgid")):
-        return []  # the named worker is gone and so is its group: no process-table walk needed
-    left = lingering(pids, worker)
+    if not pids and not any(tl.proc_alive(pid, start) for pid, _, start in tree):
+        if not worker.get("pid") or group_empty(worker.get("pgid")):
+            return []  # nothing of the tree lives, and the named worker's group is empty: no process-table walk needed
+    left = lingering(pids, worker, tree)
     for sig, secs in ((signal.SIGTERM, PROOF_TERM), (signal.SIGKILL, PROOF_KILL)):
         if not left:
             break
         for pid, start in left:
-            with contextlib.suppress(RuntimeError, OSError):
-                if os.getpgid(pid) == pid:  # it leads its own group: the group is its tree
-                    send_group(pid, sig, pid=pid, start=start)
+            with contextlib.suppress(RuntimeError, OSError):  # its own group too: Claude's background shells sit in one
+                send_group(os.getpgid(pid), sig, pid=pid, start=start)
             with contextlib.suppress(RuntimeError):
                 send_pid(pid, sig, start)
         end = time.time() + secs
@@ -762,7 +766,7 @@ def prove_dead(pids, worker, log=None):
             left = [x for x in left if tl.proc_alive(*x)]
             if left:
                 time.sleep(0.05)
-        left = lingering([x[0] for x in left], worker)
+        left = lingering([x[0] for x in left], worker, tree)
     if left and log:
         log.write(("\u26a0 worker pid %s outlived SIGTERM and SIGKILL after the stop of its delegate call\n"
                    % [x[0] for x in left]).encode())
@@ -1359,7 +1363,7 @@ class Engine:
         d = r.data
         if attempt > 1:
             self.warn("%s needed a retry to produce valid output" % node)
-        if r.secs > float(self.cfg["node_timeout_min"]) * 60 * 0.6:
+        if node != "write" and r.secs > float(self.cfg["node_timeout_min"]) * 60 * 0.6:  # a write follows its worker's activity
             self.warn("%s took %d min, close to the %s min limit" % (node, r.secs // 60, self.cfg["node_timeout_min"]))
         spent = max(self.cost / float(self.cfg["budget_usd"]), (time.time() - self.t0) / 60 / float(self.cfg["budget_min"]))
         for mark in (0.5, 0.8):

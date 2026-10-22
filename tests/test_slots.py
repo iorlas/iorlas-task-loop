@@ -540,15 +540,13 @@ class StoppedEngineKillsItsWorker(unittest.TestCase):
         self.stop_during("ignores", "sigterm")
         self.assertTrue(self.gone(self.worker_pid()))
 
-    def test_a_named_worker_goes_with_route_py_and_no_tree_walk_is_needed(self):
-        with mock.patch.object(tl, "proc_table", side_effect=AssertionError("walked the tree")):
-            self.stop_during("kills", "sigterm", names=True)
+    def test_a_named_worker_goes_with_route_py(self):
+        self.stop_during("kills", "sigterm", names=True)
         self.assertTrue(self.gone(self.worker_pid()))
         self.assertIn("delegate: worker pid=", (self.d / "err.log").read_text())
 
     def test_a_named_worker_of_a_route_py_that_ignores_the_stop_is_killed_by_its_group(self):
-        with mock.patch.object(tl, "proc_table", side_effect=AssertionError("walked the tree")):
-            self.stop_during("ignores", "sigterm", names=True)
+        self.stop_during("ignores", "sigterm", names=True)
         self.assertTrue(self.gone(self.worker_pid()))
 
     def test_a_node_timeout_kills_the_worker_too(self):

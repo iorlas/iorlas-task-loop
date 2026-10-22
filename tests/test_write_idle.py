@@ -159,6 +159,48 @@ class WriteFollowsTheWorker(unittest.TestCase):
         self.assertIn("25 min", r.error)
 
 
+SESSION_ROUTE = textwrap.dedent('''
+    import subprocess, sys, time
+    d = sys.argv[1]
+    # claude's run_in_background shells (Unity, servers) sit in a session and group of their own, under the worker
+    worker = "import subprocess, sys, time\\nc = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'], start_new_session=True)\\n" \\
+             "open(sys.argv[1], 'w').write(str(c.pid))\\ntime.sleep(60)\\n"
+    w = subprocess.Popen([sys.executable, "-c", worker, d + "/child.pid"], start_new_session=True)
+    open(d + "/w.pid", "w").write(str(w.pid))
+    time.sleep(60)
+''')
+
+
+@unittest.skipUnless(POSIX, "process groups")
+class ChildInItsOwnSession(unittest.TestCase):
+    def test_a_child_in_its_own_session_under_the_worker_is_dead_after_the_stop(self):
+        with tempfile.TemporaryDirectory() as d:
+            Path(d, "route.py").write_text(SESSION_ROUTE)
+            p = subprocess.Popen([sys.executable, str(Path(d, "route.py")), d], start_new_session=True)
+            self.addCleanup(p.wait)
+            for _ in range(100):
+                if Path(d, "child.pid").exists() and Path(d, "child.pid").read_text():
+                    break
+                time.sleep(0.05)
+            w, c = int(Path(d, "w.pid").read_text()), int(Path(d, "child.pid").read_text())
+            self.assertNotEqual(os.getpgid(c), os.getpgid(w))
+            worker = {"pid": w, "pgid": w, "start": tl.proc_start(w)}
+            try:
+                with mock.patch.object(engine, "STOP_GRACE", 1), mock.patch.object(engine, "PROOF_TERM", 1), \
+                        mock.patch.object(engine, "PROOF_KILL", 2):
+                    alive = engine.stop_and_prove(p, None, worker)
+                self.assertEqual(alive, [])
+                for _ in range(60):
+                    if not tl.proc_alive(c):
+                        break
+                    time.sleep(0.05)
+                self.assertFalse(tl.proc_alive(c))
+            finally:
+                for pid in (c, w):
+                    with __import__("contextlib").suppress(OSError):
+                        os.kill(pid, 9)
+
+
 class IdleRules(unittest.TestCase):
     def watch(self, mtime, **kw):
         self.warns, self.t = [], [0.0]
@@ -184,6 +226,18 @@ class IdleRules(unittest.TestCase):
         self.t[0] = 25 * MIN
         self.assertIn("25 min", w.check({"run_id": "r"}, 47 * MIN))
 
+    def test_a_session_file_that_was_seen_and_is_lost_is_not_instant_idleness(self):
+        seen = [30 * MIN]
+        w = self.watch(lambda p: seen[0])
+        self.t[0] = 31 * MIN
+        self.assertEqual(w.check({"run_id": "r"}, 47 * MIN), "")
+        seen[0] = None  # the file is gone; the worker was active at 30 min
+        for at in (48, 54):
+            self.t[0] = at * MIN
+            self.assertEqual(w.check({"run_id": "r"}, 47 * MIN), "", at)  # past the wall limit, inside 25 min of the last sign
+        self.t[0] = 56 * MIN
+        self.assertIn("timeout", w.check({"run_id": "r"}, 47 * MIN))
+
     def test_without_a_run_id_the_wall_clock_decides(self):
         w = self.watch(lambda p: 0.0)
         self.t[0] = 46 * MIN
@@ -194,6 +248,22 @@ class IdleRules(unittest.TestCase):
 
 
 class ProveDead(unittest.TestCase):
+    TABLE = {888: (1, 900, "x")}  # a stranger in group 900
+
+    def lingering(self, table, worker):
+        alive = lambda pid, start="": pid in table and (not start or table[pid][2] == start)  # noqa: E731
+        with mock.patch.object(tl, "proc_table", return_value=table), mock.patch.object(tl, "proc_alive", side_effect=alive):
+            return engine.lingering([], worker)
+
+    def test_a_reused_group_id_with_another_leader_is_not_ours_to_signal(self):
+        worker = {"pid": 777, "pgid": 900, "start": "old"}
+        self.assertEqual(self.lingering(self.TABLE, worker), [])  # the worker is gone
+        self.assertEqual(self.lingering({**self.TABLE, 777: (1, 900, "new")}, worker), [])  # its pid reused
+
+    def test_the_group_of_a_live_leader_is_ours(self):
+        worker = {"pid": 777, "pgid": 900, "start": "old"}
+        self.assertEqual(self.lingering({**self.TABLE, 777: (1, 900, "old")}, worker), [(777, "old"), (888, "x")])
+
     def test_it_never_signals_the_engine_its_group_or_its_parent(self):
         table = {os.getpid(): (os.getppid(), os.getpgrp(), "a"), os.getppid(): (1, os.getpgid(os.getppid()), "b"),
                  777: (1, 777, "c")}
@@ -251,6 +321,15 @@ class SurvivorBlocksTheRetry(te.EngineTest):
         self.assertEqual((seen["worker"].warn, seen["worker"].stop, seen["worker"].cap), (15 * MIN, 25 * MIN, 120 * MIN))
         self.assertIsNone(seen["planner"])
         self.assertIsNone(seen["reviewer"])
+
+    def test_a_write_under_the_idle_rules_gets_no_close_to_the_limit_warning(self):
+        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        r = engine.Result(te.CLEAN, secs=40 * 60)
+        eng.anomalies("write", r, 1)
+        eng.anomalies("review", r, 1)
+        warned = [json.loads(x)["text"] for x in Path(eng.log_path).read_text().splitlines() if '"warn"' in x]
+        self.assertEqual(len(warned), 1)  # the review's, not the write's
+        self.assertTrue(warned[0].startswith("review took"))
 
 
 for _name in dir(te.EngineTest):  # the engine fixture only: not every test of its class again
