@@ -101,6 +101,7 @@ class SlotGitTest(unittest.TestCase):
         eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
         self.assertEqual(os.path.realpath(eng.git("rev-parse", "--show-toplevel")), str(self.wt))
         (self.wt / "f.txt").write_text("f\n")
+        eng.writer_said = "added f.txt"  # an untracked file is staged only when the writer names it (tl-bxk.10.24)
         self.assertEqual(eng.stage_all(check=True), 0)
         staged = sh("git", "--git-dir", str(self.repo / ".git" / "worktrees" / "s1"), "--work-tree", str(self.wt),
                     "diff", "--cached", "--name-only", cwd=self.wt)
@@ -110,6 +111,7 @@ class SlotGitTest(unittest.TestCase):
         eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
         (self.wt / "a.txt").unlink()
         (self.wt / "new file.txt").write_text("n\n")
+        eng.writer_said = "added new file.txt"
         self.assertEqual(eng.stage_all(check=True), 0)
         self.assertEqual(sh("git", "diff", "--cached", "--name-status", cwd=self.wt).split("\n"),
                          ["D\ta.txt", "A\tnew file.txt"])

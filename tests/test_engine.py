@@ -2377,6 +2377,92 @@ class EngineTest(unittest.TestCase):
         self.assertNotIn("Linked beads", a)
 
 
+class StrayWriteScript(DelegateScript):
+    """A writer whose play-mode run leaves Unity's scene and its .meta behind (lifesim-fld.6)."""
+
+    def __call__(self, route, role, prompt, schema, cwd, resume, timeout, log_path, *a, **kw):
+        if role == "worker":
+            d = Path(cwd, "client", "Assets")
+            d.mkdir(parents=True, exist_ok=True)
+            (d / "InitTestScene123.unity").write_text("scene\n")
+            (d / "InitTestScene123.unity.meta").write_text("meta\n")
+        return super().__call__(route, role, prompt, schema, cwd, resume, timeout, log_path, *a, **kw)
+
+
+class LandReview(EngineTest):
+    """tl-bxk.10.24 untracked files, tl-bxk.10.19 verify items the engine settles, tl-bxk.10.18 the stage diff."""
+    STRAY = ["client/Assets/InitTestScene123.unity", "client/Assets/InitTestScene123.unity.meta"]
+
+    def engine_at_land(self, **cfg):
+        c = engine.load_cfg(str(self.wt))
+        c.update(cfg)
+        e = engine.Engine("t-1", str(self.wt), c)
+        e.plan_data = {"stages": [{"goal": "g", "files": ["f.txt", "docs/"], "checks": [], "hard": False}]}
+        return e
+
+    def staged(self):
+        return sorted(tl.git("diff", "--cached", "--name-only", cwd=str(self.wt)).split())
+
+    def make_files(self, *names):
+        for n in names:
+            (self.wt / n).parent.mkdir(parents=True, exist_ok=True)
+            (self.wt / n).write_text("x\n")
+
+    def run_with(self, script):
+        with mock.patch.object(engine, "find_route", return_value="/r.py"), mock.patch.object(engine, "contract", return_value=CONTRACT), \
+                mock.patch.object(engine, "call_delegate", script), mock.patch.object(engine.time, "sleep"):
+            self.eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+            return self.eng.run()
+
+    def landed(self):
+        return sorted(tl.git("show", "--name-only", "--format=", "origin/main", cwd=str(self.wt)).split())
+
+    def test_stage_all_stages_tracked_changes_and_the_files_a_stage_lists_but_not_a_stray(self):
+        self.make_files("f.txt", "docs/a/b.md", "docs/a/b.md.meta", *self.STRAY)
+        (self.wt / "a.txt").write_text("changed\n")
+        e = self.engine_at_land()
+        self.assertEqual(e.stage_all(), 0)
+        self.assertEqual(self.staged(), ["a.txt", "docs/a/b.md", "docs/a/b.md.meta", "f.txt"])
+        self.assertEqual(e.new_by_kind()["unexplained"], self.STRAY)
+
+    def test_an_untracked_file_the_writer_names_or_a_review_accepts_is_staged(self):
+        self.make_files("g.txt", *self.STRAY)
+        e = self.engine_at_land()
+        e.writer_said = "I also added g.txt for the fixture"
+        e.accepted_new = [self.STRAY[0]]  # the .meta follows its file
+        e.stage_all()
+        self.assertEqual(self.staged(), sorted(["g.txt"] + self.STRAY))
+
+    def test_untracked_ignore_globs_are_never_staged_nor_listed_even_when_a_stage_lists_the_folder(self):
+        self.make_files("docs/keep.md", "docs/junk.tmp", *self.STRAY)
+        e = self.engine_at_land(untracked_ignore=["client/Assets/InitTestScene*.unity*", "*.tmp"])
+        e.accepted_new = [self.STRAY[0]]
+        e.stage_all()
+        self.assertEqual(self.staged(), ["docs/keep.md"])
+        kinds = e.new_by_kind()
+        self.assertEqual((kinds["unexplained"], sorted(kinds["ignored"])), ([], sorted(["docs/junk.tmp"] + self.STRAY)))
+
+    def test_a_stray_scene_is_listed_for_the_review_and_left_out_of_the_land(self):
+        script = StrayWriteScript({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(self.run_with(script), 0)
+        brief = next(p for c, p in zip(script.calls, script.prompts) if c[0] == "reviewer")
+        self.assertIn("Unexplained new files", brief)
+        for p in self.STRAY:
+            self.assertIn("- " + p, brief)
+        self.assertEqual(self.landed(), ["f.txt"])
+
+    def test_a_stray_scene_the_reviewer_accepts_lands_with_its_meta(self):
+        script = StrayWriteScript({"plan": [PLAN], "write": [WRITE],
+                                   "review": [dict(CLEAN, accept_files=[self.STRAY[0], "no/such"])]})
+        self.assertEqual(self.run_with(script), 0)
+        self.assertEqual(self.landed(), sorted(["f.txt"] + self.STRAY))
+
+
+
+for _name in [n for n in dir(EngineTest) if n.startswith("test_")]:
+    setattr(LandReview, _name, None)  # the inherited tests run once, in EngineTest
+
+
 class FailureBriefAndDurations(unittest.TestCase):
     FIX = Path(__file__).parent / "fixtures" / "checks"
 

@@ -52,6 +52,7 @@ DEFAULTS = {
     "gate_timeout_min": 90,           # the same for the gate at land
     "delegate": "",                   # path to delegate's route.py; "" = the newest installed iorlas-delegate
     "lane_wait_min": 10,              # how long a step waits in its slot for a lane; longer: the run pauses (slot freed)
+    "untracked_ignore": [],           # globs of untracked files never staged and never listed for the review (lifesim: client/Assets/InitTestScene*.unity*)
     "checks": [],                     # repo checks: [{id, cmd, group: static|tests|acceptance, when: [globs], retry}]
     "host": False,                    # the work needs the host (Unity, an editor): write steps get delegate's --host
                                       # a bead label `sandbox` turns it off for one bead
@@ -360,7 +361,8 @@ SCHEMAS = {
                    "properties": {"file": S_STR, "line": {"type": "integer"},
                                   "severity": {"type": "string", "enum": ["high", "medium", "low"]},
                                   "fix": S_STR}}},
-                   "unmet": S_STRS, "question": S_STR, "decided": S_STR, "leftovers": LEFTOVERS}},
+                   "unmet": S_STRS, "question": S_STR, "decided": S_STR, "leftovers": LEFTOVERS,
+                   "accept_files": S_STRS}},  # optional: unexplained new files the review accepts into the commit
     "verify": {"type": "object", "additionalProperties": False, "required": ["items"],
                "properties": {"items": {"type": "array", "items": {
                    "type": "object", "additionalProperties": False, "required": ["n", "verdict", "evidence", "why"],
@@ -833,6 +835,8 @@ class Engine:
         self.look_filed = False
         self.look_unjudged, self.look_retried, self.shots_skipped = {}, set(), set()  # unjudged: item -> why
         self.filed = []       # leftover titles filed by an earlier run on this checkpoint: a replan naming one again is no new bead
+        self.writer_said = "" # the writer's answers so far: a new file they name is meant (tl-bxk.10.24)
+        self.accepted_new = []  # untracked files a review accepted into the commit
         self.done = []        # goals of the stages accepted on this branch, across plans and runs
         self.accepted = []    # their indices in the current plan
         self.brief_hash = ""
@@ -1223,20 +1227,53 @@ class Engine:
             raise Blocked("failed: `%s` exit %d\n%s" % (cmd, rc, tail))
         return rc, tail
 
-    def stage_all(self, check=False):
-        """Stage the slot's own changes: exactly the paths `git status --porcelain` lists under the pinned env, never a
-        bare `git add -A` (tl-bxk.10.12). Returns the exit code."""
-        self.log("cmd", "git add -A (the slot's own status paths)")
+    def slot_status(self):
+        """(tracked paths changed, untracked paths, git's result) from the slot's own `git status`."""
         st = tl.run_git(self.wt, "status", "--porcelain", "-z", "--untracked-files=all", capture_output=True)
-        parts, paths = st.stdout.decode("utf-8", "surrogateescape").split("\0"), []
+        parts, paths, new = st.stdout.decode("utf-8", "surrogateescape").split("\0"), [], []
         k = 0
         while k < len(parts):
             e = parts[k]
             k += 1
             if len(e) > 3:
-                paths.append(e[3:])
+                (new if e[:2] == "??" else paths).append(e[3:])
                 if e[0] in "RC":  # the next entry is the path it came from: gone from the tree, staged already
                     k += 1
+        return paths, new, st
+
+    def new_file_kind(self, path):
+        """tl-bxk.10.24: "ignored" (engine.untracked_ignore: never staged, never listed), "meant" (a plan stage lists it or
+        its folder in files, the writer's answer names it, or a review accepted it) or "unexplained" (left out of the
+        commit, listed in the review brief). A .meta follows the file it belongs to."""
+        p = path.replace("\\", "/")
+        if any(fnmatch.fnmatchcase(p, g) for g in self.cfg.get("untracked_ignore") or []):
+            return "ignored"
+        if p in self.look_paths or p.startswith(".task/"):  # the look flow's own screenshot copies (copy_looks) are meant
+            return "meant" if p in self.look_paths else "ignored"
+        for q in (p, p[:-5]) if p.endswith(".meta") else (p,):
+            if q in self.accepted_new or q + ".meta" in self.accepted_new or q in self.writer_said:
+                return "meant"
+            for st in (getattr(self, "plan_data", None) or {}).get("stages") or []:
+                for f in st["files"]:
+                    f = f.strip().replace("\\", "/")
+                    f = "" if f in (".", "./") else f[2:] if f.startswith("./") else f
+                    if f and (q == f or q.startswith(f.rstrip("/") + "/") or fnmatch.fnmatchcase(q, f)):
+                        return "meant"
+        return "unexplained"
+
+    def new_by_kind(self):
+        out = {"ignored": [], "meant": [], "unexplained": []}
+        for p in self.slot_status()[1]:
+            out[self.new_file_kind(p)].append(p)
+        return out
+
+    def stage_all(self, check=False):
+        """Stage the slot's own changes: exactly the paths `git status --porcelain` lists under the pinned env, never a
+        bare `git add -A` (tl-bxk.10.12). Tracked changes always; an untracked file only when a stage meant it
+        (new_file_kind, tl-bxk.10.24). Returns the exit code."""
+        self.log("cmd", "git add -A (the slot's own status paths)")
+        paths, new, st = self.slot_status()
+        paths += [p for p in new if self.new_file_kind(p) == "meant"]
         rc = st.returncode
         if rc == 0 and paths:
             r = tl.run_git(self.wt, "--literal-pathspecs", "add", "-A", "--pathspec-from-file=-", "--pathspec-file-nul",
@@ -1849,6 +1886,7 @@ class Engine:
                "writer_family": self.writer_family or "", "brief": self.brief_hash, "head": self.git("rev-parse", "HEAD"),
                "unchecked": self.unchecked, "filed": self.filed,
                "look_paths": self.look_paths, "look_notes": self.look_notes, "look_unjudged": self.look_unjudged,
+               "writer_said": self.writer_said, "accepted_new": self.accepted_new,
                "closed": False,
                "run": self.log_path.stem, "t": time.time(), **at}
         p = self.checkpoint_path()
@@ -1909,6 +1947,8 @@ class Engine:
         self.replans, self.fixes = int(ck.get("replans") or 0), int(ck.get("fixes") or 0)
         self.denials = list(ck.get("denials") or [])
         self.filed = list(ck.get("filed") or [])
+        self.writer_said = ck.get("writer_said") or ""
+        self.accepted_new = list(ck.get("accepted_new") or [])
         if ck["writer"]:
             self.writer["delegate"] = ck["writer"]
             self.fallback_lane = ck.get("fallback_lane") or ""
@@ -1998,6 +2038,7 @@ class Engine:
             self.write_rounds.append({"write": n, "round": rounds + 1, "node_id": wr.get("node_id"), "ref": wr.get("ref"),
                                       "resumed": "yes" if wr.get("resume") else "no",
                                       "input_tokens": (wr.get("tokens") or {}).get("in"), "turns": wr.get("turns")})
+            self.writer_said += "\n" + w["summary"]
             wrote_unchecked = w.get("unchecked") or []  # the review decides what is still unproven after the checks
             if w["question"].strip() and w["decided"].strip():  # lifesim-d5f.58: an accepted requirement is no question
                 rounds += 1
@@ -2055,6 +2096,7 @@ class Engine:
             self.transition("review", "checks_green", "%d passed" % sum(1 for c in checks if c["exit"] == 0))
             self.stats["reviews"] += 1
             open_items = list({u["what"]: u for u in ([] if fix else self.unchecked) + wrote_unchecked}.values())
+            kinds = self.new_by_kind()
             review, _ = self.ai("review", name, REVIEW_PROMPT.format(
                 brief=self.brief_text(), plan=self.plan_text(), n=i + 1, goal=st["goal"],
                 base=self.base_sha(), checks=compact(checks), summary=w["summary"], evidence=self.evidence_dir,
@@ -2069,8 +2111,10 @@ class Engine:
                 ("\nNobody has checked these yet (earlier stages or the writer could not; the engine's checks above ran "
                  "after them); put in your unchecked only what is still unproven:\n" + "".join(
                      "- %s (%s)\n" % (u["what"], u["kind"]) for u in open_items) if open_items else "") +
-                ("" if last else LATER_CASES) + UNCHECKED_TEXT + self.look_review(st, w, fix),
+                ("" if last else LATER_CASES) + UNCHECKED_TEXT + self.look_review(st, w, fix) + (NEW_FILES_TEXT + "".join(
+                    "- %s\n" % p for p in kinds["unexplained"]) if kinds["unexplained"] else ""),
                 writer_family=wfam, visual=not fix and self.stage_visual(st), round=rounds + 1, **where)
+            self.accepted_new += [p for p in review.get("accept_files") or [] if p in kinds["unexplained"] and p not in self.accepted_new]
             # lifesim-gfr.31.1: a stage-1 item that stage 2 ran green still stopped the land; each review re-judges what
             # is open, so its list replaces it. A fix at land reviews only the fix: it adds, never clears.
             judged = self.engine_unproven(review.get("unchecked") or [], checks)
@@ -3297,6 +3341,10 @@ Return:
 - question: empty, unless only the owner can decide something about the task itself (then explain it for a phone:
   what you found, the options, your recommendation).
 - leftovers: real follow-up work you noticed outside this task, else empty.""" + "\n" + DECIDED_RULE
+
+NEW_FILES_TEXT = ("\nUnexplained new files: untracked, and no stage lists them nor the writer names them. They are NOT in the "
+                  "commit unless you accept them. For each, put its path in accept_files if the task needs it (it is staged), "
+                  "or leave it out if it is a stray (a test run's leftover): it stays out of the commit, no finding. These files:\n")
 
 VERIFY_PROMPT = """Before a task lands, you check what its workers could not check themselves. Do not edit files.
 <task>
