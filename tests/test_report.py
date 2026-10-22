@@ -358,12 +358,18 @@ class PlannerReport(unittest.TestCase):
         p = report.planner_stats(T0 - 1, T0 + 100, history=self.hist)
         by = {x["bead"]: x for x in p["per_bead"]}
         self.assertEqual({k: by["x-1"][k] for k in ("calls", "first", "again", "amend", "back", "other", "input")},
-                         {"calls": 4, "first": 1, "again": 1, "amend": 1, "back": 1, "other": 0, "input": 16200})
+                         {"calls": 4, "first": 1, "again": 1, "amend": 1, "back": 1, "other": 0, "input": 16100})
         self.assertEqual((by["x-2"]["calls"], by["x-2"]["first"], by["x-2"]["input"]), (1, 1, 1000))
-        self.assertEqual((p["calls"], p["beads"], p["input"]), (6, 3, 17202))  # the worker call is no planner call
+        self.assertEqual((p["calls"], p["beads"], p["input"]), (6, 3, 17101))  # the worker call is no planner call
         only = report.planner_stats(T0 - 1, T0 + 100, {"x"}, history=self.hist)
         self.assertEqual((only["calls"], only["beads"]), (5, 2))
         self.assertEqual(report.planner_stats(T0 + 50, T0 + 100, history=self.hist)["calls"], 0)  # outside the window
+
+    def test_input_is_in_when_in_already_holds_the_cache_else_in_plus_cached(self):
+        self.assertEqual(report.input_tokens({"in": 10000, "cached": 9000}), 10000)   # delegate 0.22+ and Codex
+        self.assertEqual(report.input_tokens({"in": 1000, "cached": 9000}), 10000)    # before 0.22: uncached-only in
+        self.assertEqual(report.input_tokens({"in": 5, "cached": 0}), 5)
+        self.assertEqual(report.input_tokens({}), 0)
 
     def test_the_cli_prints_the_planner_table_read_only(self):
         before = sorted(p.name for p in self.eng.iterdir())

@@ -333,8 +333,9 @@ def scorecard(repo, since, until, base=None, comments_of=None, status_of=None, a
             fam = s.get("family") or (s.get("lane") or "?").split("_")[0].lower()
             for key, name in (("lane", "codex" if fam == "openai" else fam), ("role", s.get("role") or "?")):
                 d = tokens[key].setdefault(name, {"in": 0, "cached": 0, "out": 0})
-                for k in d:
-                    d[k] += int(tk.get(k) or 0)
+                d["in"] += input_tokens(tk)
+                d["cached"] += int(tk.get("cached") or 0)
+                d["out"] += int(tk.get("out") or 0)
     lost = [x for x in lost_work(repo, since=since, base=base, status_of=status_of, traces=traces)
             if x["class"] in ("lost", "pending", "unknown")]
     mins = [x["minutes"] for x in rows if x["runs"]]
@@ -376,8 +377,15 @@ def plan_class(rec):
     return "back" if t in ("plan: rewrite checks", "plan: plan to meet it") else "full"  # 'plan: plan', 'plan: re-plan'
 
 
+def input_tokens(tk):
+    """All input tokens of one delegate row. delegate 0.22.0+ writes `in` with cache reads and writes already in it (Codex
+    always did); older rows had uncached-only `in`, so cached rides on top: in >= cached means it is already counted."""
+    i, c = int((tk or {}).get("in") or 0), int((tk or {}).get("cached") or 0)
+    return i if i >= c else i + c
+
+
 def planner_stats(since, until, prefixes=(), history=None, engine_dir=None):
-    """Planner calls per bead from delegate's history (input = in + cached), split by the engine logs' plan nodes:
+    """Planner calls per bead from delegate's history (input: `in`, plus cached on rows from before delegate 0.22), split by the engine logs' plan nodes:
     first plan, full plans again (a new thread from scratch), amends, check send-backs. Reads only."""
     history = Path(history or os.path.expanduser(HISTORY))
     engine_dir = Path(engine_dir or tl.config_dir() / "engine")
@@ -390,7 +398,7 @@ def planner_stats(since, until, prefixes=(), history=None, engine_dir=None):
         if prefixes and prefix(task) not in prefixes:
             continue
         tk = r.get("tokens") or {}
-        calls.setdefault(task, []).append(int(tk.get("in") or 0) + int(tk.get("cached") or 0))
+        calls.setdefault(task, []).append(input_tokens(tk))
     rows = []
     for bead, ins in sorted(calls.items()):
         kinds = {"full": 0, "amend": 0, "back": 0}
@@ -414,7 +422,7 @@ def planner_stats(since, until, prefixes=(), history=None, engine_dir=None):
 
 def planner_line(p):
     return ("planner: %d calls on %d beads: %d first plans, %d full plans again, %d amends, %d check send-backs, %d other; "
-            "input (in + cached) %.1fM, median %dk per call" % (
+            "input %.1fM, median %dk per call" % (
                 p["calls"], p["beads"], p["first"], p["again"], p["amend"], p["back"], p["other"],
                 p["input"] / 1e6, p["median_input"] // 1000))
 
