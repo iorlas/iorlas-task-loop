@@ -35,7 +35,7 @@ DEFAULTS = {
     "budget_min": 180,
     "max_rounds": 3,                  # review send-backs per stage before a replan
     "max_check_tries": 3,             # red checks in a row that end a round (checks never reach the reviewer red)
-    "max_replans": 1,                 # per bead, across runs; a changed bead (an owner's answer) never counts
+    "max_replans": 2,                 # per bead, across runs: plans after the first (amends of any cause); then an owner ask
     "max_fix_rounds": 2,              # per bead: a red gate, a conflict or what the check before land found wrong
     "pick_label": "",                 # the label an unattended runner picks by (lifesim: auto); a decision or ticket ask removes it
     "needs_info_label": "needs-info", # and adds this one, so the bead leaves the queue until the owner relabels it
@@ -77,6 +77,9 @@ TRACKER_CHECK = re.compile(r"(?:^|[;&|(`!{]|\b(?:then|do|else|xargs|exec|command
 TRACKER_TEXT = ("\n\nYour plan was sent back: these checks read the issue tracker (they run bd or read .beads/), which "
                 "no writer can run and no code change can satisfy:\n%s\nRewrite them to prove the code and the tree only. "
                 "Follow-up work the task wants filed goes in leftovers: the engine files it.")
+
+DRY_CHECK_TEXT = ("\n\nYour plan was sent back: the engine dry-ran its checks and these cannot run:\n%s\nReturn the plan "
+                  "with only these checks fixed.")
 
 
 # tl-bxk.10.9: an unchecked item naming one of these, or a backticked command, is a check only where the repo uses it
@@ -162,6 +165,95 @@ def gate_only_checks(plan, cfg):
         if hit:
             out.append((c, hit))
     return out
+
+
+# a check that cannot run is found before any write, not by a writer's round (tl-bxk.10.13). Conservative on purpose: a false
+# alarm costs a planner call, the thing this saves.
+PROC_SUBST = re.compile(r"<\(")
+FILE_ARG = re.compile(r"(?:^|[;&|(]\s*)(?:test|\[)\s+-[fesr]\s+(\S+)|(?:^|[;&|(]\s*)(?:cat|bash|sh|node|python3?)\s+(?:-[^\smc]\S*\s+)*([^\s;&|<>$`'\"-]*[./]\S*)")
+
+
+def dry_check(plan, wt):
+    """[error]: the plan's checks that cannot run: bash -n syntax, process substitution, a file the check reads that is
+    neither in the tree nor a file some stage names."""
+    errs, made = [], [os.path.normpath(f) for st in plan.get("stages") or [] for f in st["files"]]
+    for c in plan_checks(plan):
+        bare = re.sub(r"\"[^\"]*\"|'[^']*'", "''", c)
+        if PROC_SUBST.search(bare):
+            errs.append("`%s`: process substitution `<(` is not allowed (write the output to a file instead)" % c)
+        try:
+            r = subprocess.run(["bash", "-n"], input=c, capture_output=True, text=True, timeout=10)
+        except (OSError, subprocess.SubprocessError):
+            r = None
+        if r is not None and r.returncode:
+            errs.append("`%s`: bash -n: %s" % (c, (r.stderr or "syntax error").strip().splitlines()[-1][:200]))
+            continue
+        if re.search(r"(?:^|[;&|(\s])cd\s", c):
+            continue
+        for m in FILE_ARG.finditer(c):
+            f = (m.group(1) or m.group(2) or "").strip("\"'")
+            g = os.path.normpath(f)
+            if (not f or re.search(r"[$*?{}~`]", f) or f.startswith("/") or "://" in f
+                    or re.search(r">\s*%s(?![\w./-])" % re.escape(f), c) or Path(wt, f).exists()
+                    or any(g == k or g.startswith(k + "/") or g.endswith("/" + k) for k in made)):
+                continue
+            errs.append("`%s`: `%s` is not in the tree and no stage lists it in files (add it to the stage that creates it)" % (c, f))
+    return list(dict.fromkeys(errs))
+
+
+FIELDS = ("title", "description", "acceptance_criteria", "design", "notes")
+
+
+def bead_snapshot(bead, comments):
+    """What a later amend diffs against: the bead's text fields and the people's comments, as the planner saw them."""
+    return {"fields": {k: (bead.get(k) or "").strip() for k in FIELDS},
+            "comments": [(c.get("text") or "").strip() for c in comments if not (c.get("text") or "").startswith(ENGINE_NOTES)]}
+
+
+def bead_diff(old, new, answer=""):
+    """Text: what changed in the bead since the plan (fields, new comments, the owner's answer). '' when nothing."""
+    out = []
+    for k in FIELDS:
+        a, b = old["fields"].get(k, ""), new["fields"].get(k, "")
+        if a != b:
+            out.append("- %s was:\n%s\n  now:\n%s" % (k, a[:1500] or "(empty)", b[:1500] or "(empty)"))
+    seen = list(old.get("comments") or [])
+    for t in new["comments"]:
+        if t in seen:
+            seen.remove(t)
+        else:
+            out.append("- new comment:\n%s" % t[:1500])
+    if answer:
+        out.append("- the owner's answer to the engine's ask:\n%s" % answer[:1500])
+    return "\n".join(out)
+
+
+def linked_text(bead_id, bead, comments, show, comments_of, cap=10, each=400):
+    """The decisions that live in other beads: the ones the task names, then its dependencies and parent (title, status,
+    close reason, the last owner comment; each at most `each` chars, at most `cap` beads). tl-bxk.10.10"""
+    pre = bead_id.split("-")[0]
+    text = " ".join(str(bead.get(k) or "") for k in FIELDS) + " " + " ".join(c.get("text") or "" for c in comments)
+    ids = re.findall(r"(?<![\w.-])(%s-[A-Za-z0-9]+(?:\.[0-9]+)*)" % re.escape(pre), text)
+    deps = {d.get("id"): d for d in bead.get("dependencies") or [] if isinstance(d, dict) and d.get("id")}
+    ids += list(deps) + [bead.get("parent")]
+    ids = [i for i in dict.fromkeys(ids) if i and i != bead_id][:cap]
+    out = []
+    for i in ids:
+        d = deps.get(i) or {}
+        if "status" not in d or (d.get("status") == "closed" and not d.get("close_reason")):
+            got = show(i)
+            d = got if isinstance(got, dict) and got.get("id") == i else d
+        if not d.get("id"):
+            continue
+        owner = [c for c in comments_of(i) if not (c.get("text") or "").startswith(ENGINE_NOTES)
+                 and not (c.get("author") or "").startswith("tl-")]
+        line = "- %s [%s] %s" % (i, d.get("status") or "?", d.get("title") or "")
+        if (d.get("close_reason") or "").strip():
+            line += "\n  closed: " + d["close_reason"].strip()
+        if owner:
+            line += "\n  owner: " + (owner[-1].get("text") or "").strip()
+        out.append(line if len(line) <= each else line[:each - 3] + "...")
+    return ("\n## Linked beads (what was decided there)\n" + "\n".join(out) + "\n") if out else ""
 
 
 LATER_CASES = ("\nAn acceptance case this stage cannot run is not unchecked: it is checked when the last stage runs it.")
@@ -611,6 +703,13 @@ class Engine:
         self.accepted = []    # their indices in the current plan
         self.brief_hash = ""
         self.replans = 0
+        self.cap_granted = False
+        self.planned = 0      # planner runs on this bead, across runs: the first plan, then amends (engine.max_replans caps them)
+        self.extra = 0        # amends the owner allowed past the cap
+        self.plan_log = []    # [{mode, why}] per counted planner run: the cap's ask names each
+        self.old_plan, self.amend_text, self.amend_why = None, "", ""  # set where a checkpoint's plan is kept to be amended
+        self.planner_ref = ""  # the last planner thread: a check send-back resumes it
+        self.snap = {}        # the bead's text fields and people's comments as planned: a later amend diffs against it
         self.fixes = 0
         self.denials = []     # commands refused to this bead's writers, across lanes and runs
         self.unchecked = []   # what the last review of this run says nobody checked (each review re-judges it)
@@ -777,14 +876,14 @@ class Engine:
         self.assert_tree(kw.get("step") or node, "after")
         return out
 
-    def _ai(self, node, title, prompt, resume_key=None, writer_family=None, step=None, **meta):
+    def _ai(self, node, title, prompt, resume_key=None, writer_family=None, step=None, resume_ref=None, **meta):
         """One AI node through delegate (worker-run v1): it picks lane and model, limits apply, it records the run."""
         self.budget_check()
         self.stats["nodes"] += 1
         role = ROLES[node]
         writer = writer_family if node in ("review", "verify") else None
-        resume = self.writer.get("delegate") if resume_key else None
-        if resume and self.writer_fallback:  # tl-bxk.10.5: a fallback writer would keep the bead off Codex for good
+        resume = resume_ref or (self.writer.get("delegate") if resume_key else None)
+        if resume and resume_key and self.writer_fallback:  # tl-bxk.10.5: a fallback writer would keep the bead off Codex for good
             lane = lane_status(self.route or "").get(self.fallback_lane) if self.fallback_lane else None
             if self.fallback_lane and not isinstance(lane, dict):  # that lane is not configured here: no fallback
                 self.writer_fallback, self.fallback_lane = False, ""
@@ -896,6 +995,8 @@ class Engine:
             attempt += 1
         if errs:
             raise Blocked("failed: %s node produced no valid output (%s)" % (node, "; ".join(errs[:3])))
+        if node == "plan" and r.ref:
+            self.planner_ref = r.ref
         self.last_flag = (j or {}).get("flag")  # same_family | degraded | ...: delegate could not give the usual lane
         fam = r.backend  # openai | claude: the family that wrote, for the reviewer
         model = "%s %s on %s" % ((j or {}).get("model"), (j or {}).get("effort"), (j or {}).get("lane"))
@@ -1054,7 +1155,8 @@ class Engine:
         """The task as workers read it: the bead's own text and the people's comments, never the engine's own records
         (plans, reviews, reflects pile up on every rerun: 40 of lifesim-vbo's 45 KB brief)."""
         bead, comments = tl.show(self.bead) or {"id": self.bead}, tl.comments(self.bead)
-        text = brief_digest(bead, comments)
+        text = brief_digest(bead, comments) + linked_text(self.bead, bead, comments, tl.show, tl.comments)
+        self.snap = bead_snapshot(bead, comments)
         (self.run_dir / "brief.md").write_text(text, encoding="utf-8")
         # the hash is what tells a rerun the owner changed something: the engine's own close line and labels are not that
         ours = [x for x in (self.cfg.get("pick_label"), self.cfg.get("needs_info_label")) if x]
@@ -1173,7 +1275,7 @@ class Engine:
                 if d == "replan":
                     self.replans += 1
                     self.stats["replans"] = replans = self.replans
-                    if replans > int(self.cfg["max_replans"]):
+                    if replans > int(self.cfg["max_replans"]) + self.extra:
                         raise Blocked("stage %d stuck after %s rounds and %d re-plan(s): it needs the owner's hint, "
                                       "a split, or more budget. What failed: %s" % (
                                           i + 1, self.cfg["max_rounds"], replans - 1, self.stuck_why[:600]))
@@ -1298,11 +1400,12 @@ class Engine:
         tree = self.tree_hash()
         return (tl.git("diff", "--stat", self.base_sha(), tree, cwd=self.wt) if tree else "") or "(no files changed)"
 
-    def ask_plan(self, prompt, step, title):
-        """One planner answer, its checks sent back once when they read the tracker or run gate-only commands."""
-        data, _ = self.ai("plan", title, prompt, step=step)
-        bad, gated = tracker_checks(data), gate_only_checks(data, self.cfg)
-        if bad or gated:  # asked once to rewrite them, like an invalid answer
+    def ask_plan(self, prompt, step, title, mode="plan"):
+        """One planner answer. Its checks are validated before any write; the ones that read the tracker, run gate-only
+        commands, or cannot run (dry_check) go back once, on the same planner thread, with the exact errors."""
+        data, _ = self.ai("plan", title, prompt, step=step, mode=mode)
+        bad, gated, dry = tracker_checks(data), gate_only_checks(data, self.cfg), dry_check(data, self.wt)
+        if bad or gated or dry:  # asked once to rewrite them, like an invalid answer; not a counted re-plan
             why = ""
             if bad:
                 self.warn("the plan's checks read the issue tracker, sent back: %s" % "; ".join(bad)[:300])
@@ -1311,10 +1414,16 @@ class Engine:
                 self.warn("the plan's checks run gate-only commands, sent back: %s" % "; ".join(
                     "%s (%s)" % g for g in gated)[:300])
                 why += GATE_ONLY_TEXT % "\n".join("- `%s`: %s" % g for g in gated)
-            self.outcome_of("sent back", "its checks read the tracker or run gate-only commands")
+            if dry:
+                self.warn("the plan's checks cannot run, sent back: %s" % "; ".join(dry)[:300])
+                why += DRY_CHECK_TEXT % "\n".join("- " + e for e in dry)
+            self.outcome_of("sent back", "its checks read the tracker, run gate-only commands or cannot run")
             self.transition(step, "plan_sent_back", "checks %s" % "; ".join(
-                (["read the issue tracker"] if bad else []) + (["run gate-only commands"] if gated else [])))
-            data, _ = self.ai("plan", "rewrite checks", prompt + why, step=step)
+                (["read the issue tracker"] if bad else []) + (["run gate-only commands"] if gated else []) +
+                (["cannot run"] if dry else [])))
+            ref = self.planner_ref
+            back = (why.lstrip() + "\n\nYour plan, to correct (same output schema):\n" + json.dumps(data, indent=1)) if ref else prompt + why
+            data, _ = self.ai("plan", "rewrite checks", back, step=step, mode="checks_back", resume_ref=ref or None)
             bad, gated = tracker_checks(data), gate_only_checks(data, self.cfg)
             if bad:
                 raise Blocked("failed: the plan's checks still read the issue tracker after one rewrite: %s"
@@ -1322,20 +1431,55 @@ class Engine:
             if gated:
                 raise Blocked("failed: the plan's checks still run gate-only commands after one rewrite: %s"
                               % "; ".join("%s (%s)" % g for g in gated)[:400])
+            dry = dry_check(data, self.wt)
+            if dry:  # a heuristic: the writer's bad_checks flag decides from here, no second send-back
+                self.warn("the plan's checks may still not run after one rewrite: %s" % "; ".join(dry)[:300])
         return data
 
     def plan(self, again=False):
+        old = self.old_plan or (self.plan_data if again and getattr(self, "plan_data", None) else None)
+        mode = "amend" if old else "plan"
         why = ""
         if again:
             try:
-                why = (self.run_dir / "replan.md").read_text(encoding="utf-8")[-6000:]
+                why = (self.run_dir / "replan.md").read_text(encoding="utf-8")[-12500:]
             except OSError:
                 pass
-        extra = ("\n\nThe previous plan did not work. What failed:\n<failed>\n%s\n</failed>\nPlan again." % why) if again else ""
+        if self.planned and not self.cap_granted and (self.answered or {}).get("why", "").startswith(REPLAN_CAP):
+            self.extra, self.cap_granted = self.extra + 1, True  # the owner answered the cap's ask: one more
+        if self.planned >= 1 + int(self.cfg["max_replans"]) + self.extra:
+            raise Blocked(REPLAN_CAP + "%d times (the limit is %d plan + %d amends): %s" % (
+                self.planned, 1, int(self.cfg["max_replans"]) + self.extra, "; ".join(
+                    "%d. %s: %s" % (k + 1, e["mode"], e["why"]) for k, e in enumerate(self.plan_log))[:1500]),
+                "This bead was planned %d times, so the engine stops instead of burning more planner runs. Why each time: %s\n"
+                "Choose: split the bead; clarify it (comment what the plan keeps missing); or reply \"allow one more\"." % (
+                    self.planned, "; ".join("%d. %s: %s" % (k + 1, e["mode"], e["why"]) for k, e in enumerate(self.plan_log))[:1500]))
+        self.planned += 1
+        self.plan_log.append({"mode": mode, "why": (self.amend_why or ("a re-plan: " + why[:160].replace("\n", " ") if again else "first plan"))[:240]})
+        if old and not again and not self.amend_text:
+            self.amend_text = "The bead is the same as when the old plan was made."
+        extra = ""
+        if old:
+            extra = ("\n\nAn earlier plan exists for this task. Return the plan with the smallest change that covers what "
+                     "follows; keep accepted stages and their checks unless the change touches them; do not re-explore code "
+                     "the old plan already names. Same output schema as a plan.\n<old_plan>\n%s\n</old_plan>\n"
+                     "What changed:\n<change>\n%s\n</change>" % (json.dumps(old, indent=1), (self.amend_text or why).strip()))
+        elif again:
+            extra = "\n\nThe previous plan did not work. What failed:\n<failed>\n%s\n</failed>\nPlan again." % why
+        self.old_plan, self.amend_text, self.amend_why = None, "", ""
         rules = []
         if self.cfg["worker_rules"]:
-            rules.append("Read %s: this repo's rules for workers (what runs where, known pitfalls of its tools); the "
-                         "checks you write must follow them." % (Path(self.wt) / self.cfg["worker_rules"]))
+            rf = Path(self.wt) / self.cfg["worker_rules"]
+            try:  # a short rules file is inlined: reading it costs the planner a turn
+                inline = rf.read_text(encoding="utf-8") if rf.stat().st_size < RULES_INLINE_MAX else None
+            except OSError:
+                inline = None
+            if inline is not None:
+                rules.append("This repo's rules for workers (what runs where, known pitfalls of its tools); the checks you "
+                             "write must follow them:\n<worker_rules>\n%s\n</worker_rules>" % inline.strip())
+            else:
+                rules.append("Read %s: this repo's rules for workers (what runs where, known pitfalls of its tools); the "
+                             "checks you write must follow them." % rf)
         rules.append("Proof files that a check reads or a reviewer looks at (screenshots, logs, probe output) go under "
                      "%s: it is kept across runs, and nothing else under %s is." % (self.evidence_dir, self.task_dir))
         rules.append("Checks run on the uncommitted working tree after each write. The engine runs the gate%s once, on "
@@ -1357,8 +1501,10 @@ class Engine:
                       "".join("- %s\n" % g for g in self.done))
         prompt = (PLAN_PROMPT.format(brief=self.brief_text(), wt=self.wt) + extra + "\n\n" + "\n".join(rules) +
                   ("\n\n" + self.where("plan") if self.where("plan") else ""))
+        if len(prompt.encode("utf-8")) > PLAN_BRIEF_KB * 1024:
+            self.warn("the planner's brief is %.0f KB (over %d KB)" % (len(prompt.encode("utf-8")) / 1024, PLAN_BRIEF_KB))
         step = "replan" if again else "plan"
-        data = self.ask_plan(prompt, step, "re-plan" if again else "plan")
+        data = self.ask_plan(prompt, step, "amend" if old else "plan", mode)
         q = data["question"].strip()
         decided = data["decided"].strip() if q else ""
         if decided and not self.plan_decided:  # tl-bxk.10.3: no owner ask, the planner plans again
@@ -1366,8 +1512,13 @@ class Engine:
             self.warn("the planner asked what an accepted requirement decides: %s" % decided[:300])
             self.outcome_of("sent back", "an accepted requirement decides its question")
             self.transition(step, "planner_decided", "an accepted requirement decides it: %s" % decided)
-            data = self.ask_plan(prompt + DECIDED_TEXT % (q, decided) + PLAN_DECIDED_TEXT, step, "plan to meet it")
+            data = self.ask_plan(prompt + DECIDED_TEXT % (q, decided) + PLAN_DECIDED_TEXT, step, "plan to meet it", "checks_back")
         data = json.loads(json.dumps(data))  # the engine's own copy: cases are added to it as the task runs
+        if data["stages"] and not data["question"].strip() and (
+                len(data["stages"]) <= int(self.cfg["max_stages"]) or (self.answered or {}).get("kind") == "ticket"):
+            # a SIGTERM from here on resumes with this plan (d5f.38 lost a finished 1.1M plan before its checkpoint)
+            self.plan_data = data
+            self.save_checkpoint(stage=0, rounds=0, n=0, feedback="", step="write")
         if self.verify_answer and not data["stages"] and not data["question"].strip():
             self.log("note", "the planner finds the owner's answer asks for nothing more: landing")
             self.plan_leftovers(data)
@@ -1492,7 +1643,8 @@ class Engine:
         # mid-rebase (a conflict fix) HEAD is detached: the checkpoint names the task branch the close goes back to
         branch = self.git("symbolic-ref", "--short", "-q", "HEAD") or getattr(self, "task_branch", "")
         rec = {"v": 1, "bead": self.bead, "branch": branch,
-               "plan": self.plan_data, "done": self.done, "accepted": self.accepted, "replans": self.replans, "fixes": self.fixes, "denials": self.denials,
+               "plan": self.plan_data, "planned": self.planned, "extra": self.extra, "plan_log": self.plan_log, "snap": self.snap,
+               "done": self.done, "accepted": self.accepted, "replans": self.replans, "fixes": self.fixes, "denials": self.denials,
                "writer": self.writer.get("delegate") or "", "writer_fallback": self.writer_fallback, "fallback_lane": self.fallback_lane,
                "writer_family": self.writer_family or "", "brief": self.brief_hash, "head": self.git("rev-parse", "HEAD"),
                "unchecked": self.unchecked, "filed": self.filed,
@@ -1537,11 +1689,16 @@ class Engine:
         if ck.get("v") != 1 or ck.get("branch") != branch or not ck.get("plan"):
             self.drop_checkpoint()
             return None, 0, None
+        self.planned = int(ck.get("planned") or 1 + int(ck.get("replans") or 0))  # checkpoints before the count: plan + replans
+        self.extra, self.plan_log = int(ck.get("extra") or 0), list(ck.get("plan_log") or [])
         head = self.git("rev-parse", "HEAD")
         ours = head == ck["head"] or (self.left_dirty and not ck["closed"] and self.git("rev-parse", "HEAD~1") == ck["head"])
         if not ours:  # a commit, or an edit after a clean close, that is not this engine's: the plan may not fit it
-            self.log("note", "the branch changed since the checkpoint of %s: planning again from the start" % ck["run"])
-            self.drop_checkpoint()
+            self.log("note", "the branch changed since the checkpoint of %s: amending its plan" % ck["run"])
+            self.old_plan, self.amend_why = ck["plan"], "branch changed outside the engine"
+            self.amend_text = ("The branch changed outside the engine since the old plan (commits after %s):\n%s\nNo stage of "
+                               "the old plan is known to be in the tree; read `git status` and the diff from the base."
+                               % (ck["head"][:12], (self.git("log", "--oneline", "-n", "15", "%s..HEAD" % ck["head"]) or "(none)")[:800]))
             return None, 0, None
         self.resumed = True
         self.done = list(ck["done"])
@@ -1560,6 +1717,7 @@ class Engine:
                 "Every stage was accepted, then the gate failed on the tree rebased onto the latest base (often "
                 "another task landed first). Plan the fix.\n\n" + ck.get("gate_tail", ""))
             self.replan_first = True
+            self.old_plan, self.amend_why = ck["plan"], "gate red at land"
             return None, 0, None
         if ck["brief"] != self.brief_hash and ck["step"] == "land" and (self.answered or {}).get("kind") == "verify":
             self.plan_data, self.plan_summary = ck["plan"], ck["plan"]["summary"]
@@ -1576,9 +1734,20 @@ class Engine:
                              "accepted stage(s)" % (self.answered["id"], len(self.done)))
             return None, 0, None
         if ck["brief"] != self.brief_hash:
-            self.log("note", "the bead changed since the checkpoint of %s: keeping %d accepted stage(s), planning the rest"
-                     % (ck["run"], len(self.done)))
-            return None, 0, None
+            answer = self.answer_text(self.answered) if self.answered else ""
+            diff = bead_diff(ck["snap"], self.snap, answer) if ck.get("snap") else None
+            if diff == "":  # the hash moved on a label or a priority: nothing the plan reads changed
+                self.log("note", "the bead changed since the checkpoint of %s, but nothing the plan reads: keeping the plan, "
+                         "no planner run" % ck["run"])
+            else:
+                self.log("note", "the bead changed since the checkpoint of %s: amending its plan, keeping %d accepted stage(s)"
+                         % (ck["run"], len(self.done)))
+                self.old_plan = ck["plan"]
+                self.amend_why = "bead changed: %s" % ("the owner answered ask %s" % self.answered["id"] if self.answered
+                                                       else "an edit with no ask")
+                self.amend_text = diff or "The bead changed since the old plan (the checkpoint holds no copy of the old text): read the task above."
+                self.amend_text += "\nAccepted stages (their work is in the tree): " + ("; ".join(self.done) or "none")
+                return None, 0, None
         self.plan_data, self.plan_summary, self.accepted = ck["plan"], ck["plan"]["summary"], list(ck["accepted"])
         (self.run_dir / "plan.json").write_text(json.dumps(ck["plan"], indent=1))
         stages = ck["plan"]["stages"]
@@ -1656,7 +1825,7 @@ class Engine:
                 self.stuck_why = "the writer says these stage checks are wrong: " + "; ".join(
                     "`%s` (exit %s): %s" % (c["cmd"], c["exit"], flagged[c["cmd"].strip()]) for c in wrong)
                 self.warn("%s: %s" % (name, self.stuck_why[:300]))
-                (self.run_dir / "replan.md").write_text(self.stuck_why + "\n\nTheir output:\n" + compact(wrong))
+                (self.run_dir / "replan.md").write_text(self.stuck_why + "\n\nTheir output:\n" + failure_brief(wrong, self.run_dir))
                 self.transition("replan", "bad_checks", "the writer says %d check%s cannot pass: %s" % (
                     len(wrong), "" if len(wrong) == 1 else "s", "; ".join(flagged[c["cmd"].strip()] for c in wrong)))
                 return "replan"
@@ -1673,7 +1842,7 @@ class Engine:
                 self.stats["rounds"] += 1
                 self.stuck_why = "checks still red after %s tries: %s" % (self.cfg["max_check_tries"], compact(failed))
                 if rounds >= int(self.cfg["max_rounds"]):
-                    (self.run_dir / "replan.md").write_text(self.stuck_why)
+                    (self.run_dir / "replan.md").write_text(self.stuck_why + "\n\nTheir output:\n" + failure_brief(failed, self.run_dir))
                     self.transition("replan", "rounds_used", "%s; %d rounds used" % (red_text, rounds))
                     return "replan"
                 self.transition("write", "checks_red", "%s; round %d used" % (red_text, rounds))
@@ -2554,6 +2723,9 @@ DECIDED_RULE = ("A change that contradicts an accepted requirement (in the task,
                 "accepted requirement, quoted, that already answers your question (the engine then sends the stage "
                 "back to meet it instead of asking the owner); empty when you have no question, when two accepted "
                 "requirements conflict, or when no requirement decides it yet (those are the owner's).")
+REPLAN_CAP = "stuck: the bead was re-planned "  # the cap's ask; an owner's answer to it allows one more
+RULES_INLINE_MAX = 6 * 1024   # a worker_rules file under this goes into the planner's brief
+PLAN_BRIEF_KB = 12            # the planner's whole brief should stay under this
 DECIDED_TEXT = ("\nYou asked: %s\nAn accepted requirement already decides it: %s\nMeet that requirement: change the "
                 "work, never the requirement.\n")
 PLAN_DECIDED_TEXT = "Plan the work that meets it; ask nothing it already answers.\n"
@@ -2564,7 +2736,8 @@ The task (the bead, with its acceptance criteria and comments: review findings, 
 <task>
 {brief}
 </task>
-Read the code it names. Then plan.
+Explore cheaply: find code with `rg -n` and read line ranges (`sed -n 'a,bp'`), not whole files. Stop reading once
+each stage has its files and its checks. Budget: about 12 tool calls. Then plan.
 
 - Split the work into stages, each one coherent piece that its checks can judge (often one stage is enough).
 - For each stage: goal, the files it changes, the exact commands that prove it (tests, linters), and hard=true only

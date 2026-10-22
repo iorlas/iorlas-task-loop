@@ -1410,6 +1410,8 @@ def main(argv=None):
     p.add_argument("--since", metavar="T", help="ISO, HH:MM (today) or a duration back (12h); default 24h")
     p.add_argument("--until", metavar="T", help="as --since; default now")
     p.add_argument("--json", action="store_true")
+    p.add_argument("--planner", action="store_true", help="only the planner table: calls and input tokens per bead")
+    p.add_argument("--prefix", metavar="P[,P]", help="with --planner: only beads with these id prefixes (default all)")
     p = sp.add_parser("lost", help="task/* and wip/* commits not on the base: landed, reclaimed, pending or lost")
     p.add_argument("--repo")
     p.add_argument("--since", metavar="T")

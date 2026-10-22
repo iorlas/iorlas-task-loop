@@ -4,7 +4,10 @@ Reads only: traces.jsonl, the loop's log, engine/*.jsonl and *.stderr, the repo'
 (show, comments). Writes nothing.
 
   tl.py report [--repo DIR] [--since T] [--until T] [--json]   beads run, landed, landed with no ask, parked, paused,
-                                                                failed, crashes, lost work, minutes, rounds, tokens, M2
+                                                                failed, crashes, lost work, minutes, rounds, tokens, M2,
+                                                                a planner line
+  tl.py report --planner [--prefix P] [--since T] [--until T]   planner calls and input tokens per bead (delegate's
+                                                                history.jsonl + the engine logs); no repo or bd needed
   tl.py lost [--repo DIR] [--since T] [--json]                  every task/* and wip/* commit not on the base, classed
 
 T: ISO (2026-10-21T06:00, 2026-10-21, ...Z), HH:MM (today, local) or a duration back from now (90m, 12h, 2d).
@@ -355,6 +358,75 @@ def scorecard(repo, since, until, base=None, comments_of=None, status_of=None, a
     return c
 
 
+# ---- tl-bxk.10.13: what the planner costs ----------------------------------------------------------------------------
+
+HISTORY = "~/.claude/plugins/data/iorlas-delegate-iorlas-marketplace/history.jsonl"
+
+
+def plan_class(rec):
+    """full | amend | back for an engine log's plan node record (older logs: by the node's text)."""
+    mode = rec.get("mode")
+    if mode in ("amend", "back", "full"):
+        return mode
+    if mode == "checks_back":
+        return "back"
+    if mode == "plan":
+        return "full"
+    t = rec.get("text") or ""
+    return "back" if t in ("plan: rewrite checks", "plan: plan to meet it") else "full"  # 'plan: plan', 'plan: re-plan'
+
+
+def planner_stats(since, until, prefixes=(), history=None, engine_dir=None):
+    """Planner calls per bead from delegate's history (input = in + cached), split by the engine logs' plan nodes:
+    first plan, full plans again (a new thread from scratch), amends, check send-backs. Reads only."""
+    history = Path(history or os.path.expanduser(HISTORY))
+    engine_dir = Path(engine_dir or tl.config_dir() / "engine")
+    calls = {}
+    for r in read_jsonl(history):
+        t = r.get("ts") or 0
+        task = r.get("task") or ""
+        if r.get("role") != "planner" or not (since <= t <= until) or not task:
+            continue
+        if prefixes and prefix(task) not in prefixes:
+            continue
+        tk = r.get("tokens") or {}
+        calls.setdefault(task, []).append(int(tk.get("in") or 0) + int(tk.get("cached") or 0))
+    rows = []
+    for bead, ins in sorted(calls.items()):
+        kinds = {"full": 0, "amend": 0, "back": 0}
+        for log in engine_dir.glob("%s-*.jsonl" % bead):
+            if not STEM.match(log.stem) or STEM.match(log.stem).group(1) != bead:
+                continue
+            for rec in read_jsonl(log):
+                if rec.get("kind") == "node" and rec.get("node") == "plan" and since <= (rec.get("t") or 0) <= until:
+                    kinds[plan_class(rec)] += 1
+        n = len(ins)
+        first = min(1, kinds["full"] or n)
+        again = max(kinds["full"] - first, 0)
+        other = max(n - first - again - kinds["amend"] - kinds["back"], 0)  # retries of an invalid answer, missing logs
+        rows.append({"bead": bead, "calls": n, "first": first, "again": again, "amend": kinds["amend"],
+                     "back": kinds["back"], "other": other, "input": sum(ins)})
+    allin = [x for ins in calls.values() for x in ins]
+    return {"calls": len(allin), "beads": len(rows), "input": sum(allin),
+            "median_input": int(statistics.median(allin)) if allin else 0,
+            **{k: sum(x[k] for x in rows) for k in ("first", "again", "amend", "back", "other")}, "per_bead": rows}
+
+
+def planner_line(p):
+    return ("planner: %d calls on %d beads: %d first plans, %d full plans again, %d amends, %d check send-backs, %d other; "
+            "input (in + cached) %.1fM, median %dk per call" % (
+                p["calls"], p["beads"], p["first"], p["again"], p["amend"], p["back"], p["other"],
+                p["input"] / 1e6, p["median_input"] // 1000))
+
+
+def print_planner(p):
+    print(planner_line(p))
+    print("  %-26s %5s %5s %5s %5s %5s %5s %9s" % ("bead", "calls", "first", "again", "amend", "back", "other", "input M"))
+    for x in sorted(p["per_bead"], key=lambda x: -x["input"]):
+        print("  %-26s %5d %5d %5d %5d %5d %5d %9.2f" % (x["bead"], x["calls"], x["first"], x["again"], x["amend"],
+                                                        x["back"], x["other"], x["input"] / 1e6))
+
+
 # ---- CLI --------------------------------------------------------------------------------------------------------------
 
 def mtok(d):
@@ -376,6 +448,8 @@ def print_card(c):
     for key in ("lane", "role"):
         for name, d in sorted(c["tokens"][key].items()):
             print("  tokens %-5s %-9s %s" % (key, name, mtok(d)))
+    if c.get("planner") and c["planner"]["calls"]:
+        print("  " + planner_line(c["planner"]))
     for x in c["crash_list"]:
         print("  crash   %s %s  %s" % (stamp(x["t"])[11:], x["bead"], x["why"]))
     for x in c["lost_list"]:
@@ -396,9 +470,18 @@ def window(a):
 
 
 def cmd_report(a):
-    repo = tl.repo_root(a.repo)
     since, until = window(a)
+    if getattr(a, "planner", False):
+        pre = {x.strip() for x in (getattr(a, "prefix", "") or "").split(",") if x.strip()}
+        p = planner_stats(since, until, pre)
+        if a.json:
+            print(json.dumps(p, indent=1, ensure_ascii=False))
+        else:
+            print_planner(p)
+        return 0
+    repo = tl.repo_root(a.repo)
     c = scorecard(repo, since, until, base=default_base(repo), alive=run_alive)
+    c["planner"] = planner_stats(since, until, {prefix(x["bead"]) for x in c["per_bead"]})
     if a.json:
         print(json.dumps(c, indent=1, ensure_ascii=False))
     else:

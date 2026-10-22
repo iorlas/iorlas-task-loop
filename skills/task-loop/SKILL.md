@@ -334,6 +334,9 @@ under one per-repo area lock (`<config dir>/locks/area-<repo>.lock`), so two loo
 
 ## Report (the M2 scorecard)
 
+`tl report --planner [--prefix P] [--since T]` is the planner's cost per bead (calls, first plan / full plans again /
+amends / check send-backs, input = in + cached, from delegate's `history.jsonl`); the plain report has one such line.
+
 `tl report [--repo DIR] [--since T] [--until T] [--json]` scores a window; read-only (traces.jsonl, the loop log,
 engine logs, git refs never fetched, bd show/comments). T: ISO (`2026-10-21T06:00`, `...Z`), `HH:MM`, or a
 duration back (`90m`, `12h`, `2d`); default the last 24 h. `--since HH:MM` is its last past occurrence (a morning

@@ -483,7 +483,7 @@ class EngineTest(unittest.TestCase):
 
     def test_rounds_used_up_replan_once_then_stuck(self):
         rc, s = self.run_engine({"plan": [PLAN, PLAN], "write": [WRITE, WRITE],
-                                 "review": [review(unmet=["x"]), review(unmet=["x"])]}, max_rounds=1)
+                                 "review": [review(unmet=["x"]), review(unmet=["x"])]}, max_rounds=1, max_replans=1)
         self.assertEqual(rc, 2)
         self.assertEqual([c[0] for c in s.calls].count("planner"), 2)
         self.assertIn("stuck", self.blocked[0])
@@ -1277,10 +1277,10 @@ class EngineTest(unittest.TestCase):
     def test_replans_count_across_runs(self):
         with self.stop_at("reviewer", 3):  # stage 1 sent back twice -> replan; stopped in the new plan's review
             self.run_engine({"plan": [PLAN, PLAN], "write": [WRITE] * 3,
-                             "review": [review(unmet=["a"]), review(unmet=["b"])]}, max_rounds=2)
+                             "review": [review(unmet=["a"]), review(unmet=["b"])]}, max_rounds=2, max_replans=1)
         self.assertEqual(self.checkpoint()["replans"], 1)
         rc, s = self.run_engine({"write": [WRITE] * 2, "review": [review(unmet=["c"]), review(unmet=["d"])]},
-                                max_rounds=2)
+                                max_rounds=2, max_replans=1)
         self.assertEqual(rc, 2)
         self.assertIn("re-plan", self.blocked[-1])
         self.assertNotIn("planner", [c[0] for c in s.calls])
@@ -1998,6 +1998,198 @@ class EngineTest(unittest.TestCase):
         self.assertNotIn("ANTHROPIC_BASE_URL", env)
         self.assertNotIn("CLAUDE_CODE_SESSION_ID", env)
         self.assertEqual(env["DELEGATE_DEPTH"], "1")
+
+
+    # -- tl-bxk.10.13: amend, never plan again from scratch; cap; validate; checkpoint first
+    def stopped_run(self, bead=BEAD, plan=PLAN, answers=None):
+        """A run on `bead` stopped in its first review: its checkpoint holds the plan."""
+        with self.stop_at("reviewer", 1), mock.patch.object(tl, "show", return_value=bead):
+            return self.run_engine(answers or {"plan": [plan], "write": [WRITE]})
+
+    def test_a_changed_bead_amends_the_old_plan_it_does_not_plan_again(self):
+        self.stopped_run(plan=self.TWO, answers={"plan": [self.TWO], "write": [WRITE]})
+        with mock.patch.object(tl, "show", return_value=dict(BEAD, description="Also say hi.")), \
+                mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Keep it small."}]):
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        p = s.prompts[0]
+        self.assertIn("<old_plan>", p)
+        self.assertIn("stage one", p)
+        self.assertIn("smallest change", p)
+        self.assertIn("do not re-explore code the old plan already names", p)
+        self.assertIn("description was:\n(empty)\n  now:\nAlso say hi.", p)
+        self.assertIn("new comment:\nKeep it small.", p)
+        self.assertIn('"mode": "amend"', self.eng.log_path.read_text())
+
+    def test_an_owner_answer_to_an_ask_amends_the_plan_with_the_answer(self):
+        ask = dict(WRITE, question="Which format?")
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [ask]})
+        self.assertEqual(rc, 2)
+        self.assertEqual(self.ask()["kind"], "decision")
+        with mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Use the new format."}]):
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual(s.calls[0][0], "planner")
+        self.assertIn("<old_plan>", s.prompts[0])
+        self.assertIn("Use the new format.", s.prompts[0])
+        self.assertIn("bead changed: the owner answered ask t-1-1", self.eng.plan_log[-1]["why"])
+
+    def test_a_bead_that_changed_in_nothing_the_plan_reads_keeps_its_plan_and_calls_no_planner(self):
+        self.stopped_run()
+        with mock.patch.object(tl, "show", return_value=dict(BEAD, labels=["urgent"])):
+            rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertNotIn("planner", [c[0] for c in s.calls])
+        self.assertIn("keeping the plan, no planner run", self.eng.log_path.read_text())
+
+    def test_a_branch_changed_since_the_checkpoint_amends_instead_of_planning_again(self):
+        self.stopped_run()
+        (self.wt / "g.txt").write_text("someone edited it\n")
+        sh("git", "add", "-A", cwd=self.wt)
+        sh("git", "commit", "-qm", "by hand", cwd=self.wt)
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertIn("<old_plan>", s.prompts[0])
+        self.assertIn("The branch changed outside the engine", s.prompts[0])
+        self.assertIn("by hand", s.prompts[0])
+
+    def test_an_in_run_replan_amends_with_the_old_plan_and_the_failure_tail(self):
+        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[FALSE])])
+        flag = dict(WRITE, bad_checks=[{"cmd": FALSE, "why": "it exits 1 whatever the code does"}])
+        rc, s = self.run_engine({"plan": [plan, PLAN], "write": [flag, WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0)
+        again = s.prompts[2]
+        self.assertIn("<old_plan>", again)
+        self.assertIn(FALSE.replace('"', '\\"'), again)
+        self.assertIn("it exits 1 whatever the code does", again)
+        self.assertEqual([e["mode"] for e in self.eng.plan_log], ["plan", "amend"])
+
+    def test_the_third_amend_is_an_owner_ask_and_an_answer_allows_one_more(self):
+        self.stopped_run()                                              # plan 1
+        for k in (2, 3):                                                # amend 1, amend 2 (across runs)
+            self.stopped_run(bead=dict(BEAD, description="v%d" % k))
+        self.assertEqual(self.checkpoint()["planned"], 3)
+        with mock.patch.object(tl, "show", return_value=dict(BEAD, description="v4")):
+            rc, s = self.run_engine({})
+        self.assertEqual(rc, 2)
+        self.assertEqual(s.calls, [])
+        a = self.ask()
+        self.assertEqual(a["kind"], "stuck")
+        self.assertIn("re-planned 3 times", a["why"])
+        for word in ("split", "clarify", "allow one more", "1. plan", "2. amend", "bead changed"):
+            self.assertIn(word, a["question"] + a["why"])
+        with mock.patch.object(tl, "show", return_value=dict(BEAD, description="v5")):  # the owner's answer edits the bead
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual(s.calls[0][0], "planner")
+        self.assertEqual(self.eng.extra, 1)
+
+    def test_max_replans_is_read_from_the_config(self):
+        self.stopped_run()
+        with mock.patch.object(tl, "show", return_value=dict(BEAD, description="v2")):
+            rc, s = self.run_engine({}, max_replans=0)
+        self.assertEqual(rc, 2)
+        self.assertEqual(s.calls, [])
+        self.assertIn("re-planned 1 times", self.ask()["why"])
+        self.assertEqual(engine.DEFAULTS["max_replans"], 2)
+
+    def test_the_plan_is_in_the_checkpoint_the_moment_the_planner_answers(self):
+        # d5f.38: a SIGTERM after the planner answered lost a finished plan before the checkpoint
+        with mock.patch.object(engine.Engine, "plan_leftovers", side_effect=engine.Blocked("failed: stopped (SIGTERM)")):
+            rc, _ = self.run_engine({"plan": [PLAN]})
+        self.assertEqual(rc, 2)
+        ck = self.checkpoint()
+        self.assertEqual((ck["plan"]["summary"], ck["planned"], ck["step"]), ("do it", 1, "write"))
+        rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertNotIn("planner", [c[0] for c in s.calls])
+
+    def test_a_plan_with_a_question_or_too_many_stages_is_not_checkpointed_early(self):
+        self.run_engine({"plan": [dict(PLAN, question="Old format or new?")]})
+        self.assertIsNone(self.checkpoint())
+
+    def test_checks_that_cannot_run_go_back_to_the_same_planner_thread_once_and_do_not_count(self):
+        bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["if [ -f f.txt ]; then echo ok", "cat <(echo x)"])])
+        rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
+        self.assertIsNone(s.calls[0][1])
+        self.assertEqual(s.calls[1][1], "ref-plan")  # --resume of the planner thread
+        self.assertIn("bash -n", s.prompts[1])
+        self.assertIn("process substitution", s.prompts[1])
+        self.assertIn('"mode": "checks_back"', self.eng.log_path.read_text())
+        self.assertEqual(self.eng.planned, 1)
+        self.assertLess(len(s.prompts[1]), 3000)
+
+    def test_dry_check_reads_syntax_process_substitution_and_missing_files(self):
+        def plan(*checks, files=("new.txt",)):
+            return dict(PLAN, stages=[dict(PLAN["stages"][0], checks=list(checks), files=list(files))])
+        wt = str(self.wt)
+        self.assertEqual(engine.dry_check(plan("test -f a.txt", "test -f new.txt", "grep -q '<(' a.txt", HAS_F), wt), [])
+        self.assertEqual(engine.dry_check(plan("cd sub && cat nope.txt", "cmd > out.log; test -f out.log"), wt), [])
+        self.assertEqual(engine.dry_check(plan("test -f $HOME/x", "cat dir/*.txt"), wt), [])
+        self.assertEqual(engine.dry_check(plan("python3 -m pytest -q tests", "bash -c 'true'", "python3 -c 'pass'"), wt), [])
+        self.assertTrue(engine.dry_check(plan("python3 tests/nope.py"), wt))
+        self.assertTrue(engine.dry_check(plan("test -f missing.txt"), wt)[0].count("missing.txt"))
+        self.assertIn("bash -n", engine.dry_check(plan("echo $(date"), wt)[0])
+        self.assertIn("process substitution", engine.dry_check(plan("diff <(ls) <(ls)"), wt)[0])
+        self.assertEqual(engine.dry_check(plan("test -f src/new.txt", files=("src/",)), wt), [])
+
+    def test_the_planner_is_told_to_read_less_and_inlines_short_worker_rules(self):
+        base = Path(self.tmp.name, "base-cfg")
+        sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(base), cwd=self.tmp.name)
+        (base / "docs" / "agents").mkdir(parents=True)
+        (base / "docs" / "agents" / "codex.md").write_text("RULES-MARK: unity runs on the host\n")
+        (base / "docs" / "agents" / "big.md").write_text("x" * 7000)
+        sh("git", "add", "-A", cwd=base)
+        sh("git", "commit", "-qm", "rules", cwd=base)
+        sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, worker_rules="docs/agents/codex.md")
+        p = s.prompts[0]
+        self.assertIn("RULES-MARK", p)
+        self.assertNotIn("Read %s" % (self.wt / "docs/agents/codex.md"), p)
+        self.assertIn("rg -n", p)
+        self.assertIn("line ranges", p)
+        self.assertIn("about 12 tool calls", p)
+        self.assertNotIn("Read the code it names", p)
+        self.assertLess(len(p.encode("utf-8")), 12 * 1024)
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, worker_rules="docs/agents/big.md")
+        self.assertIn("Read %s" % (self.wt / "docs/agents/big.md"), s.prompts[0])
+        self.assertNotIn("xxxxxxxx", s.prompts[0])
+
+    def test_the_brief_carries_what_linked_beads_decided(self):
+        # lifesim-fld.25.17 asked which rung was picked in yxd6.3, whose close reason said so
+        bead = dict(BEAD, description="Use the rung you picked in t-9, as agreed in t-8.", dependencies=[
+            {"id": "t-7", "title": "Dep", "status": "open"}], parent="t-6")
+        known = {"t-9": {"id": "t-9", "title": "Pick a rung", "status": "closed", "close_reason": "smile B, big smile D, laugh B"},
+                 "t-8": {"id": "t-8", "title": "Agree", "status": "open"},
+                 "t-6": {"id": "t-6", "title": "Epic", "status": "open"}}
+        notes = {"t-9": [{"author": "denis", "text": "B for smile."}, {"author": "tl-sess1234", "text": "Reflect (engine): outcome=landed"},
+                         {"author": "tl-sess1234", "text": "engine said this"}],
+                 "t-8": [{"author": "denis", "text": "x" * 900}]}
+        with mock.patch.object(tl, "show", side_effect=lambda b, cwd=None: bead if b == "t-1" else known.get(b, {})), \
+                mock.patch.object(tl, "comments", side_effect=lambda b, cwd=None: notes.get(b, [])):
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        p = s.prompts[0]
+        self.assertIn("t-9 [closed] Pick a rung\n  closed: smile B, big smile D, laugh B\n  owner: B for smile.", p)
+        self.assertNotIn("engine said this", p)
+        self.assertIn("t-8 [open] Agree", p)
+        self.assertIn("t-7 [open] Dep", p)
+        self.assertIn("t-6 [open] Epic", p)
+        line = next(l for l in p.split("\n- ") if l.startswith("t-8 "))
+        self.assertLessEqual(len(line), 400)
+        sent = (self.eng.run_dir / "brief.md").read_text()
+        self.assertIn("smile B, big smile D, laugh B", sent)
+
+    def test_linked_beads_are_at_most_ten_and_never_change_the_checkpoint_hash(self):
+        names = " ".join("t-%d" % k for k in range(20, 40))
+        bead = dict(BEAD, description=names)
+        show = lambda b, cwd=None: {"id": b, "title": "T" + b, "status": "closed", "close_reason": "r"}
+        out = engine.linked_text("t-1", bead, [], show, lambda b: [])
+        self.assertEqual(out.count("\n- t-"), 10)
+        a = engine.brief_digest(bead, [], owner_only=True)
+        self.assertNotIn("Linked beads", a)
 
 
 class FailureBriefAndDurations(unittest.TestCase):
