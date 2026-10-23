@@ -60,21 +60,41 @@ class Table(unittest.TestCase):
             self.assertEqual(cmd, "", req)
             self.assertIn(why, err)
 
-    def test_collect_takes_new_matching_pictures_from_the_given_folder_and_the_methods_own(self):
+    def test_collect_takes_new_or_changed_pictures_not_old_ones_nor_symlinks(self):
+        import os
         with tempfile.TemporaryDirectory() as d:
             wt, out = Path(d, "wt"), Path(d, "out")
             (wt / "client/Logs/shots").mkdir(parents=True)
             out.mkdir()
-            (wt / "client/Logs/shots/old.png").write_bytes(b"x")
-            import os
-            import time
-            os.utime(wt / "client/Logs/shots/old.png", (1, 1))
-            (wt / "client/Logs/shots/new.png").write_bytes(b"x")
-            (wt / "client/Logs/shots/new.txt").write_text("x")
-            (out / "mine.png").write_bytes(b"x")
+            shots = wt / "client/Logs/shots"
+            (shots / "old.png").write_bytes(b"x")
+            os.utime(shots / "old.png", (1, 1))
             m = self.methods()["CreatorShots"]
-            got = [f.name for f in looks.collect(m, wt, out, time.time() - 5)]
+            before = looks.snapshot(m, wt)
+            (shots / "new.png").write_bytes(b"x")
+            (shots / "new.txt").write_text("x")
+            (out / "mine.png").write_bytes(b"x")
+            try:
+                os.symlink("/etc/hosts", shots / "link.png")
+            except OSError:
+                pass
+            got = [f.name for f in looks.collect(m, wt, out, before)]
             self.assertEqual(sorted(got), ["mine.png", "new.png"])
+            (shots / "old.png").write_bytes(b"changed")  # same name, new bytes: it was made now
+            self.assertIn("old.png", [f.name for f in looks.collect(m, wt, out, before)])
+
+    def test_a_value_never_starts_with_a_dash_and_a_bad_table_value_is_an_error_not_a_crash(self):
+        m = self.methods()
+        for v in ("--evil=1", "-executeMethod"):
+            cmd, _, err = looks.build(m, {"method": "ShellShots", "args": [{"name": "who", "value": v}]}, "/o")
+            self.assertEqual(cmd, "", v)
+            self.assertIn("does not match", err)
+        self.assertIn("timeout_min", looks.parse_table(json.dumps({"methods": [{"method": "X", "cmd": "c", "timeout_min": "soon"}]}))[1])
+        self.assertIn("bad pattern", looks.parse_table(json.dumps({"methods": [
+            {"method": "X", "cmd": "c", "args": [{"name": "a", "flag": "-a", "pattern": "("}]}]}))[1])
+        positional = {"methods": [{"method": "P", "cmd": "run", "args": [{"name": "n", "flag": ""}]}]}
+        cmd, _, err = looks.build(looks.parse_table(json.dumps(positional))[0], {"method": "P", "args": [{"name": "n", "value": "main"}]}, "/o")
+        self.assertEqual((cmd, err), ("run main", ""))
 
 
 class Judge(unittest.TestCase):
@@ -82,6 +102,8 @@ class Judge(unittest.TestCase):
         self.assertTrue(looks.same_defect("The Save button is clipped at the right edge", "save button clipped on the right edge of the card"))
         self.assertFalse(looks.same_defect("The Save button is clipped", "Magenta texture on the sofa"))
         self.assertFalse(looks.same_defect("", "anything"))
+        self.assertFalse(looks.same_defect("clipped", "The Save button is clipped at the right edge"))  # one word is no match
+        self.assertTrue(looks.same_defect("Clipped", "clipped"))
 
     def test_the_judges_brief_has_pictures_references_befores_items_and_no_repo(self):
         text = looks.judge_prompt(["The picker shows a hue gradient"], ["build-6.png"], ["ref-mock.png"], [("build-6.png", "before-build-6.png")],

@@ -25,6 +25,7 @@ neither placeholder writes to `out` and the engine copies what is new there.
 """
 
 import fnmatch
+import glob
 import json
 import os
 import re
@@ -33,7 +34,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-DEFAULT_ARG = r"[\w.=,:@/+-]{1,200}"   # a value with no space, quote or shell character unless the table says otherwise
+DEFAULT_ARG = r"[\w.=,:@/+][\w.=,:@/+-]{0,199}"   # no space, quote or shell character, and no leading dash (never an option)
 MAX_REQUESTS = 6                        # shot requests one write may make
 CLASSES = ("test", "look-objective", "taste")
 
@@ -51,17 +52,31 @@ def parse_table(text):
     for r in rows:
         if not isinstance(r, dict) or not str(r.get("method") or "").strip() or not str(r.get("cmd") or "").strip():
             return {}, "shot table: every method needs a name and a cmd"
+        try:
+            timeout = float(r.get("timeout_min") or 15)
+        except (TypeError, ValueError):
+            return {}, "shot table: method %s has a timeout_min that is not a number" % r["method"]
         args = []
         for a in r.get("args") or []:
             if not isinstance(a, dict) or not a.get("name") or "flag" not in a:  # flag "" = a positional argument
                 return {}, "shot table: method %s has an argument without a name and a flag (flag \"\" is positional)" % r["method"]
-            args.append({"name": str(a["name"]), "flag": str(a["flag"]), "pattern": str(a.get("pattern") or DEFAULT_ARG),
+            pat = str(a.get("pattern") or DEFAULT_ARG)
+            try:
+                re.compile(pat)
+            except re.error as e:
+                return {}, "shot table: argument %s of %s has a bad pattern: %s" % (a["name"], r["method"], e)
+            args.append({"name": str(a["name"]), "flag": str(a["flag"]), "pattern": pat,
                          "required": bool(a.get("required")), "about": str(a.get("about") or "")})
         out[str(r["method"]).strip()] = {
             "method": str(r["method"]).strip(), "summary": str(r.get("summary") or "").strip(), "cmd": str(r["cmd"]),
             "args": args, "out": str(r.get("out") or "").strip("/"), "files": str(r.get("files") or "*.png"),
-            "timeout_min": float(r.get("timeout_min") or 15)}
+            "timeout_min": timeout}
     return out, ""
+
+
+def quote(value):
+    """A value as one shell word: POSIX single quotes, or cmd.exe's double quotes on Windows."""
+    return subprocess.list2cmdline([str(value)]) if os.name == "nt" else shlex.quote(str(value))
 
 
 def table_text(methods, cap=1800):
@@ -95,28 +110,41 @@ def build(methods, req, out_dir):
             if a["required"]:
                 return "", m, "shot method %s needs the argument %s" % (m["method"], a["name"])
             continue
-        if not re.fullmatch(a["pattern"], v):
+        if v.startswith("-") or not re.fullmatch(a["pattern"], v):
             return "", m, "argument %s of %s does not match %s: %r" % (a["name"], m["method"], a["pattern"], v[:80])
-        parts.append(("%s %s" % (a["flag"], shlex.quote(v))) if a["flag"] else shlex.quote(v))
+        parts.append(("%s %s" % (a["flag"], quote(v))) if a["flag"] else quote(v))
     cmd = m["cmd"]
     cmd = cmd.replace("{args}", (" " + " ".join(parts)) if parts else "") if "{args}" in cmd else (
         cmd + ((" " + " ".join(parts)) if parts else ""))
-    cmd = cmd.replace("{out}", shlex.quote(str(out_dir)))
+    cmd = cmd.replace("{out}", quote(str(out_dir)))
     return cmd, m, ""
 
 
-def collect(m, wt, out_dir, since):
-    """The pictures a method made: files matching its `files` in the folder the engine gave it (when cmd has {out}) or in its
-    `out` folder (repo-relative) that changed after `since` (epoch seconds). Sorted, as paths."""
-    folders = [Path(out_dir)]
-    if m["out"]:
-        folders.append(Path(wt) / m["out"])
+def snapshot(m, wt):
+    """{path: (mtime, size)} of the method's own `out` folder before it runs: only what changes after is its picture."""
+    snap = {}
+    folder = Path(wt) / m["out"] if m["out"] else None
+    if folder and folder.is_dir():
+        for f in folder.rglob("*"):
+            if f.is_file() and not f.is_symlink():
+                st = f.stat()
+                snap[f] = (st.st_mtime, st.st_size)
+    return snap
+
+
+def collect(m, wt, out_dir, before=None):
+    """The pictures a method made: files matching its `files` in the folder the engine gave it (when cmd has {out}), or new or
+    changed since `before` (snapshot) in its `out` folder (repo-relative). Never a symlink. Sorted."""
+    before = before or {}
     found = []
-    for folder in folders:
-        if not folder.is_dir():
+    for folder, own in ((Path(out_dir), True), (Path(wt) / m["out"] if m["out"] else None, False)):
+        if not folder or not folder.is_dir():
             continue
         for f in sorted(folder.rglob("*")):
-            if f.is_file() and fnmatch.fnmatch(f.name, m["files"]) and (folder == Path(out_dir) or f.stat().st_mtime >= since - 1):
+            if not f.is_file() or f.is_symlink() or not fnmatch.fnmatch(f.name, m["files"]):
+                continue
+            st = f.stat()
+            if own or before.get(f) != (st.st_mtime, st.st_size):
                 found.append(f)
     return list(dict.fromkeys(found))
 
@@ -129,7 +157,7 @@ def downscale(src, dst, px):
     if tool:
         cmd = [tool, "-Z", str(int(px)), str(src), "--out", str(dst)]
     else:
-        tool = shutil.which("magick") or shutil.which("convert")
+        tool = shutil.which("magick") or (shutil.which("convert") if os.name != "nt" else None)  # nt: convert.exe is a disk tool
         cmd = [tool, str(src), "-resize", "%dx%d>" % (int(px), int(px)), str(dst)] if tool else None
     if cmd:
         try:
@@ -147,11 +175,13 @@ def words(text):
 
 
 def same_defect(a, b):
-    """True when two defect descriptions say about the same thing: at least 60% of the smaller word set is in the other."""
+    """True when two defect descriptions say about the same thing: the same words, or (3+ words each) 60% of the smaller set in the other."""
     x, y = words(a), words(b)
     if not x or not y:
         return False
-    return len(x & y) >= 0.6 * min(len(x), len(y))
+    if x == y:
+        return True
+    return min(len(x), len(y)) >= 3 and len(x & y) >= 0.6 * min(len(x), len(y))
 
 
 def judge_prompt(items, shots, refs, befores, summary=""):

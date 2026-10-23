@@ -12,6 +12,7 @@ import contextlib
 import copy
 import difflib
 import fnmatch
+import glob
 import hashlib
 import json
 import os
@@ -1196,6 +1197,7 @@ class Engine:
         self.last_summary = ""  # the last write's summary: a fresh writer is told it
         self.handoff = {"rounds": [], "seen_lows": []}  # tl-bxk.13.6: what the rounds did and what a review already noted
         self.look_done, self.look_prev = 0, []  # render rounds this stage; the last round's defects (tl-bxk.13.15)
+        self.rendered_names, self.last_reqs, self.render_stale = set(), [], False  # the engine's own pictures this run, the last request
         self.taste = []  # [{id, title}] taste items for the owner-look bead
         self.scope = ""  # the bead's acceptance text: an unchecked item outside it is a follow-up, not a gap (tl-bxk.13.5)
         self.sessions = []  # every AI call of this run: the trace a later reflection reads (traces.jsonl)
@@ -2217,6 +2219,10 @@ class Engine:
                 self.done.append(plan["stages"][i]["goal"])
                 i += 1
                 self.save_checkpoint(stage=i, rounds=0, n=0, feedback="", step="write" if i < len(plan["stages"]) else "land")
+            if self.render_stale and self.last_reqs and self.shot_methods() and not self.dry:
+                # code changed after the last render (a fix round past the render rounds): the pictures that land show the tree
+                self.log("note", "rendering the last shots again: code changed since the pictures were made")
+                self.render_shots(self.last_reqs, self.look_done + 1)
             gaps = self.self_verify([u for u in self.unchecked if u["kind"] in UNCHECKED_KINDS or self.is_look(u)])
             if gaps:
                 raise Blocked(VERIFY_GAPS + "the workers could not check: " + "; ".join(
@@ -2792,7 +2798,7 @@ class Engine:
         shared = self.shared_text()
         if shared:
             rules.append(shared.strip())
-        if self.visual_cfg():
+        if self.visual_cfg() and self.shot_methods():  # the classes mean "the engine renders": only with a shot table
             rules.append(VISUAL_PLAN % self.references_text())
         rules.append("Proof files that a check reads or a reviewer looks at (screenshots, logs, probe output) go under "
                      "%s: it is kept across runs, and nothing else under %s is." % (self.evidence_dir, self.task_dir))
@@ -2979,6 +2985,8 @@ class Engine:
                "brief": self.brief_hash, "head": self.git("rev-parse", "HEAD"),
                "unchecked": self.unchecked, "filed": self.filed,
                "look_paths": self.look_paths, "look_notes": self.look_notes, "look_unjudged": self.look_unjudged,
+               "look_done": self.look_done, "look_prev": self.look_prev, "rendered": sorted(self.rendered_names),
+               "last_reqs": self.last_reqs, "render_stale": self.render_stale,
                "unverified": self.unverified, "handoff": self.handoff, "stage_tree": self.stage_tree, "writer_said": self.writer_said, "accepted_new": self.accepted_new,
                "closed": False,
                "run": self.log_path.stem, "t": time.time(), **at}
@@ -3022,6 +3030,9 @@ class Engine:
             self.drop_checkpoint()
             return None, 0, None
         self.look_paths, self.look_notes = list(ck.get("look_paths") or []), list(ck.get("look_notes") or [])
+        self.look_done, self.look_prev = int(ck.get("look_done") or 0), list(ck.get("look_prev") or [])
+        self.rendered_names, self.last_reqs = set(ck.get("rendered") or []), list(ck.get("last_reqs") or [])
+        self.render_stale = bool(ck.get("render_stale"))
         self.look_unjudged = dict(ck.get("look_unjudged") or {})
         self.unverified = list(ck.get("unverified") or [])
         if isinstance(ck.get("handoff"), dict):
@@ -3112,7 +3123,8 @@ class Engine:
         if not state or fix:  # a resumed stage keeps the checkpoint's start; the first stage starts at the task's base
             self.stage_tree = self.tree_hash() if (i or fix or self.amended) else ""
         name = state.get("name") or "stage %d/%d" % (i + 1, len(plan["stages"]))
-        self.look_done, self.look_prev = 0, []
+        if not state:  # a resumed stage keeps its render rounds (the checkpoint's)
+            self.look_done, self.look_prev = 0, []
         feedback, rounds, red, n = state.get("feedback", ""), state.get("rounds", 0), 0, state.get("n", 0)
         failed_cmds = state.get("failed")  # the commands the last engine run found red (None: no check ran red yet)
         red_now = set()  # the commands the last round found red
@@ -3184,7 +3196,9 @@ class Engine:
                 self.outcome_of("asks", w["question"][:200])
                 raise Blocked("owner decision needed", w["question"], w.get("options"))
             self.add_cases(w.get("new_cases") or [])
-            back = self.look_step(st, w, name)
+            if self.shot_methods() and self.stage_visual(st):
+                self.render_stale = True  # a write after the last render: its pictures show an older tree
+            back = self.look_step(st, w, name, last)
             if back:  # the look judge found defects: the writer fixes them before the full checks run once
                 feedback = back
                 continue
@@ -3705,6 +3719,8 @@ class Engine:
             if not (f.is_file() and f.suffix.lower() in IMAGE_EXT):
                 continue
             rel = str(f.relative_to(self.evidence_dir))
+            if self.shot_methods() and rel not in self.rendered_names:
+                continue  # with a shot table the pictures are the engine's own, of this run: never a writer's or an older run's
             why = ("over %d MB" % (MAX_SHOT_BYTES >> 20)) if f.stat().st_size > MAX_SHOT_BYTES else (
                 "more than %d screenshots" % MAX_SHOTS if len(out) >= MAX_SHOTS else "")
             if why:
@@ -3755,7 +3771,7 @@ class Engine:
         dest = (self.cfg.get("evidence_dir") or "").strip("/")
         if not dest or not Path(self.wt, dest).is_dir():
             return None
-        cands = [f for f in Path(self.wt, dest).glob("*/" + name) if f.parent.name != self.bead]
+        cands = [f for f in Path(self.wt, dest).glob("*/" + glob.escape(name)) if f.parent.name != self.bead]
         return max(cands, key=lambda f: f.stat().st_mtime) if cands else None
 
     def render_shots(self, reqs, rnd):
@@ -3765,6 +3781,7 @@ class Engine:
         methods = self.shot_methods()
         base = self.run_dir / "looks" / ("r%d" % rnd)
         names, errs = [], []
+        self.last_reqs = [r for r in reqs[:looks.MAX_REQUESTS]]
         self.node("render", "render shots, round %d" % rnd, round=rnd)
         for k, req in enumerate(reqs[:looks.MAX_REQUESTS]):
             out_dir = base / "raw" / ("%d-%s" % (k, re.sub(r"\W+", "_", str(req.get("method") or "?"))))
@@ -3773,24 +3790,33 @@ class Engine:
             if err:
                 errs.append(err)
                 continue
-            t = time.time()
+            before = looks.snapshot(m, self.wt)
             rc, tail = self.sh(cmd, timeout=m["timeout_min"] * 60, save=self.run_dir / "looks" / ("r%d-%d-%s.log" % (rnd, k, m["method"])))
-            files = looks.collect(m, self.wt, out_dir, t)
+            files = looks.collect(m, self.wt, out_dir, before) if rc == 0 else []  # a failed run's files are no render
             if not files:
                 errs.append("shot method %s %s: %s" % (m["method"], "failed (exit %d)" % rc if rc else "made no pictures",
                                                        tail.strip()[-300:] or "no output"))
                 continue
+            inside = [f for f in files if str(f).startswith(str(Path(self.wt)) + os.sep)]
+            if inside and self.sh(["git", "check-ignore", "-q", str(inside[0])], pin=True)[0] != 0:
+                self.warn("shot method %s writes pictures in the worktree (%s) and that folder is not ignored by git: they will "
+                          "show up as unexplained new files; add it to .gitignore" % (m["method"], m["out"] or str(inside[0].parent)))
             for f in files:
-                name = f.name if f.name not in names else "%s-%s" % (m["method"], f.name)
+                name, j = f.name, 1
+                while name in names:  # one name per picture within a round
+                    name, j = "%d-%s" % (j, f.name), j + 1
                 names.append(name)
                 self.evidence_dir.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(f, self.evidence_dir / name)
                 looks.downscale(f, base / name, int(self.cfg["look_max_px"]))
+        self.rendered_names |= set(names)
+        if names:
+            self.render_stale = False
         self.outcome_of("rendered" if names else "failed", "%d picture%s%s" % (
             len(names), "" if len(names) == 1 else "s", (", %d error%s" % (len(errs), "" if len(errs) == 1 else "s")) if errs else ""))
         return names, errs
 
-    def judge_shots(self, names, rnd, summary):
+    def judge_shots(self, names, rnd, summary, last=True):
         """The look judge's findings: a fresh call from another family, in a folder with only the shrunk pictures, the
         references and the 'before' pictures. -> (defects [{item, where, why}], its summary)."""
         base = self.run_dir / "looks" / ("r%d" % rnd)
@@ -3805,12 +3831,13 @@ class Engine:
             if b:
                 shutil.copy2(b, base / ("before-" + n))
                 pairs.append((n, "before-" + n))
-        prompt = looks.judge_prompt(self.cases_of("look-objective"), names, shown, pairs, summary)
+        # the plan's look items are for the last stage (like the cases); an earlier stage is judged on the general checks only
+        prompt = looks.judge_prompt(self.cases_of("look-objective") if last else [], names, shown, pairs, summary)
         d, _ = self.ai("look", "round %d: %d picture%s" % (rnd, len(names), "" if len(names) == 1 else "s"), prompt,
                        writer_family=self.writer_family, cwd=str(base), round=rnd)
         return [f for f in d["findings"] if f["verdict"] == "defect"], d["summary"]
 
-    def look_step(self, st, w, name):
+    def look_step(self, st, w, name, last=True):
         """After a visual write: the cheap checks, the shots the writer asked for, the look judge. -> the feedback that sends the
         writer back with the defects (text and picture paths), or "" to go on to the full checks. At most engine.look_rounds
         render rounds per stage; a defect that comes back is a leftover with the pictures, not another write."""
@@ -3828,7 +3855,7 @@ class Engine:
         defects = [{"item": "render", "where": "", "why": e} for e in errs]
         summary = ""
         if names:
-            found, summary = self.judge_shots(names, rnd, w.get("summary", ""))
+            found, summary = self.judge_shots(names, rnd, w.get("summary", ""), last)
             defects += found
         if summary:
             self.look_notes = [summary.strip()]

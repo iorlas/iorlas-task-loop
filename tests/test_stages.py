@@ -472,7 +472,7 @@ class VisualWork(StagesTest):
                 [{"item": "general", "verdict": "pass", "where": "", "why": "fine"}], "summary": summary}
 
     def write(self, **kw):
-        return dict(WRITE, shots=self.SHOTS, **kw)
+        return dict(WRITE, **dict({"shots": self.SHOTS}, **kw))
 
     def roles(self, s):
         return [c[0] for c in s.calls]
@@ -570,6 +570,67 @@ class VisualWork(StagesTest):
         self.assertIn("look-objective:", plan_prompt)
         self.assertIn("Never invent one as a check", plan_prompt)
         self.assertIn("ask that as your question", plan_prompt)  # no reference image in the task
+
+    def test_a_visual_repo_without_a_shot_table_is_told_nothing_of_classes(self):
+        rc, s = self.go({"plan": [PLAN], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]}, table="")
+        self.assertNotIn("look-objective:", s.prompts[0])
+
+    TWO = dict(PLAN, stages=[PLAN["stages"][0], dict(PLAN["stages"][0], goal="add g")],
+               cases=[{"criterion": "the picker shows a hue gradient", "check": "", "class": "look-objective"}])
+
+    def test_the_plans_look_items_are_judged_on_the_last_stage_only(self):
+        rc, s = self.go({"plan": [self.TWO], "write": [self.write(), self.write()], "look": [self.judged(), self.judged()],
+                         "review": [CLEAN, CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        judges = [p for p in s.prompts if p.startswith("You judge how a screen looks")]
+        self.assertEqual(len(judges), 2)
+        self.assertNotIn("hue gradient", judges[0])
+        self.assertIn("hue gradient", judges[1])
+
+    def test_only_the_engines_own_pictures_count_with_a_shot_table(self):
+        e = engine.Engine("t-1", str(self.wt), dict(engine.load_cfg(str(self.wt)), shot_table="shots.json"))
+        e.evidence_dir.mkdir(parents=True, exist_ok=True)
+        (e.evidence_dir / "writer.png").write_bytes(b"x")
+        (e.evidence_dir / "main.png").write_bytes(b"x")
+        e.rendered_names = {"main.png"}
+        self.assertEqual(e.shots(), ["main.png"])
+
+    def test_a_failed_shot_command_is_a_defect_even_if_it_left_a_picture(self):
+        self.TABLE["methods"][0]["cmd"] = te.PY + " tools/shot.py {out}{args}; exit 3"
+        try:
+            base = Path(self.tmp.name, "base-files")
+            (base / "shots.json").write_text(json.dumps(self.TABLE))
+            te.sh("git", "commit", "-qam", "failing shot", cwd=base)
+            te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
+            te.sh("git", "pull", "-q", "origin", "main", cwd=self.wt)
+            rc, s = self.go({"plan": [PLAN], "write": [self.write(), self.write()], "review": [CLEAN]})
+        finally:
+            self.TABLE["methods"][0]["cmd"] = te.PY + " tools/shot.py {out}{args}"
+        self.assertEqual(self.roles(s)[:3], ["planner", "worker", "worker"])  # no judge call: the render failed
+        self.assertIn("failed (exit 3)", s.prompts[2])
+
+    def test_pictures_made_before_a_later_fix_are_rendered_again_before_the_land(self):
+        red_once = te.PY + ' -c "import sys; sys.exit(0 if open(\'f.txt\').read().strip() != \'d2\' else 1)"'  # red after the first write
+        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[red_once])])
+        rc, s = self.go({"plan": [plan], "write": [self.write(), self.write(shots=[])], "look": [self.judged()], "review": [CLEAN]},
+                        look_rounds=1)
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertIn("rendering the last shots again", self.eng.log_path.read_text())
+        self.assertEqual(self.eng.render_stale, False)
+
+    def test_a_resumed_stage_keeps_its_render_rounds(self):
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e.look_done, e.look_prev, e.rendered_names, e.last_reqs, e.render_stale = 1, [{"why": "x", "where": ""}], {"a.png"}, self.SHOTS, True
+        e.plan_data = dict(PLAN)
+        e.branch = "task/t-1"
+        e.git("checkout", "-q", "-b", "task/t-1")
+        e.save_checkpoint(stage=0, rounds=0, n=1, feedback="", step="write")
+        ck = json.loads(e.checkpoint_path().read_text())
+        self.assertEqual((ck["look_done"], ck["rendered"], ck["render_stale"]), (1, ["a.png"], True))
+        again = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        again.reset(dict(BEAD))
+        again.resume_point()
+        self.assertEqual((again.look_done, again.rendered_names, again.render_stale), (1, {"a.png"}, True))
 
     def test_a_non_visual_repo_gets_none_of_it(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
