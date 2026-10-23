@@ -38,8 +38,21 @@ class EmptyPlan(StagesTest):
         self.assertNotEqual(rc, 0)
         self.assertTrue(self.blocked and "no stages" in self.blocked[0])
 
+    def test_an_empty_plan_over_work_no_review_accepted_is_not_done(self):
+        te.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
+        (self.wt / "g.txt").write_text("half done\n")
+        te.sh("git", "add", "-A", cwd=self.wt)
+        te.sh("git", "commit", "-qm", "wip", cwd=self.wt)
+        te.sh("git", "checkout", "-q", "-", cwd=self.wt)
+        plan = dict(PLAN, stages=[], leftovers=[{"title": "File the table bead", "why": "x"}])
+        rc, s = self.run_engine({"plan": [plan]})
+        self.assertNotEqual(rc, 0)
+        self.assertTrue(self.blocked and "no stages" in self.blocked[0])
+        self.assertEqual(self.created(), [])
+
     def test_done_when_counts_as_acceptance_criteria(self):
         has = engine.has_criteria
+        self.assertFalse(has({"description": "Done when? tbd"}))
         self.assertTrue(has({"description": "Goal.\n\n## Done when\n- x works\n"}))
         self.assertTrue(has({"description": "Goal.\n\nDone when: x works"}))
         self.assertTrue(has({"description": "Goal.\n\n**Done when**\n- x works"}))
@@ -65,6 +78,8 @@ class BadChecks(StagesTest):
         self.assertEqual(why(c, [{"cmd": "grep -qE 'other'...nothing.xml", "why": "f"}]), "")
         self.assertEqual(why(c, [{"cmd": "grep", "why": "g"}]), "")  # too short to say which check
         self.assertEqual(why(c, []), "")
+        mine = {"id": "u", "cmd": "python3 -m unittest discover -s tests -p 'test_a.py'"}
+        self.assertEqual(why(mine, [{"cmd": "python3 -m unittest discover -s tests", "why": "h"}]), "")  # another, shorter check
 
     def test_a_shortened_bad_check_replans_at_once(self):
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[self.LONG])])
@@ -116,6 +131,14 @@ class Deferred(StagesTest):
         self.assertEqual(e.engine_steps([other]), [other])
         e.leftovers = [{"title": "Tune the knob values and placeholder art", "why": "later"}]  # not an owner bead
         self.assertFalse(e.backed_by_leftover(item["what"]))
+        e.leftovers = [{"title": "Owner review of retry timeout defaults", "why": "unrelated"}]
+        self.assertFalse(e.backed_by_leftover(item["what"]))
+
+    def test_beads_in_other_sentences_are_not_the_filing_step(self):
+        e = self.eng_()
+        e.leftovers = [{"title": "x", "why": "y"}]
+        for w in ("The config file lists the bead ids", "No open beads remain in the epic", "Open the bead and read it"):
+            self.assertFalse(e.engine_does(w), w)
 
 
 class Scope(StagesTest):
@@ -137,6 +160,16 @@ class Scope(StagesTest):
         item = {"what": "Sit To Stand was not probed", "kind": "checkable"}
         self.assertEqual(e.out_of_scope([item]), [item])
         self.assertEqual(e.leftovers, [])
+
+    def test_non_latin_text_is_compared_and_a_note_is_filed_once(self):
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e.scope = "Done when: суп варится три минуты"
+        e.plan_data = dict(PLAN)
+        inside = {"what": "суп варится три минуты на плите", "kind": "checkable"}
+        outside = {"what": "wallpaper colour not probed", "kind": "checkable"}
+        self.assertEqual(e.out_of_scope([inside, outside]), [inside])
+        e.out_of_scope([outside])
+        self.assertEqual(len(e.leftovers), 1)
 
     def test_acceptance_text_reads_the_field_and_the_description_from_the_heading(self):
         txt = engine.acceptance_text({"acceptance_criteria": "A works", "description": "Intro.\n## Done when\n- B works\n"})
@@ -207,6 +240,8 @@ class Handoff(StagesTest):
     def test_a_smaller_session_goes_on_and_the_limit_is_the_repos_to_set(self):
         rc, s = self.boundary(90)
         self.assertEqual([c[1] for c in s.calls if c[0] == "worker"][1], "ref-write")
+        rc, s = self.boundary(120, write_fresh_above_k=0)  # 0 is never, for the stage boundary too
+        self.assertEqual([c[1] for c in s.calls if c[0] == "worker"][1], "ref-write")
         rc, s = self.boundary(120, write_fresh_stage_k=0)
         self.assertEqual([c[1] for c in s.calls if c[0] == "worker"][1], "ref-write")
 
@@ -225,6 +260,8 @@ class RepeatedChecks(StagesTest):
         got = {part: len(cs) for part, cs, rid in e.repeated_slow(plan)}
         self.assertEqual(got, {"just unity-tests": 3})
         self.assertEqual(e.repeated_slow(dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["just unity-tests", "just unity-tests"])])), [])
+        two = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[self.wrap("a")]), dict(PLAN["stages"][0], checks=[self.wrap("b")])])
+        self.assertEqual(e.repeated_slow(two), [])  # two stages' checks run in two rounds
         wrapped = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["mkdir -p ev && just fast-tests > ev/o 2>&1"])])
         self.assertEqual([(p, rid) for p, cs, rid in e.repeated_slow(wrapped)], [])  # not slow by name or history
         e.cfg["checks"][0]["cmd"] = "just unity-tests"
@@ -255,6 +292,12 @@ class SharedNotes(StagesTest):
         self.assertIn("SoakTests.HeapGrowth", e.flakes_text())
         self.assertIn("do not build a new isolation", e.flakes_text())
         self.assertIn("SoakTests.HeapGrowth", self.eng_().shared_text())  # another task of the repo reads the same file
+        e.add_flakes(["not a dict", {"test": "A"}, {"test": "B"}, {"test": "C"}, {"test": "D"}])
+        self.assertEqual([f["test"] for f in e.known_flakes()][1:], ["A", "B", "C"])  # three a write
+        data = json.loads(e.shared_path().read_text())
+        data["flakes"][0]["t"] = 1  # a writer's word lapses
+        e.shared_path().write_text(json.dumps(data))
+        self.assertNotIn("SoakTests.HeapGrowth", [f["test"] for f in e.known_flakes()])
 
     def test_a_writer_that_reports_a_flake_tells_the_next_prompts(self):
         flake = dict(WRITE, flakes=[{"test": "SoakTests.HeapGrowth", "note": "failed on the untouched base"}])
@@ -299,6 +342,22 @@ class SharedNotes(StagesTest):
         out = engine.subprocess.run(["git", "log", "--format=%s", "origin/main"], cwd=self.wt, capture_output=True, text=True).stdout
         self.assertIn("engine config", out)
         self.assertIn("Add f (t-1)", out)
+
+    def test_the_rebase_moves_the_checkpoints_head_with_it(self):
+        te.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
+        (self.wt / "g.txt").write_text("g\n")
+        te.sh("git", "add", "-A", cwd=self.wt)
+        te.sh("git", "commit", "-qm", "earlier work", cwd=self.wt)
+        e = self.eng_()
+        old = e.git("rev-parse", "HEAD")
+        e.checkpoint_path().parent.mkdir(exist_ok=True)
+        e.checkpoint_path().write_text(json.dumps({"v": 1, "head": old}))
+        self.commit_base_cfg({"gate": ""})
+        te.sh("git", "fetch", "-q", "origin", cwd=self.wt)
+        e.rebase_onto_base()
+        new = e.git("rev-parse", "HEAD")
+        self.assertNotEqual(old, new)
+        self.assertEqual(json.loads(e.checkpoint_path().read_text())["head"], new)
 
 
 if __name__ == "__main__":

@@ -72,6 +72,7 @@ DEFAULTS = {
 
 # ---- output contracts -----------------------------------------------------------------------------------------------
 
+FLAKE_DAYS = 14     # how long a writer-reported flaky test stays in the shared notes
 HANDOFF_CAP = 1500  # characters of round history one prompt carries (tl-bxk.13.6)
 S_STR = {"type": "string"}
 S_STRS = {"type": "array", "items": S_STR}
@@ -96,8 +97,9 @@ SYMBOL = re.compile(r"\b(?:[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]*)+|[a-z][a-z0-9]*(?:_[
 # what the engine itself does for a bead; an engine_step item settles only when it names one of these and the engine will
 ENGINE_FILES = re.compile(r"\b(?:fil(?:e|es|ed|ing)|creat(?:e|es|ed|ing)|open(?:s|ed|ing)?)\b.*\b(?:follow-?ups?|leftovers?)\b|"
                           r"\b(?:follow-?ups?|leftovers?)\b.*\b(?:not filed|filed|files?|creat\w+)\b", re.I)
-ENGINE_BEADS = re.compile(r"\b(?:fil(?:e|es|ed|ing)|creat(?:e|es|ed|ing)|open(?:s|ed|ing)?)\b[^.]{0,80}\bbeads?\b|"
-                          r"\bbeads?\b[^.]{0,80}\b(?:to be (?:filed|created)|(?:not )?(?:filed|created)|to file)\b", re.I)
+ENGINE_BEADS = re.compile(r"\bfil(?:e|es|ed|ing)\s+(?:(?:the|a|an|these|those|all|each|new|nine|\d+|follow-?ups?)\s+)*beads?\b|"
+                          r"\bcreat(?:e|es|ed|ing)\s+(?:(?:the|a|an|these|those|all|each|new|nine|\d+|follow-?ups?)\s+)*beads?\b|"
+                          r"\bbeads?\b[^.]{0,40}\b(?:to be (?:filed|created)|(?:is |are )?(?:not )?filed|to file)\b", re.I)
 ENGINE_LANDS = re.compile(r"\b(?:at|after|before|on) (?:the )?land(?:ing)?\b|\bthe engine (?:lands|merges|pushes|runs the gate)\b|"
                           r"\bthe (?:land )?gate (?:runs|will run)\b", re.I)
 ENGINE_SHOTS = re.compile(r"\b(?:screenshots?|shots|pictures)\b.*\b(?:copi\w+|committed|kept|saved into the repo)\b|"
@@ -1834,7 +1836,10 @@ class Engine:
                 keep.append(u)
                 continue
             self.log("note", "unchecked item outside the done-when, filed as a follow-up: %s" % u["what"][:200])
-            self.leftovers.append({"title": ("Check: " + u["what"])[:120], "why": "A review noted this outside the task's "
+            title = ("Check: " + u["what"])[:120]
+            if title in {lo["title"] for lo in self.leftovers}:
+                continue
+            self.leftovers.append({"title": title, "why": "A review noted this outside the task's "
                                    "done-when, so it was not verified before the land: " + u["what"][:600]})
         return keep
 
@@ -1844,11 +1849,12 @@ class Engine:
         mine = word_set(what)
         if len(mine) < 3:
             return False
-        for t, w in self.deferred_items():
+        for lo in self.leftovers:  # the beads the engine will file
+            t, w = " ".join(str(lo.get("title") or "").split()), str(lo.get("why") or "")
             if not OWNERISH.search(t):
                 continue
             theirs = word_set(t + " " + w)
-            if len(mine & theirs) >= max(3, int(0.4 * len(mine))):
+            if len(mine & theirs) >= max(4, int(0.5 * len(mine))):
                 return True
         return False
 
@@ -1890,9 +1896,9 @@ class Engine:
         boundary the lower write_fresh_stage_k applies (tl-bxk.13.7): lifesim-yxbb.9 carried 276K into stage 2 (11.7M tokens)."""
         ref, ctx = self.writer.get("delegate"), self.writer.get("ctx")
         limit = self.fresh_above_k(self.writer_family or "")
-        if boundary:
+        if boundary and limit:  # write_fresh_above_k 0 means never: the stage limit does not override it
             b = float(self.cfg.get("write_fresh_stage_k", DEFAULTS["write_fresh_stage_k"]) or 0)
-            limit = min(limit, b) if limit and b else (b or limit)
+            limit = min(limit, b) if b else limit
         if not ref or not ctx or not limit or ctx <= limit:
             return ""
         self.writer.pop("delegate")
@@ -1939,13 +1945,15 @@ class Engine:
             data = json.loads(self.shared_path().read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return []
+        week2 = time.time() - FLAKE_DAYS * 86400  # a writer's word is not a fact for ever: it lapses unless reported again
         return [f for f in (data.get("flakes") if isinstance(data, dict) else None) or []
-                if isinstance(f, dict) and str(f.get("test") or "").strip()]
+                if isinstance(f, dict) and str(f.get("test") or "").strip() and (f.get("t") or time.time()) >= week2]
 
     def add_flakes(self, new):
         have = {" ".join(str(f["test"]).split()) for f in self.known_flakes()}
         add = [{"test": " ".join(str(f["test"]).split())[:200], "note": " ".join(str(f.get("note") or "").split())[:300],
-                "bead": self.bead, "t": int(time.time())} for f in new if str(f.get("test") or "").strip()]
+                "bead": self.bead, "t": int(time.time())}
+               for f in [x for x in new if isinstance(x, dict)][:3] if str(f.get("test") or "").strip()]  # three a write
         add = [f for f in add if f["test"] not in have]
         if not add or self.dry:
             return
@@ -1990,7 +1998,7 @@ class Engine:
         flakes = self.known_flakes()
         if not flakes:
             return ""
-        return ("\nKnown flaky tests of this repo (they fail without a cause in the change). A check red only on one: run it "
+        return ("\nKnown flaky tests of this repo (a writer reported each; they fail without a cause in the change). A check red only on one: run it "
                 "once more and say so in your summary; do not build a new isolation or fix for it unless the task is about "
                 "it:\n" + "".join("- %s%s%s\n" % (f["test"][:120], (": " + f["note"][:160]) if f.get("note") else "",
                                                     (" (found in %s)" % f["bead"]) if f.get("bead") else "") for f in flakes[-8:]))
@@ -2018,7 +2026,16 @@ class Engine:
         behind = self.git("rev-list", "--count", "HEAD..%s" % self.cfg["base"])
         if behind in ("", "0"):
             return
+        old = self.git("rev-parse", "HEAD")
         rc, tail = self.sh(["git", "rebase", "-q", self.cfg["base"]], pin=True)
+        if not rc:  # the checkpoint's head follows, or the next resume reads this as an edit from outside
+            try:
+                ck = json.loads(self.checkpoint_path().read_text())
+                if isinstance(ck, dict) and ck.get("head") == old:
+                    ck["head"] = self.git("rev-parse", "HEAD")
+                    self.checkpoint_path().write_text(json.dumps(ck, indent=1))
+            except (OSError, ValueError):
+                pass
         if rc:
             self.sh(["git", "rebase", "--abort"], pin=True)
             self.warn("the task branch could not be rebased onto %s before planning (it stays as it was): %s"
@@ -2616,17 +2633,25 @@ class Engine:
         `dotnet test`, that the repo's history or its name says takes long) that two plan checks run, or that a repo check
         already runs, redirects aside. lifesim-fld.10: `just unity-tests` three times a round, 99 min in two rounds; the exact
         repeat is reused (tl-bxk.10.27), a repeat wrapped in `mkdir && cmd > a.out && grep` is not."""
-        secs, found = self.check_secs(), {}
-        for c in plan_checks(plan):
-            parts = split_top(c)
-            for part in dict.fromkeys(norm_cmd(self.REDIRECT.sub("", p)) for p, _ in (parts or [(c, "")]) if p.strip()):
-                if not (self.GATE_RUNNER.match(part) or self.SLOW_RUNNER.match(part)):
-                    continue
-                if SLOW_CMD.search(part) or secs.get(part, 0) > float(self.cfg["writer_check_max_s"]):
-                    found.setdefault(part, []).append(c)
+        secs, out = self.check_secs(), {}
         repo = {norm_cmd(k.get("cmd") or ""): k.get("id") or k.get("cmd") for k in self.cfg.get("checks") or []}
-        return [(part, cs, repo.get(part, "")) for part, cs in found.items()
-                if (len(set(cs)) >= 2 or part in repo) and any(norm_cmd(c) != part for c in cs)]
+        stages = plan.get("stages") or []
+        extra = [x["check"] for k in ("risks", "cases") for x in plan.get(k) or []]  # they run with the last stage
+        blocks = [list(st["checks"]) + (extra if k == len(stages) - 1 else []) for k, st in enumerate(stages)] or [extra]
+        for block in blocks:  # a stage's checks run together; another stage's run in another round
+            found = {}
+            for c in dict.fromkeys(block):
+                parts = split_top(c)
+                for part in dict.fromkeys(norm_cmd(self.REDIRECT.sub("", p)) for p, _ in (parts or [(c, "")]) if p.strip()):
+                    if not (self.GATE_RUNNER.match(part) or self.SLOW_RUNNER.match(part)):
+                        continue
+                    if SLOW_CMD.search(part) or secs.get(part, 0) > float(self.cfg["writer_check_max_s"]):
+                        found.setdefault(part, []).append(c)
+            for part, cs in found.items():
+                if (len(set(cs)) >= 2 or part in repo) and any(norm_cmd(c) != part for c in cs):
+                    out.setdefault(part, [])
+                    out[part] += [c for c in cs if c not in out[part]]
+        return [(part, cs, repo.get(part, "")) for part, cs in out.items()]
 
     def cap_blocked(self, detail=""):
         """The re-plan cap's ask: the planner ran `planned` times. An answer with "allow" or "more" gives one more."""
@@ -2765,7 +2790,9 @@ class Engine:
         self.outcome_of("%d stage%s" % (len(data["stages"]), "" if len(data["stages"]) == 1 else "s"),
                         data["summary"][:200])
         if not data["stages"]:
-            if data["leftovers"] or self.leftovers:  # tl-bxk.13.2: the work is done and only the filing is left: the engine files and closes
+            # tl-bxk.13.2: the work is done and only the filing is left: the engine files and closes. Never after a failed
+            # stage (a re-plan), and never over work no review accepted: that tree is not "done".
+            if (data["leftovers"] or self.leftovers) and not again and (self.done or not self.task_diff().strip()):
                 self.log("note", "the planner finds the work done and leaves only follow-up beads to file: closing")
                 self.plan_leftovers(data)
                 self.plan_summary = data["summary"]
@@ -4045,7 +4072,7 @@ def has_criteria(bead):
     if m and m.group(1).strip():
         return True
     # tl-bxk.13.2: "Done when: ..." as a line, or "**Done when**" then its list (lifesim-r6z was blocked in 0 s for it)
-    return bool(re.search(r"^[ \t>*_#-]*Done when\b[ \t:*_]*(?:[^\s:*_]|\n\s*[-*\d])", bead.get("description") or "", re.M | re.I))
+    return bool(re.search(r"^[ \t>*_#-]*Done when[ \t]*[:*_]+[ \t]*(?:[^\s:*_]|\n\s*[-*\d])", bead.get("description") or "", re.M | re.I))
 
 
 def acceptance_text(bead):
@@ -4277,8 +4304,8 @@ OWNERISH = re.compile(r"\b(?:owner|sign-?off|approv\w*|review|confirm\w*|decid\w
 
 
 def word_set(text):
-    """The words of `text` worth comparing: lower case, 4+ letters or digits, no filler."""
-    return {w for w in re.findall(r"[a-z0-9]{4,}", str(text).lower()) if w not in STOP_WORDS}
+    """The words of `text` worth comparing: lower case, 3+ letters or digits (any script), no filler."""
+    return {w for w in re.findall(r"[^\W_]{3,}", str(text).lower()) if w not in STOP_WORDS}
 
 
 def norm_cmd(cmd):
@@ -4310,7 +4337,7 @@ def flagged_why(check, bad_checks):
                 at += len(part)
             if ok:
                 return b["why"]
-        elif len(said) >= 20 and (said in mine or mine in said):
+        elif len(said) >= 20 and (said in mine or mine in said) and min(len(said), len(mine)) >= 0.8 * max(len(said), len(mine)):
             return b["why"]
     return ""
 
