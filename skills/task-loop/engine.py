@@ -3118,6 +3118,10 @@ class Engine:
         if ck["brief"] != self.brief_hash:
             answer = self.answer_text(self.answered) if self.answered else ""
             diff = bead_diff(ck["snap"], self.snap, answer) if ck.get("snap") else None
+            if answer and RERUN_ANSWER.fullmatch(" ".join(answer.lower().replace("-", " ").split()).strip(" .!")):
+                # tl-bxk.13.16.5: "Run again" changes nothing the plan reads; counted as an amend it used a re-plan (lifesim-fld.10)
+                self.log("note", "the owner's answer (%s) only asks for a rerun: keeping the plan, no planner run" % answer.strip()[:40])
+                diff = ""
             if diff == "":  # the hash moved on a label or a priority: nothing the plan reads changed
                 self.log("note", "the bead changed since the checkpoint of %s, but nothing the plan reads: keeping the plan, "
                          "no planner run" % ck["run"])
@@ -4897,6 +4901,7 @@ A number for a look item (a contrast ratio, a size) comes only from the task, th
 tokens, a rule under config/). Never invent one as a check: if you think one is needed, ask it as your question (options with
 your proposal first) and plan no check for it.
 %s"""
+RERUN_ANSWER = re.compile(r"(?:run|try|go|start) again|re ?run|retry|go on|carry on|continue|resume|go ahead")
 REPLAN_CAP = "stuck: the bead was re-planned "  # the cap's ask; an owner's answer to it allows one more
 RULES_INLINE_MAX = 6 * 1024   # a worker_rules file under this goes into the planner's brief
 PLAN_BRIEF_KB = 12            # the planner's whole brief should stay under this

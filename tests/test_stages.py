@@ -712,6 +712,48 @@ class Contracts(StagesTest):
         self.assertTrue(self.eng.why.startswith("paused: delegate crashed 3 times on the review step"), self.eng.why)
         self.assertFalse(self.eng.asked)
 
+    def test_a_run_again_answer_keeps_the_plan_and_is_no_amend(self):
+        ask = dict(WRITE, question="Which format?")
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [ask]})
+        self.assertEqual(rc, 2)
+        with mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Run again."}]):
+            rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertNotIn("planner", [c[0] for c in s.calls])
+        self.assertIn("only asks for a rerun", self.eng.log_path.read_text())
+        for text in ("run-again", "Retry!", "go on", "re-run"):
+            self.assertTrue(engine.RERUN_ANSWER.fullmatch(" ".join(text.lower().replace("-", " ").split()).strip(" .!")), text)
+        for text in ("yes", "use option A", "run again with more budget"):
+            self.assertFalse(engine.RERUN_ANSWER.fullmatch(text), text)
+
+    def test_a_real_answer_still_amends(self):
+        ask = dict(WRITE, question="Which format?")
+        self.run_engine({"plan": [PLAN], "write": [ask]})
+        with mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Use the new format, then run again."}]):
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(s.calls[0][0], "planner")
+
+    def test_asks_of_closed_or_missing_beads_are_closed_and_others_left(self):
+        asks = tl.config_dir() / "asks"
+        asks.mkdir(exist_ok=True)
+        for bead in ("b-open", "b-closed", "b-gone", "b-flaky"):
+            (asks / ("%s.json" % bead)).write_text(json.dumps({"v": 1, "id": bead + "-1", "bead": bead, "status": "open", "kind": "stuck"}))
+        (asks / "b-answered.json").write_text(json.dumps({"v": 1, "id": "x", "bead": "b-answered", "status": "answered"}))
+
+        def fake_bd(*a, **k):
+            bead = a[1]
+            if bead == "b-gone":
+                return mock.Mock(returncode=1, stdout="", stderr="Error: no issue found matching b-gone")
+            if bead == "b-flaky":
+                return mock.Mock(returncode=1, stdout="", stderr="dolt: connection lost")
+            return mock.Mock(returncode=0, stdout=json.dumps([{"id": bead, "status": "closed" if bead == "b-closed" else "open"}]), stderr="")
+        with mock.patch.object(tl, "bd", side_effect=fake_bd):
+            closed = tl.close_stale_asks(every=0)
+            self.assertEqual(sorted(closed), ["b-closed", "b-gone"])
+            self.assertEqual(tl.close_stale_asks(), [])  # throttled
+        state = {b: json.loads((asks / ("%s.json" % b)).read_text())["status"] for b in ("b-open", "b-closed", "b-gone", "b-flaky", "b-answered")}
+        self.assertEqual(state, {"b-open": "open", "b-closed": "closed", "b-gone": "closed", "b-flaky": "open", "b-answered": "answered"})
+
     def test_the_engine_log_and_trace_record_the_version(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         want = json.loads((Path(engine.__file__).resolve().parents[2] / ".claude-plugin" / "plugin.json").read_text())["version"]

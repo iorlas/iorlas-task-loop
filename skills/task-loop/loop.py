@@ -535,6 +535,7 @@ def passes(repo, a, started):
             say("%d bead(s) run (--max-beads)" % ran)
             return 0
         reclaim(repo)
+        tl.close_stale_asks()  # asks of closed or missing beads (throttled)
         ranked, skipped = queue(repo)
         now = clock()
         for rested, until in read_rests(repo).items():  # another loop's pre-engine failure rests the bead here too
