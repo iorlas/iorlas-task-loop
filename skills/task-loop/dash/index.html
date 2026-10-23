@@ -814,16 +814,17 @@ function lkCard(i,repo){const k=lkKey(i),ans=i.status!='open',e=L.err[k];
     `<div class="acts"><button class="good" data-lk="good" data-k="${esc(k)}"${L.busy[k]?' disabled':''}>Good</button><textarea data-lkn="${esc(k)}" rows="1" placeholder="What should change? (needed for Redo)">${esc(L.draft[k]||'')}</textarea><button class="redo" data-lk="redo" data-k="${esc(k)}"${L.busy[k]?' disabled':''}>Redo</button></div>`;
   return `<div class="lkc${ans?' lkdone':''}"><div><h3>${esc(i.title||i.id)}</h3><div class="lm"><a class="mono" href="${taskHref(i.bead,repo)}">${esc(i.bead)}</a><span>${i.filed?esc(ago(i.filed)):''}</span></div></div>
     ${i.note?`<div class="lnote">${esc(i.note)}</div>`:''}${lkPics(i)}${res}${e?`<div class="res err">${esc(e)}</div>`:''}</div>`}
-function renderLooks(){const d=L.d;if(!d)return;const sm=d.summary||{},names=d.repos||[];
+function renderLooks(force){const d=L.d;if(!d)return;const sm=d.summary||{},names=d.repos||[];
   let html=`<div class="hero"><div><h1>Looks</h1><div class="sum">${esc(d.repo||'')} · <b>${sm.open||0}</b> wait for you · ${sm.good||0} good · ${sm.redo||0} redo</div></div>
     <div class="rtools">${names.length>1?`<select id="lrepo" aria-label="Repo">${names.map(n=>`<option ${n==d.repo?'selected':''}>${esc(n)}</option>`).join('')}</select>`:''}</div></div>`;
   html+=d.items.length?d.items.map(i=>lkCard(i,d.repo)).join(''):'<div class="list"><div class="empty"><b>No look waits for you</b>Taste items the loop could not judge from a picture land here, with before and after.</div></div>';
   const keep=document.activeElement&&document.activeElement.dataset&&document.activeElement.dataset.lkn;
-  if(keep)return;  // typing a note: leave the page alone
-  paint($('main'),'main',html)}
+  if(keep&&!force)return;  // typing a note: leave the page alone
+  const k=keep,at=k&&document.activeElement.selectionStart;
+  if(paint($('main'),'main',html)&&k){const t=document.querySelector(`textarea[data-lkn="${CSS.escape(k)}"]`);if(t){t.focus();try{t.setSelectionRange(at,at)}catch(e){}}}}
 async function lkSend(k,verdict){const i=(L.d.items||[]).find(x=>lkKey(x)==k);if(!i||L.busy[k])return;
   const ta=document.querySelector(`textarea[data-lkn="${CSS.escape(k)}"]`),note=(ta?ta.value:L.draft[k]||'').trim();
-  if(verdict=='redo'&&!note){ta&&ta.focus();L.err[k]='Write what to change first.';S.sig={};renderLooks();return}
+  if(verdict=='redo'&&!note){ta&&ta.focus();L.err[k]='Write what to change first.';S.sig={};renderLooks(true);return}
   delete L.err[k];L.busy[k]=1;S.sig={};renderLooks();
   let tk='';try{tk=localStorage.getItem('tl.token')||''}catch(e){}
   const r=await fetch('/api/look',{method:'POST',headers:{'Content-Type':'application/json',...(tk?{'Authorization':'Bearer '+tk}:{})},body:JSON.stringify({repo:L.d.repo,look_bead:i.look_bead,item:i.id,verdict,note})}).catch(()=>null);

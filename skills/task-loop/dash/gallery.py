@@ -13,6 +13,7 @@ import os
 import re
 import shutil
 import subprocess
+import threading
 import time
 from pathlib import Path
 
@@ -20,6 +21,8 @@ LABEL = "owner-look"
 PICTURES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp"}
 REFS = ("HEAD", "origin/main", "main", "master")   # where a landed picture may be read when the checkout moved on
 NOTE_MAX = 2000
+ID = re.compile(r"^[A-Za-z0-9][\w.-]*$")   # a bead id is never a bd option
+_answering = threading.Lock()              # one answer at a time: two clicks never file two follow-ups
 
 
 def bd(repo, *args, timeout=30):
@@ -40,7 +43,7 @@ def bd_json(repo, *args):
 
 
 def _clean(e, look_bead):
-    shots = [{"path": str(s.get("path") or ""), "role": "before" if s.get("role") == "before" else "after",
+    shots = [{"path": str(s.get("path") or "").replace("\\", "/"), "role": "before" if s.get("role") == "before" else "after",
               "label": str(s.get("label") or "")} for s in e.get("shots") or [] if isinstance(s, dict) and s.get("path")]
     return {"id": str(e.get("id") or ""), "look_bead": look_bead, "bead": str(e.get("bead") or ""),
             "title": str(e.get("title") or ""), "note": str(e.get("note") or ""), "shots": shots,
@@ -152,39 +155,52 @@ def answer(repo, body, now=None):
     look_bead, item_id, verdict = body.get("look_bead"), body.get("item"), body.get("verdict")
     note = body.get("note") if isinstance(body.get("note"), str) else ""
     note = note.strip()[:NOTE_MAX]
-    if verdict not in ("good", "redo", "undo") or not isinstance(look_bead, str) or not re.match(r"^[A-Za-z0-9][\w.-]*$", look_bead) \
+    if verdict not in ("good", "redo", "undo") or not isinstance(look_bead, str) or not ID.match(look_bead) \
             or not isinstance(item_id, str):
         return 400, {"code": "bad_body", "error": "The request was not understood."}
     if verdict == "redo" and not note:
         return 400, {"code": "empty", "error": "Write what to change first."}
+    with _answering:
+        return _answer(repo, look_bead, item_id, verdict, note, now)
+
+
+def _answer(repo, look_bead, item_id, verdict, note, now):
     try:
         shown = bd_json(repo, "show", look_bead)
         if not shown or LABEL not in (shown.get("labels") or []):
             return 404, {"code": "bead_missing", "error": "The look bead %s no longer exists." % look_bead}
-        stored = _stored(look_bead, shown)
-        e = next((x for x in stored if x.get("id") == item_id), None)
+        e = next((x for x in _stored(look_bead, shown) if x.get("id") == item_id), None)
         if e is None:
             return 404, {"code": "item_missing", "error": "That item is gone. Reload the page."}
         state = e.get("status") if e.get("status") in ("good", "redo") else "open"
+        if verdict == "undo" and state == "open":
+            return 200, {"ok": True, "status": "open"}
+        if verdict != "undo" and state != "open":
+            return 409, {"code": "answered", "error": "Already answered (%s). Take that back first." % state, "status": state}
+        made = ""
+        if verdict == "redo":  # before the fresh read below: the engine may have written `looks` meanwhile
+            ok, made = _file_redo(repo, look_bead, e, note)
+            if not ok:
+                return 502, {"code": "bd", "error": "bd refused the follow-up bead: %s" % made}
+        shown = bd_json(repo, "show", look_bead) or shown
+        stored = _stored(look_bead, shown)
+        e = next((x for x in stored if x.get("id") == item_id), None)
+        if e is None:
+            _drop(repo, made)
+            return 404, {"code": "item_missing", "error": "That item is gone. Reload the page."}
+        old_redo = e.get("redo_bead") or ""
         if verdict == "undo":
-            if state == "open":
-                return 200, {"ok": True, "status": "open"}
-            if state == "redo" and e.get("redo_bead"):
-                bd(repo, "close", e["redo_bead"], "--reason", "the owner took the redo back")
             e.update(status="open", redo_bead="", answer_note="", answered=0)
-        elif state != "open":
-            return 409, {"code": "answered", "error": "Already answered (%s). Take that back first." % state,
-                         "status": state}
         elif verdict == "good":
             e.update(status="good", answer_note=note, answered=now)
         else:
-            made = _file_redo(repo, look_bead, e, note)
-            if not made[0]:
-                return 502, {"code": "bd", "error": "bd refused the follow-up bead: %s" % made[1]}
-            e.update(status="redo", redo_bead=made[1], answer_note=note, answered=now)
+            e.update(status="redo", redo_bead=made, answer_note=note, answered=now)
         ok, why = _save(repo, look_bead, shown, stored)
         if not ok:
+            _drop(repo, made)
             return 502, {"code": "bd", "error": "bd refused the answer: %s" % why}
+        if verdict == "undo":
+            _drop(repo, old_redo, "the owner took the redo back")
         waiting = sum(1 for x in stored if x.get("status") not in ("good", "redo"))
         if verdict == "undo" and shown.get("status") == "closed":
             bd(repo, "update", look_bead, "--status", "open")
@@ -195,6 +211,12 @@ def answer(repo, body, now=None):
         return 502, {"code": "no_bd", "error": "The dashboard cannot run bd (%s). Nothing was changed." % err}
     except subprocess.SubprocessError as err:
         return 502, {"code": "bd", "error": "bd did not answer (%s)." % type(err).__name__}
+
+
+def _drop(repo, bead, why="the answer could not be saved"):
+    """Close a follow-up bead that no answer points at (a failed save, an undone redo)."""
+    if bead and ID.match(bead):
+        bd(repo, "close", bead, "--reason", why)
 
 
 def _file_redo(repo, look_bead, e, note):

@@ -215,6 +215,41 @@ class Answers(unittest.TestCase):
         self.assertEqual(fake.beads["tl-look"]["status"], "open")
 
 
+class Hardening(unittest.TestCase):
+    def test_a_backslash_path_from_windows_matches(self):
+        items = gallery.items_of("b", {"metadata": {"looks": [{"id": "a#1", "shots": [{"path": "docs\\e\\a.png"}]}]}})
+        self.assertEqual(items[0]["shots"][0]["path"], "docs/e/a.png")
+
+    def test_a_failed_save_closes_the_redo_bead_it_made(self):
+        fake = world("open")
+        orig = fake.__call__
+        fake.__class__ = type("Bad", (FakeBd,), {"__call__": lambda s, repo, *a, timeout=30: subprocess.CompletedProcess(a, 1, "", "boom")
+                                                  if a[0] == "update" and "--metadata" in a and a[1] == "tl-look" else orig(repo, *a)})
+        with mock.patch.object(gallery, "bd", fake):
+            code, _ = gallery.answer("/r", {"look_bead": "tl-look", "item": "tl-1#1", "verdict": "redo", "note": "n"}, now=NOW)
+        self.assertEqual(code, 502)
+        self.assertEqual(fake.beads["tl-r1"]["status"], "closed")
+
+    def test_two_clicks_at_once_file_one_follow_up(self):
+        import threading
+        fake = world("open")
+        res = []
+        with mock.patch.object(gallery, "bd", fake):
+            ts = [threading.Thread(target=lambda: res.append(gallery.answer("/r", {"look_bead": "tl-look", "item": "tl-1#1", "verdict": "redo", "note": "n"})[0]))
+                  for _ in range(4)]
+            [t.start() for t in ts]
+            [t.join() for t in ts]
+        self.assertEqual(sorted(res), [200, 409, 409, 409])
+        self.assertEqual(sum(1 for c in fake.calls if c[0] == "create"), 1)
+
+    def test_an_odd_redo_id_is_never_closed(self):
+        fake = world("open")
+        fake.beads["tl-look"]["metadata"]["looks"][0].update(status="redo", redo_bead="--force")
+        with mock.patch.object(gallery, "bd", fake):
+            gallery.answer("/r", {"look_bead": "tl-look", "item": "tl-1#1", "verdict": "undo"})
+        self.assertFalse(any(c[0] == "close" and "--force" in c for c in fake.calls))
+
+
 class Signal(unittest.TestCase):
     def test_looks_waiting(self):
         self.assertEqual(signals.looks_waiting([], NOW), [])
@@ -258,6 +293,7 @@ class Api(unittest.TestCase):
                 self.assertIsNone(server.look_shot("demo", "docs/evidence/tl-1/nope.png"))
                 self.assertEqual(server.answer_look({"repo": "demo", "look_bead": "tl-look", "item": "tl-1#1", "verdict": "good"})[0], 200)
                 self.assertEqual(server.api_looks("demo")["summary"], {"open": 0, "good": 1, "redo": 0})
+                self.assertEqual(server.api_looks("")["repo"], "demo")  # a bare #looks means the first repo
                 self.assertEqual(server.answer_look({"repo": "nowhere"})[0], 404)
 
 

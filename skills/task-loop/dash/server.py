@@ -1233,7 +1233,7 @@ def api_roadmap(repo=""):
 
 def look_items(repo):
     """Items of the repo's owner-look beads, cached 10 s; the key follows the beads' own marker so an answer shows at once."""
-    path = resolve_repo(repo, "") or ""
+    path = (resolve_repo(repo, "") if repo else (repos() or [""])[0]) or ""
     if not path:
         return "", []
     return path, cached("looks:" + path, 10, lambda: gallery.collect(path, beads_of(path)))
