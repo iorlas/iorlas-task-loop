@@ -2695,7 +2695,7 @@ class Engine:
             self.replan_first = True
             self.old_plan, self.amend_why = ck["plan"], "gate red at land"
             return None, 0, None
-        if ck["brief"] != self.brief_hash and ck["step"] == "land" and (self.answered or {}).get("kind") == "verify":
+        if ck["brief"] != self.brief_hash and ck["step"] == "land" and (self.answered or {}).get("kind") in ("verify", "denied"):
             self.plan_data, self.plan_summary = ck["plan"], ck["plan"]["summary"]
             answer = self.answer_text(self.answered)
             gaps = (self.answered.get("why") or "").startswith(VERIFY_GAPS)  # not a denial's ask: its answer is a rerun
