@@ -2628,6 +2628,9 @@ class Engine:
         files them'. A claim about the result ('the beads cover all nine objects') goes to the verifier."""
         out = []
         for u in gaps:
+            if u["kind"] == "engine_step" and self.engine_does(u["what"]):  # the writer's own typing of it, when it names the step
+                self.settle_engine_step(u)
+                continue
             route = self.ledger_route(u["what"])
             if route == "engine_step":  # tl-bxk.13.16.1: the plan's ledger says the engine does it
                 self.settle_engine_step(u)
@@ -2635,9 +2638,7 @@ class Engine:
             if route == "leftover":
                 self.add_unverified(u, "the plan defers it to a follow-up bead")
                 continue
-            if u["kind"] == "engine_step" and self.engine_does(u["what"]):
-                self.settle_engine_step(u)
-            elif u["kind"] in ("owner_decision", "external_fact", "taste") and self.backed_by_leftover(u["what"]):
+            if u["kind"] in ("owner_decision", "external_fact", "taste") and self.backed_by_leftover(u["what"]):
                 self.add_unverified(u, "a follow-up bead for the owner is filed at land")
             elif u["kind"] in ("engine_step", "external_fact", "taste"):
                 out.append(dict(u, kind=self.resolve_kind(u, {"kind": u["kind"], "source": "x"})[0]))  # source is the verifier's to give
