@@ -96,6 +96,7 @@ conflict markers), and a review checks the fix only; then land tries again. `eng
 the bead is blocked and its next run re-plans with the gate's output. Limits per bead, across runs: `max_replans` (1;
 a changed bead never counts), `max_fix_rounds` (2); per stage: `max_rounds` (3), `max_check_tries` (3) red checks in a
 row per round.
+Push to main by hand only via `tl land-lock [--repo DIR] [--wait-min N] -- CMD...` (same lock; exits with CMD's code, 75 on timeout).
 
 Acceptance cases: the plan has at least one per acceptance criterion of the bead (the criterion quoted, a check). They
 run on the last stage and again in every fix round at land. A writer may add cases it finds (the review sees them as
