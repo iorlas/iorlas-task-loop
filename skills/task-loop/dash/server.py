@@ -1181,7 +1181,7 @@ def unblocks_by_bead(repo):
             if s in by_id and s != t and by_id[s].get("status") != "closed":
                 edges.setdefault(s, set()).add(t)
     epics = {i for i, b in by_id.items() if b.get("issue_type") == "epic"}
-    return {"counts": graph.unblock_counts(edges, epics), "open": {i for i, b in by_id.items() if b.get("status") != "closed"}}
+    return {"counts": graph.unblock_counts(edges, epics), "known": set(by_id), "open": {i for i, b in by_id.items() if b.get("status") != "closed"}}
 
 
 def inbox():
@@ -1190,12 +1190,12 @@ def inbox():
     for f, a in ask_files():
         if a.get("status") != "open":
             continue
-        repo = a.get("repo") or ""
+        repo = a.get("repo") if isinstance(a.get("repo"), str) else ""
         if repo not in ub:
             ub[repo] = unblocks_by_bead(repo) if repo and (Path(repo) / ".beads").exists() else None
         info = ub[repo]
-        if info and a.get("bead") not in info["open"]:
-            continue
+        if info and a.get("bead") not in info["open"] and (a.get("bead") in info["known"] or now - float(a.get("t") or now) > 600):
+            continue  # closed, or gone for good (a bead newer than a stale listing is not gone yet)
         a = {k: v for k, v in a.items() if k not in ("brief",)}
         a["age_s"] = int(now - float(a.get("t") or now))
         a["parked"] = now > float(a.get("parks_at") or now + 1)
@@ -1261,6 +1261,7 @@ def delegate_status():
 def ask_for(ask_id):
     """(path, ask, problem): the file that holds ask_id, or why it cannot be answered. Ask files are per bead and the
     engine overwrites them with a newer ask (id bead-n), so an id the file no longer carries is `superseded`."""
+    ask_id = ask_id if isinstance(ask_id, str) else ""
     for f, a in ask_files():
         if a.get("id") == ask_id:
             if a.get("status") == "withdrawn":
@@ -1270,9 +1271,10 @@ def ask_for(ask_id):
             if a.get("status") != "open" or a.get("answer"):
                 return f, a, (409, {"code": "answered", "error": "This ask is already answered."})
             return f, a, None
-    bead = str(ask_id).rsplit("-", 1)[0]
+    bead = ask_id.rsplit("-", 1)[0]
     f = config_dir() / "asks" / ("%s.json" % bead)
-    now = read_json(str(f), {}) or {}
+    now = read_json(str(f), {}) if bead and "/" not in bead and "\\" not in bead and ".." not in bead else {}
+    now = now if isinstance(now, dict) else {}
     if now.get("id") and now.get("status") == "open":
         return None, None, (409, {"code": "superseded", "new_ask": now["id"],
                                   "error": "The engine asked again for this bead; the new ask replaces this one."})
@@ -1289,10 +1291,13 @@ def bd_failed(a, r):
 
 def answer(body):
     """First answer wins: a comment on the bead (the engine reads it as the bead changing) and the bead opened."""
+    if not isinstance(body, dict):
+        return 400, {"code": "bad_body", "error": "The request was not understood."}
     f, a, problem = ask_for(body.get("ask"))
     if problem:
         return problem
-    text = (body.get("text") or "").strip()
+    text = body.get("text")
+    text = text.strip() if isinstance(text, str) else ""
     if not text:
         return 400, {"code": "empty", "error": "Write an answer first."}
     cwd = a.get("repo") or None
@@ -1304,7 +1309,10 @@ def answer(body):
     except OSError as e:
         return 502, {"code": "no_bd", "error": "The dashboard cannot run bd (%s). Nothing was sent." % e.strerror}
     a.update(answer=text, answer_t=time.time())
-    Path(f).write_text(json.dumps(a, indent=1))
+    try:
+        Path(f).write_text(json.dumps(a, indent=1))
+    except OSError:
+        pass  # the comment is the answer; the engine reads it from the bead
     return 200, {"ok": True, "bead": a["bead"], "next": next_step(a)}
 
 
@@ -1316,11 +1324,17 @@ def next_step(a):
 
 def withdraw(body):
     """The owner dismisses an ask that no longer applies; the bead is not touched."""
+    if not isinstance(body, dict):
+        return 400, {"code": "bad_body", "error": "The request was not understood."}
     f, a, problem = ask_for(body.get("ask"))
     if problem:
         return (200, {"ok": True}) if problem[1].get("code") == "withdrawn" else problem
-    a.update(status="withdrawn", withdrawn_why=(body.get("why") or "dismissed by the owner")[:300], withdrawn=time.time())
-    Path(f).write_text(json.dumps(a, indent=1))
+    why = body.get("why") if isinstance(body.get("why"), str) and body.get("why").strip() else "dismissed by the owner"
+    a.update(status="withdrawn", withdrawn_why=why[:300], withdrawn=time.time())
+    try:
+        Path(f).write_text(json.dumps(a, indent=1))
+    except OSError as e:
+        return 500, {"code": "write", "error": "Could not write the ask file (%s)." % e.strerror}
     return 200, {"ok": True}
 
 

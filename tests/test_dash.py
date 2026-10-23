@@ -391,6 +391,21 @@ class AskFailures(unittest.TestCase):
             rows = server.inbox()
         self.assertEqual([(r["bead"], r["unblocks"]) for r in rows], [("b", 2), ("a", 0)])
 
+    def test_odd_requests_get_an_error_not_a_crash(self):
+        self.ask()
+        for body in ([], "x", {"ask": ["x-1-1"], "text": "b"}, {"ask": "../../etc-1", "text": "b"}, {"ask": "x-1-1", "text": 5}):
+            self.assertIn(server.answer(body)[0], (400, 404, 409))
+        self.assertEqual(server.withdraw([])[0], 400)
+        self.assertEqual(server.withdraw({"ask": "x-1-1", "why": 7})[0], 200)
+        self.assertEqual(json.loads((self.asks / "x-1.json").read_text())["withdrawn_why"], "dismissed by the owner")
+
+    def test_a_new_bead_missing_from_a_stale_listing_is_not_hidden_but_an_old_gone_one_is(self):
+        (self.d / ".beads").mkdir()
+        self.ask("fresh")
+        self.ask("old", t=time.time() - 3600)
+        with mock.patch.object(server, "beads_of", return_value=[{"id": "zzz", "status": "open"}]):
+            self.assertEqual([r["bead"] for r in server.inbox()], ["fresh"])
+
 
 class LaneBanner(unittest.TestCase):
     """What the banner says of delegate's `route.py status --json` lanes (tl-bxk.10.22)."""
