@@ -93,3 +93,31 @@ verify_wrong, verified, gate_red, conflict, push_race, landed, done, failed, sto
 `checks/NN-id.rK.log`, `engine-checks.rK.json` (`engine-checks.json` is the latest). `traces.jsonl` lines add
 `prev_run`, `started_because`, `ask`. Logs from before these records are read from their node/session/warn text.
 There is no `judge` step: the engine has none yet.
+
+## Roadmap (v4, 2026-10-23, replaces the Plan graph)
+Home (`/`, `#roadmap&repo=R`). The Plan tab's dependency graph (401 nodes on lifesim, cytoscape + dagre, 3 vendored
+libraries) is cut: nobody acted on its "not auto" / "blocked" counts, and a dependency only matters as what a landing
+lets go. `#plan` links open the Roadmap; the task list moved to `#tasks`.
+- One lane per slot: the last 5 passes that left it (landed / parked / failed / paused; "taken" = lost a claim race, not
+  shown), the bead running now with its stage rail (plan, write, checks, review, verify, land) and the block trail, and
+  a git-graph tree of what its landing unlocks. A landed pass names the beads it released.
+- Up next: the queue in the order `tl next` takes it (`loop.queue`, fetch off), as a git log: each bead a commit, the
+  beads that wait on it branch off (depth 3, 5 wide, "+N more needed" = it also waits on other open beads).
+- Held back: ready beads the loop skips for now (an area is busy), most unblocking first, same tree.
+`GET /api/roadmap?repo` -> `dash/roadmap.build()` (pure); inputs: `graph.build()` nodes and edges, `loop.queue()`, the
+loop's state files and pass log (`loop/<key>*.json`, `<key>.jsonl`, read only: a dead loop's file is left), the engine
+log's blocks (`timeline.run_timeline`). Mockups of the three options considered: `docs/design/mockups/`.
+
+### Cockpit layer (2026-10-23, after a Sonnet ops-UX review of the Roadmap)
+Gaps found: asks were one badge, a lane outage and a 51-park single-cause storm were invisible, churn and token spend
+were not on the page. Added:
+- Signal strip (`dash/signals.py`, pure; thresholds are named constants fitted to lifesim's real distribution): lane
+  out / usage >= 90 % (red/amber), beads held by nothing (red), >= 4 parks with one normalised cause within 3 h (red),
+  asks aging (info > amber 12 h > red 24 h or parking within 24 h), churn (checks failed >= 3, planned >= 3, or >= 12
+  steps; amber), token hog (fresh tokens > 500k and 3x the median), budget near-miss (<= 115 % of the limit; info),
+  good news (landings in 24 h, median time, first-run share; green). Red first. The strip says "Nothing wrong" when none fire.
+- Tokens: "fresh" = input - cached + output (95 % of input is cache read, so raw totals mislead); summed over all runs of
+  a bead (`tokens_all`); the median is of fresh tokens per bead of the repo. Each running bead gets a verdict line.
+- Hover on any bead id: title, state and why, runs, steps, time, tokens (`briefs` in `/api/roadmap`). Click: panel
+  (`#roadmap&repo=R&bead=ID`, `GET /api/bead`): description, acceptance, notes, comments newest first, transitions per
+  run with duration and tokens, dependencies, link to the full run timeline.

@@ -287,52 +287,122 @@ pre.tail{margin:0;background:var(--sunk);border-radius:8px;padding:9px 10px;font
   .db{padding:12px 14px 40px}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
-/* ---- plan tab ---- */
-:root{--p-stuck:#d9480f;--p-running:#2a7de1;--p-queued:#1f8f4e;--p-blocked:#cf3a3a;--p-waits:#b7791f;--p-not_auto:#8a909a;--p-epic:#8a5cd0;--p-done:#5aa876;--p-deferred:#a3a6ad}
-:root[data-theme="dark"]{--p-stuck:#ff9a52;--p-running:#6cb0ff;--p-queued:#4fd087;--p-blocked:#ff7b7b;--p-waits:#f2b84b;--p-not_auto:#8d94a0;--p-epic:#b79cf0;--p-done:#6fbf8c;--p-deferred:#62656c}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--p-stuck:#ff9a52;--p-running:#6cb0ff;--p-queued:#4fd087;--p-blocked:#ff7b7b;--p-waits:#f2b84b;--p-not_auto:#8d94a0;--p-epic:#b79cf0;--p-done:#6fbf8c;--p-deferred:#62656c}}
-main.wide{max-width:none;padding-bottom:24px}
-.pbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 10px}
-.pbar .lb{color:var(--mute);font-size:12.5px;font-weight:600;margin-right:2px}
-.pc{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 11px;border-radius:999px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);font-size:13px;white-space:nowrap}
-.pc b{font-variant-numeric:tabular-nums}
-.pc i{width:9px;height:9px;border-radius:50%;flex:none}
-button.pc:hover{background:var(--hover)}
-button.pc.on{box-shadow:inset 0 0 0 2px var(--ring)}
-.ptools{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 10px}
-.ptools .pc{height:28px;font-size:12.5px;color:var(--ink2)}
-.ptools select{height:28px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-size:12.5px;padding:0 10px}
-.pleg{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--mute);margin:0 0 8px}
-.pleg span{display:inline-flex;align-items:center;gap:5px}
-.pleg i{width:11px;height:11px;border-radius:3px;border:2px solid;flex:none}
-.ptop{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin:0 0 6px;font-size:12px;-webkit-overflow-scrolling:touch}
-.ptop button{flex:none;display:inline-flex;gap:6px;align-items:center;height:26px;padding:0 9px;border-radius:8px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);white-space:nowrap}
-.ptop button:hover{background:var(--hover)}
-.ptop b{color:var(--run)}
-#cywrap{position:relative;border:1px solid var(--line);border-radius:12px;background:var(--surface);overflow:hidden}
-#cy{width:100%;height:calc(100vh - 330px);min-height:420px;touch-action:none}
-.pnote{position:absolute;left:10px;top:10px;z-index:3;max-width:calc(100% - 70px);font-size:12.5px;padding:5px 10px;border-radius:9px;background:var(--bg);color:var(--ink2);box-shadow:inset 0 0 0 1px var(--line2)}
-.pzoom{position:absolute;right:10px;top:10px;display:flex;flex-direction:column;gap:6px;z-index:3}
-.pzoom button{width:34px;height:34px;border-radius:9px;background:var(--bg);box-shadow:inset 0 0 0 1px var(--line2);font-size:17px;line-height:1;display:grid;place-items:center}
-.pzoom button[data-pz=fit]{width:auto;padding:0 9px}
-.pzoom button:hover{background:var(--hover)}
-.pempty{position:absolute;inset:0;display:grid;place-items:center;color:var(--mute);pointer-events:none;text-align:center;padding:20px}
-.psheet{position:absolute;left:10px;bottom:10px;width:min(380px,calc(100% - 20px));max-height:60%;overflow:auto;background:var(--bg);border-radius:12px;box-shadow:var(--shadow2),inset 0 0 0 1px var(--line2);padding:12px 14px;z-index:4;font-size:13px}
-.psheet h3{margin:6px 0 4px;font-size:14.5px;line-height:1.35;font-weight:620}
-.psheet .row{color:var(--mute);margin:3px 0;font-size:12.5px}
-.psheet .row a,.psheet .row button{color:var(--ask);font-family:var(--mono);font-size:12px}
-.psheet .pclose{position:absolute;right:8px;top:8px;width:28px;height:28px;border-radius:8px;color:var(--mute);font-size:18px}
-.psheet .go{display:inline-block;margin-top:8px;padding:6px 12px;border-radius:8px;background:var(--ask);color:#fff;font-weight:600;font-size:13px}
-@media (max-width:640px){.pbar,.ptools,.pleg{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px}.pbar>*,.ptools>*,.pleg>*{flex:none}.hero{margin-bottom:8px}#cy{height:calc(100vh - 360px);min-height:380px}.psheet{left:6px;bottom:6px;width:calc(100% - 12px)}}
+/* ---- roadmap tab: 4/8/12/16/24 spacing, 11.5 / 12.5 / 14 / 15 type, muted text never lighter than --mute ---- */
+:root{--r-ready:var(--ok);--r-running:var(--run);--r-blocked:var(--wait);--r-waits:var(--ask);--r-stuck:var(--fail);--r-not_auto:var(--mute);--r-deferred:var(--mute)}
+main.wide{max-width:1400px}
+.hero .sum b{font-weight:650;font-variant-numeric:tabular-nums}
+.hero .sum .ok{color:var(--ok)}.hero .sum .ask{color:var(--ask)}.hero .sum .fail{color:var(--fail)}.hero .sum .wait{color:var(--wait)}
+.rsec{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);font-weight:650;margin:32px 0 12px;display:flex;gap:12px;align-items:baseline;flex-wrap:wrap}
+.rsec small{text-transform:none;letter-spacing:0;font-weight:400;font-size:12.5px;color:var(--mute)}
+.rtools select{height:28px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-size:12.5px;padding:0 12px}
+/* a lane: slot | last passes | the bead now | what its landing unlocks (only when something waits) */
+.rlane{display:grid;grid-template-columns:32px minmax(0,1fr) minmax(400px,520px);gap:16px;align-items:center;padding:16px 0;border-top:1px solid var(--line)}
+.rlane.unl{grid-template-columns:32px minmax(0,1fr) minmax(400px,520px) minmax(220px,300px)}
+.rlane:first-of-type{border-top:0;padding-top:4px}
+.rslot{font-family:var(--mono);font-weight:700;font-size:15px;color:var(--mute)}
+.rpast{position:relative;display:flex;gap:8px;justify-content:flex-end;overflow:hidden;padding-right:20px;-webkit-mask-image:linear-gradient(to right,transparent,#000 24%);mask-image:linear-gradient(to right,transparent,#000 24%)}
+.rpast::after{content:"›";position:absolute;right:2px;top:50%;transform:translateY(-50%);font-size:22px;color:var(--mute)}
+.rpast .none{color:var(--mute);font-size:12.5px;padding-right:8px}
+.rx{flex:none;width:116px;border-left:3px solid var(--c,var(--line2));background:var(--surface);border-radius:8px;padding:6px 10px;box-shadow:inset 0 0 0 1px var(--line);display:block;line-height:1.35}
+.rx:hover{background:var(--hover)}
+.rx b{display:block;font-family:var(--mono);font-weight:650;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rx i{display:block;font-style:normal;font-size:12px;color:var(--c,var(--mute));font-variant-numeric:tabular-nums;white-space:nowrap}
+.rx u{display:block;text-decoration:none;color:var(--mute);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.o-landed{--c:var(--ok)}.o-parked{--c:var(--ask)}.o-failed{--c:var(--fail)}.o-paused{--c:var(--wait)}
+.rnow{display:block;background:var(--surface);border-radius:12px;padding:12px 16px 14px;box-shadow:inset 0 0 0 1.5px var(--run),var(--shadow)}
+.rnow:hover{background:var(--hover)}
+.rnow.idle{box-shadow:inset 0 0 0 1px var(--line);color:var(--mute);padding:16px}
+.rnow .t{font-size:15px;font-weight:620;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.rnow .m{display:flex;gap:8px;flex-wrap:wrap;align-items:center;color:var(--mute);font-size:12px;margin:4px 0 12px;font-variant-numeric:tabular-nums}
+.rnow .m .mono{color:var(--ink2)}
+.live{width:8px;height:8px;border-radius:50%;background:var(--run);flex:none;animation:lv 2s ease-in-out infinite}
+@keyframes lv{50%{box-shadow:0 0 0 5px rgba(108,176,255,.0);opacity:.55}0%{box-shadow:0 0 0 0 rgba(108,176,255,.5)}}
+/* stage rail: six equal steps, label + elapsed on the live one */
+.rail{display:grid;grid-template-columns:repeat(6,1fr);gap:4px}
+.rail span{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:30px;font-size:12px;line-height:1.2;border-radius:6px;background:var(--sunk);color:var(--mute);padding:3px 0}
+.rail span small{font-size:11px;font-variant-numeric:tabular-nums;opacity:.85}
+.rail .done{background:var(--ok-bg);color:var(--ok)}
+.rail .now{background:var(--run);color:var(--bg);font-weight:700}
+.rhist{display:flex;gap:4px 6px;flex-wrap:wrap;align-items:center;margin-top:12px;font-size:11.5px;color:var(--mute);line-height:1.2}
+.rhist em{font-style:normal;margin-right:4px}
+.rhist span{padding:2px 6px;border-radius:5px;background:var(--sunk);white-space:nowrap}
+.rhist .ok{color:var(--ok)}.rhist .fail{color:var(--fail)}.rhist .run{color:var(--run)}
+.runl{font-size:12.5px;color:var(--mute)}
+.runl>b{display:block;font-weight:600;color:var(--ink2);margin-bottom:4px}
+.rnone{color:var(--mute);font-size:12.5px;padding:0 4px}
+/* git-graph tree: a branch per bead that waits on the one above */
+.gt{list-style:none;margin:0;padding:0 0 0 8px}
+.gt li{position:relative;padding:4px 0 4px 20px;font-size:13px;line-height:1.4}
+.gt li::before{content:"";position:absolute;left:0;top:14px;width:14px;border-top:2px solid var(--line2)}
+.gt li::after{content:"";position:absolute;left:0;top:0;bottom:0;border-left:2px solid var(--line2)}
+.gt li:last-child::after{bottom:auto;height:14px}
+.gt .gd{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--c);margin-right:8px;vertical-align:0}
+.gt a{color:var(--ink)}.gt a:hover{text-decoration:underline}
+.gt .id{font-family:var(--mono);font-size:12px;color:var(--mute);margin-right:8px}
+.gt .need{color:var(--warn);font-size:11.5px;margin-left:8px;white-space:nowrap}
+.gt .more{color:var(--mute);font-size:12px}
+.s-ready{--c:var(--r-ready)}.s-running{--c:var(--r-running)}.s-blocked{--c:var(--r-blocked)}.s-waits{--c:var(--r-waits)}.s-stuck{--c:var(--r-stuck)}.s-not_auto{--c:var(--r-not_auto)}.s-deferred{--c:var(--r-deferred)}
+/* the queue as a git log: a main line, each commit a bead (number | title | meta), its dependents branch off it */
+.glog{position:relative;padding-left:32px}
+.glog::before{content:"";position:absolute;left:9px;top:18px;bottom:18px;border-left:2px solid var(--line2)}
+.gc{position:relative;padding:8px 0}
+.gc::before{content:"";position:absolute;left:-30px;top:14px;width:12px;height:12px;border-radius:50%;background:var(--bg);border:2px solid var(--run)}
+.gc.first::before{background:var(--run);box-shadow:0 0 0 4px rgba(108,176,255,.25)}
+.gc .h{display:grid;grid-template-columns:2.4ch minmax(0,1fr) minmax(180px,34%);gap:4px 12px;align-items:baseline}
+.gc.nn .h{grid-template-columns:minmax(0,1fr) minmax(180px,34%)}
+.gc .n{font-family:var(--mono);font-size:13px;color:var(--run);font-weight:700;text-align:right}
+.gc .tt{font-size:14.5px;font-weight:600;line-height:1.4}.gc .tt:hover{text-decoration:underline}
+.gc .unb{display:inline-block;margin-right:6px;padding:0 8px;border-radius:999px;background:var(--ok-bg);color:var(--ok);font-size:11.5px;font-weight:650;white-space:nowrap;vertical-align:1px}
+.gc .rs{color:var(--mute);font-size:12px;line-height:1.4;text-align:right}
+.gc .rs .mono{color:var(--ink2)}
+.gc .gt{margin:4px 0 0 calc(2.4ch + 12px);padding-left:0}
+.gc.nn .gt{margin-left:0}
+.glog.held .gc::before{border-color:var(--mute)}
+.glog.held .tt{font-weight:500;color:var(--ink2)}
+details.rheld>summary{cursor:pointer;list-style:none}details.rheld>summary::-webkit-details-marker{display:none}
+details.rheld>summary .rsec::before{content:"▸";color:var(--mute);font-size:11px}details.rheld[open]>summary .rsec::before{content:"▾"}
+@media (prefers-reduced-motion:reduce){.live{animation:none}}
+@media (max-width:1100px){
+  .rlane,.rlane.unl{grid-template-columns:32px minmax(0,1fr);gap:12px 16px}
+  .rpast,.rnow,.runl{grid-column:2;min-width:0}.rpast{justify-content:flex-start;-webkit-mask-image:none;mask-image:none;padding-right:0}.rpast::after{display:none}
+  .gc .h,.gc.nn .h{grid-template-columns:2.4ch minmax(0,1fr)}.gc.nn .h{grid-template-columns:minmax(0,1fr)}.gc .rs{grid-column:2;text-align:left}.gc.nn .rs{grid-column:1}
+}
+.sigs{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin:0 0 8px}
+.sig{display:flex;flex-direction:column;gap:4px;background:var(--surface);border-radius:10px;padding:10px 14px;border-left:4px solid var(--c);box-shadow:inset 0 0 0 1px var(--line);font-size:13px;line-height:1.4}
+.sig b{font-size:14px;font-weight:650}.sig b a:hover{text-decoration:underline}
+.sig>span{color:var(--ink2)}.sig .lks{display:flex;gap:8px;flex-wrap:wrap}
+.sig.red{--c:var(--fail)}.sig.red b{color:var(--fail)}.sig.amber{--c:var(--warn)}.sig.amber b{color:var(--warn)}.sig.info{--c:var(--wait)}.sig.green{--c:var(--ok)}.sig.green b{color:var(--ok)}
+.lk{font-family:var(--mono);font-size:12px;color:var(--ask)}.lk:hover{text-decoration:underline}
+.sigmore{margin:0 0 8px}.sigmore summary{cursor:pointer;color:var(--mute);font-size:12.5px;margin-bottom:8px}
+.rverd{margin-top:10px;font-size:12.5px;color:var(--warn);line-height:1.4}
+#tip{position:fixed;z-index:60;max-width:360px;background:var(--bg);color:var(--ink);border-radius:10px;padding:10px 12px;box-shadow:var(--shadow2),inset 0 0 0 1px var(--line2);font-size:13px;line-height:1.4;pointer-events:none}
+#tip .tl2{color:var(--ink2);font-size:12.5px;margin-top:3px}#tip .tl3{color:var(--mute);font-size:11.5px;margin-top:6px}
+#bscrim{position:fixed;inset:0;background:rgba(0,0,0,.35);opacity:0;pointer-events:none;transition:opacity .15s;z-index:40}#bscrim.on{opacity:1;pointer-events:auto}
+#bpanel{position:fixed;top:0;right:0;bottom:0;width:min(620px,100vw);background:var(--bg);box-shadow:var(--shadow2);transform:translateX(102%);transition:transform .18s;z-index:41;display:flex;flex-direction:column}
+#bpanel.on{transform:none}
+#bpanel .bh{display:flex;gap:12px;align-items:flex-start;padding:16px 16px 12px;border-bottom:1px solid var(--line)}#bpanel .bh h2{margin:0 0 4px;font-size:17px;line-height:1.35;font-weight:650}
+#bpanel .bh .sub{color:var(--mute);font-size:12px}
+#bpanel .bb{flex:1;overflow:auto;padding:12px 16px 40px;font-size:13.5px}
+#bpanel h3{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);margin:20px 0 8px;font-weight:650}
+#bpanel .pre{white-space:pre-wrap;word-wrap:break-word;line-height:1.5;color:var(--ink)}
+#bpanel .why{color:var(--warn);margin-bottom:8px}
+#bpanel .cost{display:flex;flex-direction:column;gap:2px;background:var(--surface);border-radius:8px;padding:8px 12px;box-shadow:inset 0 0 0 1px var(--line)}#bpanel .cost span{color:var(--mute);font-size:12px}
+#bpanel .cm{margin:0 0 12px;padding:8px 12px;background:var(--surface);border-radius:8px;box-shadow:inset 0 0 0 1px var(--line)}#bpanel .cmh{font-size:12px;color:var(--mute);margin-bottom:4px}#bpanel .cmh b{color:var(--ink2)}
+#bpanel .hrun{margin:0 0 14px}#bpanel .hh{font-size:12.5px;color:var(--ink2);margin-bottom:4px}
+#bpanel .hb{display:grid;grid-template-columns:minmax(80px,auto) 1fr auto;gap:2px 10px;font-size:12.5px;padding:3px 0;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
+#bpanel .hb .hk{font-weight:600}#bpanel .hb .hr{color:var(--mute)}#bpanel .hb .hs{color:var(--mute);text-align:right}#bpanel .hb .ha{grid-column:1/-1;color:var(--mute);font-size:12px}
+#bpanel .hb.ok .hk{color:var(--ok)}#bpanel .hb.fail .hk{color:var(--fail)}#bpanel .hb.run .hk{color:var(--run)}
+#bpanel .dp{font-size:12.5px;margin:2px 0}#bpanel .go{display:inline-block;margin-top:20px;color:var(--ask);font-weight:600}
+@media (prefers-reduced-motion:reduce){#bpanel,#bscrim{transition:none}}
 </style>
 </head>
 <body>
 <header class="bar"><div class="bar-in">
-  <a class="brand" href="#" aria-label="task-loop: tasks"><span class="logo"></span>task-loop</a>
+  <a class="brand" href="#" aria-label="task-loop: roadmap"><span class="logo"></span>task-loop</a>
   <span class="host" id="host"></span>
   <nav class="nav" id="nav">
-    <a href="#" data-nav="tasks">Tasks</a>
-    <a href="#plan" data-nav="plan">Plan</a>
+    <a href="#" data-nav="roadmap">Roadmap</a>
+    <a href="#tasks" data-nav="tasks">Tasks</a>
     <a href="#asks" data-nav="asks">Asks <span class="badge" id="askn"></span></a>
     <a href="/classic" title="The three-pane log viewer">Logs</a>
   </nav>
@@ -342,6 +412,7 @@ button.pc.on{box-shadow:inset 0 0 0 2px var(--ring)}
 <div class="lanes" id="lanes"></div>
 <main id="main"><div class="loading">Loading…</div></main>
 <div class="scrim" id="scrim"></div>
+<div id="bscrim"></div><aside id="bpanel" aria-hidden="true" role="dialog" aria-label="Bead details"></aside>
 <aside class="drawer" id="drawer" aria-hidden="true" role="dialog" aria-label="Block details"></aside>
 <script>
 "use strict";
@@ -369,17 +440,17 @@ function chip(cls,text,dot){return `<span class="chip ${cls}" title="${esc(text)
 
 // ---- routing: #task=ID&repo=R&run=RUN&block=NODE.K&tab=T&theme=dark --------------------------------------------------
 function readHash(){const raw=location.hash.slice(1),h=new URLSearchParams(raw);
-  S.view=h.get('task')?'task':(raw.split('&')[0]=='asks'?'asks':raw.split('&')[0]=='plan'?'plan':'tasks');S.task=h.get('task');S.repo=h.get('repo')||'';
-  const b=h.get('block');S.run=h.get('run');S.block=b?{node:+b.split('.')[0],k:+(b.split('.')[1]||0)}:null;S.tab=h.get('tab');
+  S.view=h.get('task')?'task':({asks:'asks',tasks:'tasks'}[raw.split('&')[0]]||'roadmap');S.task=h.get('task');S.repo=h.get('repo')||'';
+  S.bead=h.get('bead')||null;const b=h.get('block');S.run=h.get('run');S.block=b?{node:+b.split('.')[0],k:+(b.split('.')[1]||0)}:null;S.tab=h.get('tab');
   const th=h.get('theme');if(th)setTheme(th,true)}
 function go(o){const h=new URLSearchParams();if(o.task){h.set('task',o.task);if(o.repo)h.set('repo',o.repo);if(o.run)h.set('run',o.run);
-  if(o.block)h.set('block',o.block);if(o.tab)h.set('tab',o.tab)}const s=o.asks?'asks':o.plan?'plan'+(o.repo?'&repo='+encodeURIComponent(o.repo):''):h.toString();
+  if(o.block)h.set('block',o.block);if(o.tab)h.set('tab',o.tab)}const s=o.asks?'asks':o.roadmap?'roadmap'+(o.repo?'&repo='+encodeURIComponent(o.repo):''):h.toString();
   if(location.hash.slice(1)!=s)location.hash=s;else route()}
 window.addEventListener('hashchange',route);
 let lastView='';
 function route(){const was=S.task+'|'+S.run+'|'+(S.block?S.block.node+'.'+S.block.k:'');readHash();
-  document.querySelectorAll('#nav a[data-nav]').forEach(a=>a.classList.toggle('on',a.dataset.nav==(S.view=='asks'?'asks':S.view=='plan'?'plan':'tasks')));
-  $('main').classList.toggle('wide',S.view=='plan');
+  document.querySelectorAll('#nav a[data-nav]').forEach(a=>a.classList.toggle('on',a.dataset.nav==(S.view=='asks'?'asks':S.view=='roadmap'?'roadmap':'tasks')));
+  $('main').classList.toggle('wide',S.view=='roadmap');
   if(was!=S.task+'|'+S.run+'|'+(S.block?S.block.node+'.'+S.block.k:'')){S.blk=null;S.events=null}
   const v=S.view+'|'+S.task;if(v!=lastView){lastView=v;S.sig.main=null;window.scrollTo(0,0)}
   S.gen++;render();poll()}
@@ -403,7 +474,8 @@ async function poll(){if(busy)return;busy=true;const g=S.gen;
   try{
     const a=get('/api/asks').then(x=>{S.asks=x;renderTop();if(S.view=='asks'&&g==S.gen)renderAsks()}).catch(()=>{});
     if(S.view=='tasks'){const d=await get('/api/tasks');if(g!=S.gen)return;S.tasks=d;renderTop()}
-    else if(S.view=='plan'){const d=await get('/api/graph?repo='+encodeURIComponent(S.repo));if(g!=S.gen)return;planData(d)}
+    else if(S.view=='roadmap'){const d=await get('/api/roadmap?repo='+encodeURIComponent(S.repo));if(g!=S.gen)return;R.d=d;
+      if(S.bead&&(!R.b||R.b.id!=S.bead||R.bt<Date.now()-15000)){const b=await get('/api/bead?repo='+encodeURIComponent(d.repo||S.repo)+'&id='+encodeURIComponent(S.bead));if(g!=S.gen)return;R.b=b;R.bt=Date.now()}}
     else if(S.view=='task'){const d=await get(`/api/task-timeline?repo=${encodeURIComponent(S.repo)}&id=${encodeURIComponent(S.task)}`);if(g!=S.gen)return;S.tl=d;
       if(S.block){const run=S.run||lastRun(d),r=runOf(d,run),live=!!(r&&r.end&&r.end.outcome=='running');
         if(r&&(!S.blk||live)){const b=await get(`/api/block?run=${encodeURIComponent(run)}&node=${S.block.node}&k=${S.block.k}`);if(g!=S.gen)return;S.blk=b;
@@ -417,7 +489,7 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)poll()});
 
 // ---- render -------------------------------------------------------------------------------------------------------
 function paint(el,key,html){if(S.sig[key]===html)return false;S.sig[key]=html;el.innerHTML=html;return true}
-function render(){if(S.view=='tasks')renderTasks();else if(S.view=='task')renderTask();else if(S.view=='plan')renderPlan();else renderAsks();renderDrawer()}
+function render(){if(S.view=='roadmap')renderBead();if(S.view=='tasks')renderTasks();else if(S.view=='task')renderTask();else if(S.view=='roadmap')renderRoadmap();else renderAsks();renderDrawer()}
 function renderTop(){const open=(S.asks.asks||[]).filter(a=>!a.answered_here&&!a.parked).length;$('askn').textContent=open||'';
   if(S.tasks&&S.tasks.host)$('host').textContent=S.tasks.host;
   const out=(S.asks.delegate&&S.asks.delegate.out)||[];
@@ -484,9 +556,9 @@ function endHtml(e){if(!e)return'';const cls={landed:'s-ok',done:'s-ok',asks:'s-
   const c=CAUSE[e.cause]||({asks:'ask',waiting:'ask',paused:'wait',landed:'ok',done:'ok',running:'info'}[e.outcome])||'fail';
   return (lead?`<div class="conn c-${c}" title="${esc(e.why||e.text)}"><span class="lbl">${esc(lead)}</span><span class="ln"></span></div>`:connHtml(null))+
     `<div class="endp ${cls}" title="${esc(e.why||e.text||'')}"><span class="d"></span>${esc(pill)}</div>`}
-function renderTask(){const d=S.tl;if(!d||!d.task||d.task.id!=S.task){paint($('main'),'main',`<a class="back" href="#">‹ Tasks</a><div class="loading">Loading ${esc(S.task)}…</div>`);return}
+function renderTask(){const d=S.tl;if(!d||!d.task||d.task.id!=S.task){paint($('main'),'main',`<a class="back" href="#tasks">‹ Tasks</a><div class="loading">Loading ${esc(S.task)}…</div>`);return}
   const t=d.task,total=d.runs.reduce((s,r)=>s+(r.secs||0),0),toks=d.runs.reduce((s,r)=>s+((r.tokens||{}).in||0)+((r.tokens||{}).out||0),0);
-  let html=`<a class="back" href="#">‹ Tasks</a><div class="thead"><div style="flex:1;min-width:0"><h1>${esc(t.title||t.id)}</h1>
+  let html=`<a class="back" href="#tasks">‹ Tasks</a><div class="thead"><div style="flex:1;min-width:0"><h1>${esc(t.title||t.id)}</h1>
     <div class="tmeta"><span class="mono">${esc(t.id)}</span>${t.repo?'<span>'+esc(t.repo)+'</span>':''}${t.slot?'<span>slot <span class="slot">'+esc(t.slot)+'</span></span>':''}
     <span>${d.runs.length} run${d.runs.length==1?'':'s'}</span>${total?'<span>'+dur(total)+' in all</span>':''}${toks?'<span>'+tok({in:toks})+'</span>':''}</div></div>
     ${chip(STATE[t.state]||'s-info',t.label||t.state||'')}</div>`;
@@ -614,149 +686,104 @@ function answerHtml(a){if(!a)return'';let h='';
   if(a.checks_run&&a.checks_run.length)h+=`<div class="sect"><h4>The writer ran</h4>${a.checks_run.map(c=>`<div class="el"><span class="when">exit ${esc(c.exit)}</span><span class="tx">${esc(c.cmd)}</span></div>`).join('')}</div>`;
   return h||`<pre class="tail">${esc(JSON.stringify(a,null,1))}</pre>`}
 
-// ---- plan: open beads as a dependency graph (cytoscape + dagre, vendored under /vendor) ----------------------------
-const PST=[['running','running'],['stuck','stuck'],['queued','ready'],['blocked','blocked'],['waits','waits on you'],['not_auto','not auto'],['epic','epic'],['done','done recently'],['deferred','deferred']];
-const P={d:null,raw:'',cy:null,libs:null,by:{},filter:null,top:false,alone:false,notAuto:false,showDone:false,capped:false,fitAll:false,open:{},collapsedAll:null,sel:null,struct:'',pick:{}};
-function loadLibs(){if(P.libs)return P.libs;const one=src=>new Promise((ok,no)=>{const e=document.createElement('script');e.src=src;e.onload=ok;e.onerror=()=>no(new Error('could not load '+src));document.head.appendChild(e)});
-  P.libs=one('/vendor/cytoscape.min.js').then(()=>one('/vendor/dagre.min.js')).then(()=>one('/vendor/cytoscape-dagre.js')).then(()=>{cytoscape.use(cytoscapeDagre)});
-  P.libs.catch(()=>{P.libs=null});return P.libs}
-function pcol(st){return getComputedStyle(document.documentElement).getPropertyValue('--p-'+st).trim()||'#888'}
-function cssv(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
-function mix(a,b,t){const h=x=>{x=x.replace('#','');if(x.length==3)x=x.replace(/./g,'$&$&');return[0,2,4].map(i=>parseInt(x.substr(i,2),16))};
-  try{const A=h(a),B=h(b);return 'rgb('+A.map((v,i)=>Math.round(v*t+B[i]*(1-t))).join(',')+')'}catch(e){return b}}
-function planData(d){const raw=JSON.stringify(d);if(raw==P.raw)return;P.raw=raw;P.d=d;P.by={};d.nodes.forEach(n=>P.by[n.id]=n);
-  if(P.collapsedAll===null&&d.nodes.length)P.collapsedAll=[...workSet()].filter(i=>!P.by[i].is_epic).length>40;renderPlan()}
-// the loop's work and what holds it up: running, stuck, ready, blocked, waits on you, plus blockers and their epics
-const WORK=['running','stuck','queued','blocked','waits'],FS=16;
-function workSet(){const d=P.d,inE={};d.edges.forEach(e=>{(inE[e.target]=inE[e.target]||[]).push(e.source)});
-  const keep=new Set(d.nodes.filter(n=>!n.is_epic&&WORK.includes(n.state)).map(n=>n.id)),st=[...keep];
-  while(st.length){const t=st.pop();(inE[t]||[]).forEach(x=>{const n=P.by[x];if(!n||n.is_epic||n.state=='done'||keep.has(x))return;keep.add(x);st.push(x)})}
-  d.nodes.forEach(n=>{if(!n.is_epic&&((n.state=='not_auto'&&P.notAuto)||(n.state=='done'&&P.showDone)))keep.add(n.id)});
-  d.nodes.forEach(n=>{if(!n.is_epic&&keep.has(n.id))chainOf(n.id).forEach(e=>keep.add(e))});
-  return keep}
-function chainOf(id){const out=[];let p=P.by[id]&&P.by[id].epic;while(p&&!out.includes(p)){out.push(p);p=P.by[p]&&P.by[p].epic}return out}
-function isCollapsed(id){return P.collapsedAll?P.open[id]!==true:P.open[id]===false}
-function repOf(id){const ch=chainOf(id).reverse();for(const e of ch)if(isCollapsed(e))return e;return id}
-function shortT(t,n){t=String(t||'');return t.length>n?t.slice(0,n-1)+'…':t}
-function renderPlan(){
-  if(!$('plan-root')){if(P.cy){try{P.cy.destroy()}catch(e){}P.cy=null}P.struct='';S.sig.main=null;
-    $('main').innerHTML=`<div id="plan-root"><div class="hero"><div><h1>Plan</h1><div class="sum" id="psum"></div></div></div>
-      <div class="pbar" id="pbar"></div><div class="ptools" id="ptools"></div><div class="pleg" id="pleg"></div><div class="ptop" id="ptop"></div>
-      <div id="cywrap"><div id="cy"></div><div class="pzoom"><button data-pz="in" aria-label="Zoom in">+</button><button data-pz="out" aria-label="Zoom out">−</button><button data-pz="fit" aria-label="Fit to screen" style="font-size:12px">fit all</button></div>
-      <div class="pnote" id="pnote" hidden></div><div class="pempty" id="pempty">Loading the plan…</div><div class="psheet" id="psheet" hidden></div></div></div>`}
-  const d=P.d;if(!d)return;
-  const sm=d.summary||{};
-  $('psum').textContent=d.error?d.error:(d.repo||'')+' · '+d.nodes.length+' beads shown'+(d.pick_label?' · the loop takes “'+d.pick_label+'”':'');
-  const chip=(k,n,lab,col)=>`<button class="pc ${P.filter==k?'on':''}" data-pf="${k}" aria-pressed="${P.filter==k}"><i style="background:${col}"></i><b>${n}</b> ${lab}</button>`;
-  $('pbar').innerHTML=`<span class="lb">queue:</span>`+chip('queued',sm.ready||0,'ready','var(--p-queued)')+chip('running',sm.running||0,'running','var(--p-running)')+(sm.stuck?chip('stuck',sm.stuck,'stuck','var(--p-stuck)'):'')+chip('blocked',sm.blocked||0,'blocked','var(--p-blocked)')
-    +chip('waits',sm.waits||0,'wait on you','var(--p-waits)')+chip('not_auto',sm.not_auto||0,'not auto','var(--p-not_auto)')+chip('done',sm.done_today||0,'done today','var(--p-done)');
-  const names=d.repos||[];
-  $('ptools').innerHTML=(names.length>1?`<select id="prepo" aria-label="Repo">${names.map(n=>`<option ${n==d.repo?'selected':''}>${esc(n)}</option>`).join('')}</select>`:'')
-    +`<button class="pc ${P.notAuto?'on':''}" data-pt="notauto" aria-pressed="${P.notAuto}">show not auto</button><button class="pc ${P.showDone?'on':''}" data-pt="done" aria-pressed="${P.showDone}">show done</button><button class="pc ${P.top?'on':''}" data-pt="top">only beads that unblock others</button><button class="pc ${P.alone?'on':''}" data-pt="alone">show standalone</button>`
-    +`<button class="pc" data-pt="collapse">collapse epics</button><button class="pc" data-pt="expand">expand epics</button>`;
-  $('pleg').innerHTML=PST.map(([k,l])=>`<span><i style="border-color:${pcol(k)};background:${mix(pcol(k),cssv('--surface')||'#fff',.2)};${k=='deferred'?'border-style:dashed;':''}${k=='epic'?'border-radius:6px;':''}"></i>${l}</span>`).join('');
-  const tops=d.nodes.filter(n=>n.unblocks>0&&!n.is_epic).sort((a,b)=>b.unblocks-a.unblocks||(a.id<b.id?-1:1)).slice(0,P.top?40:10);
-  $('ptop').innerHTML=tops.length?`<span class="lb" style="align-self:center;color:var(--mute);font-weight:600;flex:none">unblocks most:</span>`+tops.map(n=>`<button data-pn="${esc(n.id)}"><b>${n.unblocks}</b><span class="mono">${esc(n.id)}</span>${esc(shortT(n.title,28))}</button>`).join(''):'';
-  loadLibs().then(drawGraph).catch(e=>{$('pempty').textContent=e.message})}
-function pstructure(){
-  const d=P.d,f=P.filter,allowed=workSet(),flat=!!(f||P.top||P.capped);
-  const deg={};d.edges.forEach(e=>{deg[e.source]=(deg[e.source]||0)+1;deg[e.target]=(deg[e.target]||0)+1});
-  let vis=new Set(),ctx=new Set();
-  if(flat){let base=d.nodes.filter(n=>!n.is_epic||f=='epic');
-    if(f)base=base.filter(n=>n.state==f);else base=base.filter(n=>allowed.has(n.id));
-    if(P.capped)base=base.slice().sort((a,b)=>b.unblocks-a.unblocks||(a.id<b.id?-1:1)).slice(0,40);
-    if(P.top){const ids=new Set(base.filter(n=>n.unblocks>0).map(n=>n.id));base=base.filter(n=>ids.has(n.id));
-      d.edges.forEach(e=>{if(ids.has(e.source)&&P.by[e.target]&&!P.by[e.target].is_epic&&!ids.has(e.target)){ctx.add(e.target)}});
-      ctx.forEach(i=>base.push(P.by[i]))}
-    base.forEach(n=>vis.add(n.id))}
-  else d.nodes.forEach(n=>{if(repOf(n.id)!=n.id||!allowed.has(n.id))return;
-    const lone=!n.is_epic&&!deg[n.id]&&!P.alone&&!WORK.includes(n.state)&&!chainOf(n.id).some(e=>P.pick[e]);if(lone)return;vis.add(n.id)});
-  const rep=id=>flat?id:repOf(id);
-  const nodes=[...vis].map(id=>P.by[id]);
-  const seen=new Set(),edges=[];
-  d.edges.forEach(e=>{const s=rep(e.source),t=rep(e.target);if(s==t||!vis.has(s)||!vis.has(t))return;
-    if(!flat&&((P.by[s].is_epic&&!isCollapsed(s))||(P.by[t].is_epic&&!isCollapsed(t))))return;
-    const k=s+'>'+t;if(!seen.has(k)){seen.add(k);edges.push([s,t])}});
-  return {nodes,edges,flat,ctx}}
-function descOf(id){const o={n:0};P.d.nodes.forEach(n=>{if(!n.is_epic&&n.state!='done'&&chainOf(n.id).includes(id)){o.n++;o[n.state]=(o[n.state]||0)+1}});return o}
-function label(n,flat){
-  if(n.is_epic&&(flat||isCollapsed(n.id))){const o=descOf(n.id);const bits=[o.n+' open'];if(o.queued)bits.push(o.queued+' ready');if(o.blocked)bits.push(o.blocked+' blocked');if(o.running)bits.push(o.running+' running');
-    return (flat?'':'▸ ')+n.id+'\n'+shortT(n.title,34)+'\n'+bits.join(' · ')}
-  if(n.is_epic)return '▾ '+n.id+' · '+shortT(n.title,40);
-  return n.id+(n.unblocks>0?' · unblocks '+n.unblocks:'')+'\n'+shortT(n.title,28)}
-function cystyle(){
-  const ink=cssv('--ink'),surf=cssv('--surface'),mute=cssv('--mute'),line=cssv('--line2');
-  const st=[{selector:'node',style:{shape:'round-rectangle',width:214,height:'label',padding:'8px','background-color':surf,'border-width':2,'border-color':line,label:'data(lbl)','text-wrap':'wrap','text-max-width':198,
-      'font-size':FS,'font-family':cssv('--sans')||'sans-serif',color:ink,'text-valign':'center','text-halign':'center','min-zoomed-font-size':4}},
-    {selector:'node:parent',style:{'text-valign':'top','text-halign':'center','padding':'12px','background-opacity':.35,shape:'round-rectangle','text-margin-y':-2,width:'label',height:'label'}},
-    {selector:'edge',style:{width:1.6,'line-color':mute,'target-arrow-color':mute,'target-arrow-shape':'triangle','curve-style':'bezier','arrow-scale':.9,opacity:.75}},
-    {selector:'node.ctx',style:{opacity:.55}},{selector:'node.done',style:{opacity:.5}},{selector:'node:selected',style:{'border-width':4,'overlay-opacity':0}},
-    {selector:'.dim',style:{opacity:.45}},{selector:'edge.hi',style:{width:3,opacity:1,'line-color':pcol('running'),'target-arrow-color':pcol('running')}},
-    {selector:'node[state="deferred"]',style:{'border-style':'dashed'}},{selector:'node[?epic_node]',style:{'border-width':3,'shape':'round-rectangle'}}];
-  PST.forEach(([k])=>{st.push({selector:'node[state="'+k+'"]',style:{'border-color':pcol(k),'background-color':mix(pcol(k),surf,k=='epic'?.12:.2)}})});
-  return st}
-function drawGraph(){
-  const d=P.d,box=$('cy');if(!box)return;const w=pstructure();
-  $('pempty').textContent=!d.nodes.length?(d.error||'No open beads'):!w.nodes.length?'Nothing matches this filter':'';
-  $('pempty').style.display=$('pempty').textContent?'grid':'none';
-  if(!P.cy){P.cy=cytoscape({container:box,elements:[],style:cystyle(),wheelSensitivity:.35,minZoom:.04,maxZoom:2.2,boxSelectionEnabled:false});
-    P.cy.on('tap','node',ev=>planTap(ev.target.id()));
-    P.cy.on('tap',ev=>{if(ev.target===P.cy){planSel(null)}})}
-  const cy=P.cy;
-  const sig=JSON.stringify([w.nodes.map(n=>n.id),w.edges,w.flat,[...w.nodes.filter(n=>n.is_epic).map(n=>isCollapsed(n.id))]]);
-  const els=[];
-  w.nodes.forEach(n=>{const coll=n.is_epic&&(w.flat||isCollapsed(n.id));
-    const par=!w.flat&&n.epic&&P.by[n.epic]&&!isCollapsed(n.epic)&&repOf(n.id)==n.id?n.epic:undefined;
-    els.push({group:'nodes',data:{id:n.id,lbl:label(n,w.flat),state:n.state,parent:par&&w.nodes.some(x=>x.id==par)?par:undefined,epic_node:n.is_epic&&coll?1:0},classes:(w.ctx.has(n.id)?'ctx ':'')+(n.state=='done'?'done':'')})});
-  w.edges.forEach(([s,t])=>els.push({group:'edges',data:{id:s+'>'+t,source:s,target:t}}));
-  cy.style(cystyle());
-  if(sig!=P.struct){P.struct=sig;cy.elements().remove();cy.add(els);
-    const lay=w.edges.length?{name:'dagre',rankDir:'LR',nodeSep:12,rankSep:70,edgeSep:8,ranker:'network-simplex',animate:false,fit:true,padding:24}:{name:'grid',cols:Math.max(1,Math.round(Math.sqrt(w.nodes.length*0.9))),fit:true,padding:24,avoidOverlap:true,animate:false};
-    const lone=w.edges.length?cy.nodes().filter(n=>!n.isParent()&&!n.parent().length&&!n.connectedEdges().length):cy.collection();
-    (lone.length?cy.elements().difference(lone):cy.elements()).layout(lay).run();
-    if(lone.length){const bb=cy.elements().difference(lone).boundingBox(),W=box.clientWidth||1200,H=box.clientHeight||500;
-      const cw=232,rh=64,cols=Math.max(1,Math.min(lone.length,Math.ceil(Math.sqrt(lone.length*(W/H)*rh/cw))));
-      const below=W<H*1.2;lone.forEach((n,i)=>n.position(below?{x:bb.x1+(i%cols)*cw,y:bb.y2+rh*2+Math.floor(i/cols)*rh}:{x:bb.x2+cw+(i%cols)*cw,y:bb.y1+Math.floor(i/cols)*rh}))}
-    cy.resize();cy.fit(undefined,24)
-    if(!P.capped&&!P.fitAll&&w.nodes.length>40&&cy.zoom()*FS<9){P.capped=true;P.struct='';return drawGraph()}}
-  else els.filter(e=>e.group=='nodes').forEach(e=>{const n=cy.getElementById(e.data.id);n.data('state',e.data.state);n.data('lbl',e.data.lbl)});
-  $('pnote').hidden=!P.capped;$('pnote').textContent=P.capped?'showing the 40 that unblock most; zoom out or tap fit all':'';
-  if(P.sel&&cy.getElementById(P.sel).length)cy.getElementById(P.sel).select();planSheet()}
-function planTap(id){const n=P.by[id];if(!n)return;
-  if(n.is_epic&&!P.filter&&!P.top){const c=isCollapsed(id);P.open[id]=c;P.pick[id]=c;renderPlan();return}
-  planSel(id)}
-function planSel(id){P.sel=id;if(P.cy){P.cy.elements().unselect().removeClass('dim');P.cy.edges().removeClass('hi');
-  if(id){const e=P.cy.getElementById(id);if(e.length){e.select();const hood=e.closedNeighborhood();P.cy.elements().difference(hood).addClass('dim');e.connectedEdges().addClass('hi')}}}
-  planSheet()}
-function planSheet(){const el=$('psheet');if(!el)return;const n=P.sel&&P.by[P.sel];if(!n){el.hidden=true;return}
-  const ins=P.d.edges.filter(e=>e.target==n.id).map(e=>e.source),outs=P.d.edges.filter(e=>e.source==n.id).map(e=>e.target);
-  const lk=ids=>ids.slice(0,8).map(i=>`<button data-pn="${esc(i)}">${esc(i)}</button>`).join(' ')+(ids.length>8?' +'+(ids.length-8):'');
-  const lab=(PST.find(x=>x[0]==n.state)||[])[1]||n.state;
-  el.hidden=false;el.innerHTML=`<button class="pclose" data-ps="close" aria-label="Close">×</button><span class="chip" style="background:${mix(pcol(n.state),cssv('--surface'),.2)};color:${pcol(n.state)}"><span class="d"></span><span class="x">${esc(lab)}</span></span>
-    <h3>${esc(n.title||n.id)}</h3><div class="row"><span class="mono">${esc(n.id)}</span>${n.priority!=null?' · P'+n.priority:''} · ${esc(n.why)}</div>
-    ${n.unblocks?`<div class="row">unblocks <b style="color:var(--ink)">${n.unblocks}</b> open bead${n.unblocks>1?'s':''}</div>`:''}
-    ${ins.length?`<div class="row">waits for: ${lk(ins)}</div>`:''}${outs.length?`<div class="row">unblocks next: ${lk(outs)}</div>`:''}
-    ${n.labels.length?`<div class="row">${n.labels.slice(0,8).map(l=>'<span class="tag">'+esc(l)+'</span>').join(' ')}</div>`:''}
-    ${n.is_epic?'':`<a class="go" href="#task=${encodeURIComponent(n.id)}&repo=${encodeURIComponent(P.d.repo)}">Open task timeline</a>`}`}
-function planFocus(id){const n=P.by[id];if(!n)return;
-  let rid=id;if(!P.filter&&!P.top){const r=repOf(id);if(r!=id){chainOf(id).forEach(e=>{P.open[e]=true;P.pick[e]=true});rid=id;renderPlan()}}
-  setTimeout(()=>{planSel(id);const e=P.cy&&P.cy.getElementById(id);if(e&&e.length){P.cy.animate({fit:{eles:e.union(e.successors()),padding:40}},{duration:250,complete:()=>{if(P.cy.zoom()>1.3)P.cy.zoom({level:1.3,position:e.position()})}})}},60)}
-function planClick(e){
-  const f=e.target.closest('[data-pf]');if(f){P.capped=false;P.fitAll=false;P.filter=P.filter==f.dataset.pf?null:f.dataset.pf;P.sel=null;renderPlan();return true}
-  const t=e.target.closest('[data-pt]');if(t){const k=t.dataset.pt;P.capped=false;P.fitAll=false;
-    if(k=='notauto')P.notAuto=!P.notAuto;else if(k=='done')P.showDone=!P.showDone;else if(k=='top')P.top=!P.top;else if(k=='alone')P.alone=!P.alone;else if(k=='collapse'){P.collapsedAll=true;P.open={};P.pick={}}else if(k=='expand'){P.collapsedAll=false;P.open={};P.pick={}}
-    P.sel=null;renderPlan();return true}
-  const z=e.target.closest('[data-pz]');if(z&&P.cy){const k=z.dataset.pz,c=P.cy;if(k=='fit'){if(P.capped){P.capped=false;P.fitAll=true;P.struct='';drawGraph()}else c.fit(undefined,24)}else c.zoom({level:c.zoom()*(k=='in'?1.35:1/1.35),renderedPosition:{x:c.width()/2,y:c.height()/2}});return true}
-  const n=e.target.closest('[data-pn]');if(n){planFocus(n.dataset.pn);return true}
-  if(e.target.closest('[data-ps]')){planSel(null);return true}
-  return false}
-document.addEventListener('change',e=>{if(e.target.id=='prepo'){S.repo=e.target.value;P.d=null;P.raw='';P.struct='';P.sel=null;P.filter=null;P.open={};P.collapsedAll=null;P.pick={};
-  history.replaceState(null,'','#plan&repo='+encodeURIComponent(S.repo));S.gen++;poll()}});
-new MutationObserver(()=>{if(S.view=='plan'&&P.cy)renderPlan()}).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
-if(window.matchMedia)matchMedia('(prefers-color-scheme: dark)').addEventListener&&matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>{if(S.view=='plan'&&P.cy)renderPlan()});
+// ---- roadmap: one lane per slot, the queue as a git log ------------------------------------------------------------
+const R={d:null,held:false};
+const RSTATE={queued:'ready',running:'running',blocked:'blocked',waits:'waits',stuck:'stuck',not_auto:'not_auto',deferred:'deferred'};
+const RSTATE_TXT={ready:'ready',running:'running',blocked:'blocked',waits:'waits on you',stuck:'stuck',not_auto:'not auto',deferred:'deferred'};
+const RSTEP={replan:'plan'};
+const taskHref=(id,repo)=>'#task='+encodeURIComponent(id)+(repo?'&repo='+encodeURIComponent(repo):'');
+const shortId=id=>String(id).replace(/^[^-]+-/,'');
+function rtree(ks,repo){if(!ks||!ks.length)return'';
+  return '<ul class="gt">'+ks.map(k=>{const st=RSTATE[k.state]||'blocked';
+    return `<li class="s-${st}" title="${esc(RSTATE_TXT[st]||st)}"><span class="gd"></span><span class="id">${esc(shortId(k.id))}</span><a href="${taskHref(k.id,repo)}" data-bead="${esc(k.id)}">${esc(k.title)}</a>`
+      +(k.needs?`<span class="need" title="it also waits on ${k.needs} other open bead${k.needs>1?'s':''}">+${k.needs} more needed</span>`:'')
+      +(k.more?`<div class="more">+${k.more} more</div>`:'')+rtree(k.kids,repo)+'</li>'}).join('')+'</ul>'}
+function pastCard(p,repo){const rel=(p.released||[]).slice(0,2).map(r=>shortId(r.id)).join(', ');
+  return `<a class="rx o-${esc(p.outcome)}" href="${taskHref(p.id,repo)}" data-bead="${esc(p.id)}" title="${esc((p.title||p.id)+(p.why?' — '+p.why:''))}"><b>${esc(shortId(p.id))}</b><i>${esc(p.outcome)} · ${esc(dur(p.minutes*60))}</i>`
+    +`<u>${rel?'→ released '+esc(rel):esc(ago(p.t))}</u></a>`}
+function laneHtml(l,repo){
+  const past=`<div class="rpast">${l.past.map(p=>pastCard(p,repo)).join('')||'<span class="none">nothing has left this slot yet</span>'}</div>`;
+  if(!l.bead)return `<div class="rlane"><div class="rslot">${esc(l.slot||'·')}</div>${past}<div class="rnow idle"><div class="t">idle</div><div class="m">the loop takes #1 of the queue when it checks next</div></div></div>`;
+  const last={};l.trail.forEach(b=>{last[RSTEP[b.kind]||b.kind]=b});
+  const rail=l.rail.map(r=>{const b=last[r.step];return `<span class="${r.state}">${esc(r.step)}${r.state=='now'&&b&&b.secs?`<small>${esc(dur(b.secs))}</small>`:''}</span>`}).join('');
+  const sb=[...l.trail].reverse().find(b=>b.stages),stage=sb&&sb.stages>1?`stage ${sb.stage} of ${sb.stages}`:'';
+  const hist=l.trail.slice(-8).map(b=>`<span class="${b.status=='ok'?'ok':b.status=='fail'?'fail':b.status=='run'?'run':''}" title="${esc(b.text||b.label)}">${esc(b.kind)}${b.stage?' '+b.stage:''} ${b.status=='ok'?'✓':b.status=='fail'?'✗':b.status=='run'?'…':''}</span>`).join('');
+  const unl=l.unlocks.length?`<div class="runl"><b>Landing unlocks${l.unblocks?' '+l.unblocks:''}</b>${rtree(l.unlocks,repo)}</div>`:'';
+  const meta=[`<span class="live" title="running"></span>`,`<span class="mono">${esc(l.bead)}</span>`,l.run>1?'run '+l.run:'',l.since?esc(dur(Math.floor((Date.now()/1000-l.since)/60)*60)):'',esc(stage)].filter(Boolean).map(x=>x.startsWith('<')?x:`<span>${x}</span>`).join('');
+  return `<div class="rlane${unl?' unl':''}"><div class="rslot">${esc(l.slot||'·')}</div>${past}
+    <a class="rnow" href="${taskHref(l.bead,repo)}" data-bead="${esc(l.bead)}"><div class="t">${esc(l.title||l.bead)}</div><div class="m">${meta}</div>
+      <div class="rail">${rail}</div>${l.verdict?`<div class="rverd">${esc(l.verdict)}</div>`:''}${hist?`<div class="rhist"><em>${l.trail.length>8?'last 8 of '+l.trail.length:'so far'}</em>${hist}</div>`:''}</a>${unl}</div>`}
+function signalsHtml(d){const sg=d.signals||[];if(!sg.length)return '<div class="sigs"><div class="sig green"><b>Nothing wrong</b><span>no signal fires: no lane out, no churn, no cluster of parks, no old ask</span></div></div>';
+  const card=s=>{const look=(s.look||[]).map(i=>`<a class="lk" href="${taskHref(i,d.repo)}" data-bead="${esc(i)}">${esc(shortId(i))}</a>`).join(' ');
+    const t=s.href?`<a href="${esc(s.href)}">${esc(s.title)}</a>`:esc(s.title);
+    return `<div class="sig ${esc(s.sev)}"><b>${t}</b><span>${esc(s.line)}</span>${look?`<span class="lks">${look}</span>`:''}</div>`};
+  const head=sg.slice(0,6),rest=sg.slice(6);
+  return `<div class="sigs">${head.map(card).join('')}</div>`+(rest.length?`<details class="sigmore" id="sigmore"${R.sigmore?' open':''}><summary>${rest.length} more signal${rest.length>1?'s':''}</summary><div class="sigs">${rest.map(card).join('')}</div></details>`:'')}
+function queueHtml(q,repo,held){return `<div class="glog${held?' held':''}">`+q.map((b,i)=>`<div class="gc${i||held?'':' first'}${held?' nn':''}"><div class="h">${held?'':`<span class="n">${i+1}</span>`}
+  <a class="tt" href="${taskHref(b.id,repo)}" data-bead="${esc(b.id)}">${esc(b.title||b.id)}</a>
+  <span class="rs">${b.unblocks?`<span class="unb">unblocks ${b.unblocks}</span> `:''}<span class="mono">${esc(shortId(b.id))}</span>${b.priority!=null?' · P'+b.priority:''}${b.reason?' · '+esc(b.reason):''}${b.why?' · '+esc(b.why):''}</span></div>${rtree(b.tree,repo)}</div>`).join('')+'</div>'}
+function renderRoadmap(){const d=R.d;if(!d)return;
+  if(d.error){paint($('main'),'main',`<div class="list"><div class="empty"><b>${esc(d.error)}</b></div></div>`);return}
+  const sm=d.summary||{},names=d.repos||[];
+  const today=[[sm.landed,'landed','ok'],[sm.parked,'parked','ask'],[sm.failed,'failed','fail'],[sm.paused,'paused','wait']].filter(x=>x[0]).map(x=>`<span class="${x[2]}"><b>${x[0]}</b> ${x[1]}</span>`).join(' · ');
+  let html=`<div class="hero"><div><h1>Roadmap</h1><div class="sum">${esc(d.repo)} · today ${today||'nothing finished yet'} · <b>${d.queue.length}</b> ready</div></div>
+    <div class="rtools">${names.length>1?`<select id="rrepo" aria-label="Repo">${names.map(n=>`<option ${n==d.repo?'selected':''}>${esc(n)}</option>`).join('')}</select>`:''}</div></div>`;
+  html+=signalsHtml(d);
+  html+='<div class="rsec">Slots <small>finished passes, then the bead running now</small></div>';
+  html+=d.lanes.length?d.lanes.map(l=>laneHtml(l,d.repo)).join(''):`<div class="list"><div class="empty"><b>No loop is running on ${esc(d.repo)}</b>Start one with <code>tl loop</code>; its slots show here.</div></div>`;
+  html+='<div class="rsec">Up next <small>the order <code>tl next</code> takes. A branch is a bead that waits on the one above it.</small></div>';
+  html+=d.queue.length?queueHtml(d.queue,d.repo):'<div class="list"><div class="empty"><b>Nothing ready</b>No open bead the loop may take.</div></div>';
+  if(d.held&&d.held.length)html+=`<details class="rheld" id="rheld"${R.held?' open':''}><summary><div class="rsec">Held back <small>${d.held_total} ready but skipped for now: another bead holds their area</small></div></summary>${queueHtml(d.held,d.repo,true)}</details>`;
+  if(paint($('main'),'main',html))tip.hidden=true}
+document.addEventListener('change',e=>{if(e.target.id=='rrepo'){S.repo=e.target.value;R.d=null;history.replaceState(null,'','#roadmap&repo='+encodeURIComponent(S.repo));S.gen++;poll()}});
+document.addEventListener('toggle',e=>{if(e.target.id=='rheld')R.held=e.target.open;if(e.target.id=='sigmore')R.sigmore=e.target.open},true);
+
+// ---- hover card and bead panel: what is this ticket, what has it cost, what happened to it -------------------------
+const tokh=n=>n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?Math.round(n/1e3)+'k':String(n||0);
+function costLine(b,st){if(!b||!b.tok)return'';const m=(st||{}).median_fresh,x=m?b.fresh/m:0;
+  return `${tokh(b.new_in)} new input + ${tokh(b.out)} output (${x>=1.5?x.toFixed(1)+'× the median bead ':''}median ${tokh(m||0)}) · ${tokh(b.cache)} cache reads`}
+const tip=document.createElement('div');tip.id='tip';tip.hidden=true;document.body.appendChild(tip);
+let tipT=null;
+function showTip(el){const id=el.dataset.bead,b=R.d&&R.d.briefs&&R.d.briefs[id];if(!b)return;
+  const why=String(b.why||'').split('\n')[0].slice(0,150);
+  tip.innerHTML=`<b>${esc(b.title||id)}</b><div class="tl2"><span class="mono">${esc(id)}</span>${b.priority!=null?' · P'+b.priority:''}${b.state?' · '+esc(b.state):''}</div>`
+    +(why?`<div class="tl2">${esc(why)}</div>`:'')
+    +(b.runs?`<div class="tl2">${b.runs} run${b.runs>1?'s':''} · ${b.blocks} steps · ${esc(dur(b.secs))}</div>`:'')
+    +(b.tok?`<div class="tl2">${esc(costLine(b,R.d.stats))}</div>`:'')+'<div class="tl3">click for description, comments and history</div>';
+  tip.hidden=false;const r=el.getBoundingClientRect(),w=tip.offsetWidth,h=tip.offsetHeight;
+  tip.style.left=Math.max(8,Math.min(innerWidth-w-8,r.left))+'px';tip.style.top=(r.bottom+h+12>innerHeight?Math.max(8,r.top-h-8):r.bottom+6)+'px'}
+document.addEventListener('mouseover',e=>{const el=e.target.closest&&e.target.closest('[data-bead]');clearTimeout(tipT);
+  if(!el){tip.hidden=true;return}tipT=setTimeout(()=>showTip(el),180)});
+document.addEventListener('scroll',()=>{tip.hidden=true},true);
+document.addEventListener('click',e=>{const el=e.target.closest&&e.target.closest('[data-bead]');if(!el||S.view!='roadmap')return;
+  if(e.metaKey||e.ctrlKey||e.shiftKey)return;e.preventDefault();e.stopImmediatePropagation();tip.hidden=true;
+  location.hash='roadmap&repo='+encodeURIComponent((R.d&&R.d.repo)||S.repo)+'&bead='+encodeURIComponent(el.dataset.bead)},true);
+function closeBead(){location.hash='roadmap&repo='+encodeURIComponent((R.d&&R.d.repo)||S.repo)}
+function when(t){if(!t)return'';const d=new Date(t);return isNaN(d)?String(t):d.toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false})}
+function histHtml(runs){return runs.map((r,i)=>{
+  const bl=r.blocks.map(b=>`<div class="hb ${b.status=='ok'?'ok':b.status=='fail'?'fail':b.status=='run'?'run':''}"><span class="hk">${esc(b.label||b.kind)}${b.stage&&b.stages>1?' '+b.stage+'/'+b.stages:''}</span><span class="hr">${esc(b.text||'')}</span><span class="hs">${b.secs?esc(dur(b.secs)):''}${b.tokens&&(b.tokens.in||b.tokens.out)?' · '+tokh((b.tokens.in||0)-(b.tokens.cached||0)+(b.tokens.out||0)):''}</span>${b.arrow?`<span class="ha">↳ ${esc(b.arrow)}</span>`:''}</div>`).join('');
+  return `<div class="hrun"><div class="hh"><b>Run ${i+1}</b> ${esc(r.because||'')} · ${esc(when(r.started*1000))} · ${esc(dur(r.secs))} · ${esc(r.end||'')}</div>${bl}</div>`}).join('')}
+function renderBead(){const p=$('bpanel'),sc=$('bscrim');if(!p)return;const on=S.view=='roadmap'&&!!S.bead;p.classList.toggle('on',on);sc.classList.toggle('on',on);p.setAttribute('aria-hidden',on?'false':'true');
+  if(!on)return;const b=R.b&&R.b.id==S.bead?R.b:null,br=R.d&&R.d.briefs&&R.d.briefs[S.bead];
+  if(!b){paint(p,'bpanel',`<div class="bh"><div><h2>${esc((br&&br.title)||S.bead)}</h2><div class="sub mono">${esc(S.bead)}</div></div><button class="iconbtn x" data-bclose="1" aria-label="Close">${X}</button></div><div class="bb"><div class="loading">Loading…</div></div>`);return}
+  const sec=(t,h)=>h?`<h3>${t}</h3>${h}`:'';
+  const pre=t=>t?`<div class="pre">${esc(t)}</div>`:'';
+  const cm=[...b.comments].reverse().map(c=>`<div class="cm"><div class="cmh"><b>${esc(c.author||'')}</b> <span>${esc(when(c.at))}</span></div><div class="pre">${esc(c.text||'')}</div></div>`).join('');
+  const deps=b.deps.map(d=>`<div class="dp"><span class="mono">${esc(d.id)}</span> ${esc(d.title||'')} <span class="muted">${esc(d.status||'')}${d.type?' · '+esc(d.type):''}</span></div>`).join('');
+  const tot=(b.runs||[]).reduce((a,r)=>a+((r.tokens&&r.tokens.in)||0),0);
+  const cost=br&&br.tok?`<div class="cost"><b>${esc(costLine(br,R.d&&R.d.stats))}</b><span>${br.runs} run${br.runs>1?'s':''} · ${br.blocks} steps · ${esc(dur(br.secs))} in all</span></div>`:'';
+  const why=br&&br.why?`<div class="why">${esc(String(br.why).split('\n')[0].slice(0,220))}</div>`:'';
+  paint(p,'bpanel',`<div class="bh"><div style="min-width:0"><h2>${esc(b.title||S.bead)}</h2>
+      <div class="sub"><span class="mono">${esc(b.id)}</span> · ${esc(b.status||'')}${b.priority!=null?' · P'+b.priority:''}${b.assignee?' · '+esc(b.assignee):''} ${(b.labels||[]).map(l=>`<span class="tag">${esc(l)}</span>`).join(' ')}</div></div>
+      <button class="iconbtn x" data-bclose="1" aria-label="Close">${X}</button></div>
+    <div class="bb">${why}${cost}${sec('Description',pre(b.description))}${sec('Acceptance criteria',pre(b.acceptance))}${sec('Design',pre(b.design))}${sec('Notes',pre(b.notes))}
+      ${sec('Comments ('+b.comments.length+', newest first)',cm)}${sec('Transitions',histHtml(b.runs||[]))}${sec('Depends on',deps)}
+      <a class="go" href="#task=${encodeURIComponent(b.id)}&repo=${encodeURIComponent((R.d&&R.d.repo)||S.repo)}">Open the full run timeline, transcripts and checks</a></div>`)}
+document.addEventListener('click',e=>{if(e.target.closest('[data-bclose]')||e.target.id=='bscrim')closeBead()});
+document.addEventListener('keydown',e=>{if(e.key=='Escape'&&S.view=='roadmap'&&S.bead)closeBead()});
 
 // ---- events -------------------------------------------------------------------------------------------------------
-document.addEventListener('click',e=>{if(S.view=='plan'&&planClick(e))return;const b=e.target.closest('.blk');if(b){openBlock(b.dataset.run,+b.dataset.node,+b.dataset.k);return}
+document.addEventListener('click',e=>{const b=e.target.closest('.blk');if(b){openBlock(b.dataset.run,+b.dataset.node,+b.dataset.k);return}
   if(e.target.closest('[data-close]')||e.target.id=='scrim'){closeDrawer();return}
   const t=e.target.closest('[data-tab]');if(t){S.tab=t.dataset.tab;const h=new URLSearchParams(location.hash.slice(1));h.set('tab',S.tab);history.replaceState(null,'','#'+h);renderDrawer();return}
   const u=e.target.closest('[data-undo]');if(u){undoAnswer(u.dataset.undo);return}
