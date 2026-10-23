@@ -4,6 +4,8 @@ tree. Pure: server.py gathers the inputs and calls build(). Python 3.8+, standar
 
 import time
 
+import signals
+
 STEPS = ("plan", "write", "checks", "review", "verify", "land")
 OUTCOMES = ("landed", "parked", "failed", "paused")   # "taken" (lost a claim race) is not an outcome of a pass
 DEPTH, WIDE, PAST = 3, 5, 8
@@ -51,7 +53,7 @@ def released(i, out, by_id):
             if by_id.get(t) and by_id[t]["state"] not in ("done", "epic", "blocked") and not by_id[t]["is_epic"]]
 
 
-def build(graph_data, lanes, ranked, skipped, history, trails, now=None):
+def build(graph_data, lanes, ranked, skipped, history, trails, now=None, rows=None, lane_records=(), asks=()):
     """graph_data: graph.build() output. lanes: [{slot, bead, since}] (bead None = an idle loop). ranked: [(id, reason)] in
     the order `tl next` takes them. skipped: [(id, why)]. history: loop-log rows, oldest first. trails: {bead: {run,
     stage, blocks: [{kind, label, status, text}]}}."""
@@ -101,5 +103,61 @@ def build(graph_data, lanes, ranked, skipped, history, trails, now=None):
     today = [p for p in passes if time.strftime("%Y-%m-%d", time.localtime(p["t"])) == day]
     summary = {o: sum(1 for p in today if p["outcome"] == o) for o in OUTCOMES}
     summary["ready"] = len(queue)
-    return {"now": now, "repo": graph_data.get("repo", ""), "lanes": lane_out, "queue": queue, "held": held[:12],
-            "held_total": len(held), "summary": summary, "recent": passes[-12:][::-1]}
+    out = {"now": now, "repo": graph_data.get("repo", ""), "lanes": lane_out, "queue": queue, "held": held[:12],
+           "held_total": len(held), "summary": summary, "recent": passes[-12:][::-1]}
+    out["briefs"] = briefs(out, by_id, rows or {})
+    mine = [r for r in (rows or {}).values() if not graph_data.get("repo") or r.get("repo") == graph_data["repo"]]
+    out.update(signals.build(mine, passes, list(lane_records), list(asks), graph_data.get("summary"), now))
+    for ln in out["lanes"]:
+        ln["verdict"] = verdict((rows or {}).get(ln["bead"]) or {}, out["stats"])
+    return out
+
+
+def ids_shown(out):
+    """Every bead id the page draws a link for."""
+    seen = set()
+
+    def walk(ks):
+        for k in ks:
+            seen.add(k["id"])
+            walk(k.get("kids") or [])
+    for ln in out["lanes"]:
+        if ln["bead"]:
+            seen.add(ln["bead"])
+        seen.update(p["id"] for p in ln["past"])
+        walk(ln["unlocks"])
+    for q in out["queue"] + out["held"]:
+        seen.add(q["id"])
+        walk(q["tree"])
+    seen.update(p["id"] for p in out["recent"])
+    return seen
+
+
+def briefs(out, by_id, rows):
+    """id -> what a hover says: title, one line of state and why, and what it has cost. `rows` are the engine's task rows
+    (server.api_tasks): its label is the truest 'why' (waiting for your answer, paused: lane out, checks red...)."""
+    res = {}
+    for i in ids_shown(out):
+        n, r = by_id.get(i) or {}, rows.get(i) or {}
+        spent = r.get("tokens_all") or {}
+        res[i] = {"title": n.get("title") or r.get("title") or "", "state": r.get("state") or n.get("state") or "",
+                  "why": r.get("label") or n.get("why") or "", "priority": n.get("priority"),
+                  "runs": r.get("runs") or 0, "blocks": r.get("blocks") or 0, "secs": r.get("secs") or 0,
+                  "tok": (spent.get("in") or 0) + (spent.get("out") or 0),
+                  "fresh": max(0, (spent.get("in") or 0) - (spent.get("cached") or 0)) + (spent.get("out") or 0)}
+    return res
+
+
+def verdict(r, stats):
+    """One line on a running bead: its churn and what it has cost against the median bead; '' when it is unremarkable."""
+    bits = []
+    if r.get("red_checks"):
+        bits.append("checks failed %d×" % r["red_checks"])
+    if r.get("replans"):
+        bits.append("planned %d×" % (r["replans"] + 1))
+    if r.get("secs") and (r.get("checks_secs") or 0) / r["secs"] >= .4:
+        bits.append("%d%% of its time in checks" % round(100 * r["checks_secs"] / r["secs"]))
+    f = signals.fresh(r)
+    if f and stats.get("median_fresh"):
+        bits.append("%s fresh tokens, %.1f× the median bead" % (signals.human(f), f / stats["median_fresh"]))
+    return " · ".join(bits)

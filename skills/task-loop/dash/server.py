@@ -39,6 +39,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import graph  # noqa: E402
 import roadmap  # noqa: E402
+import signals  # noqa: F401,E402
 import timeline  # noqa: E402
 from timeline import block_detail, run_timeline  # noqa: E402,F401  (the engine tests read them here)
 HOME = Path.home()
@@ -932,13 +933,27 @@ def task_row(bead, paths, spans, tr):
     elif state == "stopped":
         label = "stopped"
     started = run["started"] or 0
-    total = sum((timeline.run_timeline(p)["secs"] or 0) for p in paths)
+    total, spent, nblocks, reds, longest_check, replans, checks_secs = 0, {"in": 0, "cached": 0, "out": 0}, 0, 0, 0, 0, 0
+    for p in paths:
+        r = run if p == newest else timeline.run_timeline(p)
+        total += r["secs"] or 0
+        for k in spent:
+            spent[k] += (r["tokens"] or {}).get(k) or 0
+        nblocks += len(r["blocks"])
+        for b in r["blocks"]:
+            if b["kind"] == "checks":
+                reds += (b.get("result") or {}).get("status") == "fail"
+                longest_check = max(longest_check, b.get("secs") or 0)
+                checks_secs += b.get("secs") or 0
+            replans += b["kind"] == "replan"
     last_t = (recs[-1].get("t") if recs else None) or started
     return {"id": bead, "title": (span or {}).get("title") or (ask or {}).get("title") or "", "state": state,
             "label": label, "slot": slot_of(run_rec, span, trace), "repo": repo_name(span, trace, ask),
             "runs": len(paths), "run": name, "started": started, "updated": last_t,
             "since": round(time.time() - started) if alive and started else None, "secs": total,
             "run_secs": run["secs"], "ask": ask, "blocked_by": blocked, "end": end, "tokens": run["tokens"],
+            "tokens_all": spent, "blocks": nblocks, "red_checks": reds, "longest_check": longest_check,
+            "replans": replans, "checks_secs": checks_secs,
             "stage": timeline.live_label(timeline.last_node(newest)) if alive else ""}
 
 
@@ -1051,6 +1066,52 @@ def api_graph(repo=""):
     return dict(out, repos=names)
 
 
+def bd_json(repo, *args):
+    exe = shutil.which("bd")
+    if not exe or not repo:
+        return None
+    try:
+        r = subprocess.run([exe, *args, "--json"], cwd=repo, capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=20)
+        return json.loads(r.stdout) if r.returncode == 0 else None
+    except (subprocess.SubprocessError, ValueError, OSError):
+        return None
+
+
+def api_bead(repo, bead):
+    """One bead for the Roadmap's panel: what bd says (description, acceptance, comments, dependencies) and every run of
+    the engine on it (why it started, each block with its outcome and the arrow into it, tokens)."""
+    _last_seen[0] = time.time()
+    path = resolve_repo(repo, bead)
+
+    def load():
+        shown = bd_json(path, "show", bead)
+        b = (shown[0] if isinstance(shown, list) and shown else shown) or {}
+        comments = bd_json(path, "comments", bead) or []
+        return b, comments
+    b, comments = cached("bead:%s:%s" % (path, bead), 15, load)
+    paths = engine_logs(retain=False).get(bead, [])
+    runs, prev = [], None
+    for p in paths:
+        r = timeline.run_timeline(p)
+        r["because"] = timeline.because_text(r, prev)
+        prev = r
+        runs.append({"run": r["run"], "because": r["because"], "started": r["started"], "secs": r["secs"],
+                     "tokens": r["tokens"], "end": r["end"].get("text") or r["end"].get("outcome"), "outcome": r["end"].get("outcome"),
+                     "blocks": [{"kind": x["kind"], "label": x["label"], "stage": x.get("stage_index"), "stages": x.get("stage_count"),
+                                 "secs": x.get("secs"), "tokens": x.get("tokens"), "status": (x.get("result") or {}).get("status"),
+                                 "text": (x.get("result") or {}).get("text"), "arrow": (x.get("arrow") or {}).get("text")}
+                                for x in r["blocks"]]})
+    deps = [{"id": d.get("id") or d.get("depends_on_id"), "title": d.get("title"), "status": d.get("status"),
+             "type": d.get("dependency_type") or d.get("type")} for d in (b.get("dependencies") or [])]
+    return {"id": bead, "title": b.get("title") or "", "status": b.get("status"), "priority": b.get("priority"),
+            "labels": b.get("labels") or [], "assignee": b.get("assignee"), "created_at": b.get("created_at"),
+            "description": b.get("description") or "", "notes": b.get("notes") or "",
+            "acceptance": b.get("acceptance_criteria") or "", "design": b.get("design") or "", "deps": deps,
+            "comments": [{"author": c.get("author"), "text": c.get("text"), "at": c.get("created_at")} for c in comments],
+            "runs": runs, "found": bool(b)}
+
+
 def loop_files(repo):
     """(live loops' states, the repo's pass log rows oldest first), read without touching them (loop.live_loops would
     delete a dead loop's file): [{slot, bead, since}], [row]."""
@@ -1097,7 +1158,8 @@ def api_roadmap(repo=""):
             lanes, rows = loop_files(path)
         except Exception:
             lanes, rows = [], []
-        tasks = {t["id"]: t for t in api_tasks()["tasks"]}
+        api = api_tasks()
+        tasks = {t["id"]: t for t in api["tasks"]}
         held = {l["bead"] for l in lanes if l["bead"]}
         for t in tasks.values():  # a bead run by hand (tl run-task) has a slot but no loop
             if t.get("state") == "running" and t["id"] not in held and t.get("repo") == g["repo"]:
@@ -1117,7 +1179,8 @@ def api_roadmap(repo=""):
                                      "stages": x.get("stage_count"), "secs": x.get("secs"),
                                      "status": (x.get("result") or {}).get("status"), "text": (x.get("result") or {}).get("text")}
                                     for x in r["blocks"]]}
-        return roadmap.build(g, lanes, ranked, skipped, rows, trails)
+        mine_asks = [a for a in asks()["asks"] if os.path.basename(str(a.get("repo") or "").rstrip("/\\")) == g["repo"]]
+        return roadmap.build(g, lanes, ranked, skipped, rows, trails, rows=tasks, lane_records=api["lanes"], asks=mine_asks)
 
     out = cached("roadmap:" + path, 5, build)
     return dict(out, repos=g["repos"])
@@ -1508,6 +1571,8 @@ def make_handler(port, addrs):
                     body = api_tasks()
                 elif u.path == "/api/graph":
                     body = api_graph(q.get("repo", ""))
+                elif u.path == "/api/bead":
+                    body = api_bead(q.get("repo", ""), q.get("id", ""))
                 elif u.path == "/api/roadmap":
                     body = api_roadmap(q.get("repo", ""))
                 elif u.path == "/api/task-timeline":

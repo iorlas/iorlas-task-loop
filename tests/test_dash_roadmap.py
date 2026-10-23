@@ -129,6 +129,25 @@ class Build(unittest.TestCase):
         self.assertEqual((r["lanes"], r["queue"], r["held"], r["recent"]), ([], [], [], []))
 
 
+class Verdict(unittest.TestCase):
+    def test_one_line_on_churn_and_cost_empty_when_unremarkable(self):
+        r = {"red_checks": 6, "replans": 1, "secs": 1000, "checks_secs": 580, "tokens_all": {"in": 2_000_000, "cached": 1_500_000, "out": 100_000}}
+        v = roadmap.verdict(r, {"median_fresh": 100_000})
+        self.assertEqual(v, "checks failed 6× · planned 2× · 58% of its time in checks · 600k fresh tokens, 6.0× the median bead")
+        self.assertEqual(roadmap.verdict({"secs": 100, "checks_secs": 10}, {"median_fresh": 100_000}), "")
+
+    def test_briefs_cover_every_id_the_page_links(self):
+        beads = [bead("run1", status="in_progress"), bead("kid", blocks=["run1"]), bead("q1")]
+        rows = {"run1": {"state": "running", "label": "checks stage 2/2", "runs": 2, "blocks": 9, "secs": 600,
+                         "tokens_all": {"in": 1000, "cached": 400, "out": 100}}}
+        g = graph.build(beads, CFG, {"q1"}, {"run1"}, (), now=NOW)
+        r = roadmap.build(g, [{"slot": "s1", "bead": "run1", "since": NOW}], [("q1", "")], [], [], {}, now=NOW, rows=rows)
+        self.assertEqual(set(r["briefs"]), {"run1", "kid", "q1"})
+        b = r["briefs"]["run1"]
+        self.assertEqual((b["why"], b["tok"], b["fresh"], b["runs"]), ("checks stage 2/2", 1100, 700, 2))
+        self.assertEqual(r["briefs"]["kid"]["state"], "blocked")
+
+
 class Api(unittest.TestCase):
     """/api/roadmap over a temp HOME and config dir: bd, the loop's queue and its files stubbed."""
 
@@ -145,7 +164,7 @@ class Api(unittest.TestCase):
             with mock.patch.dict(os.environ, env), mock.patch.object(server, "HOME", Path(home)), \
                     mock.patch.object(server, "beads_of", lambda r: beads), \
                     mock.patch.object(server, "api_tasks", lambda: {"tasks": [{"id": "a", "state": "running", "repo": "demo", "slot": "s9",
-                                                                              "stage": "writing", "since": 30}]}), \
+                                                                              "stage": "writing", "since": 30}], "lanes": []}), \
                     mock.patch.object(server, "loop_order", lambda r, b, c: ([("c", "lowest id")], [("b", "area x busy")])), \
                     mock.patch.object(server, "loop_files", lambda r: ([], [])), \
                     mock.patch.object(server, "engine_logs", lambda retain=True: {}):
@@ -157,7 +176,32 @@ class Api(unittest.TestCase):
                 self.assertEqual([k["id"] for k in lane["unlocks"]], ["b"])
                 self.assertEqual([q["id"] for q in out["queue"]], ["c"])
                 self.assertEqual([h["id"] for h in out["held"]], ["b"])
+                self.assertEqual(out["briefs"]["a"]["state"], "running")
+                self.assertTrue(out["signals"] == [] or all("sev" in x for x in out["signals"]))
                 self.assertEqual(server.api_roadmap("nope")["error"], "no such repo")
+
+
+class BeadApi(unittest.TestCase):
+    def test_bead_panel_joins_bd_and_the_engine_runs(self):
+        import server
+        shown = [{"id": "a", "title": "T", "status": "open", "priority": 1, "labels": ["auto"], "description": "D", "acceptance_criteria": "AC",
+                  "dependencies": [{"id": "z", "title": "Z", "status": "closed", "dependency_type": "blocks"}]}]
+        comments = [{"author": "me", "text": "hello", "created_at": "2026-10-23T10:00:00Z"}]
+        with mock.patch.object(server, "resolve_repo", lambda r, b="": "/repo"), \
+                mock.patch.object(server, "bd_json", lambda repo, *a: shown if a[0] == "show" else comments), \
+                mock.patch.object(server, "engine_logs", lambda retain=True: {}):
+            server._cache.clear()
+            out = server.api_bead("demo", "a")
+        self.assertEqual((out["title"], out["description"], out["acceptance"], out["found"]), ("T", "D", "AC", True))
+        self.assertEqual([c["text"] for c in out["comments"]], ["hello"])
+        self.assertEqual(out["deps"][0]["id"], "z")
+        self.assertEqual(out["runs"], [])
+
+    def test_unknown_bead_is_not_found_not_an_error(self):
+        import server
+        with mock.patch.object(server, "resolve_repo", lambda r, b="": ""), mock.patch.object(server, "engine_logs", lambda retain=True: {}):
+            server._cache.clear()
+            self.assertFalse(server.api_bead("demo", "nope")["found"])
 
 
 if __name__ == "__main__":

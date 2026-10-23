@@ -364,6 +364,33 @@ details.rheld>summary .rsec::before{content:"▸";color:var(--mute);font-size:11
   .rpast,.rnow,.runl{grid-column:2;min-width:0}.rpast{justify-content:flex-start;-webkit-mask-image:none;mask-image:none;padding-right:0}.rpast::after{display:none}
   .gc .h,.gc.nn .h{grid-template-columns:2.4ch minmax(0,1fr)}.gc.nn .h{grid-template-columns:minmax(0,1fr)}.gc .rs{grid-column:2;text-align:left}.gc.nn .rs{grid-column:1}
 }
+.sigs{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin:0 0 8px}
+.sig{display:flex;flex-direction:column;gap:4px;background:var(--surface);border-radius:10px;padding:10px 14px;border-left:4px solid var(--c);box-shadow:inset 0 0 0 1px var(--line);font-size:13px;line-height:1.4}
+.sig b{font-size:14px;font-weight:650}.sig b a:hover{text-decoration:underline}
+.sig>span{color:var(--ink2)}.sig .lks{display:flex;gap:8px;flex-wrap:wrap}
+.sig.red{--c:var(--fail)}.sig.red b{color:var(--fail)}.sig.amber{--c:var(--warn)}.sig.amber b{color:var(--warn)}.sig.info{--c:var(--wait)}.sig.green{--c:var(--ok)}.sig.green b{color:var(--ok)}
+.lk{font-family:var(--mono);font-size:12px;color:var(--ask)}.lk:hover{text-decoration:underline}
+.sigmore{margin:0 0 8px}.sigmore summary{cursor:pointer;color:var(--mute);font-size:12.5px;margin-bottom:8px}
+.rverd{margin-top:10px;font-size:12.5px;color:var(--warn);line-height:1.4}
+#tip{position:fixed;z-index:60;max-width:360px;background:var(--bg);color:var(--ink);border-radius:10px;padding:10px 12px;box-shadow:var(--shadow2),inset 0 0 0 1px var(--line2);font-size:13px;line-height:1.4;pointer-events:none}
+#tip .tl2{color:var(--ink2);font-size:12.5px;margin-top:3px}#tip .tl3{color:var(--mute);font-size:11.5px;margin-top:6px}
+#bscrim{position:fixed;inset:0;background:rgba(0,0,0,.35);opacity:0;pointer-events:none;transition:opacity .15s;z-index:40}#bscrim.on{opacity:1;pointer-events:auto}
+#bpanel{position:fixed;top:0;right:0;bottom:0;width:min(620px,100vw);background:var(--bg);box-shadow:var(--shadow2);transform:translateX(102%);transition:transform .18s;z-index:41;display:flex;flex-direction:column}
+#bpanel.on{transform:none}
+#bpanel .bh{display:flex;gap:12px;align-items:flex-start;padding:16px 16px 12px;border-bottom:1px solid var(--line)}#bpanel .bh h2{margin:0 0 4px;font-size:17px;line-height:1.35;font-weight:650}
+#bpanel .bh .sub{color:var(--mute);font-size:12px}
+#bpanel .bb{flex:1;overflow:auto;padding:12px 16px 40px;font-size:13.5px}
+#bpanel h3{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);margin:20px 0 8px;font-weight:650}
+#bpanel .pre{white-space:pre-wrap;word-wrap:break-word;line-height:1.5;color:var(--ink)}
+#bpanel .why{color:var(--warn);margin-bottom:8px}
+#bpanel .cost{display:flex;flex-direction:column;gap:2px;background:var(--surface);border-radius:8px;padding:8px 12px;box-shadow:inset 0 0 0 1px var(--line)}#bpanel .cost span{color:var(--mute);font-size:12px}
+#bpanel .cm{margin:0 0 12px;padding:8px 12px;background:var(--surface);border-radius:8px;box-shadow:inset 0 0 0 1px var(--line)}#bpanel .cmh{font-size:12px;color:var(--mute);margin-bottom:4px}#bpanel .cmh b{color:var(--ink2)}
+#bpanel .hrun{margin:0 0 14px}#bpanel .hh{font-size:12.5px;color:var(--ink2);margin-bottom:4px}
+#bpanel .hb{display:grid;grid-template-columns:minmax(80px,auto) 1fr auto;gap:2px 10px;font-size:12.5px;padding:3px 0;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
+#bpanel .hb .hk{font-weight:600}#bpanel .hb .hr{color:var(--mute)}#bpanel .hb .hs{color:var(--mute);text-align:right}#bpanel .hb .ha{grid-column:1/-1;color:var(--mute);font-size:12px}
+#bpanel .hb.ok .hk{color:var(--ok)}#bpanel .hb.fail .hk{color:var(--fail)}#bpanel .hb.run .hk{color:var(--run)}
+#bpanel .dp{font-size:12.5px;margin:2px 0}#bpanel .go{display:inline-block;margin-top:20px;color:var(--ask);font-weight:600}
+@media (prefers-reduced-motion:reduce){#bpanel,#bscrim{transition:none}}
 </style>
 </head>
 <body>
@@ -382,6 +409,7 @@ details.rheld>summary .rsec::before{content:"▸";color:var(--mute);font-size:11
 <div class="lanes" id="lanes"></div>
 <main id="main"><div class="loading">Loading…</div></main>
 <div class="scrim" id="scrim"></div>
+<div id="bscrim"></div><aside id="bpanel" aria-hidden="true" role="dialog" aria-label="Bead details"></aside>
 <aside class="drawer" id="drawer" aria-hidden="true" role="dialog" aria-label="Block details"></aside>
 <script>
 "use strict";
@@ -410,7 +438,7 @@ function chip(cls,text,dot){return `<span class="chip ${cls}" title="${esc(text)
 // ---- routing: #task=ID&repo=R&run=RUN&block=NODE.K&tab=T&theme=dark --------------------------------------------------
 function readHash(){const raw=location.hash.slice(1),h=new URLSearchParams(raw);
   S.view=h.get('task')?'task':({asks:'asks',tasks:'tasks'}[raw.split('&')[0]]||'roadmap');S.task=h.get('task');S.repo=h.get('repo')||'';
-  const b=h.get('block');S.run=h.get('run');S.block=b?{node:+b.split('.')[0],k:+(b.split('.')[1]||0)}:null;S.tab=h.get('tab');
+  S.bead=h.get('bead')||null;const b=h.get('block');S.run=h.get('run');S.block=b?{node:+b.split('.')[0],k:+(b.split('.')[1]||0)}:null;S.tab=h.get('tab');
   const th=h.get('theme');if(th)setTheme(th,true)}
 function go(o){const h=new URLSearchParams();if(o.task){h.set('task',o.task);if(o.repo)h.set('repo',o.repo);if(o.run)h.set('run',o.run);
   if(o.block)h.set('block',o.block);if(o.tab)h.set('tab',o.tab)}const s=o.asks?'asks':o.roadmap?'roadmap'+(o.repo?'&repo='+encodeURIComponent(o.repo):''):h.toString();
@@ -443,7 +471,8 @@ async function poll(){if(busy)return;busy=true;const g=S.gen;
   try{
     const a=get('/api/asks').then(x=>{S.asks=x;renderTop();if(S.view=='asks'&&g==S.gen)renderAsks()}).catch(()=>{});
     if(S.view=='tasks'){const d=await get('/api/tasks');if(g!=S.gen)return;S.tasks=d;renderTop()}
-    else if(S.view=='roadmap'){const d=await get('/api/roadmap?repo='+encodeURIComponent(S.repo));if(g!=S.gen)return;R.d=d}
+    else if(S.view=='roadmap'){const d=await get('/api/roadmap?repo='+encodeURIComponent(S.repo));if(g!=S.gen)return;R.d=d;
+      if(S.bead&&(!R.b||R.b.id!=S.bead||R.bt<Date.now()-15000)){const b=await get('/api/bead?repo='+encodeURIComponent(d.repo||S.repo)+'&id='+encodeURIComponent(S.bead));if(g!=S.gen)return;R.b=b;R.bt=Date.now()}}
     else if(S.view=='task'){const d=await get(`/api/task-timeline?repo=${encodeURIComponent(S.repo)}&id=${encodeURIComponent(S.task)}`);if(g!=S.gen)return;S.tl=d;
       if(S.block){const run=S.run||lastRun(d),r=runOf(d,run),live=!!(r&&r.end&&r.end.outcome=='running');
         if(r&&(!S.blk||live)){const b=await get(`/api/block?run=${encodeURIComponent(run)}&node=${S.block.node}&k=${S.block.k}`);if(g!=S.gen)return;S.blk=b;
@@ -457,7 +486,7 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)poll()});
 
 // ---- render -------------------------------------------------------------------------------------------------------
 function paint(el,key,html){if(S.sig[key]===html)return false;S.sig[key]=html;el.innerHTML=html;return true}
-function render(){if(S.view=='tasks')renderTasks();else if(S.view=='task')renderTask();else if(S.view=='roadmap')renderRoadmap();else renderAsks();renderDrawer()}
+function render(){if(S.view=='roadmap')renderBead();if(S.view=='tasks')renderTasks();else if(S.view=='task')renderTask();else if(S.view=='roadmap')renderRoadmap();else renderAsks();renderDrawer()}
 function renderTop(){const open=(S.asks.asks||[]).filter(a=>!a.answered_here&&!a.parked).length;$('askn').textContent=open||'';
   if(S.tasks&&S.tasks.host)$('host').textContent=S.tasks.host;
   const out=(S.asks.delegate&&S.asks.delegate.out)||[];
@@ -636,11 +665,11 @@ const taskHref=(id,repo)=>'#task='+encodeURIComponent(id)+(repo?'&repo='+encodeU
 const shortId=id=>String(id).replace(/^[^-]+-/,'');
 function rtree(ks,repo){if(!ks||!ks.length)return'';
   return '<ul class="gt">'+ks.map(k=>{const st=RSTATE[k.state]||'blocked';
-    return `<li class="s-${st}" title="${esc(RSTATE_TXT[st]||st)}"><span class="gd"></span><span class="id">${esc(shortId(k.id))}</span><a href="${taskHref(k.id,repo)}">${esc(k.title)}</a>`
+    return `<li class="s-${st}" title="${esc(RSTATE_TXT[st]||st)}"><span class="gd"></span><span class="id">${esc(shortId(k.id))}</span><a href="${taskHref(k.id,repo)}" data-bead="${esc(k.id)}">${esc(k.title)}</a>`
       +(k.needs?`<span class="need" title="it also waits on ${k.needs} other open bead${k.needs>1?'s':''}">+${k.needs} more needed</span>`:'')
       +(k.more?`<div class="more">+${k.more} more</div>`:'')+rtree(k.kids,repo)+'</li>'}).join('')+'</ul>'}
 function pastCard(p,repo){const rel=(p.released||[]).slice(0,2).map(r=>shortId(r.id)).join(', ');
-  return `<a class="rx o-${esc(p.outcome)}" href="${taskHref(p.id,repo)}" title="${esc((p.title||p.id)+(p.why?' — '+p.why:''))}"><b>${esc(shortId(p.id))}</b><i>${esc(p.outcome)} · ${esc(dur(p.minutes*60))}</i>`
+  return `<a class="rx o-${esc(p.outcome)}" href="${taskHref(p.id,repo)}" data-bead="${esc(p.id)}" title="${esc((p.title||p.id)+(p.why?' — '+p.why:''))}"><b>${esc(shortId(p.id))}</b><i>${esc(p.outcome)} · ${esc(dur(p.minutes*60))}</i>`
     +`<u>${rel?'→ released '+esc(rel):esc(ago(p.t))}</u></a>`}
 function laneHtml(l,repo){
   const past=`<div class="rpast">${l.past.map(p=>pastCard(p,repo)).join('')||'<span class="none">nothing has left this slot yet</span>'}</div>`;
@@ -648,14 +677,20 @@ function laneHtml(l,repo){
   const last={};l.trail.forEach(b=>{last[RSTEP[b.kind]||b.kind]=b});
   const rail=l.rail.map(r=>{const b=last[r.step];return `<span class="${r.state}">${esc(r.step)}${r.state=='now'&&b&&b.secs?`<small>${esc(dur(b.secs))}</small>`:''}</span>`}).join('');
   const sb=[...l.trail].reverse().find(b=>b.stages),stage=sb&&sb.stages>1?`stage ${sb.stage} of ${sb.stages}`:'';
-  const hist=l.trail.map(b=>`<span class="${b.status=='ok'?'ok':b.status=='fail'?'fail':b.status=='run'?'run':''}" title="${esc(b.text||b.label)}">${esc(b.kind)}${b.stage?' '+b.stage:''} ${b.status=='ok'?'✓':b.status=='fail'?'✗':b.status=='run'?'…':''}</span>`).join('');
+  const hist=l.trail.slice(-8).map(b=>`<span class="${b.status=='ok'?'ok':b.status=='fail'?'fail':b.status=='run'?'run':''}" title="${esc(b.text||b.label)}">${esc(b.kind)}${b.stage?' '+b.stage:''} ${b.status=='ok'?'✓':b.status=='fail'?'✗':b.status=='run'?'…':''}</span>`).join('');
   const unl=l.unlocks.length?`<div class="runl"><b>Landing unlocks${l.unblocks?' '+l.unblocks:''}</b>${rtree(l.unlocks,repo)}</div>`:'';
   const meta=[`<span class="live" title="running"></span>`,`<span class="mono">${esc(l.bead)}</span>`,l.run>1?'run '+l.run:'',l.since?esc(dur(Date.now()/1000-l.since)):'',esc(stage)].filter(Boolean).map(x=>x.startsWith('<')?x:`<span>${x}</span>`).join('');
   return `<div class="rlane${unl?' unl':''}"><div class="rslot">${esc(l.slot)}</div>${past}
-    <a class="rnow" href="${taskHref(l.bead,repo)}"><div class="t">${esc(l.title||l.bead)}</div><div class="m">${meta}</div>
-      <div class="rail">${rail}</div>${hist?`<div class="rhist"><em>so far</em>${hist}</div>`:''}</a>${unl}</div>`}
+    <a class="rnow" href="${taskHref(l.bead,repo)}" data-bead="${esc(l.bead)}"><div class="t">${esc(l.title||l.bead)}</div><div class="m">${meta}</div>
+      <div class="rail">${rail}</div>${l.verdict?`<div class="rverd">${esc(l.verdict)}</div>`:''}${hist?`<div class="rhist"><em>${l.trail.length>8?'last 8 of '+l.trail.length:'so far'}</em>${hist}</div>`:''}</a>${unl}</div>`}
+function signalsHtml(d){const sg=d.signals||[];if(!sg.length)return '<div class="sigs"><div class="sig green"><b>Nothing wrong</b><span>no signal fires: no lane out, no churn, no cluster of parks, no old ask</span></div></div>';
+  const card=s=>{const look=(s.look||[]).map(i=>`<a class="lk" href="${taskHref(i,d.repo)}" data-bead="${esc(i)}">${esc(shortId(i))}</a>`).join(' ');
+    const t=s.href?`<a href="${esc(s.href)}">${esc(s.title)}</a>`:esc(s.title);
+    return `<div class="sig ${esc(s.sev)}"><b>${t}</b><span>${esc(s.line)}</span>${look?`<span class="lks">${look}</span>`:''}</div>`};
+  const head=sg.slice(0,6),rest=sg.slice(6);
+  return `<div class="sigs">${head.map(card).join('')}</div>`+(rest.length?`<details class="sigmore"><summary>${rest.length} more signal${rest.length>1?'s':''}</summary><div class="sigs">${rest.map(card).join('')}</div></details>`:'')}
 function queueHtml(q,repo,held){return `<div class="glog${held?' held':''}">`+q.map((b,i)=>`<div class="gc${i||held?'':' first'}${held?' nn':''}"><div class="h">${held?'':`<span class="n">${i+1}</span>`}
-  <a class="tt" href="${taskHref(b.id,repo)}">${esc(b.title||b.id)}</a>
+  <a class="tt" href="${taskHref(b.id,repo)}" data-bead="${esc(b.id)}">${esc(b.title||b.id)}</a>
   <span class="rs">${b.unblocks?`<span class="unb">unblocks ${b.unblocks}</span> `:''}<span class="mono">${esc(shortId(b.id))}</span>${b.priority!=null?' · P'+b.priority:''}${b.reason?' · '+esc(b.reason):''}${b.why?' · '+esc(b.why):''}</span></div>${rtree(b.tree,repo)}</div>`).join('')+'</div>'}
 function renderRoadmap(){const d=R.d;if(!d)return;
   if(d.error){paint($('main'),'main',`<div class="list"><div class="empty"><b>${esc(d.error)}</b></div></div>`);return}
@@ -663,6 +698,7 @@ function renderRoadmap(){const d=R.d;if(!d)return;
   const today=[[sm.landed,'landed','ok'],[sm.parked,'parked','ask'],[sm.failed,'failed','fail'],[sm.paused,'paused','wait']].filter(x=>x[0]).map(x=>`<span class="${x[2]}"><b>${x[0]}</b> ${x[1]}</span>`).join(' · ');
   let html=`<div class="hero"><div><h1>Roadmap</h1><div class="sum">${esc(d.repo)} · today ${today||'nothing finished yet'} · <b>${d.queue.length}</b> ready</div></div>
     <div class="rtools">${names.length>1?`<select id="rrepo" aria-label="Repo">${names.map(n=>`<option ${n==d.repo?'selected':''}>${esc(n)}</option>`).join('')}</select>`:''}</div></div>`;
+  html+=signalsHtml(d);
   html+='<div class="rsec">Slots <small>finished passes, then the bead running now</small></div>';
   html+=d.lanes.length?d.lanes.map(l=>laneHtml(l,d.repo)).join(''):`<div class="list"><div class="empty"><b>No loop is running on ${esc(d.repo)}</b>Start one with <code>tl loop</code>; its slots show here.</div></div>`;
   html+='<div class="rsec">Up next <small>the order <code>tl next</code> takes. A branch is a bead that waits on the one above it.</small></div>';
@@ -671,6 +707,50 @@ function renderRoadmap(){const d=R.d;if(!d)return;
   paint($('main'),'main',html)}
 document.addEventListener('change',e=>{if(e.target.id=='rrepo'){S.repo=e.target.value;R.d=null;history.replaceState(null,'','#roadmap&repo='+encodeURIComponent(S.repo));S.gen++;poll()}});
 document.addEventListener('toggle',e=>{if(e.target.id=='rheld')R.held=e.target.open},true);
+
+// ---- hover card and bead panel: what is this ticket, what has it cost, what happened to it -------------------------
+const tokh=n=>n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?Math.round(n/1e3)+'k':String(n||0);
+function costLine(b,st){if(!b||!b.tok)return'';const m=(st||{}).median_fresh,x=m?b.fresh/m:0;
+  return `${tokh(b.fresh)} fresh tokens${x>=1.5?` (${x.toFixed(1)}× the median ${tokh(m)})`:m?` (median ${tokh(m)})`:''}, ${tokh(b.tok)} with cache`}
+const tip=document.createElement('div');tip.id='tip';tip.hidden=true;document.body.appendChild(tip);
+let tipT=null;
+function showTip(el){const id=el.dataset.bead,b=R.d&&R.d.briefs&&R.d.briefs[id];if(!b)return;
+  const why=String(b.why||'').split('\n')[0].slice(0,150);
+  tip.innerHTML=`<b>${esc(b.title||id)}</b><div class="tl2"><span class="mono">${esc(id)}</span>${b.priority!=null?' · P'+b.priority:''}${b.state?' · '+esc(b.state):''}</div>`
+    +(why?`<div class="tl2">${esc(why)}</div>`:'')
+    +(b.runs?`<div class="tl2">${b.runs} run${b.runs>1?'s':''} · ${b.blocks} steps · ${esc(dur(b.secs))}</div>`:'')
+    +(b.tok?`<div class="tl2">${esc(costLine(b,R.d.stats))}</div>`:'')+'<div class="tl3">click for description, comments and history</div>';
+  tip.hidden=false;const r=el.getBoundingClientRect(),w=tip.offsetWidth,h=tip.offsetHeight;
+  tip.style.left=Math.max(8,Math.min(innerWidth-w-8,r.left))+'px';tip.style.top=(r.bottom+h+12>innerHeight?Math.max(8,r.top-h-8):r.bottom+6)+'px'}
+document.addEventListener('mouseover',e=>{const el=e.target.closest&&e.target.closest('[data-bead]');clearTimeout(tipT);
+  if(!el){tip.hidden=true;return}tipT=setTimeout(()=>showTip(el),180)});
+document.addEventListener('scroll',()=>{tip.hidden=true},true);
+document.addEventListener('click',e=>{const el=e.target.closest&&e.target.closest('[data-bead]');if(!el||S.view!='roadmap')return;
+  if(e.metaKey||e.ctrlKey||e.shiftKey)return;e.preventDefault();e.stopImmediatePropagation();tip.hidden=true;
+  location.hash='roadmap&repo='+encodeURIComponent((R.d&&R.d.repo)||S.repo)+'&bead='+encodeURIComponent(el.dataset.bead)},true);
+function closeBead(){location.hash='roadmap&repo='+encodeURIComponent((R.d&&R.d.repo)||S.repo)}
+function when(t){if(!t)return'';const d=new Date(t);return isNaN(d)?String(t):d.toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false})}
+function histHtml(runs){return runs.map((r,i)=>{
+  const bl=r.blocks.map(b=>`<div class="hb ${b.status=='ok'?'ok':b.status=='fail'?'fail':b.status=='run'?'run':''}"><span class="hk">${esc(b.label||b.kind)}${b.stage&&b.stages>1?' '+b.stage+'/'+b.stages:''}</span><span class="hr">${esc(b.text||'')}</span><span class="hs">${b.secs?esc(dur(b.secs)):''}${b.tokens&&(b.tokens.in||b.tokens.out)?' · '+tokh((b.tokens.in||0)-(b.tokens.cached||0)+(b.tokens.out||0)):''}</span>${b.arrow?`<span class="ha">↳ ${esc(b.arrow)}</span>`:''}</div>`).join('');
+  return `<div class="hrun"><div class="hh"><b>Run ${i+1}</b> ${esc(r.because||'')} · ${esc(when(r.started*1000))} · ${esc(dur(r.secs))} · ${esc(r.end||'')}</div>${bl}</div>`}).join('')}
+function renderBead(){const p=$('bpanel'),sc=$('bscrim');if(!p)return;const on=S.view=='roadmap'&&!!S.bead;p.classList.toggle('on',on);sc.classList.toggle('on',on);p.setAttribute('aria-hidden',on?'false':'true');
+  if(!on)return;const b=R.b&&R.b.id==S.bead?R.b:null,br=R.d&&R.d.briefs&&R.d.briefs[S.bead];
+  if(!b){paint(p,'bpanel',`<div class="bh"><div><h2>${esc((br&&br.title)||S.bead)}</h2><div class="sub mono">${esc(S.bead)}</div></div><button class="iconbtn x" data-bclose="1" aria-label="Close">${X}</button></div><div class="bb"><div class="loading">Loading…</div></div>`);return}
+  const sec=(t,h)=>h?`<h3>${t}</h3>${h}`:'';
+  const pre=t=>t?`<div class="pre">${esc(t)}</div>`:'';
+  const cm=[...b.comments].reverse().map(c=>`<div class="cm"><div class="cmh"><b>${esc(c.author||'')}</b> <span>${esc(when(c.at))}</span></div><div class="pre">${esc(c.text||'')}</div></div>`).join('');
+  const deps=b.deps.map(d=>`<div class="dp"><span class="mono">${esc(d.id)}</span> ${esc(d.title||'')} <span class="muted">${esc(d.status||'')}${d.type?' · '+esc(d.type):''}</span></div>`).join('');
+  const tot=(b.runs||[]).reduce((a,r)=>a+((r.tokens&&r.tokens.in)||0),0);
+  const cost=br&&br.tok?`<div class="cost"><b>${esc(costLine(br,R.d&&R.d.stats))}</b><span>${br.runs} run${br.runs>1?'s':''} · ${br.blocks} steps · ${esc(dur(br.secs))} in all</span></div>`:'';
+  const why=br&&br.why?`<div class="why">${esc(String(br.why).split('\\n')[0].slice(0,220))}</div>`:'';
+  paint(p,'bpanel',`<div class="bh"><div style="min-width:0"><h2>${esc(b.title||S.bead)}</h2>
+      <div class="sub"><span class="mono">${esc(b.id)}</span> · ${esc(b.status||'')}${b.priority!=null?' · P'+b.priority:''}${b.assignee?' · '+esc(b.assignee):''} ${(b.labels||[]).map(l=>`<span class="tag">${esc(l)}</span>`).join(' ')}</div></div>
+      <button class="iconbtn x" data-bclose="1" aria-label="Close">${X}</button></div>
+    <div class="bb">${why}${cost}${sec('Description',pre(b.description))}${sec('Acceptance criteria',pre(b.acceptance))}${sec('Design',pre(b.design))}${sec('Notes',pre(b.notes))}
+      ${sec('Comments ('+b.comments.length+', newest first)',cm)}${sec('Transitions',histHtml(b.runs||[]))}${sec('Depends on',deps)}
+      <a class="go" href="#task=${encodeURIComponent(b.id)}&repo=${encodeURIComponent((R.d&&R.d.repo)||S.repo)}">Open the full run timeline, transcripts and checks</a></div>`)}
+document.addEventListener('click',e=>{if(e.target.closest('[data-bclose]')||e.target.id=='bscrim')closeBead()});
+document.addEventListener('keydown',e=>{if(e.key=='Escape'&&S.view=='roadmap'&&S.bead)closeBead()});
 
 // ---- events -------------------------------------------------------------------------------------------------------
 document.addEventListener('click',e=>{const b=e.target.closest('.blk');if(b){openBlock(b.dataset.run,+b.dataset.node,+b.dataset.k);return}

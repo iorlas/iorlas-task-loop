@@ -107,3 +107,17 @@ lets go. `#plan` links open the Roadmap; the task list moved to `#tasks`.
 `GET /api/roadmap?repo` -> `dash/roadmap.build()` (pure); inputs: `graph.build()` nodes and edges, `loop.queue()`, the
 loop's state files and pass log (`loop/<key>*.json`, `<key>.jsonl`, read only: a dead loop's file is left), the engine
 log's blocks (`timeline.run_timeline`). Mockups of the three options considered: `docs/design/mockups/`.
+
+### Cockpit layer (2026-10-23, after a Sonnet ops-UX review of the Roadmap)
+Gaps found: asks were one badge, a lane outage and a 51-park single-cause storm were invisible, churn and token spend
+were not on the page. Added:
+- Signal strip (`dash/signals.py`, pure; thresholds are named constants fitted to lifesim's real distribution): lane
+  out / usage >= 90 % (red/amber), beads held by nothing (red), >= 4 parks with one normalised cause within 3 h (red),
+  asks aging (info > amber 12 h > red 24 h or parking within 24 h), churn (checks failed >= 3, planned >= 3, or >= 12
+  steps; amber), token hog (fresh tokens > 500k and 3x the median), budget near-miss (<= 115 % of the limit; info),
+  good news (landings in 24 h, median time, first-run share; green). Red first. The strip says "Nothing wrong" when none fire.
+- Tokens: "fresh" = input - cached + output (95 % of input is cache read, so raw totals mislead); summed over all runs of
+  a bead (`tokens_all`); the median is of fresh tokens per bead of the repo. Each running bead gets a verdict line.
+- Hover on any bead id: title, state and why, runs, steps, time, tokens (`briefs` in `/api/roadmap`). Click: panel
+  (`#roadmap&repo=R&bead=ID`, `GET /api/bead`): description, acceptance, notes, comments newest first, transitions per
+  run with duration and tokens, dependencies, link to the full run timeline.
