@@ -3,9 +3,18 @@
 
 import fnmatch
 import hashlib
+import json
+import os
+import re
+import statistics
 import subprocess
+import tempfile
+from pathlib import Path
 
 import tl
+
+CHEAP_S = 5.0  # a median under this counts as free: sub-second noise never reorders a round
+KEEP_RUNS = 9  # durations kept per command
 
 
 def norm(cmd):
@@ -41,3 +50,78 @@ def input_key(cmd, files, globs):
     """What a green result of `cmd` is a fact about: the command and the hash of its input files. "" = no key."""
     ih = inputs_hash(files, globs)
     return hashlib.sha1(("%s\0%s" % (norm(cmd), ih)).encode("utf-8", "surrogateescape")).hexdigest() if ih else ""
+
+
+# --- duration history -----------------------------------------------------------------------------------------------
+
+def repo_key(wt):
+    """One name per repo, shared by its slots and worktrees: the origin url, else the common git dir."""
+    env = tl.git_env(wt)
+
+    def git(*a):
+        r = subprocess.run(["git"] + list(a), cwd=wt, env=env, capture_output=True, text=True)
+        return r.stdout.strip() if r.returncode == 0 else ""
+    ident = git("config", "--get", "remote.origin.url") or git("rev-parse", "--path-format=absolute", "--git-common-dir") or str(wt)
+    return "%s-%s" % (re.sub(r"[^\w.-]+", "_", Path(ident.rstrip("/")).name)[:40] or "repo",
+                      hashlib.sha1(ident.encode("utf-8", "surrogateescape")).hexdigest()[:10])
+
+
+def durations_path(wt, config_dir=None):
+    return Path(config_dir or tl.config_dir()) / "check-durations" / ("%s.json" % repo_key(wt))
+
+
+def load_durations(wt, config_dir=None):
+    """{normalized cmd: [secs, ...]}, newest last."""
+    try:
+        data = json.loads(durations_path(wt, config_dir).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {k: [float(x) for x in v if isinstance(x, (int, float))] for k, v in data.items() if isinstance(v, list)} \
+        if isinstance(data, dict) else {}
+
+
+def record_durations(wt, runs, config_dir=None):
+    """Add [(cmd, secs)] to the repo's history. Read-merge-replace, so slots writing at once lose at most one entry."""
+    if not runs:
+        return
+    path = durations_path(wt, config_dir)
+    data = load_durations(wt, config_dir)
+    for cmd, secs in runs:
+        data.setdefault(norm(cmd), []).append(round(float(secs), 1))
+    data = {k: v[-KEEP_RUNS:] for k, v in data.items()}
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        os.replace(tmp, path)
+    except OSError:
+        pass
+
+
+def expected_secs(cmd, history):
+    """Median of earlier runs of the command; unknown = 0 (cheap), and anything under CHEAP_S is 0 too."""
+    runs = history.get(norm(cmd))
+    s = statistics.median(runs) if runs else 0.0
+    return 0.0 if s < CHEAP_S else s
+
+
+# --- order ----------------------------------------------------------------------------------------------------------
+
+def order_by_cost(items, history, rank, deps=None):
+    """Stable order by (expected cost, rank(item), declaration). deps: {id(item): [items it must come after]}; an item
+    waits for its dependencies (a check reading $TL_CHECK_LOG_X goes after X). Dependencies never loop forever: a
+    cycle is broken by declaration order."""
+    deps = deps or {}
+    keyed = sorted(range(len(items)), key=lambda i: (expected_secs(items[i]["cmd"], history), rank(items[i]), i))
+    placed, out, left = set(), [], list(keyed)
+    while left:
+        for i in left:
+            if all(id(d) in placed or d is items[i] for d in deps.get(id(items[i]), ())):
+                break
+        else:
+            i = left[0]
+        left.remove(i)
+        placed.add(id(items[i]))
+        out.append(items[i])
+    return out

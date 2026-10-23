@@ -3729,11 +3729,16 @@ class Engine:
                    "timeout": float(self.cfg["check_timeout_min"]), "cache": False, "inputs": []} for c in st["checks"]]
         if groups:  # tl-bxk.13.15: only these groups (the cheap checks before a render)
             items = [c for c in items if c["group"] in groups]
-        items.sort(key=lambda c: GROUPS.index(c["group"]) if c["group"] in GROUPS else 1)
-        if acceptance_first and not any("TL_CHECK_" in c["cmd"] for c in items if c["group"] == "acceptance"):
-            # tl-bxk.13.14: the last round failed only in acceptance: its fast checks go before the slow tests, and a red one
-            # skips them (lifesim-fdyo reran 11 minutes of unity tests before a 3-second verdict check failed, 3 rounds)
-            items.sort(key=lambda c: {"static": 0, "acceptance": 1, "tests": 2}.get(c["group"], 1))
+        # Cheapest first, by the median of earlier runs of the same command (unknown = cheap), so a red verdict comes
+        # before the slow Unity runs. A check reading $TL_CHECK_LOG_<X> stays after X. When the last round failed only in
+        # acceptance, acceptance goes before tests at equal cost (tl-bxk.13.14: lifesim-fdyo reran 11 minutes of unity tests
+        # before a 3-second verdict check failed).
+        history = cs.load_durations(self.wt)
+        rank = {"static": 0, "acceptance": 1, "tests": 2} if acceptance_first else {"static": 0, "tests": 1, "acceptance": 2}
+        env_of = {check_env_name(c["id"])[len("TL_CHECK_LOG_"):]: c for c in items if c["group"] != "acceptance"}
+        deps = {id(c): [env_of[m] for m in dict.fromkeys(re.findall(r"TL_CHECK_(?:LOG|RC)_(\w+)", c["cmd"])) if m in env_of]
+                for c in items}
+        items = cs.order_by_cost(items, history, lambda c: rank.get(c["group"], 1), deps)
         cache_path = tl.config_dir() / "check-cache" / ("%s.json" % self.bead)
         try:
             cache = json.loads(cache_path.read_text())
@@ -3745,10 +3750,11 @@ class Engine:
         files = None  # the tree's files, listed once and only when a check declares `inputs`
         logs = self.run_dir / "checks"
         logs.mkdir(exist_ok=True)
+        timings = []  # (cmd, secs) of what ran, for the duration history
         out, red, changed, ran, env_logs = [], None, None, {}, {}  # ran: what ran in this block -> its result; env_logs: its logs, for later checks
         for n, c in enumerate(items):
             base = {"cmd": c["cmd"], "id": c["id"], "group": c["group"]}
-            if red and c["group"] != red:
+            if red:  # the first red ends the round: nothing slower runs after it
                 out.append(dict(base, exit=None, status="skipped", why="%s failed first" % red, tail=""))
                 continue
             if c["when"]:
@@ -3824,6 +3830,8 @@ class Engine:
                     self.warn("`%s` failed (exit %d), retrying: it is marked flaky" % (c["id"], rc))
                 res = dict(base, exit=rc, status="ran" if rc == 0 else "failed", tries=tries, tail=tail[-1500:],
                            secs=round(time.time() - t), log="checks/" + log_name)
+                if rc != 124:  # a killed run says nothing about the cost
+                    timings.append((cmd, time.time() - t))
                 if rc == 0 and c["cache"]:  # only a pass is a fact about the tree; a failure can come from outside git (stale
                     if ikey:  # build output, a held editor, a flake) and must rerun
                         by_inputs = {k: v for k, v in by_inputs.items() if v.get("cmd") != c["cmd"]}  # one entry per check
@@ -3846,6 +3854,7 @@ class Engine:
                                                 " (same command ran earlier in this block)" if c.get("reused") else "")] +
                         (c["tail"].splitlines()[-3:] if c["status"] == "failed" else []))
         cache_path.parent.mkdir(exist_ok=True)
+        cs.record_durations(self.wt, timings)
         saved = {key: cache[key]} if key in cache else {}  # only the latest tree is worth keeping
         if by_inputs:
             saved["inputs"] = by_inputs
