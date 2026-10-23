@@ -240,6 +240,95 @@ class RepeatedChecks(StagesTest):
         self.assertIn("just unity-tests", s.prompts[1])
 
 
+class SharedNotes(StagesTest):
+    """13.8: the tasks of a repo share what is running, what landed and which tests are flaky."""
+
+    def eng_(self):
+        return engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+
+    def test_flakes_are_kept_per_repo_once_and_listed_for_the_next_prompts(self):
+        e = self.eng_()
+        self.assertEqual(e.known_flakes(), [])
+        e.add_flakes([{"test": "SoakTests.HeapGrowth", "note": "process-wide heap check"}, {"test": " ", "note": "x"}])
+        e.add_flakes([{"test": "SoakTests.HeapGrowth", "note": "again"}])
+        self.assertEqual([f["test"] for f in e.known_flakes()], ["SoakTests.HeapGrowth"])
+        self.assertIn("SoakTests.HeapGrowth", e.flakes_text())
+        self.assertIn("do not build a new isolation", e.flakes_text())
+        self.assertIn("SoakTests.HeapGrowth", self.eng_().shared_text())  # another task of the repo reads the same file
+
+    def test_a_writer_that_reports_a_flake_tells_the_next_prompts(self):
+        flake = dict(WRITE, flakes=[{"test": "SoakTests.HeapGrowth", "note": "failed on the untouched base"}])
+        rc, s = self.run_engine({"plan": [PLAN], "write": [flake], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertNotIn("Known flaky", s.prompts[1])
+        self.assertEqual([f["test"] for f in self.eng.known_flakes()], ["SoakTests.HeapGrowth"])
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertIn("SoakTests.HeapGrowth", s.prompts[0])  # the planner
+        self.assertIn("SoakTests.HeapGrowth", s.prompts[1])  # the writer's first prompt
+        self.assertIn("SoakTests.HeapGrowth", s.prompts[2])  # the reviewer
+
+    def test_what_landed_since_the_branch_left_the_base_is_listed(self):
+        te.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
+        self.commit_base_cfg({"gate": ""})
+        te.sh("git", "fetch", "-q", "origin", cwd=self.wt)
+        self.assertEqual(self.eng_().landed_since(), ["engine config"])
+
+    def test_a_task_running_in_another_worktree_is_listed_with_its_files(self):
+        other = Path(self.tmp.name, "wt2")
+        te.sh("git", "worktree", "add", "-q", "--detach", str(other), cwd=self.wt)
+        tl.write_engine_lock(str(other), {"pid": engine.os.getpid(), "start": tl.proc_start(engine.os.getpid()), "bead": "t-2"})
+        tl.config_dir().joinpath("checkpoints").mkdir(exist_ok=True)
+        tl.config_dir().joinpath("checkpoints", "t-2.json").write_text(json.dumps({"plan": {"summary": "tune the soak", "stages": [
+            {"goal": "g", "files": ["SoakTests.cs", "justfile"], "checks": [], "hard": False}]}}))
+        got = self.eng_().siblings()
+        self.assertEqual(got, [("t-2", "tune the soak", ["SoakTests.cs", "justfile"])])
+        self.assertIn("t-2: tune the soak [files: SoakTests.cs, justfile]", self.eng_().shared_text())
+        tl.write_engine_lock(str(other), {"pid": 99999999, "start": "", "bead": "t-2"})  # dead
+        self.assertEqual(self.eng_().siblings(), [])
+
+    def test_a_branch_behind_the_base_is_rebased_before_it_is_planned(self):
+        te.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
+        (self.wt / "g.txt").write_text("g\n")
+        te.sh("git", "add", "-A", cwd=self.wt)
+        te.sh("git", "commit", "-qm", "earlier work", cwd=self.wt)
+        te.sh("git", "checkout", "-q", "-", cwd=self.wt)
+        self.commit_base_cfg({"gate": ""})  # main moves on
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertIn("rebased the task branch onto the latest origin/main", self.eng.log_path.read_text())
+        out = engine.subprocess.run(["git", "log", "--format=%s", "origin/main"], cwd=self.wt, capture_output=True, text=True).stdout
+        self.assertIn("engine config", out)
+        self.assertIn("Add f (t-1)", out)
+
+
+class Probe(StagesTest):
+    """13.10: a repo check the acceptance text names runs once on the base before the first plan."""
+
+    CHECK = [{"id": "echo", "cmd": "echo probing", "group": "tests"}]
+
+    def run_with(self, acceptance, **cfg):
+        with mock.patch.object(tl, "show", return_value=dict(BEAD, acceptance_criteria=acceptance)):
+            return self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, **cfg)
+
+    def test_a_configured_check_named_in_the_acceptance_text_is_probed(self):
+        rc, s = self.run_with("`echo probing` is green and f.txt exists", checks=self.CHECK)
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertIn("ran `echo probing`", s.prompts[0])
+        self.assertIn("exit 0", s.prompts[0])
+        self.assertIn("probe: `echo probing` on the base", self.eng.log_path.read_text())
+
+    def test_a_command_that_is_not_a_configured_check_never_runs(self):
+        rc, s = self.run_with("`touch probed.txt` then f.txt exists", checks=self.CHECK)
+        self.assertNotIn("Before this plan the engine ran", s.prompts[0])
+        self.assertFalse((self.wt / "probed.txt").exists())
+
+    def test_no_probe_when_switched_off_or_slow_or_on_an_amend(self):
+        rc, s = self.run_with("`echo probing` is green", checks=self.CHECK, plan_probe=False)
+        self.assertNotIn("Before this plan the engine ran", s.prompts[0])
+        rc, s = self.run_with("`echo probing` is green", checks=self.CHECK, plan_probe_max_s=-1)
+        self.assertNotIn("Before this plan the engine ran", s.prompts[0])
+
+
 class AskText(StagesTest):
     """13.9: a 'needs a human' block is a stuck ask with a readable question, never Right/Wrong over a heredoc."""
 

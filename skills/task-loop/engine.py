@@ -50,6 +50,8 @@ DEFAULTS = {
     "node_timeout_min": 45,           # a plan, review or verify call running longer is stopped; a write follows the keys below
     "write_idle_warn_min": 15,        # a write whose worker has been silent this long (session file, process output) is warned about
     "write_idle_stop_min": 25,        # and stopped at this; a write whose activity cannot be seen keeps node_timeout_min
+    "plan_probe": True,               # a repo check that the bead's acceptance text names in backticks runs once on the base before the first plan
+    "plan_probe_max_s": 600,          # ... unless its longest known run took longer than this
     "write_fresh_stage_k": 100,       # at a stage boundary a writer session above this (k tokens) is not resumed (0 = never): the next stage is a fresh session told what is done
     "write_cap_min": 120,             # a write is stopped at this however active the worker is
     "write_fresh_above_k": {"claude": 150, "codex": 200},  # a writer session whose context ended above this (k tokens, by its family;
@@ -403,6 +405,9 @@ SCHEMAS = {
     "write": {"type": "object", "additionalProperties": False,
               "required": ["summary", "checks_run", "question", "options", "decided", "bad_checks", "new_cases", "unchecked"],
               "properties": {"summary": S_STR, "question": S_STR, "options": OPTIONS, "decided": S_STR,
+                             "flakes": {"type": "array", "items": {  # optional (tl-bxk.13.8): tests that failed for a reason outside the change
+                                 "type": "object", "additionalProperties": False, "required": ["test", "note"],
+                                 "properties": {"test": S_STR, "note": S_STR}}},
                              "unchecked": {"type": "array", "items": {
                                  "type": "object", "additionalProperties": False, "required": ["what", "kind"],
                                  "properties": {"what": S_STR, "kind": {"type": "string", "enum": list(UNCHECKED_KINDS) + ["other"]},
@@ -1925,6 +1930,126 @@ class Engine:
         if not self.dry:
             tl.bd("comments", "add", self.bead, text)
 
+    # -- tl-bxk.13.8: notes shared by the tasks of one repo (docs/design/stages.md section 6)
+    def shared_path(self):
+        common = self.git("rev-parse", "--path-format=absolute", "--git-common-dir") or str(self.wt)
+        return tl.config_dir() / "shared" / ("%s.json" % hashlib.sha1(common.encode("utf-8")).hexdigest()[:12])
+
+    def known_flakes(self):
+        """[{test, note, bead}]: tests known to fail without cause. A writer reports one (flakes); the owner may edit the file."""
+        try:
+            data = json.loads(self.shared_path().read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return []
+        return [f for f in (data.get("flakes") if isinstance(data, dict) else None) or []
+                if isinstance(f, dict) and str(f.get("test") or "").strip()]
+
+    def add_flakes(self, new):
+        have = {" ".join(str(f["test"]).split()) for f in self.known_flakes()}
+        add = [{"test": " ".join(str(f["test"]).split())[:200], "note": " ".join(str(f.get("note") or "").split())[:300],
+                "bead": self.bead, "t": int(time.time())} for f in new if str(f.get("test") or "").strip()]
+        add = [f for f in add if f["test"] not in have]
+        if not add or self.dry:
+            return
+        path = self.shared_path()
+        try:  # read again just before the write: another slot may have added one meanwhile
+            path.parent.mkdir(parents=True, exist_ok=True)
+            cur = self.known_flakes()
+            seen = {f["test"] for f in cur}
+            tmp = path.with_name(path.name + ".%d.tmp" % os.getpid())
+            tmp.write_text(json.dumps({"flakes": (cur + [f for f in add if f["test"] not in seen])[-40:]}, indent=1), encoding="utf-8")
+            os.replace(tmp, path)
+            self.log("note", "known flaky: %s" % "; ".join(f["test"] for f in add))
+        except OSError:
+            pass
+
+    def siblings(self):
+        """[(bead, summary, files)]: tasks running in other worktrees of this repo right now (a live engine lock)."""
+        out = []
+        for line in self.git("worktree", "list", "--porcelain").splitlines():
+            if not line.startswith("worktree "):
+                continue
+            wt = line[len("worktree "):]
+            if same_dir(wt, self.wt):
+                continue
+            lock = tl.read_engine_lock(wt)
+            if not lock.get("bead") or lock["bead"] == self.bead or not tl.proc_alive(lock.get("pid"), lock.get("start") or ""):
+                continue
+            try:
+                plan = json.loads((tl.config_dir() / "checkpoints" / ("%s.json" % lock["bead"])).read_text()).get("plan") or {}
+            except (OSError, ValueError):
+                plan = {}
+            files = list(dict.fromkeys(f for st in plan.get("stages") or [] for f in st.get("files") or []))
+            out.append((lock["bead"], " ".join(str(plan.get("summary") or "").split())[:100], files[:6]))
+        return out[:5]
+
+    def landed_since(self):
+        """Subjects of what landed on the base since this task's branch left it (as far as the last fetch knows)."""
+        log = self.git("log", "--format=%s", "-n", "8", "%s..%s" % (self.base_sha(), self.cfg["base"]))
+        return [x[:100] for x in log.splitlines() if x.strip()]
+
+    def flakes_text(self):
+        flakes = self.known_flakes()
+        if not flakes:
+            return ""
+        return ("\nKnown flaky tests of this repo (they fail without a cause in the change). A check red only on one: run it "
+                "once more and say so in your summary; do not build a new isolation or fix for it unless the task is about "
+                "it:\n" + "".join("- %s%s%s\n" % (f["test"][:120], (": " + f["note"][:160]) if f.get("note") else "",
+                                                    (" (found in %s)" % f["bead"]) if f.get("bead") else "") for f in flakes[-8:]))
+
+    def shared_text(self):
+        """What the other tasks of this repo are doing, for the planner and a writer's first prompt: running now, landed since
+        this branch left the base, known flaky tests. '' when there is nothing to say."""
+        out = []
+        sib = self.siblings()
+        if sib:
+            out.append("Running now beside this task (do not edit their files unless this task needs them; do not redo their work):\n" +
+                       "".join("- %s%s%s\n" % (b, (": " + sm) if sm else "", (" [files: %s]" % ", ".join(fs)) if fs else "") for b, sm, fs in sib))
+        landed = self.landed_since()
+        if landed:
+            out.append("Landed on %s since this branch left it:\n%s" % (self.cfg["base"], "".join("- %s\n" % x for x in landed)))
+        flakes = self.flakes_text()
+        return ("\n" + "".join(out) + flakes) if (out or flakes) else ""
+
+    def probe_text(self):
+        """tl-bxk.13.10: what a repo check named in the bead's acceptance text does on the base, before the first plan. At most
+        one, only a configured check (never a command out of bead text), only one that is not slow. lifesim-yxbb.1 asked its
+        first question after 46 min / 10.8M tokens; its acceptance command was red on the base in minute 3."""
+        if not self.cfg.get("plan_probe", True) or self.dry or self.git("status", "--porcelain"):
+            return ""
+        known = {norm_cmd(c.get("cmd") or ""): c for c in self.cfg.get("checks") or []}
+        secs = self.check_secs()
+        for cmd in dict.fromkeys(norm_cmd(x) for x in re.findall(r"`([^`\n]+)`", self.scope)):
+            c = known.get(cmd)
+            if not c or secs.get(cmd, 0) > float(self.cfg["plan_probe_max_s"]):
+                continue
+            limit = min(float(c.get("timeout_min") or self.cfg["check_timeout_min"]), 10.0)
+            t = time.time()
+            rc, tail = self.sh(cmd, timeout=limit * 60, save=self.run_dir / "probe.log")
+            self.log("note", "probe: `%s` on the base: exit %d in %d s" % (cmd, rc, time.time() - t))
+            return ("\n\nBefore this plan the engine ran `%s` (a check the task's acceptance text names) on the task's base, as the "
+                    "task left it: exit %d, %d s.%s\nPlan with that in mind: a check that is already green proves nothing "
+                    "new; one that is red for a reason outside this task is the owner's to know, not a stage to fix." % (
+                        cmd, rc, time.time() - t, ("\n<probe>\n%s\n</probe>" % tail[-800:]) if rc else ""))
+        return ""
+
+    def rebase_onto_base(self):
+        """tl-bxk.13.8: a branch resumed from an earlier run is rebased onto the latest base before it is planned or
+        re-planned, so the plan and the engine's checks see what main has now (lifesim-ov3w: a gate check named a recipe the
+        branch's base lacked, three plans in 11 min). A conflict is left as it was: the land fixes it, as before."""
+        if self.dry or self.git("status", "--porcelain"):
+            return
+        behind = self.git("rev-list", "--count", "HEAD..%s" % self.cfg["base"])
+        if behind in ("", "0"):
+            return
+        rc, tail = self.sh(["git", "rebase", "-q", self.cfg["base"]], pin=True)
+        if rc:
+            self.sh(["git", "rebase", "--abort"], pin=True)
+            self.warn("the task branch could not be rebased onto %s before planning (it stays as it was): %s"
+                      % (self.cfg["base"], tail.strip().splitlines()[-1][:200] if tail.strip() else "conflict"))
+            return
+        self.log("note", "rebased the task branch onto the latest %s (%s commits behind) before planning" % (self.cfg["base"], behind))
+
     # -- tl-bxk.13: the handoff record (docs/design/stages.md section 5): what a stage after this one needs to know
     def deferred_items(self):
         """[(title, why)]: the follow-up work the plan and the reviews already set aside; the engine files each at land."""
@@ -2027,6 +2152,7 @@ class Engine:
             plan, i, state = self.resume_point()
             self.log_run()
             if plan is None:
+                self.rebase_onto_base()
                 plan, i, state = self.plan(again=self.replan_first), 0, None
             while i < len(plan["stages"]):
                 d = self.stage(plan, i, state)
@@ -2584,6 +2710,8 @@ class Engine:
                      "follows; keep accepted stages and their checks unless the change touches them; do not re-explore code "
                      "the old plan already names. Same output schema as a plan.\n<old_plan>\n%s\n</old_plan>\n"
                      "What changed:\n<change>\n%s\n</change>" % (json.dumps(old, indent=1), (self.amend_text or why).strip()))
+        elif not again:
+            extra = self.probe_text()
         elif again:
             extra = "\n\nThe previous plan did not work. What failed:\n<failed>\n%s\n</failed>\nPlan again." % why
         self.old_plan, self.amend_text, self.amend_why = None, "", ""
@@ -2606,6 +2734,9 @@ class Engine:
             else:
                 rules.append("Read %s: this repo's rules for workers (what runs where, known pitfalls of its tools); the "
                              "checks you write must follow them." % rf)
+        shared = self.shared_text()
+        if shared:
+            rules.append(shared.strip())
         rules.append("Proof files that a check reads or a reviewer looks at (screenshots, logs, probe output) go under "
                      "%s: it is kept across runs, and nothing else under %s is." % (self.evidence_dir, self.task_dir))
         rules.append("Checks run on the uncommitted working tree after each write. The engine runs the gate%s once, on "
@@ -2961,6 +3092,8 @@ class Engine:
                                                         dtail + self.look_write(st))
             if delta:  # the writer may have edited its copy: the engine's brief goes back before it reads it again
                 self.brief_file.write_text(self.brief_text(), encoding="utf-8")
+            else:  # a whole prompt (a first write, a fresh writer): what the tasks beside this one are doing (tl-bxk.13.8)
+                prompt += self.shared_text()
             w, wfam = self.ai("write", "%s write %d" % (name, n), prompt, delta=delta, resume_key="writer", write=n,
                               visual=self.stage_visual(st), round=rounds + 1, **where)
             self.writer_family = wfam
@@ -2971,6 +3104,7 @@ class Engine:
                                       "input_tokens": (wr.get("tokens") or {}).get("in"), "turns": wr.get("turns"),
                                       "prompt_chars": wr.get("prompt_chars"), "context_k": wr.get("context_k"), "fresh": fresh})
             self.writer_said += "\n" + w["summary"]
+            self.add_flakes(w.get("flakes") or [])
             self.last_summary = w["summary"]
             wrote_unchecked = w.get("unchecked") or []  # the review decides what is still unproven after the checks
             if w["question"].strip() and w["decided"].strip():  # lifesim-d5f.58: an accepted requirement is no question
@@ -3047,7 +3181,7 @@ class Engine:
                 ("\nNobody has checked these yet (earlier stages or the writer could not; the engine's checks above ran "
                  "after them); put in your unchecked only what is still unproven:\n" + "".join(
                      "- %s (%s)\n" % (u["what"], u["kind"]) for u in open_items) if open_items else "") +
-                ("" if last else LATER_CASES) + self.deferred_text() + self.seen_lows_text() + UNCHECKED_TEXT + self.look_review(st, w, fix) +
+                ("" if last else LATER_CASES) + self.deferred_text() + self.seen_lows_text() + self.flakes_text() + UNCHECKED_TEXT + self.look_review(st, w, fix) +
                 (self.new_files_brief(kinds["unexplained"]) if kinds["unexplained"] else ""),
                 writer_family=wfam, visual=not fix and self.stage_visual(st), round=rounds + 1, **where)
             self.accepted_new += [p for p in review.get("accept_files") or [] if p in kinds["unexplained"] and p not in self.accepted_new]
@@ -4410,6 +4544,8 @@ Never run the gate{gate} or the issue tracker (bd): the engine runs the gate, an
 Repo instructions that say a change is done only when the full gate passes are for people working by hand; here the
 engine does that part.
 {feedback}
+flakes: a test that failed for a reason outside your change (it passed or failed differently on a rerun, or fails on the
+untouched base): its name and one line; else empty. The engine tells later tasks of this repo.
 bad_checks: a stage check that fails for a reason no code change can fix (wrong arguments, a guard that rejects the
 uncommitted work this stage must leave, a pattern that matches harmless text), each with why (cmd: the check's command exactly as listed, never shortened); else empty. The engine
 then asks for a new plan instead of retrying.
