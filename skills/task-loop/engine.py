@@ -29,6 +29,7 @@ import time
 import uuid
 from pathlib import Path
 
+import checks_speed as cs
 import looks
 import tl
 
@@ -3722,9 +3723,10 @@ class Engine:
         items = [{"id": c.get("id") or c["cmd"], "cmd": c["cmd"], "group": c.get("group") or "tests",
                   "when": c.get("when") or [], "retry": int(c.get("retry") or 0),
                   "timeout": float(c.get("timeout_min") or self.cfg["check_timeout_min"]),
-                  "cache": c.get("cache", True) is not False} for c in self.cfg["checks"]]
+                  "cache": c.get("cache", True) is not False,
+                  "inputs": [c["inputs"]] if isinstance(c.get("inputs"), str) else list(c.get("inputs") or [])} for c in self.cfg["checks"]]
         items += [{"id": c, "cmd": c, "group": "acceptance", "when": [], "retry": 0,
-                   "timeout": float(self.cfg["check_timeout_min"]), "cache": False} for c in st["checks"]]
+                   "timeout": float(self.cfg["check_timeout_min"]), "cache": False, "inputs": []} for c in st["checks"]]
         if groups:  # tl-bxk.13.15: only these groups (the cheap checks before a render)
             items = [c for c in items if c["group"] in groups]
         items.sort(key=lambda c: GROUPS.index(c["group"]) if c["group"] in GROUPS else 1)
@@ -3737,7 +3739,10 @@ class Engine:
             cache = json.loads(cache_path.read_text())
         except (OSError, ValueError):
             cache = {}
-        key = "%s %s" % (self.tree_hash(), self.git("rev-parse", self.cfg["base"]))
+        tree = self.tree_hash()
+        key = "%s %s" % (tree, self.git("rev-parse", self.cfg["base"]))
+        by_inputs = cache.get("inputs") if isinstance(cache.get("inputs"), dict) else {}  # per-check: command + hash of its `inputs` files
+        files = None  # the tree's files, listed once and only when a check declares `inputs`
         logs = self.run_dir / "checks"
         logs.mkdir(exist_ok=True)
         out, red, changed, ran, env_logs = [], None, None, {}, {}  # ran: what ran in this block -> its result; env_logs: its logs, for later checks
@@ -3762,10 +3767,19 @@ class Engine:
                 if res["exit"] != 0:
                     red = c["group"]
                 continue
-            hit = c["cache"] and cache.get(key, {}).get(c["cmd"])
+            ikey = ""
+            if c["cache"] and c["inputs"]:  # a green result is a fact about the check's own inputs, not the whole tree or base
+                files = cs.tree_files(self.wt, tree) if files is None else files
+                ikey = cs.input_key(cmd, files, c["inputs"])
+                hit = by_inputs.get(ikey) if ikey else None
+            else:
+                hit = c["cache"] and cache.get(key, {}).get(c["cmd"])
             if hit:
                 res = dict(base, **hit)
                 res.update(cached=True, status=hit.get("status") or ("ran" if hit["exit"] == 0 else "failed"))
+                if ikey:
+                    res["cached_note"] = "inputs unchanged since round %s" % (hit.get("round") or "?")
+                    self.log("note", "cached: %s, %s" % (c["id"], res["cached_note"]))
             else:
                 t, tries = time.time(), 0
                 while True:
@@ -3811,7 +3825,11 @@ class Engine:
                 res = dict(base, exit=rc, status="ran" if rc == 0 else "failed", tries=tries, tail=tail[-1500:],
                            secs=round(time.time() - t), log="checks/" + log_name)
                 if rc == 0 and c["cache"]:  # only a pass is a fact about the tree; a failure can come from outside git (stale
-                    cache.setdefault(key, {})[c["cmd"]] = res  # build output, a held editor, a flake) and must rerun
+                    if ikey:  # build output, a held editor, a flake) and must rerun
+                        by_inputs = {k: v for k, v in by_inputs.items() if v.get("cmd") != c["cmd"]}  # one entry per check
+                        by_inputs[ikey] = dict(res, round=self.check_round)
+                    else:
+                        cache.setdefault(key, {})[c["cmd"]] = res
             out.append(res)
             ran[same] = res
             if c["group"] != "acceptance" and res.get("exit") is not None:  # later checks read its log: $TL_CHECK_LOG_<ID>
@@ -3824,11 +3842,14 @@ class Engine:
             mark = {"ran": "✓", "failed": "✗", "skipped": "–"}[c["status"]]
             self.detail(["%s [%s] `%s` %s%s" % (mark, c["group"], c["id"], c["status"] if c["exit"] is None else
                                                 "exit %d" % c["exit"], " (" + c["why"] + ")" if c.get("why") else
-                                                " (same tree and base: earlier result)" if c.get("cached") else
+                                                " (%s)" % (c.get("cached_note") or "same tree and base: earlier result") if c.get("cached") else
                                                 " (same command ran earlier in this block)" if c.get("reused") else "")] +
                         (c["tail"].splitlines()[-3:] if c["status"] == "failed" else []))
         cache_path.parent.mkdir(exist_ok=True)
-        cache_path.write_text(json.dumps({key: cache[key]} if key in cache else {}))  # only the latest tree is worth keeping
+        saved = {key: cache[key]} if key in cache else {}  # only the latest tree is worth keeping
+        if by_inputs:
+            saved["inputs"] = by_inputs
+        cache_path.write_text(json.dumps(saved))
         bad = [c for c in out if c["status"] == "failed"]
         self.outcome_of("red" if bad else "green", "%d failed: %s" % (len(bad), ", ".join(c["id"][:60] for c in bad))
                         if bad else "%d passed" % sum(1 for c in out if c["status"] == "ran"))
