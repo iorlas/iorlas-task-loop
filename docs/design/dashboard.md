@@ -93,3 +93,17 @@ verify_wrong, verified, gate_red, conflict, push_race, landed, done, failed, sto
 `checks/NN-id.rK.log`, `engine-checks.rK.json` (`engine-checks.json` is the latest). `traces.jsonl` lines add
 `prev_run`, `started_because`, `ask`. Logs from before these records are read from their node/session/warn text.
 There is no `judge` step: the engine has none yet.
+
+## Roadmap (v4, 2026-10-23, replaces the Plan graph)
+Home (`/`, `#roadmap&repo=R`). The Plan tab's dependency graph (401 nodes on lifesim, cytoscape + dagre, 3 vendored
+libraries) is cut: nobody acted on its "not auto" / "blocked" counts, and a dependency only matters as what a landing
+lets go. `#plan` links open the Roadmap; the task list moved to `#tasks`.
+- One lane per slot: the last 5 passes that left it (landed / parked / failed / paused; "taken" = lost a claim race, not
+  shown), the bead running now with its stage rail (plan, write, checks, review, verify, land) and the block trail, and
+  a git-graph tree of what its landing unlocks. A landed pass names the beads it released.
+- Up next: the queue in the order `tl next` takes it (`loop.queue`, fetch off), as a git log: each bead a commit, the
+  beads that wait on it branch off (depth 3, 5 wide, "+N more needed" = it also waits on other open beads).
+- Held back: ready beads the loop skips for now (an area is busy), most unblocking first, same tree.
+`GET /api/roadmap?repo` -> `dash/roadmap.build()` (pure); inputs: `graph.build()` nodes and edges, `loop.queue()`, the
+loop's state files and pass log (`loop/<key>*.json`, `<key>.jsonl`, read only: a dead loop's file is left), the engine
+log's blocks (`timeline.run_timeline`). Mockups of the three options considered: `docs/design/mockups/`.

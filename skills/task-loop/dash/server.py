@@ -38,6 +38,7 @@ from urllib.parse import parse_qs, urlparse
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import graph  # noqa: E402
+import roadmap  # noqa: E402
 import timeline  # noqa: E402
 from timeline import block_detail, run_timeline  # noqa: E402,F401  (the engine tests read them here)
 HOME = Path.home()
@@ -958,7 +959,6 @@ def api_tasks():
 
 
 _queue_lock = threading.Lock()
-VENDOR = ("cytoscape.min.js", "dagre.min.js", "cytoscape-dagre.js")
 
 
 def _engine_dir():
@@ -967,10 +967,10 @@ def _engine_dir():
         sys.path.insert(0, d)
 
 
-def loop_queue(repo, beads, cfg):
-    """The queue rule costs seconds (bd ready, one bd show per epic) and beads change all day, so a page view never
-    waits for it: it gets the last answer (refreshed in the background every minute), or graph.local_queue() until
-    the first answer is in."""
+def loop_order(repo, beads, cfg):
+    """([(id, reason)] in the order the loop takes them, [(id, why skipped)]). The queue rule costs seconds (bd ready,
+    one bd show per epic) and beads change all day, so a page view never waits for it: it gets the last answer
+    (refreshed in the background every minute), or graph.local_queue() until the first answer is in."""
     key = "queue:" + repo
     with _lock:
         hit = _cache.get(key)
@@ -978,7 +978,18 @@ def loop_queue(repo, beads, cfg):
         if not fresh and key not in _busy:
             _busy.add(key)
             threading.Thread(target=_refresh_queue, args=(key, repo, beads, cfg), daemon=True).start()
-    return hit[1] if hit else graph.local_queue(beads, cfg)
+    return hit[1] if hit else _local_order(beads, cfg)
+
+
+def loop_queue(repo, beads, cfg):
+    """The ids the loop would take (the Plan states and tests read a set)."""
+    return {i for i, _ in loop_order(repo, beads, cfg)[0]}
+
+
+def _local_order(beads, cfg):
+    ids = graph.local_queue(beads, cfg)
+    pri = {b["id"]: b.get("priority") if b.get("priority") is not None else 2 for b in beads}
+    return [(i, "") for i in sorted(ids, key=lambda i: (pri[i], i))], []
 
 
 _busy = set()
@@ -995,8 +1006,8 @@ def _refresh_queue(key, repo, beads, cfg):
 
 
 def _loop_queue(repo, beads, cfg):
-    """Ids the loop would take: loop.queue(), the loop's own rule, with its git fetch switched off (a page view
-    writes nothing); graph.local_queue() when loop.py cannot be loaded or bd fails."""
+    """loop.queue(), the loop's own rule, with its git fetch switched off (a page view writes nothing):
+    ([(id, reason)], [(id, why)]); graph.local_queue() when loop.py cannot be loaded or bd fails."""
     try:
         _engine_dir()
         import loop
@@ -1004,14 +1015,14 @@ def _loop_queue(repo, beads, cfg):
         with _queue_lock:
             real, tl.fetch = tl.fetch, lambda *a, **k: None
             try:
-                ranked, _ = loop.queue(repo)
+                ranked, skipped = loop.queue(repo)
             finally:
                 tl.fetch = real
-        return {b["id"] for b, _ in ranked}
+        return [(b["id"], r) for b, r in ranked], list(skipped)
     except Exception:
-        return graph.local_queue(beads, cfg)
+        return _local_order(beads, cfg)
     except SystemExit:  # tl.bd exits when bd is not on PATH
-        return graph.local_queue(beads, cfg)
+        return _local_order(beads, cfg)
 
 
 def api_graph(repo=""):
@@ -1038,6 +1049,78 @@ def api_graph(repo=""):
 
     out = cached("graph:" + path, 5, build)
     return dict(out, repos=names)
+
+
+def loop_files(repo):
+    """(live loops' states, the repo's pass log rows oldest first), read without touching them (loop.live_loops would
+    delete a dead loop's file): [{slot, bead, since}], [row]."""
+    _engine_dir()
+    import loop
+    import tl
+    d, key = loop.paths(repo)["states"]
+    lanes = []
+    for f in [d / (key + ".json")] + sorted(d.glob(key + ".*.json")):
+        st = read_json(str(f), {}) or {}
+        if st.get("pid") and tl.pid_alive(st["pid"]):
+            lanes.append({"slot": st.get("slot") or "", "bead": st.get("bead"), "since": st.get("since")})
+    rows = []
+    try:
+        for line in Path(loop.paths(repo)["log"]).read_text(encoding="utf-8", errors="replace").splitlines()[-400:]:
+            try:
+                rows.append(json.loads(line))
+            except ValueError:
+                pass
+    except OSError:
+        pass
+    return lanes, rows
+
+
+def api_roadmap(repo=""):
+    """The Roadmap tab: one lane per slot with its bead, stage rail, unlocks and last passes, then the queue in the
+    order the loop takes it, each with the beads it unblocks as a tree."""
+    _last_seen[0] = time.time()
+    g = api_graph(repo)
+    if g.get("error"):
+        return dict(g, lanes=[], queue=[], held=[], recent=[], summary={})
+    path = resolve_repo(g["repo"], "")
+
+    def build():
+        beads = beads_of(path)
+        try:
+            _engine_dir()
+            import engine
+            cfg = engine.load_cfg(path)
+        except Exception:
+            cfg = {"pick_label": "auto", "skip_labels": []}
+        ranked, skipped = loop_order(path, beads, cfg)
+        try:
+            lanes, rows = loop_files(path)
+        except Exception:
+            lanes, rows = [], []
+        tasks = {t["id"]: t for t in api_tasks()["tasks"]}
+        held = {l["bead"] for l in lanes if l["bead"]}
+        for t in tasks.values():  # a bead run by hand (tl run-task) has a slot but no loop
+            if t.get("state") == "running" and t["id"] not in held and t.get("repo") == g["repo"]:
+                lanes.append({"slot": t.get("slot") or "-", "bead": t["id"], "since": time.time() - (t.get("since") or 0)})
+        trails, logs = {}, engine_logs(retain=False)
+        for ln in lanes:
+            b = ln["bead"]
+            if not b or b not in logs:
+                continue
+            try:
+                r = timeline.run_timeline(logs[b][-1], alive=True)
+            except Exception:
+                continue
+            ln["since"] = ln["since"] or (tasks.get(b) or {}).get("started")
+            trails[b] = {"run": len(logs[b]), "stage": (tasks.get(b) or {}).get("stage") or "",
+                         "blocks": [{"kind": x["kind"], "label": x["label"], "stage": x.get("stage_index"),
+                                     "stages": x.get("stage_count"), "secs": x.get("secs"),
+                                     "status": (x.get("result") or {}).get("status"), "text": (x.get("result") or {}).get("text")}
+                                    for x in r["blocks"]]}
+        return roadmap.build(g, lanes, ranked, skipped, rows, trails)
+
+    out = cached("roadmap:" + path, 5, build)
+    return dict(out, repos=g["repos"])
 
 
 def api_task_timeline(repo, bead):
@@ -1425,9 +1508,8 @@ def make_handler(port, addrs):
                     body = api_tasks()
                 elif u.path == "/api/graph":
                     body = api_graph(q.get("repo", ""))
-                elif u.path.startswith("/vendor/") and u.path[8:] in VENDOR:
-                    return self.send(200, (HERE / "vendor" / u.path[8:]).read_bytes(),
-                                     "application/javascript; charset=utf-8")
+                elif u.path == "/api/roadmap":
+                    body = api_roadmap(q.get("repo", ""))
                 elif u.path == "/api/task-timeline":
                     body = api_task_timeline(q.get("repo", ""), q.get("id", ""))
                 elif u.path == "/api/block":
