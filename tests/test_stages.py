@@ -301,50 +301,5 @@ class SharedNotes(StagesTest):
         self.assertIn("Add f (t-1)", out)
 
 
-class Probe(StagesTest):
-    """13.10: a repo check the acceptance text names runs once on the base before the first plan."""
-
-    CHECK = [{"id": "echo", "cmd": "echo probing", "group": "tests"}]
-
-    def run_with(self, acceptance, **cfg):
-        with mock.patch.object(tl, "show", return_value=dict(BEAD, acceptance_criteria=acceptance)):
-            return self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, **cfg)
-
-    def test_a_configured_check_named_in_the_acceptance_text_is_probed(self):
-        rc, s = self.run_with("`echo probing` is green and f.txt exists", checks=self.CHECK)
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertIn("ran `echo probing`", s.prompts[0])
-        self.assertIn("exit 0", s.prompts[0])
-        self.assertIn("probe: `echo probing` on the base", self.eng.log_path.read_text())
-
-    def test_a_command_that_is_not_a_configured_check_never_runs(self):
-        rc, s = self.run_with("`touch probed.txt` then f.txt exists", checks=self.CHECK)
-        self.assertNotIn("Before this plan the engine ran", s.prompts[0])
-        self.assertFalse((self.wt / "probed.txt").exists())
-
-    def test_no_probe_when_switched_off_or_slow_or_on_an_amend(self):
-        rc, s = self.run_with("`echo probing` is green", checks=self.CHECK, plan_probe=False)
-        self.assertNotIn("Before this plan the engine ran", s.prompts[0])
-        rc, s = self.run_with("`echo probing` is green", checks=self.CHECK, plan_probe_max_s=-1)
-        self.assertNotIn("Before this plan the engine ran", s.prompts[0])
-
-
-class AskText(StagesTest):
-    """13.9: a 'needs a human' block is a stuck ask with a readable question, never Right/Wrong over a heredoc."""
-
-    def test_needs_a_human_is_not_a_verify_ask(self):
-        why = "needs a human: the write step was denied `{'command': '/bin/zsh -lc \"python3 - <<PY" + "x" * 3000 + "\"'}` and gave no answer"
-        self.assertEqual(engine.ask_kind(why), "stuck")
-        self.assertEqual(engine.ask_options("stuck", why), [])
-        q = engine.human_question(why)
-        self.assertLess(len(q), 1200)
-        self.assertIn("what to try or what to allow", q)
-        self.assertEqual(engine.ask_kind("verify: before land, the workers could not check: x"), "verify")
-
-    def test_a_nothing_proves_block_asks_how_to_prove_it(self):
-        why = "the check before land: nothing proves Whether the quoted answers match. after 2 fix rounds: it needs the owner's hint"
-        self.assertIn("how to prove it", engine.human_question(why))
-
-
 if __name__ == "__main__":
     unittest.main()

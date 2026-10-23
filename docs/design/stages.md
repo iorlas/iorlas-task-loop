@@ -196,7 +196,7 @@ Ranks 1-5 first: ~22 bead-instances out of the 34 that ran, mostly one-file engi
 | 13.6 | `handoff` (rounds, seen lows) in the checkpoint and `runs/<run>/handoff.json`; the amend planner gets `<rounds>` (<= 1.5 KB) | `HANDOFF_CAP` |
 | 13.7 | fresh writer at a stage boundary above 100K; reviewers get the lows already noted; verify evidence carries each passing check's last output | `write_fresh_stage_k` (0 = off) |
 | 13.8 | `~/.config/task-loop/shared/<repo>.json` (flakes, reported by writers via `flakes`, editable by hand); running siblings and landings in the planner and a writer's whole prompt; `rebase_onto_base()` before a plan or amend | |
-| 13.9 | "needs a human" is a stuck ask with `human_question()`, no Right/Wrong | |
-| 13.10 | `probe_text()`: one configured repo check named in backticks in the acceptance text runs on the base before the first plan | `plan_probe`, `plan_probe_max_s` |
+| 13.9 | handed to the ask-input session (it owns ask phrasing) | |
+| 13.10 | deferred by the owner: no evidence yet | |
 
 Not built: file locks and a `Touches` scheduler (decision 4: dropped; the loop already says it does not read Touches).

@@ -50,8 +50,6 @@ DEFAULTS = {
     "node_timeout_min": 45,           # a plan, review or verify call running longer is stopped; a write follows the keys below
     "write_idle_warn_min": 15,        # a write whose worker has been silent this long (session file, process output) is warned about
     "write_idle_stop_min": 25,        # and stopped at this; a write whose activity cannot be seen keeps node_timeout_min
-    "plan_probe": True,               # a repo check that the bead's acceptance text names in backticks runs once on the base before the first plan
-    "plan_probe_max_s": 600,          # ... unless its longest known run took longer than this
     "write_fresh_stage_k": 100,       # at a stage boundary a writer session above this (k tokens) is not resumed (0 = never): the next stage is a fresh session told what is done
     "write_cap_min": 120,             # a write is stopped at this however active the worker is
     "write_fresh_above_k": {"claude": 150, "codex": 200},  # a writer session whose context ended above this (k tokens, by its family;
@@ -2011,28 +2009,6 @@ class Engine:
         flakes = self.flakes_text()
         return ("\n" + "".join(out) + flakes) if (out or flakes) else ""
 
-    def probe_text(self):
-        """tl-bxk.13.10: what a repo check named in the bead's acceptance text does on the base, before the first plan. At most
-        one, only a configured check (never a command out of bead text), only one that is not slow. lifesim-yxbb.1 asked its
-        first question after 46 min / 10.8M tokens; its acceptance command was red on the base in minute 3."""
-        if not self.cfg.get("plan_probe", True) or self.dry or self.git("status", "--porcelain"):
-            return ""
-        known = {norm_cmd(c.get("cmd") or ""): c for c in self.cfg.get("checks") or []}
-        secs = self.check_secs()
-        for cmd in dict.fromkeys(norm_cmd(x) for x in re.findall(r"`([^`\n]+)`", self.scope)):
-            c = known.get(cmd)
-            if not c or secs.get(cmd, 0) > float(self.cfg["plan_probe_max_s"]):
-                continue
-            limit = min(float(c.get("timeout_min") or self.cfg["check_timeout_min"]), 10.0)
-            t = time.time()
-            rc, tail = self.sh(cmd, timeout=limit * 60, save=self.run_dir / "probe.log")
-            self.log("note", "probe: `%s` on the base: exit %d in %d s" % (cmd, rc, time.time() - t))
-            return ("\n\nBefore this plan the engine ran `%s` (a check the task's acceptance text names) on the task's base, as the "
-                    "task left it: exit %d, %d s.%s\nPlan with that in mind: a check that is already green proves nothing "
-                    "new; one that is red for a reason outside this task is the owner's to know, not a stage to fix." % (
-                        cmd, rc, time.time() - t, ("\n<probe>\n%s\n</probe>" % tail[-800:]) if rc else ""))
-        return ""
-
     def rebase_onto_base(self):
         """tl-bxk.13.8: a branch resumed from an earlier run is rebased onto the latest base before it is planned or
         re-planned, so the plan and the engine's checks see what main has now (lifesim-ov3w: a gate check named a recipe the
@@ -2710,8 +2686,6 @@ class Engine:
                      "follows; keep accepted stages and their checks unless the change touches them; do not re-explore code "
                      "the old plan already names. Same output schema as a plan.\n<old_plan>\n%s\n</old_plan>\n"
                      "What changed:\n<change>\n%s\n</change>" % (json.dumps(old, indent=1), (self.amend_text or why).strip()))
-        elif not again:
-            extra = self.probe_text()
         elif again:
             extra = "\n\nThe previous plan did not work. What failed:\n<failed>\n%s\n</failed>\nPlan again." % why
         self.old_plan, self.amend_text, self.amend_why = None, "", ""
@@ -2857,8 +2831,6 @@ class Engine:
                          if not (c.get("text") or "").startswith(ENGINE_NOTES)).strip()
 
     def raise_ask(self, kind, why, question):
-        if kind == "stuck" and not question and why.startswith(("needs a human", "the check before land")):
-            question = human_question(why)
         try:
             n = int(json.loads(self.ask_path().read_text()).get("n", 0)) + 1
         except (OSError, ValueError):
@@ -4090,24 +4062,11 @@ def ask_kind(why):
         return None
     if why.startswith("owner decision needed"):
         return "decision"
-    if why.startswith("verify:"):
+    if why.startswith(("needs a human", "verify:")):
         return "verify"
     if why.startswith("ticket:"):
         return "ticket"
     return "stuck"
-
-
-def human_question(why):
-    """tl-bxk.13.9: what a 'needs a human' or 'nothing proves' block asks, readable on a phone. It was shown as a verify ask
-    (Right/Wrong buttons) over a 9 KB denied heredoc (lifesim-5ban.16) or a bare 'it needs the owner's hint' (lifesim-y7ll)."""
-    text = " ".join(why.split())
-    text = re.sub(r"`[^`]{160,}`", lambda m: m.group(0)[:121] + "...`", text)
-    text = re.sub(r"\{[^{}]{200,}\}", lambda m: m.group(0)[:121] + "...}", text)
-    if len(text) > 900:
-        text = text[:897] + "..."
-    ask = ("Reply with what to try or what to allow; the run goes on from its checkpoint." if why.startswith("needs a human") else
-           "Reply with how to prove it, or that it is fine to land without.")
-    return text + "\n\n" + ask
 
 
 def ask_options(kind, why, given=None):
