@@ -4,6 +4,7 @@ import os
 import shlex
 import subprocess
 import sys
+import time
 import unittest
 from pathlib import Path
 
@@ -202,6 +203,40 @@ class Duplicates(SpeedTest):
         eng.gate_record("abc")
         self.assertTrue(eng.gate_green("abc"))
         self.assertFalse(eng.gate_green("abd"))
+
+
+class Watchdog(SpeedTest):
+    def alive(self, mark):
+        return subprocess.run(["pgrep", "-f", "sleep " + mark], capture_output=True, text=True).stdout.strip()
+
+    def test_a_silent_check_is_stopped_as_hung_with_its_last_lines_and_its_tree_is_gone(self):
+        mark = "71.%d" % os.getpid()
+        n = Path(self.tmp.name) / "tries"
+        cmd = "echo started >> %s; echo last words; sleep %s" % (n, mark)
+        eng = self.checks_engine(checks=[{"id": "hang", "cmd": cmd, "group": "tests", "retry": 2}], check_idle_min=0.02)
+        t = time.time()
+        res = eng.run_checks({"checks": [], "files": []}, "s")
+        self.assertLess(time.time() - t, 20)
+        self.assertEqual((res[0]["status"], res[0]["hung"], res[0]["exit"]), ("failed", True, 124))
+        self.assertIn("HUNG", res[0]["tail"])
+        self.assertIn("last words", res[0]["tail"])
+        self.assertEqual(len(n.read_text().split()), 1)  # never retried
+        self.assertEqual(self.alive(mark), "")
+        items = [json.loads(l) for l in eng.log_path.read_text().splitlines() if '"kind": "checks"' in l][0]["items"]
+        self.assertTrue(items[0]["hung"])
+
+    def test_a_check_that_keeps_printing_is_not_hung(self):
+        code = "import time\nfor i in range(5):\n print(i, flush=True); time.sleep(0.6)"
+        eng = self.checks_engine(checks=[{"id": "chatty", "cmd": PY + " -c " + shlex.quote(code), "group": "tests"}],
+                                 check_idle_min=0.025)  # 1.5 s of silence allowed, 3 s run
+        res = eng.run_checks({"checks": [], "files": []}, "s")
+        self.assertEqual((res[0]["status"], res[0].get("hung")), ("ran", False))
+
+    def test_idle_min_zero_turns_the_watchdog_off_and_a_check_can_set_its_own(self):
+        eng = self.checks_engine(checks=[{"id": "q", "cmd": "sleep 2", "group": "tests"}], check_idle_min=0)
+        self.assertEqual(eng.run_checks({"checks": [], "files": []}, "s")[0]["status"], "ran")
+        eng = self.checks_engine(checks=[{"id": "q", "cmd": "sleep 30", "group": "tests", "idle_min": 0.02}], check_idle_min=0)
+        self.assertTrue(eng.run_checks({"checks": [], "files": []}, "s")[0]["hung"])
 
 
 if __name__ == "__main__":

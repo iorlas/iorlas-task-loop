@@ -64,6 +64,7 @@ DEFAULTS = {
                                       # a number sets both, 0 = never) is not resumed: a fresh writer gets the brief and what is done
     "writer_check_max_s": 60,         # a check whose last run took longer is the engine's, never the writer's to run
     "check_timeout_min": 60,          # one check (engine.checks, a stage's check) running longer is killed, process group and all: exit 124
+    "check_idle_min": 10,             # a check with no new output this long is stopped as hung (process group and all), never retried; 0 = off
     "gate_timeout_min": 90,           # the same for the gate at land
     "budget_min_by_label": {},        # {label: minutes}: a bead with a label here gets that budget_min if larger (the largest of its labels)
     "delegate": "",                   # path to delegate's route.py; "" = the newest installed iorlas-delegate
@@ -1739,7 +1740,7 @@ class Engine:
             self.transition("ask", "wrong_tree", bad[0])
             raise Blocked(why, bad[1])
 
-    def sh(self, cmd, timeout=3600, check=False, save=None, env=None, pin=False):
+    def sh(self, cmd, timeout=3600, check=False, save=None, env=None, pin=False, idle=0):
         """A command: a string goes through bash with -e and pipefail (checks, profile commands), so a red command in a
         `;` list or a pipe fails it (lifesim-gfr.31.1: `just unity-check > log; ! grep ...` passed with unity-check
         red); `! cmd` and `cmd || true` still pass. A list runs as is (no quoting rules). pin=True: an engine git command, run
@@ -1753,9 +1754,13 @@ class Engine:
                              env=dict(child_env(), **(tl.pinned_env(self.wt) if pin else {}), **(env or {})),
                              stdin=subprocess.DEVNULL,
                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=(os.name != "nt"))
+        self.hung = False
         try:
-            out, _ = p.communicate(timeout=timeout)
-            rc = p.returncode
+            if idle:
+                out, rc = self.watch_output(p, timeout, idle)
+            else:
+                out, _ = p.communicate(timeout=timeout)
+                rc = p.returncode
         except subprocess.TimeoutExpired:
             kill_tree(p)
             out, _ = p.communicate()
@@ -1772,6 +1777,37 @@ class Engine:
         if check and rc:
             raise Blocked("failed: `%s` exit %d\n%s" % (cmd, rc, tail))
         return rc, tail
+
+    def watch_output(self, p, timeout, idle):
+        """Collect p's output until it ends. No new output for `idle` seconds: the whole tree is stopped, self.hung is set
+        and the exit is 124 (the output ends with the hang notice). `timeout` still applies, as TimeoutExpired."""
+        chunks, last = [], [time.time()]
+
+        def pump():
+            while True:
+                b = os.read(p.stdout.fileno(), 65536)
+                if not b:
+                    return
+                chunks.append(b)
+                last[0] = time.time()
+        th = threading.Thread(target=pump, daemon=True)
+        th.start()
+        start = time.time()
+        while th.is_alive():
+            th.join(0.5)
+            now = time.time()
+            if now - start > timeout:
+                kill_tree(p)
+                th.join(5)
+                raise subprocess.TimeoutExpired(p.args, timeout, output=b"".join(chunks))
+            if th.is_alive() and now - last[0] > idle:
+                self.hung = True
+                kill_tree(p)
+                th.join(5)
+                chunks.append(b"\n(hung: no output for %g min; the engine stopped it and everything it started)" % round(idle / 60, 2))
+                return b"".join(chunks), 124
+        p.wait()
+        return b"".join(chunks), p.returncode
 
     def slot_status(self):
         """(tracked paths changed, untracked paths, git's result) from the slot's own `git status`."""
@@ -3724,9 +3760,11 @@ class Engine:
                   "when": c.get("when") or [], "retry": int(c.get("retry") or 0),
                   "timeout": float(c.get("timeout_min") or self.cfg["check_timeout_min"]),
                   "cache": c.get("cache", True) is not False,
+                  "idle": float(c.get("idle_min", self.cfg["check_idle_min"]) or 0) * 60,
                   "inputs": [c["inputs"]] if isinstance(c.get("inputs"), str) else list(c.get("inputs") or [])} for c in self.cfg["checks"]]
         items += [{"id": c, "cmd": c, "group": "acceptance", "when": [], "retry": 0,
-                   "timeout": float(self.cfg["check_timeout_min"]), "cache": False, "inputs": []} for c in st["checks"]]
+                   "timeout": float(self.cfg["check_timeout_min"]), "cache": False, "inputs": [],
+                   "idle": float(self.cfg["check_idle_min"] or 0) * 60} for c in st["checks"]]
         if groups:  # tl-bxk.13.15: only these groups (the cheap checks before a render)
             items = [c for c in items if c["group"] in groups]
         # Cheapest first, by the median of earlier runs of the same command (unknown = cheap), so a red verdict comes
@@ -3827,13 +3865,17 @@ class Engine:
                     tries += 1
                     log_name = "%02d-%s.r%d.log" % (n, re.sub(r"[^\w.-]+", "_", c["id"])[:40], self.check_round)
                     t_try = time.time()
-                    rc, tail = self.sh(xcmd, timeout=c["timeout"] * 60, save=logs / log_name, env=env_logs)
+                    rc, tail = self.sh(xcmd, timeout=c["timeout"] * 60, save=logs / log_name, env=env_logs, idle=c["idle"])
+                    hung = self.hung
                     try:
                         seen = (logs / log_name).read_text(encoding="utf-8", errors="replace")
                     except OSError:
                         seen = tail
                     self.note_slot_waits(seen, time.time() - t_try)
                     if rc == 0:
+                        break
+                    if hung:  # silent for check_idle_min: a rerun hangs the same way, and this round has waited enough
+                        self.warn("`%s` hung: no output for %g min, stopped; not retried" % (c["id"], c["idle"] / 60))
                         break
                     if rc == 124:  # the engine's timeout or the command's own: a rerun hangs the same way
                         if c["retry"]:
@@ -3864,7 +3906,9 @@ class Engine:
                         break
                     self.warn("`%s` failed (exit %d), retrying: it is marked flaky" % (c["id"], rc))
                 res = dict(base, exit=rc, status="ran" if rc == 0 else "failed", tries=tries, tail=tail[-1500:],
-                           secs=round(time.time() - t), log="checks/" + log_name, log_abs=str(logs / log_name))
+                           secs=round(time.time() - t), log="checks/" + log_name, log_abs=str(logs / log_name), hung=bool(hung))
+                if hung:
+                    res["tail"] = "HUNG (no output for %g min), last output:\n%s" % (c["idle"] / 60, tail[-1400:])
                 if rc != 124:  # a killed run says nothing about the cost
                     timings.append((cmd, time.time() - t))
                 if rc == 0 and c["cache"]:  # only a pass is a fact about the tree; a failure can come from outside git (stale
@@ -3883,12 +3927,12 @@ class Engine:
             if res["exit"] != 0:
                 red = c["group"]
         for c in out:
-            mark = {"ran": "✓", "failed": "✗", "skipped": "–"}[c["status"]]
+            mark = "⏸ hung" if c.get("hung") else {"ran": "✓", "failed": "✗", "skipped": "–"}[c["status"]]
             self.detail(["%s [%s] `%s` %s%s" % (mark, c["group"], c["id"], c["status"] if c["exit"] is None else
                                                 "exit %d" % c["exit"], " (" + c["why"] + ")" if c.get("why") else
                                                 " (%s)" % (c.get("cached_note") or "same tree and base: earlier result") if c.get("cached") else
                                                 " (same command ran earlier in this block)" if c.get("reused") else "")] +
-                        (c["tail"].splitlines()[-3:] if c["status"] == "failed" else []))
+                        (c["tail"].splitlines()[-(8 if c.get("hung") else 3):] if c["status"] == "failed" else []))
         cache_path.parent.mkdir(exist_ok=True)
         cs.record_durations(self.wt, timings)
         saved = {key: cache[key]} if key in cache else {}  # only the latest tree is worth keeping
@@ -3896,12 +3940,14 @@ class Engine:
             saved["inputs"] = by_inputs
         cache_path.write_text(json.dumps(saved))
         bad = [c for c in out if c["status"] == "failed"]
-        self.outcome_of("red" if bad else "green", "%d failed: %s" % (len(bad), ", ".join(c["id"][:60] for c in bad))
+        hung = [c for c in bad if c.get("hung")]
+        self.outcome_of("red" if bad else "green", "%d failed%s: %s" % (len(bad), " (%d hung: no output, stopped)" % len(hung) if hung else "",
+                                                                       ", ".join(c["id"][:60] for c in bad))
                         if bad else "%d passed" % sum(1 for c in out if c["status"] == "ran"))
         self.log("checks", "checks round %d: %s" % (self.check_round, "%d failed" % len(bad) if bad else "green"),
                  node_id=(self.cur or {}).get("id"), round=self.check_round, items=[
                      {"id": c["id"], "cmd": c["cmd"], "group": c["group"], "exit": c["exit"], "status": c["status"],
-                      "secs": c.get("secs"), "tries": c.get("tries"), "cached": bool(c.get("cached")), "reused": bool(c.get("reused")),
+                      "secs": c.get("secs"), "tries": c.get("tries"), "hung": bool(c.get("hung")), "cached": bool(c.get("cached")), "reused": bool(c.get("reused")),
                       "why": c.get("why") or "", "log": "" if c.get("cached") or c.get("reused") else c.get("log") or ""} for c in out])
         return out
 

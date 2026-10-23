@@ -194,6 +194,9 @@ tree at land, and the push gets `TASK_LOOP_GATED_TREE` (the tree it passed) so a
 A green result is then remembered by the command plus the hash of the files matching `inputs`, and the check is skipped
 (log: `cached: unity-tests, inputs unchanged since round N`) while those files are unchanged, whatever else changed in the tree
 (docs, tests, evidence, a moved base). No `inputs`: the key stays the whole tree plus the base. Only a pass is remembered.
+**Hang watchdog.** A check printing nothing for `engine.check_idle_min` (10; 0 = off; `idle_min` on one check overrides) is
+stopped as hung: its whole process group is killed the way a timeout does. It is reported as a hang (`hung` in the round record, the
+last output lines in the failure brief), fails the round, and is never retried.
 **Duplicates.** A stage check that contains a repo check's command (`mkdir -p e && just unity-tests > e/out.log && grep ...`)
 does not run it again: when the command is a plain `&&`/`;` segment (with `>`/`| tee` redirects, only `mkdir`/`echo`/`export`... before
 it) the wrapper's copy becomes `cat` of the repo check's log and only its extra part runs; otherwise the repo check is skipped
