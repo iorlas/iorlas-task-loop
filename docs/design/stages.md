@@ -1,6 +1,7 @@
 # Stages and their handoffs: audit of night 1 and a redesign (2026-10-23)
 
-Status: proposal, nothing built. Inputs: engine.py 0.23.6, 104 night-1 runs (10-22 09:41 .. 10-23 05:19), night 2 (10-23
+Status: approved by the owner 2026-10-23 and built on branch claude/stage-design-7716bd (see Build notes at the end); release after
+2026-10-24 06:30. Inputs: engine.py 0.23.6, 104 night-1 runs (10-22 09:41 .. 10-23 05:19), night 2 (10-23
 18:30, 1-3 runs so far), five read-only audits (notes G1..G5, listed under Evidence).
 
 ## Verdict
@@ -56,7 +57,7 @@ check 8 times with an abbreviated cmd, nothing matched, 43 min until the round c
 gfr.39 and 40jy lost a write the same way (40jy also: the check passed, so it was not "failed" to begin with).
 
 **F4 the same expensive check runs 2-4 times per round (5 over-budget beads).** [G1 G3]
-- Check rounds are 80-90% of the 180+ min budget runs: yxbb.2 151/227 min, fld.10 171/188, f2by 158/183, fld.27.12 163/184.
+- Check rounds are 80-90% of the 180+ min budget runs (the exact-repeat reuse, tl-bxk.10.27, shipped 10-22 17:59, after these runs; what it does not cover is a repeat wrapped in `mkdir && just x > a.out && grep`, which the plan-time send-back now catches): yxbb.2 151/227 min, fld.10 171/188, f2by 158/183, fld.27.12 163/184.
 - yxbb.2 round 5: `client-soak 1` and `3` are in stage checks and in cases: 4 soaks, 134 min in one round. fld.10 rounds
   11-12: `unity-tests` 3x per round, 99 min. 22v.24: 95 s suite twice per round.
 - Writers cannot compile Unity ("not compiled, engine runs it" in ~90% of writes), so each analyzer defect is a full
@@ -162,7 +163,7 @@ Rules (file locks are not needed):
 | 1 | handoff `deferred`/`engine_steps`: reviewer sees deferred; route `engine_step` by kind not regex; leftover-backed owner item lands unverified | ~9 | M |
 | 2 | accept `stages: []` (file leftovers, land); `has_criteria` takes "Done when" | 2 | S |
 | 3 | `bad_checks` matched by check index/id, not exact string | 3 | S |
-| 4 | dedupe by `norm_cmd` inside a round (stage + cases); writer told which checks it may run | 5 | S |
+| 4 | send back a plan whose checks run one slow command twice, or wrap a repo check (exact repeats are already reused, tl-bxk.10.27) | 5 | S |
 | 5 | verify scope rule: unchecked outside done-when -> leftover | 3 | S |
 | 6 | handoff `rounds` replaces `replan.md` (<= 1.5 KB) | 3 | M |
 | 7 | fresh writer at a stage boundary when context > 100K; "already seen" lows | 2 | S |
@@ -182,3 +183,20 @@ Ranks 1-5 first: ~22 bead-instances out of the 34 that ran, mostly one-file engi
 - Night 2 has 1-3 runs, so no night-2 numbers are used.
 - One pass by Sonnet agents, spot-checked against engine.py by line numbers; not cross-checked by a second reader.
 - Quotes of engine line numbers (2495, 2823, ~3764) are from 0.23.6 and shift with edits.
+
+## Build notes (2026-10-23)
+
+| bead | what is in `engine.py` | config |
+|---|---|---|
+| 13.1 | `deferred_text()` in the review prompt; `ENGINE_BEADS` makes "file beads" an engine step; `backed_by_leftover()` lands an owner item that has an owner-review leftover | |
+| 13.2 | an empty plan with leftovers files them and closes `done`; `has_criteria` reads "Done when" | |
+| 13.3 | `flagged_why()` matches a writer's `bad_checks` by id, whitespace-insensitive, `...`-shortened or 20+ char stretch | |
+| 13.4 | `repeated_slow()`: one send-back of a plan that runs a slow command in two checks or around a repo check | |
+| 13.5 | `out_of_scope()`: a checkable review note sharing no word pair with done-when, goals, cases, risks becomes a leftover | |
+| 13.6 | `handoff` (rounds, seen lows) in the checkpoint and `runs/<run>/handoff.json`; the amend planner gets `<rounds>` (<= 1.5 KB) | `HANDOFF_CAP` |
+| 13.7 | fresh writer at a stage boundary above 100K; reviewers get the lows already noted; verify evidence carries each passing check's last output | `write_fresh_stage_k` (0 = off) |
+| 13.8 | `~/.config/task-loop/shared/<repo>.json` (flakes, reported by writers via `flakes`, editable by hand); running siblings and landings in the planner and a writer's whole prompt; `rebase_onto_base()` before a plan or amend | |
+| 13.9 | "needs a human" is a stuck ask with `human_question()`, no Right/Wrong | |
+| 13.10 | `probe_text()`: one configured repo check named in backticks in the acceptance text runs on the base before the first plan | `plan_probe`, `plan_probe_max_s` |
+
+Not built: file locks and a `Touches` scheduler (decision 4: dropped; the loop already says it does not read Touches).
