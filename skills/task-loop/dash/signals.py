@@ -12,7 +12,7 @@ CLUSTER_N, CLUSTER_WINDOW, CLUSTER_LOOKBACK = 4, 3 * 3600, 6 * 3600   # parks wi
 CHURN_CHECKS_RED, CHURN_BLOCKS, CHURN_LOOKBACK = 3, 12, 24 * 3600      # checks fails, steps in one bead
 HOG_FRESH, HOG_TIMES_MEDIAN, HOG_LOOKBACK = 500_000, 3, 48 * 3600     # fresh tokens (input minus cached, plus output)
 REPLANS = 3
-BIG_TURN = 3_000_000                     # one write turn (input incl. cache + output): a runaway context
+BIG_TURN = 10_000_000                    # one write step (a block of many model calls; input incl. cache + output): p93 of lifesim's 93
 SLOW_CHECK, SENDBACKS = 600, 2           # seconds per check round; review send-backs
 ASK_AMBER, ASK_RED, ASK_PARK_SOON = 12 * 3600, 24 * 3600, 24 * 3600
 USAGE_HIGH = 90.0
@@ -139,7 +139,7 @@ def big_turns(rows, now):
     if not hit:
         return []
     r = hit[0]
-    return [sig("big_turn", "amber", "%s: one write turn used %s tokens" % (short(r["id"]), human(r["big_turn"])),
+    return [sig("big_turn", "amber", "%s: one write step used %s tokens" % (short(r["id"]), human(r["big_turn"])),
                 "almost all cache reads: the writer's context is huge and every model call re-reads it%s"
                 % (" (+%d more beads)" % (len(hit) - 1) if len(hit) > 1 else ""), [h["id"] for h in hit])]
 

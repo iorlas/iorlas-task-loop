@@ -99,12 +99,12 @@ class Churn(unittest.TestCase):
 
 class Rounds(unittest.TestCase):
     def test_sendbacks_slow_checks_and_a_huge_write_turn(self):
-        s = build([row("a", sendbacks=2), row("b", red_checks=2, longest_check=660), row("c", big_turn=5_980_000)])
+        s = build([row("a", sendbacks=2), row("b", red_checks=2, longest_check=660), row("c", big_turn=12_300_000)])
         by = {x["kind"]: x for x in s["signals"] if x["kind"] in ("churn", "big_turn")}
         self.assertEqual(sorted(x["look"][0] for x in s["signals"] if x["kind"] == "churn"), ["r-a", "r-b"])
         self.assertIn("review sent it back 2×", [x for x in s["signals"] if x["look"] == ["r-a"]][0]["line"])
         self.assertIn("up to 11m", [x for x in s["signals"] if x["look"] == ["r-b"]][0]["line"])
-        self.assertIn("6.0M", by["big_turn"]["title"])
+        self.assertIn("12.3M", by["big_turn"]["title"])
 
     def test_one_slow_check_round_alone_is_quiet(self):
         self.assertNotIn("churn", kinds(build([row("a", red_checks=1, longest_check=900)])))
