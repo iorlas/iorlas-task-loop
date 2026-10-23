@@ -318,3 +318,36 @@ class SlotReset(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AskCli(unittest.TestCase):
+    """tl ask: the inbox from the terminal, through the dashboard's own answer and withdraw."""
+
+    def test_list_answer_and_withdraw(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            (d / "bin").mkdir()
+            (d / "bin" / "bd").write_text("#!/bin/sh\necho \"$*\" >> %s\n" % (d / "bd.log"))
+            (d / "bin" / "bd").chmod(0o755)
+            asks = d / "task-loop" / "asks"
+            asks.mkdir(parents=True)
+            for bead in ("x-1", "x-2"):
+                (asks / ("%s.json" % bead)).write_text(json.dumps({
+                    "v": 1, "id": bead + "-1", "bead": bead, "kind": "verify", "question": "ok?", "t": 1, "status": "open",
+                    "parks_at": 9e12, "repo": str(d), "title": "T " + bead,
+                    "options": [{"label": "Right", "answer": "right"}]}))
+            env = {"XDG_CONFIG_HOME": str(d), "APPDATA": str(d), "HOME": str(d), "USERPROFILE": str(d),
+                   "PATH": str(d / "bin") + os.pathsep + os.environ["PATH"]}
+            ns = lambda **k: type("A", (), dict(dict(op="list", bead=None, text=[], json=False), **k))()
+            with mock.patch.dict(os.environ, env):
+                out = io.StringIO()
+                with mock.patch("sys.stdout", out):
+                    self.assertEqual(tl.cmd_ask(ns()), 0)
+                    self.assertEqual(tl.cmd_ask(ns(op="answer", bead="x-1", text=["right"])), 0)
+                    self.assertEqual(tl.cmd_ask(ns(op="withdraw", bead="x-2", text=["no", "longer"])), 0)
+                    self.assertEqual(tl.cmd_ask(ns(op="answer", bead="nope", text=["x"])), 1)
+                self.assertIn("x-1", out.getvalue())
+                self.assertIn("Right -> right", out.getvalue())
+                self.assertIn("comments add x-1 right", (d / "bd.log").read_text())
+                a = json.loads((asks / "x-2.json").read_text())
+                self.assertEqual((a["status"], a["withdrawn_why"]), ("withdrawn", "no longer"))

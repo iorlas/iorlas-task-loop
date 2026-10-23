@@ -392,7 +392,7 @@ class EngineTest(unittest.TestCase):
         eng.t0 -= 16 * 60
         with self.assertRaises(engine.Blocked) as e:
             eng.budget_check()
-        self.assertIn("24 min wall, 8 min waiting", str(e.exception))
+        self.assertIn("8 min waiting for shared resources not counted", str(e.exception))
 
     def test_budget_min_by_label_raises_the_budget_for_a_labelled_bead(self):
         eng = self.checks_engine(budget_min=5, budget_min_by_label={"unity": 300})
@@ -1274,7 +1274,7 @@ class EngineTest(unittest.TestCase):
         with mock.patch.object(DelegateScript, "__call__", main_moves):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE, denied], "review": [CLEAN]})
         self.assertEqual(rc, 2)
-        self.assertEqual(self.ask()["kind"], "verify")
+        self.assertEqual(self.ask()["kind"], "denied")
         ck = self.checkpoint()
         self.assertEqual((ck["step"], ck["branch"]), ("land", tl.git("symbolic-ref", "--short", "HEAD", cwd=str(self.wt))))
         answer = [{"author": "denis", "text": "False positive; rerun.", "created_at": "2026-10-20T23:25:00Z"}]
@@ -1496,11 +1496,11 @@ class EngineTest(unittest.TestCase):
         self.assertLess(b["prompt_chars"], a["prompt_chars"])
 
     def test_the_threshold_defaults_by_the_session_family(self):
-        rc, s = self.two_writes(family="openai", ctx_k=190)  # codex: 200, claude would start fresh
+        rc, s = self.two_writes(family="openai", ctx_k=90)  # codex: 100, claude would go on to 150
         self.assertEqual(s.calls[2][1], "ref-write")
-        rc, s = self.two_writes(family="openai", ctx_k=210)
+        rc, s = self.two_writes(family="openai", ctx_k=110)
         self.assertIsNone(s.calls[2][1])
-        self.assertIn("fresh writer: session at 210k", self.eng.log_path.read_text())
+        self.assertIn("fresh writer: session at 110k", self.eng.log_path.read_text())
 
     def test_write_fresh_above_k_is_the_repos_to_set(self):
         rc, s = self.two_writes(ctx_k=60, write_fresh_above_k=50)
@@ -1755,9 +1755,10 @@ class EngineTest(unittest.TestCase):
     def test_a_decision_ask_carries_the_options_the_planner_gave(self):
         rc, _ = self.run_engine({"plan": [dict(PLAN, question="Build now or park?", options=self.CHOICES)]})
         self.assertEqual(rc, 2)
+        THEN = "The bead runs again with this as its instruction."
         self.assertEqual(self.ask()["options"], [
-            {"label": "Build it", "answer": "A: build the slice now", "note": "about 4 stages"},
-            {"label": "Keep parked", "answer": "B: keep it parked", "note": "none", "recommended": True}])
+            {"label": "Build it", "answer": "A: build the slice now", "note": "about 4 stages", "then": THEN},
+            {"label": "Keep parked", "answer": "B: keep it parked", "note": "none", "recommended": True, "then": THEN}])
 
     def test_a_writer_or_reviewer_decision_carries_its_options_too(self):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which?", options=self.CHOICES[:2])]})
@@ -1796,12 +1797,37 @@ class EngineTest(unittest.TestCase):
 
     def test_an_over_budget_ask_offers_a_rerun_and_the_cap_ask_offers_one_more(self):
         self.run_engine({"plan": [PLAN], "write": [WRITE]}, budget_usd=0.6)
-        self.assertEqual([o["answer"] for o in self.ask()["options"]], ["run again"])
+        a0 = self.ask()
+        self.assertEqual((a0["kind"], [o["label"] for o in a0["options"]]), ("budget", ["Run again", "Split the bead"]))
+        self.assertTrue(all(o["then"] for o in a0["options"]))
+        self.assertIn("Pick an option", a0["question"])
         a = engine.ask_options("stuck", engine.REPLAN_CAP + "3 times")
         self.assertEqual([o["answer"] for o in a], ["allow one more"])
         self.assertIn("allow", a[0]["answer"])  # what grant_cap reads
         self.assertEqual(engine.ask_options("stuck", "stage 1 stuck: checks red"), [])
         self.assertEqual(engine.ask_options("ticket", "ticket: no criteria"), [])
+
+    def test_every_option_says_what_happens_next_and_the_question_is_readable(self):
+        for kind, why in (("verify", "needs a human: x"), ("budget", "over budget: 1 of 2 min"),
+                          ("stuck", engine.REPLAN_CAP + "3 times")):
+            for o in engine.ask_options(kind, why):
+                self.assertTrue(o["then"], o)
+        dump = "needs a human: the write step was denied `{'command': '/bin/zsh -lc \"" + "x" * 300 + "\"}` after"
+        q = engine.tidy_question(dump)
+        self.assertNotIn("zsh", q)
+        self.assertIn("see details", q)
+        self.assertEqual(engine.tidy_question("over budget: $0.00 of $15, 187 of 180 min"), "over budget: 187 of 180 min")
+        keep = engine.tidy_question("denied `git push origin main` and gave no answer; run it or allow it, then rerun. (said:\n" + "x" * 100 + ")")
+        self.assertIn("`git push origin main` and gave no answer; run it or allow it, then rerun.", keep)
+        self.assertIn("what to allow", engine.ask_hint("denied", "needs a human: x", "q"))
+        self.assertIn("how to prove it", engine.ask_hint("stuck", "the check before land: nothing proves y", "q"))
+        self.assertEqual(engine.ask_hint("stuck", "replan: x", "q"), "q")
+        log = Path(self.tmp.name) / "run.jsonl" if hasattr(self, "tmp") else Path(tempfile.mkdtemp()) / "run.jsonl"
+        log.write_text("\n".join(json.dumps({"kind": "end", "step": st, "secs": sec}) for st, sec in (
+            ("checks", 6000), ("checks", 3800), ("write", 900), ("plan", 20))))
+        self.assertEqual(engine.run_breakdown(log), "checks 163 min (2 rounds), write 15 min (1 round)")
+        cut = engine.tidy_question("word " * 400)
+        self.assertTrue(cut.endswith("(more in details)") and len(cut) < 640)
 
     def test_an_unchecked_requirement_stops_the_land_with_a_verify_ask(self):
         r = dict(CLEAN, unchecked=[{"what": "the cited spec link did not open", "kind": "link"}])
@@ -2312,7 +2338,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual([c[0] for c in s.calls].count("worker"), 1)
         self.assertIn("needs a human", self.blocked[0])
         self.assertIn("cat .env", self.blocked[0])
-        self.assertEqual(self.ask()["kind"], "verify")
+        self.assertEqual(self.ask()["kind"], "denied")
 
     def test_fail_on_a_plan_tries_once_more_then_fails_the_task(self):
         bad = ans("failed", "worker_failed", "fail", say="the worker exited 1")
@@ -2378,7 +2404,7 @@ class EngineTest(unittest.TestCase):
         bad = ans("failed", "worker_failed", "owner", say="HTTP 500: upstream error")
         rc, _ = self.run_engine({"plan": [bad]})
         self.assertEqual(rc, 2)
-        self.assertEqual(self.ask()["kind"], "verify")
+        self.assertEqual(self.ask()["kind"], "denied")
         self.assertIn("HTTP 500", self.blocked[0])
 
     def test_a_done_answer_whose_text_says_unknown_argument_lands_normally(self):

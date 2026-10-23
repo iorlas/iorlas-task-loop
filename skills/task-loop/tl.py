@@ -1271,6 +1271,38 @@ def start_server(port, bind=None):
     return None, "dashboard did not start; see " + str(config_dir() / "dash.log")
 
 
+def cmd_ask(a):
+    """The inbox from the terminal: the dashboard's own code answers and withdraws, so both say the same things."""
+    d = dash_module()
+    if a.op == "list":
+        rows = d.inbox()
+        if a.json:
+            print(json.dumps(rows, indent=1))
+            return 0
+        for r in rows:
+            print("%-22s %-8s unblocks %-2d %s" % (r["bead"], r["kind"], r["unblocks"], (r.get("title") or "")[:60]))
+            print("    " + " | ".join("%s -> %s" % (o["label"], o["answer"]) for o in r.get("options") or []) if r.get("options") else
+                  "    (free text: tl ask answer %s <text>)" % r["bead"])
+        if not rows:
+            print("nothing waits on you")
+        return 0
+    if not a.bead:
+        print("tl: ask %s needs a bead id" % a.op)
+        return 2
+    f = config_dir() / "asks" / ("%s.json" % a.bead)
+    try:
+        ask_id = json.loads(f.read_text()).get("id")
+    except (OSError, ValueError):
+        print("tl: no ask for %s" % a.bead)
+        return 1
+    if a.op == "answer":
+        code, out = d.answer({"ask": ask_id, "text": " ".join(a.text)})
+    else:
+        code, out = d.withdraw({"ask": ask_id, "why": " ".join(a.text) or "withdrawn with tl ask withdraw"})
+    print(out.get("next") if code == 200 and out.get("next") else "done" if code == 200 else "tl: " + out.get("error", "failed"))
+    return 0 if code == 200 else 1
+
+
 def cmd_dash(a):
     dev = is_dev_checkout() and "TASK_LOOP_DASH_PORT" not in os.environ
     if dev and a.op == "ensure":  # tests/dev: own random loopback port; the installed server on :7878 stays untouched
@@ -1422,6 +1454,11 @@ def main(argv=None):
     p = sp.add_parser("worktree")
     p.add_argument("op", choices=["start", "sunset"])
     p.add_argument("--self-too", action="store_true")
+    p = sp.add_parser("ask", help="the owner's inbox: list the open asks, answer one, or withdraw one that no longer applies")
+    p.add_argument("op", choices=["list", "answer", "withdraw"])
+    p.add_argument("bead", nargs="?")
+    p.add_argument("text", nargs="*", help="answer: the answer; withdraw: why")
+    p.add_argument("--json", action="store_true")
     p = sp.add_parser("dash")
     p.add_argument("op", choices=["ensure", "stop", "status", "url"])
     p = sp.add_parser("run-task")
@@ -1505,7 +1542,7 @@ def main(argv=None):
         return r.returncode
     return {"register": cmd_register, "claim": cmd_claim, "heartbeat": cmd_heartbeat, "stage": cmd_stage, "worker": cmd_worker,
             "land": cmd_land, "close": cmd_close, "block": cmd_block, "slot": cmd_slot, "worktree": cmd_worktree,
-            "dash": cmd_dash, "hook": cmd_hook, "doctor": cmd_doctor}[a.cmd](a)
+            "dash": cmd_dash, "ask": cmd_ask, "hook": cmd_hook, "doctor": cmd_doctor}[a.cmd](a)
 
 
 if __name__ == "__main__":

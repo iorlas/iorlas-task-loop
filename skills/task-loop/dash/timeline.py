@@ -271,7 +271,11 @@ def ask_kind(why):
         return None
     if why.startswith("owner decision needed"):
         return "decision"
-    if why.startswith(("needs a human", "verify:")):
+    if why.startswith("over budget"):
+        return "budget"
+    if why.startswith("needs a human"):
+        return "denied"
+    if why.startswith("verify:"):
         return "verify"
     if why.startswith("ticket:"):
         return "ticket"
@@ -373,10 +377,10 @@ def arrow_text(cause, detail="", ctx=None):
         what = ("%s out" % ctx["lane"]) if ctx.get("lane") else pause_reason(detail)
         until = ctx.get("until") or until_of(detail)
         return "%s \u2192 paused%s" % (what, (" until " + until) if until else "")
-    if cause in ("decision", "verify", "ticket", "stuck", "waiting", "verify_open", "needs_human"):
+    if cause in ("decision", "verify", "ticket", "stuck", "waiting", "verify_open", "needs_human", "denied", "budget"):
         return {"decision": "decision needed", "verify": "needs your check", "ticket": "needs a split or criteria",
                 "stuck": "stuck", "waiting": "waiting for your answer", "verify_open": "needs your check",
-                "needs_human": "needs you"}[cause] + " \u2192 asks you"
+                "needs_human": "needs you", "denied": "needs you", "budget": "over its time limit"}[cause] + " \u2192 asks you"
     if cause == "verify_wrong":
         return "check before land found defects \u2192 fix round"
     if cause == "verified":
@@ -667,7 +671,7 @@ def run_end(nodes, pending, alive):
         end.update(outcome="waiting", status="ask", text=arrow_text("waiting"))
     elif outcome == "blocked" and ask_kind(why):
         end.update(outcome="asks", status="ask", text=arrow_text(cause if cause in (
-            "decision", "verify", "ticket", "stuck", "verify_open", "needs_human") else ask_kind(why)))
+            "decision", "verify", "ticket", "stuck", "verify_open", "needs_human", "denied", "budget") else ask_kind(why)))
     elif why.startswith("failed: stopped"):
         end.update(outcome="stopped", status="fail", text="stopped")
     else:

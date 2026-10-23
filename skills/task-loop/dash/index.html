@@ -132,6 +132,9 @@ main{max-width:1180px;margin:0 auto;padding:22px 20px 80px}
 .askbox .opt small{display:block;color:var(--mute);font-size:12px;margin-top:2px}
 .askbox .opt.rec{border-color:var(--ask);box-shadow:inset 0 0 0 1px var(--ask)}
 .askbox .opt .tag{font-size:11px;font-weight:620;color:var(--ask);margin-left:8px;text-transform:uppercase;letter-spacing:.03em}
+.askbox .unb{font-size:12px;font-weight:620;color:var(--ask)}.askbox .lbl{font-size:11px;font-weight:620;text-transform:uppercase;letter-spacing:.04em;color:var(--mute);margin-right:6px}
+.askbox .cost{color:var(--p-blocked)}.askbox .msg{font-size:14px;font-weight:620}.askbox.sent{border-left-color:var(--ok)}.askbox.sent .msg{color:var(--ok)}.askbox .next{font-size:13px;color:var(--ink2);margin-top:4px}
+.askbox .undo{color:var(--ring);cursor:pointer;text-decoration:underline;font-weight:400}.askbox details.more{margin-top:8px;font-size:13px;color:var(--mute)}.asks h2.grp{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute);margin:22px 0 10px}
 .askbox .asknote{font-size:12px;color:var(--p-blocked);margin:6px 0 0}
 .btn{height:34px;padding:0 14px;border-radius:9px;background:var(--ink);color:var(--bg);font-weight:600;font-size:13px;transition:opacity .15s}
 .btn:hover{opacity:.88}
@@ -431,7 +434,7 @@ function effort(e){return e?({medium:'med'}[e]||e):''}
 const STATE={queued:'s-wait',blocked_by:'s-wait',running:'s-run',asks:'s-ask',paused:'s-wait',waiting:'s-wait',landed:'s-ok',done:'s-ok',failed:'s-fail',stopped:'s-fail',blocked:'s-fail'};
 const CAUSE={checks_red:'fail',gate_red:'fail',conflict:'fail',verify_wrong:'fail',failed:'fail',stopped:'fail',
   review_sendback:'warn',rounds_used:'warn',bad_checks:'warn',writer_decided:'warn',plan_sent_back:'warn',invalid_output:'warn',push_race:'warn',
-  lane_out:'wait',paused:'wait',lane_wait:'wait',retry:'wait',decision:'ask',verify:'ask',ticket:'ask',stuck:'ask',waiting:'ask',verify_open:'ask',needs_human:'ask',
+  lane_out:'wait',paused:'wait',lane_wait:'wait',retry:'wait',decision:'ask',verify:'ask',ticket:'ask',stuck:'ask',waiting:'ask',verify_open:'ask',needs_human:'ask',denied:'ask',budget:'ask',
   accepted:'ok',checks_green:'ok',landed:'ok',done:'ok',verified:'ok'};
 function chip(cls,text,dot){return `<span class="chip ${cls}" title="${esc(text)}">${dot!==false?'<span class="d"></span>':''}<span class="x">${esc(text)}</span></span>`}
 
@@ -570,33 +573,60 @@ function renderTask(){const d=S.tl;if(!d||!d.task||d.task.id!=S.task){paint($('m
   const ae=document.activeElement,keep=ae&&ae.tagName=='TEXTAREA'?[ae.dataset.ans,ae.value,ae.selectionStart]:null;
   if(paint($('main'),'main',html)&&keep){const ta=document.querySelector(`textarea[data-ans="${CSS.escape(keep[0])}"]`);if(ta){ta.value=keep[1];ta.focus();try{ta.setSelectionRange(keep[2],keep[2])}catch(e){}}}}
 
-const ASKK={decision:'Decision needed',verify:'Please check',ticket:'Split or criteria needed',stuck:'Stuck: a hint is needed'};
+const ASKK={decision:'Decision needed',verify:'Please check',denied:'Blocked: a step needs you',budget:'Over its time limit',ticket:'Split or criteria needed',stuck:'Stuck: a hint is needed'};
+const PEND={},DRAFT={},SEEN={},ERR={};  // PEND: ask id -> {ask,text,label,at,timer|sending|done|err}; DRAFT: unsent text; SEEN: asks as last drawn
+const UNDO_MS=8000,STALE=['withdrawn','gone','answered','bead_missing'];
 function optsHtml(a){const os=(a.options||[]).map((o,i)=>[o,i]).sort((x,y)=>!!y[0].recommended-!!x[0].recommended);
-  return os.length?`<div class="opts">`+os.map(([o,i])=>`<button class="opt${o.recommended?' rec':''}" data-opt="${i}" data-ask="${esc(a.id)}"><b>${esc(o.label)}</b>${o.recommended?'<span class="tag">Recommended</span>':''}${o.note?`<small>${esc(o.note)}</small>`:''}</button>`).join('')+`</div>`:''}
+  return os.length?`<div class="opts">`+os.map(([o,i])=>`<button class="opt${o.recommended?' rec':''}" data-opt="${i}" data-ask="${esc(a.id)}"><b>${esc(o.label)}</b>${o.recommended?'<span class="tag">Recommended</span>':''}${o.note?`<small>${esc(o.note)}</small>`:''}${o.then?`<small>Then: ${esc(o.then)}</small>`:''}${o.cost?`<small class="cost">Costs: ${esc(o.cost)}</small>`:''}</button>`).join('')+`</div>`:''}
+function askHead(a,withLink){
+  return `<h3>${chip('s-ask',ASKK[a.kind]||a.kind||'Ask')}${withLink?`<a href="#task=${encodeURIComponent(a.bead)}">${esc(a.title||a.bead)}</a>`:'<span>The engine asks you</span>'}${a.unblocks?`<span class="unb">unblocks ${a.unblocks} bead${a.unblocks>1?'s':''}</span>`:''}</h3>
+    ${withLink?`<div class="meta"><span class="mono">${esc(a.bead)}</span> · asked ${esc(ago(a.t))}</div>`:''}`}
 function askBox(a,withLink){
-  return `<div class="askbox"><h3>${chip('s-ask',ASKK[a.kind]||a.kind||'Ask')}${withLink?`<a href="#task=${encodeURIComponent(a.bead)}">${esc(a.title||a.bead)}</a>`:'<span>The engine asks you</span>'}</h3>
-    ${withLink?`<div class="meta"><span class="mono">${esc(a.bead)}</span> · asked ${esc(ago(a.t))}</div>`:''}
-    <div class="q">${esc(a.question)}</div>${a.answer?`<div class="answered">Answered: ${esc(a.answer)} · the next run starts from it</div>`:
-    `${optsHtml(a)}<textarea data-ans="${esc(a.id)}" placeholder="Your answer goes on the bead as a comment; the next run starts from it"></textarea><button class="btn" data-send="${esc(a.id)}">Send answer</button>`}</div>`}
+  SEEN[a.id]=a;const p=PEND[a.id],head=askHead(a,withLink);
+  if(p&&p.timer)return `<div class="askbox sending" data-box="${esc(a.id)}">${head}<div class="msg">Sending “${esc(p.label)}” in <span data-count="${esc(a.id)}">${Math.ceil((p.at+UNDO_MS-Date.now())/1000)}</span> s. <a class="undo" data-undo="${esc(a.id)}">Undo</a></div></div>`;
+  if(p&&p.sending)return `<div class="askbox sending" data-box="${esc(a.id)}">${head}<div class="msg">Sending “${esc(p.label)}”…</div></div>`;
+  if(p&&p.done)return `<div class="askbox sent" data-box="${esc(a.id)}">${head}<div class="msg">Sent: ${esc(p.label)}.</div><div class="next">${esc(p.done)}</div></div>`;
+  if(p&&p.err&&p.stale)return `<div class="askbox" data-box="${esc(a.id)}">${head}<div class="asknote">${esc(p.err)}</div>${p.dismiss?`<button class="btn" data-dismiss="${esc(a.id)}">Dismiss this ask</button> `:''}<a class="undo" data-clear="${esc(a.id)}">Close</a></div>`;
+  const q=a.detail&&a.detail!==a.question?`<details class="more"><summary>The engine's full text</summary><div class="q">${esc(a.detail)}</div></details>`:'';
+  const err=ERR[a.id]?`<div class="asknote">${esc(ERR[a.id])}</div>`:'';
+  return `<div class="askbox" data-box="${esc(a.id)}">${head}
+    <div class="q"><span class="lbl">Needs</span> ${esc(a.question)}</div>${q}${a.answer?`<div class="answered">Answered: ${esc(a.answer)} · the next run starts from it</div>`:
+    `${optsHtml(a)}<textarea data-ans="${esc(a.id)}" placeholder="Or write your own answer: it goes on the bead as a comment, and the next run starts from it">${esc(DRAFT[a.id]||'')}</textarea><button class="btn" data-send="${esc(a.id)}">Send answer</button>${err}`}</div>`}
 function renderAsks(){const as=S.asks.asks||[];
-  let html=`<div class="hero"><div><h1>Asks</h1><div class="sum">${as.length?as.length+' open':'nothing waits on you'}</div></div></div><div class="asks">`;
-  html+=as.length?as.map(a=>askBox(a,true)).join(''):`<div class="list"><div class="empty"><b>Nothing waits on you</b>When the engine needs a decision it shows here and on its task.</div></div>`;
+  const ids=new Set(as.map(a=>a.id)),ghosts=Object.values(PEND).filter(p=>p.ask&&!ids.has(p.ask.id)&&!p.timer);
+  const group=(t,l)=>l.length?`<h2 class="grp">${t} (${l.length})</h2>`+l.map(a=>askBox(a,true)).join(''):'';
+  const open=as.filter(a=>!a.answered_here);
+  const n=open.length,un=open.reduce((s,a)=>s+(a.unblocks||0),0);
+  let html=`<div class="hero"><div><h1>Asks</h1><div class="sum">${n?n+' wait on you'+(un?' · answering them unblocks '+un+' bead'+(un>1?'s':''):''):'nothing waits on you'}</div></div></div><div class="asks">`;
+  html+=ghosts.map(p=>askBox(p.ask,true)).join('');
+  html+=n||ghosts.length||as.length?group('Click once',open.filter(a=>a.quick))+group('Needs a decision or a hint',open.filter(a=>!a.quick))+group('Answered, waits for the next run',as.filter(a=>a.answered_here)):`<div class="list"><div class="empty"><b>Nothing waits on you</b>When the engine needs a decision it shows here and on its task.</div></div>`;
   const ae=document.activeElement,keep=ae&&ae.tagName=='TEXTAREA'?[ae.dataset.ans,ae.value]:null;
   if(paint($('main'),'main',html+'</div>')&&keep){const ta=document.querySelector(`textarea[data-ans="${CSS.escape(keep[0])}"]`);if(ta){ta.value=keep[1];ta.focus()}}}
-async function sendAnswer(id,btn,given){const ta=document.querySelector(`textarea[data-ans="${CSS.escape(id)}"]`);const text=(given!=null?given:ta&&ta.value||'').trim();if(!text){ta&&ta.focus();return}
+function askById(id){const a=((S.asks||{}).asks||[]).find(x=>x.id==id);return a||SEEN[id]}
+function repaintAsks(){S.sig={};if(S.view=='asks')renderAsks();else render()}
+// an answer waits UNDO_MS with an Undo, then posts; one at a time per ask; the box says what happens after
+function sendAnswer(id,label,text){text=(text||'').trim();const a=askById(id);if(!a||PEND[id])return;
+  if(!text){const ta=document.querySelector(`textarea[data-ans="${CSS.escape(id)}"]`);ta&&ta.focus();return}
+  delete ERR[id];const p=PEND[id]={ask:a,text,label:label.length>40?label.slice(0,40)+'…':label,at:Date.now()};
+  p.tick=setInterval(()=>{const el=document.querySelector(`[data-count="${CSS.escape(id)}"]`);if(el)el.textContent=Math.max(0,Math.ceil((p.at+UNDO_MS-Date.now())/1000))},500);
+  p.timer=setTimeout(()=>postAnswer(id),UNDO_MS);repaintAsks()}
+function undoAnswer(id){const p=PEND[id];if(!p||!p.timer)return;clearTimeout(p.timer);clearInterval(p.tick);DRAFT[id]=p.text;delete PEND[id];repaintAsks()}
+function clearAsk(id){delete PEND[id];delete DRAFT[id];repaintAsks()}
+async function postAnswer(id){const p=PEND[id];if(!p)return;clearInterval(p.tick);p.timer=p.tick=null;p.sending=true;repaintAsks();
   let tk='';try{tk=localStorage.getItem('tl.token')||''}catch(e){}
-  const label=btn.textContent;btn.disabled=true;if(given==null)btn.textContent='Sending…';
-  const r=await fetch('/api/answer',{method:'POST',headers:{'Content-Type':'application/json',...(tk?{'Authorization':'Bearer '+tk}:{})},body:JSON.stringify({ask:id,text})}).catch(()=>null);
-  btn.disabled=false;if(given==null)btn.textContent=label;
-  const box=btn.closest('.askbox'),note=box&&(box.querySelector('.asknote')||box.appendChild(Object.assign(document.createElement('div'),{className:'asknote'})));
-  const say=m=>{if(note)note.textContent=m};
-  if(!r){say('The server did not answer');return}
-  if(r.status==401){say('This address needs the token: open the link `tl dash url` prints (ANSWER LINK)');return}
-  if(!r.ok){const j=await r.json().catch(()=>({}));say(j.error||'Failed');return}
-  if(ta)ta.value='';S.sig={};poll()}
-function pickOption(o){const a=((S.asks||{}).asks||[]).find(x=>x.id==o.dataset.ask),opt=a&&(a.options||[])[+o.dataset.opt];if(!opt)return;
+  const r=await fetch('/api/answer',{method:'POST',headers:{'Content-Type':'application/json',...(tk?{'Authorization':'Bearer '+tk}:{})},body:JSON.stringify({ask:id,text:p.text})}).catch(()=>null);
+  p.sending=false;
+  if(!r){p.err='The dashboard did not answer. Nothing was sent; your text is kept.';DRAFT[id]=p.text;fail()}
+  else if(r.status==401){p.err='This address needs the answer link. Run tl dash url in a terminal and open the ANSWER LINK it prints. Nothing was sent.';DRAFT[id]=p.text;fail()}
+  else if(!r.ok){const j=await r.json().catch(()=>({}));p.err=j.error||'Failed. Nothing was sent.';p.dismiss=j.code=='bead_missing';p.stale=STALE.includes(j.code);DRAFT[id]=p.text;
+    if(j.code=='superseded'){delete PEND[id];S.sig={};poll();return}fail()}
+  else{const j=await r.json().catch(()=>({}));p.done=j.next||'The next run starts from it.';delete DRAFT[id];setTimeout(()=>{if(PEND[id]===p){delete PEND[id];repaintAsks()}},60000);S.sig={};poll();repaintAsks()}
+  function fail(){if(!p.stale){ERR[id]=p.err;delete PEND[id]}repaintAsks();S.sig={};poll()}}
+async function dismissAsk(id){const r=await fetch('/api/withdraw',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ask:id,why:'dismissed from the dashboard'})}).catch(()=>null);
+  if(r&&r.ok){delete PEND[id];delete DRAFT[id]}repaintAsks();S.sig={};poll()}
+function pickOption(o){const a=askById(o.dataset.ask),opt=a&&(a.options||[])[+o.dataset.opt];if(!opt)return;
   if(opt.edit){const ta=document.querySelector(`textarea[data-ans="${CSS.escape(a.id)}"]`);if(ta){ta.value=opt.answer;ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length)}return}
-  sendAnswer(a.id,o,opt.answer)}
+  sendAnswer(a.id,opt.label,opt.answer)}
 
 // ---- drawer -------------------------------------------------------------------------------------------------------
 const X='<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m5 5 10 10M15 5 5 15"/></svg>';
@@ -756,7 +786,10 @@ document.addEventListener('keydown',e=>{if(e.key=='Escape'&&S.view=='roadmap'&&S
 document.addEventListener('click',e=>{const b=e.target.closest('.blk');if(b){openBlock(b.dataset.run,+b.dataset.node,+b.dataset.k);return}
   if(e.target.closest('[data-close]')||e.target.id=='scrim'){closeDrawer();return}
   const t=e.target.closest('[data-tab]');if(t){S.tab=t.dataset.tab;const h=new URLSearchParams(location.hash.slice(1));h.set('tab',S.tab);history.replaceState(null,'','#'+h);renderDrawer();return}
-  const s=e.target.closest('[data-send]');if(s){sendAnswer(s.dataset.send,s);return}
+  const u=e.target.closest('[data-undo]');if(u){undoAnswer(u.dataset.undo);return}
+  const cl=e.target.closest('[data-clear]');if(cl){clearAsk(cl.dataset.clear);return}
+  const dm=e.target.closest('[data-dismiss]');if(dm){dismissAsk(dm.dataset.dismiss);return}
+  const s=e.target.closest('[data-send]');if(s){const ta=document.querySelector(`textarea[data-ans="${CSS.escape(s.dataset.send)}"]`);sendAnswer(s.dataset.send,'your answer',ta&&ta.value);return}
   const op=e.target.closest('[data-opt]');if(op){pickOption(op);return}
   if(e.target.closest('[data-more]')){S.showAll=true;renderTasks()}});
 document.addEventListener('input',e=>{if(e.target.id=='q'){S.q=e.target.value;renderTasks()}});
