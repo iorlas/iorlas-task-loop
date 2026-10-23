@@ -2558,7 +2558,7 @@ class Engine:
         except (OSError, ValueError):
             n = 1
         a = {"v": 1, "id": "%s-%d" % (self.bead, n), "n": n, "bead": self.bead, "kind": kind,
-             "question": (question or why)[:4000], "why": why[:4000], "run": self.log_path.stem, "t": time.time(),
+             "question": tidy_question(question or why), "detail": (question or why)[:4000], "why": why[:4000], "run": self.log_path.stem, "t": time.time(),
              "parks_at": time.time() + 3 * 86400, "brief": self.brief_hash, "status": "open",
              "options": ask_options(kind, why, getattr(self, "blocked_options", None))}
         common = self.git("rev-parse", "--path-format=absolute", "--git-common-dir")
@@ -3761,11 +3761,28 @@ def ask_kind(why):
         return None
     if why.startswith("owner decision needed"):
         return "decision"
-    if why.startswith(("needs a human", "verify:")):
+    if why.startswith("needs a human"):
+        return "denied"  # a step was refused or the lane stopped: nothing to confirm as right or wrong (tl-bxk.13.9)
+    if why.startswith("verify:"):
         return "verify"
     if why.startswith("ticket:"):
         return "ticket"
     return "stuck"
+
+
+BLOB = re.compile(r"`[^`]{80,}`|\{['\"][^}]{80,}\}?")  # a quoted command or tool-call dump, never a thing to read
+ZERO_COST = re.compile(r"\$0\.00 of \$[\d.]+, ")
+
+
+def tidy_question(text, cap=600):
+    """The ask as the owner reads it: no command dumps, no meaningless $0.00, ends at a word and says it was cut.
+    The full text stays in the ask's `detail`."""
+    t = BLOB.sub("(a long command, see details)", text or "")
+    t = ZERO_COST.sub("", t).strip()
+    if len(t) <= cap:
+        return t
+    cut = t[:cap].rsplit(" ", 1)[0].rstrip(",;:( ")
+    return cut + " ... (more in details)"
 
 
 def ask_options(kind, why, given=None):
@@ -3778,21 +3795,30 @@ def ask_options(kind, why, given=None):
         for o in given or []:
             if not isinstance(o, dict) or not str(o.get("label") or "").strip() or not str(o.get("answer") or "").strip():
                 continue
-            out.append({"label": o["label"].strip()[:120], "answer": o["answer"].strip()[:1000]})
+            out.append({"label": o["label"].strip()[:120], "answer": o["answer"].strip()[:1000],
+                        "then": "The bead runs again with this as its instruction."})
             if str(o.get("cost") or "").strip():
                 out[-1]["note"] = o["cost"].strip()[:300]
             if o.get("recommended"):
                 out[-1]["recommended"] = True
         return out[:4]
     if kind == "verify":
-        return [{"label": "Right", "answer": "right", "recommended": True},
-                {"label": "Wrong", "answer": "wrong: ", "edit": True, "note": "Opens the text box: say what is wrong"}]
+        return [{"label": "Right", "answer": "right", "recommended": True,
+                 "then": "The bead lands on the next pass of its loop."},
+                {"label": "Wrong", "answer": "wrong: ", "edit": True, "note": "Opens the text box: say what is wrong",
+                 "then": "The bead is planned again from your words.", "cost": "One more run"}]
+    if kind == "denied":
+        return [{"label": "Run again", "answer": "run again", "recommended": True,
+                 "note": "After you allowed the command, or ran it yourself",
+                 "then": "The step runs again on the next pass of its loop."}]
     if kind == "stuck" and why.startswith(REPLAN_CAP):
         return [{"label": "Allow one more planner run", "answer": "allow one more",
-                 "note": "The bead plans once more; or split it, or comment what the plan keeps missing"}]
+                 "note": "The bead plans once more; or split it, or comment what the plan keeps missing",
+                 "then": "The planner runs once more on the next pass of its loop."}]
     if kind == "stuck" and why.startswith("over budget"):
         return [{"label": "Run again", "answer": "run again",
-                 "note": "Goes on from where it stopped, with a fresh budget (the budget counts per run)"}]
+                 "note": "Goes on from where it stopped, with a fresh budget (the budget counts per run)",
+                 "then": "Continues from its checkpoint on the next pass of its loop.", "cost": "Up to one more full budget"}]
     return []
 
 

@@ -373,10 +373,10 @@ def arrow_text(cause, detail="", ctx=None):
         what = ("%s out" % ctx["lane"]) if ctx.get("lane") else pause_reason(detail)
         until = ctx.get("until") or until_of(detail)
         return "%s \u2192 paused%s" % (what, (" until " + until) if until else "")
-    if cause in ("decision", "verify", "ticket", "stuck", "waiting", "verify_open", "needs_human"):
+    if cause in ("decision", "verify", "ticket", "stuck", "waiting", "verify_open", "needs_human", "denied"):
         return {"decision": "decision needed", "verify": "needs your check", "ticket": "needs a split or criteria",
                 "stuck": "stuck", "waiting": "waiting for your answer", "verify_open": "needs your check",
-                "needs_human": "needs you"}[cause] + " \u2192 asks you"
+                "needs_human": "needs you", "denied": "needs you"}[cause] + " \u2192 asks you"
     if cause == "verify_wrong":
         return "check before land found defects \u2192 fix round"
     if cause == "verified":

@@ -133,6 +133,11 @@ Push: put one shell command in `~/.config/task-loop/notify`; each new ask runs i
 Intake: a bead with no acceptance criteria (the field, or a `## Acceptance Criteria` section) is a ticket ask before any
 AI step; a plan of more than `engine.max_stages` (3) stages is a split ticket, unless the owner already answered one. A decision or ticket ask takes the bead out of the unattended queue: with `engine.pick_label` set (lifesim: `auto`) the engine removes that label and adds `engine.needs_info_label` (`needs-info`), and the ask comment says so; answering does not relabel it, the owner does. Verify and stuck asks keep the label. Neither label change counts as an answer.
 
+The owner's inbox: `tl ask list` (ordered by what each ask unblocks), `tl ask answer <bead> <text>`, `tl ask withdraw <bead> [why]`;
+the dashboard's Asks page does the same with one click per option, an 8 s Undo before the comment is written, and a
+Dismiss button for a stale ask. An ask's `question` is tidied (no command dumps, ends at a word) and the full text is in
+its `detail`; each option carries `then` (what happens next) and `cost`. Withdrawn, closed-bead and replaced asks are never listed.
+
 Asks: every block is an owner ask, `~/.config/task-loop/asks/<bead>.json` plus an `Ask (engine)` comment: decision
 (a step's question; a planner's, writer's or reviewer's question that an accepted requirement already answers, quoted
 in its `decided` field, is no ask: the planner plans again once with the requirement quoted (transition

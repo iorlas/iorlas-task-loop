@@ -299,12 +299,97 @@ class AskOptions(unittest.TestCase):
                 self.assertEqual(shown["options"], opts)  # the page renders these
                 self.assertEqual(server.open_ask("x-1")["options"], opts)
                 clicked = shown["options"][1]["answer"]
-                self.assertEqual(server.answer({"ask": "x-1-1", "text": clicked}), (200, {"ok": True}))
+                code, out = server.answer({"ask": "x-1-1", "text": clicked})
+                self.assertEqual((code, out["ok"]), (200, True))
+                self.assertIn("x-1", out["next"])
                 self.assertEqual(server.answer({"ask": "x-1-1", "text": "A: build now"})[0], 409)
                 self.assertEqual(server.asks()["asks"][0]["answer"], text)
             log = (d / "bd.log").read_text().splitlines()
             self.assertEqual(log[0], "[comments][add][x-1][%s]" % text)
             self.assertEqual(log[1], "[update][x-1][--status][open]")
+
+
+class AskFailures(unittest.TestCase):
+    """Every way an answer can fail says what is true and what to do, never a raw bd line (the demo-1 502, the
+    withdrawn ask that said 'already answered', the superseded ask that said 'no such ask')."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.d = Path(self.tmp.name)
+        (self.d / "bin").mkdir()
+        self.asks = self.d / "task-loop" / "asks"
+        self.asks.mkdir(parents=True)
+        env = {"XDG_CONFIG_HOME": str(self.d), "APPDATA": str(self.d), "HOME": str(self.d), "USERPROFILE": str(self.d),
+               "PATH": str(self.d / "bin") + os.pathsep + os.environ["PATH"]}
+        p = mock.patch.dict(os.environ, env)
+        p.start()
+        self.addCleanup(p.stop)
+        self.addCleanup(self.tmp.cleanup)
+
+    def bd(self, script):
+        (self.d / "bin" / "bd").write_text("#!/bin/sh\n" + script)
+        (self.d / "bin" / "bd").chmod(0o755)
+
+    def ask(self, bead="x-1", n=1, **kw):
+        a = {"v": 1, "id": "%s-%d" % (bead, n), "bead": bead, "kind": "verify", "question": "ok?", "t": time.time(),
+             "parks_at": time.time() + 9e4, "status": "open", "repo": str(self.d), "options": []}
+        a.update(kw)
+        (self.asks / ("%s.json" % bead)).write_text(json.dumps(a))
+
+    def test_a_bead_bd_does_not_know_says_the_ask_is_out_of_date(self):
+        self.bd("echo 'Error: resolving demo: no issue found matching \"demo\"' >&2; exit 1\n")
+        self.ask("demo")
+        code, out = server.answer({"ask": "demo-1", "text": "b"})
+        self.assertEqual((code, out["code"]), (404, "bead_missing"))
+        self.assertNotIn("resolving", out["error"])
+        self.assertIn("dismiss", out["error"])
+
+    def test_any_other_bd_failure_keeps_its_last_line_and_says_nothing_was_sent(self):
+        self.bd("echo 'boom: disk full' >&2; exit 1\n")
+        self.ask()
+        code, out = server.answer({"ask": "x-1-1", "text": "b"})
+        self.assertEqual((code, out["code"]), (502, "bd"))
+        self.assertIn("boom: disk full", out["error"])
+        self.assertEqual(json.loads((self.asks / "x-1.json").read_text()).get("answer"), None)
+
+    def test_no_bd_on_the_path_is_an_error_message_not_a_dropped_connection(self):
+        self.ask()
+        with mock.patch.object(server.subprocess, "run", side_effect=FileNotFoundError(2, "No such file or directory")):
+            code, out = server.answer({"ask": "x-1-1", "text": "b"})
+        self.assertEqual((code, out["code"]), (502, "no_bd"))
+
+    def test_a_withdrawn_ask_says_who_and_why_and_is_not_listed(self):
+        self.ask(status="withdrawn", withdrawn_why="fixed in 0.23.5")
+        code, out = server.answer({"ask": "x-1-1", "text": "b"})
+        self.assertEqual((code, out["code"]), (410, "withdrawn"))
+        self.assertIn("fixed in 0.23.5", out["error"])
+        self.assertEqual(server.inbox(), [])
+
+    def test_an_ask_the_engine_replaced_points_at_the_new_one(self):
+        self.ask(n=2)
+        code, out = server.answer({"ask": "x-1-1", "text": "b"})
+        self.assertEqual((code, out["code"], out["new_ask"]), (409, "superseded", "x-1-2"))
+        self.assertEqual(server.answer({"ask": "nope-1", "text": "b"})[1]["code"], "gone")
+
+    def test_withdraw_marks_the_ask_and_leaves_the_bead_alone(self):
+        self.bd("echo called >> %s\n" % (self.d / "bd.log"))
+        self.ask()
+        self.assertEqual(server.withdraw({"ask": "x-1-1", "why": "stale"})[0], 200)
+        a = json.loads((self.asks / "x-1.json").read_text())
+        self.assertEqual((a["status"], a["withdrawn_why"]), ("withdrawn", "stale"))
+        self.assertFalse((self.d / "bd.log").exists())
+        self.assertEqual(server.withdraw({"ask": "x-1-1"})[0], 200)  # twice is fine
+
+    def test_the_inbox_is_ordered_by_what_each_ask_unblocks_and_drops_closed_beads(self):
+        (self.d / ".beads").mkdir()
+        beads = [{"id": "a", "status": "open"}, {"id": "b", "status": "open"}, {"id": "c", "status": "closed"},
+                 {"id": "d", "status": "open", "dependencies": [{"type": "blocks", "depends_on_id": "b"}]},
+                 {"id": "e", "status": "open", "dependencies": [{"type": "blocks", "depends_on_id": "b"}]}]
+        for bead in ("a", "b", "c"):
+            self.ask(bead)
+        with mock.patch.object(server, "beads_of", return_value=beads):
+            rows = server.inbox()
+        self.assertEqual([(r["bead"], r["unblocks"]) for r in rows], [("b", 2), ("a", 0)])
 
 
 class LaneBanner(unittest.TestCase):

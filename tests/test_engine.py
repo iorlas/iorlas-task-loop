@@ -1274,7 +1274,7 @@ class EngineTest(unittest.TestCase):
         with mock.patch.object(DelegateScript, "__call__", main_moves):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE, denied], "review": [CLEAN]})
         self.assertEqual(rc, 2)
-        self.assertEqual(self.ask()["kind"], "verify")
+        self.assertEqual(self.ask()["kind"], "denied")
         ck = self.checkpoint()
         self.assertEqual((ck["step"], ck["branch"]), ("land", tl.git("symbolic-ref", "--short", "HEAD", cwd=str(self.wt))))
         answer = [{"author": "denis", "text": "False positive; rerun.", "created_at": "2026-10-20T23:25:00Z"}]
@@ -1755,9 +1755,10 @@ class EngineTest(unittest.TestCase):
     def test_a_decision_ask_carries_the_options_the_planner_gave(self):
         rc, _ = self.run_engine({"plan": [dict(PLAN, question="Build now or park?", options=self.CHOICES)]})
         self.assertEqual(rc, 2)
+        THEN = "The bead runs again with this as its instruction."
         self.assertEqual(self.ask()["options"], [
-            {"label": "Build it", "answer": "A: build the slice now", "note": "about 4 stages"},
-            {"label": "Keep parked", "answer": "B: keep it parked", "note": "none", "recommended": True}])
+            {"label": "Build it", "answer": "A: build the slice now", "note": "about 4 stages", "then": THEN},
+            {"label": "Keep parked", "answer": "B: keep it parked", "note": "none", "recommended": True, "then": THEN}])
 
     def test_a_writer_or_reviewer_decision_carries_its_options_too(self):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which?", options=self.CHOICES[:2])]})
@@ -1802,6 +1803,19 @@ class EngineTest(unittest.TestCase):
         self.assertIn("allow", a[0]["answer"])  # what grant_cap reads
         self.assertEqual(engine.ask_options("stuck", "stage 1 stuck: checks red"), [])
         self.assertEqual(engine.ask_options("ticket", "ticket: no criteria"), [])
+
+    def test_every_option_says_what_happens_next_and_the_question_is_readable(self):
+        for kind, why in (("verify", "needs a human: x"), ("stuck", "over budget: 1 of 2"),
+                          ("stuck", engine.REPLAN_CAP + "3 times")):
+            for o in engine.ask_options(kind, why):
+                self.assertTrue(o["then"], o)
+        dump = "needs a human: the write step was denied `{'command': '/bin/zsh -lc \"" + "x" * 300 + "\"}` after"
+        q = engine.tidy_question(dump)
+        self.assertNotIn("zsh", q)
+        self.assertIn("see details", q)
+        self.assertEqual(engine.tidy_question("over budget: $0.00 of $15, 187 of 180 min"), "over budget: 187 of 180 min")
+        cut = engine.tidy_question("word " * 400)
+        self.assertTrue(cut.endswith("(more in details)") and len(cut) < 640)
 
     def test_an_unchecked_requirement_stops_the_land_with_a_verify_ask(self):
         r = dict(CLEAN, unchecked=[{"what": "the cited spec link did not open", "kind": "link"}])
@@ -2312,7 +2326,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual([c[0] for c in s.calls].count("worker"), 1)
         self.assertIn("needs a human", self.blocked[0])
         self.assertIn("cat .env", self.blocked[0])
-        self.assertEqual(self.ask()["kind"], "verify")
+        self.assertEqual(self.ask()["kind"], "denied")
 
     def test_fail_on_a_plan_tries_once_more_then_fails_the_task(self):
         bad = ans("failed", "worker_failed", "fail", say="the worker exited 1")
@@ -2378,7 +2392,7 @@ class EngineTest(unittest.TestCase):
         bad = ans("failed", "worker_failed", "owner", say="HTTP 500: upstream error")
         rc, _ = self.run_engine({"plan": [bad]})
         self.assertEqual(rc, 2)
-        self.assertEqual(self.ask()["kind"], "verify")
+        self.assertEqual(self.ask()["kind"], "denied")
         self.assertIn("HTTP 500", self.blocked[0])
 
     def test_a_done_answer_whose_text_says_unknown_argument_lands_normally(self):
