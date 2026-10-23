@@ -822,6 +822,64 @@ def review_with(unmet):
 
 
 
+class Inputs(StagesTest):
+    """tl-bxk.13.16.3: inputs the criteria need that were not found are the owner's to decide in minute 4."""
+
+    WIN = {"what": "a Windows PC to run the play test on", "kind": "platform", "path": ""}
+
+    def test_a_missing_input_no_case_defers_is_a_decision_ask_before_any_work(self):
+        rc, s = self.run_engine({"plan": [dict(PLAN, unresolved=[self.WIN])]})
+        self.assertEqual(rc, 2)
+        self.assertEqual([c[0] for c in s.calls], ["planner"])  # no writer
+        a = self.ask()
+        self.assertEqual(a["kind"], "decision")
+        self.assertIn("Windows PC", a["question"])
+        self.assertEqual([o["label"] for o in a["options"]], ["Defer that work", "I will provide them", "Drop those criteria"])
+        self.assertEqual([o.get("recommended") for o in a["options"]].count(True), 1)
+
+    def ask(self):
+        p = tl.config_dir() / "asks" / "t-1.json"
+        return json.loads(p.read_text()) if p.exists() else None
+
+    def test_an_input_a_case_defers_is_no_question(self):
+        case = {"criterion": "The play test passes on the Windows PC", "check": "", "proved_by": "leftover",
+                "via": "Run the play test on a Windows PC"}
+        plan = dict(PLAN, unresolved=[self.WIN], cases=[case], leftovers=[{"title": "Run the play test on a Windows PC", "why": "no PC"}])
+        rc, s = self.run_engine({"plan": [plan], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertIn("inputs not found, their criteria deferred", self.eng.log_path.read_text())
+
+    def test_a_file_that_is_there_after_all_is_dropped(self):
+        plan = dict(PLAN, unresolved=[{"what": "the notes file", "kind": "file", "path": "a.txt"}])
+        rc, s = self.run_engine({"plan": [plan], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+
+    def test_after_the_owner_answered_the_engine_does_not_ask_again(self):
+        ask = dict(WRITE, question="Which format?")
+        self.run_engine({"plan": [PLAN], "write": [ask]})
+        with mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Use the new format."}]):
+            rc, s = self.run_engine({"plan": [dict(PLAN, unresolved=[self.WIN])], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+
+    def test_planner_notes_reach_the_planner_as_text_or_a_repo_file(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, planner_notes="No Windows PC. Godot left main on 2026-10-12.")
+        self.assertIn("Facts about this factory and project", s.prompts[0])
+        self.assertIn("No Windows PC. Godot left main", s.prompts[0])
+        (self.wt / "notes.md").write_text("The factory is a Mac only.\n")
+        te.sh("git", "add", "-A", cwd=self.wt)
+        te.sh("git", "commit", "-qm", "notes", cwd=self.wt)
+        te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=self.wt)
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, planner_notes="@notes.md")
+        self.assertIn("The factory is a Mac only.", s.prompts[0])
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertNotIn("Facts about this factory", s.prompts[0])
+
+    def test_the_planner_is_told_to_list_what_it_could_not_find(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertIn("unresolved", s.prompts[0])
+
+
+
 class Contracts(StagesTest):
     """tl-bxk.13.16: infrastructure is retried with a rest, never asked; the version is recorded."""
 

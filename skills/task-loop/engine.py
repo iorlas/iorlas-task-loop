@@ -52,6 +52,7 @@ DEFAULTS = {
     "node_timeout_min": 45,           # a plan, review or verify call running longer is stopped; a write follows the keys below
     "write_idle_warn_min": 15,        # a write whose worker has been silent this long (session file, process output) is warned about
     "write_idle_stop_min": 25,        # and stopped at this; a write whose activity cannot be seen keeps node_timeout_min
+    "planner_notes": "",              # facts the planner must plan by (what the factory has and has not: platforms, engines, tools), text or "@repo/file"
     "shot_table": "",                 # the project's shot methods (docs/design/visual-work.md; looks.py): a repo path, read from the base branch.
                                       # With it a visual stage renders by the engine's hand, judged by a look judge; without it the old way (the writer saves shots)
     "look_rounds": 2,                 # render + judge rounds per visual stage
@@ -79,6 +80,7 @@ DEFAULTS = {
 # ---- output contracts -----------------------------------------------------------------------------------------------
 
 FLAKE_DAYS = 14     # how long a writer-reported flaky test stays in the shared notes
+INPUT_KINDS = ("file", "platform", "object", "engine", "tool", "other")
 PROVED_BY = ("check", "stage", "leftover", "engine_step")  # tl-bxk.13.16.1: how a plan criterion is proved (the ledger)
 HANDOFF_CAP = 1500  # characters of round history one prompt carries (tl-bxk.13.6)
 S_STR = {"type": "string"}
@@ -514,6 +516,9 @@ SCHEMAS = {
                                                       "required": ["what", "check"],
                                                       "properties": {"what": S_STR, "check": S_STR}}},
                  "question": S_STR, "options": OPTIONS,
+                 "unresolved": {"type": "array", "items": {  # optional (tl-bxk.13.16.3): inputs the criteria need that were not found
+                     "type": "object", "additionalProperties": False, "required": ["what", "kind", "path"],
+                     "properties": {"what": S_STR, "kind": {"type": "string", "enum": list(INPUT_KINDS)}, "path": S_STR}}},
                  "cases": {"type": "array", "items": {"type": "object", "additionalProperties": False,
                                                       "required": ["criterion", "check"],
                                                       "properties": {"criterion": S_STR, "check": S_STR,
@@ -2986,6 +2991,9 @@ class Engine:
             else:
                 rules.append("Read %s: this repo's rules for workers (what runs where, known pitfalls of its tools); the "
                              "checks you write must follow them." % rf)
+        notes = self.planner_notes()
+        if notes:
+            rules.append("Facts about this factory and project that the plan must respect:\n" + notes)
         shared = self.shared_text()
         if shared:
             rules.append(shared.strip())
@@ -3044,6 +3052,7 @@ class Engine:
             raise Blocked("owner decision needed", data["question"], data.get("options"))
         self.outcome_of("%d stage%s" % (len(data["stages"]), "" if len(data["stages"]) == 1 else "s"),
                         data["summary"][:200])
+        self.check_unresolved(data)
         if not data["stages"]:
             # tl-bxk.13.2: the work is done and only the filing is left: the engine files and closes. Never after a failed
             # stage (a re-plan), and never over work no review accepted: that tree is not "done".
@@ -3992,6 +4001,51 @@ class Engine:
 
     def look_ready(self, st):
         return bool(self.shot_methods()) and self.stage_visual(st)
+
+    def planner_notes(self):
+        """engine.planner_notes: text, or "@path" of a repo file (read from the worktree), at most 2000 characters."""
+        v = (self.cfg.get("planner_notes") or "").strip()
+        if v.startswith("@"):
+            try:
+                v = (Path(self.wt) / v[1:]).read_text(encoding="utf-8").strip()
+            except OSError:
+                self.warn("engine.planner_notes: %s cannot be read" % v)
+                return ""
+        return v[:2000]
+
+    def check_unresolved(self, data):
+        """tl-bxk.13.16.3: inputs the planner could not find. A file that is there after all drops out; one a case defers (proved_by
+        leftover) is a follow-up; the rest is the owner's to decide now, in minute 4, not after three rounds (lifesim-gfr.38 a
+        Windows PC, d5f.61 a sink, fdyo a Godot half, v5z files that are not on the machine)."""
+        if (self.answered or {}).get("kind") == "decision":  # the owner just chose what to do about it
+            return
+        gone, open_ = [], []
+        deferred = [word_set("%s %s" % (c["criterion"], c.get("via") or "")) for c in data.get("cases") or [] if c.get("proved_by") == "leftover"]
+        deferred += [word_set(lo["title"] + " " + lo["why"]) for lo in data.get("leftovers") or []]
+        for u in data.get("unresolved") or []:
+            path = (u.get("path") or "").strip()
+            if path and not path.startswith("/") and ".." not in path and (Path(self.wt) / path).exists():
+                continue  # it is there
+            if any(len(word_set(u["what"]) & d) >= 2 for d in deferred):
+                gone.append(u)
+                continue
+            open_.append(u)
+        if gone:
+            self.log("note", "inputs not found, their criteria deferred: %s" % "; ".join(u["what"][:100] for u in gone))
+        if not open_:
+            return
+        lines = "\n".join("- %s (%s%s)" % (u["what"], u["kind"], ", expected at " + u["path"] if u.get("path") else "") for u in open_)
+        self.outcome_of("asks", "%d input%s missing" % (len(open_), "" if len(open_) == 1 else "s"))
+        raise Blocked("owner decision needed",
+                      "The task needs inputs this factory does not have:\n%s\nNothing was started. Choose: defer the work that needs "
+                      "them to a follow-up bead and do the rest; provide them (say where); or drop those criteria from the task." % lines,
+                      [{"label": "Defer that work", "cost": "the rest of the task is done now; a follow-up bead holds the deferred part",
+                        "answer": "Defer the criteria that need: %s. Plan and do the rest; file a follow-up bead for the deferred part." % "; ".join(
+                            u["what"] for u in open_), "recommended": True},
+                       {"label": "I will provide them", "cost": "the bead waits until they are there",
+                        "answer": "The inputs are now available: %s. Plan again." % "; ".join(u["what"] for u in open_), "recommended": False},
+                       {"label": "Drop those criteria", "cost": "the task is smaller than written",
+                        "answer": "Drop the criteria that need: %s. Plan the rest." % "; ".join(u["what"] for u in open_), "recommended": False}])
 
     def references_text(self):
         """What the planner is told the task already has to look at: image files its text names, and the last landed shots."""
@@ -5127,6 +5181,11 @@ each stage has its files and its checks. Budget: about 12 tool calls. Then plan.
   (quote it) and a check. They run on the last stage and again after any fix at land. A case about what users see uses
   the host's tools and a fact the tool reports (a scenario script, a screenshot saved under the evidence folder, a count
   the editor prints), never only "a screenshot exists".
+- Before planning, check that every input the criteria need exists: a file or asset, an object in the content, a platform or
+  machine the factory has, the engine or tool the project uses now, an input the task says someone provides. One you could not
+  find is listed in unresolved (what, kind, path: the file it should be at, or empty). If the rest of the task can go on
+  without it, defer the criteria that need it instead (a case with proved_by leftover, and a leftover) and do not list it.
+  A listed input that no case defers makes the engine ask the owner now, before any work is done.
 - Each case says in proved_by how its criterion is proved, and via names what proves it: check (a command; the usual
   case), stage (its stage's own checks; via = the stage number), leftover (deferred to a follow-up bead the engine files:
   also list it in leftovers; via = that leftover's title; check empty) or engine_step (the engine does it itself: files the
