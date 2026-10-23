@@ -289,6 +289,7 @@ pid_alive = tl.pid_alive
 
 
 SESSION_ACTOR = [""]  # the session's actor, without this loop's suffix: names the session's slots-off worktree
+START_CWD = [""]  # the directory the loop was started in: where its argv's relative paths point
 STARTED = [0.0]  # wall time this loop started: a stop file written before it was meant for the loops then running
 
 
@@ -436,7 +437,7 @@ def version_key(name):
     return tuple(int(x) for x in name.split(".")) if re.fullmatch(r"\d+(\.\d+)*", name) else None
 
 
-def newest_install():
+def newest_install(skip=()):
     """(version, dir) of the newest sibling version dir of this plugin root when it is newer than the running one, else
     None. A root that is no version dir (a dev checkout) never moves."""
     root = tl.HERE.parents[1]
@@ -447,62 +448,91 @@ def newest_install():
     with contextlib.suppress(OSError):
         for d in root.parent.iterdir():
             k = version_key(d.name)
-            if k and k > mine and d.is_dir() and (best is None or k > best[0]):
+            if k and k > mine and d.name not in skip and d.is_dir() and (best is None or k > best[0]):
                 best = (k, d)
     return (best[1].name, best[1]) if best else None
 
 
 def complete(d):
-    """None when the install in `d` looks usable, else why not: its tl.py, loop.py and engine.py exist and
-    `tl.py --help` exits 0 within HELP_WAIT seconds."""
+    """None when the install in `d` looks usable, else why not: its plugin.json and tl.py, loop.py and engine.py exist
+    and import (a half-copied file fails here, `--help` alone exits before loop and engine load), within HELP_WAIT s."""
+    if not (d / ".claude-plugin" / "plugin.json").is_file():
+        return "plugin.json is missing"
+    here = d / "skills" / "task-loop"
     for f in ("tl.py", "loop.py", "engine.py"):
-        if not (d / "skills" / "task-loop" / f).is_file():
+        if not (here / f).is_file():
             return "%s is missing" % f
+    code = "import sys; sys.path.insert(0, sys.argv[1]); import tl, loop, engine"
     try:
-        r = subprocess.run([sys.executable, str(d / "skills" / "task-loop" / "tl.py"), "--help"], stdin=subprocess.DEVNULL,
+        r = subprocess.run([sys.executable, "-I", "-c", code, str(here)], stdin=subprocess.DEVNULL,
                            capture_output=True, timeout=HELP_WAIT)
     except subprocess.TimeoutExpired:
-        return "tl.py --help did not finish in %d s" % HELP_WAIT
+        return "importing tl, loop, engine did not finish in %d s" % HELP_WAIT
     except OSError as e:
-        return "tl.py --help did not start: %s" % e
-    return None if r.returncode == 0 else "tl.py --help exited %d" % r.returncode
+        return "python did not start: %s" % e
+    return None if r.returncode == 0 else "importing tl, loop, engine exited %d" % r.returncode
 
 
-def maybe_move(a, repo, state):
+def maybe_move(a, repo, state):  # returns True when a stop arrived during the check: the caller looks at it first
     """Between beads: exec the newest complete install with the loop's own argv and `state` (TL_LOOP_STATE). The pid
     stays, so what is keyed by it (slot line, state file, stop file readers) carries over. A broken install is warned
     about once per version and never stops the loop."""
     if getattr(a, "pin", False) or not getattr(a, "argv", None):
         return
     try:
-        found = newest_install()
+        found = newest_install(state["warned"])  # a version that failed is not looked at again
         if not found:
             return
         ver, d = found
         why = complete(d)
         if why:
-            if ver not in state["warned"]:
-                state["warned"].append(ver)
-                say("warn: not moving to %s: %s; staying on %s" % (ver, why, tl.HERE.parents[1].name))
+            state["warned"].append(ver)
+            say("warn: not moving to %s: %s; staying on %s" % (ver, why, tl.HERE.parents[1].name))
             return
+        if STOP_NOW.is_set() or stop_mode(repo):  # the check took a while; a stop written meanwhile is read by this process
+            return True
         say("moving to %s (was %s)" % (ver, tl.HERE.parents[1].name))
         os.environ["TL_LOOP_STATE"] = json.dumps(state)
+        if START_CWD[0]:
+            os.chdir(START_CWD[0])  # cmd_loop chdir'd into the repo; a relative --repo in argv means the start directory
         sys.stdout.flush()
         sys.stderr.flush()
         os.execv(sys.executable, [sys.executable, str(d / "skills" / "task-loop" / "tl.py"), *a.argv])
     except OSError as e:  # execv itself failed: the loop goes on where it is
         os.environ.pop("TL_LOOP_STATE", None)
+        with contextlib.suppress(OSError):
+            os.chdir(repo)
         say("warn: could not move: %s" % e)
 
 
 def inherited():
-    """The state an older version of this loop handed over through TL_LOOP_STATE ({} on a fresh start)."""
+    """The state an older version of this loop handed over through TL_LOOP_STATE ({} on a fresh start); a field of the
+    wrong type is dropped with a warning, never trusted."""
     raw = os.environ.pop("TL_LOOP_STATE", "")
     try:
         st = json.loads(raw) if raw else {}
     except ValueError:
-        st = {}
-    return st if isinstance(st, dict) else {}
+        st = None
+    if raw and not isinstance(st, dict):
+        say("warn: TL_LOOP_STATE is not a JSON object: ignored")
+        return {}
+    num = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool)  # noqa: E731
+    text = lambda v: isinstance(v, str)  # noqa: E731
+    ok = {"fails": lambda v: isinstance(v, list) and all(map(text, v)),
+          "warned": lambda v: isinstance(v, list) and all(map(text, v)),
+          "ran": lambda v: isinstance(v, int) and not isinstance(v, bool),
+          "later": lambda v: isinstance(v, dict) and all(text(k) and num(x) for k, x in v.items()),
+          "pauses": lambda v: isinstance(v, dict) and all(text(k) and isinstance(x, int) for k, x in v.items()),
+          "until": lambda v: v is None or num(v), "wt": lambda v: v is None or text(v),
+          "actor": lambda v: v is None or text(v), "STARTED": num, "started": num}
+    out = {}
+    for k, v in st.items():
+        if k in ok and ok[k](v):
+            out[k] = v
+        else:
+            say("warn: TL_LOOP_STATE field %r has a bad value: dropped" % k)
+    return out
+
 
 def end_time(hhmm):
     """--until HH:MM: the next time it is that o'clock (tomorrow when it has passed today)."""
@@ -544,6 +574,7 @@ def reclaim(repo):
 def cmd_loop(a):
     if a.op == "status":
         return cmd_status(a)
+    START_CWD[0] = os.getcwd()
     repo = tl.repo_root(a.repo)
     os.chdir(repo)  # every tl helper and bd call works on the current directory's repo
     st = inherited()  # set when this process is the same loop, exec'd into a newer install
@@ -615,9 +646,10 @@ def passes(repo, a, started, st=None):
         if a.max_beads and ran >= a.max_beads:
             say("%d bead(s) run (--max-beads)" % ran)
             return 0
-        maybe_move(a, repo, {"fails": fails, "ran": ran, "later": later, "pauses": pauses, "warned": warned, "until": until,
+        if maybe_move(a, repo, {"fails": fails, "ran": ran, "later": later, "pauses": pauses, "warned": warned, "until": until,
                              "wt": wt, "actor": os.environ.get("TASK_LOOP_ACTOR"), "STARTED": STARTED[0],
-                             "started": started})
+                             "started": started}):
+            continue
         reclaim(repo)
         ranked, skipped = queue(repo)
         now = clock()
