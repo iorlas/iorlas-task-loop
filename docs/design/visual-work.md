@@ -68,7 +68,7 @@ Rendering is the engine's job. Judging taste is the owner's job. The writer writ
 - dash-chain session: the gallery in 4.
 - lifesim (sims qs): a machine-readable shot table next to `docs/agents/unity.md`, with method, args and names.
 
-## Built (tl-bxk.13.15, task-loop 0.24.0)
+## Built (tl-bxk.13.15)
 
 | design item | where |
 |---|---|
