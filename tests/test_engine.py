@@ -392,7 +392,7 @@ class EngineTest(unittest.TestCase):
         eng.t0 -= 16 * 60
         with self.assertRaises(engine.Blocked) as e:
             eng.budget_check()
-        self.assertIn("24 min wall, 8 min waiting", str(e.exception))
+        self.assertIn("8 min waiting for shared resources not counted", str(e.exception))
 
     def test_budget_min_by_label_raises_the_budget_for_a_labelled_bead(self):
         eng = self.checks_engine(budget_min=5, budget_min_by_label={"unity": 300})
@@ -1797,7 +1797,10 @@ class EngineTest(unittest.TestCase):
 
     def test_an_over_budget_ask_offers_a_rerun_and_the_cap_ask_offers_one_more(self):
         self.run_engine({"plan": [PLAN], "write": [WRITE]}, budget_usd=0.6)
-        self.assertEqual([o["answer"] for o in self.ask()["options"]], ["run again"])
+        a0 = self.ask()
+        self.assertEqual((a0["kind"], [o["label"] for o in a0["options"]]), ("budget", ["Run again", "Split the bead"]))
+        self.assertTrue(all(o["then"] for o in a0["options"]))
+        self.assertIn("Pick an option", a0["question"])
         a = engine.ask_options("stuck", engine.REPLAN_CAP + "3 times")
         self.assertEqual([o["answer"] for o in a], ["allow one more"])
         self.assertIn("allow", a[0]["answer"])  # what grant_cap reads
@@ -1805,7 +1808,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(engine.ask_options("ticket", "ticket: no criteria"), [])
 
     def test_every_option_says_what_happens_next_and_the_question_is_readable(self):
-        for kind, why in (("verify", "needs a human: x"), ("stuck", "over budget: 1 of 2"),
+        for kind, why in (("verify", "needs a human: x"), ("budget", "over budget: 1 of 2 min"),
                           ("stuck", engine.REPLAN_CAP + "3 times")):
             for o in engine.ask_options(kind, why):
                 self.assertTrue(o["then"], o)
@@ -1816,7 +1819,11 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(engine.tidy_question("over budget: $0.00 of $15, 187 of 180 min"), "over budget: 187 of 180 min")
         self.assertIn("what to allow", engine.ask_hint("denied", "needs a human: x", "q"))
         self.assertIn("how to prove it", engine.ask_hint("stuck", "the check before land: nothing proves y", "q"))
-        self.assertEqual(engine.ask_hint("stuck", "over budget: x", "q"), "q")
+        self.assertEqual(engine.ask_hint("stuck", "replan: x", "q"), "q")
+        log = Path(self.tmp.name) / "run.jsonl" if hasattr(self, "tmp") else Path(tempfile.mkdtemp()) / "run.jsonl"
+        log.write_text("\n".join(json.dumps({"kind": "end", "step": st, "secs": sec}) for st, sec in (
+            ("checks", 6000), ("checks", 3800), ("write", 900), ("plan", 20))))
+        self.assertEqual(engine.run_breakdown(log), "checks 163 min (2 rounds), write 15 min (1 round)")
         cut = engine.tidy_question("word " * 400)
         self.assertTrue(cut.endswith("(more in details)") and len(cut) < 640)
 

@@ -363,7 +363,7 @@ function effort(e){return e?({medium:'med'}[e]||e):''}
 const STATE={queued:'s-wait',blocked_by:'s-wait',running:'s-run',asks:'s-ask',paused:'s-wait',waiting:'s-wait',landed:'s-ok',done:'s-ok',failed:'s-fail',stopped:'s-fail',blocked:'s-fail'};
 const CAUSE={checks_red:'fail',gate_red:'fail',conflict:'fail',verify_wrong:'fail',failed:'fail',stopped:'fail',
   review_sendback:'warn',rounds_used:'warn',bad_checks:'warn',writer_decided:'warn',plan_sent_back:'warn',invalid_output:'warn',push_race:'warn',
-  lane_out:'wait',paused:'wait',lane_wait:'wait',retry:'wait',decision:'ask',verify:'ask',ticket:'ask',stuck:'ask',waiting:'ask',verify_open:'ask',needs_human:'ask',denied:'ask',
+  lane_out:'wait',paused:'wait',lane_wait:'wait',retry:'wait',decision:'ask',verify:'ask',ticket:'ask',stuck:'ask',waiting:'ask',verify_open:'ask',needs_human:'ask',denied:'ask',budget:'ask',
   accepted:'ok',checks_green:'ok',landed:'ok',done:'ok',verified:'ok'};
 function chip(cls,text,dot){return `<span class="chip ${cls}" title="${esc(text)}">${dot!==false?'<span class="d"></span>':''}<span class="x">${esc(text)}</span></span>`}
 
@@ -501,7 +501,7 @@ function renderTask(){const d=S.tl;if(!d||!d.task||d.task.id!=S.task){paint($('m
   const ae=document.activeElement,keep=ae&&ae.tagName=='TEXTAREA'?[ae.dataset.ans,ae.value,ae.selectionStart]:null;
   if(paint($('main'),'main',html)&&keep){const ta=document.querySelector(`textarea[data-ans="${CSS.escape(keep[0])}"]`);if(ta){ta.value=keep[1];ta.focus();try{ta.setSelectionRange(keep[2],keep[2])}catch(e){}}}}
 
-const ASKK={decision:'Decision needed',verify:'Please check',denied:'Blocked: a step needs you',ticket:'Split or criteria needed',stuck:'Stuck: a hint is needed'};
+const ASKK={decision:'Decision needed',verify:'Please check',denied:'Blocked: a step needs you',budget:'Over its time limit',ticket:'Split or criteria needed',stuck:'Stuck: a hint is needed'};
 const PEND={},DRAFT={},SEEN={},ERR={};  // PEND: ask id -> {ask,text,label,at,timer|sending|done|err}; DRAFT: unsent text; SEEN: asks as last drawn
 const UNDO_MS=8000,STALE=['withdrawn','gone','answered','bead_missing'];
 function optsHtml(a){const os=(a.options||[]).map((o,i)=>[o,i]).sort((x,y)=>!!y[0].recommended-!!x[0].recommended);

@@ -406,6 +406,25 @@ class AskFailures(unittest.TestCase):
         with mock.patch.object(server, "beads_of", return_value=[{"id": "zzz", "status": "open"}]):
             self.assertEqual([r["bead"] for r in server.inbox()], ["fresh"])
 
+    def test_the_real_over_budget_ask_reads_as_a_question_with_options_and_no_zero_dollars(self):
+        """lifesim-fld.27.12 as the old engine wrote it: kind stuck, 'over budget: $0.00 of $15, 183 of 180 min', no buttons."""
+        a = json.loads((Path(__file__).parent / "fixtures" / "ask_over_budget_legacy.json").read_text())
+        a["repo"] = str(self.d)
+        (self.asks / "lifesim-fld.27.12.json").write_text(json.dumps(a))
+        eng = self.d / "task-loop" / "engine"
+        eng.mkdir()
+        (eng / (a["run"] + ".jsonl")).write_text("\n".join(json.dumps({"kind": "end", "step": st, "secs": sec}) for st, sec in (
+            ("checks", 9800), ("write", 900), ("plan", 100))))
+        (shown,) = server.inbox()
+        self.assertEqual(shown["kind"], "budget")
+        self.assertNotIn("$", shown["question"])
+        self.assertIn("183 of 180 min", shown["question"])
+        self.assertIn("Where it went: checks 163 min (1 round), write 15 min (1 round)", shown["question"])
+        self.assertIn("Pick an option", shown["question"])
+        self.assertEqual([o["label"] for o in shown["options"]], ["Run again", "Split the bead"])
+        self.assertTrue(all(o["then"] and o["cost"] for o in shown["options"]))
+        self.assertTrue(shown["quick"])
+
 
 class LaneBanner(unittest.TestCase):
     """What the banner says of delegate's `route.py status --json` lanes (tl-bxk.10.22)."""

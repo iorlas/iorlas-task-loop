@@ -1184,6 +1184,32 @@ def unblocks_by_bead(repo):
     return {"counts": graph.unblock_counts(edges, epics), "known": set(by_id), "open": {i for i, b in by_id.items() if b.get("status") != "closed"}}
 
 
+def upgrade_ask(a):
+    """An ask written before fmt 2 (kind from the old rules, raw question, no buttons) as the new build would have written it,
+    for display only: the file is not touched. Over-budget asks get where the minutes went from the run's engine log."""
+    if a.get("fmt") == 2:
+        return a
+    try:
+        _engine_dir()
+        import engine
+        why = str(a.get("why") or a.get("question") or "")
+        kind = engine.ask_kind(why) if a.get("why") and a.get("kind") in ("stuck", "verify") else a.get("kind")
+        src = str(a.get("detail") or a.get("question") or why)
+        if kind == "budget":
+            why = re.sub(r" \(\d+ min wall.*\)$", "", engine.ZERO_COST.sub("", why))
+            went = engine.run_breakdown(config_dir() / "engine" / ("%s.jsonl" % a.get("run", ""))) if a.get("run") else ""
+            if went and "Where it went" not in why:
+                why += ". Where it went: " + went
+            src = why
+        out = dict(a, kind=kind, detail=src, fmt=2,
+                   question=engine.ask_hint(kind, why, engine.tidy_question(src)))
+        if not out.get("options") or kind != a.get("kind"):
+            out["options"] = engine.ask_options(kind, why)
+        return out
+    except Exception:
+        return a
+
+
 def inbox():
     """The open asks, most unblocking first. An ask whose bead is gone or closed is stale and never shown."""
     out, now, ub = [], time.time(), {}
@@ -1196,7 +1222,7 @@ def inbox():
         info = ub[repo]
         if info and a.get("bead") not in info["open"] and (a.get("bead") in info["known"] or now - float(a.get("t") or now) > 600):
             continue  # closed, or gone for good (a bead newer than a stale listing is not gone yet)
-        a = {k: v for k, v in a.items() if k not in ("brief",)}
+        a = {k: v for k, v in upgrade_ask(a).items() if k not in ("brief",)}
         a["age_s"] = int(now - float(a.get("t") or now))
         a["parked"] = now > float(a.get("parks_at") or now + 1)
         a["answered_here"] = bool(a.get("answer"))
