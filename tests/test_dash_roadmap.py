@@ -139,6 +139,40 @@ class Build(unittest.TestCase):
         self.assertEqual((r["lanes"], r["queue"], r["held"], r["recent"]), ([], [], [], []))
 
 
+class Lanes(unittest.TestCase):
+    """2026-10-24 lifesim: 5 loop processes, 3 slots. Denis saw two 'idle' lanes that were not."""
+
+    def loops(self):
+        return [{"pid": 1, "slot": "", "bead": None, "started": 100, "version": "0.23.11"},          # waits in line
+                {"pid": 2, "slot": "", "bead": None, "started": 101, "version": "0.23.11"},          # waits in line
+                {"pid": 3, "slot": "s2", "bead": "b2", "since": 500, "started": 300, "version": "0.23.11"},
+                {"pid": 4, "slot": "s1", "bead": "b1", "since": 400, "started": 50, "version": "0.23.6"},  # old loop, finishing
+                {"pid": 5, "slot": "s3", "bead": "b3", "since": 450, "started": 60, "version": "0.23.8"}]
+
+    def test_five_loops_three_slots_is_three_busy_lanes_and_two_waiting(self):
+        lanes, waiting = roadmap.lanes_of(["s1", "s2", "s3"], {"b1": "s1", "b2": "s2", "b3": "s3"}, self.loops(), (200, "after"))
+        self.assertEqual([(l["slot"], l["bead"], l["version"]) for l in lanes],
+                         [("s1", "b1", "0.23.6"), ("s2", "b2", "0.23.11"), ("s3", "b3", "0.23.8")])
+        self.assertEqual([w["pid"] for w in waiting], [1, 2])
+        # the stop file (mtime 200) stops the loops that started before it (4 and 5); loop 3 started after it, so it goes on
+        self.assertEqual([l["stopping"] for l in lanes], ["after", "", "after"])
+
+    def test_a_free_slot_is_a_lane_with_no_bead_and_no_loop(self):
+        lanes, waiting = roadmap.lanes_of(["s1", "s2"], {"b1": "s1"}, [self.loops()[3]])
+        self.assertEqual([(l["slot"], l["bead"], l["loop"]) for l in lanes], [("s1", "b1", 4), ("s2", None, None)])
+        self.assertEqual(waiting, [])
+
+    def test_a_bead_run_without_a_named_slot_still_gets_one_lane_and_no_stop_file_means_no_stopping(self):
+        lanes, _ = roadmap.lanes_of([], {}, [{"pid": 9, "slot": "", "bead": "bz", "since": 7, "started": 1, "version": ""}])
+        self.assertEqual([(l["slot"], l["bead"], l["stopping"]) for l in lanes], [("-", "bz", "")])
+
+    def test_build_carries_version_stopping_and_waiting(self):
+        g = graph.build([bead("b1", status="in_progress")], CFG, set(), {"b1"}, (), now=NOW)
+        lanes, waiting = roadmap.lanes_of(["s1"], {"b1": "s1"}, [dict(self.loops()[3])], (200, "now"))
+        r = roadmap.build(g, lanes, [], [], [], {}, now=NOW, waiting=len(self.loops()[:2]))
+        self.assertEqual((r["lanes"][0]["version"], r["lanes"][0]["stopping"], r["loops_waiting"]), ("0.23.6", "now", 2))
+
+
 class Verdict(unittest.TestCase):
     def test_one_line_on_churn_and_cost_empty_when_unremarkable(self):
         r = {"writes": 4, "red_checks": 6, "replans": 1, "secs": 1000, "checks_secs": 580, "tokens_all": {"in": 2_000_000, "cached": 1_500_000, "out": 100_000}}
@@ -177,7 +211,7 @@ class Api(unittest.TestCase):
                     mock.patch.object(server, "api_tasks", lambda: {"tasks": [{"id": "a", "state": "running", "repo": "demo", "slot": "s9",
                                                                               "stage": "writing", "since": 30}], "lanes": []}), \
                     mock.patch.object(server, "loop_order", lambda r, b, c: ([("c", "lowest id")], [("b", "area x busy")])), \
-                    mock.patch.object(server, "loop_files", lambda r: ([], [])), \
+                    mock.patch.object(server, "loop_files", lambda r: ([], [], [])), \
                     mock.patch.object(server, "engine_logs", lambda retain=True: {}):
                 server._cache.clear()
                 out = server.api_roadmap("demo")
