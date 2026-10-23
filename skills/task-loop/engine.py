@@ -300,6 +300,83 @@ ISOLATED_MODULE = re.compile(r"\bpython3?(?:\.\d+)?\s+(?:-[A-Za-z]+\s+)*-[A-Za-z
                              r"(?:-[A-Za-z]+\s+)*)?([A-Za-z_][\w]*(?:\.[\w]+)+)")
 
 
+SHELL_STOP = {"if", "then", "else", "elif", "fi", "for", "while", "until", "do", "done", "case", "esac", "{", "}", "(", ")",
+              "[[", "]]", "function", "select", "time", "!"}
+COMMAND_SEP = {"|", "||", "&&", ";", "&", "|&"}
+_WORDS = {}   # (cwd, word) -> resolves; one bash per new word
+_RECIPES = {}  # cwd -> the worktree's `just --summary`, or None when there is no just here
+
+
+def shell_tokens(cmd):
+    """cmd split like a shell, operators (`;`, `&&`, `|`, `>`) apart; [] when the quoting does not close."""
+    lex = shlex.shlex(cmd, posix=True, punctuation_chars=True)
+    lex.whitespace_split = True
+    lex.commenters = "#"
+    try:
+        return list(lex)
+    except ValueError:
+        return []
+
+
+def first_words(cmd):
+    """The command words of a plan check's simple commands: the first word of each command between `;`, `&&`, `||`, `|`,
+    after env assignments, `!` and `time`. Stops at a compound command (if, for, a subshell, $(...)): nothing is claimed
+    past it."""
+    out, start = [], True
+    for t in shell_tokens(cmd):
+        if re.fullmatch(r"[;&|]+", t):
+            start = True
+            continue
+        if not start:
+            continue
+        if re.fullmatch(r"\w+=.*", t) or t in ("!", "time", "command", "exec", "env", "builtin"):
+            continue
+        if t in SHELL_STOP or re.search(r"[$`(){}<>]|^\[", t) or re.fullmatch(r"[<>(){}]+", t):
+            return out
+        out.append(t)
+        start = False
+    return out
+
+
+def command_problems(cmd, wt, made=()):
+    """[why a plan check cannot start]: a command word that is no builtin, not on PATH and no file of the tree (lifesim-fld.10
+    planned 'After building the current player: python3 ...', a sentence run as the command `After`); a `just` recipe the
+    tree's justfile does not have (lifesim-ov3w). Conservative: only a plain word is judged. No bash (Windows): nothing."""
+    bash = shutil.which("bash")
+    if not bash or os.name == "nt":
+        return []
+    out, words = [], first_words(cmd)
+    for w in words:
+        if "/" in w:
+            f = Path(w) if w.startswith("/") else Path(wt, w)
+            g = os.path.normpath(w)
+            if not f.exists() and not any(g == k or g.startswith(k + "/") for k in map(os.path.normpath, made)):
+                out.append("`%s` is not a file of this tree and no stage lists it in files" % w)
+            continue
+        key = (str(wt), w)
+        if key not in _WORDS:
+            r = subprocess.run([bash, "-c", 'type -t -- "$1" >/dev/null 2>&1', "_", w], capture_output=True, env=child_env(), cwd=str(wt))
+            _WORDS[key] = r.returncode == 0
+        if not _WORDS[key]:
+            out.append("`%s` is not a command here (no builtin, nothing on PATH): a check is a shell command, never a sentence" % w)
+    toks = None
+    if "just" in words:
+        toks = shell_tokens(cmd)
+        if str(wt) not in _RECIPES:
+            try:
+                r = subprocess.run(["just", "--summary"], capture_output=True, text=True, cwd=str(wt), timeout=20, env=child_env())
+                _RECIPES[str(wt)] = r.stdout.split() if r.returncode == 0 else None
+            except (OSError, subprocess.SubprocessError):
+                _RECIPES[str(wt)] = None
+        recipes = _RECIPES[str(wt)]
+        for k, t in enumerate(toks):
+            if t == "just" and (k == 0 or re.fullmatch(r"[;&|]+", toks[k - 1])):
+                rest = [x for x in toks[k + 1:k + 8] if not x.startswith("-")]
+                if recipes is not None and rest and re.fullmatch(r"[\w-]+", rest[0]) and rest[0] not in recipes:
+                    out.append("`just %s`: the tree's justfile has no recipe %s (it has: %s)" % (rest[0], rest[0], ", ".join(recipes[:12]) or "none"))
+    return out
+
+
 def dry_check(plan, wt):
     """[error]: the plan's checks that cannot run: bash -n syntax, process substitution, a file the check reads that is
     neither in the tree nor a file some stage names."""
@@ -315,6 +392,8 @@ def dry_check(plan, wt):
         if r is not None and r.returncode:
             errs.append("`%s`: bash -n: %s" % (c, (r.stderr or "syntax error").strip().splitlines()[-1][:200]))
             continue
+        for w in command_problems(c, wt, made):  # tl-bxk.13.16.2
+            errs.append("`%s`: %s" % (c, w))
         iso = ISOLATED_MODULE.search(bare)
         if iso and Path(wt, iso.group(1).split(".")[0]).is_dir():  # tl-bxk.13.13
             errs.append("`%s`: python -I removes the working directory from the import path, so `%s` cannot be imported; "
@@ -3137,6 +3216,15 @@ class Engine:
         self.plan_data, self.plan_summary, self.accepted = ck["plan"], ck["plan"]["summary"], list(ck["accepted"])
         (self.run_dir / "plan.json").write_text(json.dumps(ck["plan"], indent=1))
         stages = ck["plan"]["stages"]
+        again = self.promised_missing(ck["plan"], len(stages) if (ck["step"] == "land" or ck["stage"] >= len(stages)) else ck["stage"])
+        if again is not None:
+            # tl-bxk.13.16.2: lifesim-d5f.40 resumed in another slot, its stage 1 evidence file stayed behind and the checks of stage 2
+            # could never pass (the writer said so 8 times). The stage that made it runs again.
+            self.log("note", "resuming %s: a file stage %d promised is missing, so that stage runs again" % (ck["run"], again + 1))
+            self.accepted = [k for k in self.accepted if k < again]
+            self.done = self.done[:again]
+            self.unchecked = []
+            return ck["plan"], again, None
         if ck["step"] == "land" or ck["stage"] >= len(stages):
             self.unchecked = list(ck.get("unchecked") or [])  # still unproven: verified again before land
             self.log("note", "resuming %s: every stage was accepted, going straight to land" % ck["run"])
@@ -3144,6 +3232,21 @@ class Engine:
         self.log("note", "resuming %s at stage %d/%d, round %d (write %d)" % (
             ck["run"], ck["stage"] + 1, len(stages), ck["rounds"] + 1, ck["n"] + 1))
         return ck["plan"], ck["stage"], {"rounds": ck["rounds"], "n": ck["n"], "feedback": ck["feedback"]}
+
+    def promised_missing(self, plan, upto):
+        """tl-bxk.13.16.2: the index of the earliest accepted stage (before `upto`) that mentions an evidence file which is gone
+        now while a check still to run reads it, or None. A check that writes the file itself (`> path`, tee) does not need it."""
+        ev = re.compile(r"\.task/%s/evidence/[^\s\"'<>|;&)]+" % re.escape(self.bead))
+        stages = plan.get("stages") or []
+        pending = [c for st in stages[upto:] for c in st["checks"]] + [
+            x["check"] for x in plan.get("cases") or [] if x.get("check", "").strip() and x.get("class", "test") == "test"]
+        need = set()
+        for c in pending:
+            for p in ev.findall(c):
+                if not Path(self.wt, p).exists() and not re.search(r"(?:>>?|tee(?: -a)?)\s*[\"']?%s" % re.escape(p), c):
+                    need.add(p)
+        early = [k for k, st in enumerate(stages[:upto]) if any(p in c for c in st["checks"] for p in need)]
+        return min(early) if early else None
 
     def stage(self, plan, i, state=None):
         """Write → checks → review until the review is clean. A red check goes straight back to the writer (it never

@@ -666,6 +666,82 @@ class VisualWork(StagesTest):
         self.assertEqual(entry["shots"], [{"path": "design/look-reviews/t-1/main.png", "role": "after", "label": "main"}])
 
 
+class Executable(StagesTest):
+    """tl-bxk.13.16.2: a plan check must be able to start; an accepted stage's promised files must exist on resume."""
+
+    def test_a_sentence_is_not_a_command(self):
+        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["After building the current player: python3 tools/x.py", HAS_F])])
+        errs = engine.dry_check(plan, str(self.wt))
+        self.assertEqual(len(errs), 1)
+        self.assertIn("`After` is not a command here", errs[0])
+
+    def test_real_commands_pass_the_word_check(self):
+        for ok in ("grep -q x a.txt && test -f a.txt", "! grep -q zzz a.txt", "FOO=1 bash -c 'echo hi' | wc -l",
+                   "echo hi > out.txt 2>&1 && test -s out.txt", "for f in a b; do echo $f; done", "(cd . && ls)",
+                   "git status --short", "python3 -c 'a;b'", te.PY + " -c 'pass'"):
+            self.assertEqual(engine.command_problems(ok, str(self.wt)), [], ok)
+
+    def test_a_just_recipe_must_exist_in_the_tree(self):
+        (self.wt / "justfile").write_text("fmt-check:\n\techo ok\n")
+        engine._RECIPES.clear()
+        self.assertEqual(engine.command_problems("just fmt-check && echo done", str(self.wt)), [])
+        bad = engine.command_problems("just fmt-check && just unity-play-tests", str(self.wt))
+        self.assertEqual(len(bad), 1)
+        self.assertIn("no recipe unity-play-tests", bad[0])
+        self.assertIn("fmt-check", bad[0])
+        engine._RECIPES.clear()
+
+    def test_a_missing_script_is_found_unless_a_stage_makes_it(self):
+        check = "./tools/probe.sh --all"
+        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[check])])
+        self.assertIn("is not a file of this tree", engine.dry_check(plan, str(self.wt))[0])
+        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], files=["tools/probe.sh"], checks=[check])])
+        self.assertEqual([e for e in engine.dry_check(plan, str(self.wt)) if "not a file" in e], [])
+
+    def test_the_plan_with_a_sentence_goes_back_once(self):
+        bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["Confirm that f exists", HAS_F])])
+        rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
+        self.assertIn("`Confirm` is not a command here", s.prompts[1])
+
+    PATH1 = ".task/t-1/evidence/sleeper-on-bed.txt"
+
+    def two_stage(self):
+        return dict(PLAN, stages=[
+            dict(PLAN["stages"][0], goal="stage one", checks=["echo ok > %s" % self.PATH1, HAS_F]),
+            dict(PLAN["stages"][0], goal="stage two", checks=['test -s %s' % self.PATH1])])
+
+    def test_a_file_an_accepted_stage_promised_and_a_later_check_reads(self):
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        plan = self.two_stage()
+        self.assertEqual(e.promised_missing(plan, 1), 0)  # stage 1 is accepted, the file is gone, stage 2 reads it
+        Path(self.wt, self.PATH1).parent.mkdir(parents=True, exist_ok=True)
+        Path(self.wt, self.PATH1).write_text("ok\n")
+        self.assertIsNone(e.promised_missing(plan, 1))
+        Path(self.wt, self.PATH1).unlink()
+        own = dict(plan, stages=[plan["stages"][0], dict(plan["stages"][1], checks=["echo ok > %s && test -s %s" % (self.PATH1, self.PATH1)])])
+        self.assertIsNone(e.promised_missing(own, 1))  # the later check writes it itself
+        self.assertIsNone(e.promised_missing(plan, 0))  # nothing accepted yet
+
+    def test_a_resume_runs_the_stage_again_when_its_file_is_gone(self):
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e.reset(dict(BEAD))
+        e.plan_data = self.two_stage()
+        e.done, e.accepted = ["stage one"], [0]
+        e.save_checkpoint(stage=1, rounds=0, n=0, feedback="", step="write")
+        again = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        again.reset(dict(BEAD))
+        plan, i, state = again.resume_point()
+        self.assertEqual((i, state, again.accepted, again.done), (0, None, [], []))
+        self.assertIn("a file stage 1 promised is missing", again.log_path.read_text())
+        Path(self.wt, self.PATH1).parent.mkdir(parents=True, exist_ok=True)
+        Path(self.wt, self.PATH1).write_text("ok\n")
+        third = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        third.reset(dict(BEAD))
+        self.assertEqual(third.resume_point()[1], 1)  # the file is there: stage 2 goes on
+
+
+
 class Contracts(StagesTest):
     """tl-bxk.13.16: infrastructure is retried with a rest, never asked; the version is recorded."""
 
