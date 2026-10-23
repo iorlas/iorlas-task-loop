@@ -3076,6 +3076,7 @@ class Engine:
         feedback, rounds, red, n = state.get("feedback", ""), state.get("rounds", 0), 0, state.get("n", 0)
         failed_cmds = state.get("failed")  # the commands the last engine run found red (None: no check ran red yet)
         red_now = set()  # the commands the last round found red
+        acc_first = False  # the last round ran acceptance first
         acc_only = False  # the last round's red checks were all acceptance ones (tl-bxk.13.14)
         where = ({"fix": state.get("fix_n"), "fixes": state.get("fix_of")} if fix else
                  {"stage": i + 1, "stages": len(plan["stages"])})
@@ -3143,8 +3144,9 @@ class Engine:
                 self.outcome_of("asks", w["question"][:200])
                 raise Blocked("owner decision needed", w["question"], w.get("options"))
             self.add_cases(w.get("new_cases") or [])
+            acc_first = acc_only and not acc_first  # once, then the normal order: a check may read what a tests-group check writes
             checks = self.run_checks(dict(st, checks=st["checks"] + (self.case_checks() if last else [])), name,
-                                     acceptance_first=acc_only, round=rounds + 1, **where)
+                                     acceptance_first=acc_first, round=rounds + 1, **where)
             (self.run_dir / "engine-checks.json").write_text(json.dumps(checks, indent=1))
             (self.run_dir / ("engine-checks.r%d.json" % self.check_round)).write_text(json.dumps(checks, indent=1))
             self.last_checks, self.checks_tree = checks, self.tree_hash()
@@ -3170,7 +3172,7 @@ class Engine:
                 failed_cmds = [c["cmd"] for c in failed]
                 feedback = ("\nThese checks fail (run by the engine, outside your sandbox). Fix exactly this:\n%s\n"
                             % failure_brief(failed, self.run_dir))
-                again = [c["cmd"] for c in failed if c["cmd"] in (prev_red or ())]
+                again = [c["cmd"] for c in failed if c["cmd"] in (prev_red or ()) and c["id"] == c["cmd"]]  # a plan's check, not a repo check
                 if again:  # tl-bxk.13.11: lifesim-fdyo tuned contrast to a threshold the plan made up, 3 rounds, 5.98M tokens in one turn
                     feedback += REPEAT_RED % "\n".join("- %s" % c[:200] for c in again)
                 red_text = "%d failed: %s" % (len(failed), ", ".join(c["id"][:60] for c in failed))

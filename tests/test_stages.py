@@ -422,6 +422,20 @@ class Fdyo(StagesTest):
         rounds = [json.loads(l) for l in self.eng.log_path.read_text().splitlines() if '"kind": "checks"' in l]
         self.assertEqual([[i["group"] for i in r["items"]] for r in rounds], [["tests", "acceptance"], ["acceptance", "tests"]])
 
+    def test_acceptance_first_is_used_once_then_the_normal_order_returns(self):
+        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[FALSE])])
+        rc, s = self.run_engine({"plan": [plan], "write": [WRITE] * 4, "review": [CLEAN]}, max_check_tries=4,
+                                checks=[{"id": "slow", "cmd": self.PASS, "group": "tests"}])
+        rounds = [json.loads(l) for l in self.eng.log_path.read_text().splitlines() if '"kind": "checks"' in l]
+        self.assertEqual([r["items"][0]["group"] for r in rounds], ["tests", "acceptance", "tests", "acceptance"])
+
+    def test_a_repo_check_red_twice_is_not_offered_to_bad_checks(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE] * 3, "review": [CLEAN]}, max_check_tries=3,
+                                checks=[{"id": "repo-red", "cmd": FALSE, "group": "tests"}])
+        writes = [p for p, c in zip(s.prompts, s.calls) if c[0] == "worker"]
+        self.assertTrue(len(writes) >= 3)
+        self.assertNotIn("failed in the last round too", writes[2])
+
 
 if __name__ == "__main__":
     unittest.main()
