@@ -33,6 +33,7 @@ FLD_25_19 = {"what": "Mesh sizes (73x91x16, 73x212x69) and the claim that only f
 SOURCE = "https://example.com/pack-page"
 LEFT = [{"title": "Table and chairs", "why": "the catalogue needs them"}]  # the plan's leftovers: the engine files them
 PLAN_LEFT = dict(PLAN, leftovers=LEFT)
+IQAD_BEAD = dict(BEAD, acceptance_criteria="f.txt exists; the energy decay holds across other seeds in a soak")  # IQAD is inside its done-when
 
 
 def open_as(*kinds, source=SOURCE):
@@ -81,7 +82,7 @@ class NoBlock(unittest.TestCase):
             self.assertEqual(self.creates(), [])
 
     def test_a_checkable_item_goes_back_to_the_writer_for_a_test_never_to_the_owner(self):
-        rc, s = self.go([IQAD], verify=[open_as("checkable")], extra_reviews=[CLEAN], writes=2)
+        rc, s = self.go([IQAD], verify=[open_as("checkable")], extra_reviews=[CLEAN], writes=2, bead=IQAD_BEAD)
         self.assertEqual(rc, 0, self.blocked)
         self.assertIsNone(self.ask())
         self.assertEqual([c[0] for c in s.calls].count("worker"), 2)  # the fix round
@@ -90,7 +91,7 @@ class NoBlock(unittest.TestCase):
 
     def test_a_checkable_item_the_round_leaves_unproven_goes_again_then_the_bead_is_stuck_not_landed(self):
         again = dict(CLEAN, unchecked=[IQAD])
-        rc, s = self.go([IQAD], verify=[open_as("checkable")], extra_reviews=[again, again], writes=3)
+        rc, s = self.go([IQAD], verify=[open_as("checkable")], extra_reviews=[again, again], writes=3, bead=IQAD_BEAD)
         self.assertEqual(rc, 2)
         self.assertEqual([c[0] for c in s.calls].count("worker"), 3)  # the first write and max_fix_rounds (2) fix rounds
         self.assertEqual(self.closed, [])
@@ -99,7 +100,7 @@ class NoBlock(unittest.TestCase):
         self.assertEqual(self.eng.unverified, [])
 
     def test_a_checkable_item_with_no_fix_round_left_is_stuck_not_landed(self):
-        rc, s = self.go([IQAD], verify=[open_as("checkable")], max_fix_rounds=0)
+        rc, s = self.go([IQAD], verify=[open_as("checkable")], max_fix_rounds=0, bead=IQAD_BEAD)
         self.assertEqual(rc, 2)
         self.assertEqual(self.closed, [])
         self.assertEqual([c[0] for c in s.calls].count("worker"), 1)

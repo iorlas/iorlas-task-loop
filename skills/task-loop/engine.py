@@ -2549,8 +2549,11 @@ class Engine:
                                                       self.log_path_of(c, False))
             cmd = "" if c.get("cmd") == c.get("id") else "; command `%s`" % c.get("cmd", "")[:300]
             last = " ".join(" ".join((c.get("tail") or "").strip().splitlines()[-2:]).split())  # the log is no file the verifier can open
-            out.append(("- `%s` [%s] %s%s%s" % (str(c.get("id"))[:100], c.get("group"), what, cmd,
-                                                  ("; last output: " + last[-160:]) if last and c.get("exit") == 0 else ""))[:520])
+            row = ("- `%s` [%s] %s%s" % (str(c.get("id"))[:100], c.get("group"), what, cmd))[:300]
+            room = 300 - len(row) - len("; last output: ")
+            if last and c.get("exit") == 0 and room >= 20:  # what a pass printed last, within the 300-character row
+                row += "; last output: " + last[-min(160, room):]
+            out.append(row)
         if len(checks) > 30:
             out.append("- (%d more checks not listed)" % (len(checks) - 30))
         return ("The engine's own check results for %s (the engine's evidence, run by the engine itself: you may cite them as "
