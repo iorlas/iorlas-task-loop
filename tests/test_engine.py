@@ -1496,11 +1496,11 @@ class EngineTest(unittest.TestCase):
         self.assertLess(b["prompt_chars"], a["prompt_chars"])
 
     def test_the_threshold_defaults_by_the_session_family(self):
-        rc, s = self.two_writes(family="openai", ctx_k=190)  # codex: 200, claude would start fresh
+        rc, s = self.two_writes(family="openai", ctx_k=90)  # codex: 100, claude would go on to 150
         self.assertEqual(s.calls[2][1], "ref-write")
-        rc, s = self.two_writes(family="openai", ctx_k=210)
+        rc, s = self.two_writes(family="openai", ctx_k=110)
         self.assertIsNone(s.calls[2][1])
-        self.assertIn("fresh writer: session at 210k", self.eng.log_path.read_text())
+        self.assertIn("fresh writer: session at 110k", self.eng.log_path.read_text())
 
     def test_write_fresh_above_k_is_the_repos_to_set(self):
         rc, s = self.two_writes(ctx_k=60, write_fresh_above_k=50)

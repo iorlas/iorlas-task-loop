@@ -199,4 +199,13 @@ Ranks 1-5 first: ~22 bead-instances out of the 34 that ran, mostly one-file engi
 | 13.9 | handed to the ask-input session (it owns ask phrasing) | |
 | 13.10 | deferred by the owner: no evidence yet | |
 
+From the lifesim-fdyo forensic (15.7M tokens, ~2M lean), built the same day:
+
+| bead | what | config |
+|---|---|---|
+| 13.11 | PLAN_PROMPT: an owner-judged criterion gets no invented threshold check (evidence exists + leftover); a check red two rounds running tells the writer it may list it in `bad_checks` (`REPEAT_RED`) | |
+| 13.12 | `write_fresh_above_k` codex default 200 -> 100 (inside a stage, fix rounds too) | `write_fresh_above_k` |
+| 13.13 | `dry_check`: `python -I -m <repo module>` can never import it: the plan goes back before a write | |
+| 13.14 | `_run_checks(acceptance_first=True)` after a round red only in acceptance: static, acceptance, then tests (a red acceptance skips them); off when an acceptance check reads `$TL_CHECK_*` | |
+
 Not built: file locks and a `Touches` scheduler (decision 4: dropped; the loop already says it does not read Touches).

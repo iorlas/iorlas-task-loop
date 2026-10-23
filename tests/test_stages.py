@@ -16,6 +16,7 @@ class StagesTest(unittest.TestCase):
     fake_bd = te.EngineTest.fake_bd
     commit_base_cfg = te.EngineTest.commit_base_cfg
     run_engine = te.EngineTest.run_engine
+    checks_engine = te.EngineTest.checks_engine
 
     def created(self):
         return [a[1] for a in self.bd_calls if a and a[0] == "create"]
@@ -358,6 +359,68 @@ class SharedNotes(StagesTest):
         new = e.git("rev-parse", "HEAD")
         self.assertNotEqual(old, new)
         self.assertEqual(json.loads(e.checkpoint_path().read_text())["head"], new)
+
+
+class Fdyo(StagesTest):
+    """13.11-13.14, from the lifesim-fdyo run (15.7M tokens): checks only the engine can pass, a late fresh writer, a check that
+    cannot run, slow tests before a fast verdict."""
+
+    PASS = te.PY + ' -c "pass"'
+
+    def test_the_planner_is_told_not_to_invent_a_threshold_for_an_owner_judged_criterion(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertIn("only the owner can judge", s.prompts[0])
+
+    def test_a_check_red_two_rounds_running_tells_the_writer_it_may_flag_it(self):
+        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[FALSE])])
+        rc, s = self.run_engine({"plan": [plan], "write": [WRITE, WRITE, WRITE], "review": [CLEAN]}, max_check_tries=3)
+        writes = [p for p, c in zip(s.prompts, s.calls) if c[0] == "worker"]
+        self.assertNotIn("failed in the last round too", writes[1])  # red for the first time
+        self.assertIn("failed in the last round too", writes[2])
+        self.assertIn("list it in bad_checks", writes[2])
+
+    def test_a_codex_session_is_not_resumed_above_100k_inside_a_stage(self):
+        self.assertEqual(engine.DEFAULTS["write_fresh_above_k"], {"claude": 150, "codex": 100})
+
+    def test_python_isolated_mode_with_a_repo_module_is_sent_back(self):
+        (self.wt / "tools" / "tests").mkdir(parents=True)
+        (self.wt / "tools" / "tests" / "test_x.py").write_text("x = 1\n")
+        te.sh("git", "add", "-A", cwd=self.wt)
+        te.sh("git", "commit", "-qm", "tools", cwd=self.wt)
+        te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=self.wt)
+        bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["python3 -I -m unittest tools.tests.test_x"])])
+        self.assertEqual(len(engine.dry_check(bad, str(self.wt))), 1)
+        self.assertIn("python -I removes the working directory", engine.dry_check(bad, str(self.wt))[0])
+        for ok in ("python3 -I -m unittest discover -s tools/tests -p 'test_x.py'", "python3 -m unittest tools.tests.test_x",
+                   "python3 -I -m json.tool f.json", "python3 -I -c 'import tools.x'"):
+            self.assertEqual(engine.dry_check(dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[ok])]), str(self.wt)), [], ok)
+        rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
+        self.assertIn("python -I removes the working directory", s.prompts[1])
+
+    def test_after_a_round_red_only_in_acceptance_the_fast_group_runs_before_the_slow_tests(self):
+        eng = self.checks_engine(checks=[{"id": "slow", "cmd": self.PASS, "group": "tests"}])
+        st = {"checks": [FALSE], "files": []}
+        first = eng.run_checks(st, "s")
+        self.assertEqual([(c["group"], c["status"]) for c in first], [("tests", "ran"), ("acceptance", "failed")])
+        again = eng.run_checks(st, "s", acceptance_first=True)
+        self.assertEqual([(c["group"], c["status"]) for c in again], [("acceptance", "failed"), ("tests", "skipped")])
+        self.assertIn("acceptance failed first", again[1]["why"])
+
+    def test_the_reorder_is_off_when_an_acceptance_check_reads_a_repo_checks_log(self):
+        eng = self.checks_engine(checks=[{"id": "slow", "cmd": self.PASS, "group": "tests"}])
+        st = {"checks": ['grep -q . "$TL_CHECK_LOG_SLOW" || true'], "files": []}
+        res = eng.run_checks(st, "s", acceptance_first=True)
+        self.assertEqual([c["group"] for c in res], ["tests", "acceptance"])
+
+    def test_a_stage_whose_acceptance_check_was_red_runs_acceptance_first_the_next_round(self):
+        flaky = te.EngineTest.RED_ONCE
+        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[flaky])])
+        rc, s = self.run_engine({"plan": [plan], "write": [WRITE, WRITE], "review": [CLEAN]},
+                                checks=[{"id": "slow", "cmd": self.PASS, "group": "tests"}])
+        self.assertEqual(rc, 0, self.blocked)
+        rounds = [json.loads(l) for l in self.eng.log_path.read_text().splitlines() if '"kind": "checks"' in l]
+        self.assertEqual([[i["group"] for i in r["items"]] for r in rounds], [["tests", "acceptance"], ["acceptance", "tests"]])
 
 
 if __name__ == "__main__":

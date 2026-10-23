@@ -52,7 +52,7 @@ DEFAULTS = {
     "write_idle_stop_min": 25,        # and stopped at this; a write whose activity cannot be seen keeps node_timeout_min
     "write_fresh_stage_k": 100,       # at a stage boundary a writer session above this (k tokens) is not resumed (0 = never): the next stage is a fresh session told what is done
     "write_cap_min": 120,             # a write is stopped at this however active the worker is
-    "write_fresh_above_k": {"claude": 150, "codex": 200},  # a writer session whose context ended above this (k tokens, by its family;
+    "write_fresh_above_k": {"claude": 150, "codex": 100},  # a writer session whose context ended above this (k tokens, by its family;
                                       # a number sets both, 0 = never) is not resumed: a fresh writer gets the brief and what is done
     "writer_check_max_s": 60,         # a check whose last run took longer is the engine's, never the writer's to run
     "check_timeout_min": 60,          # one check (engine.checks, a stage's check) running longer is killed, process group and all: exit 124
@@ -281,6 +281,11 @@ PROC_SUBST = re.compile(r"<\(")
 FILE_ARG = re.compile(r"(?:^|[;&|(]\s*)(?:test|\[)\s+-[fesr]\s+(\S+)|(?:^|[;&|(]\s*)(?:cat|bash|sh|node|python3?)\s+(?:-[^\smc]\S*\s+)*([^\s;&|<>$`'\"-]*[./]\S*)")
 
 
+# python3 -I -m unittest tools.tests.test_x / python3 -I -m tools.x: -I (isolated mode) drops the cwd from sys.path, ModuleNotFoundError
+ISOLATED_MODULE = re.compile(r"\bpython3?(?:\.\d+)?\s+(?:-[A-Za-z]+\s+)*-[A-Za-z]*I[A-Za-z]*\s+(?:-[A-Za-z]+\s+)*-m\s+(?:unittest\s+(?!discover\b)"
+                             r"(?:-[A-Za-z]+\s+)*)?([A-Za-z_][\w]*(?:\.[\w]+)+)")
+
+
 def dry_check(plan, wt):
     """[error]: the plan's checks that cannot run: bash -n syntax, process substitution, a file the check reads that is
     neither in the tree nor a file some stage names."""
@@ -295,6 +300,12 @@ def dry_check(plan, wt):
             r = None
         if r is not None and r.returncode:
             errs.append("`%s`: bash -n: %s" % (c, (r.stderr or "syntax error").strip().splitlines()[-1][:200]))
+            continue
+        iso = ISOLATED_MODULE.search(bare)
+        if iso and Path(wt, iso.group(1).split(".")[0]).is_dir():  # tl-bxk.13.13
+            errs.append("`%s`: python -I removes the working directory from the import path, so `%s` cannot be imported; "
+                        "drop -I, or run `python3 -I -m unittest discover -s <dir> -p <pattern>` (a path, not a module name)" % (
+                            c, iso.group(1)))
             continue
         if re.search(r"(?:^|[;&|(\s])cd\s", c):
             continue
@@ -3059,6 +3070,8 @@ class Engine:
         name = state.get("name") or "stage %d/%d" % (i + 1, len(plan["stages"]))
         feedback, rounds, red, n = state.get("feedback", ""), state.get("rounds", 0), 0, state.get("n", 0)
         failed_cmds = state.get("failed")  # the commands the last engine run found red (None: no check ran red yet)
+        red_now = set()  # the commands the last round found red
+        acc_only = False  # the last round's red checks were all acceptance ones (tl-bxk.13.14)
         where = ({"fix": state.get("fix_n"), "fixes": state.get("fix_of")} if fix else
                  {"stage": i + 1, "stages": len(plan["stages"])})
         while True:
@@ -3126,7 +3139,7 @@ class Engine:
                 raise Blocked("owner decision needed", w["question"], w.get("options"))
             self.add_cases(w.get("new_cases") or [])
             checks = self.run_checks(dict(st, checks=st["checks"] + (self.case_checks() if last else [])), name,
-                                     round=rounds + 1, **where)
+                                     acceptance_first=acc_only, round=rounds + 1, **where)
             (self.run_dir / "engine-checks.json").write_text(json.dumps(checks, indent=1))
             (self.run_dir / ("engine-checks.r%d.json" % self.check_round)).write_text(json.dumps(checks, indent=1))
             self.last_checks, self.checks_tree = checks, self.tree_hash()
@@ -3134,6 +3147,8 @@ class Engine:
             if self.stats["tests_removed"]:
                 self.warn("the task's diff removes %d tests" % self.stats["tests_removed"])
             failed = [c for c in checks if c["exit"] not in (0, None)]
+            prev_red, red_now = red_now, {c["cmd"] for c in failed}  # the commands red last round (tl-bxk.13.11)
+            acc_only = bool(failed) and all(c["group"] == "acceptance" for c in failed)
             flagged = {c["cmd"].strip(): why for c in failed for why in [flagged_why(c, w["bad_checks"])] if why}
             wrong = [c for c in failed if c["cmd"].strip() in flagged]
             if wrong:  # a check no code change can satisfy: retrying it is waste, the plan must change
@@ -3150,6 +3165,9 @@ class Engine:
                 failed_cmds = [c["cmd"] for c in failed]
                 feedback = ("\nThese checks fail (run by the engine, outside your sandbox). Fix exactly this:\n%s\n"
                             % failure_brief(failed, self.run_dir))
+                again = [c["cmd"] for c in failed if c["cmd"] in (prev_red or ())]
+                if again:  # tl-bxk.13.11: lifesim-fdyo tuned contrast to a threshold the plan made up, 3 rounds, 5.98M tokens in one turn
+                    feedback += REPEAT_RED % "\n".join("- %s" % c[:200] for c in again)
                 red_text = "%d failed: %s" % (len(failed), ", ".join(c["id"][:60] for c in failed))
                 self.note_round(name, rounds + 1, "checks_red", w["summary"], [c["id"] for c in failed])
                 if red < int(self.cfg["max_check_tries"]):
@@ -3352,12 +3370,12 @@ class Engine:
         out = tl.git("diff", "--name-only", self.base_sha(), tree, cwd=self.wt) if tree else ""
         return [p for p in out.splitlines() if p]
 
-    def run_checks(self, st, name, **meta):
-        out = self._run_checks(st, name, **meta)
+    def run_checks(self, st, name, acceptance_first=False, **meta):
+        out = self._run_checks(st, name, acceptance_first=acceptance_first, **meta)
         self.assert_tree("checks", "after")
         return out
 
-    def _run_checks(self, st, name, **meta):
+    def _run_checks(self, st, name, acceptance_first=False, **meta):
         """One engine step, no AI: the repo's checks (engine.checks) and the stage's acceptance checks, grouped
         static → tests → acceptance; a red group skips the groups after it. A repo check with `when` runs only when the
         task changed a matching path; `retry` reruns a red one (known flaky). A repo check that passed on the same tree
@@ -3372,6 +3390,10 @@ class Engine:
         items += [{"id": c, "cmd": c, "group": "acceptance", "when": [], "retry": 0,
                    "timeout": float(self.cfg["check_timeout_min"]), "cache": False} for c in st["checks"]]
         items.sort(key=lambda c: GROUPS.index(c["group"]) if c["group"] in GROUPS else 1)
+        if acceptance_first and not any("TL_CHECK_" in c["cmd"] for c in items if c["group"] == "acceptance"):
+            # tl-bxk.13.14: the last round failed only in acceptance: its fast checks go before the slow tests, and a red one
+            # skips them (lifesim-fdyo reran 11 minutes of unity tests before a 3-second verdict check failed, 3 rounds)
+            items.sort(key=lambda c: {"static": 0, "acceptance": 1, "tests": 2}.get(c["group"], 1))
         cache_path = tl.config_dir() / "check-cache" / ("%s.json" % self.bead)
         try:
             cache = json.loads(cache_path.read_text())
@@ -4472,6 +4494,9 @@ DECIDED_RULE = ("A change that contradicts an accepted requirement (in the task,
                 "accepted requirement, quoted, that already answers your question (the engine then sends the stage "
                 "back to meet it instead of asking the owner); empty when you have no question, when two accepted "
                 "requirements conflict, or when no requirement decides it yet (those are the owner's).")
+REPEAT_RED = ("\nThese checks failed in the last round too:\n%s\nIf one measures a threshold the task does not ask for (the task "
+              "says the owner judges it, or the number is the plan's own), do not keep tuning the work to it: list it in "
+              "bad_checks, with why, and the plan is changed instead.\n")
 REPLAN_CAP = "stuck: the bead was re-planned "  # the cap's ask; an owner's answer to it allows one more
 RULES_INLINE_MAX = 6 * 1024   # a worker_rules file under this goes into the planner's brief
 PLAN_BRIEF_KB = 12            # the planner's whole brief should stay under this
@@ -4505,6 +4530,10 @@ each stage has its files and its checks. Budget: about 12 tool calls. Then plan.
   (quote it) and a check. They run on the last stage and again after any fix at land. A case about what users see uses
   the host's tools and a fact the tool reports (a scenario script, a screenshot saved under the evidence folder, a count
   the editor prints), never only "a screenshot exists".
+- A criterion only the owner can judge (it looks right, feels right, the owner approves) is never a pass/fail check on a
+  number you chose: the check proves the evidence exists (the screenshot or sheet is saved, a count the tool reports), and
+  the judgement goes in leftovers for the owner. A threshold you invent is a requirement nobody asked for, and the writer
+  will tune the work to it.
 - Name the risks ahead of time: what could break something users or other code rely on (a saved format, a public
   member, shared files), each with the check that proves it safe. None is fine.
 - A check proves the code and the tree only: it never reads the tracker (no `bd`, nothing under `.beads/`) nor
