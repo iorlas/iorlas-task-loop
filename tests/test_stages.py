@@ -742,6 +742,86 @@ class Executable(StagesTest):
 
 
 
+class Ledger(StagesTest):
+    """tl-bxk.13.16.1: the plan says how each criterion is proved; review and verify go by it, not by the wording of an item."""
+
+    LEFT = [{"title": "Import the chosen prefabs and add object rows", "why": "next bead"}]
+    FILE = {"criterion": "Record the plan's follow-up issues about stale layer prose and bead wording", "check": "",
+            "proved_by": "engine_step", "via": "file_beads"}
+    DEFER = {"criterion": "A follow-up bead imports the chosen prefabs and adds object rows", "check": "",
+             "proved_by": "leftover", "via": "Import the chosen prefabs and add object rows"}
+
+    def plan(self, **kw):
+        return dict(PLAN, cases=[self.FILE, self.DEFER, {"criterion": "f exists", "check": HAS_F, "proved_by": "check"}],
+                    leftovers=self.LEFT, **kw)
+
+    def test_the_planner_is_told_to_keep_a_ledger(self):
+        rc, s = self.run_engine({"plan": [self.plan()], "write": [WRITE], "review": [CLEAN]})
+        self.assertIn("proved_by how its criterion is proved", s.prompts[0].replace("\n  ", " ").replace("Each case says in ", ""))
+        self.assertIn("engine_step", s.prompts[0])
+
+    def test_the_review_is_told_what_the_engine_does_and_what_is_deferred(self):
+        rc, s = self.run_engine({"plan": [self.plan()], "write": [WRITE], "review": [CLEAN]})
+        review = s.prompts[2]
+        self.assertIn("The engine does these itself", review)
+        self.assertIn("Record the plan's follow-up issues", review)
+        self.assertIn("Import the chosen prefabs", review)
+
+    def test_a_ledgered_item_is_not_unmet_in_any_wording(self):
+        unmet = ["A follow-up bead for importing the chosen prefabs and adding object rows is not filed",
+                 "The plan's follow-up issues about stale layer prose and bead wording are not recorded"]
+        rc, s = self.run_engine({"plan": [self.plan()], "write": [WRITE], "review": [review_with(unmet)]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])  # no send-back
+        self.assertIn("unmet items dropped", self.eng.log_path.read_text())
+
+    def test_an_unrelated_unmet_item_still_sends_the_stage_back(self):
+        rc, s = self.run_engine({"plan": [self.plan()], "write": [WRITE, WRITE],
+                                 "review": [review_with(["The settings page does not save the volume"]), CLEAN]})
+        self.assertEqual([c[0] for c in s.calls].count("worker"), 2)
+
+    def test_unchecked_items_in_the_ledger_never_reach_the_verifier_or_the_writer(self):
+        items = [{"what": "Record the plan's follow-up issues about stale layer prose and bead wording", "kind": "checkable", "source": ""},
+                 {"what": "The follow-up bead for importing the chosen prefabs and adding object rows exists", "kind": "checkable", "source": ""}]
+        rc, s = self.run_engine({"plan": [self.plan()], "write": [WRITE], "review": [dict(CLEAN, unchecked=items)]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])  # no verify call, no fix round
+        self.assertEqual([u["what"] for u in self.eng.unverified], [items[1]["what"]])  # the deferral lands for the owner
+        self.assertEqual(self.eng.verified[0]["why"], "the engine does this at land")
+
+    def test_an_unrelated_checkable_item_is_still_verified(self):
+        item = {"what": "The volume slider saves its value across restarts on every platform", "kind": "checkable", "source": ""}
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e.plan_data = self.plan()
+        self.assertEqual(e.ledger_route(item["what"]), "")
+        self.assertEqual(e.engine_steps([dict(item)]), [item])
+
+    def test_a_deferred_case_the_plan_forgot_to_list_is_listed(self):
+        plan = dict(PLAN, cases=[self.DEFER], leftovers=[])
+        rc, s = self.run_engine({"plan": [plan], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([lo["title"] for lo in self.eng.plan_data["leftovers"]], ["Import the chosen prefabs and add object rows"])
+        self.assertIn("Import the chosen prefabs and add object rows", self.created())
+
+    def test_a_case_with_nothing_to_prove_it_goes_back_to_the_planner(self):
+        bad = dict(PLAN, cases=[{"criterion": "the rows exist", "check": ""}])
+        rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
+        self.assertIn("case `the rows exist` has no check", s.prompts[1])
+        self.assertEqual(engine.ledger_problems(self.plan()), [])
+
+    def test_ledgered_cases_run_no_command(self):
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e.plan_data = self.plan()
+        self.assertEqual(e.case_checks(), [HAS_F])
+        self.assertEqual(engine.plan_checks(self.plan()), [HAS_F] + [c for st in PLAN["stages"] for c in st["checks"] if c != HAS_F])
+
+
+def review_with(unmet):
+    return dict(CLEAN, unmet=list(unmet))
+
+
+
 class Contracts(StagesTest):
     """tl-bxk.13.16: infrastructure is retried with a rest, never asked; the version is recorded."""
 

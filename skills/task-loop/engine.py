@@ -79,6 +79,7 @@ DEFAULTS = {
 # ---- output contracts -----------------------------------------------------------------------------------------------
 
 FLAKE_DAYS = 14     # how long a writer-reported flaky test stays in the shared notes
+PROVED_BY = ("check", "stage", "leftover", "engine_step")  # tl-bxk.13.16.1: how a plan criterion is proved (the ledger)
 HANDOFF_CAP = 1500  # characters of round history one prompt carries (tl-bxk.13.6)
 S_STR = {"type": "string"}
 S_STRS = {"type": "array", "items": S_STR}
@@ -238,7 +239,8 @@ def plan_checks(plan):
     """The plan's checks: stages, risks, cases."""
     return list(dict.fromkeys([c for s in plan.get("stages") or [] for c in s["checks"]] + [
         x["check"] for k in ("risks", "cases") for x in plan.get(k) or []
-        if x.get("check", "").strip() and x.get("class", "test") == "test"]))  # a look or taste case has no command (tl-bxk.13.15)
+        if x.get("check", "").strip() and x.get("class", "test") == "test"
+        and x.get("proved_by", "check") in ("check", "stage")]))  # a look, taste, leftover or engine-step case has no command
 
 
 def tracker_checks(plan):
@@ -377,6 +379,16 @@ def command_problems(cmd, wt, made=()):
     return out
 
 
+def ledger_problems(plan):
+    """tl-bxk.13.16.1: a case with nothing to prove it: a test case whose proof is `check` (or unsaid) and whose check is empty."""
+    out = []
+    for c in plan.get("cases") or []:
+        if c.get("class", "test") == "test" and c.get("proved_by", "check") == "check" and not c.get("check", "").strip():
+            out.append("case `%s` has no check: give a command, or say in proved_by how it is proved (stage, leftover, "
+                       "engine_step), or a class of look-objective or taste" % c["criterion"][:120])
+    return out
+
+
 def dry_check(plan, wt):
     """[error]: the plan's checks that cannot run: bash -n syntax, process substitution, a file the check reads that is
     neither in the tree nor a file some stage names."""
@@ -505,7 +517,9 @@ SCHEMAS = {
                  "cases": {"type": "array", "items": {"type": "object", "additionalProperties": False,
                                                       "required": ["criterion", "check"],
                                                       "properties": {"criterion": S_STR, "check": S_STR,
-                                                                     "class": {"type": "string", "enum": list(looks.CLASSES)}}}},
+                                                                     "class": {"type": "string", "enum": list(looks.CLASSES)},
+                                                                     "proved_by": {"type": "string", "enum": list(PROVED_BY)},
+                                                                     "via": S_STR}}},
                  "leftovers": LEFTOVERS}},
     "write": {"type": "object", "additionalProperties": False,
               "required": ["summary", "checks_run", "question", "options", "decided", "bad_checks", "new_cases", "unchecked"],
@@ -2014,7 +2028,7 @@ class Engine:
 
     def case_checks(self):
         return [c["check"] for c in (getattr(self, "plan_data", None) or {}).get("cases") or []
-                if c.get("check", "").strip() and c.get("class", "test") == "test"]
+                if c.get("check", "").strip() and c.get("class", "test") == "test" and c.get("proved_by", "check") in ("check", "stage")]
 
     def cases_of(self, cls):
         """The criteria of the plan's cases of one class (look-objective, taste)."""
@@ -2219,12 +2233,58 @@ class Engine:
 
     def deferred_text(self):
         items = self.deferred_items()
-        if not items:
-            return ""
-        lines = "".join("- %s%s\n" % (t[:160], (": " + w[:160]) if w else "") for t, w in items[:10])
-        return ("\nAlready set aside (the plan or an earlier review put each in leftovers; the engine files each as a follow-up "
-                "bead at land, and nobody here can run bd). Never list one as unmet, as a finding or as unchecked, nor ask "
-                "the owner about it:\n" + lines)
+        steps = [e for e in self.ledger() if e["proved_by"] == "engine_step"]
+        out = ""
+        if items:
+            lines = "".join("- %s%s\n" % (t[:160], (": " + w[:160]) if w else "") for t, w in items[:10])
+            out += ("\nAlready set aside (the plan or an earlier review put each in leftovers; the engine files each as a follow-up "
+                    "bead at land, and nobody here can run bd). Never list one as unmet, as a finding or as unchecked, nor ask "
+                    "the owner about it:\n" + lines)
+        if steps:
+            out += ("\nThe engine does these itself, after the stages (the plan's ledger). Never list one as unmet, as a "
+                    "finding or as unchecked:\n" + "".join("- %s (%s)\n" % (e["criterion"][:160], e["via"][:60] or "engine step") for e in steps[:8]))
+        return out
+
+    # -- tl-bxk.13.16.1: the ledger. The plan says how each criterion is proved; review and verify go by it, not by wording.
+    def ledger(self):
+        """[{criterion, proved_by, via, text}]: what the plan defers (leftover) or leaves to the engine (engine_step)."""
+        out = []
+        for c in (getattr(self, "plan_data", None) or {}).get("cases") or []:
+            if c.get("proved_by") in ("leftover", "engine_step"):
+                out.append({"criterion": c["criterion"], "proved_by": c["proved_by"], "via": c.get("via") or "",
+                            "text": "%s %s" % (c["criterion"], c.get("via") or "")})
+        for t, _ in self.deferred_items():
+            out.append({"criterion": t, "proved_by": "leftover", "via": t, "text": t})
+        return out
+
+    def ledger_match(self, what):
+        """The ledger entry an item is about: most of the entry's words are the item's (3 at least)."""
+        mine = word_set(what)
+        if len(mine) < 3:
+            return None
+        for e in self.ledger():
+            theirs = word_set(e["text"])
+            if len(mine & theirs) >= max(3, int(0.6 * len(theirs) + 0.99)):
+                return e
+        return None
+
+    def ledger_route(self, what):
+        e = self.ledger_match(what)
+        return e["proved_by"] if e else ""
+
+    def ledger_fill(self, data):
+        """A case deferred in the ledger whose leftover the plan forgot to list: the engine lists it, so the work is filed."""
+        have = {" ".join(lo["title"].split()) for lo in data.get("leftovers") or []} | {t for t, _ in self.deferred_items()}
+        for c in data.get("cases") or []:
+            if c.get("proved_by") != "leftover":
+                continue
+            via = " ".join((c.get("via") or "").split())
+            if via and any(word_set(via) and len(word_set(via) & word_set(t)) >= 0.6 * len(word_set(via)) for t in have):
+                continue
+            title = (via or c["criterion"])[:120]
+            data.setdefault("leftovers", []).append({"title": title, "why": "Deferred by the plan: " + c["criterion"]})
+            have.add(title)
+            self.log("note", "the ledger defers a criterion the leftovers did not list; listed: %s" % title[:160])
 
     def seen_lows_text(self):
         lows = self.handoff["seen_lows"]
@@ -2401,7 +2461,8 @@ class Engine:
             try:
                 d, _ = self.ai("verify", "%d unchecked item(s) before land" % len(gaps), VERIFY_PROMPT.format(
                     brief=self.brief_text(), work=self.work_summary(), evidence=self.evidence_dir,
-                    checks=self.checks_evidence(), where=self.where("verify"), items=items), writer_family=self.writer_family, items=len(gaps))
+                    checks=self.checks_evidence(), where=self.where("verify"), items=items) + self.deferred_text(),
+                    writer_family=self.writer_family, items=len(gaps))
             except Blocked as b:
                 if b.why.startswith("failed: infrastructure"):  # tl-bxk.10.31: the request is malformed for every bead
                     raise
@@ -2528,6 +2589,13 @@ class Engine:
         files them'. A claim about the result ('the beads cover all nine objects') goes to the verifier."""
         out = []
         for u in gaps:
+            route = self.ledger_route(u["what"])
+            if route == "engine_step":  # tl-bxk.13.16.1: the plan's ledger says the engine does it
+                self.settle_engine_step(u)
+                continue
+            if route == "leftover":
+                self.add_unverified(u, "the plan defers it to a follow-up bead")
+                continue
             if u["kind"] == "engine_step" and self.engine_does(u["what"]):
                 self.settle_engine_step(u)
             elif u["kind"] in ("owner_decision", "external_fact", "taste") and self.backed_by_leftover(u["what"]):
@@ -2548,7 +2616,11 @@ class Engine:
         none left: the bead is stuck, never landed); an item no check can prove lands for the owner (route 'unverified');
         an owner decision, or an old kind, is asked."""
         k = u["kind"]
-        if k == "engine_step":
+        route = self.ledger_route(u["what"])
+        if route == "leftover":
+            self.add_unverified(u, why or "the plan defers it to a follow-up bead")
+            return "open", a, why, "unverified"
+        if k == "engine_step" or route == "engine_step":
             return "settled", dict(a, evidence="the engine does this at land"), "the engine does this at land", ""
         if k == "checkable":
             if self.fixes >= int(self.cfg["max_fix_rounds"]):
@@ -2569,6 +2641,13 @@ class Engine:
         round left) comes back flagged proof_round, to be sent again while a fix round is left; the rest still asks."""
         out = []
         for u in left:
+            route = self.ledger_route(u["what"])
+            if route == "engine_step":
+                self.settle_engine_step(u)
+                continue
+            if route == "leftover":
+                self.add_unverified(dict(u, kind=u.get("kind") or "other"), "the plan defers it to a follow-up bead")
+                continue
             k = self.resolve_kind(u, {})[0] if not u.get("proof_round") else "checkable"
             defect = str(u.get("why") or "").startswith("found wrong:") and not u.get("proof_round")
             if defect:
@@ -2757,6 +2836,9 @@ class Engine:
             self.save_checkpoint(stage=0, rounds=0, n=0, feedback="", step="write")
         bad, gated, dry = tracker_checks(data), gate_only_checks(data, self.cfg), dry_check(data, self.wt)
         rep = self.repeated_slow(data)
+        led = ledger_problems(data)
+        if led:
+            dry = dry + led  # sent back with the checks that cannot run
         if bad or gated or dry or rep:  # asked once to rewrite them, like an invalid answer; not a counted re-plan
             why = ""
             if rep:
@@ -2977,6 +3059,7 @@ class Engine:
             raise Blocked("ticket: the plan has %d stages (more than %d): the bead may be too big for one task" % (
                 len(data["stages"]), big), "Split the bead into these, or comment that it stays one bead:\n" + "\n".join(
                 "%d. %s" % (k + 1, s["goal"]) for k, s in enumerate(data["stages"])))
+        self.ledger_fill(data)
         self.plan_leftovers(data)
         lines = ["Plan (engine): " + data["summary"]]
         lines += ["%d. %s%s [files: %s] [checks: %s]" % (n + 1, s["goal"], " (hard)" if s["hard"] else "",
@@ -3303,7 +3386,7 @@ class Engine:
             if delta:  # the writer may have edited its copy: the engine's brief goes back before it reads it again
                 self.brief_file.write_text(self.brief_text(), encoding="utf-8")
             else:  # a whole prompt (a first write, a fresh writer): what the tasks beside this one are doing (tl-bxk.13.8)
-                prompt += self.shared_text()
+                prompt += self.shared_text() + self.deferred_text()
             w, wfam = self.ai("write", "%s write %d" % (name, n), prompt, delta=delta, resume_key="writer", write=n,
                               visual=self.stage_visual(st), round=rounds + 1, **where)
             self.writer_family = wfam
@@ -3408,6 +3491,12 @@ class Engine:
                 writer_family=wfam, visual=not fix and self.stage_visual(st), round=rounds + 1, **where)
             self.accepted_new += [p for p in review.get("accept_files") or [] if p in kinds["unexplained"] and p not in self.accepted_new]
             review = dict(review, findings=list(review["findings"]))
+            kept = [u for u in review["unmet"] if not self.ledger_route(u)]  # tl-bxk.13.16.1: the ledger settles these
+            if len(kept) != len(review["unmet"]):
+                self.log("note", "%d unmet item%s dropped: the plan's ledger defers or gives them to the engine: %s" % (
+                    len(review["unmet"]) - len(kept), "" if len(review["unmet"]) - len(kept) == 1 else "s",
+                    "; ".join(u[:80] for u in review["unmet"] if u not in kept)))
+                review["unmet"] = kept
             for p in self.undecided_new(kinds["unexplained"], review):  # never a silent drop: the writer names it or deletes it
                 review["findings"].append({"file": p, "line": 0, "severity": "medium", "fix":
                     "decide: unexplained new file %s (name it in your summary if the task needs it, else delete it)" % p})
@@ -5038,6 +5127,12 @@ each stage has its files and its checks. Budget: about 12 tool calls. Then plan.
   (quote it) and a check. They run on the last stage and again after any fix at land. A case about what users see uses
   the host's tools and a fact the tool reports (a scenario script, a screenshot saved under the evidence folder, a count
   the editor prints), never only "a screenshot exists".
+- Each case says in proved_by how its criterion is proved, and via names what proves it: check (a command; the usual
+  case), stage (its stage's own checks; via = the stage number), leftover (deferred to a follow-up bead the engine files:
+  also list it in leftovers; via = that leftover's title; check empty) or engine_step (the engine does it itself: files the
+  leftovers as beads, runs the gate, lands, closes the bead, copies screenshots; via = which; check empty). A criterion
+  about filing beads, the gate, the land or closing is an engine_step; one the tracker holds is never a check. The review
+  and the verifier are told this ledger and will not call a leftover or engine_step criterion unmet.
 - A criterion only the owner can judge (it looks right, feels right, the owner approves) is never a pass/fail check on a
   number you chose: the check proves the evidence exists (the screenshot or sheet is saved, a count the tool reports), and
   the judgement goes in leftovers for the owner. A threshold you invent is a requirement nobody asked for, and the writer
