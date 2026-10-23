@@ -2546,8 +2546,9 @@ class EngineTest(unittest.TestCase):
         a = self.ask()
         self.assertEqual(a["kind"], "stuck")
         self.assertIn("re-planned 3 times", a["why"])
-        for word in ("split", "clarify", "allow one more", "1. plan", "2. amend", "bead changed"):
-            self.assertIn(word, a["question"] + a["why"])
+        for word in ("split", "say what the plan keeps missing", "allow one more", "1. plan", "2. amend", "bead changed"):
+            self.assertIn(word, (a["question"] + a["why"] + a["detail"]).lower())
+        self.assertTrue(a["question"].startswith("**Re-planned 3 times"), a["question"])
         with mock.patch.object(tl, "show", return_value=dict(BEAD, description="v5")), \
                 mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Allow one more."}]):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})

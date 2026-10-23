@@ -4793,8 +4793,8 @@ def clip(text, n=170):
                 break
         else:
             t = head.rstrip(" ,;:(") + " ..."
-    t = re.sub(r"\s*-?\s*`[^`]*?(?: \.\.\.)?$", "", t) if t.count("`") % 2 else t
-    return t if not t or t[-1] in ".!?)'\"`;" else t + " ..."
+    t = re.sub(r"\s*-?\s*`[^`]*?(?: \.\.\.)?$", "", t).rstrip(" ,;:(") if t.count("`") % 2 else t
+    return t if not t or t[-1] in ".!?)'\"`" or len(t) < n * 0.9 else t + " ..."  # near the cap and no end: cut at its source
 
 
 def push_text(markdown):
@@ -4858,7 +4858,7 @@ def ask_markdown(kind, why, question):
             sents, need = [need], "Pick an option, or write your own answer."
         head = clip(sents[0], 150) if sents else "The engine needs you"
         bullets = [clip(x, 180) for x in sents[1:4]]
-    dot = lambda t: re.sub(r"(?<!\.)\.$", "", " ".join(t.replace("**", "").split()))
+    dot = lambda t: re.sub(r"(?<!\.)\.$", "", " ".join(t.replace("**", "").split()).rstrip(" ;"))
     lines = ["**%s**" % (dot(head) or "The engine needs you")]
     if bullets:
         lines += ["", "**What happened**"] + ["- %s" % dot(b) for b in bullets[:3] if dot(b)]
