@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop" / "dash"))
 import graph  # noqa: E402
 
-NOW = time.time()
+NOW = time.mktime((2026, 10, 23, 12, 0, 0, 0, 0, -1))  # local noon: 'today' counts from midnight, so a run just after 00:00 must not change the answers
 
 
 def ts(ago=0):
