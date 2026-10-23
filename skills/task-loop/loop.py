@@ -32,6 +32,7 @@ POLL = 2               # seconds between looks at a running child (stop file, sl
 HEARTBEAT = 60         # the slot bead's lease is kept alive this often while a bead runs
 DRAINED_POLL = 300     # --wait-drained: how often an empty queue is looked at again
 PAUSE_WAIT_MAX = 3600  # a lane back within this long is waited for; later, the next bead is tried
+HELP_WAIT = 20         # a newer install must answer `tl.py --help` within this long to be moved to
 PAUSE_RETRY = 900      # a pause with no time the lane frees (login, network), or a bead another session holds:
                        # try that bead again after this
 FAILS_TO_STOP = 2      # failures in a row that stop the loop; parks and pauses never count, a landing ends the run
@@ -430,6 +431,79 @@ def record(repo, bead_id, slot, r):
 
 # ---- the loop -------------------------------------------------------------------------------------------------------
 
+def version_key(name):
+    """(1, 2, 3) for a version dir name like 0.23.6; None for anything else (a dev checkout, a cache scrap)."""
+    return tuple(int(x) for x in name.split(".")) if re.fullmatch(r"\d+(\.\d+)*", name) else None
+
+
+def newest_install():
+    """(version, dir) of the newest sibling version dir of this plugin root when it is newer than the running one, else
+    None. A root that is no version dir (a dev checkout) never moves."""
+    root = tl.HERE.parents[1]
+    mine = version_key(root.name)
+    if mine is None:
+        return None
+    best = None
+    with contextlib.suppress(OSError):
+        for d in root.parent.iterdir():
+            k = version_key(d.name)
+            if k and k > mine and d.is_dir() and (best is None or k > best[0]):
+                best = (k, d)
+    return (best[1].name, best[1]) if best else None
+
+
+def complete(d):
+    """None when the install in `d` looks usable, else why not: its tl.py, loop.py and engine.py exist and
+    `tl.py --help` exits 0 within HELP_WAIT seconds."""
+    for f in ("tl.py", "loop.py", "engine.py"):
+        if not (d / "skills" / "task-loop" / f).is_file():
+            return "%s is missing" % f
+    try:
+        r = subprocess.run([sys.executable, str(d / "skills" / "task-loop" / "tl.py"), "--help"], stdin=subprocess.DEVNULL,
+                           capture_output=True, timeout=HELP_WAIT)
+    except subprocess.TimeoutExpired:
+        return "tl.py --help did not finish in %d s" % HELP_WAIT
+    except OSError as e:
+        return "tl.py --help did not start: %s" % e
+    return None if r.returncode == 0 else "tl.py --help exited %d" % r.returncode
+
+
+def maybe_move(a, repo, state):
+    """Between beads: exec the newest complete install with the loop's own argv and `state` (TL_LOOP_STATE). The pid
+    stays, so what is keyed by it (slot line, state file, stop file readers) carries over. A broken install is warned
+    about once per version and never stops the loop."""
+    if getattr(a, "pin", False) or not getattr(a, "argv", None):
+        return
+    try:
+        found = newest_install()
+        if not found:
+            return
+        ver, d = found
+        why = complete(d)
+        if why:
+            if ver not in state["warned"]:
+                state["warned"].append(ver)
+                say("warn: not moving to %s: %s; staying on %s" % (ver, why, tl.HERE.parents[1].name))
+            return
+        say("moving to %s (was %s)" % (ver, tl.HERE.parents[1].name))
+        os.environ["TL_LOOP_STATE"] = json.dumps(state)
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os.execv(sys.executable, [sys.executable, str(d / "skills" / "task-loop" / "tl.py"), *a.argv])
+    except OSError as e:  # execv itself failed: the loop goes on where it is
+        os.environ.pop("TL_LOOP_STATE", None)
+        say("warn: could not move: %s" % e)
+
+
+def inherited():
+    """The state an older version of this loop handed over through TL_LOOP_STATE ({} on a fresh start)."""
+    raw = os.environ.pop("TL_LOOP_STATE", "")
+    try:
+        st = json.loads(raw) if raw else {}
+    except ValueError:
+        st = {}
+    return st if isinstance(st, dict) else {}
+
 def end_time(hhmm):
     """--until HH:MM: the next time it is that o'clock (tomorrow when it has passed today)."""
     if not hhmm:
@@ -472,13 +546,14 @@ def cmd_loop(a):
         return cmd_status(a)
     repo = tl.repo_root(a.repo)
     os.chdir(repo)  # every tl helper and bd call works on the current directory's repo
+    st = inherited()  # set when this process is the same loop, exec'd into a newer install
     if not tl.session_id():  # without a Claude session the actor would be per folder: two loops would share it
         os.environ["TASK_LOOP_SESSION"] = "loop-" + uuid.uuid4().hex[:12]
     # an actor of its own, never the session's: bd lets an actor re-claim its own bead, so two loops (or a loop and a
     # hand run) started from one session would both win one claim. run-task re-claims as this actor (one for both).
     os.environ.pop("TASK_LOOP_ACTOR", None)
     SESSION_ACTOR[0] = tl.actor()
-    os.environ["TASK_LOOP_ACTOR"] = "%s-%s" % (SESSION_ACTOR[0], uuid.uuid4().hex[:6])
+    os.environ["TASK_LOOP_ACTOR"] = st.get("actor") or "%s-%s" % (SESSION_ACTOR[0], uuid.uuid4().hex[:6])
     old = {}
     if threading.current_thread() is threading.main_thread():
         for sig in ("SIGTERM", "SIGINT"):
@@ -486,14 +561,14 @@ def cmd_loop(a):
                 old[sig] = signal.signal(getattr(signal, sig), lambda *_: STOP_NOW.set())
     STOP_NOW.clear()
     p = paths(repo)
-    STARTED[0] = time.time()
-    if not live_loops(repo, but=os.getpid()):  # a stop no loop read: never meant for this one
+    STARTED[0] = st.get("STARTED") or time.time()
+    if not st and not live_loops(repo, but=os.getpid()):  # a stop no loop read: never meant for this one
         with contextlib.suppress(OSError):
             p["stop"].unlink()
-    started = clock()
+    started = st.get("started") or clock()
     write_state(repo, pid=os.getpid(), started=started)
     try:
-        return passes(repo, a, started)
+        return passes(repo, a, started, st)
     finally:
         with contextlib.suppress(OSError):
             p["state"].unlink()
@@ -514,16 +589,22 @@ def worktree_name(repo):
     return name
 
 
-def passes(repo, a, started):
-    cfg, until = tl.profile_slots(repo), end_time(a.until)
+def passes(repo, a, started, st=None):
+    st = st or {}
+    cfg, until = tl.profile_slots(repo), st.get("until") if "until" in st else end_time(a.until)
     slots = int(cfg.get("count") or 0) > 0
-    wt = None
-    if not slots:  # the pick and the state that names it, under a lock: two loops starting at once never pick one tree
+    wt = st.get("wt")
+    if not slots and wt:
+        write_state(repo, pid=os.getpid(), started=started, worktree=wt)
+    elif not slots:  # the pick and the state that names it, under a lock: two loops starting at once never pick one tree
         with tl.os_lock(tl.config_dir() / "locks" / ("worktree-%s.lock" % paths(repo)["states"][1]), "pid %d" % os.getpid()):
             wt = tl.start_worktree(repo, worktree_name(repo))
             write_state(repo, pid=os.getpid(), started=started, worktree=wt)
     area_wait = [0.0, 0.0]  # when every ready bead began waiting for an area, and when that was last said
     fails, ran, later, pauses = [], 0, {}, {}  # later: a paused or taken bead -> when to try it again
+    fails, ran = list(st.get("fails") or []), int(st.get("ran") or 0)  # kept across a move to a newer install
+    later, pauses = dict(st.get("later") or {}), dict(st.get("pauses") or {})
+    warned = list(st.get("warned") or [])
     while True:
         if stop_mode(repo):
             say("stopped on request after %d bead(s)" % ran)
@@ -534,11 +615,14 @@ def passes(repo, a, started):
         if a.max_beads and ran >= a.max_beads:
             say("%d bead(s) run (--max-beads)" % ran)
             return 0
+        maybe_move(a, repo, {"fails": fails, "ran": ran, "later": later, "pauses": pauses, "warned": warned, "until": until,
+                             "wt": wt, "actor": os.environ.get("TASK_LOOP_ACTOR"), "STARTED": STARTED[0],
+                             "started": started})
         reclaim(repo)
         ranked, skipped = queue(repo)
         now = clock()
-        for rested, until in read_rests(repo).items():  # another loop's pre-engine failure rests the bead here too
-            later[rested] = max(later.get(rested, 0), until)
+        for rested, due in read_rests(repo).items():  # another loop's pre-engine failure rests the bead here too
+            later[rested] = max(later.get(rested, 0), due)
         cands = [b for b, _ in ranked if later.get(b["id"], 0) <= now]
         if cands:
             area_wait[0] = 0.0
