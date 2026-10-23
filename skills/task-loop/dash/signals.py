@@ -12,6 +12,8 @@ CLUSTER_N, CLUSTER_WINDOW, CLUSTER_LOOKBACK = 4, 3 * 3600, 6 * 3600   # parks wi
 CHURN_CHECKS_RED, CHURN_BLOCKS, CHURN_LOOKBACK = 3, 12, 24 * 3600      # checks fails, steps in one bead
 HOG_FRESH, HOG_TIMES_MEDIAN, HOG_LOOKBACK = 500_000, 3, 48 * 3600     # fresh tokens (input minus cached, plus output)
 REPLANS = 3
+BIG_TURN = 3_000_000                     # one write turn (input incl. cache + output): a runaway context
+SLOW_CHECK, SENDBACKS = 600, 2           # seconds per check round; review send-backs
 ASK_AMBER, ASK_RED, ASK_PARK_SOON = 12 * 3600, 24 * 3600, 24 * 3600
 USAGE_HIGH = 90.0
 BUDGET_NEAR = 1.15  # an over-budget stop at most this far over its limit is a near miss
@@ -104,6 +106,10 @@ def churn(rows, now):
             why.append("checks failed %d×" % r["red_checks"])
         if (r.get("replans") or 0) >= REPLANS:
             why.append("planned %d×: the plan, not the code, is wrong" % r["replans"])
+        if (r.get("sendbacks") or 0) >= SENDBACKS:
+            why.append("review sent it back %d×" % r["sendbacks"])
+        if (r.get("longest_check") or 0) >= SLOW_CHECK and (r.get("red_checks") or 0) >= 2:
+            why.append("each check round takes up to %s" % dur(r["longest_check"]))
         if (r.get("blocks") or 0) >= CHURN_BLOCKS and not why:
             why.append("%d steps" % r["blocks"])
         if why:
@@ -125,6 +131,17 @@ def token_hogs(rows, now, med):
     return [sig("token_hog", "amber", "%s: %s fresh tokens" % (short(r["id"]), human(fresh(r))),
                 "%s× the median bead (%s); %s with cache, %d run%s%s" % (("%.0f" % x) if x else "?", human(med["median_fresh"]),
                 human(total(r)), r.get("runs") or 0, "" if r.get("runs") == 1 else "s", more), [h["id"] for h in hogs])]
+
+
+def big_turns(rows, now):
+    hit = sorted((r for r in rows if (r.get("big_turn") or 0) >= BIG_TURN and now - (r.get("updated") or 0) <= HOG_LOOKBACK),
+                 key=lambda r: -r["big_turn"])
+    if not hit:
+        return []
+    r = hit[0]
+    return [sig("big_turn", "amber", "%s: one write turn used %s tokens" % (short(r["id"]), human(r["big_turn"])),
+                "almost all cache reads: the writer's context is huge and every model call re-reads it%s"
+                % (" (+%d more beads)" % (len(hit) - 1) if len(hit) > 1 else ""), [h["id"] for h in hit])]
 
 
 def ask_aging(asks, now):
@@ -182,6 +199,6 @@ def build(rows, passes, lanes, asks, graph_summary, now=None):
     now = now or time.time()
     med = medians(rows)
     sigs = (lane_out(lanes, now) + stuck(graph_summary) + park_cluster(passes, now) + ask_aging(asks, now) + churn(rows, now)
-            + token_hogs(rows, now, med) + budget_near_miss(passes, now) + good(passes, rows, now))
+            + token_hogs(rows, now, med) + big_turns(rows, now) + budget_near_miss(passes, now) + good(passes, rows, now))
     sigs.sort(key=lambda s: SEVERITY[s["sev"]])
     return {"signals": sigs, "stats": med}

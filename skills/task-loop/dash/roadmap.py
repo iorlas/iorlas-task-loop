@@ -144,13 +144,17 @@ def briefs(out, by_id, rows):
                   "why": r.get("label") or n.get("why") or "", "priority": n.get("priority"),
                   "runs": r.get("runs") or 0, "blocks": r.get("blocks") or 0, "secs": r.get("secs") or 0,
                   "tok": (spent.get("in") or 0) + (spent.get("out") or 0),
-                  "fresh": max(0, (spent.get("in") or 0) - (spent.get("cached") or 0)) + (spent.get("out") or 0)}
+                  "fresh": max(0, (spent.get("in") or 0) - (spent.get("cached") or 0)) + (spent.get("out") or 0),
+                  "new_in": max(0, (spent.get("in") or 0) - (spent.get("cached") or 0)), "cache": spent.get("cached") or 0,
+                  "out": spent.get("out") or 0}
     return res
 
 
 def verdict(r, stats):
     """One line on a running bead: its churn and what it has cost against the median bead; '' when it is unremarkable."""
     bits = []
+    if r.get("writes", 0) > 1:
+        bits.append("write round %d" % r["writes"])
     if r.get("red_checks"):
         bits.append("checks failed %d×" % r["red_checks"])
     if r.get("replans"):

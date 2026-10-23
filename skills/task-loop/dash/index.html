@@ -711,7 +711,7 @@ document.addEventListener('toggle',e=>{if(e.target.id=='rheld')R.held=e.target.o
 // ---- hover card and bead panel: what is this ticket, what has it cost, what happened to it -------------------------
 const tokh=n=>n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?Math.round(n/1e3)+'k':String(n||0);
 function costLine(b,st){if(!b||!b.tok)return'';const m=(st||{}).median_fresh,x=m?b.fresh/m:0;
-  return `${tokh(b.fresh)} fresh tokens${x>=1.5?` (${x.toFixed(1)}× the median ${tokh(m)})`:m?` (median ${tokh(m)})`:''}, ${tokh(b.tok)} with cache`}
+  return `${tokh(b.new_in)} new input + ${tokh(b.out)} output (${x>=1.5?x.toFixed(1)+'× the median bead ':''}median ${tokh(m||0)}) · ${tokh(b.cache)} cache reads`}
 const tip=document.createElement('div');tip.id='tip';tip.hidden=true;document.body.appendChild(tip);
 let tipT=null;
 function showTip(el){const id=el.dataset.bead,b=R.d&&R.d.briefs&&R.d.briefs[id];if(!b)return;

@@ -131,9 +131,9 @@ class Build(unittest.TestCase):
 
 class Verdict(unittest.TestCase):
     def test_one_line_on_churn_and_cost_empty_when_unremarkable(self):
-        r = {"red_checks": 6, "replans": 1, "secs": 1000, "checks_secs": 580, "tokens_all": {"in": 2_000_000, "cached": 1_500_000, "out": 100_000}}
+        r = {"writes": 4, "red_checks": 6, "replans": 1, "secs": 1000, "checks_secs": 580, "tokens_all": {"in": 2_000_000, "cached": 1_500_000, "out": 100_000}}
         v = roadmap.verdict(r, {"median_fresh": 100_000})
-        self.assertEqual(v, "checks failed 6× · planned 2× · 58% of its time in checks · 600k fresh tokens, 6.0× the median bead")
+        self.assertEqual(v, "write round 4 · checks failed 6× · planned 2× · 58% of its time in checks · 600k fresh tokens, 6.0× the median bead")
         self.assertEqual(roadmap.verdict({"secs": 100, "checks_secs": 10}, {"median_fresh": 100_000}), "")
 
     def test_briefs_cover_every_id_the_page_links(self):
@@ -145,6 +145,7 @@ class Verdict(unittest.TestCase):
         self.assertEqual(set(r["briefs"]), {"run1", "kid", "q1"})
         b = r["briefs"]["run1"]
         self.assertEqual((b["why"], b["tok"], b["fresh"], b["runs"]), ("checks stage 2/2", 1100, 700, 2))
+        self.assertEqual((b["new_in"], b["cache"], b["out"]), (600, 400, 100))
         self.assertEqual(r["briefs"]["kid"]["state"], "blocked")
 
 

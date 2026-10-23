@@ -934,6 +934,7 @@ def task_row(bead, paths, spans, tr):
         label = "stopped"
     started = run["started"] or 0
     total, spent, nblocks, reds, longest_check, replans, checks_secs = 0, {"in": 0, "cached": 0, "out": 0}, 0, 0, 0, 0, 0
+    writes, sendbacks, big_turn = 0, 0, 0
     for p in paths:
         r = run if p == newest else timeline.run_timeline(p)
         total += r["secs"] or 0
@@ -946,6 +947,10 @@ def task_row(bead, paths, spans, tr):
                 longest_check = max(longest_check, b.get("secs") or 0)
                 checks_secs += b.get("secs") or 0
             replans += b["kind"] == "replan"
+            if b["kind"] == "write":
+                writes += 1
+                big_turn = max(big_turn, ((b.get("tokens") or {}).get("in") or 0) + ((b.get("tokens") or {}).get("out") or 0))
+            sendbacks += (b.get("arrow") or {}).get("cause") == "review_sendback"
     last_t = (recs[-1].get("t") if recs else None) or started
     return {"id": bead, "title": (span or {}).get("title") or (ask or {}).get("title") or "", "state": state,
             "label": label, "slot": slot_of(run_rec, span, trace), "repo": repo_name(span, trace, ask),
@@ -953,7 +958,7 @@ def task_row(bead, paths, spans, tr):
             "since": round(time.time() - started) if alive and started else None, "secs": total,
             "run_secs": run["secs"], "ask": ask, "blocked_by": blocked, "end": end, "tokens": run["tokens"],
             "tokens_all": spent, "blocks": nblocks, "red_checks": reds, "longest_check": longest_check,
-            "replans": replans, "checks_secs": checks_secs,
+            "replans": replans, "checks_secs": checks_secs, "writes": writes, "sendbacks": sendbacks, "big_turn": big_turn,
             "stage": timeline.live_label(timeline.last_node(newest)) if alive else ""}
 
 
