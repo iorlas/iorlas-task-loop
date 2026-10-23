@@ -124,8 +124,8 @@ main{max-width:1180px;margin:0 auto;padding:22px 20px 80px}
 .askbox .q{font-size:14px;line-height:1.6;color:var(--ink2);max-height:340px;overflow:auto}.askbox .q.raw{white-space:pre-wrap}
 .md p{margin:0 0 6px}.md ul{margin:2px 0 8px;padding-left:20px}.md li{margin:2px 0}.md code{font-family:ui-monospace,monospace;font-size:12.5px;background:var(--raise);border-radius:4px;padding:1px 4px}
 .mdt,.opttab{border-collapse:collapse;width:100%;margin:8px 0;font-size:13px}.mdt th,.mdt td,.opttab th,.opttab td{border-top:1px solid var(--line2);padding:7px 8px;text-align:left;vertical-align:top}.mdt th,.opttab th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute);font-weight:620;border-top:0}
-.askbox .opttab .opt{width:auto;display:inline-block}.opttab td:first-child{white-space:nowrap}
-@media(max-width:640px){.opttab thead{display:none}.opttab tr,.opttab td{display:block}.opttab td{border:0;padding:3px 0}.opttab tr{border-top:1px solid var(--line2);padding:8px 0}.opttab td:first-child{white-space:normal}.opttab td[data-l]:not(:first-child)::before{content:attr(data-l) ": ";color:var(--mute);font-size:11px;text-transform:uppercase}}
+.askbox .opttab .opt{width:auto;display:inline-block}.opttab td:first-child{width:34%}.opttab td:empty{display:none}
+@media(max-width:640px){.opttab thead{display:none}.opttab tr,.opttab td{display:block}.opttab td{border:0;padding:3px 0}.opttab tr{border-top:1px solid var(--line2);padding:8px 0}.opttab td:first-child{width:auto}.opttab td[data-l]:not(:first-child):not(:empty)::before{content:attr(data-l) ": ";color:var(--mute);font-size:11px;text-transform:uppercase}}
 .askbox textarea{display:block;width:100%;min-height:80px;margin:12px 0 10px;border-radius:10px;border:1px solid var(--line2);background:var(--raise);color:var(--ink);font:inherit;padding:10px 12px;resize:vertical;outline:none}
 .askbox textarea:focus{border-color:var(--ring);box-shadow:0 0 0 3px rgba(79,107,237,.16)}
 .askbox .opts{display:flex;flex-direction:column;gap:8px;margin:12px 0 0}

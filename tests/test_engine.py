@@ -1720,7 +1720,7 @@ class EngineTest(unittest.TestCase):
             if out.exists():
                 break
             time.sleep(0.1)
-        self.assertEqual(out.read_text().strip(), "decision t-1 Old format or new?: Pick an option, or write your own answer.")
+        self.assertEqual(out.read_text().strip(), "decision t-1 Old format or new? - Pick an option, or write your own answer.")
 
     def test_a_used_up_replan_is_a_stuck_ask(self):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [review(unmet=["a"])]},
@@ -1832,6 +1832,17 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(engine.run_breakdown(log), "checks 163 min (2 rounds), write 15 min (1 round)")
         cut = engine.tidy_question("word " * 400)
         self.assertTrue(cut.endswith("(more in details)") and len(cut) < 640)
+
+    def test_ask_markdown_survives_odd_text(self):
+        for kind, why, q in (("decision", "w", "Use **bold** thing. More here. Fine?"), ("decision", "w", "`code only that is long " + "x" * 200),
+                             ("budget", "over budget: 5 of 3\nmin. Where it went: checks 5 min (1 round)", ""), ("stuck", "", ""),
+                             ("verify", "verify: x", "y" * 50000), (None, "needs a human", "z")):
+            md = engine.ask_markdown(kind, why, q)
+            first = md.splitlines()[0]
+            self.assertTrue(first.startswith("**") and first.endswith("**") and len(first) > 4, (kind, first))
+            self.assertEqual(md.count("**") % 2, 0, md)
+            self.assertLessEqual(len([x for x in md.splitlines() if x.startswith("- ")]), 3)
+        self.assertNotIn("**", engine.push_text(engine.ask_markdown("decision", "w", "Use **bold** thing. Fine?")))
 
     def test_an_unchecked_requirement_stops_the_land_with_a_verify_ask(self):
         r = dict(CLEAN, unchecked=[{"what": "the cited spec link did not open", "kind": "link"}])

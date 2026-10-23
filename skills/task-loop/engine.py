@@ -3141,7 +3141,7 @@ class Engine:
         if a.get("status") != "open":
             return
         if a.get("brief") == self.brief_hash and not self.cfg.get("fresh"):
-            raise Blocked("waiting: for the owner's answer to ask %s (%s): %s" % (a["id"], a["kind"], a["question"][:200]))
+            raise Blocked("waiting: for the owner's answer to ask %s (%s): %s" % (a["id"], a["kind"], clip(push_text(a["question"]), 200)))
         a.update(status="answered", answered=time.time())
         self.ask_path().write_text(json.dumps(a, indent=1))
         self.answered = a
@@ -4800,9 +4800,9 @@ def clip(text, n=170):
 def push_text(markdown):
     """A push notification's one line from an ask's markdown: the headline, then what is needed."""
     lines = [x.strip() for x in (markdown or "").splitlines() if x.strip()]
-    head = lines[0].strip("*") if lines else ""
+    head = lines[0].replace("**", "") if lines else ""
     need = next((x.split(":**", 1)[1].strip() for x in lines if x.startswith("**What I need")), "")
-    return ("%s: %s" % (head, need) if need else head)[:500]
+    return ("%s - %s" % (head, need) if need else head)[:500]
 
 
 def ask_markdown(kind, why, question):
@@ -4858,11 +4858,11 @@ def ask_markdown(kind, why, question):
             sents, need = [need], "Pick an option, or write your own answer."
         head = clip(sents[0], 150) if sents else "The engine needs you"
         bullets = [clip(x, 180) for x in sents[1:4]]
-    dot = lambda t: re.sub(r"(?<!\.)\.$", "", t)
-    lines = ["**%s**" % dot(head)]
+    dot = lambda t: re.sub(r"(?<!\.)\.$", "", " ".join(t.replace("**", "").split()))
+    lines = ["**%s**" % (dot(head) or "The engine needs you")]
     if bullets:
-        lines += ["", "**What happened**"] + ["- %s" % dot(b) for b in bullets[:3]]
-    lines += ["", "**What I need from you:** %s" % need]
+        lines += ["", "**What happened**"] + ["- %s" % dot(b) for b in bullets[:3] if dot(b)]
+    lines += ["", "**What I need from you:** %s" % (dot(need) + ("." if need.rstrip().endswith(".") else "") or "Reply with a hint.")]
     return "\n".join(lines)
 
 
