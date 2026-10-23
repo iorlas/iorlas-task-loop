@@ -1290,11 +1290,15 @@ def close_stale_asks(every=600):
             continue
         if not isinstance(a, dict) or a.get("status") != "open" or not a.get("bead"):
             continue
-        repo = a.get("repo") if isinstance(a.get("repo"), str) and Path(a["repo"]).is_dir() else None
-        r = bd("show", a["bead"], "--json", cwd=repo)
+        if not (isinstance(a.get("repo"), str) and Path(a["repo"]).is_dir()):
+            continue  # which repo's tracker to ask is not known: the ask stays
+        try:
+            r = bd("show", a["bead"], "--json", cwd=a["repo"])
+        except SystemExit:  # no bd on this machine
+            return done
         why = ""
         if r.returncode != 0:
-            if re.search(r"no issue found|not found|no such", (r.stderr or "") + (r.stdout or ""), re.I):
+            if re.search(r"no issues? found matching|issue .{0,60}not found|no such issue", (r.stderr or "") + (r.stdout or ""), re.I):
                 why = "the bead does not exist"
         else:
             try:

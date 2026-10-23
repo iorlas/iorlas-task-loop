@@ -308,7 +308,7 @@ SHELL_STOP = {"if", "then", "else", "elif", "fi", "for", "while", "until", "do",
               "[[", "]]", "function", "select", "time", "!"}
 COMMAND_SEP = {"|", "||", "&&", ";", "&", "|&"}
 _WORDS = {}   # (cwd, word) -> resolves; one bash per new word
-_RECIPES = {}  # cwd -> the worktree's `just --summary`, or None when there is no just here
+_RECIPES = {}  # cwd -> (justfile mtime, the recipe and alias names or None)
 
 
 def shell_tokens(cmd):
@@ -327,13 +327,15 @@ def first_words(cmd):
     after env assignments, `!` and `time`. Stops at a compound command (if, for, a subshell, $(...)): nothing is claimed
     past it."""
     out, start = [], True
+    if re.search(r"<<|\(\)\s*\{|\bfunction\s+\w|\bsource\b|^\s*\.\s", cmd):  # a heredoc, a function, a sourced file: not judged
+        return []
     for t in shell_tokens(cmd):
         if re.fullmatch(r"[;&|]+", t):
             start = True
             continue
         if not start:
             continue
-        if re.fullmatch(r"\w+=.*", t) or t in ("!", "time", "command", "exec", "env", "builtin"):
+        if re.fullmatch(r"\w+=.*", t) or t in ("!", "time", "command", "exec", "env", "builtin") or t.startswith("-"):
             continue
         if t in SHELL_STOP or re.search(r"[$`(){}<>]|^\[", t) or re.fullmatch(r"[<>(){}]+", t):
             return out
@@ -350,35 +352,61 @@ def command_problems(cmd, wt, made=()):
     if not bash or os.name == "nt":
         return []
     out, words = [], first_words(cmd)
-    for w in words:
+    for n, w in enumerate(words):
         if "/" in w:
+            if n or w.startswith("~") or re.search(r"\bcd\b", cmd):
+                continue  # a path after another command or a cd may be made by it, or be relative to elsewhere
+            if not w.startswith(("./", "/")) and not Path(wt, w.split("/")[0]).is_dir():
+                continue  # `.venv/bin/python`: its folder is not in the tree (a setup makes it)
             f = Path(w) if w.startswith("/") else Path(wt, w)
             g = os.path.normpath(w)
             if not f.exists() and not any(g == k or g.startswith(k + "/") for k in map(os.path.normpath, made)):
                 out.append("`%s` is not a file of this tree and no stage lists it in files" % w)
             continue
         key = (str(wt), w)
-        if key not in _WORDS:
+        if key not in _WORDS or time.time() - _WORDS[key][1] > 120:  # a tool installed since is found within two minutes
             r = subprocess.run([bash, "-c", 'type -t -- "$1" >/dev/null 2>&1', "_", w], capture_output=True, env=child_env(), cwd=str(wt))
-            _WORDS[key] = r.returncode == 0
-        if not _WORDS[key]:
+            _WORDS[key] = (r.returncode == 0, time.time())
+        if not _WORDS[key][0]:
             out.append("`%s` is not a command here (no builtin, nothing on PATH): a check is a shell command, never a sentence" % w)
-    toks = None
-    if "just" in words:
+    if "just" in words and not any(Path(f).name.lower() in ("justfile", ".justfile") for f in made):
         toks = shell_tokens(cmd)
-        if str(wt) not in _RECIPES:
-            try:
-                r = subprocess.run(["just", "--summary"], capture_output=True, text=True, cwd=str(wt), timeout=20, env=child_env())
-                _RECIPES[str(wt)] = r.stdout.split() if r.returncode == 0 else None
-            except (OSError, subprocess.SubprocessError):
-                _RECIPES[str(wt)] = None
-        recipes = _RECIPES[str(wt)]
+        recipes = just_recipes(wt)
         for k, t in enumerate(toks):
             if t == "just" and (k == 0 or re.fullmatch(r"[;&|]+", toks[k - 1])):
-                rest = [x for x in toks[k + 1:k + 8] if not x.startswith("-")]
+                after = toks[k + 1:k + 8]
+                if any(x.startswith("-") and x not in JUST_PLAIN_FLAGS for x in after):
+                    continue  # an option that takes a value (--justfile, --set, -d): not judged
+                rest = [x for x in after if not x.startswith("-")]
                 if recipes is not None and rest and re.fullmatch(r"[\w-]+", rest[0]) and rest[0] not in recipes:
-                    out.append("`just %s`: the tree's justfile has no recipe %s (it has: %s)" % (rest[0], rest[0], ", ".join(recipes[:12]) or "none"))
+                    out.append("`just %s`: the tree's justfile has no recipe %s (it has: %s)" % (
+                        rest[0], rest[0], ", ".join(sorted(recipes)[:12]) or "none"))
     return out
+
+
+JUST_PLAIN_FLAGS = {"--unstable", "-q", "--quiet", "-v", "--verbose", "--dry-run", "-n", "--no-deps", "--highlight", "--no-highlight"}
+
+
+def just_recipes(wt):
+    """The recipe and alias names of the tree's justfile (`just --dump --dump-format json`), private ones too; None when there is
+    no just or no justfile here. Cached by the justfile's modification time: a rebase or an edit shows."""
+    jf = next((Path(wt, n) for n in ("justfile", "Justfile", ".justfile") if Path(wt, n).is_file()), None)
+    if not jf:
+        return None
+    stamp = jf.stat().st_mtime_ns
+    got = _RECIPES.get(str(wt))
+    if got and got[0] == stamp:
+        return got[1]
+    names = None
+    try:
+        r = subprocess.run(["just", "--dump", "--dump-format", "json"], capture_output=True, text=True, cwd=str(wt), timeout=20, env=child_env())
+        if r.returncode == 0:
+            d = json.loads(r.stdout)
+            names = set((d.get("recipes") or {})) | set((d.get("aliases") or {}))
+    except (OSError, subprocess.SubprocessError, ValueError):
+        names = None
+    _RECIPES[str(wt)] = (stamp, names)
+    return names
 
 
 def ledger_problems(plan):
@@ -1558,12 +1586,14 @@ class Engine:
                 if self._resume:
                     attempt_prompt = prompt + FRESH_WRITER_TEXT
                 continue
-            crashed = reason == "crash" or (reason == "no_answer" and not str(r.error or "").startswith("timeout"))  # a timeout is not a crash
+            crashed = reason == "crash" or (reason == "no_answer" and not str(r.error or "").startswith("timeout")
+                                            and not INFRA_TEXT.search("%s %s" % (r.error or "", r.text or "")))  # not a timeout, not a bad request
             if crashed and crashes < len(CRASH_RESTS):
                 # tl-bxk.13.16.4: delegate itself died (a decode error, a broken pipe): not the bead's, not the owner's. Again as a
                 # fresh call after a rest; out of tries it pauses, it never asks
                 rest = CRASH_RESTS[crashes]
                 crashes += 1
+                self.cost += r.cost
                 self.warn("%s: delegate crashed (%s), trying again in %d s (%d of %d)" % (node, (said or reason)[:160], rest, crashes, len(CRASH_RESTS)))
                 self.transition(step or node, "delegate_crash", "delegate crashed: %s" % (said or reason)[:160], lane=j.get("lane") or "")
                 time.sleep(rest)
@@ -2267,9 +2297,13 @@ class Engine:
         mine = word_set(what)
         if len(mine) < 3:
             return None
+        filing = bool(FILING_WORDS.search(what))  # an item about follow-ups, beads, records: the ledger's own subject
         for e in self.ledger():
             theirs = word_set(e["text"])
-            if len(mine & theirs) >= max(3, int(0.6 * len(theirs) + 0.99)):
+            shared = len(mine & theirs)
+            # a claim about the code that merely shares words with a deferred item is not that item: unless the item is about
+            # filing, it must be a near-paraphrase (60% of both sides, 4 words at least)
+            if shared >= max(3, int(0.6 * len(theirs) + 0.99)) and (filing or (shared >= 4 and shared >= 0.6 * len(mine))):
                 return e
         return None
 
@@ -2646,7 +2680,8 @@ class Engine:
         round left) comes back flagged proof_round, to be sent again while a fix round is left; the rest still asks."""
         out = []
         for u in left:
-            route = self.ledger_route(u["what"])
+            defect = str(u.get("why") or "").startswith("found wrong:") and not u.get("proof_round")
+            route = "" if defect else self.ledger_route(u["what"])  # a defect the verifier found is never the ledger's
             if route == "engine_step":
                 self.settle_engine_step(u)
                 continue
@@ -2654,7 +2689,6 @@ class Engine:
                 self.add_unverified(dict(u, kind=u.get("kind") or "other"), "the plan defers it to a follow-up bead")
                 continue
             k = self.resolve_kind(u, {})[0] if not u.get("proof_round") else "checkable"
-            defect = str(u.get("why") or "").startswith("found wrong:") and not u.get("proof_round")
             if defect:
                 out.append(u)
             elif k == "engine_step":
@@ -3289,7 +3323,7 @@ class Engine:
         if ck["brief"] != self.brief_hash:
             answer = self.answer_text(self.answered) if self.answered else ""
             diff = bead_diff(ck["snap"], self.snap, answer) if ck.get("snap") else None
-            if answer and RERUN_ANSWER.fullmatch(" ".join(answer.lower().replace("-", " ").split()).strip(" .!")):
+            if answer and (self.answered or {}).get("kind") in ("stuck", "budget", "denied", "pause") and RERUN_ANSWER.fullmatch(" ".join(answer.lower().replace("-", " ").split()).strip(" .!")):
                 # tl-bxk.13.16.5: "Run again" changes nothing the plan reads; counted as an amend it used a re-plan (lifesim-fld.10)
                 self.log("note", "the owner's answer (%s) only asks for a rerun: keeping the plan, no planner run" % answer.strip()[:40])
                 diff = ""
@@ -3314,7 +3348,8 @@ class Engine:
             # could never pass (the writer said so 8 times). The stage that made it runs again.
             self.log("note", "resuming %s: a file stage %d promised is missing, so that stage runs again" % (ck["run"], again + 1))
             self.accepted = [k for k in self.accepted if k < again]
-            self.done = self.done[:again]
+            redo = {st["goal"] for st in stages[again:]}
+            self.done = [g for g in self.done if g not in redo]
             self.unchecked = []
             return ck["plan"], again, None
         if ck["step"] == "land" or ck["stage"] >= len(stages):
@@ -3864,7 +3899,7 @@ class Engine:
                     if stop:
                         raise Blocked("failed: stopped (SIGTERM)")
                     if not re.search(r"rejected|non-fast-forward|fetch first|stale info", tail):
-                        if TRANSIENT_PUSH.search(tail):
+                        if TRANSIENT_PUSH.search(tail[-600:]):  # the push's own last lines, not a hook's test output before them
                             if flaky_push >= len(PUSH_RESTS):
                                 raise Blocked("paused: the land push failed %d times with a network error; the branch is kept and "
                                               "the next run lands it again: %s" % (flaky_push + 1, tail.strip()[-200:]))
@@ -4024,7 +4059,7 @@ class Engine:
         deferred += [word_set(lo["title"] + " " + lo["why"]) for lo in data.get("leftovers") or []]
         for u in data.get("unresolved") or []:
             path = (u.get("path") or "").strip()
-            if path and not path.startswith("/") and ".." not in path and (Path(self.wt) / path).exists():
+            if path and ".." not in path and (Path(path) if path.startswith("/") else Path(self.wt) / path).exists():
                 continue  # it is there
             if any(len(word_set(u["what"]) & d) >= 2 for d in deferred):
                 gone.append(u)
@@ -4037,8 +4072,9 @@ class Engine:
         lines = "\n".join("- %s (%s%s)" % (u["what"], u["kind"], ", expected at " + u["path"] if u.get("path") else "") for u in open_)
         self.outcome_of("asks", "%d input%s missing" % (len(open_), "" if len(open_) == 1 else "s"))
         raise Blocked("owner decision needed",
-                      "The task needs inputs this factory does not have:\n%s\nNothing was started. Choose: defer the work that needs "
-                      "them to a follow-up bead and do the rest; provide them (say where); or drop those criteria from the task." % lines,
+                      ("The task needs inputs this factory does not have:\n%s\n%s Choose: defer the work that needs them to a follow-up "
+                       "bead and do the rest; provide them (say where); or drop those criteria from the task.") % (
+                          lines, "Work already done stays." if self.done else "Nothing was started."),
                       [{"label": "Defer that work", "cost": "the rest of the task is done now; a follow-up bead holds the deferred part",
                         "answer": "Defer the criteria that need: %s. Plan and do the rest; file a follow-up bead for the deferred part." % "; ".join(
                             u["what"] for u in open_), "recommended": True},
@@ -4960,6 +4996,7 @@ FRAME_LINE = re.compile(r'^\s*File ".*", line \d+')
 STOP_WORDS = {"that", "this", "with", "from", "into", "have", "been", "were", "which", "their", "there", "than", "then", "when",
               "what", "does", "should", "would", "could", "also", "only", "each", "every", "about", "after", "before", "bead",
               "beads", "task", "work", "tests", "test", "file", "files", "code", "check", "checks"}
+FILING_WORDS = re.compile(r"\b(?:beads?|follow-?ups?|filed?|filing|issues?|tickets?|records?|recorded|leftovers?|deferred?)\b", re.I)
 OWNERISH = re.compile(r"\b(?:owner|sign-?off|approv\w*|review|confirm\w*|decid\w*|decision)\b", re.I)
 
 
@@ -5147,7 +5184,7 @@ A number for a look item (a contrast ratio, a size) comes only from the task, th
 tokens, a rule under config/). Never invent one as a check: if you think one is needed, ask it as your question (options with
 your proposal first) and plan no check for it.
 %s"""
-RERUN_ANSWER = re.compile(r"(?:run|try|go|start) again|re ?run|retry|go on|carry on|continue|resume|go ahead")
+RERUN_ANSWER = re.compile(r"(?:run|try|start) again|re ?run|retry")  # the dashboard's Run again, or the same said by hand
 REPLAN_CAP = "stuck: the bead was re-planned "  # the cap's ask; an owner's answer to it allows one more
 RULES_INLINE_MAX = 6 * 1024   # a worker_rules file under this goes into the planner's brief
 PLAN_BRIEF_KB = 12            # the planner's whole brief should stay under this

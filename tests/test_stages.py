@@ -691,6 +691,23 @@ class Executable(StagesTest):
         self.assertIn("fmt-check", bad[0])
         engine._RECIPES.clear()
 
+    def test_valid_checks_the_word_check_must_not_block(self):
+        for ok in ("command -v git >/dev/null", "env -i PATH=$PATH git --version", "f () { echo hi; }; f",
+                   "cat <<EOF2 > x.txt\nhello\nEOF2\ntest -s x.txt", "cd sub && ./x.sh", "make && ./build/x", "npm ci && node_modules/.bin/jest",
+                   "~/bin/foo", ".venv/bin/python -c pass", "source env.sh && git status", "time git status"):
+            self.assertEqual(engine.command_problems(ok, str(self.wt)), [], ok)
+
+    def test_just_aliases_private_recipes_options_and_a_recipe_a_stage_adds(self):
+        (self.wt / "justfile").write_text("alias ci := check\ncheck:\n\techo ok\n_private:\n\techo p\n")
+        engine._RECIPES.clear()
+        for ok in ("just ci", "just _private", "just --justfile justfile check", "just --set v x check", "just -d . check", "just check"):
+            self.assertEqual(engine.command_problems(ok, str(self.wt)), [], ok)
+        self.assertEqual(len(engine.command_problems("just nope", str(self.wt))), 1)
+        self.assertEqual(engine.command_problems("just newrecipe", str(self.wt), made=["justfile"]), [])  # a stage adds it
+        (self.wt / "justfile").write_text("newrecipe:\n\techo n\n")  # a rebase changes the file: seen at once
+        self.assertEqual(engine.command_problems("just newrecipe", str(self.wt)), [])
+        engine._RECIPES.clear()
+
     def test_a_missing_script_is_found_unless_a_stage_makes_it(self):
         check = "./tools/probe.sh --all"
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[check])])
@@ -722,6 +739,17 @@ class Executable(StagesTest):
         own = dict(plan, stages=[plan["stages"][0], dict(plan["stages"][1], checks=["echo ok > %s && test -s %s" % (self.PATH1, self.PATH1)])])
         self.assertIsNone(e.promised_missing(own, 1))  # the later check writes it itself
         self.assertIsNone(e.promised_missing(plan, 0))  # nothing accepted yet
+
+    def test_a_replanned_runs_goals_survive_the_stage_that_runs_again(self):
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e.reset(dict(BEAD))
+        e.plan_data = self.two_stage()
+        e.done, e.accepted = ["an earlier plan's goal", "stage one"], [0]
+        e.save_checkpoint(stage=1, rounds=0, n=0, feedback="", step="write")
+        again = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        again.reset(dict(BEAD))
+        again.resume_point()
+        self.assertEqual(again.done, ["an earlier plan's goal"])
 
     def test_a_resume_runs_the_stage_again_when_its_file_is_gone(self):
         e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
@@ -774,6 +802,23 @@ class Ledger(StagesTest):
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])  # no send-back
         self.assertIn("unmet items dropped", self.eng.log_path.read_text())
+
+    def test_a_claim_about_the_code_that_shares_words_with_a_deferred_item_is_not_that_item(self):
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e.plan_data = dict(PLAN, leftovers=[{"title": "Add tests for parser edge cases", "why": "later"}])
+        self.assertEqual(e.ledger_route("parser edge cases are not handled"), "")
+        self.assertEqual(e.ledger_route("The parser does not handle edge cases such as empty input or nested quotes"), "")
+        self.assertEqual(e.ledger_route("Add tests for the parser edge cases"), "leftover")
+        self.assertEqual(e.ledger_route("A follow-up bead for tests of parser edge cases is not filed"), "leftover")
+
+    def test_a_defect_the_verifier_found_is_not_filed_away_by_the_ledger(self):
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e.plan_data = self.plan()
+        e.unchecked = []
+        what = "Import the chosen prefabs and add object rows"
+        left = e.route_left([{"what": what, "kind": "checkable", "why": "found wrong: the rows are missing"}])
+        self.assertEqual([u["what"] for u in left], [what])  # still a defect: not unverified, not settled
+        self.assertEqual(e.unverified, [])
 
     def test_an_unrelated_unmet_item_still_sends_the_stage_back(self):
         rc, s = self.run_engine({"plan": [self.plan()], "write": [WRITE, WRITE],
@@ -907,6 +952,11 @@ class Contracts(StagesTest):
         self.assertTrue(self.eng.why.startswith("paused: the land push failed 4 times"), self.eng.why)
         self.assertFalse(self.eng.asked)
 
+    def test_a_hooks_test_output_before_the_push_is_not_a_network_error(self):
+        tail = "tests: Connection refused by the fake server (expected)\n" + "ok test passed\n" * 60 + "error: failed to push some refs\n"
+        self.assertTrue(engine.TRANSIENT_PUSH.search(tail))  # the whole output would match
+        self.assertFalse(engine.TRANSIENT_PUSH.search(tail[-600:]))  # the engine reads only the push's own last lines
+
     def test_a_rejected_or_other_push_failure_is_not_retried_as_the_network(self):
         self.assertFalse(engine.TRANSIENT_PUSH.search("! [rejected] HEAD -> main (non-fast-forward)"))
         self.assertFalse(engine.TRANSIENT_PUSH.search("remote: error: GH006: Protected branch update failed"))
@@ -930,14 +980,17 @@ class Contracts(StagesTest):
         ask = dict(WRITE, question="Which format?")
         rc, _ = self.run_engine({"plan": [PLAN], "write": [ask]})
         self.assertEqual(rc, 2)
+        path = tl.config_dir() / "asks" / "t-1.json"
+        a = json.loads(path.read_text())
+        path.write_text(json.dumps(dict(a, kind="stuck")))  # an over-budget or stuck ask, which has a Run again button
         with mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Run again."}]):
             rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertNotIn("planner", [c[0] for c in s.calls])
         self.assertIn("only asks for a rerun", self.eng.log_path.read_text())
-        for text in ("run-again", "Retry!", "go on", "re-run"):
+        for text in ("run-again", "Retry!", "re-run", "try again"):
             self.assertTrue(engine.RERUN_ANSWER.fullmatch(" ".join(text.lower().replace("-", " ").split()).strip(" .!")), text)
-        for text in ("yes", "use option A", "run again with more budget"):
+        for text in ("yes", "use option A", "run again with more budget", "continue", "go on", "resume"):
             self.assertFalse(engine.RERUN_ANSWER.fullmatch(text), text)
 
     def test_a_real_answer_still_amends(self):
@@ -951,7 +1004,9 @@ class Contracts(StagesTest):
         asks = tl.config_dir() / "asks"
         asks.mkdir(exist_ok=True)
         for bead in ("b-open", "b-closed", "b-gone", "b-flaky"):
-            (asks / ("%s.json" % bead)).write_text(json.dumps({"v": 1, "id": bead + "-1", "bead": bead, "status": "open", "kind": "stuck"}))
+            (asks / ("%s.json" % bead)).write_text(json.dumps({"v": 1, "id": bead + "-1", "bead": bead, "status": "open", "kind": "stuck",
+                                                                "repo": str(self.wt)}))
+        (asks / "b-norepo.json").write_text(json.dumps({"v": 1, "id": "n-1", "bead": "b-norepo", "status": "open", "kind": "stuck"}))
         (asks / "b-answered.json").write_text(json.dumps({"v": 1, "id": "x", "bead": "b-answered", "status": "answered"}))
 
         def fake_bd(*a, **k):
@@ -959,14 +1014,15 @@ class Contracts(StagesTest):
             if bead == "b-gone":
                 return mock.Mock(returncode=1, stdout="", stderr="Error: no issue found matching b-gone")
             if bead == "b-flaky":
-                return mock.Mock(returncode=1, stdout="", stderr="dolt: connection lost")
+                return mock.Mock(returncode=1, stdout="", stderr="dolt: database not found")  # a bd failure, not "no such bead"
             return mock.Mock(returncode=0, stdout=json.dumps([{"id": bead, "status": "closed" if bead == "b-closed" else "open"}]), stderr="")
         with mock.patch.object(tl, "bd", side_effect=fake_bd):
             closed = tl.close_stale_asks(every=0)
             self.assertEqual(sorted(closed), ["b-closed", "b-gone"])
             self.assertEqual(tl.close_stale_asks(), [])  # throttled
-        state = {b: json.loads((asks / ("%s.json" % b)).read_text())["status"] for b in ("b-open", "b-closed", "b-gone", "b-flaky", "b-answered")}
-        self.assertEqual(state, {"b-open": "open", "b-closed": "closed", "b-gone": "closed", "b-flaky": "open", "b-answered": "answered"})
+        state = {b: json.loads((asks / ("%s.json" % b)).read_text())["status"] for b in ("b-open", "b-closed", "b-gone", "b-flaky", "b-answered", "b-norepo")}
+        self.assertEqual(state, {"b-open": "open", "b-closed": "closed", "b-gone": "closed", "b-flaky": "open", "b-answered": "answered",
+                                 "b-norepo": "open"})  # no repo recorded: which tracker to ask is unknown, the ask stays
 
     def test_the_engine_log_and_trace_record_the_version(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
