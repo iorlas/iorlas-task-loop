@@ -287,13 +287,17 @@ filed, beads blocked with their question, the dashboard address. Nothing else.
 `tl loop` runs the queue by itself, one bead at a time, in the foreground of any shell (a background job, tmux, a
 container); the session that starts it only watches it.
 
-- **Start:** `tl loop [--repo DIR] [--max-beads N] [--until HH:MM] [--wait-slot-min M] [--wait-drained]`. Several loops
+- **Start:** `tl loop [--repo DIR] [--max-beads N] [--until HH:MM] [--wait-slot-min M] [--wait-drained] [--pin]`. Several loops
   may run on one repo, each with its own actor (never its session's: bd lets an actor re-claim its own bead) and its
   own state; the race test (tl-bxk.11.1) runs two with a hand run, a hold and releases at once. Each pass: `bd reclaim` of tl- actors' lapsed claims only (never a person's), take any free slot (none free: wait in the repo's slot line, first come first served, a line every M minutes;
   slots off: the loop's one worktree; never a held slot or one whose worktree has a live engine, see Slots), pick by the queue rule, check the bead's area and claim it under the area lock (area busy or taken → the next bead), `tl slot reset`, then
   `tl run-task` as a child with its own log, release the slot, record the outcome, next pass. `--until`: no bead
   starts after that time. No ready bead: `DRAINED`, exit 0 (`--wait-drained`: look again every 5 minutes). Every
   ready bead waiting for its area is not drained: the loop looks again every minute.
+  Between beads (never mid-bead) the loop moves to the newest installed task-loop: when a newer version dir sits beside its
+  own and `tl.py --help` passes there, it logs `loop: moving to <ver> (was <ver>)` and re-execs itself (same pid; failure
+  count, rests, `--max-beads` count and actor carry over in `TL_LOOP_STATE`). A broken newer install is warned about once
+  and skipped. `--pin` stays on the running version.
 - **Outcomes** (`run-task --outcome-file`, also its last stdout line as JSON): `landed` → next. `parked` (an ask was
   raised, or the bead is blocked for the owner) → next. `paused` (lane out, login, network; the bead stays open) → a
   lane back within an hour is waited for, otherwise the next bead first; either way the bead is retried at its

@@ -715,6 +715,180 @@ class Loop(LoopBase):
         self.assertIn("parked", s)
 
 
+class Moved(Exception):
+    """What the mocked os.execv raises: the real one never returns."""
+
+
+class LoopSelfUpdate(LoopBase):
+    """Between beads the loop re-execs into the newest complete install of the plugin (fake version trees)."""
+
+    def setUp(self):
+        super().setUp()
+        self.cache = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.cache, True)
+        self.execs = []
+
+        def execv(exe, argv):
+            self.execs.append((exe, argv, os.environ.get("TL_LOOP_STATE"), os.getcwd()))
+            raise Moved()
+        for p in (mock.patch.object(os, "execv", side_effect=execv),
+                  mock.patch.dict(os.environ, {}), mock.patch.object(tl, "HERE", self.install("0.1.0"))):
+            p.start()
+            self.addCleanup(p.stop)
+        os.environ.pop("TL_LOOP_STATE", None)
+
+    def install(self, ver, tl_py="import sys\n", missing=(), loop_py=""):
+        d = self.cache / ver / "skills" / "task-loop"
+        d.mkdir(parents=True)
+        (d.parents[1] / ".claude-plugin").mkdir()
+        (d.parents[1] / ".claude-plugin" / "plugin.json").write_text("{}")
+        for f in ("tl.py", "loop.py", "engine.py"):
+            if f not in missing:
+                (d / f).write_text(tl_py if f == "tl.py" else loop_py if f == "loop.py" else "")
+        return d
+
+    def test_it_moves_to_a_newer_complete_install_between_beads_with_the_same_argv(self):
+        self.beads({"x-1": [rec("landed")], "x-2": [rec("landed")]})
+        self.during.append(lambda: self.install("0.2.0"))
+        with self.assertRaises(Moved):
+            self.run_loop("--max-beads", "5")
+        self.assertEqual([b for b, _ in self.started], ["x-1"])  # never mid-bead: x-1 ran to its end on 0.1.0
+        self.assertEqual([l["outcome"] for l in self.lines()], ["landed"])
+        exe, argv, state, _ = self.execs[0]
+        self.assertEqual(exe, sys.executable)
+        self.assertEqual(argv[:2], [sys.executable, str(self.cache / "0.2.0" / "skills" / "task-loop" / "tl.py")])
+        self.assertEqual(argv[2:], ["loop", "--repo", str(self.repo), "--max-beads", "5"])
+        self.assertEqual(json.loads(state)["ran"], 1)
+
+    def test_the_move_is_logged_and_the_newest_of_several_wins(self):
+        self.beads({"x-1": [rec("landed")]})
+        self.install("0.2.0")
+        self.install("0.10.0")  # 0.10 is newer than 0.9: numbers, not text
+        self.install("0.9.0")
+        with self.assertRaises(Moved), redirect_stdout(io.StringIO()) as out:
+            tl.main(["loop", "--repo", str(self.repo)])
+        self.assertIn("loop: moving to 0.10.0 (was 0.1.0)", out.getvalue())
+        self.assertIn("0.10.0", self.execs[0][1][1])
+        self.assertEqual(self.started, [])  # the first look is before any bead
+
+    def test_an_incomplete_or_failing_install_is_ignored_and_warned_once_per_version(self):
+        self.beads({"x-1": [rec("landed")], "x-2": [rec("landed")]})
+        self.install("0.2.0", missing=("engine.py",))
+        self.install("0.3.0", tl_py="raise SystemExit(3)\n")
+        self.assertEqual(self.run_loop(), 0)
+        self.assertEqual(self.execs, [])
+        self.assertEqual([b for b, _ in self.started], ["x-1", "x-2"])
+        self.assertEqual(self.out.count("not moving to 0.3.0"), 1)  # three looks, one warn (and one check)
+        self.assertEqual(self.out.count("not moving to 0.2.0"), 1)  # once 0.3.0 failed, 0.2.0 is the newest left
+
+    def test_an_incomplete_newest_warns_once(self):
+        self.beads({"x-1": [rec("landed")], "x-2": [rec("landed")]})
+        self.install("0.2.0", missing=("engine.py",))
+        self.assertEqual(self.run_loop(), 0)
+        self.assertEqual(self.out.count("not moving to 0.2.0: engine.py is missing"), 1)
+
+    def test_a_half_copied_loop_py_is_not_moved_to(self):
+        self.beads({"x-1": [rec("landed")]})
+        self.install("0.2.0", loop_py="def broken(:\n")  # --help alone would pass; the import does not
+        self.assertEqual(self.run_loop(), 0)
+        self.assertEqual(self.execs, [])
+        self.assertIn("not moving to 0.2.0", self.out)
+
+    def test_an_install_without_plugin_json_is_not_moved_to(self):
+        self.beads({"x-1": [rec("landed")]})
+        self.install("0.2.0")
+        (self.cache / "0.2.0" / ".claude-plugin" / "plugin.json").unlink()
+        self.assertEqual(self.run_loop(), 0)
+        self.assertEqual(self.execs, [])
+        self.assertIn("plugin.json is missing", self.out)
+
+    def test_a_relative_repo_is_resolved_from_the_start_directory_at_the_exec(self):
+        self.beads({"x-1": [rec("landed")]})
+        self.install("0.2.0")
+        start = self.repo.parent
+        with mock.patch.dict(os.environ), mock.patch("os.getcwd", wraps=os.getcwd):
+            old = os.getcwd()
+            os.chdir(start)
+            try:
+                with self.assertRaises(Moved), redirect_stdout(io.StringIO()):
+                    tl.main(["loop", "--repo", self.repo.name])
+            finally:
+                os.chdir(old)
+        self.assertEqual(os.path.realpath(self.execs[0][3]), os.path.realpath(start))
+        self.assertIn(self.repo.name, self.execs[0][1])
+
+    def test_a_stop_written_during_the_check_cancels_the_move(self):
+        self.beads({"x-1": [rec("landed")]})
+        self.install("0.2.0")
+
+        def slow_check(d):
+            loop.paths(str(self.repo))["stop"].write_text("after")
+        with mock.patch.object(loop, "complete", side_effect=slow_check):
+            self.assertEqual(self.run_loop(), 0)
+        self.assertEqual(self.execs, [])
+        self.assertEqual(self.started, [])
+        self.assertIn("stopped on request", self.out)
+
+    def test_a_bad_state_field_is_dropped_with_a_warning(self):
+        self.beads({"x-1": [rec("landed")]})
+        os.environ["TL_LOOP_STATE"] = json.dumps({"ran": "many", "fails": ["x-0"], "later": [1]})
+        self.assertEqual(self.run_loop(), 0)
+        self.assertIn("'ran' has a bad value", self.out)
+        self.assertIn("'later' has a bad value", self.out)
+        self.assertNotIn("'fails'", self.out)
+
+    def test_a_help_that_hangs_is_not_moved_to(self):
+        self.beads({"x-1": [rec("landed")]})
+        self.install("0.2.0", tl_py="import time\ntime.sleep(60)\n")
+        with mock.patch.object(loop, "HELP_WAIT", 0.5):
+            self.assertEqual(self.run_loop(), 0)
+        self.assertEqual(self.execs, [])
+        self.assertIn("did not finish", self.out)
+
+    def test_the_failure_counter_and_the_actor_survive_the_move(self):
+        self.beads({"x-1": [rec("failed")], "x-2": [rec("failed")], "x-3": [rec("landed")]})
+        self.during.append(lambda: self.install("0.2.0"))
+        with self.assertRaises(Moved):
+            self.run_loop()
+        actor = os.environ["TASK_LOOP_ACTOR"]
+        state = json.loads(self.execs[0][2])
+        self.assertEqual(state["fails"], ["x-1"])
+        # the new process: same pid, the state in the environment, the new install as the running code
+        os.environ["TL_LOOP_STATE"] = self.execs[0][2]
+        with mock.patch.object(tl, "HERE", self.cache / "0.2.0" / "skills" / "task-loop"):
+            self.assertEqual(self.run_loop(), 2)  # one more failure is the second in a row
+        self.assertIn("STOPPED: 2 failures in a row (x-1, x-2)", self.out)
+        self.assertEqual([b for b, _ in self.started], ["x-1", "x-2"])
+        self.assertEqual(os.environ["TASK_LOOP_ACTOR"], actor)
+        self.assertNotIn("TL_LOOP_STATE", os.environ)  # not handed on to children
+
+    def test_max_beads_counts_the_beads_run_before_the_move(self):
+        self.beads({"x-1": [rec("landed")], "x-2": [rec("landed")], "x-3": [rec("landed")]})
+        self.during.append(lambda: self.install("0.2.0"))
+        with self.assertRaises(Moved):
+            self.run_loop("--max-beads", "2")
+        os.environ["TL_LOOP_STATE"] = self.execs[0][2]
+        with mock.patch.object(tl, "HERE", self.cache / "0.2.0" / "skills" / "task-loop"):
+            self.run_loop("--max-beads", "2")
+        self.assertEqual([b for b, _ in self.started], ["x-1", "x-2"])
+
+    def test_pin_stays_on_the_running_install(self):
+        self.beads({"x-1": [rec("landed")], "x-2": [rec("landed")]})
+        self.install("0.2.0")
+        self.assertEqual(self.run_loop("--pin"), 0)
+        self.assertEqual(self.execs, [])
+        self.assertEqual([b for b, _ in self.started], ["x-1", "x-2"])
+
+    def test_a_dev_checkout_never_moves(self):
+        self.beads({"x-1": [rec("landed")]})
+        self.install("0.2.0")
+        dev = self.cache / "checkout" / "skills" / "task-loop"
+        dev.mkdir(parents=True)
+        with mock.patch.object(tl, "HERE", dev):
+            self.assertEqual(self.run_loop(), 0)
+        self.assertEqual(self.execs, [])
+
+
 class LandedOnBase(Base):
     def git_repo(self):
         def sh(*a, cwd):
