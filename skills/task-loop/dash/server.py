@@ -1084,21 +1084,10 @@ def bd_json(repo, *args):
         return None
 
 
-def api_bead(repo, bead):
-    """One bead for the Roadmap's panel: what bd says (description, acceptance, comments, dependencies) and every run of
-    the engine on it (why it started, each block with its outcome and the arrow into it, tokens)."""
-    _last_seen[0] = time.time()
-    path = resolve_repo(repo, bead)
-
-    def load():
-        shown = bd_json(path, "show", bead)
-        b = (shown[0] if isinstance(shown, list) and shown else shown) or {}
-        comments = bd_json(path, "comments", bead) or []
-        return b, comments
-    b, comments = cached("bead:%s:%s" % (path, bead), 15, load)
-    paths = engine_logs(retain=False).get(bead, [])
+def bead_runs(bead):
+    """Every engine run of the bead, oldest first: why it started, its blocks with outcome, arrow, time and tokens."""
     runs, prev = [], None
-    for p in paths:
+    for p in engine_logs(retain=False).get(bead, []):
         r = timeline.run_timeline(p)
         r["because"] = timeline.because_text(r, prev)
         prev = r
@@ -1108,6 +1097,24 @@ def api_bead(repo, bead):
                                  "secs": x.get("secs"), "tokens": x.get("tokens"), "status": (x.get("result") or {}).get("status"),
                                  "text": (x.get("result") or {}).get("text"), "arrow": (x.get("arrow") or {}).get("text")}
                                 for x in r["blocks"]]})
+    return runs
+
+
+def api_bead(repo, bead):
+    """One bead for the Roadmap's panel: what bd says (description, acceptance, comments, dependencies) and every run of
+    the engine on it (why it started, each block with its outcome and the arrow into it, tokens)."""
+    _last_seen[0] = time.time()
+    if not re.match(r"^[A-Za-z0-9][\w.-]*$", bead or ""):  # an id is never a bd option
+        return {"id": bead, "found": False, "error": "not a bead id"}
+    path = resolve_repo(repo, bead)
+
+    def load():
+        shown = bd_json(path, "show", bead)
+        b = (shown[0] if isinstance(shown, list) and shown else shown) or {}
+        comments = bd_json(path, "comments", bead) or []
+        return b, comments
+    b, comments = cached("bead:%s:%s" % (path, bead), 15, load)
+    runs = cached("beadruns:%s:%s" % (path, bead), 15, lambda: bead_runs(bead))
     deps = [{"id": d.get("id") or d.get("depends_on_id"), "title": d.get("title"), "status": d.get("status"),
              "type": d.get("dependency_type") or d.get("type")} for d in (b.get("dependencies") or [])]
     return {"id": bead, "title": b.get("title") or "", "status": b.get("status"), "priority": b.get("priority"),
@@ -1134,9 +1141,11 @@ def loop_files(repo):
     try:
         for line in Path(loop.paths(repo)["log"]).read_text(encoding="utf-8", errors="replace").splitlines()[-400:]:
             try:
-                rows.append(json.loads(line))
+                row = json.loads(line)
             except ValueError:
-                pass
+                continue
+            if isinstance(row, dict) and row.get("bead"):
+                rows.append(row)
     except OSError:
         pass
     return lanes, rows

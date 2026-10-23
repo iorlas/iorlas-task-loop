@@ -703,14 +703,14 @@ function pastCard(p,repo){const rel=(p.released||[]).slice(0,2).map(r=>shortId(r
     +`<u>${rel?'→ released '+esc(rel):esc(ago(p.t))}</u></a>`}
 function laneHtml(l,repo){
   const past=`<div class="rpast">${l.past.map(p=>pastCard(p,repo)).join('')||'<span class="none">nothing has left this slot yet</span>'}</div>`;
-  if(!l.bead)return `<div class="rlane"><div class="rslot">${esc(l.slot)}</div>${past}<div class="rnow idle"><div class="t">idle</div><div class="m">the loop takes #1 of the queue when it checks next</div></div></div>`;
+  if(!l.bead)return `<div class="rlane"><div class="rslot">${esc(l.slot||'·')}</div>${past}<div class="rnow idle"><div class="t">idle</div><div class="m">the loop takes #1 of the queue when it checks next</div></div></div>`;
   const last={};l.trail.forEach(b=>{last[RSTEP[b.kind]||b.kind]=b});
   const rail=l.rail.map(r=>{const b=last[r.step];return `<span class="${r.state}">${esc(r.step)}${r.state=='now'&&b&&b.secs?`<small>${esc(dur(b.secs))}</small>`:''}</span>`}).join('');
   const sb=[...l.trail].reverse().find(b=>b.stages),stage=sb&&sb.stages>1?`stage ${sb.stage} of ${sb.stages}`:'';
   const hist=l.trail.slice(-8).map(b=>`<span class="${b.status=='ok'?'ok':b.status=='fail'?'fail':b.status=='run'?'run':''}" title="${esc(b.text||b.label)}">${esc(b.kind)}${b.stage?' '+b.stage:''} ${b.status=='ok'?'✓':b.status=='fail'?'✗':b.status=='run'?'…':''}</span>`).join('');
   const unl=l.unlocks.length?`<div class="runl"><b>Landing unlocks${l.unblocks?' '+l.unblocks:''}</b>${rtree(l.unlocks,repo)}</div>`:'';
-  const meta=[`<span class="live" title="running"></span>`,`<span class="mono">${esc(l.bead)}</span>`,l.run>1?'run '+l.run:'',l.since?esc(dur(Date.now()/1000-l.since)):'',esc(stage)].filter(Boolean).map(x=>x.startsWith('<')?x:`<span>${x}</span>`).join('');
-  return `<div class="rlane${unl?' unl':''}"><div class="rslot">${esc(l.slot)}</div>${past}
+  const meta=[`<span class="live" title="running"></span>`,`<span class="mono">${esc(l.bead)}</span>`,l.run>1?'run '+l.run:'',l.since?esc(dur(Math.floor((Date.now()/1000-l.since)/60)*60)):'',esc(stage)].filter(Boolean).map(x=>x.startsWith('<')?x:`<span>${x}</span>`).join('');
+  return `<div class="rlane${unl?' unl':''}"><div class="rslot">${esc(l.slot||'·')}</div>${past}
     <a class="rnow" href="${taskHref(l.bead,repo)}" data-bead="${esc(l.bead)}"><div class="t">${esc(l.title||l.bead)}</div><div class="m">${meta}</div>
       <div class="rail">${rail}</div>${l.verdict?`<div class="rverd">${esc(l.verdict)}</div>`:''}${hist?`<div class="rhist"><em>${l.trail.length>8?'last 8 of '+l.trail.length:'so far'}</em>${hist}</div>`:''}</a>${unl}</div>`}
 function signalsHtml(d){const sg=d.signals||[];if(!sg.length)return '<div class="sigs"><div class="sig green"><b>Nothing wrong</b><span>no signal fires: no lane out, no churn, no cluster of parks, no old ask</span></div></div>';
@@ -718,7 +718,7 @@ function signalsHtml(d){const sg=d.signals||[];if(!sg.length)return '<div class=
     const t=s.href?`<a href="${esc(s.href)}">${esc(s.title)}</a>`:esc(s.title);
     return `<div class="sig ${esc(s.sev)}"><b>${t}</b><span>${esc(s.line)}</span>${look?`<span class="lks">${look}</span>`:''}</div>`};
   const head=sg.slice(0,6),rest=sg.slice(6);
-  return `<div class="sigs">${head.map(card).join('')}</div>`+(rest.length?`<details class="sigmore"><summary>${rest.length} more signal${rest.length>1?'s':''}</summary><div class="sigs">${rest.map(card).join('')}</div></details>`:'')}
+  return `<div class="sigs">${head.map(card).join('')}</div>`+(rest.length?`<details class="sigmore" id="sigmore"${R.sigmore?' open':''}><summary>${rest.length} more signal${rest.length>1?'s':''}</summary><div class="sigs">${rest.map(card).join('')}</div></details>`:'')}
 function queueHtml(q,repo,held){return `<div class="glog${held?' held':''}">`+q.map((b,i)=>`<div class="gc${i||held?'':' first'}${held?' nn':''}"><div class="h">${held?'':`<span class="n">${i+1}</span>`}
   <a class="tt" href="${taskHref(b.id,repo)}" data-bead="${esc(b.id)}">${esc(b.title||b.id)}</a>
   <span class="rs">${b.unblocks?`<span class="unb">unblocks ${b.unblocks}</span> `:''}<span class="mono">${esc(shortId(b.id))}</span>${b.priority!=null?' · P'+b.priority:''}${b.reason?' · '+esc(b.reason):''}${b.why?' · '+esc(b.why):''}</span></div>${rtree(b.tree,repo)}</div>`).join('')+'</div>'}
@@ -734,9 +734,9 @@ function renderRoadmap(){const d=R.d;if(!d)return;
   html+='<div class="rsec">Up next <small>the order <code>tl next</code> takes. A branch is a bead that waits on the one above it.</small></div>';
   html+=d.queue.length?queueHtml(d.queue,d.repo):'<div class="list"><div class="empty"><b>Nothing ready</b>No open bead the loop may take.</div></div>';
   if(d.held&&d.held.length)html+=`<details class="rheld" id="rheld"${R.held?' open':''}><summary><div class="rsec">Held back <small>${d.held_total} ready but skipped for now: another bead holds their area</small></div></summary>${queueHtml(d.held,d.repo,true)}</details>`;
-  paint($('main'),'main',html)}
+  if(paint($('main'),'main',html))tip.hidden=true}
 document.addEventListener('change',e=>{if(e.target.id=='rrepo'){S.repo=e.target.value;R.d=null;history.replaceState(null,'','#roadmap&repo='+encodeURIComponent(S.repo));S.gen++;poll()}});
-document.addEventListener('toggle',e=>{if(e.target.id=='rheld')R.held=e.target.open},true);
+document.addEventListener('toggle',e=>{if(e.target.id=='rheld')R.held=e.target.open;if(e.target.id=='sigmore')R.sigmore=e.target.open},true);
 
 // ---- hover card and bead panel: what is this ticket, what has it cost, what happened to it -------------------------
 const tokh=n=>n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?Math.round(n/1e3)+'k':String(n||0);
@@ -772,7 +772,7 @@ function renderBead(){const p=$('bpanel'),sc=$('bscrim');if(!p)return;const on=S
   const deps=b.deps.map(d=>`<div class="dp"><span class="mono">${esc(d.id)}</span> ${esc(d.title||'')} <span class="muted">${esc(d.status||'')}${d.type?' · '+esc(d.type):''}</span></div>`).join('');
   const tot=(b.runs||[]).reduce((a,r)=>a+((r.tokens&&r.tokens.in)||0),0);
   const cost=br&&br.tok?`<div class="cost"><b>${esc(costLine(br,R.d&&R.d.stats))}</b><span>${br.runs} run${br.runs>1?'s':''} · ${br.blocks} steps · ${esc(dur(br.secs))} in all</span></div>`:'';
-  const why=br&&br.why?`<div class="why">${esc(String(br.why).split('\\n')[0].slice(0,220))}</div>`:'';
+  const why=br&&br.why?`<div class="why">${esc(String(br.why).split('\n')[0].slice(0,220))}</div>`:'';
   paint(p,'bpanel',`<div class="bh"><div style="min-width:0"><h2>${esc(b.title||S.bead)}</h2>
       <div class="sub"><span class="mono">${esc(b.id)}</span> · ${esc(b.status||'')}${b.priority!=null?' · P'+b.priority:''}${b.assignee?' · '+esc(b.assignee):''} ${(b.labels||[]).map(l=>`<span class="tag">${esc(l)}</span>`).join(' ')}</div></div>
       <button class="iconbtn x" data-bclose="1" aria-label="Close">${X}</button></div>

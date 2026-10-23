@@ -124,6 +124,16 @@ class Build(unittest.TestCase):
         r = road(beads, history=[{"ts": stamp(60), "bead": "a", "slot": "s1", "outcome": "landed", "minutes": 3}], queued={"b"})
         self.assertEqual([x["id"] for x in r["recent"][0]["released"]], ["b"])
 
+    def test_review_fixes_blank_slot_matches_its_passes_odd_log_lines_are_skipped_nodes_not_mutated(self):
+        beads = [bead("a", status="closed", closed_at=stamp(60)), bead("b", blocks=["a"])]
+        g = graph.build(beads, CFG, {"b"}, set(), (), now=NOW)
+        before = {n["id"]: set(n) for n in g["nodes"]}
+        hist = [5, "x", {"ts": stamp(60), "outcome": "landed", "slot": "s1"},
+                {"ts": stamp(50), "bead": "a", "slot": None, "outcome": "landed", "minutes": 3}]
+        r = roadmap.build(g, [{"slot": "", "bead": None, "since": None}], [("b", "")], [], hist, {}, now=NOW)
+        self.assertEqual([p["id"] for p in r["lanes"][0]["past"]], ["a"])  # the odd lines are dropped, slot None meets ""
+        self.assertEqual({n["id"]: set(n) for n in g["nodes"]}, before)
+
     def test_empty_everything(self):
         r = road([])
         self.assertEqual((r["lanes"], r["queue"], r["held"], r["recent"]), ([], [], [], []))
@@ -197,6 +207,12 @@ class BeadApi(unittest.TestCase):
         self.assertEqual([c["text"] for c in out["comments"]], ["hello"])
         self.assertEqual(out["deps"][0]["id"], "z")
         self.assertEqual(out["runs"], [])
+
+    def test_an_id_is_never_a_bd_option(self):
+        import server
+        with mock.patch.object(server, "bd_json", side_effect=AssertionError("bd must not run")):
+            for bad in ("--db=/x", "-h", "", "a b", "../x"):
+                self.assertFalse(server.api_bead("demo", bad)["found"])
 
     def test_unknown_bead_is_not_found_not_an_error(self):
         import server

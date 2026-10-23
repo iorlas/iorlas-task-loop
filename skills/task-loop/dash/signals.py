@@ -167,12 +167,12 @@ def budget_near_miss(passes, now):
     for p in reversed(passes):
         m = re.search(r"over budget:.*?(\d+) of (\d+) min", p.get("why") or "")
         if p["outcome"] == "parked" and m and now - p["t"] <= 24 * 3600 and int(m.group(1)) <= BUDGET_NEAR * int(m.group(2)):
-            out.append(p)
+            out.append((p, "%s/%s min" % m.groups()))
     if not out:
         return []
     return [sig("near_miss", "info", "%d over budget by a hair" % len(out),
-                "stopped at %s of the limit: running again is cheap and probably safe" % ", ".join(
-                    re.search(r"(\d+) of (\d+) min", p["why"]).expand(r"\1/\2 min") for p in out[:2]), [p["id"] for p in out])]
+                "stopped at %s of the limit: running again is cheap and probably safe" % ", ".join(x for _, x in out[:2]),
+                [p["id"] for p, _ in out])]
 
 
 def stuck(graph_summary):

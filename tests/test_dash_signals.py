@@ -152,6 +152,9 @@ class OthersAndGood(unittest.TestCase):
         (x,) = [t for t in s["signals"] if t["kind"] == "near_miss"]
         self.assertEqual((x["look"], x["sev"]), (["r-a"], "info"))
         self.assertIn("182/180 min", x["line"])
+        tricky = pas("c", why="over budget: $0.00 of $15, 90 of 100 min wall, 182 of 180 min", ago=H)  # the first match wins, in both places
+        (y,) = [t for t in build(passes=[tricky])["signals"] if t["kind"] == "near_miss"]
+        self.assertIn("90/100 min", y["line"])
         self.assertEqual([t["sev"] for t in s["signals"] if t["kind"] == "stuck"], ["red"])
 
     def test_good_news_counts_landings_and_first_run_share(self):

@@ -58,7 +58,7 @@ def build(graph_data, lanes, ranked, skipped, history, trails, now=None, rows=No
     the order `tl next` takes them. skipped: [(id, why)]. history: loop-log rows, oldest first. trails: {bead: {run,
     stage, blocks: [{kind, label, status, text}]}}."""
     now = now or time.time()
-    by_id = {n["id"]: n for n in graph_data["nodes"]}
+    by_id = {n["id"]: dict(n) for n in graph_data["nodes"]}  # copies: build() adds keys, and the graph is cached and shared
     out = {}
     for e in graph_data["edges"]:
         out.setdefault(e["source"], []).append(e["target"])
@@ -70,10 +70,10 @@ def build(graph_data, lanes, ranked, skipped, history, trails, now=None, rows=No
         n["blocked_by"] = blockers.get(i, [])
     passes = []
     for r in history:
-        if r.get("outcome") in OUTCOMES:
+        if isinstance(r, dict) and r.get("bead") and r.get("outcome") in OUTCOMES:
             t = epoch(r.get("ts"))
             title = (by_id.get(r["bead"]) or {}).get("title", "")
-            passes.append({"id": r["bead"], "title": title, "slot": r.get("slot"), "outcome": r["outcome"], "t": t,
+            passes.append({"id": r["bead"], "title": title, "slot": r.get("slot") or "", "outcome": r["outcome"], "t": t,
                            "minutes": r.get("minutes") or 0, "asked": bool(r.get("asked")), "why": (r.get("why") or "")[:160],
                            "released": released(r["bead"], out, by_id) if r["outcome"] == "landed" else []})
     lane_out = []
@@ -86,7 +86,7 @@ def build(graph_data, lanes, ranked, skipped, history, trails, now=None, rows=No
             "rail": rail(tr.get("blocks") or [], tr.get("run") or 0) if b else [],
             "trail": tr.get("blocks") or [], "unlocks": tree(b, out, by_id) if b else [],
             "unblocks": node.get("unblocks", 0),
-            "past": [p for p in passes if p["slot"] == ln["slot"]][-PAST:]})
+            "past": [p for p in passes if p["slot"] == (ln["slot"] or "")][-PAST:]})
     queue = []
     for i, why in ranked:
         n = by_id.get(i) or {}
