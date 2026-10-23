@@ -822,7 +822,8 @@ def open_ask(bead):
     a = read_json(config_dir() / "asks" / ("%s.json" % bead), {}) or {}
     if not isinstance(a, dict) or a.get("status") != "open":
         return None
-    return {k: a.get(k) for k in ("id", "kind", "question", "t", "title", "answer", "repo", "parks_at", "options")}
+    a = upgrade_ask(a)
+    return {k: a.get(k) for k in ("id", "kind", "question", "detail", "unblocks", "t", "title", "answer", "repo", "parks_at", "options")}
 
 
 def ask_file(bead):

@@ -1817,6 +1817,8 @@ class EngineTest(unittest.TestCase):
         self.assertNotIn("zsh", q)
         self.assertIn("see details", q)
         self.assertEqual(engine.tidy_question("over budget: $0.00 of $15, 187 of 180 min"), "over budget: 187 of 180 min")
+        keep = engine.tidy_question("denied `git push origin main` and gave no answer; run it or allow it, then rerun. (said:\n" + "x" * 100 + ")")
+        self.assertIn("`git push origin main` and gave no answer; run it or allow it, then rerun.", keep)
         self.assertIn("what to allow", engine.ask_hint("denied", "needs a human: x", "q"))
         self.assertIn("how to prove it", engine.ask_hint("stuck", "the check before land: nothing proves y", "q"))
         self.assertEqual(engine.ask_hint("stuck", "replan: x", "q"), "q")

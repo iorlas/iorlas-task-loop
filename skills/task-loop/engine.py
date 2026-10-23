@@ -3803,7 +3803,7 @@ def ask_kind(why):
     return "stuck"
 
 
-BLOB = re.compile(r"`[^`]{80,}(?:`|$)|\{['\"][^}]{80,}(?:\}|$)")  # a quoted command or tool-call dump, never a thing to read
+BLOB = re.compile(r"(?<![\w.)\]/-])`[^`]{80,}`|(?<![\w.)\]/-])`[^`]{80,}$|\{['\"][^}]{80,}(?:\}|$)")  # a quoted command or tool-call dump, never a thing to read
 ZERO_COST = re.compile(r"\$0\.00 of \$[\d.]+, ")
 
 
@@ -3873,7 +3873,7 @@ def ask_options(kind, why, given=None):
         lim = "%s min" % m.group(1) if m else "a full budget"
         return [{"label": "Run again", "answer": "run again", "recommended": True,
                  "note": "Goes on from where it stopped; the budget counts per run",
-                 "then": "Continues from its checkpoint on the next pass of its loop, with a fresh %s." % lim,
+                 "then": "The bead runs again from your answer on the next pass of its loop, with a fresh %s." % lim,
                  "cost": "Up to %s more of a slot" % lim},
                 {"label": "Split the bead", "answer": "split this bead: keep what is done as this bead and file the rest as new beads",
                  "note": "For a bead too big for one run",
