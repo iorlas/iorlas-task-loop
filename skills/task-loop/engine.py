@@ -2493,6 +2493,12 @@ class Engine:
         self.outcome_of("%d stage%s" % (len(data["stages"]), "" if len(data["stages"]) == 1 else "s"),
                         data["summary"][:200])
         if not data["stages"]:
+            if data["leftovers"] or self.leftovers:  # tl-bxk.13.2: the work is done and only the filing is left: the engine files and closes
+                self.log("note", "the planner finds the work done and leaves only follow-up beads to file: closing")
+                self.plan_leftovers(data)
+                self.plan_summary = data["summary"]
+                (self.run_dir / "plan.json").write_text(json.dumps(data, indent=1))
+                return data
             raise Blocked("failed: the plan has no stages")
         big = int(self.cfg["max_stages"])
         if len(data["stages"]) > big and (self.answered or {}).get("kind") != "ticket":
@@ -2820,7 +2826,7 @@ class Engine:
             if self.stats["tests_removed"]:
                 self.warn("the task's diff removes %d tests" % self.stats["tests_removed"])
             failed = [c for c in checks if c["exit"] not in (0, None)]
-            flagged = {b["cmd"].strip(): b["why"] for b in w["bad_checks"]}
+            flagged = {c["cmd"].strip(): why for c in failed for why in [flagged_why(c, w["bad_checks"])] if why}
             wrong = [c for c in failed if c["cmd"].strip() in flagged]
             if wrong:  # a check no code change can satisfy: retrying it is waste, the plan must change
                 self.stuck_why = "the writer says these stage checks are wrong: " + "; ".join(
@@ -3748,11 +3754,15 @@ def confirms(answer):
 
 
 def has_criteria(bead):
-    """Acceptance criteria in the bead's field, or in a ## Acceptance Criteria section of its description."""
+    """Acceptance criteria in the bead's field, or in a ## Acceptance Criteria or ## Done when section (or a "Done when:" line) of its description."""
     if (bead.get("acceptance_criteria") or "").strip():
         return True
-    m = re.search(r"^##\s*Acceptance Criteria\s*$(.*?)(?=^##\s|\Z)", bead.get("description") or "", re.M | re.S | re.I)
-    return bool(m and m.group(1).strip())
+    m = re.search(r"^#{1,6}\s*(?:Acceptance Criteria|Done when)\s*:?\s*$(.*?)(?=^#{1,6}\s|\Z)", bead.get("description") or "",
+                  re.M | re.S | re.I)
+    if m and m.group(1).strip():
+        return True
+    # tl-bxk.13.2: "Done when: ..." as a line, or "**Done when**" then its list (lifesim-r6z was blocked in 0 s for it)
+    return bool(re.search(r"^[ \t>*_#-]*Done when\b[ \t:*_]*(?:[^\s:*_]|\n\s*[-*\d])", bead.get("description") or "", re.M | re.I))
 
 
 def ask_kind(why):
@@ -3973,6 +3983,36 @@ def norm_cmd(cmd):
     return " ".join(str(cmd).split())
 
 
+ELLIPSIS = re.compile(r"\.\.\.|\u2026")
+
+
+def flagged_why(check, bad_checks):
+    """tl-bxk.13.3: the writer's reason when one of its bad_checks names this failed check, else "". It names it by its
+    command as listed, whitespace aside; by its id; or shortened (`...` for what it cut, or a stretch of 20+ characters of
+    it): lifesim-d5f.40 flagged one broken check in 8 writes and none matched, 43 minutes until the round cap."""
+    mine = norm_cmd(check["cmd"])
+    for b in bad_checks:
+        said = norm_cmd(b["cmd"]).strip("`")
+        if not said:
+            continue
+        if said == mine or said == str(check.get("id") or ""):
+            return b["why"]
+        if ELLIPSIS.search(said):
+            parts = [x.strip() for x in ELLIPSIS.split(said) if len(x.strip()) >= 6]
+            at, ok = 0, bool(parts)
+            for part in parts:
+                at = mine.find(part, at)
+                if at < 0:
+                    ok = False
+                    break
+                at += len(part)
+            if ok:
+                return b["why"]
+        elif len(said) >= 20 and (said in mine or mine in said):
+            return b["why"]
+    return ""
+
+
 def context_tokens(path, tail=1 << 20):
     """-> the input tokens (cache included) of the last turn in a worker's transcript, or None: Claude's last assistant message
     usage, Codex's last token_count. The answer's own `tokens` add up every turn of the call, so they say nothing of the size."""
@@ -4162,7 +4202,7 @@ Repo instructions that say a change is done only when the full gate passes are f
 engine does that part.
 {feedback}
 bad_checks: a stage check that fails for a reason no code change can fix (wrong arguments, a guard that rejects the
-uncommitted work this stage must leave, a pattern that matches harmless text), each with why; else empty. The engine
+uncommitted work this stage must leave, a pattern that matches harmless text), each with why (cmd: the check's command exactly as listed, never shortened); else empty. The engine
 then asks for a new plan instead of retrying.
 A check that times out or fails only where you run it is not yours to retry; note it once and move on.
 Proof the engine cannot rerun (a test seen failing after a planted fault, then passing once restored; a manual
