@@ -53,7 +53,7 @@ def released(i, out, by_id):
             if by_id.get(t) and by_id[t]["state"] not in ("done", "epic", "blocked") and not by_id[t]["is_epic"]]
 
 
-def build(graph_data, lanes, ranked, skipped, history, trails, now=None, rows=None, lane_records=(), asks=(), waiting=0):
+def build(graph_data, lanes, ranked, skipped, history, trails, now=None, rows=None, lane_records=(), asks=(), waiting=0, looks=()):
     """graph_data: graph.build() output. lanes: [{slot, bead, since}] (bead None = an idle loop). ranked: [(id, reason)] in
     the order `tl next` takes them. skipped: [(id, why)]. history: loop-log rows, oldest first. trails: {bead: {run,
     stage, blocks: [{kind, label, status, text}]}}."""
@@ -108,7 +108,7 @@ def build(graph_data, lanes, ranked, skipped, history, trails, now=None, rows=No
     out["loops_waiting"] = waiting
     out["briefs"] = briefs(out, by_id, rows or {})
     mine = [r for r in (rows or {}).values() if not graph_data.get("repo") or r.get("repo") == graph_data["repo"]]
-    out.update(signals.build(mine, passes, list(lane_records), list(asks), graph_data.get("summary"), now))
+    out.update(signals.build(mine, passes, list(lane_records), list(asks), graph_data.get("summary"), now, list(looks)))
     for ln in out["lanes"]:
         ln["verdict"] = verdict((rows or {}).get(ln["bead"]) or {}, out["stats"])
     return out

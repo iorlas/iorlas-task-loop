@@ -33,10 +33,11 @@ import time
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+import gallery  # noqa: E402
 import graph  # noqa: E402
 import roadmap  # noqa: E402
 import signals  # noqa: F401,E402
@@ -1222,10 +1223,51 @@ def api_roadmap(repo=""):
                                      "status": (x.get("result") or {}).get("status"), "text": (x.get("result") or {}).get("text")}
                                     for x in r["blocks"]]}
         mine_asks = [a for a in asks()["asks"] if os.path.basename(str(a.get("repo") or "").rstrip("/\\")) == g["repo"]]
-        return roadmap.build(g, lanes, ranked, skipped, rows, trails, rows=tasks, lane_records=api["lanes"], asks=mine_asks, waiting=len(waiting))
+        looks = [i for i in look_items(path)[1] if i["status"] == "open"]
+        return roadmap.build(g, lanes, ranked, skipped, rows, trails, rows=tasks, lane_records=api["lanes"], asks=mine_asks, waiting=len(waiting),
+                             looks=looks)
 
     out = cached("roadmap:" + path, 5, build)
     return dict(out, repos=g["repos"])
+
+
+def look_items(repo):
+    """Items of the repo's owner-look beads, cached 10 s; the key follows the beads' own marker so an answer shows at once."""
+    path = resolve_repo(repo, "") or ""
+    if not path:
+        return "", []
+    return path, cached("looks:" + path, 10, lambda: gallery.collect(path, beads_of(path)))
+
+
+def api_looks(repo=""):
+    """The gallery: every look item of the repo, open ones first (newest bead last), with counts."""
+    _last_seen[0] = time.time()
+    path, items = look_items(repo)
+    if not path:
+        return {"repo": repo, "items": [], "summary": {"open": 0, "good": 0, "redo": 0}, "repos": [os.path.basename(p) for p in repos()]}
+    order = {"open": 0, "redo": 1, "good": 2}
+    items = sorted(items, key=lambda i: (order[i["status"]], -(i["answered"] or 0)))
+    for i in items:
+        for sh in i["shots"]:
+            sh["url"] = "/api/look-shot?repo=%s&path=%s" % (quote(os.path.basename(path.rstrip("/\\"))), quote(sh["path"]))
+    return {"repo": os.path.basename(path.rstrip("/\\")), "items": items, "summary": gallery.summary(items),
+            "repos": [os.path.basename(p) for p in repos()]}
+
+
+def look_shot(repo, rel):
+    path, items = look_items(repo)
+    return gallery.picture(path, rel, items) if path else None
+
+
+def answer_look(body):
+    path = resolve_repo(body.get("repo") if isinstance(body, dict) and isinstance(body.get("repo"), str) else "", "")
+    if not path:
+        return 404, {"code": "repo_missing", "error": "That repo is not registered."}
+    code, out = gallery.answer(path, body)
+    with _lock:
+        _cache.pop("looks:" + path, None)
+        _cache.pop("roadmap:" + path, None)
+    return code, out
 
 
 def api_task_timeline(repo, bead):
@@ -1737,6 +1779,13 @@ def make_handler(port, addrs):
                     body = api_graph(q.get("repo", ""))
                 elif u.path == "/api/bead":
                     body = api_bead(q.get("repo", ""), q.get("id", ""))
+                elif u.path == "/api/looks":
+                    body = api_looks(q.get("repo", ""))
+                elif u.path == "/api/look-shot":
+                    got = look_shot(q.get("repo", ""), q.get("path", ""))
+                    if got is None:
+                        return self.send(404, b"not found", "text/plain")
+                    return self.send(200, got[0], got[1])
                 elif u.path == "/api/roadmap":
                     body = api_roadmap(q.get("repo", ""))
                 elif u.path == "/api/task-timeline":
@@ -1766,9 +1815,9 @@ def make_handler(port, addrs):
                 body = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 65536)) or b"{}")
             except ValueError:
                 return self.send(400, b'{"error": "json"}', "application/json")
-            if u.path not in ("/api/answer", "/api/withdraw"):
+            if u.path not in ("/api/answer", "/api/withdraw", "/api/look"):
                 return self.send(404, b"not found", "text/plain")
-            code, out = (answer if u.path == "/api/answer" else withdraw)(body)
+            code, out = {"/api/answer": answer, "/api/withdraw": withdraw, "/api/look": answer_look}[u.path](body)
             self.send(code, json.dumps(out).encode(), "application/json")
     return H
 

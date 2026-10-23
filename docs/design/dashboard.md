@@ -121,3 +121,21 @@ were not on the page. Added:
 - Hover on any bead id: title, state and why, runs, steps, time, tokens (`briefs` in `/api/roadmap`). Click: panel
   (`#roadmap&repo=R&bead=ID`, `GET /api/bead`): description, acceptance, notes, comments newest first, transitions per
   run with duration and tokens, dependencies, link to the full run timeline.
+
+## Looks gallery (owner-look beads)
+
+Taste items never block a land: the engine files them into the owner-look bead (metadata `looks`, see `Engine.write_looks`).
+The **Looks** tab (`#looks&repo=R`, `dash/gallery.py`, `/api/looks`) shows one card per item: the judge's note, before | after
+pictures (a before-only or after-only item shows what it has), and two answers:
+
+- **Good**: the item's status becomes `good`; when no item of the look bead waits, the bead closes.
+- **Redo** with a note (required): files a follow-up bead "Redo look: ..." (related to the source bead) whose description and
+  `looks` metadata carry the note and the pictures; the item becomes `redo` and keeps `redo_bead`.
+- **Undo** on an answered card: the item is open again, the follow-up bead is closed, a closed look bead is reopened.
+
+Pictures are served by `/api/look-shot` only when an item lists that exact path (never a caller's path), inside the repo,
+with a picture extension; read from the checkout, else from HEAD / origin/main / main / master; an LFS pointer is not served.
+An old look bead (no metadata) is read from its description: `## <bead>: <title>` sections, each `- path` an "after".
+The Roadmap's strip shows one signal, "N looks wait for you" (info, amber after 12 h), linking to the tab. Answers go through
+`POST /api/look` with the same access rule as asks (loopback and Tailscale, else the token). Writes are read-modify-write of
+the bead's metadata; the engine's own write of `looks` keeps answered items, and the race window is two bd calls.

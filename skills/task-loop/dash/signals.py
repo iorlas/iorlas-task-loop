@@ -162,6 +162,17 @@ def ask_aging(asks, now):
                 [a["bead"] for a in old[:3]], href="#asks")]
 
 
+def looks_waiting(looks, now):
+    """Taste items the owner has not answered: they never block the loop, so only age makes them worth a colour."""
+    if not looks:
+        return []
+    old = min((float(l.get("filed") or now) for l in looks), default=now)
+    sev = "amber" if now - old > ASK_AMBER else "info"
+    n = len(looks)
+    return [sig("looks", sev, "%d look%s wait for you" % (n, "" if n == 1 else "s"),
+                "good or redo, one click each: the pictures are in the gallery", [l["bead"] for l in looks][:3], href="#looks")]
+
+
 def budget_near_miss(passes, now):
     out = []
     for p in reversed(passes):
@@ -193,12 +204,12 @@ def good(passes, rows, now):
     return [sig("good", "green", "%d landed in 24 h" % len(day), line, [p["id"] for p in day[-3:]])]
 
 
-def build(rows, passes, lanes, asks, graph_summary, now=None):
+def build(rows, passes, lanes, asks, graph_summary, now=None, looks=()):
     """rows: task rows (server.api_tasks) of this repo; passes: roadmap passes ({id, outcome, t, minutes, why}); lanes:
     agent-runs lane records; asks: open asks; graph_summary: graph.build()'s summary. -> {signals: [...], stats: {...}}"""
     now = now or time.time()
     med = medians(rows)
-    sigs = (lane_out(lanes, now) + stuck(graph_summary) + park_cluster(passes, now) + ask_aging(asks, now) + churn(rows, now)
+    sigs = (lane_out(lanes, now) + stuck(graph_summary) + park_cluster(passes, now) + ask_aging(asks, now) + looks_waiting(looks, now) + churn(rows, now)
             + token_hogs(rows, now, med) + big_turns(rows, now) + budget_near_miss(passes, now) + good(passes, rows, now))
     sigs.sort(key=lambda s: SEVERITY[s["sev"]])
     return {"signals": sigs, "stats": med}

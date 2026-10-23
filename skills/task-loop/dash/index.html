@@ -367,6 +367,23 @@ details.rheld>summary .rsec::before{content:"▸";color:var(--mute);font-size:11
   .rpast,.rnow,.runl{grid-column:2;min-width:0}.rpast{justify-content:flex-start;-webkit-mask-image:none;mask-image:none;padding-right:0}.rpast::after{display:none}
   .gc .h,.gc.nn .h{grid-template-columns:2.4ch minmax(0,1fr)}.gc.nn .h{grid-template-columns:minmax(0,1fr)}.gc .rs{grid-column:2;text-align:left}.gc.nn .rs{grid-column:1}
 }
+/* looks gallery: one card per taste item, before | after pictures, two buttons */
+.lkc{background:var(--surface);border-radius:12px;box-shadow:inset 0 0 0 1px var(--line);padding:16px;margin:0 0 16px;display:grid;gap:12px}
+.lkc.lkdone{opacity:.8}.lkc.lkdone figure img{max-height:140px}.lkc.lkdone .pics{grid-template-columns:repeat(auto-fit,minmax(160px,220px))}
+.lkc h3{margin:0;font-size:15px;font-weight:650;line-height:1.35}
+.lkc .lm{color:var(--mute);font-size:12.5px;display:flex;gap:8px;flex-wrap:wrap;align-items:baseline}
+.lkc .lnote{color:var(--ink2);font-size:13px;line-height:1.45;max-width:90ch}
+.lkc .pics{display:grid;align-items:start;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.lkc figure{margin:0;display:grid;gap:4px}.lkc figcaption{font-size:12px;color:var(--mute)}.lkc figcaption b{color:var(--ink2);font-weight:620;margin-right:6px}
+.lkc figure img{width:100%;max-height:420px;object-fit:contain;background:var(--sunk);border-radius:8px;display:block}
+.lkc .nopic{background:var(--sunk);border-radius:8px;color:var(--mute);font-size:12.5px;padding:24px 12px;text-align:center}
+.lkc .acts{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start}
+.lkc textarea{flex:1 1 280px;min-height:36px;height:36px;resize:vertical;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit;font-size:13px;padding:7px 10px}
+.lkc button{height:36px;padding:0 16px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.lkc button.good{background:var(--ok-bg);color:var(--ok);border-color:transparent}.lkc button.redo{color:var(--warn)}
+.lkc button:disabled{opacity:.5;cursor:default}
+.lkc .res{font-size:13px;color:var(--ink2);display:flex;gap:12px;align-items:center;flex-wrap:wrap}.lkc .res.err{color:var(--fail)}
+.lkc .res button{height:28px;padding:0 12px;font-weight:520}
 .sigs{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin:0 0 8px}
 .sig{display:flex;flex-direction:column;gap:4px;background:var(--surface);border-radius:10px;padding:10px 14px;border-left:4px solid var(--c);box-shadow:inset 0 0 0 1px var(--line);font-size:13px;line-height:1.4}
 .sig b{font-size:14px;font-weight:650}.sig b a:hover{text-decoration:underline}
@@ -404,6 +421,7 @@ details.rheld>summary .rsec::before{content:"▸";color:var(--mute);font-size:11
     <a href="#" data-nav="roadmap">Roadmap</a>
     <a href="#tasks" data-nav="tasks">Tasks</a>
     <a href="#asks" data-nav="asks">Asks <span class="badge" id="askn"></span></a>
+    <a href="#looks" data-nav="looks">Looks <span class="badge" id="lookn"></span></a>
     <a href="/classic" title="The three-pane log viewer">Logs</a>
   </nav>
   <span class="sp"></span>
@@ -440,7 +458,7 @@ function chip(cls,text,dot){return `<span class="chip ${cls}" title="${esc(text)
 
 // ---- routing: #task=ID&repo=R&run=RUN&block=NODE.K&tab=T&theme=dark --------------------------------------------------
 function readHash(){const raw=location.hash.slice(1),h=new URLSearchParams(raw);
-  S.view=h.get('task')?'task':({asks:'asks',tasks:'tasks'}[raw.split('&')[0]]||'roadmap');S.task=h.get('task');S.repo=h.get('repo')||'';
+  S.view=h.get('task')?'task':({asks:'asks',tasks:'tasks',looks:'looks'}[raw.split('&')[0]]||'roadmap');S.task=h.get('task');S.repo=h.get('repo')||'';
   S.bead=h.get('bead')||null;const b=h.get('block');S.run=h.get('run');S.block=b?{node:+b.split('.')[0],k:+(b.split('.')[1]||0)}:null;S.tab=h.get('tab');
   const th=h.get('theme');if(th)setTheme(th,true)}
 function go(o){const h=new URLSearchParams();if(o.task){h.set('task',o.task);if(o.repo)h.set('repo',o.repo);if(o.run)h.set('run',o.run);
@@ -449,8 +467,8 @@ function go(o){const h=new URLSearchParams();if(o.task){h.set('task',o.task);if(
 window.addEventListener('hashchange',route);
 let lastView='';
 function route(){const was=S.task+'|'+S.run+'|'+(S.block?S.block.node+'.'+S.block.k:'');readHash();
-  document.querySelectorAll('#nav a[data-nav]').forEach(a=>a.classList.toggle('on',a.dataset.nav==(S.view=='asks'?'asks':S.view=='roadmap'?'roadmap':'tasks')));
-  $('main').classList.toggle('wide',S.view=='roadmap');
+  document.querySelectorAll('#nav a[data-nav]').forEach(a=>a.classList.toggle('on',a.dataset.nav==(S.view=='asks'?'asks':S.view=='looks'?'looks':S.view=='roadmap'?'roadmap':'tasks')));
+  $('main').classList.toggle('wide',S.view=='roadmap'||S.view=='looks');
   if(was!=S.task+'|'+S.run+'|'+(S.block?S.block.node+'.'+S.block.k:'')){S.blk=null;S.events=null}
   const v=S.view+'|'+S.task;if(v!=lastView){lastView=v;S.sig.main=null;window.scrollTo(0,0)}
   S.gen++;render();poll()}
@@ -474,6 +492,7 @@ async function poll(){if(busy)return;busy=true;const g=S.gen;
   try{
     const a=get('/api/asks').then(x=>{S.asks=x;renderTop();if(S.view=='asks'&&g==S.gen)renderAsks()}).catch(()=>{});
     if(S.view=='tasks'){const d=await get('/api/tasks');if(g!=S.gen)return;S.tasks=d;renderTop()}
+    else if(S.view=='looks'){const d=await get('/api/looks?repo='+encodeURIComponent(S.repo));if(g!=S.gen)return;L.d=d;renderTop()}
     else if(S.view=='roadmap'){const d=await get('/api/roadmap?repo='+encodeURIComponent(S.repo));if(g!=S.gen)return;R.d=d;
       if(S.bead&&(!R.b||R.b.id!=S.bead||R.bt<Date.now()-15000)){const b=await get('/api/bead?repo='+encodeURIComponent(d.repo||S.repo)+'&id='+encodeURIComponent(S.bead));if(g!=S.gen)return;R.b=b;R.bt=Date.now()}}
     else if(S.view=='task'){const d=await get(`/api/task-timeline?repo=${encodeURIComponent(S.repo)}&id=${encodeURIComponent(S.task)}`);if(g!=S.gen)return;S.tl=d;
@@ -489,8 +508,10 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)poll()});
 
 // ---- render -------------------------------------------------------------------------------------------------------
 function paint(el,key,html){if(S.sig[key]===html)return false;S.sig[key]=html;el.innerHTML=html;return true}
-function render(){if(S.view=='roadmap')renderBead();if(S.view=='tasks')renderTasks();else if(S.view=='task')renderTask();else if(S.view=='roadmap')renderRoadmap();else renderAsks();renderDrawer()}
-function renderTop(){const open=(S.asks.asks||[]).filter(a=>!a.answered_here&&!a.parked).length;$('askn').textContent=open||'';
+function render(){if(S.view=='roadmap')renderBead();if(S.view=='tasks')renderTasks();else if(S.view=='task')renderTask();else if(S.view=='roadmap')renderRoadmap();else if(S.view=='looks')renderLooks();else renderAsks();renderDrawer()}
+function lookCount(){if(L.d&&L.d.summary)return L.d.summary.open;const g=((R.d&&R.d.signals)||[]).find(x=>x.kind=='looks');return g?+(g.title.match(/\d+/)||[0])[0]:0}
+function renderTop(){$('lookn').textContent=lookCount()||'';
+  const open=(S.asks.asks||[]).filter(a=>!a.answered_here&&!a.parked).length;$('askn').textContent=open||'';
   if(S.tasks&&S.tasks.host)$('host').textContent=S.tasks.host;
   const out=(S.asks.delegate&&S.asks.delegate.out)||[];
   const det=(S.asks.delegate&&S.asks.delegate.detail)||{};
@@ -781,6 +802,41 @@ function renderBead(){const p=$('bpanel'),sc=$('bscrim');if(!p)return;const on=S
       <a class="go" href="#task=${encodeURIComponent(b.id)}&repo=${encodeURIComponent((R.d&&R.d.repo)||S.repo)}">Open the full run timeline, transcripts and checks</a></div>`)}
 document.addEventListener('click',e=>{if(e.target.closest('[data-bclose]')||e.target.id=='bscrim')closeBead()});
 document.addEventListener('keydown',e=>{if(e.key=='Escape'&&S.view=='roadmap'&&S.bead)closeBead()});
+
+// ---- looks gallery: taste items from owner-look beads; "good" settles one, "redo" files a bead with the note ---------------
+const L={d:null,busy:{},err:{},draft:{}};
+const lkKey=i=>i.look_bead+'|'+i.id;
+function lkPics(i){const by={};i.shots.forEach(s=>{(by[s.label||s.path]=by[s.label||s.path]||{})[s.role]=s});
+  const figs=[];Object.keys(by).forEach(k=>['before','after'].forEach(r=>{const s=by[k][r];if(s)figs.push(`<figure><a href="${esc(s.url)}" target="_blank" rel="noopener"><img loading="lazy" src="${esc(s.url)}" alt="${esc(r+': '+k)}" onerror="this.outerHTML='<div class=nopic>picture not in this checkout</div>'"></a><figcaption><b>${r}</b>${esc(k)}</figcaption></figure>`)}));
+  return figs.length?`<div class="pics">${figs.join('')}</div>`:'<div class="nopic">no pictures were kept for this item</div>'}
+function lkCard(i,repo){const k=lkKey(i),ans=i.status!='open',e=L.err[k];
+  const res=ans?`<div class="res"><span>${i.status=='good'?'Marked good':'Redo asked: <a href="'+taskHref(i.redo_bead,repo)+'">'+esc(shortId(i.redo_bead||''))+'</a>'+(i.answer_note?' · '+esc(i.answer_note):'')}</span><button data-lk="undo" data-k="${esc(k)}"${L.busy[k]?' disabled':''}>Undo</button></div>`:
+    `<div class="acts"><button class="good" data-lk="good" data-k="${esc(k)}"${L.busy[k]?' disabled':''}>Good</button><textarea data-lkn="${esc(k)}" rows="1" placeholder="What should change? (needed for Redo)">${esc(L.draft[k]||'')}</textarea><button class="redo" data-lk="redo" data-k="${esc(k)}"${L.busy[k]?' disabled':''}>Redo</button></div>`;
+  return `<div class="lkc${ans?' lkdone':''}"><div><h3>${esc(i.title||i.id)}</h3><div class="lm"><a class="mono" href="${taskHref(i.bead,repo)}">${esc(i.bead)}</a><span>${i.filed?esc(ago(i.filed)):''}</span></div></div>
+    ${i.note?`<div class="lnote">${esc(i.note)}</div>`:''}${lkPics(i)}${res}${e?`<div class="res err">${esc(e)}</div>`:''}</div>`}
+function renderLooks(){const d=L.d;if(!d)return;const sm=d.summary||{},names=d.repos||[];
+  let html=`<div class="hero"><div><h1>Looks</h1><div class="sum">${esc(d.repo||'')} · <b>${sm.open||0}</b> wait for you · ${sm.good||0} good · ${sm.redo||0} redo</div></div>
+    <div class="rtools">${names.length>1?`<select id="lrepo" aria-label="Repo">${names.map(n=>`<option ${n==d.repo?'selected':''}>${esc(n)}</option>`).join('')}</select>`:''}</div></div>`;
+  html+=d.items.length?d.items.map(i=>lkCard(i,d.repo)).join(''):'<div class="list"><div class="empty"><b>No look waits for you</b>Taste items the loop could not judge from a picture land here, with before and after.</div></div>';
+  const keep=document.activeElement&&document.activeElement.dataset&&document.activeElement.dataset.lkn;
+  if(keep)return;  // typing a note: leave the page alone
+  paint($('main'),'main',html)}
+async function lkSend(k,verdict){const i=(L.d.items||[]).find(x=>lkKey(x)==k);if(!i||L.busy[k])return;
+  const ta=document.querySelector(`textarea[data-lkn="${CSS.escape(k)}"]`),note=(ta?ta.value:L.draft[k]||'').trim();
+  if(verdict=='redo'&&!note){ta&&ta.focus();L.err[k]='Write what to change first.';S.sig={};renderLooks();return}
+  delete L.err[k];L.busy[k]=1;S.sig={};renderLooks();
+  let tk='';try{tk=localStorage.getItem('tl.token')||''}catch(e){}
+  const r=await fetch('/api/look',{method:'POST',headers:{'Content-Type':'application/json',...(tk?{'Authorization':'Bearer '+tk}:{})},body:JSON.stringify({repo:L.d.repo,look_bead:i.look_bead,item:i.id,verdict,note})}).catch(()=>null);
+  delete L.busy[k];
+  if(!r)L.err[k]='The dashboard did not answer. Nothing was changed.';
+  else if(r.status==401)L.err[k]='This address needs the answer link. Run tl dash url in a terminal and open the ANSWER LINK it prints.';
+  else if(!r.ok){const j=await r.json().catch(()=>({}));L.err[k]=j.error||'Failed. Nothing was changed.'}
+  else{delete L.draft[k];const j=await r.json().catch(()=>({}));i.status=j.status||i.status}
+  S.sig={};await poll();renderLooks()}
+document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-lk]');if(b&&S.view=='looks')lkSend(b.dataset.k,b.dataset.lk)});
+document.addEventListener('input',e=>{if(e.target.dataset&&e.target.dataset.lkn)L.draft[e.target.dataset.lkn]=e.target.value});
+document.addEventListener('change',e=>{if(e.target.id=='lrepo'){S.repo=e.target.value;L.d=null;history.replaceState(null,'','#looks&repo='+encodeURIComponent(S.repo));S.gen++;poll()}});
+
 
 // ---- events -------------------------------------------------------------------------------------------------------
 document.addEventListener('click',e=>{const b=e.target.closest('.blk');if(b){openBlock(b.dataset.run,+b.dataset.node,+b.dataset.k);return}
