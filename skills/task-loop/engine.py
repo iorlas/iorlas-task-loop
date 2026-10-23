@@ -3734,10 +3734,35 @@ class Engine:
         # acceptance, acceptance goes before tests at equal cost (tl-bxk.13.14: lifesim-fdyo reran 11 minutes of unity tests
         # before a 3-second verdict check failed).
         history = cs.load_durations(self.wt)
+        # A stage check that contains a repo check's command (`mkdir -p e && just unity-tests > e/log && grep ...`) does not
+        # run it again: where the wrapper can be split, its copy becomes `cat` of the repo check's log and only its extra part
+        # runs; where it cannot, the repo check's own run is dropped and the wrapper's run stands in for it.
+        repo = [c for c in items if c["group"] != "acceptance"]
+        needs = {}  # id(wrapper) -> [repo checks whose log it reads]
+        covered = {}  # id(repo check) -> [wrappers that run it themselves]
+        for w in items:
+            if w["group"] != "acceptance":
+                continue
+            cmd_w = w["cmd"]
+            for r in repo:
+                var = check_env_name(r["id"])
+                if not cs.contains_cmd(cmd_w, r["cmd"], unquoted=True) or var in cmd_w or var.replace("_LOG_", "_RC_") in cmd_w:
+                    continue
+                new = cs.reuse_log(cmd_w, r["cmd"], var)
+                if new:
+                    cmd_w = new
+                    needs.setdefault(id(w), []).append(r)
+                else:
+                    covered.setdefault(id(r), []).append(w)
+            w["run_cmd"] = cmd_w
+        for r in repo:  # dropped only when every wrapper that holds it runs it, and no check reads its log
+            refs = [x for x in items if x is not r and (check_env_name(r["id"]) in x["cmd"] or check_env_name(r["id"]).replace("_LOG_", "_RC_") in x["cmd"])]
+            if covered.get(id(r)) and not any(id(r) == id(q) for ws in needs.values() for q in ws) and not refs:
+                r["covered_by"] = covered[id(r)][0]["id"]
         rank = {"static": 0, "acceptance": 1, "tests": 2} if acceptance_first else {"static": 0, "tests": 1, "acceptance": 2}
         env_of = {check_env_name(c["id"])[len("TL_CHECK_LOG_"):]: c for c in items if c["group"] != "acceptance"}
         deps = {id(c): [env_of[m] for m in dict.fromkeys(re.findall(r"TL_CHECK_(?:LOG|RC)_(\w+)", c["cmd"])) if m in env_of]
-                for c in items}
+                + needs.get(id(c), []) for c in items}
         items = cs.order_by_cost(items, history, lambda c: rank.get(c["group"], 1), deps)
         cache_path = tl.config_dir() / "check-cache" / ("%s.json" % self.bead)
         try:
@@ -3756,6 +3781,11 @@ class Engine:
             base = {"cmd": c["cmd"], "id": c["id"], "group": c["group"]}
             if red:  # the first red ends the round: nothing slower runs after it
                 out.append(dict(base, exit=None, status="skipped", why="%s failed first" % red, tail=""))
+                continue
+            if c.get("covered_by"):
+                self.log("note", "`%s` is run by the stage check `%s`: not run twice" % (c["id"], c["covered_by"][:80]))
+                out.append(dict(base, exit=None, status="skipped", tail="",
+                                why="run inside the stage check `%s`" % c["covered_by"][:60]))
                 continue
             if c["when"]:
                 changed = self.changed_paths() if changed is None else changed
@@ -3788,11 +3818,16 @@ class Engine:
                     self.log("note", "cached: %s, %s" % (c["id"], res["cached_note"]))
             else:
                 t, tries = time.time(), 0
+                xcmd, reads = cmd, needs.get(id(c), [])
+                if reads and all(check_env_name(r["id"]) in env_logs and env_logs.get(check_env_name(r["id"]).replace("_LOG_", "_RC_")) == "0"
+                                 for r in reads):
+                    xcmd = c["run_cmd"]
+                    self.log("note", "`%s` reuses the log of %s: only its own part runs" % (cmd[:100], ", ".join("`%s`" % r["id"] for r in reads)))
                 while True:
                     tries += 1
                     log_name = "%02d-%s.r%d.log" % (n, re.sub(r"[^\w.-]+", "_", c["id"])[:40], self.check_round)
                     t_try = time.time()
-                    rc, tail = self.sh(cmd, timeout=c["timeout"] * 60, save=logs / log_name, env=env_logs)
+                    rc, tail = self.sh(xcmd, timeout=c["timeout"] * 60, save=logs / log_name, env=env_logs)
                     try:
                         seen = (logs / log_name).read_text(encoding="utf-8", errors="replace")
                     except OSError:
@@ -3815,7 +3850,7 @@ class Engine:
                             self.warn("`%s` is held by an editor or project lock; waiting %d s (%d)" % (c["id"], wait, w_n))
                             time.sleep(wait)
                             self.add_wait(wait, "an editor lock")
-                            rc, tail = self.sh(cmd, timeout=c["timeout"] * 60, save=logs / log_name, env=env_logs)
+                            rc, tail = self.sh(xcmd, timeout=c["timeout"] * 60, save=logs / log_name, env=env_logs)
                             seen = (logs / log_name).read_text(encoding="utf-8", errors="replace")
                             self.note_slot_waits(seen, time.time() - t_try)
                             if rc == 0 or failure_kind(seen) != "lock":
@@ -3829,7 +3864,7 @@ class Engine:
                         break
                     self.warn("`%s` failed (exit %d), retrying: it is marked flaky" % (c["id"], rc))
                 res = dict(base, exit=rc, status="ran" if rc == 0 else "failed", tries=tries, tail=tail[-1500:],
-                           secs=round(time.time() - t), log="checks/" + log_name)
+                           secs=round(time.time() - t), log="checks/" + log_name, log_abs=str(logs / log_name))
                 if rc != 124:  # a killed run says nothing about the cost
                     timings.append((cmd, time.time() - t))
                 if rc == 0 and c["cache"]:  # only a pass is a fact about the tree; a failure can come from outside git (stale
@@ -3841,7 +3876,8 @@ class Engine:
             out.append(res)
             ran[same] = res
             if c["group"] != "acceptance" and res.get("exit") is not None:  # later checks read its log: $TL_CHECK_LOG_<ID>
-                lp = (logs / log_name) if not res.get("cached") else self.run_dir / res.get("log", "")
+                lp = (logs / log_name) if not res.get("cached") else (
+                    Path(res["log_abs"]) if res.get("log_abs") and Path(res["log_abs"]).is_file() else self.run_dir / res.get("log", ""))
                 if lp.is_file():
                     env_logs[check_env_name(c["id"])], env_logs[check_env_name(c["id"]).replace("_LOG_", "_RC_")] = str(lp), str(res["exit"])
             if res["exit"] != 0:
@@ -3911,14 +3947,24 @@ class Engine:
                     self.outcome_of("conflict", ", ".join(unmerged.split()))
                 elif self.cfg["gate"]:
                     self.gate_log = self.run_dir / ("gate.r%d.log" % (self.fixes + 1))
-                    rc, tail = self.sh(self.cfg["gate"], save=self.gate_log, timeout=float(self.cfg["gate_timeout_min"]) * 60)
+                    gtree = self.git("rev-parse", "HEAD^{tree}")
+                    if self.gate_green(gtree):  # the gate already passed on exactly this tree (a push rejected, a re-land)
+                        self.log("note", "gate skipped: `%s` already passed on tree %s" % (self.cfg["gate"][:80], gtree[:12]))
+                        rc, tail = 0, ""
+                    else:
+                        green = self.green_checks(gtree)  # repo checks green on this tree's inputs: the gate may skip their part
+                        rc, tail = self.sh(self.cfg["gate"], save=self.gate_log, timeout=float(self.cfg["gate_timeout_min"]) * 60,
+                                           env={"TL_CHECKS_GREEN": ",".join(green)} if green else None)
+                        if rc == 0:
+                            self.gate_record(gtree)
                     if rc:
                         problem = ("gate", tail)
                         self.outcome_of("gate red", (tail.strip().splitlines() or [""])[-1])
                 if not problem:
                     with self.stop_deferred() as stop:  # a push half done is no state to stop in: finish it, then stop
-                        rc, tail = self.sh(self.cfg["land"], pin=True, env={"TASK_LOOP_GATED_TREE": self.git(
-                            "rev-parse", "HEAD^{tree}")} if self.cfg["gate"] else None)  # a pre-push hook may skip a gate this tree passed
+                        gated = self.git("rev-parse", "HEAD^{tree}")  # a pre-push hook may skip a gate this exact tree passed
+                        rc, tail = self.sh(self.cfg["land"], pin=True, env={"TASK_LOOP_GATED_TREE": gated, "TL_GATE_PASSED": gated}
+                                           if self.cfg["gate"] else None)
                         if rc == 0:
                             self.landed_sha = sha = self.git("rev-parse", "HEAD")
                             tl.cmd_land(Args(id=self.bead, sha=sha, worktree=self.wt))
@@ -3953,6 +3999,44 @@ class Engine:
                                 "gate red on the rebased tree: %s" % (problem[1].strip().splitlines() or [""])[-1][:200]
                                 if problem[0] == "gate" else problem[1].splitlines()[0])
             self.fix(*problem)
+
+    def gate_file(self):
+        return tl.config_dir() / "check-cache" / ("%s.gate.json" % self.bead)
+
+    def gate_green(self, tree):
+        try:
+            got = json.loads(self.gate_file().read_text())
+        except (OSError, ValueError):
+            return False
+        return bool(tree) and got.get("tree") == tree and got.get("cmd") == cs.norm(self.cfg.get("gate") or "")
+
+    def gate_record(self, tree):
+        try:
+            self.gate_file().write_text(json.dumps({"tree": tree, "cmd": cs.norm(self.cfg.get("gate") or "")}))
+        except OSError:
+            pass
+
+    def green_checks(self, tree):
+        """Ids of the repo checks with a green result on this tree: by their inputs hash, else by tree and base."""
+        try:
+            cache = json.loads((tl.config_dir() / "check-cache" / ("%s.json" % self.bead)).read_text())
+        except (OSError, ValueError):
+            return []
+        by_inputs = cache.get("inputs") if isinstance(cache.get("inputs"), dict) else {}
+        whole = cache.get("%s %s" % (tree, self.git("rev-parse", self.cfg["base"]))) or {}
+        files, out = None, []
+        for c in self.cfg.get("checks") or []:
+            if c.get("cache", True) is False:
+                continue
+            globs = [c["inputs"]] if isinstance(c.get("inputs"), str) else list(c.get("inputs") or [])
+            if globs:
+                files = cs.tree_files(self.wt, tree) if files is None else files
+                ok = bool(by_inputs.get(cs.input_key(c["cmd"], files, globs) or "-"))
+            else:
+                ok = c["cmd"] in whole
+            if ok:
+                out.append(str(c.get("id") or c["cmd"]))
+        return out
 
     FIX = {"gate": ("make the gate pass on the tree rebased onto the latest base",
                     "\nAll stages were accepted, then the gate%s failed on the tree rebased onto the latest base (another "

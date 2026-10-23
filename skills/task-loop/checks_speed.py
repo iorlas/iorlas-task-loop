@@ -125,3 +125,108 @@ def order_by_cost(items, history, rank, deps=None):
         placed.add(id(items[i]))
         out.append(items[i])
     return out
+
+
+# --- a command inside another ---------------------------------------------------------------------------------------
+
+def quoted_at(text, idx):
+    """True when position idx of `text` sits inside a '...' or "..." span."""
+    q, i = "", 0
+    while i < idx:
+        ch = text[i]
+        if q:
+            if ch == "\\" and q == '"':
+                i += 1
+            elif ch == q:
+                q = ""
+        elif ch == "\\":
+            i += 1
+        elif ch in "'\"":
+            q = ch
+        i += 1
+    return bool(q)
+
+
+def contains_cmd(outer, inner, unquoted=False):
+    """True when `inner` (a whole command) appears in `outer` on word boundaries, whitespace-insensitive. unquoted: a
+    match inside quotes (`echo 'just unity-tests'`) is text, not a command, and does not count."""
+    words = str(inner).split()
+    if not words or norm(outer) == norm(inner):
+        return False
+    for m in re.finditer(r"(?<![\w-])" + r"\s+".join(map(re.escape, words)) + r"(?![\w-])", str(outer)):
+        if not unquoted or not quoted_at(str(outer), m.start()):
+            return True
+    return False
+
+
+def split_top(cmd):
+    """[(segment, separator)] cut at top-level `&&`, `;` and newlines; None when the command has a top-level `||`, a
+    background `&`, or quoting/nesting this scan does not follow (then it is not split)."""
+    segs, cur, i, depth, quote = [], "", 0, 0, ""
+    while i < len(cmd):
+        ch = cmd[i]
+        if quote:
+            cur += ch
+            if ch == "\\" and quote == '"' and i + 1 < len(cmd):
+                cur += cmd[i + 1]
+                i += 1
+            elif ch == quote:
+                quote = ""
+        elif ch == "\\" and i + 1 < len(cmd):
+            cur += cmd[i:i + 2]
+            i += 1
+        elif ch in "'\"`":
+            quote = ch
+            cur += ch
+        elif ch in "({":
+            depth += 1
+            cur += ch
+        elif ch in ")}":
+            depth -= 1
+            cur += ch
+        elif depth == 0 and cmd.startswith("&&", i):
+            segs.append((cur, "&&"))
+            cur, i = "", i + 1
+        elif depth == 0 and cmd.startswith("||", i):
+            return None
+        elif depth == 0 and ch == "&" and not cmd.startswith(">&", i - 1) and not cmd.startswith("&>", i):
+            return None
+        elif depth == 0 and ch in ";\n":
+            segs.append((cur, ch))
+            cur = ""
+        else:
+            cur += ch
+        i += 1
+    if quote or depth:
+        return None
+    segs.append((cur, ""))
+    return segs
+
+
+REDIRECTS = re.compile(r"""^(?:\s*(?:\d*>>?\s*[^\s|&;<>]+|\d*>&\d|&>>?\s*[^\s|&;<>]+|\|\s*tee(?:\s+-a)?\s+[^\s|&;<>]+))*\s*$""")
+
+
+SETUP_WORDS = ('mkdir', 'echo', 'printf', 'export', 'true', 'test', '[', 'cd', 'set', ':')
+
+
+def reuse_log(outer, inner, log_var):
+    """`outer` with the segment that is exactly `inner` (plus output redirections) replaced by `cat "$log_var"` with the
+    same redirections, so the wrapper's own checks read the log of the run that already happened. None when no segment
+    is exactly that (the inner command sits inside a subshell, an `if`, a pipe to something else...)."""
+    segs = split_top(outer)
+    if not segs:
+        return None
+    words = str(inner).split()
+    pat = re.compile(r"^(\s*)" + r"\s+".join(map(re.escape, words)) + r"(?![\w-])(.*)$", re.S)
+    hits, out = 0, ""
+    for seg, sep in segs:
+        m = pat.match(seg)
+        if not hits and not m and (seg.split() or ["true"])[0] not in SETUP_WORDS:
+            return None  # something before the command (rm, mv, a build) may clear what the command leaves behind
+        if m and REDIRECTS.match(m.group(2)):
+            hits += 1
+            seg = '%scat "$%s"%s' % (m.group(1), log_var, m.group(2))
+        elif contains_cmd(seg, inner, unquoted=True):
+            return None
+        out += seg + sep
+    return out if hits else None
