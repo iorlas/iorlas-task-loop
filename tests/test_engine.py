@@ -62,6 +62,7 @@ class DelegateScript:
     def __init__(self, answers, j_extra=None):
         self.answers, self.calls, self.prompts = {k: list(v) for k, v in answers.items()}, [], []
         self.access = []
+        self.cwds = []
         self.j_extra = {k: list(v) for k, v in (j_extra or {}).items()}  # per node, per call: fields the answer gains
 
     def __call__(self, route, role, prompt, schema, cwd, resume, timeout, log_path, writer=None, parent="", task="",
@@ -70,6 +71,7 @@ class DelegateScript:
         node = next(k for k in engine.SCHEMAS if schema in (engine.strict(engine.schema_for(k)),
                                                              engine.strict(engine.schema_for(k, True))))
         self.calls.append((role, resume, writer))
+        self.cwds.append(cwd)
         self.access.append((role, access))
         self.prompts.append(prompt)
         a = self.answers[node].pop(0)
