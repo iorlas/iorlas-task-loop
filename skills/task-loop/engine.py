@@ -3807,10 +3807,15 @@ BLOB = re.compile(r"`[^`]{80,}(?:`|$)|\{['\"][^}]{80,}(?:\}|$)")  # a quoted com
 ZERO_COST = re.compile(r"\$0\.00 of \$[\d.]+, ")
 
 
+def dump_like(span):
+    """A quoted span that is a script or tool-call dump (multi-line, a dict, very long), not a command worth reading."""
+    return "\n" in span or "\\n" in span or span.startswith(("`{", "{'", '{"')) or len(span) >= 300
+
+
 def tidy_question(text, cap=600):
     """The ask as the owner reads it: no command dumps, no meaningless $0.00, ends at a word and says it was cut.
     The full text stays in the ask's `detail`."""
-    t = BLOB.sub("(a long command, see details)", text or "")
+    t = BLOB.sub(lambda m: "(a long command, see details)" if dump_like(m.group(0)) else m.group(0), text or "")
     t = ZERO_COST.sub("", t).strip()
     if len(t) <= cap:
         return t
