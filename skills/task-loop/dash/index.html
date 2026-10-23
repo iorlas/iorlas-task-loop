@@ -284,62 +284,86 @@ pre.tail{margin:0;background:var(--sunk);border-radius:8px;padding:9px 10px;font
   .db{padding:12px 14px 40px}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
-/* ---- roadmap tab ---- */
-:root{--r-ready:var(--ok);--r-running:var(--run);--r-blocked:var(--wait);--r-waits:var(--ask);--r-stuck:var(--fail);--r-not_auto:var(--faint);--r-deferred:var(--faint)}
-main.wide{max-width:1500px}
-.rsec{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--mute);font-weight:620;margin:22px 0 8px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
-.rsec small{text-transform:none;letter-spacing:0;font-weight:400;color:var(--faint)}
-.rtools{display:flex;gap:8px;align-items:center}
-.rtools select{height:28px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-size:12.5px;padding:0 10px}
-.rlane{display:grid;grid-template-columns:30px minmax(0,1fr) minmax(300px,420px) minmax(0,280px);gap:12px;align-items:start;padding:10px 0;border-top:1px solid var(--line)}
-.rslot{font-family:var(--mono);font-weight:700;color:var(--mute);padding-top:8px}
-.rpast{display:flex;gap:6px;justify-content:flex-end;flex-wrap:nowrap;overflow:hidden;align-self:center;-webkit-mask-image:linear-gradient(to right,transparent,#000 30%);mask-image:linear-gradient(to right,transparent,#000 30%)}
-.rx{flex:none;width:112px;border-left:3px solid var(--c,var(--line2));background:var(--surface);border-radius:6px;padding:4px 8px;font-size:12px;box-shadow:inset 0 0 0 1px var(--line);display:block}
-.rx b{display:block;font-family:var(--mono);font-weight:600;font-size:12px;overflow:hidden;text-overflow:ellipsis}
-.rx i{display:block;font-style:normal;color:var(--c,var(--mute));white-space:nowrap}
-.rx u{display:block;text-decoration:none;color:var(--faint);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* ---- roadmap tab: 4/8/12/16/24 spacing, 11.5 / 12.5 / 14 / 15 type, muted text never lighter than --mute ---- */
+:root{--r-ready:var(--ok);--r-running:var(--run);--r-blocked:var(--wait);--r-waits:var(--ask);--r-stuck:var(--fail);--r-not_auto:var(--mute);--r-deferred:var(--mute)}
+main.wide{max-width:1400px}
+.hero .sum b{font-weight:650;font-variant-numeric:tabular-nums}
+.hero .sum .ok{color:var(--ok)}.hero .sum .ask{color:var(--ask)}.hero .sum .fail{color:var(--fail)}.hero .sum .wait{color:var(--wait)}
+.rsec{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);font-weight:650;margin:32px 0 12px;display:flex;gap:12px;align-items:baseline;flex-wrap:wrap}
+.rsec small{text-transform:none;letter-spacing:0;font-weight:400;font-size:12.5px;color:var(--mute)}
+.rtools select{height:28px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-size:12.5px;padding:0 12px}
+/* a lane: slot | last passes | the bead now | what its landing unlocks (only when something waits) */
+.rlane{display:grid;grid-template-columns:32px minmax(0,1fr) minmax(400px,520px);gap:16px;align-items:center;padding:16px 0;border-top:1px solid var(--line)}
+.rlane.unl{grid-template-columns:32px minmax(0,1fr) minmax(400px,520px) minmax(220px,300px)}
+.rlane:first-of-type{border-top:0;padding-top:4px}
+.rslot{font-family:var(--mono);font-weight:700;font-size:15px;color:var(--mute)}
+.rpast{position:relative;display:flex;gap:8px;justify-content:flex-end;overflow:hidden;padding-right:20px;-webkit-mask-image:linear-gradient(to right,transparent,#000 24%);mask-image:linear-gradient(to right,transparent,#000 24%)}
+.rpast::after{content:"›";position:absolute;right:2px;top:50%;transform:translateY(-50%);font-size:22px;color:var(--mute)}
+.rpast .none{color:var(--mute);font-size:12.5px;padding-right:8px}
+.rx{flex:none;width:116px;border-left:3px solid var(--c,var(--line2));background:var(--surface);border-radius:8px;padding:6px 10px;box-shadow:inset 0 0 0 1px var(--line);display:block;line-height:1.35}
+.rx:hover{background:var(--hover)}
+.rx b{display:block;font-family:var(--mono);font-weight:650;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rx i{display:block;font-style:normal;font-size:12px;color:var(--c,var(--mute));font-variant-numeric:tabular-nums;white-space:nowrap}
+.rx u{display:block;text-decoration:none;color:var(--mute);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .o-landed{--c:var(--ok)}.o-parked{--c:var(--ask)}.o-failed{--c:var(--fail)}.o-paused{--c:var(--wait)}
-.rnow{display:block;background:var(--surface);border-radius:12px;padding:10px 12px;box-shadow:inset 0 0 0 1px var(--run),var(--shadow)}
-.rnow.idle{box-shadow:inset 0 0 0 1px var(--line);color:var(--mute)}
-.rnow .t{font-weight:620;line-height:1.3}
-.rnow .m{color:var(--mute);font-size:12px;margin:2px 0 8px}
-.rail{display:flex;gap:3px}
-.rail span{flex:1;text-align:center;font-size:11px;padding:2px 0;border-radius:5px;background:var(--sunk);color:var(--faint)}
+.rnow{display:block;background:var(--surface);border-radius:12px;padding:12px 16px 14px;box-shadow:inset 0 0 0 1.5px var(--run),var(--shadow)}
+.rnow:hover{background:var(--hover)}
+.rnow.idle{box-shadow:inset 0 0 0 1px var(--line);color:var(--mute);padding:16px}
+.rnow .t{font-size:15px;font-weight:620;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.rnow .m{display:flex;gap:8px;flex-wrap:wrap;align-items:center;color:var(--mute);font-size:12px;margin:4px 0 12px;font-variant-numeric:tabular-nums}
+.rnow .m .mono{color:var(--ink2)}
+.live{width:8px;height:8px;border-radius:50%;background:var(--run);flex:none;animation:lv 2s ease-in-out infinite}
+@keyframes lv{50%{box-shadow:0 0 0 5px rgba(108,176,255,.0);opacity:.55}0%{box-shadow:0 0 0 0 rgba(108,176,255,.5)}}
+/* stage rail: six equal steps, label + elapsed on the live one */
+.rail{display:grid;grid-template-columns:repeat(6,1fr);gap:4px}
+.rail span{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:30px;font-size:12px;line-height:1.2;border-radius:6px;background:var(--sunk);color:var(--mute);padding:3px 0}
+.rail span small{font-size:11px;font-variant-numeric:tabular-nums;opacity:.85}
 .rail .done{background:var(--ok-bg);color:var(--ok)}
 .rail .now{background:var(--run);color:var(--bg);font-weight:700}
-.rtr{display:flex;flex-wrap:wrap;gap:3px;margin-top:7px;font-size:11px;color:var(--mute)}
-.rtr span{padding:0 6px;border-radius:4px;background:var(--sunk)}
-.rtr .ok{color:var(--ok)}.rtr .fail{color:var(--fail)}.rtr .run{color:var(--run)}
-.rnow .st{color:var(--ink2);font-size:12.5px;margin-top:6px}
-.runl{font-size:12px;color:var(--mute)}
-.runl>b{display:block;font-weight:560;margin-bottom:2px}
+.rhist{display:flex;gap:4px 6px;flex-wrap:wrap;align-items:center;margin-top:12px;font-size:11.5px;color:var(--mute);line-height:1.2}
+.rhist em{font-style:normal;margin-right:4px}
+.rhist span{padding:2px 6px;border-radius:5px;background:var(--sunk);white-space:nowrap}
+.rhist .ok{color:var(--ok)}.rhist .fail{color:var(--fail)}.rhist .run{color:var(--run)}
+.runl{font-size:12.5px;color:var(--mute)}
+.runl>b{display:block;font-weight:600;color:var(--ink2);margin-bottom:4px}
+.rnone{color:var(--mute);font-size:12.5px;padding:0 4px}
 /* git-graph tree: a branch per bead that waits on the one above */
-.gt{list-style:none;margin:0;padding:0 0 0 12px}
-.gt li{position:relative;padding:3px 0 3px 18px;font-size:12.5px;line-height:1.35}
-.gt li::before{content:"";position:absolute;left:0;top:13px;width:12px;border-top:2px solid var(--line2)}
+.gt{list-style:none;margin:0;padding:0 0 0 8px}
+.gt li{position:relative;padding:4px 0 4px 20px;font-size:13px;line-height:1.4}
+.gt li::before{content:"";position:absolute;left:0;top:14px;width:14px;border-top:2px solid var(--line2)}
 .gt li::after{content:"";position:absolute;left:0;top:0;bottom:0;border-left:2px solid var(--line2)}
-.gt li:last-child::after{bottom:auto;height:13px}
-.gt .gd{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--c);margin-right:6px;vertical-align:-1px}
+.gt li:last-child::after{bottom:auto;height:14px}
+.gt .gd{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--c);margin-right:8px;vertical-align:0}
 .gt a{color:var(--ink)}.gt a:hover{text-decoration:underline}
-.gt .id{font-family:var(--mono);font-size:11.5px;color:var(--mute);margin-right:4px}
-.gt .need{color:var(--warn);font-size:11px;margin-left:4px;white-space:nowrap}
-.gt .more{color:var(--faint);font-size:11.5px}
+.gt .id{font-family:var(--mono);font-size:12px;color:var(--mute);margin-right:8px}
+.gt .need{color:var(--warn);font-size:11.5px;margin-left:8px;white-space:nowrap}
+.gt .more{color:var(--mute);font-size:12px}
 .s-ready{--c:var(--r-ready)}.s-running{--c:var(--r-running)}.s-blocked{--c:var(--r-blocked)}.s-waits{--c:var(--r-waits)}.s-stuck{--c:var(--r-stuck)}.s-not_auto{--c:var(--r-not_auto)}.s-deferred{--c:var(--r-deferred)}
-/* the queue as a git log: one main line, each commit a bead, its dependents branch off it */
-.glog{position:relative;margin:0;padding-left:30px}
-.glog::before{content:"";position:absolute;left:11px;top:14px;bottom:14px;border-left:2px solid var(--faint);opacity:.5}
-.gc{position:relative;padding:5px 0}
-.gc::before{content:"";position:absolute;left:-26px;top:11px;width:14px;height:14px;border-radius:50%;background:var(--bg);border:3px solid var(--run)}
+/* the queue as a git log: a main line, each commit a bead (number | title | meta), its dependents branch off it */
+.glog{position:relative;padding-left:32px}
+.glog::before{content:"";position:absolute;left:9px;top:18px;bottom:18px;border-left:2px solid var(--line2)}
+.gc{position:relative;padding:8px 0}
+.gc::before{content:"";position:absolute;left:-30px;top:14px;width:12px;height:12px;border-radius:50%;background:var(--bg);border:2px solid var(--run)}
 .gc.first::before{background:var(--run);box-shadow:0 0 0 4px rgba(108,176,255,.25)}
-.gc .h{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
-.gc .n{font-family:var(--mono);color:var(--run);font-weight:700;min-width:1.6em}
-.gc .tt{font-weight:600}.gc .tt:hover{text-decoration:underline}
-.gc .rs{color:var(--mute);font-size:12px}
-.gc .unb{color:var(--ok);font-size:12px;font-weight:600}
-.gc .gt{margin-top:2px;padding-left:4px}
-.glog.held .gc::before{border-color:var(--faint)}
+.gc .h{display:grid;grid-template-columns:2.4ch minmax(0,1fr) minmax(180px,34%);gap:4px 12px;align-items:baseline}
+.gc.nn .h{grid-template-columns:minmax(0,1fr) minmax(180px,34%)}
+.gc .n{font-family:var(--mono);font-size:13px;color:var(--run);font-weight:700;text-align:right}
+.gc .tt{font-size:14.5px;font-weight:600;line-height:1.4}.gc .tt:hover{text-decoration:underline}
+.gc .unb{display:inline-block;margin-right:6px;padding:0 8px;border-radius:999px;background:var(--ok-bg);color:var(--ok);font-size:11.5px;font-weight:650;white-space:nowrap;vertical-align:1px}
+.gc .rs{color:var(--mute);font-size:12px;line-height:1.4;text-align:right}
+.gc .rs .mono{color:var(--ink2)}
+.gc .gt{margin:4px 0 0 calc(2.4ch + 12px);padding-left:0}
+.gc.nn .gt{margin-left:0}
+.glog.held .gc::before{border-color:var(--mute)}
 .glog.held .tt{font-weight:500;color:var(--ink2)}
-@media (max-width:1000px){.rlane{grid-template-columns:30px minmax(0,1fr)}.rpast,.rnow,.runl{min-width:0}.rpast{grid-column:2;justify-content:flex-start;-webkit-mask-image:none;mask-image:none}.rnow{grid-column:2}.runl{grid-column:2}}
+details.rheld>summary{cursor:pointer;list-style:none}details.rheld>summary::-webkit-details-marker{display:none}
+details.rheld>summary .rsec::before{content:"▸";color:var(--mute);font-size:11px}details.rheld[open]>summary .rsec::before{content:"▾"}
+@media (prefers-reduced-motion:reduce){.live{animation:none}}
+@media (max-width:1100px){
+  .rlane,.rlane.unl{grid-template-columns:32px minmax(0,1fr);gap:12px 16px}
+  .rpast,.rnow,.runl{grid-column:2;min-width:0}.rpast{justify-content:flex-start;-webkit-mask-image:none;mask-image:none;padding-right:0}.rpast::after{display:none}
+  .gc .h,.gc.nn .h{grid-template-columns:2.4ch minmax(0,1fr)}.gc.nn .h{grid-template-columns:minmax(0,1fr)}.gc .rs{grid-column:2;text-align:left}.gc.nn .rs{grid-column:1}
+}
 </style>
 </head>
 <body>
@@ -604,44 +628,49 @@ function answerHtml(a){if(!a)return'';let h='';
   return h||`<pre class="tail">${esc(JSON.stringify(a,null,1))}</pre>`}
 
 // ---- roadmap: one lane per slot, the queue as a git log ------------------------------------------------------------
-const R={d:null,raw:''};
+const R={d:null,held:false};
 const RSTATE={queued:'ready',running:'running',blocked:'blocked',waits:'waits',stuck:'stuck',not_auto:'not_auto',deferred:'deferred'};
 const RSTATE_TXT={ready:'ready',running:'running',blocked:'blocked',waits:'waits on you',stuck:'stuck',not_auto:'not auto',deferred:'deferred'};
+const RSTEP={replan:'plan'};
 const taskHref=(id,repo)=>'#task='+encodeURIComponent(id)+(repo?'&repo='+encodeURIComponent(repo):'');
+const shortId=id=>String(id).replace(/^[^-]+-/,'');
 function rtree(ks,repo){if(!ks||!ks.length)return'';
   return '<ul class="gt">'+ks.map(k=>{const st=RSTATE[k.state]||'blocked';
-    return `<li class="s-${st}" title="${esc(RSTATE_TXT[st]||st)}"><span class="gd"></span><span class="id">${esc(k.id)}</span><a href="${taskHref(k.id,repo)}">${esc(k.title)}</a>`
+    return `<li class="s-${st}" title="${esc(RSTATE_TXT[st]||st)}"><span class="gd"></span><span class="id">${esc(shortId(k.id))}</span><a href="${taskHref(k.id,repo)}">${esc(k.title)}</a>`
       +(k.needs?`<span class="need" title="it also waits on ${k.needs} other open bead${k.needs>1?'s':''}">+${k.needs} more needed</span>`:'')
       +(k.more?`<div class="more">+${k.more} more</div>`:'')+rtree(k.kids,repo)+'</li>'}).join('')+'</ul>'}
-function pastCard(p,repo){const rel=(p.released||[]).slice(0,2).map(r=>r.id).join(', ');
-  return `<a class="rx o-${esc(p.outcome)}" href="${taskHref(p.id,repo)}" title="${esc((p.title||p.id)+(p.why?' — '+p.why:''))}"><b>${esc(p.id.replace(/^[^-]+-/,''))}</b><i>${esc(p.outcome)} · ${esc(dur(p.minutes*60))}</i>`
+function pastCard(p,repo){const rel=(p.released||[]).slice(0,2).map(r=>shortId(r.id)).join(', ');
+  return `<a class="rx o-${esc(p.outcome)}" href="${taskHref(p.id,repo)}" title="${esc((p.title||p.id)+(p.why?' — '+p.why:''))}"><b>${esc(shortId(p.id))}</b><i>${esc(p.outcome)} · ${esc(dur(p.minutes*60))}</i>`
     +`<u>${rel?'→ released '+esc(rel):esc(ago(p.t))}</u></a>`}
 function laneHtml(l,repo){
-  const past=`<div class="rpast">${l.past.map(p=>pastCard(p,repo)).join('')||'<span style="color:var(--faint);font-size:12px">nothing left this slot yet</span>'}</div>`;
-  if(!l.bead)return `<div class="rlane"><div class="rslot">${esc(l.slot)}</div>${past}<div class="rnow idle"><div class="t">idle</div><div class="m">the loop takes #1 of the queue when it checks next</div></div><div></div></div>`;
-  const rail=l.rail.map(r=>`<span class="${r.state}">${esc(r.step)}</span>`).join('');
-  const trail=l.trail.map(b=>`<span class="${b.status=='ok'?'ok':b.status=='fail'?'fail':b.status=='run'?'run':''}">${esc(b.kind)}${b.stage?' '+b.stage:''}${b.status=='ok'?' ✓':b.status=='fail'?' ✗':b.status=='run'?' …':''}</span>`).join('');
-  const unl=l.unlocks.length?`<div class="runl"><b>landing unlocks${l.unblocks?' '+l.unblocks:''}</b>${rtree(l.unlocks,repo)}</div>`:`<div class="runl">nothing waits on it</div>`;
-  return `<div class="rlane"><div class="rslot">${esc(l.slot)}</div>${past}
-    <a class="rnow" href="${taskHref(l.bead,repo)}"><div class="t">${esc(l.title||l.bead)}</div>
-      <div class="m"><span class="mono">${esc(l.bead)}</span>${l.run>1?' · run '+l.run:''}${l.since?' · '+esc(dur(Date.now()/1000-l.since)):''}</div>
-      <div class="rail">${rail}</div>${trail?`<div class="rtr">${trail}</div>`:''}${l.stage?`<div class="st">${esc(l.stage)}</div>`:''}</a>${unl}</div>`}
-function queueHtml(q,repo,held){return `<div class="glog${held?' held':''}">`+q.map((b,i)=>`<div class="gc${i||held?'':' first'}"><div class="h">${held?'':`<span class="n">${i+1}</span>`}
-  <a class="tt" href="${taskHref(b.id,repo)}">${esc(b.title||b.id)}</a><span class="mono rs">${esc(b.id)}</span>
-  <span class="rs">${b.priority!=null?'P'+b.priority:''}${b.reason?' · '+esc(b.reason):''}${b.why?' · '+esc(b.why):''}</span>${b.unblocks?`<span class="unb">unblocks ${b.unblocks}</span>`:''}</div>${rtree(b.tree,repo)}</div>`).join('')+'</div>'}
+  const past=`<div class="rpast">${l.past.map(p=>pastCard(p,repo)).join('')||'<span class="none">nothing has left this slot yet</span>'}</div>`;
+  if(!l.bead)return `<div class="rlane"><div class="rslot">${esc(l.slot)}</div>${past}<div class="rnow idle"><div class="t">idle</div><div class="m">the loop takes #1 of the queue when it checks next</div></div></div>`;
+  const last={};l.trail.forEach(b=>{last[RSTEP[b.kind]||b.kind]=b});
+  const rail=l.rail.map(r=>{const b=last[r.step];return `<span class="${r.state}">${esc(r.step)}${r.state=='now'&&b&&b.secs?`<small>${esc(dur(b.secs))}</small>`:''}</span>`}).join('');
+  const sb=[...l.trail].reverse().find(b=>b.stages),stage=sb&&sb.stages>1?`stage ${sb.stage} of ${sb.stages}`:'';
+  const hist=l.trail.map(b=>`<span class="${b.status=='ok'?'ok':b.status=='fail'?'fail':b.status=='run'?'run':''}" title="${esc(b.text||b.label)}">${esc(b.kind)}${b.stage?' '+b.stage:''} ${b.status=='ok'?'✓':b.status=='fail'?'✗':b.status=='run'?'…':''}</span>`).join('');
+  const unl=l.unlocks.length?`<div class="runl"><b>Landing unlocks${l.unblocks?' '+l.unblocks:''}</b>${rtree(l.unlocks,repo)}</div>`:'';
+  const meta=[`<span class="live" title="running"></span>`,`<span class="mono">${esc(l.bead)}</span>`,l.run>1?'run '+l.run:'',l.since?esc(dur(Date.now()/1000-l.since)):'',esc(stage)].filter(Boolean).map(x=>x.startsWith('<')?x:`<span>${x}</span>`).join('');
+  return `<div class="rlane${unl?' unl':''}"><div class="rslot">${esc(l.slot)}</div>${past}
+    <a class="rnow" href="${taskHref(l.bead,repo)}"><div class="t">${esc(l.title||l.bead)}</div><div class="m">${meta}</div>
+      <div class="rail">${rail}</div>${hist?`<div class="rhist"><em>so far</em>${hist}</div>`:''}</a>${unl}</div>`}
+function queueHtml(q,repo,held){return `<div class="glog${held?' held':''}">`+q.map((b,i)=>`<div class="gc${i||held?'':' first'}${held?' nn':''}"><div class="h">${held?'':`<span class="n">${i+1}</span>`}
+  <a class="tt" href="${taskHref(b.id,repo)}">${esc(b.title||b.id)}</a>
+  <span class="rs">${b.unblocks?`<span class="unb">unblocks ${b.unblocks}</span> `:''}<span class="mono">${esc(shortId(b.id))}</span>${b.priority!=null?' · P'+b.priority:''}${b.reason?' · '+esc(b.reason):''}${b.why?' · '+esc(b.why):''}</span></div>${rtree(b.tree,repo)}</div>`).join('')+'</div>'}
 function renderRoadmap(){const d=R.d;if(!d)return;
   if(d.error){paint($('main'),'main',`<div class="list"><div class="empty"><b>${esc(d.error)}</b></div></div>`);return}
   const sm=d.summary||{},names=d.repos||[];
-  const today=[sm.landed?sm.landed+' landed':'',sm.parked?sm.parked+' parked':'',sm.failed?sm.failed+' failed':'',sm.paused?sm.paused+' paused':''].filter(Boolean).join(' · ');
-  let html=`<div class="hero"><div><h1>Roadmap</h1><div class="sum">${esc(d.repo)} · today: ${esc(today||'nothing finished yet')} · ${d.queue.length} ready</div></div>
+  const today=[[sm.landed,'landed','ok'],[sm.parked,'parked','ask'],[sm.failed,'failed','fail'],[sm.paused,'paused','wait']].filter(x=>x[0]).map(x=>`<span class="${x[2]}"><b>${x[0]}</b> ${x[1]}</span>`).join(' · ');
+  let html=`<div class="hero"><div><h1>Roadmap</h1><div class="sum">${esc(d.repo)} · today ${today||'nothing finished yet'} · <b>${d.queue.length}</b> ready</div></div>
     <div class="rtools">${names.length>1?`<select id="rrepo" aria-label="Repo">${names.map(n=>`<option ${n==d.repo?'selected':''}>${esc(n)}</option>`).join('')}</select>`:''}</div></div>`;
-  html+='<div class="rsec">Slots <small>finished ← | now | → what its landing unlocks</small></div>';
+  html+='<div class="rsec">Slots <small>finished passes, then the bead running now</small></div>';
   html+=d.lanes.length?d.lanes.map(l=>laneHtml(l,d.repo)).join(''):`<div class="list"><div class="empty"><b>No loop is running on ${esc(d.repo)}</b>Start one with <code>tl loop</code>; its slots show here.</div></div>`;
-  html+='<div class="rsec">Up next <small>the order <code>tl next</code> takes · a branch is a bead that waits on the one above</small></div>';
+  html+='<div class="rsec">Up next <small>the order <code>tl next</code> takes. A branch is a bead that waits on the one above it.</small></div>';
   html+=d.queue.length?queueHtml(d.queue,d.repo):'<div class="list"><div class="empty"><b>Nothing ready</b>No open bead the loop may take.</div></div>';
-  if(d.held&&d.held.length)html+=`<div class="rsec">Held back <small>${d.held_total} ready but skipped for now (another bead holds its area), most unblocking first</small></div>`+queueHtml(d.held,d.repo,true);
+  if(d.held&&d.held.length)html+=`<details class="rheld" id="rheld"${R.held?' open':''}><summary><div class="rsec">Held back <small>${d.held_total} ready but skipped for now: another bead holds their area</small></div></summary>${queueHtml(d.held,d.repo,true)}</details>`;
   paint($('main'),'main',html)}
 document.addEventListener('change',e=>{if(e.target.id=='rrepo'){S.repo=e.target.value;R.d=null;history.replaceState(null,'','#roadmap&repo='+encodeURIComponent(S.repo));S.gen++;poll()}});
+document.addEventListener('toggle',e=>{if(e.target.id=='rheld')R.held=e.target.open},true);
 
 // ---- events -------------------------------------------------------------------------------------------------------
 document.addEventListener('click',e=>{const b=e.target.closest('.blk');if(b){openBlock(b.dataset.run,+b.dataset.node,+b.dataset.k);return}

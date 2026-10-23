@@ -6,7 +6,7 @@ import time
 
 STEPS = ("plan", "write", "checks", "review", "verify", "land")
 OUTCOMES = ("landed", "parked", "failed", "paused")   # "taken" (lost a claim race) is not an outcome of a pass
-DEPTH, WIDE, PAST = 3, 5, 5
+DEPTH, WIDE, PAST = 3, 5, 8
 
 
 def epoch(s):
