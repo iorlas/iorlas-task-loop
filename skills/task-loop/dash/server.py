@@ -1125,18 +1125,40 @@ def api_bead(repo, bead):
             "runs": runs, "found": bool(b)}
 
 
+def loop_version(pid):
+    """The task-loop version a loop process runs from its plugin cache path (`ps`); '' when unknown (a dev checkout, Windows)."""
+    try:
+        out = subprocess.run(["ps", "-o", "command=", "-p", str(pid)], capture_output=True, text=True, timeout=5).stdout
+    except (subprocess.SubprocessError, OSError):
+        return ""
+    m = re.search(r"iorlas-task-loop/(\d+\.\d+\.\d+)/", out)
+    return m.group(1) if m else ""
+
+
 def loop_files(repo):
-    """(live loops' states, the repo's pass log rows oldest first), read without touching them (loop.live_loops would
-    delete a dead loop's file): [{slot, bead, since}], [row]."""
+    """(lanes, rows, waiting loops): one lane per slot (roadmap.lanes_of), the repo's pass log rows oldest first. Read only: a
+    dead loop's state file is left (loop.live_loops would delete it)."""
     _engine_dir()
     import loop
     import tl
     d, key = loop.paths(repo)["states"]
-    lanes = []
+    loops = []
     for f in [d / (key + ".json")] + sorted(d.glob(key + ".*.json")):
         st = read_json(str(f), {}) or {}
-        if st.get("pid") and tl.pid_alive(st["pid"]):
-            lanes.append({"slot": st.get("slot") or "", "bead": st.get("bead"), "since": st.get("since")})
+        if isinstance(st, dict) and st.get("pid") and tl.pid_alive(st["pid"]):
+            loops.append({"pid": st["pid"], "slot": st.get("slot") or "", "bead": st.get("bead"), "since": st.get("since"),
+                          "started": st.get("started") or 0, "version": loop_version(st["pid"])})
+    try:
+        slots = [b["title"].split()[-1] for b in tl.slot_beads(repo)]
+        running = loop.running(repo)
+    except Exception:
+        slots, running = [], {}
+    try:
+        sf = loop.paths(repo)["stop"]
+        stop = (sf.stat().st_mtime, sf.read_text().strip() or "after")
+    except OSError:
+        stop = (0, "")
+    lanes, waiting = roadmap.lanes_of(slots, running, loops, stop)
     rows = []
     try:
         for line in Path(loop.paths(repo)["log"]).read_text(encoding="utf-8", errors="replace").splitlines()[-400:]:
@@ -1148,7 +1170,7 @@ def loop_files(repo):
                 rows.append(row)
     except OSError:
         pass
-    return lanes, rows
+    return lanes, rows, waiting
 
 
 def api_roadmap(repo=""):
@@ -1170,15 +1192,20 @@ def api_roadmap(repo=""):
             cfg = {"pick_label": "auto", "skip_labels": []}
         ranked, skipped = loop_order(path, beads, cfg)
         try:
-            lanes, rows = loop_files(path)
+            lanes, rows, waiting = loop_files(path)
         except Exception:
-            lanes, rows = [], []
+            lanes, rows, waiting = [], [], []
         api = api_tasks()
         tasks = {t["id"]: t for t in api["tasks"]}
         held = {l["bead"] for l in lanes if l["bead"]}
         for t in tasks.values():  # a bead run by hand (tl run-task) has a slot but no loop
             if t.get("state") == "running" and t["id"] not in held and t.get("repo") == g["repo"]:
-                lanes.append({"slot": t.get("slot") or "-", "bead": t["id"], "since": time.time() - (t.get("since") or 0)})
+                free = next((l for l in lanes if l["slot"] == t.get("slot") and not l["bead"]), None)
+                since = time.time() - (t.get("since") or 0)
+                if free:
+                    free["bead"], free["since"] = t["id"], since
+                else:
+                    lanes.append({"slot": t.get("slot") or "-", "bead": t["id"], "since": since})
         trails, logs = {}, engine_logs(retain=False)
         for ln in lanes:
             b = ln["bead"]
@@ -1195,7 +1222,7 @@ def api_roadmap(repo=""):
                                      "status": (x.get("result") or {}).get("status"), "text": (x.get("result") or {}).get("text")}
                                     for x in r["blocks"]]}
         mine_asks = [a for a in asks()["asks"] if os.path.basename(str(a.get("repo") or "").rstrip("/\\")) == g["repo"]]
-        return roadmap.build(g, lanes, ranked, skipped, rows, trails, rows=tasks, lane_records=api["lanes"], asks=mine_asks)
+        return roadmap.build(g, lanes, ranked, skipped, rows, trails, rows=tasks, lane_records=api["lanes"], asks=mine_asks, waiting=len(waiting))
 
     out = cached("roadmap:" + path, 5, build)
     return dict(out, repos=g["repos"])

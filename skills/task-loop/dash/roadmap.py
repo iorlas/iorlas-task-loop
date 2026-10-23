@@ -53,7 +53,7 @@ def released(i, out, by_id):
             if by_id.get(t) and by_id[t]["state"] not in ("done", "epic", "blocked") and not by_id[t]["is_epic"]]
 
 
-def build(graph_data, lanes, ranked, skipped, history, trails, now=None, rows=None, lane_records=(), asks=()):
+def build(graph_data, lanes, ranked, skipped, history, trails, now=None, rows=None, lane_records=(), asks=(), waiting=0):
     """graph_data: graph.build() output. lanes: [{slot, bead, since}] (bead None = an idle loop). ranked: [(id, reason)] in
     the order `tl next` takes them. skipped: [(id, why)]. history: loop-log rows, oldest first. trails: {bead: {run,
     stage, blocks: [{kind, label, status, text}]}}."""
@@ -81,7 +81,7 @@ def build(graph_data, lanes, ranked, skipped, history, trails, now=None, rows=No
         b, tr = ln.get("bead"), trails.get(ln.get("bead")) or {}
         node = by_id.get(b) or {}
         lane_out.append({
-            "slot": ln["slot"], "bead": b, "title": node.get("title") or tr.get("title") or "", "since": ln.get("since"),
+            "slot": ln["slot"], "bead": b, "version": ln.get("version") or "", "stopping": ln.get("stopping") or "", "title": node.get("title") or tr.get("title") or "", "since": ln.get("since"),
             "run": tr.get("run") or 0, "stage": tr.get("stage") or "",
             "rail": rail(tr.get("blocks") or [], tr.get("run") or 0) if b else [],
             "trail": tr.get("blocks") or [], "unlocks": tree(b, out, by_id) if b else [],
@@ -105,6 +105,7 @@ def build(graph_data, lanes, ranked, skipped, history, trails, now=None, rows=No
     summary["ready"] = len(queue)
     out = {"now": now, "repo": graph_data.get("repo", ""), "lanes": lane_out, "queue": queue, "held": held[:12],
            "held_total": len(held), "summary": summary, "recent": passes[-12:][::-1]}
+    out["loops_waiting"] = waiting
     out["briefs"] = briefs(out, by_id, rows or {})
     mine = [r for r in (rows or {}).values() if not graph_data.get("repo") or r.get("repo") == graph_data["repo"]]
     out.update(signals.build(mine, passes, list(lane_records), list(asks), graph_data.get("summary"), now))
@@ -165,3 +166,30 @@ def verdict(r, stats):
     if f and stats.get("median_fresh"):
         bits.append("%s fresh tokens, %.1f× the median bead" % (signals.human(f), f / stats["median_fresh"]))
     return " · ".join(bits)
+
+
+def lanes_of(slots, running, loops, stop=(0, "")):
+    """One lane per slot, never per loop. slots: this machine's slot names; running: {bead: slot} (a slot bead's held_bead, or
+    a live engine lock); loops: live loop states [{pid, slot, bead, since, started, version}]; stop: (mtime, mode) of the repo's
+    stop file. -> (lanes, waiting): a lane {slot, bead, since, version, stopping, loop}, and the loops that hold no slot yet
+    (they wait in line; they are a note on the queue, not a lane). A slot with no bead is free; a loop with a bead but no
+    slot name (run in a worktree) gets a lane named after its bead's slot or '-'."""
+    def mode(lp):
+        return stop[1] if stop[0] and stop[0] >= (lp.get("started") or 0) else ""
+    names = set(slots) | set(running.values()) | {lp["slot"] for lp in loops if lp.get("slot")}
+    lanes = []
+    for name in sorted(names):
+        bead = next((b for b, s in running.items() if s == name), None)
+        owner = next((lp for lp in loops if lp.get("slot") == name or (bead and lp.get("bead") == bead)), None)
+        bead = bead or (owner or {}).get("bead")
+        lanes.append({"slot": name, "bead": bead, "since": (owner or {}).get("since") if bead else None,
+                      "version": (owner or {}).get("version") or "", "stopping": mode(owner) if owner else "",
+                      "loop": (owner or {}).get("pid")})
+    placed = {l["loop"] for l in lanes if l["loop"]}
+    for lp in loops:  # a loop on a bead whose slot nobody named
+        if lp.get("bead") and lp.get("pid") not in placed and lp["bead"] not in {l["bead"] for l in lanes}:
+            lanes.append({"slot": lp.get("slot") or "-", "bead": lp["bead"], "since": lp.get("since"), "version": lp.get("version") or "",
+                          "stopping": mode(lp), "loop": lp.get("pid")})
+            placed.add(lp.get("pid"))
+    waiting = [lp for lp in loops if not lp.get("bead") and lp.get("pid") not in placed]
+    return lanes, waiting

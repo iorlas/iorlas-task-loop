@@ -701,15 +701,15 @@ function rtree(ks,repo){if(!ks||!ks.length)return'';
 function pastCard(p,repo){const rel=(p.released||[]).slice(0,2).map(r=>shortId(r.id)).join(', ');
   return `<a class="rx o-${esc(p.outcome)}" href="${taskHref(p.id,repo)}" data-bead="${esc(p.id)}" title="${esc((p.title||p.id)+(p.why?' — '+p.why:''))}"><b>${esc(shortId(p.id))}</b><i>${esc(p.outcome)} · ${esc(dur(p.minutes*60))}</i>`
     +`<u>${rel?'→ released '+esc(rel):esc(ago(p.t))}</u></a>`}
-function laneHtml(l,repo){
+function laneHtml(l,repo,waiting){
   const past=`<div class="rpast">${l.past.map(p=>pastCard(p,repo)).join('')||'<span class="none">nothing has left this slot yet</span>'}</div>`;
-  if(!l.bead)return `<div class="rlane"><div class="rslot">${esc(l.slot||'·')}</div>${past}<div class="rnow idle"><div class="t">idle</div><div class="m">the loop takes #1 of the queue when it checks next</div></div></div>`;
+  if(!l.bead)return `<div class="rlane"><div class="rslot">${esc(l.slot||'·')}</div>${past}<div class="rnow idle"><div class="t">${waiting?'free':'idle'}</div><div class="m">${waiting?'a waiting loop takes #1 of the queue next':'free, and no loop waits for it'}</div></div></div>`;
   const last={};l.trail.forEach(b=>{last[RSTEP[b.kind]||b.kind]=b});
   const rail=l.rail.map(r=>{const b=last[r.step];return `<span class="${r.state}">${esc(r.step)}${r.state=='now'&&b&&b.secs?`<small>${esc(dur(b.secs))}</small>`:''}</span>`}).join('');
   const sb=[...l.trail].reverse().find(b=>b.stages),stage=sb&&sb.stages>1?`stage ${sb.stage} of ${sb.stages}`:'';
   const hist=l.trail.slice(-8).map(b=>`<span class="${b.status=='ok'?'ok':b.status=='fail'?'fail':b.status=='run'?'run':''}" title="${esc(b.text||b.label)}">${esc(b.kind)}${b.stage?' '+b.stage:''} ${b.status=='ok'?'✓':b.status=='fail'?'✗':b.status=='run'?'…':''}</span>`).join('');
   const unl=l.unlocks.length?`<div class="runl"><b>Landing unlocks${l.unblocks?' '+l.unblocks:''}</b>${rtree(l.unlocks,repo)}</div>`:'';
-  const meta=[`<span class="live" title="running"></span>`,`<span class="mono">${esc(l.bead)}</span>`,l.run>1?'run '+l.run:'',l.since?esc(dur(Math.floor((Date.now()/1000-l.since)/60)*60)):'',esc(stage)].filter(Boolean).map(x=>x.startsWith('<')?x:`<span>${x}</span>`).join('');
+  const meta=[`<span class="live" title="running"></span>`,`<span class="mono">${esc(l.bead)}</span>`,l.run>1?'run '+l.run:'',l.since?esc(dur(Math.floor((Date.now()/1000-l.since)/60)*60)):'',esc(stage),l.version?'loop '+esc(l.version):'',l.stopping=='after'?'stopping after this bead':l.stopping=='now'?'stopping now':''].filter(Boolean).map(x=>x.startsWith('<')?x:`<span>${x}</span>`).join('');
   return `<div class="rlane${unl?' unl':''}"><div class="rslot">${esc(l.slot||'·')}</div>${past}
     <a class="rnow" href="${taskHref(l.bead,repo)}" data-bead="${esc(l.bead)}"><div class="t">${esc(l.title||l.bead)}</div><div class="m">${meta}</div>
       <div class="rail">${rail}</div>${l.verdict?`<div class="rverd">${esc(l.verdict)}</div>`:''}${hist?`<div class="rhist"><em>${l.trail.length>8?'last 8 of '+l.trail.length:'so far'}</em>${hist}</div>`:''}</a>${unl}</div>`}
@@ -730,8 +730,8 @@ function renderRoadmap(){const d=R.d;if(!d)return;
     <div class="rtools">${names.length>1?`<select id="rrepo" aria-label="Repo">${names.map(n=>`<option ${n==d.repo?'selected':''}>${esc(n)}</option>`).join('')}</select>`:''}</div></div>`;
   html+=signalsHtml(d);
   html+='<div class="rsec">Slots <small>finished passes, then the bead running now</small></div>';
-  html+=d.lanes.length?d.lanes.map(l=>laneHtml(l,d.repo)).join(''):`<div class="list"><div class="empty"><b>No loop is running on ${esc(d.repo)}</b>Start one with <code>tl loop</code>; its slots show here.</div></div>`;
-  html+='<div class="rsec">Up next <small>the order <code>tl next</code> takes. A branch is a bead that waits on the one above it.</small></div>';
+  html+=d.lanes.length?d.lanes.map(l=>laneHtml(l,d.repo,d.loops_waiting)).join(''):`<div class="list"><div class="empty"><b>No loop is running on ${esc(d.repo)}</b>Start one with <code>tl loop</code>; its slots show here.</div></div>`;
+  html+=`<div class="rsec">Up next <small>the order <code>tl next</code> takes. A branch is a bead that waits on the one above it.${d.loops_waiting?` ${d.loops_waiting} loop${d.loops_waiting>1?'s':''} wait${d.loops_waiting>1?'':'s'} for a free slot.`:''}</small></div>`;
   html+=d.queue.length?queueHtml(d.queue,d.repo):'<div class="list"><div class="empty"><b>Nothing ready</b>No open bead the loop may take.</div></div>';
   if(d.held&&d.held.length)html+=`<details class="rheld" id="rheld"${R.held?' open':''}><summary><div class="rsec">Held back <small>${d.held_total} ready but skipped for now: another bead holds their area</small></div></summary>${queueHtml(d.held,d.repo,true)}</details>`;
   if(paint($('main'),'main',html))tip.hidden=true}
