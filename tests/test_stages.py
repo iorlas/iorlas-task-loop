@@ -666,5 +666,60 @@ class VisualWork(StagesTest):
         self.assertEqual(entry["shots"], [{"path": "design/look-reviews/t-1/main.png", "role": "after", "label": "main"}])
 
 
+class Contracts(StagesTest):
+    """tl-bxk.13.16: infrastructure is retried with a rest, never asked; the version is recorded."""
+
+    FLAKY = ("import os, subprocess, sys\nm = %r\nn = int(open(m).read()) if os.path.exists(m) else 0\n"
+             "open(m, 'w').write(str(n + 1))\n"
+             "if n < %d:\n    sys.stderr.write('error: RPC failed; curl 56 Send failure: Broken pipe\\nfatal: the remote end hung up unexpectedly\\n'); sys.exit(1)\n"
+             "sys.exit(subprocess.call(['git', 'push', 'origin', 'HEAD:main']))\n")
+
+    def land_with(self, fails):
+        script = Path(self.tmp.name, "flaky_push.py")
+        script.write_text(self.FLAKY % (str(Path(self.tmp.name, "flaky-count")), fails))
+        return te.PY + " " + str(script).replace("\\", "/")
+
+    def test_a_network_failure_on_the_push_is_retried_with_a_rest_and_lands(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, land=self.land_with(2))
+        self.assertEqual(rc, 0, self.blocked)
+        text = self.eng.log_path.read_text()
+        self.assertEqual(text.count("the push failed with a network error"), 2)
+        self.assertIsNone(self.eng.__dict__.get("asked") or None)
+        self.assertTrue(self.closed and self.closed[0].startswith("merged"))
+
+    def test_a_push_that_keeps_failing_pauses_the_bead_and_asks_nobody(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, land=self.land_with(99))
+        self.assertNotEqual(rc, 0)
+        self.assertTrue(self.eng.why.startswith("paused: the land push failed 4 times"), self.eng.why)
+        self.assertFalse(self.eng.asked)
+
+    def test_a_rejected_or_other_push_failure_is_not_retried_as_the_network(self):
+        self.assertFalse(engine.TRANSIENT_PUSH.search("! [rejected] HEAD -> main (non-fast-forward)"))
+        self.assertFalse(engine.TRANSIENT_PUSH.search("remote: error: GH006: Protected branch update failed"))
+        self.assertTrue(engine.TRANSIENT_PUSH.search("fatal: unable to access 'https://x/': Could not resolve host: x"))
+
+    def test_a_delegate_crash_is_retried_fresh_and_the_run_goes_on(self):
+        crash = te.ans("failed", "crash", "owner", say="UnicodeDecodeError: 'utf-8' codec can't decode bytes in position 65534-65535")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [crash, CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer", "reviewer"])
+        self.assertIn("delegate crashed", self.eng.log_path.read_text())
+
+    def test_a_delegate_that_keeps_crashing_pauses_the_bead_and_asks_nobody(self):
+        crash = te.ans("failed", "crash", "owner", say="UnicodeDecodeError")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [crash, crash, crash]})
+        self.assertNotEqual(rc, 0)
+        self.assertTrue(self.eng.why.startswith("paused: delegate crashed 3 times on the review step"), self.eng.why)
+        self.assertFalse(self.eng.asked)
+
+    def test_the_engine_log_and_trace_record_the_version(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        want = json.loads((Path(engine.__file__).resolve().parents[2] / ".claude-plugin" / "plugin.json").read_text())["version"]
+        self.assertEqual(engine.plugin_version(), want)
+        self.assertIn("task-loop %s" % want, self.eng.log_path.read_text())
+        last = json.loads((tl.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
+        self.assertEqual(last["version"], want)
+
+
 if __name__ == "__main__":
     unittest.main()

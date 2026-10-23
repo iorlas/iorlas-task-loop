@@ -556,6 +556,14 @@ def validate(data, schema, path="$"):
 GIT_PIN_VARS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")  # the engine's own git is pinned; no child inherits a pin
 
 
+def plugin_version():
+    """This engine's task-loop version, from the plugin.json next to it ('' when it is run from a bare copy)."""
+    try:
+        return str(json.loads((Path(__file__).resolve().parents[2] / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")).get("version") or "")
+    except (OSError, ValueError, IndexError):
+        return ""
+
+
 def child_env():
     """Workers never inherit the launcher's session (a leaked CLAUDE_* broke claude children in the factory)."""
     drop = ("CLAUDE_CODE_", "CLAUDECODE", "ANTHROPIC_", "DELEGATE_", "CODEX_COMPANION", "CLAUDE_PID",
@@ -731,6 +739,12 @@ def wait_wall(p, timeout):
     return ""
 
 
+# tl-bxk.13.16.4: a push that died of the network (lifesim-l4ow: curl 56 broken pipe, after a 17 min hook) is retried with a rest
+TRANSIENT_PUSH = re.compile(r"curl \d+|Broken pipe|Connection (?:reset|timed out|refused)|Could not resolve host|early EOF|RPC failed|"
+                            r"remote end hung up|SSL_ERROR|TLS|Operation timed out|Network is unreachable|"
+                            r"Temporary failure in name resolution|error: 5\d\d|HTTP/\d(?:\.\d)? 5\d\d", re.I)
+PUSH_RESTS = (30, 120, 300)  # seconds before the 2nd, 3rd and 4th try
+CRASH_RESTS = (30, 120)      # a delegate that crashed (lifesim-rl4s: UnicodeDecodeError): two more tries, with these rests
 STOP_GRACE = 10  # seconds route.py gets to stop its worker after a SIGTERM, before everything is SIGKILLed
 PROOF_TERM, PROOF_KILL = 5, 10  # seconds a worker that outlived the stop gets after a SIGTERM, then after a SIGKILL
 
@@ -1320,7 +1334,7 @@ class Engine:
         rec = {"v": 1, "run": self.log_path.stem, "bead": self.bead,
                "repo": self.git("remote", "get-url", "origin") or str(self.wt), "worktree": str(self.wt),
                "branch": self.git("symbolic-ref", "--short", "-q", "HEAD"), "coordinator_session": self.session,
-               "started": self.t0, "ended": time.time(), "outcome": outcome, "why": (why or "")[:500], "sha": sha or "",
+               "version": plugin_version(), "started": self.t0, "ended": time.time(), "outcome": outcome, "why": (why or "")[:500], "sha": sha or "",
                "cost": self.cost, "stats": self.stats, "host": self.host, "delegate": self.route or "", "log": str(self.log_path),
                "stderr": str(self.err_path), "lanes": (self.contract or {}).get("lanes"), "sessions": self.sessions,
                "verified": self.verified, "write_rounds": self.write_rounds, "strays": self.strays}
@@ -1409,6 +1423,7 @@ class Engine:
                   **meta)
         timeout = float(self.cfg["node_timeout_min"]) * 60
         waited, attempt_prompt, attempt, errs = 0.0, delta if (delta and resume and resume_key) else prompt, 1, ["not run"]
+        crashes = 0  # delegate crashes retried on this call
         login_note = ""  # set once a lane answered logged_out and the engine retried afresh (delegate puts that lane out 15 min)
         while attempt <= 2:
             self._resume = resume
@@ -1445,6 +1460,20 @@ class Engine:
                 if self._resume:
                     attempt_prompt = prompt + FRESH_WRITER_TEXT
                 continue
+            crashed = reason == "crash" or (reason == "no_answer" and not str(r.error or "").startswith("timeout"))  # a timeout is not a crash
+            if crashed and crashes < len(CRASH_RESTS):
+                # tl-bxk.13.16.4: delegate itself died (a decode error, a broken pipe): not the bead's, not the owner's. Again as a
+                # fresh call after a rest; out of tries it pauses, it never asks
+                rest = CRASH_RESTS[crashes]
+                crashes += 1
+                self.warn("%s: delegate crashed (%s), trying again in %d s (%d of %d)" % (node, (said or reason)[:160], rest, crashes, len(CRASH_RESTS)))
+                self.transition(step or node, "delegate_crash", "delegate crashed: %s" % (said or reason)[:160], lane=j.get("lane") or "")
+                time.sleep(rest)
+                self.add_wait(rest, "a delegate crash")
+                resume, attempt_prompt = None, prompt + (FRESH_WRITER_TEXT if self._resume else "")
+                continue
+            if crashed and crashes >= len(CRASH_RESTS):
+                raise Blocked("paused: delegate crashed %d times on the %s step: %s" % (crashes + 1, node, said[:300]))
             if reason == "lane_out" and nxt in ("retry", "owner") and resume:
                 # delegate never moves a resumed thread to another lane; a new thread gets the role's next rung at once.
                 # next is owner when delegate cannot say when the lane frees (no retry_after): the same move (lifesim-5ar.6)
@@ -2188,6 +2217,7 @@ class Engine:
                 raise Blocked("failed: delegate at %s does not speak worker-run v2; update delegate (claude plugin "
                               "update iorlas-delegate@iorlas-marketplace) or this engine" % self.route)
             self.log("note", "workers: delegate %s (worker-run v2)" % self.route)
+            self.log("note", "task-loop %s" % (plugin_version() or "(unknown version)"), version=plugin_version())
             self.reset(bead)
             self.labels = list(bead.get("labels") or [])
             self.host = self.granted_host(self.labels)
@@ -3587,10 +3617,14 @@ class Engine:
         if self.dry:
             self.log("note", "dry run: not landing")
             return ""
-        pushes = 0
+        pushes, flaky_push, rest = 0, 0, 0
         self.task_branch = self.git("symbolic-ref", "--short", "-q", "HEAD")
         while True:  # one land at a time per repo: rebase, gate and push see the latest base; a fix runs outside the lock
             problem = None
+            if rest:  # a rest after a network failure, with the lock let go
+                time.sleep(rest)
+                self.add_wait(rest, "the network")
+                rest = 0
             with self.land_lock():
                 self.node("land", "land (try %d)" % (pushes + 1), **{"try": pushes + 1})
                 self.quarantine_strays()
@@ -3625,6 +3659,16 @@ class Engine:
                     if stop:
                         raise Blocked("failed: stopped (SIGTERM)")
                     if not re.search(r"rejected|non-fast-forward|fetch first|stale info", tail):
+                        if TRANSIENT_PUSH.search(tail):
+                            if flaky_push >= len(PUSH_RESTS):
+                                raise Blocked("paused: the land push failed %d times with a network error; the branch is kept and "
+                                              "the next run lands it again: %s" % (flaky_push + 1, tail.strip()[-200:]))
+                            rest = PUSH_RESTS[flaky_push]
+                            flaky_push += 1
+                            self.warn("the push failed with a network error, trying again in %d s (%d of %d): %s" % (
+                                rest, flaky_push, len(PUSH_RESTS), tail.strip()[-160:]))
+                            self.transition("land", "push_network", "network error on the push; try %d after %d s" % (flaky_push + 1, rest))
+                            continue
                         raise Blocked("land failed\n" + tail)
                     pushes += 1
                     self.outcome_of("rejected", "main moved")
