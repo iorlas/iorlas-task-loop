@@ -822,7 +822,8 @@ def open_ask(bead):
     a = read_json(config_dir() / "asks" / ("%s.json" % bead), {}) or {}
     if not isinstance(a, dict) or a.get("status") != "open":
         return None
-    return {k: a.get(k) for k in ("id", "kind", "question", "t", "title", "answer", "repo", "parks_at", "options")}
+    a = upgrade_ask(a)
+    return {k: a.get(k) for k in ("id", "kind", "question", "detail", "unblocks", "t", "title", "answer", "repo", "parks_at", "options")}
 
 
 def ask_file(bead):
@@ -1157,20 +1158,84 @@ def token():
     return t
 
 
-def asks():
-    out, now = [], time.time()
+def ask_files():
     for f in glob.glob(str(config_dir() / "asks" / "*.json")):
         a = read_json(f, {}) or {}
-        if not isinstance(a, dict) or a.get("v") != 1 or a.get("status") != "open":
+        if isinstance(a, dict) and a.get("v") == 1:
+            yield f, a
+
+
+def unblocks_by_bead(repo):
+    """bead id -> how many open beads wait on it (directly or through others), from bd list (cached by beads_of)."""
+    try:
+        beads = beads_of(repo)
+    except Exception:
+        return None
+    if not beads:
+        return None
+    by_id = {b["id"]: b for b in beads}
+    edges = {}
+    for t, b in by_id.items():
+        if b.get("status") == "closed":
             continue
-        a = {k: v for k, v in a.items() if k not in ("brief",)}
+        for s in graph.blockers(b):
+            if s in by_id and s != t and by_id[s].get("status") != "closed":
+                edges.setdefault(s, set()).add(t)
+    epics = {i for i, b in by_id.items() if b.get("issue_type") == "epic"}
+    return {"counts": graph.unblock_counts(edges, epics), "known": set(by_id), "open": {i for i, b in by_id.items() if b.get("status") != "closed"}}
+
+
+def upgrade_ask(a):
+    """An ask written before fmt 2 (kind from the old rules, raw question, no buttons) as the new build would have written it,
+    for display only: the file is not touched. Over-budget asks get where the minutes went from the run's engine log."""
+    if a.get("fmt") == 2:
+        return a
+    try:
+        _engine_dir()
+        import engine
+        why = str(a.get("why") or a.get("question") or "")
+        kind = engine.ask_kind(why) if a.get("why") and a.get("kind") in ("stuck", "verify") else a.get("kind")
+        src = str(a.get("detail") or a.get("question") or why)
+        if kind == "budget":
+            why = re.sub(r" \(\d+ min wall.*\)$", "", engine.ZERO_COST.sub("", why))
+            went = engine.run_breakdown(config_dir() / "engine" / ("%s.jsonl" % a.get("run", ""))) if a.get("run") else ""
+            if went and "Where it went" not in why:
+                why += ". Where it went: " + went
+            src = why
+        out = dict(a, kind=kind, detail=src, fmt=2,
+                   question=engine.ask_hint(kind, why, engine.tidy_question(src)))
+        if not out.get("options") or kind != a.get("kind"):
+            out["options"] = engine.ask_options(kind, why)
+        return out
+    except Exception:
+        return a
+
+
+def inbox():
+    """The open asks, most unblocking first. An ask whose bead is gone or closed is stale and never shown."""
+    out, now, ub = [], time.time(), {}
+    for f, a in ask_files():
+        if a.get("status") != "open":
+            continue
+        repo = a.get("repo") if isinstance(a.get("repo"), str) else ""
+        if repo not in ub:
+            ub[repo] = unblocks_by_bead(repo) if repo and (Path(repo) / ".beads").exists() else None
+        info = ub[repo]
+        if info and a.get("bead") not in info["open"] and (a.get("bead") in info["known"] or now - float(a.get("t") or now) > 600):
+            continue  # closed, or gone for good (a bead newer than a stale listing is not gone yet)
+        a = {k: v for k, v in upgrade_ask(a).items() if k not in ("brief",)}
         a["age_s"] = int(now - float(a.get("t") or now))
         a["parked"] = now > float(a.get("parks_at") or now + 1)
         a["answered_here"] = bool(a.get("answer"))
+        a["unblocks"] = (info["counts"].get(a.get("bead"), 0) if info else 0)
+        a["quick"] = bool(a.get("options")) and a.get("kind") != "decision"
         out.append(a)
-    order = {"stuck": 0, "verify": 1, "decision": 2, "ticket": 3}
-    out.sort(key=lambda a: (a["parked"], a["answered_here"], order.get(a.get("kind"), 9), -a["age_s"]))
-    return {"asks": out, "delegate": delegate_status()}
+    out.sort(key=lambda a: (a["parked"], a["answered_here"], -a["unblocks"], not a["quick"], -a["age_s"]))
+    return out
+
+
+def asks():
+    return {"asks": inbox(), "delegate": delegate_status()}
 
 
 LOGGED_OUT = re.compile(r"logged[ _]out|not logged in", re.I)
@@ -1220,26 +1285,84 @@ def delegate_status():
     return cached("delegate", 60, load)
 
 
+def ask_for(ask_id):
+    """(path, ask, problem): the file that holds ask_id, or why it cannot be answered. Ask files are per bead and the
+    engine overwrites them with a newer ask (id bead-n), so an id the file no longer carries is `superseded`."""
+    ask_id = ask_id if isinstance(ask_id, str) else ""
+    for f, a in ask_files():
+        if a.get("id") == ask_id:
+            if a.get("status") == "withdrawn":
+                why = (a.get("withdrawn_why") or "").strip()
+                return f, a, (410, {"code": "withdrawn", "error": "The engine withdrew this ask%s. Nothing to answer." %
+                                    ((" (" + why + ")") if why else "")})
+            if a.get("status") != "open" or a.get("answer"):
+                return f, a, (409, {"code": "answered", "error": "This ask is already answered."})
+            return f, a, None
+    bead = ask_id.rsplit("-", 1)[0]
+    f = config_dir() / "asks" / ("%s.json" % bead)
+    now = read_json(str(f), {}) if bead and "/" not in bead and "\\" not in bead and ".." not in bead else {}
+    now = now if isinstance(now, dict) else {}
+    if now.get("id") and now.get("status") == "open":
+        return None, None, (409, {"code": "superseded", "new_ask": now["id"],
+                                  "error": "The engine asked again for this bead; the new ask replaces this one."})
+    return None, None, (404, {"code": "gone", "error": "This ask no longer exists."})
+
+
+def bd_failed(a, r):
+    out = ((r.stderr or "") + (r.stdout or "")).strip()
+    if "no issue found" in out or "not found" in out.lower():
+        return 404, {"code": "bead_missing", "error": "The bead %s no longer exists in %s. The ask is out of date: dismiss it."
+                     % (a.get("bead"), os.path.basename(str(a.get("repo") or "").rstrip("/")) or "its repo")}
+    return 502, {"code": "bd", "error": "bd refused the comment: %s" % (out.splitlines()[-1][:200] if out else "no output")}
+
+
 def answer(body):
     """First answer wins: a comment on the bead (the engine reads it as the bead changing) and the bead opened."""
-    for f in glob.glob(str(config_dir() / "asks" / "*.json")):
-        a = read_json(f, {}) or {}
-        if a.get("id") != body.get("ask"):
-            continue
-        if a.get("status") != "open" or a.get("answer"):
-            return 409, {"error": "already answered"}
-        text = (body.get("text") or "").strip()
-        if not text:
-            return 400, {"error": "empty answer"}
-        cwd = a.get("repo") or None
+    if not isinstance(body, dict):
+        return 400, {"code": "bad_body", "error": "The request was not understood."}
+    f, a, problem = ask_for(body.get("ask"))
+    if problem:
+        return problem
+    text = body.get("text")
+    text = text.strip() if isinstance(text, str) else ""
+    if not text:
+        return 400, {"code": "empty", "error": "Write an answer first."}
+    cwd = a.get("repo") or None
+    try:
         r = subprocess.run(["bd", "comments", "add", a["bead"], text], cwd=cwd, capture_output=True, text=True)
         if r.returncode:
-            return 502, {"error": "bd: " + (r.stderr or r.stdout)[-300:]}
+            return bd_failed(a, r)
         subprocess.run(["bd", "update", a["bead"], "--status", "open"], cwd=cwd, capture_output=True, text=True)
-        a.update(answer=text, answer_t=time.time())
+    except OSError as e:
+        return 502, {"code": "no_bd", "error": "The dashboard cannot run bd (%s). Nothing was sent." % e.strerror}
+    a.update(answer=text, answer_t=time.time())
+    try:
         Path(f).write_text(json.dumps(a, indent=1))
-        return 200, {"ok": True}
-    return 404, {"error": "no such ask"}
+    except OSError:
+        pass  # the comment is the answer; the engine reads it from the bead
+    return 200, {"ok": True, "bead": a["bead"], "next": next_step(a)}
+
+
+def next_step(a):
+    """One sentence on what happens after the answer, for the confirmation."""
+    return "The bead %s runs again from your answer on the next pass of the loop for %s." % (
+        a.get("bead"), os.path.basename(str(a.get("repo") or "").rstrip("/")) or "its repo")
+
+
+def withdraw(body):
+    """The owner dismisses an ask that no longer applies; the bead is not touched."""
+    if not isinstance(body, dict):
+        return 400, {"code": "bad_body", "error": "The request was not understood."}
+    f, a, problem = ask_for(body.get("ask"))
+    if problem:
+        return (200, {"ok": True}) if problem[1].get("code") == "withdrawn" else problem
+    why = body.get("why") if isinstance(body.get("why"), str) and body.get("why").strip() else "dismissed by the owner"
+    a.update(status="withdrawn", withdrawn_why=why[:300], withdrawn=time.time())
+    try:
+        Path(f).write_text(json.dumps(a, indent=1))
+    except OSError as e:
+        return 500, {"code": "write", "error": "Could not write the ask file (%s)." % e.strerror}
+    return 200, {"ok": True}
 
 
 CGNAT = ipaddress.ip_network("100.64.0.0/10")  # Tailscale's range
@@ -1455,9 +1578,9 @@ def make_handler(port, addrs):
                 body = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 65536)) or b"{}")
             except ValueError:
                 return self.send(400, b'{"error": "json"}', "application/json")
-            if u.path != "/api/answer":
+            if u.path not in ("/api/answer", "/api/withdraw"):
                 return self.send(404, b"not found", "text/plain")
-            code, out = answer(body)
+            code, out = (answer if u.path == "/api/answer" else withdraw)(body)
             self.send(code, json.dumps(out).encode(), "application/json")
     return H
 

@@ -1337,8 +1337,13 @@ class Engine:
         mins, limit = self.spent_min(), self.budget_limit_min()
         if self.cost > float(self.cfg["budget_usd"]) or mins > limit:
             wall = (time.time() - self.t0) / 60
-            raise Blocked("over budget: $%.2f of $%s, %d of %g min (%d min wall, %d min waiting for shared resources)" % (
-                self.cost, self.cfg["budget_usd"], mins, limit, wall, self.waited // 60))
+            over = ["%d of %g min" % (mins, limit)] if mins > limit else []
+            if self.cost > float(self.cfg["budget_usd"]):
+                over.append("$%.2f of $%s" % (self.cost, self.cfg["budget_usd"]))
+            went = run_breakdown(self.log_path, self.cur)
+            raise Blocked("over budget: %s%s%s" % (", ".join(over), (". Where it went: " + went) if went else "",
+                                                   (" (%d min waiting for shared resources not counted)" % (self.waited // 60))
+                                                   if self.waited >= 60 else ""))
 
     # -- AI node
     def ai(self, node, title, prompt, *a, **kw):
@@ -2877,8 +2882,8 @@ class Engine:
         except (OSError, ValueError):
             n = 1
         a = {"v": 1, "id": "%s-%d" % (self.bead, n), "n": n, "bead": self.bead, "kind": kind,
-             "question": (question or why)[:4000], "why": why[:4000], "run": self.log_path.stem, "t": time.time(),
-             "parks_at": time.time() + 3 * 86400, "brief": self.brief_hash, "status": "open",
+             "question": ask_hint(kind, why, tidy_question(question or why)), "detail": (question or why)[:4000], "why": why[:4000], "run": self.log_path.stem, "t": time.time(),
+             "parks_at": time.time() + 3 * 86400, "brief": self.brief_hash, "status": "open", "fmt": 2,
              "options": ask_options(kind, why, getattr(self, "blocked_options", None))}
         common = self.git("rev-parse", "--path-format=absolute", "--git-common-dir")
         a.update(repo=str(Path(common).parent) if common else str(self.wt),
@@ -3016,7 +3021,7 @@ class Engine:
             self.replan_first = True
             self.old_plan, self.amend_why = ck["plan"], "gate red at land"
             return None, 0, None
-        if ck["brief"] != self.brief_hash and ck["step"] == "land" and (self.answered or {}).get("kind") == "verify":
+        if ck["brief"] != self.brief_hash and ck["step"] == "land" and (self.answered or {}).get("kind") in ("verify", "denied"):
             self.plan_data, self.plan_summary = ck["plan"], ck["plan"]["summary"]
             answer = self.answer_text(self.answered)
             gaps = (self.answered.get("why") or "").startswith(VERIFY_GAPS)  # not a denial's ask: its answer is a rerun
@@ -4108,17 +4113,82 @@ def acceptance_text(bead):
     return "\n".join(x for x in ((bead.get("acceptance_criteria") or "").strip(), desc[m.start():] if m else "") if x)
 
 
+def run_breakdown(log_path, open_node=None, top=4):
+    """Where a run's minutes went, from its engine log: 'checks 163 min (9 rounds), write 16 min (9 rounds)'. Steps under a
+    minute are left out; the open node counts up to now."""
+    tot = {}
+    try:
+        lines = Path(log_path).read_text(encoding="utf-8", errors="replace").splitlines()
+    except (OSError, TypeError):
+        lines = []
+    for ln in lines:
+        try:
+            r = json.loads(ln)
+        except ValueError:
+            continue
+        if isinstance(r, dict) and r.get("kind") == "end" and r.get("step"):
+            t = tot.setdefault(r["step"], [0.0, 0])
+            t[0] += float(r.get("secs") or 0)
+            t[1] += 1
+    if open_node and open_node.get("step"):
+        t = tot.setdefault(open_node["step"], [0.0, 0])
+        t[0] += max(0.0, time.time() - open_node.get("t", time.time()))
+        t[1] += 1
+    parts = ["%s %d min (%d round%s)" % (k, v[0] // 60, v[1], "" if v[1] == 1 else "s")
+             for k, v in sorted(tot.items(), key=lambda kv: -kv[1][0]) if v[0] >= 60][:top]
+    return ", ".join(parts)
+
+
 def ask_kind(why):
     """The owner ask a block is, or None for the machine's own trouble (paused, waiting) and engine failures."""
     if why.startswith(("paused:", "waiting:", "failed:")):
         return None
     if why.startswith("owner decision needed"):
         return "decision"
-    if why.startswith(("needs a human", "verify:")):
+    if why.startswith("over budget"):
+        return "budget"
+    if why.startswith("needs a human"):
+        return "denied"  # a step was refused or the lane stopped: nothing to confirm as right or wrong (tl-bxk.13.9)
+    if why.startswith("verify:"):
         return "verify"
     if why.startswith("ticket:"):
         return "ticket"
     return "stuck"
+
+
+BLOB = re.compile(r"(?<![\w.)\]/-])`[^`]{80,}`|(?<![\w.)\]/-])`[^`]{80,}$|\{['\"][^}]{80,}(?:\}|$)")  # a quoted command or tool-call dump, never a thing to read
+ZERO_COST = re.compile(r"\$0\.00 of \$[\d.]+, ")
+
+
+def dump_like(span):
+    """A quoted span that is a script or tool-call dump (multi-line, a dict, very long), not a command worth reading."""
+    return "\n" in span or "\\n" in span or span.startswith(("`{", "{'", '{"')) or len(span) >= 300
+
+
+def tidy_question(text, cap=600):
+    """The ask as the owner reads it: no command dumps, no meaningless $0.00, ends at a word and says it was cut.
+    The full text stays in the ask's `detail`."""
+    t = BLOB.sub(lambda m: "(a long command, see details)" if dump_like(m.group(0)) else m.group(0), text or "")
+    t = ZERO_COST.sub("", t).strip()
+    if len(t) <= cap:
+        return t
+    cut = t[:cap].rsplit(" ", 1)[0].rstrip(",;:( ")
+    return cut + " ... (more in details)"
+
+
+def ask_hint(kind, why, question):
+    """One line saying what a free-text reply should contain, for the asks that have no buttons for it."""
+    if kind == "denied":
+        hint = "Reply with what to try or what to allow; the run goes on from its checkpoint."
+    elif kind == "budget":
+        hint = "Pick an option, or reply with a hint."
+        if "checks " in why.split("Where it went:")[-1].split(",")[0] and "Where it went:" in why:
+            hint += " Most of the time went to check rounds: running again repeats them unless you say what to change."
+    elif kind == "stuck" and "nothing proves" in why:
+        hint = "Reply with how to prove it, or that it is fine to land without."
+    else:
+        return question
+    return question + "\n" + hint
 
 
 def ask_options(kind, why, given=None):
@@ -4131,21 +4201,37 @@ def ask_options(kind, why, given=None):
         for o in given or []:
             if not isinstance(o, dict) or not str(o.get("label") or "").strip() or not str(o.get("answer") or "").strip():
                 continue
-            out.append({"label": o["label"].strip()[:120], "answer": o["answer"].strip()[:1000]})
+            out.append({"label": o["label"].strip()[:120], "answer": o["answer"].strip()[:1000],
+                        "then": "The bead runs again with this as its instruction."})
             if str(o.get("cost") or "").strip():
                 out[-1]["note"] = o["cost"].strip()[:300]
             if o.get("recommended"):
                 out[-1]["recommended"] = True
         return out[:4]
     if kind == "verify":
-        return [{"label": "Right", "answer": "right", "recommended": True},
-                {"label": "Wrong", "answer": "wrong: ", "edit": True, "note": "Opens the text box: say what is wrong"}]
+        return [{"label": "Right", "answer": "right", "recommended": True,
+                 "then": "The bead lands on the next pass of its loop."},
+                {"label": "Wrong", "answer": "wrong: ", "edit": True, "note": "Opens the text box: say what is wrong",
+                 "then": "The bead is planned again from your words.", "cost": "One more run"}]
+    if kind == "denied":
+        return [{"label": "Run again", "answer": "run again", "recommended": True,
+                 "note": "After you allowed the command, or ran it yourself",
+                 "then": "The step runs again on the next pass of its loop."}]
     if kind == "stuck" and why.startswith(REPLAN_CAP):
         return [{"label": "Allow one more planner run", "answer": "allow one more",
-                 "note": "The bead plans once more; or split it, or comment what the plan keeps missing"}]
-    if kind == "stuck" and why.startswith("over budget"):
-        return [{"label": "Run again", "answer": "run again",
-                 "note": "Goes on from where it stopped, with a fresh budget (the budget counts per run)"}]
+                 "note": "The bead plans once more; or split it, or comment what the plan keeps missing",
+                 "then": "The planner runs once more on the next pass of its loop."}]
+    if kind == "budget":
+        m = re.search(r"of (\d+) min", why)
+        lim = "%s min" % m.group(1) if m else "a full budget"
+        return [{"label": "Run again", "answer": "run again", "recommended": True,
+                 "note": "Goes on from where it stopped; the budget counts per run",
+                 "then": "The bead runs again from your answer on the next pass of its loop, with a fresh %s." % lim,
+                 "cost": "Up to %s more of a slot" % lim},
+                {"label": "Split the bead", "answer": "split this bead: keep what is done as this bead and file the rest as new beads",
+                 "note": "For a bead too big for one run",
+                 "then": "The planner cuts the bead down from your answer, then the work goes on from the checkpoint.",
+                 "cost": "One planner run"}]
     return []
 
 
