@@ -19,7 +19,7 @@
   tl.py run-task ID [--worktree DIR] [--slot S|any [--wait]] [--exclusive-area] [--dry-run] [--fresh]
                                                 one bead through the engine (engine.py), no judgement here
   tl.py next [--repo DIR] [--json]              the bead the loop would take next and why (claims nothing)
-  tl.py loop [--repo DIR] [--max-beads N] [--until HH:MM] [--wait-slot-min M] [--wait-drained]
+  tl.py loop [--repo DIR] [--max-beads N] [--until HH:MM] [--wait-slot-min M] [--wait-drained] [--pin]
                                                 run ready beads one after another, each in any free slot
   tl.py loop status [--repo DIR] [--last N]     the running loop and its last beads
   tl.py stop [--repo DIR] [--now]               stop the loop after its current bead, or now (SIGTERM)
@@ -1488,6 +1488,7 @@ def main(argv=None):
     p.add_argument("--until", metavar="HH:MM", help="start no bead after this local time")
     p.add_argument("--wait-slot-min", type=float, default=30, help="say so this often while no slot is free")
     p.add_argument("--wait-drained", action="store_true", help="no ready bead: poll every 5 min instead of ending")
+    p.add_argument("--pin", action="store_true", help="stay on this install (default: between beads, move to the newest installed one)")
     p.add_argument("--last", type=int, default=10, help="status: how many finished beads to show")
     p = sp.add_parser("stop", help="stop the repo's loop after its current bead (--now: SIGTERM the bead's run)")
     p.add_argument("--repo")
@@ -1531,6 +1532,7 @@ def main(argv=None):
         return 0
     if a.cmd in ("next", "loop", "stop"):
         import loop
+        a.argv = list(argv) if argv is not None else sys.argv[1:]  # the loop re-execs itself with these
         return {"next": loop.cmd_next, "loop": loop.cmd_loop, "stop": loop.cmd_stop}[a.cmd](a)
     if a.cmd in ("report", "lost"):
         import report
