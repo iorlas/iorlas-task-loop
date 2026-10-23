@@ -349,6 +349,14 @@ under one per-repo area lock (`<config dir>/locks/area-<repo>.lock`), so two loo
 `"area_label_prefix": "lane:", "areas": {"build": ["build"]}`. A hand `tl run-task` in a busy area warns
 (`⚠ area live busy: ...: running anyway beside it`) and runs; `--exclusive-area` refuses it (`taken`) instead.
 
+**Visual work with a shot table (tl-bxk.13.15, docs/design/visual-work.md):** with `engine.shot_table` (a repo path, read
+from the base branch) the writer on a visual stage does not save screenshots: it returns `shots` (a method from the table,
+its args, names) and the engine renders them (static checks first), a look judge (fresh, other family, only the shrunk
+pictures, references and 'before' shots) returns text findings, and the writer fixes them: at most `look_rounds` (2) render
+rounds per stage, a defect that comes back is a leftover. The plan's cases carry a class (test / look-objective / taste);
+taste goes to the owner-look bead (metadata `looks` for the gallery) and never blocks the land. Without `shot_table` the
+old way below stands.
+
 **Look and feel (tl-bxk.10.23):** `engine.visual_paths` `{"include": [globs], "exclude": [globs]}` (`**` crosses
 folders, `{a,b}` is either; read from the base branch like the other engine keys; absent = none of the rules below) and
 `engine.evidence_dir` (a repo folder, lifesim `design/look-reviews`). A stage whose planned files or diff match an include

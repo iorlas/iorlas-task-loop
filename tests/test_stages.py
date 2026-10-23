@@ -437,5 +437,234 @@ class Fdyo(StagesTest):
         self.assertNotIn("failed in the last round too", writes[2])
 
 
+class VisualWork(StagesTest):
+    """tl-bxk.13.15: the engine renders the writer's shots, a look judge judges, the owner decides taste."""
+
+    SHOT = ("import sys, pathlib\n"
+            "out = pathlib.Path(sys.argv[1]); out.mkdir(parents=True, exist_ok=True)\n"
+            "name = sys.argv[2] if len(sys.argv) > 2 else 'screen'\n"
+            "(out / (name + '.png')).write_bytes(b'\\x89PNG fake ' + name.encode())\n")
+    TABLE = {"v": 1, "methods": [{"method": "ScreenShots", "summary": "the main screen", "timeout_min": 1,
+                                  "cmd": te.PY + " tools/shot.py {out}{args}", "args": [{"name": "name", "flag": "", "pattern": "[a-z-]+"}]}]}
+    VIS = {"include": ["f.txt"]}
+
+    def setUp(self):
+        super().setUp()
+        base = Path(self.tmp.name, "base-files")
+        te.sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(base), cwd=self.tmp.name)
+        (base / "tools").mkdir()
+        (base / "tools" / "shot.py").write_text(self.SHOT)
+        (base / "shots.json").write_text(json.dumps(self.TABLE))
+        te.sh("git", "add", "-A", cwd=base)
+        te.sh("git", "commit", "-qm", "shot table", cwd=base)
+        te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
+        te.sh("git", "pull", "-q", "origin", "main", cwd=self.wt)
+
+    def go(self, answers, table="shots.json", **cfg):
+        raw = {"visual_paths": self.VIS, "shot_table": table, "evidence_dir": "design/look-reviews"}
+        return self.run_engine(answers, raw=raw, **cfg)
+
+    SHOTS = [{"method": "ScreenShots", "args": [{"name": "name", "value": "main"}], "names": ["main screen"]}]
+
+    @staticmethod
+    def judged(*defects, summary="the main screen shows"):
+        return {"findings": [{"item": "general", "verdict": "defect", "where": w, "why": y} for w, y in defects] or
+                [{"item": "general", "verdict": "pass", "where": "", "why": "fine"}], "summary": summary}
+
+    def write(self, **kw):
+        return dict(WRITE, **dict({"shots": self.SHOTS}, **kw))
+
+    def roles(self, s):
+        return [c[0] for c in s.calls]
+
+    def test_the_writer_is_asked_for_shot_requests_not_screenshots(self):
+        rc, s = self.go({"plan": [PLAN], "write": [self.write()], "look": [self.judged()], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        first = s.prompts[1]
+        self.assertIn("You cannot render it here: the engine does", first)
+        self.assertIn("ScreenShots: the main screen", first)
+        self.assertNotIn("Save a screenshot of every changed", first)
+
+    def test_the_engine_renders_and_a_judge_with_only_the_pictures_reads_them(self):
+        rc, s = self.go({"plan": [PLAN], "write": [self.write()], "look": [self.judged()], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual(self.roles(s), ["planner", "worker", "reviewer", "reviewer"])  # the judge, then the review
+        judge = s.prompts[2]
+        self.assertIn("You judge how a screen looks from pictures", judge)
+        self.assertIn("main.png", judge)
+        cwd = Path(s.cwds[2])
+        self.assertEqual(cwd.name, "r1")
+        self.assertEqual(sorted(p.name for p in cwd.iterdir() if p.is_file()), ["main.png"])  # no repo, only the pictures
+        self.assertTrue((self.eng.evidence_dir / "main.png").is_file())  # the full-size copy for the land and the review
+        self.assertIn("a look judge", s.prompts[3])  # the reviewer is told, and does not open the pictures by default
+
+    def test_the_judge_is_from_the_other_family_like_the_review(self):
+        rc, s = self.go({"plan": [PLAN], "write": [self.write()], "look": [self.judged()], "review": [CLEAN]})
+        self.assertIsNotNone(s.calls[2][2])  # authored-by: the writer's family
+
+    def test_a_defect_goes_back_to_the_writer_as_text_then_a_second_render_passes(self):
+        defect = self.judged(("main.png, top right", "The Save button is clipped at the right edge"))
+        rc, s = self.go({"plan": [PLAN], "write": [self.write(), self.write()], "look": [defect, self.judged()], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual(self.roles(s), ["planner", "worker", "reviewer", "worker", "reviewer", "reviewer"])
+        again = s.prompts[3]
+        self.assertIn("Save button is clipped at the right edge", again)
+        self.assertIn("main.png", again)
+        self.assertEqual([x for x in self.created() if x.startswith("Look:")], [])
+
+    def test_the_same_defect_twice_is_a_leftover_not_a_third_write(self):
+        defect = self.judged(("main.png", "The Save button is clipped at the right edge"))
+        same = self.judged(("main.png", "Save button clipped at right edge of the card"))
+        rc, s = self.go({"plan": [PLAN], "write": [self.write(), self.write()], "look": [defect, same], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual(self.roles(s).count("worker"), 2)
+        self.assertEqual(len([t for t in self.created() if t.startswith("Look:")]), 1)
+
+    def test_a_new_defect_in_the_last_render_round_is_a_leftover_too(self):
+        one = self.judged(("main.png", "The Save button is clipped"))
+        two = self.judged(("main.png", "A magenta texture on the sofa"))
+        rc, s = self.go({"plan": [PLAN], "write": [self.write(), self.write()], "look": [one, two], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual(self.roles(s).count("worker"), 2)  # two render rounds, no third
+        self.assertEqual([t for t in self.created() if t.startswith("Look:")], ["Look: A magenta texture on the sofa"])
+
+    def test_a_method_the_table_does_not_have_is_a_defect_with_no_judge_call(self):
+        bad = dict(WRITE, shots=[{"method": "Nope", "args": [], "names": []}])
+        rc, s = self.go({"plan": [PLAN], "write": [bad, self.write()], "look": [self.judged()], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual(self.roles(s), ["planner", "worker", "worker", "reviewer", "reviewer"])
+        self.assertIn("no shot method 'Nope'", s.prompts[2])
+
+    def test_a_visual_write_with_no_shots_and_no_reason_is_a_finding(self):
+        rc, s = self.go({"plan": [PLAN], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]})
+        self.assertIn("asked for no shots", self.eng.run_dir.joinpath("handoff.json").read_text())
+
+    def test_without_a_shot_table_a_visual_stage_works_the_old_way(self):
+        rc, s = self.go({"plan": [PLAN], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]}, table="")
+        self.assertIn("Save a screenshot of every changed", s.prompts[1])
+        self.assertNotIn("You cannot render it here", s.prompts[1])
+        self.assertNotIn("look", [k for k in self.eng.run_dir.glob("look-*.json")])
+
+    def test_the_table_is_read_from_the_base_branch_not_the_working_copy(self):
+        (self.wt / "shots.json").write_text(json.dumps({"v": 1, "methods": [{"method": "Evil", "cmd": "touch pwned"}]}))
+        e = engine.Engine("t-1", str(self.wt), dict(engine.load_cfg(str(self.wt)), shot_table="shots.json"))
+        self.assertEqual(list(e.shot_methods()), ["ScreenShots"])
+
+    def test_a_missing_table_is_warned_once_and_the_old_way_stands(self):
+        e = engine.Engine("t-1", str(self.wt), dict(engine.load_cfg(str(self.wt)), shot_table="nowhere.json"))
+        self.assertEqual(e.shot_methods(), {})
+        self.assertEqual(e.shot_methods(), {})
+
+    def test_look_and_taste_cases_have_no_command_and_run_nothing(self):
+        cases = [{"criterion": "the picker shows", "check": "", "class": "look-objective"},
+                 {"criterion": "it reads well", "check": "", "class": "taste"}]
+        rc, s = self.go({"plan": [dict(PLAN, cases=cases)], "write": [self.write()], "look": [self.judged()], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertIn("the picker shows", s.prompts[2])  # the judge judges the look-objective item
+        self.assertNotIn("it reads well", s.prompts[2])
+        self.assertEqual(self.eng.case_checks(), [])
+
+    def test_the_planner_is_told_the_classes_and_asks_for_a_missing_reference(self):
+        rc, s = self.go({"plan": [PLAN], "write": [self.write()], "look": [self.judged()], "review": [CLEAN]})
+        plan_prompt = s.prompts[0]
+        self.assertIn("look-objective:", plan_prompt)
+        self.assertIn("Never invent one as a check", plan_prompt)
+        self.assertIn("ask that as your question", plan_prompt)  # no reference image in the task
+
+    def test_a_visual_repo_without_a_shot_table_is_told_nothing_of_classes(self):
+        rc, s = self.go({"plan": [PLAN], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]}, table="")
+        self.assertNotIn("look-objective:", s.prompts[0])
+
+    TWO = dict(PLAN, stages=[PLAN["stages"][0], dict(PLAN["stages"][0], goal="add g")],
+               cases=[{"criterion": "the picker shows a hue gradient", "check": "", "class": "look-objective"}])
+
+    def test_the_plans_look_items_are_judged_on_the_last_stage_only(self):
+        rc, s = self.go({"plan": [self.TWO], "write": [self.write(), self.write()], "look": [self.judged(), self.judged()],
+                         "review": [CLEAN, CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        judges = [p for p in s.prompts if p.startswith("You judge how a screen looks")]
+        self.assertEqual(len(judges), 2)
+        self.assertNotIn("hue gradient", judges[0])
+        self.assertIn("hue gradient", judges[1])
+
+    def test_only_the_engines_own_pictures_count_with_a_shot_table(self):
+        e = engine.Engine("t-1", str(self.wt), dict(engine.load_cfg(str(self.wt)), shot_table="shots.json"))
+        e.evidence_dir.mkdir(parents=True, exist_ok=True)
+        (e.evidence_dir / "writer.png").write_bytes(b"x")
+        (e.evidence_dir / "main.png").write_bytes(b"x")
+        e.rendered_names = {"main.png"}
+        self.assertEqual(e.shots(), ["main.png"])
+
+    def test_a_failed_shot_command_is_a_defect_even_if_it_left_a_picture(self):
+        self.TABLE["methods"][0]["cmd"] = te.PY + " tools/shot.py {out}{args}; exit 3"
+        try:
+            base = Path(self.tmp.name, "base-files")
+            (base / "shots.json").write_text(json.dumps(self.TABLE))
+            te.sh("git", "commit", "-qam", "failing shot", cwd=base)
+            te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
+            te.sh("git", "pull", "-q", "origin", "main", cwd=self.wt)
+            rc, s = self.go({"plan": [PLAN], "write": [self.write(), self.write()], "review": [CLEAN]})
+        finally:
+            self.TABLE["methods"][0]["cmd"] = te.PY + " tools/shot.py {out}{args}"
+        self.assertEqual(self.roles(s)[:3], ["planner", "worker", "worker"])  # no judge call: the render failed
+        self.assertIn("failed (exit 3)", s.prompts[2])
+
+    def test_pictures_made_before_a_later_fix_are_rendered_again_before_the_land(self):
+        red_once = te.PY + ' -c "import sys; sys.exit(0 if open(\'f.txt\').read().strip() != \'d2\' else 1)"'  # red after the first write
+        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[red_once])])
+        rc, s = self.go({"plan": [plan], "write": [self.write(), self.write(shots=[])], "look": [self.judged()], "review": [CLEAN]},
+                        look_rounds=1)
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertIn("rendering the last shots again", self.eng.log_path.read_text())
+        self.assertEqual(self.eng.render_stale, False)
+
+    def test_a_resumed_stage_keeps_its_render_rounds(self):
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e.look_done, e.look_prev, e.rendered_names, e.last_reqs, e.render_stale = 1, [{"why": "x", "where": ""}], {"a.png"}, self.SHOTS, True
+        e.plan_data = dict(PLAN)
+        e.branch = "task/t-1"
+        e.git("checkout", "-q", "-b", "task/t-1")
+        e.save_checkpoint(stage=0, rounds=0, n=1, feedback="", step="write")
+        ck = json.loads(e.checkpoint_path().read_text())
+        self.assertEqual((ck["look_done"], ck["rendered"], ck["render_stale"]), (1, ["a.png"], True))
+        again = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        again.reset(dict(BEAD))
+        again.resume_point()
+        self.assertEqual((again.look_done, again.rendered_names, again.render_stale), (1, {"a.png"}, True))
+
+    def test_a_non_visual_repo_gets_none_of_it(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertNotIn("look-objective:", s.prompts[0])
+
+    def test_the_gallery_data_lands_in_the_owner_look_beads_metadata(self):
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e.plan_data = dict(PLAN, cases=[{"criterion": "it reads well", "check": "", "class": "taste"}])
+        e.look_paths = ["design/look-reviews/t-1/main.png"]
+        e.look_notes = ["the main screen shows"]
+        sent = []
+        old = {"metadata": {"looks": [
+            {"id": "t-0#1", "bead": "t-0", "title": "other", "shots": [], "status": "open"},
+            {"id": "t-1#1", "bead": "t-1", "title": "it reads well", "shots": [], "status": "good"}], "keep": "me"}}
+        with mock.patch.object(tl, "show", return_value=old), \
+                mock.patch.object(tl, "bd", side_effect=lambda *a, **k: sent.append(a) or mock.Mock(returncode=0, stdout="", stderr="")):
+            e.write_looks("lk-1")
+        (call,) = sent
+        self.assertEqual(call[:3], ("update", "lk-1", "--metadata"))
+        meta = json.loads(call[3])
+        self.assertEqual(meta["keep"], "me")
+        self.assertEqual([x["id"] for x in meta["looks"]], ["t-0#1", "t-1#1"])
+        self.assertEqual(meta["looks"][1]["status"], "good")  # the owner's answer stays
+        e.leftovers = []
+        old["metadata"]["looks"].pop()
+        sent.clear()
+        with mock.patch.object(tl, "show", return_value=old), \
+                mock.patch.object(tl, "bd", side_effect=lambda *a, **k: sent.append(a) or mock.Mock(returncode=0, stdout="", stderr="")):
+            e.write_looks("lk-1")
+        entry = json.loads(sent[0][3])["looks"][-1]
+        self.assertEqual((entry["id"], entry["bead"], entry["title"], entry["status"]), ("t-1#1", "t-1", "it reads well", "open"))
+        self.assertEqual(entry["note"], "the main screen shows")
+        self.assertEqual(entry["shots"], [{"path": "design/look-reviews/t-1/main.png", "role": "after", "label": "main"}])
+
+
 if __name__ == "__main__":
     unittest.main()
