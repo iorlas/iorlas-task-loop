@@ -2558,7 +2558,7 @@ class Engine:
         except (OSError, ValueError):
             n = 1
         a = {"v": 1, "id": "%s-%d" % (self.bead, n), "n": n, "bead": self.bead, "kind": kind,
-             "question": tidy_question(question or why), "detail": (question or why)[:4000], "why": why[:4000], "run": self.log_path.stem, "t": time.time(),
+             "question": ask_hint(kind, why, tidy_question(question or why)), "detail": (question or why)[:4000], "why": why[:4000], "run": self.log_path.stem, "t": time.time(),
              "parks_at": time.time() + 3 * 86400, "brief": self.brief_hash, "status": "open",
              "options": ask_options(kind, why, getattr(self, "blocked_options", None))}
         common = self.git("rev-parse", "--path-format=absolute", "--git-common-dir")
@@ -3783,6 +3783,17 @@ def tidy_question(text, cap=600):
         return t
     cut = t[:cap].rsplit(" ", 1)[0].rstrip(",;:( ")
     return cut + " ... (more in details)"
+
+
+def ask_hint(kind, why, question):
+    """One line saying what a free-text reply should contain, for the asks that have no buttons for it."""
+    if kind == "denied":
+        hint = "Reply with what to try or what to allow; the run goes on from its checkpoint."
+    elif kind == "stuck" and "nothing proves" in why:
+        hint = "Reply with how to prove it, or that it is fine to land without."
+    else:
+        return question
+    return question + "\n" + hint
 
 
 def ask_options(kind, why, given=None):
