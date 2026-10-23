@@ -1,0 +1,28 @@
+{
+ "v": 1,
+ "id": "lifesim-gqzz-2",
+ "n": 2,
+ "bead": "lifesim-gqzz",
+ "kind": "verify",
+ "question": "Check these yourself, then comment on the bead (right, or wrong and why): Serialising the allocation collections removes the 1,656 B / 8120 B readings; rests on probe runs plus passing runs",
+ "why": "verify: before land, the workers could not check: Serialising the allocation collections removes the 1,656 B / 8120 B readings; rests on probe runs plus passing runs (case; The mechanism is well supported. The root-cause notes tie the phantom bytes to background GC that another thread induces (probe: 76/256 nonzero readings with background GC on, 0/256 with it off). Running the measuring collection alone should remove that source. But no run applies the fix under the same pressure. The probe used a synthetic worker thread, not the other test collections. Five clean runs on macOS are weak evidence against an intermittent failure. The bead requires five passes on Windows, where the flake was seen, and nothing here ran on Windows. The root-cause file also says Windows confirmation is still needed. Someone must run `dotnet test lifesim.slnx` five times on the Windows PC.)",
+ "run": "lifesim-gqzz-20261023-031539",
+ "t": 1792719347.841989,
+ "parks_at": 1792978547.841989,
+ "status": "open",
+ "options": [
+  {
+   "label": "Right",
+   "answer": "right",
+   "recommended": true
+  },
+  {
+   "label": "Wrong",
+   "answer": "wrong: ",
+   "edit": true,
+   "note": "Opens the text box: say what is wrong"
+  }
+ ],
+ "repo": "/nonexistent/repo",
+ "title": "Flaky under the parallel full test run: allocation tests and ReleaseReaderTests publish"
+}

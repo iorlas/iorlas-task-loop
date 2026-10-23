@@ -1674,7 +1674,9 @@ class EngineTest(unittest.TestCase):
         rc, _ = self.run_engine({"plan": [dict(PLAN, question="Old format or new?")]})
         self.assertEqual(rc, 2)
         a = self.ask()
-        self.assertEqual((a["kind"], a["status"], a["question"]), ("decision", "open", "Old format or new?"))
+        self.assertEqual((a["kind"], a["status"]), ("decision", "open"))
+        self.assertTrue(a["question"].startswith("**Old format or new?**"), a["question"])
+        self.assertEqual(a["detail"], "Old format or new?")
         self.assertTrue(any(c[:2] == ("comments", "add") and "%s (decision)" % a["id"] in c[3] for c in self.bd_calls))
 
     # Denis 2026-10-21 (lifesim-s28t): a bead that lacks the information to do it leaves the unattended queue
@@ -1718,7 +1720,7 @@ class EngineTest(unittest.TestCase):
             if out.exists():
                 break
             time.sleep(0.1)
-        self.assertEqual(out.read_text().strip(), "decision t-1 Old format or new?")
+        self.assertEqual(out.read_text().strip(), "decision t-1 Old format or new?: Pick an option, or write your own answer.")
 
     def test_a_used_up_replan_is_a_stuck_ask(self):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [review(unmet=["a"])]},

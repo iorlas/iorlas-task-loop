@@ -296,8 +296,10 @@ class AskOptions(unittest.TestCase):
                    "PATH": str(d / "bin") + os.pathsep + os.environ["PATH"]}
             with mock.patch.dict(os.environ, env):
                 shown = server.asks()["asks"][0]
-                self.assertEqual(shown["options"], opts)  # the page renders these
-                self.assertEqual(server.open_ask("x-1")["options"], opts)
+                strip = lambda os: [{k: o[k] for k in ("label", "answer", "note", "recommended") if k in o} for o in os]
+                self.assertEqual(strip(shown["options"]), opts)  # the page renders these (plus what happens next)
+                self.assertEqual(strip(server.open_ask("x-1")["options"]), opts)
+                self.assertTrue(all(o["then"] for o in shown["options"]))
                 clicked = shown["options"][1]["answer"]
                 code, out = server.answer({"ask": "x-1-1", "text": clicked})
                 self.assertEqual((code, out["ok"]), (200, True))
@@ -418,12 +420,74 @@ class AskFailures(unittest.TestCase):
         (shown,) = server.inbox()
         self.assertEqual(shown["kind"], "budget")
         self.assertNotIn("$", shown["question"])
-        self.assertIn("183 of 180 min", shown["question"])
-        self.assertIn("Where it went: checks 163 min (1 round), write 15 min (1 round)", shown["question"])
-        self.assertIn("Pick an option", shown["question"])
+        self.assertIn("**Over its time limit: 183 of 180 min**", shown["question"])
+        self.assertIn("- checks took 163 min (1 round)", shown["question"])
+        self.assertIn("- write took 15 min (1 round)", shown["question"])
+        self.assertIn("**What I need from you:** Pick an option", shown["question"])
         self.assertEqual([o["label"] for o in shown["options"]], ["Run again", "Split the bead"])
         self.assertTrue(all(o["then"] and o["cost"] for o in shown["options"]))
         self.assertTrue(shown["quick"])
+
+    def test_every_real_ask_reads_as_headline_bullets_and_a_need(self):
+        """Copies of the open asks (tests/fixtures/asks): a headline, at most 3 bullets, one need line, no wall of text, no
+        cut-off dump, no $0.00; asks that can be answered with a click carry a table's worth of options."""
+        names = sorted((Path(__file__).parent / "fixtures" / "asks").glob("*.json"))
+        self.assertGreaterEqual(len(names), 10)
+        for f in names:
+            a = json.loads(f.read_text())
+            a["repo"] = str(self.d)
+            (self.asks / ("%s.json" % a["bead"])).write_text(json.dumps(a))
+        eng = self.d / "task-loop" / "engine"
+        eng.mkdir()
+        rows = server.inbox()
+        self.assertEqual(len(rows), len(names))
+        for r in rows:
+            lines = [x for x in r["question"].split("\n") if x.strip()]
+            self.assertTrue(lines[0].startswith("**") and lines[0].endswith("**"), (r["bead"], lines[0]))
+            self.assertTrue(lines[-1].startswith("**What I need from you:**"), r["bead"])
+            bullets = [x for x in lines if x.startswith("- ")]
+            self.assertLessEqual(len(bullets), 3, r["bead"])
+            for x in lines:
+                self.assertLessEqual(len(x), 330, (r["bead"], x))
+                self.assertNotIn("$0.00", x)
+                self.assertNotIn("<<'PY'", x)
+                self.assertFalse(x.rstrip().endswith((";", ",", ":", "(")), (r["bead"], x))
+            self.assertEqual(r["fmt"], 3)
+        by = {r["bead"]: r for r in rows}
+        self.assertEqual([o["label"] for o in by["lifesim-d5f.61"]["options"]], ["Defer the sink", "Add a stand-in sink now"])
+        self.assertIn("Re-planned 3 times", by["lifesim-d5f.34"]["question"])
+        self.assertTrue(all(o["then"] for r in rows for o in r["options"]))
+
+
+class Markdown(unittest.TestCase):
+    """The page's md(): bullets, tables, bold and code render; HTML in ask text never does."""
+
+    def run_md(self, text):
+        import re
+        import shutil
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("no node")
+        page = (ROOT / "skills" / "task-loop" / "dash" / "index.html").read_text()
+        src = re.search(r"/\*md\*/(.*?)/\*end md\*/", page, re.S).group(1)
+        esc = "const esc=s=>String(s==null?'':s).replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));"
+        r = subprocess.run([node, "-e", esc + src + "\nprocess.stdout.write(md(JSON.parse(process.argv[1])))", json.dumps(text)],
+                           capture_output=True, text=True, timeout=20)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return r.stdout
+
+    def test_structure_renders(self):
+        out = self.run_md("**Head**\n\n**What happened**\n- one `x`\n- two\n\n| a | b |\n|---|---|\n| 1 | **2** |\n\n**Need:** it")
+        self.assertIn("<b>Head</b>", out)
+        self.assertIn("<ul><li>one <code>x</code></li><li>two</li></ul>", out)
+        self.assertIn("<th>a</th>", out)
+        self.assertIn("<td><b>2</b></td>", out)
+
+    def test_html_in_ask_text_is_escaped(self):
+        out = self.run_md("- <img src=x onerror=alert(1)>\n| <script>x</script> |\n[a](javascript:alert(1))")
+        self.assertNotIn("<img", out)
+        self.assertNotIn("<script", out)
+        self.assertNotIn("<a ", out)
 
 
 class LaneBanner(unittest.TestCase):

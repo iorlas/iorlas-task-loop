@@ -1,0 +1,28 @@
+{
+ "v": 1,
+ "id": "lifesim-d5f.61-2",
+ "n": 2,
+ "bead": "lifesim-d5f.61",
+ "kind": "decision",
+ "question": "Sink in lifesim-d5f.61 (furnish against walls). Criterion 1 says a sink must touch a wall. But the game has no sink object, and the bead lists \"new furniture models\" as out of scope. Everything else is done or planned: the bed, sofa, fridge, stove, toilet and shower are against walls, two or more are in corners, and a reach test covers them. The review keeps rejecting the work over the missing sink. Options: (A) Defer the sink to a follow-up bead (add a sink, place it, run the reach test on it). Costs nothing now; criterion 1 is met without the sink. (B) Add a minimal sink object now: a content entry with front use slots, drawn in the client with a stand-in shape, placed against a wall and reach-tested. Costs a bit more work in this bead and a placeholder look until real art exists. I recommend A, because the bead itself rules out new furniture.",
+ "why": "owner decision needed",
+ "run": "lifesim-d5f.61-20261023-040408",
+ "t": 1792721652.2619882,
+ "parks_at": 1792980852.2619882,
+ "status": "open",
+ "options": [
+  {
+   "label": "Defer the sink",
+   "answer": "Defer the sink: criterion 1 is met without it in this bead. File the follow-up bead to add a sink object, place it against a wall in the furnished flat and the evening-alone fixture, and run the reach test on it.",
+   "note": "No extra work; criterion 1 is met without the sink, and a follow-up bead adds it",
+   "recommended": true
+  },
+  {
+   "label": "Add a stand-in sink now",
+   "answer": "Add a minimal sink object now: a content entry with front use slots, drawn with a stand-in shape in the client (no new model). Place it against a wall in both layouts and cover it in FurnitureReachTests and the Unity reach test.",
+   "note": "More work in this bead; the sink looks like a placeholder until real art exists"
+  }
+ ],
+ "repo": "/nonexistent/repo",
+ "title": "Furnish against walls and in corners; every object stays reachable and usable"
+}

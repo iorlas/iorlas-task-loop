@@ -1,0 +1,33 @@
+{
+ "v": 1,
+ "id": "lifesim-fld.25.15-3",
+ "n": 3,
+ "bead": "lifesim-fld.25.15",
+ "kind": "decision",
+ "question": "Hair sources spike: all styles are done except dreads and braided beards. For those, I found four Fab packs (2 dread, 2 braided beard), but Fab hides their price and licence unless you are logged in, and Sketchfab blocks agents (403). Without a read licence, the runbook marks them refused. Authoring them ourselves already has a costed row: UMA Hair Card Editor or Blender, free, about 6-10 h for dreads and more for beard braids on a CC0 beard. How should I close these two styles?",
+ "why": "owner decision needed",
+ "run": "lifesim-fld.25.15-20261023-013041",
+ "t": 1792708848.56228,
+ "parks_at": 1792968048.56228,
+ "status": "open",
+ "options": [
+  {
+   "label": "Accept authoring",
+   "answer": "Owner 2026-10-23: accept authoring (UMA Hair Card Editor / Blender) as the candidate for dreads and braided or dreaded beards; keep the Fab packs listed as refused pending licence; close the spike.",
+   "note": "No purchase. Dreads and braided beard are authored in-house (about 6-10 h each) when imported",
+   "recommended": true
+  },
+  {
+   "label": "I'll read Fab prices",
+   "answer": "Owner 2026-10-23: I will read the four Fab listings myself and paste price and licence here; wait for them.",
+   "note": "The task waits until you paste the price and licence for the 4 Fab links in the README"
+  },
+  {
+   "label": "Drop these two styles",
+   "answer": "Owner 2026-10-23: drop dreads and braided beards from this spike; mark them out of scope in the README and close.",
+   "note": "The creator ships with no dreads and no braided beard for now"
+  }
+ ],
+ "repo": "/nonexistent/repo",
+ "title": "Spike: sources for dreads, braids, curls, afro, updo, masculine long hair and braided beards on UMA"
+}

@@ -2995,7 +2995,7 @@ class Engine:
         if self.planned >= 1 + int(self.cfg["max_replans"]) + self.extra:
             raise self.cap_blocked()
         self.planned += 1
-        self.plan_log.append({"mode": mode, "why": (self.amend_why or ("a re-plan: " + why[:160].replace("\n", " ") if again else "first plan"))[:240]})
+        self.plan_log.append({"mode": mode, "why": clip(self.amend_why or ("a re-plan: " + clip(why, 160) if again else "first plan"), 240)})
         if old and not again and not self.amend_text:
             self.amend_text = "The bead is the same as when the old plan was made."
         extra = ""
@@ -3163,8 +3163,8 @@ class Engine:
         except (OSError, ValueError):
             n = 1
         a = {"v": 1, "id": "%s-%d" % (self.bead, n), "n": n, "bead": self.bead, "kind": kind,
-             "question": ask_hint(kind, why, tidy_question(question or why)), "detail": (question or why)[:4000], "why": why[:4000], "run": self.log_path.stem, "t": time.time(),
-             "parks_at": time.time() + 3 * 86400, "brief": self.brief_hash, "status": "open", "fmt": 2,
+             "question": ask_markdown(kind, why, question or why), "detail": (question or why)[:4000], "why": why[:4000], "run": self.log_path.stem, "t": time.time(),
+             "parks_at": time.time() + 3 * 86400, "brief": self.brief_hash, "status": "open", "fmt": 3,
              "options": ask_options(kind, why, getattr(self, "blocked_options", None))}
         common = self.git("rev-parse", "--path-format=absolute", "--git-common-dir")
         a.update(repo=str(Path(common).parent) if common else str(self.wt),
@@ -3200,7 +3200,7 @@ class Engine:
         if not cmd:
             return
         env = dict(os.environ, TL_ASK_KIND=a["kind"], TL_ASK_BEAD=a["bead"], TL_ASK_ID=a["id"],
-                   TL_ASK_TEXT=a["question"][:500])
+                   TL_ASK_TEXT=push_text(a["question"]))
         try:
             subprocess.Popen(cmd, shell=True, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                              stderr=subprocess.DEVNULL, start_new_session=(os.name != "nt"))
@@ -4775,6 +4775,95 @@ def ask_hint(kind, why, question):
     else:
         return question
     return question + "\n" + hint
+
+
+SENT_END = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9(`'\"])")
+
+
+def clip(text, n=170):
+    """text cut to at most n characters at a sentence end, else a clause end, else a word: never mid-word. A cut code span
+    (an unclosed backtick, or a dash-list dump after a colon) goes."""
+    t = " ".join((text or "").split())
+    if len(t) > n:
+        head = t[:n]
+        for seps in ((". ", "! ", "? "), ("; ", ": "), (", ", " ")):
+            at = max(head.rfind(x) for x in seps)
+            if at >= n // 3:
+                t = head[:at].rstrip(" ,;:(") + ("" if seps[0] == ". " else " ...")
+                break
+        else:
+            t = head.rstrip(" ,;:(") + " ..."
+    t = re.sub(r"\s*-?\s*`[^`]*?(?: \.\.\.)?$", "", t) if t.count("`") % 2 else t
+    return t if not t or t[-1] in ".!?)'\"`;" else t + " ..."
+
+
+def push_text(markdown):
+    """A push notification's one line from an ask's markdown: the headline, then what is needed."""
+    lines = [x.strip() for x in (markdown or "").splitlines() if x.strip()]
+    head = lines[0].strip("*") if lines else ""
+    need = next((x.split(":**", 1)[1].strip() for x in lines if x.startswith("**What I need")), "")
+    return ("%s: %s" % (head, need) if need else head)[:500]
+
+
+def ask_markdown(kind, why, question):
+    """An ask as the owner reads it: a headline, what happened (3 bullets at most), what is needed. The options go to the
+    page as a table (they are buttons); the raw text stays in `detail`. Markdown the dashboard renders."""
+    q = tidy_question(question or why, cap=4000)
+    need, head, bullets = "Reply with a hint.", "", []
+    went = why.split("Where it went:", 1)[1].strip() if "Where it went:" in why else ""
+    if kind == "budget":
+        m = re.search(r"over budget: ([^.]*?)(?:\.|$)", why)
+        head = "Over its time limit: %s" % (m.group(1).strip() if m else "see details")
+        bullets = ["%s took %s min (%s round%s)" % (m[0], m[1], m[2], "" if m[2] == "1" else "s")
+                   for m in re.findall(r"(\w+) (\d+) min \((\d+) rounds?\)", went)[:2]]
+        if went.startswith("checks"):
+            bullets.append("Most of it went to check rounds, so running again repeats them unless something changes")
+        need = "Pick an option, or say what to change."
+    elif kind == "stuck" and why.startswith(REPLAN_CAP):
+        m = re.search(r"re-planned (\d+) times", why)
+        head = "Re-planned %s times; the engine stopped" % (m.group(1) if m else "several")
+        reasons = [clip(re.sub(r"^(?:\d+\.\s*)?(?:amend|plan)\s*:\s*(?:a re-plan:\s*)?", "", x), 160)
+                   for x in re.split(r"(?:^|\s)\d+\.\s+(?=(?:plan|amend):)", why.split("): ", 1)[-1]) if x.strip()]
+        reasons = [r for r in reasons if r and "first plan" not in r]
+        bullets = reasons[-3:]
+        need = "Split the bead, say what the plan keeps missing, or allow one more run."
+    elif kind == "verify":
+        body = q.split("): ", 1)[1] if "): " in q else q.split(": ", 1)[-1]
+        items = [clip(x, 200) for x in re.split(r";\s+", body) if x.strip()]
+        head = "Please check before it lands"
+        bullets = items[:3] + (["...and %d more (see details)" % (len(items) - 3)] if len(items) > 3 else [])
+        need = "Is it right? Right lands it; Wrong plans a fix from your words."
+    elif kind == "denied":
+        head = "A step was refused or stopped"
+        bullets = [clip(q.split("needs a human:", 1)[-1], 220)]
+        need = "Say what to try or allow, then Run again."
+    elif kind == "ticket":
+        head = "Nothing says what proves this bead done"
+        bullets = [clip(q, 200)]
+        need = "Add acceptance criteria to the bead, or answer here."
+    elif kind == "stuck" and "nothing proves" in why:
+        head = "Nothing proves a claim before landing"
+        body = why.split("nothing proves", 1)[1].split(" after ", 1)[0]
+        bullets = [clip(x, 180) for x in SENT_END.split(" ".join(body.split())) if x.strip()][:3]
+        need = "Say how to prove it, or that it is fine to land without."
+    else:  # decision, and any other stuck
+        text = re.split(r"\bOptions?:", q, 1)[0].strip() if kind == "decision" else q
+        sents = [x for x in SENT_END.split(" ".join(text.split())) if x.strip()]
+        if sents and sents[-1].endswith("?"):
+            need = sents.pop()
+        elif kind == "decision":
+            need = "Pick an option."
+        sents = [x for x in sents if not re.match(r"(?:I recommend|Recommendation)", x)]
+        if not sents and need.endswith("?"):  # the whole ask is one question: it is the headline
+            sents, need = [need], "Pick an option, or write your own answer."
+        head = clip(sents[0], 150) if sents else "The engine needs you"
+        bullets = [clip(x, 180) for x in sents[1:4]]
+    dot = lambda t: re.sub(r"(?<!\.)\.$", "", t)
+    lines = ["**%s**" % dot(head)]
+    if bullets:
+        lines += ["", "**What happened**"] + ["- %s" % dot(b) for b in bullets[:3]]
+    lines += ["", "**What I need from you:** %s" % need]
+    return "\n".join(lines)
 
 
 def ask_options(kind, why, given=None):

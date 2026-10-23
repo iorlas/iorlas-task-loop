@@ -1,0 +1,22 @@
+{
+ "v": 1,
+ "id": "lifesim-yxbb.2-3",
+ "n": 3,
+ "bead": "lifesim-yxbb.2",
+ "kind": "stuck",
+ "question": "over budget: $0.00 of $15, 214 of 180 min",
+ "why": "over budget: $0.00 of $15, 214 of 180 min",
+ "run": "lifesim-yxbb.2-20261022-141254",
+ "t": 1792680443.039912,
+ "parks_at": 1792939643.039912,
+ "status": "open",
+ "repo": "/nonexistent/repo",
+ "title": "Client soak: Live in Play mode for N game days at top speed, 1 and 3 lifers, no exception, no stuck lifer, memory flat",
+ "options": [
+  {
+   "label": "Run again",
+   "answer": "run again",
+   "note": "Goes on from where it stopped, with a fresh budget (the budget counts per run)"
+  }
+ ]
+}
