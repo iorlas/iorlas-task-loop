@@ -35,7 +35,7 @@ class InputCache(SpeedTest):
 
     def test_a_check_with_inputs_survives_edits_outside_them_and_a_moved_base(self):
         cmd, n = self.bump()
-        eng = self.checks_engine(checks=[{"id": "unity", "cmd": cmd, "group": "tests", "inputs": ["client/**"]}])
+        eng = self.checks_engine(checks=[{"id": "unity", "cmd": cmd, "group": "tests", "inputs": ["client/**"], "inputs_only": True}])
         (self.wt / "client").mkdir()
         (self.wt / "client" / "a.cs").write_text("1\n")
         eng.run_checks(self.ST, "s")
@@ -62,6 +62,42 @@ class InputCache(SpeedTest):
         eng3 = self.checks_engine(checks=[{"id": "unity", "cmd": cmd + " # other", "group": "tests", "inputs": ["client/**"]}])
         eng3.run_checks(self.ST, "s")
         self.assertEqual(n.read_text(), "111")
+
+    def test_the_justfile_a_lockfile_the_base_and_the_env_are_inputs_unless_inputs_only(self):
+        cmd, n = self.bump()
+        chk = {"id": "u", "cmd": cmd, "group": "tests", "inputs": ["client/**"]}
+        eng = self.checks_engine(checks=[chk])
+        (self.wt / "client").mkdir()
+        (self.wt / "client" / "a.cs").write_text("1\n")
+        eng.run_checks(self.ST, "s")
+        eng.run_checks(self.ST, "s")
+        self.assertEqual(n.read_text(), "1")
+        (self.wt / "justfile").write_text("x:\n")  # outside the globs, but it defines the recipe
+        eng.run_checks(self.ST, "s")
+        self.assertEqual(n.read_text(), "11")
+        (self.wt / "packages-lock.json").write_text("{}")
+        eng.run_checks(self.ST, "s")
+        self.assertEqual(n.read_text(), "111")
+        te.sh("git", "commit", "--allow-empty", "-qm", "x", cwd=self.wt)
+        te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=self.wt)  # the base moves
+        eng.run_checks(self.ST, "s")
+        self.assertEqual(n.read_text(), "1111")
+        eng2 = self.checks_engine(checks=[dict(chk, env={"A": "1"})])
+        eng2.run_checks(self.ST, "s")
+        self.assertEqual(n.read_text(), "11111")
+
+    def test_a_gitignored_file_under_the_globs_counts_by_its_content(self):
+        cmd, n = self.bump()
+        (self.wt / ".gitignore").write_text("gen/\n")
+        eng = self.checks_engine(checks=[{"id": "u", "cmd": cmd, "group": "tests", "inputs": ["gen/**"], "inputs_only": True}])
+        (self.wt / "gen").mkdir()
+        (self.wt / "gen" / "o.bin").write_text("1\n")
+        eng.run_checks(self.ST, "s")
+        eng.run_checks(self.ST, "s")
+        self.assertEqual(n.read_text(), "1")
+        (self.wt / "gen" / "o.bin").write_text("2\n")
+        eng.run_checks(self.ST, "s")
+        self.assertEqual(n.read_text(), "11")
 
     def test_without_inputs_any_untracked_file_still_throws_the_result_away(self):
         cmd, n = self.bump()
@@ -103,6 +139,18 @@ class CheapFirst(SpeedTest):
         self.assertEqual([c["id"] for c in res], ["quick", "slow"])
         self.assertEqual([c["status"] for c in res], ["failed", "skipped"])
         self.assertEqual(mark.read_text(), "quick ")
+
+    def test_cheap_checks_all_run_before_the_stop_and_only_green_runs_are_recorded(self):
+        mark, slow, quick = self.slow_then_fast()
+        red = FALSE_P = te.FALSE
+        eng = self.checks_engine(checks=[{"id": "a", "cmd": red, "group": "tests"}, {"id": "b", "cmd": quick, "group": "tests"},
+                                         {"id": "c", "cmd": slow, "group": "tests"}])
+        self.seed(eng, slow, 400)
+        res = eng.run_checks({"checks": [], "files": []}, "s")
+        self.assertEqual([(c["id"], c["status"]) for c in res], [("a", "failed"), ("b", "ran"), ("c", "skipped")])
+        hist = cs.load_durations(str(self.wt))
+        self.assertNotIn(cs.norm(red), hist)
+        self.assertIn(cs.norm(quick), hist)
 
     def test_unknown_commands_count_as_cheap_and_durations_are_recorded(self):
         mark, slow, quick = self.slow_then_fast()
@@ -150,13 +198,32 @@ class Duplicates(SpeedTest):
         res = eng.run_checks({"checks": ["%s > ev.log && grep -q 'Passed: 99' ev.log" % cmd], "files": []}, "s")
         self.assertEqual((n.read_text(), res[-1]["status"]), ("1", "failed"))
 
-    def test_a_wrapper_that_cannot_be_split_runs_it_and_the_engine_copy_is_skipped(self):
+    def test_no_wrapper_pattern_that_is_not_the_bare_command_skips_the_repo_check(self):
+        n = Path(self.tmp.name) / "runs"
+        (self.wt / "t.sh").write_text("echo x >> %s\necho 'Passed: 12'\n" % n)
+        cmd = "sh t.sh"
+        wrappers = ["sh t.sh foo", "FOO=1 sh t.sh", "sh t.sh || true", "! sh t.sh || true", "if true; then sh t.sh; fi", "(sh t.sh)",
+                    "sh t.sh; true", "rm -f z.log; sh t.sh > z.log", "echo 'sh t.sh'", "sh t.sh | grep P", "sh t.sh & wait"]
+        for w in wrappers:
+            n.write_text("")
+            eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests", "cache": False}])
+            res = eng.run_checks({"checks": [w], "files": []}, "s")
+            self.assertEqual(res[0]["status"], "ran", w)  # the repo check always runs
+            if "echo 'sh" not in w:
+                self.assertEqual(len(n.read_text().split()), 2, w)  # and the wrapper runs its own copy as written
+
+    def test_a_wrapper_is_split_only_when_the_extra_part_reads_nothing_but_the_log(self):
+        (self.wt / "other.xml").write_text("x\n")
+        for extra, ok in (("grep -q 'Passed: 12' o.log", True), ("grep -q Passed other.xml", False), ("grep -q Passed $(ls)", False),
+                          ("python3 check.py o.log", False), ("grep -q Passed ./o.log", False)):
+            self.assertEqual(bool(cs.reuse_log("sh t.sh > o.log && " + extra, "sh t.sh", "V", str(self.wt))), ok, extra)
+
+    def test_a_wrapper_runs_in_full_when_the_repo_check_is_cached_without_a_log_or_skipped(self):
         cmd, n = self.counter()
-        eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests"}])
-        res = eng.run_checks({"checks": ["if true; then %s; fi" % cmd], "files": []}, "s")
-        self.assertEqual(n.read_text(), "1")
-        self.assertEqual([c["status"] for c in res], ["skipped", "ran"])
-        self.assertIn("run inside the stage check", res[0]["why"])
+        eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests", "when": ["nothing/**"]}])
+        wrap = "%s > ev.log && grep -q 'Passed: 12' ev.log" % cmd
+        res = eng.run_checks({"checks": [wrap], "files": []}, "s")
+        self.assertEqual(([c["status"] for c in res], n.read_text()), (["skipped", "ran"], "1"))
 
     def test_a_red_recipe_ends_the_round_before_the_wrapper(self):
         red, n = self.counter(1)
@@ -173,8 +240,12 @@ class Duplicates(SpeedTest):
     def test_reuse_log_keeps_redirections_and_refuses_what_it_cannot_split(self):
         f = cs.reuse_log
         self.assertEqual(f("mkdir -p e && just t > e/o 2>&1 && grep P e/o", "just t", "V"), 'mkdir -p e && cat "$V" > e/o 2>&1 && grep P e/o')
-        self.assertEqual(f("just t | tee e/l; grep P e/l", "just t", "V"), 'cat "$V" | tee e/l; grep P e/l')
-        self.assertIsNone(f("rm -f r.xml; just t", "just t", "V"))
+        self.assertEqual(f("just t | tee e/l && grep P e/l", "just t", "V"), 'cat "$V" | tee e/l && grep P e/l')
+        self.assertIsNone(f("just t | tee e/l; grep P e/l", "just t", "V"))
+        self.assertIsNone(f("rm -f r.xml && just t", "just t", "V"))
+        self.assertIsNone(f("just t foo", "just t", "V"))
+        self.assertIsNone(f("FOO=1 just t", "just t", "V"))
+        self.assertIsNone(f("! just t", "just t", "V"))
         self.assertIsNone(f("just t || true", "just t", "V"))
         self.assertIsNone(f("(just t)", "just t", "V"))
         self.assertIsNone(f("just t | grep P", "just t", "V"))
@@ -231,6 +302,34 @@ class Watchdog(SpeedTest):
                                  check_idle_min=0.025)  # 1.5 s of silence allowed, 3 s run
         res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertEqual((res[0]["status"], res[0].get("hung")), ("ran", False))
+
+    def test_a_check_writing_a_file_under_the_worktree_without_printing_is_not_hung(self):
+        code = "import time\nfor i in range(7):\n open('out.log','a').write('x'*50); time.sleep(0.6)"
+        eng = self.checks_engine(checks=[{"id": "w", "cmd": PY + " -c " + shlex.quote(code), "group": "tests"}], check_idle_min=0.03)
+        res = eng.run_checks({"checks": [], "files": []}, "s")
+        self.assertEqual((res[0]["status"], res[0].get("hung")), ("ran", False))
+
+    def test_a_check_burning_cpu_without_output_or_files_is_not_hung(self):
+        code = "import time\nt=time.time()\nwhile time.time()-t<5: sum(range(10000))"
+        eng = self.checks_engine(checks=[{"id": "cpu", "cmd": PY + " -c " + shlex.quote(code), "group": "tests"}], check_idle_min=0.03)
+        res = eng.run_checks({"checks": [], "files": []}, "s")
+        self.assertEqual((res[0]["status"], res[0].get("hung")), ("ran", False))
+
+    def test_the_hang_notice_names_all_three_signals(self):
+        eng = self.checks_engine(checks=[{"id": "h", "cmd": "sleep 30", "group": "tests"}], check_idle_min=0.02)
+        res = eng.run_checks({"checks": [], "files": []}, "s")
+        self.assertIn("no output, file writes or CPU", res[0]["tail"])
+
+    def test_a_timeout_keeps_the_output_and_kills_a_setsid_descendant(self):
+        mark = "72.%d" % os.getpid()
+        code = "import os,subprocess,sys,time\nprint('before', flush=True)\nsubprocess.Popen(['sleep','%s'], start_new_session=True)\ntime.sleep(30)" % mark
+        eng = self.checks_engine(checks=[{"id": "t", "cmd": PY + " -c " + shlex.quote(code), "group": "tests", "timeout_min": 0.05}],
+                                 check_idle_min=5)
+        res = eng.run_checks({"checks": [], "files": []}, "s")
+        self.assertEqual(res[0]["exit"], 124)
+        self.assertIn("before", (Path(eng.run_dir) / res[0]["log"]).read_text())
+        time.sleep(1)
+        self.assertEqual(self.alive(mark), "")
 
     def test_idle_min_zero_turns_the_watchdog_off_and_a_check_can_set_its_own(self):
         eng = self.checks_engine(checks=[{"id": "q", "cmd": "sleep 2", "group": "tests"}], check_idle_min=0)

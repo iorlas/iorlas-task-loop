@@ -1149,12 +1149,24 @@ def kill_tree(p):
         else:
             if p.pid in own_ids() or (p.returncode is None and os.getpgid(p.pid) in own_ids()):
                 raise RuntimeError("kill_tree: child %s is in our own process group; refusing to kill it" % p.pid)
+            try:  # a descendant that called setsid left the group: note it now, before it is reparented
+                away = [(k, st) for k, g, st in descendants(p.pid, tl.proc_table()) if g != p.pid]
+            except Exception:
+                away = []
             send_group(p.pid, signal.SIGTERM)  # Unity removes Temp/UnityLockfile on SIGTERM
             end = time.time() + 10
             while time.time() < end and tl.proc_alive(p.pid):  # not p.wait(): a reaped leader frees its pid, and its
                 time.sleep(0.1)                                # group id with it, for any new process to take
             if p.returncode is None:
                 send_group(p.pid, signal.SIGKILL)  # stragglers; p is still unreaped, so the group id is still its own
+            for sig in (signal.SIGTERM, signal.SIGKILL):  # setsid'd descendants: the same pid and start time only
+                for k, st in away:
+                    try:
+                        send_pid(k, sig, st)
+                    except RuntimeError:
+                        pass
+                if sig == signal.SIGTERM and away:
+                    time.sleep(1)
     except OSError:
         pass
     p.wait()
@@ -1761,9 +1773,10 @@ class Engine:
             else:
                 out, _ = p.communicate(timeout=timeout)
                 rc = p.returncode
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as e:
             kill_tree(p)
             out, _ = p.communicate()
+            out = (e.output or b"") + out if idle else out  # the watched path read the output itself: keep what it collected
             out += b"\n(timed out after %g min: the engine stopped it and everything it started)" % round(timeout / 60, 2)
             rc = 124
         except BaseException:  # stopped: never leave a check (just check, Unity) running
@@ -1779,8 +1792,10 @@ class Engine:
         return rc, tail
 
     def watch_output(self, p, timeout, idle):
-        """Collect p's output until it ends. No new output for `idle` seconds: the whole tree is stopped, self.hung is set
-        and the exit is 124 (the output ends with the hang notice). `timeout` still applies, as TimeoutExpired."""
+        """Collect p's output until it ends. Stopped as hung when, for `idle` seconds, all three are flat: its output, any
+        file written under the worktree (a check that redirects to a file is not silent), the CPU time of its process tree.
+        Then the whole tree is stopped, self.hung is set and the exit is 124 (the output ends with the hang notice).
+        `timeout` still applies, as TimeoutExpired carrying the output so far."""
         chunks, last = [], [time.time()]
 
         def pump():
@@ -1793,6 +1808,8 @@ class Engine:
         th = threading.Thread(target=pump, daemon=True)
         th.start()
         start = time.time()
+        poll, nxt = min(60.0, max(0.3, idle / 4)), start
+        seen = {"files": None, "cpu": {}}
         while th.is_alive():
             th.join(0.5)
             now = time.time()
@@ -1800,11 +1817,16 @@ class Engine:
                 kill_tree(p)
                 th.join(5)
                 raise subprocess.TimeoutExpired(p.args, timeout, output=b"".join(chunks))
+            if th.is_alive() and now >= nxt:
+                nxt = now + poll
+                if cs.activity(self.wt, p.pid, seen):
+                    last[0] = max(last[0], now)
             if th.is_alive() and now - last[0] > idle:
                 self.hung = True
                 kill_tree(p)
                 th.join(5)
-                chunks.append(b"\n(hung: no output for %g min; the engine stopped it and everything it started)" % round(idle / 60, 2))
+                chunks.append(b"\n(hung: no output, file writes or CPU for %g min; the engine stopped it and everything it started)"
+                              % round(idle / 60, 2))
                 return b"".join(chunks), 124
         p.wait()
         return b"".join(chunks), p.returncode
@@ -3761,9 +3783,10 @@ class Engine:
                   "timeout": float(c.get("timeout_min") or self.cfg["check_timeout_min"]),
                   "cache": c.get("cache", True) is not False,
                   "idle": float(c.get("idle_min", self.cfg["check_idle_min"]) or 0) * 60,
-                  "inputs": [c["inputs"]] if isinstance(c.get("inputs"), str) else list(c.get("inputs") or [])} for c in self.cfg["checks"]]
+                  "inputs": [c["inputs"]] if isinstance(c.get("inputs"), str) else list(c.get("inputs") or []),
+                  "inputs_only": bool(c.get("inputs_only")), "env": c.get("env") or {}} for c in self.cfg["checks"]]
         items += [{"id": c, "cmd": c, "group": "acceptance", "when": [], "retry": 0,
-                   "timeout": float(self.cfg["check_timeout_min"]), "cache": False, "inputs": [],
+                   "timeout": float(self.cfg["check_timeout_min"]), "cache": False, "inputs": [], "inputs_only": False, "env": {},
                    "idle": float(self.cfg["check_idle_min"] or 0) * 60} for c in st["checks"]]
         if groups:  # tl-bxk.13.15: only these groups (the cheap checks before a render)
             items = [c for c in items if c["group"] in groups]
@@ -3772,12 +3795,11 @@ class Engine:
         # acceptance, acceptance goes before tests at equal cost (tl-bxk.13.14: lifesim-fdyo reran 11 minutes of unity tests
         # before a 3-second verdict check failed).
         history = cs.load_durations(self.wt)
-        # A stage check that contains a repo check's command (`mkdir -p e && just unity-tests > e/log && grep ...`) does not
-        # run it again: where the wrapper can be split, its copy becomes `cat` of the repo check's log and only its extra part
-        # runs; where it cannot, the repo check's own run is dropped and the wrapper's run stands in for it.
+        # A stage check whose segment is exactly a repo check's command (`mkdir -p e && just unity-tests > e/log && grep ...`)
+        # reads that check's log instead of running it again, when the repo check ran green in this round (see cs.reuse_log).
+        # Anything else (args, an env prefix, `||`, `!`, a subshell, a quoted mention) runs as written, and so does the repo check.
         repo = [c for c in items if c["group"] != "acceptance"]
         needs = {}  # id(wrapper) -> [repo checks whose log it reads]
-        covered = {}  # id(repo check) -> [wrappers that run it themselves]
         for w in items:
             if w["group"] != "acceptance":
                 continue
@@ -3786,17 +3808,11 @@ class Engine:
                 var = check_env_name(r["id"])
                 if not cs.contains_cmd(cmd_w, r["cmd"], unquoted=True) or var in cmd_w or var.replace("_LOG_", "_RC_") in cmd_w:
                     continue
-                new = cs.reuse_log(cmd_w, r["cmd"], var)
+                new = cs.reuse_log(cmd_w, r["cmd"], var, self.wt)
                 if new:
                     cmd_w = new
                     needs.setdefault(id(w), []).append(r)
-                else:
-                    covered.setdefault(id(r), []).append(w)
             w["run_cmd"] = cmd_w
-        for r in repo:  # dropped only when every wrapper that holds it runs it, and no check reads its log
-            refs = [x for x in items if x is not r and (check_env_name(r["id"]) in x["cmd"] or check_env_name(r["id"]).replace("_LOG_", "_RC_") in x["cmd"])]
-            if covered.get(id(r)) and not any(id(r) == id(q) for ws in needs.values() for q in ws) and not refs:
-                r["covered_by"] = covered[id(r)][0]["id"]
         rank = {"static": 0, "acceptance": 1, "tests": 2} if acceptance_first else {"static": 0, "tests": 1, "acceptance": 2}
         env_of = {check_env_name(c["id"])[len("TL_CHECK_LOG_"):]: c for c in items if c["group"] != "acceptance"}
         deps = {id(c): [env_of[m] for m in dict.fromkeys(re.findall(r"TL_CHECK_(?:LOG|RC)_(\w+)", c["cmd"])) if m in env_of]
@@ -3810,20 +3826,17 @@ class Engine:
         tree = self.tree_hash()
         key = "%s %s" % (tree, self.git("rev-parse", self.cfg["base"]))
         by_inputs = cache.get("inputs") if isinstance(cache.get("inputs"), dict) else {}  # per-check: command + hash of its `inputs` files
-        files = None  # the tree's files, listed once and only when a check declares `inputs`
+        keys = cs.InputKeys(self.wt, tree, self.git("rev-parse", self.cfg["base"]))  # per-check keys, listed lazily
         logs = self.run_dir / "checks"
         logs.mkdir(exist_ok=True)
         timings = []  # (cmd, secs) of what ran, for the duration history
         out, red, changed, ran, env_logs = [], None, None, {}, {}  # ran: what ran in this block -> its result; env_logs: its logs, for later checks
         for n, c in enumerate(items):
             base = {"cmd": c["cmd"], "id": c["id"], "group": c["group"]}
-            if red:  # the first red ends the round: nothing slower runs after it
+            if red and (c["group"] != red or cs.expected_secs(c["cmd"], history) >= cs.CHEAP_S):
+                # a red group skips the groups after it, and any red skips every expensive check (the cheap ones of its own
+                # group run to the end, so the writer sees all the cheap failures at once)
                 out.append(dict(base, exit=None, status="skipped", why="%s failed first" % red, tail=""))
-                continue
-            if c.get("covered_by"):
-                self.log("note", "`%s` is run by the stage check `%s`: not run twice" % (c["id"], c["covered_by"][:80]))
-                out.append(dict(base, exit=None, status="skipped", tail="",
-                                why="run inside the stage check `%s`" % c["covered_by"][:60]))
                 continue
             if c["when"]:
                 changed = self.changed_paths() if changed is None else changed
@@ -3843,8 +3856,7 @@ class Engine:
                 continue
             ikey = ""
             if c["cache"] and c["inputs"]:  # a green result is a fact about the check's own inputs, not the whole tree or base
-                files = cs.tree_files(self.wt, tree) if files is None else files
-                ikey = cs.input_key(cmd, files, c["inputs"])
+                ikey = keys.key(c)
                 hit = by_inputs.get(ikey) if ikey else None
             else:
                 hit = c["cache"] and cache.get(key, {}).get(c["cmd"])
@@ -3875,7 +3887,7 @@ class Engine:
                     if rc == 0:
                         break
                     if hung:  # silent for check_idle_min: a rerun hangs the same way, and this round has waited enough
-                        self.warn("`%s` hung: no output for %g min, stopped; not retried" % (c["id"], c["idle"] / 60))
+                        self.warn("`%s` hung: no output, file writes or CPU for %g min, stopped; not retried" % (c["id"], c["idle"] / 60))
                         break
                     if rc == 124:  # the engine's timeout or the command's own: a rerun hangs the same way
                         if c["retry"]:
@@ -3908,8 +3920,8 @@ class Engine:
                 res = dict(base, exit=rc, status="ran" if rc == 0 else "failed", tries=tries, tail=tail[-1500:],
                            secs=round(time.time() - t), log="checks/" + log_name, log_abs=str(logs / log_name), hung=bool(hung))
                 if hung:
-                    res["tail"] = "HUNG (no output for %g min), last output:\n%s" % (c["idle"] / 60, tail[-1400:])
-                if rc != 124:  # a killed run says nothing about the cost
+                    res["tail"] = "HUNG (no output, file writes or CPU for %g min), last output:\n%s" % (c["idle"] / 60, tail[-1400:])
+                if rc == 0:  # only a green run says what the check costs: a red one stops early
                     timings.append((cmd, time.time() - t))
                 if rc == 0 and c["cache"]:  # only a pass is a fact about the tree; a failure can come from outside git (stale
                     if ikey:  # build output, a held editor, a flake) and must rerun
@@ -3941,7 +3953,7 @@ class Engine:
         cache_path.write_text(json.dumps(saved))
         bad = [c for c in out if c["status"] == "failed"]
         hung = [c for c in bad if c.get("hung")]
-        self.outcome_of("red" if bad else "green", "%d failed%s: %s" % (len(bad), " (%d hung: no output, stopped)" % len(hung) if hung else "",
+        self.outcome_of("red" if bad else "green", "%d failed%s: %s" % (len(bad), " (%d hung: no output, file writes or CPU, stopped)" % len(hung) if hung else "",
                                                                        ", ".join(c["id"][:60] for c in bad))
                         if bad else "%d passed" % sum(1 for c in out if c["status"] == "ran"))
         self.log("checks", "checks round %d: %s" % (self.check_round, "%d failed" % len(bad) if bad else "green"),
@@ -4070,14 +4082,13 @@ class Engine:
             return []
         by_inputs = cache.get("inputs") if isinstance(cache.get("inputs"), dict) else {}
         whole = cache.get("%s %s" % (tree, self.git("rev-parse", self.cfg["base"]))) or {}
-        files, out = None, []
+        keys, out = cs.InputKeys(self.wt, tree, self.git("rev-parse", self.cfg["base"])), []
         for c in self.cfg.get("checks") or []:
             if c.get("cache", True) is False:
                 continue
             globs = [c["inputs"]] if isinstance(c.get("inputs"), str) else list(c.get("inputs") or [])
             if globs:
-                files = cs.tree_files(self.wt, tree) if files is None else files
-                ok = bool(by_inputs.get(cs.input_key(c["cmd"], files, globs) or "-"))
+                ok = bool(by_inputs.get(keys.key(dict(c, inputs=globs)) or "-"))
             else:
                 ok = c["cmd"] in whole
             if ok:

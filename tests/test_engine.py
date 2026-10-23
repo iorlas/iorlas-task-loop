@@ -521,8 +521,7 @@ class EngineTest(unittest.TestCase):
         eng = self.checks_engine(checks=[{"id": "ut", "cmd": bump, "group": "tests", "cache": False}])
         st = {"checks": ["rm -f nothing.xml; " + bump, "echo '" + bump.replace("'", "") + " && x'"], "files": []}
         eng.run_checks(st, "s")
-        self.assertEqual(count.read_text(), "1")  # rm first may clear what the command leaves: the stage check runs it
-        # itself (once), and the engine's copy is dropped; the quoted text is no command
+        self.assertEqual(count.read_text(), "11")  # the repo check, then the one after rm; the quoted text is no command
 
     def test_a_red_part_after_the_reused_check_still_fails(self):
         eng = self.checks_engine(checks=[{"id": "ut", "cmd": PY + ' -c "pass"', "group": "tests"}])
@@ -567,7 +566,7 @@ class EngineTest(unittest.TestCase):
         eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
         cases = {FALSE + "; true": 1, FALSE + " | cat": 1, "! " + FALSE: 0, FALSE + " || true": 0,
                  "if " + FALSE + "; then exit 3; fi": 0, "true; true": 0}
-        res = [eng.run_checks({"checks": [k], "files": []}, "s")[0] for k in cases]  # one round each: a red ends a round
+        res = eng.run_checks({"checks": list(cases), "files": []}, "s")
         self.assertEqual({c["cmd"]: c["exit"] != 0 for c in res}, {k: v != 0 for k, v in cases.items()})
 
     def test_a_stop_during_a_check_stops_the_check_and_everything_it_started(self):

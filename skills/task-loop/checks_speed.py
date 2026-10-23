@@ -46,10 +46,63 @@ def inputs_hash(files, globs):
     return h.hexdigest() if n else ""
 
 
-def input_key(cmd, files, globs):
-    """What a green result of `cmd` is a fact about: the command and the hash of its input files. "" = no key."""
-    ih = inputs_hash(files, globs)
-    return hashlib.sha1(("%s\0%s" % (norm(cmd), ih)).encode("utf-8", "surrogateescape")).hexdigest() if ih else ""
+ROOT_FILES = ("justfile", "Justfile", ".justfile", "*.lock", "packages-lock.json", "package-lock.json", "Directory.Packages.props",
+              "Directory.Build.props", "Directory.Build.targets", "global.json", "nuget.config", ".task-loop.json")
+BIG = 16 * 1024 * 1024  # an ignored input bigger than this counts by size, not content
+
+
+def ignored_paths(wt, globs):
+    """Ignored (untracked, gitignored) files in the worktree that match any glob, from `git ls-files -o -i`."""
+    r = subprocess.run(["git", "ls-files", "-z", "-o", "-i", "--exclude-standard"], cwd=wt, env=tl.git_env(wt), capture_output=True)
+    paths = r.stdout.decode("utf-8", "surrogateescape").split("\0")
+    return [p for p in paths if p and any(fnmatch.fnmatch(p, g) for g in globs)]
+
+
+def file_digest(path):
+    h = hashlib.sha1()
+    try:
+        size = os.path.getsize(path)
+        if size > BIG:
+            return "big:%d" % size
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+    except OSError:
+        return "gone"
+    return h.hexdigest()
+
+
+class InputKeys:
+    """A check's cache key for one tree: its command and env, the hash of the tree files matching its `inputs`, of the
+    gitignored files matching them (their contents, read directly: tree_hash never sees them), and unless the check sets
+    `"inputs_only": true` also of the justfile, lockfiles and .task-loop.json anywhere in the tree, and the base sha."""
+
+    def __init__(self, wt, tree, base=""):
+        self.wt, self.tree, self.base = wt, tree, base
+        self.files = None
+        self.ignored = {}  # globs -> [paths]
+
+    def key(self, c):
+        globs = list(c.get("inputs") or [])
+        if not globs:
+            return ""
+        if self.files is None:
+            self.files = tree_files(self.wt, self.tree)
+        h = hashlib.sha1()
+        ih = inputs_hash(self.files, globs)
+        gk = tuple(globs)
+        if gk not in self.ignored:
+            self.ignored[gk] = ignored_paths(self.wt, globs)
+        ign = sorted(self.ignored[gk])
+        for p in ign:
+            h.update(("I\t%s\t%s\0" % (p, file_digest(os.path.join(self.wt, p)))).encode("utf-8", "surrogateescape"))
+        if not ih and not ign:
+            return ""
+        h.update(("%s\0%s\0%s" % (norm(c["cmd"]), ih, json.dumps(c.get("env") or {}, sort_keys=True))).encode("utf-8", "surrogateescape"))
+        if not c.get("inputs_only"):
+            h.update(inputs_hash(self.files, ["*/" + g for g in ROOT_FILES] + list(ROOT_FILES)).encode())
+            h.update(("\0" + self.base).encode())
+        return h.hexdigest()
 
 
 # --- duration history -----------------------------------------------------------------------------------------------
@@ -207,26 +260,104 @@ REDIRECTS = re.compile(r"""^(?:\s*(?:\d*>>?\s*[^\s|&;<>]+|\d*>&\d|&>>?\s*[^\s|&;
 
 
 SETUP_WORDS = ('mkdir', 'echo', 'printf', 'export', 'true', 'test', '[', 'cd', 'set', ':')
+READ_WORDS = ('grep', 'egrep', 'fgrep', 'test', '[', 'wc', 'tail', 'head', 'cat')  # an extra part that only reads
+TARGET = re.compile(r"""(?:\d*>>?|&>>?)\s*([^\s|&;<>]+)|\|\s*tee(?:\s+-a)?\s+([^\s|&;<>]+)""")
 
 
-def reuse_log(outer, inner, log_var):
-    """`outer` with the segment that is exactly `inner` (plus output redirections) replaced by `cat "$log_var"` with the
-    same redirections, so the wrapper's own checks read the log of the run that already happened. None when no segment
-    is exactly that (the inner command sits inside a subshell, an `if`, a pipe to something else...)."""
+def reuse_log(outer, inner, log_var, wt=None):
+    """`outer` with the segment that is exactly `inner` replaced by `cat "$log_var"` (same output redirections), or None.
+    Only when: the segments are joined by `&&` alone (no `;`, newline, `||`, `&`); exactly one segment is the command, with
+    nothing before it (no env prefix, `!`, args) and nothing after it but output redirections; the segments before it are
+    setup (mkdir, echo...) and the ones after it only read: grep/test/wc/tail/head/cat with no substitution, whose file
+    operands are the command's redirect targets (a path that exists in `wt` and is not a target refuses)."""
     segs = split_top(outer)
-    if not segs:
+    if not segs or any(sep not in ("&&", "") for _, sep in segs):
         return None
     words = str(inner).split()
     pat = re.compile(r"^(\s*)" + r"\s+".join(map(re.escape, words)) + r"(?![\w-])(.*)$", re.S)
-    hits, out = 0, ""
+    hits, out, targets = 0, "", set()
     for seg, sep in segs:
         m = pat.match(seg)
-        if not hits and not m and (seg.split() or ["true"])[0] not in SETUP_WORDS:
-            return None  # something before the command (rm, mv, a build) may clear what the command leaves behind
-        if m and REDIRECTS.match(m.group(2)):
+        if m:
+            if hits or not REDIRECTS.match(m.group(2)):
+                return None
             hits += 1
+            targets |= {a or b for a, b in TARGET.findall(m.group(2))}
             seg = '%scat "$%s"%s' % (m.group(1), log_var, m.group(2))
         elif contains_cmd(seg, inner, unquoted=True):
             return None
+        elif not hits:
+            if (seg.split() or ["true"])[0] not in SETUP_WORDS:
+                return None
+        else:
+            toks = seg.split()
+            if not toks or toks[0] not in READ_WORDS or "$(" in seg or "`" in seg or "<" in seg or ">" in seg:
+                return None
+            for t in toks[1:]:
+                t = t.strip("'\"")
+                if t in targets or t.startswith("-") or not t:
+                    continue
+                if t.startswith(("/", "./", "../", "~")) or (wt and os.path.exists(os.path.join(wt, t))):
+                    return None
         out += seg + sep
     return out if hits else None
+
+
+# --- activity of a running check ------------------------------------------------------------------------------------
+
+def parse_cpu(text):
+    """Seconds from ps's [[dd-]hh:]mm:ss[.ff]."""
+    days, rest = (text.split("-", 1) if "-" in text else ("0", text))
+    secs = 0.0
+    for part in rest.split(":"):
+        secs = secs * 60 + float(part)
+    return secs + float(days) * 86400
+
+
+def tree_cpu(root_pid):
+    """{pid: cpu seconds} for the process tree under root_pid and every member of its group; {} when ps is missing."""
+    out = tl.ps("-A", "-o", "pid=,ppid=,pgid=,time=")
+    rows = {}
+    for ln in (out or "").splitlines():
+        f = ln.split()
+        if len(f) == 4 and all(x.isdigit() for x in f[:3]):
+            try:
+                rows[int(f[0])] = (int(f[1]), int(f[2]), parse_cpu(f[3]))
+            except ValueError:
+                pass
+    mine, todo = {root_pid}, [root_pid]
+    while todo:
+        cur = todo.pop()
+        for k, (ppid, _, _) in rows.items():
+            if ppid == cur and k not in mine:
+                mine.add(k)
+                todo.append(k)
+    mine |= {k for k, (_, g, _) in rows.items() if g == root_pid}
+    return {k: rows[k][2] for k in mine if k in rows}
+
+
+def files_signature(wt):
+    """(files, bytes, newest mtime) under the worktree, .git left out."""
+    n = size = newest = 0
+    for dp, dns, fns in os.walk(wt):
+        dns[:] = [d for d in dns if d != ".git"]
+        for f in fns:
+            try:
+                st = os.lstat(os.path.join(dp, f))
+            except OSError:
+                continue
+            n += 1
+            size += st.st_size
+            newest = max(newest, st.st_mtime_ns)
+    return (n, size, newest)
+
+
+def activity(wt, root_pid, seen):
+    """True when since the last call the tree under root_pid used CPU (or started a process) or a file under `wt` changed
+    (a count, a size or an mtime). `seen` carries the last look; the first call only takes it (and counts as activity)."""
+    cpu, sig = tree_cpu(root_pid), files_signature(wt)
+    prev_cpu, prev_sig = seen.get("cpu") or {}, seen.get("files")
+    seen["cpu"], seen["files"] = cpu, sig
+    if prev_sig is None or sig != prev_sig:
+        return True
+    return any(k not in prev_cpu or v > prev_cpu[k] for k, v in cpu.items())
