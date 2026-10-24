@@ -864,7 +864,7 @@ def bead_priority(repo, bead_id):
     """The priority (0 = P0) of a bead, DEFAULT_PRIO when it cannot be read."""
     try:
         return prio_of(show(bead_id, cwd=repo))
-    except SystemExit:
+    except (SystemExit, IndexError, KeyError, AttributeError):  # no bd, or a bead bd answers `[]` for: it waits as a P2
         return DEFAULT_PRIO
 
 

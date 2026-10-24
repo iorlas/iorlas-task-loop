@@ -296,6 +296,13 @@ class Line(Slots):
         for t in (p2, p0b):
             tl.drop_ticket(t)
 
+    def test_a_bead_that_cannot_be_read_waits_as_a_p2(self):
+        for boom in (IndexError("[]"), SystemExit("no bd"), KeyError("x")):
+            with mock.patch.object(tl, "show", side_effect=boom):
+                self.assertEqual(tl.bead_priority(str(self.repo), "x-1"), 2)
+        with mock.patch.object(tl, "show", return_value={"priority": 0}):
+            self.assertEqual(tl.bead_priority(str(self.repo), "x-1"), 0)
+
     def test_equal_priorities_keep_arrival_order_and_an_unreadable_priority_is_p2(self):
         repo = str(self.repo)
         ts = [tl.take_ticket(repo, "a", 1), tl.take_ticket(repo, "b", 1), tl.take_ticket(repo, "c")]
