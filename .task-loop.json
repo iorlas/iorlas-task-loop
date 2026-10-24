@@ -1,6 +1,8 @@
 {
   "engine": {
     "gate": "python3 -m unittest discover -s tests",
-    "land": "git push origin HEAD:main"
+    "land": "git push origin HEAD:main",
+    "pick_label": "auto",
+    "needs_info_label": "needs-info"
   }
 }
