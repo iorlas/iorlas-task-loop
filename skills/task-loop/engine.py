@@ -714,9 +714,17 @@ def agent_run_session(run_id):
     return tl.transcript_of("openai", str(rec["thread"])) if rec.get("thread") else ""
 
 
+_OC_SEEN = {}  # OpenCode session id -> last update time read
+
+
 def file_mtime(path):
-    if tl.opencode_id(path):  # an OpenCode session: its newest message
-        return tl.opencode_updated(tl.opencode_id(path))
+    sid = tl.opencode_id(path)
+    if sid:  # an OpenCode session: its newest message or part; a DB that cannot be read now keeps the last time seen
+        t = tl.opencode_updated(sid)
+        if t is None:
+            return _OC_SEEN.get(sid)
+        _OC_SEEN[sid] = t
+        return t
     try:
         return os.stat(path).st_mtime
     except OSError:
@@ -1446,8 +1454,8 @@ class Engine:
                "reason": j.get("reason"), "next": j.get("next"), "context": j.get("context"),
                "node_id": (self.cur or {}).get("id"), "resume": bool(getattr(self, "_resume", None)), "flag": j.get("flag"),
                "prompt_chars": getattr(self, "_prompt_chars", None)}
-        if node == "write" and not rec["transcript"] and tl.opencode_id(rec["ref"]):
-            rec["transcript"] = tl.transcript_of("xai", rec["ref"])  # OpenCode: the answer's session id stands for the transcript
+        if node == "write" and not rec["transcript"] and tl.opencode_id(rec["ref"]):  # OpenCode: the session id stands for the transcript,
+            rec["transcript"] = "opencode:" + tl.opencode_id(rec["ref"])  # no DB look (a busy DB must not blank context_k)
         if node == "write":  # where the session's context stands now: what the next round weighs against write_fresh_above_k
             tok = context_tokens(rec["transcript"])
             rec["context_k"] = round(tok / 1000) if tok else None
@@ -5240,10 +5248,10 @@ LOCK_FAIL = re.compile(r"another Unity instance|Multiple Unity instances|It look
 def login_fix(j):
     """The trace note for a logged-out lane: which login to run."""
     lane = j.get("lane") or ""
+    if j.get("family") == "xai" or (not j.get("family") and ("GROK" in lane.upper() or lane.upper().endswith("XAI"))):
+        return "Grok logged out: run `opencode auth login`"
     if j.get("family") == "openai" or lane.upper().startswith("OPENAI"):
         return "Codex logged out: run `codex login`"
-    if j.get("family") == "xai" or lane.upper().startswith(("GROK", "XAI")):
-        return "Grok logged out: run `opencode auth login`"
     return "Claude logged out: run `claude auth login`"
 
 

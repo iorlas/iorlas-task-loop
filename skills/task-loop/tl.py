@@ -163,7 +163,8 @@ def opencode_has(sid):
 
 def opencode_updated(sid):
     """Seconds since the epoch of the session's last change (OpenCode stores ms), or None."""
-    rows = opencode_rows("SELECT MAX(time_updated) FROM message WHERE session_id = ?", (sid,))
+    rows = opencode_rows("SELECT MAX(t) FROM (SELECT MAX(time_updated) t FROM message WHERE session_id = ? "
+                         "UNION ALL SELECT MAX(time_updated) FROM part WHERE session_id = ?)", (sid, sid))
     return rows[0][0] / 1000.0 if rows and rows[0][0] else None
 
 

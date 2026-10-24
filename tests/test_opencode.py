@@ -147,5 +147,98 @@ class OpenCode(unittest.TestCase):
         self.assertEqual(engine.Engine.fresh_above_k(eng, "xai"), 100.0)
 
 
+    # review fixes (7e5b07d)
+    def test_api_block_for_xai_names_an_opencode_events_id(self):
+        d = {"session": {"family": "xai", "ref": SID, "transcript": ""}, "block": {"who": {"family": "xai"}, "t0": 100.0, "t1": 200.0}, "checks": []}
+        with mock.patch.object(server, "run_path", return_value="/x"), mock.patch.object(server, "block_detail", return_value=d):
+            out = server.api_block("r", "n", 0)
+        self.assertEqual(out["events_id"], "opencode:%s@70.0@230.0" % SID)
+        self.assertEqual(out["transcript"], "opencode:" + SID)
+        d["session"]["ref"] = "ses_unknown"
+        with mock.patch.object(server, "run_path", return_value="/x"), mock.patch.object(server, "block_detail", return_value=d):
+            out = server.api_block("r", "n", 0)  # a busy or unreadable DB must not blank the block: the id stays, events are empty
+        self.assertEqual(out["events_id"], "opencode:ses_unknown@70.0@230.0")
+        self.assertEqual(server.run_events(out["events_id"]), [])
+
+    def test_watchdog_reads_an_opencode_path_by_part_updates_and_survives_a_locked_db(self):
+        con = sqlite3.connect(self.db)
+        con.execute("INSERT INTO part VALUES ('p9','m3',?,?,?,'{}')", (SID, T + 9000, T + 99000))
+        con.commit()
+        con.close()
+        self.assertAlmostEqual(tl.opencode_updated(SID), 1_790_000_099.0)  # a part newer than every message
+        t = [1_790_000_100.0]
+        w = engine.Idle(900, 1500, 7200, clock=lambda: t[0], session=lambda r: "opencode:" + SID)
+        w.begin()
+        w.t0 = t[0] - 60
+        self.assertEqual(w.check({"run_id": "r"}, 2820), "")
+        t[0] += 600
+        self.assertEqual(w.check({"run_id": "r"}, 2820), "")
+        with mock.patch.dict(os.environ, {"OPENCODE_DB": os.path.join(self.tmp.name, "gone.db")}):  # unreadable now: last time kept
+            self.assertAlmostEqual(engine.file_mtime("opencode:" + SID), 1_790_000_099.0)
+            t[0] += 300
+            self.assertEqual(w.check({"run_id": "r"}, 2820), "")
+
+    def test_a_locked_db_reads_as_empty(self):
+        con = sqlite3.connect(self.db, isolation_level=None)
+        con.execute("BEGIN EXCLUSIVE")
+        try:
+            t0 = time.time()
+            self.assertEqual(server.opencode_events(SID), [])
+            self.assertIsNone(tl.opencode_context(SID))
+            self.assertLess(time.time() - t0, 5)
+        finally:
+            con.execute("ROLLBACK")
+            con.close()
+
+    def test_a_long_session_shows_its_newest_parts_and_a_window_is_cut_in_sql(self):
+        con = sqlite3.connect(self.db)
+        for i in range(5100):
+            con.execute("INSERT INTO part VALUES (?,?,?,?,?,?)", ("q%05d" % i, "m3", SID, T + 10000 + i, T + 10000 + i,
+                                                                  json.dumps({"type": "text", "text": "t%d" % i})))
+        con.commit()
+        con.close()
+        ev = server.opencode_events(SID)
+        self.assertEqual(len(ev), 5000)
+        self.assertEqual(ev[-1]["text"], "t5099")
+        self.assertEqual(ev[0]["text"], "t100")
+        win = server.opencode_events(SID, (T + 10000) / 1000.0 + 0.5, (T + 10000) / 1000.0 + 1.5)
+        self.assertTrue(0 < len(win) < 4000)  # +-1 s of slack on each side
+
+    def test_a_non_numeric_tool_time_gives_no_duration(self):
+        con = sqlite3.connect(self.db)
+        d = {"type": "tool", "tool": "bash", "state": {"status": "completed", "input": {"command": "x"}, "output": "",
+                                                       "time": {"start": "a", "end": None}}}
+        con.execute("INSERT INTO part VALUES ('z1','m3',?,?,?,?)", (SID, T + 9500, T + 9500, json.dumps(d)))
+        con.commit()
+        con.close()
+        last = server.opencode_events(SID)[-1]
+        self.assertEqual((last["text"], "dur" in last), ("x", False))
+
+    def test_a_lane_named_openai_xai_is_grok_by_family_or_name(self):
+        self.assertEqual(engine.login_fix({"lane": "OPENAI_XAI"}), "Grok logged out: run `opencode auth login`")
+        self.assertEqual(engine.login_fix({"lane": "OPENAI_SUBSCRIPTION", "family": "openai"}), "Codex logged out: run `codex login`")
+        self.assertEqual(timeline.lane_name("OPENAI_XAI"), "Grok")
+        self.assertEqual(timeline.lane_name("OPENAI_SUBSCRIPTION"), "Codex")
+
+    def test_trace_with_a_missing_db_prints_and_the_engine_trace_keeps_the_session_id(self):
+        os.environ["OPENCODE_DB"] = os.path.join(self.tmp.name, "gone.db")
+        Path(self.cfg, "task-loop").mkdir(parents=True, exist_ok=True)
+        rec = {"v": 1, "bead": "b-1", "run": "r", "outcome": "landed", "sessions": [
+            {"node": "write", "family": "xai", "ref": SID, "transcript": ""}]}
+        Path(self.cfg, "task-loop", "traces.jsonl").write_text(json.dumps(rec) + "\n")
+        import contextlib
+        import io
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = tl.cmd_trace(types.SimpleNamespace(id="b-1", last=0, json=True))
+        self.assertEqual(rc, 0)
+        self.assertEqual(json.loads(buf.getvalue())[0]["sessions"][0]["transcript"], "")
+        eng = types.SimpleNamespace(cur=None, stats={"tokens_in": 0, "tokens_cached": 0, "tokens_out": 0}, sessions=[],
+                                    log=lambda *a, **k: None)
+        r = types.SimpleNamespace(error="", ref=SID, secs=1, cost=0, stop="", data=None)
+        engine.Engine.trace_call(eng, "write", "writer", 1, r, {"ref": SID, "status": "ok"})
+        self.assertEqual(eng.sessions[0]["transcript"], "opencode:" + SID)  # no DB look
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -323,10 +323,12 @@ def opencode_events(sid, t0=None, t1=None):
     if not sid:
         return []
     out = []
-    rows = tl.opencode_rows(
+    lo = int((t0 - 1) * 1000) if t0 else 0  # OpenCode stores ms
+    hi = int((t1 + 1) * 1000) if t1 else 1 << 62
+    rows = tl.opencode_rows(  # the newest 5000 parts of the window: a long session shows its end, a poll reads no more
         "SELECT p.time_created, m.data, p.data FROM part p JOIN message m ON m.id = p.message_id WHERE p.session_id = ? "
-        "ORDER BY p.time_created, p.id LIMIT 5000", (sid,))
-    for created, mdata, pdata in rows:
+        "AND p.time_created BETWEEN ? AND ? ORDER BY p.time_created DESC, p.id DESC LIMIT 5000", (sid, lo, hi))
+    for created, mdata, pdata in reversed(rows):
         try:
             t = created / 1000.0
             role = json.loads(mdata).get("role")
@@ -352,7 +354,7 @@ def opencode_events(sid, t0=None, t1=None):
             if st.get("status") in ("completed", "error"):
                 e["state"] = "ok" if st["status"] == "completed" else "fail"
                 tm = st.get("time") if isinstance(st.get("time"), dict) else {}
-                if tm.get("start") and tm.get("end"):
+                if isinstance(tm.get("start"), (int, float)) and isinstance(tm.get("end"), (int, float)):
                     e["dur"] = (tm["end"] - tm["start"]) / 1000.0
                 e["detail"] = str(st.get("output") or st.get("error") or "")[:3000]
             out.append(e)
@@ -1440,10 +1442,18 @@ def api_block(run, node, k=0):
     if d.get("error"):
         return d
     s, b = d.get("session") or {}, d["block"]
-    tr = s.get("transcript") if s.get("transcript") and os.path.exists(s["transcript"]) else \
-        find_transcript(s.get("family") or b["who"]["family"], s.get("ref"))
-    d["events_id"] = ("%s:%s@%s@%s" % ("codex-exec" if (s.get("family") or b["who"]["family"]) == "openai" else
-                                       "claude-p", tr, (b["t0"] or 0) - 30, (b["t1"] or 0) + 30)) if tr else ""
+    fam = s.get("family") or b["who"]["family"]
+    if fam == "xai" or _tl().opencode_id(s.get("transcript")):  # OpenCode: a session id into its DB, never a file
+        tr = _tl().transcript_of("xai", s.get("transcript") or s.get("ref"))
+        if not tr and _tl().opencode_id(s.get("ref")):
+            tr = "opencode:" + _tl().opencode_id(s["ref"])
+        adapter = "opencode"
+        tr_id = tr[9:]
+    else:
+        tr = s.get("transcript") if s.get("transcript") and os.path.exists(s["transcript"]) else \
+            find_transcript(fam, s.get("ref"))
+        adapter, tr_id = ("codex-exec" if fam == "openai" else "claude-p"), tr
+    d["events_id"] = "%s:%s@%s@%s" % (adapter, tr_id, (b["t0"] or 0) - 30, (b["t1"] or 0) + 30) if tr else ""
     d["transcript"] = tr
     rdir = config_dir() / "runs" / run
     legacy_ids = {}

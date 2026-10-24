@@ -68,8 +68,8 @@ def lane_name(lane="", family=""):
     if family in FAMILY:
         return FAMILY[family]
     up = (lane or "").upper()
-    return ("Codex" if "OPENAI" in up or "CODEX" in up else "Claude" if "CLAUDE" in up or "ANTHROPIC" in up
-            else "Grok" if "GROK" in up or "XAI" in up else "")
+    return ("Grok" if "GROK" in up or up.endswith("XAI") or "_XAI" in up else
+            "Codex" if "OPENAI" in up or "CODEX" in up else "Claude" if "CLAUDE" in up or "ANTHROPIC" in up else "")
 
 
 def hhmm(t):
