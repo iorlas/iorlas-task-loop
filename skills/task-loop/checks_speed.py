@@ -1,7 +1,6 @@
 """Helpers for the engine's check rounds: what a check's result is a fact about (its inputs), what a check costs
 (duration history), and which checks repeat another. Pure functions and small files; no engine state."""
 
-import fnmatch
 import hashlib
 import json
 import os
@@ -15,6 +14,43 @@ import tl
 
 CHEAP_S = 5.0  # a median under this counts as free: sub-second noise never reorders a round
 KEEP_RUNS = 9  # durations kept per command
+
+
+def glob_re(g):
+    """A repo path glob: ** crosses folders, * and ? stay in one, {a,b} is either."""
+    out, i, depth = "", 0, 0
+    while i < len(g):
+        c = g[i]
+        if g.startswith("**/", i):
+            out, i = out + "(?:.*/)?", i + 3
+            continue
+        if c == "*":
+            out, i = out + (".*" if g.startswith("**", i) else "[^/]*"), i + (2 if g.startswith("**", i) else 1)
+            continue
+        if c == "{":
+            out, depth = out + "(?:", depth + 1
+        elif c == "}" and depth:
+            out, depth = out + ")", depth - 1
+        elif c == "," and depth:
+            out += "|"
+        else:
+            out += "[^/]" if c == "?" else re.escape(c)
+        i += 1
+    return re.compile(out + r"\Z")
+
+
+def expand_braces(g):
+    """['a/{b,c}/d'] -> ['a/b/d', 'a/c/d'] (nested braces too)."""
+    m = re.search(r"\{([^{}]*)\}", g)
+    if not m:
+        return [g]
+    return [x for alt in m.group(1).split(",") for x in expand_braces(g[:m.start()] + alt + g[m.end():])]
+
+
+def literal_prefix(g):
+    """The folder a glob alternative cannot leave: its path up to the last `/` before the first `*` or `?`."""
+    head = re.split(r"[*?]", g, 1)[0]
+    return head[:head.rfind("/") + 1]
 
 
 def norm(cmd):
@@ -34,13 +70,13 @@ def tree_files(wt, tree):
     return out
 
 
-def inputs_hash(files, globs):
-    """Hash of the files in `files` ({path: "mode type sha"}) that match any glob (fnmatch, as a check's `when`: `*`
-    crosses `/`). Empty when nothing matches: a check whose inputs are not in the tree has no fact to remember."""
+def inputs_hash(files, globs, exclude=()):
+    """Hash of the files in `files` ({path: "mode type sha"}) that match any glob (glob_re: `*` stays in one folder, `**` crosses, `{a,b}` is either). Empty when nothing matches: a check whose inputs are not in the tree has no fact to remember."""
     h = hashlib.sha1()
     n = 0
+    res, ex = [glob_re(g) for g in globs], [glob_re(g) for g in exclude]
     for p in sorted(files):
-        if any(fnmatch.fnmatch(p, g) for g in globs):
+        if any(r.match(p) for r in res) and not any(r.match(p) for r in ex):
             h.update(("%s\t%s\0" % (files[p], p)).encode("utf-8", "surrogateescape"))
             n += 1
     return h.hexdigest() if n else ""
@@ -51,11 +87,20 @@ ROOT_FILES = ("justfile", "Justfile", ".justfile", "*.lock", "packages-lock.json
 BIG = 16 * 1024 * 1024  # an ignored input bigger than this counts by size, not content
 
 
-def ignored_paths(wt, globs):
-    """Ignored (untracked, gitignored) files in the worktree that match any glob, from `git ls-files -o -i`."""
-    r = subprocess.run(["git", "ls-files", "-z", "-o", "-i", "--exclude-standard"], cwd=wt, env=tl.git_env(wt), capture_output=True)
+def ignored_paths(wt, globs, exclude=()):
+    """Ignored (untracked, gitignored) files in the worktree that match any glob (glob_re, as tracked files do). git lists
+    only under the globs' literal folders (`client/Assets/{App,Core}/**` -> client/Assets/App/, client/Assets/Core/), so a
+    Library/ the globs do not name is never walked; a glob with no literal folder lists the whole tree."""
+    alts = [x for g in globs for x in expand_braces(g)]
+    prefixes = sorted({literal_prefix(x) for x in alts})
+    spec = [] if "" in prefixes else [":(literal)" + p for p in prefixes]
+    if exclude:  # git prunes the walk at excluded folders where it can; the filter below is the rule
+        spec = (spec or [":(literal)."]) + [":(exclude,glob)" + x for g in exclude for x in expand_braces(g)]
+    r = subprocess.run(["git", "ls-files", "-z", "-o", "-i", "--exclude-standard"] + (["--"] + spec if spec else []),
+                       cwd=wt, env=tl.git_env(wt), capture_output=True)
     paths = r.stdout.decode("utf-8", "surrogateescape").split("\0")
-    return [p for p in paths if p and any(fnmatch.fnmatch(p, g) for g in globs)]
+    res, ex = [glob_re(g) for g in globs], [glob_re(g) for g in exclude]
+    return [p for p in paths if p and any(x.match(p) for x in res) and not any(x.match(p) for x in ex)]
 
 
 def file_digest(path):
@@ -89,16 +134,17 @@ class InputKeys:
         if self.files is None:
             self.files = tree_files(self.wt, self.tree)
         h = hashlib.sha1()
-        ih = inputs_hash(self.files, globs)
-        gk = tuple(globs)
+        excl = list(c.get("exclude") or [])
+        ih = inputs_hash(self.files, globs, excl)
+        gk = (tuple(globs), tuple(excl))
         if gk not in self.ignored:
-            self.ignored[gk] = ignored_paths(self.wt, globs)
+            self.ignored[gk] = ignored_paths(self.wt, globs, excl)
         ign = sorted(self.ignored[gk])
         for p in ign:
             h.update(("I\t%s\t%s\0" % (p, file_digest(os.path.join(self.wt, p)))).encode("utf-8", "surrogateescape"))
         if not ih and not ign:
             return ""
-        h.update(("%s\0%s\0%s" % (norm(c["cmd"]), ih, json.dumps(c.get("env") or {}, sort_keys=True))).encode("utf-8", "surrogateescape"))
+        h.update(("%s\0%s\0%s\0%s" % (norm(c["cmd"]), ih, json.dumps(c.get("env") or {}, sort_keys=True), "\0".join(excl))).encode("utf-8", "surrogateescape"))
         if not c.get("inputs_only"):
             h.update(inputs_hash(self.files, ["*/" + g for g in ROOT_FILES] + list(ROOT_FILES)).encode())
             h.update(("\0" + self.base).encode())

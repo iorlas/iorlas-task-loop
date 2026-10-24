@@ -147,27 +147,7 @@ LOOK_ITEM = re.compile(r"owner\b[^.]{0,40}\b(?:judge|check|decide|assess|review|
 LOOK_LABEL = "owner-look"
 
 
-def glob_re(g):
-    """A repo path glob: ** crosses folders, * and ? stay in one, {a,b} is either."""
-    out, i, depth = "", 0, 0
-    while i < len(g):
-        c = g[i]
-        if g.startswith("**/", i):
-            out, i = out + "(?:.*/)?", i + 3
-            continue
-        if c == "*":
-            out, i = out + (".*" if g.startswith("**", i) else "[^/]*"), i + (2 if g.startswith("**", i) else 1)
-            continue
-        if c == "{":
-            out, depth = out + "(?:", depth + 1
-        elif c == "}" and depth:
-            out, depth = out + ")", depth - 1
-        elif c == "," and depth:
-            out += "|"
-        else:
-            out += "[^/]" if c == "?" else re.escape(c)
-        i += 1
-    return re.compile(out + r"\Z")
+glob_re = cs.glob_re  # one glob dialect for visual_paths and a check's `inputs` (defined in checks_speed)
 
 
 def visual_hit(vp, paths):
@@ -3784,7 +3764,7 @@ class Engine:
                   "cache": c.get("cache", True) is not False,
                   "idle": float(c.get("idle_min", self.cfg["check_idle_min"]) or 0) * 60,
                   "inputs": [c["inputs"]] if isinstance(c.get("inputs"), str) else list(c.get("inputs") or []),
-                  "inputs_only": bool(c.get("inputs_only")), "env": c.get("env") or {}} for c in self.cfg["checks"]]
+                  "inputs_only": bool(c.get("inputs_only")), "exclude": list(c.get("exclude") or []), "env": c.get("env") or {}} for c in self.cfg["checks"]]
         items += [{"id": c, "cmd": c, "group": "acceptance", "when": [], "retry": 0,
                    "timeout": float(self.cfg["check_timeout_min"]), "cache": False, "inputs": [], "inputs_only": False, "env": {},
                    "idle": float(self.cfg["check_idle_min"] or 0) * 60} for c in st["checks"]]
