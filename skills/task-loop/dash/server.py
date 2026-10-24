@@ -209,10 +209,27 @@ def transcript_of(session):
     if p and os.path.exists(p):
         return p
 
-    def find():
-        hits = glob.glob(str(PROJECTS / "*" / (session + ".jsonl")))
-        return max(hits, key=os.path.getmtime) if hits else None
-    return cached("tr:" + session, 30, find)
+    return cached("transcripts", 10, transcript_index).get(session)
+
+
+def transcript_index():
+    """session id -> its transcript (the newest of the same name in any project folder): one listing of the project folders,
+    not one glob per session (/api/runs asked for hundreds)."""
+    out = {}
+    try:
+        projects = list(os.scandir(str(PROJECTS)))
+    except OSError:
+        return out
+    for d in projects:
+        try:
+            for e in os.scandir(d.path):
+                if e.name.endswith(".jsonl") and e.is_file():
+                    sid = e.name[:-6]
+                    if sid not in out or e.stat().st_mtime > os.path.getmtime(out[sid]):
+                        out[sid] = e.path
+        except OSError:
+            continue
+    return out
 
 
 def session_dirs(session):
@@ -434,20 +451,27 @@ def status_of(path, done_hint=False):
     return ("running" if time.time() - m < LIVE_SECONDS else "idle"), m
 
 
+def subagent_run(path, t0=0, t1=None):
+    """One subagent transcript as a run, or None when it started outside the window."""
+    first = parse_ts(first_json(path).get("timestamp")) or os.path.getmtime(path)
+    if first < t0 - 1 or (t1 and first > t1 + 1):
+        return None
+    meta = read_json(path[:-6] + ".meta.json", {}) or {}
+    tail = "\n".join(tail_lines(path, 30000)[-20:])
+    done = '"SubagentHandback"' in tail or '"stop_reason":"end_turn"' in tail
+    st, m = status_of(path, done)
+    return {"id": "subagent:" + path, "kind": "subagent", "title": meta.get("description") or "Subagent",
+            "model": meta.get("model", ""), "role": meta.get("agentType", ""), "status": st,
+            "started": first, "updated": m, "ended": m if done else None}
+
+
 def subagent_runs(session, t0=0, t1=None):
     runs = []
     for d in session_dirs(session):
         for path in glob.glob(os.path.join(d, "subagents", "agent-*.jsonl")):
-            first = parse_ts(first_json(path).get("timestamp")) or os.path.getmtime(path)
-            if first < t0 - 1 or (t1 and first > t1 + 1):
-                continue
-            meta = read_json(path[:-6] + ".meta.json", {}) or {}
-            tail = "\n".join(tail_lines(path, 30000)[-20:])
-            done = '"SubagentHandback"' in tail or '"stop_reason":"end_turn"' in tail
-            st, m = status_of(path, done)
-            runs.append({"id": "subagent:" + path, "kind": "subagent", "title": meta.get("description") or "Subagent",
-                         "model": meta.get("model", ""), "role": meta.get("agentType", ""), "status": st,
-                         "started": first, "updated": m, "ended": m if done else None})
+            r = subagent_run(path, t0, t1)
+            if r:
+                runs.append(r)
     return runs
 
 
@@ -503,6 +527,11 @@ def codex_rollouts(since):
     return cached("rollouts:%d" % int(since / 60), 5, load)
 
 
+def rollout_files():
+    """Every Codex rollout file, listed once (a thread's file is found by its name's end): not one glob per run record."""
+    return glob.glob(str(CODEX_SESSIONS / "*" / "*" / "*" / "rollout-*.jsonl"))
+
+
 def contract_runs(since):
     """Run records under agent-runs v1 (docs/contracts/agent-runs-v1.md). Unknown fields ignored, other versions skipped."""
     def load():
@@ -521,8 +550,9 @@ def contract_runs(since):
             if r.get("session"):
                 path, adapter = transcript_of(r["session"]), "claude-p"
             if not path and r.get("thread"):
-                hits = glob.glob(str(CODEX_SESSIONS / "*" / "*" / "*" / ("rollout-*%s.jsonl" % r["thread"])))
-                path, adapter = (hits[0], "codex-exec") if hits else (None, None)
+                hit = next((p for p in cached("rollout-files", 30, rollout_files) if p.endswith(str(r["thread"]) + ".jsonl")
+                            and os.path.basename(p).startswith("rollout-")), None)
+                path, adapter = (hit, "codex-exec") if hit else (None, None)
             if not path and r.get("transcript") and os.path.exists(r["transcript"]):
                 path, adapter = r["transcript"], ("codex-exec" if kind == "codex" else "claude-p")
             st = r.get("status") or "running"
@@ -738,11 +768,10 @@ def all_runs(hours):
                 continue
         except OSError:
             continue
-        sess = os.path.basename(os.path.dirname(os.path.dirname(path)))
-        for r in subagent_runs(sess, 0, None):
-            if r["id"] == "subagent:" + path:
-                r["where"] = os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(path)))).split("-")[-1]
-                runs.append(r)
+        r = subagent_run(path)  # this file only: not every agent of its session, once per file
+        if r:
+            r["where"] = os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(path)))).split("-")[-1]
+            runs.append(r)
     for j in codex_jobs(since) + codex_rollouts(since) + contract_runs(since):
         j = dict(j)
         j["where"] = os.path.basename(j.get("cwd") or "")
