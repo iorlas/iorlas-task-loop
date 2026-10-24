@@ -380,7 +380,7 @@ class Fdyo(StagesTest):
         self.assertIn("list it in bad_checks", writes[2])
 
     def test_a_codex_session_is_not_resumed_above_100k_inside_a_stage(self):
-        self.assertEqual(engine.DEFAULTS["write_fresh_above_k"], {"claude": 150, "codex": 100})
+        self.assertEqual(engine.DEFAULTS["write_fresh_above_k"], {"claude": 150, "codex": 100, "xai": 100})
 
     def test_python_isolated_mode_with_a_repo_module_is_sent_back(self):
         (self.wt / "tools" / "tests").mkdir(parents=True)

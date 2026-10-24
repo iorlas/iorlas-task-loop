@@ -44,11 +44,13 @@ import re
 import shutil
 import signal
 import socket
+import sqlite3
 import subprocess
 import sys
 import time
 import urllib.request
 from pathlib import Path
+from urllib.parse import quote
 
 try:
     import fcntl
@@ -122,10 +124,73 @@ def config_dir():
     return d
 
 
+def opencode_db():
+    """OpenCode's session store (macOS/Linux); OPENCODE_DB overrides it (tests)."""
+    env = os.environ.get("OPENCODE_DB")
+    if env:
+        return env
+    base = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+    return str(Path(base) / "opencode" / "opencode.db")
+
+
+def opencode_id(ref):
+    """`ses_...` or `opencode:ses_...` -> the OpenCode session id, else ""."""
+    ref = str(ref or "")
+    if ref.startswith("opencode:"):
+        ref = ref[9:]
+    return ref if re.match(r"^ses_[A-Za-z0-9]+$", ref) else ""
+
+
+def opencode_rows(sql, args=()):
+    """Read-only query of OpenCode's DB (session, message and part tables only): a list of rows, [] when the DB is missing,
+    locked or another shape. Never writes, never reads the credential tables."""
+    path = opencode_db()
+    if not os.path.isfile(path):
+        return []
+    try:
+        con = sqlite3.connect("file:%s?mode=ro" % quote(path), uri=True, timeout=1.0)
+        try:
+            return con.execute(sql, args).fetchall()
+        finally:
+            con.close()
+    except (sqlite3.Error, ValueError, OSError):
+        return []
+
+
+def opencode_has(sid):
+    return bool(sid) and bool(opencode_rows("SELECT 1 FROM session WHERE id = ?", (sid,)))
+
+
+def opencode_updated(sid):
+    """Seconds since the epoch of the session's last change (OpenCode stores ms), or None."""
+    rows = opencode_rows("SELECT MAX(time_updated) FROM message WHERE session_id = ?", (sid,))
+    return rows[0][0] / 1000.0 if rows and rows[0][0] else None
+
+
+def opencode_context(sid):
+    """-> input + cache read + cache write tokens of the session's last assistant message that reports any, or None."""
+    for (data,) in opencode_rows("SELECT data FROM message WHERE session_id = ? ORDER BY time_created DESC, id DESC LIMIT 20", (sid,)):
+        try:
+            d = json.loads(data)
+            if d.get("role") != "assistant":
+                continue
+            t = d["tokens"]
+            n = int(t.get("input") or 0) + int((t.get("cache") or {}).get("read") or 0) + int((t.get("cache") or {}).get("write") or 0)
+        except (ValueError, KeyError, TypeError, AttributeError):
+            continue
+        if n:
+            return n
+    return None
+
+
 def transcript_of(family, ref):
-    """Where a worker session's transcript lives on this machine: Codex rollouts and Claude projects, by session id."""
+    """Where a worker session's transcript lives on this machine: Codex rollouts and Claude projects, by session id; for
+    family xai (OpenCode) the session's `opencode:ses_...` reference into its DB."""
     if not ref:
         return ""
+    if family == "xai" or opencode_id(ref):
+        sid = opencode_id(ref)
+        return "opencode:" + sid if opencode_has(sid) else ""
     home = Path.home()
     pats = ([home / ".codex" / "sessions", "*%s*.jsonl" % ref] if family == "openai" else
             [home / ".claude" / "projects", "*/%s.jsonl" % ref])

@@ -1,0 +1,151 @@
+"""tl-bxk.10.32: the Grok lane (delegate family xai, OpenCode): login hint, transcript reader, context size, fresh-writer limit."""
+import json
+import os
+import sqlite3
+import sys
+import tempfile
+import time
+import types
+import unittest
+from pathlib import Path
+from unittest import mock
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
+sys.path.insert(0, str(ROOT / "skills" / "task-loop" / "dash"))
+import engine  # noqa: E402
+import server  # noqa: E402
+import timeline  # noqa: E402
+import tl  # noqa: E402
+
+SID = "ses_abc123"
+T = 1_790_000_000_000  # OpenCode stores milliseconds
+
+
+def make_db(path):
+    con = sqlite3.connect(path)
+    con.executescript("""
+        CREATE TABLE session (id text PRIMARY KEY, directory text, title text, time_created integer, time_updated integer);
+        CREATE TABLE message (id text PRIMARY KEY, session_id text, time_created integer, time_updated integer, data text);
+        CREATE TABLE part (id text PRIMARY KEY, message_id text, session_id text, time_created integer, time_updated integer, data text);
+    """)
+    con.execute("INSERT INTO session VALUES (?,?,?,?,?)", (SID, "/w", "t", T, T + 9000))
+    tok = lambda i, o, r, w: {"role": "assistant", "tokens": {"input": i, "output": o, "reasoning": 0, "cache": {"read": r, "write": w}}}  # noqa: E731
+    msgs = [("m1", T, {"role": "user", "time": {"created": T}}),
+            ("m2", T + 1000, tok(5000, 10, 2000, 300)),
+            ("m3", T + 5000, tok(9000, 20, 4000, 700)),
+            ("m4", T + 9000, tok(0, 0, 0, 0))]
+    for i, t, d in msgs:
+        con.execute("INSERT INTO message VALUES (?,?,?,?,?)", (i, SID, t, t, json.dumps(d)))
+    parts = [("p1", "m1", T, {"type": "text", "text": "do the thing"}),
+             ("p2", "m2", T + 1100, {"type": "reasoning", "text": "hmm"}),
+             ("p3", "m2", T + 1200, {"type": "tool", "tool": "bash", "state": {
+                 "status": "completed", "input": {"command": "ls"}, "output": "a\nb", "time": {"start": T + 1200, "end": T + 3200}}}),
+             ("p4", "m3", T + 5100, {"type": "tool", "tool": "read", "state": {"status": "error", "input": {"filePath": "/x"}, "error": "nope"}}),
+             ("p5", "m3", T + 5200, {"type": "text", "text": "done"}),
+             ("p6", "m3", T + 5300, {"type": "tool", "tool": "bash", "state": {"status": "running", "input": {"command": "sleep 9"}}})]
+    for i, m, t, d in parts:
+        con.execute("INSERT INTO part VALUES (?,?,?,?,?,?)", (i, m, SID, t, t, json.dumps(d)))
+    con.commit()
+    con.close()
+
+
+class OpenCode(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db = os.path.join(self.tmp.name, "opencode.db")
+        make_db(self.db)
+        self.cfg = os.path.join(self.tmp.name, "cfg")
+        self.env = mock.patch.dict(os.environ, {"OPENCODE_DB": self.db, "XDG_CONFIG_HOME": self.cfg, "APPDATA": self.cfg})
+        self.env.start()
+        server._cache.clear()
+        self.runs = Path(self.cfg, "agent-runs", "runs")
+        self.runs.mkdir(parents=True)
+
+    def tearDown(self):
+        self.env.stop()
+        self.tmp.cleanup()
+
+    # login hint
+    def test_a_logged_out_xai_lane_says_grok_and_opencode(self):
+        for j in ({"family": "xai"}, {"lane": "GROK_SUBSCRIPTION"}):
+            self.assertEqual(engine.login_fix(j), "Grok logged out: run `opencode auth login`")
+        self.assertEqual(engine.login_fix({"family": "claude"}), "Claude logged out: run `claude auth login`")
+        self.assertEqual(timeline.lane_name("GROK_SUBSCRIPTION", ""), "Grok")
+        self.assertEqual(timeline.lane_name("x", "xai"), "Grok")
+        self.assertEqual(timeline.pause_reason("paused: logged_out on write; run `opencode auth login` on this machine"),
+                         "Grok logged out")
+        lane = {"out": True, "reason": "logged_out", "family": "xai"}
+        b = server.lane_banners({"v": 1, "lanes": {"GROK_SUBSCRIPTION": lane}})
+        self.assertEqual(b["GROK_SUBSCRIPTION"]["text"], "Grok logged out: run opencode auth login")
+
+    # reader
+    def test_events_have_the_shape_of_the_other_readers(self):
+        ev = server.opencode_events(SID)
+        self.assertEqual([e["kind"] for e in ev], ["user", "cmd", "cmd", "msg", "cmd"])
+        cmd = ev[1]
+        self.assertEqual((cmd["tool"], cmd["text"], cmd["state"], cmd["dur"], cmd["detail"]), ("bash", "ls", "ok", 2.0, "a\nb"))
+        self.assertEqual((ev[2]["state"], ev[2]["text"]), ("fail", "/x"))
+        self.assertEqual(ev[4]["state"], "run")
+        self.assertEqual(server.ADAPTERS["opencode"], server.opencode_events)
+        self.assertEqual(server.run_events("opencode:" + SID)[3]["text"], "done")
+        win = server.opencode_events("opencode:" + SID, 1_790_000_005.0, None)
+        self.assertEqual([e["kind"] for e in win], ["cmd", "msg", "cmd"])
+
+    def test_a_missing_db_or_unknown_id_is_empty_never_an_error(self):
+        self.assertEqual(server.opencode_events("ses_nope"), [])
+        self.assertEqual(server.opencode_events("not-an-id"), [])
+        self.assertEqual(server.run_events("opencode:ses_nope"), [])
+        junk = os.path.join(self.tmp.name, "junk.db")
+        Path(junk).write_text("not sqlite")
+        for path in (os.path.join(self.tmp.name, "gone.db"), junk):
+            with mock.patch.dict(os.environ, {"OPENCODE_DB": path}):
+                self.assertEqual(server.opencode_events(SID), [])
+                self.assertEqual(tl.transcript_of("xai", SID), "")
+                self.assertIsNone(engine.context_tokens("opencode:" + SID))
+
+    def test_the_reader_never_writes(self):
+        before = Path(self.db).read_bytes()
+        server.opencode_events(SID)
+        tl.opencode_context(SID)
+        self.assertEqual(Path(self.db).read_bytes(), before)
+
+    # lookups
+    def test_transcript_of_xai_is_the_session_reference(self):
+        self.assertEqual(tl.transcript_of("xai", SID), "opencode:" + SID)
+        self.assertEqual(tl.transcript_of("xai", "ses_zzz"), "")
+        self.assertEqual(tl.transcript_of("xai", ""), "")
+
+    def test_context_is_the_last_assistant_message_with_tokens(self):
+        self.assertEqual(engine.context_tokens("opencode:" + SID), 9000 + 4000 + 700)
+        self.assertEqual(engine.context_tokens(SID), 13700)
+        self.assertIsNone(engine.context_tokens("opencode:ses_nope"))
+
+    def test_agent_run_session_and_mtime_follow_an_opencode_id(self):
+        (self.runs / "r1.json").write_text(json.dumps({"v": 1, "id": "r1", "kind": "opencode", "transcript": SID}))
+        self.assertEqual(engine.agent_run_session("r1"), "opencode:" + SID)
+        self.assertAlmostEqual(engine.file_mtime("opencode:" + SID), 1_790_000_009.0)
+
+    def test_contract_runs_find_the_session_by_session_thread_or_transcript(self):
+        now = time.time()
+        for i, field in enumerate(("session", "thread", "transcript")):
+            (self.runs / ("r%d.json" % i)).write_text(json.dumps({
+                "v": 1, "id": "r%d" % i, "kind": "opencode", "family": "xai", "started": now, "status": "running", field: SID}))
+        (self.runs / "r9.json").write_text(json.dumps({"v": 1, "id": "r9", "kind": "opencode", "started": now,
+                                                       "status": "running", "session": "ses_unknown"}))
+        got = {r["id"] for r in server.contract_runs(now - 60)}
+        self.assertEqual(got, {"opencode:" + SID, "none:r9"})
+
+    # fresh-writer limit
+    def test_xai_has_its_own_fresh_writer_limit(self):
+        self.assertEqual(engine.DEFAULTS["write_fresh_above_k"]["xai"], 100)
+        eng = types.SimpleNamespace(cfg={})
+        self.assertEqual(engine.Engine.fresh_above_k(eng, "xai"), 100.0)
+        eng.cfg = {"write_fresh_above_k": {"xai": 40}}
+        self.assertEqual(engine.Engine.fresh_above_k(eng, "xai"), 40.0)
+        eng.cfg = {"write_fresh_above_k": {"claude": 1}}
+        self.assertEqual(engine.Engine.fresh_above_k(eng, "xai"), 100.0)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -61,7 +61,7 @@ DEFAULTS = {
     "look_max_px": 1280,              # the look judge's pictures are shrunk to this many pixels on the long side
     "write_fresh_stage_k": 100,       # at a stage boundary a writer session above this (k tokens) is not resumed (0 = never): the next stage is a fresh session told what is done
     "write_cap_min": 120,             # a write is stopped at this however active the worker is
-    "write_fresh_above_k": {"claude": 150, "codex": 100},  # a writer session whose context ended above this (k tokens, by its family;
+    "write_fresh_above_k": {"claude": 150, "codex": 100, "xai": 100},  # a writer session whose context ended above this (k tokens, by its family;
                                       # a number sets both, 0 = never) is not resumed: a fresh writer gets the brief and what is done
     "writer_check_max_s": 60,         # a check whose last run took longer is the engine's, never the writer's to run
     "check_timeout_min": 60,          # one check (engine.checks, a stage's check) running longer is killed, process group and all: exit 124
@@ -706,12 +706,17 @@ def agent_run_session(run_id):
         return ""
     if rec.get("transcript") and os.path.exists(rec["transcript"]):
         return rec["transcript"]
+    for ref in (rec.get("transcript"), rec.get("session"), rec.get("thread")):  # OpenCode (xai): a session id into its DB
+        if tl.opencode_id(ref):
+            return tl.transcript_of("xai", ref)
     if rec.get("session"):
         return tl.transcript_of("claude", str(rec["session"]))
     return tl.transcript_of("openai", str(rec["thread"])) if rec.get("thread") else ""
 
 
 def file_mtime(path):
+    if tl.opencode_id(path):  # an OpenCode session: its newest message
+        return tl.opencode_updated(tl.opencode_id(path))
     try:
         return os.stat(path).st_mtime
     except OSError:
@@ -1441,6 +1446,8 @@ class Engine:
                "reason": j.get("reason"), "next": j.get("next"), "context": j.get("context"),
                "node_id": (self.cur or {}).get("id"), "resume": bool(getattr(self, "_resume", None)), "flag": j.get("flag"),
                "prompt_chars": getattr(self, "_prompt_chars", None)}
+        if node == "write" and not rec["transcript"] and tl.opencode_id(rec["ref"]):
+            rec["transcript"] = tl.transcript_of("xai", rec["ref"])  # OpenCode: the answer's session id stands for the transcript
         if node == "write":  # where the session's context stands now: what the next round weighs against write_fresh_above_k
             tok = context_tokens(rec["transcript"])
             rec["context_k"] = round(tok / 1000) if tok else None
@@ -1723,7 +1730,7 @@ class Engine:
     def pause_logged_out(self, node, j, said):  # the retry was logged out too
         """A lane that needs a login: the bead stays open and the run pauses with the fix, never an owner ask."""
         lane = j.get("lane") or ""
-        fix = "run `codex login`" if login_fix(j).endswith("`codex login`") else "run `claude auth login`"
+        fix = "run " + login_fix(j).rsplit("run ", 1)[-1]
         self.outcome_of("paused", "logged_out")
         self.transition("pause", "paused", "logged out for %s: %s" % (node, fix), lane=lane, reason="logged_out")
         raise Blocked("paused: logged_out on %s; %s on this machine, then rerun. (%s)" % (node, fix, said[:200]))
@@ -5235,6 +5242,8 @@ def login_fix(j):
     lane = j.get("lane") or ""
     if j.get("family") == "openai" or lane.upper().startswith("OPENAI"):
         return "Codex logged out: run `codex login`"
+    if j.get("family") == "xai" or lane.upper().startswith(("GROK", "XAI")):
+        return "Grok logged out: run `opencode auth login`"
     return "Claude logged out: run `claude auth login`"
 
 
@@ -5357,7 +5366,10 @@ def flagged_why(check, bad_checks):
 
 def context_tokens(path, tail=1 << 20):
     """-> the input tokens (cache included) of the last turn in a worker's transcript, or None: Claude's last assistant message
-    usage, Codex's last token_count. The answer's own `tokens` add up every turn of the call, so they say nothing of the size."""
+    usage, Codex's last token_count, OpenCode's last assistant message tokens (`opencode:ses_...`, read from its DB). The
+    answer's own `tokens` add up every turn of the call, so they say nothing of the size."""
+    if tl.opencode_id(path):
+        return tl.opencode_context(tl.opencode_id(path))
     try:
         with open(path, "rb") as f:
             f.seek(0, 2)
