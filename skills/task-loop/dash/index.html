@@ -642,11 +642,11 @@ function askBox(a,withLink){
 function renderAsks(){const as=S.asks.asks||[];
   const ids=new Set(as.map(a=>a.id)),ghosts=Object.values(PEND).filter(p=>p.ask&&!ids.has(p.ask.id)&&!p.timer);
   const group=(t,l)=>l.length?`<h2 class="grp">${t} (${l.length})</h2>`+l.map(a=>askBox(a,true)).join(''):'';
-  const open=as.filter(a=>!a.answered_here);
+  const open=as.filter(a=>!a.answered_here&&!a.parked);
   const n=open.length,un=open.reduce((s,a)=>s+(a.unblocks||0),0);
   let html=`<div class="hero"><div><h1>Asks</h1><div class="sum">${n?n+' wait on you'+(un?' · answering them unblocks '+un+' bead'+(un>1?'s':''):''):'nothing waits on you'}</div></div></div><div class="asks">`;
   html+=ghosts.map(p=>askBox(p.ask,true)).join('');
-  html+=n||ghosts.length||as.length?group('Click once',open.filter(a=>a.quick))+group('Needs a decision or a hint',open.filter(a=>!a.quick))+group('Answered, waits for the next run',as.filter(a=>a.answered_here)):`<div class="list"><div class="empty"><b>Nothing waits on you</b>When the engine needs a decision it shows here and on its task.</div></div>`;
+  html+=n||ghosts.length||as.length?group('Click once',open.filter(a=>a.quick))+group('Needs a decision or a hint',open.filter(a=>!a.quick))+group('Parked: no answer in 3 days',as.filter(a=>a.parked&&!a.answered_here))+group('Answered, waits for the next run',as.filter(a=>a.answered_here)):`<div class="list"><div class="empty"><b>Nothing waits on you</b>When the engine needs a decision it shows here and on its task.</div></div>`;
   const ae=document.activeElement,keep=ae&&ae.tagName=='TEXTAREA'?[ae.dataset.ans,ae.value]:null;
   if(paint($('main'),'main',html+'</div>')&&keep){const ta=document.querySelector(`textarea[data-ans="${CSS.escape(keep[0])}"]`);if(ta){ta.value=keep[1];ta.focus()}}}
 function askById(id){const a=((S.asks||{}).asks||[]).find(x=>x.id==id);return a||SEEN[id]}

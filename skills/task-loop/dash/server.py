@@ -860,7 +860,7 @@ def traces():
 
 def open_ask(bead):
     a = read_json(config_dir() / "asks" / ("%s.json" % bead), {}) or {}
-    if not isinstance(a, dict) or a.get("status") != "open":
+    if not isinstance(a, dict) or a.get("status") not in ("open", "parked"):
         return None
     a = upgrade_ask(a)
     return {k: a.get(k) for k in ("id", "kind", "question", "detail", "unblocks", "t", "title", "answer", "repo", "parks_at", "options")}
@@ -1494,7 +1494,7 @@ def inbox():
     """The open asks, most unblocking first. An ask whose bead is gone or closed is stale and never shown."""
     out, now, ub = [], time.time(), {}
     for f, a in ask_files():
-        if a.get("status") != "open":
+        if a.get("status") not in ("open", "parked"):
             continue
         repo = a.get("repo") if isinstance(a.get("repo"), str) else ""
         if repo not in ub:
@@ -1504,7 +1504,7 @@ def inbox():
             continue  # closed, or gone for good (a bead newer than a stale listing is not gone yet)
         a = {k: v for k, v in upgrade_ask(a).items() if k not in ("brief",)}
         a["age_s"] = int(now - float(a.get("t") or now))
-        a["parked"] = now > float(a.get("parks_at") or now + 1)
+        a["parked"] = a.get("status") == "parked" or now > float(a.get("parks_at") or now + 1)
         a["answered_here"] = bool(a.get("answer"))
         a["unblocks"] = (info["counts"].get(a.get("bead"), 0) if info else 0)
         a["quick"] = bool(a.get("options")) and a.get("kind") != "decision"
@@ -1574,7 +1574,7 @@ def ask_for(ask_id):
                 why = (a.get("withdrawn_why") or "").strip()
                 return f, a, (410, {"code": "withdrawn", "error": "The engine withdrew this ask%s. Nothing to answer." %
                                     ((" (" + why + ")") if why else "")})
-            if a.get("status") != "open" or a.get("answer"):
+            if a.get("status") not in ("open", "parked") or a.get("answer"):
                 return f, a, (409, {"code": "answered", "error": "This ask is already answered."})
             return f, a, None
     bead = ask_id.rsplit("-", 1)[0]
@@ -1611,6 +1611,7 @@ def answer(body):
         r = subprocess.run(["bd", "comments", "add", a["bead"], text], cwd=cwd, capture_output=True, text=True)
         if r.returncode:
             return bd_failed(a, r)
+        file_answer(a, text, cwd)
         subprocess.run(["bd", "update", a["bead"], "--status", "open"], cwd=cwd, capture_output=True, text=True)
     except OSError as e:
         return 502, {"code": "no_bd", "error": "The dashboard cannot run bd (%s). Nothing was sent." % e.strerror}
@@ -1620,6 +1621,35 @@ def answer(body):
     except OSError:
         pass  # the comment is the answer; the engine reads it from the bead
     return 200, {"ok": True, "bead": a["bead"], "next": next_step(a)}
+
+
+PLAIN_ANSWERS = {"right", "run again", "allow one more", "yes", "ok"}
+
+
+def file_answer(a, text, cwd):
+    """tl-bxk.8.25: a substantive answer is also filed on the bead where the planner reads it: under `## Testing` for a verify or
+    denied ask, `## Decisions` for any other. A bare button answer (right, run again) is not: it says nothing the bead should keep.
+    Best effort: the comment is the answer, this is the record."""
+    if text.strip().lower().rstrip(".!") in PLAIN_ANSWERS or text.strip().lower() == "wrong:":
+        return
+    head = "## Testing" if a.get("kind") in ("verify", "denied") else "## Decisions"
+    first = (a.get("question") or "").strip().splitlines()[0].replace("**", "") if (a.get("question") or "").strip() else a.get("kind", "ask")
+    line = "- %s (ask %s) %s -> %s" % (time.strftime("%Y-%m-%d"), a.get("id"), first[:140], " ".join(text.split())[:600])
+    try:
+        r = subprocess.run(["bd", "show", a["bead"], "--json"], cwd=cwd, capture_output=True, text=True, timeout=30)
+        d = json.loads(r.stdout)
+        d = d[0] if isinstance(d, list) and d else d
+        notes = (d.get("notes") or "").rstrip("\n") if isinstance(d, dict) else ""
+        if head in notes:
+            i = notes.index(head) + len(head)
+            nxt = notes.find("\n## ", i)
+            at = nxt if nxt >= 0 else len(notes)
+            notes = notes[:at].rstrip("\n") + "\n" + line + notes[at:]
+        else:
+            notes = (notes + "\n\n" if notes else "") + head + "\n" + line
+        subprocess.run(["bd", "update", a["bead"], "--notes", notes], cwd=cwd, capture_output=True, text=True, timeout=30)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        pass
 
 
 def next_step(a):

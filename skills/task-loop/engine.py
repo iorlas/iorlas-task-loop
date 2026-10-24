@@ -31,6 +31,7 @@ from pathlib import Path
 
 import checks_speed as cs
 import looks
+import notifier
 import tl
 
 DEFAULTS = {
@@ -3247,7 +3248,7 @@ class Engine:
             a = json.loads(self.ask_path().read_text())
         except (OSError, ValueError):
             return
-        if a.get("status") != "open":
+        if a.get("status") not in ("open", "parked"):  # a parked ask (3 days, no answer) still waits
             return
         if a.get("brief") == self.brief_hash and not self.cfg.get("fresh"):
             raise Blocked("waiting: for the owner's answer to ask %s (%s): %s" % (a["id"], a["kind"], clip(push_text(a["question"]), 200)))
@@ -3299,8 +3300,7 @@ class Engine:
             pick, pick, ", %s added" % info if info else "", pick)
 
     def notify(self, a):
-        """The owner's push (tl.push): ~/.config/task-loop/notify holds one shell command (ntfy, Pushover, a Telegram bot...);
-        it gets TL_ASK_KIND, TL_ASK_BEAD, TL_ASK_ID and TL_ASK_TEXT. Which service is the owner's choice."""
+        """The owner's push (tl.push -> notifier.py): a command in ~/.config/task-loop/notify, or the word `desktop`."""
         err = tl.push(a["kind"], a["bead"], a["id"], push_text(a["question"]))
         if err:
             self.warn("notify failed: %s" % err)

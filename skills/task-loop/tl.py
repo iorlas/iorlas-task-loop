@@ -1382,24 +1382,12 @@ REPUSH, LOOK_BATCH = 24 * 3600, 24 * 3600  # an ask nobody answered is pushed ag
 
 
 def push(kind, bead, ask_id, text, repeat=False):
-    """The owner's push: ~/.config/task-loop/notify holds one shell command (ntfy, Pushover, a Telegram bot...); it gets
-    TL_ASK_KIND, TL_ASK_BEAD, TL_ASK_ID and TL_ASK_TEXT (and TL_ASK_REPEAT=1 for a second push of the same thing). -> '' when
-    started or when there is no command, else the error."""
-    try:
-        cmd = (config_dir() / "notify").read_text(encoding="utf-8").strip()
-    except OSError:
-        return ""
-    if not cmd:
-        return ""
-    env = dict(os.environ, TL_ASK_KIND=kind, TL_ASK_BEAD=bead, TL_ASK_ID=ask_id, TL_ASK_TEXT=text[:500])
-    if repeat:
-        env["TL_ASK_REPEAT"] = "1"
-    try:
-        subprocess.Popen(cmd, shell=True, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                         start_new_session=(os.name != "nt"))
-    except OSError as e:
-        return str(e)
-    return ""
+    """The owner's push (notifier.py: a command in ~/.config/task-loop/notify, or the word `desktop`); the command gets TL_ASK_KIND,
+    TL_ASK_BEAD, TL_ASK_ID and TL_ASK_TEXT (and TL_ASK_REPEAT=1 for a second push of the same thing). -> '' when started or when
+    there is no channel, else the error."""
+    import notifier
+    got = notifier.send(kind, text, bead=bead, ask_id=ask_id, repeat=repeat)
+    return got[len("failed: "):] if got.startswith("failed") else ""
 
 
 def _ask_head(markdown):
@@ -1539,6 +1527,66 @@ def cmd_ask(a):
         code, out = d.withdraw({"ask": ask_id, "why": " ".join(a.text) or "withdrawn with tl ask withdraw"})
     print(out.get("next") if code == 200 and out.get("next") else "done" if code == 200 else "tl: " + out.get("error", "failed"))
     return 0 if code == 200 else 1
+
+
+def park_stale_asks(every=600):
+    """tl-bxk.8.25: an open ask nobody answered by its parks_at (3 days after it was asked) is parked: status `parked`, a comment on
+    the bead, off the live inbox's top and out of the morning digest's open count. The bead still waits; an answer (the dashboard,
+    `tl ask answer`, or a comment on the bead) un-parks it. At most once per `every` seconds across all callers. -> bead ids."""
+    marker = config_dir() / "asks" / ".parked"
+    try:
+        if time.time() - marker.stat().st_mtime < every:
+            return []
+    except OSError:
+        pass
+    done = []
+    for f in sorted(glob.glob(str(config_dir() / "asks" / "*.json"))):
+        try:
+            a = json.loads(Path(f).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(a, dict) or a.get("status") != "open" or not a.get("bead") or a.get("answer"):
+            continue
+        try:
+            late = time.time() > float(a.get("parks_at") or 0) > 0
+        except (TypeError, ValueError):
+            continue
+        if not late or not (isinstance(a.get("repo"), str) and Path(a["repo"]).is_dir()):
+            continue
+        a.update(status="parked", parked=time.time())
+        try:
+            Path(f).write_text(json.dumps(a, indent=1), encoding="utf-8")
+            bd("comments", "add", a["bead"], "Parked (engine): ask %s got no answer in 3 days. It stays open for an answer: "
+               "`tl ask answer %s <text>`, the dashboard, or a comment here." % (a.get("id"), a["bead"]), cwd=a["repo"])
+            done.append(a["bead"])
+        except (OSError, SystemExit):
+            pass
+    try:
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(str(time.time()))
+    except OSError:
+        pass
+    return done
+
+
+def cmd_notify(a):
+    """tl notify test | desktop | off: the owner's push channel (notifier.py). `desktop` and `off` write ~/.config/task-loop/notify."""
+    import notifier
+    f = config_dir() / "notify"
+    if a.op in ("desktop", "off"):
+        config_dir().mkdir(parents=True, exist_ok=True)
+        f.write_text(a.op + "\n", encoding="utf-8")
+        print("notify: %s" % a.op)
+        return 0
+    how = notifier.channel()[0]
+    got = notifier.send("test", "task-loop push test: if you read this, asks and the morning digest reach you", bead="test")
+    print("notify (%s): %s%s" % (how, got, "" if how != "off" else " -- put a shell command, or the word desktop, in %s" % f))
+    return 0 if got == "sent" else 1
+
+
+def cmd_digest(a):
+    import digest
+    return digest.cmd_digest(a)
 
 
 def cmd_dash(a):
@@ -1707,6 +1755,12 @@ def main(argv=None):
     p.add_argument("bead", nargs="?")
     p.add_argument("text", nargs="*", help="answer: the answer; withdraw: why")
     p.add_argument("--json", action="store_true")
+    p = sp.add_parser("notify", help="the owner's push channel: test it, or choose desktop notifications / off")
+    p.add_argument("op", choices=["test", "desktop", "off"])
+    p = sp.add_parser("digest", help="the digest of the night (landed, asks, paused, failed) plus refusals, DNS errors, flakes")
+    p.add_argument("--since")
+    p.add_argument("--until")
+    p.add_argument("--send", action="store_true", help="push it through the notify channel (default: print)")
     p = sp.add_parser("dash")
     p.add_argument("op", choices=["ensure", "stop", "status", "url"])
     p = sp.add_parser("run-task")
@@ -1796,7 +1850,7 @@ def main(argv=None):
         return r.returncode
     return {"register": cmd_register, "claim": cmd_claim, "heartbeat": cmd_heartbeat, "stage": cmd_stage, "worker": cmd_worker,
             "land": cmd_land, "close": cmd_close, "block": cmd_block, "slot": cmd_slot, "worktree": cmd_worktree,
-            "dash": cmd_dash, "ask": cmd_ask, "hook": cmd_hook, "doctor": cmd_doctor, "land-lock": cmd_land_lock}[a.cmd](a)
+            "dash": cmd_dash, "ask": cmd_ask, "notify": cmd_notify, "digest": cmd_digest, "hook": cmd_hook, "doctor": cmd_doctor, "land-lock": cmd_land_lock}[a.cmd](a)
 
 
 if __name__ == "__main__":

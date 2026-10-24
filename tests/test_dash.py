@@ -308,7 +308,8 @@ class AskOptions(unittest.TestCase):
                 self.assertEqual(server.asks()["asks"][0]["answer"], text)
             log = (d / "bd.log").read_text().splitlines()
             self.assertEqual(log[0], "[comments][add][x-1][%s]" % text)
-            self.assertEqual(log[1], "[update][x-1][--status][open]")
+            self.assertEqual(log[1], "[show][x-1][--json]")  # the answer is filed on the bead's notes (here bd shows nothing: skipped)
+            self.assertEqual(log[-1], "[update][x-1][--status][open]")
 
 
 class AskFailures(unittest.TestCase):
@@ -457,6 +458,37 @@ class AskFailures(unittest.TestCase):
         self.assertEqual([o["label"] for o in by["lifesim-d5f.61"]["options"]], ["Defer the sink", "Add a stand-in sink now"])
         self.assertIn("Re-planned 3 times", by["lifesim-d5f.34"]["question"])
         self.assertTrue(all(o["then"] for r in rows for o in r["options"]))
+
+
+    def test_a_parked_ask_is_listed_last_flagged_and_answerable(self):
+        self.bd("echo \"$*\" >> %s\n" % (self.d / "bd.log"))
+        self.ask("quiet", status="parked")
+        self.ask("loud")
+        rows = server.inbox()
+        self.assertEqual([(r["bead"], r["parked"]) for r in rows], [("loud", False), ("quiet", True)])
+        self.assertEqual(server.answer({"ask": "quiet-1", "text": "go on"})[0], 200)
+
+    def test_a_substantive_answer_is_filed_on_the_bead_under_decisions_or_testing(self):
+        notes = {"v": "existing note"}
+        self.bd("""case "$1" in
+show) python3 -c "import json,sys;print(json.dumps([{'id':'x','notes':open(sys.argv[1]).read()}]))" NOTES ;;
+update) [ "$3" = "--notes" ] && printf '%s' "$4" > NOTES; echo "$@" >> LOG ;;
+esac
+""".replace("NOTES", str(self.d / "notes.txt")).replace("LOG", str(self.d / "bd.log")))
+        (self.d / "notes.txt").write_text(notes["v"])
+        self.ask("x", kind="decision", question="**Build the sink now?**\n\n**What I need from you:** pick")
+        self.assertEqual(server.answer({"ask": "x-1", "text": "B: add a stand-in sink"})[0], 200)
+        text = (self.d / "notes.txt").read_text()
+        self.assertIn("existing note\n\n## Decisions\n- ", text)
+        self.assertIn("(ask x-1) Build the sink now? -> B: add a stand-in sink", text)
+        self.ask("x", kind="verify", n=2)
+        self.assertEqual(server.answer({"ask": "x-2", "text": "right"})[0], 200)  # a bare button answer files nothing
+        self.assertNotIn("## Testing", (self.d / "notes.txt").read_text())
+        self.ask("x", kind="verify", n=3)
+        self.assertEqual(server.answer({"ask": "x-3", "text": "wrong: the unit is ms"})[0], 200)
+        text = (self.d / "notes.txt").read_text()
+        self.assertIn("## Testing\n- ", text)
+        self.assertIn("## Decisions\n- ", text)  # the first section is kept, the second beside it
 
 
 class Markdown(unittest.TestCase):

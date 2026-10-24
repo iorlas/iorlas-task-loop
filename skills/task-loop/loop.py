@@ -656,6 +656,12 @@ def passes(repo, a, started, st=None):
             tl.renotify()  # an ask unanswered for 24 h pushed again; once a day, the looks that wait (throttled)
         except Exception as e:  # a push is never worth the loop
             say("re-push skipped: %s" % e)
+        tl.park_stale_asks()  # asks unanswered past parks_at (3 days), throttled with the sweep above
+        try:
+            import digest
+            digest.maybe_send()  # the morning digest, once a day, when a push channel is set
+        except Exception as e:  # a digest never stops a loop
+            say("digest: %s" % e)
         ranked, skipped = queue(repo)
         now = clock()
         for rested, due in read_rests(repo).items():  # another loop's pre-engine failure rests the bead here too

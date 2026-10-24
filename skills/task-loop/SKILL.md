@@ -134,6 +134,14 @@ Push: put one shell command in `~/.config/task-loop/notify`; each new ask runs i
 Intake: a bead with no acceptance criteria (the field, or a `## Acceptance Criteria` section) is a ticket ask before any
 AI step; a plan of more than `engine.max_stages` (3) stages is a split ticket, unless the owner already answered one. A decision or ticket ask takes the bead out of the unattended queue: with `engine.pick_label` set (lifesim: `auto`) the engine removes that label and adds `engine.needs_info_label` (`needs-info`), and the ask comment says so; answering does not relabel it, the owner does. Verify and stuck asks keep the label. Neither label change counts as an answer.
 
+The owner's push and digest (notifier.py, digest.py): `~/.config/task-loop/notify` holds a shell command (ntfy, Pushover, a Telegram bot: it gets
+`TL_ASK_KIND`, `TL_ASK_BEAD`, `TL_ASK_ID`, `TL_ASK_TEXT`, `TL_DIGEST_TEXT`), or the word `desktop` (a notification on this machine, no account),
+or nothing/`off`. `tl notify test|desktop|off`. Every ask pushes at once; once a day after 07:00 the loop starts a detached `tl digest --send`:
+the night's landed/asked/paused/failed, the asks to answer first, and the counts of refused commands, DNS errors and flakes for the coordinator
+(`tl digest` prints it). An ask nobody answers in 3 days is parked (status `parked`, a comment on the bead; it still waits and an answer
+un-parks it). A substantive answer from the dashboard or `tl ask answer` is also filed on the bead's notes under `## Decisions`
+(`## Testing` for verify and denied asks).
+
 The owner's inbox: `tl ask list` (ordered by what each ask unblocks), `tl ask answer <bead> <text>`, `tl ask withdraw <bead> [why]`;
 the dashboard's Asks page does the same with one click per option, an 8 s Undo before the comment is written, and a
 Dismiss button for a stale ask. An ask's `question` is tidied (no command dumps, ends at a word) and the full text is in
