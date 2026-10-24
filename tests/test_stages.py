@@ -1073,10 +1073,14 @@ class Claims(StagesTest):
 
     def test_parking_a_bead_lets_go_of_its_claim(self):
         calls = []
-        with mock.patch.object(tl, "bd", side_effect=lambda *a, **k: calls.append(a) or mock.Mock(returncode=0, stdout="", stderr="")), \
-                mock.patch.object(tl, "event"), mock.patch.object(tl, "provenance"):
-            self.assertEqual(real_cmd_block(mock.Mock(id="t-1", why="stuck")), 0)
-        self.assertEqual(calls[0], ("update", "t-1", "--status", "blocked", "--assignee", ""))
+        for holder, expect in (("tl-2be89f88", ("update", "t-1", "--status", "blocked", "--assignee", "")),
+                               ("denis", ("update", "t-1", "--status", "blocked")), ("", ("update", "t-1", "--status", "blocked"))):
+            calls.clear()
+            with mock.patch.object(tl, "bd", side_effect=lambda *a, **k: calls.append(a) or mock.Mock(returncode=0, stdout="", stderr="")), \
+                    mock.patch.object(tl, "show", return_value={"assignee": holder}), \
+                    mock.patch.object(tl, "event"), mock.patch.object(tl, "provenance"):
+                self.assertEqual(real_cmd_block(mock.Mock(id="t-1", why="stuck")), 0)
+            self.assertEqual(calls[0], expect, holder)  # a person's own claim stays theirs
 
     def test_a_plan_with_no_stages_goes_back_to_the_planner_once(self):
         empty = dict(PLAN, stages=[])
@@ -1113,6 +1117,8 @@ class Claims(StagesTest):
         self.assertEqual(last["reflection"]["went_badly"][0]["session"], "ref-review")
         comment = [c[3] for c in self.bd_calls if c[:2] == ("comments", "add") and c[3].startswith("Reflect (engine)")][0]
         self.assertIn("reflection: badly: [prompt] the review sent the same finding back twice (session ref-review)", comment)
+        self.assertLess(comment.index("reflection:"), comment.index("filed="))  # first: the view of the last run clips at 400 characters
+        self.assertEqual(last["stats"]["tokens_in"], sum(s["tokens"]["in"] for s in last["sessions"] if s["node"] != "reflect"))
 
     def test_a_reflection_that_fails_changes_nothing(self):
         crash = te.ans("failed", "crash", "owner", say="boom")
@@ -1128,7 +1134,12 @@ class Claims(StagesTest):
         e = engine.Engine("t-1", str(self.wt), dict(engine.load_cfg(str(self.wt)), reflect=True))
         e.route = "/fake/route.py"
         e.sessions = [{"node": "plan"}]
+        self.assertIsNone(e.reflect_run("failed", "failed: x"))  # a run that only planned
+        e.sessions = [{"node": "plan"}, {"node": "write"}]
         self.assertIsNone(e.reflect_run("blocked", "paused: no lane for write until 04:00"))
+        e.stop_pending = True
+        self.assertIsNone(e.reflect_run("landed", ""))  # a stop is on its way
+        e.stop_pending = False
         self.assertIsNone(e.reflect_run("failed", "failed: infrastructure: bad_request"))
         e.dry = True
         self.assertIsNone(e.reflect_run("landed", ""))

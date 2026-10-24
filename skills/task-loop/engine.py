@@ -1467,16 +1467,20 @@ class Engine:
         """tl-05s: one cheap read-only call that reflects on this run: what went well and badly (each bad item with its cause class
         and the session it comes from), what wasted tokens or minutes, what to change. Never blocks or changes the outcome: any
         failure, a missing lane, a paused run, a stop, is no reflection. -> the answer dict or None."""
-        if not self.cfg.get("reflect", True) or self.dry or not self.route or not self.sessions:
+        if not self.cfg.get("reflect", True) or self.dry or not self.route or getattr(self, "stop_pending", False):
             return None
+        if not any(s.get("node") in ("write", "review", "verify") for s in self.sessions):
+            return None  # a run that only planned has nothing to reflect on
         if why.startswith(("paused:", "waiting:", "failed: infrastructure", "failed: stopped")):
             return None
         try:
             prompt = self.reflect_prompt(outcome, why)
-            r, j = call_delegate(self.route, "reviewer", prompt, strict(SCHEMAS["reflect"]), self.wt, None, 240, self.err_path, None,
+            # a short wait: the close step ignores a stop while this runs (route.py adds 120 s to the limit)
+            r, j = call_delegate(self.route, "reviewer", prompt, strict(SCHEMAS["reflect"]), self.wt, None, 45, self.err_path, None,
                                  self.session, self.bead, "%s · reflect" % self.bead)
+            saved = {k: v for k, v in self.stats.items() if k.startswith("tokens_")}
             self.trace_call("reflect", "reviewer", 1, r, j)
-            self.cost += r.cost or 0.0
+            self.stats.update(saved)  # the run's counts are the run's, as the Reflect comment says them
             if r.data is None or (j or {}).get("status") != "done":
                 return None
             data = unstrict(r.data, SCHEMAS["reflect"])
@@ -1496,13 +1500,17 @@ class Engine:
                 t.get("out") or 0, s.get("secs"), s.get("ref") or "(none)"))
         lines = []
         try:
-            for ln in self.log_path.read_text(encoding="utf-8").splitlines():
-                if '"kind": "transition"' in ln or '"kind": "warn"' in ln:
+            raw = self.log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            raw = []
+        for ln in raw:
+            if '"kind": "transition"' in ln or '"kind": "warn"' in ln:
+                try:
                     d = json.loads(ln)
-                    lines.append("%s: %s" % (d.get("kind"), clip(d.get("text") or "", 200)))
-        except (OSError, ValueError):
-            pass
-        return REFLECT_PROMPT % (self.bead, clip(self.bead_title or "", 120), outcome, clip(why or "(none)", 600),
+                except ValueError:
+                    continue  # a damaged line is skipped, the rest still counts
+                lines.append("%s: %s" % (d.get("kind"), clip(d.get("text") or "", 200)))
+        return REFLECT_PROMPT % (self.bead, clip(getattr(self, "bead_title", "") or "", 120), outcome, clip(why or "(none)", 600),
                                  "; ".join("%s=%s" % kv for kv in self.stats.items()), "\n".join(rows[:40]),
                                  "\n".join(lines[-70:]) or "(none)")
 
@@ -4845,9 +4853,9 @@ class Engine:
             self.file_owner_look()
         verified = ("; self-verified=" + ", ".join("%d %s" % (sum(x["verdict"] == k for x in self.verified), k)
                                                    for k in VERDICTS)) if self.verified else ""
-        self.comment("Reflect (engine): outcome=%s; filed=%d; %s%s%s; trace=%s (tl trace %s)%s" % (
-            outcome, len(new), stats, verified, ("; why=" + why) if why else "", self.log_path.stem, self.bead,
-            reflection_text(getattr(self, "reflection", None))))
+        self.comment("Reflect (engine): outcome=%s;%s filed=%d; %s%s%s; trace=%s (tl trace %s)" % (
+            outcome, reflection_text(getattr(self, "reflection", None)), len(new), stats, verified, ("; why=" + why) if why else "",
+            self.log_path.stem, self.bead))
         summary = (getattr(self, "plan_summary", "") or "")[:300]
         if outcome == "landed":
             rc = tl.cmd_close(Args(id=self.bead, reason="merged %s to %s: %s; %s" % (
@@ -5417,8 +5425,8 @@ def reflection_text(r):
     if not r:
         return ""
     bad = "; ".join("[%s] %s (session %s)" % (b["cause"], clip(b["what"], 160), b["session"]) for b in r.get("went_badly") or []) or "none"
-    return " | reflection: badly: %s%s%s" % (bad, (" | wasted: " + clip("; ".join(r["wasted"]), 300)) if r.get("wasted") else "",
-                                              (" | change: " + clip("; ".join(r["change"]), 300)) if r.get("change") else "")
+    return " reflection: badly: %s%s%s;" % (clip(bad, 500), (" | wasted: " + clip("; ".join(r["wasted"]), 200)) if r.get("wasted") else "",
+                                           (" | change: " + clip("; ".join(r["change"]), 200)) if r.get("change") else "")
 
 
 def norm_cmd(cmd):
