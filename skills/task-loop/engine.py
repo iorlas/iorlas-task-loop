@@ -29,6 +29,7 @@ import time
 import uuid
 from pathlib import Path
 
+import checks_speed as cs
 import looks
 import tl
 
@@ -63,6 +64,7 @@ DEFAULTS = {
                                       # a number sets both, 0 = never) is not resumed: a fresh writer gets the brief and what is done
     "writer_check_max_s": 60,         # a check whose last run took longer is the engine's, never the writer's to run
     "check_timeout_min": 60,          # one check (engine.checks, a stage's check) running longer is killed, process group and all: exit 124
+    "check_idle_min": 10,             # a check with no new output this long is stopped as hung (process group and all), never retried; 0 = off
     "gate_timeout_min": 90,           # the same for the gate at land
     "budget_min_by_label": {},        # {label: minutes}: a bead with a label here gets that budget_min if larger (the largest of its labels)
     "delegate": "",                   # path to delegate's route.py; "" = the newest installed iorlas-delegate
@@ -1147,12 +1149,24 @@ def kill_tree(p):
         else:
             if p.pid in own_ids() or (p.returncode is None and os.getpgid(p.pid) in own_ids()):
                 raise RuntimeError("kill_tree: child %s is in our own process group; refusing to kill it" % p.pid)
+            try:  # a descendant that called setsid left the group: note it now, before it is reparented
+                away = [(k, st) for k, g, st in descendants(p.pid, tl.proc_table()) if g != p.pid]
+            except Exception:
+                away = []
             send_group(p.pid, signal.SIGTERM)  # Unity removes Temp/UnityLockfile on SIGTERM
             end = time.time() + 10
             while time.time() < end and tl.proc_alive(p.pid):  # not p.wait(): a reaped leader frees its pid, and its
                 time.sleep(0.1)                                # group id with it, for any new process to take
             if p.returncode is None:
                 send_group(p.pid, signal.SIGKILL)  # stragglers; p is still unreaped, so the group id is still its own
+            for sig in (signal.SIGTERM, signal.SIGKILL):  # setsid'd descendants: the same pid and start time only
+                for k, st in away:
+                    try:
+                        send_pid(k, sig, st)
+                    except RuntimeError:
+                        pass
+                if sig == signal.SIGTERM and away:
+                    time.sleep(1)
     except OSError:
         pass
     p.wait()
@@ -1738,7 +1752,7 @@ class Engine:
             self.transition("ask", "wrong_tree", bad[0])
             raise Blocked(why, bad[1])
 
-    def sh(self, cmd, timeout=3600, check=False, save=None, env=None, pin=False):
+    def sh(self, cmd, timeout=3600, check=False, save=None, env=None, pin=False, idle=0):
         """A command: a string goes through bash with -e and pipefail (checks, profile commands), so a red command in a
         `;` list or a pipe fails it (lifesim-gfr.31.1: `just unity-check > log; ! grep ...` passed with unity-check
         red); `! cmd` and `cmd || true` still pass. A list runs as is (no quoting rules). pin=True: an engine git command, run
@@ -1752,12 +1766,17 @@ class Engine:
                              env=dict(child_env(), **(tl.pinned_env(self.wt) if pin else {}), **(env or {})),
                              stdin=subprocess.DEVNULL,
                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=(os.name != "nt"))
+        self.hung = False
         try:
-            out, _ = p.communicate(timeout=timeout)
-            rc = p.returncode
-        except subprocess.TimeoutExpired:
+            if idle:
+                out, rc = self.watch_output(p, timeout, idle)
+            else:
+                out, _ = p.communicate(timeout=timeout)
+                rc = p.returncode
+        except subprocess.TimeoutExpired as e:
             kill_tree(p)
             out, _ = p.communicate()
+            out = (e.output or b"") + out if idle else out  # the watched path read the output itself: keep what it collected
             out += b"\n(timed out after %g min: the engine stopped it and everything it started)" % round(timeout / 60, 2)
             rc = 124
         except BaseException:  # stopped: never leave a check (just check, Unity) running
@@ -1771,6 +1790,46 @@ class Engine:
         if check and rc:
             raise Blocked("failed: `%s` exit %d\n%s" % (cmd, rc, tail))
         return rc, tail
+
+    def watch_output(self, p, timeout, idle):
+        """Collect p's output until it ends. Stopped as hung when, for `idle` seconds, all three are flat: its output, any
+        file written under the worktree (a check that redirects to a file is not silent), the CPU time of its process tree.
+        Then the whole tree is stopped, self.hung is set and the exit is 124 (the output ends with the hang notice).
+        `timeout` still applies, as TimeoutExpired carrying the output so far."""
+        chunks, last = [], [time.time()]
+
+        def pump():
+            while True:
+                b = os.read(p.stdout.fileno(), 65536)
+                if not b:
+                    return
+                chunks.append(b)
+                last[0] = time.time()
+        th = threading.Thread(target=pump, daemon=True)
+        th.start()
+        start = time.time()
+        poll, nxt = min(60.0, max(0.3, idle / 4)), start
+        seen = {"files": None, "cpu": {}}
+        while th.is_alive():
+            th.join(0.5)
+            now = time.time()
+            if now - start > timeout:
+                kill_tree(p)
+                th.join(5)
+                raise subprocess.TimeoutExpired(p.args, timeout, output=b"".join(chunks))
+            if th.is_alive() and now >= nxt:
+                nxt = now + poll
+                if cs.activity(self.wt, p.pid, seen):
+                    last[0] = max(last[0], now)
+            if th.is_alive() and now - last[0] > idle:
+                self.hung = True
+                kill_tree(p)
+                th.join(5)
+                chunks.append(b"\n(hung: no output, file writes or CPU for %g min; the engine stopped it and everything it started)"
+                              % round(idle / 60, 2))
+                return b"".join(chunks), 124
+        p.wait()
+        return b"".join(chunks), p.returncode
 
     def slot_status(self):
         """(tracked paths changed, untracked paths, git's result) from the slot's own `git status`."""
@@ -3722,28 +3781,61 @@ class Engine:
         items = [{"id": c.get("id") or c["cmd"], "cmd": c["cmd"], "group": c.get("group") or "tests",
                   "when": c.get("when") or [], "retry": int(c.get("retry") or 0),
                   "timeout": float(c.get("timeout_min") or self.cfg["check_timeout_min"]),
-                  "cache": c.get("cache", True) is not False} for c in self.cfg["checks"]]
+                  "cache": c.get("cache", True) is not False,
+                  "idle": float(c.get("idle_min", self.cfg["check_idle_min"]) or 0) * 60,
+                  "inputs": [c["inputs"]] if isinstance(c.get("inputs"), str) else list(c.get("inputs") or []),
+                  "inputs_only": bool(c.get("inputs_only")), "env": c.get("env") or {}} for c in self.cfg["checks"]]
         items += [{"id": c, "cmd": c, "group": "acceptance", "when": [], "retry": 0,
-                   "timeout": float(self.cfg["check_timeout_min"]), "cache": False} for c in st["checks"]]
+                   "timeout": float(self.cfg["check_timeout_min"]), "cache": False, "inputs": [], "inputs_only": False, "env": {},
+                   "idle": float(self.cfg["check_idle_min"] or 0) * 60} for c in st["checks"]]
         if groups:  # tl-bxk.13.15: only these groups (the cheap checks before a render)
             items = [c for c in items if c["group"] in groups]
-        items.sort(key=lambda c: GROUPS.index(c["group"]) if c["group"] in GROUPS else 1)
-        if acceptance_first and not any("TL_CHECK_" in c["cmd"] for c in items if c["group"] == "acceptance"):
-            # tl-bxk.13.14: the last round failed only in acceptance: its fast checks go before the slow tests, and a red one
-            # skips them (lifesim-fdyo reran 11 minutes of unity tests before a 3-second verdict check failed, 3 rounds)
-            items.sort(key=lambda c: {"static": 0, "acceptance": 1, "tests": 2}.get(c["group"], 1))
+        # Cheapest first, by the median of earlier runs of the same command (unknown = cheap), so a red verdict comes
+        # before the slow Unity runs. A check reading $TL_CHECK_LOG_<X> stays after X. When the last round failed only in
+        # acceptance, acceptance goes before tests at equal cost (tl-bxk.13.14: lifesim-fdyo reran 11 minutes of unity tests
+        # before a 3-second verdict check failed).
+        history = cs.load_durations(self.wt)
+        # A stage check whose segment is exactly a repo check's command (`mkdir -p e && just unity-tests > e/log && grep ...`)
+        # reads that check's log instead of running it again, when the repo check ran green in this round (see cs.reuse_log).
+        # Anything else (args, an env prefix, `||`, `!`, a subshell, a quoted mention) runs as written, and so does the repo check.
+        repo = [c for c in items if c["group"] != "acceptance"]
+        needs = {}  # id(wrapper) -> [repo checks whose log it reads]
+        for w in items:
+            if w["group"] != "acceptance":
+                continue
+            cmd_w = w["cmd"]
+            for r in repo:
+                var = check_env_name(r["id"])
+                if not cs.contains_cmd(cmd_w, r["cmd"], unquoted=True) or var in cmd_w or var.replace("_LOG_", "_RC_") in cmd_w:
+                    continue
+                new = cs.reuse_log(cmd_w, r["cmd"], var, self.wt)
+                if new:
+                    cmd_w = new
+                    needs.setdefault(id(w), []).append(r)
+            w["run_cmd"] = cmd_w
+        rank = {"static": 0, "acceptance": 1, "tests": 2} if acceptance_first else {"static": 0, "tests": 1, "acceptance": 2}
+        env_of = {check_env_name(c["id"])[len("TL_CHECK_LOG_"):]: c for c in items if c["group"] != "acceptance"}
+        deps = {id(c): [env_of[m] for m in dict.fromkeys(re.findall(r"TL_CHECK_(?:LOG|RC)_(\w+)", c["cmd"])) if m in env_of]
+                + needs.get(id(c), []) for c in items}
+        items = cs.order_by_cost(items, history, lambda c: rank.get(c["group"], 1), deps)
         cache_path = tl.config_dir() / "check-cache" / ("%s.json" % self.bead)
         try:
             cache = json.loads(cache_path.read_text())
         except (OSError, ValueError):
             cache = {}
-        key = "%s %s" % (self.tree_hash(), self.git("rev-parse", self.cfg["base"]))
+        tree = self.tree_hash()
+        key = "%s %s" % (tree, self.git("rev-parse", self.cfg["base"]))
+        by_inputs = cache.get("inputs") if isinstance(cache.get("inputs"), dict) else {}  # per-check: command + hash of its `inputs` files
+        keys = cs.InputKeys(self.wt, tree, self.git("rev-parse", self.cfg["base"]))  # per-check keys, listed lazily
         logs = self.run_dir / "checks"
         logs.mkdir(exist_ok=True)
+        timings = []  # (cmd, secs) of what ran, for the duration history
         out, red, changed, ran, env_logs = [], None, None, {}, {}  # ran: what ran in this block -> its result; env_logs: its logs, for later checks
         for n, c in enumerate(items):
             base = {"cmd": c["cmd"], "id": c["id"], "group": c["group"]}
-            if red and c["group"] != red:
+            if red and (c["group"] != red or cs.expected_secs(c["cmd"], history) >= cs.CHEAP_S):
+                # a red group skips the groups after it, and any red skips every expensive check (the cheap ones of its own
+                # group run to the end, so the writer sees all the cheap failures at once)
                 out.append(dict(base, exit=None, status="skipped", why="%s failed first" % red, tail=""))
                 continue
             if c["when"]:
@@ -3762,23 +3854,40 @@ class Engine:
                 if res["exit"] != 0:
                     red = c["group"]
                 continue
-            hit = c["cache"] and cache.get(key, {}).get(c["cmd"])
+            ikey = ""
+            if c["cache"] and c["inputs"]:  # a green result is a fact about the check's own inputs, not the whole tree or base
+                ikey = keys.key(c)
+                hit = by_inputs.get(ikey) if ikey else None
+            else:
+                hit = c["cache"] and cache.get(key, {}).get(c["cmd"])
             if hit:
                 res = dict(base, **hit)
                 res.update(cached=True, status=hit.get("status") or ("ran" if hit["exit"] == 0 else "failed"))
+                if ikey:
+                    res["cached_note"] = "inputs unchanged since round %s" % (hit.get("round") or "?")
+                    self.log("note", "cached: %s, %s" % (c["id"], res["cached_note"]))
             else:
                 t, tries = time.time(), 0
+                xcmd, reads = cmd, needs.get(id(c), [])
+                if reads and all(check_env_name(r["id"]) in env_logs and env_logs.get(check_env_name(r["id"]).replace("_LOG_", "_RC_")) == "0"
+                                 for r in reads):
+                    xcmd = c["run_cmd"]
+                    self.log("note", "`%s` reuses the log of %s: only its own part runs" % (cmd[:100], ", ".join("`%s`" % r["id"] for r in reads)))
                 while True:
                     tries += 1
                     log_name = "%02d-%s.r%d.log" % (n, re.sub(r"[^\w.-]+", "_", c["id"])[:40], self.check_round)
                     t_try = time.time()
-                    rc, tail = self.sh(cmd, timeout=c["timeout"] * 60, save=logs / log_name, env=env_logs)
+                    rc, tail = self.sh(xcmd, timeout=c["timeout"] * 60, save=logs / log_name, env=env_logs, idle=c["idle"])
+                    hung = self.hung
                     try:
                         seen = (logs / log_name).read_text(encoding="utf-8", errors="replace")
                     except OSError:
                         seen = tail
                     self.note_slot_waits(seen, time.time() - t_try)
                     if rc == 0:
+                        break
+                    if hung:  # silent for check_idle_min: a rerun hangs the same way, and this round has waited enough
+                        self.warn("`%s` hung: no output, file writes or CPU for %g min, stopped; not retried" % (c["id"], c["idle"] / 60))
                         break
                     if rc == 124:  # the engine's timeout or the command's own: a rerun hangs the same way
                         if c["retry"]:
@@ -3795,7 +3904,7 @@ class Engine:
                             self.warn("`%s` is held by an editor or project lock; waiting %d s (%d)" % (c["id"], wait, w_n))
                             time.sleep(wait)
                             self.add_wait(wait, "an editor lock")
-                            rc, tail = self.sh(cmd, timeout=c["timeout"] * 60, save=logs / log_name, env=env_logs)
+                            rc, tail = self.sh(xcmd, timeout=c["timeout"] * 60, save=logs / log_name, env=env_logs)
                             seen = (logs / log_name).read_text(encoding="utf-8", errors="replace")
                             self.note_slot_waits(seen, time.time() - t_try)
                             if rc == 0 or failure_kind(seen) != "lock":
@@ -3809,33 +3918,48 @@ class Engine:
                         break
                     self.warn("`%s` failed (exit %d), retrying: it is marked flaky" % (c["id"], rc))
                 res = dict(base, exit=rc, status="ran" if rc == 0 else "failed", tries=tries, tail=tail[-1500:],
-                           secs=round(time.time() - t), log="checks/" + log_name)
+                           secs=round(time.time() - t), log="checks/" + log_name, log_abs=str(logs / log_name), hung=bool(hung))
+                if hung:
+                    res["tail"] = "HUNG (no output, file writes or CPU for %g min), last output:\n%s" % (c["idle"] / 60, tail[-1400:])
+                if rc == 0:  # only a green run says what the check costs: a red one stops early
+                    timings.append((cmd, time.time() - t))
                 if rc == 0 and c["cache"]:  # only a pass is a fact about the tree; a failure can come from outside git (stale
-                    cache.setdefault(key, {})[c["cmd"]] = res  # build output, a held editor, a flake) and must rerun
+                    if ikey:  # build output, a held editor, a flake) and must rerun
+                        by_inputs = {k: v for k, v in by_inputs.items() if v.get("cmd") != c["cmd"]}  # one entry per check
+                        by_inputs[ikey] = dict(res, round=self.check_round)
+                    else:
+                        cache.setdefault(key, {})[c["cmd"]] = res
             out.append(res)
             ran[same] = res
             if c["group"] != "acceptance" and res.get("exit") is not None:  # later checks read its log: $TL_CHECK_LOG_<ID>
-                lp = (logs / log_name) if not res.get("cached") else self.run_dir / res.get("log", "")
+                lp = (logs / log_name) if not res.get("cached") else (
+                    Path(res["log_abs"]) if res.get("log_abs") and Path(res["log_abs"]).is_file() else self.run_dir / res.get("log", ""))
                 if lp.is_file():
                     env_logs[check_env_name(c["id"])], env_logs[check_env_name(c["id"]).replace("_LOG_", "_RC_")] = str(lp), str(res["exit"])
             if res["exit"] != 0:
                 red = c["group"]
         for c in out:
-            mark = {"ran": "✓", "failed": "✗", "skipped": "–"}[c["status"]]
+            mark = "⏸ hung" if c.get("hung") else {"ran": "✓", "failed": "✗", "skipped": "–"}[c["status"]]
             self.detail(["%s [%s] `%s` %s%s" % (mark, c["group"], c["id"], c["status"] if c["exit"] is None else
                                                 "exit %d" % c["exit"], " (" + c["why"] + ")" if c.get("why") else
-                                                " (same tree and base: earlier result)" if c.get("cached") else
+                                                " (%s)" % (c.get("cached_note") or "same tree and base: earlier result") if c.get("cached") else
                                                 " (same command ran earlier in this block)" if c.get("reused") else "")] +
-                        (c["tail"].splitlines()[-3:] if c["status"] == "failed" else []))
+                        (c["tail"].splitlines()[-(8 if c.get("hung") else 3):] if c["status"] == "failed" else []))
         cache_path.parent.mkdir(exist_ok=True)
-        cache_path.write_text(json.dumps({key: cache[key]} if key in cache else {}))  # only the latest tree is worth keeping
+        cs.record_durations(self.wt, timings)
+        saved = {key: cache[key]} if key in cache else {}  # only the latest tree is worth keeping
+        if by_inputs:
+            saved["inputs"] = by_inputs
+        cache_path.write_text(json.dumps(saved))
         bad = [c for c in out if c["status"] == "failed"]
-        self.outcome_of("red" if bad else "green", "%d failed: %s" % (len(bad), ", ".join(c["id"][:60] for c in bad))
+        hung = [c for c in bad if c.get("hung")]
+        self.outcome_of("red" if bad else "green", "%d failed%s: %s" % (len(bad), " (%d hung: no output, file writes or CPU, stopped)" % len(hung) if hung else "",
+                                                                       ", ".join(c["id"][:60] for c in bad))
                         if bad else "%d passed" % sum(1 for c in out if c["status"] == "ran"))
         self.log("checks", "checks round %d: %s" % (self.check_round, "%d failed" % len(bad) if bad else "green"),
                  node_id=(self.cur or {}).get("id"), round=self.check_round, items=[
                      {"id": c["id"], "cmd": c["cmd"], "group": c["group"], "exit": c["exit"], "status": c["status"],
-                      "secs": c.get("secs"), "tries": c.get("tries"), "cached": bool(c.get("cached")), "reused": bool(c.get("reused")),
+                      "secs": c.get("secs"), "tries": c.get("tries"), "hung": bool(c.get("hung")), "cached": bool(c.get("cached")), "reused": bool(c.get("reused")),
                       "why": c.get("why") or "", "log": "" if c.get("cached") or c.get("reused") else c.get("log") or ""} for c in out])
         return out
 
@@ -3881,14 +4005,24 @@ class Engine:
                     self.outcome_of("conflict", ", ".join(unmerged.split()))
                 elif self.cfg["gate"]:
                     self.gate_log = self.run_dir / ("gate.r%d.log" % (self.fixes + 1))
-                    rc, tail = self.sh(self.cfg["gate"], save=self.gate_log, timeout=float(self.cfg["gate_timeout_min"]) * 60)
+                    gtree = self.git("rev-parse", "HEAD^{tree}")
+                    if self.gate_green(gtree):  # the gate already passed on exactly this tree (a push rejected, a re-land)
+                        self.log("note", "gate skipped: `%s` already passed on tree %s" % (self.cfg["gate"][:80], gtree[:12]))
+                        rc, tail = 0, ""
+                    else:
+                        green = self.green_checks(gtree)  # repo checks green on this tree's inputs: the gate may skip their part
+                        rc, tail = self.sh(self.cfg["gate"], save=self.gate_log, timeout=float(self.cfg["gate_timeout_min"]) * 60,
+                                           env={"TL_CHECKS_GREEN": ",".join(green)} if green else None)
+                        if rc == 0:
+                            self.gate_record(gtree)
                     if rc:
                         problem = ("gate", tail)
                         self.outcome_of("gate red", (tail.strip().splitlines() or [""])[-1])
                 if not problem:
                     with self.stop_deferred() as stop:  # a push half done is no state to stop in: finish it, then stop
-                        rc, tail = self.sh(self.cfg["land"], pin=True, env={"TASK_LOOP_GATED_TREE": self.git(
-                            "rev-parse", "HEAD^{tree}")} if self.cfg["gate"] else None)  # a pre-push hook may skip a gate this tree passed
+                        gated = self.git("rev-parse", "HEAD^{tree}")  # a pre-push hook may skip a gate this exact tree passed
+                        rc, tail = self.sh(self.cfg["land"], pin=True, env={"TASK_LOOP_GATED_TREE": gated, "TL_GATE_PASSED": gated}
+                                           if self.cfg["gate"] else None)
                         if rc == 0:
                             self.landed_sha = sha = self.git("rev-parse", "HEAD")
                             tl.cmd_land(Args(id=self.bead, sha=sha, worktree=self.wt))
@@ -3923,6 +4057,43 @@ class Engine:
                                 "gate red on the rebased tree: %s" % (problem[1].strip().splitlines() or [""])[-1][:200]
                                 if problem[0] == "gate" else problem[1].splitlines()[0])
             self.fix(*problem)
+
+    def gate_file(self):
+        return tl.config_dir() / "check-cache" / ("%s.gate.json" % self.bead)
+
+    def gate_green(self, tree):
+        try:
+            got = json.loads(self.gate_file().read_text())
+        except (OSError, ValueError):
+            return False
+        return bool(tree) and got.get("tree") == tree and got.get("cmd") == cs.norm(self.cfg.get("gate") or "")
+
+    def gate_record(self, tree):
+        try:
+            self.gate_file().write_text(json.dumps({"tree": tree, "cmd": cs.norm(self.cfg.get("gate") or "")}))
+        except OSError:
+            pass
+
+    def green_checks(self, tree):
+        """Ids of the repo checks with a green result on this tree: by their inputs hash, else by tree and base."""
+        try:
+            cache = json.loads((tl.config_dir() / "check-cache" / ("%s.json" % self.bead)).read_text())
+        except (OSError, ValueError):
+            return []
+        by_inputs = cache.get("inputs") if isinstance(cache.get("inputs"), dict) else {}
+        whole = cache.get("%s %s" % (tree, self.git("rev-parse", self.cfg["base"]))) or {}
+        keys, out = cs.InputKeys(self.wt, tree, self.git("rev-parse", self.cfg["base"])), []
+        for c in self.cfg.get("checks") or []:
+            if c.get("cache", True) is False:
+                continue
+            globs = [c["inputs"]] if isinstance(c.get("inputs"), str) else list(c.get("inputs") or [])
+            if globs:
+                ok = bool(by_inputs.get(keys.key(dict(c, inputs=globs)) or "-"))
+            else:
+                ok = c["cmd"] in whole
+            if ok:
+                out.append(str(c.get("id") or c["cmd"]))
+        return out
 
     FIX = {"gate": ("make the gate pass on the tree rebased onto the latest base",
                     "\nAll stages were accepted, then the gate%s failed on the tree rebased onto the latest base (another "

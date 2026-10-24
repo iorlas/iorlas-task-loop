@@ -181,13 +181,33 @@ is accepted, so a run that pauses in the fix round verifies them again on resume
 Reflect comment's `self-verified=` count, so the owner can audit what nobody asked him (the 2026-10-21 lifesim night:
 lifesim-d5f.46, lifesim-fld.26.15, lifesim-gfr.31.1 each waited hours on an ask settled by reading in a minute).
 
-Check groups run static → tests → acceptance (the plan's per-stage checks), one at a time; a red group skips the rest.
+Checks run one at a time, cheapest first: by the median of earlier runs of the same command (a small per-repo history in `~/.config/task-loop/check-durations/`; a command never run, or under 5 s, counts as free; ties go static → tests → acceptance, or static → acceptance → tests after a round red only in acceptance; a check reading `$TL_CHECK_LOG_<ID>` stays after `<ID>`). A red group skips the groups after it; any red also skips every expensive check (expected 5 s or more), after the cheap ones have run to the end. Only green runs enter the history.
 Every string command (checks, gate, land) runs under `bash -e -o pipefail`: a red command before a `;` or inside a pipe
 fails it; `! cmd` and `cmd || true` still pass. The planner is told to grep a file, not `cmd | grep -q` (an early
 exit kills `cmd` with SIGPIPE, exit 141). `when` runs a
 check only when the task changed a matching path; `retry` reruns a known flaky one, but never a check that timed out (exit 124: the engine's limit or the command's own; the log says "no retry: timed out after N min"). `timeout_min` sets one check's time limit in place of `engine.check_timeout_min` (60). A repo check that passed on the
 same tree and base is reused; mark one `"cache": false` when it reads state git cannot see. Stage checks always run. A repo check that ran in this block exports its log and exit code to the checks after it as `TL_CHECK_LOG_<ID>` and `TL_CHECK_RC_<ID>` (id upper-cased, other characters `_`); a plan check asserts with `grep -q 'Passed: 12' "$TL_CHECK_LOG_UNITY_TESTS"` and never re-runs the command (a plan check containing a repo check's command is logged "re-runs <id>" and still runs as written). Within one checks block each distinct command (whitespace stripped, same directory and time limit) runs once; a repeat gets the first result. Time spent waiting for a shared resource (a Unity slot, read from `unity-slot: ... got slot N after Ns` in a check's output and capped at that run's wall time; a lane wait; an editor-lock wait) is not counted in `budget_min`; the over-budget ask gives wall and waited minutes. `engine.budget_min_by_label` (`{"unity": 300}`) gives a bead with that label that larger budget. The gate runs once, on the rebased
 tree at land, and the push gets `TASK_LOOP_GATED_TREE` (the tree it passed) so a pre-push hook can skip a second run.
+
+**Check inputs (per-check cache).** A repo check may list `inputs`, globs over repo paths (`*` crosses `/`, as in `when`):
+`"checks": [{"id": "unity-tests", "cmd": "just unity-tests", "group": "tests", "inputs": ["client/**", "content/**", "src/**"]}]`.
+A green result is then remembered by the key: command, the check's `env`, the hash of the tracked files matching `inputs`, the
+contents of gitignored files matching them (read directly; keep the globs off build output such as `Library/`, which changes on
+every run), the justfile, lockfiles (`*.lock`, `packages-lock.json`, `Directory.Packages.props`...) and `.task-loop.json`, and the
+base sha. `"inputs_only": true` drops the last two groups, so only the globs count. A hit is logged
+`cached: unity-tests, inputs unchanged since round N`. No `inputs`: the key stays the whole tree plus the base. Only a pass is remembered.
+**Hang watchdog.** `engine.check_idle_min` (10; 0 = off; `idle_min` on one check overrides): a check is stopped as hung only when
+for that long all three are flat: its stdout/stderr, any file under the worktree (size, count, mtime; checked about every
+minute) and the CPU time of its process tree. The whole group is killed, descendants that called setsid too. It is reported as
+`hung: no output, file writes or CPU for N min` (`hung` in the round record, the last output lines in the brief), fails the
+round, and is never retried. A timeout keeps the output collected so far in the log.
+**Duplicates.** A stage check whose `&&` segment is exactly a repo check's command (no args, env prefix, `||`, `!`, `;` or subshell),
+optionally redirected (`> f`, `| tee f`), after setup only (`mkdir`, `echo`...) and followed only by readers (`grep`, `test`, `wc`, `tail`,
+`head`, `cat`) of that redirect target, reads the repo check's log instead of running it again, when the repo check ran green (or is cached
+with its log kept). Anything else runs as written, and the repo check always runs too. At land the gate is skipped when it already passed on the same tree; the gate gets
+`TL_CHECKS_GREEN=<id>,<id>` (repo checks green at their inputs), which a gate script may honour to skip those parts. The push gets
+`TL_GATE_PASSED=<tree>` (plain `git rev-parse HEAD^{tree}` of the commit pushed, set only when the gate passed on it; also
+`TASK_LOOP_GATED_TREE`, same value): a pre-push hook compares it with its own tree and skips the gate run when equal.
 
 No `slots` (or `count` 0): slots are off. No profile: say so in one line, use
 `bd ready --exclude-type epic --exclude-label slot`, the gate the repo's AGENTS.md names, and land on main by push.
