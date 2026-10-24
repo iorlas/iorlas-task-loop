@@ -3299,22 +3299,17 @@ class Engine:
             pick, pick, ", %s added" % info if info else "", pick)
 
     def notify(self, a):
-        """The owner's push: ~/.config/task-loop/notify holds one shell command (ntfy, Pushover, a Telegram bot...);
+        """The owner's push (tl.push): ~/.config/task-loop/notify holds one shell command (ntfy, Pushover, a Telegram bot...);
         it gets TL_ASK_KIND, TL_ASK_BEAD, TL_ASK_ID and TL_ASK_TEXT. Which service is the owner's choice."""
-        f = tl.config_dir() / "notify"
-        try:
-            cmd = f.read_text(encoding="utf-8").strip()
-        except OSError:
-            return
-        if not cmd:
-            return
-        env = dict(os.environ, TL_ASK_KIND=a["kind"], TL_ASK_BEAD=a["bead"], TL_ASK_ID=a["id"],
-                   TL_ASK_TEXT=push_text(a["question"]))
-        try:
-            subprocess.Popen(cmd, shell=True, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL, start_new_session=(os.name != "nt"))
-        except OSError as e:
-            self.warn("notify failed: %s" % e)
+        err = tl.push(a["kind"], a["bead"], a["id"], push_text(a["question"]))
+        if err:
+            self.warn("notify failed: %s" % err)
+        else:
+            try:  # the clock of the 24 h repeat starts at the first push
+                a["pushed_at"] = time.time()
+                self.ask_path().write_text(json.dumps(a, indent=1))
+            except OSError:
+                pass
 
     def checkpoint_path(self):
         return tl.config_dir() / "checkpoints" / ("%s.json" % self.bead)

@@ -652,6 +652,7 @@ def passes(repo, a, started, st=None):
             continue
         reclaim(repo)
         tl.close_stale_asks()  # asks of closed or missing beads (throttled)
+        tl.renotify()  # an ask unanswered for 24 h pushed again; once a day, the looks that wait (throttled)
         ranked, skipped = queue(repo)
         now = clock()
         for rested, due in read_rests(repo).items():  # another loop's pre-engine failure rests the bead here too

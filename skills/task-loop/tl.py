@@ -1378,6 +1378,121 @@ def close_stale_asks(every=600):
     return done
 
 
+REPUSH, LOOK_BATCH = 24 * 3600, 24 * 3600  # an ask nobody answered is pushed again after this; a batch of looks waits at most this often
+
+
+def push(kind, bead, ask_id, text, repeat=False):
+    """The owner's push: ~/.config/task-loop/notify holds one shell command (ntfy, Pushover, a Telegram bot...); it gets
+    TL_ASK_KIND, TL_ASK_BEAD, TL_ASK_ID and TL_ASK_TEXT (and TL_ASK_REPEAT=1 for a second push of the same thing). -> '' when
+    started or when there is no command, else the error."""
+    try:
+        cmd = (config_dir() / "notify").read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+    if not cmd:
+        return ""
+    env = dict(os.environ, TL_ASK_KIND=kind, TL_ASK_BEAD=bead, TL_ASK_ID=ask_id, TL_ASK_TEXT=text[:500])
+    if repeat:
+        env["TL_ASK_REPEAT"] = "1"
+    try:
+        subprocess.Popen(cmd, shell=True, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         start_new_session=(os.name != "nt"))
+    except OSError as e:
+        return str(e)
+    return ""
+
+
+def _ask_head(markdown):
+    lines = [x.strip() for x in str(markdown or "").splitlines() if x.strip()]
+    return lines[0].replace("**", "")[:300] if lines else ""
+
+
+def _stamp(path):
+    """The time a marker file says (it holds the time it was written), 0 when there is none."""
+    try:
+        return float(Path(path).read_text().strip())
+    except (OSError, ValueError):
+        return 0.0
+
+
+def renotify(every=3600, now=None):
+    """tl-bxk.8.26: one push per new ask was all the owner got. An ask still open and unanswered 24 h after its last push is
+    pushed again (once per 24 h until it is answered or parks); once a day, when reviews of how things look wait in the
+    repos, one push says how many. Throttled to once per `every` seconds across all callers. -> [(kind, id)] pushed."""
+    now = now or time.time()
+    marker = config_dir() / "asks" / ".repushed"
+    if now - _stamp(marker) < every:
+        return []
+    sent = []
+    for f in sorted(glob.glob(str(config_dir() / "asks" / "*.json"))):
+        try:
+            a = json.loads(Path(f).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(a, dict) or not a.get("bead") or not a.get("id"):
+            continue
+
+        def due(x):
+            last = float(x.get("pushed_at") or x.get("t") or now)
+            return (x.get("status") == "open" and not x.get("answer") and not x.get("answer_t")
+                    and not (x.get("parks_at") and now >= float(x["parks_at"])) and now - last >= REPUSH)
+        if not due(a):
+            continue
+        try:
+            with os_lock(config_dir() / "locks" / ("repush-%s.lock" % hashlib.sha1(f.encode()).hexdigest()[:12]), "pid %d" % os.getpid(), timeout=0.3):
+                a = json.loads(Path(f).read_text(encoding="utf-8"))  # another loop may have pushed it a moment ago
+                if not due(a):
+                    continue
+                waited = int((now - float(a.get("t") or now)) // 3600)
+                err = push(str(a.get("kind") or "ask"), a["bead"], a["id"], "Still waiting for you (%d h): %s" % (waited, _ask_head(a.get("question"))), True)
+                if err:
+                    sys.stderr.write("tl: notify failed: %s\n" % err)
+                    continue
+                a["pushed_at"], a["pushes"] = now, int(a.get("pushes") or 0) + 1
+                Path(f).write_text(json.dumps(a, indent=1), encoding="utf-8")
+                sent.append((a.get("kind") or "ask", a["id"]))
+        except (TimeoutError, OSError, ValueError):
+            continue
+    sent += _push_looks(now)
+    try:
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(str(now))
+    except OSError:
+        pass
+    return sent
+
+
+def _push_looks(now):
+    """The daily batch: owner-look beads still open across the registered repos."""
+    state = config_dir() / "asks" / ".looks_pushed"
+    if now - _stamp(state) < LOOK_BATCH:
+        return []
+    try:
+        repos = [r for r in json.loads((config_dir() / "repos.json").read_text(encoding="utf-8")) if os.path.isdir(r)]
+    except (OSError, ValueError):
+        return []
+    waiting, first = 0, ""
+    for r in repos:
+        try:
+            out = bd("list", "--label", "owner-look", "--json", "-n", "0", cwd=r)
+            rows = json.loads(out.stdout or "[]") if out.returncode == 0 else []
+        except (SystemExit, ValueError, OSError):
+            continue
+        rows = [x for x in rows if isinstance(x, dict) and x.get("status") != "closed"]
+        waiting += len(rows)
+        first = first or (rows[0].get("id") if rows else "")
+    try:
+        state.parent.mkdir(parents=True, exist_ok=True)
+        state.write_text(str(now))  # checked once a day whatever it found
+    except OSError:
+        return []
+    if not waiting:
+        return []
+    err = push("look", first, "looks-" + time.strftime("%Y%m%d", time.localtime(now)),
+               "%d look review%s wait for you: the dashboard's Looks tab has the pictures" % (waiting, "" if waiting == 1 else "s"))
+    return [] if err else [("look", "looks")]
+
+
 def cmd_ask(a):
     """The inbox from the terminal: the dashboard's own code answers and withdraws, so both say the same things."""
     d = dash_module()
