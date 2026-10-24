@@ -623,6 +623,9 @@ def cmd_slot(a):
             why = ("%s (hold until %s)" % (hold["why"], hold["until"]) if hold else
                    "%s since %s" % (m.get("held_why") or "?", m.get("held_since") or "?") if held else "-")
             print("\t".join([name, b["id"], b.get("status", ""), holder, why, engine_busy(d) or "-", d]))
+        for n, t in enumerate(waiting_line(repo), 1):  # the line, first served first: WAITING N P<priority> WHO WHY SINCE
+            print("\t".join(["WAITING", str(n), "P%s" % ticket_order(t)[0], "pid %s" % t.get("pid"), str(t.get("why") or "-"),
+                             stamp(t["since"]) if t.get("since") else "-"]))
         return 0
     if a.op == "hold":  # a slot for something that is no bead (screenshots, a person): the loop and run-task keep off
         if not a.name or not a.why:
@@ -766,10 +769,10 @@ def slot_lock(repo):
     return os_lock(config_dir() / "locks" / ("slot-take-%s.lock" % repo_key(repo)), "pid %d" % os.getpid())
 
 
-# ---- the slot line: waiters get free slots in arrival order (tl-bxk.11.5) ---------------------------------------------
-# A waiter (a loop, run-task --slot any) takes a ticket, a file <seq>.json {seq, pid, start, why, since} under the
-# repo's slot state; only the first live ticket may take a slot; a ticket whose process is gone (pid and start time) is
-# dropped by whoever reads the line.
+# ---- the slot line: waiters get free slots by bead priority, then arrival order (tl-bxk.11.5, tl-43k) -----------------
+# A waiter (a loop, run-task --slot any) takes a ticket, a file <seq>.json {seq, prio, pid, start, why, since} under the
+# repo's slot state; only the first live ticket may take a slot: the lowest `prio` (P0 first, read when the waiter joins),
+# then the lowest seq; a ticket whose process is gone (pid and start time) is dropped by whoever reads the line.
 
 TICKET_POLL = (1, 5)  # run-task --slot any --wait: seconds between looks, first and at most
 
@@ -784,11 +787,23 @@ def ticket_dir(repo):
     return d
 
 
-def take_ticket(repo, why):
+DEFAULT_PRIO = 2
+
+
+def ticket_order(t):
+    """(priority, arrival) of a ticket: P0 before P2, and among equals the one that joined first."""
+    try:
+        prio = int(t.get("prio"))
+    except (TypeError, ValueError):
+        prio = DEFAULT_PRIO
+    return prio, t.get("seq", 0)
+
+
+def take_ticket(repo, why, prio=DEFAULT_PRIO):
     """This process's place at the end of the line: numbers only grow (a counter file), and a ticket appears whole
     (written aside, then linked in: a link never replaces a file another waiter made)."""
     d = ticket_dir(repo)
-    me = {"pid": os.getpid(), "start": proc_start(os.getpid()), "why": why, "since": now()}
+    me = {"pid": os.getpid(), "start": proc_start(os.getpid()), "why": why, "since": now(), "prio": prio}
     with os_lock(d / "line.lock", "pid %d" % os.getpid()):
         try:
             last = int((d / "seq").read_text().strip() or 0)
@@ -834,18 +849,34 @@ def waiting_line(repo):
                 f.unlink()
             continue
         out.append(t)
-    return sorted(out, key=lambda t: t.get("seq", 0))
+    return sorted(out, key=ticket_order)
 
 
-def wait_slot(repo, cfg, why, bead="", stop=None, sleep=time.sleep, poll=None, on_wait=None):
+def prio_of(bead):
+    """The priority number of a bead dict (0 = P0), DEFAULT_PRIO when it has none or a odd one."""
+    try:
+        return int(bead.get("priority")) if bead and bead.get("priority") is not None else DEFAULT_PRIO
+    except (TypeError, ValueError):
+        return DEFAULT_PRIO
+
+
+def bead_priority(repo, bead_id):
+    """The priority (0 = P0) of a bead, DEFAULT_PRIO when it cannot be read."""
+    try:
+        return prio_of(show(bead_id, cwd=repo))
+    except (SystemExit, IndexError, KeyError, AttributeError):  # no bd, or a bead bd answers `[]` for: it waits as a P2
+        return DEFAULT_PRIO
+
+
+def wait_slot(repo, cfg, why, bead="", stop=None, sleep=time.sleep, poll=None, on_wait=None, prio=DEFAULT_PRIO):
     """(name, dir, slot bead) once this waiter is first in line and a slot is free; None when stop() says so after a
     look (stop=lambda: True: one look, no wait). on_wait(ahead) is called before each sleep. Never takes a slot while a
-    live ticket is ahead of it."""
+    live ticket is ahead of it: a lower `prio` number (read when the waiter joins), or the same and earlier."""
     first, most = poll or TICKET_POLL
-    t, delay = take_ticket(repo, why), first
+    t, delay = take_ticket(repo, why, prio), first
     try:
         while True:
-            ahead = [x for x in waiting_line(repo) if x.get("seq", 0) < t["seq"]]
+            ahead = [x for x in waiting_line(repo) if ticket_order(x) < ticket_order(t)]
             if not ahead:
                 got = take_slot(repo, cfg, why, bead=bead, ticket=t["seq"])
                 if got:

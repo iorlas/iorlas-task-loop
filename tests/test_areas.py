@@ -278,6 +278,40 @@ class Line(Slots):
         for t in (b, c):
             tl.drop_ticket(t)
 
+    def test_a_p0_waiter_is_served_before_a_p2_waiter_that_joined_first(self):
+        """tl-43k: lifesim's P0 hclf.34 sat 10th in line behind P2 beads."""
+        self.beads({}, slots=1)
+        repo = str(self.repo)
+        p2 = tl.take_ticket(repo, "run-task p2-bead", 2)  # joined first, alive (this process)
+        p0 = tl.take_ticket(repo, "run-task p0-bead", 0)
+        self.assertLess(p2["seq"], p0["seq"])
+        self.assertEqual([t["why"] for t in tl.waiting_line(repo)], ["run-task p0-bead", "run-task p2-bead"])
+        tl.drop_ticket(p0)
+        got = tl.wait_slot(repo, self.cfg, "late p0", poll=(0.01, 0.01), stop=lambda: True, prio=0)
+        self.assertEqual(got[0], "s1")  # the P0 newcomer passes the P2 waiter that was there first
+        tl.release_slot(repo, "s1")
+        self.assertIsNone(tl.wait_slot(repo, self.cfg, "late p3", poll=(0.01, 0.01), stop=lambda: True, prio=3))  # the P2 waiter is ahead
+        p0b = tl.take_ticket(repo, "p0 again", 0)
+        self.assertIsNone(tl.wait_slot(repo, self.cfg, "p2 behind p0", poll=(0.01, 0.01), stop=lambda: True, prio=2))  # a P0 is ahead
+        for t in (p2, p0b):
+            tl.drop_ticket(t)
+
+    def test_a_bead_that_cannot_be_read_waits_as_a_p2(self):
+        for boom in (IndexError("[]"), SystemExit("no bd"), KeyError("x")):
+            with mock.patch.object(tl, "show", side_effect=boom):
+                self.assertEqual(tl.bead_priority(str(self.repo), "x-1"), 2)
+        with mock.patch.object(tl, "show", return_value={"priority": 0}):
+            self.assertEqual(tl.bead_priority(str(self.repo), "x-1"), 0)
+
+    def test_equal_priorities_keep_arrival_order_and_an_unreadable_priority_is_p2(self):
+        repo = str(self.repo)
+        ts = [tl.take_ticket(repo, "a", 1), tl.take_ticket(repo, "b", 1), tl.take_ticket(repo, "c")]
+        self.assertEqual([t["why"] for t in tl.waiting_line(repo)], ["a", "b", "c"][:2] + ["c"])
+        self.assertEqual(tl.ticket_order({"seq": 5, "prio": "x"}), (2, 5))
+        self.assertEqual((tl.prio_of({"priority": 0}), tl.prio_of({}), tl.prio_of({"priority": "P1"}), tl.prio_of(None)), (0, 2, 2, 2))
+        for t in ts:
+            tl.drop_ticket(t)
+
     def test_run_task_slot_any_takes_a_free_slot_and_gives_it_back(self):
         bd = self.beads({"x-1": []})
         bd.slots["sl-1"].update(status="in_progress", assignee="tl-other")

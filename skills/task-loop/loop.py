@@ -548,8 +548,8 @@ def end_time(hhmm):
     return (t if t > now else t + datetime.timedelta(days=1)).timestamp()
 
 
-def acquire(repo, cfg, wait_min, until):
-    """(name, dir, slot bead) of a free slot, waiting in the repo's slot line (tl.wait_slot: first come, first served)
+def acquire(repo, cfg, wait_min, until, prio=tl.DEFAULT_PRIO):
+    """(name, dir, slot bead) of a free slot, waiting in the repo's slot line (tl.wait_slot: lowest priority number first, then first come)
     with backoff while none is; None on a stop or the end time."""
     since, told = clock(), [0.0]
 
@@ -560,7 +560,7 @@ def acquire(repo, cfg, wait_min, until):
             told[0] = clock()
     return tl.wait_slot(repo, cfg, "tl loop", stop=lambda: bool(stop_mode(repo) or (until and clock() >= until)),
                         sleep=lambda secs: nap(secs, repo, until), poll=(5, min(30, max(5, wait_min * 60))),
-                        on_wait=waiting)
+                        on_wait=waiting, prio=prio)
 
 
 def reclaim(repo):
@@ -699,7 +699,8 @@ def passes(repo, a, started, st=None):
                 return 0
             nap(DRAINED_POLL, repo, until)
             continue
-        got = acquire(repo, cfg, a.wait_slot_min, until) if slots else (None, wt, None)
+        prio = min(tl.prio_of(b) for b in cands)  # the best bead this loop would run
+        got = acquire(repo, cfg, a.wait_slot_min, until, prio) if slots else (None, wt, None)
         if got is None:
             continue
         name, d, slot_bead = got

@@ -84,6 +84,20 @@ class Slots(LoopBase):
         return rc, json.loads(f.read_text()), out.getvalue()
 
 
+class SlotListShowsTheLine(Slots):
+    def test_slot_list_names_the_waiters_in_the_order_they_are_served(self):
+        """tl-43k: P0 first, then arrival; the list says so."""
+        self.beads({"x-1": []})
+        a, b = tl.take_ticket(str(self.repo), "run-task late-p2", 2), tl.take_ticket(str(self.repo), "run-task hclf.34", 0)
+        try:
+            rc, out = self.cli("slot", "list")
+        finally:
+            tl.drop_ticket(a)
+            tl.drop_ticket(b)
+        rows = [x.split("\t") for x in out.splitlines() if x.startswith("WAITING")]
+        self.assertEqual([(r[1], r[2], r[4]) for r in rows], [("1", "P0", "run-task hclf.34"), ("2", "P2", "run-task late-p2")])
+
+
 class RunTaskTakesItsSlot(Slots):
     def test_a_hand_run_holds_the_slot_bead_while_it_runs_and_the_loop_takes_another(self):
         bd = self.beads({"x-1": [], "x-2": [rec("landed")]})
