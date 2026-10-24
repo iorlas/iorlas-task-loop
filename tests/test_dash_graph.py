@@ -59,6 +59,14 @@ class States(unittest.TestCase):
         self.assertEqual((n["held"]["state"], n["ghost"]["state"]), ("running", "stuck"))
         self.assertEqual((g["summary"]["running"], g["summary"]["stuck"]), (1, 2))
 
+    def test_slot_records_are_locks_not_stuck_work(self):
+        beads = [bead("lifesim-4om1", status="in_progress", labels=("slot",), kind="chore"), bead("ghost", status="in_progress"),
+                 bead("w", blocks=["lifesim-4om1"])]
+        n, g = states(beads)
+        self.assertNotIn("lifesim-4om1", n)
+        self.assertEqual(g["summary"]["stuck"], 1)
+        self.assertIn("w", n)  # a hand-made edge to a slot record must not crash
+
     def test_closed_blocker_does_not_block(self):
         n, _ = states([bead("a", status="closed", closed_at=ts(60)), bead("b", blocks=["a"])], queued={"b"})
         self.assertEqual(n["b"]["state"], "queued")

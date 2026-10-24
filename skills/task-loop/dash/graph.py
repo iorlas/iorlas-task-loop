@@ -52,6 +52,7 @@ def unblock_counts(edges, skip):
 def build(beads, cfg, queued, running=(), asks=(), now=None, repo=""):
     now = now or time.time()
     running, asks, queued = set(running), set(asks), set(queued)
+    beads = [b for b in beads if "slot" not in (b.get("labels") or [])]  # a slot record is a lock, never work: it is in_progress for as long as it exists
     by_id = {b["id"]: b for b in beads}
     pick = cfg.get("pick_label")
     recent = {b["id"] for b in beads if b.get("status") == "closed" and now - parse(b.get("closed_at")) < DAY}
