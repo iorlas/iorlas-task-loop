@@ -1234,6 +1234,75 @@ class StaleTree(StagesTest):
 
 
 
+class SlotHygiene(StagesTest):
+    """tl-g6a: base-ignored files do not make a slot dirty; a parked bead leaves the slot at the base."""
+
+    def put_ignore_on_main(self, text, name=".gitignore", sub=""):
+        base = Path(self.tmp.name, "base-ignore")
+        if not base.exists():
+            te.sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(base), cwd=self.tmp.name)
+        te.sh("git", "pull", "-q", "origin", "main", cwd=base)
+        d = base / sub
+        d.mkdir(parents=True, exist_ok=True)
+        (d / name).write_text(text)
+        te.sh("git", "add", "-A", cwd=base)
+        te.sh("git", "commit", "-qm", "gitignore", cwd=base)
+        te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
+        te.sh("git", "fetch", "-q", "origin", cwd=self.wt)
+
+    def test_files_the_base_ignores_do_not_count_as_dirty_work(self):
+        self.put_ignore_on_main("client/log.txt\n")
+        self.put_ignore_on_main("*.log\n!keep.log\n", sub="client")
+        (self.wt / "client").mkdir()
+        for f in ("client/log.txt", "client/Logs.log", "client/deep/x.log"):
+            Path(self.wt, f).parent.mkdir(parents=True, exist_ok=True)
+            Path(self.wt, f).write_text("noise\n")
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        self.assertEqual(e.dirty_status(), "")
+        self.assertIn("?? client/", e.git("status", "--porcelain"))  # git alone calls it dirty: the old tree has no such rule
+        Path(self.wt, "client/keep.log").write_text("real\n")  # negated by the base: real work
+        Path(self.wt, "client/src.cs").write_text("real\n")
+        self.assertEqual(sorted(l[3:] for l in e.dirty_status().splitlines()), ["client/keep.log", "client/src.cs"])
+
+    def test_a_slot_left_on_an_old_branch_with_only_ignored_files_is_not_another_branchs_work(self):
+        te.sh("git", "checkout", "-qb", "task/old-bead", cwd=self.wt)
+        self.put_ignore_on_main("client/log.txt\nclient/log-previous.txt\n")
+        (self.wt / "client").mkdir()
+        (self.wt / "client" / "log.txt").write_text("unity\n")
+        (self.wt / "client" / "log-previous.txt").write_text("unity\n")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertNotIn("another branch", self.eng.why)
+
+    def test_real_work_of_another_branch_still_stops_the_run(self):
+        te.sh("git", "checkout", "-qb", "task/old-bead", cwd=self.wt)
+        (self.wt / "keep.py").write_text("work\n")
+        rc, s = self.run_engine({"plan": [PLAN]})
+        self.assertNotEqual(rc, 0)
+        self.assertIn("uncommitted work of another branch", self.eng.why)
+
+    def test_a_parked_bead_leaves_the_slot_at_the_detached_base(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which format?")]})
+        self.assertEqual(rc, 2)
+        head = engine.subprocess.run(["git", "symbolic-ref", "-q", "HEAD"], cwd=self.wt, capture_output=True, text=True)
+        self.assertNotEqual(head.returncode, 0)  # detached
+        self.assertEqual(self.eng.git("rev-parse", "HEAD"), self.eng.git("rev-parse", "origin/main"))
+        self.assertTrue(self.eng.git("rev-parse", "--verify", "-q", "refs/heads/task/t-1"))  # the branch keeps the bead's work
+
+    def test_a_parked_bead_with_work_commits_it_to_its_branch_first(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which format?")]})
+        self.assertEqual(rc, 2)
+        log = self.eng.git("log", "--format=%s", "task/t-1")
+        self.assertIn("wip (t-1)", log)  # f.txt was written by the writer: kept on the bead's branch
+        self.assertEqual(Path(self.wt, "f.txt").exists(), False)  # and gone from the slot
+
+    def test_a_landed_bead_leaves_the_slot_alone(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0)
+        self.assertTrue(self.eng.git("symbolic-ref", "--short", "-q", "HEAD"))
+
+
+
 class Contracts(StagesTest):
     """tl-bxk.13.16: infrastructure is retried with a rest, never asked; the version is recorded."""
 

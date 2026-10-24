@@ -35,6 +35,10 @@ PAUSE_WAIT_MAX = 3600  # a lane back within this long is waited for; later, the 
 HELP_WAIT = 20         # a newer install must answer `tl.py --help` within this long to be moved to
 PAUSE_RETRY = 900      # a pause with no time the lane frees (login, network), or a bead another session holds:
                        # try that bead again after this
+SLOT_FAILS_TO_SET_ASIDE = 2  # instant failures in a row on one slot that set the slot aside (tl-g6a); not the loop's stop count
+QUICK_FAIL_MIN = 1.5           # a failed run shorter than this, in minutes, is an instant failure
+SLOT_FAILURE = re.compile(r"worktree|uncommitted work|\bslot\b|git checkout|index\.lock|not a git", re.I)  # ... when it names the slot or its git state
+SLOT_ASIDE_MIN = 720           # minutes a slot set aside stays held
 FAILS_TO_STOP = 2      # failures in a row that stop the loop; parks and pauses never count, a landing ends the run
 PAUSES_TO_REST = 3     # a bead paused this often in one loop run rests for REST while the loop takes others
 REST = 3600
@@ -632,6 +636,7 @@ def passes(repo, a, started, st=None):
             wt = tl.start_worktree(repo, worktree_name(repo))
             write_state(repo, pid=os.getpid(), started=started, worktree=wt)
     area_wait = [0.0, 0.0]  # when every ready bead began waiting for an area, and when that was last said
+    slot_quick = {}  # slot -> the beads that failed in an instant there, in a row
     fails, ran, later, pauses = [], 0, {}, {}  # later: a paused or taken bead -> when to try it again
     fails, ran = list(st.get("fails") or []), int(st.get("ran") or 0)  # kept across a move to a newer install
     later, pauses = dict(st.get("later") or {}), dict(st.get("pauses") or {})
@@ -743,6 +748,23 @@ def passes(repo, a, started, st=None):
             write_state(repo, pid=os.getpid(), started=started, worktree=wt)
         if r is None:  # every candidate is held by another session: the next pass sleeps until one is due
             continue
+        if slots and name and r is not None:
+            out0 = r.get("outcome")
+            quick = (out0 == "failed" and r.get("minutes") is not None and float(r["minutes"]) < QUICK_FAIL_MIN
+                     and SLOT_FAILURE.search(r.get("why") or "") is not None)  # failures that name the slot or its git state
+            slot_quick[name] = (slot_quick.get(name, []) + [bid]) if quick else []
+            if len(slot_quick[name]) >= SLOT_FAILS_TO_SET_ASIDE:
+                # tl-g6a: a broken slot must not eat the queue (7 beads failed in under a minute each on s4): it is held, the
+                # failures are the slot's, not the beads' or the loop's, and the dashboard and the loop log say so
+                why = "%d runs failed within %g min each (%s): last: %s" % (
+                    len(slot_quick[name]), QUICK_FAIL_MIN, ", ".join(slot_quick[name]), (r.get("why") or "")[:160])
+                held = tl.cmd_slot(engine.Args(op="hold", name=name, why="set aside by tl loop: " + why, for_min=SLOT_ASIDE_MIN,
+                                               n=None, bead=None, force=False))
+                say("SLOT %s SET ASIDE for %d h: %s" % (name, SLOT_ASIDE_MIN // 60, why))
+                tl.event("slot-aside", bid, slot=name, why=why, held=(held == 0), repo=repo)
+                fails = [f for f in fails if f not in slot_quick[name]]
+                slot_quick[name] = []
+                continue
         if r.get("pre_engine"):  # the engine never started: no verdict on the run, so no failure toward the stop
             rest_bead(repo, bid, clock() + REST)
             later[bid] = clock() + REST

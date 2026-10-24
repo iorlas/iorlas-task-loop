@@ -2051,7 +2051,7 @@ class Engine:
                 f.write("\n.task/\n")
         exists = bool(self.git("rev-parse", "--verify", "-q", "refs/heads/" + branch))
         self.left_dirty = False
-        if self.git("status", "--porcelain"):
+        if self.dirty_status():
             if self.git("symbolic-ref", "--short", "-q", "HEAD") != branch:
                 raise Blocked("failed: worktree %s has uncommitted work of another branch" % self.wt)
             self.wip("left from an earlier run")
@@ -2067,6 +2067,42 @@ class Engine:
         self.export_brief()
         self.branch = branch
         return branch
+
+    def dirty_status(self):
+        """`git status --porcelain` of the slot, leaving out what the BASE's .gitignore files ignore (tl-g6a): Unity's client/log.txt
+        is untracked on an old branch and ignored on main, and made a slot 'dirty with another branch's work' for 7 beads."""
+        out = self.git("status", "--porcelain", "--untracked-files=all")
+        if not out:
+            return ""
+        rules = []
+        base = self.cfg["base"]
+        for path in (self.git("ls-tree", "-r", "--name-only", base) or "").splitlines():
+            if path.split("/")[-1] != ".gitignore":
+                continue
+            d = path[:-len(".gitignore")].rstrip("/")
+            for ln in (self.git("show", "%s:%s" % (base, path)) or "").splitlines():
+                ln = ln.rstrip()
+                if not ln or ln.startswith("#"):
+                    continue
+                neg, pat = ("!", ln[1:]) if ln.startswith("!") else ("", ln)
+                if not d:
+                    rules.append(ln)
+                elif pat.startswith("/"):
+                    rules.append(neg + "/" + d + pat)
+                elif "/" in pat.rstrip("/"):
+                    rules.append(neg + "/" + d + "/" + pat)
+                else:
+                    rules.append(neg + "/" + d + "/**/" + pat)
+        if not rules:
+            return out
+        with tempfile.NamedTemporaryFile("w", suffix=".ignore", delete=False, encoding="utf-8") as f:
+            f.write("\n".join(rules) + "\n")
+            ex = f.name
+        try:
+            return self.git("-c", "core.excludesFile=" + ex, "status", "--porcelain", "--untracked-files=all")
+        finally:
+            with contextlib.suppress(OSError):
+                os.unlink(ex)
 
     def free_branch(self, branch):
         """A paused bead resumes in any free slot: the slot that last held its branch lets go of it (detached there),
@@ -4801,11 +4837,26 @@ class Engine:
         old = None
         if hasattr(signal, "SIGTERM") and threading.current_thread() is threading.main_thread():
             old = signal.signal(signal.SIGTERM, signal.SIG_IGN)  # a second stop must not break the close-out
+        branch = self.git("symbolic-ref", "--short", "-q", "HEAD")
         try:
             self._close(outcome, why, sha, question)
+            if not self.dry:
+                with contextlib.suppress(Exception):  # last: the trace and the comments above read the branch
+                    self.leave_slot(outcome, branch)
         finally:  # what the process starts after this (a notify command, the next test) must stay stoppable
             if old is not None:
                 signal.signal(signal.SIGTERM, old)
+
+    def leave_slot(self, outcome, branch):
+        """tl-g6a: a bead that parked leaves its work on its own branch (wip committed above) and the slot at the detached base,
+        not on an old branch whose untracked files made the next runs fail as 'uncommitted work of another branch'."""
+        if outcome in ("landed", "done") or not branch or branch != getattr(self, "branch", None):
+            return
+        if self.git("status", "--porcelain", "--untracked-files=no") or self.git("symbolic-ref", "--short", "-q", "HEAD") != branch:
+            return  # work that could not be committed stays where it is
+        rc, tail = self.sh(["git", "checkout", "-q", "--detach", self.cfg["base"]], pin=True)
+        if rc:
+            self.warn("the slot could not be left at the base: %s" % tail.strip()[-160:])
 
     def _close(self, outcome, why, sha, question):
         why = why or ("stopped before a reason was recorded" if outcome == "failed" else "")
