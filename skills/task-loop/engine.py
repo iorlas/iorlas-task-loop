@@ -866,6 +866,8 @@ TRANSIENT_PUSH = re.compile(r"curl \d+|Broken pipe|Connection (?:reset|timed out
                             r"Temporary failure in name resolution|error: 5\d\d|HTTP/\d(?:\.\d)? 5\d\d", re.I)
 PUSH_RESTS = (30, 120, 300)  # seconds before the 2nd, 3rd and 4th try
 CRASH_RESTS = (30, 120)      # a delegate that crashed (lifesim-rl4s: UnicodeDecodeError): two more tries, with these rests
+# tl-fsj: a configured check that fails because the tree lacks what the base's config names is the engine's, never a writer's amend
+STALE_TREE = re.compile(r"does not contain recipe|This checkout has no |no recipe (?:named|called)|Justfile does not contain", re.I)
 STOP_GRACE = 10  # seconds route.py gets to stop its worker after a SIGTERM, before everything is SIGKILLed
 PROOF_TERM, PROOF_KILL = 5, 10  # seconds a worker that outlived the stop gets after a SIGTERM, then after a SIGKILL
 
@@ -2049,7 +2051,7 @@ class Engine:
                 f.write("\n.task/\n")
         exists = bool(self.git("rev-parse", "--verify", "-q", "refs/heads/" + branch))
         self.left_dirty = False
-        if self.git("status", "--porcelain"):
+        if self.dirty_status():
             if self.git("symbolic-ref", "--short", "-q", "HEAD") != branch:
                 raise Blocked("failed: worktree %s has uncommitted work of another branch" % self.wt)
             self.wip("left from an earlier run")
@@ -2065,6 +2067,42 @@ class Engine:
         self.export_brief()
         self.branch = branch
         return branch
+
+    def dirty_status(self):
+        """`git status --porcelain` of the slot, leaving out what the BASE's .gitignore files ignore (tl-g6a): Unity's client/log.txt
+        is untracked on an old branch and ignored on main, and made a slot 'dirty with another branch's work' for 7 beads."""
+        out = self.git("status", "--porcelain", "--untracked-files=all")
+        if not out:
+            return ""
+        rules = []
+        base = self.cfg["base"]
+        for path in (self.git("ls-tree", "-r", "--name-only", base) or "").splitlines():
+            if path.split("/")[-1] != ".gitignore":
+                continue
+            d = path[:-len(".gitignore")].rstrip("/")
+            for ln in (self.git("show", "%s:%s" % (base, path)) or "").splitlines():
+                ln = ln.rstrip()
+                if not ln or ln.startswith("#"):
+                    continue
+                neg, pat = ("!", ln[1:]) if ln.startswith("!") else ("", ln)
+                if not d:
+                    rules.append(ln)
+                elif pat.startswith("/"):
+                    rules.append(neg + "/" + d + pat)
+                elif "/" in pat.rstrip("/"):
+                    rules.append(neg + "/" + d + "/" + pat)
+                else:
+                    rules.append(neg + "/" + d + "/**/" + pat)
+        if not rules:
+            return out
+        with tempfile.NamedTemporaryFile("w", suffix=".ignore", delete=False, encoding="utf-8") as f:
+            f.write("\n".join(rules) + "\n")
+            ex = f.name
+        try:
+            return self.git("-c", "core.excludesFile=" + ex, "status", "--porcelain", "--untracked-files=all")
+        finally:
+            with contextlib.suppress(OSError):
+                os.unlink(ex)
 
     def free_branch(self, branch):
         """A paused bead resumes in any free slot: the slot that last held its branch lets go of it (detached there),
@@ -2365,12 +2403,16 @@ class Engine:
         if behind in ("", "0"):
             return ""
         old = self.git("rev-parse", "HEAD")
+        old_parent = self.git("rev-parse", "-q", "--verify", "HEAD~1") if self.left_dirty else ""
         rc, tail = self.sh(["git", "rebase", "-q", self.cfg["base"]], pin=True)
         if not rc:  # the checkpoint's head follows, or the next resume reads this as an edit from outside
             try:
                 ck = json.loads(self.checkpoint_path().read_text())
                 if isinstance(ck, dict) and ck.get("head") == old:
                     ck["head"] = self.git("rev-parse", "HEAD")
+                    self.checkpoint_path().write_text(json.dumps(ck, indent=1))
+                elif isinstance(ck, dict) and old_parent and ck.get("head") == old_parent:  # the wip commit reset() made on top of it
+                    ck["head"] = self.git("rev-parse", "HEAD~1")
                     self.checkpoint_path().write_text(json.dumps(ck, indent=1))
             except (OSError, ValueError):
                 pass
@@ -2574,9 +2616,14 @@ class Engine:
             self.scope = acceptance_text(bead)
             plan, i, state = self.resume_point()
             self.log_run()
+            # tl-fsj: the configured checks come from the base's config, so the tree they run on must have what the base has; every
+            # resume rebases first, a plan to make or a stage to go on with (lifesim: 8 beads parked on 'just fmt-check-changed')
+            moved = self.rebase_onto_base()
+            if moved == "conflict" and self.start_again_on_base("Its work: %s" % (self.git("log", "--oneline", "-n", "3", "%s..HEAD" % self.cfg["base"]) or "").replace("\n", "; ")):
+                plan, i, state = None, 0, None
+            elif moved == "rebased" and plan is not None:
+                self.stage_tree = ""  # the stage's diff starts at the base now: the rebase moved what it was measured from
             if plan is None:
-                if self.rebase_onto_base() == "conflict":
-                    self.start_again_on_base("Its work: %s" % (self.git("log", "--oneline", "-n", "3", "%s..HEAD" % self.cfg["base"]) or "").replace("\n", "; "))
                 plan, i, state = self.plan(again=self.replan_first), 0, None
             while i < len(plan["stages"]):
                 d = self.stage(plan, i, state)
@@ -3910,7 +3957,8 @@ class Engine:
                   "cache": c.get("cache", True) is not False,
                   "idle": float(c.get("idle_min", self.cfg["check_idle_min"]) or 0) * 60,
                   "inputs": [c["inputs"]] if isinstance(c.get("inputs"), str) else list(c.get("inputs") or []),
-                  "inputs_only": bool(c.get("inputs_only")), "exclude": list(c.get("exclude") or []), "env": c.get("env") or {}} for c in self.cfg["checks"]]
+                  "inputs_only": bool(c.get("inputs_only")), "exclude": list(c.get("exclude") or []), "env": c.get("env") or {},
+                  "repo": True} for c in self.cfg["checks"]]
         items += [{"id": c, "cmd": c, "group": "acceptance", "when": [], "retry": 0,
                    "timeout": float(self.cfg["check_timeout_min"]), "cache": False, "inputs": [], "inputs_only": False, "env": {},
                    "idle": float(self.cfg["check_idle_min"] or 0) * 60} for c in st["checks"]]
@@ -3999,7 +4047,7 @@ class Engine:
                     res["cached_note"] = "inputs unchanged since round %s" % (hit.get("round") or "?")
                     self.log("note", "cached: %s, %s" % (c["id"], res["cached_note"]))
             else:
-                t, tries = time.time(), 0
+                t, tries, seen = time.time(), 0, ""
                 xcmd, reads = cmd, needs.get(id(c), [])
                 if reads and all(check_env_name(r["id"]) in env_logs and env_logs.get(check_env_name(r["id"]).replace("_LOG_", "_RC_")) == "0"
                                  for r in reads):
@@ -4049,6 +4097,11 @@ class Engine:
                     if tries > (max(c["retry"], 1) if kind == "import" else c["retry"]):
                         break
                     self.warn("`%s` failed (exit %d), retrying: it is marked flaky" % (c["id"], rc))
+                if rc and c.get("repo"):
+                    stale = STALE_TREE.search((seen or tail)[-500:])  # its last lines: a test that talks about recipes is no stale tree
+                    if stale:  # tl-fsj: not a writer's amend; the engine's tree is older than the config it runs
+                        raise Blocked("failed: infrastructure: the configured check `%s` needs something this tree lacks (\"%s\"): the "
+                                      "tree is older than the base's .task-loop.json, which no writer can fix" % (c["id"], stale.group(0)))
                 res = dict(base, exit=rc, status="ran" if rc == 0 else "failed", tries=tries, tail=tail[-1500:],
                            secs=round(time.time() - t), log="checks/" + log_name, log_abs=str(logs / log_name), hung=bool(hung))
                 if hung:
@@ -4784,11 +4837,26 @@ class Engine:
         old = None
         if hasattr(signal, "SIGTERM") and threading.current_thread() is threading.main_thread():
             old = signal.signal(signal.SIGTERM, signal.SIG_IGN)  # a second stop must not break the close-out
+        branch = self.git("symbolic-ref", "--short", "-q", "HEAD")
         try:
             self._close(outcome, why, sha, question)
+            if not self.dry:
+                with contextlib.suppress(Exception):  # last: the trace and the comments above read the branch
+                    self.leave_slot(outcome, branch)
         finally:  # what the process starts after this (a notify command, the next test) must stay stoppable
             if old is not None:
                 signal.signal(signal.SIGTERM, old)
+
+    def leave_slot(self, outcome, branch):
+        """tl-g6a: a bead that parked leaves its work on its own branch (wip committed above) and the slot at the detached base,
+        not on an old branch whose untracked files made the next runs fail as 'uncommitted work of another branch'."""
+        if outcome in ("landed", "done") or not branch or branch != getattr(self, "branch", None):
+            return
+        if self.git("status", "--porcelain", "--untracked-files=no") or self.git("symbolic-ref", "--short", "-q", "HEAD") != branch:
+            return  # work that could not be committed stays where it is
+        rc, tail = self.sh(["git", "checkout", "-q", "--detach", self.cfg["base"]], pin=True)
+        if rc:
+            self.warn("the slot could not be left at the base: %s" % tail.strip()[-160:])
 
     def _close(self, outcome, why, sha, question):
         why = why or ("stopped before a reason was recorded" if outcome == "failed" else "")

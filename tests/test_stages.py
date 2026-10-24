@@ -1153,6 +1153,156 @@ class Claims(StagesTest):
 
 
 
+class StaleTree(StagesTest):
+    """tl-fsj: the tree a check runs on must have what the base's config names."""
+
+    stop_at = te.EngineTest.stop_at
+    stopped_run = te.EngineTest.stopped_run
+
+    def main_moves(self, name="moved.txt"):
+        base = Path(self.tmp.name, "base-moves")
+        if not base.exists():
+            te.sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(base), cwd=self.tmp.name)
+        te.sh("git", "pull", "-q", "origin", "main", cwd=base)
+        (base / name).write_text("main moved on\n")
+        te.sh("git", "add", "-A", cwd=base)
+        te.sh("git", "commit", "-qm", "main moves", cwd=base)
+        te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
+
+    def test_a_resume_mid_stage_rebases_first_and_goes_on(self):
+        self.stopped_run()
+        self.main_moves()
+        rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        text = self.eng.log_path.read_text()
+        self.assertIn("rebased the task branch onto the latest origin/main", text)
+        self.assertNotIn("planner", [c[0] for c in s.calls])  # the plan was kept
+        self.assertEqual(self.eng.stage_tree, "")
+
+    def test_a_resume_that_conflicts_with_main_starts_again(self):
+        te.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
+        (self.wt / "a.txt").write_text("my work\n")
+        te.sh("git", "add", "-A", cwd=self.wt)
+        te.sh("git", "commit", "-qm", "wip", cwd=self.wt)
+        te.sh("git", "checkout", "-q", "-", cwd=self.wt)
+        self.main_moves("a.txt")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertIn("resume_conflict", self.eng.log_path.read_text())
+
+    def test_a_configured_check_the_tree_lacks_is_the_engines_error_not_a_writers_amend(self):
+        miss = [{"id": "fmt", "cmd": te.PY + " -c \"import sys; sys.stderr.write('error: Justfile does not contain recipe `fmt-check-changed`.'); sys.exit(1)\"",
+                 "group": "static"}]
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE]}, checks=miss)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker"])  # no second write: nothing was sent back to the writer
+        self.assertTrue(self.eng.why.startswith("failed: infrastructure: the configured check `fmt` needs something this tree lacks"), self.eng.why)
+
+    def test_words_in_the_middle_of_a_long_output_are_not_a_stale_tree(self):
+        noisy = "a test about justfile prints: This checkout has no recipe x\n" + "ok\n" * 300 + "2 failed: Foo"
+        self.assertTrue(engine.STALE_TREE.search(noisy))  # the whole log matches...
+        self.assertFalse(engine.STALE_TREE.search(noisy[-500:]))  # ...its last lines, which the engine reads, do not
+
+    def test_the_checkpoint_head_follows_a_rebase_over_the_wip_commit(self):
+        te.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
+        (self.wt / "g.txt").write_text("work\n")
+        te.sh("git", "add", "-A", cwd=self.wt)
+        te.sh("git", "commit", "-qm", "work", cwd=self.wt)
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        before = e.git("rev-parse", "HEAD")
+        (self.wt / "g.txt").write_text("more work\n")
+        te.sh("git", "commit", "-qam", "wip (t-1): blocked", cwd=self.wt)  # what reset() does with a dirty tree
+        e.left_dirty = True
+        e.checkpoint_path().parent.mkdir(exist_ok=True)
+        e.checkpoint_path().write_text(json.dumps({"v": 1, "head": before}))
+        self.main_moves()
+        te.sh("git", "fetch", "-q", "origin", cwd=self.wt)
+        self.assertEqual(e.rebase_onto_base(), "rebased")
+        self.assertEqual(json.loads(e.checkpoint_path().read_text())["head"], e.git("rev-parse", "HEAD~1"))
+
+    def test_the_lifesim_wording_is_found_too_and_a_plain_red_check_is_not(self):
+        self.assertTrue(engine.STALE_TREE.search("This checkout has no fmt-check-changed; rebase onto main"))
+        self.assertFalse(engine.STALE_TREE.search("2 tests failed: FooTests.Bar"))
+        plain = [{"id": "unit", "cmd": FALSE, "group": "tests"}]
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE, WRITE]}, checks=plain, max_check_tries=2)
+        self.assertNotIn("infrastructure", self.eng.why)
+
+    def test_a_plan_check_that_prints_the_same_words_is_the_writers_not_the_engines(self):
+        words = te.PY + " -c \"import sys; sys.stderr.write('Justfile does not contain recipe x'); sys.exit(1)\""
+        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[words])])
+        rc, s = self.run_engine({"plan": [plan], "write": [WRITE, WRITE, WRITE]}, max_check_tries=2)
+        self.assertNotIn("infrastructure", self.eng.why)
+
+
+
+class SlotHygiene(StagesTest):
+    """tl-g6a: base-ignored files do not make a slot dirty; a parked bead leaves the slot at the base."""
+
+    def put_ignore_on_main(self, text, name=".gitignore", sub=""):
+        base = Path(self.tmp.name, "base-ignore")
+        if not base.exists():
+            te.sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(base), cwd=self.tmp.name)
+        te.sh("git", "pull", "-q", "origin", "main", cwd=base)
+        d = base / sub
+        d.mkdir(parents=True, exist_ok=True)
+        (d / name).write_text(text)
+        te.sh("git", "add", "-A", cwd=base)
+        te.sh("git", "commit", "-qm", "gitignore", cwd=base)
+        te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
+        te.sh("git", "fetch", "-q", "origin", cwd=self.wt)
+
+    def test_files_the_base_ignores_do_not_count_as_dirty_work(self):
+        self.put_ignore_on_main("client/log.txt\n")
+        self.put_ignore_on_main("*.log\n!keep.log\n", sub="client")
+        (self.wt / "client").mkdir()
+        for f in ("client/log.txt", "client/Logs.log", "client/deep/x.log"):
+            Path(self.wt, f).parent.mkdir(parents=True, exist_ok=True)
+            Path(self.wt, f).write_text("noise\n")
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        self.assertEqual(e.dirty_status(), "")
+        self.assertIn("?? client/", e.git("status", "--porcelain"))  # git alone calls it dirty: the old tree has no such rule
+        Path(self.wt, "client/keep.log").write_text("real\n")  # negated by the base: real work
+        Path(self.wt, "client/src.cs").write_text("real\n")
+        self.assertEqual(sorted(l[3:] for l in e.dirty_status().splitlines()), ["client/keep.log", "client/src.cs"])
+
+    def test_a_slot_left_on_an_old_branch_with_only_ignored_files_is_not_another_branchs_work(self):
+        te.sh("git", "checkout", "-qb", "task/old-bead", cwd=self.wt)
+        self.put_ignore_on_main("client/log.txt\nclient/log-previous.txt\n")
+        (self.wt / "client").mkdir()
+        (self.wt / "client" / "log.txt").write_text("unity\n")
+        (self.wt / "client" / "log-previous.txt").write_text("unity\n")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertNotIn("another branch", self.eng.why)
+
+    def test_real_work_of_another_branch_still_stops_the_run(self):
+        te.sh("git", "checkout", "-qb", "task/old-bead", cwd=self.wt)
+        (self.wt / "keep.py").write_text("work\n")
+        rc, s = self.run_engine({"plan": [PLAN]})
+        self.assertNotEqual(rc, 0)
+        self.assertIn("uncommitted work of another branch", self.eng.why)
+
+    def test_a_parked_bead_leaves_the_slot_at_the_detached_base(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which format?")]})
+        self.assertEqual(rc, 2)
+        head = engine.subprocess.run(["git", "symbolic-ref", "-q", "HEAD"], cwd=self.wt, capture_output=True, text=True)
+        self.assertNotEqual(head.returncode, 0)  # detached
+        self.assertEqual(self.eng.git("rev-parse", "HEAD"), self.eng.git("rev-parse", "origin/main"))
+        self.assertTrue(self.eng.git("rev-parse", "--verify", "-q", "refs/heads/task/t-1"))  # the branch keeps the bead's work
+
+    def test_a_parked_bead_with_work_commits_it_to_its_branch_first(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which format?")]})
+        self.assertEqual(rc, 2)
+        log = self.eng.git("log", "--format=%s", "task/t-1")
+        self.assertIn("wip (t-1)", log)  # f.txt was written by the writer: kept on the bead's branch
+        self.assertEqual(Path(self.wt, "f.txt").exists(), False)  # and gone from the slot
+
+    def test_a_landed_bead_leaves_the_slot_alone(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0)
+        self.assertTrue(self.eng.git("symbolic-ref", "--short", "-q", "HEAD"))
+
+
+
 class Contracts(StagesTest):
     """tl-bxk.13.16: infrastructure is retried with a rest, never asked; the version is recorded."""
 
