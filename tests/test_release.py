@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import time
 import unittest
 from pathlib import Path
 
@@ -159,18 +160,220 @@ class Release(unittest.TestCase):
         self.assertEqual(self.market_versions()["iorlas-task-loop"], "0.1.6")
         self.assertEqual(json.loads((self.repo / PLUGIN).read_text())["author"], {"name": "t"})  # the rest kept
 
-    def test_a_branch_that_is_not_a_fast_forward_is_refused(self):
-        self.git("checkout", "-q", "-b", "task/z", cwd=self.repo)
-        (self.repo / "z.txt").write_text("z\n")
+    def test_a_stale_branch_is_rebased_before_the_suite(self):
+        for remote_only in (False, True):
+            with self.subTest(remote_only=remote_only):
+                name = "task/remote" if remote_only else "task/local"
+                self.git("checkout", "-q", "-b", name, cwd=self.repo)
+                self.write(self.repo / "z.txt", name + "\n")
+                self.git("add", "-A", cwd=self.repo)
+                self.git("commit", "-qm", name, cwd=self.repo)
+                source = self.git("rev-parse", "HEAD", cwd=self.repo)
+                self.git("checkout", "-q", "main", cwd=self.repo)
+                if remote_only:
+                    self.git("push", "-q", "origin", name, cwd=self.repo)
+                    self.git("branch", "-D", name, cwd=self.repo)
+                else:
+                    worktree = self.home / "source-worktree"
+                    self.git("worktree", "add", "-q", str(worktree), name, cwd=self.repo)
+                self.git("pull", "-q", "--ff-only", "origin", "main", cwd=self.seed)
+                self.write(self.seed / "other.txt", name + "\n")
+                self.write(self.seed / "tests" / "test_rebased.py", textwrap.dedent('''
+                    import unittest
+                    from pathlib import Path
+                    class Rebased(unittest.TestCase):
+                        def test_both_changes_are_present(self):
+                            self.assertEqual(Path("z.txt").read_text(), %r)
+                            self.assertEqual(Path("other.txt").read_text(), %r)
+                ''' % (name + "\n", name + "\n")))
+                self.commit(self.seed, "moved on")
+                r = self.release("z", "--from-branch", name)
+                self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+                self.assertEqual(r.stdout.count("running the full suite"), 1)
+                ref = "origin/" + name if remote_only else name
+                self.assertEqual(self.git("rev-parse", ref, cwd=self.repo), source)
+                if not remote_only:
+                    self.assertEqual(self.git("rev-parse", "HEAD", cwd=worktree), source)
+                    self.assertEqual(self.git("status", "--porcelain", cwd=worktree), "")
+                self.assertEqual(self.git("show", "main:z.txt", cwd=self.origin), name)
+                self.assertEqual(self.git("show", "main:other.txt", cwd=self.origin), name)
+                self.assertEqual(self.git("rev-list", "--merges", "main", cwd=self.origin), "")
+
+    def test_source_refs_survive_rebase_with_update_refs_enabled(self):
+        self.git("config", "rebase.updateRefs", "true", cwd=self.repo)
+        for suite_fails in (False, True):
+            with self.subTest(suite_fails=suite_fails):
+                name = "task/red" if suite_fails else "task/green"
+                self.git("checkout", "-q", "-b", name, cwd=self.repo)
+                self.write(self.repo / "feature.txt", name + "\n")
+                if suite_fails:
+                    self.write(self.repo / "tests" / "test_red.py", textwrap.dedent('''
+                        import unittest
+                        class Red(unittest.TestCase):
+                            def test_red(self):
+                                self.fail("red after rebase")
+                    '''))
+                self.git("add", "-A", cwd=self.repo)
+                self.git("commit", "-qm", name, cwd=self.repo)
+                source = self.git("rev-parse", "HEAD", cwd=self.repo)
+                self.git("checkout", "-q", "main", cwd=self.repo)
+                start = self.git("rev-parse", "HEAD", cwd=self.repo)
+                self.git("pull", "-q", "--ff-only", "origin", "main", cwd=self.seed)
+                self.write(self.seed / "other.txt", name + "\n")
+                self.commit(self.seed, "advance main before " + name)
+                origin = self.git("rev-parse", "main", cwd=self.origin)
+
+                r = self.release(name, "--from-branch", name)
+
+                self.assertEqual(self.git("rev-parse", name, cwd=self.repo), source, r.stdout + r.stderr)
+                self.assertEqual(self.git("config", "--get", "rebase.updateRefs", cwd=self.repo), "true")
+                self.assertEqual(self.git("branch", "--show-current", cwd=self.repo), "main")
+                self.assertEqual(self.git("status", "--porcelain", cwd=self.repo), "")
+                if suite_fails:
+                    self.assertNotEqual(r.returncode, 0)
+                    self.assertIn("red after rebase", r.stderr)
+                    self.assertEqual(self.git("rev-parse", "HEAD", cwd=self.repo), start)
+                    self.assertEqual(self.git("rev-parse", "main", cwd=self.origin), origin)
+                else:
+                    self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+                    self.assertEqual(self.git("show", "main:feature.txt", cwd=self.origin), name)
+                    self.assertEqual(self.git("show", "main:other.txt", cwd=self.origin), name)
+
+    def test_unpublished_main_commits_absent_from_the_branch_are_refused(self):
+        self.git("checkout", "-q", "-b", "task/sibling", cwd=self.repo)
+        self.write(self.repo / "sibling.txt", "branch change\n")
         self.git("add", "-A", cwd=self.repo)
-        self.git("commit", "-qm", "z", cwd=self.repo)
+        self.git("commit", "-qm", "sibling change", cwd=self.repo)
+        source = self.git("rev-parse", "HEAD", cwd=self.repo)
         self.git("checkout", "-q", "main", cwd=self.repo)
-        (self.seed / "other.txt").write_text("o\n")
-        self.commit(self.seed, "moved on")
-        r = self.release("z", "--from-branch", "task/z")
+        self.write(self.repo / "unpublished.txt", "keep this main commit\n")
+        self.git("add", "-A", cwd=self.repo)
+        self.git("commit", "-qm", "unpublished main change", cwd=self.repo)
+        start = self.git("rev-parse", "HEAD", cwd=self.repo)
+        origin = self.git("rev-parse", "main", cwd=self.origin)
+        marketplace = self.git("rev-parse", "main", cwd=self.morigin)
+
+        r = self.release("sibling", "--from-branch", "task/sibling")
+
         self.assertNotEqual(r.returncode, 0)
-        self.assertIn("rebase task/z onto origin/main", r.stderr)
-        self.assertEqual(self.version(self.origin)["version"], "0.1.0")
+        self.assertIn("main has unpublished commits absent from task/sibling", r.stderr)
+        self.assertNotIn("running the full suite", r.stdout)
+        self.assertEqual(self.git("rev-parse", "HEAD", cwd=self.repo), start)
+        self.assertEqual(self.git("branch", "--show-current", cwd=self.repo), "main")
+        self.assertEqual(self.git("status", "--porcelain", cwd=self.repo), "")
+        self.assertEqual((self.repo / "unpublished.txt").read_text(), "keep this main commit\n")
+        self.assertFalse((self.repo / "sibling.txt").exists())
+        self.assertEqual(self.git("rev-parse", "task/sibling", cwd=self.repo), source)
+        self.assertEqual(self.git("rev-parse", "main", cwd=self.origin), origin)
+        self.assertEqual(self.git("rev-parse", "main", cwd=self.morigin), marketplace)
+        self.assertEqual(self.log("claude"), [])
+        self.assertEqual(self.log("bd"), [])
+
+    def test_a_rebase_conflict_aborts_and_restores_main(self):
+        start = self.git("rev-parse", "HEAD", cwd=self.repo)
+        self.git("checkout", "-q", "-b", "task/conflict", cwd=self.repo)
+        self.write(self.repo / "conflict.txt", "branch\n")
+        self.git("add", "-A", cwd=self.repo)
+        self.git("commit", "-qm", "branch change", cwd=self.repo)
+        source = self.git("rev-parse", "HEAD", cwd=self.repo)
+        self.git("checkout", "-q", "main", cwd=self.repo)
+        self.write(self.seed / "conflict.txt", "origin\n")
+        self.commit(self.seed, "conflicting change")
+        origin = self.git("rev-parse", "main", cwd=self.origin)
+        r = self.release("conflict", "--from-branch", "task/conflict")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("rebase", r.stderr)
+        self.assertNotIn("running the full suite", r.stdout)
+        self.assertEqual(self.git("rev-parse", "HEAD", cwd=self.repo), start)
+        self.assertEqual(self.git("branch", "--show-current", cwd=self.repo), "main")
+        self.assertEqual(self.git("status", "--porcelain", cwd=self.repo), "")
+        self.assertEqual(self.git("rev-parse", "task/conflict", cwd=self.repo), source)
+        self.assertEqual(self.git("rev-parse", "main", cwd=self.origin), origin)
+        self.assertFalse((self.repo / ".git" / "rebase-merge").exists())
+        self.assertFalse((self.repo / ".git" / "rebase-apply").exists())
+        self.assertEqual(self.market_versions()["iorlas-task-loop"], "0.1.0")
+        self.assertEqual(self.log("claude"), [])
+
+    def test_two_branch_releases_queue_rebase_and_test_the_pushed_tree(self):
+        ready, proceed = self.home / "ready", self.home / "proceed"
+        snapshots = self.home / "snapshots"
+        snapshots.mkdir()
+        self.write(self.seed / "tests" / "test_queue.py", textwrap.dedent('''
+            import json, subprocess, time, unittest
+            from pathlib import Path
+            READY, PROCEED, SNAPSHOTS = Path(%r), Path(%r), Path(%r)
+            class Queue(unittest.TestCase):
+                def test_snapshot(self):
+                    version = json.loads(Path(%r).read_text())["version"]
+                    paths = subprocess.check_output(["git", "ls-files"], text=True).splitlines()
+                    snapshot = {p: Path(p).read_bytes().hex() for p in paths}
+                    with (SNAPSHOTS / (version + ".jsonl")).open("a") as out:
+                        out.write(json.dumps(snapshot) + "\\n")
+                    if version == "0.1.1":
+                        READY.touch()
+                        deadline = time.monotonic() + 15
+                        while not PROCEED.exists():
+                            self.assertLess(time.monotonic(), deadline, "first suite was not released")
+                            time.sleep(0.02)
+        ''' % (str(ready), str(proceed), str(snapshots), PLUGIN)))
+        self.commit(self.seed, "suite records exactly what was tested")
+        self.git("pull", "-q", "--ff-only", "origin", "main", cwd=self.repo)
+        for name in ("first", "second"):
+            self.git("checkout", "-q", "-b", "task/" + name, "main", cwd=self.repo)
+            self.write(self.repo / (name + ".txt"), name + "\n")
+            self.git("add", "-A", cwd=self.repo)
+            self.git("commit", "-qm", name + " change", cwd=self.repo)
+            self.git("checkout", "-q", "main", cwd=self.repo)
+        sources = {name: self.git("rev-parse", "task/" + name, cwd=self.repo) for name in ("first", "second")}
+
+        def wait_for(predicate):
+            deadline = time.monotonic() + 10
+            while not predicate():
+                self.assertLess(time.monotonic(), deadline, "release did not reach synchronization point")
+                time.sleep(0.02)
+
+        procs = []
+        outputs = [self.home / (name + ".out") for name in ("first", "second")]
+        with outputs[0].open("w") as first_out, outputs[1].open("w") as second_out:
+            try:
+                procs.append(subprocess.Popen(self.cmd("first", "--from-branch", "task/first"), env=self.env,
+                                              stdout=first_out, stderr=subprocess.STDOUT))
+                wait_for(ready.exists)
+                procs.append(subprocess.Popen(self.cmd("second", "--from-branch", "task/second"), env=self.env,
+                                              stdout=second_out, stderr=subprocess.STDOUT))
+                wait_for(lambda: "waiting for the release lock" in outputs[1].read_text())
+                self.assertRegex(outputs[1].read_text(),
+                                 r"held by pid %d since \d{2}:\d{2}:\d{2}: first" % procs[0].pid)
+                self.assertIsNone(procs[1].poll())
+                self.assertEqual(self.version(self.origin)["version"], "0.1.0")
+                self.assertFalse((snapshots / "0.1.2.jsonl").exists())
+                proceed.touch()
+                for p in procs:
+                    p.wait(timeout=20)
+                self.assertEqual([p.returncode for p in procs], [0, 0], [p.read_text() for p in outputs])
+            finally:
+                for p in procs:
+                    if p.poll() is None:
+                        p.kill()
+                    p.wait(timeout=5)
+
+        for version, message in (("0.1.1", "first"), ("0.1.2", "second")):
+            commit = self.git("log", "--format=%H", "--fixed-strings", "--grep=" + version + ": " + message,
+                              "main", cwd=self.origin)
+            self.assertTrue(commit)
+            paths = self.git("ls-tree", "-r", "--name-only", commit, cwd=self.origin).splitlines()
+            pushed = {p: subprocess.check_output(["git", "show", commit + ":" + p], cwd=self.origin,
+                                                 env=self.env).hex() for p in paths}
+            tested = [json.loads(line) for line in (snapshots / (version + ".jsonl")).read_text().splitlines()]
+            self.assertEqual(tested, [pushed])  # once, on exactly the tracked contents that landed
+        for name, source in sources.items():
+            self.assertEqual(self.git("rev-parse", "task/" + name, cwd=self.repo), source)
+            self.assertEqual(self.git("show", "main:" + name + ".txt", cwd=self.origin), name)
+        for output in outputs:
+            self.assertEqual(output.read_text().count("running the full suite"), 1)
+        self.assertEqual(self.version(self.origin)["version"], "0.1.2")
+        self.assertEqual(self.market_versions()["iorlas-task-loop"], "0.1.2")
+        self.assertEqual(self.git("status", "--porcelain", cwd=self.repo), "")
 
     def test_minor_bumps_the_minor_and_resets_the_patch(self):
         r = self.release("new feature", "--minor")
@@ -178,18 +381,27 @@ class Release(unittest.TestCase):
         self.assertEqual(self.version(self.origin)["version"], "0.2.0")
 
     def test_a_push_race_rebases_reruns_the_suite_and_takes_the_next_version(self):
+        self.git("config", "rebase.updateRefs", "true", cwd=self.repo)
+        self.git("checkout", "-q", "-b", "task/race", cwd=self.repo)
+        self.write(self.repo / "feature.txt", "survives the push race\n")
+        self.git("add", "-A", cwd=self.repo)
+        self.git("commit", "-qm", "branch change", cwd=self.repo)
+        source = self.git("rev-parse", "HEAD", cwd=self.repo)
+        self.git("checkout", "-q", "main", cwd=self.repo)
         # another release lands between our fetch and our push: simulated by a pre-push hook that pushes once
         hook = self.repo / ".git" / "hooks" / "pre-push"
         hook.write_text("#!/bin/sh\nunset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE\n[ -f '%s' ] && exit 0\ntouch '%s'\ncd '%s' && sed -i.bak 's/0.1.0/0.1.1/' %s "
                         "&& rm %s.bak && git commit -qam '0.1.1: racer' && git push -q origin HEAD:main\n"
                         % (self.home / "raced", self.home / "raced", self.seed, PLUGIN, PLUGIN))
         hook.chmod(0o755)
-        r = self.release("mine")
+        r = self.release("mine", "--from-branch", "task/race")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("push race", r.stdout)
         self.assertRegex(r.stdout, r"origin/main [0-9a-f]{40} is not the base [0-9a-f]{40}")
-        self.assertEqual(self.git("log", "--format=%s", "-2", "main", cwd=self.origin).splitlines(),
-                         ["0.1.2: mine", "0.1.1: racer"])
+        self.assertEqual(self.git("log", "--format=%s", "-3", "main", cwd=self.origin).splitlines(),
+                         ["0.1.2: mine", "branch change", "0.1.1: racer"])
+        self.assertEqual(self.git("rev-parse", "task/race", cwd=self.repo), source)
+        self.assertEqual(self.git("show", "main:feature.txt", cwd=self.origin), "survives the push race")
         self.assertEqual(self.market_versions()["iorlas-task-loop"], "0.1.2")
 
     def test_a_branch_release_with_nothing_landed_meanwhile_is_no_push_race(self):

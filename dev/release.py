@@ -5,8 +5,9 @@
                            [--repo DIR] [--marketplace DIR]
 
 Takes an OS lock (~/.config/task-loop/locks/release-*.lock): a second release waits in line and prints who holds it.
-Then, in the repo's main checkout (on main, clean, or refused): fetch, fast-forward to origin/main, fast-forward to B
-when given (a branch that is not a fast-forward is refused: rebase it first), bump the patch version of origin/main's
+Then, in the repo's main checkout (on main, clean, or refused): fetch, fast-forward to origin/main, rebase B's commits
+onto origin/main when given, leaving B and its worktrees unchanged (refusing if B omits unpublished main commits),
+bump the patch version of origin/main's
 .claude-plugin/plugin.json (--minor: the minor), run the full suite (red aborts and puts main back), commit only
 plugin.json as "<version>: <message>", push under the land lock, so no loop lands in between. When origin/main moved
 since the bump (a land during the suite) it drops the bump, rebases, takes the next version and runs the suite again
@@ -136,7 +137,7 @@ def push_main(repo, message, minor, version, base):
     """Push, under the land lock (an engine lands only while it holds it): an origin/main that moved since the bump (a
     land during the suite) is rebased onto, the version taken again and the suite run again, then pushed while no land
     can get in. A push refused all the same (one that skipped the lock) gets one more round. `base` is the origin/main the
-    bump was built on: HEAD~1 is not, a --from-branch fast-forward puts the branch's commits between them."""
+    bump was built on: HEAD~1 is not, --from-branch puts the branch's commits between them."""
     url = git(repo, "remote", "get-url", "origin", check=False) or str(repo)
     with tl.os_lock(tl.land_lock_path(url), "release: " + message,
                     lambda who: say("waiting for the land lock (held by %s)" % who)):
@@ -147,7 +148,7 @@ def push_main(repo, message, minor, version, base):
                 say("push race: origin/main %s is not the base %s; rebasing, taking the next version and running the suite again"
                     % (head, base))
                 git(repo, "reset", "-q", "--hard", "HEAD~1")
-                if run(["git", "rebase", "-q", "origin/main"], repo, check=False).returncode:
+                if run(["git", "-c", "rebase.updateRefs=false", "rebase", "-q", "origin/main"], repo, check=False).returncode:
                     run(["git", "rebase", "--abort"], repo, check=False)
                     raise Abort("the rebase onto origin/main after the push race failed")
                 base = head
@@ -192,9 +193,12 @@ def release(a, repo, market):
             b = a.from_branch
             if not git(repo, "rev-parse", "--verify", "-q", b + "^{commit}", check=False):
                 b = "origin/" + a.from_branch
-            if run(["git", "merge", "-q", "--ff-only", b], repo, check=False).returncode:
-                raise Abort("%s is not a fast-forward of origin/main: rebase %s onto origin/main first"
-                            % (a.from_branch, a.from_branch))
+            if git(repo, "rev-list", "--max-count=1", "HEAD", "--not", "origin/main", b):
+                raise Abort("main has unpublished commits absent from %s; nothing released" % a.from_branch)
+            # Replay on main rather than checking out B: it may be in use in another worktree,
+            # and releasing must not rewrite the source branch's ref, even with updateRefs enabled.
+            git(repo, "reset", "-q", "--hard", b)
+            git(repo, "-c", "rebase.updateRefs=false", "rebase", "-q", "origin/main")
         version = bump_and_commit(repo, a.message, a.minor)
         version = push_main(repo, a.message, a.minor, version, base)
     except Abort:
@@ -220,7 +224,7 @@ def main(argv=None):
     ap.add_argument("message")
     ap.add_argument("--bead", help="close this bead after the push")
     ap.add_argument("--reason", help="the close reason (default: the message)")
-    ap.add_argument("--from-branch", help="fast-forward main to this branch first")
+    ap.add_argument("--from-branch", help="rebase this branch onto origin/main in the release checkout under the release lock")
     ap.add_argument("--minor", action="store_true", help="bump the minor version, not the patch")
     ap.add_argument("--repo", default=tl.repo_root(str(HERE)), help="the main checkout (default: this repo's)")
     ap.add_argument("--marketplace", default=str(Path.home() / "Workspaces" / MARKETPLACE))
