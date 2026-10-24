@@ -6194,7 +6194,7 @@ def run_any_slot(a, repo, cfg):
             say("no free slot%s; waiting in line" % (" (%d ahead)" % ahead if ahead else ""))
             told.append(1)
     got = tl.wait_slot(repo, tl.profile_slots(repo), "run-task " + a.id, stop=lambda: not wait,
-                       on_wait=waiting)
+                       on_wait=waiting, prio=tl.bead_priority(repo, a.id))
     if not got:
         why = "no free slot (tl slot list); --wait waits in line for one"
         print("TAKEN: %s" % why)
