@@ -52,6 +52,7 @@ DEFAULTS = {
     "node_timeout_min": 45,           # a plan, review or verify call running longer is stopped; a write follows the keys below
     "write_idle_warn_min": 15,        # a write whose worker has been silent this long (session file, process output) is warned about
     "write_idle_stop_min": 25,        # and stopped at this; a write whose activity cannot be seen keeps node_timeout_min
+    "planner_notes": "",              # facts the planner must plan by (what the factory has and has not: platforms, engines, tools), text or "@repo/file"
     "shot_table": "",                 # the project's shot methods (docs/design/visual-work.md; looks.py): a repo path, read from the base branch.
                                       # With it a visual stage renders by the engine's hand, judged by a look judge; without it the old way (the writer saves shots)
     "look_rounds": 2,                 # render + judge rounds per visual stage
@@ -79,6 +80,8 @@ DEFAULTS = {
 # ---- output contracts -----------------------------------------------------------------------------------------------
 
 FLAKE_DAYS = 14     # how long a writer-reported flaky test stays in the shared notes
+INPUT_KINDS = ("file", "platform", "object", "engine", "tool", "other")
+PROVED_BY = ("check", "stage", "leftover", "engine_step")  # tl-bxk.13.16.1: how a plan criterion is proved (the ledger)
 HANDOFF_CAP = 1500  # characters of round history one prompt carries (tl-bxk.13.6)
 S_STR = {"type": "string"}
 S_STRS = {"type": "array", "items": S_STR}
@@ -238,7 +241,8 @@ def plan_checks(plan):
     """The plan's checks: stages, risks, cases."""
     return list(dict.fromkeys([c for s in plan.get("stages") or [] for c in s["checks"]] + [
         x["check"] for k in ("risks", "cases") for x in plan.get(k) or []
-        if x.get("check", "").strip() and x.get("class", "test") == "test"]))  # a look or taste case has no command (tl-bxk.13.15)
+        if x.get("check", "").strip() and x.get("class", "test") == "test"
+        and x.get("proved_by", "check") in ("check", "stage")]))  # a look, taste, leftover or engine-step case has no command
 
 
 def tracker_checks(plan):
@@ -300,6 +304,121 @@ ISOLATED_MODULE = re.compile(r"\bpython3?(?:\.\d+)?\s+(?:-[A-Za-z]+\s+)*-[A-Za-z
                              r"(?:-[A-Za-z]+\s+)*)?([A-Za-z_][\w]*(?:\.[\w]+)+)")
 
 
+SHELL_STOP = {"if", "then", "else", "elif", "fi", "for", "while", "until", "do", "done", "case", "esac", "{", "}", "(", ")",
+              "[[", "]]", "function", "select", "time", "!"}
+COMMAND_SEP = {"|", "||", "&&", ";", "&", "|&"}
+_WORDS = {}   # (cwd, word) -> resolves; one bash per new word
+_RECIPES = {}  # cwd -> (justfile mtime, the recipe and alias names or None)
+
+
+def shell_tokens(cmd):
+    """cmd split like a shell, operators (`;`, `&&`, `|`, `>`) apart; [] when the quoting does not close."""
+    lex = shlex.shlex(cmd, posix=True, punctuation_chars=True)
+    lex.whitespace_split = True
+    lex.commenters = "#"
+    try:
+        return list(lex)
+    except ValueError:
+        return []
+
+
+def first_words(cmd):
+    """The command words of a plan check's simple commands: the first word of each command between `;`, `&&`, `||`, `|`,
+    after env assignments, `!` and `time`. Stops at a compound command (if, for, a subshell, $(...)): nothing is claimed
+    past it."""
+    out, start = [], True
+    if re.search(r"<<|\(\)\s*\{|\bfunction\s+\w|\bsource\b|^\s*\.\s", cmd):  # a heredoc, a function, a sourced file: not judged
+        return []
+    for t in shell_tokens(cmd):
+        if re.fullmatch(r"[;&|]+", t):
+            start = True
+            continue
+        if not start:
+            continue
+        if re.fullmatch(r"\w+=.*", t) or t in ("!", "time", "command", "exec", "env", "builtin") or t.startswith("-"):
+            continue
+        if t in SHELL_STOP or re.search(r"[$`(){}<>]|^\[", t) or re.fullmatch(r"[<>(){}]+", t):
+            return out
+        out.append(t)
+        start = False
+    return out
+
+
+def command_problems(cmd, wt, made=()):
+    """[why a plan check cannot start]: a command word that is no builtin, not on PATH and no file of the tree (lifesim-fld.10
+    planned 'After building the current player: python3 ...', a sentence run as the command `After`); a `just` recipe the
+    tree's justfile does not have (lifesim-ov3w). Conservative: only a plain word is judged. No bash (Windows): nothing."""
+    bash = shutil.which("bash")
+    if not bash or os.name == "nt":
+        return []
+    out, words = [], first_words(cmd)
+    for n, w in enumerate(words):
+        if "/" in w:
+            if n or w.startswith("~") or re.search(r"\bcd\b", cmd):
+                continue  # a path after another command or a cd may be made by it, or be relative to elsewhere
+            if not w.startswith(("./", "/")) and not Path(wt, w.split("/")[0]).is_dir():
+                continue  # `.venv/bin/python`: its folder is not in the tree (a setup makes it)
+            f = Path(w) if w.startswith("/") else Path(wt, w)
+            g = os.path.normpath(w)
+            if not f.exists() and not any(g == k or g.startswith(k + "/") for k in map(os.path.normpath, made)):
+                out.append("`%s` is not a file of this tree and no stage lists it in files" % w)
+            continue
+        key = (str(wt), w)
+        if key not in _WORDS or time.time() - _WORDS[key][1] > 120:  # a tool installed since is found within two minutes
+            r = subprocess.run([bash, "-c", 'type -t -- "$1" >/dev/null 2>&1', "_", w], capture_output=True, env=child_env(), cwd=str(wt))
+            _WORDS[key] = (r.returncode == 0, time.time())
+        if not _WORDS[key][0]:
+            out.append("`%s` is not a command here (no builtin, nothing on PATH): a check is a shell command, never a sentence" % w)
+    if "just" in words and not any(Path(f).name.lower() in ("justfile", ".justfile") for f in made):
+        toks = shell_tokens(cmd)
+        recipes = just_recipes(wt)
+        for k, t in enumerate(toks):
+            if t == "just" and (k == 0 or re.fullmatch(r"[;&|]+", toks[k - 1])):
+                after = toks[k + 1:k + 8]
+                if any(x.startswith("-") and x not in JUST_PLAIN_FLAGS for x in after):
+                    continue  # an option that takes a value (--justfile, --set, -d): not judged
+                rest = [x for x in after if not x.startswith("-")]
+                if recipes is not None and rest and re.fullmatch(r"[\w-]+", rest[0]) and rest[0] not in recipes:
+                    out.append("`just %s`: the tree's justfile has no recipe %s (it has: %s)" % (
+                        rest[0], rest[0], ", ".join(sorted(recipes)[:12]) or "none"))
+    return out
+
+
+JUST_PLAIN_FLAGS = {"--unstable", "-q", "--quiet", "-v", "--verbose", "--dry-run", "-n", "--no-deps", "--highlight", "--no-highlight"}
+
+
+def just_recipes(wt):
+    """The recipe and alias names of the tree's justfile (`just --dump --dump-format json`), private ones too; None when there is
+    no just or no justfile here. Cached by the justfile's modification time: a rebase or an edit shows."""
+    jf = next((Path(wt, n) for n in ("justfile", "Justfile", ".justfile") if Path(wt, n).is_file()), None)
+    if not jf:
+        return None
+    stamp = jf.stat().st_mtime_ns
+    got = _RECIPES.get(str(wt))
+    if got and got[0] == stamp:
+        return got[1]
+    names = None
+    try:
+        r = subprocess.run(["just", "--dump", "--dump-format", "json"], capture_output=True, text=True, cwd=str(wt), timeout=20, env=child_env())
+        if r.returncode == 0:
+            d = json.loads(r.stdout)
+            names = set((d.get("recipes") or {})) | set((d.get("aliases") or {}))
+    except (OSError, subprocess.SubprocessError, ValueError):
+        names = None
+    _RECIPES[str(wt)] = (stamp, names)
+    return names
+
+
+def ledger_problems(plan):
+    """tl-bxk.13.16.1: a case with nothing to prove it: a test case whose proof is `check` (or unsaid) and whose check is empty."""
+    out = []
+    for c in plan.get("cases") or []:
+        if c.get("class", "test") == "test" and c.get("proved_by", "check") == "check" and not c.get("check", "").strip():
+            out.append("case `%s` has no check: give a command, or say in proved_by how it is proved (stage, leftover, "
+                       "engine_step), or a class of look-objective or taste" % c["criterion"][:120])
+    return out
+
+
 def dry_check(plan, wt):
     """[error]: the plan's checks that cannot run: bash -n syntax, process substitution, a file the check reads that is
     neither in the tree nor a file some stage names."""
@@ -315,6 +434,8 @@ def dry_check(plan, wt):
         if r is not None and r.returncode:
             errs.append("`%s`: bash -n: %s" % (c, (r.stderr or "syntax error").strip().splitlines()[-1][:200]))
             continue
+        for w in command_problems(c, wt, made):  # tl-bxk.13.16.2
+            errs.append("`%s`: %s" % (c, w))
         iso = ISOLATED_MODULE.search(bare)
         if iso and Path(wt, iso.group(1).split(".")[0]).is_dir():  # tl-bxk.13.13
             errs.append("`%s`: python -I removes the working directory from the import path, so `%s` cannot be imported; "
@@ -423,10 +544,15 @@ SCHEMAS = {
                                                       "required": ["what", "check"],
                                                       "properties": {"what": S_STR, "check": S_STR}}},
                  "question": S_STR, "options": OPTIONS,
+                 "unresolved": {"type": "array", "items": {  # optional (tl-bxk.13.16.3): inputs the criteria need that were not found
+                     "type": "object", "additionalProperties": False, "required": ["what", "kind", "path"],
+                     "properties": {"what": S_STR, "kind": {"type": "string", "enum": list(INPUT_KINDS)}, "path": S_STR}}},
                  "cases": {"type": "array", "items": {"type": "object", "additionalProperties": False,
                                                       "required": ["criterion", "check"],
                                                       "properties": {"criterion": S_STR, "check": S_STR,
-                                                                     "class": {"type": "string", "enum": list(looks.CLASSES)}}}},
+                                                                     "class": {"type": "string", "enum": list(looks.CLASSES)},
+                                                                     "proved_by": {"type": "string", "enum": list(PROVED_BY)},
+                                                                     "via": S_STR}}},
                  "leftovers": LEFTOVERS}},
     "write": {"type": "object", "additionalProperties": False,
               "required": ["summary", "checks_run", "question", "options", "decided", "bad_checks", "new_cases", "unchecked"],
@@ -554,6 +680,14 @@ def validate(data, schema, path="$"):
 # ---- workers --------------------------------------------------------------------------------------------------------
 
 GIT_PIN_VARS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")  # the engine's own git is pinned; no child inherits a pin
+
+
+def plugin_version():
+    """This engine's task-loop version, from the plugin.json next to it ('' when it is run from a bare copy)."""
+    try:
+        return str(json.loads((Path(__file__).resolve().parents[2] / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")).get("version") or "")
+    except (OSError, ValueError, IndexError):
+        return ""
 
 
 def child_env():
@@ -731,6 +865,12 @@ def wait_wall(p, timeout):
     return ""
 
 
+# tl-bxk.13.16.4: a push that died of the network (lifesim-l4ow: curl 56 broken pipe, after a 17 min hook) is retried with a rest
+TRANSIENT_PUSH = re.compile(r"curl \d+|Broken pipe|Connection (?:reset|timed out|refused)|Could not resolve host|early EOF|RPC failed|"
+                            r"remote end hung up|SSL_ERROR|TLS|Operation timed out|Network is unreachable|"
+                            r"Temporary failure in name resolution|error: 5\d\d|HTTP/\d(?:\.\d)? 5\d\d", re.I)
+PUSH_RESTS = (30, 120, 300)  # seconds before the 2nd, 3rd and 4th try
+CRASH_RESTS = (30, 120)      # a delegate that crashed (lifesim-rl4s: UnicodeDecodeError): two more tries, with these rests
 STOP_GRACE = 10  # seconds route.py gets to stop its worker after a SIGTERM, before everything is SIGKILLed
 PROOF_TERM, PROOF_KILL = 5, 10  # seconds a worker that outlived the stop gets after a SIGTERM, then after a SIGKILL
 
@@ -1320,7 +1460,7 @@ class Engine:
         rec = {"v": 1, "run": self.log_path.stem, "bead": self.bead,
                "repo": self.git("remote", "get-url", "origin") or str(self.wt), "worktree": str(self.wt),
                "branch": self.git("symbolic-ref", "--short", "-q", "HEAD"), "coordinator_session": self.session,
-               "started": self.t0, "ended": time.time(), "outcome": outcome, "why": (why or "")[:500], "sha": sha or "",
+               "version": plugin_version(), "started": self.t0, "ended": time.time(), "outcome": outcome, "why": (why or "")[:500], "sha": sha or "",
                "cost": self.cost, "stats": self.stats, "host": self.host, "delegate": self.route or "", "log": str(self.log_path),
                "stderr": str(self.err_path), "lanes": (self.contract or {}).get("lanes"), "sessions": self.sessions,
                "verified": self.verified, "write_rounds": self.write_rounds, "strays": self.strays}
@@ -1409,6 +1549,7 @@ class Engine:
                   **meta)
         timeout = float(self.cfg["node_timeout_min"]) * 60
         waited, attempt_prompt, attempt, errs = 0.0, delta if (delta and resume and resume_key) else prompt, 1, ["not run"]
+        crashes = 0  # delegate crashes retried on this call
         login_note = ""  # set once a lane answered logged_out and the engine retried afresh (delegate puts that lane out 15 min)
         while attempt <= 2:
             self._resume = resume
@@ -1445,6 +1586,22 @@ class Engine:
                 if self._resume:
                     attempt_prompt = prompt + FRESH_WRITER_TEXT
                 continue
+            crashed = reason == "crash" or (reason == "no_answer" and not str(r.error or "").startswith("timeout")
+                                            and not INFRA_TEXT.search("%s %s" % (r.error or "", r.text or "")))  # not a timeout, not a bad request
+            if crashed and crashes < len(CRASH_RESTS):
+                # tl-bxk.13.16.4: delegate itself died (a decode error, a broken pipe): not the bead's, not the owner's. Again as a
+                # fresh call after a rest; out of tries it pauses, it never asks
+                rest = CRASH_RESTS[crashes]
+                crashes += 1
+                self.cost += r.cost
+                self.warn("%s: delegate crashed (%s), trying again in %d s (%d of %d)" % (node, (said or reason)[:160], rest, crashes, len(CRASH_RESTS)))
+                self.transition(step or node, "delegate_crash", "delegate crashed: %s" % (said or reason)[:160], lane=j.get("lane") or "")
+                time.sleep(rest)
+                self.add_wait(rest, "a delegate crash")
+                resume, attempt_prompt = None, prompt + (FRESH_WRITER_TEXT if self._resume else "")
+                continue
+            if crashed and crashes >= len(CRASH_RESTS):
+                raise Blocked("paused: delegate crashed %d times on the %s step: %s" % (crashes + 1, node, said[:300]))
             if reason == "lane_out" and nxt in ("retry", "owner") and resume:
                 # delegate never moves a resumed thread to another lane; a new thread gets the role's next rung at once.
                 # next is owner when delegate cannot say when the lane frees (no retry_after): the same move (lifesim-5ar.6)
@@ -1906,7 +2063,7 @@ class Engine:
 
     def case_checks(self):
         return [c["check"] for c in (getattr(self, "plan_data", None) or {}).get("cases") or []
-                if c.get("check", "").strip() and c.get("class", "test") == "test"]
+                if c.get("check", "").strip() and c.get("class", "test") == "test" and c.get("proved_by", "check") in ("check", "stage")]
 
     def cases_of(self, cls):
         """The criteria of the plan's cases of one class (look-objective, taste)."""
@@ -2111,12 +2268,62 @@ class Engine:
 
     def deferred_text(self):
         items = self.deferred_items()
-        if not items:
-            return ""
-        lines = "".join("- %s%s\n" % (t[:160], (": " + w[:160]) if w else "") for t, w in items[:10])
-        return ("\nAlready set aside (the plan or an earlier review put each in leftovers; the engine files each as a follow-up "
-                "bead at land, and nobody here can run bd). Never list one as unmet, as a finding or as unchecked, nor ask "
-                "the owner about it:\n" + lines)
+        steps = [e for e in self.ledger() if e["proved_by"] == "engine_step"]
+        out = ""
+        if items:
+            lines = "".join("- %s%s\n" % (t[:160], (": " + w[:160]) if w else "") for t, w in items[:10])
+            out += ("\nAlready set aside (the plan or an earlier review put each in leftovers; the engine files each as a follow-up "
+                    "bead at land, and nobody here can run bd). Never list one as unmet, as a finding or as unchecked, nor ask "
+                    "the owner about it:\n" + lines)
+        if steps:
+            out += ("\nThe engine does these itself, after the stages (the plan's ledger). Never list one as unmet, as a "
+                    "finding or as unchecked:\n" + "".join("- %s (%s)\n" % (e["criterion"][:160], e["via"][:60] or "engine step") for e in steps[:8]))
+        return out
+
+    # -- tl-bxk.13.16.1: the ledger. The plan says how each criterion is proved; review and verify go by it, not by wording.
+    def ledger(self):
+        """[{criterion, proved_by, via, text}]: what the plan defers (leftover) or leaves to the engine (engine_step)."""
+        out = []
+        for c in (getattr(self, "plan_data", None) or {}).get("cases") or []:
+            if c.get("proved_by") in ("leftover", "engine_step"):
+                out.append({"criterion": c["criterion"], "proved_by": c["proved_by"], "via": c.get("via") or "",
+                            "text": "%s %s" % (c["criterion"], c.get("via") or "")})
+        for t, _ in self.deferred_items():
+            out.append({"criterion": t, "proved_by": "leftover", "via": t, "text": t})
+        return out
+
+    def ledger_match(self, what):
+        """The ledger entry an item is about: most of the entry's words are the item's (3 at least)."""
+        mine = word_set(what)
+        if len(mine) < 3:
+            return None
+        filing = bool(FILING_WORDS.search(what))  # an item about follow-ups, beads, records: the ledger's own subject
+        for e in self.ledger():
+            theirs = word_set(e["text"])
+            shared = len(mine & theirs)
+            # a claim about the code that merely shares words with a deferred item is not that item: unless the item is about
+            # filing, it must be a near-paraphrase (60% of both sides, 4 words at least)
+            if shared >= max(3, int(0.6 * len(theirs) + 0.99)) and (filing or (shared >= 4 and shared >= 0.6 * len(mine))):
+                return e
+        return None
+
+    def ledger_route(self, what):
+        e = self.ledger_match(what)
+        return e["proved_by"] if e else ""
+
+    def ledger_fill(self, data):
+        """A case deferred in the ledger whose leftover the plan forgot to list: the engine lists it, so the work is filed."""
+        have = {" ".join(lo["title"].split()) for lo in data.get("leftovers") or []} | {t for t, _ in self.deferred_items()}
+        for c in data.get("cases") or []:
+            if c.get("proved_by") != "leftover":
+                continue
+            via = " ".join((c.get("via") or "").split())
+            if via and any(word_set(via) and len(word_set(via) & word_set(t)) >= 0.6 * len(word_set(via)) for t in have):
+                continue
+            title = (via or c["criterion"])[:120]
+            data.setdefault("leftovers", []).append({"title": title, "why": "Deferred by the plan: " + c["criterion"]})
+            have.add(title)
+            self.log("note", "the ledger defers a criterion the leftovers did not list; listed: %s" % title[:160])
 
     def seen_lows_text(self):
         lows = self.handoff["seen_lows"]
@@ -2188,6 +2395,7 @@ class Engine:
                 raise Blocked("failed: delegate at %s does not speak worker-run v2; update delegate (claude plugin "
                               "update iorlas-delegate@iorlas-marketplace) or this engine" % self.route)
             self.log("note", "workers: delegate %s (worker-run v2)" % self.route)
+            self.log("note", "task-loop %s" % (plugin_version() or "(unknown version)"), version=plugin_version())
             self.reset(bead)
             self.labels = list(bead.get("labels") or [])
             self.host = self.granted_host(self.labels)
@@ -2292,7 +2500,8 @@ class Engine:
             try:
                 d, _ = self.ai("verify", "%d unchecked item(s) before land" % len(gaps), VERIFY_PROMPT.format(
                     brief=self.brief_text(), work=self.work_summary(), evidence=self.evidence_dir,
-                    checks=self.checks_evidence(), where=self.where("verify"), items=items), writer_family=self.writer_family, items=len(gaps))
+                    checks=self.checks_evidence(), where=self.where("verify"), items=items) + self.deferred_text(),
+                    writer_family=self.writer_family, items=len(gaps))
             except Blocked as b:
                 if b.why.startswith("failed: infrastructure"):  # tl-bxk.10.31: the request is malformed for every bead
                     raise
@@ -2419,9 +2628,17 @@ class Engine:
         files them'. A claim about the result ('the beads cover all nine objects') goes to the verifier."""
         out = []
         for u in gaps:
-            if u["kind"] == "engine_step" and self.engine_does(u["what"]):
+            if u["kind"] == "engine_step" and self.engine_does(u["what"]):  # the writer's own typing of it, when it names the step
                 self.settle_engine_step(u)
-            elif u["kind"] in ("owner_decision", "external_fact", "taste") and self.backed_by_leftover(u["what"]):
+                continue
+            route = self.ledger_route(u["what"])
+            if route == "engine_step":  # tl-bxk.13.16.1: the plan's ledger says the engine does it
+                self.settle_engine_step(u)
+                continue
+            if route == "leftover":
+                self.add_unverified(u, "the plan defers it to a follow-up bead")
+                continue
+            if u["kind"] in ("owner_decision", "external_fact", "taste") and self.backed_by_leftover(u["what"]):
                 self.add_unverified(u, "a follow-up bead for the owner is filed at land")
             elif u["kind"] in ("engine_step", "external_fact", "taste"):
                 out.append(dict(u, kind=self.resolve_kind(u, {"kind": u["kind"], "source": "x"})[0]))  # source is the verifier's to give
@@ -2439,7 +2656,11 @@ class Engine:
         none left: the bead is stuck, never landed); an item no check can prove lands for the owner (route 'unverified');
         an owner decision, or an old kind, is asked."""
         k = u["kind"]
-        if k == "engine_step":
+        route = self.ledger_route(u["what"])
+        if route == "leftover":
+            self.add_unverified(u, why or "the plan defers it to a follow-up bead")
+            return "open", a, why, "unverified"
+        if k == "engine_step" or route == "engine_step":
             return "settled", dict(a, evidence="the engine does this at land"), "the engine does this at land", ""
         if k == "checkable":
             if self.fixes >= int(self.cfg["max_fix_rounds"]):
@@ -2460,8 +2681,15 @@ class Engine:
         round left) comes back flagged proof_round, to be sent again while a fix round is left; the rest still asks."""
         out = []
         for u in left:
-            k = self.resolve_kind(u, {})[0] if not u.get("proof_round") else "checkable"
             defect = str(u.get("why") or "").startswith("found wrong:") and not u.get("proof_round")
+            route = "" if defect else self.ledger_route(u["what"])  # a defect the verifier found is never the ledger's
+            if route == "engine_step":
+                self.settle_engine_step(u)
+                continue
+            if route == "leftover":
+                self.add_unverified(dict(u, kind=u.get("kind") or "other"), "the plan defers it to a follow-up bead")
+                continue
+            k = self.resolve_kind(u, {})[0] if not u.get("proof_round") else "checkable"
             if defect:
                 out.append(u)
             elif k == "engine_step":
@@ -2648,6 +2876,9 @@ class Engine:
             self.save_checkpoint(stage=0, rounds=0, n=0, feedback="", step="write")
         bad, gated, dry = tracker_checks(data), gate_only_checks(data, self.cfg), dry_check(data, self.wt)
         rep = self.repeated_slow(data)
+        led = ledger_problems(data)
+        if led:
+            dry = dry + led  # sent back with the checks that cannot run
         if bad or gated or dry or rep:  # asked once to rewrite them, like an invalid answer; not a counted re-plan
             why = ""
             if rep:
@@ -2795,6 +3026,9 @@ class Engine:
             else:
                 rules.append("Read %s: this repo's rules for workers (what runs where, known pitfalls of its tools); the "
                              "checks you write must follow them." % rf)
+        notes = self.planner_notes()
+        if notes:
+            rules.append("Facts about this factory and project that the plan must respect:\n" + notes)
         shared = self.shared_text()
         if shared:
             rules.append(shared.strip())
@@ -2853,6 +3087,7 @@ class Engine:
             raise Blocked("owner decision needed", data["question"], data.get("options"))
         self.outcome_of("%d stage%s" % (len(data["stages"]), "" if len(data["stages"]) == 1 else "s"),
                         data["summary"][:200])
+        self.check_unresolved(data)
         if not data["stages"]:
             # tl-bxk.13.2: the work is done and only the filing is left: the engine files and closes. Never after a failed
             # stage (a re-plan), and never over work no review accepted: that tree is not "done".
@@ -2868,6 +3103,7 @@ class Engine:
             raise Blocked("ticket: the plan has %d stages (more than %d): the bead may be too big for one task" % (
                 len(data["stages"]), big), "Split the bead into these, or comment that it stays one bead:\n" + "\n".join(
                 "%d. %s" % (k + 1, s["goal"]) for k, s in enumerate(data["stages"])))
+        self.ledger_fill(data)
         self.plan_leftovers(data)
         lines = ["Plan (engine): " + data["summary"]]
         lines += ["%d. %s%s [files: %s] [checks: %s]" % (n + 1, s["goal"], " (hard)" if s["hard"] else "",
@@ -3088,6 +3324,10 @@ class Engine:
         if ck["brief"] != self.brief_hash:
             answer = self.answer_text(self.answered) if self.answered else ""
             diff = bead_diff(ck["snap"], self.snap, answer) if ck.get("snap") else None
+            if answer and (self.answered or {}).get("kind") in ("stuck", "budget", "denied", "pause") and RERUN_ANSWER.fullmatch(" ".join(answer.lower().replace("-", " ").split()).strip(" .!")):
+                # tl-bxk.13.16.5: "Run again" changes nothing the plan reads; counted as an amend it used a re-plan (lifesim-fld.10)
+                self.log("note", "the owner's answer (%s) only asks for a rerun: keeping the plan, no planner run" % answer.strip()[:40])
+                diff = ""
             if diff == "":  # the hash moved on a label or a priority: nothing the plan reads changed
                 self.log("note", "the bead changed since the checkpoint of %s, but nothing the plan reads: keeping the plan, "
                          "no planner run" % ck["run"])
@@ -3103,6 +3343,16 @@ class Engine:
         self.plan_data, self.plan_summary, self.accepted = ck["plan"], ck["plan"]["summary"], list(ck["accepted"])
         (self.run_dir / "plan.json").write_text(json.dumps(ck["plan"], indent=1))
         stages = ck["plan"]["stages"]
+        again = self.promised_missing(ck["plan"], len(stages) if (ck["step"] == "land" or ck["stage"] >= len(stages)) else ck["stage"])
+        if again is not None:
+            # tl-bxk.13.16.2: lifesim-d5f.40 resumed in another slot, its stage 1 evidence file stayed behind and the checks of stage 2
+            # could never pass (the writer said so 8 times). The stage that made it runs again.
+            self.log("note", "resuming %s: a file stage %d promised is missing, so that stage runs again" % (ck["run"], again + 1))
+            self.accepted = [k for k in self.accepted if k < again]
+            redo = {st["goal"] for st in stages[again:]}
+            self.done = [g for g in self.done if g not in redo]
+            self.unchecked = []
+            return ck["plan"], again, None
         if ck["step"] == "land" or ck["stage"] >= len(stages):
             self.unchecked = list(ck.get("unchecked") or [])  # still unproven: verified again before land
             self.log("note", "resuming %s: every stage was accepted, going straight to land" % ck["run"])
@@ -3110,6 +3360,21 @@ class Engine:
         self.log("note", "resuming %s at stage %d/%d, round %d (write %d)" % (
             ck["run"], ck["stage"] + 1, len(stages), ck["rounds"] + 1, ck["n"] + 1))
         return ck["plan"], ck["stage"], {"rounds": ck["rounds"], "n": ck["n"], "feedback": ck["feedback"]}
+
+    def promised_missing(self, plan, upto):
+        """tl-bxk.13.16.2: the index of the earliest accepted stage (before `upto`) that mentions an evidence file which is gone
+        now while a check still to run reads it, or None. A check that writes the file itself (`> path`, tee) does not need it."""
+        ev = re.compile(r"\.task/%s/evidence/[^\s\"'<>|;&)]+" % re.escape(self.bead))
+        stages = plan.get("stages") or []
+        pending = [c for st in stages[upto:] for c in st["checks"]] + [
+            x["check"] for x in plan.get("cases") or [] if x.get("check", "").strip() and x.get("class", "test") == "test"]
+        need = set()
+        for c in pending:
+            for p in ev.findall(c):
+                if not Path(self.wt, p).exists() and not re.search(r"(?:>>?|tee(?: -a)?)\s*[\"']?%s" % re.escape(p), c):
+                    need.add(p)
+        early = [k for k, st in enumerate(stages[:upto]) if any(p in c for c in st["checks"] for p in need)]
+        return min(early) if early else None
 
     def stage(self, plan, i, state=None):
         """Write → checks → review until the review is clean. A red check goes straight back to the writer (it never
@@ -3166,7 +3431,7 @@ class Engine:
             if delta:  # the writer may have edited its copy: the engine's brief goes back before it reads it again
                 self.brief_file.write_text(self.brief_text(), encoding="utf-8")
             else:  # a whole prompt (a first write, a fresh writer): what the tasks beside this one are doing (tl-bxk.13.8)
-                prompt += self.shared_text()
+                prompt += self.shared_text() + self.deferred_text()
             w, wfam = self.ai("write", "%s write %d" % (name, n), prompt, delta=delta, resume_key="writer", write=n,
                               visual=self.stage_visual(st), round=rounds + 1, **where)
             self.writer_family = wfam
@@ -3271,6 +3536,12 @@ class Engine:
                 writer_family=wfam, visual=not fix and self.stage_visual(st), round=rounds + 1, **where)
             self.accepted_new += [p for p in review.get("accept_files") or [] if p in kinds["unexplained"] and p not in self.accepted_new]
             review = dict(review, findings=list(review["findings"]))
+            kept = [u for u in review["unmet"] if not self.ledger_route(u)]  # tl-bxk.13.16.1: the ledger settles these
+            if len(kept) != len(review["unmet"]):
+                self.log("note", "%d unmet item%s dropped: the plan's ledger defers or gives them to the engine: %s" % (
+                    len(review["unmet"]) - len(kept), "" if len(review["unmet"]) - len(kept) == 1 else "s",
+                    "; ".join(u[:80] for u in review["unmet"] if u not in kept)))
+                review["unmet"] = kept
             for p in self.undecided_new(kinds["unexplained"], review):  # never a silent drop: the writer names it or deletes it
                 review["findings"].append({"file": p, "line": 0, "severity": "medium", "fix":
                     "decide: unexplained new file %s (name it in your summary if the task needs it, else delete it)" % p})
@@ -3587,10 +3858,14 @@ class Engine:
         if self.dry:
             self.log("note", "dry run: not landing")
             return ""
-        pushes = 0
+        pushes, flaky_push, rest = 0, 0, 0
         self.task_branch = self.git("symbolic-ref", "--short", "-q", "HEAD")
         while True:  # one land at a time per repo: rebase, gate and push see the latest base; a fix runs outside the lock
             problem = None
+            if rest:  # a rest after a network failure, with the lock let go
+                time.sleep(rest)
+                self.add_wait(rest, "the network")
+                rest = 0
             with self.land_lock():
                 self.node("land", "land (try %d)" % (pushes + 1), **{"try": pushes + 1})
                 self.quarantine_strays()
@@ -3625,6 +3900,16 @@ class Engine:
                     if stop:
                         raise Blocked("failed: stopped (SIGTERM)")
                     if not re.search(r"rejected|non-fast-forward|fetch first|stale info", tail):
+                        if TRANSIENT_PUSH.search(tail[-600:]):  # the push's own last lines, not a hook's test output before them
+                            if flaky_push >= len(PUSH_RESTS):
+                                raise Blocked("paused: the land push failed %d times with a network error; the branch is kept and "
+                                              "the next run lands it again: %s" % (flaky_push + 1, tail.strip()[-200:]))
+                            rest = PUSH_RESTS[flaky_push]
+                            flaky_push += 1
+                            self.warn("the push failed with a network error, trying again in %d s (%d of %d): %s" % (
+                                rest, flaky_push, len(PUSH_RESTS), tail.strip()[-160:]))
+                            self.transition("land", "push_network", "network error on the push; try %d after %d s" % (flaky_push + 1, rest))
+                            continue
                         raise Blocked("land failed\n" + tail)
                     pushes += 1
                     self.outcome_of("rejected", "main moved")
@@ -3752,6 +4037,52 @@ class Engine:
 
     def look_ready(self, st):
         return bool(self.shot_methods()) and self.stage_visual(st)
+
+    def planner_notes(self):
+        """engine.planner_notes: text, or "@path" of a repo file (read from the worktree), at most 2000 characters."""
+        v = (self.cfg.get("planner_notes") or "").strip()
+        if v.startswith("@"):
+            try:
+                v = (Path(self.wt) / v[1:]).read_text(encoding="utf-8").strip()
+            except OSError:
+                self.warn("engine.planner_notes: %s cannot be read" % v)
+                return ""
+        return v[:2000]
+
+    def check_unresolved(self, data):
+        """tl-bxk.13.16.3: inputs the planner could not find. A file that is there after all drops out; one a case defers (proved_by
+        leftover) is a follow-up; the rest is the owner's to decide now, in minute 4, not after three rounds (lifesim-gfr.38 a
+        Windows PC, d5f.61 a sink, fdyo a Godot half, v5z files that are not on the machine)."""
+        if (self.answered or {}).get("kind") == "decision":  # the owner just chose what to do about it
+            return
+        gone, open_ = [], []
+        deferred = [word_set("%s %s" % (c["criterion"], c.get("via") or "")) for c in data.get("cases") or [] if c.get("proved_by") == "leftover"]
+        deferred += [word_set(lo["title"] + " " + lo["why"]) for lo in data.get("leftovers") or []]
+        for u in data.get("unresolved") or []:
+            path = (u.get("path") or "").strip()
+            if path and ".." not in path and (Path(path) if path.startswith("/") else Path(self.wt) / path).exists():
+                continue  # it is there
+            if any(len(word_set(u["what"]) & d) >= 2 for d in deferred):
+                gone.append(u)
+                continue
+            open_.append(u)
+        if gone:
+            self.log("note", "inputs not found, their criteria deferred: %s" % "; ".join(u["what"][:100] for u in gone))
+        if not open_:
+            return
+        lines = "\n".join("- %s (%s%s)" % (u["what"], u["kind"], ", expected at " + u["path"] if u.get("path") else "") for u in open_)
+        self.outcome_of("asks", "%d input%s missing" % (len(open_), "" if len(open_) == 1 else "s"))
+        raise Blocked("owner decision needed",
+                      ("The task needs inputs this factory does not have:\n%s\n%s Choose: defer the work that needs them to a follow-up "
+                       "bead and do the rest; provide them (say where); or drop those criteria from the task.") % (
+                          lines, "Work already done stays." if self.done else "Nothing was started."),
+                      [{"label": "Defer that work", "cost": "the rest of the task is done now; a follow-up bead holds the deferred part",
+                        "answer": "Defer the criteria that need: %s. Plan and do the rest; file a follow-up bead for the deferred part." % "; ".join(
+                            u["what"] for u in open_), "recommended": True},
+                       {"label": "I will provide them", "cost": "the bead waits until they are there",
+                        "answer": "The inputs are now available: %s. Plan again." % "; ".join(u["what"] for u in open_), "recommended": False},
+                       {"label": "Drop those criteria", "cost": "the task is smaller than written",
+                        "answer": "Drop the criteria that need: %s. Plan the rest." % "; ".join(u["what"] for u in open_), "recommended": False}])
 
     def references_text(self):
         """What the planner is told the task already has to look at: image files its text names, and the last landed shots."""
@@ -4666,6 +4997,7 @@ FRAME_LINE = re.compile(r'^\s*File ".*", line \d+')
 STOP_WORDS = {"that", "this", "with", "from", "into", "have", "been", "were", "which", "their", "there", "than", "then", "when",
               "what", "does", "should", "would", "could", "also", "only", "each", "every", "about", "after", "before", "bead",
               "beads", "task", "work", "tests", "test", "file", "files", "code", "check", "checks"}
+FILING_WORDS = re.compile(r"\b(?:beads?|follow-?ups?|filed?|filing|issues?|tickets?|records?|recorded|leftovers?|deferred?)\b", re.I)
 OWNERISH = re.compile(r"\b(?:owner|sign-?off|approv\w*|review|confirm\w*|decid\w*|decision)\b", re.I)
 
 
@@ -4853,6 +5185,7 @@ A number for a look item (a contrast ratio, a size) comes only from the task, th
 tokens, a rule under config/). Never invent one as a check: if you think one is needed, ask it as your question (options with
 your proposal first) and plan no check for it.
 %s"""
+RERUN_ANSWER = re.compile(r"(?:run|try|start) again|re ?run|retry")  # the dashboard's Run again, or the same said by hand
 REPLAN_CAP = "stuck: the bead was re-planned "  # the cap's ask; an owner's answer to it allows one more
 RULES_INLINE_MAX = 6 * 1024   # a worker_rules file under this goes into the planner's brief
 PLAN_BRIEF_KB = 12            # the planner's whole brief should stay under this
@@ -4886,6 +5219,17 @@ each stage has its files and its checks. Budget: about 12 tool calls. Then plan.
   (quote it) and a check. They run on the last stage and again after any fix at land. A case about what users see uses
   the host's tools and a fact the tool reports (a scenario script, a screenshot saved under the evidence folder, a count
   the editor prints), never only "a screenshot exists".
+- Before planning, check that every input the criteria need exists: a file or asset, an object in the content, a platform or
+  machine the factory has, the engine or tool the project uses now, an input the task says someone provides. One you could not
+  find is listed in unresolved (what, kind, path: the file it should be at, or empty). If the rest of the task can go on
+  without it, defer the criteria that need it instead (a case with proved_by leftover, and a leftover) and do not list it.
+  A listed input that no case defers makes the engine ask the owner now, before any work is done.
+- Each case says in proved_by how its criterion is proved, and via names what proves it: check (a command; the usual
+  case), stage (its stage's own checks; via = the stage number), leftover (deferred to a follow-up bead the engine files:
+  also list it in leftovers; via = that leftover's title; check empty) or engine_step (the engine does it itself: files the
+  leftovers as beads, runs the gate, lands, closes the bead, copies screenshots; via = which; check empty). A criterion
+  about filing beads, the gate, the land or closing is an engine_step; one the tracker holds is never a check. The review
+  and the verifier are told this ledger and will not call a leftover or engine_step criterion unmet.
 - A criterion only the owner can judge (it looks right, feels right, the owner approves) is never a pass/fail check on a
   number you chose: the check proves the evidence exists (the screenshot or sheet is saved, a count the tool reports), and
   the judgement goes in leftovers for the owner. A threshold you invent is a requirement nobody asked for, and the writer

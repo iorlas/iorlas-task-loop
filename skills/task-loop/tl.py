@@ -34,6 +34,7 @@ State: ~/.config/task-loop (%APPDATA%\\task-loop on Windows): repos.json, events
 
 import argparse
 import contextlib
+import glob
 import hashlib
 import json
 import os
@@ -1271,10 +1272,63 @@ def start_server(port, bind=None):
     return None, "dashboard did not start; see " + str(config_dir() / "dash.log")
 
 
+def close_stale_asks(every=600):
+    """tl-bxk.13.16.5: an open ask whose bead is closed, or does not exist, is closed with the reason (lifesim-u3bx was closed by
+    hand a minute after its ask and sat open 40 hours; a demo record named a bead `demo`). A bd that fails for another reason
+    changes nothing. At most once per `every` seconds across all callers. -> the bead ids closed."""
+    marker = config_dir() / "asks" / ".swept"
+    try:
+        if time.time() - marker.stat().st_mtime < every:
+            return []
+    except OSError:
+        pass
+    done = []
+    for f in sorted(glob.glob(str(config_dir() / "asks" / "*.json"))):
+        try:
+            a = json.loads(Path(f).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(a, dict) or a.get("status") != "open" or not a.get("bead"):
+            continue
+        if not (isinstance(a.get("repo"), str) and Path(a["repo"]).is_dir()):
+            continue  # which repo's tracker to ask is not known: the ask stays
+        try:
+            r = bd("show", a["bead"], "--json", cwd=a["repo"])
+        except SystemExit:  # no bd on this machine
+            return done
+        why = ""
+        if r.returncode != 0:
+            if re.search(r"no issues? found matching|issue .{0,60}not found|no such issue", (r.stderr or "") + (r.stdout or ""), re.I):
+                why = "the bead does not exist"
+        else:
+            try:
+                d = json.loads(r.stdout)
+                d = d[0] if isinstance(d, list) and d else d
+            except ValueError:
+                continue
+            if isinstance(d, dict) and d.get("status") == "closed":
+                why = "the bead is closed"
+        if why:
+            a.update(status="closed", closed=time.time(), closed_why=why)
+            try:
+                Path(f).write_text(json.dumps(a, indent=1), encoding="utf-8")
+                done.append(a["bead"])
+            except OSError:
+                pass
+    try:
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(str(time.time()))
+    except OSError:
+        pass
+    return done
+
+
 def cmd_ask(a):
     """The inbox from the terminal: the dashboard's own code answers and withdraws, so both say the same things."""
     d = dash_module()
     if a.op == "list":
+        for b in close_stale_asks(every=0):
+            print("closed the ask of %s: its bead is closed or gone" % b)
         rows = d.inbox()
         if a.json:
             print(json.dumps(rows, indent=1))

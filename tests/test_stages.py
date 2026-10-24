@@ -666,5 +666,372 @@ class VisualWork(StagesTest):
         self.assertEqual(entry["shots"], [{"path": "design/look-reviews/t-1/main.png", "role": "after", "label": "main"}])
 
 
+class Executable(StagesTest):
+    """tl-bxk.13.16.2: a plan check must be able to start; an accepted stage's promised files must exist on resume."""
+
+    def test_a_sentence_is_not_a_command(self):
+        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["After building the current player: python3 tools/x.py", HAS_F])])
+        errs = engine.dry_check(plan, str(self.wt))
+        self.assertEqual(len(errs), 1)
+        self.assertIn("`After` is not a command here", errs[0])
+
+    def test_real_commands_pass_the_word_check(self):
+        for ok in ("grep -q x a.txt && test -f a.txt", "! grep -q zzz a.txt", "FOO=1 bash -c 'echo hi' | wc -l",
+                   "echo hi > out.txt 2>&1 && test -s out.txt", "for f in a b; do echo $f; done", "(cd . && ls)",
+                   "git status --short", "python3 -c 'a;b'", te.PY + " -c 'pass'"):
+            self.assertEqual(engine.command_problems(ok, str(self.wt)), [], ok)
+
+    def test_a_just_recipe_must_exist_in_the_tree(self):
+        (self.wt / "justfile").write_text("fmt-check:\n\techo ok\n")
+        engine._RECIPES.clear()
+        self.assertEqual(engine.command_problems("just fmt-check && echo done", str(self.wt)), [])
+        bad = engine.command_problems("just fmt-check && just unity-play-tests", str(self.wt))
+        self.assertEqual(len(bad), 1)
+        self.assertIn("no recipe unity-play-tests", bad[0])
+        self.assertIn("fmt-check", bad[0])
+        engine._RECIPES.clear()
+
+    def test_valid_checks_the_word_check_must_not_block(self):
+        for ok in ("command -v git >/dev/null", "env -i PATH=$PATH git --version", "f () { echo hi; }; f",
+                   "cat <<EOF2 > x.txt\nhello\nEOF2\ntest -s x.txt", "cd sub && ./x.sh", "make && ./build/x", "npm ci && node_modules/.bin/jest",
+                   "~/bin/foo", ".venv/bin/python -c pass", "source env.sh && git status", "time git status"):
+            self.assertEqual(engine.command_problems(ok, str(self.wt)), [], ok)
+
+    def test_just_aliases_private_recipes_options_and_a_recipe_a_stage_adds(self):
+        (self.wt / "justfile").write_text("alias ci := check\ncheck:\n\techo ok\n_private:\n\techo p\n")
+        engine._RECIPES.clear()
+        for ok in ("just ci", "just _private", "just --justfile justfile check", "just --set v x check", "just -d . check", "just check"):
+            self.assertEqual(engine.command_problems(ok, str(self.wt)), [], ok)
+        self.assertEqual(len(engine.command_problems("just nope", str(self.wt))), 1)
+        self.assertEqual(engine.command_problems("just newrecipe", str(self.wt), made=["justfile"]), [])  # a stage adds it
+        (self.wt / "justfile").write_text("newrecipe:\n\techo n\n")  # a rebase changes the file: seen at once
+        self.assertEqual(engine.command_problems("just newrecipe", str(self.wt)), [])
+        engine._RECIPES.clear()
+
+    def test_a_missing_script_is_found_unless_a_stage_makes_it(self):
+        check = "./tools/probe.sh --all"
+        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[check])])
+        self.assertIn("is not a file of this tree", engine.dry_check(plan, str(self.wt))[0])
+        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], files=["tools/probe.sh"], checks=[check])])
+        self.assertEqual([e for e in engine.dry_check(plan, str(self.wt)) if "not a file" in e], [])
+
+    def test_the_plan_with_a_sentence_goes_back_once(self):
+        bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["Confirm that f exists", HAS_F])])
+        rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
+        self.assertIn("`Confirm` is not a command here", s.prompts[1])
+
+    PATH1 = ".task/t-1/evidence/sleeper-on-bed.txt"
+
+    def two_stage(self):
+        return dict(PLAN, stages=[
+            dict(PLAN["stages"][0], goal="stage one", checks=["echo ok > %s" % self.PATH1, HAS_F]),
+            dict(PLAN["stages"][0], goal="stage two", checks=['test -s %s' % self.PATH1])])
+
+    def test_a_file_an_accepted_stage_promised_and_a_later_check_reads(self):
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        plan = self.two_stage()
+        self.assertEqual(e.promised_missing(plan, 1), 0)  # stage 1 is accepted, the file is gone, stage 2 reads it
+        Path(self.wt, self.PATH1).parent.mkdir(parents=True, exist_ok=True)
+        Path(self.wt, self.PATH1).write_text("ok\n")
+        self.assertIsNone(e.promised_missing(plan, 1))
+        Path(self.wt, self.PATH1).unlink()
+        own = dict(plan, stages=[plan["stages"][0], dict(plan["stages"][1], checks=["echo ok > %s && test -s %s" % (self.PATH1, self.PATH1)])])
+        self.assertIsNone(e.promised_missing(own, 1))  # the later check writes it itself
+        self.assertIsNone(e.promised_missing(plan, 0))  # nothing accepted yet
+
+    def test_a_replanned_runs_goals_survive_the_stage_that_runs_again(self):
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e.reset(dict(BEAD))
+        e.plan_data = self.two_stage()
+        e.done, e.accepted = ["an earlier plan's goal", "stage one"], [0]
+        e.save_checkpoint(stage=1, rounds=0, n=0, feedback="", step="write")
+        again = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        again.reset(dict(BEAD))
+        again.resume_point()
+        self.assertEqual(again.done, ["an earlier plan's goal"])
+
+    def test_a_resume_runs_the_stage_again_when_its_file_is_gone(self):
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e.reset(dict(BEAD))
+        e.plan_data = self.two_stage()
+        e.done, e.accepted = ["stage one"], [0]
+        e.save_checkpoint(stage=1, rounds=0, n=0, feedback="", step="write")
+        again = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        again.reset(dict(BEAD))
+        plan, i, state = again.resume_point()
+        self.assertEqual((i, state, again.accepted, again.done), (0, None, [], []))
+        self.assertIn("a file stage 1 promised is missing", again.log_path.read_text())
+        Path(self.wt, self.PATH1).parent.mkdir(parents=True, exist_ok=True)
+        Path(self.wt, self.PATH1).write_text("ok\n")
+        third = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        third.reset(dict(BEAD))
+        self.assertEqual(third.resume_point()[1], 1)  # the file is there: stage 2 goes on
+
+
+
+class Ledger(StagesTest):
+    """tl-bxk.13.16.1: the plan says how each criterion is proved; review and verify go by it, not by the wording of an item."""
+
+    LEFT = [{"title": "Import the chosen prefabs and add object rows", "why": "next bead"}]
+    FILE = {"criterion": "Record the plan's follow-up issues about stale layer prose and bead wording", "check": "",
+            "proved_by": "engine_step", "via": "file_beads"}
+    DEFER = {"criterion": "A follow-up bead imports the chosen prefabs and adds object rows", "check": "",
+             "proved_by": "leftover", "via": "Import the chosen prefabs and add object rows"}
+
+    def plan(self, **kw):
+        return dict(PLAN, cases=[self.FILE, self.DEFER, {"criterion": "f exists", "check": HAS_F, "proved_by": "check"}],
+                    leftovers=self.LEFT, **kw)
+
+    def test_the_planner_is_told_to_keep_a_ledger(self):
+        rc, s = self.run_engine({"plan": [self.plan()], "write": [WRITE], "review": [CLEAN]})
+        self.assertIn("proved_by how its criterion is proved", s.prompts[0].replace("\n  ", " ").replace("Each case says in ", ""))
+        self.assertIn("engine_step", s.prompts[0])
+
+    def test_the_review_is_told_what_the_engine_does_and_what_is_deferred(self):
+        rc, s = self.run_engine({"plan": [self.plan()], "write": [WRITE], "review": [CLEAN]})
+        review = s.prompts[2]
+        self.assertIn("The engine does these itself", review)
+        self.assertIn("Record the plan's follow-up issues", review)
+        self.assertIn("Import the chosen prefabs", review)
+
+    def test_a_ledgered_item_is_not_unmet_in_any_wording(self):
+        unmet = ["A follow-up bead for importing the chosen prefabs and adding object rows is not filed",
+                 "The plan's follow-up issues about stale layer prose and bead wording are not recorded"]
+        rc, s = self.run_engine({"plan": [self.plan()], "write": [WRITE], "review": [review_with(unmet)]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])  # no send-back
+        self.assertIn("unmet items dropped", self.eng.log_path.read_text())
+
+    def test_a_claim_about_the_code_that_shares_words_with_a_deferred_item_is_not_that_item(self):
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e.plan_data = dict(PLAN, leftovers=[{"title": "Add tests for parser edge cases", "why": "later"}])
+        self.assertEqual(e.ledger_route("parser edge cases are not handled"), "")
+        self.assertEqual(e.ledger_route("The parser does not handle edge cases such as empty input or nested quotes"), "")
+        self.assertEqual(e.ledger_route("Add tests for the parser edge cases"), "leftover")
+        self.assertEqual(e.ledger_route("A follow-up bead for tests of parser edge cases is not filed"), "leftover")
+
+    def test_a_defect_the_verifier_found_is_not_filed_away_by_the_ledger(self):
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e.plan_data = self.plan()
+        e.unchecked = []
+        what = "Import the chosen prefabs and add object rows"
+        left = e.route_left([{"what": what, "kind": "checkable", "why": "found wrong: the rows are missing"}])
+        self.assertEqual([u["what"] for u in left], [what])  # still a defect: not unverified, not settled
+        self.assertEqual(e.unverified, [])
+
+    def test_an_unrelated_unmet_item_still_sends_the_stage_back(self):
+        rc, s = self.run_engine({"plan": [self.plan()], "write": [WRITE, WRITE],
+                                 "review": [review_with(["The settings page does not save the volume"]), CLEAN]})
+        self.assertEqual([c[0] for c in s.calls].count("worker"), 2)
+
+    def test_unchecked_items_in_the_ledger_never_reach_the_verifier_or_the_writer(self):
+        items = [{"what": "Record the plan's follow-up issues about stale layer prose and bead wording", "kind": "checkable", "source": ""},
+                 {"what": "The follow-up bead for importing the chosen prefabs and adding object rows exists", "kind": "checkable", "source": ""}]
+        rc, s = self.run_engine({"plan": [self.plan()], "write": [WRITE], "review": [dict(CLEAN, unchecked=items)]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])  # no verify call, no fix round
+        self.assertEqual([u["what"] for u in self.eng.unverified], [items[1]["what"]])  # the deferral lands for the owner
+        self.assertEqual(self.eng.verified[0]["why"], "the engine does this at land")
+
+    def test_an_unrelated_checkable_item_is_still_verified(self):
+        item = {"what": "The volume slider saves its value across restarts on every platform", "kind": "checkable", "source": ""}
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e.plan_data = self.plan()
+        self.assertEqual(e.ledger_route(item["what"]), "")
+        self.assertEqual(e.engine_steps([dict(item)]), [item])
+
+    def test_a_deferred_case_the_plan_forgot_to_list_is_listed(self):
+        plan = dict(PLAN, cases=[self.DEFER], leftovers=[])
+        rc, s = self.run_engine({"plan": [plan], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([lo["title"] for lo in self.eng.plan_data["leftovers"]], ["Import the chosen prefabs and add object rows"])
+        self.assertIn("Import the chosen prefabs and add object rows", self.created())
+
+    def test_a_case_with_nothing_to_prove_it_goes_back_to_the_planner(self):
+        bad = dict(PLAN, cases=[{"criterion": "the rows exist", "check": ""}])
+        rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
+        self.assertIn("case `the rows exist` has no check", s.prompts[1])
+        self.assertEqual(engine.ledger_problems(self.plan()), [])
+
+    def test_ledgered_cases_run_no_command(self):
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e.plan_data = self.plan()
+        self.assertEqual(e.case_checks(), [HAS_F])
+        self.assertEqual(engine.plan_checks(self.plan()), [HAS_F] + [c for st in PLAN["stages"] for c in st["checks"] if c != HAS_F])
+
+
+def review_with(unmet):
+    return dict(CLEAN, unmet=list(unmet))
+
+
+
+class Inputs(StagesTest):
+    """tl-bxk.13.16.3: inputs the criteria need that were not found are the owner's to decide in minute 4."""
+
+    WIN = {"what": "a Windows PC to run the play test on", "kind": "platform", "path": ""}
+
+    def test_a_missing_input_no_case_defers_is_a_decision_ask_before_any_work(self):
+        rc, s = self.run_engine({"plan": [dict(PLAN, unresolved=[self.WIN])]})
+        self.assertEqual(rc, 2)
+        self.assertEqual([c[0] for c in s.calls], ["planner"])  # no writer
+        a = self.ask()
+        self.assertEqual(a["kind"], "decision")
+        self.assertIn("Windows PC", a["question"])
+        self.assertEqual([o["label"] for o in a["options"]], ["Defer that work", "I will provide them", "Drop those criteria"])
+        self.assertEqual([o.get("recommended") for o in a["options"]].count(True), 1)
+
+    def ask(self):
+        p = tl.config_dir() / "asks" / "t-1.json"
+        return json.loads(p.read_text()) if p.exists() else None
+
+    def test_an_input_a_case_defers_is_no_question(self):
+        case = {"criterion": "The play test passes on the Windows PC", "check": "", "proved_by": "leftover",
+                "via": "Run the play test on a Windows PC"}
+        plan = dict(PLAN, unresolved=[self.WIN], cases=[case], leftovers=[{"title": "Run the play test on a Windows PC", "why": "no PC"}])
+        rc, s = self.run_engine({"plan": [plan], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertIn("inputs not found, their criteria deferred", self.eng.log_path.read_text())
+
+    def test_a_file_that_is_there_after_all_is_dropped(self):
+        plan = dict(PLAN, unresolved=[{"what": "the notes file", "kind": "file", "path": "a.txt"}])
+        rc, s = self.run_engine({"plan": [plan], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+
+    def test_after_the_owner_answered_the_engine_does_not_ask_again(self):
+        ask = dict(WRITE, question="Which format?")
+        self.run_engine({"plan": [PLAN], "write": [ask]})
+        with mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Use the new format."}]):
+            rc, s = self.run_engine({"plan": [dict(PLAN, unresolved=[self.WIN])], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+
+    def test_planner_notes_reach_the_planner_as_text_or_a_repo_file(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, planner_notes="No Windows PC. Godot left main on 2026-10-12.")
+        self.assertIn("Facts about this factory and project", s.prompts[0])
+        self.assertIn("No Windows PC. Godot left main", s.prompts[0])
+        (self.wt / "notes.md").write_text("The factory is a Mac only.\n")
+        te.sh("git", "add", "-A", cwd=self.wt)
+        te.sh("git", "commit", "-qm", "notes", cwd=self.wt)
+        te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=self.wt)
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, planner_notes="@notes.md")
+        self.assertIn("The factory is a Mac only.", s.prompts[0])
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertNotIn("Facts about this factory", s.prompts[0])
+
+    def test_the_planner_is_told_to_list_what_it_could_not_find(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertIn("unresolved", s.prompts[0])
+
+
+
+class Contracts(StagesTest):
+    """tl-bxk.13.16: infrastructure is retried with a rest, never asked; the version is recorded."""
+
+    FLAKY = ("import os, subprocess, sys\nm = %r\nn = int(open(m).read()) if os.path.exists(m) else 0\n"
+             "open(m, 'w').write(str(n + 1))\n"
+             "if n < %d:\n    sys.stderr.write('error: RPC failed; curl 56 Send failure: Broken pipe\\nfatal: the remote end hung up unexpectedly\\n'); sys.exit(1)\n"
+             "sys.exit(subprocess.call(['git', 'push', 'origin', 'HEAD:main']))\n")
+
+    def land_with(self, fails):
+        script = Path(self.tmp.name, "flaky_push.py")
+        script.write_text(self.FLAKY % (str(Path(self.tmp.name, "flaky-count")), fails))
+        return te.PY + " " + str(script).replace("\\", "/")
+
+    def test_a_network_failure_on_the_push_is_retried_with_a_rest_and_lands(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, land=self.land_with(2))
+        self.assertEqual(rc, 0, self.blocked)
+        text = self.eng.log_path.read_text()
+        self.assertEqual(text.count("the push failed with a network error"), 2)
+        self.assertIsNone(self.eng.__dict__.get("asked") or None)
+        self.assertTrue(self.closed and self.closed[0].startswith("merged"))
+
+    def test_a_push_that_keeps_failing_pauses_the_bead_and_asks_nobody(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, land=self.land_with(99))
+        self.assertNotEqual(rc, 0)
+        self.assertTrue(self.eng.why.startswith("paused: the land push failed 4 times"), self.eng.why)
+        self.assertFalse(self.eng.asked)
+
+    def test_a_hooks_test_output_before_the_push_is_not_a_network_error(self):
+        tail = "tests: Connection refused by the fake server (expected)\n" + "ok test passed\n" * 60 + "error: failed to push some refs\n"
+        self.assertTrue(engine.TRANSIENT_PUSH.search(tail))  # the whole output would match
+        self.assertFalse(engine.TRANSIENT_PUSH.search(tail[-600:]))  # the engine reads only the push's own last lines
+
+    def test_a_rejected_or_other_push_failure_is_not_retried_as_the_network(self):
+        self.assertFalse(engine.TRANSIENT_PUSH.search("! [rejected] HEAD -> main (non-fast-forward)"))
+        self.assertFalse(engine.TRANSIENT_PUSH.search("remote: error: GH006: Protected branch update failed"))
+        self.assertTrue(engine.TRANSIENT_PUSH.search("fatal: unable to access 'https://x/': Could not resolve host: x"))
+
+    def test_a_delegate_crash_is_retried_fresh_and_the_run_goes_on(self):
+        crash = te.ans("failed", "crash", "owner", say="UnicodeDecodeError: 'utf-8' codec can't decode bytes in position 65534-65535")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [crash, CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer", "reviewer"])
+        self.assertIn("delegate crashed", self.eng.log_path.read_text())
+
+    def test_a_delegate_that_keeps_crashing_pauses_the_bead_and_asks_nobody(self):
+        crash = te.ans("failed", "crash", "owner", say="UnicodeDecodeError")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [crash, crash, crash]})
+        self.assertNotEqual(rc, 0)
+        self.assertTrue(self.eng.why.startswith("paused: delegate crashed 3 times on the review step"), self.eng.why)
+        self.assertFalse(self.eng.asked)
+
+    def test_a_run_again_answer_keeps_the_plan_and_is_no_amend(self):
+        ask = dict(WRITE, question="Which format?")
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [ask]})
+        self.assertEqual(rc, 2)
+        path = tl.config_dir() / "asks" / "t-1.json"
+        a = json.loads(path.read_text())
+        path.write_text(json.dumps(dict(a, kind="stuck")))  # an over-budget or stuck ask, which has a Run again button
+        with mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Run again."}]):
+            rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertNotIn("planner", [c[0] for c in s.calls])
+        self.assertIn("only asks for a rerun", self.eng.log_path.read_text())
+        for text in ("run-again", "Retry!", "re-run", "try again"):
+            self.assertTrue(engine.RERUN_ANSWER.fullmatch(" ".join(text.lower().replace("-", " ").split()).strip(" .!")), text)
+        for text in ("yes", "use option A", "run again with more budget", "continue", "go on", "resume"):
+            self.assertFalse(engine.RERUN_ANSWER.fullmatch(text), text)
+
+    def test_a_real_answer_still_amends(self):
+        ask = dict(WRITE, question="Which format?")
+        self.run_engine({"plan": [PLAN], "write": [ask]})
+        with mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Use the new format, then run again."}]):
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(s.calls[0][0], "planner")
+
+    def test_asks_of_closed_or_missing_beads_are_closed_and_others_left(self):
+        asks = tl.config_dir() / "asks"
+        asks.mkdir(exist_ok=True)
+        for bead in ("b-open", "b-closed", "b-gone", "b-flaky"):
+            (asks / ("%s.json" % bead)).write_text(json.dumps({"v": 1, "id": bead + "-1", "bead": bead, "status": "open", "kind": "stuck",
+                                                                "repo": str(self.wt)}))
+        (asks / "b-norepo.json").write_text(json.dumps({"v": 1, "id": "n-1", "bead": "b-norepo", "status": "open", "kind": "stuck"}))
+        (asks / "b-answered.json").write_text(json.dumps({"v": 1, "id": "x", "bead": "b-answered", "status": "answered"}))
+
+        def fake_bd(*a, **k):
+            bead = a[1]
+            if bead == "b-gone":
+                return mock.Mock(returncode=1, stdout="", stderr="Error: no issue found matching b-gone")
+            if bead == "b-flaky":
+                return mock.Mock(returncode=1, stdout="", stderr="dolt: database not found")  # a bd failure, not "no such bead"
+            return mock.Mock(returncode=0, stdout=json.dumps([{"id": bead, "status": "closed" if bead == "b-closed" else "open"}]), stderr="")
+        with mock.patch.object(tl, "bd", side_effect=fake_bd):
+            closed = tl.close_stale_asks(every=0)
+            self.assertEqual(sorted(closed), ["b-closed", "b-gone"])
+            self.assertEqual(tl.close_stale_asks(), [])  # throttled
+        state = {b: json.loads((asks / ("%s.json" % b)).read_text())["status"] for b in ("b-open", "b-closed", "b-gone", "b-flaky", "b-answered", "b-norepo")}
+        self.assertEqual(state, {"b-open": "open", "b-closed": "closed", "b-gone": "closed", "b-flaky": "open", "b-answered": "answered",
+                                 "b-norepo": "open"})  # no repo recorded: which tracker to ask is unknown, the ask stays
+
+    def test_the_engine_log_and_trace_record_the_version(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        want = json.loads((Path(engine.__file__).resolve().parents[2] / ".claude-plugin" / "plugin.json").read_text())["version"]
+        self.assertEqual(engine.plugin_version(), want)
+        self.assertIn("task-loop %s" % want, self.eng.log_path.read_text())
+        last = json.loads((tl.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
+        self.assertEqual(last["version"], want)
+
+
 if __name__ == "__main__":
     unittest.main()

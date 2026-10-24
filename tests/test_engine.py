@@ -2629,7 +2629,7 @@ class EngineTest(unittest.TestCase):
             return dict(PLAN, stages=[dict(PLAN["stages"][0], checks=list(checks), files=list(files))])
         wt = str(self.wt)
         self.assertEqual(engine.dry_check(plan("test -f a.txt", "test -f new.txt", "grep -q '<(' a.txt", HAS_F), wt), [])
-        self.assertEqual(engine.dry_check(plan("cd sub && cat nope.txt", "cmd > out.log; test -f out.log"), wt), [])
+        self.assertEqual(engine.dry_check(plan("cd sub && cat nope.txt", "echo hi > out.log; test -f out.log"), wt), [])
         self.assertEqual(engine.dry_check(plan("test -f $HOME/x", "cat dir/*.txt"), wt), [])
         self.assertEqual(engine.dry_check(plan("python3 -m pytest -q tests", "bash -c 'true'", "python3 -c 'pass'"), wt), [])
         self.assertTrue(engine.dry_check(plan("python3 tests/nope.py"), wt))
