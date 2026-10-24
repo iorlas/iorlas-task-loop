@@ -171,6 +171,9 @@ class InputCache(SpeedTest):
         te.sh("git", "commit", "-qm", "a", cwd=self.wt)
         (self.wt / ".task-loop.json").write_text(json.dumps({"engine": {"checks": [
             {"id": "u", "cmd": "x", "inputs": ["*.cs"]}, {"id": "v", "cmd": "y", "inputs": ["client/{A,B}/**"]}]}}))
+        te.sh("git", "add", ".task-loop.json", cwd=self.wt)
+        te.sh("git", "commit", "-qm", "doctor config", cwd=self.wt)
+        te.sh("git", "update-ref", "refs/remotes/origin/main", "HEAD", cwd=self.wt)
         warns = engine.tl.doctor_warnings(str(self.wt))
         self.assertEqual(len([w for w in warns if "matches no tracked file" in w]), 1)
         self.assertIn("client/{A,B}/**", " ".join(warns))

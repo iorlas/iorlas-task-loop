@@ -6187,14 +6187,21 @@ Also give each item its kind (the engine routes by it; an open item of the wrong
 
 # ---- entry ----------------------------------------------------------------------------------------------------------
 
+def cfg_source(repo):
+    """The selected profile, base hint, and pinned commit (empty for a local fallback)."""
+    local = tl.profile(repo).get("engine") or {}
+    base = local.get("base") or DEFAULTS["base"]
+    data, commit = tl.profile_source(repo, base)
+    return data, base, commit
+
+
 def load_cfg(repo):
     """DEFAULTS plus the `engine` block of the repo's .task-loop.json as committed on the base branch (tl.profile).
     The base is itself a key: the working tree (or DEFAULTS) names it, then the base's copy is read. A caller fetches
     first (the loop's queue does; run-task reads the last fetch, and resets onto the base anyway)."""
     cfg = json.loads(json.dumps(DEFAULTS))
-    local = tl.profile(repo).get("engine") or {}
-    base = local.get("base") or cfg["base"]
-    cfg.update(tl.profile(repo, base).get("engine") or {})
+    data, _, _ = cfg_source(repo)
+    cfg.update(data.get("engine") or {})
     return cfg
 
 

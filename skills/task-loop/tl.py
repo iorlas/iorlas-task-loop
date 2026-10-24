@@ -570,15 +570,21 @@ def profile(repo, base=None):
     """The repo's loop profile (.task-loop.json, parsed). With `base` (a ref such as origin/main), the copy committed
     there, so a pushed rule counts after a fetch even when nobody pulled the checkout; the working tree only when
     `base` does not resolve here (no remote). A file missing on the base is {}: committed wins."""
-    if base and git("rev-parse", "--verify", "-q", base + "^{commit}", cwd=repo):
+    return profile_source(repo, base)[0]
+
+
+def profile_source(repo, base=None):
+    """The profile and its exact commit, or an empty commit for the working-tree fallback."""
+    commit = git("rev-parse", "--verify", "-q", base + "^{commit}", cwd=repo) if base else ""
+    if commit:
         try:
-            return json.loads(git("show", "%s:.task-loop.json" % base, cwd=repo) or "{}")
+            return json.loads(git("show", "%s:.task-loop.json" % commit, cwd=repo) or "{}"), commit
         except ValueError:
-            return {}
+            return {}, commit
     try:
-        return json.loads((Path(repo) / ".task-loop.json").read_text(encoding="utf-8"))
+        return json.loads((Path(repo) / ".task-loop.json").read_text(encoding="utf-8")), ""
     except (OSError, ValueError):
-        return {}
+        return {}, ""
 
 
 def profile_slots(repo):
@@ -1792,7 +1798,7 @@ def cmd_hook(a):
 
 # ---- doctor -------------------------------------------------------------------------------------------------------
 
-def doctor_warnings(repo):
+def doctor_warnings(repo, source=None):
     """What is off in the repo's git setup for slots (tl-bxk.10.12), one line each."""
     out = []
     if git("config", "--get", "extensions.worktreeConfig", cwd=repo).lower() != "true":
@@ -1801,8 +1807,14 @@ def doctor_warnings(repo):
                    "extensions.worktreeConfig true` gives each worktree its own config file." % repo)
     try:  # engine.checks[].inputs globs that match no tracked file would cache a green over changed code
         import checks_speed
-        files = git("ls-files", cwd=repo).splitlines()
-        for c in (profile(repo).get("engine") or {}).get("checks") or []:
+        if source is None:
+            import engine
+            source = engine.cfg_source(repo)
+        data, base, commit = source
+        files = (git("ls-tree", "-r", "--name-only", "-z", commit, cwd=repo).split("\0") if commit
+                 else git("ls-files", "-z", cwd=repo).split("\0"))
+        files = [path for path in files if path]
+        for c in (data.get("engine") or {}).get("checks") or []:
             ins = [c["inputs"]] if isinstance(c.get("inputs"), str) else list(c.get("inputs") or [])
             for g in checks_speed.dead_globs(files, ins):
                 out.append("check %s: inputs glob %s matches no tracked file, so the check is never cached; braces are "
@@ -1813,8 +1825,13 @@ def doctor_warnings(repo):
 
 
 def cmd_doctor(a):
-    repo = repo_root()
-    warns = doctor_warnings(repo)
+    import engine
+    repo = git("rev-parse", "--show-toplevel") or os.getcwd()
+    source = engine.cfg_source(repo)
+    _, base, commit = source
+    print("config: .task-loop.json from base %s at commit %s" % (base, commit) if commit else
+          "config: .task-loop.json from working tree %s (base %s unresolved; no commit read)" % (repo, base))
+    warns = doctor_warnings(repo, source)
     for w in warns:
         print("WARN " + w)
     if not warns:
