@@ -497,6 +497,49 @@ class Loop(LoopBase):
         self.assertIn("infrastructure", self.lines()[0]["why"])
         self.assertEqual(sorted(loop.read_rests(str(self.repo))), ["x-1", "x-2"])  # rests an hour for every loop
 
+    def test_two_instant_failures_on_one_slot_set_the_slot_aside_and_the_loop_goes_on(self):
+        # tl-g6a: s4 fed 7 beads in under a minute each, 'worktree has uncommitted work of another branch'
+        bad = lambda: rec("failed", minutes=0.3, why="failed: worktree /w/.slots/s1 has uncommitted work of another branch")
+        self.beads({"x-1": [bad()], "x-2": [bad()], "x-3": [rec("landed")]}, slots=2)
+        holds = []
+        real = tl.cmd_slot
+        with mock.patch.object(tl, "cmd_slot", side_effect=lambda a: holds.append((a.op, a.name, a.why, a.for_min)) or 0 if a.op == "hold" else real(a)):
+            rc = self.run_loop()
+        self.assertEqual([h[:2] for h in holds], [("hold", "s1")])
+        self.assertIn("SET ASIDE", self.out)
+        self.assertIn("set aside by tl loop: 2 runs failed", holds[0][2])
+        self.assertEqual(holds[0][3], loop.SLOT_ASIDE_MIN)
+        self.assertNotIn("2 failures in a row", self.out)  # the slot's failures are not the beads' or the loop's
+        self.assertEqual([b for b, _ in self.started], ["x-1", "x-2", "x-3"])
+
+    def test_one_instant_failure_or_a_slow_one_or_another_reason_sets_nothing_aside(self):
+        holds = []
+        real = tl.cmd_slot
+        guard = mock.patch.object(tl, "cmd_slot", side_effect=lambda a: holds.append(a.name) or 0 if a.op == "hold" else real(a))
+        with guard:
+            self.beads({"x-1": [rec("failed", minutes=0.3, why="failed: worktree X has uncommitted work of another branch")],
+                        "x-2": [rec("landed")], "x-3": [rec("failed", minutes=0.3, why="failed: worktree X has uncommitted work of another branch")],
+                        "x-4": [rec("landed")]})
+            self.run_loop()
+        self.assertEqual(holds, [])  # a landing ends the run of failures
+        with guard:
+            self.beads({"x-1": [rec("failed", minutes=40, why="failed: worktree X has uncommitted work")], "x-2": [rec("failed", minutes=40, why="failed: worktree X has uncommitted work")]})
+            self.run_loop()
+        self.assertEqual(holds, [])  # slow ones
+        with guard:
+            self.beads({"x-1": [rec("failed", minutes=0.2, why="failed: the plan has no stages")], "x-2": [rec("failed", minutes=0.2, why="failed: the plan has no stages")]})
+            self.run_loop()
+        self.assertEqual(holds, [])  # not the slot's
+
+    def test_a_slot_that_cannot_be_held_is_said_so_and_the_failures_still_count(self):
+        bad = lambda: rec("failed", minutes=0.3, why="failed: worktree /w/.slots/s1 has uncommitted work of another branch")
+        self.beads({"x-1": [bad()], "x-2": [bad()], "x-3": [rec("landed")]}, slots=2)
+        real = tl.cmd_slot
+        with mock.patch.object(tl, "cmd_slot", side_effect=lambda a: 1 if a.op == "hold" else real(a)):
+            self.run_loop()
+        self.assertIn("could not be set aside", self.out)
+        self.assertNotIn("SET ASIDE", self.out)
+
     def test_a_landed_bead_ends_a_run_of_failures(self):
         self.beads({"x-1": [rec("failed")], "x-2": [rec("landed")], "x-3": [rec("failed")], "x-4": [rec("landed")]})
         self.assertEqual(self.run_loop(), 0)

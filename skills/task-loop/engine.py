@@ -54,6 +54,7 @@ DEFAULTS = {
     "node_timeout_min": 45,           # a plan, review or verify call running longer is stopped; a write follows the keys below
     "write_idle_warn_min": 15,        # a write whose worker has been silent this long (session file, process output) is warned about
     "write_idle_stop_min": 25,        # and stopped at this; a write whose activity cannot be seen keeps node_timeout_min
+    "reflect": True,                  # tl-05s: one cheap call after the close writes a short reflection into the trace and the bead's Reflect comment
     "planner_notes": "",              # facts the planner must plan by (what the factory has and has not: platforms, engines, tools), text or "@repo/file"
     "shot_table": "",                 # the project's shot methods (docs/design/visual-work.md; looks.py): a repo path, read from the base branch.
                                       # With it a visual stage renders by the engine's hand, judged by a look judge; without it the old way (the writer saves shots)
@@ -84,6 +85,7 @@ DEFAULTS = {
 
 FLAKE_DAYS = 14     # how long a writer-reported flaky test stays in the shared notes
 INPUT_KINDS = ("file", "platform", "object", "engine", "tool", "other")
+CAUSE_CLASSES = ("engine", "prompt", "delegate", "repo_profile", "bead", "sandbox", "other")  # tl-05s
 PROVED_BY = ("check", "stage", "leftover", "engine_step")  # tl-bxk.13.16.1: how a plan criterion is proved (the ledger)
 HANDOFF_CAP = 1500  # characters of round history one prompt carries (tl-bxk.13.6)
 S_STR = {"type": "string"}
@@ -168,6 +170,11 @@ TRACKER_TEXT = ("\n\nYour plan was sent back: these checks read the issue tracke
 REPEAT_TEXT = ("\n\nYour plan was sent back: these slow commands run in more than one check, or repeat a check the engine already "
                "runs, and each run takes minutes:\n%s\nRun each once. A check that needs its result reads the file the first "
                "one saved, or `$TL_CHECK_LOG_<ID>` for a repo check, instead of running the command again.")
+
+EMPTY_PLAN_TEXT = ("\n\nYour plan was sent back: it has no stages, no question and no leftovers, so there is nothing to do and nothing to "
+                   "ask. A plan has at least one stage (goal, files, checks). If the work is already done in the tree, plan the "
+                   "stage that checks it. If only follow-up work is left, list it in leftovers. If the task cannot be done without "
+                   "an owner's decision, ask it in question.")
 
 DRY_CHECK_TEXT = ("\n\nYour plan was sent back: the engine dry-ran its checks and these cannot run:\n%s\nReturn the plan "
                   "with only these checks fixed.")
@@ -575,6 +582,12 @@ SCHEMAS = {
                                   "fix": S_STR}}},
                    "unmet": S_STRS, "question": S_STR, "options": OPTIONS, "decided": S_STR, "leftovers": LEFTOVERS,
                    "accept_files": S_STRS, "reject_files": S_STRS}},  # optional: unexplained new files the review accepts into the commit / rejects as strays
+    "reflect": {"type": "object", "additionalProperties": False, "required": ["went_well", "went_badly", "wasted", "change"],
+                "properties": {"went_well": S_STRS, "wasted": S_STRS, "change": S_STRS,
+                               "went_badly": {"type": "array", "items": {
+                                   "type": "object", "additionalProperties": False, "required": ["what", "cause", "session", "evidence"],
+                                   "properties": {"what": S_STR, "cause": {"type": "string", "enum": list(CAUSE_CLASSES)},
+                                                  "session": S_STR, "evidence": S_STR}}}}},
     "look": {"type": "object", "additionalProperties": False, "required": ["findings", "summary"],
              "properties": {"summary": S_STR,
                             "findings": {"type": "array", "items": {
@@ -867,6 +880,8 @@ TRANSIENT_PUSH = re.compile(r"curl \d+|Broken pipe|Connection (?:reset|timed out
                             r"Temporary failure in name resolution|error: 5\d\d|HTTP/\d(?:\.\d)? 5\d\d", re.I)
 PUSH_RESTS = (30, 120, 300)  # seconds before the 2nd, 3rd and 4th try
 CRASH_RESTS = (30, 120)      # a delegate that crashed (lifesim-rl4s: UnicodeDecodeError): two more tries, with these rests
+# tl-fsj: a configured check that fails because the tree lacks what the base's config names is the engine's, never a writer's amend
+STALE_TREE = re.compile(r"does not contain recipe|This checkout has no |no recipe (?:named|called)|Justfile does not contain", re.I)
 STOP_GRACE = 10  # seconds route.py gets to stop its worker after a SIGTERM, before everything is SIGKILLed
 PROOF_TERM, PROOF_KILL = 5, 10  # seconds a worker that outlived the stop gets after a SIGTERM, then after a SIGKILL
 
@@ -1344,6 +1359,7 @@ class Engine:
         self.write_rounds = []  # per write round: resumed, input tokens, turns, prompt chars, context k, why fresh (a fix round's cost)
         self.last_summary = ""  # the last write's summary: a fresh writer is told it
         self.handoff = {"rounds": [], "seen_lows": []}  # tl-bxk.13.6: what the rounds did and what a review already noted
+        self.lane_notes = []  # steps that ran on the writer's own family, with delegate's warning (tl: same_family, never a pause)
         self.rebase_resets = 0  # times the plan count started again after a rebase (checkpointed)
         self.look_done, self.look_prev = 0, []  # render rounds this stage; the last round's defects (tl-bxk.13.15)
         self.rendered_names, self.last_reqs, self.render_stale = set(), [], False  # the engine's own pictures this run, the last request
@@ -1451,7 +1467,7 @@ class Engine:
                "family": j.get("family") or "", "lane": j.get("lane") or "", "model": j.get("model") or "",
                "effort": j.get("effort") or "", "turns": j.get("turns"), "secs": round(r.secs or 0), "cost": r.cost or 0.0, "t": time.time(),
                "host": host, "stopped": r.stop, "tokens": j.get("tokens"), "denied": j.get("denied") or [],  # tokens {in, cached, out}
-               "reason": j.get("reason"), "next": j.get("next"), "context": j.get("context"),
+               "reason": j.get("reason"), "next": j.get("next"), "warning": j.get("warning"), "context": j.get("context"),
                "node_id": (self.cur or {}).get("id"), "resume": bool(getattr(self, "_resume", None)), "flag": j.get("flag"),
                "prompt_chars": getattr(self, "_prompt_chars", None)}
         if node == "write" and not rec["transcript"] and tl.opencode_id(rec["ref"]):  # OpenCode: the session id stands for the transcript,
@@ -1466,6 +1482,57 @@ class Engine:
         self.sessions.append(rec)
         self.log("session", "%s: %s %s" % (node, rec["family"] or "?", rec["ref"] or "(no session)"), **rec)
 
+    def reflect_run(self, outcome, why):
+        """tl-05s: one cheap read-only call that reflects on this run: what went well and badly (each bad item with its cause class
+        and the session it comes from), what wasted tokens or minutes, what to change. Never blocks or changes the outcome: any
+        failure, a missing lane, a paused run, a stop, is no reflection. -> the answer dict or None."""
+        if not self.cfg.get("reflect", True) or self.dry or not self.route or getattr(self, "stop_pending", False):
+            return None
+        if not any(s.get("node") in ("write", "review", "verify") for s in self.sessions):
+            return None  # a run that only planned has nothing to reflect on
+        if why.startswith(("paused:", "waiting:", "failed: infrastructure", "failed: stopped")):
+            return None
+        try:
+            prompt = self.reflect_prompt(outcome, why)
+            # a short wait: the close step ignores a stop while this runs (route.py adds 120 s to the limit)
+            r, j = call_delegate(self.route, "reviewer", prompt, strict(SCHEMAS["reflect"]), self.wt, None, 45, self.err_path, None,
+                                 self.session, self.bead, "%s · reflect" % self.bead)
+            saved = {k: v for k, v in self.stats.items() if k.startswith("tokens_")}
+            self.trace_call("reflect", "reviewer", 1, r, j)
+            self.stats.update(saved)  # the run's counts are the run's, as the Reflect comment says them
+            if r.data is None or (j or {}).get("status") != "done":
+                return None
+            data = unstrict(r.data, SCHEMAS["reflect"])
+            if validate(data, SCHEMAS["reflect"]):
+                return None
+            return data
+        except Exception as e:  # nothing here may touch the run's outcome
+            self.warn("no reflection: %s: %s" % (type(e).__name__, str(e)[:160]))
+            return None
+
+    def reflect_prompt(self, outcome, why):
+        rows = []
+        for s in self.sessions:
+            t = s.get("tokens") or {}
+            rows.append("- %s (%s) %s %s: in %s, cached %s, out %s, %ss, session %s" % (
+                s.get("node"), s.get("role"), s.get("family") or "?", s.get("model") or "?", t.get("in") or 0, t.get("cached") or 0,
+                t.get("out") or 0, s.get("secs"), s.get("ref") or "(none)"))
+        lines = []
+        try:
+            raw = self.log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            raw = []
+        for ln in raw:
+            if '"kind": "transition"' in ln or '"kind": "warn"' in ln:
+                try:
+                    d = json.loads(ln)
+                except ValueError:
+                    continue  # a damaged line is skipped, the rest still counts
+                lines.append("%s: %s" % (d.get("kind"), clip(d.get("text") or "", 200)))
+        return REFLECT_PROMPT % (self.bead, clip(getattr(self, "bead_title", "") or "", 120), outcome, clip(why or "(none)", 600),
+                                 "; ".join("%s=%s" % kv for kv in self.stats.items()), "\n".join(rows[:40]),
+                                 "\n".join(lines[-70:]) or "(none)")
+
     def write_trace(self, outcome, why, sha):
         """One line per engine run in traces.jsonl, never pruned: bead, repo, branch, every session, the outcome."""
         rec = {"v": 1, "run": self.log_path.stem, "bead": self.bead,
@@ -1474,7 +1541,8 @@ class Engine:
                "version": plugin_version(), "started": self.t0, "ended": time.time(), "outcome": outcome, "why": (why or "")[:500], "sha": sha or "",
                "cost": self.cost, "stats": self.stats, "host": self.host, "delegate": self.route or "", "log": str(self.log_path),
                "stderr": str(self.err_path), "lanes": (self.contract or {}).get("lanes"), "sessions": self.sessions,
-               "verified": self.verified, "write_rounds": self.write_rounds, "strays": self.strays}
+               "verified": self.verified, "write_rounds": self.write_rounds, "strays": self.strays,
+               "reflection": getattr(self, "reflection", None), "lane_notes": self.lane_notes}
         rec.update(self.origin())
         try:
             with open(tl.config_dir() / "traces.jsonl", "a", encoding="utf-8") as f:
@@ -1642,6 +1710,14 @@ class Engine:
                 resume, attempt_prompt, out_on = None, prompt + FRESH_WRITER_TEXT, j.get("lane") or ""
                 continue
             if nxt == "retry":  # worker-run v2: delegate says when; how long a slot waits is this engine's policy
+                if (node in ("review", "verify", "look") and not resume and j.get("family") in ("openai", "claude", "xai")
+                        and j["family"] != writer and reason not in ("busy", "network", "lane_out", "logged_out")):
+                    # a lane that failed to start (Grok out of credits answered 'vendor_prework' without being marked out, lifesim
+                    # o67g and 5ban.28 waited 10 minutes and paused): the next try is routed as if that family had written the work, so
+                    # the others come first and the failing one last. When the route then lands on the real writer's own family, it
+                    # is flagged same_family below: a review by the same model is better than a parked bead (the owner's word)
+                    self.log("note", "%s: %s failed to start (%s): the next try is routed past it" % (node, j["family"], reason))
+                    writer = j["family"]
                 due = float(j.get("retry_after") or 0)
                 wait = max(60.0, due - time.time())
                 if waited + wait > float(self.cfg["lane_wait_min"]) * 60:  # a long wait frees the slot; the checkpoint resumes
@@ -1725,6 +1801,17 @@ class Engine:
         if node == "plan" and r.ref:
             self.planner_ref = r.ref
         self.last_flag = (j or {}).get("flag")  # same_family | degraded | ...: delegate could not give the usual lane
+        if node in ("review", "verify", "look") and writer_family and (j or {}).get("family") == writer_family and not self.last_flag:
+            self.last_flag = "same_family"  # routed past a dead lane to the writer's own family: say so
+        warning = str((j or {}).get("warning") or "").strip()
+        if self.last_flag == "same_family" or warning:
+            # the owner's word: when only one family is up, it reviews its own work; say so (delegate's warning when it gives one),
+            # in the log, the trace and the bead, and never pause for it
+            note = "the %s step ran on the writer's own model family%s" % (node, (": " + warning[:300]) if warning else " (no other lane was free)")
+            if note not in self.lane_notes:
+                self.lane_notes.append(note)
+                self.warn(note)
+                self.comment("Lane (engine): " + note)
         fam = r.backend  # openai | claude: the family that wrote, for the reviewer
         model = "%s %s on %s" % ((j or {}).get("model"), (j or {}).get("effort"), (j or {}).get("lane"))
         (self.run_dir / ("%s-%d.json" % (node, self.stats["nodes"]))).write_text(json.dumps(r.data, indent=1))
@@ -2000,7 +2087,7 @@ class Engine:
                 f.write("\n.task/\n")
         exists = bool(self.git("rev-parse", "--verify", "-q", "refs/heads/" + branch))
         self.left_dirty = False
-        if self.git("status", "--porcelain"):
+        if self.dirty_status():
             if self.git("symbolic-ref", "--short", "-q", "HEAD") != branch:
                 raise Blocked("failed: worktree %s has uncommitted work of another branch" % self.wt)
             self.wip("left from an earlier run")
@@ -2016,6 +2103,52 @@ class Engine:
         self.export_brief()
         self.branch = branch
         return branch
+
+    def dirty_status(self):
+        """`git status --porcelain` of the slot, leaving out what the BASE's .gitignore files ignore (tl-g6a): Unity's client/log.txt
+        is untracked on an old branch and ignored on main, and made a slot 'dirty with another branch's work' for 7 beads."""
+        out = self.git("status", "--porcelain", "--untracked-files=all")
+        if not out:
+            return ""
+        rules = []
+        base = self.cfg["base"]
+        for path in (self.git("ls-tree", "-r", "--name-only", base) or "").splitlines():
+            if path.split("/")[-1] != ".gitignore":
+                continue
+            d = path[:-len(".gitignore")].rstrip("/")
+            for ln in (self.git("show", "%s:%s" % (base, path)) or "").splitlines():
+                ln = ln.rstrip()
+                if not ln or ln.startswith("#"):
+                    continue
+                neg, pat = ("!", ln[1:]) if ln.startswith("!") else ("", ln)
+                if not d:
+                    rules.append(ln)
+                elif pat.startswith("/"):
+                    rules.append(neg + "/" + d + pat)
+                elif "/" in pat.rstrip("/"):
+                    rules.append(neg + "/" + d + "/" + pat)
+                else:
+                    rules.append(neg + "/" + d + "/**/" + pat)
+        if not rules:
+            return out
+        with tempfile.NamedTemporaryFile("w", suffix=".ignore", delete=False, encoding="utf-8") as f:
+            f.write("\n".join(rules) + "\n")
+            ex = f.name
+        try:
+            lines = out.splitlines()
+            untracked = [ln[3:] for ln in lines if ln.startswith("?? ")]
+            if not untracked:
+                return out
+            # which of them the base's rules ignore (check-ignore reads only the rules given; the user's own global excludes
+            # already left their files out of `out`, and are not replaced)
+            r = subprocess.run(["git", "-C", str(self.wt), "-c", "core.excludesFile=" + ex, "check-ignore", "--no-index", "--stdin", "-z"],
+                               input="\0".join(untracked) + "\0", capture_output=True, text=True, encoding="utf-8", errors="replace",
+                               env=child_env())
+            ignored = set(r.stdout.split("\0")) if r.returncode in (0, 1) else set()
+            return "\n".join(ln for ln in lines if not (ln.startswith("?? ") and ln[3:] in ignored))
+        finally:
+            with contextlib.suppress(OSError):
+                os.unlink(ex)
 
     def free_branch(self, branch):
         """A paused bead resumes in any free slot: the slot that last held its branch lets go of it (detached there),
@@ -2316,12 +2449,16 @@ class Engine:
         if behind in ("", "0"):
             return ""
         old = self.git("rev-parse", "HEAD")
+        old_parent = self.git("rev-parse", "-q", "--verify", "HEAD~1") if getattr(self, "left_dirty", False) else ""
         rc, tail = self.sh(["git", "rebase", "-q", self.cfg["base"]], pin=True)
         if not rc:  # the checkpoint's head follows, or the next resume reads this as an edit from outside
             try:
                 ck = json.loads(self.checkpoint_path().read_text())
                 if isinstance(ck, dict) and ck.get("head") == old:
                     ck["head"] = self.git("rev-parse", "HEAD")
+                    self.checkpoint_path().write_text(json.dumps(ck, indent=1))
+                elif isinstance(ck, dict) and old_parent and ck.get("head") == old_parent:  # the wip commit reset() made on top of it
+                    ck["head"] = self.git("rev-parse", "HEAD~1")
                     self.checkpoint_path().write_text(json.dumps(ck, indent=1))
             except (OSError, ValueError):
                 pass
@@ -2525,9 +2662,15 @@ class Engine:
             self.scope = acceptance_text(bead)
             plan, i, state = self.resume_point()
             self.log_run()
+            # tl-fsj: the configured checks come from the base's config, so the tree they run on must have what the base has; every
+            # resume rebases first, a plan to make or a stage to go on with (lifesim: 8 beads parked on 'just fmt-check-changed')
+            at_land = plan is not None and (i >= len(plan["stages"]) or (state or {}).get("fix"))  # a conflict there is the writer's fix round
+            moved = "" if at_land else self.rebase_onto_base()
+            if moved == "conflict" and self.start_again_on_base("Its work: %s" % (self.git("log", "--oneline", "-n", "3", "%s..HEAD" % self.cfg["base"]) or "").replace("\n", "; ")):
+                plan, i, state = None, 0, None
+            elif moved == "rebased" and plan is not None:
+                self.stage_tree = ""  # the stage's diff starts at the base now: the rebase moved what it was measured from
             if plan is None:
-                if self.rebase_onto_base() == "conflict":
-                    self.start_again_on_base("Its work: %s" % (self.git("log", "--oneline", "-n", "3", "%s..HEAD" % self.cfg["base"]) or "").replace("\n", "; "))
                 plan, i, state = self.plan(again=self.replan_first), 0, None
             while i < len(plan["stages"]):
                 d = self.stage(plan, i, state)
@@ -2998,8 +3141,15 @@ class Engine:
         led = ledger_problems(data)
         if led:
             dry = dry + led  # sent back with the checks that cannot run
-        if bad or gated or dry or rep:  # asked once to rewrite them, like an invalid answer; not a counted re-plan
+        # tl-wjj: a plan with no stages, no question and nothing to file breaks the plan contract (lifesim-w6mk failed on it): back
+        # to the planner once. With leftovers it is the finished-work plan (tl-bxk.13.2); with the owner's verify answer it may be empty.
+        empty = (not data["stages"] and not data["question"].strip() and not data.get("leftovers") and not self.leftovers
+                 and not self.verify_answer)
+        if bad or gated or dry or rep or empty:  # asked once to rewrite them, like an invalid answer; not a counted re-plan
             why = ""
+            if empty:
+                self.warn("the plan has no stages, no question and nothing to file, sent back")
+                why += EMPTY_PLAN_TEXT
             if rep:
                 self.warn("the plan's checks run a slow command more than once, sent back: %s" % "; ".join(r[0] for r in rep)[:300])
                 why += REPEAT_TEXT % "\n".join("- `%s` in %s" % (part, "; ".join("`%s`" % c[:80] for c in cs) if cs else "a repo check (%s)" % rid)
@@ -3014,10 +3164,12 @@ class Engine:
             if dry:
                 self.warn("the plan's checks cannot run, sent back: %s" % "; ".join(dry)[:300])
                 why += DRY_CHECK_TEXT % "\n".join("- " + e for e in dry)
-            self.outcome_of("sent back", "its checks read the tracker, run gate-only commands, repeat a slow command or cannot run")
-            self.transition(step, "plan_sent_back", "checks %s" % "; ".join(
-                (["read the issue tracker"] if bad else []) + (["run gate-only commands"] if gated else []) +
-                (["repeat a slow command"] if rep else []) + (["cannot run"] if dry else [])))
+            self.outcome_of("sent back", "its checks read the tracker, run gate-only commands, repeat a slow command or cannot run" if not empty
+                            else "it has no stages")
+            self.transition(step, "plan_sent_back", "plan %s" % "; ".join(
+                (["has no stages"] if empty else []) + (["checks read the issue tracker"] if bad else []) +
+                (["checks run gate-only commands"] if gated else []) +
+                (["checks repeat a slow command"] if rep else []) + (["checks cannot run"] if dry else [])))
             ref = self.planner_ref
             back = (why.lstrip() + "\n\nYour plan, to correct (same output schema):\n" + json.dumps(data, indent=1)) if ref else prompt + why
             data, _ = self.ai("plan", "rewrite checks", back, step=step, mode="checks_back", resume_ref=ref or None)
@@ -3846,7 +3998,8 @@ class Engine:
                   "cache": c.get("cache", True) is not False,
                   "idle": float(c.get("idle_min", self.cfg["check_idle_min"]) or 0) * 60,
                   "inputs": [c["inputs"]] if isinstance(c.get("inputs"), str) else list(c.get("inputs") or []),
-                  "inputs_only": bool(c.get("inputs_only")), "exclude": list(c.get("exclude") or []), "env": c.get("env") or {}} for c in self.cfg["checks"]]
+                  "inputs_only": bool(c.get("inputs_only")), "exclude": list(c.get("exclude") or []), "env": c.get("env") or {},
+                  "repo": True} for c in self.cfg["checks"]]
         items += [{"id": c, "cmd": c, "group": "acceptance", "when": [], "retry": 0,
                    "timeout": float(self.cfg["check_timeout_min"]), "cache": False, "inputs": [], "inputs_only": False, "env": {},
                    "idle": float(self.cfg["check_idle_min"] or 0) * 60} for c in st["checks"]]
@@ -3935,7 +4088,7 @@ class Engine:
                     res["cached_note"] = "inputs unchanged since round %s" % (hit.get("round") or "?")
                     self.log("note", "cached: %s, %s" % (c["id"], res["cached_note"]))
             else:
-                t, tries = time.time(), 0
+                t, tries, seen = time.time(), 0, ""
                 xcmd, reads = cmd, needs.get(id(c), [])
                 if reads and all(check_env_name(r["id"]) in env_logs and env_logs.get(check_env_name(r["id"]).replace("_LOG_", "_RC_")) == "0"
                                  for r in reads):
@@ -3985,6 +4138,11 @@ class Engine:
                     if tries > (max(c["retry"], 1) if kind == "import" else c["retry"]):
                         break
                     self.warn("`%s` failed (exit %d), retrying: it is marked flaky" % (c["id"], rc))
+                if rc and c.get("repo"):
+                    stale = STALE_TREE.search((seen or tail)[-500:])  # its last lines: a test that talks about recipes is no stale tree
+                    if stale:  # tl-fsj: not a writer's amend; the engine's tree is older than the config it runs
+                        raise Blocked("failed: infrastructure: the configured check `%s` needs something this tree lacks (\"%s\"): the "
+                                      "tree is older than the base's .task-loop.json, which no writer can fix" % (c["id"], stale.group(0)))
                 res = dict(base, exit=rc, status="ran" if rc == 0 else "failed", tries=tries, tail=tail[-1500:],
                            secs=round(time.time() - t), log="checks/" + log_name, log_abs=str(logs / log_name), hung=bool(hung))
                 if hung:
@@ -4403,9 +4561,20 @@ class Engine:
                 pairs.append((n, "before-" + n))
         # the plan's look items are for the last stage (like the cases); an earlier stage is judged on the general checks only
         prompt = looks.judge_prompt(self.cases_of("look-objective") if last else [], names, shown, pairs, summary)
-        d, _ = self.ai("look", "round %d: %d picture%s" % (rnd, len(names), "" if len(names) == 1 else "s"), prompt,
-                       writer_family=self.writer_family, cwd=str(base), round=rnd)
-        return [f for f in d["findings"] if f["verdict"] == "defect"], d["summary"]
+        try:
+            d, _ = self.ai("look", "round %d: %d picture%s" % (rnd, len(names), "" if len(names) == 1 else "s"), prompt,
+                           writer_family=self.writer_family, cwd=str(base), round=rnd)
+        except Blocked as b:
+            if not b.why.startswith(("paused: no lane", "paused: no network")):
+                raise  # a login to fix, a crash: not this node's to swallow
+            self.retry_after = 0.0  # the run goes on: _ai had noted a pause for the loop
+            self.outcome_of("skipped", "no lane")
+            # no lane for the judge: the pictures go unjudged to the owner-look bead; a look judge never parks the bead
+            self.warn("the look judge had no lane, the pictures are not judged: %s" % b.why[:200])
+            self.look_unjudged["look judge, round %d" % rnd] = "no lane: " + b.why[:160]
+            return [], "(not judged: no lane for the look judge)"
+        note = "[same family as the writer: no other lane was free] " if self.last_flag == "same_family" else ""
+        return [f for f in d["findings"] if f["verdict"] == "defect"], note + d["summary"]
 
     def look_step(self, st, w, name, last=True):
         """After a visual write: the cheap checks, the shots the writer asked for, the look judge. -> the feedback that sends the
@@ -4720,11 +4889,26 @@ class Engine:
         old = None
         if hasattr(signal, "SIGTERM") and threading.current_thread() is threading.main_thread():
             old = signal.signal(signal.SIGTERM, signal.SIG_IGN)  # a second stop must not break the close-out
+        branch = self.git("symbolic-ref", "--short", "-q", "HEAD")
         try:
             self._close(outcome, why, sha, question)
+            if not self.dry:
+                with contextlib.suppress(Exception):  # last: the trace and the comments above read the branch
+                    self.leave_slot(outcome, branch)
         finally:  # what the process starts after this (a notify command, the next test) must stay stoppable
             if old is not None:
                 signal.signal(signal.SIGTERM, old)
+
+    def leave_slot(self, outcome, branch):
+        """tl-g6a: a bead that parked leaves its work on its own branch (wip committed above) and the slot at the detached base,
+        not on an old branch whose untracked files made the next runs fail as 'uncommitted work of another branch'."""
+        if outcome in ("landed", "done") or not branch or branch != getattr(self, "branch", None):
+            return
+        if self.dirty_status() or self.git("symbolic-ref", "--short", "-q", "HEAD") != branch:
+            return  # work that could not be committed, or files stage_all left out, stay where they are for the next run
+        rc, tail = self.sh(["git", "checkout", "-q", "--detach", self.cfg["base"]], pin=True)
+        if rc:
+            self.warn("the slot could not be left at the base: %s" % tail.strip()[-160:])
 
     def _close(self, outcome, why, sha, question):
         why = why or ("stopped before a reason was recorded" if outcome == "failed" else "")
@@ -4750,6 +4934,7 @@ class Engine:
         self.node("close", "close: %s" % outcome, outcome=outcome, why=why)
         self.outcome_of(outcome, why.splitlines()[0][:200] if why else "")
         self.end_node()
+        self.reflection = self.reflect_run(outcome, why)  # after the close node: the outcome is decided and nothing here changes it
         self.write_trace(outcome, why, sha)
         self.detail([stats] + ([why[:400]] if why else []) + (["question: " + question[:400]] if question else []))
         if outcome == "failed":
@@ -4788,8 +4973,9 @@ class Engine:
             self.file_owner_look()
         verified = ("; self-verified=" + ", ".join("%d %s" % (sum(x["verdict"] == k for x in self.verified), k)
                                                    for k in VERDICTS)) if self.verified else ""
-        self.comment("Reflect (engine): outcome=%s; filed=%d; %s%s%s; trace=%s (tl trace %s)" % (
-            outcome, len(new), stats, verified, ("; why=" + why) if why else "", self.log_path.stem, self.bead))
+        self.comment("Reflect (engine): outcome=%s;%s filed=%d; %s%s%s; trace=%s (tl trace %s)" % (
+            outcome, reflection_text(getattr(self, "reflection", None)), len(new), stats, verified, ("; why=" + why) if why else "",
+            self.log_path.stem, self.bead))
         summary = (getattr(self, "plan_summary", "") or "")[:300]
         if outcome == "landed":
             rc = tl.cmd_close(Args(id=self.bead, reason="merged %s to %s: %s; %s" % (
@@ -4880,6 +5066,24 @@ def count_tests(diff, pattern):
             removed += 1
     return added, removed
 
+
+REFLECT_PROMPT = """You write a short reflection on one run of an unattended task engine, for the engineer who maintains the engine. Do not
+edit files; judge only from what is below.
+Bead %s: %s
+Outcome: %s. Why: %s
+Counts: %s
+The run's worker sessions (cite the session id):
+%s
+The run's decisions and warnings, oldest first:
+%s
+
+Answer:
+- went_well: up to 4 lines, each one concrete thing that worked.
+- went_badly: up to 4 items; each: what (one line), cause (one of engine, prompt, delegate, repo_profile, bead, sandbox, other), session
+  (the session id above it comes from, or "run"), evidence (a number or a quote from above). Empty when nothing went badly.
+- wasted: up to 3 lines, where tokens or minutes went for nothing, with the numbers.
+- change: up to 3 lines, what to change, naming the cause class.
+Cite only what the data above shows; do not guess a cause it does not support."""
 
 ENGINE_NOTES = ("Plan (engine)", "Review (engine", "Reflect (engine)", "Blocked:", "Ask (engine)", "Evidence (engine)", "Parked (engine)")
 
@@ -5338,6 +5542,15 @@ def word_set(text):
     return {w for w in re.findall(r"[^\W_]{3,}", str(text).lower()) if w not in STOP_WORDS}
 
 
+def reflection_text(r):
+    """The reflection as one line for the bead's Reflect comment ('' when there is none)."""
+    if not r:
+        return ""
+    bad = "; ".join("[%s] %s (session %s)" % (b["cause"], clip(b["what"], 160), b["session"]) for b in r.get("went_badly") or []) or "none"
+    return " reflection: badly: %s%s%s;" % (clip(bad, 500), (" | wasted: " + clip("; ".join(r["wasted"]), 200)) if r.get("wasted") else "",
+                                           (" | change: " + clip("; ".join(r["change"]), 200)) if r.get("change") else "")
+
+
 def norm_cmd(cmd):
     return " ".join(str(cmd).split())
 
@@ -5722,7 +5935,14 @@ def reclaim(bead_id, repo):
     if who and who != me:
         if not who.startswith("tl-"):
             return False, "claimed by %s" % who
-        if who in tl.live_actors(repo) or (b.get("lease_expires_at") or "") >= time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()):
+        if b.get("status") == "blocked":
+            # tl-159: a parked bead keeps the actor of the loop that parked it, and that actor is live (it holds other beads), so
+            # --fresh was refused 'taken: live claim' with no engine on the bead. Only an engine running it now is a live claim.
+            import loop  # the queue rule; imports engine itself
+            live = bead_id in loop.running(repo)
+        else:
+            live = who in tl.live_actors(repo) or (b.get("lease_expires_at") or "") >= time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        if live:
             logs = sorted((tl.config_dir() / "engine").glob("%s-*.jsonl" % bead_id))
             return False, "another run of %s is still running as %s (a live claim)%s" % (
                 bead_id, who, "; its engine log: %s" % logs[-1] if logs else "")

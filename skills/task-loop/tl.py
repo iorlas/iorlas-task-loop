@@ -548,7 +548,11 @@ def cmd_close(a):
 
 
 def cmd_block(a):
-    r = bd("update", a.id, "--status", "blocked")
+    # tl-159: a parked bead lets go of its claim; the actor that held it stays live (a loop holds other beads), and a claim
+    # nobody works on refused --fresh as 'taken: live claim'. A person's pre-existing claim is released too: parking ends the work.
+    held = (show(a.id) or {}).get("assignee") or ""
+    # a claim by an engine's actor ends with the run; a person's own claim stays theirs (tl-159)
+    r = bd("update", a.id, "--status", "blocked", *(["--assignee", ""] if held.startswith("tl-") else []))
     if r.returncode != 0:
         sys.stderr.write(r.stderr)
         return r.returncode
