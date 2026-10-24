@@ -38,6 +38,12 @@ class Table(unittest.TestCase):
         self.assertIn("who (required)", text)
         self.assertLessEqual(len(looks.table_text(self.methods(), cap=40)), 40)
 
+    def test_a_long_summary_is_one_short_line_in_the_menu(self):
+        m, err = looks.parse_table(json.dumps({"methods": [{"method": "X", "cmd": "c", "summary": "Does the first thing. " + "Second long sentence. " * 30}]}))
+        text = looks.table_text(m)
+        self.assertEqual(text, "- X: Does the first thing.")
+        self.assertEqual(looks.short("a" * 400, 50), "a" * 47 + "...")
+
     def test_a_command_is_built_only_from_the_table_and_its_declared_arguments(self):
         m = self.methods()
         cmd, entry, err = looks.build(m, {"method": "CreatorShots", "args": [{"name": "shots", "value": "body=body,face=face"}]}, "/o")

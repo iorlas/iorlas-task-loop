@@ -3296,6 +3296,8 @@ class Engine:
             rules.append(shared.strip())
         if self.visual_cfg() and self.shot_methods():  # the classes mean "the engine renders": only with a shot table
             rules.append(VISUAL_PLAN % self.references_text())
+            vp = self.visual_cfg()
+            rules.append(VISUAL_STAGES % (", ".join(vp.get("include") or [])[:300], looks.table_text(self.shot_methods())))
         rules.append("Proof files that a check reads or a reviewer looks at (screenshots, logs, probe output) go under "
                      "%s: it is kept across runs, and nothing else under %s is." % (self.evidence_dir, self.task_dir))
         rules.append("Checks run on the uncommitted working tree after each write. The engine runs the gate%s once, on "
@@ -3650,6 +3652,7 @@ class Engine:
             self.look_done, self.look_prev = 0, []
         feedback, rounds, red, n = state.get("feedback", ""), state.get("rounds", 0), 0, state.get("n", 0)
         failed_cmds = state.get("failed")  # the commands the last engine run found red (None: no check ran red yet)
+        shots_fixed = False  # a visual write without shots or a reason is sent back once, at no cost to the rounds (tl-tno)
         red_now = set()  # the commands the last round found red
         acc_first = False  # the last round ran acceptance first
         acc_only = False  # the last round's red checks were all acceptance ones (tl-bxk.13.14)
@@ -3718,6 +3721,26 @@ class Engine:
             if w["question"].strip():
                 self.outcome_of("asks", w["question"][:200])
                 raise Blocked("owner decision needed", w["question"], w.get("options"))
+            if (self.look_ready(st) and not fix and not shots_fixed and not (w.get("shots") or [])
+                    and not (w.get("logic_only") or "").strip()):
+                # tl-tno: the review's 'asked for no shots' finding was a writer amend and burned lifesim-d5f.39's re-plan cap; the contract
+                # is the engine's to hold: ask again once, with the table, before any check or review runs
+                shots_fixed = True
+                tip = SHOTS_FIX % looks.table_text(self.shot_methods())
+                self.transition("write", "shots_contract", "a visual write named no shots and gave no reason: asked once more")
+                w2, wfam = self.ai("write", "%s shots contract" % name, prompt + tip, delta=tip, resume_key="writer", write=n,
+                                   visual=True, round=rounds + 1, **where)
+                self.stats["writes"] += 1
+                self.writer_family = wfam
+                self.writer["last_stage"] = last
+                self.writer_said += "\n" + w2["summary"]
+                self.last_summary = w2["summary"]
+                if w2["question"].strip():
+                    self.outcome_of("asks", w2["question"][:200])
+                    raise Blocked("owner decision needed", w2["question"], w2.get("options"))
+                w = dict(w2, summary=w["summary"] + "\n" + w2["summary"], new_cases=(w.get("new_cases") or []) + (w2.get("new_cases") or []),
+                         unchecked=(w.get("unchecked") or []) + (w2.get("unchecked") or []),
+                         bad_checks=(w.get("bad_checks") or []) + (w2.get("bad_checks") or []))
             self.add_cases(w.get("new_cases") or [])
             if self.shot_methods() and self.stage_visual(st):
                 self.render_stale = True  # a write after the last render: its pictures show an older tree
@@ -5703,6 +5726,14 @@ DECIDED_RULE = ("A change that contradicts an accepted requirement (in the task,
 REPEAT_RED = ("\nThese checks failed in the last round too:\n%s\nIf one measures a threshold the task does not ask for (the task "
               "says the owner judges it, or the number is the plan's own), do not keep tuning the work to it: list it in "
               "bad_checks, with why, and the plan is changed instead.\n")
+VISUAL_STAGES = """A stage whose files match this repo's visual paths (%s) changes how something looks. Its writer cannot render: it names the
+pictures to render in `shots` (a method from the table below, its args, names) or gives a `logic_only` reason; an answer with
+neither is sent back. Plan such stages knowing that, and never plan a check that needs a picture the writer is to make.
+Shot methods:
+%s"""
+SHOTS_FIX = ("\nYour answer named no shots and gave no logic_only reason, but this stage touches visual paths. You cannot render here: the "
+             "engine does. Name the pictures to render in `shots` (a method from the table, its args, names), or say in logic_only why "
+             "nothing on screen differs. Change nothing else; do not redo the work.\n%s\n")
 VISUAL_PLAN = """This repo has visual work (screens). Give every case a class in `class`:
 - test: a command proves it (the usual case with its check).
 - look-objective: a picture can prove it: it shows, nothing is clipped or overlapped, no error text, magenta or missing
