@@ -20,7 +20,7 @@ CACHE_MAX = 500
 RUN_STEM = re.compile(r"^(?P<bead>.+)-(?P<stamp>\d{8}-\d{6})$")
 META = ("stage", "stages", "write", "round", "fix", "fixes", "try", "items")
 LINE_KINDS = ("cmd", "note", "warn", "verify")
-FAMILY = {"openai": "Codex", "claude": "Claude"}
+FAMILY = {"openai": "Codex", "claude": "Claude", "xai": "Grok"}
 
 
 def read(path):
@@ -64,11 +64,12 @@ def bead_of(run):
 
 
 def lane_name(lane="", family=""):
-    """Codex or Claude, from delegate's family or lane name."""
+    """Codex, Claude or Grok, from delegate's family or lane name."""
     if family in FAMILY:
         return FAMILY[family]
     up = (lane or "").upper()
-    return "Codex" if "OPENAI" in up or "CODEX" in up else "Claude" if "CLAUDE" in up or "ANTHROPIC" in up else ""
+    return ("Grok" if "GROK" in up or up.endswith("XAI") or "_XAI" in up else
+            "Codex" if "OPENAI" in up or "CODEX" in up else "Claude" if "CLAUDE" in up or "ANTHROPIC" in up else "")
 
 
 def hhmm(t):
@@ -86,7 +87,7 @@ def when(t):
 def pause_reason(why):
     """What a pause waits for, in a few words: "Codex out", "Claude logged out", "no network"."""
     if "logged_out" in why:
-        return "%s logged out" % ("Codex" if "codex login" in why else "Claude")
+        return "%s logged out" % ("Codex" if "codex login" in why else "Grok" if "opencode auth login" in why else "Claude")
     if why.startswith("paused: no network") or "(network" in why:
         return "no network"
     if "setup on" in why or "(setup" in why:

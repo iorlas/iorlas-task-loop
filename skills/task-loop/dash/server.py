@@ -382,6 +382,58 @@ def claude_events(path, t0=None, t1=None):
     return out
 
 
+def _tl():
+    _engine_dir()
+    import tl
+    return tl
+
+
+def opencode_events(sid, t0=None, t1=None):
+    """An OpenCode session (xai lane: `ses_...`, read from its SQLite DB, read only) -> timeline events. [] for a missing DB or
+    an unknown id; `sid` may carry the `opencode:` prefix."""
+    tl = _tl()
+    sid = tl.opencode_id(sid)
+    if not sid:
+        return []
+    out = []
+    lo = int((t0 - 1) * 1000) if t0 else 0  # OpenCode stores ms
+    hi = int((t1 + 1) * 1000) if t1 else 1 << 62
+    rows = tl.opencode_rows(  # the newest 5000 parts of the window: a long session shows its end, a poll reads no more
+        "SELECT p.time_created, m.data, p.data FROM part p JOIN message m ON m.id = p.message_id WHERE p.session_id = ? "
+        "AND p.time_created BETWEEN ? AND ? ORDER BY p.time_created DESC, p.id DESC LIMIT 5000", (sid, lo, hi))
+    for created, mdata, pdata in reversed(rows):
+        try:
+            t = created / 1000.0
+            role = json.loads(mdata).get("role")
+            d = json.loads(pdata)
+        except (ValueError, TypeError, AttributeError):
+            continue
+        if not isinstance(d, dict):
+            continue
+        if t0 and t < t0 - 1:
+            continue
+        if t1 and t > t1 + 1:
+            break
+        typ = d.get("type")
+        if typ == "text" and str(d.get("text") or "").strip() and not d.get("synthetic"):
+            out.append({"t": t, "kind": "msg" if role == "assistant" else "user",
+                        "text": d["text"].strip()[:6000 if role == "assistant" else 4000]})
+        elif typ == "tool":
+            st = d.get("state") if isinstance(d.get("state"), dict) else {}
+            inp = st.get("input") if isinstance(st.get("input"), dict) else {}
+            text = (inp.get("command") or inp.get("description") or inp.get("filePath") or inp.get("pattern")
+                    or inp.get("query") or inp.get("prompt") or inp.get("url") or "")
+            e = {"t": t, "kind": "cmd", "tool": d.get("tool", ""), "text": str(text).strip()[:600], "state": "run"}
+            if st.get("status") in ("completed", "error"):
+                e["state"] = "ok" if st["status"] == "completed" else "fail"
+                tm = st.get("time") if isinstance(st.get("time"), dict) else {}
+                if isinstance(tm.get("start"), (int, float)) and isinstance(tm.get("end"), (int, float)):
+                    e["dur"] = (tm["end"] - tm["start"]) / 1000.0
+                e["detail"] = str(st.get("output") or st.get("error") or "")[:3000]
+            out.append(e)
+    return out
+
+
 CODEX_LINE = re.compile(r"^\[(?P<ts>[^\]]+)\] (?P<body>.*)$")
 
 
@@ -534,7 +586,7 @@ def engine_runs(bead, t0, t1):
 
 
 ADAPTERS = {"engine": engine_events, "claude": claude_events, "subagent": claude_events, "claude-p": claude_events,
-            "codex": codex_log_events, "codex-exec": rollout_events}
+            "codex": codex_log_events, "codex-exec": rollout_events, "opencode": opencode_events}
 
 
 def status_of(path, done_hint=False):
@@ -642,17 +694,28 @@ def contract_runs(since):
             if not isinstance(r, dict) or r.get("v") != 1 or not r.get("id"):
                 continue
             kind = r.get("kind") or "other"
-            path, adapter = None, None
-            if r.get("session"):
+            path, adapter, upd_oc = None, None, None
+            if r.get("session") and not _tl().opencode_id(r["session"]) and kind != "opencode":
                 path, adapter = transcript_of(r["session"]), "claude-p"
             if not path and r.get("thread"):
                 hit = next((p for p in cached("rollout-files", 30, rollout_files) if p.endswith(str(r["thread"]) + ".jsonl")
                             and os.path.basename(p).startswith("rollout-")), None)
                 path, adapter = (hit, "codex-exec") if hit else (None, None)
+            if not path and (kind == "opencode" or r.get("family") == "xai"):  # OpenCode: a session id into its DB
+                tl = _tl()
+                for ref in (r.get("session"), r.get("thread"), r.get("transcript")):
+                    hit = tl.transcript_of("xai", ref) if tl.opencode_id(ref) else ""
+                    if hit:
+                        path, adapter = hit[9:], "opencode"
+                        upd_oc = tl.opencode_updated(path)
+                        break
             if not path and r.get("transcript") and os.path.exists(r["transcript"]):
                 path, adapter = r["transcript"], ("codex-exec" if kind == "codex" else "claude-p")
             st = r.get("status") or "running"
-            upd = os.path.getmtime(path) if path and os.path.exists(path) else (r.get("ended") or r.get("started"))
+            if adapter == "opencode":
+                upd = upd_oc or r.get("ended") or r.get("started")
+            else:
+                upd = os.path.getmtime(path) if path and os.path.exists(path) else (r.get("ended") or r.get("started"))
             if st == "running" and upd and time.time() - upd > 6 * 3600:
                 st = "dead"
             out.append({"id": "%s:%s" % (adapter, path) if path else "none:" + str(r["id"]), "kind": kind,
@@ -892,7 +955,7 @@ def run_events(run_id, limit=800):
     kind, rest = run_id.split(":", 1)
     path, t0, t1 = split_window(rest)
     fn = ADAPTERS.get(kind)
-    if not fn or not os.path.exists(path):
+    if not fn or (kind != "opencode" and not os.path.exists(path)):  # an OpenCode run is a session id, not a file
         return []
     evs = fn(path, t0, t1)
     return evs[-limit:]
@@ -1452,10 +1515,18 @@ def api_block(run, node, k=0):
     if d.get("error"):
         return d
     s, b = d.get("session") or {}, d["block"]
-    tr = s.get("transcript") if s.get("transcript") and os.path.exists(s["transcript"]) else \
-        find_transcript(s.get("family") or b["who"]["family"], s.get("ref"))
-    d["events_id"] = ("%s:%s@%s@%s" % ("codex-exec" if (s.get("family") or b["who"]["family"]) == "openai" else
-                                       "claude-p", tr, (b["t0"] or 0) - 30, (b["t1"] or 0) + 30)) if tr else ""
+    fam = s.get("family") or b["who"]["family"]
+    if fam == "xai" or _tl().opencode_id(s.get("transcript")):  # OpenCode: a session id into its DB, never a file
+        tr = _tl().transcript_of("xai", s.get("transcript") or s.get("ref"))
+        if not tr and _tl().opencode_id(s.get("ref")):
+            tr = "opencode:" + _tl().opencode_id(s["ref"])
+        adapter = "opencode"
+        tr_id = tr[9:]
+    else:
+        tr = s.get("transcript") if s.get("transcript") and os.path.exists(s["transcript"]) else \
+            find_transcript(fam, s.get("ref"))
+        adapter, tr_id = ("codex-exec" if fam == "openai" else "claude-p"), tr
+    d["events_id"] = "%s:%s@%s@%s" % (adapter, tr_id, (b["t0"] or 0) - 30, (b["t1"] or 0) + 30) if tr else ""
     d["transcript"] = tr
     rdir = config_dir() / "runs" / run
     legacy_ids = {}
@@ -1613,6 +1684,7 @@ def asks():
     return {"asks": inbox(), "delegate": delegate_status()}
 
 
+LOGIN_CMD = {"Codex": "codex login", "Grok": "opencode auth login"}
 LOGGED_OUT = re.compile(r"logged[ _]out|not logged in", re.I)
 
 
@@ -1631,7 +1703,7 @@ def lane_banners(j):
         who = timeline.lane_name(n, ln.get("family") or "") or str(n).lower()
         until = ln.get("out_until")
         if gone:
-            text = "%s logged out: run %s" % (who, "codex login" if who == "Codex" else "claude auth login")
+            text = "%s logged out: run %s" % (who, LOGIN_CMD.get(who, "claude auth login"))
         else:
             past = until and until < time.time()  # delegate still says out after its own end: say so, never a bare old time
             text = "%s out%s" % (who, (" (its end, %s, has passed)" % timeline.when(until)) if past
