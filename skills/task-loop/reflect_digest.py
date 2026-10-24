@@ -320,8 +320,8 @@ def due(now=None):
 def maybe_run(now=None):
     """The loop's call: once a day a detached `tl reflect digest` (it asks bd about every open bead of the target repos: a loop
     pass never waits for it). -> 'started' or ''."""
-    if not due(now):
-        return ""
+    if not due(now) or not (tl.config_dir() / "traces.jsonl").is_file() or not registered():
+        return ""  # nothing to read or nowhere to file
     try:
         with tl.os_lock(tl.config_dir() / "locks" / "reflect-digest.lock", "pid %d" % os.getpid()):
             if not due(now):

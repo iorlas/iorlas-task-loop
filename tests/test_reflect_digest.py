@@ -219,7 +219,13 @@ class Filing(Base):
 
 
 class Daily(Base):
+    def test_nothing_to_read_means_no_process(self):
+        with mock.patch.object(rd.subprocess, "Popen") as p:
+            self.assertEqual(rd.maybe_run(NOW), "")
+        p.assert_not_called()
+
     def test_once_a_day(self):
+        self.traces.write_text("")
         with mock.patch.object(rd.subprocess, "Popen") as p:
             self.assertEqual(rd.maybe_run(NOW), "started")
             self.assertEqual(rd.maybe_run(NOW + 60), "")
