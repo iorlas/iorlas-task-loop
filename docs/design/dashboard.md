@@ -157,3 +157,9 @@ of every run (`api_bead` -> `timeline`); hover a segment for its name, length, h
 - **Live runs end now.** `run_timeline(alive=True)` gives the open step and the run an end of now, not of the last record.
 - **Not recorded yet** (outside the engine's log, so no segment): the slot-take lock (tl.py), the area lock (loop.py), the gap
   from claim to the engine's start, push duration while running. They show up as the unexplained start of a run.
+
+## Old windows of a huge transcript (tl-65w)
+
+`/api/events` for a run worked hours ago in a long session no longer shows nothing: `window_lines` (server.py) bisects the
+transcript on byte offsets by timestamp (they only grow) to the start of the run's window and reads from there, at most 40 MB.
+A small file, no window, or a window the last 6 MB already holds is read as before.
