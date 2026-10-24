@@ -1379,6 +1379,7 @@ class Engine:
         self.planner_ref = ""  # the last planner thread: a check send-back resumes it
         self.snap = {}        # the bead's text fields and people's comments as planned: a later amend diffs against it
         self.fixes = 0
+        self.pending_land_validation = ""  # a rejected push's failed checks still need an accepted fix
         self.denials = []     # commands refused to this bead's writers, across lanes and runs
         self.unchecked = []   # what the last review of this run says nobody checked (each review re-judges it)
         self.answered = None  # the owner ask this run starts from, once answered
@@ -2728,6 +2729,9 @@ class Engine:
                 d = self.stage(plan, i, state)
                 state = None
                 if d == "replan":
+                    if self.pending_land_validation:
+                        self.pending_land_validation += "\n" + self.stuck_why
+                        self.save_checkpoint(stage=i, rounds=0, n=0, feedback="", step="write")
                     self.replans += 1
                     self.stats["replans"] = replans = self.replans
                     if replans > int(self.cfg["max_replans"]) + self.extra:
@@ -2740,6 +2744,8 @@ class Engine:
                 self.accepted.append(i)
                 self.done.append(plan["stages"][i]["goal"])
                 i += 1
+                if i == len(plan["stages"]):
+                    self.pending_land_validation = ""  # every recovery stage passed checks and review
                 self.save_checkpoint(stage=i, rounds=0, n=0, feedback="", step="write" if i < len(plan["stages"]) else "land")
             if self.render_stale and self.last_reqs and self.shot_methods() and not self.dry:
                 # code changed after the last render (a fix round past the render rounds): the pictures that land show the tree
@@ -3552,6 +3558,10 @@ class Engine:
                "unverified": self.unverified, "handoff": self.handoff, "stage_tree": self.stage_tree, "writer_said": self.writer_said, "accepted_new": self.accepted_new,
                "closed": False,
                "run": self.log_path.stem, "t": time.time(), **at}
+        rec["pending_land_validation"] = self.pending_land_validation
+        if self.pending_land_validation:
+            # fix(), a re-plan, or an interrupted recovery must never turn this into a direct-to-land checkpoint.
+            rec.update(step="land-verify-red", feedback=self.pending_land_validation)
         p = self.checkpoint_path()
         p.parent.mkdir(exist_ok=True)
         p.write_text(json.dumps(rec, indent=1))
@@ -3564,7 +3574,7 @@ class Engine:
         except (OSError, ValueError):
             return
         ck.update(head=self.git("rev-parse", "HEAD"), closed=True, filed=self.filed)
-        if why.startswith("gate red"):
+        if why.startswith("gate red") and not ck.get("pending_land_validation"):
             ck.update(step="gate-red", gate_tail=why[-3000:])
         self.checkpoint_path().write_text(json.dumps(ck, indent=1))
 
@@ -3591,6 +3601,8 @@ class Engine:
         if ck.get("v") != 1 or ck.get("branch") != branch or not ck.get("plan"):
             self.drop_checkpoint()
             return None, 0, None
+        self.pending_land_validation = ck.get("pending_land_validation") or (
+            ck.get("feedback", "") if ck["step"] == "land-verify-red" else "")
         self.look_paths, self.look_notes = list(ck.get("look_paths") or []), list(ck.get("look_notes") or [])
         self.look_done, self.look_prev = int(ck.get("look_done") or 0), list(ck.get("look_prev") or [])
         self.rendered_names, self.last_reqs = set(ck.get("rendered") or []), list(ck.get("last_reqs") or [])
@@ -3633,6 +3645,16 @@ class Engine:
                 "another task landed first). Plan the fix.\n\n" + ck.get("gate_tail", ""))
             self.replan_first = True
             self.old_plan, self.amend_why = ck["plan"], "gate red at land"
+            return None, 0, None
+        if ck["step"] == "land-verify-red":
+            # A retry fix that failed checks or review is not accepted work, even if its tree passes the gate.
+            # Re-plan it through stages so both checks and review must pass before another land attempt.
+            self.log("note", "retry validation failed in %s: re-planning the unaccepted fix" % ck["run"])
+            (self.run_dir / "replan.md").write_text(
+                "A push retry's validation fix did not pass checks and review. Plan the fix before landing.\n\n"
+                + ck.get("feedback", ""))
+            self.replan_first = True
+            self.old_plan, self.amend_why = ck["plan"], "retry validation fix failed at land"
             return None, 0, None
         if ck["brief"] != self.brief_hash and ck["step"] == "land" and (self.answered or {}).get("kind") in ("verify", "denied"):
             self.plan_data, self.plan_summary = ck["plan"], ck["plan"]["summary"]
@@ -4266,6 +4288,8 @@ class Engine:
         return out
 
     def finish(self, bead):
+        if self.pending_land_validation:
+            raise Blocked("land retry validation still needs accepted checks and review; branch kept")
         if not self.git("status", "--porcelain"):
             if self.git("rev-list", "--count", "%s..HEAD" % self.cfg["base"]) in ("", "0"):
                 self.log("note", "nothing changed")
@@ -4284,7 +4308,7 @@ class Engine:
         if self.dry:
             self.log("note", "dry run: not landing")
             return ""
-        pushes, flaky_push, rest = 0, 0, 0
+        flaky_push, rest = 0, 0
         self.task_branch = self.git("symbolic-ref", "--short", "-q", "HEAD")
         while True:  # one land at a time per repo: rebase, gate and push see the latest base; a fix runs outside the lock
             problem = None
@@ -4293,72 +4317,117 @@ class Engine:
                 self.add_wait(rest, "the network")
                 rest = 0
             with self.land_lock():
-                self.node("land", "land (try %d)" % (pushes + 1), **{"try": pushes + 1})
-                self.quarantine_strays()
-                rc, tail = self.fetch()
-                if rc == 0:
-                    rc, tail = self.sh(["git", "rebase", "-q", self.cfg["base"]], pin=True)
-                if rc:
-                    unmerged = self.git("diff", "--name-only", "--diff-filter=U")
-                    if not unmerged:
-                        self.sh(["git", "rebase", "--abort"], pin=True)
-                        raise Blocked("failed: fetch or rebase onto %s failed; branch kept\n%s" % (self.cfg["base"], tail))
-                    problem = ("conflict", "Conflicted files: %s\n%s" % (", ".join(unmerged.split()), tail))
-                    self.outcome_of("conflict", ", ".join(unmerged.split()))
-                elif self.cfg["gate"]:
-                    self.gate_log = self.run_dir / ("gate.r%d.log" % (self.fixes + 1))
-                    gtree = self.git("rev-parse", "HEAD^{tree}")
-                    if self.gate_green(gtree):  # the gate already passed on exactly this tree (a push rejected, a re-land)
-                        self.log("note", "gate skipped: `%s` already passed on tree %s" % (self.cfg["gate"][:80], gtree[:12]))
-                        rc, tail = 0, ""
-                    else:
-                        green = self.green_checks(gtree)  # repo checks green on this tree's inputs: the gate may skip their part
-                        rc, tail = self.sh(self.cfg["gate"], save=self.gate_log, timeout=float(self.cfg["gate_timeout_min"]) * 60,
-                                           env={"TL_CHECKS_GREEN": ",".join(green)} if green else None)
-                        if rc == 0:
-                            self.gate_record(gtree)
-                    if rc:
-                        problem = ("gate", tail)
-                        self.outcome_of("gate red", (tail.strip().splitlines() or [""])[-1])
-                if not problem:
-                    with self.stop_deferred() as stop:  # a push half done is no state to stop in: finish it, then stop
-                        gated = self.git("rev-parse", "HEAD^{tree}")  # a pre-push hook may skip a gate this exact tree passed
-                        rc, tail = self.sh(self.cfg["land"], pin=True, env={"TASK_LOOP_GATED_TREE": gated, "TL_GATE_PASSED": gated}
-                                           if self.cfg["gate"] else None)
-                        if rc == 0:
-                            self.landed_sha = sha = self.git("rev-parse", "HEAD")
-                            tl.cmd_land(Args(id=self.bead, sha=sha, worktree=self.wt))
+                pushes = 0
+                while True:  # initial push plus at most two main-moved retries in this hold
+                    self.node("land", "land (try %d)" % (pushes + 1), **{"try": pushes + 1})
+                    self.quarantine_strays()
+                    rc, tail = self.fetch()
                     if rc == 0:
-                        self.outcome_of("landed", sha[:12])
+                        rc, tail = self.sh(["git", "rebase", "-q", self.cfg["base"]], pin=True)
+                    if rc:
+                        unmerged = self.git("diff", "--name-only", "--diff-filter=U")
+                        if not unmerged:
+                            self.sh(["git", "rebase", "--abort"], pin=True)
+                            raise Blocked("failed: fetch or rebase onto %s failed; branch kept\n%s" % (self.cfg["base"], tail))
+                        problem = ("conflict", "Conflicted files: %s\n%s" % (", ".join(unmerged.split()), tail))
+                        self.outcome_of("conflict", ", ".join(unmerged.split()))
+                    if not problem and pushes:
+                        # Revalidate the rebased inputs. Repo checks reuse their input cache; stage/case checks
+                        # remain conservative because they can depend on state outside the tracked tree.
+                        checks = list(dict.fromkeys(c for st in (self.plan_data or {}).get("stages") or []
+                                                    for c in st["checks"]))
+                        checks = list(dict.fromkeys(checks + self.case_checks()))
+                        # A stop during checks or just after they return must resume through acceptance.
+                        # Save that barrier first, then let sh() receive SIGTERM and stop its process tree.
+                        with self.stop_deferred() as stop:
+                            self.pending_land_validation = "land retry checks require successful checks and review before landing"
+                            self.save_checkpoint(stage=len((self.plan_data or {}).get("stages") or []), rounds=0, n=0,
+                                                 feedback="", step="land-verify-red")
                         if stop:
-                            self.warn("a stop came during the land: landed first, closing now")
-                        return sha
-                    if stop:
-                        raise Blocked("failed: stopped (SIGTERM)")
-                    if not re.search(r"rejected|non-fast-forward|fetch first|stale info", tail):
-                        if TRANSIENT_PUSH.search(tail[-600:]):  # the push's own last lines, not a hook's test output before them
-                            if flaky_push >= len(PUSH_RESTS):
-                                raise Blocked("paused: the land push failed %d times with a network error; the branch is kept and "
-                                              "the next run lands it again: %s" % (flaky_push + 1, tail.strip()[-200:]))
-                            rest = PUSH_RESTS[flaky_push]
-                            flaky_push += 1
-                            self.warn("the push failed with a network error, trying again in %d s (%d of %d): %s" % (
-                                rest, flaky_push, len(PUSH_RESTS), tail.strip()[-160:]))
-                            self.transition("land", "push_network", "network error on the push; try %d after %d s" % (flaky_push + 1, rest))
-                            continue
-                        raise Blocked("land failed\n" + tail)
-                    pushes += 1
-                    self.outcome_of("rejected", "main moved")
-                    if pushes >= 5:
-                        raise Blocked("land rejected 5 times: main moves too fast")
-                    self.warn("push rejected (main moved), try %d of 5" % pushes)
-                    self.transition("land", "push_race", "push rejected (main moved): try %d of 5" % (pushes + 1))
-                    continue
+                            raise Blocked("failed: stopped (SIGTERM)")
+                        results = self.run_checks({"checks": checks, "files": []}, "land retry")
+                        with self.stop_deferred() as stop:
+                            bad = [c for c in results if c["status"] == "failed"]
+                            if bad:
+                                problem = ("verify", failure_brief(bad, self.run_dir))
+                                self.pending_land_validation = problem[1]
+                            else:
+                                self.pending_land_validation = ""
+                            self.save_checkpoint(stage=len((self.plan_data or {}).get("stages") or []), rounds=0, n=0,
+                                                 feedback="", step="land-verify-red" if bad else "land")
+                        if stop:
+                            raise Blocked("failed: stopped (SIGTERM)")
+                        self.node("land", "land (try %d)" % (pushes + 1), **{"try": pushes + 1})
+                    if not problem and self.cfg["gate"]:
+                        self.gate_log = self.run_dir / ("gate.r%d.log" % (self.fixes + 1))
+                        gtree = self.git("rev-parse", "HEAD^{tree}")
+                        if self.gate_green(gtree):  # the gate already passed on exactly this tree (a push rejected, a re-land)
+                            self.log("note", "gate skipped: `%s` already passed on tree %s" % (self.cfg["gate"][:80], gtree[:12]))
+                            rc, tail = 0, ""
+                        else:
+                            green = self.green_checks(gtree)  # repo checks green on this tree's inputs: the gate may skip their part
+                            rc, tail = self.sh(self.cfg["gate"], save=self.gate_log, timeout=float(self.cfg["gate_timeout_min"]) * 60,
+                                               env={"TL_CHECKS_GREEN": ",".join(green)} if green else None)
+                            if rc == 0:
+                                self.gate_record(gtree)
+                        if rc:
+                            problem = ("gate", tail)
+                            self.outcome_of("gate red", (tail.strip().splitlines() or [""])[-1])
+                    if not problem:
+                        with self.stop_deferred() as stop:  # a push half done is no state to stop in: finish it, then stop
+                            gated = self.git("rev-parse", "HEAD^{tree}")  # a pre-push hook may skip a gate this exact tree passed
+                            rc, tail = self.sh(self.cfg["land"], pin=True, env={"TASK_LOOP_GATED_TREE": gated, "TL_GATE_PASSED": gated}
+                                               if self.cfg["gate"] else None)
+                            if rc == 0:
+                                self.landed_sha = sha = self.git("rev-parse", "HEAD")
+                                tl.cmd_land(Args(id=self.bead, sha=sha, worktree=self.wt))
+                        if rc == 0:
+                            self.outcome_of("landed", sha[:12])
+                            if stop:
+                                self.warn("a stop came during the land: landed first, closing now")
+                            return sha
+                        if stop:
+                            raise Blocked("failed: stopped (SIGTERM)")
+                        if not re.search(r"rejected|non-fast-forward|fetch first|stale info", tail):
+                            if TRANSIENT_PUSH.search(tail[-600:]):  # the push's own last lines, not a hook's test output before them
+                                if flaky_push >= len(PUSH_RESTS):
+                                    raise Blocked("paused: the land push failed %d times with a network error; the branch is kept and "
+                                                  "the next run lands it again: %s" % (flaky_push + 1, tail.strip()[-200:]))
+                                rest = PUSH_RESTS[flaky_push]
+                                flaky_push += 1
+                                self.warn("the push failed with a network error, trying again in %d s (%d of %d): %s" % (
+                                    rest, flaky_push, len(PUSH_RESTS), tail.strip()[-160:]))
+                                self.transition("land", "push_network", "network error on the push; try %d after %d s" % (flaky_push + 1, rest))
+                                break
+                            raise Blocked("land failed\n" + tail)
+                        pushes += 1
+                        self.outcome_of("rejected", "main moved")
+                        if pushes >= 3:
+                            raise Blocked("land rejected 3 times: main moves too fast")
+                        self.warn("push rejected (main moved), try %d of 3" % (pushes + 1))
+                        self.transition("land", "push_race", "push rejected (main moved): try %d of 3" % (pushes + 1))
+                        continue
+                    break  # a red check/gate or conflict is fixed outside the land lock
+            if rest:
+                continue
             if self.fixes < int(self.cfg["max_fix_rounds"]):
-                self.transition("fix", "gate_red" if problem[0] == "gate" else "conflict",
+                self.transition("fix", {"gate": "gate_red", "verify": "checks_red", "conflict": "conflict"}[problem[0]],
                                 "gate red on the rebased tree: %s" % (problem[1].strip().splitlines() or [""])[-1][:200]
                                 if problem[0] == "gate" else problem[1].splitlines()[0])
-            self.fix(*problem)
+            fixed = self.fix(*problem)
+            if problem[0] == "verify" and fixed != "accept":
+                self.pending_land_validation += "\n" + self.stuck_why
+                self.save_checkpoint(stage=len((self.plan_data or {}).get("stages") or []), rounds=0, n=0,
+                                     feedback="", step="land-verify-red")
+                raise Blocked("land retry validation fix did not pass its checks and review; branch kept")
+            if problem[0] == "verify":
+                self.pending_land_validation = ""
+                self.save_checkpoint(stage=len((self.plan_data or {}).get("stages") or []), rounds=0, n=0,
+                                     feedback="", step="land")
+            if problem[0] == "verify" and self.git("status", "--porcelain"):
+                # Unlike verification before finish(), a retry check's fix follows the task commit.
+                self.stage_all(check=True)
+                self.sh(["git", "commit", "-q", "--amend", "--no-edit"], check=True, pin=True)
 
     def gate_file(self):
         return tl.config_dir() / "check-cache" / ("%s.gate.json" % self.bead)

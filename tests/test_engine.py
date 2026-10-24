@@ -9,7 +9,7 @@ import tempfile
 import threading
 import time
 import unittest
-from contextlib import redirect_stdout
+from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -1597,6 +1597,394 @@ class EngineTest(unittest.TestCase):
         log = tl.git("log", "--format=%s", "origin/main", cwd=str(self.wt)).splitlines()
         self.assertEqual(log[:2], ["Add f (t-1)", "theirs"])
         self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d4")
+
+    def run_push_race(self, rejections=1, failure="", plan=PLAN, resume_failed_fix=False, **cfg):
+        """Advance a local remote immediately before each rejected push, under the real land lock."""
+        n = getattr(self, "race_runs", 0) + 1
+        self.race_runs = n
+        home = Path(self.tmp.name)
+        self.wt = home / ("race-%d" % n)
+        origin = self.race_origin = home / ("race-origin-%d.git" % n)
+        sh("git", "clone", "-q", "--bare", str(home / "o.git"), str(origin), cwd=home)
+        other = home / ("concurrent-%d" % n)
+        for checkout in (self.wt, other):
+            sh("git", "clone", "-q", str(origin), str(checkout), cwd=home)
+        events, held = [], []
+        state = {"pushes": 0, "fetches": 0, "gates": 0, "results": []}
+        real_lock, real_sh, real_wait = engine.Engine.land_lock, engine.Engine.sh, engine.Engine.add_wait
+        real_fetch, real_checks, real_fix = engine.Engine.fetch, engine.Engine.run_checks, engine.Engine.fix
+        gate = PY + ' -c "pass"'
+
+        @contextmanager
+        def lock(this):
+            with real_lock(this):
+                self.assertFalse(held)
+                held.append(True)
+                events.append("enter")
+                try:
+                    yield
+                finally:
+                    events.append("exit")
+                    held.pop()
+
+        def fetch(this, *a, **kw):
+            if held:
+                events.append("fetch")
+                state["fetches"] += 1
+                if failure == "fetch" and state["fetches"] == 2:
+                    return 1, "fetch failed"
+            return real_fetch(this, *a, **kw)
+
+        def checks(this, st, name, *a, **kw):
+            if name == "land retry":
+                self.assertTrue(held)
+                events.append("checks")
+                if failure == "checks_stop":
+                    state["pidfile"] = home / ("retry-child-%d.pid" % n)
+                    state["next_check"] = home / ("retry-next-%d" % n)
+                    st = dict(st, checks=[self.SPAWN % state["pidfile"] + "kill -TERM $PPID; wait",
+                                          "touch %s" % state["next_check"]])
+                if failure in ("checks", "checks_fixed", "checks_exhausted", "review_exhausted") and not state.get("check_failed"):
+                    state["check_failed"] = True
+                    return [{"cmd": "retry check", "status": "failed", "exit": 1, "tail": "red", "group": "tests"}]
+            result = real_checks(this, st, name, *a, **kw)
+            if failure == "checks_exhausted" and (name.startswith("fix ") or state.get("resuming")):
+                result = [dict(c, status="failed", exit=1, tail="still red") for c in result]
+            if state.get("resuming"):
+                state.setdefault("resume_checks", []).append(result)
+            if name == "land retry":
+                state["results"].append(result)
+            return result
+
+        def command(this, cmd, *a, **kw):
+            if held and isinstance(cmd, list) and cmd[:3] == ["git", "rebase", "-q"]:
+                events.append("rebase")
+            if held and cmd == gate:
+                events.append("gate")
+                state["gates"] += 1
+                if failure == "gate" and state["gates"] == 2:
+                    return 1, "gate red"
+            if cmd == this.cfg["land"]:
+                self.assertTrue(held)
+                events.append("push")
+                state["pushes"] += 1
+                if state["pushes"] <= rejections:
+                    path = "f.txt" if failure == "conflict" else "a.txt"
+                    (other / path).write_text("concurrent %d\n" % state["pushes"])
+                    sh("git", "add", "-A", cwd=other)
+                    sh("git", "commit", "-qm", "concurrent", cwd=other)
+                    sh("git", "push", "-q", "origin", "HEAD:main", cwd=other)
+                elif failure in ("network", "push", "stop"):
+                    if failure == "stop":
+                        signal.raise_signal(signal.SIGTERM)
+                        return 1, "! [rejected] (fetch first)"
+                    return 1, "Connection reset" if failure == "network" else "hook failed"
+            return real_sh(this, cmd, *a, **kw)
+
+        def fix(this, kind, tail):
+            self.assertFalse(held)
+            events.append("fix:" + kind)
+            if failure in ("checks_fixed", "checks_exhausted", "review_exhausted"):
+                state["fix_result"] = real_fix(this, kind, tail)
+                return state["fix_result"]
+            raise engine.Blocked("test stops at fix: " + kind)
+
+        def wait(this, secs, what):
+            if what != "the network":
+                return real_wait(this, secs, what)
+            self.assertFalse(held)
+            events.append("wait")
+            raise engine.Blocked("test stops at network wait")
+
+        config_home = str(home / ("race-cfg-%d" % n))
+        state["config_home"] = config_home
+        with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": config_home, "APPDATA": config_home}), \
+                mock.patch.object(engine.Engine, "land_lock", lock), \
+                mock.patch.object(engine.Engine, "fetch", fetch), \
+                mock.patch.object(engine.Engine, "run_checks", checks), \
+                mock.patch.object(engine.Engine, "sh", command), \
+                mock.patch.object(engine.Engine, "fix", fix), \
+                mock.patch.object(engine.Engine, "add_wait", wait):
+            reviews = [CLEAN, review(findings=[finding("high")])] if failure == "review_exhausted" else [CLEAN] * 2
+            rc, _ = self.run_engine({"plan": [plan], "write": [WRITE] * 2, "review": reviews}, gate=gate, **cfg)
+            if resume_failed_fix:
+                state["first_rc"], state["first_blocked"] = rc, self.blocked[-1]
+                state["checkpoint"] = self.checkpoint()
+                state["resuming"] = True
+                # An owner comment answers the stuck ask without discarding the checkpoint.
+                with mock.patch.object(tl, "comments", return_value=[{"author": "owner", "text": "Run again."}]):
+                    rc, script = self.run_engine({"plan": [plan], "write": [WRITE], "review": [reviews[-1]]},
+                                                 gate=gate, **dict(cfg, max_replans=1))
+                state["resume_calls"] = [c[0] for c in script.calls]
+        self.assertFalse(held)
+        return rc, events, state
+
+    def test_push_race_retry_keeps_one_land_lock_and_lands(self):
+        rc, events, state = self.run_push_race()
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual(events, ["enter", "fetch", "rebase", "gate", "push",
+                                  "fetch", "rebase", "checks", "gate", "push", "exit"])
+        self.assertEqual(state["pushes"], 2)
+        self.assertEqual(self.eng.result()["outcome"], "landed")
+        self.assertTrue(self.closed[0].startswith("merged "))
+        self.assertEqual(tl.git("show", "origin/main:a.txt", cwd=str(self.wt)), "concurrent 1")
+        self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
+        self.assertEqual(tl.git("rev-parse", "HEAD", cwd=str(self.wt)),
+                         tl.git("rev-parse", "main", cwd=str(self.race_origin)))
+
+    def test_push_race_stops_after_two_retries(self):
+        for rejections, expected in ((2, 0), (3, 2)):
+            with self.subTest(rejections=rejections):
+                rc, events, state = self.run_push_race(rejections=rejections)
+                self.assertEqual(rc, expected, self.blocked)
+                self.assertEqual(state["pushes"], 3)
+                self.assertEqual(events.count("enter"), 1)
+                self.assertEqual(events.count("exit"), 1)
+                self.assertEqual(events[-1], "exit")
+                if expected:
+                    self.assertIn("land rejected 3 times", self.blocked[-1])
+                    self.assertFalse(self.eng.landed_sha)
+                else:
+                    self.assertTrue(self.eng.landed_sha)
+
+    def test_push_race_retries_use_input_cache(self):
+        counts = {key: Path(self.tmp.name, key) for key in ("changed", "same", "whole", "uncached", "stage", "case", "conservative")}
+
+        def bump(key):
+            return PY + ' -c "open(%r, \'a\').write(\'1\')"' % str(counts[key])
+
+        checks = [{"id": key, "cmd": bump(key), "group": "tests", "inputs": [path], "inputs_only": True}
+                  for key, path in (("changed", "a.txt"), ("same", "f.txt"))]
+        checks += [{"id": "whole", "cmd": bump("whole"), "group": "tests"},
+                   {"id": "uncached", "cmd": bump("uncached"), "group": "tests", "cache": False},
+                   {"id": "conservative", "cmd": bump("conservative"), "group": "tests", "inputs": ["f.txt"]}]
+        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[bump("stage")])],
+                    cases=[{"criterion": "case", "check": bump("case"), "class": "test", "proved_by": "check"}])
+        rc, events, state = self.run_push_race(checks=checks, plan=plan)
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual(events.count("enter"), 1)
+        self.assertEqual({key: path.read_text() for key, path in counts.items()},
+                         {key: "1" if key == "same" else "11" for key in counts})
+        cached = {c["id"] for c in state["results"][0] if c.get("cached")}
+        self.assertEqual(cached, {"same"})
+
+    def test_push_race_failure_paths_release_land_lock(self):
+        for failure, after in (("fetch", None), ("checks", "fix:verify"), ("gate", "fix:gate"),
+                               ("push", None), ("network", "wait"), ("stop", None), ("conflict", "fix:conflict")):
+            with self.subTest(failure=failure):
+                rc, events, state = self.run_push_race(failure=failure)
+                self.assertEqual(rc, 2)
+                self.assertEqual(events.count("enter"), 1)
+                self.assertEqual(events.count("exit"), 1)
+                self.assertFalse(self.eng.landed_sha)
+                self.assertEqual(events[-2:] if after else events[-1:], ["exit", after] if after else ["exit"])
+                self.assertEqual(state["pushes"], 2 if failure in ("push", "network", "stop") else 1)
+        rc, events, state = self.run_push_race(failure="checks_fixed")
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual(events.count("enter"), 2)
+        self.assertEqual(events.count("exit"), 2)
+        self.assertEqual(events[events.index("fix:verify") - 1], "exit")
+        self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d4")
+        self.assertEqual(self.eng.result()["outcome"], "landed")
+
+    def test_push_race_exhausted_validation_fix_cannot_land(self):
+        for failure in ("checks_exhausted", "review_exhausted"):
+            with self.subTest(failure=failure), mock.patch.object(tl, "cmd_land") as land:
+                rc, events, state = self.run_push_race(failure=failure, resume_failed_fix=True,
+                                                      max_rounds=1, max_check_tries=1)
+                self.assertEqual(state["fix_result"], "replan")
+                self.assertEqual(state["first_rc"], 2)
+                self.assertEqual(rc, 2, self.blocked)
+                self.assertIn("validation fix did not pass", state["first_blocked"])
+                self.assertEqual(state["checkpoint"]["step"], "land-verify-red")
+                self.assertTrue(state["checkpoint"]["closed"])
+                self.assertIn("still red" if failure == "checks_exhausted" else "a high fix",
+                              state["checkpoint"]["feedback"])
+                self.assertTrue(self.eng.resumed)
+                self.assertEqual(state["resume_calls"], ["planner", "worker"] +
+                                 (["reviewer"] if failure == "review_exhausted" else []))
+                self.assertEqual(len(state["resume_checks"]), 1)
+                self.assertEqual(any(c["status"] == "failed" for c in state["resume_checks"][0]),
+                                 failure == "checks_exhausted")
+                self.assertEqual(state["pushes"], 1)  # only the initial, rejected push
+                self.assertEqual(state["gates"], 1)  # a green gate cannot accept the failed fix
+                self.assertEqual(events.count("enter"), 1)
+                self.assertEqual(events.count("exit"), 1)
+                self.assertEqual(events[-2:], ["exit", "fix:verify"])
+                self.assertFalse(self.eng.landed_sha)
+                self.assertNotEqual(self.eng.result()["outcome"], "landed")
+                self.assertFalse(self.closed)
+                land.assert_not_called()
+                self.assertEqual(tl.git("show", "main:a.txt", cwd=str(self.race_origin)), "concurrent 1")
+                self.assertEqual(tl.git("ls-tree", "--name-only", "main", "f.txt", cwd=str(self.race_origin)), "")
+
+    def test_push_race_interrupted_validation_fix_resume_requires_acceptance(self):
+        real_fix, real_stage = engine.Engine.fix, engine.Engine.stage
+        real_delegate = DelegateScript.__call__
+        real_sh, real_checks = engine.Engine.sh, engine.Engine.run_checks
+        real_brief = engine.failure_brief
+        real_checkpoint, real_transition = engine.Engine.save_checkpoint, engine.Engine.transition
+        gate = PY + ' -c "pass"'
+        for interruption in ("pause", "denial", "SIGTERM"):
+            for role in (("worker", "reviewer", "failed_checks", "checkpoint", "transition")
+                         if interruption == "SIGTERM" else ("worker", "reviewer")):
+                with self.subTest(interruption=interruption, role=role), self.stoppable(), \
+                        mock.patch.object(tl, "cmd_land") as land:
+                    seen, recovery_checks, recovery_pushes = {}, [], []
+                    closed_before = len(self.closed)
+
+                    def interrupt_boundary(boundary):
+                        if role == boundary and not seen.get("interrupted"):
+                            seen["interrupted"] = True
+                            signal.raise_signal(signal.SIGTERM)
+
+                    def brief(bad, run_dir):
+                        # Red results must replace the pre-check recovery barrier without a signal gap.
+                        if any(c.get("cmd") == "retry check" for c in bad):
+                            interrupt_boundary("failed_checks")
+                        return real_brief(bad, run_dir)
+
+                    def checkpoint(this, **at):
+                        if at.get("step") == "land-verify-red":
+                            # SIGTERM must wait until the durable checkpoint has actually been written.
+                            interrupt_boundary("checkpoint")
+                        return real_checkpoint(this, **at)
+
+                    def transition(this, to, cause, detail="", **kw):
+                        if to == "fix" and cause == "checks_red":
+                            # This used to interrupt before pending validation was saved at all.
+                            interrupt_boundary("transition")
+                        return real_transition(this, to, cause, detail, **kw)
+
+                    def fix(this, kind, tail):
+                        ck = self.checkpoint()
+                        self.assertEqual(ck["step"], "land-verify-red")
+                        self.assertIn("retry check", ck["pending_land_validation"])
+                        self.assertEqual(ck["feedback"], ck["pending_land_validation"])
+                        seen["failure"] = ck["feedback"]
+                        seen["in_fix"] = True
+                        try:
+                            return real_fix(this, kind, tail)
+                        finally:
+                            seen["in_fix"] = False
+
+                    def stage(this, plan, i, state=None):
+                        if (state or {}).get("fix"):
+                            # fix() has initialized its checkpoint; the pending failure must still be there.
+                            ck = self.checkpoint()
+                            self.assertEqual(ck["step"], "land-verify-red")
+                            self.assertEqual(ck["feedback"], seen["failure"])
+                            seen["fix_initialized"] = True
+                        return real_stage(this, plan, i, state)
+
+                    def delegate(this, route, current_role, *a, **kw):
+                        if seen.get("in_fix") and current_role == role:
+                            seen["interrupted"] = True
+                            if interruption == "SIGTERM":
+                                signal.raise_signal(signal.SIGTERM)
+                            raise engine.Blocked("paused: validation writer unavailable" if interruption == "pause"
+                                                 else "needs a human: validation command denied")
+                        return real_delegate(this, route, current_role, *a, **kw)
+
+                    with mock.patch.object(engine.Engine, "fix", fix), \
+                            mock.patch.object(engine.Engine, "stage", stage), \
+                            mock.patch.object(engine, "failure_brief", brief), \
+                            mock.patch.object(engine.Engine, "save_checkpoint", checkpoint), \
+                            mock.patch.object(engine.Engine, "transition", transition), \
+                            mock.patch.object(DelegateScript, "__call__", delegate):
+                        rc, events, race = self.run_push_race(failure="checks_fixed", max_rounds=1, max_check_tries=1)
+                    self.assertEqual(rc, 2, self.blocked)
+                    self.assertEqual(bool(seen.get("fix_initialized")), role in ("worker", "reviewer"))
+                    self.assertTrue(seen.get("interrupted"))
+                    if role in ("worker", "reviewer"):
+                        self.assertEqual(events[-2:], ["exit", "fix:verify"])
+                    else:
+                        self.assertEqual(events[-1], "exit")
+                        self.assertNotIn("fix:verify", events)
+                    self.assertEqual(events.count("enter"), 1)
+                    self.assertEqual(events.count("exit"), 1)
+                    self.assertEqual(race["pushes"], 1)
+                    self.assertFalse(self.eng.landed_sha)
+                    self.assertEqual(len(self.closed), closed_before)
+                    land.assert_not_called()
+
+                    def checks(this, *a, **kw):
+                        result = real_checks(this, *a, **kw)
+                        recovery_checks.append(result)
+                        return result
+
+                    def command(this, cmd, *a, **kw):
+                        if cmd == this.cfg["land"]:
+                            recovery_pushes.append(cmd)
+                            self.assertFalse(this.pending_land_validation)
+                            self.assertFalse(self.checkpoint()["pending_land_validation"])
+                        return real_sh(this, cmd, *a, **kw)
+
+                    env = {"XDG_CONFIG_HOME": race["config_home"], "APPDATA": race["config_home"]}
+                    with mock.patch.dict(os.environ, env), mock.patch.object(engine.Engine, "run_checks", checks), \
+                            mock.patch.object(engine.Engine, "sh", command):
+                        ck = self.checkpoint()
+                        self.assertTrue(ck["closed"])
+                        self.assertEqual(ck["step"], "land-verify-red")
+                        if role not in ("worker", "reviewer"):
+                            self.assertIn("retry check", ck["pending_land_validation"])
+                            seen["failure"] = ck["pending_land_validation"]
+                        self.assertEqual(ck["feedback"], seen["failure"])
+                        self.assertEqual(ck["pending_land_validation"], seen["failure"])
+                        red_plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[FALSE])]) if role != "reviewer" else PLAN
+                        red_review = review(findings=[finding("high")]) if role == "reviewer" else CLEAN
+                        with mock.patch.object(tl, "comments", return_value=[{"author": "owner", "text": "Recover validation."}]):
+                            rc, script = self.run_engine({"plan": [red_plan], "write": [WRITE], "review": [red_review]},
+                                                         gate=gate, max_rounds=1, max_check_tries=1, max_replans=1)
+                        self.assertEqual(rc, 2, self.blocked)
+                        self.assertTrue(self.eng.resumed)
+                        self.assertEqual([c[0] for c in script.calls], ["planner", "worker"] +
+                                         (["reviewer"] if role == "reviewer" else []))
+                        self.assertEqual(len(recovery_checks), 1)
+                        self.assertEqual(any(c["exit"] for c in recovery_checks[0]), role != "reviewer")
+                        self.assertIn(seen["failure"], self.checkpoint()["pending_land_validation"])
+                        self.assertEqual(self.checkpoint()["step"], "land-verify-red")
+                        self.assertFalse(recovery_pushes)
+                        self.assertFalse(self.eng.landed_sha)
+                        self.assertEqual(len(self.closed), closed_before)
+                        land.assert_not_called()
+
+                        with mock.patch.object(tl, "comments", return_value=[{"author": "owner", "text": "Recover with passing checks and review."}]):
+                            rc, script = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
+                                                         gate=gate, max_rounds=1, max_check_tries=1, max_replans=2)
+                        self.assertEqual(rc, 0, self.blocked)
+                        self.assertEqual([c[0] for c in script.calls], ["planner", "worker", "reviewer"])
+                        self.assertEqual(len(recovery_checks), 2)
+                        self.assertTrue(all(c["exit"] == 0 for c in recovery_checks[-1]))
+                        self.assertEqual(len(recovery_pushes), 1)
+                        self.assertFalse(self.eng.pending_land_validation)
+                        self.assertIsNone(self.checkpoint())
+                        self.assertEqual(self.eng.result()["outcome"], "landed")
+                        self.assertEqual(len(self.closed), closed_before + 1)
+                        land.assert_called_once()
+
+    def test_push_race_sigterm_during_retry_check_stops_child_and_keeps_barrier(self):
+        with self.stoppable(), mock.patch.object(tl, "cmd_land") as land:
+            rc, events, race = self.run_push_race(failure="checks_stop", check_timeout_min=0.03)
+        self.assertEqual(rc, 2, self.blocked)
+        self.assertIn("stopped (SIGTERM)", self.blocked[-1])
+        self.assertDead(self.child_of(race["pidfile"]))
+        self.assertFalse(race["next_check"].exists(), "another check ran after SIGTERM")
+        self.assertEqual(events.count("enter"), 1)
+        self.assertEqual(events.count("exit"), 1)
+        self.assertEqual(events[-1], "exit")
+        self.assertEqual(race["pushes"], 1)
+        self.assertFalse(self.closed)
+        self.assertFalse(self.eng.landed_sha)
+        land.assert_not_called()
+
+        env = {"XDG_CONFIG_HOME": race["config_home"], "APPDATA": race["config_home"]}
+        with mock.patch.dict(os.environ, env):
+            ck = self.checkpoint()
+            self.assertTrue(ck["closed"])
+            self.assertEqual(ck["step"], "land-verify-red")
+            self.assertIn("retry checks", ck["pending_land_validation"])
+            self.assertEqual(ck["feedback"], ck["pending_land_validation"])
 
     def test_land_lock_is_one_per_repo_across_processes(self):
         if os.name == "nt":
