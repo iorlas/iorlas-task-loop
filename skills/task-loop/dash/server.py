@@ -1740,7 +1740,7 @@ def delegate_status():
     return cached("delegate", 60, load)
 
 
-def ask_for(ask_id, amend=False):
+def ask_for(ask_id, amend=False, withdrawing=False):
     """(path, ask, problem): the file that holds ask_id, or why it cannot be answered. Ask files are per bead and the
     engine overwrites them with a newer ask (id bead-n), so an id the file no longer carries is `superseded`."""
     ask_id = ask_id if isinstance(ask_id, str) else ""
@@ -1754,7 +1754,7 @@ def ask_for(ask_id, amend=False):
                 return f, a, (409, {"code": "consumed" if amend else "answered",
                                     "error": "A run already used the answer to this ask; comment on the bead to say more." if amend
                                     else "This ask is already answered."})
-            if a.get("answer") and not amend:
+            if a.get("answer") and not amend and not withdrawing:
                 return f, a, (409, {"code": "answered", "error": "This ask is already answered. To replace the answer before a run "
                                     "uses it: tl ask answer %s --amend <text> (or Change answer on the dashboard)." % a.get("bead")})
             return f, a, None
@@ -1870,10 +1870,14 @@ def withdraw(body):
     """The owner dismisses an ask that no longer applies; the bead is not touched."""
     if not isinstance(body, dict):
         return 400, {"code": "bad_body", "error": "The request was not understood."}
-    f, a, problem = ask_for(body.get("ask"))
+    f, a, problem = ask_for(body.get("ask"), withdrawing=True)
     if problem:
         return (200, {"ok": True}) if problem[1].get("code") == "withdrawn" else problem
     why = body.get("why") if isinstance(body.get("why"), str) and body.get("why").strip() else "dismissed by the owner"
+    if a.get("answer"):  # tl-gy4: an answer no run has used yet goes with the ask, and the record says so
+        a["withdrawn_answer"] = a.pop("answer")
+        a.pop("answer_t", None)
+        why = ("%s (answer dropped: %s)" % (why, " ".join(str(a["withdrawn_answer"]).split())[:120]))
     a.update(status="withdrawn", withdrawn_why=why[:300], withdrawn=time.time())
     try:
         Path(f).write_text(json.dumps(a, indent=1))

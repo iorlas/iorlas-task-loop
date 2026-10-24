@@ -527,6 +527,19 @@ esac
         self.assertEqual(server.answer({"ask": "x-1", "text": "run again", "amend": True})[0], 200)  # a bare answer removes the line
         self.assertNotIn("(ask x-1)", (self.d / "notes.txt").read_text())
 
+    def test_withdrawing_an_answered_but_unused_ask_drops_the_answer_and_notes_it(self):
+        """tl-gy4: withdraw refused 'already answered'; only --fresh worked, which dropped the answer unseen."""
+        self.bd("echo ok\n")
+        self.ask()
+        self.assertEqual(server.answer({"ask": "x-1-1", "text": "go with B"})[0], 200)
+        self.assertEqual(server.withdraw({"ask": "x-1-1", "why": "wrong ask"})[0], 200)
+        a = json.loads((self.asks / "x-1.json").read_text())
+        self.assertEqual((a["status"], a.get("answer"), a["withdrawn_answer"]), ("withdrawn", None, "go with B"))
+        self.assertIn("answer dropped: go with B", a["withdrawn_why"])
+        a["status"], a["answer"] = "answered", "used"  # a run consumed it: too late to withdraw
+        (self.asks / "x-1.json").write_text(json.dumps(a))
+        self.assertEqual(server.withdraw({"ask": "x-1-1"})[1]["code"], "answered")
+
     def test_a_parked_ask_is_listed_last_flagged_and_answerable(self):
         self.bd("echo \"$*\" >> %s\n" % (self.d / "bd.log"))
         self.ask("quiet", status="parked")

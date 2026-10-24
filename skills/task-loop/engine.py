@@ -3484,12 +3484,14 @@ class Engine:
             return
         if a.get("status") not in ("open", "parked"):  # a parked ask (3 days, no answer) still waits
             return
-        if a.get("brief") == self.brief_hash and not self.cfg.get("fresh"):
+        given = bool(str(a.get("answer") or "").strip())  # tl-gy4: an answer filed on the ask is an answer, whether or not the bead changed
+        if a.get("brief") == self.brief_hash and not self.cfg.get("fresh") and not given:
             raise Blocked("waiting: for the owner's answer to ask %s (%s): %s" % (a["id"], a["kind"], clip(push_text(a["question"]), 200)))
         a.update(status="answered", answered=time.time())
         self.ask_path().write_text(json.dumps(a, indent=1))
         self.answered = a
-        self.log("note", "ask %s (%s) is answered: the bead changed since it was asked" % (a["id"], a["kind"]))
+        self.log("note", "ask %s (%s) is answered: %s" % (a["id"], a["kind"], "the owner's answer is filed on it" if given
+                                                           and a.get("brief") == self.brief_hash else "the bead changed since it was asked"))
 
     def answer_text(self, a):
         """The owner's answer to ask a: the dashboard's, else the people's comments after the engine's ask comment."""

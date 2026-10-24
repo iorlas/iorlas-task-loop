@@ -2187,6 +2187,20 @@ class EngineTest(unittest.TestCase):
     def test_the_park_comment_is_the_engines_own_note_not_an_owner_answer(self):
         self.assertTrue("Parked (engine): ask x-1 got no answer in 3 days.".startswith(engine.ENGINE_NOTES))
 
+    def test_an_ask_with_an_answer_filed_on_it_starts_the_run_and_is_consumed(self):
+        """tl-gy4 (lifesim-hclf.32-2): answered at 19:00, status still open, the bead unchanged: run-task said 'waiting for the answer'."""
+        self.run_engine({"plan": [dict(PLAN, question="Old format or new?")]})
+        a = self.ask()
+        a["answer"], a["answer_t"] = "Old format.", time.time()
+        (tl.config_dir() / "asks" / ("%s.json" % a["bead"])).write_text(json.dumps(a))
+        self.assertEqual(a["status"], "open")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertGreaterEqual(len(s.calls), 1)  # it ran, it did not wait
+        self.assertEqual(self.ask()["status"], "answered")
+        self.assertIn("Old format.", self.eng.answer_text(self.ask()))
+        self.assertIn("owner's answer is filed on it", self.eng.log_path.read_text())
+
     def test_a_parked_ask_still_waits_for_the_owner(self):
         self.run_engine({"plan": [dict(PLAN, question="Old format or new?")]})
         a = self.ask()
