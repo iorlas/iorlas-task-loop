@@ -112,7 +112,8 @@ def read_json(p, default=None):
         return default
 
 
-def tail_lines(path, limit=TAIL_BYTES):
+def tail_lines(path, limit=None):
+    limit = limit or TAIL_BYTES
     try:
         with open(path, "rb") as f:
             f.seek(0, 2)
@@ -123,6 +124,61 @@ def tail_lines(path, limit=TAIL_BYTES):
         return []
     lines = data.decode("utf-8", "replace").splitlines()
     return lines[1:] if size > limit else lines
+
+
+WINDOW_BYTES = 40_000_000  # the most window_lines reads from the middle of a huge transcript
+
+
+def _ts_at(f, pos, size):
+    """(timestamp, offset of its line) of the first full line that starts at or after pos and has one; (None, size) past the end."""
+    f.seek(pos)
+    if pos:
+        f.readline()  # the rest of the line pos is inside
+    for _ in range(50):
+        at = f.tell()
+        ln = f.readline()
+        if not ln:
+            return None, size
+        try:
+            t = parse_ts(json.loads(ln).get("timestamp"))
+        except (ValueError, AttributeError):
+            continue
+        if t:
+            return t, at
+    return None, size
+
+
+def window_lines(path, t0=None, t1=None):
+    """The lines of a transcript from t0 on. A small file or a window the 6 MB tail already covers is the tail; otherwise (a task
+    worked hours ago in a long session, tl-65w) the start of the window is found by bisecting the file on byte offsets, since
+    a transcript's timestamps only grow, and read from there up to t1 (WINDOW_BYTES at most)."""
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        return []
+    if not t0 or size <= TAIL_BYTES:
+        return tail_lines(path)
+    try:
+        with open(path, "rb") as f:
+            t, _ = _ts_at(f, size - TAIL_BYTES, size)
+            if t is None or t <= t0 - 2:  # the tail starts before the window: it holds the window
+                return tail_lines(path)
+            lo, hi = 0, size - TAIL_BYTES  # the answer is in [lo, hi]: first line with ts >= t0 - 2
+            while hi - lo > 65536:
+                mid = (lo + hi) // 2
+                t, at = _ts_at(f, mid, size)
+                if t is not None and t < t0 - 2:
+                    lo = mid
+                else:
+                    hi = mid
+            f.seek(lo)
+            if lo:
+                f.readline()
+            data = f.read(WINDOW_BYTES)
+    except OSError:
+        return []
+    lines = data.decode("utf-8", "replace").splitlines()
+    return lines[:-1] if len(data) == WINDOW_BYTES else lines
 
 
 def first_json(path):
@@ -262,7 +318,7 @@ def session_dirs(session):
 def claude_events(path, t0=None, t1=None):
     """Claude transcript (session, subagent, or claude -p stream) -> timeline events."""
     out, pending = [], {}
-    for ln in tail_lines(path):
+    for ln in window_lines(path, t0, t1):
         try:
             d = json.loads(ln)
         except ValueError:
@@ -345,7 +401,7 @@ def codex_log_events(path, t0=None, t1=None):
 def rollout_events(path, t0=None, t1=None):
     """A Codex rollout file (codex exec / app-server) -> timeline events."""
     out, pending = [], {}
-    for ln in tail_lines(path):
+    for ln in window_lines(path, t0, t1):
         try:
             d = json.loads(ln)
         except ValueError:
