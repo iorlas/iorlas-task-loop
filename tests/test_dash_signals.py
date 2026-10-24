@@ -41,11 +41,16 @@ class Quiet(unittest.TestCase):
 
 class Lanes(unittest.TestCase):
     def test_out_lane_is_red_with_the_wait_and_a_short_reason(self):
-        s = build(lanes=[{"name": "CLAUDE_CREDIT", "out_until": NOW + 3 * H + 600, "why": "credit balance too low: top up (https://x)"}])
+        s = build(lanes=[{"name": "CLAUDE_SUBSCRIPTION", "out_until": NOW + 3 * H + 600, "why": "usage limit reached: resets later (https://x)"}])
         (x,) = s["signals"]
         self.assertEqual((x["sev"], x["title"]), ("red", "Claude lane out"))
         self.assertIn("3h10m", x["line"])
-        self.assertNotIn("top up", x["line"])
+        self.assertNotIn("resets later", x["line"])
+
+    def test_a_credit_lane_out_is_no_alarm_unattended_runs_never_use_it(self):
+        s = build(lanes=[{"name": "CLAUDE_CREDIT", "out_until": NOW + 3 * H, "why": "credit balance too low"},
+                         {"name": "claude_credit", "usage": [{"window": "5h", "used_pct": 99.0, "resets_at": NOW + H}]}])
+        self.assertEqual(s["signals"], [])
 
     def test_a_lane_that_is_back_and_low_usage_is_quiet_high_usage_is_amber(self):
         quiet = [{"name": "OPENAI_SUBSCRIPTION", "out_until": NOW - 5, "usage": [{"window": "5h", "used_pct": 40.0, "resets_at": NOW + H}]}]
