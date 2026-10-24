@@ -1345,9 +1345,10 @@ def close_stale_asks(every=600):
             continue
         if not isinstance(a, dict) or a.get("status") not in ("open", "parked") or not a.get("bead"):
             continue
-        if not (isinstance(a.get("repo"), str) and Path(a["repo"]).is_dir()):
-            continue  # which repo's tracker to ask is not known: the ask stays
+        if not (isinstance(a.get("repo"), str) and (Path(a["repo"]) / ".beads").is_dir()):
+            continue  # which repo's tracker to ask is not known (bd would walk up to another one): the ask stays
         by_repo.setdefault(a["repo"], []).append((f, a))
+    listed_any = False
     for repo, items in by_repo.items():  # one bd read per repo (tl-u08: a bd show per ask took over two minutes for 25 asks)
         try:
             r = bd("list", "--json", "--all", "-n", "0", cwd=repo)
@@ -1361,22 +1362,33 @@ def close_stale_asks(every=600):
             continue
         if not status:
             continue  # an empty answer proves nothing
+        listed_any = True
         for f, a in items:
             why = ""
-            if a["bead"] not in status:
-                why = "the bead does not exist"
+            if a["bead"] not in status:  # the list hides gates, ephemeral and infra beads: ask bd about this one before saying so
+                try:
+                    one = bd("show", a["bead"], "--json", cwd=repo)
+                except SystemExit:
+                    return done
+                if one.returncode != 0 and re.search(r"no issues? found matching|issue .{0,60}not found|no such issue",
+                                                     (one.stderr or "") + (one.stdout or ""), re.I):
+                    why = "the bead does not exist"
             elif status[a["bead"]] == "closed":
                 why = "the bead is closed"
             if why:
-                a.update(status="closed", closed=time.time(), closed_why=why)
-                try:
-                    Path(f).write_text(json.dumps(a, indent=1), encoding="utf-8")
+                try:  # the owner or the engine may have written since the read: close only what is still open or parked
+                    cur = json.loads(Path(f).read_text(encoding="utf-8"))
+                    if cur.get("status") not in ("open", "parked") or cur.get("id") != a.get("id"):
+                        continue
+                    cur.update(status="closed", closed=time.time(), closed_why=why)
+                    Path(f).write_text(json.dumps(cur, indent=1), encoding="utf-8")
                     done.append(a["bead"])
-                except OSError:
+                except (OSError, ValueError):
                     pass
     try:
-        marker.parent.mkdir(parents=True, exist_ok=True)
-        marker.write_text(str(time.time()))
+        if listed_any or not by_repo:  # a bd outage is no sweep: it is tried again at once
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.write_text(str(time.time()))
     except OSError:
         pass
     return done

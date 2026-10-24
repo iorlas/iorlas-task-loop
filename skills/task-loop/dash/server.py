@@ -192,7 +192,7 @@ def beads_of(repo):
     if not hit:  # a fresh process (tl ask list): what another process listed in the last 30 s is good enough (tl-u08)
         try:
             c = json.loads(disk.read_text(encoding="utf-8"))
-            if time.time() - float(c["t"]) < 30 and isinstance(c["beads"], list):
+            if time.time() - float(c["t"]) < 30 and c.get("m") == m and isinstance(c["beads"], list):
                 with _lock:
                     _cache[key] = (time.time(), c["beads"], m)
                 return c["beads"]
@@ -206,8 +206,8 @@ def beads_of(repo):
                 beads = json.loads(r.stdout)
                 try:
                     disk.parent.mkdir(parents=True, exist_ok=True)
-                    tmp = disk.with_name("%s.%d.tmp" % (disk.name, os.getpid()))
-                    tmp.write_text(json.dumps({"t": time.time(), "beads": beads}), encoding="utf-8")
+                    tmp = disk.with_name("%s.%d.%d.tmp" % (disk.name, os.getpid(), threading.get_ident()))
+                    tmp.write_text(json.dumps({"t": time.time(), "m": m, "beads": beads}), encoding="utf-8")
                     os.replace(str(tmp), str(disk))
                 except OSError:
                     pass
@@ -1517,7 +1517,7 @@ def inbox():
         for t in ts:
             t.start()
         for t in ts:
-            t.join(40)
+            t.join(32)
     for f, a in todo:
         repo = a.get("repo") if isinstance(a.get("repo"), str) else ""
         if repo not in ub:
