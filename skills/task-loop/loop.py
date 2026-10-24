@@ -760,7 +760,8 @@ def passes(repo, a, started, st=None):
             continue
         if slots and name and r is not None:
             out0 = r.get("outcome")
-            quick = (out0 == "failed" and SLOT_FAILURE.search(r.get("why") or "") is not None and (
+            quick = (out0 == "failed" and SLOT_FAILURE.search(r.get("why") or "") is not None
+                     and "already used by worktree" not in (r.get("why") or "") and (  # that one is the bead's branch, held elsewhere
                 r.get("pre_engine") or (r.get("minutes") is not None and float(r["minutes"]) < QUICK_FAIL_MIN)))  # the slot's, and instant
             slot_quick[name] = (slot_quick.get(name, []) + [bid]) if quick else []
             if len(slot_quick[name]) >= SLOT_FAILS_TO_SET_ASIDE:  # (the failures before it were counted toward the stop: see `fails` below)

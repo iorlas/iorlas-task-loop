@@ -1219,6 +1219,7 @@ class EngineTest(unittest.TestCase):
             self.run_engine({"plan": [self.TWO], "write": [WRITE, WRITE], "review": [CLEAN]})
         p = tl.config_dir() / "checkpoints" / "t-1.json"  # as if kill -9: no close, no wip commit
         ck = json.loads(p.read_text())
+        sh("git", "checkout", "-q", "task/t-1", cwd=self.wt)  # (a parked slot is left detached at the base: back on the bead's branch)
         sh("git", "reset", "-q", "--soft", "HEAD~1", cwd=self.wt)
         ck.update(closed=False, head=tl.git("rev-parse", "HEAD", cwd=str(self.wt)))
         p.write_text(json.dumps(ck))
@@ -1229,6 +1230,7 @@ class EngineTest(unittest.TestCase):
     def test_a_tree_changed_since_the_checkpoint_starts_over(self):
         with self.stop_at("reviewer", 2):
             self.run_engine({"plan": [self.TWO], "write": [WRITE, WRITE], "review": [CLEAN]})
+        sh("git", "checkout", "-q", "task/t-1", cwd=self.wt)  # a parked slot is left detached at the base
         (self.wt / "f.txt").write_text("someone edited it\n")
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
@@ -2577,6 +2579,7 @@ class EngineTest(unittest.TestCase):
 
     def test_a_branch_changed_since_the_checkpoint_amends_instead_of_planning_again(self):
         self.stopped_run()
+        sh("git", "checkout", "-q", "task/t-1", cwd=self.wt)  # a parked slot is left detached at the base
         (self.wt / "g.txt").write_text("someone edited it\n")
         sh("git", "add", "-A", cwd=self.wt)
         sh("git", "commit", "-qm", "by hand", cwd=self.wt)

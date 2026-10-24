@@ -2649,7 +2649,8 @@ class Engine:
             self.log_run()
             # tl-fsj: the configured checks come from the base's config, so the tree they run on must have what the base has; every
             # resume rebases first, a plan to make or a stage to go on with (lifesim: 8 beads parked on 'just fmt-check-changed')
-            moved = self.rebase_onto_base()
+            at_land = plan is not None and (i >= len(plan["stages"]) or (state or {}).get("fix"))  # a conflict there is the writer's fix round
+            moved = "" if at_land else self.rebase_onto_base()
             if moved == "conflict" and self.start_again_on_base("Its work: %s" % (self.git("log", "--oneline", "-n", "3", "%s..HEAD" % self.cfg["base"]) or "").replace("\n", "; ")):
                 plan, i, state = None, 0, None
             elif moved == "rebased" and plan is not None:
