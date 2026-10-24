@@ -866,6 +866,8 @@ TRANSIENT_PUSH = re.compile(r"curl \d+|Broken pipe|Connection (?:reset|timed out
                             r"Temporary failure in name resolution|error: 5\d\d|HTTP/\d(?:\.\d)? 5\d\d", re.I)
 PUSH_RESTS = (30, 120, 300)  # seconds before the 2nd, 3rd and 4th try
 CRASH_RESTS = (30, 120)      # a delegate that crashed (lifesim-rl4s: UnicodeDecodeError): two more tries, with these rests
+# tl-fsj: a configured check that fails because the tree lacks what the base's config names is the engine's, never a writer's amend
+STALE_TREE = re.compile(r"does not contain recipe|This checkout has no |no recipe (?:named|called)|Justfile does not contain", re.I)
 STOP_GRACE = 10  # seconds route.py gets to stop its worker after a SIGTERM, before everything is SIGKILLed
 PROOF_TERM, PROOF_KILL = 5, 10  # seconds a worker that outlived the stop gets after a SIGTERM, then after a SIGKILL
 
@@ -2574,9 +2576,14 @@ class Engine:
             self.scope = acceptance_text(bead)
             plan, i, state = self.resume_point()
             self.log_run()
+            # tl-fsj: the configured checks come from the base's config, so the tree they run on must have what the base has; every
+            # resume rebases first, a plan to make or a stage to go on with (lifesim: 8 beads parked on 'just fmt-check-changed')
+            moved = self.rebase_onto_base()
+            if moved == "conflict" and self.start_again_on_base("Its work: %s" % (self.git("log", "--oneline", "-n", "3", "%s..HEAD" % self.cfg["base"]) or "").replace("\n", "; ")):
+                plan, i, state = None, 0, None
+            elif moved == "rebased" and plan is not None:
+                self.stage_tree = ""  # the stage's diff starts at the base now: the rebase moved what it was measured from
             if plan is None:
-                if self.rebase_onto_base() == "conflict":
-                    self.start_again_on_base("Its work: %s" % (self.git("log", "--oneline", "-n", "3", "%s..HEAD" % self.cfg["base"]) or "").replace("\n", "; "))
                 plan, i, state = self.plan(again=self.replan_first), 0, None
             while i < len(plan["stages"]):
                 d = self.stage(plan, i, state)
@@ -3910,7 +3917,8 @@ class Engine:
                   "cache": c.get("cache", True) is not False,
                   "idle": float(c.get("idle_min", self.cfg["check_idle_min"]) or 0) * 60,
                   "inputs": [c["inputs"]] if isinstance(c.get("inputs"), str) else list(c.get("inputs") or []),
-                  "inputs_only": bool(c.get("inputs_only")), "exclude": list(c.get("exclude") or []), "env": c.get("env") or {}} for c in self.cfg["checks"]]
+                  "inputs_only": bool(c.get("inputs_only")), "exclude": list(c.get("exclude") or []), "env": c.get("env") or {},
+                  "repo": True} for c in self.cfg["checks"]]
         items += [{"id": c, "cmd": c, "group": "acceptance", "when": [], "retry": 0,
                    "timeout": float(self.cfg["check_timeout_min"]), "cache": False, "inputs": [], "inputs_only": False, "env": {},
                    "idle": float(self.cfg["check_idle_min"] or 0) * 60} for c in st["checks"]]
@@ -3999,7 +4007,7 @@ class Engine:
                     res["cached_note"] = "inputs unchanged since round %s" % (hit.get("round") or "?")
                     self.log("note", "cached: %s, %s" % (c["id"], res["cached_note"]))
             else:
-                t, tries = time.time(), 0
+                t, tries, seen = time.time(), 0, ""
                 xcmd, reads = cmd, needs.get(id(c), [])
                 if reads and all(check_env_name(r["id"]) in env_logs and env_logs.get(check_env_name(r["id"]).replace("_LOG_", "_RC_")) == "0"
                                  for r in reads):
@@ -4049,6 +4057,11 @@ class Engine:
                     if tries > (max(c["retry"], 1) if kind == "import" else c["retry"]):
                         break
                     self.warn("`%s` failed (exit %d), retrying: it is marked flaky" % (c["id"], rc))
+                if rc and c.get("repo"):
+                    stale = STALE_TREE.search(seen or tail)
+                    if stale:  # tl-fsj: not a writer's amend; the engine's tree is older than the config it runs
+                        raise Blocked("failed: infrastructure: the configured check `%s` needs something this tree lacks (\"%s\"): the "
+                                      "tree is older than the base's .task-loop.json, which no writer can fix" % (c["id"], stale.group(0)))
                 res = dict(base, exit=rc, status="ran" if rc == 0 else "failed", tries=tries, tail=tail[-1500:],
                            secs=round(time.time() - t), log="checks/" + log_name, log_abs=str(logs / log_name), hung=bool(hung))
                 if hung:

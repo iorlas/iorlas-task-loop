@@ -1153,6 +1153,65 @@ class Claims(StagesTest):
 
 
 
+class StaleTree(StagesTest):
+    """tl-fsj: the tree a check runs on must have what the base's config names."""
+
+    stop_at = te.EngineTest.stop_at
+    stopped_run = te.EngineTest.stopped_run
+
+    def main_moves(self, name="moved.txt"):
+        base = Path(self.tmp.name, "base-moves")
+        if not base.exists():
+            te.sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(base), cwd=self.tmp.name)
+        te.sh("git", "pull", "-q", "origin", "main", cwd=base)
+        (base / name).write_text("main moved on\n")
+        te.sh("git", "add", "-A", cwd=base)
+        te.sh("git", "commit", "-qm", "main moves", cwd=base)
+        te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
+
+    def test_a_resume_mid_stage_rebases_first_and_goes_on(self):
+        self.stopped_run()
+        self.main_moves()
+        rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        text = self.eng.log_path.read_text()
+        self.assertIn("rebased the task branch onto the latest origin/main", text)
+        self.assertNotIn("planner", [c[0] for c in s.calls])  # the plan was kept
+        self.assertEqual(self.eng.stage_tree, "")
+
+    def test_a_resume_that_conflicts_with_main_starts_again(self):
+        te.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
+        (self.wt / "a.txt").write_text("my work\n")
+        te.sh("git", "add", "-A", cwd=self.wt)
+        te.sh("git", "commit", "-qm", "wip", cwd=self.wt)
+        te.sh("git", "checkout", "-q", "-", cwd=self.wt)
+        self.main_moves("a.txt")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertIn("resume_conflict", self.eng.log_path.read_text())
+
+    def test_a_configured_check_the_tree_lacks_is_the_engines_error_not_a_writers_amend(self):
+        miss = [{"id": "fmt", "cmd": te.PY + " -c \"import sys; sys.stderr.write('error: Justfile does not contain recipe `fmt-check-changed`.'); sys.exit(1)\"",
+                 "group": "static"}]
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE]}, checks=miss)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker"])  # no second write: nothing was sent back to the writer
+        self.assertTrue(self.eng.why.startswith("failed: infrastructure: the configured check `fmt` needs something this tree lacks"), self.eng.why)
+
+    def test_the_lifesim_wording_is_found_too_and_a_plain_red_check_is_not(self):
+        self.assertTrue(engine.STALE_TREE.search("This checkout has no fmt-check-changed; rebase onto main"))
+        self.assertFalse(engine.STALE_TREE.search("2 tests failed: FooTests.Bar"))
+        plain = [{"id": "unit", "cmd": FALSE, "group": "tests"}]
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE, WRITE]}, checks=plain, max_check_tries=2)
+        self.assertNotIn("infrastructure", self.eng.why)
+
+    def test_a_plan_check_that_prints_the_same_words_is_the_writers_not_the_engines(self):
+        words = te.PY + " -c \"import sys; sys.stderr.write('Justfile does not contain recipe x'); sys.exit(1)\""
+        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[words])])
+        rc, s = self.run_engine({"plan": [plan], "write": [WRITE, WRITE, WRITE]}, max_check_tries=2)
+        self.assertNotIn("infrastructure", self.eng.why)
+
+
+
 class Contracts(StagesTest):
     """tl-bxk.13.16: infrastructure is retried with a rest, never asked; the version is recorded."""
 
