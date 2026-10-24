@@ -1358,6 +1358,24 @@ class EngineTest(unittest.TestCase):
         self.assertTrue(ok)
         self.assertIn(("update", "t-1", "--status", "open", "--assignee", ""), up)
 
+    def test_reclaim_reopens_a_bead_whose_ask_has_an_answer_filed_on_it_with_no_comment_after_the_block(self):
+        """tl-gy4 (sims qs, lifesim-hclf.32-2): answered on the ask, status open, no comment after 'Blocked:': run-task and --fresh
+        (both go through this gate) said 'waiting for the answer'. Only a bead comment after the block got past it."""
+        for status in ("open", "parked"):
+            ask = {"id": "t-1-2", "kind": "denied", "status": status, "brief": "x", "t": 0, "answer": "run again"}
+            ok, why, up = self.reclaim({"status": "blocked"}, [self.BLOCKED], ask)
+            self.assertTrue(ok, why)
+            self.assertIn(("update", "t-1", "--status", "open", "--assignee", ""), up)
+        ask = {"id": "t-1-2", "kind": "denied", "status": "open", "brief": "x", "t": 0, "answer": "  "}  # a blank answer is none
+        ok, why, _ = self.reclaim({"status": "blocked"}, [self.BLOCKED], ask)
+        self.assertFalse(ok)
+        self.assertIn("waiting for the answer", why)
+        later = {"author": "denis", "text": "Parked.", "created_at": "2026-10-21T00:05:00Z"}
+        ask = {"id": "t-1-2", "kind": "denied", "status": "answered", "brief": "x", "t": 0, "answer": "go"}  # consumed, then a person spoke
+        ok, why, _ = self.reclaim({"status": "blocked"}, [self.BLOCKED, later], ask)
+        self.assertFalse(ok)
+        self.assertIn("commented after", why)
+
     def test_reclaim_leaves_blocked_what_a_person_parked_or_an_unanswered_ask_holds(self):
         later = {"author": "denis", "text": "Parked until People is designed.", "created_at": "2026-10-21T00:05:00Z"}
         ok, why, up = self.reclaim({"status": "blocked"}, [self.BLOCKED, later])

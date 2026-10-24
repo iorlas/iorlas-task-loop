@@ -6248,6 +6248,8 @@ def reclaim(bead_id, repo):
         except (OSError, ValueError):
             ask = {}
         asking = ask.get("status") in ("open", "parked")
+        if asking and str(ask.get("answer") or "").strip():  # tl-gy4: an answer filed on the ask (dashboard, tl ask answer) is an answer
+            after, asking = [], False  # whether or not a comment followed the block; the run's check_ask consumes it
         if asking and not after:
             return False, "waiting for the answer to ask %s (%s)" % (ask.get("id"), ask.get("kind"))
         if after and not asking:
