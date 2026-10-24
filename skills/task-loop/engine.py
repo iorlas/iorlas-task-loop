@@ -401,6 +401,41 @@ def just_recipes(wt):
     return names
 
 
+TIMEOUT_MS = re.compile(r"timeout[_-]?ms\s*[=: ]\s*(\d+)", re.I)
+TIMEOUT_MIN = re.compile(r"timeout[_-]?min(?:ute)?s?\s*[=: ]\s*(\d+(?:\.\d+)?)", re.I)
+TIMEOUT_SEC = re.compile(r"timeout[_-]?sec(?:ond)?s?\s*[=: ]\s*(\d+(?:\.\d+)?)", re.I)
+TIMEOUT_ANY = re.compile(r"(?<![\w-])(?:--timeout|-timeout|timeout)(?:=|\s+)(\d+(?:\.\d+)?)([smhd]?)(?![\w.])", re.I)
+
+
+def own_timeouts(check):
+    """[(minutes, the text)]: the time limits a check sets for itself: `timeout_ms 2400000`, `--timeout=40m`, `timeout 2400 cmd`,
+    `-timeout_min 40`. A bare number is seconds."""
+    out = []
+    for m in TIMEOUT_MS.finditer(check):
+        out.append((float(m.group(1)) / 60000.0, m.group(0)))
+    for m in TIMEOUT_MIN.finditer(check):
+        out.append((float(m.group(1)), m.group(0)))
+    for m in TIMEOUT_SEC.finditer(check):
+        out.append((float(m.group(1)) / 60.0, m.group(0)))
+    for m in TIMEOUT_ANY.finditer(check):
+        out.append((float(m.group(1)) * {"": 1 / 60.0, "s": 1 / 60.0, "m": 1.0, "h": 60.0, "d": 1440.0}[m.group(2).lower()], m.group(0)))
+    return out
+
+
+def timeout_problems(plan, cap_min):
+    """tl-btt: [why] for a plan check that sets a time limit above the engine's check limit: the engine kills it at the cap, every
+    round (lifesim-yxbb.3: a play test with timeout_ms 2400000 under a 30-minute cap timed out five rounds, 2.5 hours)."""
+    out = []
+    for c in plan_checks(plan):
+        for minutes, text in own_timeouts(c):
+            if minutes > float(cap_min):
+                out.append("`%s`: sets its own limit `%s` = %g min, above the engine's check limit of %g min, so the engine kills it at the "
+                           "limit every round: lower the limit, or split the work into checks that each finish inside it" % (
+                               clip(c, 120), text.strip(), round(minutes, 1), float(cap_min)))
+                break
+    return out
+
+
 def ledger_problems(plan):
     """tl-bxk.13.16.1: a case with nothing to prove it: a test case whose proof is `check` (or unsaid) and whose check is empty."""
     out = []
@@ -3155,7 +3190,7 @@ class Engine:
             self.save_checkpoint(stage=0, rounds=0, n=0, feedback="", step="write")
         bad, gated, dry = tracker_checks(data), gate_only_checks(data, self.cfg), dry_check(data, self.wt)
         rep = self.repeated_slow(data)
-        led = ledger_problems(data)
+        led = ledger_problems(data) + timeout_problems(data, self.cfg["check_timeout_min"])
         if led:
             dry = dry + led  # sent back with the checks that cannot run
         # tl-wjj: a plan with no stages, no question and nothing to file breaks the plan contract (lifesim-w6mk failed on it): back

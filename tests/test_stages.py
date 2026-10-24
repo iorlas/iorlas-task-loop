@@ -1507,5 +1507,40 @@ class Contracts(StagesTest):
         self.assertEqual(last["version"], want)
 
 
+class PlanTimeout(StagesTest):
+    """tl-btt: a check that sets a limit above the engine's check limit is sent back at plan time."""
+
+    def test_the_limits_a_check_sets_for_itself_are_read_in_minutes(self):
+        for check, minutes in (("just play --timeout_ms 2400000", 40.0), ("tool -testTimeoutMs=1800000", 30.0), ("run --timeout=40m", 40.0),
+                               ("run --timeout 2h", 120.0), ("timeout 2400 python3 t.py", 40.0), ("x --timeout-min 45", 45.0),
+                               ("x timeout_seconds=600", 10.0), ("x --timeout 90", 1.5)):
+            got = [m for m, _ in engine.own_timeouts(check)]
+            self.assertEqual(got, [minutes], check)
+        for check in ("pytest tests", "grep -q timeout config.yaml", "x --timeouts 5", "x --no-timeout", "x timeout_msg"):
+            self.assertEqual(engine.own_timeouts(check), [], check)
+
+    def test_yxbb3s_play_test_of_40_minutes_under_a_30_minute_cap_is_found(self):
+        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["just unity-play-tests --timeout_ms 2400000", HAS_F])])
+        got = engine.timeout_problems(plan, 30)
+        self.assertEqual(len(got), 1)
+        self.assertIn("= 40 min, above the engine's check limit of 30 min", got[0])
+        self.assertEqual(engine.timeout_problems(plan, 40), [])  # equal is fine
+        self.assertEqual(engine.timeout_problems(plan, 60), [])
+        cases = dict(PLAN, cases=[{"criterion": "c", "check": "x --timeout 5400", "class": "test"}])
+        self.assertEqual(len(engine.timeout_problems(cases, 60)), 1)  # cases are checks too
+
+    def test_the_plan_goes_back_to_the_planner_once_with_the_reason(self):
+        bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[HAS_F + " ; true --timeout_ms 2400000"])])
+        rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]}, check_timeout_min=30)
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
+        self.assertIn("above the engine's check limit of 30 min", s.prompts[1])
+
+    def test_a_plan_inside_the_limit_is_not_sent_back(self):
+        ok = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[HAS_F + " ; true --timeout_ms 600000"])])
+        rc, s = self.run_engine({"plan": [ok], "write": [WRITE], "review": [CLEAN]}, check_timeout_min=30)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])
+
+
 if __name__ == "__main__":
     unittest.main()
