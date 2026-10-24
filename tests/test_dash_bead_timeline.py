@@ -68,6 +68,28 @@ class Segments(unittest.TestCase):
         self.assertEqual(timeline.bead_segments([{"run": "b-1", "started": None, "blocks": [], "end": {}}], now=T)["t0"], None)
 
 
+class Review(unittest.TestCase):
+    def test_a_live_run_ends_now_so_a_running_bead_reads_to_now(self):
+        r = dict(run("b-1", 0, 100, [block("write", 0, 100)]), alive=True)
+        tl = timeline.bead_segments([r], now=T + 500)
+        self.assertEqual(tl["t1"], T + 500)
+        self.assertEqual(tl["segments"][-1]["kind"], "idle")
+
+    def test_cuts_never_overlap_or_run_backwards(self):
+        r = run("b-1", 0, 100, [block("checks", 0, 100)], waits=[("unity_slot", -1, 0.5), ("unity_slot", 10, 40), ("lane", 30, 40)])
+        tl = timeline.bead_segments([r], now=T + 200)
+        self.assertEqual(sum(totals(tl)), 100)
+        self.assertTrue(all(s["t1"] >= s["t0"] for s in tl["segments"]))
+
+    def test_a_wait_before_the_run_does_not_overlap_the_gap_before_it(self):
+        a = run("b-1", 0, 100, [block("write", 0, 100)], outcome="asks")
+        b = run("b-2", 1000, 1100, [block("write", 1050, 1100)], waits=[("land_lock", 900, 150)])
+        tl = timeline.bead_segments([a, b], now=T + 2000)
+        spans = [(s["t0"], s["t1"]) for s in tl["segments"]]
+        self.assertTrue(all(x[1] <= y[0] for x, y in zip(spans, spans[1:])), spans)
+        self.assertEqual(sum(totals(tl)), 1100)  # every second of the 1100 is counted once
+
+
 class FromLogs(unittest.TestCase):
     def write(self, recs):
         d = tempfile.mkdtemp()
@@ -80,6 +102,21 @@ class FromLogs(unittest.TestCase):
                         {"kind": "wait", "what": "x"}, {"kind": "wait", "t0": "no", "secs": 1}])
         (w,) = timeline.waits_of(timeline.read(p))
         self.assertEqual((w["what"], w["secs"], w["holder"], w["in_budget"]), ("land_lock", 90, "o", True))
+
+    def test_a_wait_that_is_still_going_is_a_wait_not_idle(self):
+        recs = [{"kind": "run", "t": T}, {"kind": "node", "t": T + 1, "id": 1, "step": "review", "text": "review"},
+                {"kind": "end", "t": T + 50, "id": 1, "step": "review", "outcome": "done", "secs": 49},
+                {"kind": "wait_start", "t": T + 51, "what": "land_lock", "holder": "o", "t0": T + 51}]
+        p = self.write(recs)
+        live = timeline.run_timeline(p, alive=True, now=T + 400)
+        (w,) = live["waits"]
+        self.assertEqual((w["what"], w["secs"], w["open"]), ("land_lock", 349, True))
+        tl = timeline.bead_segments([live], now=T + 400)
+        self.assertEqual([(s["kind"], s["what"]) for s in tl["segments"]], [("work", "review"), ("wait", "land_lock")])
+        dead = timeline.run_timeline(p, alive=False, now=T + 400)  # the process died while waiting: it waited until its last record
+        self.assertEqual(dead["waits"], [])
+        done = self.write(recs + [{"kind": "wait", "t": T + 90, "what": "land_lock", "t0": T + 51, "secs": 39, "holder": "o", "in_budget": True}])
+        self.assertEqual([w["secs"] for w in timeline.run_timeline(done)["waits"]], [39])
 
     def test_a_live_run_ends_now_not_at_its_last_record(self):
         recs = [{"kind": "run", "t": T, "started_because": "first"}, {"kind": "node", "t": T + 1, "id": 1, "step": "write", "text": "write"},

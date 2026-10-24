@@ -707,17 +707,24 @@ def run_timeline(path, alive=False, trace=None, now=None):
     return dict(origin, run=name, bead=bead_of(name), structured=structured, started=t0, ended=t1,
                 secs=round(t1 - t0) if t0 and t1 else None, blocks=blocks, end=end,
                 tokens=tokens, slot=(run or {}).get("slot") or "", worktree=(run or {}).get("worktree") or "",
-                waits=waits_of(recs))
+                waits=waits_of(recs, now if alive else (t1 or 0)), alive=bool(alive))
 
 
-def waits_of(recs):
-    """The engine's `wait` records: [{what, label, t0, secs, holder, in_budget}], oldest first (tl-9h2)."""
-    out = []
+def waits_of(recs, until=0):
+    """The engine's `wait` records: [{what, label, t0, secs, holder, in_budget}], oldest first (tl-9h2). A `wait_start`
+    with no `wait` after it is a wait still going (or cut off when the process died): it lasts until `until`."""
+    out, done = [], set()
     for r in recs:
         if r.get("kind") == "wait" and isinstance(r.get("t0"), (int, float)) and isinstance(r.get("secs"), (int, float)):
+            done.add((str(r.get("what")), r["t0"]))
             out.append({"what": str(r.get("what") or "other"), "label": str(r.get("text") or ""), "t0": r["t0"], "secs": r["secs"],
                         "holder": str(r.get("holder") or ""), "in_budget": bool(r.get("in_budget"))})
-    return out
+    for r in recs:
+        if r.get("kind") == "wait_start" and isinstance(r.get("t0"), (int, float)) and (str(r.get("what")), r["t0"]) not in done \
+                and until > r["t0"]:
+            out.append({"what": str(r.get("what") or "other"), "label": str(r.get("text") or ""), "t0": r["t0"], "secs": until - r["t0"],
+                        "holder": str(r.get("holder") or ""), "in_budget": True, "open": True})
+    return sorted(out, key=lambda w: w["t0"])
 
 
 def last_node(path):
@@ -828,6 +835,9 @@ def run_segments(r, end):
                 used.add(i)
         at = b["t0"]
         for c0, c1, w in sorted(cuts, key=lambda c: c[0]):
+            c0 = max(c0, at)
+            if c1 <= c0:
+                continue
             if c0 > at:
                 out.append(_seg(kind, b["kind"], label, at, c0, name, node=b["node"]))
             out.append(_seg("wait", w["what"], WAIT_NAMES.get(w["what"], w["what"]), c0, c1, name, node=b["node"], holder=w["holder"]))
@@ -835,8 +845,9 @@ def run_segments(r, end):
         if b["t1"] > at:
             out.append(_seg(kind, b["kind"], label, at, b["t1"], name, node=b["node"]))
     for i, w in enumerate(waits):
-        if i not in used:
-            out.append(_seg("wait", w["what"], WAIT_NAMES.get(w["what"], w["what"]), w["t0"], w["t0"] + w["secs"], name, holder=w["holder"]))
+        t0 = max(w["t0"], r.get("started") or 0)  # never before the run: the time before it is the gap between runs
+        if i not in used and w["t0"] + w["secs"] > t0:
+            out.append(_seg("wait", w["what"], WAIT_NAMES.get(w["what"], w["what"]), t0, w["t0"] + w["secs"], name, holder=w["holder"]))
     out.sort(key=lambda x: (x["t0"], x["t1"]))
     filled, at = [], r.get("started")
     for s in out:
@@ -859,7 +870,7 @@ def bead_segments(runs, now=None):
         start = r.get("started")
         if not start:
             continue
-        end = r.get("ended") or start
+        end = now if r.get("alive") else r.get("ended") or start
         if prev and prev["end"] and start - prev["end"] >= MIN_GAP:
             out = ((prev["r"].get("end") or {}).get("outcome") or "")
             what = "owner_ask" if out in ("asks", "waiting") else "paused" if out == "paused" else "between_runs"

@@ -1523,6 +1523,7 @@ class Engine:
             who.append(w)
             self.end_node()
             t_req[0] = time.time()  # the wait starts when the node before it has ended
+            self.log("wait_start", what.replace("_", " "), what=what, holder=w, t0=t_req[0])  # a wait still going (or cut off) shows up
             self.log("note", "waiting for the %s (held by %s)" % (what.replace("_", " "), w))
         with tl.os_lock(path, holder or self.bead, waiting):
             if who:
@@ -4766,7 +4767,7 @@ GHERKIN_TEST = re.compile(r"^\s*Scenario( Outline)?:")  # a use-case scenario (R
 
 WAIT_KINDS = {"a lane": "lane", "a Unity slot": "unity_slot", "an editor lock": "editor_lock", "a delegate crash": "delegate_crash",
               "the network": "network"}  # add_wait's wording -> the `wait` record's kind (the dashboard names them)
-QUIET_KINDS = ("end", "transition", "checks", "run", "wait")  # trace records for the dashboard, never printed
+QUIET_KINDS = ("end", "transition", "checks", "run", "wait", "wait_start")  # trace records for the dashboard, never printed
 RUN_STEM = re.compile(r"^\d{8}-\d{6}$")  # <bead>-<YYYYMMDD-HHMMSS>: an engine log of that bead, not of a child bead
 
 

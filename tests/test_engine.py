@@ -1646,6 +1646,9 @@ class EngineTest(unittest.TestCase):
         self.assertGreaterEqual(w["secs"], 0)
         end = next(r for r in recs if r.get("kind") == "end")
         self.assertLess(recs.index(end), recs.index(w))  # the review node ended before the wait began: the wait is not its time
+        start = next(r for r in recs if r.get("kind") == "wait_start")  # logged when the wait begins, so a wait that never ends shows
+        self.assertEqual((start["what"], start["holder"], start["t0"]), ("land_lock", "other-bead", w["t0"]))
+        self.assertLess(recs.index(end), recs.index(start))
 
     def test_a_free_land_lock_logs_no_wait(self):
         eng = self.checks_engine()
