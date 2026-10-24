@@ -1232,6 +1232,55 @@ class StaleTree(StagesTest):
         self.assertNotIn("planner", [c[0] for c in s.calls])  # the plan was kept
         self.assertEqual(self.eng.stage_tree, "")
 
+    def junk_and_moving_main(self):
+        """The slot has Unity's untracked log (the base ignores it) and main has moved on with a new recipe file."""
+        base = Path(self.tmp.name, "base-ignore")
+        te.sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(base), cwd=self.tmp.name)
+        (base / ".gitignore").write_text("client/log.txt\n")
+        (base / "justfile").write_text("fmt-check-changed:\n\techo ok\n")
+        te.sh("git", "add", "-A", cwd=base)
+        te.sh("git", "commit", "-qm", "recipe and ignore", cwd=base)
+        te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
+        te.sh("git", "fetch", "-q", "origin", cwd=self.wt)
+        (self.wt / "client").mkdir(exist_ok=True)
+        (self.wt / "client" / "log.txt").write_text("unity wrote this\n")
+
+    def test_a_resume_start_rebases_even_with_a_base_ignored_file_in_the_slot(self):
+        # lifesim-fld.27.12-20261024-230954: started_because resume, 75 commits behind, no rebase, the check named a recipe the tree lacked
+        self.stopped_run()
+        te.sh("git", "checkout", "-q", "task/t-1", cwd=self.wt)
+        self.junk_and_moving_main()
+        rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertIn("rebased the task branch onto the latest origin/main", self.eng.log_path.read_text())
+        self.assertTrue(Path(self.wt, "justfile").exists() or "justfile" in self.eng.git("ls-tree", "-r", "--name-only", "HEAD"))
+
+    def test_an_answer_start_rebases_even_with_a_base_ignored_file_in_the_slot(self):
+        # lifesim-6pld-20261024-224705: started_because answer, the same
+        te.sh("git", "checkout", "-q", "-b", "task/t-1", cwd=self.wt)
+        (self.wt / "g.txt").write_text("earlier work\n")
+        te.sh("git", "add", "-A", cwd=self.wt)
+        te.sh("git", "commit", "-qm", "wip (t-1): blocked", cwd=self.wt)
+        te.sh("git", "checkout", "-q", "-", cwd=self.wt)
+        self.junk_and_moving_main()
+        te.sh("git", "checkout", "-q", "task/t-1", cwd=self.wt)
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertIn("rebased the task branch onto the latest origin/main", self.eng.log_path.read_text())
+
+    def test_a_tracked_change_in_the_slot_still_stops_the_rebase(self):
+        te.sh("git", "checkout", "-q", "-b", "task/t-1", cwd=self.wt)
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        self.junk_and_moving_main()
+        (self.wt / "a.txt").write_text("edited and not committed\n")
+        self.assertEqual(e.rebase_onto_base(), "")
+
+    def test_the_writer_is_told_the_check_variables_exist_only_inside_the_engines_checks(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        writer = s.prompts[1]
+        self.assertIn("exist only while the engine runs the checks, never in your session", writer)
+        self.assertIn("do not call it a blocker", writer)
+
     def test_a_resume_that_conflicts_with_main_starts_again(self):
         te.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
         (self.wt / "a.txt").write_text("my work\n")

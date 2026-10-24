@@ -2503,7 +2503,7 @@ class Engine:
         branch's base lacked, three plans in 11 min). -> "rebased" (the plan count starts again: the earlier plans were made on
         another base), "conflict" (the branch work does not fit main: the caller starts again, tl-19i), or "".
         The branch is left as it was in the conflict, and when there is nothing to do."""
-        if self.dry or self.git("status", "--porcelain"):
+        if self.dry or self.dirty_status():  # (the base-ignored files of an old branch, Unity's logs, are no reason not to rebase)
             return ""
         behind = self.git("rev-list", "--count", "HEAD..%s" % self.cfg["base"])
         if behind in ("", "0"):
@@ -6079,6 +6079,9 @@ Files: {files}
 The stage's checks (the engine runs all of them after you; the split says which you may run):
 {checks}
 {where}
+A check that mentions $TL_CHECK_LOG_<ID> or $TL_CHECK_RC_<ID> reads the log and the exit code of a configured check the engine ran just
+before it. Those variables exist only while the engine runs the checks, never in your session: do not ask for them, do not export them,
+and do not call it a blocker that they are unset. Make what the check asserts true and run the checks you may run.
 Never run the gate{gate} or the issue tracker (bd): the engine runs the gate, and its run is the one that counts.
 Repo instructions that say a change is done only when the full gate passes are for people working by hand; here the
 engine does that part.
