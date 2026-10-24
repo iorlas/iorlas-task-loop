@@ -1510,6 +1510,24 @@ class Engine:
         if secs > 0:
             self.waited += secs
             self.log("note", "waited %d min for %s: not counted in budget_min" % (secs // 60, what))
+            self.log("wait", what, what=WAIT_KINDS.get(what, "other"), t0=time.time() - secs, secs=round(secs), in_budget=False)
+
+    @contextlib.contextmanager
+    def locked(self, what, path, holder=None):
+        """tl.os_lock with a wait recorded as its own segment (tl-9h2): the open node ends before the wait starts (it was
+        booked to the step before), and a `wait` record names the lock, who held it, when the wait began and how long it took.
+        Unlike add_wait's, a lock wait still counts against budget_min (it always did): the record says in_budget=True."""
+        who, t_req = [], [time.time()]
+
+        def waiting(w):
+            who.append(w)
+            self.end_node()
+            t_req[0] = time.time()  # the wait starts when the node before it has ended
+            self.log("note", "waiting for the %s (held by %s)" % (what.replace("_", " "), w))
+        with tl.os_lock(path, holder or self.bead, waiting):
+            if who:
+                self.log("wait", what.replace("_", " "), what=what, holder=who[0], t0=t_req[0], secs=round(time.time() - t_req[0]), in_budget=True)
+            yield path
 
     def note_slot_waits(self, text, wall):
         """A check's output says how long it queued for a Unity slot ("unity-slot: x got slot 0 after 686s"). The output
@@ -4155,7 +4173,7 @@ class Engine:
     def land_lock(self):
         """One land at a time per repo, across slots and sessions: an flock the OS drops when the process dies."""
         path = tl.land_lock_path(self.git("remote", "get-url", "origin") or str(self.wt))
-        with tl.os_lock(path, self.bead, lambda who: self.log("note", "waiting for the land lock (held by %s)" % who)):
+        with self.locked("land_lock", path):
             yield path
 
     # -- look and feel (tl-bxk.10.23): screenshots for a visual change, judged by the agent, held for the owner's batch
@@ -4561,7 +4579,7 @@ class Engine:
     def review_lock(self):
         """One filer at a time per (repo, epic), across slots and sessions."""
         key = "%s|%s" % (self.git("remote", "get-url", "origin") or str(self.wt), self.look_epic() or self.bead)
-        with tl.os_lock(tl.config_dir() / "locks" / ("review-%s.lock" % hashlib.sha1(key.encode()).hexdigest()[:12]), self.bead):
+        with self.locked("review_lock", tl.config_dir() / "locks" / ("review-%s.lock" % hashlib.sha1(key.encode()).hexdigest()[:12])):
             yield
 
     def file_review(self, section):
@@ -4746,7 +4764,9 @@ class Engine:
 GHERKIN_TEST = re.compile(r"^\s*Scenario( Outline)?:")  # a use-case scenario (Reqnroll, lifesim-fld.26.10)
 
 
-QUIET_KINDS = ("end", "transition", "checks", "run")  # trace records for the dashboard, never printed
+WAIT_KINDS = {"a lane": "lane", "a Unity slot": "unity_slot", "an editor lock": "editor_lock", "a delegate crash": "delegate_crash",
+              "the network": "network"}  # add_wait's wording -> the `wait` record's kind (the dashboard names them)
+QUIET_KINDS = ("end", "transition", "checks", "run", "wait")  # trace records for the dashboard, never printed
 RUN_STEM = re.compile(r"^\d{8}-\d{6}$")  # <bead>-<YYYYMMDD-HHMMSS>: an engine log of that bead, not of a child bead
 
 

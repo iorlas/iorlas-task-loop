@@ -6,6 +6,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from contextlib import redirect_stdout
@@ -1605,6 +1606,52 @@ class EngineTest(unittest.TestCase):
             held = subprocess.run([sys.executable, "-c", probe, str(path)], capture_output=True, text=True).stdout
         free = subprocess.run([sys.executable, "-c", probe, str(path)], capture_output=True, text=True).stdout
         self.assertEqual((held.strip(), free.strip()), ("held", "free"))
+
+    def wait_records(self, eng):
+        if not Path(eng.log_path).exists():
+            return []
+        return [r for r in (json.loads(x) for x in Path(eng.log_path).read_text().splitlines()) if r.get("kind") == "wait"]
+
+    def test_a_wait_is_logged_as_its_own_segment(self):
+        eng = self.checks_engine()
+        eng.t0 -= 600
+        eng.add_wait(120, "a lane")
+        (w,) = self.wait_records(eng)
+        self.assertEqual((w["what"], w["secs"], w["in_budget"]), ("lane", 120, False))
+        self.assertAlmostEqual(w["t0"], time.time() - 120, delta=5)
+
+    def test_waiting_for_the_land_lock_ends_the_open_node_first_and_is_logged(self):
+        if os.name == "nt":
+            self.skipTest("POSIX flock")
+        eng = self.checks_engine()
+        path = tl.land_lock_path(eng.git("remote", "get-url", "origin") or str(eng.wt))
+        eng.node("review", "review")
+        got, go = [], threading.Event()
+
+        def holder():
+            with tl.os_lock(path, "other-bead"):
+                got.append(1)
+                go.wait(5)
+        t = threading.Thread(target=holder)
+        t.start()
+        while not got:
+            time.sleep(0.01)
+        threading.Timer(0.4, go.set).start()
+        with eng.land_lock():
+            pass
+        t.join()
+        recs = [json.loads(x) for x in Path(eng.log_path).read_text().splitlines()]
+        (w,) = [r for r in recs if r.get("kind") == "wait"]
+        self.assertEqual((w["what"], w["holder"], w["in_budget"]), ("land_lock", "other-bead", True))
+        self.assertGreaterEqual(w["secs"], 0)
+        end = next(r for r in recs if r.get("kind") == "end")
+        self.assertLess(recs.index(end), recs.index(w))  # the review node ended before the wait began: the wait is not its time
+
+    def test_a_free_land_lock_logs_no_wait(self):
+        eng = self.checks_engine()
+        with eng.land_lock():
+            pass
+        self.assertEqual(self.wait_records(eng), [])
 
     def test_replans_count_across_runs(self):
         with self.stop_at("reviewer", 3):  # stage 1 sent back twice -> replan; stopped in the new plan's review

@@ -160,7 +160,7 @@ def nodes_of(recs):
                 out[-1]["t1"] = r.get("t")
             cur = {"id": nid, "step": step, "text": r.get("text") or "", "t0": r.get("t"), "t1": None, "meta": meta,
                    "sessions": [], "msgs": [], "lines": [], "moves": [], "checks": None, "outcome": "", "detail": "",
-                   "rec": r}
+                   "rec": r, "open": True}
             out.append(cur)
             by_id[nid] = cur
             continue
@@ -198,6 +198,7 @@ def nodes_of(recs):
         e = ends.get(n["id"])
         if e:
             n["t1"], n["outcome"], n["detail"] = e.get("t") or n["t1"], e.get("outcome") or "", e.get("detail") or ""
+            n["open"] = False
     for i, n in enumerate(out):
         if not n["outcome"]:
             n["outcome"], n["detail"] = legacy_outcome(n)
@@ -680,15 +681,19 @@ def run_end(nodes, pending, alive):
     return end
 
 
-def run_timeline(path, alive=False, trace=None):
-    """One run of a bead: why it started, its blocks with the arrows between them, how it ended."""
+def run_timeline(path, alive=False, trace=None, now=None):
+    """One run of a bead: why it started, its blocks with the arrows between them, how it ended. A run that is alive has its
+    open step and its end at `now` (the last record only says when something last happened, not how long it has been going)."""
     recs = read(path)
     nodes, run, structured = nodes_of(recs)
+    now = now or time.time()
+    if alive and nodes and nodes[-1].get("open"):
+        nodes[-1]["t1"] = now
     blocks, pending, _ = blocks_of(nodes, structured, plan_file_titles(path))
     origin = ({k: run.get(k) or "" for k in ("started_because", "prev_run", "ask")} if run
               else legacy_origin(path, nodes))
     t0 = recs[0].get("t") if recs else None
-    t1 = recs[-1].get("t") if recs else None
+    t1 = now if alive and recs else recs[-1].get("t") if recs else None
     tokens = {"in": 0, "cached": 0, "out": 0}
     for b in blocks:
         for k in tokens:
@@ -701,7 +706,18 @@ def run_timeline(path, alive=False, trace=None):
     name = run_name(path)
     return dict(origin, run=name, bead=bead_of(name), structured=structured, started=t0, ended=t1,
                 secs=round(t1 - t0) if t0 and t1 else None, blocks=blocks, end=end,
-                tokens=tokens, slot=(run or {}).get("slot") or "", worktree=(run or {}).get("worktree") or "")
+                tokens=tokens, slot=(run or {}).get("slot") or "", worktree=(run or {}).get("worktree") or "",
+                waits=waits_of(recs))
+
+
+def waits_of(recs):
+    """The engine's `wait` records: [{what, label, t0, secs, holder, in_budget}], oldest first (tl-9h2)."""
+    out = []
+    for r in recs:
+        if r.get("kind") == "wait" and isinstance(r.get("t0"), (int, float)) and isinstance(r.get("secs"), (int, float)):
+            out.append({"what": str(r.get("what") or "other"), "label": str(r.get("text") or ""), "t0": r["t0"], "secs": r["secs"],
+                        "holder": str(r.get("holder") or ""), "in_budget": bool(r.get("in_budget"))})
+    return out
 
 
 def last_node(path):
@@ -779,3 +795,81 @@ def checks_of(n):
                 break
         out.append(dict(it, tail=tail))
     return out
+
+
+# ---- one bead's whole time: every step, check and wait as a bar (tl-9h2) ----------------------------------------------
+
+WAIT_NAMES = {"land_lock": "land lock", "review_lock": "review lock", "lane": "lane", "unity_slot": "Unity slot",
+              "editor_lock": "editor lock", "delegate_crash": "delegate crash", "network": "network", "owner_ask": "owner ask",
+              "paused": "paused", "between_runs": "between runs", "between_steps": "between steps", "other": "other wait"}
+LOCKS = ("land_lock", "review_lock")  # waited for after the step before them ended: a bar of their own, never cut out of a step
+MIN_GAP = 10  # seconds of unexplained time worth a bar of its own
+
+
+def _seg(kind, what, label, t0, t1, run, **kw):
+    return dict({"kind": kind, "what": what, "label": label, "t0": t0, "t1": t1, "secs": max(0, round(t1 - t0)), "run": run}, **kw)
+
+
+def run_segments(r, end):
+    """The segments of one run: its steps (work, or checks), the waits the engine recorded (cut out of the step they
+    happened in, or a bar of their own between steps), and the unexplained gaps between them."""
+    name, out = r["run"], []
+    waits = [w for w in r.get("waits") or [] if w["secs"] > 0]
+    used = set()
+    for b in r["blocks"]:
+        if not (b.get("t0") and b.get("t1")) or b["t1"] < b["t0"]:
+            continue
+        kind = "checks" if b["kind"] == "checks" else "work"
+        label = b.get("label") or b["kind"]
+        cuts = []
+        for i, w in enumerate(waits):
+            if i not in used and w["what"] not in LOCKS and b["t0"] - 1 <= w["t0"] < b["t1"]:  # a wait that starts in a step belongs to it
+                cuts.append((max(b["t0"], w["t0"]), min(b["t1"], w["t0"] + w["secs"]), w))
+                used.add(i)
+        at = b["t0"]
+        for c0, c1, w in sorted(cuts, key=lambda c: c[0]):
+            if c0 > at:
+                out.append(_seg(kind, b["kind"], label, at, c0, name, node=b["node"]))
+            out.append(_seg("wait", w["what"], WAIT_NAMES.get(w["what"], w["what"]), c0, c1, name, node=b["node"], holder=w["holder"]))
+            at = max(at, c1)
+        if b["t1"] > at:
+            out.append(_seg(kind, b["kind"], label, at, b["t1"], name, node=b["node"]))
+    for i, w in enumerate(waits):
+        if i not in used:
+            out.append(_seg("wait", w["what"], WAIT_NAMES.get(w["what"], w["what"]), w["t0"], w["t0"] + w["secs"], name, holder=w["holder"]))
+    out.sort(key=lambda x: (x["t0"], x["t1"]))
+    filled, at = [], r.get("started")
+    for s in out:
+        if at and s["t0"] - at >= MIN_GAP:
+            filled.append(_seg("idle", "between_steps", WAIT_NAMES["between_steps"], at, s["t0"], name))
+        filled.append(s)
+        at = max(at or 0, s["t1"])
+    if at and end and end - at >= MIN_GAP:
+        filled.append(_seg("idle", "between_steps", WAIT_NAMES["between_steps"], at, end, name))
+    return filled
+
+
+def bead_segments(runs, now=None):
+    """runs: run_timeline() results of one bead, oldest first, the last one `alive` when the bead is running. -> {t0, t1,
+    segments, totals: {work, checks, wait, idle (seconds), by_what: {what: seconds}}}. Time between two runs is an owner ask
+    (the earlier one ended asking), a pause (it ended paused) or idle (anything else)."""
+    now = now or time.time()
+    segs, prev = [], None
+    for r in runs:
+        start = r.get("started")
+        if not start:
+            continue
+        end = r.get("ended") or start
+        if prev and prev["end"] and start - prev["end"] >= MIN_GAP:
+            out = ((prev["r"].get("end") or {}).get("outcome") or "")
+            what = "owner_ask" if out in ("asks", "waiting") else "paused" if out == "paused" else "between_runs"
+            segs.append(_seg("idle" if what == "between_runs" else "wait", what, WAIT_NAMES[what], prev["end"], start, r["run"]))
+        segs += run_segments(r, end)
+        prev = {"r": r, "end": end}
+    totals = {"work": 0, "checks": 0, "wait": 0, "idle": 0, "by_what": {}}
+    for s in segs:
+        totals[s["kind"]] += s["secs"]
+        if s["kind"] in ("wait", "idle", "checks"):
+            totals["by_what"][s["what"]] = totals["by_what"].get(s["what"], 0) + s["secs"]
+    return {"t0": segs[0]["t0"] if segs else None, "t1": segs[-1]["t1"] if segs else None, "segments": segs, "totals": totals,
+            "now": now}

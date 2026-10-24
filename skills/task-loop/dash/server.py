@@ -1085,11 +1085,14 @@ def bd_json(repo, *args):
         return None
 
 
-def bead_runs(bead):
-    """Every engine run of the bead, oldest first: why it started, its blocks with outcome, arrow, time and tokens."""
-    runs, prev = [], None
-    for p in engine_logs(retain=False).get(bead, []):
-        r = timeline.run_timeline(p)
+def bead_runs(bead, alive=False):
+    """Every engine run of the bead, oldest first: why it started, its blocks with outcome, arrow, time and tokens. -> (runs,
+    the run timelines for timeline.bead_segments). The last run is alive when the bead is running: its open step ends now."""
+    runs, prev, tls = [], None, []
+    logs = engine_logs(retain=False).get(bead, [])
+    for n, p in enumerate(logs):
+        r = timeline.run_timeline(p, alive=alive and n == len(logs) - 1)
+        tls.append(r)
         r["because"] = timeline.because_text(r, prev)
         prev = r
         runs.append({"run": r["run"], "because": r["because"], "started": r["started"], "secs": r["secs"],
@@ -1098,7 +1101,7 @@ def bead_runs(bead):
                                  "secs": x.get("secs"), "tokens": x.get("tokens"), "status": (x.get("result") or {}).get("status"),
                                  "text": (x.get("result") or {}).get("text"), "arrow": (x.get("arrow") or {}).get("text")}
                                 for x in r["blocks"]]})
-    return runs
+    return runs, tls
 
 
 def api_bead(repo, bead):
@@ -1115,7 +1118,12 @@ def api_bead(repo, bead):
         comments = bd_json(path, "comments", bead) or []
         return b, comments
     b, comments = cached("bead:%s:%s" % (path, bead), 15, load)
-    runs = cached("beadruns:%s:%s" % (path, bead), 15, lambda: bead_runs(bead))
+    try:
+        alive = any(t["id"] == bead and t.get("state") == "running" for t in api_tasks()["tasks"])
+    except Exception:
+        alive = False
+    runs, tls = cached("beadruns:%s:%s:%d" % (path, bead, alive), 5 if alive else 15, lambda: bead_runs(bead, alive))
+    now = time.time()
     deps = [{"id": d.get("id") or d.get("depends_on_id"), "title": d.get("title"), "status": d.get("status"),
              "type": d.get("dependency_type") or d.get("type")} for d in (b.get("dependencies") or [])]
     return {"id": bead, "title": b.get("title") or "", "status": b.get("status"), "priority": b.get("priority"),
@@ -1123,7 +1131,7 @@ def api_bead(repo, bead):
             "description": b.get("description") or "", "notes": b.get("notes") or "",
             "acceptance": b.get("acceptance_criteria") or "", "design": b.get("design") or "", "deps": deps,
             "comments": [{"author": c.get("author"), "text": c.get("text"), "at": c.get("created_at")} for c in comments],
-            "runs": runs, "found": bool(b)}
+            "runs": runs, "found": bool(b), "timeline": timeline.bead_segments(tls, now)}
 
 
 def loop_version(pid):

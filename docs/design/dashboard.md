@@ -139,3 +139,21 @@ An old look bead (no metadata) is read from its description: `## <bead>: <title>
 The Roadmap's strip shows one signal, "N looks wait for you" (info, amber after 12 h), linking to the tab. Answers go through
 `POST /api/look` with the same access rule as asks (loopback and Tailscale, else the token). Writes are read-modify-write of
 the bead's metadata; the engine's own write of `looks` keeps answered items, and the race window is two bd calls.
+
+## Where the time went (tl-9h2)
+
+The bead panel's "Where the time went" is one bar across the bead's whole life, one segment per step, check, wait and idle
+stretch, with totals per kind (working, checks, waiting by cause, idle). `timeline.bead_segments` builds it from the engine logs
+of every run (`api_bead` -> `timeline`); hover a segment for its name, length, holder and start.
+
+- **Engine records.** `wait` records (quiet kind): `{what, t0, secs, holder?, in_budget}`. `add_wait` writes one for each wait that
+  is already excluded from budget_min (lane, Unity slot, editor lock, delegate crash, network; `in_budget=false`). `Engine.locked`
+  wraps `tl.os_lock` for the land lock and the review lock: when the lock is taken, the open node ends first (the wait is no longer
+  booked to the step before it, engine.py land loop) and a `wait` record names the lock, the holder, the start and the length
+  (`in_budget=true`: lock waits still count against budget_min, as before). A free lock logs nothing.
+- **Segments.** A wait that starts inside a step is cut out of that step (nothing counts twice); a lock wait is a bar of its own
+  between steps. Unexplained time inside a run of 10 s or more is "between steps" (idle). Time between runs is "owner ask" (the
+  earlier run ended asking), "paused" (it ended paused) or "between runs" (idle).
+- **Live runs end now.** `run_timeline(alive=True)` gives the open step and the run an end of now, not of the last record.
+- **Not recorded yet** (outside the engine's log, so no segment): the slot-take lock (tl.py), the area lock (loop.py), the gap
+  from claim to the engine's start, push duration while running. They show up as the unexplained start of a run.
