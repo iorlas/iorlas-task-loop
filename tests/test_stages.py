@@ -480,6 +480,20 @@ class VisualWork(StagesTest):
     def roles(self, s):
         return [c[0] for c in s.calls]
 
+    def test_a_look_judge_with_no_lane_leaves_the_pictures_unjudged_and_the_bead_unparked(self):
+        late = te.ans("stop", "no_lane", "retry", retry_after=engine.time.time() + 3600, family="xai", lane="GROK", say="no lane")
+        rc, s = self.go({"plan": [PLAN], "write": [self.write()], "look": [late], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertIn("the look judge had no lane", self.eng.log_path.read_text())
+        self.assertIn("look judge, round 1", self.eng.look_unjudged)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer", "reviewer"])  # the judge's one try, then the review
+
+    def test_the_judge_from_the_same_family_says_so(self):
+        rc, s = self.go({"plan": [PLAN], "write": [self.write()], "look": [self.judged()], "review": [CLEAN]},
+                        j_extra={"look": [{"flag": "same_family"}]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertIn("same family as the writer", " ".join(self.eng.look_notes))
+
     def test_the_writer_is_asked_for_shot_requests_not_screenshots(self):
         rc, s = self.go({"plan": [PLAN], "write": [self.write()], "look": [self.judged()], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
@@ -1322,6 +1336,26 @@ class SlotHygiene(StagesTest):
         self.assertEqual(rc, 0)
         self.assertTrue(self.eng.git("symbolic-ref", "--short", "-q", "HEAD"))
 
+
+
+class DeadLane(StagesTest):
+    """A lane that fails to start without being marked out must not hold a read-only step for ten minutes."""
+
+    def test_a_retry_from_a_failing_family_routes_the_next_try_past_it(self):
+        dead = te.ans("stop", "vendor_prework", "retry", retry_after=engine.time.time() + 30, family="xai", lane="GROK_SUBSCRIPTION",
+                      say="opencode failed before any work: spending limit")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [dead, CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        reviews = [c for c in s.calls if c[0] == "reviewer"]
+        self.assertEqual(len(reviews), 2)
+        self.assertEqual(reviews[1][2], "xai")  # authored-by the failing family: the route puts the others first
+        self.assertNotEqual(reviews[0][2], "xai")
+
+    def test_a_busy_lane_is_waited_for_as_before(self):
+        busy = te.ans("stop", "busy", "retry", retry_after=engine.time.time() + 30, family="openai", lane="OPENAI_SUBSCRIPTION", say="no free slot")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [busy, CLEAN]})
+        reviews = [c for c in s.calls if c[0] == "reviewer"]
+        self.assertEqual(reviews[1][2], reviews[0][2])
 
 
 class Contracts(StagesTest):

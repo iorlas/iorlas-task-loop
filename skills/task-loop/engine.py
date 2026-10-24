@@ -1693,6 +1693,11 @@ class Engine:
                 resume, attempt_prompt, out_on = None, prompt + FRESH_WRITER_TEXT, j.get("lane") or ""
                 continue
             if nxt == "retry":  # worker-run v2: delegate says when; how long a slot waits is this engine's policy
+                if node in ("review", "verify", "look") and j.get("family") in ("openai", "claude", "xai") and reason != "busy":
+                    # a lane that failed to start (Grok out of credits answered 'vendor_prework' without being marked out, lifesim
+                    # o67g and 5ban.28 waited 10 minutes and paused): the next try is routed as if that family had written the work, so
+                    # the others come first and the failing one only last, as the same family
+                    writer = j["family"]
                 due = float(j.get("retry_after") or 0)
                 wait = max(60.0, due - time.time())
                 if waited + wait > float(self.cfg["lane_wait_min"]) * 60:  # a long wait frees the slot; the checkpoint resumes
@@ -4525,9 +4530,18 @@ class Engine:
                 pairs.append((n, "before-" + n))
         # the plan's look items are for the last stage (like the cases); an earlier stage is judged on the general checks only
         prompt = looks.judge_prompt(self.cases_of("look-objective") if last else [], names, shown, pairs, summary)
-        d, _ = self.ai("look", "round %d: %d picture%s" % (rnd, len(names), "" if len(names) == 1 else "s"), prompt,
-                       writer_family=self.writer_family, cwd=str(base), round=rnd)
-        return [f for f in d["findings"] if f["verdict"] == "defect"], d["summary"]
+        try:
+            d, _ = self.ai("look", "round %d: %d picture%s" % (rnd, len(names), "" if len(names) == 1 else "s"), prompt,
+                           writer_family=self.writer_family, cwd=str(base), round=rnd)
+        except Blocked as b:
+            if not b.why.startswith("paused:"):
+                raise
+            # no lane for the judge: the pictures go unjudged to the owner-look bead; a look judge never parks the bead
+            self.warn("the look judge had no lane, the pictures are not judged: %s" % b.why[:200])
+            self.look_unjudged["look judge, round %d" % rnd] = "no lane: " + b.why[:160]
+            return [], "(not judged: no lane for the look judge)"
+        note = "[same family as the writer: no other lane was free] " if self.last_flag == "same_family" else ""
+        return [f for f in d["findings"] if f["verdict"] == "defect"], note + d["summary"]
 
     def look_step(self, st, w, name, last=True):
         """After a visual write: the cheap checks, the shots the writer asked for, the look judge. -> the feedback that sends the
