@@ -57,6 +57,8 @@ def send(kind, text, bead="", ask_id="", full="", repeat=False):
     text, full = text.replace("\x00", " "), (full or text).replace("\x00", " ")
     env = dict(os.environ, TL_ASK_KIND=kind, TL_ASK_BEAD=bead, TL_ASK_ID=ask_id, TL_ASK_TEXT=text[:500],
                TL_DIGEST_TEXT=full)
+    if repeat:
+        env["TL_ASK_REPEAT"] = "1"
     try:
         subprocess.Popen(cmd, shell=True, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                          stderr=subprocess.DEVNULL, start_new_session=(os.name != "nt"))
