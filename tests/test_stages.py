@@ -38,7 +38,7 @@ class EmptyPlan(StagesTest):
         self.assertEqual(self.blocked, [])
 
     def test_an_empty_plan_with_nothing_to_file_still_fails(self):
-        rc, s = self.run_engine({"plan": [dict(PLAN, stages=[])]})
+        rc, s = self.run_engine({"plan": [dict(PLAN, stages=[]), dict(PLAN, stages=[])]})  # sent back once (tl-wjj), still empty
         self.assertNotEqual(rc, 0)
         self.assertTrue(self.blocked and "no stages" in self.blocked[0])
 

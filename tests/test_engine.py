@@ -3751,7 +3751,7 @@ class Validate(unittest.TestCase):
         self.assertTrue(engine.validate(review(findings=[dict(finding("high"), severity="maybe")]), s))
         self.assertTrue(engine.validate({"findings": []}, s))
         self.assertTrue(engine.validate(dict(CLEAN, unmet="x"), s))
-        self.assertEqual(sorted(engine.SCHEMAS), ["look", "plan", "review", "verify", "write"])
+        self.assertEqual(sorted(engine.SCHEMAS), ["look", "plan", "reflect", "review", "verify", "write"])
         v = engine.SCHEMAS["verify"]
         self.assertEqual(engine.validate({"items": [verdict(1, "settled", "a.cs:3")]}, v), [])
         self.assertTrue(engine.validate({"items": [verdict(1, "maybe")]}, v))
