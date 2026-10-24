@@ -70,6 +70,12 @@ def tree_files(wt, tree):
     return out
 
 
+def dead_globs(paths, globs):
+    """The globs that match none of `paths` (tracked files): a typo, or a dialect the glob does not speak."""
+    res = [(g, glob_re(g)) for g in globs]
+    return [g for g, r in res if not any(r.match(p) for p in paths)]
+
+
 def inputs_hash(files, globs, exclude=()):
     """Hash of the files in `files` ({path: "mode type sha"}) that match any glob (glob_re: `*` stays in one folder, `**` crosses, `{a,b}` is either). Empty when nothing matches: a check whose inputs are not in the tree has no fact to remember."""
     h = hashlib.sha1()
@@ -126,6 +132,12 @@ class InputKeys:
         self.wt, self.tree, self.base = wt, tree, base
         self.files = None
         self.ignored = {}  # globs -> [paths]
+
+    def dead(self, c):
+        """The check's `inputs` globs that match no tracked file in the tree."""
+        if self.files is None:
+            self.files = tree_files(self.wt, self.tree)
+        return dead_globs(self.files, list(c.get("inputs") or []))
 
     def key(self, c):
         globs = list(c.get("inputs") or [])

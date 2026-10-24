@@ -197,7 +197,7 @@ contents of gitignored files matching them (read directly; keep the globs off bu
 every run), the justfile, lockfiles (`*.lock`, `packages-lock.json`, `Directory.Packages.props`...) and `.task-loop.json`, and the
 base sha. `"inputs_only": true` drops the last two groups, so only the globs count. `exclude` (same glob rules) drops matching paths from both the tracked and the ignored set, and the ignored walk is cut at excluded folders:
 `"exclude": ["client/Assets/Features/*/Generated/**", "client/Assets/Views/*/Generated/**", "client/Assets/Kit/UI/Fonts/**"]`.
-The ignored walk lists only under the globs' literal folders (`client/Assets/{App,Core}/**` walks `client/Assets/App/` and `.../Core/`), so a `Library/` the globs do not name is never read. A hit is logged
+The ignored walk lists only under the globs' literal folders (`client/Assets/{App,Core}/**` walks `client/Assets/App/` and `.../Core/`), so a `Library/` the globs do not name is never read. An `inputs` glob that matches no tracked file switches the cache off for that check (logged `inputs glob X matches no tracked file; not cached`; `tl doctor` reports it). A hit is logged
 `cached: unity-tests, inputs unchanged since round N`. No `inputs`: the key stays the whole tree plus the base. Only a pass is remembered.
 **Hang watchdog.** `engine.check_idle_min` (10; 0 = off; `idle_min` on one check overrides): a check is stopped as hung only when
 for that long all three are flat: its stdout/stderr, any file under the worktree (size, count, mtime; checked about every
