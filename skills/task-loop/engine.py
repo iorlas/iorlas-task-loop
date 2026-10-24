@@ -2290,12 +2290,14 @@ class Engine:
     def rebase_onto_base(self):
         """tl-bxk.13.8: a branch resumed from an earlier run is rebased onto the latest base before it is planned or
         re-planned, so the plan and the engine's checks see what main has now (lifesim-ov3w: a gate check named a recipe the
-        branch's base lacked, three plans in 11 min). A conflict is left as it was: the land fixes it, as before."""
+        branch's base lacked, three plans in 11 min). -> "rebased" (the plan count starts again: the earlier plans were made on
+        another base), "conflict" (the branch work does not fit main: the caller starts again, tl-19i), or "".
+        The branch is left as it was in the conflict, and when there is nothing to do."""
         if self.dry or self.git("status", "--porcelain"):
-            return
+            return ""
         behind = self.git("rev-list", "--count", "HEAD..%s" % self.cfg["base"])
         if behind in ("", "0"):
-            return
+            return ""
         old = self.git("rev-parse", "HEAD")
         rc, tail = self.sh(["git", "rebase", "-q", self.cfg["base"]], pin=True)
         if not rc:  # the checkpoint's head follows, or the next resume reads this as an edit from outside
@@ -2308,10 +2310,33 @@ class Engine:
                 pass
         if rc:
             self.sh(["git", "rebase", "--abort"], pin=True)
-            self.warn("the task branch could not be rebased onto %s before planning (it stays as it was): %s"
+            self.warn("the task branch could not be rebased onto %s before planning: %s"
                       % (self.cfg["base"], tail.strip().splitlines()[-1][:200] if tail.strip() else "conflict"))
-            return
+            return "conflict"
         self.log("note", "rebased the task branch onto the latest %s (%s commits behind) before planning" % (self.cfg["base"], behind))
+        if self.planned or self.plan_log:  # tl-19i: plans made on the old base say nothing about this one (lifesim-ov3w counted 2)
+            self.log("note", "the plan count starts again: %d earlier plan%s were made on another base" % (
+                self.planned, "" if self.planned == 1 else "s"))
+            self.planned, self.plan_log = 0, []
+        return "rebased"
+
+    def start_again_on_base(self, why):
+        """tl-19i: the branch's earlier work conflicts with main, so it cannot go on. It is kept under another name; the task
+        starts again on the base with a fresh plan (the owner's answer is in the bead's comments, which the planner reads),
+        and nothing so far counts toward the re-plan limit."""
+        branch = self.git("symbolic-ref", "--short", "-q", "HEAD") or getattr(self, "branch", "")
+        stale = "%s-stale-%s" % (branch, time.strftime("%Y%m%d-%H%M%S"))
+        if branch:
+            self.sh(["git", "branch", "-m", branch, stale], pin=True)
+            self.sh(["git", "checkout", "-q", "-B", branch, self.cfg["base"]], pin=True, check=True)
+        self.drop_checkpoint()
+        self.old_plan, self.amend_why, self.amend_text, self.replan_first = None, "", "", False
+        self.plan_data, self.plan_summary, self.verify_answer = None, "", ""
+        self.done, self.accepted, self.unchecked, self.plan_log, self.planned = [], [], [], [], 0
+        self.amended, self.stage_tree, self.writer, self.writer_family = False, "", {}, None
+        self.transition("plan", "resume_conflict", "the branch's earlier work conflicts with %s: kept as %s, planning fresh. %s" % (
+            self.cfg["base"], stale, why[:160]))
+        self.log("note", "resume conflict: %s kept as %s; the task starts again on %s" % (branch, stale, self.cfg["base"]))
 
     # -- tl-bxk.13: the handoff record (docs/design/stages.md section 5): what a stage after this one needs to know
     def deferred_items(self):
@@ -2466,7 +2491,8 @@ class Engine:
             plan, i, state = self.resume_point()
             self.log_run()
             if plan is None:
-                self.rebase_onto_base()
+                if self.rebase_onto_base() == "conflict":
+                    self.start_again_on_base("Its work: %s" % (self.git("log", "--oneline", "-n", "3", "%s..HEAD" % self.cfg["base"]) or "").replace("\n", "; "))
                 plan, i, state = self.plan(again=self.replan_first), 0, None
             while i < len(plan["stages"]):
                 d = self.stage(plan, i, state)
@@ -3050,10 +3076,15 @@ class Engine:
                 why = (self.run_dir / "replan.md").read_text(encoding="utf-8")[-12500:]
             except OSError:
                 pass
-        if self.planned >= 1 + int(self.cfg["max_replans"]) + self.extra:
+        # tl-19i: the owner's answer, or an edit of the bead by the owner, is not a failed plan: it never counts (lifesim-yxbb.3
+        # parked 'stuck: re-planned 3 times' on 'the owner answered ask yxbb.3-1')
+        owner = bool(old) and not again and (self.amend_why or "").startswith("bead changed")
+        if not owner and self.planned >= 1 + int(self.cfg["max_replans"]) + self.extra:
             raise self.cap_blocked()
-        self.planned += 1
-        self.plan_log.append({"mode": mode, "why": clip(self.amend_why or ("a re-plan: " + clip(why, 160) if again else "first plan"), 240)})
+        if not owner:
+            self.planned += 1
+        self.plan_log.append({"mode": mode, "counted": not owner,
+                              "why": clip(self.amend_why or ("a re-plan: " + clip(why, 160) if again else "first plan"), 240)})
         if old and not again and not self.amend_text:
             self.amend_text = "The bead is the same as when the old plan was made."
         extra = ""

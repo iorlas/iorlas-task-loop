@@ -925,6 +925,77 @@ class Inputs(StagesTest):
 
 
 
+class ResumeCount(StagesTest):
+    """tl-19i: the re-plan limit counts failed plans on one base, never the owner's answer; a branch that conflicts with main starts again."""
+
+    def behind_branch(self, conflict=False):
+        """task/t-1 with one commit of earlier work, and main moved on (touching the same file when `conflict`)."""
+        te.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
+        (self.wt / ("a.txt" if conflict else "g.txt")).write_text("earlier work\n")
+        te.sh("git", "add", "-A", cwd=self.wt)
+        te.sh("git", "commit", "-qm", "wip (t-1): blocked", cwd=self.wt)
+        te.sh("git", "checkout", "-q", "-", cwd=self.wt)
+        base = Path(self.tmp.name, "base-moves")
+        te.sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(base), cwd=self.tmp.name)
+        (base / ("a.txt" if conflict else "h.txt")).write_text("main moved on\n")
+        te.sh("git", "add", "-A", cwd=base)
+        te.sh("git", "commit", "-qm", "main moves", cwd=base)
+        te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
+        te.sh("git", "fetch", "-q", "origin", cwd=self.wt)
+
+    def test_the_owners_answer_is_no_failed_plan_even_at_the_limit(self):
+        ask = dict(WRITE, question="Which format?")
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [ask]}, max_replans=0)  # one plan allowed, no amend
+        self.assertEqual(rc, 2)
+        with mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Use the new format."}]):
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, max_replans=0)
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual(s.calls[0][0], "planner")  # it amended
+        self.assertEqual((self.eng.planned, self.eng.plan_log[-1]["counted"]), (1, False))
+
+    def test_an_edit_of_the_bead_by_the_owner_is_no_failed_plan_either(self):
+        self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which format?")]}, max_replans=0)
+        with mock.patch.object(tl, "show", return_value=dict(BEAD, description="Also say hi.")):
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, max_replans=0)
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual(self.eng.plan_log[-1]["counted"], False)
+
+    def test_a_failed_plan_still_counts_and_the_limit_still_stops(self):
+        flag = dict(WRITE, bad_checks=[{"cmd": FALSE, "why": "never passes"}])
+        bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[FALSE])])
+        rc, s = self.run_engine({"plan": [bad, bad], "write": [flag, flag]}, max_replans=1)
+        self.assertEqual(rc, 2)
+        self.assertTrue(self.blocked and self.blocked[0].startswith(engine.REPLAN_CAP))
+
+    def test_a_rebase_onto_a_new_base_starts_the_plan_count_again(self):
+        self.behind_branch()
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e.git("checkout", "-q", "task/t-1")
+        e.planned, e.plan_log = 3, [{"mode": "plan", "why": "x"}] * 3
+        self.assertEqual(e.rebase_onto_base(), "rebased")
+        self.assertEqual((e.planned, e.plan_log), (0, []))
+        self.assertEqual(e.rebase_onto_base(), "")  # nothing behind now
+        e.planned = 2
+        self.assertEqual(e.planned, 2)
+
+    def test_a_branch_that_conflicts_with_main_starts_again_fresh_and_nothing_is_counted(self):
+        self.behind_branch(conflict=True)
+        with mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Use the new format."}]):
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, max_replans=0)
+        self.assertEqual(rc, 0, self.blocked)
+        text = self.eng.log_path.read_text()
+        self.assertIn("resume_conflict", text)
+        self.assertIn("resume conflict: task/t-1 kept as task/t-1-stale-", text)
+        self.assertNotIn("<old_plan>", s.prompts[0])  # a fresh plan, not an amend
+        self.assertIn("Use the new format.", s.prompts[0])  # the answer is in the planner's brief
+        self.assertEqual(self.eng.planned, 1)
+        out = engine.subprocess.run(["git", "branch", "--list", "task/t-1-stale-*"], cwd=self.wt, capture_output=True, text=True).stdout
+        self.assertIn("task/t-1-stale-", out)  # the earlier work is kept
+        shown = engine.subprocess.run(["git", "show", "origin/main:a.txt"], cwd=self.wt, capture_output=True, text=True).stdout
+        self.assertEqual(shown, "main moved on\n")
+
+
+
 class Contracts(StagesTest):
     """tl-bxk.13.16: infrastructure is retried with a rest, never asked; the version is recorded."""
 
