@@ -308,7 +308,8 @@ class AskOptions(unittest.TestCase):
                 self.assertEqual(server.asks()["asks"][0]["answer"], text)
             log = (d / "bd.log").read_text().splitlines()
             self.assertEqual(log[0], "[comments][add][x-1][%s]" % text)
-            self.assertEqual(log[1], "[update][x-1][--status][open]")
+            self.assertEqual(log[1], "[show][x-1][--json]")  # the answer is filed on the bead's notes (here bd shows nothing: skipped)
+            self.assertEqual(log[-1], "[update][x-1][--status][open]")
 
 
 class AskFailures(unittest.TestCase):
@@ -457,6 +458,109 @@ class AskFailures(unittest.TestCase):
         self.assertEqual([o["label"] for o in by["lifesim-d5f.61"]["options"]], ["Defer the sink", "Add a stand-in sink now"])
         self.assertIn("Re-planned 3 times", by["lifesim-d5f.34"]["question"])
         self.assertTrue(all(o["then"] for r in rows for o in r["options"]))
+
+
+    def test_a_second_process_reuses_the_bead_list_of_the_last_30_seconds(self):
+        """tl-u08: tl ask list is a fresh process every time; bd list takes seconds under load, so it is read once per 30 s."""
+        (self.d / ".beads").mkdir()
+        out = mock.Mock(returncode=0, stdout=json.dumps([{"id": "a", "status": "open"}]), stderr="")
+        with mock.patch.object(server.subprocess, "run", return_value=out) as run, mock.patch.object(server.shutil, "which", return_value="/bin/bd"):
+            server._cache.clear()
+            self.assertEqual(server.beads_of(str(self.d)), [{"id": "a", "status": "open"}])
+            server._cache.clear()  # a new process: nothing in memory
+            self.assertEqual(server.beads_of(str(self.d)), [{"id": "a", "status": "open"}])
+        self.assertEqual(run.call_count, 1)
+
+    def test_amend_replaces_an_unused_answer_and_keeps_the_history(self):
+        """tl-ptv: a second answer is refused; --amend replaces one no run has used yet, and nothing is lost."""
+        self.bd("echo \"$*\" >> %s\n" % (self.d / "bd.log"))
+        self.ask()
+        self.assertEqual(server.answer({"ask": "x-1-1", "text": "first"})[0], 200)
+        code, out = server.answer({"ask": "x-1-1", "text": "second"})
+        self.assertEqual((code, out["code"]), (409, "answered"))
+        self.assertIn("--amend", out["error"])
+        self.assertEqual(server.answer({"ask": "x-1-1", "text": "second", "amend": True})[0], 200)
+        a = json.loads((self.asks / "x-1.json").read_text())
+        self.assertEqual(a["answer"], "second")
+        self.assertEqual([x["text"] for x in a["answers"]], ["first", "second"])
+        self.assertIn("comments add x-1 Answer amended (replaces the one above, not used yet): second", (self.d / "bd.log").read_text())
+        a["status"] = "answered"  # a run used it
+        (self.asks / "x-1.json").write_text(json.dumps(a))
+        code, out = server.answer({"ask": "x-1-1", "text": "third", "amend": True})
+        self.assertEqual((code, out["code"]), (409, "consumed"))
+        # a run that picked the answer up while bd was working is not undone: status stays answered, the amend is told it is late
+        self.ask("z")
+        real = server.subprocess.run
+
+        def engine_consumes(cmd, *a, **k):
+            if cmd[:3] == ["bd", "comments", "add"]:
+                f = self.asks / "z.json"
+                d = json.loads(f.read_text())
+                d["status"] = "answered"
+                f.write_text(json.dumps(d))
+            return real(cmd, *a, **k)
+        self.assertEqual(server.answer({"ask": "z-1", "text": "one"})[0], 200)
+        d = json.loads((self.asks / "z.json").read_text())
+        d["status"] = "open"
+        (self.asks / "z.json").write_text(json.dumps(d))
+        with mock.patch.object(server.subprocess, "run", side_effect=engine_consumes):
+            code, out = server.answer({"ask": "z-1", "text": "two", "amend": True})
+        self.assertEqual((code, out["code"]), (409, "consumed"))
+        self.assertEqual(json.loads((self.asks / "z.json").read_text())["status"], "answered")
+        self.ask("y")  # no answer yet: amend is just the first answer
+        self.assertEqual(server.answer({"ask": "y-1", "text": "one", "amend": True})[0], 200)
+        self.assertNotIn("answers", json.loads((self.asks / "y.json").read_text()))
+
+    def test_amending_replaces_the_line_filed_for_the_old_answer(self):
+        self.bd("""case "$1" in
+show) python3 -c "import json,sys;print(json.dumps([{'id':'x','notes':open(sys.argv[1]).read()}]))" NOTES ;;
+update) [ "$3" = "--notes" ] && printf '%s' "$4" > NOTES ;;
+esac
+""".replace("NOTES", str(self.d / "notes.txt")))
+        (self.d / "notes.txt").write_text("")
+        self.ask("x", kind="decision", question="**Which db?**")
+        self.assertEqual(server.answer({"ask": "x-1", "text": "use sqlite"})[0], 200)
+        self.assertEqual(server.answer({"ask": "x-1", "text": "use postgres", "amend": True})[0], 200)
+        text = (self.d / "notes.txt").read_text()
+        self.assertIn("use postgres", text)
+        self.assertNotIn("use sqlite", text)
+        self.assertEqual(server.answer({"ask": "x-1", "text": "run again", "amend": True})[0], 200)  # a bare answer removes the line
+        self.assertNotIn("(ask x-1)", (self.d / "notes.txt").read_text())
+
+    def test_a_parked_ask_is_listed_last_flagged_and_answerable(self):
+        self.bd("echo \"$*\" >> %s\n" % (self.d / "bd.log"))
+        self.ask("quiet", status="parked")
+        self.ask("loud")
+        rows = server.inbox()
+        self.assertEqual([(r["bead"], r["parked"]) for r in rows], [("loud", False), ("quiet", True)])
+        self.assertEqual(server.answer({"ask": "quiet-1", "text": "go on"})[0], 200)
+
+    def test_a_substantive_answer_is_filed_on_the_bead_under_decisions_or_testing(self):
+        notes = {"v": "existing note"}
+        self.bd("""case "$1" in
+show) python3 -c "import json,sys;print(json.dumps([{'id':'x','notes':open(sys.argv[1]).read()}]))" NOTES ;;
+update) [ "$3" = "--notes" ] && printf '%s' "$4" > NOTES; echo "$@" >> LOG ;;
+esac
+""".replace("NOTES", str(self.d / "notes.txt")).replace("LOG", str(self.d / "bd.log")))
+        (self.d / "notes.txt").write_text(notes["v"])
+        self.ask("x", kind="decision", question="**Build the sink now?**\n\n**What I need from you:** pick")
+        self.assertEqual(server.answer({"ask": "x-1", "text": "B: add a stand-in sink"})[0], 200)
+        text = (self.d / "notes.txt").read_text()
+        self.assertIn("existing note\n\n## Decisions\n- ", text)
+        self.assertIn("(ask x-1) Build the sink now? -> B: add a stand-in sink", text)
+        self.ask("x", kind="verify", n=2)
+        self.assertEqual(server.answer({"ask": "x-2", "text": "right"})[0], 200)  # a bare button answer files nothing
+        self.assertNotIn("## Testing", (self.d / "notes.txt").read_text())
+        self.ask("x", kind="verify", n=3)
+        self.assertEqual(server.answer({"ask": "x-3", "text": "wrong: the unit is ms"})[0], 200)
+        text = (self.d / "notes.txt").read_text()
+        self.assertIn("## Testing\n- ", text)
+        self.assertIn("## Decisions\n- ", text)  # the first section is kept, the second beside it
+        (self.d / "notes.txt").write_text("### Testing plan\nsee ## Testing below in prose\n")
+        self.ask("x", kind="verify", n=4)
+        self.assertEqual(server.answer({"ask": "x-4", "text": "wrong: another"})[0], 200)
+        text = (self.d / "notes.txt").read_text()
+        self.assertTrue(text.startswith("### Testing plan\nsee ## Testing below in prose\n\n## Testing\n- "), text)  # a new section, not inside the prose
 
 
 class Markdown(unittest.TestCase):

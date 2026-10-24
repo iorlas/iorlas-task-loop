@@ -1455,25 +1455,33 @@ class Contracts(StagesTest):
     def test_asks_of_closed_or_missing_beads_are_closed_and_others_left(self):
         asks = tl.config_dir() / "asks"
         asks.mkdir(exist_ok=True)
-        for bead in ("b-open", "b-closed", "b-gone", "b-flaky"):
+        other = Path(self.tmp.name) / "other-repo"
+        (other / ".beads").mkdir(parents=True)
+        (Path(self.wt) / ".beads").mkdir(exist_ok=True)
+        for bead in ("b-open", "b-closed", "b-gone", "b-hidden"):
             (asks / ("%s.json" % bead)).write_text(json.dumps({"v": 1, "id": bead + "-1", "bead": bead, "status": "open", "kind": "stuck",
                                                                 "repo": str(self.wt)}))
+        (asks / "b-flaky.json").write_text(json.dumps({"v": 1, "id": "f-1", "bead": "b-flaky", "status": "open", "kind": "stuck",
+                                                        "repo": str(other)}))  # its tracker fails: nothing is learned, the ask stays
         (asks / "b-norepo.json").write_text(json.dumps({"v": 1, "id": "n-1", "bead": "b-norepo", "status": "open", "kind": "stuck"}))
         (asks / "b-answered.json").write_text(json.dumps({"v": 1, "id": "x", "bead": "b-answered", "status": "answered"}))
+        calls = []
 
         def fake_bd(*a, **k):
-            bead = a[1]
-            if bead == "b-gone":
-                return mock.Mock(returncode=1, stdout="", stderr="Error: no issue found matching b-gone")
-            if bead == "b-flaky":
-                return mock.Mock(returncode=1, stdout="", stderr="dolt: database not found")  # a bd failure, not "no such bead"
-            return mock.Mock(returncode=0, stdout=json.dumps([{"id": bead, "status": "closed" if bead == "b-closed" else "open"}]), stderr="")
+            calls.append((a, k.get("cwd")))
+            if k.get("cwd") == str(other):
+                return mock.Mock(returncode=1, stdout="", stderr="dolt: database not found")
+            if a[0] == "show":  # absent from the list: only a bead bd really does not know is gone (a gate or wisp is hidden from lists)
+                return (mock.Mock(returncode=0, stdout="[{}]", stderr="") if a[1] == "b-hidden"
+                        else mock.Mock(returncode=1, stdout="", stderr="Error: no issue found matching %s" % a[1]))
+            return mock.Mock(returncode=0, stderr="", stdout=json.dumps([{"id": "b-open", "status": "open"}, {"id": "b-closed", "status": "closed"}]))
         with mock.patch.object(tl, "bd", side_effect=fake_bd):
             closed = tl.close_stale_asks(every=0)
             self.assertEqual(sorted(closed), ["b-closed", "b-gone"])
             self.assertEqual(tl.close_stale_asks(), [])  # throttled
-        state = {b: json.loads((asks / ("%s.json" % b)).read_text())["status"] for b in ("b-open", "b-closed", "b-gone", "b-flaky", "b-answered", "b-norepo")}
-        self.assertEqual(state, {"b-open": "open", "b-closed": "closed", "b-gone": "closed", "b-flaky": "open", "b-answered": "answered",
+        self.assertEqual([c[0][0] for c in calls].count("list"), 2)  # one list per repo, not one read per ask (a show only for an absent id)
+        state = {b: json.loads((asks / ("%s.json" % b)).read_text())["status"] for b in ("b-open", "b-closed", "b-gone", "b-hidden", "b-flaky", "b-answered", "b-norepo")}
+        self.assertEqual(state, {"b-hidden": "open", "b-open": "open", "b-closed": "closed", "b-gone": "closed", "b-flaky": "open", "b-answered": "answered",
                                  "b-norepo": "open"})  # no repo recorded: which tracker to ask is unknown, the ask stays
 
     def test_the_engine_log_and_trace_record_the_version(self):

@@ -31,6 +31,7 @@ from pathlib import Path
 
 import checks_speed as cs
 import looks
+import notifier
 import tl
 
 DEFAULTS = {
@@ -3388,7 +3389,7 @@ class Engine:
             a = json.loads(self.ask_path().read_text())
         except (OSError, ValueError):
             return
-        if a.get("status") != "open":
+        if a.get("status") not in ("open", "parked"):  # a parked ask (3 days, no answer) still waits
             return
         if a.get("brief") == self.brief_hash and not self.cfg.get("fresh"):
             raise Blocked("waiting: for the owner's answer to ask %s (%s): %s" % (a["id"], a["kind"], clip(push_text(a["question"]), 200)))
@@ -3440,8 +3441,7 @@ class Engine:
             pick, pick, ", %s added" % info if info else "", pick)
 
     def notify(self, a):
-        """The owner's push (tl.push): ~/.config/task-loop/notify holds one shell command (ntfy, Pushover, a Telegram bot...);
-        it gets TL_ASK_KIND, TL_ASK_BEAD, TL_ASK_ID and TL_ASK_TEXT. Which service is the owner's choice."""
+        """The owner's push (tl.push -> notifier.py): a command in ~/.config/task-loop/notify, or the word `desktop`."""
         err = tl.push(a["kind"], a["bead"], a["id"], push_text(a["question"]))
         if err:
             self.warn("notify failed: %s" % err)
@@ -4926,7 +4926,7 @@ class Engine:
         elif outcome in ("landed", "done") and self.ask_path().exists():
             try:
                 a = json.loads(self.ask_path().read_text())
-                if a.get("status") == "open":
+                if a.get("status") in ("open", "parked"):
                     a.update(status="closed", closed=time.time())
                     self.ask_path().write_text(json.dumps(a, indent=1))
             except (OSError, ValueError):
@@ -5059,7 +5059,7 @@ Answer:
 - change: up to 3 lines, what to change, naming the cause class.
 Cite only what the data above shows; do not guess a cause it does not support."""
 
-ENGINE_NOTES = ("Plan (engine)", "Review (engine", "Reflect (engine)", "Blocked:", "Ask (engine)", "Evidence (engine)")
+ENGINE_NOTES = ("Plan (engine)", "Review (engine", "Reflect (engine)", "Blocked:", "Ask (engine)", "Evidence (engine)", "Parked (engine)")
 
 
 VERIFY_GAPS = "verify: before land, "  # the ask for what the workers could not check; its answer may ask for work
@@ -5932,7 +5932,7 @@ def reclaim(bead_id, repo):
             ask = json.loads((tl.config_dir() / "asks" / ("%s.json" % bead_id)).read_text())
         except (OSError, ValueError):
             ask = {}
-        asking = ask.get("status") == "open"
+        asking = ask.get("status") in ("open", "parked")
         if asking and not after:
             return False, "waiting for the answer to ask %s (%s)" % (ask.get("id"), ask.get("kind"))
         if after and not asking:

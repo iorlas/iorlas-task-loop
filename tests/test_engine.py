@@ -1794,6 +1794,18 @@ class EngineTest(unittest.TestCase):
         self.assertIn("for the owner's answer", self.eng.log_path.read_text())
         self.assertEqual(self.ask()["status"], "open")
 
+    def test_the_park_comment_is_the_engines_own_note_not_an_owner_answer(self):
+        self.assertTrue("Parked (engine): ask x-1 got no answer in 3 days.".startswith(engine.ENGINE_NOTES))
+
+    def test_a_parked_ask_still_waits_for_the_owner(self):
+        self.run_engine({"plan": [dict(PLAN, question="Old format or new?")]})
+        a = self.ask()
+        a["status"] = "parked"
+        (tl.config_dir() / "asks" / ("%s.json" % a["bead"])).write_text(json.dumps(a))
+        rc, s = self.run_engine({})
+        self.assertEqual((rc, s.calls), (2, []))
+        self.assertEqual(self.ask()["status"], "parked")
+
     def test_an_owner_comment_answers_the_ask_and_the_bead_goes_on(self):
         self.run_engine({"plan": [dict(PLAN, question="Old format or new?")]})
         with mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Old format."}]):

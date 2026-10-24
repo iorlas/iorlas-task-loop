@@ -6,6 +6,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -346,8 +347,39 @@ class AskCli(unittest.TestCase):
                     self.assertEqual(tl.cmd_ask(ns(op="answer", bead="x-1", text=["right"])), 0)
                     self.assertEqual(tl.cmd_ask(ns(op="withdraw", bead="x-2", text=["no", "longer"])), 0)
                     self.assertEqual(tl.cmd_ask(ns(op="answer", bead="nope", text=["x"])), 1)
+                    self.assertEqual(tl.cmd_ask(ns(op="answer", bead="x-1", text=["again"])), 1)  # already answered
+                    self.assertEqual(tl.cmd_ask(ns(op="answer", bead="x-1", text=["again"], amend=True)), 0)
                 self.assertIn("x-1", out.getvalue())
                 self.assertIn("Right -> right", out.getvalue())
                 self.assertIn("comments add x-1 right", (d / "bd.log").read_text())
                 a = json.loads((asks / "x-2.json").read_text())
                 self.assertEqual((a["status"], a["withdrawn_why"]), ("withdrawn", "no longer"))
+
+
+class ParkStaleAsks(unittest.TestCase):
+    """tl-bxk.8.25: an ask with no answer 3 days after it was asked is parked, once, with a comment; it still waits."""
+
+    def test_parks_only_late_unanswered_open_asks(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            (d / "bin").mkdir()
+            (d / "bin" / "bd").write_text("#!/bin/sh\necho \"$*\" >> %s\n" % (d / "bd.log"))
+            (d / "bin" / "bd").chmod(0o755)
+            asks = d / "task-loop" / "asks"
+            asks.mkdir(parents=True)
+            now = time.time()
+            for bead, parks, extra in (("late", now - 10, {}), ("fresh", now + 9e4, {}), ("done", now - 10, {"answer": "x"}),
+                                       ("closed", now - 10, {"status": "closed"})):
+                (asks / ("%s.json" % bead)).write_text(json.dumps(dict({
+                    "v": 1, "id": bead + "-1", "bead": bead, "kind": "verify", "question": "q", "t": 1, "status": "open",
+                    "parks_at": parks, "repo": str(d)}, **extra)))
+            env = {"XDG_CONFIG_HOME": str(d), "APPDATA": str(d), "HOME": str(d), "USERPROFILE": str(d),
+                   "PATH": str(d / "bin") + os.pathsep + os.environ["PATH"]}
+            with mock.patch.dict(os.environ, env):
+                self.assertEqual(tl.park_stale_asks(every=0), ["late"])
+                self.assertEqual(tl.park_stale_asks(every=600), [])  # throttled
+            status = lambda b: json.loads((asks / ("%s.json" % b)).read_text())["status"]
+            self.assertEqual([status(b) for b in ("late", "fresh", "done", "closed")], ["parked", "open", "open", "closed"])
+            log = (d / "bd.log").read_text()
+            self.assertIn("comments add late Parked (engine): ask late-1 got no answer in 3 days", log)
+            self.assertEqual(log.count("comments add"), 1)
