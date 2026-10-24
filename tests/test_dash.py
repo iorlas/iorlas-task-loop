@@ -529,16 +529,32 @@ esac
 
     def test_withdrawing_an_answered_but_unused_ask_drops_the_answer_and_notes_it(self):
         """tl-gy4: withdraw refused 'already answered'; only --fresh worked, which dropped the answer unseen."""
-        self.bd("echo ok\n")
+        self.bd("echo \"$*\" >> %s\n" % (self.d / "bd.log"))
         self.ask()
         self.assertEqual(server.answer({"ask": "x-1-1", "text": "go with B"})[0], 200)
         self.assertEqual(server.withdraw({"ask": "x-1-1", "why": "wrong ask"})[0], 200)
         a = json.loads((self.asks / "x-1.json").read_text())
         self.assertEqual((a["status"], a.get("answer"), a["withdrawn_answer"]), ("withdrawn", None, "go with B"))
         self.assertIn("answer dropped: go with B", a["withdrawn_why"])
+        self.assertIn("comments add x-1 Answer to ask x-1-1 withdrawn, no run used it: go with B", (self.d / "bd.log").read_text())
         a["status"], a["answer"] = "answered", "used"  # a run consumed it: too late to withdraw
         (self.asks / "x-1.json").write_text(json.dumps(a))
         self.assertEqual(server.withdraw({"ask": "x-1-1"})[1]["code"], "answered")
+
+    def test_an_answer_for_an_ask_the_engine_replaced_meanwhile_writes_nothing(self):
+        self.ask("x", n=1)
+        real = server.subprocess.run
+
+        def engine_asks_again(cmd, *a, **k):
+            if cmd[:3] == ["bd", "comments", "add"]:
+                self.ask("x", n=2, question="a new question")
+            return real(cmd, *a, **k)
+        self.bd("echo ok\n")
+        with mock.patch.object(server.subprocess, "run", side_effect=engine_asks_again):
+            code, out = server.answer({"ask": "x-1", "text": "for the old one"})
+        self.assertEqual((code, out["code"], out["new_ask"]), (409, "superseded", "x-2"))
+        a = json.loads((self.asks / "x.json").read_text())
+        self.assertEqual((a["id"], a.get("answer")), ("x-2", None))  # the new ask is whole, no stale answer on it
 
     def test_a_parked_ask_is_listed_last_flagged_and_answerable(self):
         self.bd("echo \"$*\" >> %s\n" % (self.d / "bd.log"))

@@ -1802,8 +1802,9 @@ def answer(body):
         return 502, {"code": "no_bd", "error": "The dashboard cannot run bd (%s). Nothing was sent." % e.strerror}
     try:  # the bd calls took seconds: re-read, so a run that started meanwhile (status answered) is not undone by a stale copy
         cur = json.loads(Path(f).read_text())
-        if cur.get("id") != a.get("id"):
-            cur = None
+        if cur.get("id") != a.get("id"):  # a newer ask replaced this one: the answer was for the old one, nothing is written
+            return 409, {"code": "superseded", "new_ask": cur.get("id"),
+                         "error": "The engine asked again while this was sent; the new ask replaces this one. Your text is a comment on the bead."}
     except (OSError, ValueError):
         cur = None
     if cur is None:
@@ -1874,10 +1875,26 @@ def withdraw(body):
     if problem:
         return (200, {"ok": True}) if problem[1].get("code") == "withdrawn" else problem
     why = body.get("why") if isinstance(body.get("why"), str) and body.get("why").strip() else "dismissed by the owner"
+    dropped = a.get("answer")
+    try:  # a run may have used the answer since ask_for looked: withdraw only what is still unused
+        cur = json.loads(Path(f).read_text())
+    except (OSError, ValueError):
+        cur = a
+    if cur.get("id") != a.get("id") or cur.get("status") not in ("open", "parked"):
+        return 409, {"code": "answered", "error": "A run just used this ask; it cannot be withdrawn now."}
+    a = cur
     if a.get("answer"):  # tl-gy4: an answer no run has used yet goes with the ask, and the record says so
+        dropped = a.get("answer")
         a["withdrawn_answer"] = a.pop("answer")
         a.pop("answer_t", None)
-        why = ("%s (answer dropped: %s)" % (why, " ".join(str(a["withdrawn_answer"]).split())[:120]))
+        why = ("%s (answer dropped: %s)" % (why, " ".join(str(dropped).split())[:120]))
+        cwd = a.get("repo") or None
+        try:  # the bead must not keep it either: a comment says so and the notes line it filed goes
+            subprocess.run(["bd", "comments", "add", a["bead"], "Answer to ask %s withdrawn, no run used it: %s" % (
+                a.get("id"), " ".join(str(dropped).split())[:300])], cwd=cwd, capture_output=True, text=True, timeout=30)
+            file_answer(a, "right", cwd, amend=True)  # a bare answer in amend mode only removes this ask's line from the notes
+        except (OSError, subprocess.SubprocessError):
+            pass
     a.update(status="withdrawn", withdrawn_why=why[:300], withdrawn=time.time())
     try:
         Path(f).write_text(json.dumps(a, indent=1))
