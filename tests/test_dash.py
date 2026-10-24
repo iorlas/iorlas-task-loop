@@ -471,6 +471,27 @@ class AskFailures(unittest.TestCase):
             self.assertEqual(server.beads_of(str(self.d)), [{"id": "a", "status": "open"}])
         self.assertEqual(run.call_count, 1)
 
+    def test_amend_replaces_an_unused_answer_and_keeps_the_history(self):
+        """tl-ptv: a second answer is refused; --amend replaces one no run has used yet, and nothing is lost."""
+        self.bd("echo \"$*\" >> %s\n" % (self.d / "bd.log"))
+        self.ask()
+        self.assertEqual(server.answer({"ask": "x-1-1", "text": "first"})[0], 200)
+        code, out = server.answer({"ask": "x-1-1", "text": "second"})
+        self.assertEqual((code, out["code"]), (409, "answered"))
+        self.assertIn("--amend", out["error"])
+        self.assertEqual(server.answer({"ask": "x-1-1", "text": "second", "amend": True})[0], 200)
+        a = json.loads((self.asks / "x-1.json").read_text())
+        self.assertEqual(a["answer"], "second")
+        self.assertEqual([x["text"] for x in a["answers"]], ["first", "second"])
+        self.assertIn("comments add x-1 Answer amended (replaces the one above, not used yet): second", (self.d / "bd.log").read_text())
+        a["status"] = "answered"  # a run used it
+        (self.asks / "x-1.json").write_text(json.dumps(a))
+        code, out = server.answer({"ask": "x-1-1", "text": "third", "amend": True})
+        self.assertEqual((code, out["code"]), (409, "consumed"))
+        self.ask("y")  # no answer yet: amend is just the first answer
+        self.assertEqual(server.answer({"ask": "y-1", "text": "one", "amend": True})[0], 200)
+        self.assertNotIn("answers", json.loads((self.asks / "y.json").read_text()))
+
     def test_a_parked_ask_is_listed_last_flagged_and_answerable(self):
         self.bd("echo \"$*\" >> %s\n" % (self.d / "bd.log"))
         self.ask("quiet", status="parked")

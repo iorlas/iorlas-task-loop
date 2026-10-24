@@ -1538,7 +1538,7 @@ def cmd_ask(a):
         print("tl: no ask for %s" % a.bead)
         return 1
     if a.op == "answer":
-        code, out = d.answer({"ask": ask_id, "text": " ".join(a.text)})
+        code, out = d.answer({"ask": ask_id, "text": " ".join(a.text), "amend": bool(getattr(a, "amend", False))})
     else:
         code, out = d.withdraw({"ask": ask_id, "why": " ".join(a.text) or "withdrawn with tl ask withdraw"})
     print(out.get("next") if code == 200 and out.get("next") else "done" if code == 200 else "tl: " + out.get("error", "failed"))
@@ -1775,6 +1775,7 @@ def main(argv=None):
     p.add_argument("bead", nargs="?")
     p.add_argument("text", nargs="*", help="answer: the answer; withdraw: why")
     p.add_argument("--json", action="store_true")
+    p.add_argument("--amend", action="store_true", help="answer: replace an answer no run has used yet (the history stays)")
     p = sp.add_parser("notify", help="the owner's push channel: test it, or choose desktop notifications / off")
     p.add_argument("op", choices=["test", "desktop", "off"])
     p = sp.add_parser("digest", help="the digest of the night (landed, asks, paused, failed) plus refusals, DNS errors, flakes")

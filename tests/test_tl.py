@@ -347,6 +347,8 @@ class AskCli(unittest.TestCase):
                     self.assertEqual(tl.cmd_ask(ns(op="answer", bead="x-1", text=["right"])), 0)
                     self.assertEqual(tl.cmd_ask(ns(op="withdraw", bead="x-2", text=["no", "longer"])), 0)
                     self.assertEqual(tl.cmd_ask(ns(op="answer", bead="nope", text=["x"])), 1)
+                    self.assertEqual(tl.cmd_ask(ns(op="answer", bead="x-1", text=["again"])), 1)  # already answered
+                    self.assertEqual(tl.cmd_ask(ns(op="answer", bead="x-1", text=["again"], amend=True)), 0)
                 self.assertIn("x-1", out.getvalue())
                 self.assertIn("Right -> right", out.getvalue())
                 self.assertIn("comments add x-1 right", (d / "bd.log").read_text())

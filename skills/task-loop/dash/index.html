@@ -608,7 +608,7 @@ function renderTask(){const d=S.tl;if(!d||!d.task||d.task.id!=S.task){paint($('m
   if(paint($('main'),'main',html)&&keep){const ta=document.querySelector(`textarea[data-ans="${CSS.escape(keep[0])}"]`);if(ta){ta.value=keep[1];ta.focus();try{ta.setSelectionRange(keep[2],keep[2])}catch(e){}}}}
 
 const ASKK={decision:'Decision needed',verify:'Please check',denied:'Blocked: a step needs you',budget:'Over its time limit',ticket:'Split or criteria needed',stuck:'Stuck: a hint is needed'};
-const PEND={},DRAFT={},SEEN={},ERR={};  // PEND: ask id -> {ask,text,label,at,timer|sending|done|err}; DRAFT: unsent text; SEEN: asks as last drawn
+const PEND={},DRAFT={},SEEN={},ERR={},AMEND={};  // PEND: ask id -> {ask,text,label,at,timer|sending|done|err}; DRAFT: unsent text; SEEN: asks as last drawn
 const UNDO_MS=8000,STALE=['withdrawn','gone','answered','bead_missing'];
 /*md*/function md(src){  // a small safe markdown: paragraphs, bullets, tables, **bold**, `code`; everything is escaped first, no links, no raw HTML
   const inl=t=>esc(t).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>');
@@ -637,8 +637,8 @@ function askBox(a,withLink){
   const q=a.detail&&a.detail!==a.question?`<details class="more"><summary>The engine's full text</summary><div class="q raw">${esc(a.detail)}</div></details>`:'';
   const err=ERR[a.id]?`<div class="asknote">${esc(ERR[a.id])}</div>`:'';
   return `<div class="askbox" data-box="${esc(a.id)}">${head}
-    <div class="q md">${md(a.question)}</div>${q}${a.answer?`<div class="answered">Answered: ${esc(a.answer)} · the next run starts from it</div>`:
-    `${optsHtml(a)}<textarea data-ans="${esc(a.id)}" placeholder="Or write your own answer: it goes on the bead as a comment, and the next run starts from it">${esc(DRAFT[a.id]||'')}</textarea><button class="btn" data-send="${esc(a.id)}">Send answer</button>${err}`}</div>`}
+    <div class="q md">${md(a.question)}</div>${q}${a.answer&&!AMEND[a.id]?`<div class="answered">Answered: ${esc(a.answer)} · the next run starts from it · <a class="undo" data-amend="${esc(a.id)}">Change answer</a></div>`:
+    `${optsHtml(a)}<textarea data-ans="${esc(a.id)}" placeholder="Or write your own answer: it goes on the bead as a comment, and the next run starts from it">${esc(DRAFT[a.id]||'')}</textarea><button class="btn" data-send="${esc(a.id)}">${AMEND[a.id]?'Replace answer':'Send answer'}</button>${err}`}</div>`}
 function renderAsks(){const as=S.asks.asks||[];
   const ids=new Set(as.map(a=>a.id)),ghosts=Object.values(PEND).filter(p=>p.ask&&!ids.has(p.ask.id)&&!p.timer);
   const group=(t,l)=>l.length?`<h2 class="grp">${t} (${l.length})</h2>`+l.map(a=>askBox(a,true)).join(''):'';
@@ -661,13 +661,13 @@ function undoAnswer(id){const p=PEND[id];if(!p||!p.timer)return;clearTimeout(p.t
 function clearAsk(id){delete PEND[id];delete DRAFT[id];repaintAsks()}
 async function postAnswer(id){const p=PEND[id];if(!p)return;clearInterval(p.tick);p.timer=p.tick=null;p.sending=true;repaintAsks();
   let tk='';try{tk=localStorage.getItem('tl.token')||''}catch(e){}
-  const r=await fetch('/api/answer',{method:'POST',headers:{'Content-Type':'application/json',...(tk?{'Authorization':'Bearer '+tk}:{})},body:JSON.stringify({ask:id,text:p.text})}).catch(()=>null);
+  const r=await fetch('/api/answer',{method:'POST',headers:{'Content-Type':'application/json',...(tk?{'Authorization':'Bearer '+tk}:{})},body:JSON.stringify({ask:id,text:p.text,amend:!!AMEND[id]})}).catch(()=>null);
   p.sending=false;
   if(!r){p.err='The dashboard did not answer. Nothing was sent; your text is kept.';DRAFT[id]=p.text;fail()}
   else if(r.status==401){p.err='This address needs the answer link. Run tl dash url in a terminal and open the ANSWER LINK it prints. Nothing was sent.';DRAFT[id]=p.text;fail()}
   else if(!r.ok){const j=await r.json().catch(()=>({}));p.err=j.error||'Failed. Nothing was sent.';p.dismiss=j.code=='bead_missing';p.stale=STALE.includes(j.code);DRAFT[id]=p.text;
     if(j.code=='superseded'){delete PEND[id];S.sig={};poll();return}fail()}
-  else{const j=await r.json().catch(()=>({}));p.done=j.next||'The next run starts from it.';delete DRAFT[id];setTimeout(()=>{if(PEND[id]===p){delete PEND[id];repaintAsks()}},60000);S.sig={};poll();repaintAsks()}
+  else{const j=await r.json().catch(()=>({}));p.done=j.next||'The next run starts from it.';delete DRAFT[id];delete AMEND[id];setTimeout(()=>{if(PEND[id]===p){delete PEND[id];repaintAsks()}},60000);S.sig={};poll();repaintAsks()}
   function fail(){if(!p.stale){ERR[id]=p.err;delete PEND[id]}repaintAsks();S.sig={};poll()}}
 async function dismissAsk(id){const r=await fetch('/api/withdraw',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ask:id,why:'dismissed from the dashboard'})}).catch(()=>null);
   if(r&&r.ok){delete PEND[id];delete DRAFT[id]}repaintAsks();S.sig={};poll()}
@@ -877,6 +877,7 @@ document.addEventListener('click',e=>{const b=e.target.closest('.blk');if(b){ope
   if(e.target.closest('[data-close]')||e.target.id=='scrim'){closeDrawer();return}
   const t=e.target.closest('[data-tab]');if(t){S.tab=t.dataset.tab;const h=new URLSearchParams(location.hash.slice(1));h.set('tab',S.tab);history.replaceState(null,'','#'+h);renderDrawer();return}
   const u=e.target.closest('[data-undo]');if(u){undoAnswer(u.dataset.undo);return}
+  const am=e.target.closest('[data-amend]');if(am){AMEND[am.dataset.amend]=true;repaintAsks();return}
   const cl=e.target.closest('[data-clear]');if(cl){clearAsk(cl.dataset.clear);return}
   const dm=e.target.closest('[data-dismiss]');if(dm){dismissAsk(dm.dataset.dismiss);return}
   const s=e.target.closest('[data-send]');if(s){const ta=document.querySelector(`textarea[data-ans="${CSS.escape(s.dataset.send)}"]`);sendAnswer(s.dataset.send,'your answer',ta&&ta.value);return}

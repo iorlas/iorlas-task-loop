@@ -142,7 +142,7 @@ the night's landed/asked/paused/failed, the asks to answer first, and the counts
 un-parks it). A substantive answer from the dashboard or `tl ask answer` is also filed on the bead's notes under `## Decisions`
 (`## Testing` for verify and denied asks).
 
-The owner's inbox: `tl ask list` (ordered by what each ask unblocks), `tl ask answer <bead> <text>`, `tl ask withdraw <bead> [why]`;
+The owner's inbox: `tl ask answer <bead> --amend <text>` replaces an answer no run has used yet (the history stays in the ask's `answers`; the dashboard has Change answer); `tl ask list` (ordered by what each ask unblocks), `tl ask answer <bead> <text>`, `tl ask withdraw <bead> [why]`;
 the dashboard's Asks page does the same with one click per option, an 8 s Undo before the comment is written, and a
 Dismiss button for a stale ask. An ask's `question` is tidied (no command dumps, ends at a word) and the full text is in
 its `detail`; each option carries `then` (what happens next) and `cost`. Withdrawn, closed-bead and replaced asks are never listed.

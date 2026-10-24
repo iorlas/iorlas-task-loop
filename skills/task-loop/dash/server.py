@@ -1587,7 +1587,7 @@ def delegate_status():
     return cached("delegate", 60, load)
 
 
-def ask_for(ask_id):
+def ask_for(ask_id, amend=False):
     """(path, ask, problem): the file that holds ask_id, or why it cannot be answered. Ask files are per bead and the
     engine overwrites them with a newer ask (id bead-n), so an id the file no longer carries is `superseded`."""
     ask_id = ask_id if isinstance(ask_id, str) else ""
@@ -1597,8 +1597,13 @@ def ask_for(ask_id):
                 why = (a.get("withdrawn_why") or "").strip()
                 return f, a, (410, {"code": "withdrawn", "error": "The engine withdrew this ask%s. Nothing to answer." %
                                     ((" (" + why + ")") if why else "")})
-            if a.get("status") not in ("open", "parked") or a.get("answer"):
-                return f, a, (409, {"code": "answered", "error": "This ask is already answered."})
+            if a.get("status") not in ("open", "parked"):
+                return f, a, (409, {"code": "consumed" if amend else "answered",
+                                    "error": "A run already used the answer to this ask; comment on the bead to say more." if amend
+                                    else "This ask is already answered."})
+            if a.get("answer") and not amend:
+                return f, a, (409, {"code": "answered", "error": "This ask is already answered. To replace the answer before a run "
+                                    "uses it: tl ask answer %s --amend <text> (or Change answer on the dashboard)." % a.get("bead")})
             return f, a, None
     bead = ask_id.rsplit("-", 1)[0]
     f = config_dir() / "asks" / ("%s.json" % bead)
@@ -1622,7 +1627,8 @@ def answer(body):
     """First answer wins: a comment on the bead (the engine reads it as the bead changing) and the bead opened."""
     if not isinstance(body, dict):
         return 400, {"code": "bad_body", "error": "The request was not understood."}
-    f, a, problem = ask_for(body.get("ask"))
+    amend = body.get("amend") is True
+    f, a, problem = ask_for(body.get("ask"), amend)
     if problem:
         return problem
     text = body.get("text")
@@ -1630,14 +1636,19 @@ def answer(body):
     if not text:
         return 400, {"code": "empty", "error": "Write an answer first."}
     cwd = a.get("repo") or None
+    amend = amend and bool(a.get("answer"))  # nothing to replace: it is a first answer
     try:
-        r = subprocess.run(["bd", "comments", "add", a["bead"], text], cwd=cwd, capture_output=True, text=True)
+        r = subprocess.run(["bd", "comments", "add", a["bead"],
+                            ("Answer amended (replaces the one above, not used yet): " + text) if amend else text],
+                           cwd=cwd, capture_output=True, text=True)
         if r.returncode:
             return bd_failed(a, r)
         file_answer(a, text, cwd)
         subprocess.run(["bd", "update", a["bead"], "--status", "open"], cwd=cwd, capture_output=True, text=True)
     except OSError as e:
         return 502, {"code": "no_bd", "error": "The dashboard cannot run bd (%s). Nothing was sent." % e.strerror}
+    if amend:  # the history stays: every answer given, oldest first
+        a["answers"] = list(a.get("answers") or [{"text": a.get("answer"), "t": a.get("answer_t")}]) + [{"text": text, "t": time.time()}]
     a.update(answer=text, answer_t=time.time())
     try:
         Path(f).write_text(json.dumps(a, indent=1))
