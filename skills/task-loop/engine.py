@@ -1693,10 +1693,13 @@ class Engine:
                 resume, attempt_prompt, out_on = None, prompt + FRESH_WRITER_TEXT, j.get("lane") or ""
                 continue
             if nxt == "retry":  # worker-run v2: delegate says when; how long a slot waits is this engine's policy
-                if node in ("review", "verify", "look") and j.get("family") in ("openai", "claude", "xai") and reason != "busy":
+                if (node in ("review", "verify", "look") and not resume and j.get("family") in ("openai", "claude", "xai")
+                        and j["family"] != writer and reason not in ("busy", "network", "lane_out", "logged_out")):
                     # a lane that failed to start (Grok out of credits answered 'vendor_prework' without being marked out, lifesim
                     # o67g and 5ban.28 waited 10 minutes and paused): the next try is routed as if that family had written the work, so
-                    # the others come first and the failing one only last, as the same family
+                    # the others come first and the failing one last. When the route then lands on the real writer's own family, it
+                    # is flagged same_family below: a review by the same model is better than a parked bead (the owner's word)
+                    self.log("note", "%s: %s failed to start (%s): the next try is routed past it" % (node, j["family"], reason))
                     writer = j["family"]
                 due = float(j.get("retry_after") or 0)
                 wait = max(60.0, due - time.time())
@@ -1781,6 +1784,8 @@ class Engine:
         if node == "plan" and r.ref:
             self.planner_ref = r.ref
         self.last_flag = (j or {}).get("flag")  # same_family | degraded | ...: delegate could not give the usual lane
+        if node in ("review", "verify", "look") and writer_family and (j or {}).get("family") == writer_family and not self.last_flag:
+            self.last_flag = "same_family"  # routed past a dead lane to the writer's own family: say so
         fam = r.backend  # openai | claude: the family that wrote, for the reviewer
         model = "%s %s on %s" % ((j or {}).get("model"), (j or {}).get("effort"), (j or {}).get("lane"))
         (self.run_dir / ("%s-%d.json" % (node, self.stats["nodes"]))).write_text(json.dumps(r.data, indent=1))
@@ -4534,8 +4539,10 @@ class Engine:
             d, _ = self.ai("look", "round %d: %d picture%s" % (rnd, len(names), "" if len(names) == 1 else "s"), prompt,
                            writer_family=self.writer_family, cwd=str(base), round=rnd)
         except Blocked as b:
-            if not b.why.startswith("paused:"):
-                raise
+            if not b.why.startswith(("paused: no lane", "paused: no network")):
+                raise  # a login to fix, a crash: not this node's to swallow
+            self.retry_after = 0.0  # the run goes on: _ai had noted a pause for the loop
+            self.outcome_of("skipped", "no lane")
             # no lane for the judge: the pictures go unjudged to the owner-look bead; a look judge never parks the bead
             self.warn("the look judge had no lane, the pictures are not judged: %s" % b.why[:200])
             self.look_unjudged["look judge, round %d" % rnd] = "no lane: " + b.why[:160]
