@@ -148,6 +148,7 @@ class EngineTest(unittest.TestCase):
             self.commit_base_cfg(access)
         script = DelegateScript(answers, j_extra)
         c = engine.load_cfg(str(self.wt))
+        c.update({"reflect": False})  # the reflection is one more call; its own tests switch it on
         c.update(cfg)
         c.update(raw or {})
         with mock.patch.object(engine, "find_route", return_value=route), \

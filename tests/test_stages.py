@@ -10,6 +10,9 @@ import test_engine as te  # noqa: E402
 from test_engine import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, tl  # noqa: E402,F401
 
 
+_REAL_CMD_BLOCK = tl.cmd_block  # te's harness patches it per test; this is the real one
+
+
 class StagesTest(unittest.TestCase):
     setUp = te.EngineTest.setUp
     tearDown = te.EngineTest.tearDown
@@ -1029,6 +1032,113 @@ class ResumeCount(StagesTest):
         self.assertTrue(e.start_again_on_base("x"))
         self.assertEqual((e.unverified, e.look_paths, e.handoff["rounds"], e.fixes, e.replans, e.rendered_names), ([], [], [], 0, 0, set()))
         self.assertEqual(e.verify_answer, "Use the old format")  # the owner's word still goes to the planner
+
+
+
+class Claims(StagesTest):
+    """tl-159, tl-wjj, tl-05s."""
+
+    def setUp(self):
+        global real_cmd_block
+        real_cmd_block = _REAL_CMD_BLOCK
+        super().setUp()
+
+    def test_a_parked_bead_whose_actor_is_live_elsewhere_can_be_taken_over(self):
+        parked = {"id": "t-1", "status": "blocked", "assignee": "tl-2be89f88", "lease_expires_at": "2999-01-01T00:00:00Z", "dependencies": []}
+        comments = [{"text": "Blocked: stuck: re-planned 3 times", "created_at": "1", "author": "engine"}]
+        import loop
+        with mock.patch.object(tl, "show", return_value=parked), mock.patch.object(tl, "live_actors", return_value={"tl-2be89f88"}), \
+                mock.patch.object(tl, "comments", return_value=comments), mock.patch.object(loop, "running", return_value={}), \
+                mock.patch.object(tl, "bd", return_value=mock.Mock(returncode=0)) as bd:
+            ok, why = engine.reclaim("t-1", str(self.wt))
+        self.assertTrue(ok, why)
+        self.assertEqual(why, "reopened")
+        self.assertEqual(bd.call_args_list[0][0], ("update", "t-1", "--status", "open", "--assignee", ""))
+
+    def test_a_parked_bead_with_an_engine_still_on_it_is_a_live_claim(self):
+        parked = {"id": "t-1", "status": "blocked", "assignee": "tl-2be89f88", "lease_expires_at": "", "dependencies": []}
+        import loop
+        with mock.patch.object(tl, "show", return_value=parked), mock.patch.object(tl, "live_actors", return_value=set()), \
+                mock.patch.object(loop, "running", return_value={"t-1": "s2"}):
+            ok, why = engine.reclaim("t-1", str(self.wt))
+        self.assertFalse(ok)
+        self.assertIn("a live claim", why)
+
+    def test_a_working_bead_of_a_live_actor_is_still_a_live_claim(self):
+        busy = {"id": "t-1", "status": "in_progress", "assignee": "tl-2be89f88", "lease_expires_at": "", "dependencies": []}
+        with mock.patch.object(tl, "show", return_value=busy), mock.patch.object(tl, "live_actors", return_value={"tl-2be89f88"}):
+            ok, why = engine.reclaim("t-1", str(self.wt))
+        self.assertFalse(ok)
+        self.assertIn("a live claim", why)
+
+    def test_parking_a_bead_lets_go_of_its_claim(self):
+        calls = []
+        with mock.patch.object(tl, "bd", side_effect=lambda *a, **k: calls.append(a) or mock.Mock(returncode=0, stdout="", stderr="")), \
+                mock.patch.object(tl, "event"), mock.patch.object(tl, "provenance"):
+            self.assertEqual(real_cmd_block(mock.Mock(id="t-1", why="stuck")), 0)
+        self.assertEqual(calls[0], ("update", "t-1", "--status", "blocked", "--assignee", ""))
+
+    def test_a_plan_with_no_stages_goes_back_to_the_planner_once(self):
+        empty = dict(PLAN, stages=[])
+        rc, s = self.run_engine({"plan": [empty, PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
+        self.assertIn("it has no stages, no question and no leftovers", s.prompts[1])
+        self.assertIn("has no stages", self.eng.log_path.read_text())
+
+    def test_a_plan_that_stays_empty_after_the_send_back_still_fails(self):
+        empty = dict(PLAN, stages=[])
+        rc, s = self.run_engine({"plan": [empty, empty]})
+        self.assertNotEqual(rc, 0)
+        self.assertTrue(self.blocked and "no stages" in self.blocked[0])
+        self.assertEqual([c[0] for c in s.calls], ["planner", "planner"])
+
+    def test_an_empty_plan_with_leftovers_or_a_question_is_not_sent_back(self):
+        rc, s = self.run_engine({"plan": [dict(PLAN, stages=[], leftovers=[{"title": "File it", "why": "x"}])]})
+        self.assertEqual([c[0] for c in s.calls], ["planner"])
+        self.assertEqual(rc, 0)
+
+    REFLECTION = {"went_well": ["the plan was right at once"], "wasted": ["2 min waiting for a lane"], "change": ["engine: none"],
+                  "went_badly": [{"what": "the review sent the same finding back twice", "cause": "prompt", "session": "ref-review",
+                                  "evidence": "2 reviews, same file:line"}]}
+
+    def test_a_run_ends_with_a_reflection_in_the_trace_and_the_bead_comment(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN], "reflect": [self.REFLECTION]}, reflect=True)
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer", "reviewer"])  # the reflection is the last call
+        self.assertIn("Bead t-1: Add f", s.prompts[3])
+        self.assertIn("session ref-write", s.prompts[3])  # the sessions to cite
+        last = json.loads((tl.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
+        self.assertEqual(last["reflection"]["went_badly"][0]["cause"], "prompt")
+        self.assertEqual(last["reflection"]["went_badly"][0]["session"], "ref-review")
+        comment = [c[3] for c in self.bd_calls if c[:2] == ("comments", "add") and c[3].startswith("Reflect (engine)")][0]
+        self.assertIn("reflection: badly: [prompt] the review sent the same finding back twice (session ref-review)", comment)
+
+    def test_a_reflection_that_fails_changes_nothing(self):
+        crash = te.ans("failed", "crash", "owner", say="boom")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN], "reflect": [crash, crash, crash]}, reflect=True)
+        self.assertEqual(rc, 0, self.blocked)
+        last = json.loads((tl.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
+        self.assertEqual((last["outcome"], last["reflection"]), ("landed", None))
+        self.assertTrue(self.closed and self.closed[0].startswith("merged"))
+
+    def test_no_reflection_for_a_paused_run_or_when_switched_off(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})  # reflect off in the harness
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])
+        e = engine.Engine("t-1", str(self.wt), dict(engine.load_cfg(str(self.wt)), reflect=True))
+        e.route = "/fake/route.py"
+        e.sessions = [{"node": "plan"}]
+        self.assertIsNone(e.reflect_run("blocked", "paused: no lane for write until 04:00"))
+        self.assertIsNone(e.reflect_run("failed", "failed: infrastructure: bad_request"))
+        e.dry = True
+        self.assertIsNone(e.reflect_run("landed", ""))
+
+    def test_the_reflection_text_names_cause_and_session(self):
+        text = engine.reflection_text(self.REFLECTION)
+        self.assertIn("[prompt]", text)
+        self.assertIn("(session ref-review)", text)
+        self.assertEqual(engine.reflection_text(None), "")
+        self.assertIn("badly: none", engine.reflection_text(dict(self.REFLECTION, went_badly=[])))
 
 
 

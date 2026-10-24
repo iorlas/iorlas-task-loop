@@ -53,6 +53,7 @@ DEFAULTS = {
     "node_timeout_min": 45,           # a plan, review or verify call running longer is stopped; a write follows the keys below
     "write_idle_warn_min": 15,        # a write whose worker has been silent this long (session file, process output) is warned about
     "write_idle_stop_min": 25,        # and stopped at this; a write whose activity cannot be seen keeps node_timeout_min
+    "reflect": True,                  # tl-05s: one cheap call after the close writes a short reflection into the trace and the bead's Reflect comment
     "planner_notes": "",              # facts the planner must plan by (what the factory has and has not: platforms, engines, tools), text or "@repo/file"
     "shot_table": "",                 # the project's shot methods (docs/design/visual-work.md; looks.py): a repo path, read from the base branch.
                                       # With it a visual stage renders by the engine's hand, judged by a look judge; without it the old way (the writer saves shots)
@@ -83,6 +84,7 @@ DEFAULTS = {
 
 FLAKE_DAYS = 14     # how long a writer-reported flaky test stays in the shared notes
 INPUT_KINDS = ("file", "platform", "object", "engine", "tool", "other")
+CAUSE_CLASSES = ("engine", "prompt", "delegate", "repo_profile", "bead", "sandbox", "other")  # tl-05s
 PROVED_BY = ("check", "stage", "leftover", "engine_step")  # tl-bxk.13.16.1: how a plan criterion is proved (the ledger)
 HANDOFF_CAP = 1500  # characters of round history one prompt carries (tl-bxk.13.6)
 S_STR = {"type": "string"}
@@ -167,6 +169,11 @@ TRACKER_TEXT = ("\n\nYour plan was sent back: these checks read the issue tracke
 REPEAT_TEXT = ("\n\nYour plan was sent back: these slow commands run in more than one check, or repeat a check the engine already "
                "runs, and each run takes minutes:\n%s\nRun each once. A check that needs its result reads the file the first "
                "one saved, or `$TL_CHECK_LOG_<ID>` for a repo check, instead of running the command again.")
+
+EMPTY_PLAN_TEXT = ("\n\nYour plan was sent back: it has no stages, no question and no leftovers, so there is nothing to do and nothing to "
+                   "ask. A plan has at least one stage (goal, files, checks). If the work is already done in the tree, plan the "
+                   "stage that checks it. If only follow-up work is left, list it in leftovers. If the task cannot be done without "
+                   "an owner's decision, ask it in question.")
 
 DRY_CHECK_TEXT = ("\n\nYour plan was sent back: the engine dry-ran its checks and these cannot run:\n%s\nReturn the plan "
                   "with only these checks fixed.")
@@ -574,6 +581,12 @@ SCHEMAS = {
                                   "fix": S_STR}}},
                    "unmet": S_STRS, "question": S_STR, "options": OPTIONS, "decided": S_STR, "leftovers": LEFTOVERS,
                    "accept_files": S_STRS, "reject_files": S_STRS}},  # optional: unexplained new files the review accepts into the commit / rejects as strays
+    "reflect": {"type": "object", "additionalProperties": False, "required": ["went_well", "went_badly", "wasted", "change"],
+                "properties": {"went_well": S_STRS, "wasted": S_STRS, "change": S_STRS,
+                               "went_badly": {"type": "array", "items": {
+                                   "type": "object", "additionalProperties": False, "required": ["what", "cause", "session", "evidence"],
+                                   "properties": {"what": S_STR, "cause": {"type": "string", "enum": list(CAUSE_CLASSES)},
+                                                  "session": S_STR, "evidence": S_STR}}}}},
     "look": {"type": "object", "additionalProperties": False, "required": ["findings", "summary"],
              "properties": {"summary": S_STR,
                             "findings": {"type": "array", "items": {
@@ -1450,6 +1463,49 @@ class Engine:
         self.sessions.append(rec)
         self.log("session", "%s: %s %s" % (node, rec["family"] or "?", rec["ref"] or "(no session)"), **rec)
 
+    def reflect_run(self, outcome, why):
+        """tl-05s: one cheap read-only call that reflects on this run: what went well and badly (each bad item with its cause class
+        and the session it comes from), what wasted tokens or minutes, what to change. Never blocks or changes the outcome: any
+        failure, a missing lane, a paused run, a stop, is no reflection. -> the answer dict or None."""
+        if not self.cfg.get("reflect", True) or self.dry or not self.route or not self.sessions:
+            return None
+        if why.startswith(("paused:", "waiting:", "failed: infrastructure", "failed: stopped")):
+            return None
+        try:
+            prompt = self.reflect_prompt(outcome, why)
+            r, j = call_delegate(self.route, "reviewer", prompt, strict(SCHEMAS["reflect"]), self.wt, None, 240, self.err_path, None,
+                                 self.session, self.bead, "%s · reflect" % self.bead)
+            self.trace_call("reflect", "reviewer", 1, r, j)
+            self.cost += r.cost or 0.0
+            if r.data is None or (j or {}).get("status") != "done":
+                return None
+            data = unstrict(r.data, SCHEMAS["reflect"])
+            if validate(data, SCHEMAS["reflect"]):
+                return None
+            return data
+        except Exception as e:  # nothing here may touch the run's outcome
+            self.warn("no reflection: %s: %s" % (type(e).__name__, str(e)[:160]))
+            return None
+
+    def reflect_prompt(self, outcome, why):
+        rows = []
+        for s in self.sessions:
+            t = s.get("tokens") or {}
+            rows.append("- %s (%s) %s %s: in %s, cached %s, out %s, %ss, session %s" % (
+                s.get("node"), s.get("role"), s.get("family") or "?", s.get("model") or "?", t.get("in") or 0, t.get("cached") or 0,
+                t.get("out") or 0, s.get("secs"), s.get("ref") or "(none)"))
+        lines = []
+        try:
+            for ln in self.log_path.read_text(encoding="utf-8").splitlines():
+                if '"kind": "transition"' in ln or '"kind": "warn"' in ln:
+                    d = json.loads(ln)
+                    lines.append("%s: %s" % (d.get("kind"), clip(d.get("text") or "", 200)))
+        except (OSError, ValueError):
+            pass
+        return REFLECT_PROMPT % (self.bead, clip(self.bead_title or "", 120), outcome, clip(why or "(none)", 600),
+                                 "; ".join("%s=%s" % kv for kv in self.stats.items()), "\n".join(rows[:40]),
+                                 "\n".join(lines[-70:]) or "(none)")
+
     def write_trace(self, outcome, why, sha):
         """One line per engine run in traces.jsonl, never pruned: bead, repo, branch, every session, the outcome."""
         rec = {"v": 1, "run": self.log_path.stem, "bead": self.bead,
@@ -1458,7 +1514,8 @@ class Engine:
                "version": plugin_version(), "started": self.t0, "ended": time.time(), "outcome": outcome, "why": (why or "")[:500], "sha": sha or "",
                "cost": self.cost, "stats": self.stats, "host": self.host, "delegate": self.route or "", "log": str(self.log_path),
                "stderr": str(self.err_path), "lanes": (self.contract or {}).get("lanes"), "sessions": self.sessions,
-               "verified": self.verified, "write_rounds": self.write_rounds, "strays": self.strays}
+               "verified": self.verified, "write_rounds": self.write_rounds, "strays": self.strays,
+               "reflection": getattr(self, "reflection", None)}
         rec.update(self.origin())
         try:
             with open(tl.config_dir() / "traces.jsonl", "a", encoding="utf-8") as f:
@@ -2982,8 +3039,15 @@ class Engine:
         led = ledger_problems(data)
         if led:
             dry = dry + led  # sent back with the checks that cannot run
-        if bad or gated or dry or rep:  # asked once to rewrite them, like an invalid answer; not a counted re-plan
+        # tl-wjj: a plan with no stages, no question and nothing to file breaks the plan contract (lifesim-w6mk failed on it): back
+        # to the planner once. With leftovers it is the finished-work plan (tl-bxk.13.2); with the owner's verify answer it may be empty.
+        empty = (not data["stages"] and not data["question"].strip() and not data.get("leftovers") and not self.leftovers
+                 and not self.verify_answer)
+        if bad or gated or dry or rep or empty:  # asked once to rewrite them, like an invalid answer; not a counted re-plan
             why = ""
+            if empty:
+                self.warn("the plan has no stages, no question and nothing to file, sent back")
+                why += EMPTY_PLAN_TEXT
             if rep:
                 self.warn("the plan's checks run a slow command more than once, sent back: %s" % "; ".join(r[0] for r in rep)[:300])
                 why += REPEAT_TEXT % "\n".join("- `%s` in %s" % (part, "; ".join("`%s`" % c[:80] for c in cs) if cs else "a repo check (%s)" % rid)
@@ -2998,10 +3062,12 @@ class Engine:
             if dry:
                 self.warn("the plan's checks cannot run, sent back: %s" % "; ".join(dry)[:300])
                 why += DRY_CHECK_TEXT % "\n".join("- " + e for e in dry)
-            self.outcome_of("sent back", "its checks read the tracker, run gate-only commands, repeat a slow command or cannot run")
-            self.transition(step, "plan_sent_back", "checks %s" % "; ".join(
-                (["read the issue tracker"] if bad else []) + (["run gate-only commands"] if gated else []) +
-                (["repeat a slow command"] if rep else []) + (["cannot run"] if dry else [])))
+            self.outcome_of("sent back", "its checks read the tracker, run gate-only commands, repeat a slow command or cannot run" if not empty
+                            else "it has no stages")
+            self.transition(step, "plan_sent_back", "plan %s" % "; ".join(
+                (["has no stages"] if empty else []) + (["checks read the issue tracker"] if bad else []) +
+                (["checks run gate-only commands"] if gated else []) +
+                (["checks repeat a slow command"] if rep else []) + (["checks cannot run"] if dry else [])))
             ref = self.planner_ref
             back = (why.lstrip() + "\n\nYour plan, to correct (same output schema):\n" + json.dumps(data, indent=1)) if ref else prompt + why
             data, _ = self.ai("plan", "rewrite checks", back, step=step, mode="checks_back", resume_ref=ref or None)
@@ -4740,6 +4806,7 @@ class Engine:
         self.node("close", "close: %s" % outcome, outcome=outcome, why=why)
         self.outcome_of(outcome, why.splitlines()[0][:200] if why else "")
         self.end_node()
+        self.reflection = self.reflect_run(outcome, why)  # after the close node: the outcome is decided and nothing here changes it
         self.write_trace(outcome, why, sha)
         self.detail([stats] + ([why[:400]] if why else []) + (["question: " + question[:400]] if question else []))
         if outcome == "failed":
@@ -4778,8 +4845,9 @@ class Engine:
             self.file_owner_look()
         verified = ("; self-verified=" + ", ".join("%d %s" % (sum(x["verdict"] == k for x in self.verified), k)
                                                    for k in VERDICTS)) if self.verified else ""
-        self.comment("Reflect (engine): outcome=%s; filed=%d; %s%s%s; trace=%s (tl trace %s)" % (
-            outcome, len(new), stats, verified, ("; why=" + why) if why else "", self.log_path.stem, self.bead))
+        self.comment("Reflect (engine): outcome=%s; filed=%d; %s%s%s; trace=%s (tl trace %s)%s" % (
+            outcome, len(new), stats, verified, ("; why=" + why) if why else "", self.log_path.stem, self.bead,
+            reflection_text(getattr(self, "reflection", None))))
         summary = (getattr(self, "plan_summary", "") or "")[:300]
         if outcome == "landed":
             rc = tl.cmd_close(Args(id=self.bead, reason="merged %s to %s: %s; %s" % (
@@ -4870,6 +4938,24 @@ def count_tests(diff, pattern):
             removed += 1
     return added, removed
 
+
+REFLECT_PROMPT = """You write a short reflection on one run of an unattended task engine, for the engineer who maintains the engine. Do not
+edit files; judge only from what is below.
+Bead %s: %s
+Outcome: %s. Why: %s
+Counts: %s
+The run's worker sessions (cite the session id):
+%s
+The run's decisions and warnings, oldest first:
+%s
+
+Answer:
+- went_well: up to 4 lines, each one concrete thing that worked.
+- went_badly: up to 4 items; each: what (one line), cause (one of engine, prompt, delegate, repo_profile, bead, sandbox, other), session
+  (the session id above it comes from, or "run"), evidence (a number or a quote from above). Empty when nothing went badly.
+- wasted: up to 3 lines, where tokens or minutes went for nothing, with the numbers.
+- change: up to 3 lines, what to change, naming the cause class.
+Cite only what the data above shows; do not guess a cause it does not support."""
 
 ENGINE_NOTES = ("Plan (engine)", "Review (engine", "Reflect (engine)", "Blocked:", "Ask (engine)", "Evidence (engine)")
 
@@ -5326,6 +5412,15 @@ def word_set(text):
     return {w for w in re.findall(r"[^\W_]{3,}", str(text).lower()) if w not in STOP_WORDS}
 
 
+def reflection_text(r):
+    """The reflection as one line for the bead's Reflect comment ('' when there is none)."""
+    if not r:
+        return ""
+    bad = "; ".join("[%s] %s (session %s)" % (b["cause"], clip(b["what"], 160), b["session"]) for b in r.get("went_badly") or []) or "none"
+    return " | reflection: badly: %s%s%s" % (bad, (" | wasted: " + clip("; ".join(r["wasted"]), 300)) if r.get("wasted") else "",
+                                              (" | change: " + clip("; ".join(r["change"]), 300)) if r.get("change") else "")
+
+
 def norm_cmd(cmd):
     return " ".join(str(cmd).split())
 
@@ -5707,7 +5802,14 @@ def reclaim(bead_id, repo):
     if who and who != me:
         if not who.startswith("tl-"):
             return False, "claimed by %s" % who
-        if who in tl.live_actors(repo) or (b.get("lease_expires_at") or "") >= time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()):
+        if b.get("status") == "blocked":
+            # tl-159: a parked bead keeps the actor of the loop that parked it, and that actor is live (it holds other beads), so
+            # --fresh was refused 'taken: live claim' with no engine on the bead. Only an engine running it now is a live claim.
+            import loop  # the queue rule; imports engine itself
+            live = bead_id in loop.running(repo)
+        else:
+            live = who in tl.live_actors(repo) or (b.get("lease_expires_at") or "") >= time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        if live:
             logs = sorted((tl.config_dir() / "engine").glob("%s-*.jsonl" % bead_id))
             return False, "another run of %s is still running as %s (a live claim)%s" % (
                 bead_id, who, "; its engine log: %s" % logs[-1] if logs else "")
