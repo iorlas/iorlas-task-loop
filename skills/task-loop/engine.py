@@ -1330,6 +1330,7 @@ class Engine:
         self.write_rounds = []  # per write round: resumed, input tokens, turns, prompt chars, context k, why fresh (a fix round's cost)
         self.last_summary = ""  # the last write's summary: a fresh writer is told it
         self.handoff = {"rounds": [], "seen_lows": []}  # tl-bxk.13.6: what the rounds did and what a review already noted
+        self.rebase_resets = 0  # times the plan count started again after a rebase (checkpointed)
         self.look_done, self.look_prev = 0, []  # render rounds this stage; the last round's defects (tl-bxk.13.15)
         self.rendered_names, self.last_reqs, self.render_stale = set(), [], False  # the engine's own pictures this run, the last request
         self.taste = []  # [{id, title}] taste items for the owner-look bead
@@ -2314,29 +2315,47 @@ class Engine:
                       % (self.cfg["base"], tail.strip().splitlines()[-1][:200] if tail.strip() else "conflict"))
             return "conflict"
         self.log("note", "rebased the task branch onto the latest %s (%s commits behind) before planning" % (self.cfg["base"], behind))
-        if self.planned or self.plan_log:  # tl-19i: plans made on the old base say nothing about this one (lifesim-ov3w counted 2)
+        if self.planned and self.rebase_resets < MAX_REBASE_RESETS:
+            # tl-19i: plans made on the old base say nothing about this one (lifesim-ov3w counted 2). At most twice per bead:
+            # a bead whose gate is red for a real reason must still reach the limit while main keeps moving
             self.log("note", "the plan count starts again: %d earlier plan%s were made on another base" % (
                 self.planned, "" if self.planned == 1 else "s"))
-            self.planned, self.plan_log = 0, []
+            self.plan_log.append({"mode": "rebase", "counted": False, "why": "the branch moved to a new base; %d plan(s) before it do not count" % self.planned})
+            self.planned, self.rebase_resets = 0, self.rebase_resets + 1
         return "rebased"
 
     def start_again_on_base(self, why):
         """tl-19i: the branch's earlier work conflicts with main, so it cannot go on. It is kept under another name; the task
         starts again on the base with a fresh plan (the owner's answer is in the bead's comments, which the planner reads),
         and nothing so far counts toward the re-plan limit."""
-        branch = self.git("symbolic-ref", "--short", "-q", "HEAD") or getattr(self, "branch", "")
+        branch = self.git("symbolic-ref", "--short", "-q", "HEAD")
+        if not branch or branch != getattr(self, "branch", branch):
+            self.warn("resume conflict, but HEAD is not the task branch (%s): the branch stays as it was" % (branch or "detached"))
+            return False
         stale = "%s-stale-%s" % (branch, time.strftime("%Y%m%d-%H%M%S"))
-        if branch:
-            self.sh(["git", "branch", "-m", branch, stale], pin=True)
-            self.sh(["git", "checkout", "-q", "-B", branch, self.cfg["base"]], pin=True, check=True)
+        if self.git("rev-parse", "--verify", "-q", "refs/heads/" + stale):
+            stale += "-2"
+        rc, tail = self.sh(["git", "branch", "-m", branch, stale], pin=True)
+        if rc:  # never reset a branch whose work could not be kept
+            self.warn("resume conflict, but the branch could not be kept aside (%s): it stays as it was" % tail.strip()[-160:])
+            return False
+        self.sh(["git", "checkout", "-q", "-B", branch, self.cfg["base"]], pin=True, check=True)
         self.drop_checkpoint()
         self.old_plan, self.amend_why, self.amend_text, self.replan_first = None, "", "", False
-        self.plan_data, self.plan_summary, self.verify_answer = None, "", ""
+        self.plan_data, self.plan_summary = None, ""  # verify_answer stays: the owner's word still goes to the planner
         self.done, self.accepted, self.unchecked, self.plan_log, self.planned = [], [], [], [], 0
         self.amended, self.stage_tree, self.writer, self.writer_family = False, "", {}, None
+        self.writer_fallback, self.fallback_lane, self.denials, self.fixes, self.replans = False, "", [], 0, 0
+        self.unverified, self.accepted_new, self.writer_said, self.last_summary = [], [], "", ""
+        self.look_paths, self.look_notes, self.look_unjudged = [], [], {}
+        self.rendered_names, self.last_reqs, self.render_stale = set(), [], False
+        self.handoff = {"rounds": [], "seen_lows": []}
         self.transition("plan", "resume_conflict", "the branch's earlier work conflicts with %s: kept as %s, planning fresh. %s" % (
             self.cfg["base"], stale, why[:160]))
         self.log("note", "resume conflict: %s kept as %s; the task starts again on %s" % (branch, stale, self.cfg["base"]))
+        self.comment("Resume (engine): the earlier work on %s conflicts with %s. It is kept as the branch %s; the task starts again on "
+                     "%s with a fresh plan." % (branch, self.cfg["base"], stale, self.cfg["base"]))
+        return True
 
     # -- tl-bxk.13: the handoff record (docs/design/stages.md section 5): what a stage after this one needs to know
     def deferred_items(self):
@@ -3078,7 +3097,8 @@ class Engine:
                 pass
         # tl-19i: the owner's answer, or an edit of the bead by the owner, is not a failed plan: it never counts (lifesim-yxbb.3
         # parked 'stuck: re-planned 3 times' on 'the owner answered ask yxbb.3-1')
-        owner = bool(old) and not again and (self.amend_why or "").startswith("bead changed")
+        owner = (bool(old) and not again and (self.amend_why or "").startswith("bead changed: the owner answered")
+                 and not (self.answered or {}).get("why", "").startswith(REPLAN_CAP))  # a cap ask answered 'split' stays blocked
         if not owner and self.planned >= 1 + int(self.cfg["max_replans"]) + self.extra:
             raise self.cap_blocked()
         if not owner:
@@ -3303,6 +3323,7 @@ class Engine:
         # mid-rebase (a conflict fix) HEAD is detached: the checkpoint names the task branch the close goes back to
         branch = self.git("symbolic-ref", "--short", "-q", "HEAD") or getattr(self, "task_branch", "")
         rec = {"v": 1, "bead": self.bead, "branch": branch,
+               "rebase_resets": self.rebase_resets,
                "plan": self.plan_data, "planner_ref": self.planner_ref, "planned": self.planned, "extra": self.extra, "plan_log": self.plan_log, "snap": self.snap,
                "done": self.done, "accepted": self.accepted, "replans": self.replans, "fixes": self.fixes, "denials": self.denials,
                "writer": self.writer.get("delegate") or "", "writer_fallback": self.writer_fallback, "fallback_lane": self.fallback_lane,
@@ -3362,6 +3383,7 @@ class Engine:
         self.unverified = list(ck.get("unverified") or [])
         if isinstance(ck.get("handoff"), dict):
             self.handoff = {"rounds": list(ck["handoff"].get("rounds") or []), "seen_lows": list(ck["handoff"].get("seen_lows") or [])}
+        self.rebase_resets = int(ck.get("rebase_resets") or 0)
         self.planned = int(ck.get("planned") or 1 + int(ck.get("replans") or 0))  # checkpoints before the count: plan + replans
         self.extra, self.plan_log = self.extra + int(ck.get("extra") or 0), list(ck.get("plan_log") or [])
         self.planner_ref = ck.get("planner_ref") or self.planner_ref
@@ -5484,6 +5506,7 @@ tokens, a rule under config/). Never invent one as a check: if you think one is 
 your proposal first) and plan no check for it.
 %s"""
 RERUN_ANSWER = re.compile(r"(?:run|try|start) again|re ?run|retry")  # the dashboard's Run again, or the same said by hand
+MAX_REBASE_RESETS = 2   # per bead, across runs (tl-19i)
 REPLAN_CAP = "stuck: the bead was re-planned "  # the cap's ask; an owner's answer to it allows one more
 RULES_INLINE_MAX = 6 * 1024   # a worker_rules file under this goes into the planner's brief
 PLAN_BRIEF_KB = 12            # the planner's whole brief should stay under this

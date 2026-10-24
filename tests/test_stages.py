@@ -953,12 +953,14 @@ class ResumeCount(StagesTest):
         self.assertEqual(s.calls[0][0], "planner")  # it amended
         self.assertEqual((self.eng.planned, self.eng.plan_log[-1]["counted"]), (1, False))
 
-    def test_an_edit_of_the_bead_by_the_owner_is_no_failed_plan_either(self):
-        self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which format?")]}, max_replans=0)
+    def test_an_edit_with_no_ask_still_counts(self):
+        # who edited the bead is not known: a comment from a sibling agent must not lift the limit
+        self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which format?")]}, max_replans=1)
+        path = tl.config_dir() / "asks" / "t-1.json"
+        path.unlink()
         with mock.patch.object(tl, "show", return_value=dict(BEAD, description="Also say hi.")):
-            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, max_replans=0)
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(self.eng.plan_log[-1]["counted"], False)
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, max_replans=1)
+        self.assertEqual(self.eng.plan_log[-1]["counted"], True)
 
     def test_a_failed_plan_still_counts_and_the_limit_still_stops(self):
         flag = dict(WRITE, bad_checks=[{"cmd": FALSE, "why": "never passes"}])
@@ -973,10 +975,18 @@ class ResumeCount(StagesTest):
         e.git("checkout", "-q", "task/t-1")
         e.planned, e.plan_log = 3, [{"mode": "plan", "why": "x"}] * 3
         self.assertEqual(e.rebase_onto_base(), "rebased")
-        self.assertEqual((e.planned, e.plan_log), (0, []))
+        self.assertEqual((e.planned, e.rebase_resets), (0, 1))
+        self.assertEqual(e.plan_log[-1]["counted"], False)  # the history stays, with a note
         self.assertEqual(e.rebase_onto_base(), "")  # nothing behind now
-        e.planned = 2
-        self.assertEqual(e.planned, 2)
+
+    def test_the_count_starts_again_after_a_rebase_at_most_twice_per_bead(self):
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e.rebase_resets = engine.MAX_REBASE_RESETS
+        e.planned = 3
+        self.behind_branch()
+        e.git("checkout", "-q", "task/t-1")
+        self.assertEqual(e.rebase_onto_base(), "rebased")
+        self.assertEqual(e.planned, 3)  # a bead stuck for a real reason still reaches the limit while main moves
 
     def test_a_branch_that_conflicts_with_main_starts_again_fresh_and_nothing_is_counted(self):
         self.behind_branch(conflict=True)
@@ -993,6 +1003,32 @@ class ResumeCount(StagesTest):
         self.assertIn("task/t-1-stale-", out)  # the earlier work is kept
         shown = engine.subprocess.run(["git", "show", "origin/main:a.txt"], cwd=self.wt, capture_output=True, text=True).stdout
         self.assertEqual(shown, "main moved on\n")
+        self.assertTrue(any("Resume (engine)" in str(c) for c in self.bd_calls))  # the bead says where the parked work is
+
+    def test_a_branch_that_cannot_be_kept_aside_is_not_reset(self):
+        self.behind_branch(conflict=True)
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e.git("checkout", "-q", "task/t-1")
+        e.branch = "task/t-1"
+        before = e.git("rev-parse", "HEAD")
+        real = e.sh
+        e.sh = lambda cmd, **kw: (1, "refused") if cmd[:3] == ["git", "branch", "-m"] else real(cmd, **kw)
+        self.assertFalse(e.start_again_on_base("x"))
+        self.assertEqual(e.git("rev-parse", "HEAD"), before)  # the work is where it was
+        e.sh = real
+        e.git("checkout", "-q", "--detach")
+        self.assertFalse(e.start_again_on_base("x"))  # detached: nothing renamed or reset
+
+    def test_a_fresh_start_clears_what_the_old_attempt_left(self):
+        self.behind_branch(conflict=True)
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e.git("checkout", "-q", "task/t-1")
+        e.branch = "task/t-1"
+        e.unverified, e.look_paths, e.handoff["rounds"], e.fixes, e.replans, e.rendered_names = [{"what": "x"}], ["p.png"], [{"r": 1}], 2, 2, {"a.png"}
+        e.verify_answer = "Use the old format"
+        self.assertTrue(e.start_again_on_base("x"))
+        self.assertEqual((e.unverified, e.look_paths, e.handoff["rounds"], e.fixes, e.replans, e.rendered_names), ([], [], [], 0, 0, set()))
+        self.assertEqual(e.verify_answer, "Use the old format")  # the owner's word still goes to the planner
 
 
 
