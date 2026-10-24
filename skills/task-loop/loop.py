@@ -37,7 +37,7 @@ PAUSE_RETRY = 900      # a pause with no time the lane frees (login, network), o
                        # try that bead again after this
 SLOT_FAILS_TO_SET_ASIDE = 2  # instant failures in a row on one slot that set the slot aside (tl-g6a); not the loop's stop count
 QUICK_FAIL_MIN = 1.5           # a failed run shorter than this, in minutes, is an instant failure
-SLOT_FAILURE = re.compile(r"worktree|uncommitted work|\bslot\b|git checkout|index\.lock|not a git", re.I)  # ... when it names the slot or its git state
+SLOT_FAILURE = re.compile(r"worktree \S+ has uncommitted work|did not give a clean tree|index\.lock|not a git repository|could not commit the leftover", re.I)  # the slot's own git state
 SLOT_ASIDE_MIN = 720           # minutes a slot set aside stays held
 FAILS_TO_STOP = 2      # failures in a row that stop the loop; parks and pauses never count, a landing ends the run
 PAUSES_TO_REST = 3     # a bead paused this often in one loop run rests for REST while the loop takes others
@@ -754,21 +754,27 @@ def passes(repo, a, started, st=None):
             continue
         if slots and name and r is not None:
             out0 = r.get("outcome")
-            quick = (out0 == "failed" and r.get("minutes") is not None and float(r["minutes"]) < QUICK_FAIL_MIN
-                     and SLOT_FAILURE.search(r.get("why") or "") is not None)  # failures that name the slot or its git state
+            quick = (out0 == "failed" and SLOT_FAILURE.search(r.get("why") or "") is not None and (
+                r.get("pre_engine") or (r.get("minutes") is not None and float(r["minutes"]) < QUICK_FAIL_MIN)))  # the slot's, and instant
             slot_quick[name] = (slot_quick.get(name, []) + [bid]) if quick else []
-            if len(slot_quick[name]) >= SLOT_FAILS_TO_SET_ASIDE:
+            if len(slot_quick[name]) >= SLOT_FAILS_TO_SET_ASIDE:  # (the failures before it were counted toward the stop: see `fails` below)
                 # tl-g6a: a broken slot must not eat the queue (7 beads failed in under a minute each on s4): it is held, the
                 # failures are the slot's, not the beads' or the loop's, and the dashboard and the loop log say so
                 why = "%d runs failed within %g min each (%s): last: %s" % (
                     len(slot_quick[name]), QUICK_FAIL_MIN, ", ".join(slot_quick[name]), (r.get("why") or "")[:160])
-                held = tl.cmd_slot(engine.Args(op="hold", name=name, why="set aside by tl loop: " + why, for_min=SLOT_ASIDE_MIN,
-                                               n=None, bead=None, force=False))
-                say("SLOT %s SET ASIDE for %d h: %s" % (name, SLOT_ASIDE_MIN // 60, why))
+                try:
+                    held = tl.cmd_slot(engine.Args(op="hold", name=name, why="set aside by tl loop: " + why, for_min=SLOT_ASIDE_MIN,
+                                                   n=None, bead=None, force=False))
+                except SystemExit:  # no such slot bead: nothing to hold
+                    held = 1
+                say("SLOT %s %s: %s" % (name, ("SET ASIDE for %d h" % (SLOT_ASIDE_MIN // 60)) if held == 0 else
+                                        "could not be set aside (another loop has it)", why))
                 tl.event("slot-aside", bid, slot=name, why=why, held=(held == 0), repo=repo)
-                fails = [f for f in fails if f not in slot_quick[name]]
-                slot_quick[name] = []
-                continue
+                if held == 0:
+                    fails = [f for f in fails if f not in slot_quick[name]]
+                    slot_quick[name] = []
+                    continue
+                slot_quick[name] = slot_quick[name][-1:]  # still failing: asked again after the next one
         if r.get("pre_engine"):  # the engine never started: no verdict on the run, so no failure toward the stop
             rest_bead(repo, bid, clock() + REST)
             later[bid] = clock() + REST
@@ -779,7 +785,8 @@ def passes(repo, a, started, st=None):
         if out == "landed":
             fails = []
         elif out == "failed":
-            fails.append(bid)  # an infrastructure failure counts too: one config bug stops the loop after 2 beads
+            if not (slots and name and slot_quick.get(name)):  # a slot's own instant failure is the slot's (set aside after two)
+                fails.append(bid)  # an infrastructure failure counts too: one config bug stops the loop after 2 beads
             if (r.get("why") or "").startswith("failed: infrastructure"):  # the bead is open again: others first, for every loop
                 rest_bead(repo, bid, clock() + REST)
                 later[bid] = clock() + REST

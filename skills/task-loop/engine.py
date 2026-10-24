@@ -2099,7 +2099,17 @@ class Engine:
             f.write("\n".join(rules) + "\n")
             ex = f.name
         try:
-            return self.git("-c", "core.excludesFile=" + ex, "status", "--porcelain", "--untracked-files=all")
+            lines = out.splitlines()
+            untracked = [ln[3:] for ln in lines if ln.startswith("?? ")]
+            if not untracked:
+                return out
+            # which of them the base's rules ignore (check-ignore reads only the rules given; the user's own global excludes
+            # already left their files out of `out`, and are not replaced)
+            r = subprocess.run(["git", "-C", str(self.wt), "-c", "core.excludesFile=" + ex, "check-ignore", "--no-index", "--stdin", "-z"],
+                               input="\0".join(untracked) + "\0", capture_output=True, text=True, encoding="utf-8", errors="replace",
+                               env=child_env())
+            ignored = set(r.stdout.split("\0")) if r.returncode in (0, 1) else set()
+            return "\n".join(ln for ln in lines if not (ln.startswith("?? ") and ln[3:] in ignored))
         finally:
             with contextlib.suppress(OSError):
                 os.unlink(ex)
@@ -2403,7 +2413,7 @@ class Engine:
         if behind in ("", "0"):
             return ""
         old = self.git("rev-parse", "HEAD")
-        old_parent = self.git("rev-parse", "-q", "--verify", "HEAD~1") if self.left_dirty else ""
+        old_parent = self.git("rev-parse", "-q", "--verify", "HEAD~1") if getattr(self, "left_dirty", False) else ""
         rc, tail = self.sh(["git", "rebase", "-q", self.cfg["base"]], pin=True)
         if not rc:  # the checkpoint's head follows, or the next resume reads this as an edit from outside
             try:
@@ -4847,8 +4857,8 @@ class Engine:
         not on an old branch whose untracked files made the next runs fail as 'uncommitted work of another branch'."""
         if outcome in ("landed", "done") or not branch or branch != getattr(self, "branch", None):
             return
-        if self.git("status", "--porcelain", "--untracked-files=no") or self.git("symbolic-ref", "--short", "-q", "HEAD") != branch:
-            return  # work that could not be committed stays where it is
+        if self.dirty_status() or self.git("symbolic-ref", "--short", "-q", "HEAD") != branch:
+            return  # work that could not be committed, or files stage_all left out, stay where they are for the next run
         rc, tail = self.sh(["git", "checkout", "-q", "--detach", self.cfg["base"]], pin=True)
         if rc:
             self.warn("the slot could not be left at the base: %s" % tail.strip()[-160:])

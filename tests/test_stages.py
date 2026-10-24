@@ -1264,6 +1264,27 @@ class SlotHygiene(StagesTest):
         Path(self.wt, "client/src.cs").write_text("real\n")
         self.assertEqual(sorted(l[3:] for l in e.dirty_status().splitlines()), ["client/keep.log", "client/src.cs"])
 
+    def test_the_users_own_global_excludes_still_apply(self):
+        self.put_ignore_on_main("client/log.txt\n")
+        glob = Path(self.tmp.name, "global-ignore")
+        glob.write_text("*.swp\n")
+        te.sh("git", "config", "core.excludesFile", str(glob), cwd=self.wt)
+        (self.wt / "notes.swp").write_text("editor\n")
+        (self.wt / "client").mkdir()
+        (self.wt / "client" / "log.txt").write_text("unity\n")
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        self.assertEqual(e.dirty_status(), "")
+
+    def test_files_the_base_does_not_ignore_keep_a_parked_slot_where_it_is(self):
+        rc, s = self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which format?")]})
+        self.assertEqual(rc, 2)
+        # the bead's branch is checked out again by the next run; a stray untracked file the commit left out blocks the detach
+        e = self.eng
+        e.git("checkout", "-q", "task/t-1")
+        (self.wt / "stray.dat").write_text("not ignored, not committed\n")
+        e.leave_slot("blocked", "task/t-1")
+        self.assertEqual(e.git("symbolic-ref", "--short", "-q", "HEAD"), "task/t-1")
+
     def test_a_slot_left_on_an_old_branch_with_only_ignored_files_is_not_another_branchs_work(self):
         te.sh("git", "checkout", "-qb", "task/old-bead", cwd=self.wt)
         self.put_ignore_on_main("client/log.txt\nclient/log-previous.txt\n")
