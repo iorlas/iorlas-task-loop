@@ -413,6 +413,8 @@ def engine_runs(bead, t0, t1):
         st, m = status_of(path, closed)
         if closed:
             st = "completed" if ('close: landed' in tail or 'close: done' in tail) else "failed"
+        elif st == "idle" and run_alive(path, first if first.get("kind") == "run" else None, None):
+            st = "running"  # checks and tests run for minutes without a log record: the engine's own lock says it is alive
         runs.append({"id": "engine:" + path, "kind": "engine", "title": "Engine", "role": "runs the task",
                      "status": st, "started": start, "updated": m, "ended": m if closed else None})
     return runs

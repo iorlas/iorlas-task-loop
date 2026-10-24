@@ -282,6 +282,22 @@ class Api(unittest.TestCase):
         timeline._parsed.clear()
         self.assertEqual(self.task("x-1")["state"], "stopped")
 
+    def test_an_engine_run_silent_in_a_long_check_is_running_not_idle(self):
+        wt = Path(self.tmp.name) / "slots" / "s1"
+        (wt / ".task").mkdir(parents=True)
+        (wt / ".task" / "engine.lock").write_text(json.dumps({"pid": os.getpid(), "bead": "x-1", "slot": "s1"}))
+        old = time.time() - 600  # no record for ten minutes: the checks are running
+        recs = [{"t": old, "kind": "run", "text": "run: first", "run": "x-1-20261021-120000", "bead": "x-1", "worktree": str(wt),
+                 "slot": "s1", "started_because": "first", "prev_run": "", "ask": ""}]
+        path = self.cfg / "engine" / "x-1-20261021-120000.jsonl"
+        path.write_text("".join(json.dumps(r) + "\n" for r in recs))
+        os.utime(str(path), (old, old))
+        (run,) = server.engine_runs("x-1", old - 60, None)
+        self.assertEqual(run["status"], "running")
+        (wt / ".task" / "engine.lock").unlink()  # the engine is gone: idle, as before
+        (run,) = server.engine_runs("x-1", old - 60, None)
+        self.assertEqual(run["status"], "idle")
+
     def test_the_task_timeline_is_every_run_of_the_bead_oldest_first(self):
         d = server.api_task_timeline("", BEAD)
         self.assertEqual([r["run"][-6:] for r in d["runs"]], RUNS)

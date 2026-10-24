@@ -67,6 +67,8 @@ def lane_out(lanes, now):
     out = []
     for ln in lanes or []:
         name = str(ln.get("name") or "")
+        if "CREDIT" in name.upper():  # a credit lane is never used by an unattended run (the subscription lanes are): out is no alarm
+            continue
         label = "Codex" if "OPENAI" in name.upper() or "CODEX" in name.upper() else "Claude" if "CLAUDE" in name.upper() else name
         until = ln.get("out_until")
         if until and float(until) > now:
