@@ -17,6 +17,7 @@
   tl.py slot hold S --why TEXT [--for MIN]      keep the loop and run-task off a slot (a person, screenshots)
   tl.py worktree start|sunset ...               one worktree per loop session when slots are off
   tl.py usage '<plan.windows JSON>'             feed get_usage to delegate (every 20 min while an engine runs)
+  tl.py reflect digest [--since 24h] [--dry-run]  the last day's run reflections into one bead per recurring cause
   tl.py trace [ID] [--last N] [--json]          engine runs and every worker session of each (for reflection)
   tl.py run-task ID [--worktree DIR] [--slot S|any [--wait]] [--exclusive-area] [--dry-run] [--fresh]
                                                 one bead through the engine (engine.py), no judgement here
@@ -1711,6 +1712,11 @@ def cmd_notify(a):
     return 0 if got == "sent" else 1
 
 
+def cmd_reflect(a):
+    import reflect_digest
+    return reflect_digest.cmd_reflect(a)
+
+
 def cmd_digest(a):
     import digest
     return digest.cmd_digest(a)
@@ -1923,6 +1929,12 @@ def main(argv=None):
     p.add_argument("id", nargs="?", default="")
     p.add_argument("--last", type=int, default=0)
     p.add_argument("--json", action="store_true")
+    p = sp.add_parser("reflect", help="turn the last day's run reflections into beads, one per recurring cause (tl-bl5)")
+    p.add_argument("op", choices=["digest"])
+    p.add_argument("--since", help="window start: 24h (default), a time, or epoch seconds")
+    p.add_argument("--until", help="window end (default now)")
+    p.add_argument("--dry-run", action="store_true", help="file nothing, write no state")
+    p.add_argument("--json", action="store_true")
     p = sp.add_parser("next", help="the bead the loop would take next and why (claims nothing)")
     p.add_argument("--repo")
     p.add_argument("--json", action="store_true")
@@ -1989,7 +2001,7 @@ def main(argv=None):
         return r.returncode
     return {"register": cmd_register, "claim": cmd_claim, "heartbeat": cmd_heartbeat, "stage": cmd_stage, "worker": cmd_worker,
             "land": cmd_land, "close": cmd_close, "block": cmd_block, "slot": cmd_slot, "worktree": cmd_worktree,
-            "dash": cmd_dash, "ask": cmd_ask, "notify": cmd_notify, "digest": cmd_digest, "hook": cmd_hook, "doctor": cmd_doctor, "land-lock": cmd_land_lock}[a.cmd](a)
+            "dash": cmd_dash, "ask": cmd_ask, "notify": cmd_notify, "digest": cmd_digest, "reflect": cmd_reflect, "hook": cmd_hook, "doctor": cmd_doctor, "land-lock": cmd_land_lock}[a.cmd](a)
 
 
 if __name__ == "__main__":

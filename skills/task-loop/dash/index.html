@@ -435,6 +435,7 @@ details.rheld>summary .rsec::before{content:"▸";color:var(--mute);font-size:11
     <a href="#tasks" data-nav="tasks">Tasks</a>
     <a href="#asks" data-nav="asks">Asks <span class="badge" id="askn"></span></a>
     <a href="#looks" data-nav="looks">Looks <span class="badge" id="lookn"></span></a>
+    <a href="#causes" data-nav="causes">Causes</a>
     <a href="/classic" title="The three-pane log viewer">Logs</a>
   </nav>
   <span class="sp"></span>
@@ -471,7 +472,7 @@ function chip(cls,text,dot){return `<span class="chip ${cls}" title="${esc(text)
 
 // ---- routing: #task=ID&repo=R&run=RUN&block=NODE.K&tab=T&theme=dark --------------------------------------------------
 function readHash(){const raw=location.hash.slice(1),h=new URLSearchParams(raw);
-  S.view=h.get('task')?'task':({asks:'asks',tasks:'tasks',looks:'looks'}[raw.split('&')[0]]||'roadmap');S.task=h.get('task');S.repo=h.get('repo')||'';
+  S.view=h.get('task')?'task':({asks:'asks',tasks:'tasks',looks:'looks',causes:'causes'}[raw.split('&')[0]]||'roadmap');S.task=h.get('task');S.repo=h.get('repo')||'';
   S.bead=h.get('bead')||null;const b=h.get('block');S.run=h.get('run');S.block=b?{node:+b.split('.')[0],k:+(b.split('.')[1]||0)}:null;S.tab=h.get('tab');
   const th=h.get('theme');if(th)setTheme(th,true)}
 function go(o){const h=new URLSearchParams();if(o.task){h.set('task',o.task);if(o.repo)h.set('repo',o.repo);if(o.run)h.set('run',o.run);
@@ -480,8 +481,8 @@ function go(o){const h=new URLSearchParams();if(o.task){h.set('task',o.task);if(
 window.addEventListener('hashchange',route);
 let lastView='';
 function route(){const was=S.task+'|'+S.run+'|'+(S.block?S.block.node+'.'+S.block.k:'');readHash();
-  document.querySelectorAll('#nav a[data-nav]').forEach(a=>a.classList.toggle('on',a.dataset.nav==(S.view=='asks'?'asks':S.view=='looks'?'looks':S.view=='roadmap'?'roadmap':'tasks')));
-  $('main').classList.toggle('wide',S.view=='roadmap'||S.view=='looks');
+  document.querySelectorAll('#nav a[data-nav]').forEach(a=>a.classList.toggle('on',a.dataset.nav==(S.view=='asks'?'asks':S.view=='looks'?'looks':S.view=='causes'?'causes':S.view=='roadmap'?'roadmap':'tasks')));
+  $('main').classList.toggle('wide',S.view=='roadmap'||S.view=='looks'||S.view=='causes');
   if(was!=S.task+'|'+S.run+'|'+(S.block?S.block.node+'.'+S.block.k:'')){S.blk=null;S.events=null}
   const v=S.view+'|'+S.task;if(v!=lastView){lastView=v;S.sig.main=null;window.scrollTo(0,0)}
   S.gen++;render();poll()}
@@ -505,6 +506,7 @@ async function poll(){if(busy)return;busy=true;const g=S.gen;
   try{
     const a=get('/api/asks').then(x=>{S.asks=x;renderTop();if(S.view=='asks'&&g==S.gen)renderAsks()}).catch(()=>{});
     if(S.view=='tasks'){const d=await get('/api/tasks');if(g!=S.gen)return;S.tasks=d;renderTop()}
+    else if(S.view=='causes'){const d=await get('/api/reflections');if(g!=S.gen)return;C.d=d;renderTop()}
     else if(S.view=='looks'){const d=await get('/api/looks?repo='+encodeURIComponent(S.repo));if(g!=S.gen)return;L.d=d;renderTop()}
     else if(S.view=='roadmap'){const d=await get('/api/roadmap?repo='+encodeURIComponent(S.repo));if(g!=S.gen)return;R.d=d;
       if(S.bead&&(!R.b||R.b.id!=S.bead||R.bt<Date.now()-15000)){const b=await get('/api/bead?repo='+encodeURIComponent(d.repo||S.repo)+'&id='+encodeURIComponent(S.bead));if(g!=S.gen)return;R.b=b;R.bt=Date.now()}}
@@ -521,7 +523,7 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)poll()});
 
 // ---- render -------------------------------------------------------------------------------------------------------
 function paint(el,key,html){if(S.sig[key]===html)return false;S.sig[key]=html;el.innerHTML=html;return true}
-function render(){if(S.view=='roadmap')renderBead();if(S.view=='tasks')renderTasks();else if(S.view=='task')renderTask();else if(S.view=='roadmap')renderRoadmap();else if(S.view=='looks')renderLooks();else renderAsks();renderDrawer()}
+function render(){if(S.view=='roadmap')renderBead();if(S.view=='tasks')renderTasks();else if(S.view=='task')renderTask();else if(S.view=='roadmap')renderRoadmap();else if(S.view=='looks')renderLooks();else if(S.view=='causes')renderCauses();else renderAsks();renderDrawer()}
 function lookCount(){if(L.d&&L.d.summary)return L.d.summary.open;const g=((R.d&&R.d.signals)||[]).find(x=>x.kind=='looks');return g?+(g.title.match(/\d+/)||[0])[0]:0}
 function renderTop(){$('lookn').textContent=lookCount()||'';
   const open=(S.asks.asks||[]).filter(a=>!a.answered_here&&!a.parked).length;$('askn').textContent=open||'';
@@ -838,6 +840,12 @@ document.addEventListener('keydown',e=>{if(e.key=='Escape'&&S.view=='roadmap'&&S
 
 // ---- looks gallery: taste items from owner-look beads; "good" settles one, "redo" files a bead with the note ---------------
 const L={d:null,busy:{},err:{},draft:{}};
+const C={d:null};
+function renderCauses(){const d=C.d;if(!d)return;const cs=d.clusters||[],rec=cs.filter(c=>c.recurring);
+  let html=`<div class="hero"><div><h1>Causes</h1><div class="sum">last ${d.hours} h of run reflections · <b>${rec.length}</b> recurring · ${cs.length-rec.length} seen once</div></div></div>`;
+  html+=cs.length?cs.map(c=>`<div class="lkc${c.recurring?'':' lkdone'}"><div><h3>${esc(c.title)}</h3><div class="lm"><span>${esc(c.cause)}</span><span>${c.runs} run${c.runs==1?'':'s'}</span>${c.bead?`<a class="mono" href="${taskHref(c.bead,c.repo?c.repo.split('/').pop():'')}">${esc(shortId(c.bead))}</a>`:(c.recurring?'<span>bead pending</span>':'')}</div></div>
+    ${c.files.length?`<div class="lnote">${c.files.map(esc).join(' · ')}</div>`:''}<div class="lm">${(c.beads||[]).map(b=>`<a class="mono" href="${taskHref(b,'')}">${esc(shortId(b))}</a>`).join(' ')}</div></div>`).join(''):'<div class="list"><div class="empty"><b>No reflection in the window</b>Every run since 0.23.25 writes one; recurring causes become a bead each day (tl reflect digest).</div></div>';
+  paint($('main'),'main',html)}
 const lkKey=i=>i.look_bead+'|'+i.id;
 function lkPics(i){const by={};i.shots.forEach(s=>{(by[s.label||s.path]=by[s.label||s.path]||{})[s.role]=s});
   const figs=[];Object.keys(by).forEach(k=>['before','after'].forEach(r=>{const s=by[k][r];if(s)figs.push(`<figure><a href="${esc(s.url)}" target="_blank" rel="noopener"><img loading="lazy" src="${esc(s.url)}" alt="${esc(r+': '+k)}" onerror="this.outerHTML='<div class=nopic>picture not in this checkout</div>'"></a><figcaption><b>${r}</b>${esc(k)}</figcaption></figure>`)}));

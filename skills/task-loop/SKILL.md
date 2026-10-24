@@ -342,6 +342,9 @@ container); the session that starts it only watches it.
   finished bead (outcome, minutes, rounds, tests added, ask, trace id). The log is `<config dir>/loop/<repo>-<hash>.jsonl`
   (fields `ts bead slot outcome minutes rounds tests_added asked trace engine_log run_log why`); each run's own output
   is beside it, one file per run. `tl next` prints what the loop would take next and why, claiming nothing.
+- **Reflections into fixes:** `tl reflect digest [--since 24h] [--dry-run]` (the loop starts it once a day) clusters the last day's
+  run reflections by cause and files or updates one bead per recurring cause in the repo that owns it, with run ids as
+  evidence. The dashboard's Causes page shows the clusters. See docs/design/dashboard.md.
 - **Stop:** `tl stop` ends every loop on the repo after its current bead (a loop started after the stop does not
   read it). Slots off: each loop start reuses its session's worktree (`.worktrees/loop-<session>`); a second loop of
   the session at the same time gets its own. `tl stop --now` sends SIGTERM to the running bead (the

@@ -163,3 +163,12 @@ of every run (`api_bead` -> `timeline`); hover a segment for its name, length, h
 `/api/events` for a run worked hours ago in a long session no longer shows nothing: `window_lines` (server.py) bisects the
 transcript on byte offsets by timestamp (they only grow) to the start of the run's window and reads from there, at most 40 MB.
 A small file, no window, or a window the last 6 MB already holds is read as before.
+
+## Causes (tl-bl5)
+
+`#causes` lists the last 24 h of run reflections clustered by cause class (`/api/reflections`, `reflect_digest.view`): title, run
+count, files named, and the bead filed for the cause. Seen-once causes are dimmed; two or more runs make a cause recurring.
+`tl reflect digest` (daily from the loop, detached) files one bead per recurring cause: engine and prompt in task-loop, delegate
+in delegate, the rest in the project the runs ran in. Run ids are the evidence; the acceptance says the next 3 comparable runs
+show no such item. A cause already filed (state file, or an open bead of that repo with a like title) gets a comment with its new
+runs; one whose bead was closed and recurs gets a new bead naming the old. `--dry-run` files nothing.

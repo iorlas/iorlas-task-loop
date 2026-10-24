@@ -667,6 +667,11 @@ def passes(repo, a, started, st=None):
             digest.maybe_send()  # the morning digest, once a day, when a push channel is set
         except Exception as e:  # a digest never stops a loop
             say("digest: %s" % e)
+        try:
+            import reflect_digest
+            reflect_digest.maybe_run()  # the run reflections into beads, once a day (tl-bl5)
+        except Exception as e:
+            say("reflect digest: %s" % e)
         ranked, skipped = queue(repo)
         now = clock()
         for rested, due in read_rests(repo).items():  # another loop's pre-engine failure rests the bead here too

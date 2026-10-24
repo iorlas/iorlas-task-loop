@@ -1437,6 +1437,13 @@ def look_items(repo):
     return path, cached("looks:" + path, 10, lambda: gallery.collect(path, beads_of(path)))
 
 
+def api_reflections(hours=24):
+    """The recurring and one-off causes of the last day's run reflections, each with the bead filed for it (tl-bl5)."""
+    _engine_dir()
+    import reflect_digest
+    return reflect_digest.view(max(1, min(int(hours or 24), 24 * 14)))
+
+
 def api_looks(repo=""):
     """The gallery: every look item of the repo, open ones first (newest bead last), with counts."""
     _last_seen[0] = time.time()
@@ -2059,6 +2066,8 @@ def make_handler(port, addrs):
                     body = api_graph(q.get("repo", ""))
                 elif u.path == "/api/bead":
                     body = api_bead(q.get("repo", ""), q.get("id", ""))
+                elif u.path == "/api/reflections":
+                    body = api_reflections(q.get("hours", "24"))
                 elif u.path == "/api/looks":
                     body = api_looks(q.get("repo", ""))
                 elif u.path == "/api/look-shot":
