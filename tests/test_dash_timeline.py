@@ -294,6 +294,12 @@ class Api(unittest.TestCase):
         os.utime(str(path), (old, old))
         (run,) = server.engine_runs("x-1", old - 60, None)
         self.assertEqual(run["status"], "running")
+        older = self.cfg / "engine" / "x-1-20261020-120000.jsonl"  # a crashed earlier run of the bead: the lock is not its
+        older.write_text("".join(json.dumps(dict(r, run="x-1-20261020-120000", t=old - 86400)) + "\n" for r in recs))
+        os.utime(str(older), (old - 86400, old - 86400))
+        states = sorted((os.path.basename(r["id"]), r["status"]) for r in server.engine_runs("x-1", old - 2 * 86400, None))
+        self.assertEqual(states, [("x-1-20261020-120000.jsonl", "idle"), ("x-1-20261021-120000.jsonl", "running")])
+        older.unlink()
         (wt / ".task" / "engine.lock").unlink()  # the engine is gone: idle, as before
         (run,) = server.engine_runs("x-1", old - 60, None)
         self.assertEqual(run["status"], "idle")

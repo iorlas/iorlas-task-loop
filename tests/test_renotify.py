@@ -73,6 +73,33 @@ class Renotify(unittest.TestCase):
             self.assertEqual(tl.renotify(now=NOW), [])
         self.assertFalse(self.out.exists())
 
+    def test_an_odd_ask_file_is_skipped_and_never_raises(self):
+        self.ask("b-bad", parks_at="soon")
+        (self.asks / "b-junk.json").write_text("[1, 2]")
+        (self.asks / "b-trunc.json").write_text("{")
+        self.ask("b-old")
+        with mock.patch.object(tl, "bd", side_effect=SystemExit):
+            self.assertEqual(tl.renotify(now=NOW), [("decision", "b-old-1")])
+        (tl.config_dir() / "repos.json").write_text(json.dumps([5, None]))
+        with mock.patch.object(tl, "bd", side_effect=SystemExit):
+            self.assertEqual(tl.renotify(every=0, now=NOW + 99 * H), [])  # junk repos.json: no looks, no crash (the ask has parked by now)
+
+    def test_a_push_keeps_an_answer_written_while_it_ran(self):
+        self.ask("b-old")
+        real = tl.push
+
+        def push_and_answer(*a, **k):
+            r = real(*a, **k)
+            f = self.asks / "b-old.json"
+            d = json.loads(f.read_text())
+            d.update(answer="yes", answer_t=NOW)
+            f.write_text(json.dumps(d))
+            return r
+        with mock.patch.object(tl, "bd", side_effect=SystemExit), mock.patch.object(tl, "push", push_and_answer):
+            tl.renotify(now=NOW)
+        a = self.stored("b-old")
+        self.assertEqual((a["answer"], a["pushes"]), ("yes", 1))
+
     def test_no_notify_command_pushes_nothing_and_breaks_nothing(self):
         (tl.config_dir() / "notify").unlink()
         self.ask("b-old")

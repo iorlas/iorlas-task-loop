@@ -215,20 +215,24 @@ def transcript_of(session):
 def transcript_index():
     """session id -> its transcript (the newest of the same name in any project folder): one listing of the project folders,
     not one glob per session (/api/runs asked for hundreds)."""
-    out = {}
+    out, seen = {}, {}
     try:
         projects = list(os.scandir(str(PROJECTS)))
     except OSError:
         return out
     for d in projects:
         try:
-            for e in os.scandir(d.path):
-                if e.name.endswith(".jsonl") and e.is_file():
-                    sid = e.name[:-6]
-                    if sid not in out or e.stat().st_mtime > os.path.getmtime(out[sid]):
-                        out[sid] = e.path
+            entries = list(os.scandir(d.path))
         except OSError:
             continue
+        for e in entries:
+            try:
+                if e.name.endswith(".jsonl") and e.is_file():
+                    sid, m = e.name[:-6], e.stat().st_mtime
+                    if sid not in out or m > seen[sid]:
+                        out[sid], seen[sid] = e.path, m
+            except OSError:
+                continue  # a file that vanished mid-scan: the rest of the folder still counts
     return out
 
 
@@ -420,7 +424,9 @@ def engine_events(path, t0=None, t1=None):
 
 def engine_runs(bead, t0, t1):
     runs = []
-    for path in glob.glob(str(config_dir() / "engine" / ("%s-*.jsonl" % bead))):
+    paths = glob.glob(str(config_dir() / "engine" / ("%s-*.jsonl" % bead)))
+    newest = max(paths) if paths else ""  # names end in the start second: only the newest run of a bead can be the live one
+    for path in paths:
         first = first_json(path)
         start = first.get("t") or os.path.getmtime(path)
         if start < t0 - 5 or (t1 and start > t1 + 5):
@@ -430,7 +436,7 @@ def engine_runs(bead, t0, t1):
         st, m = status_of(path, closed)
         if closed:
             st = "completed" if ('close: landed' in tail or 'close: done' in tail) else "failed"
-        elif st == "idle" and run_alive(path, first if first.get("kind") == "run" else None, None):
+        elif st == "idle" and path == newest and first.get("kind") == "run" and first.get("worktree") and run_alive(path, first, None):
             st = "running"  # checks and tests run for minutes without a log record: the engine's own lock says it is alive
         runs.append({"id": "engine:" + path, "kind": "engine", "title": "Engine", "role": "runs the task",
                      "status": st, "started": start, "updated": m, "ended": m if closed else None})

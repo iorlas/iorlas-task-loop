@@ -1424,42 +1424,56 @@ def renotify(every=3600, now=None):
     if now - _stamp(marker) < every:
         return []
     sent = []
-    for f in sorted(glob.glob(str(config_dir() / "asks" / "*.json"))):
-        try:
-            a = json.loads(Path(f).read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            continue
-        if not isinstance(a, dict) or not a.get("bead") or not a.get("id"):
-            continue
-
-        def due(x):
-            last = float(x.get("pushed_at") or x.get("t") or now)
-            return (x.get("status") == "open" and not x.get("answer") and not x.get("answer_t")
-                    and not (x.get("parks_at") and now >= float(x["parks_at"])) and now - last >= REPUSH)
-        if not due(a):
-            continue
-        try:
-            with os_lock(config_dir() / "locks" / ("repush-%s.lock" % hashlib.sha1(f.encode()).hexdigest()[:12]), "pid %d" % os.getpid(), timeout=0.3):
-                a = json.loads(Path(f).read_text(encoding="utf-8"))  # another loop may have pushed it a moment ago
-                if not due(a):
-                    continue
-                waited = int((now - float(a.get("t") or now)) // 3600)
-                err = push(str(a.get("kind") or "ask"), a["bead"], a["id"], "Still waiting for you (%d h): %s" % (waited, _ask_head(a.get("question"))), True)
-                if err:
-                    sys.stderr.write("tl: notify failed: %s\n" % err)
-                    continue
-                a["pushed_at"], a["pushes"] = now, int(a.get("pushes") or 0) + 1
-                Path(f).write_text(json.dumps(a, indent=1), encoding="utf-8")
-                sent.append((a.get("kind") or "ask", a["id"]))
-        except (TimeoutError, OSError, ValueError):
-            continue
-    sent += _push_looks(now)
     try:
-        marker.parent.mkdir(parents=True, exist_ok=True)
-        marker.write_text(str(now))
-    except OSError:
-        pass
+        for f in sorted(glob.glob(str(config_dir() / "asks" / "*.json"))):
+            try:
+                got = _repush_one(f, now)
+            except Exception as e:  # one odd ask file never stops the rest, and never the loop that called this
+                sys.stderr.write("tl: re-push of %s skipped: %s\n" % (os.path.basename(f), e))
+                continue
+            if got:
+                sent.append(got)
+        sent += _push_looks(now)
+    except Exception as e:
+        sys.stderr.write("tl: re-push skipped: %s\n" % e)
+    finally:
+        try:
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.write_text(str(now))
+        except OSError:
+            pass
     return sent
+
+
+def _repush_one(f, now):
+    """One ask file: pushed again when due. -> (kind, id) or None."""
+    def load():
+        a = json.loads(Path(f).read_text(encoding="utf-8"))
+        return a if isinstance(a, dict) and a.get("bead") and a.get("id") else None
+
+    def due(x):
+        last = float(x.get("pushed_at") or x.get("t") or now)
+        return (x.get("status") == "open" and not x.get("answer") and not x.get("answer_t")
+                and not (x.get("parks_at") and now >= float(x["parks_at"])) and now - last >= REPUSH)
+    a = load()
+    if not a or not due(a):
+        return None
+    try:
+        with os_lock(config_dir() / "locks" / ("repush-%s.lock" % hashlib.sha1(f.encode()).hexdigest()[:12]), "pid %d" % os.getpid(), timeout=0.3):
+            a = load()  # another loop may have pushed it a moment ago
+            if not a or not due(a):
+                return None
+            waited = int((now - float(a.get("t") or now)) // 3600)
+            err = push(str(a.get("kind") or "ask"), a["bead"], a["id"], "Still waiting for you (%d h): %s" % (waited, _ask_head(a.get("question"))), True)
+            if err:
+                sys.stderr.write("tl: notify failed: %s\n" % err)
+                return None
+            fresh = load() or a  # the dashboard may have written an answer meanwhile: keep it, add only the push
+            fresh["pushed_at"], fresh["pushes"] = now, int(fresh.get("pushes") or 0) + 1
+            Path(f).write_text(json.dumps(fresh, indent=1), encoding="utf-8")
+            return (a.get("kind") or "ask", a["id"])
+    except TimeoutError:
+        return None
 
 
 def _push_looks(now):
@@ -1468,7 +1482,7 @@ def _push_looks(now):
     if now - _stamp(state) < LOOK_BATCH:
         return []
     try:
-        repos = [r for r in json.loads((config_dir() / "repos.json").read_text(encoding="utf-8")) if os.path.isdir(r)]
+        repos = [r for r in json.loads((config_dir() / "repos.json").read_text(encoding="utf-8")) if isinstance(r, str) and os.path.isdir(r)]
     except (OSError, ValueError):
         return []
     waiting, first = 0, ""
