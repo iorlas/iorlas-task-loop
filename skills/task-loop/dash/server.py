@@ -1417,7 +1417,7 @@ def unblocks_by_bead(repo):
 def upgrade_ask(a):
     """An ask written before fmt 2 (kind from the old rules, raw question, no buttons) as the new build would have written it,
     for display only: the file is not touched. Over-budget asks get where the minutes went from the run's engine log."""
-    if a.get("fmt") == 2:
+    if a.get("fmt") == 3:
         return a
     try:
         _engine_dir()
@@ -1431,10 +1431,15 @@ def upgrade_ask(a):
             if went and "Where it went" not in why:
                 why += ". Where it went: " + went
             src = why
-        out = dict(a, kind=kind, detail=src, fmt=2,
-                   question=engine.ask_hint(kind, why, engine.tidy_question(src)))
+        out = dict(a, kind=kind, detail=src, fmt=3,
+                   question=engine.ask_markdown(kind, why, src))
         if not out.get("options") or kind != a.get("kind"):
             out["options"] = engine.ask_options(kind, why)
+        elif any(not o.get("then") for o in out["options"]):
+            if kind == "decision":
+                out["options"] = [dict(o, then=o.get("then") or "The bead runs again with this as its instruction.") for o in out["options"]]
+            else:
+                out["options"] = engine.ask_options(kind, why) or out["options"]
         return out
     except Exception:
         return a

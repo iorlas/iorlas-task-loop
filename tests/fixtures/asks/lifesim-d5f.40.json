@@ -1,0 +1,22 @@
+{
+ "v": 1,
+ "id": "lifesim-d5f.40-2",
+ "n": 2,
+ "bead": "lifesim-d5f.40",
+ "kind": "stuck",
+ "question": "This bead was planned 3 times, so the engine stops instead of burning more planner runs. Why each time: 1. plan: first plan; 2. amend: a re-plan: the review still sends it back: client/Assets/Editor/SleeperBedProbe.cs:280 The proposed-rule shot lifts the body by liftToRule so the lowest sampled point touc; 3. amend: a re-plan: checks still red after 3 tries: - `python3 -I -c 'import re,sys,pathlib;t=pathlib.Path(\".task/lifesim-d5f.40/evidence/sleeper-on-bed.txt\").read_text();N=r\"(-?\\d\nChoose: split the bead; clarify it (comment what the plan keeps missing); or reply \"allow one more\".",
+ "why": "stuck: the bead was re-planned 3 times (the limit is 1 plan + 2 amends): 1. plan: first plan; 2. amend: a re-plan: the review still sends it back: client/Assets/Editor/SleeperBedProbe.cs:280 The proposed-rule shot lifts the body by liftToRule so the lowest sampled point touc; 3. amend: a re-plan: checks still red after 3 tries: - `python3 -I -c 'import re,sys,pathlib;t=pathlib.Path(\".task/lifesim-d5f.40/evidence/sleeper-on-bed.txt\").read_text();N=r\"(-?\\d; stage 2 stuck after 3 rounds. What failed: the writer says these stage checks are wrong: `python3 -I -c 'import re,sys,pathlib;t=pathlib.Path(\".task/lifesim-d5f.40/evidence/sleeper-on-bed.txt\").read_text();m=pathlib.Path(\"design/research/sleeper-on-bed/README.md\").read_text();n=[v for l in t.splitlines() if l.startswith((\"bed \",\"rule \")) for v in re.findall(r\"(?<= )-?\\d+\\.\\d{3}(?= |$)\",l)];sys.exit(0 if n and all(v in m for v in n) else 1)'` (exit 1): Missing stage-1 probe report causes FileNotFoundError. No change to the permitted stage-2 files can restore authentic probe evidence.; `python3 -I -c 'import re,sys,pathlib;t=pathlib.Path",
+ "run": "lifesim-d5f.40-20261023-012438",
+ "t": 1792709328.202542,
+ "parks_at": 1792968528.202542,
+ "status": "open",
+ "options": [
+  {
+   "label": "Allow one more planner run",
+   "answer": "allow one more",
+   "note": "The bead plans once more; or split it, or comment what the plan keeps missing"
+  }
+ ],
+ "repo": "/nonexistent/repo",
+ "title": "Spike: measure sleeper penetration through each bed and propose a mattress-top rule"
+}

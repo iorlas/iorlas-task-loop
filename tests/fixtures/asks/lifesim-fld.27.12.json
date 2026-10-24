@@ -1,0 +1,15 @@
+{
+ "v": 1,
+ "id": "lifesim-fld.27.12-1",
+ "n": 1,
+ "bead": "lifesim-fld.27.12",
+ "kind": "stuck",
+ "question": "over budget: $0.00 of $15, 183 of 180 min",
+ "why": "over budget: $0.00 of $15, 183 of 180 min",
+ "run": "lifesim-fld.27.12-20261022-171436",
+ "t": 1792689514.6945322,
+ "parks_at": 1792948714.6945322,
+ "status": "open",
+ "repo": "/nonexistent/repo",
+ "title": "After the last death: ending moment, then household creation in the same save (household-lifecycle.R7)"
+}

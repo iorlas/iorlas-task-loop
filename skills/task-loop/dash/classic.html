@@ -172,7 +172,7 @@ function renderAsks(){
   $('filters').innerHTML='<span class="note">What the loop needs from you, most urgent first</span>';
   $('list').innerHTML=ASKS.asks.length?ASKS.asks.map(a=>`<div class="ask"><div class="top"><span class="kind ${esc(a.kind)}">${esc(a.kind)}</span>
     <span class="id">${esc(a.bead)}</span><span>${esc(a.title||'')}</span><span class="time">${fmt(a.age_s)} waiting${a.parked?' · parked':''}</span></div>
-    <div class="q">${esc(a.question)}</div>${a.answered_here?`<div class="done">answered: ${esc(a.answer)} — the next run picks it up</div>`:
+    <div class="q">${esc(a.question).replace(/\*\*/g,'')}</div>${a.answered_here?`<div class="done">answered: ${esc(a.answer)} — the next run picks it up</div>`:
     `<textarea data-ans="${esc(a.id)}" placeholder="Your answer goes on the bead as a comment"></textarea><button data-send="${esc(a.id)}">Answer</button>`}</div>`).join('')
     :'<div class="empty">Nothing needs you</div>';
 }

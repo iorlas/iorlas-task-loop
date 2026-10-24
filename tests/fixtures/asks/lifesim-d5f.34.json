@@ -1,0 +1,15 @@
+{
+ "v": 1,
+ "id": "lifesim-d5f.34-1",
+ "n": 1,
+ "bead": "lifesim-d5f.34",
+ "kind": "stuck",
+ "question": "This bead was planned 3 times, so the engine stops instead of burning more planner runs. Why each time: 1. plan: first plan; 2. amend: a re-plan: the review still sends it back: Acceptance criterion 'A design-stream bead (unlabelled) asks the owner to approve the numbers' is not met: no bead exists. The R; 3. amend: a re-plan: the review still sends it back: The unlabelled design-stream approval bead and the follow-up beads (owner look, rig, walls cutaway, config home, farthest zoom f\nChoose: split the bead; clarify it (comment what the plan keeps missing); or reply \"allow one more\".",
+ "why": "stuck: the bead was re-planned 3 times (the limit is 1 plan + 2 amends): 1. plan: first plan; 2. amend: a re-plan: the review still sends it back: Acceptance criterion 'A design-stream bead (unlabelled) asks the owner to approve the numbers' is not met: no bead exists. The R; 3. amend: a re-plan: the review still sends it back: The unlabelled design-stream approval bead and the follow-up beads (owner look, rig, walls cutaway, config home, farthest zoom f; stage 1 stuck after 3 rounds. What failed: the review still sends it back: Acceptance criterion 2: the unlabelled design-stream bead asking the owner to approve the numbers is not filed yet. The engine files it from the leftovers.; Acceptance criterion 3: the follow-up beads (owner look, rig, wall cutaway, config home, farthest zoom from lot extent) are not filed yet. The engine files them from the leftovers.",
+ "run": "lifesim-d5f.34-20261022-194258",
+ "t": 1792690919.127996,
+ "parks_at": 1792950119.127996,
+ "status": "open",
+ "repo": "/nonexistent/repo",
+ "title": "Spike: Live camera zoom range and pitch curve for a lot"
+}

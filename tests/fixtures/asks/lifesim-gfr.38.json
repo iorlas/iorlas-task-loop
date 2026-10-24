@@ -1,0 +1,33 @@
+{
+ "v": 1,
+ "id": "lifesim-gfr.38-1",
+ "n": 1,
+ "bead": "lifesim-gfr.38",
+ "kind": "decision",
+ "question": "gfr.38 (dynamic render scale in Live and Build) is finished and tested on macOS. A play test forces heavy frames, the scale drops and stops at min_scale, and the log prints 'render scale at floor: 0.50'. Criterion 3 asks for this run on Windows, and this engine has no Windows machine, so the review keeps sending it back. Options: (A) Accept the macOS run now and file the Windows run as its own bead (cost: Windows proof comes later). (B) Keep the task open until you run `just unity-play-tests RenderScalePlayTests` on the Windows PC and copy client/Logs/unity-play-tests.log into .task/lifesim-gfr.38/evidence/ (cost: it waits for you). (C) Change criterion 3 to say 'a play run' with no platform (cost: Windows is never proven for this feature). I recommend A.",
+ "why": "owner decision needed",
+ "run": "lifesim-gfr.38-20261022-220643",
+ "t": 1792698598.2389162,
+ "parks_at": 1792957798.2389162,
+ "status": "open",
+ "options": [
+  {
+   "label": "Accept macOS, file Windows bead",
+   "answer": "Accept the macOS play run as proof for criterion 3 now; the Windows run is a follow-up bead (the leftover), not a blocker for this PR.",
+   "note": "The Windows proof comes later, in its own bead",
+   "recommended": true
+  },
+  {
+   "label": "Wait for my Windows run",
+   "answer": "Keep criterion 3 as written. I will run `just unity-play-tests RenderScalePlayTests` on the Windows PC and put the log in .task/lifesim-gfr.38/evidence/unity-play-tests-windows.log; check for the floor line there.",
+   "note": "The task waits until the owner runs the test on Windows"
+  },
+  {
+   "label": "Drop 'Windows' from criterion",
+   "answer": "Criterion 3 becomes 'a play run with a forced heavy frame shows the scale drop and stop at min_scale (log line)'; any platform counts and no follow-up is needed.",
+   "note": "Windows is never proven for this feature"
+  }
+ ],
+ "repo": "/nonexistent/repo",
+ "title": "Apply the render-scale controller in Live and Build (renderer.R2)"
+}

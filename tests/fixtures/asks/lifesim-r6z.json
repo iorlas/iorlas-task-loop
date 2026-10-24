@@ -1,0 +1,16 @@
+{
+ "v": 1,
+ "id": "lifesim-r6z-1",
+ "n": 1,
+ "bead": "lifesim-r6z",
+ "kind": "ticket",
+ "question": "What proves this bead done? Add acceptance criteria (the field, or a ## Acceptance Criteria section), then rerun.",
+ "why": "ticket: the bead has no acceptance criteria",
+ "run": "lifesim-r6z-20261023-001439",
+ "t": 1792703693.59527,
+ "parks_at": 1792962893.59527,
+ "status": "open",
+ "options": [],
+ "repo": "/nonexistent/repo",
+ "title": "Fix stale paths and retired sources named in live decisions"
+}
