@@ -2385,6 +2385,43 @@ class EngineTest(unittest.TestCase):
         self.assertIn("needs a human", self.blocked[0])
         self.assertIn("unity open client", self.blocked[0])
 
+    def test_a_refused_read_only_command_gets_one_retry_on_a_fresh_thread_with_a_note(self):
+        """tl-bxk.10.21 (lifesim-6dq0): a guard refused a head+rg chain, no answer: one retry, told what was refused."""
+        refused = {"v": 2, "status": "done", "data": None, "text": "", "ref": "w1", "family": "openai", "reason": "guard",
+                   "denied": [{"tool": "shell", "input": "/bin/zsh -lc \"head -n 20 a.txt | rg -n 'x' b\""}]}
+        rc, s = self.run_engine({"plan": [PLAN], "write": [refused, WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        workers = [c for c in s.calls if c[0] == "worker"]
+        self.assertEqual(len(workers), 2)
+        log = self.eng.log_path.read_text()
+        self.assertIn("read-only command refused", log)
+        self.assertIn("denied_retry", log)
+
+    def test_a_second_refusal_after_the_retry_keeps_the_block(self):
+        refused = {"v": 2, "status": "done", "data": None, "text": "", "ref": "w1", "family": "openai",
+                   "denied": [{"tool": "Bash", "input": "rg -n foo src"}]}
+        rc, s = self.run_engine({"plan": [PLAN], "write": [refused, dict(refused, ref="w2"), WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 2)
+        self.assertEqual([c[0] for c in s.calls].count("worker"), 2)
+        self.assertIn("needs a human", self.blocked[0])
+
+    def test_a_refused_command_that_writes_or_a_secrets_stop_is_not_retried(self):
+        for denied, reason in (([{"tool": "Bash", "input": "rm -rf build"}], ""), ([{"tool": "shell", "input": "cat > f"}], ""),
+                               ([{"tool": "shell", "input": "rg -n x ."}], "secrets"),
+                               ([{"tool": "Bash", "input": "rg -n x ."}, {"tool": "Bash", "input": "curl x"}], "")):
+            stuck = {"v": 2, "status": "done", "data": None, "text": "no", "ref": "w1", "family": "claude", "reason": reason, "denied": denied}
+            rc, s = self.run_engine({"plan": [PLAN], "write": [stuck, WRITE], "review": [CLEAN]})
+            self.assertEqual((rc, [c[0] for c in s.calls].count("worker")), (2, 1), denied)
+
+    def test_read_only_commands_are_told_from_the_rest(self):
+        for c in ("rg -n foo src", "head -n 5 a | rg x", "git log --oneline -5", "git diff main...HEAD -- a", "find . -name '*.cs' | head",
+                  "sed -n '1,5p' f", "git branch", "rg -n --glob '!**/.env*' '^<<<<<<<' .",
+                  "/bin/zsh -lc \"head -n 20 a.txt && rg -n 'x' b\""):
+            self.assertTrue(engine.read_only_command(c), c)
+        for c in ("rm -rf x", "cat > f", "git commit -m x", "git branch -D x", "find . -delete", "find . -exec rm {} ;", "sed -i s/a/b/ f",
+                  "curl x", "rg x | xargs rm", "cat $(ls)", "head -n 5 a; rm b", "git checkout x", "cat <<EOF", "echo `id`", "", None):
+            self.assertFalse(engine.read_only_command(c), c)
+
     def test_a_second_denied_write_in_a_bead_needs_a_human_with_every_denied_command(self):
         first = {"v": 2, "status": "done", "data": WRITE, "ref": "w1", "family": "claude",
                  "denied": [{"tool": "Bash", "input": "git checkout x && pick"}]}

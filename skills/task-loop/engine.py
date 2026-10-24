@@ -1633,6 +1633,7 @@ class Engine:
         timeout = float(self.cfg["node_timeout_min"]) * 60
         waited, attempt_prompt, attempt, errs = 0.0, delta if (delta and resume and resume_key) else prompt, 1, ["not run"]
         crashes = 0  # delegate crashes retried on this call
+        denied_retried = False  # one retry after a refused read-only command, on a fresh thread
         login_note = ""  # set once a lane answered logged_out and the engine retried afresh (delegate puts that lane out 15 min)
         while attempt <= 2:
             self._resume = resume
@@ -1762,6 +1763,19 @@ class Engine:
                 r.data = unstrict(r.data, schema_for(node, visual))
             errs = validate(r.data, schema_for(node, visual)) if (r.data is not None and nxt is None) else [
                 "%s: %s" % (reason or "no structured output", said[:300])]
+            if (denied and errs and not denied_retried and reason != "secrets" and j.get("denied")
+                    and all(isinstance(d, dict) and d.get("tool") in ("Bash", "shell", "bash") and read_only_command(d.get("input"))
+                            for d in j["denied"])):
+                # tl-bxk.10.21: a guard refused only commands that read (lifesim-6dq0: a head+rg chain, 12 s, no answer; the next
+                # run found the work done). One retry on a fresh thread that is told what was refused; a second denial blocks
+                denied_retried = True
+                note = ("\nAn earlier attempt at this step (thread %s) was refused a read-only command: %s. Do not run it again. "
+                        "Read with one plain command at a time, such as `rg -n PATTERN PATH`, `cat FILE` or `git diff`, "
+                        "with no pipes, chains or substitutions, then give your answer." % (r.ref or "unknown", denied))
+                self.warn("%s: read-only command refused (%s); retrying once on a fresh thread" % (node, denied))
+                self.transition(step or node, "denied_retry", "refused read-only: %s" % denied[:200], lane=j.get("lane") or "")
+                resume, attempt_prompt = None, prompt + (FRESH_WRITER_TEXT if self._resume else "") + note
+                continue
             if denied and errs:  # asking again meets the same refusal
                 raise Blocked("needs a human: the %s step was denied %s and gave no answer; run it or allow it, then "
                               "rerun. (%s)" % (node, denied, (j.get("text") or said or "")[:200]))
@@ -5392,6 +5406,53 @@ class Heartbeat:
 
 
 GROUPS = ("static", "tests", "acceptance")
+
+
+READ_ONLY_WORDS = {"head", "tail", "cat", "rg", "grep", "egrep", "fgrep", "ls", "wc", "sort", "uniq", "nl", "cut", "tr", "stat", "file",
+                   "diff", "cmp", "basename", "dirname", "pwd", "echo", "printf", "true", "test", "["}
+READ_ONLY_GIT = {"log", "diff", "show", "status", "rev-parse", "ls-files", "ls-tree", "grep", "blame", "cat-file", "describe", "shortlog",
+                 "branch", "rev-list", "name-rev", "merge-base"}
+FIND_WRITES = {"-exec", "-execdir", "-ok", "-okdir", "-delete", "-fprint", "-fprint0", "-fprintf", "-fls"}
+
+
+def read_only_command(cmd):
+    """True when every part of a shell command only reads (head, cat, rg, grep, git log/diff/show, ls, find without -exec or
+    -delete, a pipe or && chain of those): no redirection, no substitution, no heredoc. Unsure is False (tl-bxk.10.21)."""
+    if not isinstance(cmd, str) or not cmd.strip():
+        return False
+    try:
+        words = shlex.split(cmd)
+    except ValueError:
+        return False
+    if len(words) >= 3 and Path(words[0]).name in ("zsh", "bash", "sh") and words[1] in ("-c", "-lc", "-ic", "-l", "-cl") :
+        return read_only_command(words[-1])  # the payload of `/bin/zsh -lc "..."`
+    bare = re.sub(r"'[^']*'|\"[^\"]*\"", "''", cmd).replace("2>&1", "").replace("2>/dev/null", "").replace(">/dev/null", "")
+    if re.search(r"[<>]|\|\||&\s*$", bare) or re.search(r"`|\$\(|\$\{", cmd):  # a redirection or a substitution writes or hides
+        return False
+    parts = split_top(cmd)
+    if parts is None:
+        return False
+    for part in re.split(r"\s*(?:\|\||\||&&|;)\s*", cmd):
+        try:
+            w = shlex.split(part)
+        except ValueError:
+            return False
+        if not w:
+            return False
+        head = Path(w[0]).name
+        if head == "git":
+            rest = [x for x in w[1:] if not x.startswith("-")]
+            if not rest or rest[0] not in READ_ONLY_GIT or (rest[0] == "branch" and len(rest) > 1):
+                return False
+        elif head == "find":
+            if any(x in FIND_WRITES for x in w):
+                return False
+        elif head == "sed":
+            if "-i" in w or any(x.startswith("-i") for x in w) or "-n" not in w:
+                return False
+        elif head not in READ_ONLY_WORDS:
+            return False
+    return True
 
 
 def split_top(cmd):
