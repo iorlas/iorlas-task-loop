@@ -1337,7 +1337,7 @@ def close_stale_asks(every=600):
             return []
     except OSError:
         pass
-    done = []
+    done, by_repo = [], {}
     for f in sorted(glob.glob(str(config_dir() / "asks" / "*.json"))):
         try:
             a = json.loads(Path(f).read_text(encoding="utf-8"))
@@ -1347,29 +1347,33 @@ def close_stale_asks(every=600):
             continue
         if not (isinstance(a.get("repo"), str) and Path(a["repo"]).is_dir()):
             continue  # which repo's tracker to ask is not known: the ask stays
+        by_repo.setdefault(a["repo"], []).append((f, a))
+    for repo, items in by_repo.items():  # one bd read per repo (tl-u08: a bd show per ask took over two minutes for 25 asks)
         try:
-            r = bd("show", a["bead"], "--json", cwd=a["repo"])
+            r = bd("list", "--json", "--all", "-n", "0", cwd=repo)
         except SystemExit:  # no bd on this machine
             return done
-        why = ""
         if r.returncode != 0:
-            if re.search(r"no issues? found matching|issue .{0,60}not found|no such issue", (r.stderr or "") + (r.stdout or ""), re.I):
+            continue
+        try:
+            status = {b.get("id"): b.get("status") for b in json.loads(r.stdout) if isinstance(b, dict)}
+        except (ValueError, TypeError):
+            continue
+        if not status:
+            continue  # an empty answer proves nothing
+        for f, a in items:
+            why = ""
+            if a["bead"] not in status:
                 why = "the bead does not exist"
-        else:
-            try:
-                d = json.loads(r.stdout)
-                d = d[0] if isinstance(d, list) and d else d
-            except ValueError:
-                continue
-            if isinstance(d, dict) and d.get("status") == "closed":
+            elif status[a["bead"]] == "closed":
                 why = "the bead is closed"
-        if why:
-            a.update(status="closed", closed=time.time(), closed_why=why)
-            try:
-                Path(f).write_text(json.dumps(a, indent=1), encoding="utf-8")
-                done.append(a["bead"])
-            except OSError:
-                pass
+            if why:
+                a.update(status="closed", closed=time.time(), closed_why=why)
+                try:
+                    Path(f).write_text(json.dumps(a, indent=1), encoding="utf-8")
+                    done.append(a["bead"])
+                except OSError:
+                    pass
     try:
         marker.parent.mkdir(parents=True, exist_ok=True)
         marker.write_text(str(time.time()))
@@ -1499,7 +1503,7 @@ def cmd_ask(a):
     """The inbox from the terminal: the dashboard's own code answers and withdraws, so both say the same things."""
     d = dash_module()
     if a.op == "list":
-        for b in close_stale_asks(every=0):
+        for b in close_stale_asks():  # throttled: the loop sweeps too, and the inbox hides closed beads itself
             print("closed the ask of %s: its bead is closed or gone" % b)
         rows = d.inbox()
         if a.json:

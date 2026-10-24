@@ -460,6 +460,17 @@ class AskFailures(unittest.TestCase):
         self.assertTrue(all(o["then"] for r in rows for o in r["options"]))
 
 
+    def test_a_second_process_reuses_the_bead_list_of_the_last_30_seconds(self):
+        """tl-u08: tl ask list is a fresh process every time; bd list takes seconds under load, so it is read once per 30 s."""
+        (self.d / ".beads").mkdir()
+        out = mock.Mock(returncode=0, stdout=json.dumps([{"id": "a", "status": "open"}]), stderr="")
+        with mock.patch.object(server.subprocess, "run", return_value=out) as run, mock.patch.object(server.shutil, "which", return_value="/bin/bd"):
+            server._cache.clear()
+            self.assertEqual(server.beads_of(str(self.d)), [{"id": "a", "status": "open"}])
+            server._cache.clear()  # a new process: nothing in memory
+            self.assertEqual(server.beads_of(str(self.d)), [{"id": "a", "status": "open"}])
+        self.assertEqual(run.call_count, 1)
+
     def test_a_parked_ask_is_listed_last_flagged_and_answerable(self):
         self.bd("echo \"$*\" >> %s\n" % (self.d / "bd.log"))
         self.ask("quiet", status="parked")

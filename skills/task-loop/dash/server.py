@@ -188,12 +188,29 @@ def beads_of(repo):
         return hit[1]
     exe = shutil.which("bd")
     beads = hit[1] if hit else []
+    disk = config_dir() / "cache" / ("beads-%s.json" % hashlib.sha1(repo.encode("utf-8")).hexdigest()[:12])
+    if not hit:  # a fresh process (tl ask list): what another process listed in the last 30 s is good enough (tl-u08)
+        try:
+            c = json.loads(disk.read_text(encoding="utf-8"))
+            if time.time() - float(c["t"]) < 30 and isinstance(c["beads"], list):
+                with _lock:
+                    _cache[key] = (time.time(), c["beads"], m)
+                return c["beads"]
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
     if exe:
         try:
             r = subprocess.run([exe, "list", "--json", "--all", "-n", "0"], cwd=repo, capture_output=True,
                                text=True, encoding="utf-8", errors="replace", timeout=30)
             if r.returncode == 0:
                 beads = json.loads(r.stdout)
+                try:
+                    disk.parent.mkdir(parents=True, exist_ok=True)
+                    tmp = disk.with_name("%s.%d.tmp" % (disk.name, os.getpid()))
+                    tmp.write_text(json.dumps({"t": time.time(), "beads": beads}), encoding="utf-8")
+                    os.replace(str(tmp), str(disk))
+                except OSError:
+                    pass
         except (subprocess.SubprocessError, ValueError, OSError):
             pass
     with _lock:
@@ -1493,9 +1510,15 @@ def upgrade_ask(a):
 def inbox():
     """The open asks, most unblocking first. An ask whose bead is gone or closed is stale and never shown."""
     out, now, ub = [], time.time(), {}
-    for f, a in ask_files():
-        if a.get("status") not in ("open", "parked"):
-            continue
+    todo = [(f, a) for f, a in ask_files() if a.get("status") in ("open", "parked")]
+    repos_ = {a["repo"] for _, a in todo if isinstance(a.get("repo"), str) and (Path(a["repo"]) / ".beads").exists()}
+    if len(repos_) > 1:  # the bd reads of several repos run side by side
+        ts = [threading.Thread(target=unblocks_by_bead, args=(r,), daemon=True) for r in repos_]
+        for t in ts:
+            t.start()
+        for t in ts:
+            t.join(40)
+    for f, a in todo:
         repo = a.get("repo") if isinstance(a.get("repo"), str) else ""
         if repo not in ub:
             ub[repo] = unblocks_by_bead(repo) if repo and (Path(repo) / ".beads").exists() else None
