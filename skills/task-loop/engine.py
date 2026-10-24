@@ -2094,13 +2094,17 @@ class Engine:
         return ("The work of this stage is too big to inline (%d chars; the cap is %d). Its changed files:\n%s\nRead only "
                 "the changed files plus the plan; do not diff the whole task." % (len(diff), self.STAGE_DIFF_CAP, stat))
 
-    def stage_all(self, check=False):
+    def stage_all(self, check=False, everything=False):
         """Stage the slot's own changes: exactly the paths `git status --porcelain` lists under the pinned env, never a
         bare `git add -A` (tl-bxk.10.12). Tracked changes always; an untracked file only when a stage meant it
         (new_file_kind, tl-bxk.10.24). Returns the exit code."""
         self.log("cmd", "git add -A (the slot's own status paths)")
         paths, new, st = self.slot_status()
-        paths += [p for p in new if self.new_file_kind(p) == "meant"]
+        if everything:  # a parked bead's work: every new file the base does not ignore goes to its branch, the unexplained ones too
+            ignored = self.base_ignored(new)
+            paths += [p for p in new if p not in ignored]
+        else:
+            paths += [p for p in new if self.new_file_kind(p) == "meant"]
         rc = st.returncode
         if rc == 0 and paths:
             r = tl.run_git(self.wt, "--literal-pathspecs", "add", "-A", "--pathspec-from-file=-", "--pathspec-file-nul",
@@ -2163,6 +2167,15 @@ class Engine:
         out = self.git("status", "--porcelain", "--untracked-files=all")
         if not out:
             return ""
+        lines = out.splitlines()
+        untracked = [ln[3:] for ln in lines if ln.startswith("?? ")]
+        ignored = self.base_ignored(untracked)
+        return "\n".join(ln for ln in lines if not (ln.startswith("?? ") and ln[3:] in ignored))
+
+    def base_ignored(self, paths):
+        """The subset of `paths` that the BASE's .gitignore files ignore (the user's own global excludes are not replaced)."""
+        if not paths:
+            return set()
         rules = []
         base = self.cfg["base"]
         for path in (self.git("ls-tree", "-r", "--name-only", base) or "").splitlines():
@@ -2183,22 +2196,16 @@ class Engine:
                 else:
                     rules.append(neg + "/" + d + "/**/" + pat)
         if not rules:
-            return out
+            return set()
         with tempfile.NamedTemporaryFile("w", suffix=".ignore", delete=False, encoding="utf-8") as f:
             f.write("\n".join(rules) + "\n")
             ex = f.name
         try:
-            lines = out.splitlines()
-            untracked = [ln[3:] for ln in lines if ln.startswith("?? ")]
-            if not untracked:
-                return out
-            # which of them the base's rules ignore (check-ignore reads only the rules given; the user's own global excludes
-            # already left their files out of `out`, and are not replaced)
+            # check-ignore reads only the rules given
             r = subprocess.run(["git", "-C", str(self.wt), "-c", "core.excludesFile=" + ex, "check-ignore", "--no-index", "--stdin", "-z"],
-                               input="\0".join(untracked) + "\0", capture_output=True, text=True, encoding="utf-8", errors="replace",
+                               input="\0".join(paths) + "\0", capture_output=True, text=True, encoding="utf-8", errors="replace",
                                env=child_env())
-            ignored = set(r.stdout.split("\0")) if r.returncode in (0, 1) else set()
-            return "\n".join(ln for ln in lines if not (ln.startswith("?? ") and ln[3:] in ignored))
+            return set(r.stdout.split("\0")) if r.returncode in (0, 1) else set()
         finally:
             with contextlib.suppress(OSError):
                 os.unlink(ex)
@@ -5072,7 +5079,7 @@ class Engine:
             signal.signal(signal.SIGTERM, old)
 
     def wip(self, why):
-        self.stage_all()
+        self.stage_all(everything=True)  # tl-g6a: nothing the bead made is left behind in a slot that is reset to the base
         rc, _ = self.sh(["git", "commit", "-q", "-m", "wip (%s): %s" % (self.bead, why)], pin=True)
         return rc == 0
 

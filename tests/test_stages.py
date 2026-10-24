@@ -1370,6 +1370,26 @@ class SlotHygiene(StagesTest):
         self.assertIn("wip (t-1)", log)  # f.txt was written by the writer: kept on the bead's branch
         self.assertEqual(Path(self.wt, "f.txt").exists(), False)  # and gone from the slot
 
+    def test_the_beads_new_files_go_to_its_branch_when_it_parks_and_the_base_ignored_junk_does_not(self):
+        self.put_ignore_on_main("client/log.txt\n")
+        (self.wt / "tests").mkdir(exist_ok=True)
+
+        class Writer(te.DelegateScript):  # a writer that makes a new feature file nothing in the plan names, and Unity's log
+            def __call__(this, route, role, prompt, schema, cwd, *a, **kw):
+                if role == "worker":
+                    Path(cwd, "tests", "edit_content.feature").write_text("Feature: x\n")
+                    (Path(cwd) / "client").mkdir(exist_ok=True)
+                    (Path(cwd) / "client" / "log.txt").write_text("unity\n")
+                return super().__call__(route, role, prompt, schema, cwd, *a, **kw)
+        with mock.patch.object(te, "DelegateScript", Writer):
+            rc, s = self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which format?")]})
+        self.assertEqual(rc, 2)
+        branch_files = self.eng.git("ls-tree", "-r", "--name-only", "task/t-1").splitlines()
+        self.assertIn("tests/edit_content.feature", branch_files)  # not lost: it is on the bead's branch
+        self.assertNotIn("client/log.txt", branch_files)  # the base ignores it: no junk on the branch
+        self.assertFalse(Path(self.wt, "tests", "edit_content.feature").exists())  # and the slot is at the base
+        self.assertFalse(self.eng.git("symbolic-ref", "--short", "-q", "HEAD"))
+
     def test_a_landed_bead_leaves_the_slot_alone(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
