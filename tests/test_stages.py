@@ -1197,6 +1197,28 @@ class StaleTree(StagesTest):
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker"])  # no second write: nothing was sent back to the writer
         self.assertTrue(self.eng.why.startswith("failed: infrastructure: the configured check `fmt` needs something this tree lacks"), self.eng.why)
 
+    def test_words_in_the_middle_of_a_long_output_are_not_a_stale_tree(self):
+        noisy = "a test about justfile prints: This checkout has no recipe x\n" + "ok\n" * 300 + "2 failed: Foo"
+        self.assertTrue(engine.STALE_TREE.search(noisy))  # the whole log matches...
+        self.assertFalse(engine.STALE_TREE.search(noisy[-500:]))  # ...its last lines, which the engine reads, do not
+
+    def test_the_checkpoint_head_follows_a_rebase_over_the_wip_commit(self):
+        te.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
+        (self.wt / "g.txt").write_text("work\n")
+        te.sh("git", "add", "-A", cwd=self.wt)
+        te.sh("git", "commit", "-qm", "work", cwd=self.wt)
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        before = e.git("rev-parse", "HEAD")
+        (self.wt / "g.txt").write_text("more work\n")
+        te.sh("git", "commit", "-qam", "wip (t-1): blocked", cwd=self.wt)  # what reset() does with a dirty tree
+        e.left_dirty = True
+        e.checkpoint_path().parent.mkdir(exist_ok=True)
+        e.checkpoint_path().write_text(json.dumps({"v": 1, "head": before}))
+        self.main_moves()
+        te.sh("git", "fetch", "-q", "origin", cwd=self.wt)
+        self.assertEqual(e.rebase_onto_base(), "rebased")
+        self.assertEqual(json.loads(e.checkpoint_path().read_text())["head"], e.git("rev-parse", "HEAD~1"))
+
     def test_the_lifesim_wording_is_found_too_and_a_plain_red_check_is_not(self):
         self.assertTrue(engine.STALE_TREE.search("This checkout has no fmt-check-changed; rebase onto main"))
         self.assertFalse(engine.STALE_TREE.search("2 tests failed: FooTests.Bar"))

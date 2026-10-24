@@ -2367,12 +2367,16 @@ class Engine:
         if behind in ("", "0"):
             return ""
         old = self.git("rev-parse", "HEAD")
+        old_parent = self.git("rev-parse", "-q", "--verify", "HEAD~1") if self.left_dirty else ""
         rc, tail = self.sh(["git", "rebase", "-q", self.cfg["base"]], pin=True)
         if not rc:  # the checkpoint's head follows, or the next resume reads this as an edit from outside
             try:
                 ck = json.loads(self.checkpoint_path().read_text())
                 if isinstance(ck, dict) and ck.get("head") == old:
                     ck["head"] = self.git("rev-parse", "HEAD")
+                    self.checkpoint_path().write_text(json.dumps(ck, indent=1))
+                elif isinstance(ck, dict) and old_parent and ck.get("head") == old_parent:  # the wip commit reset() made on top of it
+                    ck["head"] = self.git("rev-parse", "HEAD~1")
                     self.checkpoint_path().write_text(json.dumps(ck, indent=1))
             except (OSError, ValueError):
                 pass
@@ -4058,7 +4062,7 @@ class Engine:
                         break
                     self.warn("`%s` failed (exit %d), retrying: it is marked flaky" % (c["id"], rc))
                 if rc and c.get("repo"):
-                    stale = STALE_TREE.search(seen or tail)
+                    stale = STALE_TREE.search((seen or tail)[-500:])  # its last lines: a test that talks about recipes is no stale tree
                     if stale:  # tl-fsj: not a writer's amend; the engine's tree is older than the config it runs
                         raise Blocked("failed: infrastructure: the configured check `%s` needs something this tree lacks (\"%s\"): the "
                                       "tree is older than the base's .task-loop.json, which no writer can fix" % (c["id"], stale.group(0)))
