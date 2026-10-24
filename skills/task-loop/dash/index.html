@@ -609,7 +609,7 @@ function renderTask(){const d=S.tl;if(!d||!d.task||d.task.id!=S.task){paint($('m
 
 const ASKK={decision:'Decision needed',verify:'Please check',denied:'Blocked: a step needs you',budget:'Over its time limit',ticket:'Split or criteria needed',stuck:'Stuck: a hint is needed'};
 const PEND={},DRAFT={},SEEN={},ERR={},AMEND={};  // PEND: ask id -> {ask,text,label,at,timer|sending|done|err}; DRAFT: unsent text; SEEN: asks as last drawn
-const UNDO_MS=8000,STALE=['withdrawn','gone','answered','bead_missing'];
+const UNDO_MS=8000,STALE=['withdrawn','gone','answered','bead_missing','consumed'];
 /*md*/function md(src){  // a small safe markdown: paragraphs, bullets, tables, **bold**, `code`; everything is escaped first, no links, no raw HTML
   const inl=t=>esc(t).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>');
   const L=String(src==null?'':src).split('\n'),row=/^\s*\|.*\|\s*$/,sep=/^\s*\|[\s:|-]+\|\s*$/;let out='',i=0,ul=false;
@@ -665,7 +665,7 @@ async function postAnswer(id){const p=PEND[id];if(!p)return;clearInterval(p.tick
   p.sending=false;
   if(!r){p.err='The dashboard did not answer. Nothing was sent; your text is kept.';DRAFT[id]=p.text;fail()}
   else if(r.status==401){p.err='This address needs the answer link. Run tl dash url in a terminal and open the ANSWER LINK it prints. Nothing was sent.';DRAFT[id]=p.text;fail()}
-  else if(!r.ok){const j=await r.json().catch(()=>({}));p.err=j.error||'Failed. Nothing was sent.';p.dismiss=j.code=='bead_missing';p.stale=STALE.includes(j.code);DRAFT[id]=p.text;
+  else if(!r.ok){const j=await r.json().catch(()=>({}));p.err=j.error||'Failed. Nothing was sent.';p.dismiss=j.code=='bead_missing';p.stale=STALE.includes(j.code);if(p.stale)delete AMEND[id];DRAFT[id]=p.text;
     if(j.code=='superseded'){delete PEND[id];S.sig={};poll();return}fail()}
   else{const j=await r.json().catch(()=>({}));p.done=j.next||'The next run starts from it.';delete DRAFT[id];delete AMEND[id];setTimeout(()=>{if(PEND[id]===p){delete PEND[id];repaintAsks()}},60000);S.sig={};poll();repaintAsks()}
   function fail(){if(!p.stale){ERR[id]=p.err;delete PEND[id]}repaintAsks();S.sig={};poll()}}

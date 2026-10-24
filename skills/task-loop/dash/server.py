@@ -1643,28 +1643,43 @@ def answer(body):
                            cwd=cwd, capture_output=True, text=True)
         if r.returncode:
             return bd_failed(a, r)
-        file_answer(a, text, cwd)
+        file_answer(a, text, cwd, amend)
         subprocess.run(["bd", "update", a["bead"], "--status", "open"], cwd=cwd, capture_output=True, text=True)
     except OSError as e:
         return 502, {"code": "no_bd", "error": "The dashboard cannot run bd (%s). Nothing was sent." % e.strerror}
+    try:  # the bd calls took seconds: re-read, so a run that started meanwhile (status answered) is not undone by a stale copy
+        cur = json.loads(Path(f).read_text())
+        if cur.get("id") != a.get("id"):
+            cur = None
+    except (OSError, ValueError):
+        cur = None
+    if cur is None:
+        cur = a
+    if cur.get("status") not in ("open", "parked"):
+        if amend:
+            return 409, {"code": "consumed", "error": "Too late: a run started on the first answer while you replaced it. "
+                         "Your new text is a comment on the bead; the next run reads it."}
+        return 200, {"ok": True, "bead": a["bead"], "next": next_step(a)}  # a first answer the run already picked up from the comment
     if amend:  # the history stays: every answer given, oldest first
-        a["answers"] = list(a.get("answers") or [{"text": a.get("answer"), "t": a.get("answer_t")}]) + [{"text": text, "t": time.time()}]
-    a.update(answer=text, answer_t=time.time())
+        cur["answers"] = list(cur.get("answers") or [{"text": cur.get("answer"), "t": cur.get("answer_t")}]) + [{"text": text, "t": time.time()}]
+    cur.update(answer=text, answer_t=time.time())
     try:
-        Path(f).write_text(json.dumps(a, indent=1))
-    except OSError:
-        pass  # the comment is the answer; the engine reads it from the bead
+        Path(f).write_text(json.dumps(cur, indent=1))
+    except OSError as e:
+        if amend:  # the old answer would keep winning in the file: say so
+            return 500, {"code": "write", "error": "The new answer could not be saved (%s); the old one still stands." % e.strerror}
     return 200, {"ok": True, "bead": a["bead"], "next": next_step(a)}
 
 
 PLAIN_ANSWERS = {"right", "run again", "allow one more", "yes", "ok"}
 
 
-def file_answer(a, text, cwd):
+def file_answer(a, text, cwd, amend=False):
     """tl-bxk.8.25: a substantive answer is also filed on the bead where the planner reads it: under `## Testing` for a verify or
     denied ask, `## Decisions` for any other. A bare button answer (right, run again) is not: it says nothing the bead should keep.
     Best effort: the comment is the answer, this is the record."""
-    if text.strip().lower().rstrip(".!") in PLAIN_ANSWERS or text.strip().lower() == "wrong:":
+    plain = text.strip().lower().rstrip(".!") in PLAIN_ANSWERS or text.strip().lower() == "wrong:"
+    if plain and not amend:
         return
     head = "## Testing" if a.get("kind") in ("verify", "denied") else "## Decisions"
     first = (a.get("question") or "").strip().splitlines()[0].replace("**", "") if (a.get("question") or "").strip() else a.get("kind", "ask")
@@ -1674,6 +1689,11 @@ def file_answer(a, text, cwd):
         d = json.loads(r.stdout)
         d = d[0] if isinstance(d, list) and d else d
         notes = (d.get("notes") or "").rstrip("\n") if isinstance(d, dict) else ""
+        if amend:  # the line this ask filed for the answer it replaces goes
+            notes = "\n".join(x for x in notes.split("\n") if "(ask %s) " % a.get("id") not in x)
+            if plain:
+                subprocess.run(["bd", "update", a["bead"], "--notes", notes], cwd=cwd, capture_output=True, text=True, timeout=30)
+                return
         m = re.search(r"^%s[ \t]*$" % re.escape(head), notes, re.M)  # the heading on its own line, not ### or a mention
         if m:
             i = m.end()

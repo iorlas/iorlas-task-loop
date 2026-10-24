@@ -488,9 +488,44 @@ class AskFailures(unittest.TestCase):
         (self.asks / "x-1.json").write_text(json.dumps(a))
         code, out = server.answer({"ask": "x-1-1", "text": "third", "amend": True})
         self.assertEqual((code, out["code"]), (409, "consumed"))
+        # a run that picked the answer up while bd was working is not undone: status stays answered, the amend is told it is late
+        self.ask("z")
+        real = server.subprocess.run
+
+        def engine_consumes(cmd, *a, **k):
+            if cmd[:3] == ["bd", "comments", "add"]:
+                f = self.asks / "z.json"
+                d = json.loads(f.read_text())
+                d["status"] = "answered"
+                f.write_text(json.dumps(d))
+            return real(cmd, *a, **k)
+        self.assertEqual(server.answer({"ask": "z-1", "text": "one"})[0], 200)
+        d = json.loads((self.asks / "z.json").read_text())
+        d["status"] = "open"
+        (self.asks / "z.json").write_text(json.dumps(d))
+        with mock.patch.object(server.subprocess, "run", side_effect=engine_consumes):
+            code, out = server.answer({"ask": "z-1", "text": "two", "amend": True})
+        self.assertEqual((code, out["code"]), (409, "consumed"))
+        self.assertEqual(json.loads((self.asks / "z.json").read_text())["status"], "answered")
         self.ask("y")  # no answer yet: amend is just the first answer
         self.assertEqual(server.answer({"ask": "y-1", "text": "one", "amend": True})[0], 200)
         self.assertNotIn("answers", json.loads((self.asks / "y.json").read_text()))
+
+    def test_amending_replaces_the_line_filed_for_the_old_answer(self):
+        self.bd("""case "$1" in
+show) python3 -c "import json,sys;print(json.dumps([{'id':'x','notes':open(sys.argv[1]).read()}]))" NOTES ;;
+update) [ "$3" = "--notes" ] && printf '%s' "$4" > NOTES ;;
+esac
+""".replace("NOTES", str(self.d / "notes.txt")))
+        (self.d / "notes.txt").write_text("")
+        self.ask("x", kind="decision", question="**Which db?**")
+        self.assertEqual(server.answer({"ask": "x-1", "text": "use sqlite"})[0], 200)
+        self.assertEqual(server.answer({"ask": "x-1", "text": "use postgres", "amend": True})[0], 200)
+        text = (self.d / "notes.txt").read_text()
+        self.assertIn("use postgres", text)
+        self.assertNotIn("use sqlite", text)
+        self.assertEqual(server.answer({"ask": "x-1", "text": "run again", "amend": True})[0], 200)  # a bare answer removes the line
+        self.assertNotIn("(ask x-1)", (self.d / "notes.txt").read_text())
 
     def test_a_parked_ask_is_listed_last_flagged_and_answerable(self):
         self.bd("echo \"$*\" >> %s\n" % (self.d / "bd.log"))
