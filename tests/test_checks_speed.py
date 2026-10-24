@@ -243,6 +243,7 @@ class Duplicates(SpeedTest):
         self.assertEqual(f("just t | tee e/l && grep P e/l", "just t", "V"), 'cat "$V" | tee e/l && grep P e/l')
         self.assertIsNone(f("just t | tee e/l; grep P e/l", "just t", "V"))
         self.assertIsNone(f("rm -f r.xml && just t", "just t", "V"))
+        self.assertIsNone(f("cd client && just t > o && grep P o", "just t", "V"))
         self.assertIsNone(f("just t foo", "just t", "V"))
         self.assertIsNone(f("FOO=1 just t", "just t", "V"))
         self.assertIsNone(f("! just t", "just t", "V"))

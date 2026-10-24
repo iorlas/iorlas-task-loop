@@ -259,7 +259,7 @@ def split_top(cmd):
 REDIRECTS = re.compile(r"""^(?:\s*(?:\d*>>?\s*[^\s|&;<>]+|\d*>&\d|&>>?\s*[^\s|&;<>]+|\|\s*tee(?:\s+-a)?\s+[^\s|&;<>]+))*\s*$""")
 
 
-SETUP_WORDS = ('mkdir', 'echo', 'printf', 'export', 'true', 'test', '[', 'cd', 'set', ':')
+SETUP_WORDS = ('mkdir', 'echo', 'printf', 'export', 'true', 'test', '[', ':')  # no cd: another directory is another command
 READ_WORDS = ('grep', 'egrep', 'fgrep', 'test', '[', 'wc', 'tail', 'head', 'cat')  # an extra part that only reads
 TARGET = re.compile(r"""(?:\d*>>?|&>>?)\s*([^\s|&;<>]+)|\|\s*tee(?:\s+-a)?\s+([^\s|&;<>]+)""")
 
