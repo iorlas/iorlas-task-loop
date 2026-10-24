@@ -1441,7 +1441,11 @@ def api_reflections(hours=24):
     """The recurring and one-off causes of the last day's run reflections, each with the bead filed for it (tl-bl5)."""
     _engine_dir()
     import reflect_digest
-    return reflect_digest.view(max(1, min(int(hours or 24), 24 * 14)))
+    try:
+        hours = int(hours)
+    except (TypeError, ValueError):
+        hours = 24
+    return reflect_digest.view(max(1, min(hours, 24 * 14)))
 
 
 def api_looks(repo=""):

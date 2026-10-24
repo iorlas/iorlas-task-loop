@@ -64,8 +64,8 @@ class Base(unittest.TestCase):
     def comments(self):
         return [c for c in self.calls if c[0][0] == "comments"]
 
-    def trace(self, run, bad, repo="lifesim", bead="b1", t=NOW - 3600):
-        rec = {"run": run, "bead": bead, "repo": self.repos[repo], "ended": t,
+    def trace(self, run, bad, repo="lifesim", bead="b1", t=NOW - 3600, url=True):  # the engine writes the origin's URL
+        rec = {"run": run, "bead": bead, "repo": ("git@github.com:me/%s.git" % repo) if url else self.repos[repo], "ended": t,
                "reflection": {"went_well": [], "wasted": [], "change": [], "went_badly": [
                    {"what": w, "cause": c, "session": "s-" + run, "evidence": e} for w, c, e in bad]}}
         with open(self.traces, "a") as f:
@@ -81,9 +81,30 @@ class Clusters(Base):
         self.assertEqual([(c["cause"], len(c["runs"])) for c in cs], [("prompt", 2), ("engine", 1)])
         self.assertEqual([c["cause"] for c in rd.recurring(cs)], ["prompt"])
 
+    def test_a_bare_shared_file_alone_does_not_merge_unrelated_items(self):
+        self.trace("r1", [("planner missed the dependency edge", "engine", "engine.py")])
+        self.trace("r2", [("close crashed because zebra giraffe", "engine", "engine.py")], bead="b2")
+        self.assertEqual(len(rd.cluster(rd.items(NOW - 86400, NOW))), 2)
+
+    def test_a_trace_repo_url_or_worktree_path_resolves_to_the_registered_repo(self):
+        repos = list(self.repos.values())
+        self.assertEqual(rd.resolve_repo("git@github.com:me/lifesim.git", repos), self.repos["lifesim"])
+        self.assertEqual(rd.resolve_repo("https://github.com/me/lifesim", repos), self.repos["lifesim"])
+        wt = Path(self.repos["lifesim"]) / ".slots" / "s1"
+        wt.mkdir(parents=True)
+        self.assertEqual(rd.resolve_repo(str(wt), repos), self.repos["lifesim"])
+        self.assertEqual(rd.resolve_repo("https://x/y/unknown.git", repos), "")
+
+    def test_one_beads_two_runs_are_not_recurring_but_three_are(self):
+        self.trace("r1", [("writer reran the whole test suite after every edit", "prompt", "9")])
+        self.trace("r2", [("writer reran the whole test suite after every edit again", "prompt", "7")])
+        self.assertEqual(rd.recurring(rd.cluster(rd.items(NOW - 86400, NOW))), [])
+        self.trace("r3", [("writer reran the whole test suite after every edit", "prompt", "5")])
+        self.assertEqual(len(rd.recurring(rd.cluster(rd.items(NOW - 86400, NOW)))), 1)
+
     def test_a_shared_file_joins_items_that_say_different_things(self):
-        self.trace("r1", [("planner missed the dependency", "engine", "see skills/task-loop/engine.py line 12")])
-        self.trace("r2", [("close step crashed on empty list", "engine", "engine.py")], bead="b2")
+        self.trace("r1", [("planner missed the dependency edge", "engine", "see skills/task-loop/engine.py line 12")])
+        self.trace("r2", [("planner crashed on the dependency list", "engine", "engine.py")], bead="b2")
         self.trace("r3", [("nothing alike whatsoever here", "engine", "other.py")], bead="b3")
         cs = rd.cluster(rd.items(NOW - 86400, NOW))
         self.assertEqual(sorted(len(c["runs"]) for c in cs), [1, 2])
@@ -159,6 +180,23 @@ class Filing(Base):
         args = self.creates()[1][0]
         self.assertIn("tl-new1", args[args.index("--description") + 1])
 
+    def test_a_cause_that_keeps_coming_back_after_closes_files_one_new_bead_each_time_not_one_per_digest(self):
+        self.two()
+        rd.digest(NOW - 86400, NOW)
+        self.status["tl-new1"] = "closed"
+        self.trace("r3", [("writer reran the whole test suite after every edit", "prompt", "5")], bead="b3")
+        rd.digest(NOW - 86400, NOW)  # B2 now
+        rd.digest(NOW - 86400, NOW)  # B2 is open: no third bead
+        rd.digest(NOW - 86400, NOW)
+        self.assertEqual(len(self.creates()), 2)
+
+    def test_an_open_bead_found_by_title_is_commented_once(self):
+        self.two()
+        self.open_rows = [{"id": "tl-77", "title": "Writer reruns the whole test suite after every edit"}]
+        rd.digest(NOW - 86400, NOW)
+        rd.digest(NOW - 86400, NOW)
+        self.assertEqual(len(self.comments()), 1)
+
     def test_dry_run_files_and_writes_nothing(self):
         self.two()
         d = rd.digest(NOW - 86400, NOW, dry=True)
@@ -203,3 +241,4 @@ class Api(Base):
         v = server.api_reflections("24")
         self.assertEqual((v["hours"], v["clusters"][0]["runs"], v["clusters"][0]["recurring"]), (24, 2, True))
         self.assertEqual(server.api_reflections("99999")["hours"], 24 * 14)
+        self.assertEqual(server.api_reflections("abc")["hours"], 24)

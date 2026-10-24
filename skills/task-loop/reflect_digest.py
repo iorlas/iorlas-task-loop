@@ -23,6 +23,7 @@ import tl
 
 MIN_RUNS = 2
 SIMILAR = 0.35  # token overlap (Jaccard) that makes two went_badly items one cause
+FILE_SIMILAR = 0.1  # ... or this much when they also name the same file (a bare tl.py or README.md must not merge unrelated items)
 TITLE_SIMILAR = 0.5  # ... and an open bead's title the same as a cluster
 DAY = 86400
 OWNERS = {"engine": "iorlas-task-loop", "prompt": "iorlas-task-loop", "delegate": "iorlas-delegate"}
@@ -97,7 +98,8 @@ def cluster(its):
     cl = []
     for it in its:
         for c in cl:
-            if c["cause"] == it["cause"] and any(it["files"] & m["files"] or jaccard(it["tokens"], m["tokens"]) >= SIMILAR
+            if c["cause"] == it["cause"] and any(jaccard(it["tokens"], m["tokens"]) >= SIMILAR or
+                                                 (it["files"] & m["files"] and jaccard(it["tokens"], m["tokens"]) >= FILE_SIMILAR)
                                                  for m in c["items"]):
                 c["items"].append(it)
                 break
@@ -115,8 +117,14 @@ def cluster(its):
     return sorted(out, key=lambda c: (-len(c["runs"]), c["cause"]))
 
 
+def is_recurring(c):
+    """Two beads show it, or one bead's run did it three times: one retried bead with one complaint is a bead's problem."""
+    runs = c["runs"] if isinstance(c.get("runs"), list) else c["run_ids"]
+    return len(runs) >= 3 or (len(runs) >= MIN_RUNS and len(c["beads"]) >= 2)
+
+
 def recurring(clusters):
-    return [c for c in clusters if len(c["runs"]) >= MIN_RUNS]
+    return [c for c in clusters if is_recurring(c)]
 
 
 def registered():
@@ -127,6 +135,24 @@ def registered():
     return [p for p in (d if isinstance(d, list) else list(d)) if isinstance(p, str) and (Path(p) / ".beads").is_dir()]
 
 
+def resolve_repo(value, repos):
+    """A trace's `repo` is the origin's URL (or the worktree path when there is no origin): -> the registered repo folder it is."""
+    v = str(value or "")
+    if not v:
+        return ""
+    if v in repos:
+        return v
+    if os.path.isdir(v):
+        real = os.path.realpath(v)
+        hits = [p for p in repos if real == os.path.realpath(p) or real.startswith(os.path.realpath(p) + os.sep)]
+        return max(hits, key=len) if hits else ""
+    name = re.sub(r"\.git$", "", v.rstrip("/").replace(":", "/").split("/")[-1])
+    for p in repos:
+        if Path(p).name == name:
+            return p
+    return ""
+
+
 def owner_repo(c, repos=None):
     """The repo whose bead list takes this cause: task-loop, delegate, or the project most of its runs ran in."""
     repos = registered() if repos is None else repos
@@ -135,8 +161,12 @@ def owner_repo(c, repos=None):
         for p in repos:
             if Path(p).name == want:
                 return p
-    mine = [r for r, _ in c["repos"].most_common() if r in repos]
-    return mine[0] if mine else (c["repos"].most_common(1)[0][0] if c["repos"] else "")
+    mine = Counter()
+    for r_, n in c["repos"].items():
+        hit = resolve_repo(r_, repos)
+        if hit:
+            mine[hit] += n
+    return mine.most_common(1)[0][0] if mine else ""
 
 
 def bd_json(args, repo):
@@ -149,14 +179,18 @@ def bd_json(args, repo):
         return None
 
 
+def same_cause(e, c):
+    t = jaccard(set(e.get("tokens") or []), c["tokens"])
+    return t >= SIMILAR or bool(set(e.get("files") or []) & set(c["files"]) and t >= FILE_SIMILAR)
+
+
 def known_bead(c, repo, state):
     """-> (bead id, why) of the bead that already carries this cause: the state file's, else an open bead of the repo with a like
     title; ('', '') when none."""
-    for e in state.get("filed", []):
-        if e.get("cause") == c["cause"] and e.get("repo") == repo and (set(e.get("files") or []) & set(c["files"])
-                                                                         or jaccard(set(e.get("tokens") or []), c["tokens"]) >= SIMILAR):
+    for e in reversed(state.get("filed", [])):  # the newest first: a closed one's successor wins
+        if e.get("cause") == c["cause"] and e.get("repo") == repo and same_cause(e, c):
             return e["bead"], "filed"
-    rows = bd_json(["list", "--status=open", "--json", "--limit", "0"], repo) or []
+    rows = bd_json(["list", "--json", "--limit", "0"], repo) or []  # the default filter leaves out closed beads only
     ct = tokens(c["title"])
     for b in rows if isinstance(rows, list) else []:
         if jaccard(tokens(b.get("title") or ""), ct) >= TITLE_SIMILAR:
@@ -198,22 +232,27 @@ def file_cluster(c, state, dry=False, repos=None):
     if not repo:
         return res
     bead, why = known_bead(c, repo, state)
+    old = ""
     if bead and why == "filed" and is_closed(bead, repo):
+        for e in state.get("filed", []):
+            if e.get("bead") == bead and e.get("repo") == repo:
+                e["closed"] = True  # its successor takes the cause from here
         old, bead = bead, ""
-    else:
-        old = ""
-    entry = next((e for e in state.get("filed", []) if e.get("bead") == bead and e.get("repo") == repo), None)
     if bead:
-        new = [r for r in c["runs"] if r not in (entry or {}).get("runs", [])]
+        entry = next((e for e in state.get("filed", []) if e.get("bead") == bead and e.get("repo") == repo), None)
+        if entry is None:  # an open bead found by title: remember it, so its runs are commented once
+            entry = {"cause": c["cause"], "repo": repo, "bead": bead, "tokens": sorted(c["tokens"]), "files": c["files"], "runs": [],
+                     "at": time.time()}
+            if not dry:
+                state.setdefault("filed", []).append(entry)
+        new = [r_ for r_ in c["runs"] if r_ not in entry["runs"]]
         res.update(bead=bead, action="skipped")
-        if new and not dry:
-            tl.bd("comments", "add", bead, "Reflect digest: the cause recurred in %d more run(s): %s\n%s" % (
-                len(new), ", ".join(new), "\n".join(evidence_lines(dict(c, items=[i for i in c["items"] if i["run"] in new])))), cwd=repo)
+        if new:
             res["action"] = "commented"
-        elif new:
-            res["action"] = "commented"
-        if entry is not None and new and not dry:
-            entry["runs"] = sorted(set(entry["runs"]) | set(new))
+            if not dry:
+                tl.bd("comments", "add", bead, "Reflect digest: the cause recurred in %d more run(s): %s\n%s" % (
+                    len(new), ", ".join(new), "\n".join(evidence_lines(dict(c, items=[i for i in c["items"] if i["run"] in new])))), cwd=repo)
+                entry["runs"] = sorted(set(entry["runs"]) | set(new))
         return res
     title = "Reflect: %s: %s" % (c["cause"], c["title"])[:140]
     res["action"] = "filed"
@@ -232,20 +271,31 @@ def file_cluster(c, state, dry=False, repos=None):
 
 
 def digest(since, until, dry=False, traces=None, repos=None):
-    """-> {window, clusters: [...], actions: [...]}. Files and updates beads unless dry."""
+    """-> {window, clusters: [...], actions: [...]}. Files and updates beads unless dry; one digest at a time (a manual run and
+    the daily one never both file the cause), the state saved after every bead so a crash loses none."""
+    if dry:
+        return _digest(since, until, True, traces, repos)
+    try:
+        with tl.os_lock(tl.config_dir() / "locks" / "reflect-digest-run.lock", "pid %d" % os.getpid(), timeout=120):
+            return _digest(since, until, False, traces, repos)
+    except TimeoutError:
+        return {"since": since, "until": until, "items": 0, "clusters": [], "actions": [], "busy": True}
+
+
+def _digest(since, until, dry, traces, repos):
     cs = cluster(items(since, until, traces))
     out = {"since": since, "until": until, "items": sum(len(c["items"]) for c in cs), "clusters": [], "actions": []}
     state = read_state()
     for c in cs:
         row = {"cause": c["cause"], "title": c["title"], "runs": len(c["runs"]), "run_ids": c["runs"], "beads": c["beads"],
-               "files": c["files"], "recurring": len(c["runs"]) >= MIN_RUNS}
+               "files": c["files"], "recurring": is_recurring(c)}
         out["clusters"].append(row)
         if row["recurring"]:
             a = file_cluster(c, state, dry, repos)
             out["actions"].append(a)
             row["bead"], row["repo"] = a["bead"], a["repo"]
-    if not dry and out["actions"]:
-        write_state(state)
+            if not dry and a["action"] in ("filed", "commented"):
+                write_state(state)
     return out
 
 
@@ -256,10 +306,9 @@ def view(hours=24, now=None):
     st = read_state()
     out = []
     for c in cs:
-        e = next((e for e in st.get("filed", []) if e.get("cause") == c["cause"] and (set(e.get("files") or []) & set(c["files"])
-                                                                                       or jaccard(set(e.get("tokens") or []), c["tokens"]) >= SIMILAR)), None)
+        e = next((e for e in st.get("filed", []) if e.get("cause") == c["cause"] and not e.get("closed") and same_cause(e, c)), None)
         out.append({"cause": c["cause"], "title": c["title"], "runs": len(c["runs"]), "run_ids": c["runs"][:12], "beads": c["beads"][:8],
-                    "files": c["files"], "recurring": len(c["runs"]) >= MIN_RUNS, "bead": (e or {}).get("bead", ""),
+                    "files": c["files"], "recurring": is_recurring(c), "bead": (e or {}).get("bead", ""),
                     "repo": (e or {}).get("repo", ""), "last": c["last"]})
     return {"hours": hours, "clusters": out}
 
@@ -277,12 +326,13 @@ def maybe_run(now=None):
         with tl.os_lock(tl.config_dir() / "locks" / "reflect-digest.lock", "pid %d" % os.getpid()):
             if not due(now):
                 return ""
-            st = read_state()
-            st["tried"] = now or time.time()
-            write_state(st)
+            pass
         subprocess.Popen([sys.executable, str(Path(__file__).resolve().with_name("tl.py")), "reflect", "digest"],
                          stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          start_new_session=(os.name != "nt"))
+        st = read_state()
+        st["tried"] = now or time.time()
+        write_state(st)
     except OSError:
         return ""
     return "started"
@@ -299,7 +349,13 @@ def cmd_reflect(a):
             return now - int(m.group(1)) * 3600
         import report
         return float(text) if re.match(r"^\d{9,}(\.\d+)?$", text.strip()) else report.parse_time(text, now)
-    d = digest(at(a.since, now - DAY), at(a.until, now), dry=a.dry_run)
+    st = read_state()
+    since = at(a.since, max(now - 3 * DAY, float(st.get("until") or 0) or now - DAY))  # since the last digest ended, 3 days at most
+    d = digest(since, at(a.until, now), dry=a.dry_run)
+    if not a.dry_run and not a.since and not d.get("busy"):
+        st = read_state()
+        st["until"] = now
+        write_state(st)
     if a.json:
         print(json.dumps(d, indent=1, default=str))
         return 0

@@ -841,7 +841,7 @@ document.addEventListener('keydown',e=>{if(e.key=='Escape'&&S.view=='roadmap'&&S
 // ---- looks gallery: taste items from owner-look beads; "good" settles one, "redo" files a bead with the note ---------------
 const L={d:null,busy:{},err:{},draft:{}};
 const C={d:null};
-function renderCauses(){const d=C.d;if(!d)return;const cs=d.clusters||[],rec=cs.filter(c=>c.recurring);
+function renderCauses(){const d=C.d;if(!d){paint($('main'),'main','<div class="loading">Loading…</div>');return}const cs=d.clusters||[],rec=cs.filter(c=>c.recurring);
   let html=`<div class="hero"><div><h1>Causes</h1><div class="sum">last ${d.hours} h of run reflections · <b>${rec.length}</b> recurring · ${cs.length-rec.length} seen once</div></div></div>`;
   html+=cs.length?cs.map(c=>`<div class="lkc${c.recurring?'':' lkdone'}"><div><h3>${esc(c.title)}</h3><div class="lm"><span>${esc(c.cause)}</span><span>${c.runs} run${c.runs==1?'':'s'}</span>${c.bead?`<a class="mono" href="${taskHref(c.bead,c.repo?c.repo.split('/').pop():'')}">${esc(shortId(c.bead))}</a>`:(c.recurring?'<span>bead pending</span>':'')}</div></div>
     ${c.files.length?`<div class="lnote">${c.files.map(esc).join(' · ')}</div>`:''}<div class="lm">${(c.beads||[]).map(b=>`<a class="mono" href="${taskHref(b,'')}">${esc(shortId(b))}</a>`).join(' ')}</div></div>`).join(''):'<div class="list"><div class="empty"><b>No reflection in the window</b>Every run since 0.23.25 writes one; recurring causes become a bead each day (tl reflect digest).</div></div>';
