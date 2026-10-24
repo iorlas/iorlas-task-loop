@@ -9,6 +9,8 @@
   tl.py stage ID TEXT                           record what the task is doing now (shown on the dashboard)
   tl.py worker ID --kind K --ref R [--title T]  record a worker run (codex | claude-p | subagent | other)
   tl.py land ID --sha SHA [--worktree DIR]      record the landing (before close)
+  tl.py land-lock [--repo DIR] [--wait-min N] -- CMD...
+                                                run CMD under the repo's land lock (the engine's); exits with CMD's code, 75 on timeout
   tl.py close ID [--reason R]                   close the bead, record it
   tl.py block ID --why TEXT                     block the bead with a question, record it
   tl.py slot list|take|release|reset|setup ...  slots (see SKILL.md, Slots)
@@ -63,9 +65,10 @@ RETAIN_DAYS = 7
 # ---- paths and identity -------------------------------------------------------------------------------------------
 
 @contextlib.contextmanager
-def os_lock(path, holder, waiting=None):
+def os_lock(path, holder, waiting=None, timeout=None):
     """One holder at a time, across processes: an flock the OS drops when the process dies; a second taker waits in
-    line. The file names the holder; `waiting(text)` is called with it once, before blocking. No-op without fcntl."""
+    line. The file names the holder; `waiting(text)` is called with it once, before blocking. With `timeout` (seconds) a
+    wait that long raises TimeoutError (the holder's name in it). No-op without fcntl."""
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     f = open(path, "a+")
     try:
@@ -81,7 +84,18 @@ def os_lock(path, holder, waiting=None):
                             break
                         time.sleep(0.01)
                     waiting(who or "?")
-                fcntl.flock(f, fcntl.LOCK_EX)
+                if timeout is None:
+                    fcntl.flock(f, fcntl.LOCK_EX)
+                else:
+                    end = time.monotonic() + timeout
+                    while True:
+                        try:
+                            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                            break
+                        except OSError:
+                            if time.monotonic() >= end:
+                                raise TimeoutError(Path(path).read_text().strip() or "?")
+                            time.sleep(0.05)
         f.seek(0)
         f.truncate()
         f.write(holder)
@@ -218,6 +232,47 @@ def repo_root(cwd=None):
         p = Path(common)
         return str(p.parent if p.name == ".git" else p)
     return git("rev-parse", "--show-toplevel", cwd=cwd) or str(Path(cwd or os.getcwd()).resolve())
+
+
+def cmd_land_lock(a):
+    """Run a command while holding the repo's land lock (what the engine takes around fetch, rebase, gate, push)."""
+    cmd = list(a.cmd_args)
+    if cmd and cmd[0] == "--":
+        cmd = cmd[1:]
+    if not cmd:
+        print("land-lock: no command (usage: tl.py land-lock [--repo DIR] -- CMD...)", file=sys.stderr)
+        return 2
+    repo = str(Path(a.repo).resolve())
+    path = land_lock_path(git("remote", "get-url", "origin", cwd=repo) or repo)
+    holder = "land-lock pid %d (%s)" % (os.getpid(), " ".join(cmd)[:80])
+    secs = a.wait_min * 60 if a.wait_min is not None else None
+    child = []
+    got = []
+
+    def stop(sig, _frame):
+        got.append(sig)
+        for c in child:
+            if c.poll() is None:
+                c.send_signal(sig)
+        if not child:
+            raise SystemExit(128 + sig)
+
+    old = {s: signal.signal(s, stop) for s in (signal.SIGINT, signal.SIGTERM)}
+    try:
+        with os_lock(path, holder, lambda who: print("waiting for the land lock (held by %s)" % who, flush=True), secs):
+            try:
+                child.append(subprocess.Popen(cmd))
+            except OSError as e:
+                print("land-lock: cannot run %s: %s" % (cmd[0], e), file=sys.stderr)
+                return 127
+            rc = child[0].wait()
+            return 128 + got[0] if got and rc < 0 else rc
+    except TimeoutError as e:
+        print("land-lock: gave up after %s min waiting for the land lock (held by %s)" % (a.wait_min, e), file=sys.stderr)
+        return 75
+    finally:
+        for s, h in old.items():
+            signal.signal(s, h)
 
 
 def actor():
@@ -1528,6 +1583,10 @@ def main(argv=None):
     p.add_argument("--outcome-file", help="also write the outcome (the last stdout line, JSON) to this file")
     p = sp.add_parser("usage", help="pass get_usage's plan.windows (JSON) to delegate, so headless Claude steps may run")
     p.add_argument("windows")
+    p = sp.add_parser("land-lock", help="run a command under the repo's land lock (the one the engine lands under)")
+    p.add_argument("--repo", default=".", metavar="DIR", help="Git working directory (default: current directory)")
+    p.add_argument("--wait-min", type=float, default=None, help="give up (exit 75) after this many minutes")
+    p.add_argument("cmd_args", nargs=argparse.REMAINDER, metavar="-- CMD")
     p = sp.add_parser("trace", help="engine runs of a bead (or all) with every worker session and its transcript")
     p.add_argument("id", nargs="?", default="")
     p.add_argument("--last", type=int, default=0)
@@ -1598,7 +1657,7 @@ def main(argv=None):
         return r.returncode
     return {"register": cmd_register, "claim": cmd_claim, "heartbeat": cmd_heartbeat, "stage": cmd_stage, "worker": cmd_worker,
             "land": cmd_land, "close": cmd_close, "block": cmd_block, "slot": cmd_slot, "worktree": cmd_worktree,
-            "dash": cmd_dash, "ask": cmd_ask, "hook": cmd_hook, "doctor": cmd_doctor}[a.cmd](a)
+            "dash": cmd_dash, "ask": cmd_ask, "hook": cmd_hook, "doctor": cmd_doctor, "land-lock": cmd_land_lock}[a.cmd](a)
 
 
 if __name__ == "__main__":
