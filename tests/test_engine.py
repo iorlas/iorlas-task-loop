@@ -2422,6 +2422,48 @@ class EngineTest(unittest.TestCase):
                   "curl x", "rg x | xargs rm", "cat $(ls)", "head -n 5 a; rm b", "git checkout x", "cat <<EOF", "echo `id`", "", None):
             self.assertFalse(engine.read_only_command(c), c)
 
+    RESEARCH_DIFF = ("diff --git a/notes/hair.md b/notes/hair.md\n+++ b/notes/hair.md\n@@ -0,0 +1,3 @@\n"
+                     "+Dread packs: https://fab.com/s/abc is free.\n+Beards: (unverified) https://sketchfab.com/m/x blocks agents.\n"
+                     "+Docs: https://docs.unity3d.com/Manual/index.html\n")
+
+    def test_links_that_do_not_open_go_back_to_the_writer_and_unverified_ones_to_the_owner(self):
+        """tl-bxk.7 (lifesim-ggi: 7 of 19 links 403 from the host, 'verified' from a sandbox with no network)."""
+        self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        eng, opened = self.eng, []
+
+        def fake(url):
+            opened.append(url)
+            return (url.startswith("https://docs."), "HTTP 403")
+        eng.link_fn = fake
+        with mock.patch.object(engine.Engine, "task_diff", return_value=self.RESEARCH_DIFF):
+            review = {"findings": []}
+            eng.link_judged(review)
+            self.assertEqual(len(review["findings"]), 1)
+            self.assertIn("https://fab.com/s/abc did not open from the engine's host (HTTP 403)", review["findings"][0]["fix"])
+            self.assertEqual(review["findings"][0]["file"], "notes/hair.md")
+            self.assertEqual([(u["kind"], u["source"]) for u in eng.unverified], [("external_fact", "https://sketchfab.com/m/x")])
+            self.assertIn("Beards: (unverified)", eng.unverified[0]["what"])
+            opened.clear()
+            review = {"findings": []}
+            eng.link_judged(review)  # the link that opened is not opened again; the two that did not are
+            self.assertEqual(sorted(opened), ["https://fab.com/s/abc", "https://sketchfab.com/m/x"])
+            self.assertEqual(len(eng.unverified), 1)
+        eng.cfg["check_links"] = False
+        review = {"findings": []}
+        eng.link_judged(review)
+        self.assertEqual(review["findings"], [])
+
+    def test_a_task_with_an_unopened_link_is_sent_back_then_asks_when_the_writer_cannot_fix_it(self):
+        fake = lambda url: (False, "HTTP 403")
+        with mock.patch.object(engine.links, "check", fake), mock.patch.object(engine.Engine, "task_diff", return_value=self.RESEARCH_DIFF):
+            rc, s = self.run_engine({"plan": [PLAN] * 3, "write": [WRITE] * 8, "review": [CLEAN] * 8},
+                                    max_rounds=2, max_replans=0)
+        self.assertEqual(rc, 2, self.blocked)
+        self.assertNotIn("engine error", " ".join(self.blocked))
+        self.assertGreaterEqual([c[0] for c in s.calls].count("worker"), 2)  # a fix round went to the writer
+        self.assertIn("did not open from the engine's host", self.eng.log_path.read_text() + " ".join(self.blocked) +
+                      " ".join(str(c) for c in self.bd_calls))
+
     def test_a_second_denied_write_in_a_bead_needs_a_human_with_every_denied_command(self):
         first = {"v": 2, "status": "done", "data": WRITE, "ref": "w1", "family": "claude",
                  "denied": [{"tool": "Bash", "input": "git checkout x && pick"}]}

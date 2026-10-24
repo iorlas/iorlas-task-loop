@@ -30,6 +30,7 @@ import uuid
 from pathlib import Path
 
 import checks_speed as cs
+import links
 import looks
 import notifier
 import tl
@@ -39,6 +40,7 @@ DEFAULTS = {
     "land": "git push origin HEAD:main",
     "base": "origin/main",
     "budget_usd": 15,
+    "check_links": True,  # tl-bxk.7: open every link a task adds to a text file from this host; one that does not open goes back to the writer
     "budget_min": 180,
     "max_rounds": 3,                  # review send-backs per stage before a replan
     "max_check_tries": 3,             # red checks in a row that end a round (checks never reach the reviewer red)
@@ -1310,6 +1312,7 @@ class Engine:
         self.look_filed = False
         self.look_unjudged, self.look_retried, self.shots_skipped = {}, set(), set()  # unjudged: item -> why
         self.unverified = []  # tl-bxk.10.28: items that land for the owner
+        self.link_ok, self.link_bad, self.link_fn = set(), {}, None  # tl-bxk.7: links opened from this host (link_fn: a test's check)
         self.filed = []       # leftover titles filed by an earlier run on this checkpoint: a replan naming one again is no new bead
         self.stage_tree = ""  # the tree the current stage started from ("" = the task's base): the review's diff runs from here
         self.writer_said = "" # the writer's answers so far: a new file they name is meant (tl-bxk.10.24)
@@ -3822,6 +3825,7 @@ class Engine:
             judged = self.out_of_scope(self.engine_unproven(review.get("unchecked") or [], checks))
             self.unchecked = self.unchecked + judged if fix else judged
             self.look_judged(review, st, w, fix)
+            self.link_judged(review)
             same = self.last_flag == "same_family"
             if same:
                 self.warn("%s: the review is from the writer's own model family (no other lane was free)" % name)
@@ -4653,6 +4657,42 @@ class Engine:
             text += ("\nThe writer says this change is logic-only: \"%s\". Accept it only if nothing on screen can differ; "
                      "if not, give a medium finding." % w["logic_only"].strip())
         return text + "\nlook: empty when nothing here is visual.\n"
+
+    def link_judged(self, review):
+        """tl-bxk.7: every link the task adds to a text file is opened from the engine's host (the writer's sandbox has no network,
+        and 'verified' there means nothing). One that does not open is a finding for the writer: replace it, or write `unverified` on
+        its line; a link marked unverified lands as an item for the owner with the claim it carries (a bot-blocking site answers
+        403 from here and opens for a person). Opened links are not asked again."""
+        if not self.cfg.get("check_links", True):
+            return
+        try:
+            found = links.added_urls(self.task_diff())
+        except Exception as e:  # no diff to read is no check, never a failed run
+            self.warn("link check skipped: %s" % e)
+            return
+        todo = [u for _, _, u in found if u not in self.link_ok]
+        if not todo:
+            return
+        for url, (ok, why) in links.check_all(todo, fn=self.link_fn or links.check).items():
+            if ok:
+                self.link_ok.add(url)
+                self.link_bad.pop(url, None)
+            else:
+                self.link_bad[url] = why
+        seen = set()
+        for path, line, url in found:
+            why = self.link_bad.get(url)
+            if url in self.link_ok or not why or (path, url) in seen:
+                continue
+            seen.add((path, url))
+            if re.search(r"\bunverified\b", line, re.I):
+                self.add_unverified({"what": clip(line, 240), "kind": "external_fact", "source": url},
+                                    "the engine could not open %s (%s); the owner checks it" % (url, why))
+                continue
+            review["findings"].append({"file": path, "line": 0, "severity": "medium", "fix":
+                "the link %s did not open from the engine's host (%s). Replace it with a source that opens. If the site only blocks "
+                "bots, keep it and write `unverified` on the same line, so the owner is asked about the claim it carries. Never "
+                "call a link verified that you could not open." % (url, why)})
 
     def look_judged(self, review, st, w, fix):
         """No screenshot and no logic-only reason on a visual stage is a medium finding; the reviewer's look is kept."""
