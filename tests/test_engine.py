@@ -2410,19 +2410,23 @@ class EngineTest(unittest.TestCase):
                                ([{"tool": "shell", "input": "rg -n x ."}], "secrets"),
                                ([{"tool": "Bash", "input": "rg -n x ."}, {"tool": "Bash", "input": "curl x"}], "")):
             stuck = {"v": 2, "status": "done", "data": None, "text": "no", "ref": "w1", "family": "claude", "reason": reason, "denied": denied}
+            for f in (tl.config_dir() / "asks" / "t-1.json", tl.config_dir() / "checkpoints" / "t-1.json"):
+                f.unlink() if f.exists() else None  # each case starts as a new bead: an open ask would make the run wait
             rc, s = self.run_engine({"plan": [PLAN], "write": [stuck, WRITE], "review": [CLEAN]})
             self.assertEqual((rc, [c[0] for c in s.calls].count("worker")), (2, 1), denied)
 
     def test_read_only_commands_are_told_from_the_rest(self):
         for c in ("rg -n foo src", "head -n 5 a | rg x", "git log --oneline -5", "git diff main...HEAD -- a", "find . -name '*.cs' | head",
-                  "sed -n '1,5p' f", "git branch", "rg -n --glob '!**/.env*' '^<<<<<<<' .",
+                  "sed -n '1,5p' f", "git branch", "rg -o x f", "sort -u f", "sort -n -r f", "rg -n --glob '!**/.env*' '^<<<<<<<' .",
                   "/bin/zsh -lc \"head -n 20 a.txt && rg -n 'x' b\""):
             self.assertTrue(engine.read_only_command(c), c)
-        for c in ("rm -rf x", "cat > f", "git commit -m x", "git branch -D x", "find . -delete", "find . -exec rm {} ;", "sed -i s/a/b/ f",
+        for c in ("ls\nrm x", "ls & rm x", "sort -o f x", "sort --output=f x", "git diff --output=f", "git log --output=f", "rg --pre sh x",
+                  "git grep -O sh x", "git diff --ext-diff", "sed -n '1w out' f", "sed -n '1e cmd' f", "sh -c 'rm x' ls", "git -c core.pager=sh log",
+                  "rm -rf x", "cat > f", "git commit -m x", "git branch -D x", "find . -delete", "find . -exec rm {} ;", "sed -i s/a/b/ f",
                   "curl x", "rg x | xargs rm", "cat $(ls)", "head -n 5 a; rm b", "git checkout x", "cat <<EOF", "echo `id`", "", None):
             self.assertFalse(engine.read_only_command(c), c)
 
-    RESEARCH_DIFF = ("diff --git a/notes/hair.md b/notes/hair.md\n+++ b/notes/hair.md\n@@ -0,0 +1,3 @@\n"
+    RESEARCH_DIFF = ("diff --git a/notes/hair.md b/notes/hair.md\n--- a/notes/hair.md\n+++ b/notes/hair.md\n@@ -0,0 +1,3 @@\n"
                      "+Dread packs: https://fab.com/s/abc is free.\n+Beards: (unverified) https://sketchfab.com/m/x blocks agents.\n"
                      "+Docs: https://docs.unity3d.com/Manual/index.html\n")
 
@@ -2452,6 +2456,30 @@ class EngineTest(unittest.TestCase):
         review = {"findings": []}
         eng.link_judged(review)
         self.assertEqual(review["findings"], [])
+
+    def test_a_host_that_reaches_nothing_makes_no_findings_and_a_raising_check_is_a_failed_link(self):
+        self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        eng = self.eng
+        eng.link_fn = lambda url: (False, "no such host")
+        with mock.patch.object(engine.Engine, "task_diff", return_value=self.RESEARCH_DIFF):
+            review = {"findings": []}
+            eng.link_judged(review)
+            self.assertEqual((review["findings"], eng.unverified), ([], []))  # offline: nothing the writer can fix
+            self.assertIn("looks offline", eng.log_path.read_text())
+            eng.link_tries.clear()
+            eng.link_fn = lambda url: (_ for _ in ()).throw(RuntimeError("boom"))
+            review = {"findings": []}
+            eng.link_judged(review)
+            self.assertEqual(len(review["findings"]), 2)  # a check that raised failed that link; the run goes on
+
+    def test_a_link_is_opened_twice_at_most(self):
+        self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        eng, opened = self.eng, []
+        eng.link_fn = lambda url: (opened.append(url), (False, "HTTP 404"))[1]
+        with mock.patch.object(engine.Engine, "task_diff", return_value=self.RESEARCH_DIFF):
+            for _ in range(4):
+                eng.link_judged({"findings": []})
+        self.assertEqual(len(opened), 6)  # three links, two rounds each; later reviews keep the verdict
 
     def test_a_task_with_an_unopened_link_is_sent_back_then_asks_when_the_writer_cannot_fix_it(self):
         fake = lambda url: (False, "HTTP 403")

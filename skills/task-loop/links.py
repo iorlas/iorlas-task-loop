@@ -6,48 +6,90 @@ engine opens every link the task adds to a text file, outside any sandbox; one t
 Standard library only; the check is injectable for tests.
 """
 
+import functools
 import ipaddress
 import re
 import socket
+import time
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse
 
 TEXT_EXT = (".md", ".markdown", ".txt", ".rst", ".adoc")
-URL = re.compile(r"https?://[^\s<>\"'`\]\)]+")
+URL = re.compile(r"https?://[^\s<>\"'`\]]+")
 SKIP_HOSTS = ("localhost", "example.com", "example.org", "example.net")
 SKIP_SUFFIX = (".invalid", ".test", ".local", ".localhost", ".example")
+UNKNOWN = "not checked in time"
+DEADLINE = 120  # seconds for all the links of one review
 AGENT = "Mozilla/5.0 (compatible; task-loop link check; +https://github.com/iorlas)"
 
 
+def trim(url):
+    """The url without the punctuation of the sentence around it: a closing parenthesis only when it has no opener."""
+    url = url.rstrip(".,;:!?*")
+    while url.endswith(")") and url.count(")") > url.count("("):
+        url = url[:-1].rstrip(".,;:!?*")
+    return url
+
+
 def skipped(url):
-    """A link that points nowhere to check: this machine, a private address, a placeholder domain."""
-    host = (urlparse(url).hostname or "").lower()
-    if not host or host in SKIP_HOSTS or host.endswith(SKIP_SUFFIX) or any(host.endswith("." + h) for h in SKIP_HOSTS):
-        return True
+    """A link that points nowhere to check: this machine, a private address, a placeholder domain, a scheme that is not web, a
+    malformed address."""
     try:
-        ip = ipaddress.ip_address(host)
-        return ip.is_private or ip.is_loopback or ip.is_link_local
+        p = urlparse(url)
+        host = (p.hostname or "").lower()
     except ValueError:
-        return False
+        return True
+    if p.scheme not in ("http", "https") or not host or host in SKIP_HOSTS or host.endswith(SKIP_SUFFIX) \
+            or any(host.endswith("." + h) for h in SKIP_HOSTS):
+        return True
+    return not public_host(host)
+
+
+@functools.lru_cache(maxsize=512)
+def public_host(host):
+    """False for a name that resolves to this machine or a private network (the check never fetches from inside), unknown names are
+    left to the check itself to fail on."""
+    try:
+        ips = [ipaddress.ip_address(host)]
+    except ValueError:
+        try:
+            ips = [ipaddress.ip_address(x[4][0]) for x in socket.getaddrinfo(host, None)]
+        except (socket.gaierror, UnicodeError, OSError):
+            return True
+    return all(ip.is_global for ip in ips)
 
 
 def added_urls(diff, exts=TEXT_EXT):
     """[(path, the line that cites it, url)] from the lines a unified diff adds to text files, each url once per line."""
-    out, path = [], ""
+    out, path, prev = [], "", ""
     for ln in (diff or "").splitlines():
-        if ln.startswith("+++ "):
+        header = ln.startswith("+++ ") and prev.startswith("--- ")  # an added line that starts with "++ " is a line, not a header
+        prev = ln
+        if header:
             path = ln[4:].strip()[2:] if ln[4:6] in ("b/", "a/") else ln[4:].strip()
             path = "" if path == "/dev/null" else path
         elif ln.startswith("+") and path.lower().endswith(exts):
             seen = set()
             for m in URL.finditer(ln[1:]):
-                url = m.group(0).rstrip(".,;:!?*_")
+                url = trim(m.group(0))
                 if url not in seen and not skipped(url):
                     seen.add(url)
                     out.append((path, ln[1:].strip(), url))
     return out
+
+
+class _Public(urllib.request.HTTPRedirectHandler):
+    """A redirect stays on the web and never lands on this machine or a private network."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if skipped(newurl):
+            raise urllib.error.HTTPError(newurl, 400, "redirect to a private or non-web address", headers, fp)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_opener = urllib.request.build_opener(_Public)
 
 
 def check(url, timeout=15):
@@ -56,7 +98,7 @@ def check(url, timeout=15):
     for method in ("HEAD", "GET"):
         req = urllib.request.Request(url, method=method, headers={"User-Agent": AGENT, "Accept": "*/*"})
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as r:
+            with _opener.open(req, timeout=timeout) as r:
                 if r.status < 400:
                     return True, ""
                 last = "HTTP %d" % r.status
@@ -69,15 +111,34 @@ def check(url, timeout=15):
             return False, "no such host" if isinstance(reason, socket.gaierror) else "timeout" if isinstance(reason, socket.timeout) else str(reason)[:80]
         except (socket.timeout, TimeoutError):
             return False, "timeout"
-        except (OSError, ValueError) as e:
-            return False, str(e)[:80]
+        except Exception as e:  # http.client errors (a non-HTTP server), ssl, odd addresses: a verdict, never a crash
+            return False, ("%s: %s" % (type(e).__name__, e))[:80]
     return False, last
 
 
-def check_all(urls, fn=check, workers=8):
-    """{url: (ok, why)} for the distinct urls, opened side by side."""
+def network_down(why):
+    """True for a failure that says this machine cannot reach the web, not that the link is bad."""
+    return why in ("no such host", "timeout", UNKNOWN) or why.startswith(("[Errno 6", "[Errno 5", "<urlopen error"))
+
+
+def check_all(urls, fn=check, workers=8, deadline=DEADLINE):
+    """{url: (ok, why)} for the distinct urls, opened side by side, in `deadline` seconds in all: a link not done by then is UNKNOWN."""
     urls = sorted(set(urls))
+    out = {}
     if not urls:
-        return {}
-    with ThreadPoolExecutor(max_workers=min(workers, len(urls))) as ex:
-        return dict(zip(urls, ex.map(lambda u: fn(u), urls)))
+        return out
+    def one(u):
+        try:
+            return fn(u)
+        except Exception as e:  # a check that raises is a failed link
+            return False, ("%s: %s" % (type(e).__name__, e))[:80]
+    ex = ThreadPoolExecutor(max_workers=min(workers, len(urls)))
+    futs = {u: ex.submit(one, u) for u in urls}
+    end = time.time() + deadline
+    for u, f in futs.items():
+        try:
+            out[u] = f.result(timeout=max(0.0, end - time.time()))
+        except Exception:
+            out[u] = (False, UNKNOWN)
+    ex.shutdown(wait=False)
+    return out

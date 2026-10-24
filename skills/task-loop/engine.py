@@ -1312,7 +1312,7 @@ class Engine:
         self.look_filed = False
         self.look_unjudged, self.look_retried, self.shots_skipped = {}, set(), set()  # unjudged: item -> why
         self.unverified = []  # tl-bxk.10.28: items that land for the owner
-        self.link_ok, self.link_bad, self.link_fn = set(), {}, None  # tl-bxk.7: links opened from this host (link_fn: a test's check)
+        self.link_ok, self.link_bad, self.link_fn, self.link_tries = set(), {}, None, {}  # tl-bxk.7: links opened from this host (link_fn: a test's check)
         self.filed = []       # leftover titles filed by an earlier run on this checkpoint: a replan naming one again is no new bead
         self.stage_tree = ""  # the tree the current stage started from ("" = the task's base): the review's diff runs from here
         self.writer_said = "" # the writer's answers so far: a new file they name is meant (tl-bxk.10.24)
@@ -4673,11 +4673,21 @@ class Engine:
         todo = [u for _, _, u in found if u not in self.link_ok]
         if not todo:
             return
-        for url, (ok, why) in links.check_all(todo, fn=self.link_fn or links.check).items():
+        todo = [u for u in todo if self.link_tries.get(u, 0) < 2][:LINK_CAP]  # each link is opened twice at most, 200 per review
+        try:
+            got = links.check_all(todo, fn=self.link_fn or links.check)
+        except Exception as e:  # opening links must never stop a run
+            self.warn("link check skipped: %s" % e)
+            return
+        if len(got) >= 3 and all(not ok and links.network_down(why) for ok, why in got.values()):
+            self.warn("link check skipped: none of %d links could be reached at all (%s): this host looks offline" % (len(got), next(iter(got.values()))[1]))
+            return
+        for url, (ok, why) in got.items():
+            self.link_tries[url] = self.link_tries.get(url, 0) + 1
             if ok:
                 self.link_ok.add(url)
                 self.link_bad.pop(url, None)
-            else:
+            elif why != links.UNKNOWN:  # out of time is no verdict
                 self.link_bad[url] = why
         seen = set()
         for path, line, url in found:
@@ -4686,7 +4696,7 @@ class Engine:
                 continue
             seen.add((path, url))
             if re.search(r"\bunverified\b", line, re.I):
-                self.add_unverified({"what": clip(line, 240), "kind": "external_fact", "source": url},
+                self.add_unverified({"what": "%s (link: %s)" % (clip(line, 200), url), "kind": "external_fact", "source": url},
                                     "the engine could not open %s (%s); the owner checks it" % (url, why))
                 continue
             review["findings"].append({"file": path, "line": 0, "severity": "medium", "fix":
@@ -5448,6 +5458,7 @@ class Heartbeat:
 GROUPS = ("static", "tests", "acceptance")
 
 
+LINK_CAP = 200  # links opened per review
 READ_ONLY_WORDS = {"head", "tail", "cat", "rg", "grep", "egrep", "fgrep", "ls", "wc", "sort", "uniq", "nl", "cut", "tr", "stat", "file",
                    "diff", "cmp", "basename", "dirname", "pwd", "echo", "printf", "true", "test", "["}
 READ_ONLY_GIT = {"log", "diff", "show", "status", "rev-parse", "ls-files", "ls-tree", "grep", "blame", "cat-file", "describe", "shortlog",
@@ -5455,24 +5466,31 @@ READ_ONLY_GIT = {"log", "diff", "show", "status", "rev-parse", "ls-files", "ls-t
 FIND_WRITES = {"-exec", "-execdir", "-ok", "-okdir", "-delete", "-fprint", "-fprint0", "-fprintf", "-fls"}
 
 
+SED_PRINT = re.compile(r"^\s*(?:\d+|\$)?(?:,\s*(?:\d+|\$))?\s*[pd]\s*$")  # sed -n 'N,Mp': the one script that only prints
+GIT_BAD = ("--output", "--ext-diff", "--open-files-in-pager", "-O", "-c", "-C", "--git-dir", "--work-tree", "--exec-path", "--textconv")
+
+
 def read_only_command(cmd):
     """True when every part of a shell command only reads (head, cat, rg, grep, git log/diff/show, ls, find without -exec or
-    -delete, a pipe or && chain of those): no redirection, no substitution, no heredoc. Unsure is False (tl-bxk.10.21)."""
+    -delete, a pipe or && chain of those): no redirection, no substitution, no heredoc, no newline or single &, no flag that
+    writes or runs a program (sort -o, --output, rg --pre, git --ext-diff, a sed script beyond printing). Unsure is False
+    (tl-bxk.10.21)."""
     if not isinstance(cmd, str) or not cmd.strip():
         return False
     try:
         words = shlex.split(cmd)
     except ValueError:
         return False
-    if len(words) >= 3 and Path(words[0]).name in ("zsh", "bash", "sh") and words[1] in ("-c", "-lc", "-ic", "-l", "-cl") :
-        return read_only_command(words[-1])  # the payload of `/bin/zsh -lc "..."`
+    if len(words) >= 3 and Path(words[0]).name in ("zsh", "bash", "sh") and words[1] in ("-c", "-lc", "-ic", "-l", "-cl"):
+        return len(words) == 3 and read_only_command(words[2])  # the payload of `/bin/zsh -lc "..."`, and nothing after it
+    if "\n" in cmd or "\r" in cmd:
+        return False
     bare = re.sub(r"'[^']*'|\"[^\"]*\"", "''", cmd).replace("2>&1", "").replace("2>/dev/null", "").replace(">/dev/null", "")
-    if re.search(r"[<>]|\|\||&\s*$", bare) or re.search(r"`|\$\(|\$\{", cmd):  # a redirection or a substitution writes or hides
+    if re.search(r"[<>]|\|\|", bare) or re.search(r"(?<!&)&(?!&)", bare) or re.search(r"`|\$\(|\$\{", cmd):
+        return False  # a redirection, a background job or a substitution writes or hides
+    if split_top(cmd) is None:
         return False
-    parts = split_top(cmd)
-    if parts is None:
-        return False
-    for part in re.split(r"\s*(?:\|\||\||&&|;)\s*", cmd):
+    for part in re.split(r"\s*(?:\|\||\||&&|;)\s*", bare if False else cmd):
         try:
             w = shlex.split(part)
         except ValueError:
@@ -5481,6 +5499,8 @@ def read_only_command(cmd):
             return False
         head = Path(w[0]).name
         if head == "git":
+            if any(x == f or x.startswith(f + "=") for x in w[1:] for f in GIT_BAD):
+                return False
             rest = [x for x in w[1:] if not x.startswith("-")]
             if not rest or rest[0] not in READ_ONLY_GIT or (rest[0] == "branch" and len(rest) > 1):
                 return False
@@ -5488,7 +5508,16 @@ def read_only_command(cmd):
             if any(x in FIND_WRITES for x in w):
                 return False
         elif head == "sed":
-            if "-i" in w or any(x.startswith("-i") for x in w) or "-n" not in w:
+            scripts = [x for x in w[1:] if not x.startswith("-")]
+            if "-n" not in w or any(x.startswith("-i") or x == "--in-place" or x in ("-f", "-e", "--file", "--expression") for x in w[1:]) \
+                    or not scripts or not SED_PRINT.match(scripts[0]):
+                return False
+        elif head == "sort":
+            if any(x == "-o" or x.startswith("--output") or (x.startswith("-") and not x.startswith("--") and "o" in x[1:] and not x[1:].isdigit())
+                   for x in w[1:]):
+                return False
+        elif head == "rg":
+            if any(x == "--pre" or x.startswith("--pre=") or x.startswith("--pre-glob") for x in w[1:]):
                 return False
         elif head not in READ_ONLY_WORDS:
             return False
