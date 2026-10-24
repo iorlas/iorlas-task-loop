@@ -1364,6 +1364,20 @@ class DeadLane(StagesTest):
         self.assertEqual(self.eng.last_flag, "same_family")
         self.assertIn("review is from the writer's own model family", self.eng.log_path.read_text())
 
+    def test_a_same_family_step_with_delegates_warning_is_logged_traced_and_commented_never_paused(self):
+        extra = {"review": [{"flag": "same_family", "warning": "only the Codex lane is up: the review is the writer's own model"}]}
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, j_extra=extra)
+        self.assertEqual(rc, 0, self.blocked)
+        note = "the review step ran on the writer's own model family: only the Codex lane is up"
+        self.assertIn(note, self.eng.log_path.read_text())
+        comments = [c[3] for c in self.bd_calls if c[:2] == ("comments", "add") and c[3].startswith("Lane (engine)")]
+        self.assertEqual(len(comments), 1)
+        self.assertIn(note, comments[0])
+        last = json.loads((tl.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
+        self.assertEqual(last["lane_notes"], [note + last["lane_notes"][0][len(note):]])
+        self.assertIn("only the Codex lane is up", [s_["warning"] for s_ in last["sessions"] if s_["node"] == "review"][0])
+        self.assertTrue(self.closed)  # it landed
+
     def test_one_family_failing_twice_is_not_switched_back_and_forth(self):
         dead = te.ans("stop", "vendor_prework", "retry", retry_after=engine.time.time() + 30, family="xai", lane="GROK", say="x")
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [dead, dead, CLEAN]})

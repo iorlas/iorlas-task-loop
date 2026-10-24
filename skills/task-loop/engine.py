@@ -1346,6 +1346,7 @@ class Engine:
         self.write_rounds = []  # per write round: resumed, input tokens, turns, prompt chars, context k, why fresh (a fix round's cost)
         self.last_summary = ""  # the last write's summary: a fresh writer is told it
         self.handoff = {"rounds": [], "seen_lows": []}  # tl-bxk.13.6: what the rounds did and what a review already noted
+        self.lane_notes = []  # steps that ran on the writer's own family, with delegate's warning (tl: same_family, never a pause)
         self.rebase_resets = 0  # times the plan count started again after a rebase (checkpointed)
         self.look_done, self.look_prev = 0, []  # render rounds this stage; the last round's defects (tl-bxk.13.15)
         self.rendered_names, self.last_reqs, self.render_stale = set(), [], False  # the engine's own pictures this run, the last request
@@ -1453,7 +1454,7 @@ class Engine:
                "family": j.get("family") or "", "lane": j.get("lane") or "", "model": j.get("model") or "",
                "effort": j.get("effort") or "", "turns": j.get("turns"), "secs": round(r.secs or 0), "cost": r.cost or 0.0, "t": time.time(),
                "host": host, "stopped": r.stop, "tokens": j.get("tokens"), "denied": j.get("denied") or [],  # tokens {in, cached, out}
-               "reason": j.get("reason"), "next": j.get("next"), "context": j.get("context"),
+               "reason": j.get("reason"), "next": j.get("next"), "warning": j.get("warning"), "context": j.get("context"),
                "node_id": (self.cur or {}).get("id"), "resume": bool(getattr(self, "_resume", None)), "flag": j.get("flag"),
                "prompt_chars": getattr(self, "_prompt_chars", None)}
         if node == "write":  # where the session's context stands now: what the next round weighs against write_fresh_above_k
@@ -1526,7 +1527,7 @@ class Engine:
                "cost": self.cost, "stats": self.stats, "host": self.host, "delegate": self.route or "", "log": str(self.log_path),
                "stderr": str(self.err_path), "lanes": (self.contract or {}).get("lanes"), "sessions": self.sessions,
                "verified": self.verified, "write_rounds": self.write_rounds, "strays": self.strays,
-               "reflection": getattr(self, "reflection", None)}
+               "reflection": getattr(self, "reflection", None), "lane_notes": self.lane_notes}
         rec.update(self.origin())
         try:
             with open(tl.config_dir() / "traces.jsonl", "a", encoding="utf-8") as f:
@@ -1787,6 +1788,15 @@ class Engine:
         self.last_flag = (j or {}).get("flag")  # same_family | degraded | ...: delegate could not give the usual lane
         if node in ("review", "verify", "look") and writer_family and (j or {}).get("family") == writer_family and not self.last_flag:
             self.last_flag = "same_family"  # routed past a dead lane to the writer's own family: say so
+        warning = str((j or {}).get("warning") or "").strip()
+        if self.last_flag == "same_family" or warning:
+            # the owner's word: when only one family is up, it reviews its own work; say so (delegate's warning when it gives one),
+            # in the log, the trace and the bead, and never pause for it
+            note = "the %s step ran on the writer's own model family%s" % (node, (": " + warning[:300]) if warning else " (no other lane was free)")
+            if note not in self.lane_notes:
+                self.lane_notes.append(note)
+                self.warn(note)
+                self.comment("Lane (engine): " + note)
         fam = r.backend  # openai | claude: the family that wrote, for the reviewer
         model = "%s %s on %s" % ((j or {}).get("model"), (j or {}).get("effort"), (j or {}).get("lane"))
         (self.run_dir / ("%s-%d.json" % (node, self.stats["nodes"]))).write_text(json.dumps(r.data, indent=1))
