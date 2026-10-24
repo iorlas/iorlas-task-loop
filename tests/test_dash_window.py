@@ -68,10 +68,22 @@ class Window(unittest.TestCase):
         with mock.patch.object(server, "TAIL_BYTES", 6_000_000):
             self.assertEqual(len(server.window_lines(str(small), T0 + 1, None)), 2)
 
-    def test_it_reads_a_bounded_amount_from_the_middle(self):
+    def test_a_closed_window_stops_reading_at_its_end(self):
+        n = len(server.window_lines(self.path, T0 + 400, T0 + 410))
+        self.assertLess(n, 2700)  # chunks of 1 MB: this 1.2 MB file shows it stops early only at scale, so check the rest too
+        self.assertEqual(self.texts(400, 410), list(range(399, 412)))
+
+    def test_a_long_live_window_shows_the_newest_events_not_the_oldest(self):
+        with mock.patch.object(server, "WINDOW_BYTES", 100_000):
+            got = [int(e["text"].split()[1]) for e in server.claude_events(self.path, T0 + 400, None)]
+        self.assertEqual(got[-1], 2999)
+
+    def test_a_cut_window_has_no_half_line(self):
         with mock.patch.object(server, "WINDOW_BYTES", 5000):
-            n = len(server.window_lines(self.path, T0 + 400, None))
-        self.assertLess(n, 20)  # not the whole 1 MB, and no half line
+            lines = server.window_lines(self.path, T0 + 400, T0 + 2900)
+        self.assertTrue(lines)
+        for ln in lines:
+            json.loads(ln)
 
 
 if __name__ == "__main__":

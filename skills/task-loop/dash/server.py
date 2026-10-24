@@ -171,14 +171,31 @@ def window_lines(path, t0=None, t1=None):
                     lo = mid
                 else:
                     hi = mid
+            lo = max(0, lo - 1_000_000)  # a resumed session may re-append older lines: start a little early
+            if t1 is None and size - lo > WINDOW_BYTES:
+                return tail_lines(path)  # a live window longer than the cap: the newest events, as before
             f.seek(lo)
             if lo:
                 f.readline()
-            data = f.read(WINDOW_BYTES)
+            data, cut = b"", False
+            while len(data) < WINDOW_BYTES:  # chunks, so a short window never reads the 40 MB
+                chunk = f.read(1_000_000)
+                if not chunk:
+                    break
+                data += chunk
+                if t1:
+                    last = data.rsplit(b"\n", 2)
+                    try:
+                        if len(last) > 2 and (parse_ts(json.loads(last[-2]).get("timestamp")) or 0) > t1 + 2:
+                            break
+                    except (ValueError, AttributeError):
+                        pass
+            cut = len(data) >= WINDOW_BYTES
+            data = data[:WINDOW_BYTES]
     except OSError:
         return []
     lines = data.decode("utf-8", "replace").splitlines()
-    return lines[:-1] if len(data) == WINDOW_BYTES else lines
+    return lines[:-1] if cut and not data.endswith(b"\n") else lines
 
 
 def first_json(path):
