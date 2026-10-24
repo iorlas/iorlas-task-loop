@@ -147,27 +147,7 @@ LOOK_ITEM = re.compile(r"owner\b[^.]{0,40}\b(?:judge|check|decide|assess|review|
 LOOK_LABEL = "owner-look"
 
 
-def glob_re(g):
-    """A repo path glob: ** crosses folders, * and ? stay in one, {a,b} is either."""
-    out, i, depth = "", 0, 0
-    while i < len(g):
-        c = g[i]
-        if g.startswith("**/", i):
-            out, i = out + "(?:.*/)?", i + 3
-            continue
-        if c == "*":
-            out, i = out + (".*" if g.startswith("**", i) else "[^/]*"), i + (2 if g.startswith("**", i) else 1)
-            continue
-        if c == "{":
-            out, depth = out + "(?:", depth + 1
-        elif c == "}" and depth:
-            out, depth = out + ")", depth - 1
-        elif c == "," and depth:
-            out += "|"
-        else:
-            out += "[^/]" if c == "?" else re.escape(c)
-        i += 1
-    return re.compile(out + r"\Z")
+glob_re = cs.glob_re  # one glob dialect for visual_paths and a check's `inputs` (defined in checks_speed)
 
 
 def visual_hit(vp, paths):
@@ -3803,7 +3783,7 @@ class Engine:
                   "cache": c.get("cache", True) is not False,
                   "idle": float(c.get("idle_min", self.cfg["check_idle_min"]) or 0) * 60,
                   "inputs": [c["inputs"]] if isinstance(c.get("inputs"), str) else list(c.get("inputs") or []),
-                  "inputs_only": bool(c.get("inputs_only")), "env": c.get("env") or {}} for c in self.cfg["checks"]]
+                  "inputs_only": bool(c.get("inputs_only")), "exclude": list(c.get("exclude") or []), "env": c.get("env") or {}} for c in self.cfg["checks"]]
         items += [{"id": c, "cmd": c, "group": "acceptance", "when": [], "retry": 0,
                    "timeout": float(self.cfg["check_timeout_min"]), "cache": False, "inputs": [], "inputs_only": False, "env": {},
                    "idle": float(self.cfg["check_idle_min"] or 0) * 60} for c in st["checks"]]
@@ -3873,9 +3853,15 @@ class Engine:
                 if res["exit"] != 0:
                     red = c["group"]
                 continue
-            ikey = ""
+            ikey, nocache = "", False
             if c["cache"] and c["inputs"]:  # a green result is a fact about the check's own inputs, not the whole tree or base
                 ikey = keys.key(c)
+                dead = keys.dead(c)
+                for g in dead:
+                    self.warn("inputs glob %s matches no tracked file; not cached" % g)
+                if dead:  # a glob that selects nothing would cache a green over changed code
+                    ikey = ""
+                    nocache = True
                 hit = by_inputs.get(ikey) if ikey else None
             else:
                 hit = c["cache"] and cache.get(key, {}).get(c["cmd"])
@@ -3942,7 +3928,7 @@ class Engine:
                     res["tail"] = "HUNG (no output, file writes or CPU for %g min), last output:\n%s" % (c["idle"] / 60, tail[-1400:])
                 if rc == 0:  # only a green run says what the check costs: a red one stops early
                     timings.append((cmd, time.time() - t))
-                if rc == 0 and c["cache"]:  # only a pass is a fact about the tree; a failure can come from outside git (stale
+                if rc == 0 and c["cache"] and not nocache:  # only a pass is a fact about the tree; a failure can come from outside git (stale
                     if ikey:  # build output, a held editor, a flake) and must rerun
                         by_inputs = {k: v for k, v in by_inputs.items() if v.get("cmd") != c["cmd"]}  # one entry per check
                         by_inputs[ikey] = dict(res, round=self.check_round)
@@ -4107,7 +4093,7 @@ class Engine:
                 continue
             globs = [c["inputs"]] if isinstance(c.get("inputs"), str) else list(c.get("inputs") or [])
             if globs:
-                ok = bool(by_inputs.get(keys.key(dict(c, inputs=globs)) or "-"))
+                ok = not keys.dead(dict(c, inputs=globs)) and bool(by_inputs.get(keys.key(dict(c, inputs=globs)) or "-"))
             else:
                 ok = c["cmd"] in whole
             if ok:

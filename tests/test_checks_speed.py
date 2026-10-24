@@ -33,6 +33,10 @@ class SpeedTest(unittest.TestCase):
 class InputCache(SpeedTest):
     ST = {"checks": [], "files": []}
 
+    @property
+    def eng_tree(self):
+        return self.checks_engine()
+
     def test_a_check_with_inputs_survives_edits_outside_them_and_a_moved_base(self):
         cmd, n = self.bump()
         eng = self.checks_engine(checks=[{"id": "unity", "cmd": cmd, "group": "tests", "inputs": ["client/**"], "inputs_only": True}])
@@ -88,9 +92,10 @@ class InputCache(SpeedTest):
 
     def test_a_gitignored_file_under_the_globs_counts_by_its_content(self):
         cmd, n = self.bump()
-        (self.wt / ".gitignore").write_text("gen/\n")
+        (self.wt / ".gitignore").write_text("*.bin\n")
         eng = self.checks_engine(checks=[{"id": "u", "cmd": cmd, "group": "tests", "inputs": ["gen/**"], "inputs_only": True}])
         (self.wt / "gen").mkdir()
+        (self.wt / "gen" / "t.txt").write_text("1\n")  # a tracked file keeps the glob alive
         (self.wt / "gen" / "o.bin").write_text("1\n")
         eng.run_checks(self.ST, "s")
         eng.run_checks(self.ST, "s")
@@ -98,6 +103,77 @@ class InputCache(SpeedTest):
         (self.wt / "gen" / "o.bin").write_text("2\n")
         eng.run_checks(self.ST, "s")
         self.assertEqual(n.read_text(), "11")
+
+    def test_one_glob_matches_tracked_and_ignored_files_alike(self):
+        names = ["client/App/a", "client/App/sub/b", "client/Core/c", "client/Other/d", "client/e"]
+        tracked = {n + ".cs": "100644 blob 1" for n in names}
+        (self.wt / ".gitignore").write_text("*.gen\n")
+        for n in names:
+            (self.wt / (n + ".gen")).parent.mkdir(parents=True, exist_ok=True)
+            (self.wt / (n + ".gen")).write_text("x")
+        for g in ("client/*/*.X", "client/**/*.X", "client/*.X", "client/{App,Core}/**", "client/{App,Core}/*.X", "client/**"):
+            t_ = {p[:-3] for p in tracked if cs.inputs_hash({p: tracked[p]}, [g.replace("X", "cs")])}
+            i_ = {p[:-4] for p in cs.ignored_paths(str(self.wt), [g.replace("X", "gen")])}
+            self.assertEqual(t_, i_, g)
+        self.assertEqual({p[:-4] for p in cs.ignored_paths(str(self.wt), ["client/*/*.gen"])}, {"client/App/a", "client/Core/c", "client/Other/d"})
+        self.assertEqual({p[:-4] for p in cs.ignored_paths(str(self.wt), ["client/{App,Core}/**"])}, {"client/App/a", "client/App/sub/b", "client/Core/c"})
+
+    def test_the_ignored_walk_is_cut_to_the_globs_folders_and_the_excluded_ones(self):
+        seen = []
+        real = cs.subprocess.run
+        cs.subprocess.run = lambda args, **kw: (seen.append(args), real(args, **kw))[1]
+        try:
+            cs.ignored_paths(str(self.wt), ["client/Assets/{App,Core}/**"], ["client/Assets/App/*/Gen/**"])
+        finally:
+            cs.subprocess.run = real
+        spec = " ".join(seen[0])
+        self.assertIn(":(literal)client/Assets/App/", spec)
+        self.assertIn(":(literal)client/Assets/Core/", spec)
+        self.assertIn(":(exclude,glob)client/Assets/App/*/Gen/**", spec)
+        self.assertNotIn("Library", spec)
+
+    def test_excluded_paths_do_not_change_the_key_tracked_or_ignored(self):
+        (self.wt / ".gitignore").write_text("*.gen\n")
+        (self.wt / "client" / "Gen").mkdir(parents=True)
+        (self.wt / "client" / "a.cs").write_text("1\n")
+        (self.wt / "client" / "Gen" / "t.cs").write_text("1\n")
+        (self.wt / "client" / "Gen" / "i.gen").write_text("1\n")
+        c = {"cmd": "x", "inputs": ["client/**"], "inputs_only": True, "exclude": ["client/Gen/**"]}
+
+        def key():
+            return cs.InputKeys(str(self.wt), self.tree(), "b").key(c)
+        k = key()
+        (self.wt / "client" / "Gen" / "i.gen").write_text("2\n")  # an excluded ignored file
+        (self.wt / "client" / "Gen" / "t.cs").write_text("2\n")  # an excluded tracked (here: untracked-new) file
+        self.assertEqual(key(), k)
+        (self.wt / "client" / "a.cs").write_text("2\n")
+        self.assertNotEqual(key(), k)
+        self.assertNotEqual(cs.InputKeys(str(self.wt), self.tree(), "b").key(dict(c, exclude=[])), key())
+
+    def tree(self):
+        return self.eng_tree.tree_hash()
+
+    def test_a_glob_that_matches_no_tracked_file_switches_the_cache_off(self):
+        cmd, n = self.bump()
+        (self.wt / "client").mkdir()
+        (self.wt / "client" / "a.cs").write_text("1\n")
+        for globs in (["client/**", "clent/**"], ["client/{a,b}.cs", "src/**/*.cs"]):
+            n.write_text("")
+            eng = self.checks_engine(checks=[{"id": "u", "cmd": cmd, "group": "tests", "inputs": globs}])
+            eng.run_checks(self.ST, "s")
+            again = eng.run_checks(self.ST, "s")
+            self.assertEqual(n.read_text(), "11", globs)  # one dead glob is enough
+            self.assertFalse(again[0].get("cached"))
+
+    def test_doctor_reports_a_dead_inputs_glob(self):
+        (self.wt / "a.cs").write_text("1\n")
+        te.sh("git", "add", "-A", cwd=self.wt)
+        te.sh("git", "commit", "-qm", "a", cwd=self.wt)
+        (self.wt / ".task-loop.json").write_text(json.dumps({"engine": {"checks": [
+            {"id": "u", "cmd": "x", "inputs": ["*.cs"]}, {"id": "v", "cmd": "y", "inputs": ["client/{A,B}/**"]}]}}))
+        warns = engine.tl.doctor_warnings(str(self.wt))
+        self.assertEqual(len([w for w in warns if "matches no tracked file" in w]), 1)
+        self.assertIn("client/{A,B}/**", " ".join(warns))
 
     def test_without_inputs_any_untracked_file_still_throws_the_result_away(self):
         cmd, n = self.bump()
