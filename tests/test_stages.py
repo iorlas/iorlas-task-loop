@@ -557,9 +557,43 @@ class VisualWork(StagesTest):
         self.assertEqual(self.roles(s), ["planner", "worker", "worker", "reviewer", "reviewer"])
         self.assertIn("no shot method 'Nope'", s.prompts[2])
 
-    def test_a_visual_write_with_no_shots_and_no_reason_is_a_finding(self):
-        rc, s = self.go({"plan": [PLAN], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]})
-        self.assertIn("asked for no shots", self.eng.run_dir.joinpath("handoff.json").read_text())
+    def test_a_visual_write_with_no_shots_and_no_reason_is_asked_once_more_at_no_cost_to_the_rounds(self):
+        rc, s = self.go({"plan": [PLAN], "write": [WRITE, self.write()], "look": [self.judged()], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual(self.roles(s), ["planner", "worker", "worker", "reviewer", "reviewer"])  # the second write, then the judge, then the review
+        self.assertIn("named no shots and gave no logic_only reason", s.prompts[2])
+        self.assertIn("ScreenShots: the main screen", s.prompts[2])  # the table is in the question
+        self.assertEqual(self.eng.stats["rounds"], 0)  # not a send-back round
+        self.assertIn("shots_contract", self.eng.log_path.read_text())
+        self.assertTrue((self.eng.evidence_dir / "main.png").is_file())  # the second answer's shots were rendered
+
+    def test_a_logic_only_reason_or_shots_need_no_second_ask(self):
+        rc, s = self.go({"plan": [PLAN], "write": [dict(WRITE, logic_only="a rename: nothing on screen differs")], "review": [CLEAN]})
+        self.assertEqual(self.roles(s), ["planner", "worker", "reviewer"])
+        rc, s = self.go({"plan": [PLAN], "write": [self.write()], "look": [self.judged()], "review": [CLEAN]})
+        self.assertEqual(self.roles(s).count("worker"), 1)
+
+    def test_a_writer_that_still_names_nothing_meets_the_reviews_finding_as_before(self):
+        rc, s = self.go({"plan": [PLAN], "write": [WRITE, WRITE, WRITE, WRITE], "review": [CLEAN, CLEAN]})
+        handoff = self.eng.run_dir.joinpath("handoff.json").read_text()
+        self.assertIn("asked for no shots", handoff)
+        self.assertEqual(sum(1 for t in s.prompts if "named no shots and gave no logic_only reason" in t), 1)  # asked once, not again
+
+    def test_the_planner_is_told_the_rule_and_the_repos_shot_methods(self):
+        base = Path(self.tmp.name, "base-files")
+        (base / "lifesim.json").write_text((Path(__file__).resolve().parent / "fixtures" / "lifesim_shot_table.json").read_text())
+        te.sh("git", "add", "-A", cwd=base)
+        te.sh("git", "commit", "-qm", "lifesim table", cwd=base)
+        te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
+        te.sh("git", "pull", "-q", "origin", "main", cwd=self.wt)
+        rc, s = self.go({"plan": [PLAN], "write": [self.write()], "review": [CLEAN]}, table="lifesim.json")
+        planner = s.prompts[0]
+        self.assertIn("changes how something looks", planner)
+        self.assertIn("logic_only", planner)
+        self.assertIn("(f.txt)", planner)  # the visual paths
+        self.assertIn("- BuildShots: Build mode: flat, drag, undo", planner)
+        self.assertIn("- PoseShots: Every declared body slot", planner)
+        self.assertNotIn("Diagnostic records", planner)  # a line per method, not the whole summary
 
     def test_without_a_shot_table_a_visual_stage_works_the_old_way(self):
         rc, s = self.go({"plan": [PLAN], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]}, table="")
@@ -634,7 +668,7 @@ class VisualWork(StagesTest):
     def test_pictures_made_before_a_later_fix_are_rendered_again_before_the_land(self):
         red_once = te.PY + ' -c "import sys; sys.exit(0 if open(\'f.txt\').read().strip() != \'d2\' else 1)"'  # red after the first write
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[red_once])])
-        rc, s = self.go({"plan": [plan], "write": [self.write(), self.write(shots=[])], "look": [self.judged()], "review": [CLEAN]},
+        rc, s = self.go({"plan": [plan], "write": [self.write(), self.write(shots=[], logic_only="nothing on screen changed")], "look": [self.judged()], "review": [CLEAN]},
                         look_rounds=1)
         self.assertEqual(rc, 0, self.blocked)
         self.assertIn("rendering the last shots again", self.eng.log_path.read_text())

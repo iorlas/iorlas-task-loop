@@ -79,13 +79,19 @@ def quote(value):
     return subprocess.list2cmdline([str(value)]) if os.name == "nt" else shlex.quote(str(value))
 
 
+def short(summary, n=150):
+    """What a method covers, in the first sentence of its summary, at most n characters."""
+    first = re.split(r"(?<=\.)\s", " ".join(str(summary).split()), 1)[0]
+    return first if len(first) <= n else first[:n - 3].rstrip() + "..."
+
+
 def table_text(methods, cap=1800):
-    """The writer's menu: each method, what it captures, the arguments it takes."""
+    """The menu of shot methods: each method, what it covers (a short line), the arguments it takes."""
     lines = []
     for m in methods.values():
-        args = "; ".join("%s%s%s" % (a["name"], " (required)" if a["required"] else "", (" e.g. " + a["about"]) if a["about"] else "")
+        args = "; ".join("%s%s%s" % (a["name"], " (required)" if a["required"] else "", (" e.g. " + short(a["about"], 70)) if a["about"] else "")
                          for a in m["args"])
-        lines.append("- %s: %s%s" % (m["method"], m["summary"] or "(no summary)", (" [args: %s]" % args) if args else ""))
+        lines.append("- %s: %s%s" % (m["method"], short(m["summary"]) or "(no summary)", (" [args: %s]" % args) if args else ""))
     text = "\n".join(lines)
     return text if len(text) <= cap else text[:cap - 3] + "..."
 

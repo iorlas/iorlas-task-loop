@@ -1,0 +1,71 @@
+{
+  "v": 1,
+  "methods": [
+    {
+      "method": "BuildShots",
+      "summary": "Build mode: flat, drag, undo, refusal, paint, Buy hover/place/move/sell, picker. Diagnostic records: Facts in the editor log; no separate text file. `[build-shots] kit buy-1-catalogue controls=N unkitted=U grey=G` and `kit build-6-picker ... hue-gradient=true|false` count controls without a kit class and controls drawing a neutral grey (swatches excluded); `buy buy-1-catalogue cards=N visible=V clipped=C placeholders=P cube-pictures=Q` counts Buy cards fully inside the scroll view, cards with a clipped name, cards showing the placeholder icon, and model-less items still drawing a picture. Filename rules from client/Assets/Editor/BuildShots.cs: `build-1-flat.png, build-2-drawing.png, build-3-undo.png, build-4-refused.png, build-5-painted.png, build-6-picker.png, buy-1-catalogue.png, buy-2-placing.png, buy-3-refused.png, buy-4-moving.png, buy-5-sold.png`. Measured run time and observed filenames: pending coordinator capture.",
+      "cmd": "python3 tools/unity_slot.py shots -- \"${UNITY:-/Applications/Unity/Hub/Editor/6000.7.0b4/Unity.app/Contents/MacOS/Unity}\" -batchmode -projectPath client -executeMethod Lifesim.Editor.BuildShots.Run -buildShotsOut {out} -logFile client/Logs/build-shots.log",
+      "files": "*.png",
+      "timeout_min": 20
+    },
+    {
+      "method": "CreatorShots",
+      "summary": "Character creator categories by name (optional :stage suffix). Diagnostic records: Editor log; no separate text file. Filename rules from client/Assets/Editor/CreatorShots.cs: `<name>.png for each name=category[:stage] argument; body=body,face=face requests body.png and face.png in the fixed client/Logs/shots directory`. Measured run time and observed filenames: pending coordinator capture.",
+      "cmd": "python3 tools/unity_slot.py shots -- \"${UNITY:-/Applications/Unity/Hub/Editor/6000.7.0b4/Unity.app/Contents/MacOS/Unity}\" -batchmode -projectPath client -executeMethod Lifesim.Editor.CreatorShots.Run{args} -logFile client/Logs/creator-shots.log",
+      "files": "*.png",
+      "timeout_min": 20,
+      "out": "client/Logs/shots",
+      "args": [
+        {
+          "name": "shots",
+          "flag": "-shots",
+          "pattern": "[\\w-]+=(?:looks|face|body|hair|outfit|traits)(?::(?:day|evening|turned|named|family))?(?:,[\\w-]+=(?:looks|face|body|hair|outfit|traits)(?::(?:day|evening|turned|named|family))?)*",
+          "required": true,
+          "about": "Comma-separated name=category[:stage]; categories: looks, face, body, hair, outfit, traits; stages: day, evening, turned, named, family. Names must be unique. Example: body=body,face=face"
+        },
+        {
+          "name": "size",
+          "flag": "-size",
+          "pattern": "[1-9][0-9]*x[1-9][0-9]*",
+          "required": false,
+          "about": "Optional WIDTHxHEIGHT in positive pixels; CreatorShots default is 1600x900"
+        }
+      ]
+    },
+    {
+      "method": "LiveShots",
+      "summary": "Live view before and after a purchase reaches it. Diagnostic records: `live-place.txt` in the output folder. Filename rules from client/Assets/Editor/LiveShots.cs: `live-place-1-before.png, live-place-2-after.png`. Measured run time and observed filenames: pending coordinator capture.",
+      "cmd": "python3 tools/unity_slot.py shots -- \"${UNITY:-/Applications/Unity/Hub/Editor/6000.7.0b4/Unity.app/Contents/MacOS/Unity}\" -batchmode -projectPath client -executeMethod Lifesim.Editor.LiveShots.Run -liveShotsOut {out} -logFile client/Logs/live-shots.log",
+      "files": "*.png",
+      "timeout_min": 20
+    },
+    {
+      "method": "EveningShots",
+      "summary": "evening_alone scenario to 23:59, a picture every 90 game minutes, walls up, why inspector open. Diagnostic records: `evening.txt`: one `sample=` line per picture (time, action, phase, energy, cause, candidates:chance, shot) then `sleep_start`, `sleep_end`, `woke_energy`. Filename rules from client/Assets/Editor/EveningShots.cs: `evening-NN-HHMM.png, where NN is the sample index padded to two digits and HHMM is its game time`. Measured run time and observed filenames: pending coordinator capture.",
+      "cmd": "python3 tools/unity_slot.py shots -- \"${UNITY:-/Applications/Unity/Hub/Editor/6000.7.0b4/Unity.app/Contents/MacOS/Unity}\" -batchmode -projectPath client -executeMethod Lifesim.Editor.EveningShots.Run -eveningShotsOut {out} -logFile client/Logs/evening-shots.log",
+      "files": "*.png",
+      "timeout_min": 20
+    },
+    {
+      "method": "LotPickShots",
+      "summary": "Every shipped lot's card in the lot picker. Diagnostic records: `lot-pick.txt`: lot id and demonstrates text; `lot-pick-facts.txt`: per lot `label_fits`, `pieces_in_view`, `house_cover`, `void` (the run fails on a bad fact). Filename rules from client/Assets/Editor/LotPickShots.cs: `lot-pick-<lot-id>.png for each shipped lot`. Measured run time and observed filenames: pending coordinator capture.",
+      "cmd": "python3 tools/unity_slot.py shots -- \"${UNITY:-/Applications/Unity/Hub/Editor/6000.7.0b4/Unity.app/Contents/MacOS/Unity}\" -batchmode -projectPath client -executeMethod Lifesim.Editor.LotPickShots.Run -lotPickShotsOut {out} -logFile client/Logs/lot-pick-shots.log",
+      "files": "*.png",
+      "timeout_min": 20
+    },
+    {
+      "method": "ShellShots",
+      "summary": "Main menu, settings, save slots, Build's Esc menu. Diagnostic records: `shell.txt`: tab-separated UI button/card counts and Esc menu open state. Filename rules from client/Assets/Editor/ShellShots.cs: `shell-1-main-menu.png, shell-2-settings.png, shell-3-save-slots.png, shell-4-esc-menu.png`. Measured run time and observed filenames: pending coordinator capture.",
+      "cmd": "python3 tools/unity_slot.py shots -- \"${UNITY:-/Applications/Unity/Hub/Editor/6000.7.0b4/Unity.app/Contents/MacOS/Unity}\" -batchmode -projectPath client -executeMethod Lifesim.Editor.ShellShots.Run -shellShotsOut {out} -logFile client/Logs/shell-shots.log",
+      "files": "*.png",
+      "timeout_min": 20
+    },
+    {
+      "method": "PoseShots",
+      "summary": "Every declared body slot with both bodies, paired sofa seats and Stop/Up exits. Diagnostic records: `poses.json`: declarations, Running samples, resolved placements, Animator/frame facts, paired seats, exit holds and missing coverage; missing assets, actions or logged errors fail the run; temporary scenario and player data stay in the worktree. Filename rules from client/Assets/Editor/PoseShots.cs: `<object-id>-<body>-actor<character-id>-<slot-id>-Running.png for slot samples; <object-id>-<body>-actor<character-id>-exit-<state>.png for exits; each also has a matching side view, replacing .png with -side.png, with exit state sit_stop or sleep_up`. Measured run time and observed filenames: pending coordinator capture.",
+      "cmd": "python3 tools/unity_slot.py pose-shots -- \"${UNITY:-/Applications/Unity/Hub/Editor/6000.7.0b4/Unity.app/Contents/MacOS/Unity}\" -batchmode -projectPath client -executeMethod Lifesim.Editor.PoseShots.Run -poseShotsOut {out} -logFile client/Logs/pose-shots.log",
+      "files": "*.png",
+      "timeout_min": 40
+    }
+  ]
+}
