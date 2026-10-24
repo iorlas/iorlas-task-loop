@@ -30,6 +30,7 @@ import uuid
 from pathlib import Path
 
 import checks_speed as cs
+import links
 import looks
 import notifier
 import tl
@@ -39,6 +40,7 @@ DEFAULTS = {
     "land": "git push origin HEAD:main",
     "base": "origin/main",
     "budget_usd": 15,
+    "check_links": True,  # tl-bxk.7: open every link a task adds to a text file from this host; one that does not open goes back to the writer
     "budget_min": 180,
     "max_rounds": 3,                  # review send-backs per stage before a replan
     "max_check_tries": 3,             # red checks in a row that end a round (checks never reach the reviewer red)
@@ -1310,6 +1312,7 @@ class Engine:
         self.look_filed = False
         self.look_unjudged, self.look_retried, self.shots_skipped = {}, set(), set()  # unjudged: item -> why
         self.unverified = []  # tl-bxk.10.28: items that land for the owner
+        self.link_ok, self.link_bad, self.link_fn, self.link_tries = set(), {}, None, {}  # tl-bxk.7: links opened from this host (link_fn: a test's check)
         self.filed = []       # leftover titles filed by an earlier run on this checkpoint: a replan naming one again is no new bead
         self.stage_tree = ""  # the tree the current stage started from ("" = the task's base): the review's diff runs from here
         self.writer_said = "" # the writer's answers so far: a new file they name is meant (tl-bxk.10.24)
@@ -1633,6 +1636,7 @@ class Engine:
         timeout = float(self.cfg["node_timeout_min"]) * 60
         waited, attempt_prompt, attempt, errs = 0.0, delta if (delta and resume and resume_key) else prompt, 1, ["not run"]
         crashes = 0  # delegate crashes retried on this call
+        denied_retried = False  # one retry after a refused read-only command, on a fresh thread
         login_note = ""  # set once a lane answered logged_out and the engine retried afresh (delegate puts that lane out 15 min)
         while attempt <= 2:
             self._resume = resume
@@ -1762,6 +1766,19 @@ class Engine:
                 r.data = unstrict(r.data, schema_for(node, visual))
             errs = validate(r.data, schema_for(node, visual)) if (r.data is not None and nxt is None) else [
                 "%s: %s" % (reason or "no structured output", said[:300])]
+            if (denied and errs and not denied_retried and reason != "secrets" and j.get("denied")
+                    and all(isinstance(d, dict) and d.get("tool") in ("Bash", "shell", "bash") and read_only_command(d.get("input"))
+                            for d in j["denied"])):
+                # tl-bxk.10.21: a guard refused only commands that read (lifesim-6dq0: a head+rg chain, 12 s, no answer; the next
+                # run found the work done). One retry on a fresh thread that is told what was refused; a second denial blocks
+                denied_retried = True
+                note = ("\nAn earlier attempt at this step (thread %s) was refused a read-only command: %s. Do not run it again. "
+                        "Read with one plain command at a time, such as `rg -n PATTERN PATH`, `cat FILE` or `git diff`, "
+                        "with no pipes, chains or substitutions, then give your answer." % (r.ref or "unknown", denied))
+                self.warn("%s: read-only command refused (%s); retrying once on a fresh thread" % (node, denied))
+                self.transition(step or node, "denied_retry", "refused read-only: %s" % denied[:200], lane=j.get("lane") or "")
+                resume, attempt_prompt = None, prompt + (FRESH_WRITER_TEXT if self._resume else "") + note
+                continue
             if denied and errs:  # asking again meets the same refusal
                 raise Blocked("needs a human: the %s step was denied %s and gave no answer; run it or allow it, then "
                               "rerun. (%s)" % (node, denied, (j.get("text") or said or "")[:200]))
@@ -3831,6 +3848,7 @@ class Engine:
             judged = self.out_of_scope(self.engine_unproven(review.get("unchecked") or [], checks))
             self.unchecked = self.unchecked + judged if fix else judged
             self.look_judged(review, st, w, fix)
+            self.link_judged(review)
             same = self.last_flag == "same_family"
             if same:
                 self.warn("%s: the review is from the writer's own model family (no other lane was free)" % name)
@@ -4663,6 +4681,52 @@ class Engine:
                      "if not, give a medium finding." % w["logic_only"].strip())
         return text + "\nlook: empty when nothing here is visual.\n"
 
+    def link_judged(self, review):
+        """tl-bxk.7: every link the task adds to a text file is opened from the engine's host (the writer's sandbox has no network,
+        and 'verified' there means nothing). One that does not open is a finding for the writer: replace it, or write `unverified` on
+        its line; a link marked unverified lands as an item for the owner with the claim it carries (a bot-blocking site answers
+        403 from here and opens for a person). Opened links are not asked again."""
+        if not self.cfg.get("check_links", True):
+            return
+        try:
+            found = links.added_urls(self.task_diff())
+        except Exception as e:  # no diff to read is no check, never a failed run
+            self.warn("link check skipped: %s" % e)
+            return
+        todo = [u for _, _, u in found if u not in self.link_ok]
+        if not todo:
+            return
+        todo = [u for u in todo if self.link_tries.get(u, 0) < 2][:LINK_CAP]  # each link is opened twice at most, 200 per review
+        try:
+            got = links.check_all(todo, fn=self.link_fn or links.check)
+        except Exception as e:  # opening links must never stop a run
+            self.warn("link check skipped: %s" % e)
+            return
+        if len(got) >= 3 and all(not ok and links.network_down(why) for ok, why in got.values()):
+            self.warn("link check skipped: none of %d links could be reached at all (%s): this host looks offline" % (len(got), next(iter(got.values()))[1]))
+            return
+        for url, (ok, why) in got.items():
+            self.link_tries[url] = self.link_tries.get(url, 0) + 1
+            if ok:
+                self.link_ok.add(url)
+                self.link_bad.pop(url, None)
+            elif why != links.UNKNOWN:  # out of time is no verdict
+                self.link_bad[url] = why
+        seen = set()
+        for path, line, url in found:
+            why = self.link_bad.get(url)
+            if url in self.link_ok or not why or (path, url) in seen:
+                continue
+            seen.add((path, url))
+            if re.search(r"\bunverified\b", line, re.I):
+                self.add_unverified({"what": "%s (link: %s)" % (clip(line, 200), url), "kind": "external_fact", "source": url},
+                                    "the engine could not open %s (%s); the owner checks it" % (url, why))
+                continue
+            review["findings"].append({"file": path, "line": 0, "severity": "medium", "fix":
+                "the link %s did not open from the engine's host (%s). Replace it with a source that opens. If the site only blocks "
+                "bots, keep it and write `unverified` on the same line, so the owner is asked about the claim it carries. Never "
+                "call a link verified that you could not open." % (url, why)})
+
     def look_judged(self, review, st, w, fix):
         """No screenshot and no logic-only reason on a visual stage is a medium finding; the reviewer's look is kept."""
         if fix or not self.stage_visual(st):
@@ -5415,6 +5479,72 @@ class Heartbeat:
 
 
 GROUPS = ("static", "tests", "acceptance")
+
+
+LINK_CAP = 200  # links opened per review
+READ_ONLY_WORDS = {"head", "tail", "cat", "rg", "grep", "egrep", "fgrep", "ls", "wc", "sort", "uniq", "nl", "cut", "tr", "stat", "file",
+                   "diff", "cmp", "basename", "dirname", "pwd", "echo", "printf", "true", "test", "["}
+READ_ONLY_GIT = {"log", "diff", "show", "status", "rev-parse", "ls-files", "ls-tree", "grep", "blame", "cat-file", "describe", "shortlog",
+                 "branch", "rev-list", "name-rev", "merge-base"}
+FIND_WRITES = {"-exec", "-execdir", "-ok", "-okdir", "-delete", "-fprint", "-fprint0", "-fprintf", "-fls"}
+
+
+SED_PRINT = re.compile(r"^\s*(?:\d+|\$)?(?:,\s*(?:\d+|\$))?\s*[pd]\s*$")  # sed -n 'N,Mp': the one script that only prints
+GIT_BAD = ("--output", "--ext-diff", "--open-files-in-pager", "-O", "-c", "-C", "--git-dir", "--work-tree", "--exec-path", "--textconv")
+
+
+def read_only_command(cmd):
+    """True when every part of a shell command only reads (head, cat, rg, grep, git log/diff/show, ls, find without -exec or
+    -delete, a pipe or && chain of those): no redirection, no substitution, no heredoc, no newline or single &, no flag that
+    writes or runs a program (sort -o, --output, rg --pre, git --ext-diff, a sed script beyond printing). Unsure is False
+    (tl-bxk.10.21)."""
+    if not isinstance(cmd, str) or not cmd.strip():
+        return False
+    try:
+        words = shlex.split(cmd)
+    except ValueError:
+        return False
+    if len(words) >= 3 and Path(words[0]).name in ("zsh", "bash", "sh") and words[1] in ("-c", "-lc", "-ic", "-l", "-cl"):
+        return len(words) == 3 and read_only_command(words[2])  # the payload of `/bin/zsh -lc "..."`, and nothing after it
+    if "\n" in cmd or "\r" in cmd:
+        return False
+    bare = re.sub(r"'[^']*'|\"[^\"]*\"", "''", cmd).replace("2>&1", "").replace("2>/dev/null", "").replace(">/dev/null", "")
+    if re.search(r"[<>]|\|\|", bare) or re.search(r"(?<!&)&(?!&)", bare) or re.search(r"`|\$\(|\$\{", cmd):
+        return False  # a redirection, a background job or a substitution writes or hides
+    if split_top(cmd) is None:
+        return False
+    for part in re.split(r"\s*(?:\|\||\||&&|;)\s*", bare if False else cmd):
+        try:
+            w = shlex.split(part)
+        except ValueError:
+            return False
+        if not w:
+            return False
+        head = Path(w[0]).name
+        if head == "git":
+            if any(x == f or x.startswith(f + "=") for x in w[1:] for f in GIT_BAD):
+                return False
+            rest = [x for x in w[1:] if not x.startswith("-")]
+            if not rest or rest[0] not in READ_ONLY_GIT or (rest[0] == "branch" and len(rest) > 1):
+                return False
+        elif head == "find":
+            if any(x in FIND_WRITES for x in w):
+                return False
+        elif head == "sed":
+            scripts = [x for x in w[1:] if not x.startswith("-")]
+            if "-n" not in w or any(x.startswith("-i") or x == "--in-place" or x in ("-f", "-e", "--file", "--expression") for x in w[1:]) \
+                    or not scripts or not SED_PRINT.match(scripts[0]):
+                return False
+        elif head == "sort":
+            if any(x == "-o" or x.startswith("--output") or (x.startswith("-") and not x.startswith("--") and "o" in x[1:] and not x[1:].isdigit())
+                   for x in w[1:]):
+                return False
+        elif head == "rg":
+            if any(x == "--pre" or x.startswith("--pre=") or x.startswith("--pre-glob") for x in w[1:]):
+                return False
+        elif head not in READ_ONLY_WORDS:
+            return False
+    return True
 
 
 def split_top(cmd):
