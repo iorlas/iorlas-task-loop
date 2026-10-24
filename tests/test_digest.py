@@ -75,9 +75,17 @@ class Signals(Env):
         (eng / "lifesim-a-20261023-010101.jsonl").write_text("\n".join(json.dumps(r) for r in recs))
         (eng / "lifesim-b-20261023-010101.stderr").write_text("fatal: Temporary failure in name resolution\n")
         os.utime(eng / "lifesim-a-20261023-010101.jsonl", (time.time(), time.time()))
-        sig = digest.signals(50, 1000)
-        self.assertEqual((sig["refused"]["count"], sig["flake"]["count"], sig["dns"]["count"]), (1, 1, 2))
-        self.assertEqual(sig["dns"]["beads"], {"lifesim-a": 1, "lifesim-b": 1})
+        (eng / "lifesim-c-20200101-000000.stderr").write_text("fatal: Temporary failure in name resolution\n")  # an old run
+        recs2 = [{"kind": "warn", "t": 104, "text": "git: Permission denied (publickey)"}]
+        with (eng / "lifesim-a-20261023-010101.jsonl").open("a") as fh:
+            fh.write("\n" + json.dumps(recs2[0]))
+        lo = time.mktime((2026, 10, 22, 0, 0, 0, 0, 0, -1))
+        sig = digest.signals(50, 1000)  # the .stderr run of 2026-10-23 is outside this window of epoch seconds
+        self.assertEqual((sig["refused"]["count"], sig["flake"]["count"], sig["dns"]["count"]), (1, 1, 1))
+        self.assertEqual(sig["dns"]["beads"], {"lifesim-a": 1})
+        sig = digest.signals(lo, time.mktime((2026, 10, 25, 0, 0, 0, 0, 0, -1)))
+        self.assertEqual(sig["dns"]["beads"].get("lifesim-b"), 1)
+        self.assertNotIn("lifesim-c", sig["dns"]["beads"])
 
 
 class Compose(unittest.TestCase):
@@ -111,6 +119,10 @@ class Due(Env):
     def test_a_try_in_the_last_two_hours_blocks_another(self):
         (self.d / "task-loop" / "digest.json").write_text(json.dumps({"tried": self.at(8) - 600}))
         self.assertIsNone(digest.due(self.at(8)))
+
+    def test_a_garbled_state_file_does_not_stop_the_digest(self):
+        (self.d / "task-loop" / "digest.json").write_text(json.dumps({"sent": "x", "tried": None}))
+        self.assertIsNotNone(digest.due(self.at(8)))
 
     def test_the_loop_starts_it_detached_only_with_a_channel(self):
         self.assertEqual(digest.maybe_send(self.at(8)), "")

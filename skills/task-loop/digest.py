@@ -21,7 +21,7 @@ import notifier
 import tl
 
 DIGEST_HOUR = 7
-REFUSED = re.compile(r"\b(?:denied|refused)\b", re.I)
+REFUSED = re.compile(r"\b(?:was|were|been) (?:denied|refused)\b|\bdenied ->|\brefused commands\b|\btool use denied\b", re.I)
 DNS = re.compile(r"Could not resolve host|Temporary failure in name resolution|getaddrinfo|nodename nor servname|"
                  r"Name or service not known", re.I)
 FLAKE = re.compile(r"\bflak(?:y|e|es)\b|passed on (?:a )?retry|succeeded on retry", re.I)
@@ -60,6 +60,13 @@ def signals(since, until, engine_dir=None):
         except OSError:
             continue
         bead = re.sub(r"-\d{8}-\d{6}\.\w+$", "", Path(f).name)
+        if f.endswith(".stderr"):  # no timestamps inside: the run's start, from its name, decides
+            m = re.search(r"-(\d{8}-\d{6})\.stderr$", f)
+            try:
+                if m and not (since <= time.mktime(time.strptime(m.group(1), "%Y%m%d-%H%M%S")) <= until):
+                    continue
+            except (ValueError, OverflowError):
+                continue
         for ln in lines:
             text, t = ln, None
             if f.endswith(".jsonl"):
@@ -133,7 +140,10 @@ def due(now=None, hour=DIGEST_HOUR):
     lt = datetime.fromtimestamp(now)
     at = lt.replace(hour=hour, minute=0, second=0, microsecond=0).timestamp()
     st = read_state()
-    last, tried = float(st.get("sent") or 0), float(st.get("tried") or 0)
+    try:
+        last, tried = float(st.get("sent") or 0), float(st.get("tried") or 0)
+    except (TypeError, ValueError):
+        last = tried = 0.0
     if now < at or last >= at or now - tried < 2 * 3600:  # not yet, done today, or a try is running or failed lately
         return None
     return (last if last and now - last < 3 * 86400 else now - 86400), now
@@ -156,10 +166,13 @@ def maybe_send(now=None):
     w = due(now)
     if not w or notifier.channel()[0] == "off":
         return ""
-    st = read_state()
-    st["tried"] = now or time.time()
     try:
-        state_path().write_text(json.dumps(st), encoding="utf-8")
+        with tl.os_lock(tl.config_dir() / "locks" / "digest.lock", "pid %d" % os.getpid()):  # loops of several repos wake together
+            if not due(now):  # another loop claimed it while this one waited
+                return ""
+            st = read_state()
+            st["tried"] = now or time.time()
+            state_path().write_text(json.dumps(st), encoding="utf-8")
         cmd = [sys.executable, str(Path(__file__).resolve().with_name("tl.py")), "digest", "--send",
                "--since", str(int(w[0])), "--until", str(int(w[1]))]
         subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,

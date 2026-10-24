@@ -1581,7 +1581,7 @@ def ask_for(ask_id):
     f = config_dir() / "asks" / ("%s.json" % bead)
     now = read_json(str(f), {}) if bead and "/" not in bead and "\\" not in bead and ".." not in bead else {}
     now = now if isinstance(now, dict) else {}
-    if now.get("id") and now.get("status") == "open":
+    if now.get("id") and now.get("status") in ("open", "parked"):
         return None, None, (409, {"code": "superseded", "new_ask": now["id"],
                                   "error": "The engine asked again for this bead; the new ask replaces this one."})
     return None, None, (404, {"code": "gone", "error": "This ask no longer exists."})
@@ -1640,8 +1640,9 @@ def file_answer(a, text, cwd):
         d = json.loads(r.stdout)
         d = d[0] if isinstance(d, list) and d else d
         notes = (d.get("notes") or "").rstrip("\n") if isinstance(d, dict) else ""
-        if head in notes:
-            i = notes.index(head) + len(head)
+        m = re.search(r"^%s[ \t]*$" % re.escape(head), notes, re.M)  # the heading on its own line, not ### or a mention
+        if m:
+            i = m.end()
             nxt = notes.find("\n## ", i)
             at = nxt if nxt >= 0 else len(notes)
             notes = notes[:at].rstrip("\n") + "\n" + line + notes[at:]

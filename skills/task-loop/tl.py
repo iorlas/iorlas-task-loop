@@ -1343,7 +1343,7 @@ def close_stale_asks(every=600):
             a = json.loads(Path(f).read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
-        if not isinstance(a, dict) or a.get("status") != "open" or not a.get("bead"):
+        if not isinstance(a, dict) or a.get("status") not in ("open", "parked") or not a.get("bead"):
             continue
         if not (isinstance(a.get("repo"), str) and Path(a["repo"]).is_dir()):
             continue  # which repo's tracker to ask is not known: the ask stays
@@ -1553,13 +1553,17 @@ def park_stale_asks(every=600):
             continue
         if not late or not (isinstance(a.get("repo"), str) and Path(a["repo"]).is_dir()):
             continue
-        a.update(status="parked", parked=time.time())
-        try:
+        try:  # the engine or the dashboard may have written since the read above: park only what is still open and unanswered
+            cur = json.loads(Path(f).read_text(encoding="utf-8"))
+            if cur.get("status") != "open" or cur.get("answer") or cur.get("id") != a.get("id"):
+                continue
+            cur.update(status="parked", parked=time.time())
+            a = cur
             Path(f).write_text(json.dumps(a, indent=1), encoding="utf-8")
             bd("comments", "add", a["bead"], "Parked (engine): ask %s got no answer in 3 days. It stays open for an answer: "
                "`tl ask answer %s <text>`, the dashboard, or a comment here." % (a.get("id"), a["bead"]), cwd=a["repo"])
             done.append(a["bead"])
-        except (OSError, SystemExit):
+        except (OSError, ValueError, SystemExit):
             pass
     try:
         marker.parent.mkdir(parents=True, exist_ok=True)

@@ -489,6 +489,11 @@ esac
         text = (self.d / "notes.txt").read_text()
         self.assertIn("## Testing\n- ", text)
         self.assertIn("## Decisions\n- ", text)  # the first section is kept, the second beside it
+        (self.d / "notes.txt").write_text("### Testing plan\nsee ## Testing below in prose\n")
+        self.ask("x", kind="verify", n=4)
+        self.assertEqual(server.answer({"ask": "x-4", "text": "wrong: another"})[0], 200)
+        text = (self.d / "notes.txt").read_text()
+        self.assertTrue(text.startswith("### Testing plan\nsee ## Testing below in prose\n\n## Testing\n- "), text)  # a new section, not inside the prose
 
 
 class Markdown(unittest.TestCase):

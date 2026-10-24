@@ -20,7 +20,7 @@ def channel():
     """('command', text) | ('desktop', '') | ('off', '')"""
     try:
         text = (tl.config_dir() / "notify").read_text(encoding="utf-8").strip()
-    except OSError:
+    except (OSError, ValueError):
         return "off", ""
     if text.lower() == "desktop":
         return "desktop", ""
@@ -31,12 +31,12 @@ def channel():
 
 def desktop(title, text):
     """True when a desktop notification was started; False when this machine has no way to show one."""
-    text = " ".join((text or "").split())[:240]
+    text = " ".join((text or "").replace("\x00", " ").split())[:240]
     if sys.platform == "darwin" and shutil.which("osascript"):
         cmd = ["osascript", "-e", "on run argv", "-e", "display notification (item 1 of argv) with title (item 2 of argv)",
                "-e", "end run", text, title]
     elif shutil.which("notify-send"):
-        cmd = ["notify-send", title, text]
+        cmd = ["notify-send", "--", title, text]
     else:
         return False
     try:
@@ -54,11 +54,12 @@ def send(kind, text, bead="", ask_id="", full="", repeat=False):
         return "off"
     if how == "desktop":
         return "sent" if desktop("task-loop: %s" % (bead or kind), text) else "failed: no desktop notifier on this machine"
+    text, full = text.replace("\x00", " "), (full or text).replace("\x00", " ")
     env = dict(os.environ, TL_ASK_KIND=kind, TL_ASK_BEAD=bead, TL_ASK_ID=ask_id, TL_ASK_TEXT=text[:500],
-               TL_DIGEST_TEXT=full or text)
+               TL_DIGEST_TEXT=full)
     try:
         subprocess.Popen(cmd, shell=True, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                          stderr=subprocess.DEVNULL, start_new_session=(os.name != "nt"))
-    except OSError as e:
+    except (OSError, ValueError) as e:
         return "failed: %s" % e
     return "sent"

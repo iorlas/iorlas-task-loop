@@ -4752,7 +4752,7 @@ class Engine:
         elif outcome in ("landed", "done") and self.ask_path().exists():
             try:
                 a = json.loads(self.ask_path().read_text())
-                if a.get("status") == "open":
+                if a.get("status") in ("open", "parked"):
                     a.update(status="closed", closed=time.time())
                     self.ask_path().write_text(json.dumps(a, indent=1))
             except (OSError, ValueError):
@@ -4866,7 +4866,7 @@ def count_tests(diff, pattern):
     return added, removed
 
 
-ENGINE_NOTES = ("Plan (engine)", "Review (engine", "Reflect (engine)", "Blocked:", "Ask (engine)", "Evidence (engine)")
+ENGINE_NOTES = ("Plan (engine)", "Review (engine", "Reflect (engine)", "Blocked:", "Ask (engine)", "Evidence (engine)", "Parked (engine)")
 
 
 VERIFY_GAPS = "verify: before land, "  # the ask for what the workers could not check; its answer may ask for work
@@ -5723,7 +5723,7 @@ def reclaim(bead_id, repo):
             ask = json.loads((tl.config_dir() / "asks" / ("%s.json" % bead_id)).read_text())
         except (OSError, ValueError):
             ask = {}
-        asking = ask.get("status") == "open"
+        asking = ask.get("status") in ("open", "parked")
         if asking and not after:
             return False, "waiting for the answer to ask %s (%s)" % (ask.get("id"), ask.get("kind"))
         if after and not asking:
