@@ -155,7 +155,17 @@ class EnsureFlow(unittest.TestCase):
         ping.assert_called_with(54321)
 
 
+# HTTPServer.server_bind asks socket.getfqdn(host), a reverse DNS lookup; on a CI runner it can stall for tens of seconds.
+# These tests are about which bind fails, not about naming, so the lookup is cut out of them (in the child via -c).
+NO_FQDN = "import runpy, socket, sys; socket.getfqdn = lambda name='': name; sys.argv = sys.argv[1:]; runpy.run_path(sys.argv[0], run_name='__main__')"
+
+
 class LoudBind(unittest.TestCase):
+    def setUp(self):
+        p = mock.patch.object(socket, "getfqdn", lambda name="": name)
+        p.start()
+        self.addCleanup(p.stop)
+
     def test_open_servers_fails_on_any_address(self):
         port = free_port()
         with self.assertRaises(server.BindError) as cm:
@@ -185,7 +195,7 @@ class LoudBind(unittest.TestCase):
 
     def test_process_exits_nonzero_and_serves_nothing(self):
         port = free_port()
-        r = subprocess.run([sys.executable, str(SERVER), "--port", str(port), "--bind", "127.0.0.1,203.0.113.9"],
+        r = subprocess.run([sys.executable, "-c", NO_FQDN, str(SERVER), "--port", str(port), "--bind", "127.0.0.1,203.0.113.9"],
                            capture_output=True, text=True, timeout=30,
                            env={**os.environ, "TASK_LOOP_DASH_DEV_PUBLIC": "1", "XDG_CONFIG_HOME": tempfile.mkdtemp(), "APPDATA": tempfile.mkdtemp()})
         self.assertNotEqual(r.returncode, 0)
