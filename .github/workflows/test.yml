@@ -13,4 +13,28 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
+      # The suite shells out to `just` (recipe checks); the developer machine has it, a runner does not.
+      - uses: extractions/setup-just@v2
+      - name: probe bash and just
+        shell: bash
+        continue-on-error: true
+        run: |
+          which -a bash || true
+          bash --version | head -1
+          echo 'test -f a.txt' | bash -n; echo "bash -n rc=$?"
+          just --version
+      - name: probe Windows bash on cmd path
+        if: runner.os == 'Windows'
+        shell: cmd
+        continue-on-error: true
+        run: |
+          where bash
+          echo test -f a.txt | bash -n
+          echo rc=%ERRORLEVEL%
+      - name: probe LoudBind (macOS)
+        if: runner.os == 'macOS'
+        continue-on-error: true
+        run: |
+          time python -X faulthandler -m unittest -v tests/test_dash_ensure.py -k LoudBind
+          time lsof -nP -iTCP@203.0.113.9:50000 -sTCP:LISTEN -t
       - run: python -m unittest discover -s tests -v

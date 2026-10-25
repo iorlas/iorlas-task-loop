@@ -109,7 +109,9 @@ class LegacyRuns(unittest.TestCase):
         self.assertEqual(r["blocks"][4]["arrow"]["cause"], "accepted")
         self.assertEqual(r["end"]["outcome"], "landed")
         self.assertEqual(r["end"]["text"], "landed " + timeline.when(r["end"]["t"]))
-        self.assertTrue(timeline.when(r["end"]["t"]).endswith("11:20"))
+        # the fixture's end is 08:20 UTC (11:20 where it was recorded); the label is local time, so it follows the machine's zone
+        self.assertEqual(time.strftime("%H:%M", time.gmtime(r["end"]["t"])), "08:20")
+        self.assertTrue(timeline.when(r["end"]["t"]).endswith(time.strftime("%H:%M", time.localtime(r["end"]["t"]))))
 
     def test_block_detail_has_the_checks_of_its_round_and_the_engine_lines_of_its_step(self):
         r = self.run_of("072411")

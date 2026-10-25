@@ -44,6 +44,7 @@ class Release(unittest.TestCase):
         self.git("checkout", "-q", "-B", "main", cwd=self.seed)  # an empty clone's branch follows init.defaultBranch
         self.write(self.seed / PLUGIN, json.dumps({"name": "iorlas-task-loop", "version": "0.1.0",
                                                    "author": {"name": "t"}}, indent=2) + "\n")
+        self.write(self.seed / ".gitignore", "__pycache__/\n")  # the real repo ignores it; the inner suite writes it when bytecode is on
         self.write(self.seed / "tests" / "test_ok.py", "import time\nimport unittest\n\n\nclass T(unittest.TestCase):\n"
                                                         "    def test_ok(self):\n        time.sleep(1)\n")
         self.commit(self.seed, "init")

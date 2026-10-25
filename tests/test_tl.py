@@ -254,6 +254,10 @@ class SlotReset(Base):
         sh("git", "worktree", "add", "-q", "--detach", str(self.slot), "origin/main", cwd=self.repo)
         self.cwd = os.getcwd()
         os.chdir(self.repo)
+        # a reset is about git; the slot-bead lookup gets an empty bd, so no real bd (absent on CI) is needed
+        no_beads = mock.patch.object(tl, "bd", return_value=subprocess.CompletedProcess([], 0, "[]", ""))
+        no_beads.start()
+        self.addCleanup(no_beads.stop)
 
     def tearDown(self):
         os.chdir(self.cwd)
