@@ -166,6 +166,12 @@ class Lanes(unittest.TestCase):
         lanes, _ = roadmap.lanes_of([], {}, [{"pid": 9, "slot": "", "bead": "bz", "since": 7, "started": 1, "version": ""}])
         self.assertEqual([(l["slot"], l["bead"], l["stopping"]) for l in lanes], [("-", "bz", "")])
 
+    def test_targeted_stop_indicators(self):
+        lanes, _ = roadmap.lanes_of(["s1", "s2", "s3"], {}, self.loops(), {3: "now", 4: "after"})
+        self.assertEqual([l["stopping"] for l in lanes], ["after", "now", ""])
+        lanes, _ = roadmap.lanes_of(["s2"], {}, [self.loops()[2]], (300, "after"))
+        self.assertEqual(lanes[0]["stopping"], "")
+
     def test_build_carries_version_stopping_and_waiting(self):
         g = graph.build([bead("b1", status="in_progress")], CFG, set(), {"b1"}, (), now=NOW)
         lanes, waiting = roadmap.lanes_of(["s1"], {"b1": "s1"}, [dict(self.loops()[3])], (200, "now"))
@@ -195,6 +201,26 @@ class Verdict(unittest.TestCase):
 
 class Api(unittest.TestCase):
     """/api/roadmap over a temp HOME and config dir: bd, the loop's queue and its files stubbed."""
+
+    def test_loop_files_reports_only_targeted_stops(self):
+        import server
+        server._engine_dir()
+        import loop
+        import tl
+        with tempfile.TemporaryDirectory() as home, mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": home, "APPDATA": home}):
+            repo = str(Path(home) / "repo")
+            loop.write_state(repo, pid=111, started=100, slot="s1", bead="a")
+            loop.write_state(repo, pid=222, started=100, slot="s2", bead="b")
+            f = loop.paths(repo)["stop"]
+            with mock.patch.object(tl, "pid_alive", return_value=True), \
+                    mock.patch.object(tl, "slot_beads", return_value=[]), \
+                    mock.patch.object(loop, "running", return_value={}), \
+                    mock.patch.object(server, "loop_version", return_value="test"):
+                for mode in ("now", "after"):
+                    f.write_text(json.dumps({"targets": [111], "time": 100, "mode": mode}))
+                    os.utime(f, (1000, 1000))
+                    lanes, _, _ = server.loop_files(repo)
+                    self.assertEqual([(l["loop"], l["stopping"]) for l in lanes], [(111, mode), (222, "")])
 
     def test_endpoint(self):
         import server

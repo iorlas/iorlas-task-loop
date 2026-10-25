@@ -1352,11 +1352,8 @@ def loop_files(repo):
         running = loop.running(repo)
     except Exception:
         slots, running = [], {}
-    try:
-        sf = loop.paths(repo)["stop"]
-        stop = (sf.stat().st_mtime, sf.read_text().strip() or "after")
-    except OSError:
-        stop = (0, "")
+    request = loop.read_stop(repo)
+    stop = {st["pid"]: loop.stop_for(request, st["pid"], st["started"]) for st in loops}
     lanes, waiting = roadmap.lanes_of(slots, running, loops, stop)
     rows = []
     try:

@@ -170,12 +170,14 @@ def verdict(r, stats):
 
 def lanes_of(slots, running, loops, stop=(0, "")):
     """One lane per slot, never per loop. slots: this machine's slot names; running: {bead: slot} (a slot bead's held_bead, or
-    a live engine lock); loops: live loop states [{pid, slot, bead, since, started, version}]; stop: (mtime, mode) of the repo's
-    stop file. -> (lanes, waiting): a lane {slot, bead, since, version, stopping, loop}, and the loops that hold no slot yet
+    a live engine lock); loops: live loop states [{pid, slot, bead, since, started, version}]; stop: {pid: applicable mode},
+    or a legacy (mtime, mode) pair. -> (lanes, waiting): a lane {slot, bead, since, version, stopping, loop}, and loops without a slot
     (they wait in line; they are a note on the queue, not a lane). A slot with no bead is free; a loop with a bead but no
     slot name (run in a worktree) gets a lane named after its bead's slot or '-'."""
     def mode(lp):
-        return stop[1] if stop[0] and stop[0] >= (lp.get("started") or 0) else ""
+        if isinstance(stop, dict):
+            return stop.get(lp.get("pid"), "")
+        return stop[1] if stop[0] > (lp.get("started") or 0) + 1 else ""
     names = set(slots) | set(running.values()) | {lp["slot"] for lp in loops if lp.get("slot")}
     lanes = []
     for name in sorted(names):

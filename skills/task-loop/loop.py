@@ -18,6 +18,7 @@ import os
 import random
 import re
 import signal
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -249,7 +250,7 @@ def write_state(repo, **st):
     d, key = paths(repo)["states"]
     f = d / ("%s.%d.json" % (key, st.get("pid") or os.getpid()))
     tmp = f.with_suffix(".tmp")
-    tmp.write_text(json.dumps(dict(st, repo=repo)), encoding="utf-8")
+    tmp.write_text(json.dumps(dict(st, repo=repo, stop_protocol=1)), encoding="utf-8")
     os.replace(tmp, f)
 
 
@@ -297,17 +298,80 @@ START_CWD = [""]  # the directory the loop was started in: where its argv's rela
 STARTED = [0.0]  # wall time this loop started: a stop file written before it was meant for the loops then running
 
 
+@contextlib.contextmanager
+def stop_lock(repo):
+    """Serialize stop capture with loop registration, removal and request cleanup."""
+    f = paths(repo)["stop"]
+    if tl.fcntl:
+        with tl.os_lock(f.with_name(f.name + ".lock"), "pid %d" % os.getpid()):
+            yield
+        return
+    # SQLite's OS locks work on Windows too, across threads and processes, and are
+    # released on process exit. Reserve a transaction; no table or data is needed.
+    with contextlib.closing(sqlite3.connect(str(f.with_name(f.name + ".lock.sqlite3")), timeout=1)) as db:
+        while True:
+            try:
+                db.execute("BEGIN IMMEDIATE")
+                break
+            except sqlite3.OperationalError as e:
+                if str(e) != "database is locked":
+                    raise
+                time.sleep(0.05)
+        try:
+            yield
+        finally:
+            db.rollback()
+
+
+def read_stop(repo):
+    """Read one atomic snapshot; legacy text uses the mtime from that same open file."""
+    try:
+        with paths(repo)["stop"].open(encoding="utf-8") as f:
+            text = f.read().strip()
+            mtime = os.fstat(f.fileno()).st_mtime
+    except OSError:
+        return {}
+    if text in ("", "after", "now"):
+        return {"mode": text or "after", "time": mtime}
+    try:
+        request = json.loads(text)
+        if (isinstance(request, dict) and request.get("mode") in ("after", "now")
+                and isinstance(request.get("targets"), list)
+                and isinstance(request.get("time"), (int, float))):
+            return request
+    except ValueError:
+        pass
+    return {}
+
+
+def stop_for(request, pid, started):
+    """Targeted requests ignore timestamps; old untargeted files need >1s of clock margin."""
+    if not request:
+        return ""
+    applies = (pid in request["targets"] if "targets" in request
+               else request["time"] > started + 1)
+    return request["mode"] if applies else ""
+
+
+def clean_stop(repo, loops):
+    """Caller holds stop_lock. Keep requests still needed by any live target."""
+    request = read_stop(repo)
+    if not request:
+        return
+    if "targets" in request:
+        stale = not any(st["pid"] in request["targets"] for st in loops)
+    else:
+        stale = not loops or all(request["time"] < (st.get("started") or 0) for st in loops)
+    if stale:
+        with contextlib.suppress(FileNotFoundError):
+            paths(repo)["stop"].unlink()
+
+
 def stop_mode(repo):
     """'now', 'after' (stop after the current bead) or '' (go on)."""
     if STOP_NOW.is_set():
         return "now"
-    f = paths(repo)["stop"]
-    try:
-        if f.stat().st_mtime < STARTED[0]:
-            return ""
-        return f.read_text().strip() or "after"
-    except OSError:
-        return ""
+    return stop_for(read_stop(repo), os.getpid(), STARTED[0])
 
 
 def nap(secs, repo=None, until=0):
@@ -596,20 +660,18 @@ def cmd_loop(a):
                 old[sig] = signal.signal(getattr(signal, sig), lambda *_: STOP_NOW.set())
     STOP_NOW.clear()
     p = paths(repo)
-    STARTED[0] = st.get("STARTED") or time.time()
-    if not st and not live_loops(repo, but=os.getpid()):  # a stop no loop read: never meant for this one
-        with contextlib.suppress(OSError):
-            p["stop"].unlink()
-    started = st.get("started") or clock()
-    write_state(repo, pid=os.getpid(), started=started)
+    STARTED[0] = st.get("STARTED", st.get("started", clock()))
+    started = st.get("started", STARTED[0])
+    with stop_lock(repo):
+        write_state(repo, pid=os.getpid(), started=started)
+        clean_stop(repo, live_loops(repo))
     try:
         return passes(repo, a, started, st)
     finally:
-        with contextlib.suppress(OSError):
-            p["state"].unlink()
-        if not live_loops(repo, but=os.getpid()):  # the other loops still read it
-            with contextlib.suppress(OSError):
-                p["stop"].unlink()
+        with stop_lock(repo):
+            with contextlib.suppress(FileNotFoundError):
+                p["state"].unlink()
+            clean_stop(repo, live_loops(repo))
         for sig, h in old.items():
             signal.signal(getattr(signal, sig), h)
 
@@ -830,13 +892,15 @@ def cmd_status(a):
     def t(x):
         return time.strftime("%m-%d %H:%M", time.localtime(x))
     loops = live_loops(repo)
+    request = read_stop(repo)
     for st in loops:
         print("LOOP pid %s on %s since %s" % (st["pid"], repo, t(st.get("started") or 0)))
         if st.get("bead"):
             print("  now: %s in %s since %s; log %s" % (st["bead"], st.get("slot") or "its worktree", t(st["since"]),
                                                        st.get("run_log")))
-    if loops and paths(repo)["stop"].exists():
-        print("  stop requested: %s" % (paths(repo)["stop"].read_text().strip() or "after"))
+        mode = stop_for(request, st["pid"], st.get("started") or 0)
+        if mode:
+            print("  stop requested: %s" % mode)
     if not loops:
         print("no loop running on %s" % repo)
     f = paths(repo)["log"]
@@ -857,15 +921,124 @@ def cmd_status(a):
     return 0
 
 
+def stopped_run_actor(repo, st, wt):
+    """Recover ownership from this run's claim event, never from the current claim.
+
+    Legacy state has no actor. Its claim in the local event log must name the
+    same repository, worktree, slot and bead, between loop start and child start.
+    Missing or ambiguous evidence leaves ownership alone.
+    """
+    if not wt or not st.get("started") or not st.get("since"):
+        return ""
+    actors = set()
+    try:
+        with (tl.config_dir() / "events.jsonl").open(encoding="utf-8") as events:
+            for line in events:
+                try:
+                    e = json.loads(line)
+                    if (e.get("kind") == "claim" and e.get("bead") == st.get("bead")
+                            and e.get("repo") == repo
+                            and Path(e.get("worktree") or "").resolve() == Path(wt).resolve()
+                            and e.get("slot") == st.get("slot")
+                            and st["started"] <= e.get("t", 0) <= st["since"]
+                            and e.get("actor")):
+                        actors.add(e["actor"])
+                except (ValueError, TypeError, AttributeError):
+                    continue
+    except OSError:
+        return ""
+    return actors.pop() if len(actors) == 1 else ""
+
+
+def stop_legacy_windows_child(repo, st):
+    """Stop an old parent's child and restore its claim; the parent still releases its slot.
+
+    The old reader never sets run_bead's stopped flag for a JSON request, so it
+    cannot do this cleanup itself. Snapshot ownership before terminating anything.
+    """
+    child, bead_id = st.get("child"), st.get("bead")
+    if not child:
+        return
+    wt = st.get("worktree")
+    if not wt and st.get("slot"):
+        wt = tl.slot_dir(repo, st["slot"], tl.profile_slots(repo))
+    expected_actor = stopped_run_actor(repo, st, wt)
+    before = tl.show(bead_id, cwd=repo) if bead_id else {}
+    # Windows raises OSError (WinError 87, not ProcessLookupError) for a pid that
+    # exited between the state read and the kill.
+    with contextlib.suppress(OSError):
+        os.kill(child, signal.SIGTERM)
+    deadline = time.monotonic() + 10
+    while pid_alive(child):
+        if time.monotonic() >= deadline:
+            raise TimeoutError("legacy loop child %s did not terminate; claim left alone" % child)
+        time.sleep(0.05)
+    if not bead_id or not expected_actor or before.get("assignee") != expected_actor or not wt:
+        return
+    outcome = {}
+    if st.get("run_log"):
+        try:
+            outcome = json.loads(Path(st["run_log"]).with_suffix(".outcome.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            pass  # TerminateProcess may leave no outcome file, or an incomplete one.
+    if not isinstance(outcome, dict) or outcome.get("outcome", "failed") != "failed":
+        return
+    if landed_on_base(repo, wt, bead_id):
+        return
+    with stop_lock(repo):
+        for current in live_loops(repo):
+            if current["pid"] == st["pid"]:
+                if current.get("started") != st.get("started"):
+                    return
+                if current.get("bead") and any(current.get(k) != st.get(k) for k in ("bead", "child", "since", "run_log")):
+                    return
+            elif current.get("bead") == bead_id:
+                return
+        for tree in set(tl.worktrees(repo)) | {wt}:
+            lock = tl.read_engine_lock(tree)
+            if lock.get("by") == "loop" and lock.get("pid") == st["pid"]:
+                continue  # The stopped loop's own lock: run-task has not replaced it yet.
+            holders = [lock.get("pid")] + ([lock.get("route")] + list(lock.get("workers") or []))
+            live = [p for p in holders if p and tl.proc_alive(p[0] if isinstance(p, (list, tuple)) else p,
+                                                              p[1] if isinstance(p, (list, tuple)) and len(p) > 1 else "")]
+            if not live:
+                continue
+            if tree == wt or lock.get("bead") == bead_id:
+                if lock.get("pid") not in live or lock["pid"] != st["pid"] or lock.get("bead") != bead_id:
+                    return  # A replacement run owns the worktree or the bead.
+        current = tl.show(bead_id, cwd=repo)
+        if (current.get("assignee") == expected_actor
+                and current.get("status") in ("in_progress", "blocked", "open")):
+            # The database checks both predicates atomically with the mutation.
+            # Older bd versions that lack these guards fail without changing it.
+            tl.bd("update", bead_id, "--status", "open", "--assignee", "",
+                  "--if-assignee", expected_actor, "--if-status", current["status"], cwd=repo)
+
+
 def cmd_stop(a):
     """Every loop running on the repo stops (a loop started later does not read this stop)."""
     repo = tl.repo_root(a.repo)
-    loops = live_loops(repo)
-    if not loops:
-        print("no loop running on %s" % repo)
-        return 1
-    paths(repo)["stop"].write_text("now" if a.now else "after")
+    with stop_lock(repo):
+        loops = live_loops(repo)
+        if not loops:
+            print("no loop running on %s" % repo)
+            return 1
+        request = {"mode": "now" if a.now else "after", "targets": [st["pid"] for st in loops], "time": clock()}
+        f = paths(repo)["stop"]
+        tmp = f.with_name(f.name + ".%d.tmp" % os.getpid())
+        tmp.write_text(json.dumps(request), encoding="utf-8")
+        os.replace(tmp, f)
     for st in loops:
+        if a.now and not st.get("stop_protocol"):
+            # Old installs read the JSON as opaque text, so never see mode == "now".
+            # POSIX loops trap SIGTERM and stop their child through the normal close
+            # path. Windows SIGTERM kills its recipient: terminate only the child,
+            # just as run_bead does there, leaving the loop to release its slot.
+            if os.name == "nt":
+                stop_legacy_windows_child(repo, st)
+            else:
+                with contextlib.suppress(ProcessLookupError):
+                    os.kill(st["pid"], signal.SIGTERM)
         print("STOP %s: loop pid %s%s" % ("NOW" if a.now else "after the current bead", st["pid"],
                                           (", running " + st["bead"]) if st.get("bead") else ""))
     return 0
