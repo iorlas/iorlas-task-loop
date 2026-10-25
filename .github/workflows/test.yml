@@ -15,6 +15,19 @@ jobs:
           python-version: ${{ matrix.python }}
       # The suite shells out to `just` (recipe checks); the developer machine has it, a runner does not.
       - uses: extractions/setup-just@v2
+      - run: python -m unittest discover -s tests -v
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: extractions/setup-just@v2
       - name: probe bash and just
         shell: bash
         continue-on-error: true
@@ -37,4 +50,3 @@ jobs:
         run: |
           time python -X faulthandler -m unittest -v tests/test_dash_ensure.py -k LoudBind
           time lsof -nP -iTCP@203.0.113.9:50000 -sTCP:LISTEN -t
-      - run: python -m unittest discover -s tests -v
