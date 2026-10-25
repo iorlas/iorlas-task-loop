@@ -10,7 +10,6 @@ every release a distinct version, and nothing left held after all exit.
 RACE_SEED sets the jitter (default 1); every process gets one Claude session id, as when one coordinator starts them.
 """
 
-import fcntl
 import json
 import os
 import random
@@ -22,6 +21,11 @@ import threading
 import time
 import unittest
 from pathlib import Path
+
+try:
+    import fcntl
+except ImportError:  # Windows: the Race class is skipped there
+    fcntl = None
 
 ROOT = Path(__file__).resolve().parents[1]
 FIX = ROOT / "tests" / "fixtures" / "race"

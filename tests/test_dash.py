@@ -213,7 +213,7 @@ class PostAuth(unittest.TestCase):
             self.assertTrue(server.post_allowed(addr, "Bearer " + self.tok), addr)
 
     def test_the_address_comes_from_the_socket_not_a_header(self):
-        src = (ROOT / "skills" / "task-loop" / "dash" / "server.py").read_text()
+        src = (ROOT / "skills" / "task-loop" / "dash" / "server.py").read_text(encoding="utf-8")
         self.assertIn("post_allowed(self.client_address[0]", src)
         self.assertNotIn("X-Forwarded-For", src)
 
@@ -601,7 +601,7 @@ class Markdown(unittest.TestCase):
         node = shutil.which("node")
         if not node:
             self.skipTest("no node")
-        page = (ROOT / "skills" / "task-loop" / "dash" / "index.html").read_text()
+        page = (ROOT / "skills" / "task-loop" / "dash" / "index.html").read_text(encoding="utf-8")
         src = re.search(r"/\*md\*/(.*?)/\*end md\*/", page, re.S).group(1)
         esc = "const esc=s=>String(s==null?'':s).replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));"
         r = subprocess.run([node, "-e", esc + src + "\nprocess.stdout.write(md(JSON.parse(process.argv[1])))", json.dumps(text)],

@@ -737,6 +737,7 @@ class Executable(StagesTest):
                    "git status --short", "python3 -c 'a;b'", te.PY + " -c 'pass'"):
             self.assertEqual(engine.command_problems(ok, str(self.wt)), [], ok)
 
+    @unittest.skipUnless(shutil.which("just"), "needs the real `just` (the engine asks it for the recipes)")
     def test_a_just_recipe_must_exist_in_the_tree(self):
         (self.wt / "justfile").write_text("fmt-check:\n\techo ok\n")
         engine._RECIPES.clear()
@@ -753,6 +754,7 @@ class Executable(StagesTest):
                    "~/bin/foo", ".venv/bin/python -c pass", "source env.sh && git status", "time git status"):
             self.assertEqual(engine.command_problems(ok, str(self.wt)), [], ok)
 
+    @unittest.skipUnless(shutil.which("just"), "needs the real `just` (the engine asks it for the recipes)")
     def test_just_aliases_private_recipes_options_and_a_recipe_a_stage_adds(self):
         (self.wt / "justfile").write_text("alias ci := check\ncheck:\n\techo ok\n_private:\n\techo p\n")
         engine._RECIPES.clear()

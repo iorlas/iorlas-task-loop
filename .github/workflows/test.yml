@@ -9,12 +9,22 @@ jobs:
         python: ["3.8", "3.12"]
     runs-on: ${{ matrix.os }}
     steps:
+      # Fixtures are compared byte for byte; Windows git would turn their LF into CRLF on checkout.
+      - run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
       # The suite shells out to `just` (recipe checks); the developer machine has it, a runner does not.
       - uses: extractions/setup-just@v2
+      - name: EXPERIMENT drop the WSL bash stub from System32 (Windows)
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          takeown /f C:\Windows\System32\bash.exe
+          icacls C:\Windows\System32\bash.exe /grant "$($env:USERNAME):F"
+          Rename-Item C:\Windows\System32\bash.exe bash.exe.off
       - run: python -m unittest discover -s tests -v
   probe:
     strategy:

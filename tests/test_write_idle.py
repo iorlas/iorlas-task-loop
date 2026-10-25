@@ -249,6 +249,7 @@ class IdleRules(unittest.TestCase):
         self.assertEqual(self.warns, [])
 
 
+@unittest.skipIf(os.name == "nt", "POSIX process groups (os.getpgrp); engine.own_ids needs it")
 class ProveDead(unittest.TestCase):
     TABLE = {888: (1, 900, "x")}  # a stranger in group 900
 
