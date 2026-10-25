@@ -1194,7 +1194,7 @@ class EngineTest(unittest.TestCase):
         lo = {"title": "Track hard-to-undo moves", "why": "the plan wants it filed"}
         with self.stop_at("reviewer", 2):
             self.run_engine({"plan": [dict(self.TWO, leftovers=[lo])], "write": [WRITE, WRITE], "review": [CLEAN]})
-        with mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Stage two: keep it small."}]):
+        with mock.patch.object(tl, "show", return_value=dict(BEAD, description="Stage two: keep it small.")):
             rc, s = self.run_engine({"plan": [dict(self.TWO, stages=self.TWO["stages"][1:], leftovers=[lo])],
                                      "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
@@ -1310,7 +1310,7 @@ class EngineTest(unittest.TestCase):
         ok, _, up = self.reclaim({"status": "in_progress", "assignee": "tl-61ba34e7",
                                   "lease_expires_at": "2020-01-01T00:00:00Z"})
         self.assertTrue(ok)
-        self.assertIn(("update", "t-1", "--assignee", ""), up)
+        self.assertIn(("update", "t-1", "--if-assignee", "tl-61ba34e7", "--assignee", ""), up)  # conditional on the claim just read
 
     def test_reclaim_refuses_a_live_claim_and_a_persons_claim(self):
         ok, why, up = self.reclaim({"status": "in_progress", "assignee": "tl-61ba34e7",
@@ -1349,7 +1349,7 @@ class EngineTest(unittest.TestCase):
     def test_reclaim_reopens_a_bead_the_engine_blocked_on_a_failed_run(self):
         ok, _, up = self.reclaim({"status": "blocked", "assignee": "tl-61ba34e7"}, [self.BLOCKED])
         self.assertTrue(ok)
-        self.assertIn(("update", "t-1", "--status", "open", "--assignee", ""), up)
+        self.assertIn(("update", "t-1", "--status", "open", "--if-assignee", "tl-61ba34e7", "--assignee", ""), up)
 
     def test_reclaim_reopens_when_a_comment_answers_the_open_ask(self):
         ask = {"id": "t-1-1", "kind": "verify", "status": "open", "brief": "x", "t": 0}
@@ -3083,6 +3083,16 @@ class EngineTest(unittest.TestCase):
         self.assertIn("new comment:\nKeep it small.", p)
         self.assertIn('"mode": "amend"', self.eng.log_path.read_text())
 
+    def test_a_comment_alone_is_not_an_amend_and_costs_no_replan(self):
+        self.stopped_run(plan=self.TWO, answers={"plan": [self.TWO], "write": [WRITE]})
+        with mock.patch.object(tl, "show", return_value=BEAD), \
+                mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Fresh start: use the other slot."}]):
+            rc, s = self.run_engine({"write": [WRITE, WRITE], "review": [CLEAN, CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertNotIn("planner", [c[0] for c in s.calls])
+        self.assertNotIn("an edit with no ask", self.eng.log_path.read_text())
+        self.assertIn("nothing the plan reads", self.eng.log_path.read_text())
+
     def test_an_owner_answer_to_an_ask_amends_the_plan_with_the_answer(self):
         ask = dict(WRITE, question="Which format?")
         rc, _ = self.run_engine({"plan": [PLAN], "write": [ask]})
@@ -3099,7 +3109,7 @@ class EngineTest(unittest.TestCase):
     def test_a_bead_that_changed_in_nothing_the_plan_reads_keeps_its_plan_and_calls_no_planner(self):
         self.stopped_run()
         with mock.patch.object(tl, "show", return_value=dict(BEAD, labels=["urgent"])):
-            rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
+            rc, s = self.run_engine({"write": [WRITE, WRITE], "review": [CLEAN, CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertNotIn("planner", [c[0] for c in s.calls])
         self.assertIn("keeping the plan, no planner run", self.eng.log_path.read_text())
@@ -3193,7 +3203,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 2)
         ck = self.checkpoint()
         self.assertEqual((ck["plan"]["summary"], ck["planned"], ck["step"]), ("do it", 1, "write"))
-        rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
+        rc, s = self.run_engine({"write": [WRITE, WRITE], "review": [CLEAN, CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertNotIn("planner", [c[0] for c in s.calls])
 
@@ -3781,7 +3791,7 @@ class Outcome(unittest.TestCase):
 
     def test_a_lane_out_for_long_is_paused_with_the_time_the_lane_is_back(self):
         due = time.time() + 3 * 3600
-        self.run_engine({"plan": [PLAN], "write": [ans("lane_out", "lane_out", "retry", retry_after=due, say="out")]})
+        self.run_engine({"plan": [PLAN], "write": [ans("lane_out", "lane_out", "retry", retry_after=due, say="out")] * 3})
         r = self.eng.result()
         self.assertEqual(r["outcome"], "paused")
         self.assertAlmostEqual(r["retry_after"], due, delta=1)
@@ -4021,10 +4031,11 @@ class DelegateLauncher(unittest.TestCase):
         self.assertIn(engine.FRESH_WRITER_TEXT, workers[2][1])
 
     def test_a_new_thread_whose_lane_is_out_with_no_time_pauses_without_an_ask(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_OWNER, self.OUT_OWNER],
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_OWNER, self.OUT_OWNER, self.OUT_OWNER, self.OUT_OWNER],
                                  "review": [review(unmet=["more"])]})
         self.assertEqual(rc, 2)
-        self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, "ref-write", None])
+        # the resumed thread's lane is out: a new thread; that lane out too: routed again twice, then the pause
+        self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, "ref-write", None, None, None])
         self.assertEqual(self.blocked, [])
         self.assertTrue(any(c[:1] == ("update",) and "open" in c and any("paused: no lane for write" in x for x in c)
                             for c in self.bd_calls))
@@ -4078,7 +4089,7 @@ class DelegateLauncher(unittest.TestCase):
     # tl-bxk.10.22: the dashboard says which lane a run waits for and until when
     def test_a_wait_for_a_lane_records_the_lane_and_when_it_ends(self):
         out = ans("lane_out", "lane_out", "retry", retry_after=time.time() + 120, lane="OPENAI_SUBSCRIPTION")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [out, WRITE], "review": [CLEAN]})
+        rc, s = self.run_engine({"plan": [PLAN], "write": [out, out, out, WRITE], "review": [CLEAN]})  # two re-routes first
         self.assertEqual(rc, 0, self.blocked)
         waits = [json.loads(ln) for ln in self.eng.log_path.read_text().splitlines() if '"lane_wait"' in ln and '"transition"' in ln]
         self.assertEqual([w["lane"] for w in waits], ["OPENAI_SUBSCRIPTION"])
@@ -4173,9 +4184,9 @@ class DelegateLauncher(unittest.TestCase):
 
     def test_a_lane_out_for_long_pauses_at_once_and_frees_the_slot(self):
         later = ans("lane_out", "lane_out", "retry", retry_after=time.time() + 3 * 3600, say="codex out until 21:00")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [later]})
+        rc, s = self.run_engine({"plan": [PLAN], "write": [later] * 3})
         self.assertEqual(rc, 2)
-        self.assertEqual([c[0] for c in s.calls].count("worker"), 1)  # no hour of sleeping in the slot
+        self.assertEqual([c[0] for c in s.calls].count("worker"), 3)  # routed again twice, no hour of sleeping in the slot
         self.assertEqual(self.blocked, [])
         self.assertTrue(any(c[:1] == ("update",) and "open" in c and any("paused: no lane for write until" in x for x in c)
                             for c in self.bd_calls))

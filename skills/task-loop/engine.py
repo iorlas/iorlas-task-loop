@@ -498,7 +498,7 @@ def bead_snapshot(bead, comments):
 DIFF_CAP = 4096
 
 
-def bead_diff(old, new, answer=""):
+def bead_diff(old, new, answer="", comments=True):
     """Text: what changed in the bead since the plan (fields as a unified diff of at most 4 KB each, issue type,
     dependencies, new comments, the owner's answer). '' when nothing."""
     out = []
@@ -514,7 +514,7 @@ def bead_diff(old, new, answer=""):
         out.append("- dependencies: added %s; removed %s" % (", ".join(sorted(now - was)) or "none",
                                                               ", ".join(sorted(was - now)) or "none"))
     seen = list(old.get("comments") or [])
-    for t in new["comments"]:
+    for t in (new["comments"] if comments else []):
         if t in seen:
             seen.remove(t)
         else:
@@ -1336,6 +1336,7 @@ def call_delegate(route, role, prompt, schema, cwd, resume, timeout, log_path, w
 
 # tl-bxk.10.31: delegate reasons (route.py REASONS) that say the request itself is malformed, and the words a lane uses for it
 INFRA_REASONS = ("bad_request",)  # not "caller": a refused resume is retried as a new thread
+SIGNALLED = re.compile(r"\bexited -\d+\b|\b(?:killed|terminated) by signal\b", re.I)  # a worker a supervisor stopped: no answer, no fault of the bead
 INFRA_TEXT = re.compile(r"\"code\":\s*\"invalid_json_schema\"|invalid schema for response_format|unrecognized arguments:|error: unknown argument", re.I)
 
 
@@ -1688,6 +1689,7 @@ class Engine:
         waited, attempt_prompt, attempt, errs = 0.0, delta if (delta and resume and resume_key) else prompt, 1, ["not run"]
         crashes = 0  # delegate crashes retried on this call
         denied_retried = False  # one retry after a refused read-only command, on a fresh thread
+        rerouted = 0  # fresh calls made at once after a lane went out on a new thread: delegate marks it out, the next call takes the next rung
         login_note = ""  # set once a lane answered logged_out and the engine retried afresh (delegate puts that lane out 15 min)
         while attempt <= 2:
             self._resume = resume
@@ -1724,7 +1726,8 @@ class Engine:
                 if self._resume:
                     attempt_prompt = prompt + FRESH_WRITER_TEXT
                 continue
-            crashed = reason == "crash" or (reason == "no_answer" and not str(r.error or "").startswith("timeout")
+            crashed = reason == "crash" or (reason in ("no_answer", "crash", "") and bool(SIGNALLED.search("%s %s" % (said, r.error or "")))
+                                            and not str(r.error or "").startswith("timeout") and not INFRA_TEXT.search("%s %s" % (r.error or "", r.text or ""))) or (reason == "no_answer" and not str(r.error or "").startswith("timeout")
                                             and not INFRA_TEXT.search("%s %s" % (r.error or "", r.text or "")))  # not a timeout, not a bad request
             if crashed and crashes < len(CRASH_RESTS):
                 # tl-bxk.13.16.4: delegate itself died (a decode error, a broken pipe): not the bead's, not the owner's. Again as a
@@ -1748,6 +1751,17 @@ class Engine:
                 self.transition(step or node, "lane_out", "the resumed thread's lane is out: a new thread",
                                 lane=j.get("lane") or "")
                 resume, attempt_prompt, out_on = None, prompt + FRESH_WRITER_TEXT, j.get("lane") or ""
+                continue
+            if reason == "lane_out" and nxt in ("owner", "retry") and not resume and rerouted < 2 and not j.get("denied"):
+                # a lane that went out while the call ran (ZAI, lifesim 0.23.34; delegate answers next=retry with the dead lane's own reset
+                # time, so the wait ran past lane_wait_min and the bead paused 'no lane ... until 19:48') paused it while
+                # `route.py next worker` already named another one: the lane is marked out now, so a fresh call is routed
+                # again. Two tries; the pause stays for a role with no lane left
+                rerouted += 1
+                self.cost += r.cost
+                self.log("note", "%s: the lane went out (%s); routing the call again at once (%d of 2)" % (node, said[:160], rerouted))
+                self.transition(step or node, "lane_out", "the lane went out: routed again", lane=j.get("lane") or "")
+                out_on = j.get("lane") or out_on
                 continue
             if nxt == "retry":  # worker-run v2: delegate says when; how long a slot waits is this engine's policy
                 if (node in ("review", "verify", "look") and not resume and j.get("family") in ("openai", "claude", "xai")
@@ -2149,6 +2163,21 @@ class Engine:
                 raise Blocked("failed: worktree %s has uncommitted work of another branch" % self.wt)
             self.wip("left from an earlier run")
             self.left_dirty = True
+        if exists and self.cfg.get("fresh"):
+            # tl-19i: --fresh starts the task again on the base: the old branch is kept as task/<id>-stale-<time>, never reset in place
+            # and never checked out (lifesim-6pld ran --fresh on its old branch, 56 commits behind, and failed on a missing recipe)
+            self.free_branch(branch)
+            if self.git("rev-list", "--count", "%s..%s" % (self.cfg["base"], branch)) not in ("", "0"):
+                stale = "%s-stale-%s" % (branch, time.strftime("%Y%m%d-%H%M%S"))
+                if self.git("rev-parse", "--verify", "-q", "refs/heads/" + stale):
+                    stale += "-2"
+                rc, tail = self.sh(["git", "branch", "-m", branch, stale], pin=True)
+                if rc:
+                    raise Blocked("failed: --fresh could not keep the old branch aside as %s: %s" % (stale, tail.strip()[-200:]))
+                self.log("note", "--fresh: the old branch %s is kept as %s; the task starts again on %s" % (branch, stale, self.cfg["base"]))
+                self.comment("Fresh (engine): --fresh: the earlier work on %s is kept as the branch %s; the task starts again on %s." % (
+                    branch, stale, self.cfg["base"]))
+            exists = False
         if exists:
             self.free_branch(branch)
             self.sh(["git", "checkout", "-q", branch], check=True, pin=True)
@@ -3681,12 +3710,16 @@ class Engine:
             return None, 0, None
         if ck["brief"] != self.brief_hash:
             answer = self.answer_text(self.answered) if self.answered else ""
+            # a comment alone is context for the next writer (the brief carries it), not an amend: supervisor notes used up
+            # the re-plan cap (lifesim d5f.40, fld.27.12). An owner's answer to an ask still amends.
             diff = bead_diff(ck["snap"], self.snap, answer) if ck.get("snap") else None
+            if diff and not self.answered and not bead_diff(ck["snap"], self.snap, answer, comments=False):
+                diff = ""
             if answer and (self.answered or {}).get("kind") in ("stuck", "budget", "denied", "pause") and RERUN_ANSWER.fullmatch(" ".join(answer.lower().replace("-", " ").split()).strip(" .!")):
                 # tl-bxk.13.16.5: "Run again" changes nothing the plan reads; counted as an amend it used a re-plan (lifesim-fld.10)
                 self.log("note", "the owner's answer (%s) only asks for a rerun: keeping the plan, no planner run" % answer.strip()[:40])
                 diff = ""
-            if diff == "":  # the hash moved on a label or a priority: nothing the plan reads changed
+            if diff == "":  # the hash moved on a label, a priority or a comment: nothing the plan reads changed
                 self.log("note", "the bead changed since the checkpoint of %s, but nothing the plan reads: keeping the plan, "
                          "no planner run" % ck["run"])
             else:
@@ -4436,7 +4469,7 @@ class Engine:
             if problem[0] == "verify" and self.git("status", "--porcelain"):
                 # Unlike verification before finish(), a retry check's fix follows the task commit.
                 self.stage_all(check=True)
-                self.sh(["git", "commit", "-q", "--amend", "--no-edit"], check=True, pin=True)
+                self.sh(["git", "commit", "-q", "--no-verify", "--amend", "--no-edit"], check=True, pin=True)
 
     def gate_file(self):
         return tl.config_dir() / "check-cache" / ("%s.gate.json" % self.bead)
@@ -4526,7 +4559,7 @@ class Engine:
                 raise Blocked("failed: the rebase did not continue after the conflict fix\n" + out)
         elif kind == "gate" and self.git("status", "--porcelain"):
             self.stage_all(check=True)
-            self.sh(["git", "commit", "-q", "--amend", "--no-edit"], check=True, pin=True)
+            self.sh(["git", "commit", "-q", "--no-verify", "--amend", "--no-edit"], check=True, pin=True)
         if d != "accept" and kind != "verify":
             self.warn("land: the fix round did not pass its checks and review; landing tries the gate again")
         return d
@@ -5082,7 +5115,12 @@ class Engine:
 
     def wip(self, why):
         self.stage_all(everything=True)  # tl-g6a: nothing the bead made is left behind in a slot that is reset to the base
-        rc, _ = self.sh(["git", "commit", "-q", "-m", "wip (%s): %s" % (self.bead, why)], pin=True)
+        # --no-verify: a wip commit saves work, it does not judge it; formatting is the checks' and the gate's job. A pre-commit
+        # hook that refused it left staged files in the slot and failed the next bead there (lifesim-6pld, then rl4s)
+        rc, tail = self.sh(["git", "commit", "-q", "--no-verify", "-m", "wip (%s): %s" % (self.bead, why)], pin=True)
+        if rc:
+            self.warn("the wip commit (%s) failed, the work stays uncommitted in %s: %s" % (why, self.wt, (tail or "").strip()[-300:]))
+            self.log("note", "wip commit failed: %s" % (tail or "").strip()[-300:])
         return rc == 0
 
     def close(self, outcome, why, sha, question):
@@ -5187,7 +5225,7 @@ class Engine:
             rc = getattr(r, "returncode", 0)
         elif why.startswith("paused:"):  # the machine's problem (login, network, lanes), not the bead's: keep it open
             self.warn(why)
-            r = tl.bd("update", self.bead, "--status", "open", "--append-notes", "Engine paused: " + why[:400])
+            r = tl.bd("update", self.bead, "--status", "open", "--assignee", "", "--append-notes", "Engine paused: " + why[:400])  # (tl-kwo: it lets go)
             rc = getattr(r, "returncode", 0)
         else:
             text = why + (("\n\nQuestion: " + question) if question else "")
@@ -6207,6 +6245,18 @@ def load_cfg(repo):
     return cfg
 
 
+def busy_elsewhere(repo, actor, bead_id):
+    """True when `actor` holds a slot (it is a loop) that a run of ANOTHER bead holds now: then its claim on `bead_id` is a claim
+    it left, not one it works on."""
+    now_t = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    for sb in tl.slot_beads(repo):
+        if sb.get("assignee") == actor and sb.get("status") == "in_progress" and (sb.get("lease_expires_at") or now_t) >= now_t:
+            held = (sb.get("metadata") or {}).get("held_bead")
+            if held and held != bead_id:
+                return True
+    return False
+
+
 def reclaim(bead_id, repo):
     """(ok, why): run-task takes back what the engine itself left, never what a person holds. A claim by a tl- actor
     whose lease ran out is released (a restarted Claude session gets a new actor name). A bead the engine blocked is
@@ -6219,12 +6269,13 @@ def reclaim(bead_id, repo):
     if who and who != me:
         if not who.startswith("tl-"):
             return False, "claimed by %s" % who
-        if b.get("status") == "blocked":
-            # tl-159: a parked bead keeps the actor of the loop that parked it, and that actor is live (it holds other beads), so
-            # --fresh was refused 'taken: live claim' with no engine on the bead. Only an engine running it now is a live claim.
-            import loop  # the queue rule; imports engine itself
+        import loop  # the queue rule; imports engine itself
+        if b.get("status") == "blocked" or busy_elsewhere(repo, who, bead_id):
+            # tl-159, tl-kwo: the claim is the actor's, and a loop's actor is live while the loop runs, whatever bead it is on:
+            # lifesim-o67g was 'a live claim' of the loop that was running fld.27.12, and its answered ask waited an hour. A bead
+            # a loop has left (parked, or the loop went on to another) is live only if an engine is running it now.
             live = bead_id in loop.running(repo)
-        else:
+        else:  # a session working by hand: its lease and heartbeat are the only sign
             live = who in tl.live_actors(repo) or (b.get("lease_expires_at") or "") >= time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         if live:
             logs = sorted((tl.config_dir() / "engine").glob("%s-*.jsonl" % bead_id))
@@ -6255,10 +6306,13 @@ def reclaim(bead_id, repo):
         if after and not asking:
             return False, "%s commented after the engine blocked it; read that first" % (after[-1].get("author") or "someone")
         reopen = True
-    if reopen:
-        tl.bd("update", bead_id, "--status", "open", "--assignee", "")
-    elif release:
-        tl.bd("update", bead_id, "--assignee", "")
+    if reopen or release:
+        # tl-kwo: only if the claim is still the one just read (bd applies --if-assignee atomically): two loops looking at one freed bead
+        # must not both release and then both claim
+        guard = ["--if-assignee", who] if who and who != me else []
+        r = tl.bd("update", bead_id, *(["--status", "open"] if reopen else []), *guard, "--assignee", "")
+        if guard and getattr(r, "returncode", 0) != 0:
+            return False, "the claim of %s changed hands just now (%s no longer holds it): not taken" % (bead_id, who)
     return True, ("reopened" if reopen else "released %s" % who if release else "")
 
 

@@ -130,7 +130,7 @@ class TraceRecords(unittest.TestCase):
     def test_a_long_lane_out_pauses_with_the_time_the_lane_is_back(self):
         due = time.time() + 3 * 3600
         self.run_engine({"plan": [PLAN], "write": [ans("lane_out", "lane_out", "retry", retry_after=due, say="out",
-                                                       lane="OPENAI_SUBSCRIPTION")]})
+                                                       lane="OPENAI_SUBSCRIPTION")] * 3})
         t = next(r for r in records(self.eng, "transition") if r["cause"] == "paused")
         self.assertEqual((t["from"], t["to"]), (3, "pause"))
         self.assertAlmostEqual(t["until"], due, delta=1)

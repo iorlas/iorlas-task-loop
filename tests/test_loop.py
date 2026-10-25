@@ -67,8 +67,12 @@ class FakeBd:
                 rc = 1  # bd 1.3: an open bead still assigned to another actor (a paused run's) refuses the claim
             else:
                 b.update(status="in_progress", assignee=tl.actor())
-        elif a[0] == "unclaim":
-            (self.beads.get(a[1]) or self.slots.get(a[1])).update(status="open", assignee="")
+        elif a[0] == "unclaim":  # as bd: only the current assignee frees its own claim; --force frees another's
+            b = self.beads.get(a[1]) or self.slots.get(a[1])
+            if "--force" in a or b.get("assignee") in (None, "", tl.actor()):
+                b.update(status="open", assignee="")
+            else:
+                rc = 1
         elif a[0] == "update" and ("--status" in a or "--assignee" in a):
             b = self.beads.get(a[1]) or self.slots[a[1]]
             if any(flag in a and b.get(key) != a[a.index(flag) + 1]
@@ -389,7 +393,7 @@ class Loop(LoopBase):
         bd.beads["x-2"].update(assignee="tl-live", lease_expires_at="2999-01-01T00:00:00Z")
         self.run_loop("--max-beads", "1")
         self.assertEqual([b for b, _ in self.started], ["x-1"])
-        self.assertIn(("update", "x-1", "--assignee", ""), bd.calls)
+        self.assertIn(("update", "x-1", "--if-assignee", "tl-dead", "--assignee", ""), bd.calls)
 
     def test_when_every_ready_bead_is_held_elsewhere_the_loop_sleeps_instead_of_spinning(self):
         bd = self.beads({"x-1": []})

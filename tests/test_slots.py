@@ -411,6 +411,24 @@ class HoldRaces(Slots):
             self.run_loop("--max-beads", "1")
         self.assertEqual(self.started, [("x-1", "s1")])
 
+    def test_releasing_a_slot_claimed_by_another_actor_frees_the_claim_too(self):
+        # lifesim 0.23.34: `slot release --force` cleared the marks but the loop actor's claim kept the slot bead in_progress
+        bd = self.beads({})
+        self.assertTrue(tl.take_slot(str(self.repo), {}))
+        bd.slots["sl-1"].update(status="in_progress", assignee="tl-551cf8ee")
+        tl.release_slot(str(self.repo), "s1")
+        self.assertEqual(bd.slots["sl-1"]["assignee"], "tl-551cf8ee")  # without --force another actor's claim is left alone
+        tl.release_slot(str(self.repo), "s1", force=True)
+        self.assertEqual((bd.slots["sl-1"]["status"], bd.slots["sl-1"]["assignee"]), ("open", ""))
+
+    def test_an_expired_hold_frees_the_claim_of_the_loop_that_held_the_slot(self):
+        bd = self.beads({})
+        self.assertTrue(tl.take_slot(str(self.repo), {}))
+        bd.slots["sl-1"].update(status="in_progress", assignee="tl-551cf8ee")
+        bd.slots["sl-1"].setdefault("metadata", {}).update(held_by="tl-abcdef12-f296a9", hold_until="1000")
+        tl.free_expired(str(self.repo))
+        self.assertEqual((bd.slots["sl-1"]["status"], bd.slots["sl-1"]["assignee"]), ("open", ""))
+
     def test_a_hold_taken_while_the_loop_releases_the_slot_is_kept(self):
         # race test (tl-bxk.11.1): the release unclaimed the slot bead, a person's hold claimed it at once, and the
         # release's own clean-up then wiped the hold's metadata: the hold was gone, the slot only leased

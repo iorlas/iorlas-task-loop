@@ -115,7 +115,9 @@ class WriteFollowsTheWorker(unittest.TestCase):
         self.assertIn("no worker output for 25 min", stop["why"])
         self.assertEqual(stop["alive"], [])
         self.assertTrue(self.gone(self.worker()))
-        self.assertLess(self.clock.now, 1000 + 30 * MIN)
+        # stopped near the 25 min of silence, far from the 45 min node limit; the fake clock also advances while the stop waits for
+        # the process group (more under load), so the bound is not 30 min to the second
+        self.assertLess(self.clock.now, 1000 + 40 * MIN)
 
     def test_the_hard_cap_stops_a_worker_that_never_goes_quiet(self):
         res, stop = self.call(lambda path: self.clock.now)

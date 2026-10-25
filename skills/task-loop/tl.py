@@ -690,7 +690,7 @@ def cmd_slot(a):
             return 1
         if busy:
             drop_engine_lock(d)
-        if not release_slot(repo, a.name):
+        if not release_slot(repo, a.name, force=a.force):
             sys.exit("tl: no slot " + str(a.name))
         return 0
     if a.op == "reset":  # per task: a clean tree on a fresh task branch; ignored setup output stays
@@ -714,7 +714,7 @@ def cmd_slot(a):
                 br = "wip/%s/%d" % (a.name, int(now()))
                 git("checkout", "-b", br, cwd=d)
             git("add", "-A", cwd=d)
-            r = run_git(d, "commit", "-qm", "wip: left in slot %s" % a.name,
+            r = run_git(d, "commit", "-q", "--no-verify", "-m", "wip: left in slot %s" % a.name,
                                capture_output=True, text=True, encoding="utf-8", errors="replace")
             if r.returncode != 0:
                 print("DIRTY: could not commit the leftover work on %s\n%s" % (br, r.stderr))
@@ -949,14 +949,23 @@ def held_by(b):
                                  m.get("held_why") or "no reason")
 
 
-def release_slot(repo, name, bead=None, mine=False):
+def unclaim_slot(repo, b, force=False):
+    """Gives a slot bead back. `bd unclaim` frees only the caller's own claim: a slot claimed by a loop's actor and held by one of
+    its runs (or a dead loop's) stayed in_progress after `slot release --force` / an expired hold (lifesim, 0.23.34). The
+    marks say who holds the slot; the claim is the slot's, so it is released with --force when asked."""
+    r = bd("unclaim", b["id"], cwd=repo)
+    if getattr(r, "returncode", 0) and force:
+        bd("unclaim", b["id"], "--force", cwd=repo)
+
+
+def release_slot(repo, name, bead=None, mine=False, force=False):
     """Frees slot `name`. mine=True (a run ending): under slot_lock, and only while the slot's marks still name this
     actor (and `bead`, when it is marked): a slot reclaimed and retaken is the new holder's, left alone."""
     with slot_lock(repo):
-        return release_slot_locked(repo, name, bead, mine)
+        return release_slot_locked(repo, name, bead, mine, force)
 
 
-def release_slot_locked(repo, name, bead, mine):
+def release_slot_locked(repo, name, bead, mine, force=False):
     b = slot_bead(repo, name)
     if not b:
         return False
@@ -970,7 +979,7 @@ def release_slot_locked(repo, name, bead, mine):
     # the holder's marks go first, while the bead is still claimed: unclaimed first, a hold taken in between would lose
     # its marks to this clean-up (race test, tl-bxk.11.1)
     bd("update", b["id"], *sum((["--unset-metadata", k] for k in HELD_KEYS), []), cwd=repo)
-    bd("unclaim", b["id"], cwd=repo)
+    unclaim_slot(repo, b, force)
     event("slot-release", "", slot=name, slot_bead=b["id"], repo=repo)
     return True
 
@@ -982,8 +991,9 @@ def free_expired(repo):
         m = b.get("metadata") or {}
         if hold_until(b) and not slot_hold(b):
             bd("update", b["id"], *sum((["--unset-metadata", k] for k in HELD_KEYS), []), cwd=repo)  # first: see release_slot
-            if b.get("status") == "in_progress" and (b.get("assignee") or "") in ("", m.get("held_by")):
-                bd("unclaim", b["id"], cwd=repo)
+            who = b.get("assignee") or ""
+            if b.get("status") == "in_progress" and (who in ("", m.get("held_by")) or who.startswith("tl-")):
+                unclaim_slot(repo, b, force=True)
             event("slot-hold-expired", "", slot=b["title"].split()[-1], slot_bead=b["id"], repo=repo)
 
 

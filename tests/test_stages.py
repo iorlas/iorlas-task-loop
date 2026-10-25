@@ -1106,7 +1106,7 @@ class Claims(StagesTest):
             ok, why = engine.reclaim("t-1", str(self.wt))
         self.assertTrue(ok, why)
         self.assertEqual(why, "reopened")
-        self.assertEqual(bd.call_args_list[0][0], ("update", "t-1", "--status", "open", "--assignee", ""))
+        self.assertEqual(bd.call_args_list[0][0], ("update", "t-1", "--status", "open", "--if-assignee", "tl-2be89f88", "--assignee", ""))
 
     def test_a_parked_bead_with_an_engine_still_on_it_is_a_live_claim(self):
         parked = {"id": "t-1", "status": "blocked", "assignee": "tl-2be89f88", "lease_expires_at": "", "dependencies": []}
@@ -1538,6 +1538,54 @@ class Contracts(StagesTest):
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer", "reviewer"])
         self.assertIn("delegate crashed", self.eng.log_path.read_text())
 
+    def test_a_worker_a_supervisor_stopped_gets_one_fresh_try_not_the_final_failure(self):
+        killed = te.ans("failed", "no_answer", "owner", say="opencode exited -15 without an error")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [killed, CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer", "reviewer"])
+        self.assertIn("delegate crashed", self.eng.log_path.read_text())
+
+    def test_the_wip_commit_skips_the_pre_commit_hook_and_a_failed_one_is_loud(self):
+        import os
+        import subprocess
+        self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        eng = self.eng
+        hook = Path(eng.git("rev-parse", "--path-format=absolute", "--git-common-dir")) / "hooks" / "pre-commit"
+        hook.parent.mkdir(exist_ok=True)
+        hook.write_text("#!/bin/sh\necho 'csharpier: unformatted' >&2\nexit 1\n")
+        os.chmod(str(hook), 0o755)
+        (Path(eng.wt) / "wip-file.txt").write_text("x\n")
+        self.assertTrue(eng.wip("paused"))
+        self.assertEqual(eng.git("status", "--porcelain"), "")
+        self.assertIn("wip (t-1): paused", eng.git("log", "-1", "--format=%s"))
+        (Path(eng.wt) / "wip-file2.txt").write_text("y\n")
+        with mock.patch.object(eng, "sh", return_value=(1, "fatal: boom")), mock.patch.object(eng, "warn") as warn:
+            self.assertFalse(eng.wip("paused"))
+        self.assertIn("wip commit", warn.call_args[0][0])
+        self.assertIn("boom", warn.call_args[0][0])
+
+    def test_a_lane_that_went_out_during_the_call_is_routed_again_at_once(self):
+        out = te.ans("failed", "lane_out", "owner", say="lane_out: ZAI", lane="ZAI")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [out, WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "worker", "reviewer"])
+
+    def test_a_lane_that_went_out_mid_call_with_a_far_reset_time_is_routed_again_not_waited_for(self):
+        # lifesim r0yc/rl4s: delegate answered next=retry with the dead lane's own reset time (hours away); another lane was free
+        import time
+        out = te.ans("failed", "lane_out", "retry", say="lane_out: ZAI", lane="ZAI", retry_after=time.time() + 3 * 3600)
+        rc, s = self.run_engine({"plan": [PLAN], "write": [out, WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "worker", "reviewer"])
+        self.assertFalse(any(c[:1] == ("update",) and any("no lane" in x for x in c) for c in self.bd_calls))
+
+    def test_a_role_with_no_lane_left_still_pauses_after_two_reroutes(self):
+        out = te.ans("failed", "lane_out", "owner", say="lane_out: ZAI", lane="ZAI")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [out, out, out], "review": [CLEAN]})
+        self.assertEqual(rc, 2)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "worker", "worker"])
+        self.assertTrue(any(c[:1] == ("update",) and any("paused: no lane for write" in x for x in c) for c in self.bd_calls))
+
     def test_a_delegate_that_keeps_crashing_pauses_the_bead_and_asks_nobody(self):
         crash = te.ans("failed", "crash", "owner", say="UnicodeDecodeError")
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [crash, crash, crash]})
@@ -1643,6 +1691,110 @@ class PlanTimeout(StagesTest):
         ok = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[HAS_F + " ; true --timeout_ms 600000"])])
         rc, s = self.run_engine({"plan": [ok], "write": [WRITE], "review": [CLEAN]}, check_timeout_min=30)
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])
+
+
+class ClaimPerBead(StagesTest):
+    """tl-kwo: a claim is live when an engine runs that bead, not because the claiming actor's loop is alive."""
+
+    def reclaim(self, bead, slots, running, hand_live=False):
+        import loop
+        with mock.patch.object(tl, "show", return_value=bead), mock.patch.object(tl, "slot_beads", return_value=slots), \
+                mock.patch.object(tl, "live_actors", return_value={"tl-2be89f88"} if hand_live or slots else set()), \
+                mock.patch.object(loop, "running", return_value=running), mock.patch.object(tl, "comments", return_value=[]), \
+                mock.patch.object(tl, "bd", return_value=mock.Mock(returncode=0)):
+            return engine.reclaim("o67g", str(self.wt))
+
+    BEAD = {"id": "o67g", "status": "open", "assignee": "tl-2be89f88", "lease_expires_at": "2999-01-01T00:00:00Z", "dependencies": []}
+    SLOT = {"id": "sl-5", "status": "in_progress", "assignee": "tl-2be89f88", "lease_expires_at": "2999-01-01T00:00:00Z",
+            "metadata": {"held_bead": "fld.27.12"}, "title": "slot h s5"}
+
+    def test_a_bead_the_loop_left_for_another_is_takeable(self):
+        ok, why = self.reclaim(self.BEAD, [self.SLOT], {"fld.27.12": "s5"})
+        self.assertTrue(ok, why)
+        self.assertIn("released tl-2be89f88", why)
+
+    def test_an_engine_running_the_bead_is_a_live_claim(self):
+        ok, why = self.reclaim(self.BEAD, [self.SLOT], {"fld.27.12": "s5", "o67g": "s2"})
+        self.assertFalse(ok)
+        self.assertIn("a live claim", why)
+
+    def test_the_loop_running_this_very_bead_keeps_its_claim(self):
+        slot = dict(self.SLOT, metadata={"held_bead": "o67g"})
+        ok, why = self.reclaim(self.BEAD, [slot], {})  # the slot says it, the engine is just starting
+        self.assertFalse(ok)
+
+    def test_a_session_working_by_hand_keeps_its_claim(self):
+        ok, why = self.reclaim(self.BEAD, [], {}, hand_live=True)
+        self.assertFalse(ok)
+        self.assertIn("a live claim", why)
+
+    def test_the_release_is_conditional_on_the_claim_just_read(self):
+        import loop
+        calls = []
+        with mock.patch.object(tl, "show", return_value=self.BEAD), mock.patch.object(tl, "slot_beads", return_value=[self.SLOT]), \
+                mock.patch.object(tl, "live_actors", return_value={"tl-2be89f88"}), mock.patch.object(loop, "running", return_value={}), \
+                mock.patch.object(tl, "comments", return_value=[]), \
+                mock.patch.object(tl, "bd", side_effect=lambda *a, **k: calls.append(a) or mock.Mock(returncode=0)):
+            ok, why = engine.reclaim("o67g", str(self.wt))
+        self.assertTrue(ok, why)
+        self.assertEqual(calls[-1], ("update", "o67g", "--if-assignee", "tl-2be89f88", "--assignee", ""))
+
+    def test_a_claim_that_changed_hands_meanwhile_is_not_taken(self):
+        import loop
+        with mock.patch.object(tl, "show", return_value=self.BEAD), mock.patch.object(tl, "slot_beads", return_value=[self.SLOT]), \
+                mock.patch.object(tl, "live_actors", return_value={"tl-2be89f88"}), mock.patch.object(loop, "running", return_value={}), \
+                mock.patch.object(tl, "comments", return_value=[]), mock.patch.object(tl, "bd", return_value=mock.Mock(returncode=1)):
+            ok, why = engine.reclaim("o67g", str(self.wt))
+        self.assertFalse(ok)
+        self.assertIn("changed hands", why)
+
+    def test_a_loop_that_pauses_a_bead_clears_its_assignee(self):
+        late = te.ans("stop", "no_lane", "retry", retry_after=engine.time.time() + 3600, family="openai", lane="OPENAI", say="no lane")
+        rc, s = self.run_engine({"plan": [late]})
+        self.assertTrue(self.eng.why.startswith("paused:"), self.eng.why)
+        updates = [c for c in self.bd_calls if c[:2] == ("update", "t-1") and "--append-notes" in c]
+        self.assertTrue(updates and updates[-1][2:6] == ("--status", "open", "--assignee", ""), updates)
+
+
+class FreshAside(StagesTest):
+    """--fresh (lifesim-6pld): the old branch is kept as task/<id>-stale-<time> and the task starts again on the base."""
+
+    def old_branch(self, commits=1):
+        te.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
+        for k in range(commits):
+            (self.wt / ("old%d.txt" % k)).write_text("earlier work\n")
+            te.sh("git", "add", "-A", cwd=self.wt)
+            te.sh("git", "commit", "-qm", "wip %d" % k, cwd=self.wt)
+        te.sh("git", "checkout", "-q", "-", cwd=self.wt)
+
+    def branches(self):
+        return self.eng.git("branch", "--list", "task/t-1*", "--format=%(refname:short)").split()
+
+    def test_fresh_keeps_the_old_branch_aside_and_starts_on_the_base(self):
+        self.old_branch(2)
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, fresh=True)
+        self.assertEqual(rc, 0, self.blocked)
+        text = self.eng.log_path.read_text()
+        self.assertIn("--fresh: the old branch task/t-1 is kept as task/t-1-stale-", text)
+        self.assertNotIn("git checkout -q task/t-1\n", text)  # the old branch was never checked out
+        stale = [b for b in self.branches() if "-stale-" in b]
+        self.assertEqual(len(stale), 1)
+        kept = self.eng.git("ls-tree", "-r", "--name-only", stale[0]).split()
+        self.assertIn("old1.txt", kept)  # the earlier work is there
+        self.assertNotIn("old0.txt", self.eng.git("ls-tree", "-r", "--name-only", "origin/main").split())
+        self.assertTrue(any("Fresh (engine)" in str(c) for c in self.bd_calls))
+
+    def test_fresh_on_a_branch_with_no_work_of_its_own_just_starts_on_the_base(self):
+        te.sh("git", "branch", "task/t-1", "HEAD", cwd=self.wt)
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, fresh=True)
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([b for b in self.branches() if "-stale-" in b], [])
+
+    def test_without_fresh_the_old_branch_is_used_as_before(self):
+        self.old_branch(1)
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual([b for b in self.branches() if "-stale-" in b], [])
+        self.assertIn("git checkout -q task/t-1", self.eng.log_path.read_text())
 
 
 if __name__ == "__main__":
