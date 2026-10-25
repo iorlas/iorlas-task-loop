@@ -48,5 +48,10 @@ jobs:
         if: runner.os == 'macOS'
         continue-on-error: true
         run: |
-          time python -X faulthandler -m unittest -v tests/test_dash_ensure.py -k LoudBind
-          time lsof -nP -iTCP@203.0.113.9:50000 -sTCP:LISTEN -t
+          time (lsof -nP -iTCP@203.0.113.9:50000 -sTCP:LISTEN -t; echo "lsof rc=$?")
+          export TASK_LOOP_DASH_DEV_PUBLIC=1 XDG_CONFIG_HOME=$(mktemp -d) PYTHONFAULTHANDLER=1
+          python skills/task-loop/dash/server.py --port 50001 --bind 127.0.0.1,203.0.113.9 &
+          pid=$!
+          sleep 20
+          kill -0 $pid && { echo "STILL RUNNING after 20s"; ps -o pid,ppid,stat,command -ax | grep -E "lsof|server.py" | grep -v grep; kill -ABRT $pid; sleep 2; } || echo "exited early"
+          wait $pid || echo "rc=$?"
