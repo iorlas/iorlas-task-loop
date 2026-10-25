@@ -1799,3 +1799,54 @@ class FreshAside(StagesTest):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FollowUps(StagesTest):
+    """tl-7y6.7.9: a follow-up is filed only when bd's create worked; lint sections are added once; a refused one is never 'filed'."""
+    LO = {"title": "Rename x", "why": "found in passing"}
+    LINT = "missing required sections for task: ## Acceptance Criteria, ## Touches"
+
+    def lint_bd(self, always=False):
+        def fake(*a, **kw):
+            r = self.fake_bd(*a, **kw)
+            if a[:1] == ("create",):
+                body = a[a.index("--description") + 1] if "--description" in a else ""
+                if always or not ("## Touches" in body and "## Acceptance Criteria" in body):
+                    return mock.Mock(returncode=1, stdout="", stderr=self.LINT)
+            return r
+        return fake
+
+    def reflect_comments(self):
+        return [c[3] for c in self.bd_calls if c[:2] == ("comments", "add") and c[3].startswith("Reflect (engine)")]
+
+    def test_a_follow_up_bd_lint_refuses_is_filed_again_with_the_sections_it_names(self):
+        with mock.patch.object(tl, "bd", side_effect=self.lint_bd()):
+            rc, _ = self.run_engine({"plan": [dict(PLAN, leftovers=[self.LO])], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        creates = [c for c in self.bd_calls if c[:2] == ("create", "Rename x")]
+        self.assertEqual(len(creates), 2)
+        body = creates[1][creates[1].index("--description") + 1]
+        self.assertIn("found in passing", body)
+        self.assertIn("## Touches", body)
+        self.assertIn("## Acceptance Criteria", body)
+        self.assertIn("filed=1", self.reflect_comments()[0])
+        self.assertNotIn("unfiled", self.reflect_comments()[0])
+
+    def test_a_follow_up_bd_will_not_take_is_reported_unfiled_the_run_still_lands(self):
+        with mock.patch.object(tl, "bd", side_effect=self.lint_bd(always=True)):
+            rc, _ = self.run_engine({"plan": [dict(PLAN, leftovers=[self.LO])], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual(self.eng.filed, [])
+        self.assertIn("filed=0", self.reflect_comments()[0])
+        self.assertIn("unfiled=1", self.reflect_comments()[0])
+        self.assertTrue(any(c[:2] == ("comments", "add") and c[3].startswith("Follow-up (engine)") and "Rename x" in c[3]
+                            for c in self.bd_calls))
+        self.assertEqual(len([c for c in self.bd_calls if c[:2] == ("create", "Rename x")]), 2)  # one retry, no more
+
+    def test_lint_sections_reads_the_headings_bd_names(self):
+        self.assertEqual(engine.lint_sections("Error: missing required sections for bug: ## Steps to Reproduce, ## Acceptance Criteria"),
+                         ["Steps to Reproduce", "Acceptance Criteria"])
+        self.assertEqual(engine.lint_sections("some other failure"), [])
+        body = engine.with_sections("why\n\n## Touches\nx.py", ["Touches", "Acceptance Criteria"], "t-1")
+        self.assertEqual(body.count("## Touches"), 1)
+        self.assertIn("## Acceptance Criteria", body)

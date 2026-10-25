@@ -1337,6 +1337,33 @@ def call_delegate(route, role, prompt, schema, cwd, resume, timeout, log_path, w
 # tl-bxk.10.31: delegate reasons (route.py REASONS) that say the request itself is malformed, and the words a lane uses for it
 INFRA_REASONS = ("bad_request",)  # not "caller": a refused resume is retried as a new thread
 SIGNALLED = re.compile(r"\bexited -\d+\b|\b(?:killed|terminated) by signal\b", re.I)  # a worker a supervisor stopped: no answer, no fault of the bead
+LINT_MISSING = re.compile(r"missing required sections?[^:\n]*:\s*(.+)", re.I)
+LINT_FILLER = {
+    "acceptance criteria": "- The follow-up named in the title is done, and the checks of the code it touches pass.",
+    "touches": "Not known yet: the writer who picks this up names the files it changes (found while working on %(bead)s).",
+    "steps to reproduce": "See the description above (found while working on %(bead)s); the reproduction is not recorded.",
+}
+
+
+def bd_ok(r):
+    rc = getattr(r, "returncode", 0)
+    return rc == 0 if isinstance(rc, int) else True
+
+
+def lint_sections(text):
+    """['Acceptance Criteria', 'Touches']: the headings bd's lint says a create is missing (its error names them), else []."""
+    m = LINT_MISSING.search(text or "")
+    return [h.strip() for h in re.findall(r"##\s*([^,#\n]+)", m.group(1))] if m else []
+
+
+def with_sections(body, headings, bead):
+    """The description with each missing section appended (a filler that says so, never an invented fact)."""
+    have = {h.lower() for h in re.findall(r"^##\s*(.+?)\s*$", body or "", re.M)}
+    add = ["## %s\n%s" % (h, LINT_FILLER.get(h.lower(), "(not recorded: found while working on %(bead)s)") % {"bead": bead})
+           for h in headings if h.lower() not in have]
+    return (body or "").rstrip() + ("\n\n" + "\n\n".join(add) if add else "")
+
+
 INFRA_TEXT = re.compile(r"\"code\":\s*\"invalid_json_schema\"|invalid schema for response_format|unrecognized arguments:|error: unknown argument", re.I)
 
 
@@ -3604,6 +3631,18 @@ class Engine:
         p.parent.mkdir(exist_ok=True)
         p.write_text(json.dumps(rec, indent=1))
 
+    def save_unfiled(self, unfiled):
+        """The follow-ups bd refused, kept in the checkpoint (title, why) and out of `filed`, so none is lost or counted."""
+        try:
+            ck = json.loads(self.checkpoint_path().read_text())
+        except (OSError, ValueError):
+            ck = None
+        if ck is not None:
+            ck.update(filed=self.filed)
+            if unfiled:
+                ck["unfiled"] = (ck.get("unfiled") or []) + [{"title": lo["title"], "why": lo["why"]} for lo in unfiled]
+            self.checkpoint_path().write_text(json.dumps(ck, indent=1))
+
     def mark_checkpoint_closed(self, why=""):
         """The close step committed everything: the checkpoint's head is now exactly what the next run should find. A
         red gate at land is no stop: the next run re-plans with the gate's output, or it would rerun the same red gate."""
@@ -5034,6 +5073,22 @@ class Engine:
         with self.locked("review_lock", tl.config_dir() / "locks" / ("review-%s.lock" % hashlib.sha1(key.encode()).hexdigest()[:12])):
             yield
 
+    def create_checked(self, args):
+        """bd create that is known to have worked: when bd's lint refuses the body for missing sections (lifesim: Touches and
+        Acceptance Criteria), the sections are added and it is tried once more. -> the last result; a nonzero returncode
+        means nothing was created (tl-7y6.7.9: 98 follow-ups were called filed and none existed)."""
+        r = tl.bd(*args)
+        if bd_ok(r) or "--description" not in args:
+            return r
+        need = lint_sections("%s\n%s" % (r.stderr or "", r.stdout or ""))
+        if not need:
+            return r
+        i = args.index("--description") + 1
+        fixed = list(args)
+        fixed[i] = with_sections(args[i], need, self.bead)
+        self.log("note", "bd refused the create (%s): trying again with the sections it names" % ", ".join(need))
+        return tl.bd(*fixed)
+
     def file_review(self, section):
         head = section.split("\n", 1)[0]
         have, old = self.existing_owner_look()
@@ -5045,7 +5100,7 @@ class Engine:
                     (self.bead_title or self.bead), "--type", "task", "--labels", LOOK_LABEL, "--no-inherit-labels",
                     "--description", section, "--deps", "related:" + self.bead, "--json"]
             args += ["--parent", self.look_epic() or self.bead]  # no epic: the review bead sits under the bead itself
-        r = tl.bd(*args)
+        r = tl.bd(*args) if have else self.create_checked(args)
         if r.returncode != 0:
             self.warn("owner-look bead %s failed: %s" % ("update" if have else "create", (r.stderr or r.stdout or "")[:300]))
         else:
@@ -5155,8 +5210,7 @@ class Engine:
         if (gd / "rebase-merge").exists() or (gd / "rebase-apply").exists():  # stopped mid-conflict-fix: back to the branch
             self.sh(["git", "rebase", "--abort"], pin=True)
         branch = self.git("symbolic-ref", "--short", "-q", "HEAD")
-        new = [lo for lo in self.leftovers if lo["title"] not in self.filed]
-        self.filed += [lo["title"] for lo in new]  # into the checkpoint before it is marked closed
+        new = list({lo["title"]: lo for lo in self.leftovers if lo["title"] not in self.filed}.values())  # a title once
         if outcome not in ("landed", "done") and branch and branch == getattr(self, "branch", None):
             if self.git("status", "--porcelain"):
                 self.wip(outcome)  # the next run continues this branch
@@ -5204,15 +5258,27 @@ class Engine:
         shots = self.keep_evidence()
         if shots:
             self.comment("Evidence (engine): %s" % ", ".join(str(p) for p in shots))
+        unfiled = []
         for lo in new:
-            tl.bd("create", lo["title"], "--type", "task", "--description", lo["why"],
-                  "--deps", "discovered-from:" + self.bead)
+            r = self.create_checked(["create", lo["title"], "--type", "task", "--description", lo["why"],
+                                     "--deps", "discovered-from:" + self.bead])
+            if bd_ok(r):
+                self.filed.append(lo["title"])  # only a create that worked; the checkpoint follows at once (a kill loses no title)
+                self.save_unfiled([])
+            else:
+                unfiled.append(lo)
+                self.warn("follow-up not filed: %s: %s" % (lo["title"][:80], str(getattr(r, "stderr", "") or getattr(r, "stdout", ""))[:200]))
+        if unfiled:
+            self.comment("Follow-up (engine): bd refused %d follow-up(s), none was filed: %s" % (
+                len(unfiled), "; ".join("%s (%s)" % (lo["title"], lo["why"][:120]) for lo in unfiled)))
+            self.save_unfiled(unfiled)
         if outcome == "landed":
             self.file_owner_look()
         verified = ("; self-verified=" + ", ".join("%d %s" % (sum(x["verdict"] == k for x in self.verified), k)
                                                    for k in VERDICTS)) if self.verified else ""
-        self.comment("Reflect (engine): outcome=%s;%s filed=%d; %s%s%s; trace=%s (tl trace %s)" % (
-            outcome, reflection_text(getattr(self, "reflection", None)), len(new), stats, verified, ("; why=" + why) if why else "",
+        self.comment("Reflect (engine): outcome=%s;%s filed=%d;%s %s%s%s; trace=%s (tl trace %s)" % (
+            outcome, reflection_text(getattr(self, "reflection", None)), len(new) - len(unfiled),
+            (" unfiled=%d;" % len(unfiled)) if unfiled else "", stats, verified, ("; why=" + why) if why else "",
             self.log_path.stem, self.bead))
         summary = (getattr(self, "plan_summary", "") or "")[:300]
         if outcome == "landed":
