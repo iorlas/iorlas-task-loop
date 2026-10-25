@@ -214,7 +214,7 @@ class Line(Slots):
             self.until(lambda: len(self.tickets()) == len(threads))  # w2 arrives after w1 has its ticket
         time.sleep(0.1)
         self.assertEqual(served, [])  # nobody steals the held slot
-        tl.release_slot(str(self.repo), "s1")
+        tl.release_slot(str(self.repo), "s1", force=True)  # tl-other's claim: bd frees another actor's only with --force
         for th in threads:
             th.join(10)
         self.assertEqual(served, [("w1", "s1"), ("w2", "s1"), ("w3", "s1")])
