@@ -2668,7 +2668,7 @@ class EngineTest(unittest.TestCase):
 
     def test_a_verifier_that_cannot_run_leaves_every_item_to_the_owner(self):
         out = ans("failed", "lane_out", "retry", retry_after=time.time() + 7200, say="no lane")
-        rc, _ = self.verified(out)
+        rc, _ = self.verified(out, verify=[out] * 3)  # routed again twice, then given up
         self.assertEqual(rc, 2)
         q = self.ask()["question"]
         for item in self.GAPS:
