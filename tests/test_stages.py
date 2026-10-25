@@ -1,5 +1,6 @@
 """tl-bxk.13: stage handoffs (docs/design/stages.md). Reuses test_engine's harness without re-running its tests."""
 import json
+import shutil
 import sys
 import unittest
 from pathlib import Path
