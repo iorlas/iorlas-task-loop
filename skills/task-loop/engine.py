@@ -1429,8 +1429,10 @@ class Engine:
             self.transition("pause", "paused", "%s for %s%s" % (a.outcome.kind.name.lower().replace("pause_", ""), c.node,
                             (" until " + time.strftime("%H:%M:%S", time.localtime(self.retry_after))) if self.retry_after else ""),
                             until=self.retry_after, lane=stop.lane, reason=stop.reason)
-        raise Blocked(stop_why(c.node, a.outcome.kind, stop, res.say, getattr(a, "retry_after", 0.0), c.counts["crashes"] + 1,
+        err = Blocked(stop_why(c.node, a.outcome.kind, stop, res.say, getattr(a, "retry_after", 0.0), c.counts["crashes"] + 1,
                                dl.real_denied(res.raw)), kind=a.outcome.kind)
+        err.stop = stop
+        raise err
 
     def wait_net(self, c, res, a):
         """The network is down: probe until it is back (backoff), at most a.max_s; then the same thread goes on with a short
@@ -4574,8 +4576,9 @@ class Engine:
             d, _ = self.ai("look", "round %d: %d picture%s" % (rnd, len(names), "" if len(names) == 1 else "s"), prompt,
                            writer_family=self.writer_family, cwd=str(base), round=rnd, at=(self.at_stage, rnd, 0))
         except Blocked as b:
-            if not b.why.startswith("paused: no lane"):
-                raise  # the network (the step resumes), a crash: not this node's to swallow
+            st = getattr(b, "stop", None)
+            if not b.why.startswith("paused: no lane") or (st is not None and st.permanence == "needs_owner" and st.reason != "no_lane"):
+                raise  # the network (the step resumes), a crash, a login or credit pause: not this node's to swallow
             self.retry_after, self.pause_role, self.pause_lane = 0.0, "", ""  # the run goes on: _ai had noted a pause for the loop
             self.outcome_of("skipped", "no lane")
             # no lane for the judge: the pictures go unjudged to the owner-look bead; a look judge never parks the bead

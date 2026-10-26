@@ -124,7 +124,7 @@ class TraceRecords(unittest.TestCase):
         t = next(r for r in records(self.eng, "transition") if r["cause"] == "lane_out")
         self.assertEqual((t["from"], t["to"]), (6, "write"))
         sess = [s for s in records(self.eng, "session") if s["node_id"] == 6]
-        self.assertEqual([(s["status"], s["resume"]) for s in sess], [("rate_limited", True), ("done", False)])
+        self.assertEqual([(s["status"], s["reason"], s["resume"]) for s in sess], [("stopped", "rate_limited", True), ("done", None, False)])
         self.assertEqual(sess[1]["model"], "sonnet")
 
     def test_a_long_lane_out_pauses_with_the_time_the_lane_is_back(self):
