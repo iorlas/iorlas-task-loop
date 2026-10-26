@@ -2,6 +2,7 @@
 passes that left the slot) and the queue in the order the loop takes it, each entry with the beads it unblocks as a
 tree. Pure: server.py gathers the inputs and calls build(). Python 3.8+, standard library only."""
 
+import re
 import time
 from datetime import datetime
 
@@ -103,7 +104,7 @@ def released(i, out, by_id):
             if by_id.get(t) and by_id[t]["state"] not in ("done", "epic", "blocked") and not by_id[t]["is_epic"]]
 
 
-def build(graph_data, lanes, ranked, skipped, history, trails, now=None, rows=None, lane_records=(), asks=(), waiting=0, looks=(), closed=()):
+def build(graph_data, lanes, ranked, skipped, history, trails, now=None, rows=None, lane_records=(), asks=(), waiting=0, looks=(), closed=(), installed=()):
     """graph_data: graph.build() output. lanes: [{slot, bead, since}] (bead None = an idle loop). ranked: [(id, reason)] in
     the order `tl next` takes them. skipped: [(id, why)]. history: loop-log rows, oldest first. trails: {bead: {run,
     stage, blocks: [{kind, label, status, text}]}}. closed: the repo's bd beads (the closed ones feed Done)."""
@@ -131,7 +132,8 @@ def build(graph_data, lanes, ranked, skipped, history, trails, now=None, rows=No
         b, tr = ln.get("bead"), trails.get(ln.get("bead")) or {}
         node = by_id.get(b) or {}
         lane_out.append({
-            "slot": ln["slot"], "bead": b, "version": ln.get("version") or "", "stopping": ln.get("stopping") or "", "title": node.get("title") or tr.get("title") or "", "since": ln.get("since"),
+            "slot": ln["slot"], "bead": b, "version": ln.get("version") or "", "engine": ln.get("engine") or "",
+            "lags": lag(ln.get("engine") or ln.get("version") or "", installed), "stopping": ln.get("stopping") or "", "title": node.get("title") or tr.get("title") or "", "since": ln.get("since"),
             "run": tr.get("run") or 0, "stage": tr.get("stage") or "",
             "rail": rail(tr.get("blocks") or [], tr.get("run") or 0) if b else [],
             "trail": tr.get("blocks") or [], "unlocks": tree(b, out, by_id) if b else [],
@@ -218,6 +220,16 @@ def verdict(r, stats):
     return " · ".join(bits)
 
 
+def vkey(v):
+    return tuple(int(x) for x in v.split(".")) if re.fullmatch(r"\d+(\.\d+)*", v or "") else None
+
+
+def lag(version, installed):
+    """How many installed releases are newer than `version` (0: current, or either side unknown)."""
+    mine = vkey(version)
+    return sum(1 for v in installed if mine and vkey(v) and vkey(v) > mine)
+
+
 def lanes_of(slots, running, loops, stop=(0, "")):
     """One lane per slot, never per loop. slots: this machine's slot names; running: {bead: slot} (a slot bead's held_bead, or
     a live engine lock); loops: live loop states [{pid, slot, bead, since, started, version}]; stop: {pid: applicable mode},
@@ -235,7 +247,8 @@ def lanes_of(slots, running, loops, stop=(0, "")):
         owner = next((lp for lp in loops if lp.get("slot") == name or (bead and lp.get("bead") == bead)), None)
         bead = bead or (owner or {}).get("bead")
         lanes.append({"slot": name, "bead": bead, "since": (owner or {}).get("since") if bead else None,
-                      "version": (owner or {}).get("version") or "", "stopping": mode(owner) if owner else "",
+                      "version": (owner or {}).get("version") or "", "engine": (owner or {}).get("engine") or "",
+                      "stopping": mode(owner) if owner else "",
                       "loop": (owner or {}).get("pid")})
     placed = {l["loop"] for l in lanes if l["loop"]}
     for lp in loops:  # a loop on a bead whose slot nobody named
