@@ -33,6 +33,7 @@ POLL = 2               # seconds between looks at a running child (stop file, sl
 HEARTBEAT = 60         # the slot bead's lease is kept alive this often while a bead runs
 DRAINED_POLL = 300     # --wait-drained: how often an empty queue is looked at again
 PAUSE_WAIT_MAX = 3600  # a lane back within this long is waited for; later, the next bead is tried
+SELFTEST_WAIT = 30     # a newer install must pass `tl.py selftest` (a few seconds of work) within this long
 HELP_WAIT = 20         # a newer install must answer `tl.py --help` within this long to be moved to
 PAUSE_RETRY = 900      # a pause with no time the lane frees (login, network), or a bead another session holds:
                        # try that bead again after this
@@ -528,7 +529,8 @@ def newest_install(skip=()):
 
 def complete(d):
     """None when the install in `d` looks usable, else why not: its plugin.json and tl.py, loop.py and engine.py exist
-    and import (a half-copied file fails here, `--help` alone exits before loop and engine load), within HELP_WAIT s."""
+    and import (a half-copied file fails here, `--help` alone exits before loop and engine load), within HELP_WAIT s,
+    and `tl.py selftest` passes (an install that imports but cannot plan a bead is refused and recorded)."""
     if not (d / ".claude-plugin" / "plugin.json").is_file():
         return "plugin.json is missing"
     here = d / "skills" / "task-loop"
@@ -543,7 +545,46 @@ def complete(d):
         return "importing tl, loop, engine did not finish in %d s" % HELP_WAIT
     except OSError as e:
         return "python did not start: %s" % e
-    return None if r.returncode == 0 else "importing tl, loop, engine exited %d" % r.returncode
+    if r.returncode != 0:
+        return "importing tl, loop, engine exited %d" % r.returncode
+    why = selftest_of(here)
+    if why:
+        why = "selftest failed: " + why
+        record_bad_version(d.name, why)
+    return why
+
+
+def selftest_of(here):
+    """None when `tl.py selftest` of the install at `here` passes, else the tail of what it said."""
+    try:
+        r = subprocess.run([sys.executable, str(here / "tl.py"), "selftest"], stdin=subprocess.DEVNULL,
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=SELFTEST_WAIT, cwd=here)
+    except subprocess.TimeoutExpired:
+        return "did not finish in %d s" % SELFTEST_WAIT
+    except OSError as e:
+        return "python did not start: %s" % e
+    if r.returncode == 0:
+        return None
+    return "exit %d: %s" % (r.returncode, ((r.stderr or "") + (r.stdout or "")).strip()[-300:])
+
+
+def record_bad_version(version, why):
+    """bad-versions.json in the config dir: {version: {"why", "at", "seen_by"}}, the installs a loop refused."""
+    f = tl.config_dir() / "bad-versions.json"
+    try:
+        bad = json.loads(f.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        bad = {}
+    if not isinstance(bad, dict):
+        bad = {}
+    bad[version] = {"why": why[:400], "at": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+                    "seen_by": tl.HERE.parents[1].name}
+    tmp = f.with_name(f.name + ".%d.tmp" % os.getpid())
+    try:
+        tmp.write_text(json.dumps(bad, indent=1), encoding="utf-8")
+        os.replace(tmp, f)
+    except OSError:
+        pass  # the refusal stands; only its record is lost
 
 
 def pin_aware(d):
@@ -1057,4 +1098,93 @@ def cmd_stop(a):
                     os.kill(st["pid"], signal.SIGTERM)
         print("STOP %s: loop pid %s%s" % ("NOW" if a.now else "after the current bead", st["pid"],
                                           (", running " + st["bead"]) if st.get("bead") else ""))
+    return 0
+
+
+# ---- selftest -------------------------------------------------------------------------------------------------------
+
+def selftest():
+    """One bead through Engine.run (plan, write, review, land) with a scripted lane in a temp repo and a temp config dir,
+    on this install's code. None when it lands and closes the bead, else why not. Nothing real is touched: no bd, no
+    delegate, no network, no model."""
+    import tempfile
+    import types
+    from unittest import mock
+
+    py = '"%s"' % sys.executable
+    check = py + " -c \"import os,sys; sys.exit(0 if os.path.exists('f.txt') else 1)\""
+    plan = {"summary": "do it", "stages": [{"goal": "add f", "files": ["f.txt"], "checks": [check], "hard": False}],
+            "risks": [], "question": "", "options": [], "decided": "", "cases": [], "leftovers": []}
+    write = {"summary": "wrote f", "checks_run": [{"cmd": check, "exit": 0}], "question": "", "options": [], "decided": "",
+             "bad_checks": [], "new_cases": [], "unchecked": [], "logic_only": ""}
+    review = {"findings": [], "unmet": [], "question": "", "options": [], "decided": "", "leftovers": [], "unchecked": [],
+              "look": ""}
+    bead = {"id": "t-1", "title": "Add f", "metadata": {}, "acceptance_criteria": "f.txt exists"}
+    closed, blocked = [], []
+
+    def lane(route, role, prompt, schema, cwd, resume, timeout, log_path, writer=None, parent="", task="", title="",
+             access="", idle=None):  # fake route.py run
+        props = (json.loads(schema) if isinstance(schema, str) else schema).get("properties", {})
+        if "stages" in props:
+            data, node = plan, "plan"
+        elif "checks_run" in props:
+            data, node = write, "write"
+            Path(cwd, "f.txt").write_text("f\n", encoding="utf-8")
+        else:
+            data, node = review, "review"
+        j = {"v": 2, "status": "done", "reason": None, "next": None, "data": data, "ref": "ref-" + node, "cost": 0.0,
+             "secs": 1, "family": "openai" if node == "write" else "claude", "lane": "L", "model": "m", "effort": "e",
+             "git_violation": [], "tokens": {"in": 1, "cached": 0, "out": 1}, "context": {"instructions": [], "env_keys": []}}
+        return engine.Result(data, "", j["ref"], 0.0, 1, "", j["family"]), j
+
+    with tempfile.TemporaryDirectory(prefix="tl-selftest-") as tmp:
+        home = Path(os.path.realpath(tmp))
+        env = {"XDG_CONFIG_HOME": str(home / "cfg"), "APPDATA": str(home / "cfg"), "HOME": str(home), "USERPROFILE": str(home),
+               "CLAUDE_CODE_SESSION_ID": "selftest-0", "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+               "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t", "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull}
+        origin, wt = home / "o.git", home / "wt"
+        with mock.patch.dict(os.environ, env):
+            for cmd in (["init", "-q", "--bare", "-b", "main", str(origin)], ["clone", "-q", str(origin), str(wt)]):
+                r = subprocess.run(["git"] + cmd, cwd=home, capture_output=True, text=True)
+                if r.returncode:
+                    return "git %s: %s" % (cmd[0], r.stderr.strip()[-200:])
+            (wt / "a.txt").write_text("a\n", encoding="utf-8")
+            for cmd in (["add", "-A"], ["commit", "-qm", "init"], ["push", "-q", "origin", "HEAD:main"]):
+                r = subprocess.run(["git"] + cmd, cwd=wt, capture_output=True, text=True)
+                if r.returncode:
+                    return "git %s: %s" % (cmd[0], r.stderr.strip()[-200:])
+            contract = {"worker_run": 2, "features": ["reason", "next", "context"], "reasons": {}, "lanes": {"codex": {}}}
+            fake_bd = types.SimpleNamespace(returncode=0, stdout="bead t-1: Add f\n", stderr="")
+            with mock.patch.object(tl, "bd", return_value=fake_bd), mock.patch.object(tl, "show", return_value=bead), \
+                    mock.patch.object(tl, "comments", return_value=[]), \
+                    mock.patch.object(tl, "cmd_close", side_effect=lambda a: closed.append(a.reason) or 0), \
+                    mock.patch.object(tl, "cmd_block", side_effect=lambda a: blocked.append(a.why) or 0), \
+                    mock.patch.object(tl, "cmd_land", return_value=0), \
+                    mock.patch.object(engine, "find_route", return_value="/selftest/route.py"), \
+                    mock.patch.object(engine, "contract", return_value=contract), \
+                    mock.patch.object(engine, "call_delegate", lane), mock.patch.object(engine.time, "sleep"):
+                cfg = engine.load_cfg(str(wt))
+                cfg.update({"reflect": False})
+                os.chdir(wt)  # the engine reads cwd
+                try:
+                    rc = engine.Engine("t-1", str(wt), cfg).run()
+                finally:
+                    os.chdir(home.parent)  # out of the directory that is removed next
+    if rc != 0 or not closed:
+        return "the engine ended %s without closing the bead%s" % (rc, (" (blocked: %s)" % blocked[0][:200]) if blocked else "")
+    return None
+
+
+def cmd_selftest(a):
+    started = time.monotonic()
+    try:
+        why = selftest()
+    except Exception as e:  # any raise is a failure; the traceback tail says where
+        import traceback
+        why = "%s: %s\n%s" % (type(e).__name__, e, "".join(traceback.format_exc().splitlines(True)[-6:]))
+    secs = time.monotonic() - started
+    if why:
+        print("selftest FAILED in %.1f s: %s" % (secs, why), file=sys.stderr)
+        return 1
+    print("selftest ok in %.1f s" % secs)
     return 0

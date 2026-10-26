@@ -2010,6 +2010,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(prog="tl.py", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sp = ap.add_subparsers(dest="cmd", required=True)
     sp.add_parser("actor")
+    sp.add_parser("selftest", help="run one bead through the engine with a fake lane in a temp repo; exit 1 when it cannot")
     sp.add_parser("doctor", help="warn about git settings that let a slot's git leave the slot")
     p = sp.add_parser("register", help="add a repository to the dashboard")
     p.add_argument("directory", nargs="?", default=".", metavar="DIR",
@@ -2154,6 +2155,9 @@ def main(argv=None):
             print("delegate did not take the reading (exit %d): %s" % (r.returncode, (r.stderr or r.stdout)[-400:]))
             return 1
         return 0
+    if a.cmd == "selftest":
+        import loop
+        return loop.cmd_selftest(a)
     if a.cmd in ("next", "loop", "stop"):
         import loop
         a.argv = list(argv) if argv is not None else sys.argv[1:]  # the loop re-execs itself with these
