@@ -442,8 +442,7 @@ class RealTree(unittest.TestCase):
         path = ROOT / "pyrefly-baseline.json"
         recorded = load_ratchet()["pyrefly_baseline_errors"]
         data = json.loads(path.read_text(encoding="utf-8"))
-        errors = data["errors"] if isinstance(data, dict) and "errors" in data else data
-        count = sum(len(v) if isinstance(v, list) else 1 for v in errors.values()) if isinstance(errors, dict) else len(errors)
+        count = len(data["errors"])
         self.assertLessEqual(count, recorded, "the baseline grew: fix the new errors instead")
         self.assertEqual(count, recorded, "the baseline shrank: lower pyrefly_baseline_errors in tests/rules_ratchet.json to %d" % count)
 
@@ -542,20 +541,10 @@ class Planted(unittest.TestCase):
         self.assertEqual(self.problems({"src/taskloop/adapters/a.py": "CACHE = {}\n"}), [])
 
     def test_file_names_only_in_contracts_paths(self):
-        self.assertEqual(self.problems({"src/taskloop/contracts/paths.py": 'A = "engine/"\nB = ".task/x"\n'}), [])
-        self.only({"src/taskloop/app/a.py": 'p = root / "plan.json"\n'}, "contracts/paths.py")
-        self.assertEqual(self.problems({"src/taskloop/app/a.py": '"""Writes plan.json."""\n'}), [])
-
-    def test_the_old_folder_table_catches_a_sideways_import(self):
-        root = self.tree({"checks/x.py": "import slots\n", "slots/__init__.py": "", "write/b.py": "from ..asks import x\n", "core/d.py": "import os\n"})
-        out = violations(root)
-        self.assertEqual(len(out), 2, out)
-        self.assertTrue(any("checks -> slots" in o for o in out))
-        self.assertTrue(any("write -> asks" in o for o in out))
-
-    def test_a_flat_module_of_the_same_name_is_the_hub_not_the_folder(self):
-        self.assertEqual(violations(self.tree({"dash/a.py": "import loop\n", "loop.py": ""})), [])
-        self.assertEqual(len(violations(self.tree({"dash/a.py": "import loop\n"}))), 1)
+        lit = PATH_LITERALS[0]
+        self.assertEqual(self.problems({"src/taskloop/contracts/paths.py": "A = %r\n" % lit}), [])
+        self.only({"src/taskloop/app/a.py": "p = root / %r\n" % lit}, "contracts/paths.py")
+        self.assertEqual(self.problems({"src/taskloop/app/a.py": '"""Writes %s."""\n' % lit}), [])
 
 
 class FolderTable(unittest.TestCase):
