@@ -8,6 +8,7 @@ import subprocess
 import time
 from pathlib import Path
 
+from checks import speed
 from core.fmt import clip
 from core.procs import child_env
 
@@ -221,6 +222,31 @@ def timeout_problems(plan, cap_min):
                            "limit every round: lower the limit, or split the work into checks that each finish inside it" % (
                                clip(c, 120), text.strip(), round(minutes, 1), float(cap_min)))
                 break
+    return out
+
+
+UNITY_RECIPE = re.compile(r"(?<![\w-])just\s+(unity-[\w-]+)(?![\w-])")
+
+
+def repo_check_of(cmd, cfg):
+    """The id of the configured check a plan check is, wrappers aside (`mkdir -p e && just unity-tests > e/log` is `unity-tests`), or None."""
+    want = speed.canon(cmd)
+    return next((k.get("id") or k["cmd"] for k in cfg.get("checks") or [] if speed.canon(k.get("cmd") or "") == want), None)
+
+
+def unity_problems(plan, cfg):
+    """tl-7y6.7.7: [why] for a plan check that runs a `just unity-*` recipe. The repo's checks run it once per round; an acceptance
+    copy launches Unity again (lifesim-22b3 r4, yxbb.3: 200 to 540 s each) or, as a wrapper, reads the repo check's log at best."""
+    out = []
+    for c in plan_checks(plan):
+        bare = re.sub(r"\"[^\"]*\"|'[^']*'", "''", c)  # a quoted mention is text
+        m = UNITY_RECIPE.search(bare)
+        if not m:
+            continue
+        rid = repo_check_of(c, cfg) or next((k.get("id") for k in cfg.get("checks") or [] if (k.get("cmd") or "").split()[-1:] == [m.group(1)]), None)
+        use = ("the repo check `%s` already runs it: read $%s and $%s" % (rid, check_env_name(rid), check_env_name(rid).replace("_LOG_", "_RC_"))
+               if rid else "it is a Unity run the repo's checks own: do not launch it from acceptance")
+        out.append("`%s`: runs `just %s`; %s" % (clip(c, 120), m.group(1), use))
     return out
 
 

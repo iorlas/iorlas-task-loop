@@ -412,12 +412,19 @@ class EngineTest(unittest.TestCase):
         self.assertEqual([i for _, i in lint.rerun_checks(plan, cfg)], ["unity-tests"])
         self.assertEqual(lint.check_env_name("unity-tests"), "TL_CHECK_LOG_UNITY_TESTS")
 
-    def test_the_same_command_with_another_timeout_is_not_a_duplicate(self):
+    def test_a_plan_with_just_unity_in_acceptance_is_sent_back_once(self):
+        bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["just unity-tests"])])
+        rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]},
+                                checks=[{"id": "unity-tests", "cmd": PY + ' -c "pass"', "group": "tests"}])
+        self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
+        self.assertIn("runs `just unity-tests`", s.prompts[1])
+
+    def test_the_same_command_with_another_timeout_is_one_launch(self):
         cmd, n = self.counting_check("ok", ok_after=1)
         eng = self.checks_engine(checks=[{"id": "a", "cmd": cmd, "group": "static", "timeout_min": 1, "cache": False},
                                          {"id": "b", "cmd": cmd, "group": "tests", "timeout_min": 2, "cache": False}])
-        eng.run_checks({"checks": [], "files": []}, "s")
-        self.assertEqual(n.read_text(), "2")
+        res = eng.run_checks({"checks": [], "files": []}, "s")
+        self.assertEqual((n.read_text(), [bool(c.get("reused")) for c in res]), ("1", [False, True]))
 
     def test_a_slot_wait_in_a_check_is_read_and_capped_at_its_wall_time(self):
         cmd, n = self.counting_check("unity-slot: x got slot 0 after 99999999s", ok_after=1)
