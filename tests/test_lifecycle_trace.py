@@ -296,7 +296,7 @@ class TraceTelemetry(unittest.TestCase):
 
         eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False)
         with mock.patch.object(engine.subprocess, "Popen", return_value=FakeProc()), \
-                mock.patch.object(engine, "kill_tree") as kill:
+                mock.patch.object(engine.procs, "kill_tree") as kill:
             with self.assertRaises(KeyboardInterrupt):
                 eng.sh("fake", timeout=5)
         self.assertTrue(kill.called)
@@ -375,7 +375,7 @@ class TraceTelemetry(unittest.TestCase):
             proc.stop("shutdown after slow scan\n")
 
         with mock.patch.object(engine.subprocess, "Popen", return_value=p), \
-                mock.patch.object(engine, "kill_tree", side_effect=stop), \
+                mock.patch.object(engine.procs, "kill_tree", side_effect=stop), \
                 mock.patch.object(engine.cs, "activity", side_effect=slow_activity):
             rc, _ = eng.sh("fake-check", timeout=10, idle=0.5)
         self.assertEqual(rc, 124)
@@ -397,7 +397,7 @@ class TraceTelemetry(unittest.TestCase):
             proc.stop("shutdown output after timeout\n")
 
         with mock.patch.object(engine.subprocess, "Popen", return_value=p), \
-                mock.patch.object(engine, "kill_tree", side_effect=stop), \
+                mock.patch.object(engine.procs, "kill_tree", side_effect=stop), \
                 mock.patch.object(engine.cs, "activity", return_value=False):
             rc, tail = eng.sh("fake-check", timeout=0.4, idle=10)
         self.assertEqual(rc, 124)
@@ -422,7 +422,7 @@ class TraceTelemetry(unittest.TestCase):
             proc.stop("shutdown output after interrupt\n")
 
         with mock.patch.object(engine.subprocess, "Popen", return_value=p), \
-                mock.patch.object(engine, "kill_tree", side_effect=stop), \
+                mock.patch.object(engine.procs, "kill_tree", side_effect=stop), \
                 mock.patch.object(engine.cs, "activity", side_effect=KeyboardInterrupt):
             with self.assertRaises(KeyboardInterrupt):
                 eng.sh("fake-check", timeout=10, idle=10)
@@ -440,8 +440,8 @@ class TraceTelemetry(unittest.TestCase):
 
     def test_a_stopped_delegate_worker_that_survives_still_leaves_a_kill_record(self):
         eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False)
-        r = engine.Result(secs=2, error="timeout (timeout 1 min)", stop="timeout 1 min", alive=[4242])
-        with mock.patch.object(engine, "call_delegate", return_value=(r, None)):
+        r = engine.lcall.Result(secs=2, error="timeout (timeout 1 min)", stop="timeout 1 min", alive=[4242])
+        with mock.patch.object(engine.lcall, "call_delegate", return_value=(r, None)):
             with self.assertRaises(engine.Blocked):
                 eng._ai("plan", "title", "prompt")
         kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
@@ -454,7 +454,7 @@ class TraceTelemetry(unittest.TestCase):
         log = self.wt / "observed.log"
         code = "import sys,time; sys.stderr.write('error: boom\\n'); sys.stderr.flush(); time.sleep(10)"
         stop, obs = {}, {}
-        res, _ = engine.run_proc([sys.executable, "-c", code], str(self.wt), 0.4, log, stop=stop, obs=obs)
+        res, _ = engine.procs.run_proc([sys.executable, "-c", code], str(self.wt), 0.4, log, stop=stop, obs=obs)
         self.assertIsNone(res)
         self.assertIsNotNone(obs["first_error_t"])
         self.assertIsNotNone(obs["last_event_t"])
@@ -474,7 +474,7 @@ class TraceTelemetry(unittest.TestCase):
             "time.sleep(10)\n"
         )
         stop, obs = {}, {}
-        res, _ = engine.run_proc([sys.executable, "-c", code], str(self.wt), 0.4, log, stop=stop, obs=obs)
+        res, _ = engine.procs.run_proc([sys.executable, "-c", code], str(self.wt), 0.4, log, stop=stop, obs=obs)
         self.assertIsNone(res)
         self.assertIn("shutdown error: late", log.read_text())
         self.assertIsNotNone(obs["first_error_t"])
@@ -491,7 +491,7 @@ class TraceTelemetry(unittest.TestCase):
             raise KeyboardInterrupt()
 
         eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False)
-        with mock.patch.object(engine, "run_proc", side_effect=interrupted):
+        with mock.patch.object(engine.procs, "run_proc", side_effect=interrupted):
             with self.assertRaises(KeyboardInterrupt):
                 eng._ai("plan", "title", "prompt")
         kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
