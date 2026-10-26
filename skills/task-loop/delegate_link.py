@@ -1,11 +1,12 @@
 """The one link to delegate's route.py: which install, the handshake file, and `call` (60-design-A3 sec 2.1; tl-7y6.4.3).
 
 `resolve` picks the install in A3's order (an explicit path, the `pinned.json` entry, then `installed_plugins.json` user scope;
-never a glob over the cache) and refuses a contract it does not speak. `call` runs one `route.py run`, never raises, and
-always returns either `stop is None` (done) or a `lane_policy.Stop`: a process that printed nothing is a synthesized `crash`,
-an answer that breaks the schema is a synthesized `contract_violation`. The stop's facts come from the install's
-contract.json, not from literals here. Argument discipline: only flags contract.json lists in `run_args` are passed.
-Nothing here reads prose. Unused by the engine until R21. Python 3.8+, stdlib only.
+never a glob over the cache) and refuses a contract it does not speak (contract 3: every answer carries `stop`, null = done).
+`call` runs one `route.py run`, never raises, and always returns either `stop is None` (done) or a `lane_policy.Stop`: a
+process that printed nothing is a synthesized `no_answer`, an answer that breaks the shape a synthesized `contract_violation`,
+a call the engine had to stop a synthesized `timeout`. The stop's facts come from the answer's `stop{}` and the install's
+contract.json, not from literals here (the three synthesized reasons have no answer to read). Argument discipline: only flags
+contract.json lists in `run_args` are passed. Nothing here reads prose. Python 3.8+, stdlib only.
 """
 
 import json
@@ -18,8 +19,9 @@ from pathlib import Path
 
 import lane_policy as lp
 import tl
+from core import procs
 
-CONTRACT = 2            # the contract number this engine speaks; R20/R21 move it to 3
+CONTRACT = 3            # the contract number this engine speaks (R20 and R21 are one pair)
 NODE_MARGIN_S = 180     # --timeout passed = the node's timeout minus this
 BACKSTOP_S = 120        # the engine kills the child at the node's timeout plus this
 PLUGIN = "iorlas-delegate@"
@@ -47,7 +49,6 @@ class CallRequest:
     cwd: str
     resume: str = ""
     authored_by: str = ""
-    host: bool = False
     task: str = ""
     parent: str = ""
     title: str = ""
@@ -57,27 +58,61 @@ class CallRequest:
 
 @dataclass
 class CallResult:
-    status: str = ""
     data: object = None
     text: str = ""
     say: str = ""
     ref: str = ""
     lane: str = ""
     model: str = ""
+    family: str = ""
     run_id: str = ""
     call_id: str = ""
+    cost: float = 0.0
+    secs: float = 0.0
     usage: dict = field(default_factory=dict)
     stop: object = None            # lane_policy.Stop, None iff done
     source: str = "delegate"       # delegate | synthesized
     raw: dict = field(default_factory=dict)
 
+    @property
+    def done(self):
+        return self.stop is None
 
-def read_contract(d):
+
+class Stopped(Exception):
+    """The engine ended the call (its wall limit, its write-idle watcher). `why` is the engine's own word for it."""
+
+    def __init__(self, why):
+        super().__init__(why)
+        self.why = why
+
+
+class ProcRunner:
+    """The `runner` seam over core.procs.run_proc: the engine's log, the write-idle watcher and the kill record
+    (`stop`, `obs`: why the call was ended, the pids that outlived it, the process boundaries). One per call."""
+
+    def __init__(self, log_path, idle=None):
+        self.log_path, self.idle = log_path, idle
+        self.stop, self.obs, self.secs = {}, {}, 0.0
+
+    def __call__(self, cmd, **kw):
+        res, self.secs = procs.run_proc(cmd, kw.get("cwd"), kw.get("timeout") or 3600, self.log_path, idle=self.idle,
+                                        stop=self.stop, obs=self.obs)
+        if res is None:
+            raise Stopped(self.stop.get("why") or "timeout")
+        return subprocess.CompletedProcess(cmd, res[0], res[1], "")
+
+
+def read_contract_file(path):
     try:
-        j = json.loads((Path(d) / "skills" / "delegate" / "contract.json").read_text(encoding="utf-8"))
+        j = json.loads(Path(path).read_text(encoding="utf-8"))
         return j if isinstance(j, dict) and isinstance(j.get("reasons"), dict) else None
     except (OSError, ValueError):
         return None
+
+
+def read_contract(d):
+    return read_contract_file(Path(d) / "skills" / "delegate" / "contract.json")
 
 
 def installed_dir(claude_dir=None):
@@ -95,10 +130,13 @@ def installed_dir(claude_dir=None):
 
 
 def resolve(path="", pinned=None, installed=None, contract=CONTRACT):
-    """-> Resolved | Refusal. path: an explicit delegate dir (a dev override); pinned: the pinned dir (default tl's);
-    installed: the installed dir (default installed_plugins.json). A pin that is gone is a refusal, never a fall-through."""
+    """-> Resolved | Refusal. path: an explicit delegate dir or its route.py (a dev override or the `delegate` config key);
+    pinned: the pinned dir (default tl's); installed: the installed dir (default installed_plugins.json). A pin that is gone is
+    a refusal, never a fall-through."""
     if path:
         d, source = Path(path), "explicit"
+        route = str(d) if d.suffix == ".py" else str(d / "skills" / "delegate" / "route.py")
+        c = read_contract_file(Path(route).with_name("contract.json"))
     else:
         pin = pinned if pinned is not None else tl.pinned_dir("delegate")
         if pin:
@@ -109,7 +147,8 @@ def resolve(path="", pinned=None, installed=None, contract=CONTRACT):
             d, source = (installed if installed is not None else installed_dir()), "installed"
             if not d:
                 return Refusal("not_installed")
-    c = read_contract(d)
+        route = str(d / "skills" / "delegate" / "route.py")
+        c = read_contract(d)
     if c is None:
         return Refusal("pin_unreadable" if source == "pinned" else "not_installed", str(d))
     have = int(c.get("contract") or 0)
@@ -117,7 +156,7 @@ def resolve(path="", pinned=None, installed=None, contract=CONTRACT):
         return Refusal("skew_delegate_newer_no_match", "delegate speaks contract %d, this engine %d" % (have, contract))
     if have < contract:
         return Refusal("skew_delegate_older", "delegate speaks contract %d, this engine %d" % (have, contract))
-    return Resolved(d, str(d / "skills" / "delegate" / "route.py"), c, source)
+    return Resolved(d.parent if d.suffix == ".py" else d, route, c, source)
 
 
 def facts_of(contract, reason, default):
@@ -126,29 +165,37 @@ def facts_of(contract, reason, default):
     return (r["scope"], r["permanence"], r["retry"]) if isinstance(r, dict) and "scope" in r else default
 
 
-def _stop(contract, reason, text, default, **kw):
-    s, p, k = facts_of(contract, reason, default)
-    return lp.Stop(s, p, k, reason=reason, **kw)
+def wording_of(contract, reason):
+    r = (contract.get("reasons") or {}).get(reason)
+    return str(r.get("wording") or "") if isinstance(r, dict) else ""
 
 
 def _synth(contract, reason, default, text, **kw):
-    return CallResult(status="stop", text=text[-2000:], say=text[:300], stop=_stop(contract, reason, text, default, **kw), source="synthesized")
+    """A stop with no answer to read: the facts are the contract's row for `reason`, else `default`."""
+    s, p, k = facts_of(contract, reason, default)
+    return CallResult(text=text[-2000:], say=text[:300], stop=lp.Stop(s, p, k, reason=reason, **kw), source="synthesized")
 
 
 def stop_of(contract, j):
     """The lane_policy.Stop of a non-done answer. Facts: the answer's `stop{}`; else the install's reason table; else a tuple
-    the policy does not know (it pauses the lane). The reason string is wording."""
-    ref = str(j.get("ref") or (j.get("usage") or {}).get("ref") or "")
+    the policy does not know (it pauses the lane). The reason string is wording. One exception, named: a `killed` stop is a
+    signal (contract 3 states no signal number, and (machine, transient, none) alone cannot tell it from a crash)."""
     st = j.get("stop") if isinstance(j.get("stop"), dict) else {}
-    reason = str(st.get("reason") or (contract.get("wire_default") or {}).get(j.get("reason"), j.get("reason")) or "")
+    ref = str(j.get("ref") or st.get("ref") or (j.get("usage") or {}).get("ref") or "")
+    reason = str(st.get("reason") or "")
     if st.get("scope") and st.get("permanence"):
         s, p, k = st["scope"], st["permanence"], (st.get("retry") or {}).get("kind") or "none"
     else:
         s, p, k = facts_of(contract, reason, ("unknown", "unknown", "unknown"))
-    at = (st.get("retry") or {}).get("at") or j.get("retry_after") or 0.0
+    at = (st.get("retry") or {}).get("at") or 0.0
+    sig = int(st.get("signal") or 0) or (1 if reason == "killed" else 0)
     return lp.Stop(s, p, k, float(at), reason, bool(st.get("resumable", False)), bool(st.get("partial", False)), ref,
-                   str(j.get("lane") or ""), str(j.get("model") or ""), int(st.get("signal") or 0), str(st.get("fix") or ""),
-                   str(st.get("fingerprint") or ""))
+                   str(j.get("lane") or ""), str(j.get("model") or ""), sig, str(st.get("fix") or ""), str(st.get("fingerprint") or ""))
+
+
+def real_denied(j):
+    """The refusals that count: contract 3 lists `sandbox_limit` ones (a system resource the sandbox blocks) but they are noise."""
+    return [d for d in (j.get("denied") or []) if isinstance(d, dict) and d.get("kind") != "sandbox_limit"]
 
 
 def argv_of(resolved, req, brief_file, schema_file):
@@ -160,13 +207,26 @@ def argv_of(resolved, req, brief_file, schema_file):
     for flag, val in (("--resume", req.resume), ("--authored-by", req.authored_by), ("--call-id", req.call_id)):
         if val:
             cmd += [flag, val]
-    if req.host:
-        cmd.append("--host")
     return cmd
 
 
+def answer_of(contract, j, resume=""):
+    """The CallResult of a parsed answer object (contract 3: `contract` is the number, `stop` is null or the facts)."""
+    if j.get("contract") != CONTRACT or "stop" not in j or not (j["stop"] is None or isinstance(j["stop"], dict)):
+        return _synth(contract, "contract_violation", ("machine", "needs_owner", "none"),
+                      "an answer that is not contract %d: %s" % (CONTRACT, json.dumps(j)[:300]), ref=str(j.get("ref") or resume))
+    usage = j.get("usage") if isinstance(j.get("usage"), dict) else {}
+    r = CallResult(j.get("data"), str(j.get("text") or ""), str(j.get("say") or ""), str(j.get("ref") or usage.get("ref") or ""),
+                   str(j.get("lane") or ""), str(j.get("model") or ""), str(j.get("family") or ""), str(j.get("run_id") or ""),
+                   str(j.get("call_id") or ""), float(j.get("cost") or 0), float(j.get("secs") or 0), usage, None, "delegate", j)
+    if j["stop"] is not None:
+        r.stop = stop_of(contract, j)
+    return r
+
+
 def call(resolved, req, runner=subprocess.run, env=None):
-    """One delegate call. Never raises. runner(cmd, **kw) -> CompletedProcess is the process seam."""
+    """One delegate call. Never raises (but an interruption: BaseException goes on). runner(cmd, **kw) -> CompletedProcess is
+    the process seam; it raises Stopped (or TimeoutExpired) when the call had to be ended."""
     c = resolved.contract
     try:
         with tempfile.TemporaryDirectory() as d:
@@ -177,22 +237,17 @@ def call(resolved, req, runner=subprocess.run, env=None):
             if req.timeout_s:
                 kw["timeout"] = req.timeout_s + BACKSTOP_S
             p = runner(argv_of(resolved, req, bf, sf), **kw)
-    except subprocess.TimeoutExpired:
-        return _synth(c, "hung", ("model", "transient", "none"), "the engine backstop killed route.py", ref=req.resume)
+    except (Stopped, subprocess.TimeoutExpired) as e:
+        return _synth(c, "timeout", ("bead", "transient", "none"), "the engine ended the call: %s" % (getattr(e, "why", "") or "its time ran out"),
+                      ref=req.resume)
     except (OSError, ValueError) as e:
-        return _synth(c, "crash", ("machine", "transient", "none"), "route.py could not run: %s" % e, ref=req.resume)
+        return _synth(c, "no_answer", ("machine", "transient", "none"), "route.py could not run: %s" % e, ref=req.resume)
     out = (p.stdout or "").strip()
     try:
         j = json.loads(out.splitlines()[-1]) if out else None
     except ValueError:
         j = None
     if not isinstance(j, dict):
-        return _synth(c, "crash", ("machine", "transient", "none"), "route.py exit %s, no answer object: %s" % (p.returncode, out or p.stderr or ""), ref=req.resume)
-    if j.get("v") != 2 or "status" not in j:
-        return _synth(c, "contract_violation", ("machine", "needs_owner", "none"), "an answer that is not worker-run v2: %s" % out[:300], ref=str(j.get("ref") or req.resume))
-    usage = j.get("usage") if isinstance(j.get("usage"), dict) else {}
-    r = CallResult(j["status"], j.get("data"), str(j.get("text") or ""), str(j.get("say") or ""), str(j.get("ref") or usage.get("ref") or ""),
-                   str(j.get("lane") or ""), str(j.get("model") or ""), str(j.get("run_id") or ""), str(j.get("call_id") or ""), usage, None, "delegate", j)
-    if j["status"] != "done":
-        r.stop = stop_of(c, j)
-    return r
+        return _synth(c, "no_answer", ("machine", "transient", "none"), "route.py exit %s, no answer object: %s" % (p.returncode, out or p.stderr or ""),
+                      ref=req.resume)
+    return answer_of(c, j, req.resume)
