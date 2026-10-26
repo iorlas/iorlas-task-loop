@@ -1843,6 +1843,24 @@ def doctor_warnings(repo, source=None):
     return out
 
 
+def bead_lint_warnings(repo):
+    """tl-f52: one line per open bead whose text cites material outside the repo (beadlint). [] when bd cannot be read."""
+    import beadlint
+    try:
+        beads = json.loads(bd("list", "--status", "open", "--json", "-n", "0", cwd=repo).stdout or "[]")
+    except (ValueError, SystemExit, OSError):
+        return []
+    out = []
+    for b in beads if isinstance(beads, list) else []:
+        if b.get("issue_type") == "epic" or "slot" in (b.get("labels") or []):
+            continue
+        r = beadlint.refs(b, str(repo))
+        if r:
+            out.append("bead %s: %s: %s; inline the facts, or label it %s if this is a false positive" % (
+                b["id"], beadlint.REASON, "; ".join("%s %s" % (k, t[:60]) for k, t in r[:3]), beadlint.ESCAPE_LABEL))
+    return out
+
+
 def cmd_doctor(a):
     import engine
     repo = git("rev-parse", "--show-toplevel") or os.getcwd()
@@ -1851,6 +1869,7 @@ def cmd_doctor(a):
     print("config: .task-loop.json from base %s at commit %s" % (base, commit) if commit else
           "config: .task-loop.json from working tree %s (base %s unresolved; no commit read)" % (repo, base))
     warns = doctor_warnings(repo, source)
+    warns += bead_lint_warnings(repo)
     for w in warns:
         print("WARN " + w)
     if not warns:

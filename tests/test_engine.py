@@ -923,7 +923,7 @@ class EngineTest(unittest.TestCase):
                    "is available) and fix the two-person home test another way.")
 
     def test_a_planner_question_an_accepted_requirement_decides_is_planned_again_citing_it(self):
-        rc, s = self.run_engine({"plan": [dict(PLAN, question=self.D5F58_Q, decided=self.R10), PLAN],
+        rc, s = self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question=self.D5F58_Q, decided=self.R10), PLAN],
                                  "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertIsNone(self.ask())
@@ -935,7 +935,7 @@ class EngineTest(unittest.TestCase):
         self.assertIn("planner_decided", causes)
 
     def test_a_planner_that_asks_again_after_the_requirement_is_quoted_reaches_the_owner(self):
-        ask = dict(PLAN, question=self.D5F58_Q, decided=self.R10)
+        ask = dict(PLAN, irreversible="push_shared", question=self.D5F58_Q, decided=self.R10)
         rc, s = self.run_engine({"plan": [ask, ask]})
         self.assertEqual(rc, 2)
         self.assertEqual(self.ask()["kind"], "decision")
@@ -944,7 +944,7 @@ class EngineTest(unittest.TestCase):
     def test_a_question_naming_two_requirements_the_brief_quotes_is_still_an_ask(self):
         owner = [{"author": "Denis Tomilin", "text": "Accepted: R3 keep saves forever; R7 drop them after a week."}]
         with mock.patch.object(tl, "comments", return_value=owner):
-            rc, _ = self.run_engine({"plan": [dict(PLAN, question="R3 and R7 conflict here: which wins?")]})
+            rc, _ = self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="R3 and R7 conflict here: which wins?")]})
         self.assertEqual(rc, 2)
         self.assertEqual(self.ask()["kind"], "decision")
 
@@ -961,7 +961,7 @@ class EngineTest(unittest.TestCase):
         owner = [{"author": "Denis Tomilin", "text": self.D5F58_OWNER}]
         for q in ("Should R10 be relaxed for a sole candidate?", "R10 vs criterion 3: which wins?"):
             with mock.patch.object(tl, "comments", return_value=owner):
-                rc, s = self.run_engine({"plan": [dict(PLAN, question=q)]})
+                rc, s = self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question=q)]})
             self.assertEqual(rc, 2, q)
             self.assertEqual(self.ask()["kind"], "decision")
             self.assertEqual([c[0] for c in s.calls], ["planner"])
@@ -2305,7 +2305,7 @@ class EngineTest(unittest.TestCase):
         return json.loads(p.read_text()) if p.exists() else None
 
     def test_a_planner_question_is_a_decision_ask_on_the_bead(self):
-        rc, _ = self.run_engine({"plan": [dict(PLAN, question="Old format or new?")]})
+        rc, _ = self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
         self.assertEqual(rc, 2)
         a = self.ask()
         self.assertEqual((a["kind"], a["status"]), ("decision", "open"))
@@ -2316,7 +2316,7 @@ class EngineTest(unittest.TestCase):
     # Denis 2026-10-21 (lifesim-s28t): a bead that lacks the information to do it leaves the unattended queue
     def test_a_decision_ask_takes_the_bead_out_of_the_pick_queue(self):
         with mock.patch.object(tl, "show", return_value=dict(BEAD, labels=["auto", "lane:sim"])):
-            rc, _ = self.run_engine({"plan": [dict(PLAN, question="Build dreams now or park?")]}, pick_label="auto")
+            rc, _ = self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Build dreams now or park?")]}, pick_label="auto")
         self.assertEqual(rc, 2)
         self.assertIn(("label", "remove", "t-1", "auto"), self.bd_calls)
         self.assertIn(("label", "add", "t-1", "needs-info"), self.bd_calls)
@@ -2333,7 +2333,7 @@ class EngineTest(unittest.TestCase):
 
     def test_the_label_swap_does_not_answer_the_ask(self):
         with mock.patch.object(tl, "show", return_value=dict(BEAD, labels=["auto"])):
-            self.run_engine({"plan": [dict(PLAN, question="Build dreams now or park?")]}, pick_label="auto")
+            self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Build dreams now or park?")]}, pick_label="auto")
         with mock.patch.object(tl, "show", return_value=dict(BEAD, labels=["needs-info"])):
             rc, s = self.run_engine({}, pick_label="auto")
         self.assertEqual(s.calls, [])
@@ -2341,7 +2341,7 @@ class EngineTest(unittest.TestCase):
 
     def test_no_pick_label_configured_touches_no_labels(self):
         with mock.patch.object(tl, "show", return_value=dict(BEAD, labels=["auto"])):
-            self.run_engine({"plan": [dict(PLAN, question="Build dreams now or park?")]})
+            self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Build dreams now or park?")]})
         self.assertFalse(any(c[:1] == ("label",) for c in self.bd_calls))
 
     @POSIX_CHECK
@@ -2349,7 +2349,7 @@ class EngineTest(unittest.TestCase):
         out = Path(self.tmp.name, "pushed")
         (tl.config_dir()).mkdir(parents=True, exist_ok=True)
         (tl.config_dir() / "notify").write_text('echo "$TL_ASK_KIND $TL_ASK_BEAD $TL_ASK_TEXT" > %s' % out)
-        self.run_engine({"plan": [dict(PLAN, question="Old format or new?")]})
+        self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
         self.assertEqual(Path(self.ask()["repo"]).resolve(), self.wt.resolve())
         for _ in range(50):
             if out.exists():
@@ -2369,7 +2369,7 @@ class EngineTest(unittest.TestCase):
         self.assertIsNone(self.ask())
 
     def test_an_open_ask_with_an_unchanged_bead_waits_without_any_ai_step(self):
-        self.run_engine({"plan": [dict(PLAN, question="Old format or new?")]})
+        self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
         blocks = len(self.blocked)
         rc, s = self.run_engine({})
         self.assertEqual(rc, 2)
@@ -2383,7 +2383,7 @@ class EngineTest(unittest.TestCase):
 
     def test_an_ask_with_an_answer_filed_on_it_starts_the_run_and_is_consumed(self):
         """tl-gy4 (lifesim-hclf.32-2): answered at 19:00, status still open, the bead unchanged: run-task said 'waiting for the answer'."""
-        self.run_engine({"plan": [dict(PLAN, question="Old format or new?")]})
+        self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
         a = self.ask()
         a["answer"], a["answer_t"] = "Old format.", time.time()
         (tl.config_dir() / "asks" / ("%s.json" % a["bead"])).write_text(json.dumps(a))
@@ -2396,7 +2396,7 @@ class EngineTest(unittest.TestCase):
         self.assertIn("owner's answer is filed on it", self.eng.log_path.read_text())
 
     def test_a_parked_ask_still_waits_for_the_owner(self):
-        self.run_engine({"plan": [dict(PLAN, question="Old format or new?")]})
+        self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
         a = self.ask()
         a["status"] = "parked"
         (tl.config_dir() / "asks" / ("%s.json" % a["bead"])).write_text(json.dumps(a))
@@ -2405,7 +2405,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(self.ask()["status"], "parked")
 
     def test_an_owner_comment_answers_the_ask_and_the_bead_goes_on(self):
-        self.run_engine({"plan": [dict(PLAN, question="Old format or new?")]})
+        self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
         with mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Old format."}]):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
@@ -2418,7 +2418,7 @@ class EngineTest(unittest.TestCase):
                {"label": "", "cost": "x", "answer": "dropped: no label", "recommended": False}]
 
     def test_a_decision_ask_carries_the_options_the_planner_gave(self):
-        rc, _ = self.run_engine({"plan": [dict(PLAN, question="Build now or park?", options=self.CHOICES)]})
+        rc, _ = self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Build now or park?", options=self.CHOICES)]})
         self.assertEqual(rc, 2)
         THEN = "The bead runs again with this as its instruction."
         self.assertEqual(self.ask()["options"], [
@@ -2434,7 +2434,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(len(self.ask()["options"]), 2)
 
     def test_a_decision_without_options_gets_the_text_box_only(self):
-        self.run_engine({"plan": [dict(PLAN, question="Old format or new?")]})
+        self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
         self.assertEqual(self.ask()["options"], [])
 
     def test_the_decision_schemas_require_options(self):
@@ -2887,7 +2887,7 @@ class EngineTest(unittest.TestCase):
         self.assertIn("bd refused to close", log.read_text())
 
     def test_owner_question_blocks_with_the_question(self):
-        rc, _ = self.run_engine({"plan": [dict(PLAN, question="Which format, A or B?")]})
+        rc, _ = self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Which format, A or B?")]})
         self.assertEqual(rc, 2)
         self.assertIn("Which format, A or B?", self.blocked[0])
         self.assertFalse(self.closed)
@@ -3468,13 +3468,13 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(s.calls[0][0], "worker")
 
     def test_the_decided_path_planner_call_counts_toward_the_cap(self):
-        q = dict(PLAN, question="Which?", decided="the accepted requirement says A")
+        q = dict(PLAN, irreversible="push_shared", question="Which?", decided="the accepted requirement says A")
         rc, s = self.run_engine({"plan": [q, PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(self.eng.planned, 2)
 
     def test_a_plan_with_a_question_or_too_many_stages_is_not_checkpointed_early(self):
-        self.run_engine({"plan": [dict(PLAN, question="Old format or new?")]})
+        self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
         self.assertIsNone(self.checkpoint())
 
     def test_checks_that_cannot_run_go_back_to_the_same_planner_thread_once_and_do_not_count(self):
@@ -4050,7 +4050,7 @@ class Outcome(unittest.TestCase):
             self.assertIn(k, r)
 
     def test_an_owner_ask_is_parked(self):
-        self.run_engine({"plan": [dict(PLAN, question="Old format or new?")]})
+        self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
         r = self.eng.result()
         self.assertEqual((r["outcome"], r["asked"]), ("parked", True))
 

@@ -28,7 +28,8 @@ each stage has its files and its checks. Budget: about 12 tool calls. Then plan.
   machine the factory has, the engine or tool the project uses now, an input the task says someone provides. One you could not
   find is listed in unresolved (what, kind, path: the file it should be at, or empty). If the rest of the task can go on
   without it, defer the criteria that need it instead (a case with proved_by leftover, and a leftover) and do not list it.
-  A listed input that no case defers makes the engine ask the owner now, before any work is done.
+  A listed input is never an ask: the engine records it as an Assumption and the plan goes on. Material outside the
+  worktree (a study, a file under ~/ or Drop) is missing material: plan from the bead text and the repo.
 - Each case says in proved_by how its criterion is proved, and via names what proves it: check (a command; the usual
   case), stage (its stage's own checks; via = the stage number), leftover (deferred to a follow-up bead the engine files:
   also list it in leftovers; via = that leftover's title; check empty) or engine_step (the engine does it itself: files the
@@ -45,8 +46,11 @@ each stage has its files and its checks. Budget: about 12 tool calls. Then plan.
   anything outside the worktree; the writers cannot run bd, so such a check fails whatever they do. Follow-up work the
   task wants filed (a new bead, a later task) goes in leftovers, each a title and why: the engine files them itself,
   and no check or case asks for them.
-- question: empty, unless the task cannot be done without a decision only the owner can make (product direction,
-  scope, a hard-to-reverse architecture choice). Decide technical choices yourself. If you ask, write the question
-  so it can be answered from a phone: what you found, the decision, 2-3 options with costs, your recommendation.
+- question: empty. Assume instead of asking: decide what you can, plan on it, and say it in the summary. Only a step
+  that cannot be undone may ask: set irreversible to push_shared (a push to a shared branch), delete_outside (a
+  deletion outside the worktree), close_epic (closing an epic) or spend_money, and write the question so it can be
+  answered from a phone: what you found, the decision, 2-3 options with costs, your recommendation. A question
+  without irreversible is dropped by the engine and recorded as an Assumption. Missing reference material, a missing
+  file, an unclear scope, a product or architecture choice are all reversible: assume.
 options: with a question, 2-4 answers the owner can click, each a short label, a one-line cost, the exact answer text the next run will read, and recommended (true for exactly one: yours); empty with no question.
 A change that contradicts an accepted requirement (in the task, its acceptance criteria, or a requirement it cites) is never the owner's question: the fix is to meet the requirement. Nor is a test, check or scenario at odds with an accepted requirement: that is no conflict between two requirements. A test that contradicts an accepted requirement is fixed to match the requirement, never weakened or deleted to make the code pass. An owner's answer in the task's comments decides as an accepted requirement does. decided: the accepted requirement, quoted, that already answers your question (the engine then sends the stage back to meet it instead of asking the owner); empty when you have no question, when two accepted requirements conflict, or when no requirement decides it yet (those are the owner's).

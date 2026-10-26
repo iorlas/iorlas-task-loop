@@ -26,6 +26,7 @@ import time
 import uuid
 from pathlib import Path
 
+import beadlint
 import engine
 import tl
 from lanes import call as lcall
@@ -181,6 +182,8 @@ def queue(repo):
             rank = min([order.index(e) for e in ups if e in order] or [len(order)])
             if rank == len(order) and cfg.get("epic_only"):
                 why = "under no epic in epic_order (epic_only)"
+        if not why:
+            why = beadlint.why(b, str(repo))
         if why:
             skipped.append((b["id"], why))
         else:

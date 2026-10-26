@@ -621,12 +621,12 @@ class VisualWork(StagesTest):
         self.assertNotIn("it reads well", s.prompts[2])
         self.assertEqual(self.eng.case_checks(), [])
 
-    def test_the_planner_is_told_the_classes_and_asks_for_a_missing_reference(self):
+    def test_the_planner_is_told_the_classes_and_to_assume_a_missing_reference(self):
         rc, s = self.go({"plan": [PLAN], "write": [self.write()], "look": [self.judged()], "review": [CLEAN]})
         plan_prompt = s.prompts[0]
         self.assertIn("look-objective:", plan_prompt)
         self.assertIn("Never invent one as a check", plan_prompt)
-        self.assertIn("ask that as your question", plan_prompt)  # no reference image in the task
+        self.assertIn("assume the look", plan_prompt)  # no reference image in the task
 
     def test_a_visual_repo_without_a_shot_table_is_told_nothing_of_classes(self):
         rc, s = self.go({"plan": [PLAN], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]}, table="")
@@ -937,19 +937,51 @@ class Inputs(StagesTest):
 
     WIN = {"what": "a Windows PC to run the play test on", "kind": "platform", "path": ""}
 
-    def test_a_missing_input_no_case_defers_is_a_decision_ask_before_any_work(self):
-        rc, s = self.run_engine({"plan": [dict(PLAN, unresolved=[self.WIN])]})
-        self.assertEqual(rc, 2)
-        self.assertEqual([c[0] for c in s.calls], ["planner"])  # no writer
-        a = self.ask()
-        self.assertEqual(a["kind"], "decision")
-        self.assertIn("Windows PC", a["question"])
-        self.assertEqual([o["label"] for o in a["options"]], ["Defer that work", "I will provide them", "Drop those criteria"])
-        self.assertEqual([o.get("recommended") for o in a["options"]].count(True), 1)
+    def test_a_missing_input_no_case_defers_is_an_assumption_not_an_ask(self):
+        """tl-ntp: tl-7y6.6.15 stopped on study files no worktree can read; now the plan goes on and records it."""
+        rc, s = self.run_engine({"plan": [dict(PLAN, unresolved=[self.WIN])], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertIsNone(self.ask())
+        self.assertEqual([c[0] for c in s.calls][:2], ["planner", "worker"])
+        plan = json.loads((self.eng.run_dir / "plan.json").read_text())
+        self.assertEqual(plan["assumptions"], [{"step": "plan", "text": plan["assumptions"][0]["text"], "reversible": True}])
+        self.assertIn("Windows PC", plan["assumptions"][0]["text"])
+        self.assertIn("Assumption: ", self.eng.log_path.read_text())
+        self.assertIn("Windows PC", s.prompts[1])  # the writer reads the plan, assumptions included
 
     def ask(self):
         p = tl.config_dir() / "asks" / "t-1.json"
         return json.loads(p.read_text()) if p.exists() else None
+
+    def test_a_plan_question_about_missing_inputs_proceeds_to_write_with_an_assumption(self):
+        q = dict(PLAN, question="84-self-hosting.md is outside the worktree: which draft do I follow?",
+                 options=[{"label": "Wait", "cost": "slow", "answer": "wait", "recommended": True}])
+        rc, s = self.run_engine({"plan": [q], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertIsNone(self.ask())
+        plan = json.loads((self.eng.run_dir / "plan.json").read_text())
+        self.assertEqual((plan["question"], plan["options"]), ("", []))
+        self.assertIn("84-self-hosting.md", plan["assumptions"][0]["text"])
+        self.assertTrue(plan["assumptions"][0]["reversible"])
+
+    def test_a_reversible_question_with_no_stages_sends_the_planner_back_once_to_plan_on_it(self):
+        q = dict(PLAN, stages=[], cases=[], question="Which file do I follow?")
+        rc, s = self.run_engine({"plan": [q, PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[0] for c in s.calls][:2], ["planner", "planner"])
+        self.assertIn("Nothing in that question cannot be undone", s.prompts[1])
+        plan = json.loads((self.eng.run_dir / "plan.json").read_text())
+        self.assertIn("Which file do I follow?", plan["assumptions"][0]["text"])
+
+    def test_an_irreversible_step_still_reaches_the_ask_path(self):
+        self.assertEqual(sorted(engine.IRREVERSIBLE), ["close_epic", "delete_outside", "push_shared", "spend_money"])
+        q = dict(PLAN, question="Push the rewritten history to main?", irreversible="push_shared",
+                 options=[{"label": "Push", "cost": "shared", "answer": "push", "recommended": True},
+                          {"label": "Hold", "cost": "slow", "answer": "hold", "recommended": False}])
+        rc, s = self.run_engine({"plan": [q]})
+        self.assertEqual(rc, 2)
+        self.assertEqual([c[0] for c in s.calls], ["planner"])
+        self.assertIn("Push the rewritten history", self.ask()["question"])
 
     def test_an_input_a_case_defers_is_no_question(self):
         case = {"criterion": "The play test passes on the Windows PC", "check": "", "proved_by": "leftover",

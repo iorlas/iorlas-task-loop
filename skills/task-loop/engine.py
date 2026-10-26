@@ -91,6 +91,10 @@ DEFAULTS = {
 # ---- output contracts -----------------------------------------------------------------------------------------------
 
 FLAKE_DAYS = 14     # how long a writer-reported flaky test stays in the shared notes
+# tl-ntp (owner ruling 82 item 1): agents assume and record an Assumption; only a step that cannot be undone may ask the owner.
+IRREVERSIBLE = {"push_shared": "a push to a shared branch", "delete_outside": "a deletion outside the worktree",
+                "close_epic": "closing an epic", "spend_money": "spending money"}
+ASSUMPTION = "Assumption: "  # the stable prefix of an assumption line (plan comment, plan summary)
 INPUT_KINDS = ("file", "platform", "object", "engine", "tool", "other")
 CAUSE_CLASSES = ("engine", "prompt", "delegate", "repo_profile", "bead", "sandbox", "other")  # tl-05s
 PROVED_BY = ("check", "stage", "leftover", "engine_step")  # tl-bxk.13.16.1: how a plan criterion is proved (the ledger)
@@ -321,6 +325,7 @@ SCHEMAS = {
                                                       "required": ["what", "check"],
                                                       "properties": {"what": S_STR, "check": S_STR}}},
                  "question": S_STR, "options": OPTIONS,
+                 "irreversible": {"type": "string", "enum": [""] + list(IRREVERSIBLE)},  # optional (tl-ntp): what the question's step cannot undo
                  "unresolved": {"type": "array", "items": {  # optional (tl-bxk.13.16.3): inputs the criteria need that were not found
                      "type": "object", "additionalProperties": False, "required": ["what", "kind", "path"],
                      "properties": {"what": S_STR, "kind": {"type": "string", "enum": list(INPUT_KINDS)}, "path": S_STR}}},
@@ -672,6 +677,7 @@ class Engine:
         self.budget_warned = set()
         self.writer = {}  # backend -> thread/session id, so later rounds of a task resume the same writer
         self.writer_family = None  # the family of the last write: the verifier comes from another one when it can
+        self.plan_assumed = False  # tl-ntp: the planner was sent back once to plan on assumptions
         self.plan_decided = False  # the planner was sent back once with the requirement that answers its question
         self.writer_fallback = False  # the writer's thread is a fallback: delegate's answer said so, or it went on
                                       # as a new thread after a lane_out the engine saw
@@ -2979,6 +2985,22 @@ class Engine:
             self.plan_log.append({"mode": "plan", "why": "an accepted requirement decides its question"})
             data = self.ask_plan(prompt + DECIDED_TEXT % (q, decided) + PLAN_DECIDED_TEXT, step, "plan to meet it", "checks_back")
         data = json.loads(json.dumps(data))  # the engine's own copy: cases are added to it as the task runs
+        if data["question"].strip() and data.get("irreversible") not in IRREVERSIBLE:
+            # tl-ntp: a question about anything that can be undone is an assumption, not an ask (82 item 1)
+            asked = data["question"].strip()
+            data = self.assume_question(data)
+            if not data["stages"] and not data.get("leftovers") and not self.leftovers and not self.plan_assumed:
+                self.plan_assumed = True
+                self.warn("the planner asked a question about a step that can be undone, sent back: %s" % asked[:300])
+                self.outcome_of("sent back", "its question is about a step that can be undone")
+                self.transition(step, "planner_assumed", "a question about a reversible step is an assumption: %s" % asked[:200])
+                self.planned += 1
+                self.plan_log.append({"mode": "plan", "why": "its question is about a step that can be undone"})
+                prior = data["assumptions"]
+                data = json.loads(json.dumps(self.ask_plan(prompt + ASSUME_TEXT % asked, step, "plan on assumptions", "checks_back")))
+                data["assumptions"] = prior + data.get("assumptions", [])
+                if data["question"].strip() and data.get("irreversible") not in IRREVERSIBLE:
+                    data = self.assume_question(data)
         if self.plan_fits(data):
             # a SIGTERM from here on resumes with this plan (d5f.38 lost a finished 1.1M plan before its checkpoint)
             self.plan_data = data
@@ -3019,6 +3041,7 @@ class Engine:
                                                           ", ".join(s["files"]), "; ".join(s["checks"]))
                   for n, s in enumerate(data["stages"])]
         lines += ["Risk: %s → %s" % (r["what"], r["check"]) for r in data["risks"]]
+        lines += [ASSUMPTION + a["text"] for a in data.get("assumptions") or []]
         self.comment("\n".join(lines))
         (self.run_dir / "plan.json").write_text(json.dumps(data, indent=1))
         self.export_brief()
@@ -4231,12 +4254,22 @@ class Engine:
                 return ""
         return v[:2000]
 
+    def assume(self, data, text):
+        """tl-ntp: record an Assumption on the plan (typed: step, text, reversible) and keep going."""
+        data.setdefault("assumptions", []).append({"step": "plan", "text": " ".join(text.split())[:600], "reversible": True})
+
+    def assume_question(self, data):
+        """A plan question about a step that can be undone becomes an Assumption; the plan goes on without the ask."""
+        q = " ".join(data["question"].split())
+        self.assume(data, "no owner answer; planned on the bead text and the repo. Open question: " + q)
+        data["question"], data["options"], data["irreversible"] = "", [], ""
+        self.log("note", ASSUMPTION + q[:300])
+        return data
+
     def check_unresolved(self, data):
-        """tl-bxk.13.16.3: inputs the planner could not find. A file that is there after all drops out; one a case defers (proved_by
-        leftover) is a follow-up; the rest is the owner's to decide now, in minute 4, not after three rounds (lifesim-gfr.38 a
-        Windows PC, d5f.61 a sink, fdyo a Godot half, v5z files that are not on the machine)."""
-        if (self.answered or {}).get("kind") == "decision":  # the owner just chose what to do about it
-            return
+        """tl-bxk.13.16.3, tl-ntp: inputs the planner could not find. A file that is there after all drops out; one a case defers
+        (proved_by leftover) is a follow-up; the rest is an Assumption in the plan: missing reference material is not a reason to
+        ask the owner (tl-7y6.6.15 stopped on study files no worktree can read)."""
         gone, open_ = [], []
         deferred = [word_set("%s %s" % (c["criterion"], c.get("via") or "")) for c in data.get("cases") or [] if c.get("proved_by") == "leftover"]
         deferred += [word_set(lo["title"] + " " + lo["why"]) for lo in data.get("leftovers") or []]
@@ -4250,21 +4283,10 @@ class Engine:
             open_.append(u)
         if gone:
             self.log("note", "inputs not found, their criteria deferred: %s" % "; ".join(u["what"][:100] for u in gone))
-        if not open_:
-            return
-        lines = "\n".join("- %s (%s%s)" % (u["what"], u["kind"], ", expected at " + u["path"] if u.get("path") else "") for u in open_)
-        self.outcome_of("asks", "%d input%s missing" % (len(open_), "" if len(open_) == 1 else "s"))
-        raise Blocked("owner decision needed",
-                      ("The task needs inputs this factory does not have:\n%s\n%s Choose: defer the work that needs them to a follow-up "
-                       "bead and do the rest; provide them (say where); or drop those criteria from the task.") % (
-                          lines, "Work already done stays." if self.done else "Nothing was started."),
-                      [{"label": "Defer that work", "cost": "the rest of the task is done now; a follow-up bead holds the deferred part",
-                        "answer": "Defer the criteria that need: %s. Plan and do the rest; file a follow-up bead for the deferred part." % "; ".join(
-                            u["what"] for u in open_), "recommended": True},
-                       {"label": "I will provide them", "cost": "the bead waits until they are there",
-                        "answer": "The inputs are now available: %s. Plan again." % "; ".join(u["what"] for u in open_), "recommended": False},
-                       {"label": "Drop those criteria", "cost": "the task is smaller than written",
-                        "answer": "Drop the criteria that need: %s. Plan the rest." % "; ".join(u["what"] for u in open_), "recommended": False}])
+        for u in open_:
+            self.assume(data, "%s (%s%s) is not available; planned from the bead text and the repo" % (
+                u["what"], u["kind"], ", expected at " + u["path"] if u.get("path") else ""))
+            self.log("note", ASSUMPTION + u["what"][:300])
 
     def references_text(self):
         """What the planner is told the task already has to look at: image files its text names, and the last landed shots."""
@@ -4276,7 +4298,7 @@ class Engine:
         before = sorted(Path(self.wt, dest).glob("*/*.png"))[-6:] if dest and Path(self.wt, dest).is_dir() else []
         if not (found or before):
             return ("No reference image is in the task or under the repo's look reviews. If the task does not say what it should "
-                    "look like (a mockup, a target, a screen to match), ask that as your question and plan nothing on a guess.")
+                    "look like (a mockup, a target, a screen to match), plan from the bead text and assume the look; say the assumption in the summary.")
         return "Reference images the task has: %s." % ", ".join(found + [str(b.relative_to(self.wt)) for b in before])
 
     def before_shot(self, name):
@@ -5686,6 +5708,8 @@ RULES_MAX = 3 * 1024          # a worker_rules file is inlined once, in the plan
 PLAN_BRIEF_KB = 12            # the planner's whole brief should stay under this
 DECIDED_TEXT = ("\nYou asked: %s\nAn accepted requirement already decides it: %s\nMeet that requirement: change the "
                 "work, never the requirement.\n")
+ASSUME_TEXT = ("\nYou asked: %s\nNothing in that question cannot be undone, so the engine does not ask the owner: it records it as an "
+               "Assumption. Plan the work on your best assumption now, with at least one stage.\n")
 PLAN_DECIDED_TEXT = "Plan the work that meets it; ask nothing it already answers.\n"
 
 PLAN_PROMPT = COMMON + """
@@ -5718,7 +5742,8 @@ each stage has its files and its checks. Budget: about 12 tool calls. Then plan.
   machine the factory has, the engine or tool the project uses now, an input the task says someone provides. One you could not
   find is listed in unresolved (what, kind, path: the file it should be at, or empty). If the rest of the task can go on
   without it, defer the criteria that need it instead (a case with proved_by leftover, and a leftover) and do not list it.
-  A listed input that no case defers makes the engine ask the owner now, before any work is done.
+  A listed input is never an ask: the engine records it as an Assumption and the plan goes on. Material outside the
+  worktree (a study, a file under ~/ or Drop) is missing material: plan from the bead text and the repo.
 - Each case says in proved_by how its criterion is proved, and via names what proves it: check (a command; the usual
   case), stage (its stage's own checks; via = the stage number), leftover (deferred to a follow-up bead the engine files:
   also list it in leftovers; via = that leftover's title; check empty) or engine_step (the engine does it itself: files the
@@ -5735,9 +5760,12 @@ each stage has its files and its checks. Budget: about 12 tool calls. Then plan.
   anything outside the worktree; the writers cannot run bd, so such a check fails whatever they do. Follow-up work the
   task wants filed (a new bead, a later task) goes in leftovers, each a title and why: the engine files them itself,
   and no check or case asks for them.
-- question: empty, unless the task cannot be done without a decision only the owner can make (product direction,
-  scope, a hard-to-reverse architecture choice). Decide technical choices yourself. If you ask, write the question
-  so it can be answered from a phone: what you found, the decision, 2-3 options with costs, your recommendation.
+- question: empty. Assume instead of asking: decide what you can, plan on it, and say it in the summary. Only a step
+  that cannot be undone may ask: set irreversible to push_shared (a push to a shared branch), delete_outside (a
+  deletion outside the worktree), close_epic (closing an epic) or spend_money, and write the question so it can be
+  answered from a phone: what you found, the decision, 2-3 options with costs, your recommendation. A question
+  without irreversible is dropped by the engine and recorded as an Assumption. Missing reference material, a missing
+  file, an unclear scope, a product or architecture choice are all reversible: assume.
 """ + OPTIONS_RULE + "\n" + DECIDED_RULE
 
 WRITE_PROMPT = """You are the writer for one stage of a task, in an unattended engine. Nobody is watching.

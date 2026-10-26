@@ -155,6 +155,17 @@ class Queue(Base):
         self.assertEqual(dict(skipped), {"x-1": "label owner-taste", "x-3": "an epic", "x-4": "a slot",
                                          "x-5": "label needs-info"})
 
+    def test_a_bead_citing_material_outside_the_repo_is_skipped_as_needing_inlined_facts(self):
+        """tl-f52: the Drop study that no worktree can read stopped tl-7y6.6.15 after 4 minutes."""
+        cites = dict(bead("x-1"), description="Follow section 2 of ~/Documents/Drop/arch-study-1025/84-self-hosting.md")
+        clean = dict(bead("x-2"), description="Edit skills/task-loop/engine.py; see docs/design/stages.md")
+        escaped = dict(bead("x-3", labels=["facts-inline"]), description="Per study 84 s.2 (facts below): do X")
+        self.fake(cites, clean, escaped)
+        ranked, skipped = loop.queue(str(self.repo))
+        self.assertEqual([b["id"] for b, _ in ranked], ["x-2", "x-3"])
+        self.assertEqual([i for i, _ in skipped], ["x-1"])
+        self.assertTrue(skipped[0][1].startswith("needs inlined facts"), skipped)
+
     def test_priority_comes_before_epic_order(self):
         self.config(epic_order=["e-1", "e-2"])
         self.fake(bead("x-1", 2, parent="e-1"), bead("x-2", 1, parent="e-2"))

@@ -210,3 +210,18 @@ class DoctorSource(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DoctorBeads(unittest.TestCase):
+    """tl-f52: doctor lists the open beads whose text names material no worktree holds."""
+
+    def test_doctor_lists_the_offenders_and_not_the_clean_or_escaped(self):
+        beads = [{"id": "x-1", "description": "see ~/Documents/Drop/arch-study-1025/84-self-hosting.md"},
+                 {"id": "x-2", "description": "change engine.py"},
+                 {"id": "x-3", "description": "study 84 s.2: facts inline", "labels": ["facts-inline"]},
+                 {"id": "x-4", "acceptance_criteria": "matches 79-test-impact-and-land-gate.md"},
+                 {"id": "x-5", "issue_type": "epic", "description": "study 49"}]
+        with mock.patch.object(tl, "bd", return_value=mock.Mock(stdout=json.dumps(beads))):
+            out = tl.bead_lint_warnings("/work/repo")
+        self.assertEqual([w.split(":")[0] for w in out], ["bead x-1", "bead x-4"])
+        self.assertTrue(all("needs inlined facts" in w for w in out))

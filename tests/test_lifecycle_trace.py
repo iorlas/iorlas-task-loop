@@ -180,7 +180,7 @@ class TraceTelemetry(unittest.TestCase):
         self.assertEqual(run["end"]["outcome"], "landed")
 
     def test_a_decision_ask_keeps_its_reason_and_fingerprint(self):
-        rc, _ = self.run_engine({"plan": [dict(PLAN, question="Old format or new?")]})
+        rc, _ = self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
         self.assertEqual(rc, 2)
         row = self.assert_row("blocked")
         self.assertIn("owner decision needed", row["why"])

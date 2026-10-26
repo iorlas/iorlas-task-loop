@@ -110,7 +110,7 @@ class TraceRecords(unittest.TestCase):
         self.assertEqual(dict(self.steps())[5], "replan")
 
     def test_a_decision_asks_the_owner(self):
-        rc, _ = self.run_engine({"plan": [dict(PLAN, question="Old format or new?")]})
+        rc, _ = self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
         self.assertEqual(rc, 2)
         self.assertIn((2, "ask", "decision"), self.transitions())
         ends = {r["id"]: r for r in records(self.eng, "end")}
@@ -148,7 +148,7 @@ class TraceRecords(unittest.TestCase):
         self.assertEqual({r["id"]: r for r in records(self.eng, "end")}[6]["outcome"], "gate red")
 
     def test_the_trace_says_why_each_run_started_and_which_run_came_before(self):
-        rc, _ = self.run_engine({"plan": [dict(PLAN, question="Old format or new?")]})
+        rc, _ = self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
         first = self.eng.log_path.stem
         time.sleep(1.05)  # a run's name is its start second
         with te.mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Old format."}]):

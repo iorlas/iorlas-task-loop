@@ -803,7 +803,7 @@ function renderRoadmap(){const d=R.d;if(!d)return;
   html+=doneHtml(d);
   html+=`<div class="rsec">Up next <small>the order <code>tl next</code> takes. A branch is a bead that waits on the one above it.${d.loops_waiting?` ${d.loops_waiting} loop${d.loops_waiting>1?'s':''} wait${d.loops_waiting>1?'':'s'} for a free slot.`:''}</small></div>`;
   html+=d.queue.length?queueHtml(d.queue,d.repo):'<div class="list"><div class="empty"><b>Nothing ready</b>No open bead the loop may take.</div></div>';
-  if(d.held&&d.held.length)html+=`<details class="rheld" id="rheld"${R.held?' open':''}><summary><div class="rsec">Held back <small>${d.held_total} ready but skipped for now: another bead holds their area</small></div></summary>${queueHtml(d.held,d.repo,true)}</details>`;
+  if(d.held&&d.held.length)html+=`<details class="rheld" id="rheld"${R.held?' open':''}><summary><div class="rsec">Held back <small>${d.held_total} ready but skipped for now: the reason is on each row (a busy area, or a bead that needs inlined facts)</small></div></summary>${queueHtml(d.held,d.repo,true)}</details>`;
   if(paint($('main'),'main',html))tip.hidden=true}
 document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-win]');if(b&&S.view=='roadmap'){R.win=b.dataset.win;render()}});
 document.addEventListener('change',e=>{if(e.target.id=='rrepo'){S.repo=e.target.value;R.d=null;history.replaceState(null,'','#roadmap&repo='+encodeURIComponent(S.repo));S.gen++;poll()}});
