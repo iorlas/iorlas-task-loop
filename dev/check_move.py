@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check that a change only moved code: `check_move.py BASE HEAD [--rename self=eng]`.
+"""Check that a change only moved code: `python3 dev/check_move.py BASE HEAD [--rename self=eng]`.
 
 Parses every changed .py at both revs. Each function/class removed from a
 file must exist with an identical ast.dump (decorators, docstring included)

@@ -5,7 +5,7 @@ import tempfile
 import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TOOL = os.path.join(ROOT, "tools", "check_move.py")
+TOOL = os.path.join(ROOT, "dev", "check_move.py")
 
 FUNC = 'def area(self, w, h):\n    """Rectangle area."""\n    return self.scale * w * h\n'
 

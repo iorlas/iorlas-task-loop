@@ -1,13 +1,13 @@
 # Shadow test selection
 
-`tools/select_tests.py` prints the tests a change should run. It is **shadow-only**: no
+`dev/select_tests.py` prints the tests a change should run. It is **shadow-only**: no
 gate, CI workflow, release command, hook or engine path calls it. The gate stays
 `python3 -m unittest discover -s tests` in `.task-loop.json`.
 
 ## Selector
 
 ```sh
-python3 tools/select_tests.py --base origin/main --list
+python3 dev/select_tests.py --base origin/main --list
 ```
 
 It reads only local Git state for the diff: staged, unstaged, untracked, deleted and renamed
@@ -16,15 +16,15 @@ paths. Global/system Git config and external diff helpers are disabled, and no n
 
 Paths under `skills/task-loop/<feature>/` and `tests/<feature>/` map to that feature through
 `tests/feature_tests.py`; features that depend on a changed one are added from
-`tests/test_layers.py`. Test modules that are not assigned to a feature are always kept
-because they are integration coverage. Any unmapped path, Core, `tools/`, `.task-loop.json`,
+`tests/test_rules.py`. Test modules that are not assigned to a feature are always kept
+because they are integration coverage. Any unmapped path, Core, `dev/`, `.task-loop.json`,
 a `plugin.json`, shared fixtures, a flat hub module, or an incomplete mapping selects the
 whole suite. The output is sorted unique unittest ids and no test body runs.
 
 ## Replay checker
 
 ```sh
-python3 tools/replay_select_tests.py RECORDS.json [--json]
+python3 dev/replay_select_tests.py RECORDS.json [--json]
 ```
 
 `RECORDS.json` is an explicit worktree-local file. Its resolved path must stay inside this
@@ -68,7 +68,7 @@ Every failure and error id must be in `inventory`. Duplicate landing ids, orders
 SHAs (compared case-insensitively), duplicate inventory ids, and inventories that omit an
 observed outcome are rejected.
 
-For each landing the checker recomputes selection with `tools/select_tests.py` and reports:
+For each landing the checker recomputes selection with `dev/select_tests.py` and reports:
 
 - the selected count and share of the full inventory;
 - every recorded failure or error that the selection missed;

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Replay the shadow test selection over explicit worktree-local landing records; read-only and offline.
 
-`python3 tools/replay_select_tests.py RECORDS.json [--json]` validates exactly 50 landings,
-recomputes each selected set through tools/select_tests.py against that landing's recorded
+`python3 dev/replay_select_tests.py RECORDS.json [--json]` validates exactly 50 landings,
+recomputes each selected set through dev/select_tests.py against that landing's recorded
 full test inventory, and reports every landing's selected share and missed failures. The
 median selected share is printed for the window. Any missed failure fails the replay.
 
@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "tools"))
+sys.path.insert(0, str(ROOT / "dev"))
 import select_tests  # noqa: E402
 
 WINDOW = 50

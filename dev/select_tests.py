@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Print a conservative test selection for uncommitted changes; never run it and never touch the gate.
 
-`python3 tools/select_tests.py --base origin/main --list` reads local Git state, maps
+`python3 dev/select_tests.py --base origin/main --list` reads local Git state, maps
 `skills/task-loop/<feature>/` and `tests/<feature>/` paths through tests/feature_tests.py,
-adds the features that depend on the changed ones (tests/test_layers.py), and prints sorted
-unittest ids. Unmapped paths, Core, tools/, .task-loop.json, a plugin.json, shared fixtures,
+adds the features that depend on the changed ones (tests/test_rules.py), and prints sorted
+unittest ids. Unmapped paths, Core, dev/, .task-loop.json, a plugin.json, shared fixtures,
 and flat hub modules fall back to the whole suite. Test modules without a feature stay in
 every selection because they are integration coverage.
 
@@ -24,11 +24,11 @@ from pathlib import Path, PurePosixPath
 ROOT = Path(__file__).resolve().parents[1]
 TESTS = ROOT / "tests"
 FEATURE_TESTS = TESTS / "feature_tests.py"
-LAYER_TESTS = TESTS / "test_layers.py"
+LAYER_TESTS = TESTS / "test_rules.py"
 
 FULL = object()
-FULL_FILES = {".task-loop.json", "tests/test_layers.py", "release.py", "dev/release.py"}
-FULL_PREFIXES = ("tools/", "tests/fixtures/", "Core/", "core/")
+FULL_FILES = {".task-loop.json", "tests/test_rules.py", "release.py", "dev/release.py"}
+FULL_PREFIXES = ("dev/", "tests/fixtures/", "Core/", "core/")
 GIT_CONFIG = ("-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false",
               "-c", "core.excludesFile=" + os.devnull)
 GIT_ENV_DROP = ("GIT_EXTERNAL_DIFF", "GIT_DIFF_OPTS", "GIT_PAGER", "GIT_CONFIG", "GIT_CONFIG_PARAMETERS")
@@ -54,8 +54,8 @@ def feature_map(root=ROOT):
 
 
 def layer_edges(root=ROOT):
-    path = Path(root) / "tests" / "test_layers.py"
-    return {name: set(deps) for name, deps in _load("test_layers", path).ALLOWED.items()}
+    path = Path(root) / "tests" / "test_rules.py"
+    return {name: set(deps) for name, deps in _load("test_rules", path).ALLOWED.items()}
 
 
 def _walk(suite):

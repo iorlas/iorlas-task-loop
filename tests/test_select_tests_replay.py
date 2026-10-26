@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "tools"))
+sys.path.insert(0, str(ROOT / "dev"))
 import replay_select_tests as replay  # noqa: E402
 import select_tests  # noqa: E402
 
@@ -53,7 +53,7 @@ def write_records(path, landings):
 
 def run_checker(path, *extra):
     env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
-    return subprocess.run([sys.executable, str(ROOT / "tools" / "replay_select_tests.py"), str(path)]
+    return subprocess.run([sys.executable, str(ROOT / "dev" / "replay_select_tests.py"), str(path)]
                           + list(extra), cwd=str(ROOT), env=env, stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE, text=True)
 
