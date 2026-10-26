@@ -1,0 +1,157 @@
+"""One filled instance of every record in taskloop.contracts, for the round-trip, golden and completeness tests."""
+import datetime
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1])); import support.paths  # noqa: E402,F401
+from taskloop.contracts import ask, bead, config, delegate, events, ids, locks, loop, run, snapshots, trace  # noqa: E402
+from taskloop.contracts import log  # noqa: E402
+from taskloop.contracts.enums import AskKind, AskStatus, LockWhat, Outcome, WaitWhat, WhyCode  # noqa: E402
+
+T = 1793050200.5
+RUN = ids.RunId(ids.BeadId("tl-7y6.3.1"), datetime.datetime(2026, 10, 27, 0, 22, 39))
+TOK = trace.Tokens(in_=412000, cached=380000, out=5100)
+
+CALL = trace.AiCall(node="write", family="zai", ref="ses_e85d", status="done", role="worker", t=T, transcript="/t/x.jsonl",
+                    node_id=4, attempt=1, run_id="r1", resume=True, lane="ZAI_CODING_SUBSCRIPTION", model="glm-5.3", effort="high",
+                    host=False, cost=0.0, tokens=TOK, context_k=35, denied=[trace.Denied(tool="Bash", input={"command": "ls"})],
+                    prompt_chars=6598, secs=229.0)
+
+TRACE = trace.RunTrace(
+    run=RUN, bead="tl-7y6.3.1", repo_url="https://github.com/x/y.git", worktree="/w/.slots/s1", branch="task/tl-7y6.3.1",
+    coordinator_session="61ba34e7", started=T, ended=T + 600, outcome=Outcome.LANDED, why="", sha="abc123", repo_path="/w",
+    version="0.23.56", why_code=None, fingerprint="", cost=trace.Cost(usd=1.5), stats=trace.Stats(writes=2, rounds=3, nodes=7),
+    host=False, delegate_path="/d/route.py", log="/l.jsonl", stderr="/l.stderr", lanes={"codex": {"sees": ["the brief"]}},
+    sessions=[CALL], verified=[trace.Verified(what="w", kind="checkable", verdict="settled", evidence="e", why="y")],
+    write_rounds=[trace.WriteRound(write=1, round=1, node_id=3, ref="r", resumed="no", input_tokens=10, context_k=5)],
+    strays=["a.txt"], reflection=trace.Reflection(went_well=["a"], went_badly=[trace.WentBadly(what="w", cause="engine", session="s", evidence="e")],
+                                                  wasted=["w"], change=["c"]),
+    lane_notes=["n"], salvaged=False, backfilled=False, ask="tl-1-1", prev_run="tl-7y6.3.0-20261026-101010",
+    started_because="answer", faults=[trace.Fault(step="write", lane="L", exit=1, reason="hung", t=T)])
+
+OUTCOME = run.RunOutcome(outcome=Outcome.BLOCKED, bead="tl-1", run=str(RUN), why_code=WhyCode.STUCK, why="stuck", log="/l", minutes=3.5,
+                         rounds=2, tests_added=4, asked=True, retry_after=None, cost=0.25)
+LOCK = locks.EngineLock(pid=1789, bead="tl-1", started=T, by="tl-abc", pid_start=T - 5, slot="s1", slot_bead="slot-1",
+                        route=(10, T), workers=[(11, T), (12, T + 1)])
+CMD = {"gate": "just check", "pick_label": "auto", "gate_only": ["a", config.GateOnly(cmd="b", why="c")],
+       "visual_paths": config.VisualConfig(include=["a/**"]), "write_fresh_above_k": 150.0, "max_rounds": 4,
+       "checks": [config.CheckSpec(id="fmt", cmd="just fmt", group="static", when=["x/**"], inputs="a/**")]}
+
+
+def _log(cls, **kw):
+    return cls(t=T, **kw)
+
+
+def _ev(cls, **kw):
+    return cls(t=T, bead="tl-1", session="s", actor="tl-abc", repo="/r", host="h", **kw)
+
+
+LOG = {
+    "run_start": _log(log.RunStart, run=str(RUN), bead="tl-1", worktree="/w", slot="s1", prev_run="p", started_because="retry", ask="a"),
+    "step_start": _log(log.StepStart, id="n4", step="write", text="write: stage 2/2", stage=2, stages=2, round=1, write=1, fix=0),
+    "step_end": _log(log.StepEnd, id="n4", step="write", outcome="done", detail="", secs=231.0),
+    "call_start": _log(log.CallStart, id="c3", n=3, step="write", node="n4", role="worker", resume=True),
+    "call_end": _log(log.CallEnd, id="c3", status="done", reason=None, ref="ses", lane="L", model="m", effort="high", secs=229.0,
+                     tokens=TOK, cost=0.0),
+    "cmd_start": _log(log.CmdStart, id="k1", text="git status", cwd="/w"),
+    "cmd_end": _log(log.CmdEnd, id="k1", exit=0, secs=0.4, out="clean"),
+    "check_start": _log(log.CheckStart, id="k5.1", check="unittest", group="tests", cmd="python3 -m unittest", round=1,
+                        log="checks/01.log", timeout_s=1200.0),
+    "check_end": _log(log.CheckEnd, id="k5.1", exit=1, status="failed", tries=2, secs=43.4),
+    "gate_start": _log(log.GateStart, cmd="just check", log="g.log", tree="deadbeef"),
+    "gate_end": _log(log.GateEnd, exit=0, secs=2101.0, skipped=False),
+    "wait_start": _log(log.WaitStart, id="w1", what=WaitWhat.LANE, holder="", until=T + 60),
+    "wait_end": _log(log.WaitEnd, id="w1", secs=60.0, in_budget=True),
+    "lock": _log(log.Lock, what="land", holder="tl-7y6.1.2"),
+    "unlock": _log(log.Unlock, what="land", secs=240.0),
+    "vendor_error": _log(log.VendorError, node="n4", reason="lane_out", lane="L", model="m", until=T + 900, error="out"),
+    "kill": _log(log.Kill, what="check", why="idle", secs=600.0),
+    "transition": _log(log.Transition, from_id="n4", to="write", cause="gate_red", detail="red"),
+    "reload": _log(log.Reload, old="0.23.56", new="0.23.57", step="write"),
+    "warn": _log(log.Warn, text="careful"),
+    "note": _log(log.Note, text="fyi"),
+    "close": _log(log.Close, outcome=Outcome.LANDED, why_code=None, sha="abc"),
+}
+EVENTS = {
+    "claim": _ev(events.Claim, branch="task/tl-1", slot="s1", title="T", worktree="/w"),
+    "stage": _ev(events.Stage, step="write", text="writing"),
+    "slot_take": _ev(events.SlotTake, slot="s1", slot_bead="slot-1", ticket=3, worktree="/w"),
+    "slot_release": _ev(events.SlotRelease, slot="s1"),
+    "slot_setup": _ev(events.SlotSetup, exit=0, secs=12.5),
+    "slot_hold": _ev(events.SlotHold, until=T + 3600, why="screenshots"),
+    "slot_aside": _ev(events.SlotAside, held="tl-2", why="busy"),
+    "block": _ev(events.Block, why_code=WhyCode.NEEDS_HUMAN, why="needs a human"),
+    "close": _ev(events.BeadClosed, reason="done"),
+    "land": _ev(events.Land, sha="abc"),
+    "reload": _ev(events.CodeReloaded, code_dir="/c", new="2", old="1", who="tl-abc"),
+    "worktree_start": _ev(events.WorktreeStart, worktree="/w"),
+}
+LIVE = {
+    "start": delegate.LiveStart(t=T, harness="opencode", lane="L", model="m", effort="high", role="worker", pid=69272),
+    "cmd": delegate.LiveCmd(t=T, id="oc:2", text="python3 -m unittest", cwd="/w", prov=True),
+    "cmd_end": delegate.LiveCmdEnd(t=T, id="oc:2", exit=1, secs=43.4, out="FAILED"),
+    "tool": delegate.LiveTool(t=T, id="oc:1", text="read x", prov=True),
+    "tool_end": delegate.LiveToolEnd(t=T, id="oc:1", secs=0.6, out=""),
+    "msg": delegate.LiveMsg(t=T, text="fixing"),
+    "think": delegate.LiveThink(t=T, text="hm"),
+    "tokens": delegate.LiveTokens(t=T, in_=412000, cached=380000, out=5100),
+    "stall": delegate.LiveStall(t=T, secs=60.0),
+    "retry": delegate.LiveRetry(t=T, n=2, of=5, why="Reconnecting"),
+    "end": delegate.LiveEnd(t=T, status="done", secs=227.3, cost_usd=0.0),
+    "raw": delegate.LiveRaw(t=T, type="x"),
+}
+OTHERS = {
+    "RunTrace": TRACE,
+    "Ask": ask.Ask(id="tl-1-1", n=1, bead="tl-1", kind=AskKind.DECISION, question="Which?", run=str(RUN), t=T, status=AskStatus.ANSWERED,
+                   detail=ask.AskDetail(budget=[ask.BudgetLine(step="write", minutes=12.0, usd=1.0)],
+                                        replans=[ask.ReplanLine(n=1, why="scope")], text="d"),
+                   why_code=WhyCode.OWNER_DECISION, why="w", parks_at=T + 3600, brief_hash="b0c0",
+                   options=[ask.AskOption(label="Right", cost="free", answer="right", recommended=True)], repo="/r", title="t",
+                   answer=ask.AskAnswer(action="confirm", text="ok", t=T, by="denis"), answered=T + 5),
+    "RunOutcome": OUTCOME,
+    "LoopLogLine": run.LoopLogLine(outcome=OUTCOME, t=T, slot="s1", run_log="/rl"),
+    "Reexec": run.Reexec(run=str(RUN), bead="tl-1", from_version="0.23.56", to_version="0.23.57", step="write", owned=["a"], fallback="f",
+                         counters={"rounds": 2}),
+    "LoopState": loop.LoopState(pid=1789, started=T, t=T, repo="/r", version="0.23.56", code_dir="/c", actor="tl-abc", pid_start=T - 1,
+                                bead="tl-1", slot="s1", since=T, child=29307, run_log="/rl", worktree="/w",
+                                stop=loop.StopRequest(kind="after_current", by="denis", t=T),
+                                queue=[loop.QueueRow(bead="tl-2", prio=1, since=T, ahead=0,
+                                                     skip=loop.Skip(why="area busy", until=T + 60))], lanes_seen=["L"]),
+    "LoopCommand": loop.LoopCommand(action="stop_now", by="denis", t=T),
+    "Rest": loop.Rest(until=T + 600, why="network", t=T),
+    "BadVersions": loop.BadVersions(entries=[loop.BadVersion(version="0.2.0", why="selftest failed", t=T)]),
+    "EngineLock": LOCK,
+    "Ticket": locks.Ticket(pid=5, why="slot", since=T, prio=1, seq=3, pid_start=T),
+    "LockRecord": locks.LockRecord(what=LockWhat.LAND, holder="tl-1", pid=5, t=T),
+    "TasksSnapshot": snapshots.TasksSnapshot(t=T, repo="/r", beads=[snapshots.TaskRow(
+        bead="tl-1", title="T", status="in_progress", labels=["auto"], parent="tl-0", slot="s1", worktree="/w", lock=LOCK,
+        run=str(RUN), ask="tl-1-1", blocker="")]),
+    "SessionIndex": snapshots.SessionIndex(session="s", transcript="/t.jsonl", cwd="/w", t=T),
+    "ReposIndex": snapshots.ReposIndex(repos={"/r": snapshots.RepoEntry(added=T)}),
+    "SharedNotes": snapshots.SharedNotes(flakes={"test_x": T}, notes=["n"]),
+    "Pin": snapshots.Pin(task_loop="0.23.38", delegate=None),
+    "ReleaseResult": snapshots.ReleaseResult(version="0.23.57", ok=True, t=T, why="", sha="abc"),
+    "DashState": snapshots.DashState(pid=9, port=7878, bind="127.0.0.1", token="tok", version="0.23.56", started=T, pid_start=T,
+                                     idle_until=None),
+    "SlotSetupMarker": snapshots.SlotSetupMarker(cmd_hash="ab12", t=T),
+    "RepoProfile": config.RepoProfile(engine=config.EngineConfig(**CMD), slots=config.SlotsConfig(count=2, setup="just setup")),
+    "RunRequest": delegate.RunRequest(role="worker", brief_path="/b.md", cwd="/w", schema_path="/s.json", parent="p", task="t", title="T",
+                                      resume="ses", authored_by="openai", host=True, call_id="c1", readable_outside=["/x"]),
+    "DelegateResult": delegate.DelegateResult(
+        status="stop", reason="lane_out", next="retry", data={"summary": "s"}, text="t", ref="r", lane="L", model="m", effort="high",
+        family="zai", flag=None, cost=0.1, tokens=TOK, denied=[trace.Denied(tool="Bash")], secs=3.0, run_id="r1", call_id="c1",
+        transcript="/t", transcript_status="ok", retry_after=T, say="s", git_violation=["g"],
+        stop=delegate.StopFacts(reason="lane_out", scope="lane", permanence="transient", retry=delegate.Retry(kind="predicted", at=T),
+                                ref="r", fix="f", resumable=True, partial=False),
+        usage=delegate.Usage(tokens=TOK, cost=0.1, secs=3.0, turns=4, context_k=35.5, ref="r"), fallback="f", first_lane="L", rung=2,
+        warnings=["w"], needs_input=False, ask_user=""),
+    "DelegateContract": delegate.DelegateContract(worker_run=3, features=frozenset({"b", "a"}), reasons=["busy"], lanes=["L"]),
+    "WorkerStarted": delegate.WorkerStarted(pid=1, pgid=1, run_id="r1"),
+    "Bead": bead.Bead(id="tl-1", title="T", status="open", issue_type="feature", priority=1, assignee="a", labels=["auto"], parent="tl-0",
+                      description="d", design="x", acceptance_criteria="ac", notes="n", dependencies=["tl-2"],
+                      metadata=bead.BeadMeta(held_bead="tl-3", slot_hold=bead.SlotHold(until=T, why="w"),
+                                             looks=[bead.LookEntry(item="i", verdict="pass", where="w", why="y")],
+                                             extra={"k": 1}), lease_expires_at="2026-10-27T00:00:00Z"),
+    "Comment": bead.Comment(author="a", text="t", created_at="2026-10-27T00:00:00Z"),
+    "BdError": bead.BdError(kind="lint", missing_sections=["ACCEPTANCE"], text="t"),
+}

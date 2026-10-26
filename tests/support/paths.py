@@ -1,0 +1,11 @@
+"""`import support.paths` puts ROOT/src (the taskloop package) on sys.path, once, ahead of everything else.
+
+Every test module imports it, so a flat module can `from taskloop.contracts import ...` under any runner: the release shards,
+`python3 tests/test_x.py`, `python3 -m unittest tests.test_x`, `just test`."""
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+SRC = str(ROOT / "src")
+if SRC not in sys.path:
+    sys.path.insert(0, SRC)

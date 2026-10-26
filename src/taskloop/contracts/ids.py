@@ -1,0 +1,79 @@
+"""Identifiers: one parser each, no regex."""
+import datetime
+import hashlib
+from typing import NewType
+
+BeadId = NewType("BeadId", str)
+STAMP = "%Y%m%d-%H%M%S"
+_BEAD_CHARS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-")
+
+
+def parse_bead_id(text: str) -> BeadId:
+    """A bead id: starts with a letter or digit, then letters, digits, `_`, `.`, `-`."""
+    if not text or not text[0].isascii() or not text[0].isalnum() or not set(text) <= _BEAD_CHARS:
+        raise ValueError("not a bead id: %r" % (text,))
+    return BeadId(text)
+
+
+class RunId:
+    """`<bead>-YYYYMMDD-HHMMSS`: the run's name and the stem of its files. The stamp is the engine's wall clock."""
+
+    __slots__ = ("bead", "started")
+
+    def __init__(self, bead: BeadId, started: datetime.datetime) -> None:
+        self.bead = bead
+        self.started = started
+
+    @classmethod
+    def parse(cls, text: str) -> "RunId":
+        parts = text.rsplit("-", 2)
+        if len(parts) != 3:
+            raise ValueError("not a run id: %r" % (text,))
+        try:
+            started = datetime.datetime.strptime("%s-%s" % (parts[1], parts[2]), STAMP)
+        except ValueError:
+            raise ValueError("not a run id: %r" % (text,)) from None
+        return cls(parse_bead_id(parts[0]), started)
+
+    from_wire = parse
+
+    def to_wire(self) -> str:
+        return str(self)
+
+    def __str__(self) -> str:
+        return "%s-%s" % (self.bead, self.started.strftime(STAMP))
+
+    def __repr__(self) -> str:
+        return "RunId(%s)" % self
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, RunId) and (self.bead, self.started) == (other.bead, other.started)
+
+    def __hash__(self) -> int:
+        return hash((self.bead, self.started))
+
+
+class Version(tuple[int, ...]):
+    """A dotted version as an ordered tuple of ints: `Version.parse("0.23.56") > Version.parse("0.9.1")`."""
+
+    __slots__ = ()
+
+    @classmethod
+    def parse(cls, text: str) -> "Version":
+        parts = text.split(".")
+        if not text or not all(p.isascii() and p.isdigit() for p in parts):
+            raise ValueError("not a version: %r" % (text,))
+        return cls(int(p) for p in parts)
+
+    from_wire = parse
+
+    def to_wire(self) -> str:
+        return str(self)
+
+    def __str__(self) -> str:
+        return ".".join(str(n) for n in self)
+
+
+def repo_key(common_dir: str) -> str:
+    """The 12-hex key of a repository: sha1 of its git common dir."""
+    return hashlib.sha1(common_dir.encode("utf-8")).hexdigest()[:12]
