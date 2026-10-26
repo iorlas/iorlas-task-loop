@@ -1,4 +1,5 @@
 """tl-bxk.12.4: dash ensure replaces stale servers, binds fail loudly, dev checkouts stay on loopback."""
+import gc
 import json
 import os
 import socket
@@ -84,6 +85,7 @@ class EnsureFlow(unittest.TestCase):
             self.addCleanup(q.stop)
 
     def tearDown(self):
+        gc.collect()  # tl.cmd_dash leaves dash.log open; the mocked Popen keeps it alive in a cycle, and Windows will not delete an open file
         self.tmp.cleanup()
 
     def run_ensure(self, pings):

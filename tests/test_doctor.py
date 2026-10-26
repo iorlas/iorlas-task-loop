@@ -14,6 +14,11 @@ import engine  # noqa: E402
 import tl  # noqa: E402
 
 
+def shown(p):
+    """A path as git and the engine print it: forward slashes and long names on Windows."""
+    return Path(p).resolve().as_posix() if os.name == "nt" else str(p)
+
+
 class DoctorSource(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -111,7 +116,7 @@ class DoctorSource(unittest.TestCase):
         commit = self.advance_base(self.config("good", "old.txt"))
         out = self.doctor()
         self.assertIn("base origin/main at commit " + commit, out)
-        self.assertIn("ok: no setup problems found in " + str(self.wt), out)
+        self.assertIn("ok: no setup problems found in " + shown(self.wt), out)
         self.assertNotIn("WARN", out)
 
     def test_trailing_nul_does_not_match_a_directory_glob(self):
@@ -152,7 +157,7 @@ class DoctorSource(unittest.TestCase):
         nested = self.wt / "nested"
         nested.mkdir()
         out = self.doctor(nested)
-        self.assertIn("working tree " + str(self.wt), out)
+        self.assertIn("working tree " + shown(self.wt), out)
         self.assertIn("base missing-base unresolved; no commit read", out)
         self.assertIn("ok:", out)
         self.assertEqual(engine.load_cfg(str(self.wt))["checks"][0]["id"], "fallback")

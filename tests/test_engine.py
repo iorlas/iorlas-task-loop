@@ -23,6 +23,16 @@ def sh(*a, cwd):
     subprocess.run(list(a), cwd=cwd, check=True, capture_output=True)
 
 
+def shq(text):
+    """One shell word for the engine's check runner: bash quoting on POSIX, CreateProcess quoting for cmd.exe on Windows."""
+    return shlex.quote(text) if os.name != "nt" else subprocess.list2cmdline([text])
+
+
+def shown(p):
+    """A path as git and the engine print it: forward slashes and long names on Windows."""
+    return Path(p).resolve().as_posix() if os.name == "nt" else str(p)
+
+
 PY = '"%s"' % sys.executable
 HAS_F = PY + ' -c "import os,sys; sys.exit(0 if os.path.exists(\'f.txt\') else 1)"'
 FALSE = PY + ' -c "import sys; sys.exit(1)"'
@@ -307,7 +317,7 @@ class EngineTest(unittest.TestCase):
     def sleeping_check(self, secs, counter):
         code = "import time,os; p=%r; k=(int(open(p).read()) if os.path.exists(p) else 0)+1; open(p,'w').write(str(k)); time.sleep(%r)" % (
             str(counter), secs)
-        return PY + " -c " + shlex.quote(code)
+        return PY + " -c " + shq(code)
 
     def test_a_timed_out_check_is_never_retried(self):
         n = Path(self.tmp.name) / "runs-timeout"
@@ -446,7 +456,7 @@ class EngineTest(unittest.TestCase):
         n = Path(self.tmp.name) / ("runs-%s" % self._testMethodName)
         code = ("import sys,os; p=%r; k=(int(open(p).read()) if os.path.exists(p) else 0)+1; open(p,'w').write(str(k)); "
                 "print(%r); sys.exit(0 if %r and k>=%r else 1)" % (str(n), line, ok_after is not None, ok_after))
-        return PY + " -c " + shlex.quote(code), n
+        return PY + " -c " + shq(code), n
 
     def test_a_compile_error_is_not_retried(self):
         cmd, n = self.counting_check(self.COMPILE[1])
@@ -4211,7 +4221,7 @@ class DelegateLauncher(unittest.TestCase):
         Path(other, "dirty.txt").write_text("someone's work\n")
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 2)
-        self.assertIn(str(other), self.blocked[0])
+        self.assertIn(shown(other), self.blocked[0])
         self.assertTrue(Path(other, "dirty.txt").exists())
 
     def test_another_answer_version_blocks(self):

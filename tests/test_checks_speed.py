@@ -378,20 +378,20 @@ class Watchdog(SpeedTest):
 
     def test_a_check_that_keeps_printing_is_not_hung(self):
         code = "import time\nfor i in range(5):\n print(i, flush=True); time.sleep(0.6)"
-        eng = self.checks_engine(checks=[{"id": "chatty", "cmd": PY + " -c " + shlex.quote(code), "group": "tests"}],
+        eng = self.checks_engine(checks=[{"id": "chatty", "cmd": PY + " -c " + te.shq(code), "group": "tests"}],
                                  check_idle_min=0.025)  # 1.5 s of silence allowed, 3 s run
         res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertEqual((res[0]["status"], res[0].get("hung")), ("ran", False))
 
     def test_a_check_writing_a_file_under_the_worktree_without_printing_is_not_hung(self):
         code = "import time\nfor i in range(7):\n open('out.log','a').write('x'*50); time.sleep(0.6)"
-        eng = self.checks_engine(checks=[{"id": "w", "cmd": PY + " -c " + shlex.quote(code), "group": "tests"}], check_idle_min=0.03)
+        eng = self.checks_engine(checks=[{"id": "w", "cmd": PY + " -c " + te.shq(code), "group": "tests"}], check_idle_min=0.03)
         res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertEqual((res[0]["status"], res[0].get("hung")), ("ran", False))
 
     def test_a_check_burning_cpu_without_output_or_files_is_not_hung(self):
         code = "import time\nt=time.time()\nwhile time.time()-t<5: sum(range(10000))"
-        eng = self.checks_engine(checks=[{"id": "cpu", "cmd": PY + " -c " + shlex.quote(code), "group": "tests"}], check_idle_min=0.03)
+        eng = self.checks_engine(checks=[{"id": "cpu", "cmd": PY + " -c " + te.shq(code), "group": "tests"}], check_idle_min=0.03)
         res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertEqual((res[0]["status"], res[0].get("hung")), ("ran", False))
 
@@ -403,7 +403,7 @@ class Watchdog(SpeedTest):
     def test_a_timeout_keeps_the_output_and_kills_a_setsid_descendant(self):
         mark = "72.%d" % os.getpid()
         code = "import os,subprocess,sys,time\nprint('before', flush=True)\nsubprocess.Popen(['sleep','%s'], start_new_session=True)\ntime.sleep(30)" % mark
-        eng = self.checks_engine(checks=[{"id": "t", "cmd": PY + " -c " + shlex.quote(code), "group": "tests", "timeout_min": 0.05}],
+        eng = self.checks_engine(checks=[{"id": "t", "cmd": PY + " -c " + te.shq(code), "group": "tests", "timeout_min": 0.05}],
                                  check_idle_min=5)
         res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertEqual(res[0]["exit"], 124)

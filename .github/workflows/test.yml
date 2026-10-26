@@ -66,3 +66,21 @@ jobs:
           sleep 20
           kill -0 $pid && { echo "STILL RUNNING after 20s"; ps -o pid,ppid,stat,command -ax | grep -E "lsof|server.py" | grep -v grep; kill -ABRT $pid; sleep 2; } || echo "exited early"
           wait $pid || echo "rc=$?"
+  winfast:
+    runs-on: windows-latest
+    steps:
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: extractions/setup-just@v2
+      - shell: pwsh
+        run: |
+          takeown /f C:\Windows\System32\bash.exe
+          icacls C:\Windows\System32\bash.exe /grant "$($env:USERNAME):F"
+          Rename-Item C:\Windows\System32\bash.exe bash.exe.off
+      - shell: pwsh
+        run: |
+          $k = Get-Content winfast-names.txt | Where-Object { $_ } | ForEach-Object { "-k"; $_ }
+          python -m unittest discover -s tests -v @k

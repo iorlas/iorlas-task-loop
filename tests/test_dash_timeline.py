@@ -349,7 +349,7 @@ class Api(unittest.TestCase):
     def test_a_check_log_is_served_from_its_run_and_nothing_outside_it(self):
         run = "%s-20261021-072411" % BEAD
         (self.cfg / "runs" / run / "checks").mkdir(parents=True)
-        (self.cfg / "runs" / run / "checks" / "00-fmt.log").write_text("all formatted\n")
+        (self.cfg / "runs" / run / "checks" / "00-fmt.log").write_bytes(b"all formatted\n")
         self.assertEqual(server.run_file(run, "checks/00-fmt.log"), b"all formatted\n")
         self.assertIsNone(server.run_file(run, "../../traces.jsonl"))
         self.assertIsNone(server.run_file("../x", "checks/00-fmt.log"))
