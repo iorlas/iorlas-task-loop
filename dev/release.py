@@ -37,6 +37,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "skills" / "task-loop"))
+sys.path.insert(0, str(HERE.parent / "src"))
 import tl  # noqa: E402
 
 PLUGIN = ".claude-plugin/plugin.json"

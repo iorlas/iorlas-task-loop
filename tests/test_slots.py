@@ -18,6 +18,7 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # python3 -m unittest tests.test_slots, from the repo root
+import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from test_loop import LoopBase, rec  # noqa: E402
 
 import engine  # noqa: E402  (test_loop put skills/task-loop on sys.path)

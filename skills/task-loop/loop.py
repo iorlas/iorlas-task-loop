@@ -637,9 +637,9 @@ def complete(d):
     for f in ("tl.py", "loop.py", "engine.py"):
         if not (here / f).is_file():
             return "%s is missing" % f
-    code = "import sys; sys.path.insert(0, sys.argv[1]); import tl, loop, engine"
+    code = "import sys; sys.path.insert(0, sys.argv[1]); sys.path.insert(0, sys.argv[2]); import tl, loop, engine"
     try:
-        r = subprocess.run([sys.executable, "-I", "-c", code, str(here)], stdin=subprocess.DEVNULL,
+        r = subprocess.run([sys.executable, "-I", "-c", code, str(here), str(d / "src")], stdin=subprocess.DEVNULL,
                            capture_output=True, timeout=HELP_WAIT)
     except subprocess.TimeoutExpired:
         return "importing tl, loop, engine did not finish in %d s" % HELP_WAIT

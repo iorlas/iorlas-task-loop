@@ -9,6 +9,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
+sys.path.insert(0, str(Path(__file__).resolve().parent)); import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import engine  # noqa: E402
 
 C3 = {"contract": 3, "reasons": {}}
