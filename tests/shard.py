@@ -1,7 +1,7 @@
 """Split the suite across CI shards: python tests/shard.py run INDEX COUNT runs shard INDEX (1-based) of COUNT.
 
 Every test is in exactly one shard. Units (a class, or a chunk of a big one) are placed heaviest first on the lightest shard (weight: its test
-count, times WEIGHT for a module whose tests are slow), ties broken by name, so the split is stable for a given tree.
+count times WEIGHT, the measured seconds per test of its module), ties broken by name, so the split is stable for a given tree.
 `python tests/shard.py run INDEX COUNT` runs it. `python tests/shard.py --check COUNT` fails when a test would run in no shard or in two.
 
 The release gate (dev/release.py) uses the same split on one machine: `plan COUNT --root DIR` prints {"shards": [[id]], "serial": [id]},
