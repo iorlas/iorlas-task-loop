@@ -1,0 +1,66 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.4, pytest-8.2.0
+rootdir: /work
+collected 118 items
+
+tests/test_api.py ......................
+tests/test_db.py ......................
+tests/test_cache.py ....F...........F.....
+tests/test_cache.py ......................
+tests/test_auth.py ......................
+
+=================================== FAILURES ===================================
+_________________________ test_evicts_oldest_entry _____________________________
+
+    def test_evicts_oldest_entry():
+        c = Cache(max_items=2)
+        c.put('a', 1); c.put('b', 2); c.put('c', 3)
+>       assert c.get('a') is None
+E       assert 1 is None
+E        +  where 1 = <bound method Cache.get of <cache.Cache object at 0x7f>>('a')
+
+tests/test_cache.py:31: AssertionError
+________________________ test_ttl_expires_with_clock ___________________________
+
+    def test_ttl_expires_with_clock(clock):
+        c = Cache(ttl=5, clock=clock)
+        c.put('k', 1)
+        clock.advance(6)
+>       assert 'k' not in c
+E       AssertionError: assert 'k' not in <cache.Cache object at 0x7f>
+
+tests/test_cache.py:47: AssertionError
+  captured log line 0: cache stats hits=0 misses=0
+  captured log line 1: cache stats hits=3 misses=1
+  captured log line 2: cache stats hits=6 misses=2
+  captured log line 3: cache stats hits=9 misses=3
+  captured log line 4: cache stats hits=12 misses=4
+  captured log line 5: cache stats hits=15 misses=5
+  captured log line 6: cache stats hits=18 misses=6
+  captured log line 7: cache stats hits=21 misses=7
+  captured log line 8: cache stats hits=24 misses=8
+  captured log line 9: cache stats hits=27 misses=9
+  captured log line 10: cache stats hits=30 misses=10
+  captured log line 11: cache stats hits=33 misses=11
+  captured log line 12: cache stats hits=36 misses=12
+  captured log line 13: cache stats hits=39 misses=13
+  captured log line 14: cache stats hits=42 misses=14
+  captured log line 15: cache stats hits=45 misses=15
+  captured log line 16: cache stats hits=48 misses=16
+  captured log line 17: cache stats hits=51 misses=17
+  captured log line 18: cache stats hits=54 misses=18
+  captured log line 19: cache stats hits=57 misses=19
+  captured log line 20: cache stats hits=60 misses=20
+  captured log line 21: cache stats hits=63 misses=21
+  captured log line 22: cache stats hits=66 misses=22
+  captured log line 23: cache stats hits=69 misses=23
+  captured log line 24: cache stats hits=72 misses=24
+  captured log line 25: cache stats hits=75 misses=25
+  captured log line 26: cache stats hits=78 misses=26
+  captured log line 27: cache stats hits=81 misses=27
+  captured log line 28: cache stats hits=84 misses=28
+  captured log line 29: cache stats hits=87 misses=29
+=========================== short test summary info ============================
+FAILED tests/test_cache.py::test_evicts_oldest_entry - assert 1 is None
+FAILED tests/test_cache.py::test_ttl_expires_with_clock - AssertionError: assert 'k' not in <cache.Cache object at 0x7f>
+========================= 2 failed, 116 passed in 4.82s =========================

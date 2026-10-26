@@ -1,0 +1,254 @@
+============================= test session starts ==============================
+collected 400 items
+
+tests/test_big.py FFFFFFFFFFFFFF
+
+=================================== FAILURES ===================================
+______________________ test_scenario_00 ______________________
+
+    def test_scenario_00():
+        x = build(0)
+>       assert x.value == 1
+E       assert 0 == 1
+
+tests/test_big.py:10: AssertionError
+______________________ test_scenario_01 ______________________
+
+    def test_scenario_01():
+        x = build(1)
+>       assert x.value == 2
+E       assert 1 == 2
+
+tests/test_big.py:11: AssertionError
+______________________ test_scenario_02 ______________________
+
+    def test_scenario_02():
+        x = build(2)
+>       assert x.value == 3
+E       assert 2 == 3
+
+tests/test_big.py:12: AssertionError
+______________________ test_scenario_03 ______________________
+
+    def test_scenario_03():
+        x = build(3)
+>       assert x.value == 4
+E       assert 3 == 4
+
+tests/test_big.py:13: AssertionError
+______________________ test_scenario_04 ______________________
+
+    def test_scenario_04():
+        x = build(4)
+>       assert x.value == 5
+E       assert 4 == 5
+
+tests/test_big.py:14: AssertionError
+______________________ test_scenario_05 ______________________
+
+    def test_scenario_05():
+        x = build(5)
+>       assert x.value == 6
+E       assert 5 == 6
+
+tests/test_big.py:15: AssertionError
+______________________ test_scenario_06 ______________________
+
+    def test_scenario_06():
+        x = build(6)
+>       assert x.value == 7
+E       assert 6 == 7
+
+tests/test_big.py:16: AssertionError
+______________________ test_scenario_07 ______________________
+
+    def test_scenario_07():
+        x = build(7)
+>       assert x.value == 8
+E       assert 7 == 8
+
+tests/test_big.py:17: AssertionError
+______________________ test_scenario_08 ______________________
+
+    def test_scenario_08():
+        x = build(8)
+>       assert x.value == 9
+E       assert 8 == 9
+
+tests/test_big.py:18: AssertionError
+______________________ test_scenario_09 ______________________
+
+    def test_scenario_09():
+        x = build(9)
+>       assert x.value == 10
+E       assert 9 == 10
+
+tests/test_big.py:19: AssertionError
+______________________ test_scenario_10 ______________________
+
+    def test_scenario_10():
+        x = build(10)
+>       assert x.value == 11
+E       assert 10 == 11
+
+tests/test_big.py:20: AssertionError
+______________________ test_scenario_11 ______________________
+
+    def test_scenario_11():
+        x = build(11)
+>       assert x.value == 12
+E       assert 11 == 12
+
+tests/test_big.py:21: AssertionError
+______________________ test_scenario_12 ______________________
+
+    def test_scenario_12():
+        x = build(12)
+>       assert x.value == 13
+E       assert 12 == 13
+
+tests/test_big.py:22: AssertionError
+______________________ test_scenario_13 ______________________
+
+    def test_scenario_13():
+        x = build(13)
+>       assert x.value == 14
+E       assert 13 == 14
+
+tests/test_big.py:23: AssertionError
+  captured stdout line 0: building scenario graph
+  captured stdout line 1: building scenario graph
+  captured stdout line 2: building scenario graph
+  captured stdout line 3: building scenario graph
+  captured stdout line 4: building scenario graph
+  captured stdout line 5: building scenario graph
+  captured stdout line 6: building scenario graph
+  captured stdout line 7: building scenario graph
+  captured stdout line 8: building scenario graph
+  captured stdout line 9: building scenario graph
+  captured stdout line 10: building scenario graph
+  captured stdout line 11: building scenario graph
+  captured stdout line 12: building scenario graph
+  captured stdout line 13: building scenario graph
+  captured stdout line 14: building scenario graph
+  captured stdout line 15: building scenario graph
+  captured stdout line 16: building scenario graph
+  captured stdout line 17: building scenario graph
+  captured stdout line 18: building scenario graph
+  captured stdout line 19: building scenario graph
+  captured stdout line 20: building scenario graph
+  captured stdout line 21: building scenario graph
+  captured stdout line 22: building scenario graph
+  captured stdout line 23: building scenario graph
+  captured stdout line 24: building scenario graph
+  captured stdout line 25: building scenario graph
+  captured stdout line 26: building scenario graph
+  captured stdout line 27: building scenario graph
+  captured stdout line 28: building scenario graph
+  captured stdout line 29: building scenario graph
+  captured stdout line 30: building scenario graph
+  captured stdout line 31: building scenario graph
+  captured stdout line 32: building scenario graph
+  captured stdout line 33: building scenario graph
+  captured stdout line 34: building scenario graph
+  captured stdout line 35: building scenario graph
+  captured stdout line 36: building scenario graph
+  captured stdout line 37: building scenario graph
+  captured stdout line 38: building scenario graph
+  captured stdout line 39: building scenario graph
+  captured stdout line 40: building scenario graph
+  captured stdout line 41: building scenario graph
+  captured stdout line 42: building scenario graph
+  captured stdout line 43: building scenario graph
+  captured stdout line 44: building scenario graph
+  captured stdout line 45: building scenario graph
+  captured stdout line 46: building scenario graph
+  captured stdout line 47: building scenario graph
+  captured stdout line 48: building scenario graph
+  captured stdout line 49: building scenario graph
+  captured stdout line 50: building scenario graph
+  captured stdout line 51: building scenario graph
+  captured stdout line 52: building scenario graph
+  captured stdout line 53: building scenario graph
+  captured stdout line 54: building scenario graph
+  captured stdout line 55: building scenario graph
+  captured stdout line 56: building scenario graph
+  captured stdout line 57: building scenario graph
+  captured stdout line 58: building scenario graph
+  captured stdout line 59: building scenario graph
+  captured stdout line 60: building scenario graph
+  captured stdout line 61: building scenario graph
+  captured stdout line 62: building scenario graph
+  captured stdout line 63: building scenario graph
+  captured stdout line 64: building scenario graph
+  captured stdout line 65: building scenario graph
+  captured stdout line 66: building scenario graph
+  captured stdout line 67: building scenario graph
+  captured stdout line 68: building scenario graph
+  captured stdout line 69: building scenario graph
+  captured stdout line 70: building scenario graph
+  captured stdout line 71: building scenario graph
+  captured stdout line 72: building scenario graph
+  captured stdout line 73: building scenario graph
+  captured stdout line 74: building scenario graph
+  captured stdout line 75: building scenario graph
+  captured stdout line 76: building scenario graph
+  captured stdout line 77: building scenario graph
+  captured stdout line 78: building scenario graph
+  captured stdout line 79: building scenario graph
+  captured stdout line 80: building scenario graph
+  captured stdout line 81: building scenario graph
+  captured stdout line 82: building scenario graph
+  captured stdout line 83: building scenario graph
+  captured stdout line 84: building scenario graph
+  captured stdout line 85: building scenario graph
+  captured stdout line 86: building scenario graph
+  captured stdout line 87: building scenario graph
+  captured stdout line 88: building scenario graph
+  captured stdout line 89: building scenario graph
+  captured stdout line 90: building scenario graph
+  captured stdout line 91: building scenario graph
+  captured stdout line 92: building scenario graph
+  captured stdout line 93: building scenario graph
+  captured stdout line 94: building scenario graph
+  captured stdout line 95: building scenario graph
+  captured stdout line 96: building scenario graph
+  captured stdout line 97: building scenario graph
+  captured stdout line 98: building scenario graph
+  captured stdout line 99: building scenario graph
+  captured stdout line 100: building scenario graph
+  captured stdout line 101: building scenario graph
+  captured stdout line 102: building scenario graph
+  captured stdout line 103: building scenario graph
+  captured stdout line 104: building scenario graph
+  captured stdout line 105: building scenario graph
+  captured stdout line 106: building scenario graph
+  captured stdout line 107: building scenario graph
+  captured stdout line 108: building scenario graph
+  captured stdout line 109: building scenario graph
+  captured stdout line 110: building scenario graph
+  captured stdout line 111: building scenario graph
+  captured stdout line 112: building scenario graph
+  captured stdout line 113: building scenario graph
+  captured stdout line 114: building scenario graph
+  captured stdout line 115: building scenario graph
+  captured stdout line 116: building scenario graph
+  captured stdout line 117: building scenario graph
+  captured stdout line 118: building scenario graph
+  captured stdout line 119: building scenario graph
+=========================== short test summary info ============================
+FAILED tests/test_big.py::test_scenario_00 - assert 0 == 1
+FAILED tests/test_big.py::test_scenario_01 - assert 1 == 2
+FAILED tests/test_big.py::test_scenario_02 - assert 2 == 3
+FAILED tests/test_big.py::test_scenario_03 - assert 3 == 4
+FAILED tests/test_big.py::test_scenario_04 - assert 4 == 5
+FAILED tests/test_big.py::test_scenario_05 - assert 5 == 6
+FAILED tests/test_big.py::test_scenario_06 - assert 6 == 7
+FAILED tests/test_big.py::test_scenario_07 - assert 7 == 8
+FAILED tests/test_big.py::test_scenario_08 - assert 8 == 9
+FAILED tests/test_big.py::test_scenario_09 - assert 9 == 10
+FAILED tests/test_big.py::test_scenario_10 - assert 10 == 11
+FAILED tests/test_big.py::test_scenario_11 - assert 11 == 12
+FAILED tests/test_big.py::test_scenario_12 - assert 12 == 13
+FAILED tests/test_big.py::test_scenario_13 - assert 13 == 14
+======================== 14 failed, 386 passed in 12.0s ========================
