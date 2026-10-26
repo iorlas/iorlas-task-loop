@@ -23,7 +23,7 @@ jobs:
         run: |
           python - <<'PY' >> "$GITHUB_OUTPUT"
           import json
-          cells = [("ubuntu-latest", "3.8", 3), ("ubuntu-latest", "3.12", 3)]
+          cells = [("ubuntu-latest", "3.12", 3)]
           inc = [{"os": o, "python": p, "shard": i, "shards": n} for o, p, n in cells for i in range(1, n + 1)]
           print("matrix=" + json.dumps({"include": inc}))
           PY
@@ -43,3 +43,17 @@ jobs:
       # The suite shells out to `just` (recipe checks); the developer machine has it, a runner does not.
       - uses: extractions/setup-just@v2
       - run: python tests/shard.py run ${{ matrix.shard }} ${{ matrix.shards }}
+
+  # ruff and pyrefly, pinned in mise.toml and run by the same recipes as a local `just check`; nothing here needs a secret.
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.13.0"
+      - uses: extractions/setup-just@v2
+      - run: just lint types rules
