@@ -10,6 +10,7 @@ Design: 60-design-A1 sec 2.1 and 61-integration sec 1.2; ASK_VERIFY is retired (
 """
 
 import enum
+import re
 from dataclasses import dataclass
 
 import lifecycle
@@ -125,7 +126,8 @@ def fingerprint(kind, text):
     """The one normaliser: the kind name plus lifecycle's stripped text. Empty for a finish."""
     if kind in FINISH:
         return ""
-    return "%s %s" % (kind.name, lifecycle.fingerprint(text) or "unknown")
+    slug = re.sub(r"#[0-9a-f]{8}$", "", lifecycle.fingerprint(text))  # lifecycle hashes a long tail; a storm is the same head
+    return "%s %s" % (kind.name, slug or "unknown")
 
 
 def make(kind, text=""):
