@@ -23,7 +23,6 @@ FEATURES = {
     "land": ["test_land_lock", "test_held_branch"],
     "look": ["test_look", "test_looks"],
     "write": ["test_stages"],
-    "contracts": [],
     "dash": sorted(p.stem for p in HERE.glob("test_dash*.py")),
 }
 
