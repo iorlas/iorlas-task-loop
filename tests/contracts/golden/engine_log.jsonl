@@ -1,0 +1,22 @@
+{"v": 2, "kind": "run_start", "t": 1793050200.5, "run": "tl-7y6.3.1-20261027-002239", "bead": "tl-1", "worktree": "/w", "slot": "s1", "prev_run": "p", "started_because": "retry", "ask": "a"}
+{"v": 2, "kind": "step_start", "t": 1793050200.5, "id": "n4", "step": "write", "text": "write: stage 2/2", "stage": 2, "stages": 2, "round": 1, "write": 1, "fix": 0}
+{"v": 2, "kind": "step_end", "t": 1793050200.5, "id": "n4", "step": "write", "outcome": "done", "detail": "", "secs": 231.0}
+{"v": 2, "kind": "call_start", "t": 1793050200.5, "id": "c3", "n": 3, "step": "write", "node": "n4", "role": "worker", "resume": true}
+{"v": 2, "kind": "call_end", "t": 1793050200.5, "id": "c3", "status": "done", "reason": null, "ref": "ses", "lane": "L", "model": "m", "effort": "high", "secs": 229.0, "tokens": {"in": 412000, "cached": 380000, "out": 5100}, "cost": 0.0}
+{"v": 2, "kind": "cmd_start", "t": 1793050200.5, "id": "k1", "text": "git status", "cwd": "/w"}
+{"v": 2, "kind": "cmd_end", "t": 1793050200.5, "id": "k1", "exit": 0, "secs": 0.4, "out": "clean"}
+{"v": 2, "kind": "check_start", "t": 1793050200.5, "id": "k5.1", "check": "unittest", "group": "tests", "cmd": "python3 -m unittest", "round": 1, "log": "checks/01.log", "timeout_s": 1200.0}
+{"v": 2, "kind": "check_end", "t": 1793050200.5, "id": "k5.1", "exit": 1, "status": "failed", "tries": 2, "secs": 43.4}
+{"v": 2, "kind": "gate_start", "t": 1793050200.5, "cmd": "just check", "log": "g.log", "tree": "deadbeef"}
+{"v": 2, "kind": "gate_end", "t": 1793050200.5, "exit": 0, "secs": 2101.0, "skipped": false}
+{"v": 2, "kind": "wait_start", "t": 1793050200.5, "id": "w1", "what": "lane", "holder": "", "until": 1793050260.5}
+{"v": 2, "kind": "wait_end", "t": 1793050200.5, "id": "w1", "secs": 60.0, "in_budget": true}
+{"v": 2, "kind": "lock", "t": 1793050200.5, "what": "land", "holder": "tl-7y6.1.2"}
+{"v": 2, "kind": "unlock", "t": 1793050200.5, "what": "land", "secs": 240.0}
+{"v": 2, "kind": "vendor_error", "t": 1793050200.5, "node": "n4", "reason": "lane_out", "lane": "L", "model": "m", "until": 1793051100.5, "error": "out"}
+{"v": 2, "kind": "kill", "t": 1793050200.5, "what": "check", "why": "idle", "secs": 600.0}
+{"v": 2, "kind": "transition", "t": 1793050200.5, "from": "n4", "to": "write", "cause": "gate_red", "detail": "red"}
+{"v": 2, "kind": "reload", "t": 1793050200.5, "old": "0.23.56", "new": "0.23.57", "step": "write"}
+{"v": 2, "kind": "warn", "t": 1793050200.5, "text": "careful"}
+{"v": 2, "kind": "note", "t": 1793050200.5, "text": "fyi"}
+{"v": 2, "kind": "close", "t": 1793050200.5, "outcome": "landed", "why_code": null, "sha": "abc"}

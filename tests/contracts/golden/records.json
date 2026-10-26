@@ -1,0 +1,687 @@
+{
+ "RunTrace": {
+  "v": 2,
+  "run": "tl-7y6.3.1-20261027-002239",
+  "bead": "tl-7y6.3.1",
+  "repo_url": "https://github.com/x/y.git",
+  "worktree": "/w/.slots/s1",
+  "branch": "task/tl-7y6.3.1",
+  "coordinator_session": "61ba34e7",
+  "started": 1793050200.5,
+  "ended": 1793050800.5,
+  "outcome": "landed",
+  "why": "",
+  "sha": "abc123",
+  "repo_path": "/w",
+  "version": "0.23.56",
+  "why_code": null,
+  "fingerprint": "",
+  "cost": {
+   "usd": 1.5
+  },
+  "stats": {
+   "writes": 2,
+   "rounds": 3,
+   "reviews": 0,
+   "replans": 0,
+   "nodes": 7,
+   "tests_added": 0,
+   "tests_removed": 0,
+   "tokens_in": 0,
+   "tokens_cached": 0,
+   "tokens_out": 0
+  },
+  "host": false,
+  "delegate_path": "/d/route.py",
+  "log": "/l.jsonl",
+  "stderr": "/l.stderr",
+  "lanes": {
+   "codex": {
+    "sees": [
+     "the brief"
+    ]
+   }
+  },
+  "sessions": [
+   {
+    "node": "write",
+    "family": "zai",
+    "ref": "ses_e85d",
+    "status": "done",
+    "role": "worker",
+    "t": 1793050200.5,
+    "transcript": "/t/x.jsonl",
+    "node_id": 4,
+    "attempt": 1,
+    "run_id": "r1",
+    "resume": true,
+    "lane": "ZAI_CODING_SUBSCRIPTION",
+    "model": "glm-5.3",
+    "effort": "high",
+    "flag": null,
+    "host": false,
+    "cost": 0.0,
+    "tokens": {
+     "in": 412000,
+     "cached": 380000,
+     "out": 5100
+    },
+    "turns": null,
+    "context_k": 35,
+    "denied": [
+     {
+      "tool": "Bash",
+      "input": {
+       "command": "ls"
+      }
+     }
+    ],
+    "next": null,
+    "reason": null,
+    "stopped": null,
+    "prompt_chars": 6598,
+    "secs": 229.0,
+    "warning": null
+   }
+  ],
+  "verified": [
+   {
+    "what": "w",
+    "kind": "checkable",
+    "verdict": "settled",
+    "evidence": "e",
+    "why": "y"
+   }
+  ],
+  "write_rounds": [
+   {
+    "write": 1,
+    "round": 1,
+    "node_id": 3,
+    "ref": "r",
+    "resumed": "no",
+    "input_tokens": 10,
+    "turns": null,
+    "prompt_chars": null,
+    "context_k": 5,
+    "fresh": ""
+   }
+  ],
+  "strays": [
+   "a.txt"
+  ],
+  "reflection": {
+   "went_well": [
+    "a"
+   ],
+   "went_badly": [
+    {
+     "what": "w",
+     "cause": "engine",
+     "session": "s",
+     "evidence": "e"
+    }
+   ],
+   "wasted": [
+    "w"
+   ],
+   "change": [
+    "c"
+   ]
+  },
+  "lane_notes": [
+   "n"
+  ],
+  "salvaged": false,
+  "backfilled": false,
+  "ask": "tl-1-1",
+  "prev_run": "tl-7y6.3.0-20261026-101010",
+  "started_because": "answer",
+  "faults": [
+   {
+    "step": "write",
+    "lane": "L",
+    "exit": 1,
+    "reason": "hung",
+    "t": 1793050200.5
+   }
+  ]
+ },
+ "Ask": {
+  "v": 2,
+  "id": "tl-1-1",
+  "n": 1,
+  "bead": "tl-1",
+  "kind": "decision",
+  "question": "Which?",
+  "run": "tl-7y6.3.1-20261027-002239",
+  "t": 1793050200.5,
+  "status": "answered",
+  "detail": {
+   "budget": [
+    {
+     "step": "write",
+     "minutes": 12.0,
+     "usd": 1.0
+    }
+   ],
+   "replans": [
+    {
+     "n": 1,
+     "why": "scope"
+    }
+   ],
+   "text": "d"
+  },
+  "why_code": "owner_decision",
+  "why": "w",
+  "parks_at": 1793053800.5,
+  "brief_hash": "b0c0",
+  "options": [
+   {
+    "label": "Right",
+    "cost": "free",
+    "answer": "right",
+    "recommended": true
+   }
+  ],
+  "repo": "/r",
+  "title": "t",
+  "answer": {
+   "action": "confirm",
+   "text": "ok",
+   "t": 1793050200.5,
+   "by": "denis"
+  },
+  "answered": 1793050205.5
+ },
+ "RunOutcome": {
+  "v": 2,
+  "outcome": "blocked",
+  "bead": "tl-1",
+  "run": "tl-7y6.3.1-20261027-002239",
+  "why_code": "stuck",
+  "why": "stuck",
+  "log": "/l",
+  "minutes": 3.5,
+  "rounds": 2,
+  "tests_added": 4,
+  "asked": true,
+  "retry_after": null,
+  "cost": 0.25
+ },
+ "LoopLogLine": {
+  "v": 2,
+  "outcome": {
+   "outcome": "blocked",
+   "bead": "tl-1",
+   "run": "tl-7y6.3.1-20261027-002239",
+   "why_code": "stuck",
+   "why": "stuck",
+   "log": "/l",
+   "minutes": 3.5,
+   "rounds": 2,
+   "tests_added": 4,
+   "asked": true,
+   "retry_after": null,
+   "cost": 0.25
+  },
+  "t": 1793050200.5,
+  "slot": "s1",
+  "run_log": "/rl"
+ },
+ "Reexec": {
+  "v": 1,
+  "run": "tl-7y6.3.1-20261027-002239",
+  "bead": "tl-1",
+  "from_version": "0.23.56",
+  "to_version": "0.23.57",
+  "step": "write",
+  "owned": [
+   "a"
+  ],
+  "fallback": "f",
+  "counters": {
+   "rounds": 2
+  }
+ },
+ "LoopState": {
+  "v": 2,
+  "pid": 1789,
+  "started": 1793050200.5,
+  "t": 1793050200.5,
+  "repo": "/r",
+  "version": "0.23.56",
+  "code_dir": "/c",
+  "actor": "tl-abc",
+  "pid_start": 1793050199.5,
+  "bead": "tl-1",
+  "slot": "s1",
+  "since": 1793050200.5,
+  "child": 29307,
+  "run_log": "/rl",
+  "worktree": "/w",
+  "stop": {
+   "kind": "after_current",
+   "by": "denis",
+   "t": 1793050200.5
+  },
+  "queue": [
+   {
+    "bead": "tl-2",
+    "prio": 1,
+    "since": 1793050200.5,
+    "ahead": 0,
+    "skip": {
+     "why": "area busy",
+     "until": 1793050260.5
+    }
+   }
+  ],
+  "lanes_seen": [
+   "L"
+  ]
+ },
+ "LoopCommand": {
+  "v": 1,
+  "action": "stop_now",
+  "by": "denis",
+  "t": 1793050200.5
+ },
+ "Rest": {
+  "v": 1,
+  "until": 1793050800.5,
+  "why": "network",
+  "t": 1793050200.5
+ },
+ "BadVersions": {
+  "v": 1,
+  "entries": [
+   {
+    "version": "0.2.0",
+    "why": "selftest failed",
+    "t": 1793050200.5
+   }
+  ]
+ },
+ "EngineLock": {
+  "v": 2,
+  "pid": 1789,
+  "bead": "tl-1",
+  "started": 1793050200.5,
+  "by": "tl-abc",
+  "pid_start": 1793050195.5,
+  "slot": "s1",
+  "slot_bead": "slot-1",
+  "route": [
+   10,
+   1793050200.5
+  ],
+  "workers": [
+   [
+    11,
+    1793050200.5
+   ],
+   [
+    12,
+    1793050201.5
+   ]
+  ]
+ },
+ "Ticket": {
+  "v": 1,
+  "pid": 5,
+  "why": "slot",
+  "since": 1793050200.5,
+  "prio": 1,
+  "seq": 3,
+  "pid_start": 1793050200.5
+ },
+ "LockRecord": {
+  "v": 1,
+  "what": "land",
+  "holder": "tl-1",
+  "pid": 5,
+  "t": 1793050200.5
+ },
+ "TasksSnapshot": {
+  "v": 1,
+  "t": 1793050200.5,
+  "repo": "/r",
+  "beads": [
+   {
+    "bead": "tl-1",
+    "title": "T",
+    "status": "in_progress",
+    "labels": [
+     "auto"
+    ],
+    "parent": "tl-0",
+    "slot": "s1",
+    "worktree": "/w",
+    "lock": {
+     "pid": 1789,
+     "bead": "tl-1",
+     "started": 1793050200.5,
+     "by": "tl-abc",
+     "pid_start": 1793050195.5,
+     "slot": "s1",
+     "slot_bead": "slot-1",
+     "route": [
+      10,
+      1793050200.5
+     ],
+     "workers": [
+      [
+       11,
+       1793050200.5
+      ],
+      [
+       12,
+       1793050201.5
+      ]
+     ]
+    },
+    "run": "tl-7y6.3.1-20261027-002239",
+    "ask": "tl-1-1",
+    "blocker": ""
+   }
+  ]
+ },
+ "SessionIndex": {
+  "v": 1,
+  "session": "s",
+  "transcript": "/t.jsonl",
+  "cwd": "/w",
+  "t": 1793050200.5
+ },
+ "ReposIndex": {
+  "v": 1,
+  "repos": {
+   "/r": {
+    "added": 1793050200.5
+   }
+  }
+ },
+ "SharedNotes": {
+  "v": 1,
+  "flakes": {
+   "test_x": 1793050200.5
+  },
+  "notes": [
+   "n"
+  ]
+ },
+ "Pin": {
+  "v": 1,
+  "task-loop": "0.23.38",
+  "delegate": null
+ },
+ "ReleaseResult": {
+  "v": 1,
+  "version": "0.23.57",
+  "ok": true,
+  "t": 1793050200.5,
+  "why": "",
+  "sha": "abc"
+ },
+ "DashState": {
+  "v": 1,
+  "pid": 9,
+  "port": 7878,
+  "bind": "127.0.0.1",
+  "token": "tok",
+  "version": "0.23.56",
+  "started": 1793050200.5,
+  "pid_start": 1793050200.5,
+  "idle_until": null
+ },
+ "SlotSetupMarker": {
+  "v": 1,
+  "cmd_hash": "ab12",
+  "t": 1793050200.5
+ },
+ "RepoProfile": {
+  "engine": {
+   "gate": "just check",
+   "land": "git push origin HEAD:main",
+   "base": "origin/main",
+   "check_links": true,
+   "pick_label": "auto",
+   "needs_info_label": "needs-info",
+   "skip_labels": [],
+   "epic_order": [],
+   "epic_only": false,
+   "gate_only": [
+    "a",
+    {
+     "cmd": "b",
+     "why": "c"
+    }
+   ],
+   "reflect": true,
+   "planner_notes": "",
+   "shot_table": "",
+   "write_fresh_stage_k": 100,
+   "write_fresh_above_k": 150.0,
+   "delegate": "",
+   "untracked_ignore": [],
+   "checks": [
+    {
+     "id": "fmt",
+     "cmd": "just fmt",
+     "group": "static",
+     "when": [
+      "x/**"
+     ],
+     "retry": 0,
+     "timeout_min": null,
+     "idle_min": null,
+     "cache": null,
+     "inputs": "a/**",
+     "inputs_only": false,
+     "exclude": [],
+     "env": {}
+    }
+   ],
+   "host": false,
+   "no_sandbox": false,
+   "worker_rules": "",
+   "test_pattern": "",
+   "area_label_prefix": "",
+   "areas": {},
+   "evidence_dir": "",
+   "visual_paths": {
+    "include": [
+     "a/**"
+    ],
+    "exclude": []
+   },
+   "budget_usd": 15,
+   "budget_min": 180,
+   "budget_min_by_label": {},
+   "max_rounds": 4,
+   "max_check_tries": 3,
+   "max_replans": 2,
+   "max_fix_rounds": 2,
+   "max_stages": 3,
+   "node_timeout_min": 45,
+   "write_idle_warn_min": 15,
+   "write_idle_stop_min": 25,
+   "write_cap_min": 120,
+   "writer_check_max_s": 60,
+   "check_timeout_min": 60,
+   "check_idle_min": 10,
+   "gate_timeout_min": 90,
+   "lane_wait_min": 10,
+   "look_rounds": 2,
+   "look_max_px": 1280,
+   "brief_kb": 5
+  },
+  "slots": {
+   "count": 2,
+   "dir": ".slots",
+   "base": "origin/main",
+   "setup": "just setup",
+   "setup_inputs": [],
+   "keep": []
+  }
+ },
+ "RunRequest": {
+  "role": "worker",
+  "brief_path": "/b.md",
+  "cwd": "/w",
+  "schema_path": "/s.json",
+  "unattended": true,
+  "parent": "p",
+  "task": "t",
+  "title": "T",
+  "resume": "ses",
+  "authored_by": "openai",
+  "host": true,
+  "call_id": "c1",
+  "readable_outside": [
+   "/x"
+  ]
+ },
+ "DelegateResult": {
+  "v": 3,
+  "status": "stop",
+  "reason": "lane_out",
+  "next": "retry",
+  "data": {
+   "summary": "s"
+  },
+  "text": "t",
+  "ref": "r",
+  "lane": "L",
+  "model": "m",
+  "effort": "high",
+  "family": "zai",
+  "flag": null,
+  "cost": 0.1,
+  "tokens": {
+   "in": 412000,
+   "cached": 380000,
+   "out": 5100
+  },
+  "denied": [
+   {
+    "tool": "Bash",
+    "input": {}
+   }
+  ],
+  "secs": 3.0,
+  "run_id": "r1",
+  "call_id": "c1",
+  "transcript": "/t",
+  "transcript_status": "ok",
+  "retry_after": 1793050200.5,
+  "say": "s",
+  "git_violation": [
+   "g"
+  ],
+  "stop": {
+   "reason": "lane_out",
+   "scope": "lane",
+   "permanence": "transient",
+   "retry": {
+    "kind": "predicted",
+    "at": 1793050200.5
+   },
+   "ref": "r",
+   "fix": "f",
+   "resumable": true,
+   "partial": false
+  },
+  "usage": {
+   "tokens": {
+    "in": 412000,
+    "cached": 380000,
+    "out": 5100
+   },
+   "cost": 0.1,
+   "secs": 3.0,
+   "turns": 4,
+   "context_k": 35.5,
+   "ref": "r"
+  },
+  "fallback": "f",
+  "first_lane": "L",
+  "rung": 2,
+  "warnings": [
+   "w"
+  ],
+  "needs_input": false,
+  "ask_user": ""
+ },
+ "DelegateContract": {
+  "worker_run": 3,
+  "features": [
+   "a",
+   "b"
+  ],
+  "reasons": [
+   "busy"
+  ],
+  "lanes": [
+   "L"
+  ]
+ },
+ "WorkerStarted": {
+  "v": 1,
+  "pid": 1,
+  "pgid": 1,
+  "run_id": "r1"
+ },
+ "Bead": {
+  "id": "tl-1",
+  "title": "T",
+  "status": "open",
+  "issue_type": "feature",
+  "priority": 1,
+  "assignee": "a",
+  "labels": [
+   "auto"
+  ],
+  "parent": "tl-0",
+  "description": "d",
+  "design": "x",
+  "acceptance_criteria": "ac",
+  "notes": "n",
+  "dependencies": [
+   "tl-2"
+  ],
+  "metadata": {
+   "held_bead": "tl-3",
+   "slot_hold": {
+    "until": 1793050200.5,
+    "why": "w"
+   },
+   "looks": [
+    {
+     "item": "i",
+     "verdict": "pass",
+     "where": "w",
+     "why": "y"
+    }
+   ],
+   "extra": {
+    "k": 1
+   }
+  },
+  "lease_expires_at": "2026-10-27T00:00:00Z"
+ },
+ "Comment": {
+  "author": "a",
+  "text": "t",
+  "created_at": "2026-10-27T00:00:00Z"
+ },
+ "BdError": {
+  "kind": "lint",
+  "missing_sections": [
+   "ACCEPTANCE"
+  ],
+  "text": "t"
+ }
+}

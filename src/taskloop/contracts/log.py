@@ -1,0 +1,228 @@
+"""EngineLog: the union of records an engine run appends to engine/<run>.jsonl (v2). Start/end pairs share an `id`, unique
+within the file; an end without its start, or the reverse, is a run that died in between."""
+from dataclasses import field
+from typing import ClassVar
+
+from taskloop.contracts.codec import from_tagged, record, table_of
+from taskloop.contracts.enums import Outcome, WaitWhat, WhyCode
+from taskloop.contracts.trace import Tokens
+
+
+@record
+class LogRec:
+    V: ClassVar[int] = 2
+    t: float
+
+
+@record
+class RunStart(LogRec):
+    KIND: ClassVar[str] = "run_start"
+    run: str
+    bead: str
+    worktree: str
+    slot: str | None = None
+    prev_run: str = ""
+    started_because: str = ""
+    ask: str = ""
+
+
+@record
+class StepStart(LogRec):
+    KIND: ClassVar[str] = "step_start"
+    id: str
+    step: str
+    text: str = ""
+    stage: int | None = None
+    stages: int | None = None
+    round: int | None = None
+    write: int | None = None
+    fix: int | None = None
+
+
+@record
+class StepEnd(LogRec):
+    KIND: ClassVar[str] = "step_end"
+    id: str
+    step: str
+    outcome: str
+    detail: str = ""
+    secs: float = 0.0
+
+
+@record
+class CallStart(LogRec):
+    KIND: ClassVar[str] = "call_start"
+    id: str
+    n: int
+    step: str
+    node: str
+    role: str
+    resume: bool = False
+
+
+@record
+class CallEnd(LogRec):
+    KIND: ClassVar[str] = "call_end"
+    id: str
+    status: str
+    reason: str | None = None
+    ref: str = ""
+    lane: str = ""
+    model: str = ""
+    effort: str = ""
+    secs: float = 0.0
+    tokens: Tokens = field(default_factory=Tokens)
+    cost: float = 0.0
+
+
+@record
+class CmdStart(LogRec):
+    KIND: ClassVar[str] = "cmd_start"
+    id: str
+    text: str
+    cwd: str = ""
+
+
+@record
+class CmdEnd(LogRec):
+    KIND: ClassVar[str] = "cmd_end"
+    id: str
+    exit: int
+    secs: float = 0.0
+    out: str = ""
+
+
+@record
+class CheckStart(LogRec):
+    KIND: ClassVar[str] = "check_start"
+    id: str
+    check: str
+    group: str
+    cmd: str
+    round: int
+    log: str = ""
+    timeout_s: float | None = None
+
+
+@record
+class CheckEnd(LogRec):
+    KIND: ClassVar[str] = "check_end"
+    id: str
+    exit: int | None
+    status: str
+    tries: int = 1
+    secs: float = 0.0
+
+
+@record
+class GateStart(LogRec):
+    KIND: ClassVar[str] = "gate_start"
+    cmd: str
+    log: str = ""
+    tree: str = ""
+
+
+@record
+class GateEnd(LogRec):
+    KIND: ClassVar[str] = "gate_end"
+    exit: int | None
+    secs: float = 0.0
+    skipped: bool = False
+
+
+@record
+class WaitStart(LogRec):
+    KIND: ClassVar[str] = "wait_start"
+    id: str
+    what: WaitWhat
+    holder: str = ""
+    until: float | None = None
+
+
+@record
+class WaitEnd(LogRec):
+    KIND: ClassVar[str] = "wait_end"
+    id: str
+    secs: float
+    in_budget: bool = False
+
+
+@record
+class Lock(LogRec):
+    KIND: ClassVar[str] = "lock"
+    what: str
+    holder: str = ""
+
+
+@record
+class Unlock(LogRec):
+    KIND: ClassVar[str] = "unlock"
+    what: str
+    secs: float = 0.0
+
+
+@record
+class VendorError(LogRec):
+    KIND: ClassVar[str] = "vendor_error"
+    node: str
+    reason: str
+    lane: str = ""
+    model: str = ""
+    until: float | None = None
+    error: str = ""
+
+
+@record
+class Kill(LogRec):
+    KIND: ClassVar[str] = "kill"
+    what: str
+    why: str
+    secs: float = 0.0
+
+
+@record
+class Transition(LogRec):
+    KIND: ClassVar[str] = "transition"
+    from_id: str = field(metadata={"name": "from"})
+    to: str
+    cause: str
+    detail: str = ""
+
+
+@record
+class Reload(LogRec):
+    KIND: ClassVar[str] = "reload"
+    old: str
+    new: str
+    step: str
+
+
+@record
+class Warn(LogRec):
+    KIND: ClassVar[str] = "warn"
+    text: str
+
+
+@record
+class Note(LogRec):
+    KIND: ClassVar[str] = "note"
+    text: str
+
+
+@record
+class Close(LogRec):
+    KIND: ClassVar[str] = "close"
+    outcome: Outcome
+    why_code: WhyCode | None = None
+    sha: str = ""
+
+
+EngineLog = (RunStart | StepStart | StepEnd | CallStart | CallEnd | CmdStart | CmdEnd | CheckStart | CheckEnd | GateStart | GateEnd
+             | WaitStart | WaitEnd | Lock | Unlock | VendorError | Kill | Transition | Reload | Warn | Note | Close)
+ENGINE_LOG = table_of(RunStart, StepStart, StepEnd, CallStart, CallEnd, CmdStart, CmdEnd, CheckStart, CheckEnd, GateStart,
+                      GateEnd, WaitStart, WaitEnd, Lock, Unlock, VendorError, Kill, Transition, Reload, Warn, Note, Close)
+
+
+def decode(data: object) -> EngineLog:
+    """The engine-log record `data` is; CodecError (StaleRecord for a foreign v) otherwise."""
+    return from_tagged(ENGINE_LOG, data)
