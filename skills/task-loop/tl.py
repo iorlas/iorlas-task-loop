@@ -62,6 +62,7 @@ except ImportError:  # Windows
     fcntl = None
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parents[1] / "src"))  # taskloop.contracts: the typed records ship in the plugin dir
 DASH = HERE / "dash" / "server.py"
 PORT = int(os.environ.get("TASK_LOOP_DASH_PORT", "7878"))
 SOURCE = "task-loop"
@@ -1870,6 +1871,12 @@ def cmd_doctor(a):
           "config: .task-loop.json from working tree %s (base %s unresolved; no commit read)" % (repo, base))
     warns = doctor_warnings(repo, source)
     warns += bead_lint_warnings(repo)
+    if sys.version_info >= (3, 12):  # src/ is written for the 3.12 floor; older interpreters skip it
+        try:
+            from taskloop import contracts  # the typed records, in src/ next to skills/
+            print("contracts: %s" % Path(contracts.__file__).resolve().parent)
+        except Exception as e:  # an install without src/
+            warns.append("taskloop.contracts does not import: %s: %s" % (type(e).__name__, e))
     for w in warns:
         print("WARN " + w)
     if not warns:

@@ -39,6 +39,7 @@ from urllib.parse import parse_qs, quote, urlparse
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(HERE.parents[2] / "src"))
 import gallery  # noqa: E402
 import graph  # noqa: E402
 import roadmap  # noqa: E402

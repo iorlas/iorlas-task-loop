@@ -18,6 +18,7 @@ import tl
 
 ROOT = te.ROOT
 sys.path.insert(0, str(ROOT / "skills" / "task-loop" / "dash"))
+import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import server  # noqa: E402
 
 

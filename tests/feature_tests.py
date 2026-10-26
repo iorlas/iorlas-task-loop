@@ -9,6 +9,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 FEATURES = {
     "core": ["test_trace_records", "test_tl"],
     "lanes": ["test_opencode", "test_write_idle"],
@@ -22,6 +23,7 @@ FEATURES = {
     "land": ["test_land_lock", "test_held_branch"],
     "look": ["test_look", "test_looks"],
     "write": ["test_stages"],
+    "contracts": [],
     "dash": sorted(p.stem for p in HERE.glob("test_dash*.py")),
 }
 
