@@ -11,6 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import test_engine as te  # noqa: E402
 from test_engine import PY, engine  # noqa: E402,F401
+from checks import lint  # noqa: E402
 from checks import speed as cs  # noqa: E402
 
 
@@ -357,6 +358,123 @@ class Duplicates(SpeedTest):
         eng.gate_record("abc")
         self.assertTrue(eng.gate_green("abc"))
         self.assertFalse(eng.gate_green("abd"))
+
+
+class Schedule(SpeedTest):
+    """tl-7y6.7.11 / .7 / .16 (R09): one launch per command, Unity last, the ban on Unity in acceptance."""
+    # yxbb.3-20261025-005743 engine-checks.r1.json, from ~/.config/task-loop/runs (read-only): the repo checks of lifesim's
+    # .task-loop.json (timeout_min 30 on the two test checks) and the round's items with the seconds they took.
+    REPO = [{"id": "fmt", "cmd": "just fmt-check-changed", "group": "static"}, {"id": "text", "cmd": "just text", "group": "static"},
+            {"id": "unity-analyzers", "cmd": "just unity-analyzers", "group": "static"},
+            {"id": "unity-tests", "cmd": "just unity-tests", "group": "tests", "timeout_min": 30},
+            {"id": "unity-play-tests", "cmd": "just unity-play-tests", "group": "tests", "timeout_min": 30}]
+    GREP = ('test "${TL_CHECK_RC_UNITY_PLAY_TESTS:?}" -eq 0 && test -r "${TL_CHECK_LOG_UNITY_PLAY_TESTS:?}" && grep -Eq '
+            "'total=[1-9][0-9]* passed=[1-9][0-9]* failed=0 skipped=0' \"$TL_CHECK_LOG_UNITY_PLAY_TESTS\"")
+    R1 = {"just fmt-check-changed": 2, "just text": 0, "just worker-plan": 0, "python3 tools/select_tests.py --phase coordinator": 0,
+          "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tools.tests.test_select_tests": 0,
+          "dotnet csharpier check ./client/Assets/Tests/PlayMode/ShareableLoopTests.cs": 1, "just text theme-check client-layers": 1,
+          "just unity-analyzers": 104, "just unity-tests": 190, "just unity-play-tests": 571, GREP: 0}
+    ACCEPTANCE_R1 = ["just worker-plan", "python3 tools/select_tests.py --phase coordinator",
+                     "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tools.tests.test_select_tests",
+                     "dotnet csharpier check ./client/Assets/Tests/PlayMode/ShareableLoopTests.cs", "just text theme-check client-layers",
+                     "just unity-analyzers", "just unity-tests", "just unity-play-tests", GREP,
+                     "just unity-play-tests", "just unity-play-tests", "just unity-play-tests"]
+
+    def replay(self, repo, accept, secs, red=(), **cfg):
+        """Run one check round with a fake shell: no process starts; each launch costs secs[cmd] simulated seconds.
+        Returns (results, [launched commands], simulated seconds per result id)."""
+        eng = self.checks_engine(checks=repo, **cfg)
+        launched = []
+
+        def fake(cmd, timeout=3600, check=False, save=None, env=None, pin=False, idle=0):
+            if not isinstance(cmd, str):
+                return real(cmd, timeout=timeout, check=check, save=save, env=env, pin=pin, idle=idle)
+            launched.append(cmd)
+            eng.hung = False
+            if save:
+                Path(save).write_text("ran %s\n" % cmd)
+            return (1 if cmd in red else 0), "ran"
+        real = eng.sh
+        eng.sh = fake
+        res = eng.run_checks({"checks": accept, "files": []}, "s")
+        return res, launched, {i: secs.get(c["cmd"], 0) if c.get("log") else 0 for i, c in enumerate(res)}
+
+    def test_a_plan_copy_with_a_longer_limit_than_the_repo_check_is_one_launch(self):
+        cmd, n = self.counter()
+        eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests", "timeout_min": 30, "cache": False}])
+        res = eng.run_checks({"checks": [cmd], "files": []}, "s")  # the plan's copy gets check_timeout_min, 60
+        self.assertEqual(eng.cfg["check_timeout_min"], 60)
+        self.assertEqual((n.read_text(), [bool(c.get("reused")) for c in res]), ("1", [False, True]))
+
+    def counter(self, code=0):
+        n = Path(self.tmp.name) / "unity-runs"
+        return PY + ' -c "import sys; open(%r, \'a\').write(\'1\'); print(\'Passed: 12\'); sys.exit(%d)"' % (str(n), code), n
+
+    @te.POSIX_CHECK
+    def test_a_wrapper_that_only_sets_up_and_redirects_is_the_repo_check(self):
+        cmd, n = self.counter()
+        eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests", "cache": False}])
+        res = eng.run_checks({"checks": ["mkdir -p e && %s > e/log 2>&1" % cmd], "files": []}, "s")
+        self.assertEqual((n.read_text(), [c["status"] for c in res]), ("1", ["ran", "ran"]))
+        self.assertEqual(cs.canon("mkdir -p e && just unity-tests > e/log"), "just unity-tests")
+        self.assertEqual(cs.canon("just   unity-tests  | tee -a e/log"), "just unity-tests")
+        for kept in ("FOO=1 just unity-tests", "just unity-tests foo", "cd client && just unity-tests", "just unity-tests; true",
+                     "mkdir e && just a && just b", "! just unity-tests"):
+            self.assertEqual(cs.canon(kept), " ".join(kept.split()), kept)
+
+    def test_a_first_run_that_timed_out_under_a_shorter_limit_is_not_reused_by_a_longer_one(self):
+        n = Path(self.tmp.name) / "slow-runs"
+        slow = PY + ' -c "import time; open(%r, \'a\').write(\'1\'); time.sleep(3)"' % str(n)
+        eng = self.checks_engine(checks=[{"id": "short", "cmd": slow, "group": "tests", "timeout_min": 0.02, "cache": False},
+                                         {"id": "long", "cmd": slow, "group": "tests", "timeout_min": 1, "cache": False}])
+        res = eng.run_checks({"checks": [], "files": []}, "s")
+        self.assertEqual(([c["exit"] for c in res], n.read_text()), ([124, 0], "11"))
+
+    def test_replay_yxbb3_r1_the_acceptance_copies_of_the_unity_checks_add_nothing(self):
+        res, launched, secs = self.replay(self.REPO, self.ACCEPTANCE_R1, self.R1, cache=True)
+        for c in ("just unity-analyzers", "just unity-tests", "just unity-play-tests"):
+            self.assertEqual(launched.count(c), 1, c)  # r1 launched unity-tests and unity-play-tests twice
+        copies = [r for r in res if r["group"] == "acceptance" and r["cmd"].startswith("just unity-")]
+        self.assertEqual(len(copies), 6)  # the analyzers, unity-tests and four play-test copies, as in r1
+        self.assertTrue(all(r.get("reused") for r in copies))
+        # r1 as recorded spent 869 s on the repo checks plus 208 s (unity-tests) and 536 s (unity-play-tests) on acceptance copies
+        self.assertEqual(sum(self.R1[c] for c in launched), 869)
+
+    def test_acceptance_that_reads_no_check_log_is_judged_before_the_unity_group(self):
+        repo = [{"id": "unity-tests", "cmd": "just unity-tests", "group": "tests"}, {"id": "fmt", "cmd": "just fmt", "group": "static"}]
+        res, launched, _ = self.replay(repo, ["just cheap-accept", "test -r $TL_CHECK_LOG_UNITY_TESTS"], {})
+        self.assertEqual(launched, ["just fmt", "just cheap-accept", "just unity-tests", "test -r $TL_CHECK_LOG_UNITY_TESTS"])
+
+    def test_a_red_acceptance_check_stops_the_round_before_unity_with_the_reason(self):
+        repo = [{"id": "unity-tests", "cmd": "just unity-tests", "group": "tests"},
+                {"id": "unity-analyzers", "cmd": "just unity-analyzers", "group": "static"}]
+        accept = ["just cheap-accept", "test -r $TL_CHECK_LOG_UNITY_TESTS", "just unity-tests"]
+        res, launched, _ = self.replay(repo, accept, {}, red={"just cheap-accept"})
+        self.assertEqual(launched, ["just cheap-accept"])
+        skipped = [(c["id"], c["why"]) for c in res if c["status"] == "skipped"]
+        self.assertEqual(len(skipped), 4)
+        self.assertTrue(all("failed first" in w for _, w in skipped))
+
+    def test_replay_of_acceptance_only_red_rounds_never_relaunches_unity(self):
+        # a round shaped like yxbb.3 r1 whose only red is a cheap acceptance check, replayed three times (the rounds a writer fixes)
+        for bad in ("just worker-plan", "just text theme-check client-layers", "python3 tools/select_tests.py --phase coordinator"):
+            res, launched, _ = self.replay(self.REPO, self.ACCEPTANCE_R1, self.R1, red={bad}, cache=True)
+            self.assertFalse([c for c in launched if "unity" in c], bad)
+            self.assertEqual([c["id"] for c in res if c["status"] == "failed"], [bad])
+
+    def test_the_plan_validator_rejects_unity_recipes_in_acceptance_and_a_limit_above_the_cap(self):
+        cfg = {"checks": self.REPO}
+        plan = dict(te.PLAN, stages=[dict(te.PLAN["stages"][0], checks=[
+            "just unity-tests", "mkdir -p e && just unity-play-tests > e/log && grep -q ok e/log", "echo 'just unity-tests'", "just unity-foo", "just fmt"])])
+        got = lint.unity_problems(plan, cfg)
+        self.assertEqual(len(got), 3)
+        self.assertIn("TL_CHECK_LOG_UNITY_TESTS", got[0])
+        self.assertIn("TL_CHECK_RC_UNITY_PLAY_TESTS", got[1])
+        self.assertIn("do not launch it from acceptance", got[2])
+        over = dict(te.PLAN, stages=[dict(te.PLAN["stages"][0], checks=["just play --timeout_ms 7200000"])])
+        self.assertEqual(len(lint.timeout_problems(over, 60)), 1)
+        self.assertEqual(lint.repo_check_of("mkdir -p e && just unity-tests > e/log", cfg), "unity-tests")
+        self.assertIsNone(lint.repo_check_of("just unity-tests foo", cfg))
 
 
 class Watchdog(SpeedTest):

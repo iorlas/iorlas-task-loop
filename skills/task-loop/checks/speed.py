@@ -1,5 +1,12 @@
 """Helpers for the engine's check rounds: what a check's result is a fact about (its inputs), what a check costs
-(duration history), and which checks repeat another. Pure functions and small files; no engine state."""
+(duration history), and which checks repeat another. Pure functions and small files; no engine state.
+
+Cache policy (tl-7y6.7.7): a green result is remembered per check as a fact about the files in its `inputs` (InputKeys).
+Widen `inputs`, never narrow: a glob that is too wide only costs a rerun, one that is too narrow serves a green over
+code the check never saw, and a wrong cache hit is worse than a miss. A check with no `inputs` is keyed on the whole
+tree and base; a glob that matches no tracked file switches the cache off for that round. Only a pass is stored, and
+a plan's own (acceptance) check is never cached: it can read what git cannot see. What an acceptance copy of a repo
+check reuses is that check's result of the same round (see canon), not an earlier one."""
 
 import hashlib
 import json
@@ -55,6 +62,29 @@ def literal_prefix(g):
 
 def norm(cmd):
     return " ".join(str(cmd).split())
+
+
+UNITY = re.compile(r"(?i)unity")  # the Unity group: repo checks that name Unity in their id or command (slot queue, minutes each)
+SETUP = re.compile(r"^\s*mkdir(?:\s+-p)?\s+\S+\s*$")  # a wrapper's setup that changes nothing the command reads
+TAIL_REDIRECT = re.compile(r"""\s*(?:\d*>>?\s*[^\s|&;<>]+|&>>?\s*[^\s|&;<>]+|\d*>&\d|\|\s*tee(?:\s+-a)?\s+[^\s|&;<>]+)\s*$""")
+
+
+def canon(cmd):
+    """What a command is a fact about: whitespace normalised, `mkdir -p dir &&` setup and trailing output redirections
+    stripped when exactly one command is left (`mkdir -p e && just unity-tests > e/log` -> `just unity-tests`). An env prefix,
+    arguments, a `!` or any other part stay: they change the run. Anything not split by `&&` alone is left as written."""
+    segs = split_top(str(cmd))
+    if not segs or any(sep not in ("&&", "") for _, sep in segs):
+        return norm(cmd)
+    keep = [seg for seg, _ in segs if seg.strip() and not SETUP.match(seg)]
+    if len(keep) != 1:
+        return norm(cmd)
+    one = keep[0]
+    while True:
+        new = TAIL_REDIRECT.sub("", one)
+        if new == one:
+            return norm(one)
+        one = new
 
 
 # --- per-check input hash -------------------------------------------------------------------------------------------
@@ -219,12 +249,13 @@ def expected_secs(cmd, history):
 
 # --- order ----------------------------------------------------------------------------------------------------------
 
-def order_by_cost(items, history, rank, deps=None):
-    """Stable order by (expected cost, rank(item), declaration). deps: {id(item): [items it must come after]}; an item
+def order_by_cost(items, history, rank, deps=None, late=()):
+    """Stable order by (late, expected cost, rank(item), declaration); `late` (ids of items) go after every other item whose
+    dependencies allow it (the Unity group: cheap checks, acceptance included, get their verdict first). deps: {id(item): [items it must come after]}; an item
     waits for its dependencies (a check reading $TL_CHECK_LOG_X goes after X). Dependencies never loop forever: a
     cycle is broken by declaration order."""
     deps = deps or {}
-    keyed = sorted(range(len(items)), key=lambda i: (expected_secs(items[i]["cmd"], history), rank(items[i]), i))
+    keyed = sorted(range(len(items)), key=lambda i: (id(items[i]) in late, expected_secs(items[i]["cmd"], history), rank(items[i]), i))
     placed, out, left = set(), [], list(keyed)
     while left:
         for i in left:

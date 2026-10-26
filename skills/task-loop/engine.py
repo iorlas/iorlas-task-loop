@@ -2476,7 +2476,8 @@ class Engine:
         bad, gated, dry = lint.tracker_checks(data), lint.gate_only_checks(data, self.cfg), lint.dry_check(data, self.wt)
         rep = self.repeated_slow(data)
         only = gate_only_criteria(data, self.cfg)
-        led = lint.ledger_problems(data) + lint.timeout_problems(data, self.cfg["check_timeout_min"])
+        led = (lint.ledger_problems(data) + lint.timeout_problems(data, self.cfg["check_timeout_min"])
+               + lint.unity_problems(data, self.cfg))
         if led:
             dry = dry + led  # sent back with the checks that cannot run
         # tl-wjj: a plan with no stages, no question and nothing to file breaks the plan contract (lifesim-w6mk failed on it): back
@@ -3433,7 +3434,14 @@ class Engine:
         env_of = {lint.check_env_name(c["id"])[len("TL_CHECK_LOG_"):]: c for c in items if c["group"] != "acceptance"}
         deps = {id(c): [env_of[m] for m in dict.fromkeys(re.findall(r"TL_CHECK_(?:LOG|RC)_(\w+)", c["cmd"])) if m in env_of]
                 + needs.get(id(c), []) for c in items}
-        items = cs.order_by_cost(items, history, lambda c: rank.get(c["group"], 1), deps)
+        # tl-7y6.7.16: the Unity group (a repo check naming Unity) goes last: an acceptance check that reads no TL_CHECK_* is
+        # judged before it, and a red anywhere skips the Unity group with the reason. An acceptance copy of a repo check
+        # waits for that check and takes its result (tl-7y6.7.11).
+        unity = {id(c) for c in repo if cs.UNITY.search(c["id"] + " " + c["cmd"])}
+        for w in items:
+            if w["group"] == "acceptance":
+                deps[id(w)] += [r for r in repo if cs.canon(r["cmd"]) == cs.canon(w["cmd"]) and r not in deps[id(w)]]
+        items = cs.order_by_cost(items, history, lambda c: rank.get(c["group"], 1), deps, late=unity)
         cache_path = tl.config_dir() / "check-cache" / ("%s.json" % self.bead)
         try:
             cache = json.loads(cache_path.read_text())
@@ -3446,13 +3454,16 @@ class Engine:
         logs = self.run_dir / "checks"
         logs.mkdir(exist_ok=True)
         timings = []  # (cmd, secs) of what ran, for the duration history
+        red_skipped = set()  # ids of items left out because a group was red
         out, red, changed, ran, env_logs = [], None, None, {}, {}  # ran: what ran in this block -> its result; env_logs: its logs, for later checks
         for n, c in enumerate(items):
             base = {"cmd": c["cmd"], "id": c["id"], "group": c["group"]}
-            if red and (c["group"] != red or cs.expected_secs(c["cmd"], history) >= cs.CHEAP_S):
+            if red and (c["group"] != red or cs.expected_secs(c["cmd"], history) >= cs.CHEAP_S or id(c) in unity
+                        or any(id(d) in red_skipped for d in deps.get(id(c), ()))):  # a check reading a skipped check's log has none
                 # a red group skips the groups after it, and any red skips every expensive check (the cheap ones of its own
-                # group run to the end, so the writer sees all the cheap failures at once)
+                # group run to the end, so the writer sees all the cheap failures at once; the Unity group never runs after a red)
                 out.append(dict(base, exit=None, status="skipped", why="%s failed first" % red, tail=""))
+                red_skipped.add(id(c))
                 continue
             if c["when"]:
                 changed = self.changed_paths() if changed is None else changed
@@ -3461,10 +3472,15 @@ class Engine:
                                     why="no change under %s" % ", ".join(c["when"])))
                     continue
             cmd = c["cmd"]
-            same = (cmd.strip(), str(self.wt), c["timeout"])  # what a result is a fact about: command, directory, limit
-            if same in ran:  # each distinct command runs once per block (tl-bxk.10.27)
+            same = (cs.canon(cmd), str(self.wt))  # what a result is a fact about: the command (setup and redirects aside), directory
+            seen_before = ran.get(same)
+            # each distinct command runs once per block (tl-bxk.10.27), whatever limit its copy carries (tl-7y6.7.11); the limit
+            # matters only when the first run timed out under a shorter one. A green wrapper that reads a repo check's log runs
+            # its own part instead (it writes the file the rest of the plan reads); a red one is not launched again.
+            if seen_before and (seen_before[0]["exit"] != 124 or seen_before[1] >= c["timeout"]) and not (
+                    seen_before[0]["exit"] == 0 and id(c) in needs and norm_cmd(cmd) != same[0]):
                 self.log("note", "`%s` already ran in this block: its result is reused" % cmd[:120])
-                res = dict(ran[same], **base)
+                res = dict(seen_before[0], **base)
                 res.update(cached=False, reused=True)
                 out.append(res)
                 if res["exit"] != 0:
@@ -3557,7 +3573,7 @@ class Engine:
                     else:
                         cache.setdefault(key, {})[c["cmd"]] = res
             out.append(res)
-            ran[same] = res
+            ran[same] = (res, c["timeout"])
             if c["group"] != "acceptance" and res.get("exit") is not None:  # later checks read its log: $TL_CHECK_LOG_<ID>
                 lp = (logs / log_name) if not res.get("cached") else (
                     Path(res["log_abs"]) if res.get("log_abs") and Path(res["log_abs"]).is_file() else self.run_dir / res.get("log", ""))
