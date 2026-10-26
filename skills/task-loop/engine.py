@@ -623,6 +623,10 @@ class Blocked(Exception):
         self.why, self.question, self.options = why, question, options or []
 
 
+class FixFailed(Blocked):
+    """A conflict fix round that could not finish (no rounds left, or the rebase would not continue): a resume salvage starts again."""
+
+
 class Engine:
     def __init__(self, bead, wt, cfg, dry_run=False, verbose=True):
         self.bead, self.wt, self.cfg, self.dry, self.verbose = bead, wt, cfg, dry_run, verbose
@@ -676,6 +680,7 @@ class Engine:
         self.write_rounds = []  # per write round: resumed, input tokens, turns, prompt chars, context k, why fresh (a fix round's cost)
         self.last_summary = ""  # the last write's summary: a fresh writer is told it
         self.handoff = {"rounds": [], "seen_lows": []}  # tl-bxk.13.6: what the rounds did and what a review already noted
+        self.salvaged = False  # a resume conflict was fixed in place, not by starting again (tl-7y6.2.19)
         self.lane_notes = []  # steps that ran on the writer's own family, with delegate's warning (tl: same_family, never a pause)
         self.rebase_resets = 0  # times the plan count started again after a rebase (checkpointed)
         self.look_done, self.look_prev = 0, []  # render rounds this stage; the last round's defects (tl-bxk.13.15)
@@ -961,7 +966,7 @@ class Engine:
                "cost": self.cost, "stats": self.stats, "host": self.host, "delegate": self.route or "", "log": str(self.log_path),
                "stderr": str(self.err_path), "lanes": (self.contract or {}).get("lanes"), "sessions": self.sessions,
                "verified": self.verified, "write_rounds": self.write_rounds, "strays": self.strays,
-               "reflection": getattr(self, "reflection", None), "lane_notes": self.lane_notes}
+               "reflection": getattr(self, "reflection", None), "lane_notes": self.lane_notes, "salvaged": self.salvaged}
         rec.update(self.origin())
         try:
             with open(tl.config_dir() / "traces.jsonl", "a", encoding="utf-8") as f:
@@ -1990,37 +1995,87 @@ class Engine:
         flakes = self.flakes_text()
         return ("\n" + "".join(out) + flakes) if (out or flakes) else ""
 
-    def rebase_onto_base(self):
+    SALVAGE_MAX_FILES = 10  # tl-7y6.2.19: a resume conflict in more files than this starts again; fewer is fixed
+
+    def rebase_onto_base(self, salvage=False):
         """tl-bxk.13.8: a branch resumed from an earlier run is rebased onto the latest base before it is planned or
         re-planned, so the plan and the engine's checks see what main has now (lifesim-ov3w: a gate check named a recipe the
         branch's base lacked, three plans in 11 min). -> "rebased" (the plan count starts again: the earlier plans were made on
-        another base), "conflict" (the branch work does not fit main: the caller starts again, tl-19i), or "".
-        The branch is left as it was in the conflict, and when there is nothing to do."""
+        another base), "conflict" (the branch work does not fit main: the caller starts again, tl-19i), "conflict-fixable" (salvage on: the
+        rebase stopped on at most SALVAGE_MAX_FILES files and is left running for the caller's fix(conflict)), or "".
+        tl-7y6.2.19: more than one commit on the branch (the wip commits) is squashed first, as finish() does, so one conflict
+        is fixed once. The branch is left as it was in the conflict (squash undone), and when there is nothing to do."""
         if self.dry or self.dirty_status():  # (the base-ignored files of an old branch, Unity's logs, are no reason not to rebase)
             return ""
         behind = self.git("rev-list", "--count", "HEAD..%s" % self.cfg["base"])
         if behind in ("", "0"):
             return ""
-        old = self.git("rev-parse", "HEAD")
+        orig = self.git("rev-parse", "HEAD")
         old_parent = self.git("rev-parse", "-q", "--verify", "HEAD~1") if getattr(self, "left_dirty", False) else ""
+        self.squashed = False
+        mb = self.git("merge-base", "HEAD", self.cfg["base"])
+        if mb and self.git("rev-list", "--count", "%s..HEAD" % mb) not in ("", "0", "1"):  # the wip commits become one, like finish()
+            rc, tail = self.sh(["git", "reset", "-q", "--soft", mb], pin=True)
+            if not rc:
+                rc, tail = self.sh(["git", "commit", "-q", "--no-verify", "--allow-empty", "-m", "wip (%s): earlier work, squashed" % self.bead], pin=True)
+            if rc:  # the branch stays as it was
+                self.sh(["git", "reset", "-q", "--hard", orig], pin=True)
+            else:
+                self.squashed = True
+                self.log("note", "squashed the branch's wip commits into one before rebasing")
+        self.rebase_orig, self.rebase_pre = orig, [x for x in (orig, old_parent) if x]
         rc, tail = self.sh(["git", "rebase", "-q", self.cfg["base"]], pin=True)
-        if not rc:  # the checkpoint's head follows, or the next resume reads this as an edit from outside
-            try:
-                ck = json.loads(self.checkpoint_path().read_text())
-                if isinstance(ck, dict) and ck.get("head") == old:
-                    ck["head"] = self.git("rev-parse", "HEAD")
-                    self.checkpoint_path().write_text(json.dumps(ck, indent=1))
-                elif isinstance(ck, dict) and old_parent and ck.get("head") == old_parent:  # the wip commit reset() made on top of it
-                    ck["head"] = self.git("rev-parse", "HEAD~1")
-                    self.checkpoint_path().write_text(json.dumps(ck, indent=1))
-            except (OSError, ValueError):
-                pass
         if rc:
+            unmerged = self.git("diff", "--name-only", "--diff-filter=U").split()
+            if salvage and unmerged and len(unmerged) <= self.SALVAGE_MAX_FILES:
+                self.salvage_tail = "Conflicted files: %s\n%s" % (", ".join(unmerged), tail)
+                return "conflict-fixable"
             self.sh(["git", "rebase", "--abort"], pin=True)
+            if self.squashed:
+                self.sh(["git", "reset", "-q", "--hard", orig], pin=True)
             self.warn("the task branch could not be rebased onto %s before planning: %s"
                       % (self.cfg["base"], tail.strip().splitlines()[-1][:200] if tail.strip() else "conflict"))
             return "conflict"
+        self.follow_checkpoint()
         self.log("note", "rebased the task branch onto the latest %s (%s commits behind) before planning" % (self.cfg["base"], behind))
+        return self.rebased_plan_count()
+
+    def follow_checkpoint(self):
+        """The checkpoint's head follows a rebase (or squash), or the next resume reads this as an edit from outside."""
+        try:
+            ck = json.loads(self.checkpoint_path().read_text())
+            if isinstance(ck, dict) and ck.get("head") in self.rebase_pre:
+                # unsquashed, the wip commit reset() made on top of the checkpoint's head is still on top of it
+                above = not self.squashed and len(self.rebase_pre) > 1 and ck["head"] == self.rebase_pre[1]
+                ck["head"] = self.git("rev-parse", "HEAD~1" if above else "HEAD")
+                self.checkpoint_path().write_text(json.dumps(ck, indent=1))
+        except (OSError, ValueError):
+            pass
+
+    def salvage_resume_conflict(self):
+        """tl-7y6.2.19: the resume rebase stopped on a few files: one fix(conflict) round (markers and build only) instead of
+        throwing the branch away. -> "rebased" (the run record shows salvaged: true), or "conflict": the fix did not work, the
+        branch is back as it was and the caller starts again."""
+        fixes, ok = self.fixes, False
+        try:
+            d = self.fix("conflict", self.salvage_tail, resume=True)
+            ok = d == "accept" and not self.git("diff", "--name-only", "--diff-filter=U")
+        except FixFailed as e:
+            self.warn("the resume conflict fix failed: %s" % str(e).splitlines()[0][:200])
+        finally:
+            self.fixes = fixes  # the land's two fix rounds are its own
+        gd = Path(self.git("rev-parse", "--absolute-git-dir") or ".")
+        if (gd / "rebase-merge").exists() or (gd / "rebase-apply").exists():
+            self.sh(["git", "rebase", "--abort"], pin=True)
+        if not ok:
+            self.sh(["git", "reset", "-q", "--hard", self.rebase_orig], pin=True)  # the work as it was, for start_again_on_base
+            return "conflict"
+        self.salvaged = True
+        self.follow_checkpoint()
+        self.log("note", "resume conflict fixed in place instead of starting again (salvaged)", salvaged=True)
+        return self.rebased_plan_count()
+
+    def rebased_plan_count(self):
         if self.planned and self.rebase_resets < MAX_REBASE_RESETS:
             # tl-19i: plans made on the old base say nothing about this one (lifesim-ov3w counted 2). At most twice per bead:
             # a bead whose gate is red for a real reason must still reach the limit while main keeps moving
@@ -2218,7 +2273,10 @@ class Engine:
             # tl-fsj: the configured checks come from the base's config, so the tree they run on must have what the base has; every
             # resume rebases first, a plan to make or a stage to go on with (lifesim: 8 beads parked on 'just fmt-check-changed')
             at_land = plan is not None and (i >= len(plan["stages"]) or (state or {}).get("fix"))  # a conflict there is the writer's fix round
-            moved = "" if at_land else self.rebase_onto_base()
+            moved = "" if at_land else self.rebase_onto_base(salvage=plan is not None)  # (no plan: nothing accepted to salvage)
+            if moved == "conflict-fixable":
+                self.plan_data = self.plan_data or plan
+                moved = self.salvage_resume_conflict()
             if moved == "conflict" and self.start_again_on_base("Its work: %s" % (self.git("log", "--oneline", "-n", "3", "%s..HEAD" % self.cfg["base"]) or "").replace("\n", "; ")):
                 plan, i, state = None, 0, None
             elif moved == "rebased" and plan is not None:
@@ -3366,7 +3424,7 @@ class Engine:
                 continue
             acc_first = acc_only and not acc_first  # once, then the normal order: a check may read what a tests-group check writes
             checks = self.run_checks(dict(st, checks=st["checks"] + (self.case_checks() if last else [])), name,
-                                     acceptance_first=acc_first, round=rounds + 1, **where)
+                                     acceptance_first=acc_first, conflict_fix=state.get("conflict_fix"), round=rounds + 1, **where)
             (self.run_dir / "engine-checks.json").write_text(json.dumps(checks, indent=1))
             (self.run_dir / ("engine-checks.r%d.json" % self.check_round)).write_text(json.dumps(checks, indent=1))
             self.last_checks, self.checks_tree = checks, self.tree_hash()
@@ -3613,17 +3671,19 @@ class Engine:
         out = tl.git("diff", "--name-only", self.base_sha(), tree, cwd=self.wt) if tree else ""
         return [p for p in out.splitlines() if p]
 
-    def run_checks(self, st, name, acceptance_first=False, groups=None, **meta):
-        out = self._run_checks(st, name, acceptance_first=acceptance_first, groups=groups, **meta)
+    def run_checks(self, st, name, acceptance_first=False, groups=None, conflict_fix=None, **meta):
+        out = self._run_checks(st, name, acceptance_first=acceptance_first, groups=groups, conflict_fix=conflict_fix, **meta)
         self.assert_tree("checks", "after")
         return out
 
-    def _run_checks(self, st, name, acceptance_first=False, groups=None, **meta):
+    def _run_checks(self, st, name, acceptance_first=False, groups=None, conflict_fix=None, **meta):
         """One engine step, no AI: the repo's checks (engine.checks) and the stage's acceptance checks, grouped
         static → tests → acceptance; a red group skips the groups after it. A repo check with `when` runs only when the
         task changed a matching path; `retry` reruns a red one (known flaky). A repo check that passed on the same tree
         and base is not run again, unless it says `"cache": false`; a stage check always runs, since a plan's check can
-        read what git cannot see (a running editor, a log, a bead comment). The gate is not here: it runs once, on the rebased tree, at land."""
+        read what git cannot see (a running editor, a log, a bead comment). The gate is not here: it runs once, on the rebased tree, at land.
+        conflict_fix (tl-7y6.2.18; the plan's check commands the fix skips, else None): a conflict fix runs the marker check and
+        the repo's build checks only; every other check is recorded as skipped (conflict_fix) and the gate verifies the result."""
         self.node("checks", "checks: %s" % name, **meta)
         self.check_round += 1
         items = [{"id": c.get("id") or c["cmd"], "cmd": c["cmd"], "group": c.get("group") or "tests",
@@ -3637,6 +3697,14 @@ class Engine:
         items += [{"id": c, "cmd": c, "group": "acceptance", "when": [], "retry": 0,
                    "timeout": float(self.cfg["check_timeout_min"]), "cache": False, "inputs": [], "inputs_only": False, "env": {},
                    "idle": float(self.cfg["check_idle_min"] or 0) * 60} for c in st["checks"]]
+        pre_skipped = []
+        if conflict_fix is not None:
+            keep = [c for c in items if c["cmd"] == self.MARKERS or (c.get("repo") and CONFLICT_BUILD.search(c["id"] + " " + c["cmd"]))]
+            pre_skipped = [dict(cmd=c["cmd"], id=c["id"], group=c["group"], exit=None, status="skipped", why="conflict_fix", tail="")
+                           for c in items if c not in keep]
+            pre_skipped += [dict(cmd=x, id=x, group="acceptance", exit=None, status="skipped", why="conflict_fix", tail="")
+                            for x in dict.fromkeys(conflict_fix) if x != self.MARKERS and x not in {c["cmd"] for c in items}]
+            items = keep
         if groups:  # tl-bxk.13.15: only these groups (the cheap checks before a render)
             items = [c for c in items if c["group"] in groups]
         # Cheapest first, by the median of earlier runs of the same command (unknown = cheap), so a red verdict comes
@@ -3687,7 +3755,7 @@ class Engine:
         logs.mkdir(exist_ok=True)
         timings = []  # (cmd, secs) of what ran, for the duration history
         red_skipped = set()  # ids of items left out because a group was red
-        out, red, changed, ran, env_logs = [], None, None, {}, {}  # ran: what ran in this block -> its result; env_logs: its logs, for later checks
+        out, red, changed, ran, env_logs = list(pre_skipped), None, None, {}, {}  # ran: what ran in this block -> its result; env_logs: its logs, for later checks
         for n, c in enumerate(items):
             base = {"cmd": c["cmd"], "id": c["id"], "group": c["group"]}
             if red and (c["group"] != red or cs.expected_secs(c["cmd"], history) >= cs.CHEAP_S or id(c) in unity
@@ -4043,10 +4111,11 @@ class Engine:
                       "undoing what the stages built:\n%s\n")}
     MARKERS = "! git grep -n -I -E '^(<<<<<<<|>>>>>>>)( |$)' -- ."
 
-    def fix(self, kind, tail):
-        """One fix round at land: write → checks (every stage's checks, again) → a review of the fix only. A gate fix is
+    def fix(self, kind, tail, resume=False):
+        """One fix round at land: write → checks (a conflict fix: markers and build only; else every stage's checks, again) → a review of the fix only. A gate fix is
         folded into the task's commit; a conflict fix continues the rebase; a verify fix (what the verifier found wrong,
-        before the task's commit) stays in the tree. max_fix_rounds per bead, then stuck. Returns the fix stage's end."""
+        before the task's commit) stays in the tree. max_fix_rounds per bead, then stuck. Returns the fix stage's end.
+        resume: the conflict is the resume rebase's (tl-7y6.2.19), so the checkpoint stays where it is."""
         self.fixes += 1
         limit = int(self.cfg["max_fix_rounds"])
         what = {"gate": "gate red on the rebased tree", "conflict": "merge conflict with main",
@@ -4054,17 +4123,20 @@ class Engine:
         if self.fixes > limit:
             if kind == "conflict":
                 self.sh(["git", "rebase", "--abort"], pin=True)
-            raise Blocked("%s after %d fix rounds: it needs the owner's hint\n%s" % (
+            raise (FixFailed if kind == "conflict" else Blocked)("%s after %d fix rounds: it needs the owner's hint\n%s" % (
                 what, limit, trim.trim_log(tail, log=str(getattr(self, "gate_log", "") or "") if kind == "gate" else "")))
         self.warn("land: %s, fix round %d of %d" % (what, self.fixes, limit))
-        self.save_checkpoint(stage=len((self.plan_data or {}).get("stages") or []), rounds=0, n=0, feedback="", step="land")
+        if not resume:
+            self.save_checkpoint(stage=len((self.plan_data or {}).get("stages") or []), rounds=0, n=0, feedback="", step="land")
         checks = list(dict.fromkeys(c for s in (self.plan_data or {}).get("stages") or [] for c in s["checks"]))
-        if kind == "conflict":
-            checks.append(self.MARKERS)
+        skip = None
+        if kind == "conflict":  # tl-7y6.2.18: markers and build only; the plan's checks are skipped, the gate runs once on the result
+            skip = list(dict.fromkeys(checks + self.case_checks()))
+            checks = [self.MARKERS]
         goal, text = self.FIX[kind]
         st = {"goal": "Fix: " + goal, "files": [], "checks": checks, "hard": False}
         d = self.stage({"stages": [st]}, 0, {
-            "fix": True, "name": "fix %d/%d" % (self.fixes, limit), "fix_n": self.fixes, "fix_of": limit,
+            "fix": True, "conflict_fix": skip, "name": "fix %d/%d" % (self.fixes, limit), "fix_n": self.fixes, "fix_of": limit,
             "failed": [self.cfg["gate"] or "rebase"] if kind == "gate" else None,
             "feedback": text % tail if kind == "verify" else text % (
                 (" (`%s`)" % self.cfg["gate"]) if kind == "gate" and self.cfg["gate"] else "",
@@ -4080,7 +4152,7 @@ class Engine:
             rc, out = self.sh(["git", "-c", "core.editor=true", "rebase", "--continue"], pin=True)
             if rc:
                 self.sh(["git", "rebase", "--abort"], pin=True)
-                raise Blocked("failed: the rebase did not continue after the conflict fix\n" + out)
+                raise FixFailed("failed: the rebase did not continue after the conflict fix\n" + out)
         elif kind == "gate" and self.git("status", "--porcelain"):
             self.stage_all(check=True)
             self.sh(["git", "commit", "-q", "--no-verify", "--amend", "--no-edit"], check=True, pin=True)
@@ -5378,6 +5450,7 @@ def compact(checks):
     return "\n".join(out) or "- (no checks)"
 
 
+CONFLICT_BUILD = re.compile(r"(?i)(?<![a-z])(build|compile)(?![a-z])")  # a repo check a conflict fix still runs (tl-7y6.2.18)
 SLOW_CMD = re.compile(r"(?i)(?<![a-z])(unity|play|test[-_]all|check|build|dotnet)")
 
 

@@ -1070,6 +1070,109 @@ class ResumeCount(StagesTest):
         self.assertEqual(shown, "main moved on\n")
         self.assertTrue(any("Resume (engine)" in str(c) for c in self.bd_calls))  # the bead says where the parked work is
 
+    # -- tl-7y6.2.19: a resume conflict is squashed and fixed in place (a few files), not thrown away
+    def wip_branch(self, steps, main, files=("a.txt",)):
+        """task/t-1 with one wip commit per entry of `steps` (the text every file in `files` gets), a checkpoint mid-stage, and
+        main moved on to `main` in the same files. The slot is left detached at the base, as a parked run leaves it."""
+        te.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
+        for n, text in enumerate(steps):
+            for f in files:
+                (self.wt / f).write_text(text + "\n")
+            te.sh("git", "add", "-A", cwd=self.wt)
+            te.sh("git", "commit", "-qm", "wip (t-1): %d" % n, cwd=self.wt)
+        base = Path(self.tmp.name, "base-moves")
+        te.sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(base), cwd=self.tmp.name)
+        for f in files:
+            (base / f).write_text(main + "\n")
+        te.sh("git", "add", "-A", cwd=base)
+        te.sh("git", "commit", "-qm", "main moves", cwd=base)
+        te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e.reset(dict(BEAD))
+        e.plan_data = dict(PLAN)
+        e.save_checkpoint(stage=0, rounds=0, n=1, feedback="", step="write")
+        te.sh("git", "checkout", "-q", "--detach", "origin/main", cwd=self.wt)
+
+    def resolving_worker(self, which=1, file="a.txt", text="merged"):
+        """The `which`-th worker call resolves `file` (the conflict fix), as a real writer would."""
+        real = te.DelegateScript.__call__
+
+        def call(this, route, role, *a, **kw):
+            r = real(this, route, role, *a, **kw)
+            if role == "worker" and [c[0] for c in this.calls].count("worker") == which:
+                Path(this.cwds[-1], file).write_text(text + "\n")
+            return r
+        return mock.patch.object(te.DelegateScript, "__call__", call)
+
+    def last_trace(self):
+        return json.loads((tl.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
+
+    def test_wip_commits_that_conflict_only_unsquashed_are_squashed_and_rebase_without_a_fix(self):
+        self.wip_branch(["step 1", "step 2", "step 3", "main moved on"], "main moved on")
+        rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[0] for c in s.calls], ["worker", "reviewer"])  # no fix round, no plan
+        text = self.eng.log_path.read_text()
+        self.assertIn("squashed the branch's wip commits into one", text)
+        self.assertNotIn("resume_conflict", text)
+        self.assertFalse(self.last_trace()["salvaged"])
+        self.assertEqual(te.tl.git("show", "origin/main:a.txt", cwd=str(self.wt)), "main moved on")
+        self.assertEqual(engine.subprocess.run(["git", "branch", "--list", "task/t-1-stale-*"], cwd=self.wt, capture_output=True, text=True).stdout, "")
+
+    def test_a_real_resume_conflict_in_a_few_files_is_fixed_not_thrown_away(self):
+        self.wip_branch(["mine 1", "mine 2"], "theirs")
+        with self.resolving_worker():
+            rc, s = self.run_engine({"write": [WRITE, WRITE], "review": [CLEAN, CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[0] for c in s.calls], ["worker", "reviewer", "worker", "reviewer"])  # the conflict fix, then the stage; no plan
+        self.assertIn("conflict", s.prompts[0])
+        text = self.eng.log_path.read_text()
+        self.assertNotIn("resume_conflict", text)
+        self.assertTrue(self.last_trace()["salvaged"])
+        self.assertEqual(te.tl.git("show", "origin/main:a.txt", cwd=str(self.wt)), "merged")
+        self.assertEqual(self.eng.fixes, 0)  # the land's two fix rounds are its own
+        self.assertEqual(engine.subprocess.run(["git", "branch", "--list", "task/t-1-stale-*"], cwd=self.wt, capture_output=True, text=True).stdout, "")
+
+    def test_a_resume_conflict_in_more_than_ten_files_starts_again_as_before(self):
+        files = ["c%d.txt" % n for n in range(11)]
+        self.wip_branch(["mine 1", "mine 2"], "theirs", files=files)
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])
+        self.assertIn("resume_conflict", self.eng.log_path.read_text())
+        self.assertFalse(self.last_trace()["salvaged"])
+        out = engine.subprocess.run(["git", "branch", "--list", "task/t-1-stale-*"], cwd=self.wt, capture_output=True, text=True).stdout
+        self.assertIn("task/t-1-stale-", out)
+        stale = out.split()[-1]
+        self.assertEqual(te.tl.git("show", stale + ":c0.txt", cwd=str(self.wt)), "mine 2")  # the work is kept whole
+
+    def test_exactly_ten_conflicted_files_are_still_fixed(self):
+        files = ["c%d.txt" % n for n in range(10)]
+        self.wip_branch(["mine"], "theirs", files=files)
+        real = te.DelegateScript.__call__
+
+        def fix_all(this, route, role, *a, **kw):
+            r = real(this, route, role, *a, **kw)
+            if role == "worker" and not any(Path(this.cwds[-1], f).read_text() == "merged\n" for f in files):
+                for f in files:
+                    Path(this.cwds[-1], f).write_text("merged\n")
+            return r
+        with mock.patch.object(te.DelegateScript, "__call__", fix_all):
+            rc, s = self.run_engine({"write": [WRITE, WRITE], "review": [CLEAN, CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertTrue(self.last_trace()["salvaged"])
+
+    def test_a_conflict_fix_that_does_not_resolve_it_restores_the_branch_and_starts_again(self):
+        self.wip_branch(["mine 1", "mine 2"], "theirs")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE] * 3, "review": [CLEAN]}, max_check_tries=1, max_rounds=1)
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertIn("resume_conflict", self.eng.log_path.read_text())
+        self.assertFalse(self.last_trace()["salvaged"])
+        out = engine.subprocess.run(["git", "branch", "--list", "task/t-1-stale-*"], cwd=self.wt, capture_output=True, text=True).stdout
+        stale = out.split()[-1]
+        self.assertEqual(te.tl.git("show", stale + ":a.txt", cwd=str(self.wt)), "mine 2")  # the original work, not a half-fixed rebase
+        self.assertEqual(self.eng.fixes, 0)
+
     def test_a_branch_that_cannot_be_kept_aside_is_not_reset(self):
         self.behind_branch(conflict=True)
         e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))

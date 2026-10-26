@@ -1713,6 +1713,84 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(log[:2], ["Add f (t-1)", "theirs"])
         self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d4")
 
+    # -- tl-7y6.2.18: a conflict fix runs the marker check and the build, not every stage's checks
+    def conflict_run(self, answers, **cfg):
+        """A run where another task lands f.txt while this one is reviewed: the land hits a planted conflict."""
+        other = Path(self.tmp.name, "other")
+        real = DelegateScript.__call__
+
+        def main_moves(this, route, role, *a, **kw):
+            if role == "reviewer" and not other.exists():
+                sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(other), cwd=self.tmp.name)
+                (other / "f.txt").write_text("theirs\n")
+                sh("git", "add", "-A", cwd=other)
+                sh("git", "commit", "-qm", "theirs", cwd=other)
+                sh("git", "push", "-q", "origin", "HEAD:main", cwd=other)
+            return real(this, route, role, *a, **kw)
+        with mock.patch.object(DelegateScript, "__call__", main_moves):
+            return self.run_engine(answers, **cfg)
+
+    def count_check(self, name):
+        log = Path(self.tmp.name, name + ".count")
+        return "%s -c \"open(r'%s','a').write('x')\"" % (PY, log), log
+
+    def checks_records(self):
+        recs = [json.loads(x) for x in self.eng.log_path.read_text().splitlines()]
+        return [r for r in recs if r.get("kind") == "checks"]
+
+    @ENGINE_BASH
+    def test_a_conflict_fix_runs_the_marker_check_and_the_build_not_the_stage_or_other_repo_checks(self):
+        build, build_log = self.count_check("build")
+        unit, unit_log = self.count_check("unit")
+        stage_check, stage_log = self.count_check("stage")
+        plan = self.plan_with(HAS_F, stage_check)
+        repo = [{"id": "build", "cmd": build, "group": "static", "cache": False}, {"id": "unit", "cmd": unit, "group": "tests", "cache": False}]
+        rc, s = self.conflict_run({"plan": [plan], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]}, checks=repo)
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertIn("conflict", s.prompts[3])
+        rounds = self.checks_records()
+        self.assertEqual(len(rounds), 2)  # the stage, then the conflict fix
+        fix = {i["id"]: i for i in rounds[1]["items"]}
+        self.assertEqual(fix[engine.Engine.MARKERS]["status"], "ran")
+        self.assertEqual(fix["build"]["status"], "ran")
+        for skipped in ("unit", HAS_F, stage_check):
+            self.assertEqual((fix[skipped]["status"], fix[skipped]["why"]), ("skipped", "conflict_fix"), skipped)
+        self.assertEqual((len(build_log.read_text()), len(unit_log.read_text()), len(stage_log.read_text())), (2, 1, 1))
+        self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d4")
+
+    @ENGINE_BASH
+    def test_a_conflict_fix_leaving_markers_is_not_accepted_the_marker_check_still_runs(self):
+        marked = dict(WRITE)
+        real = DelegateScript.__call__
+
+        def write_markers(this, route, role, *a, **kw):
+            r = real(this, route, role, *a, **kw)
+            if role == "worker" and len(this.calls) == 4:  # the conflict fix's first write
+                Path(this.cwds[-1], "f.txt").write_text("<<<<<<< HEAD\nx\n=======\ny\n>>>>>>> t\n")
+            return r
+        with mock.patch.object(DelegateScript, "__call__", write_markers):
+            rc, s = self.conflict_run({"plan": [PLAN], "write": [WRITE, marked, WRITE], "review": [CLEAN, CLEAN, CLEAN]})
+        recs = [{i["id"]: i["status"] for i in r["items"]} for r in self.checks_records()]
+        self.assertEqual(recs[1][engine.Engine.MARKERS], "failed")  # the marker check judged it, not a stage check
+        self.assertEqual(rc, 0, self.blocked)
+
+    @ENGINE_BASH
+    def test_a_red_gate_after_a_conflict_fix_still_gets_a_fix_round_and_the_gate_ran_once_on_the_result(self):
+        flag = Path(self.tmp.name, "gate-ran")
+        gate = "%s -c \"import os,sys; g=r'%s'; r=os.path.exists(g); open(g,'a').write('x'); sys.exit(0 if r else 1)\"" % (PY, flag)
+        rc, s = self.conflict_run({"plan": [PLAN], "write": [WRITE] * 3, "review": [CLEAN] * 3}, gate=gate)
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[0] for c in s.calls].count("worker"), 3)  # the stage, the conflict fix, the gate fix
+        self.assertEqual(self.eng.fixes, 2)
+        self.assertEqual(len(flag.read_text()), 2)  # red once, then green: one gate run per land try
+
+    @ENGINE_BASH
+    def test_the_fix_cap_stays_two_after_a_conflict_fix(self):
+        rc, s = self.conflict_run({"plan": [PLAN], "write": [WRITE] * 4, "review": [CLEAN] * 4}, gate=FALSE)
+        self.assertEqual(rc, 2)
+        self.assertEqual([c[0] for c in s.calls].count("worker"), 3)  # the stage, then 2 fix rounds: the conflict fix and one gate fix
+        self.assertIn("2 fix rounds", self.blocked[0])
+
     def run_push_race(self, rejections=1, failure="", plan=PLAN, resume_failed_fix=False, **cfg):
         """Advance a local remote immediately before each rejected push, under the real land lock."""
         n = getattr(self, "race_runs", 0) + 1
