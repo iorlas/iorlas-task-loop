@@ -16,8 +16,8 @@ sys.path.insert(0, str(ROOT / "tests"))
 import engine  # noqa: E402
 import test_engine as te  # noqa: E402
 import tl  # noqa: E402
-from lanes import call as lcall  # noqa: E402,F401
-from lanes import route as lroute  # noqa: E402,F401
+import delegate_link as dl  # noqa: E402
+import fake_route  # noqa: E402
 
 
 def sh(*a, cwd):
@@ -62,14 +62,12 @@ class SlotGitTest(unittest.TestCase):
         self.plant_decoy()
         before = self.decoy_state()
         closed, blocked = [], []
-        script = te.DelegateScript({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
+        script = fake_route.Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         with mock.patch.object(tl, "bd", return_value=mock.Mock(returncode=0, stdout="", stderr="")), \
                 mock.patch.object(tl, "show", return_value=te.BEAD), mock.patch.object(tl, "comments", return_value=[]), \
                 mock.patch.object(tl, "cmd_close", side_effect=lambda a: closed.append(a.reason) or 0), \
                 mock.patch.object(tl, "cmd_block", side_effect=lambda a: blocked.append(a.why) or 0), \
-                mock.patch.object(lroute, "find_route", return_value="/fake/route.py"), \
-                mock.patch.object(lroute, "contract", return_value=te.CONTRACT), \
-                mock.patch.object(lcall, "call_delegate", script), mock.patch.object(engine.time, "sleep"):
+                te.delegate_stack(script):
             eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
             rc = eng.run()
         self.assertEqual(rc, 2)
@@ -122,14 +120,17 @@ class SlotGitTest(unittest.TestCase):
     @te.POSIX_CHECK
     def test_workers_and_checks_are_not_pinned_but_the_engines_own_git_is(self):
         route = Path(self.tmp.name) / "route.py"
-        route.write_text("import json, os\nprint(json.dumps({'v': 2, 'status': 'done', 'data': {'env': [k for k in "
-                         "('GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE') if k in os.environ]}}))\n")
+        route.write_text("import json, os, sys\nsys.path.insert(0, %r)\nimport fake_route\n"
+                         "env = [k for k in ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE') if k in os.environ]\n"
+                         "print(json.dumps(fake_route.answer(fake_route.contract(), None, 'r1', False, {'env': env})))\n"
+                         % str(ROOT / "skills" / "task-loop"))
         with mock.patch.dict(os.environ, {"GIT_DIR": "/x", "GIT_WORK_TREE": "/y", "GIT_INDEX_FILE": "/z"}):
-            r, j = lcall.call_delegate(str(route), "worker", "p", {"type": "object"}, str(self.wt), None, 30,
-                                        Path(self.tmp.name) / "err.log")
+            r = dl.call(dl.Resolved(route.parent, str(route), fake_route.CONTRACT, "explicit"),
+                        dl.CallRequest("worker", "p", {"type": "object"}, str(self.wt), timeout_s=30),
+                        runner=dl.ProcRunner(Path(self.tmp.name) / "err.log"))
             eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
             rc, tail = eng.sh('echo "[$GIT_DIR|$GIT_WORK_TREE|$GIT_INDEX_FILE]"')
-            self.assertEqual(j["data"]["env"], [])
+            self.assertEqual(r.data["env"], [])
             self.assertEqual((rc, tail), (0, "[||]"))
             rc, tail = eng.sh('echo "$GIT_DIR|$GIT_WORK_TREE"', pin=True)
         gitdir = os.path.realpath(str(self.repo / ".git" / "worktrees" / "s1"))
@@ -152,9 +153,9 @@ class SlotGitTest(unittest.TestCase):
     def test_a_worker_that_redirects_git_is_caught_after_its_node(self):
         decoy = self.decoy
 
-        class Planting(te.DelegateScript):
-            def __call__(self, route, role, prompt, schema, cwd, *a, **kw):
-                out = super().__call__(route, role, prompt, schema, cwd, *a, **kw)
+        class Planting(fake_route.Script):
+            def reply(self, role, prompt, schema, cwd, *a, **kw):
+                out = super().reply(role, prompt, schema, cwd, *a, **kw)
                 if role == "worker":
                     sh("git", "config", "core.worktree", str(decoy), cwd=cwd)
                 return out
@@ -167,9 +168,7 @@ class SlotGitTest(unittest.TestCase):
                 mock.patch.object(tl, "cmd_close", side_effect=lambda a: landed.append(1) or 0), \
                 mock.patch.object(tl, "cmd_land", side_effect=lambda a: landed.append(1) or 0), \
                 mock.patch.object(tl, "cmd_block", return_value=0), \
-                mock.patch.object(lroute, "find_route", return_value="/fake/route.py"), \
-                mock.patch.object(lroute, "contract", return_value=te.CONTRACT), \
-                mock.patch.object(lcall, "call_delegate", script), mock.patch.object(engine.time, "sleep"):
+                te.delegate_stack(script):
             eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
             rc = eng.run()
         self.assertEqual(rc, 2)

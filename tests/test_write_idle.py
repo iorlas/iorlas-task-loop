@@ -17,7 +17,9 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import test_engine as te  # noqa: E402
 
+import delegate_link as dl  # noqa: E402
 import engine  # noqa: E402
+import fake_route  # noqa: E402
 import tl  # noqa: E402
 from core import procs  # noqa: E402,F401
 from lanes import call as lcall  # noqa: E402,F401
@@ -153,17 +155,17 @@ class WriteFollowsTheWorker(unittest.TestCase):
         self.assertEqual(stop["alive"], [self.worker()])
         self.assertTrue(tl.proc_alive(self.worker()))
 
-    def test_call_delegate_hands_the_survivors_to_the_engine(self):
+    def test_a_call_hands_the_survivors_to_the_engine(self):
         route = self.d / "route.py"
         idle = lcall.Idle(15 * MIN, 25 * MIN, 120 * MIN, clock=self.clock, mtime=lambda p: 1000.0)
+        runner = dl.ProcRunner(self.d / "err.log", idle=idle, wall=47 * MIN)
         with mock.patch.object(procs, "send_group", return_value=False), mock.patch.object(procs, "send_pid", return_value=False), \
                 mock.patch.object(procs, "signal_child", return_value=False), mock.patch.dict(os.environ, {"FAKE_MODE": "stubborn"}):
-            r, j = lcall.call_delegate(str(route), "worker", "x", {"type": "object"}, str(self.d), None, 47 * MIN - 120,
-                                        self.d / "err.log", idle=idle)
-        self.assertIsNone(j)
-        self.assertEqual(r.alive, [self.worker()])
-        self.assertIn("timeout", r.error)
-        self.assertIn("25 min", r.error)
+            r = dl.call(dl.Resolved(self.d, str(route), fake_route.CONTRACT, "explicit"),
+                        dl.CallRequest("worker", "x", {"type": "object"}, str(self.d), timeout_s=47 * MIN - 120), runner=runner)
+        self.assertEqual(runner.stop["alive"], [self.worker()])
+        self.assertEqual(r.stop.reason, "timeout")  # the engine ended the call: the bead's own transient failure
+        self.assertIn("25 min", r.say)
 
 
 SESSION_ROUTE = textwrap.dedent('''
@@ -291,19 +293,17 @@ class ProveDead(unittest.TestCase):
 
 class SurvivorBlocksTheRetry(te.EngineTest):
     def test_a_write_whose_worker_outlived_the_stop_fails_the_node_and_is_not_retried(self):
-        class Script(te.DelegateScript):
-            def __call__(self, route, role, *a, **kw):
+        class Script(fake_route.Script):
+            def reply(self, role, *a, **kw):
                 if role != "worker":
-                    return super().__call__(route, role, *a, **kw)
+                    return super().reply(role, *a, **kw)
                 self.calls.append((role, None, None))
-                return lcall.Result(secs=2820, error="timeout (no worker output for 25 min)", backend="delegate",
-                                     alive=[4242]), None
+                self.stop = {"alive": [4242], "why": "timeout (no worker output for 25 min)"}
+                raise dl.Stopped("timeout (no worker output for 25 min)")
 
         script = Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         c = engine.load_cfg(str(self.wt))
-        with mock.patch.object(lroute, "find_route", return_value="/fake/route.py"), \
-                mock.patch.object(lroute, "contract", return_value=te.CONTRACT), \
-                mock.patch.object(lcall, "call_delegate", script), mock.patch.object(engine.time, "sleep"):
+        with te.delegate_stack(script):
             self.eng = engine.Engine("t-1", str(self.wt), c)
             rc = self.eng.run()
         self.assertEqual(rc, 2)
@@ -312,26 +312,19 @@ class SurvivorBlocksTheRetry(te.EngineTest):
         self.assertIn("still alive", self.eng.why)
 
     def test_the_write_node_gets_the_idle_limits_from_the_config_and_other_nodes_do_not(self):
-        seen = {}
-
-        class Script(te.DelegateScript):
-            def __call__(self, route, role, *a, idle=None, **kw):
-                seen[role] = idle
-                return super().__call__(route, role, *a, **kw)
-
-        script = Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
+        idles = []
+        script = fake_route.Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         c = engine.load_cfg(str(self.wt))
-        with mock.patch.object(lroute, "find_route", return_value="/fake/route.py"), \
-                mock.patch.object(lroute, "contract", return_value=te.CONTRACT), \
-                mock.patch.object(lcall, "call_delegate", script), mock.patch.object(engine.time, "sleep"):
+        with te.delegate_stack(script), mock.patch.object(engine, "make_runner", lambda log, idle=None, wall=None: idles.append(idle) or script):
             engine.Engine("t-1", str(self.wt), c).run()
+        seen = dict(zip([x[0] for x in script.calls], idles))  # one runner per call, in call order
         self.assertEqual((seen["worker"].warn, seen["worker"].stop, seen["worker"].cap), (15 * MIN, 25 * MIN, 120 * MIN))
         self.assertIsNone(seen["planner"])
         self.assertIsNone(seen["reviewer"])
 
     def test_a_write_under_the_idle_rules_gets_no_close_to_the_limit_warning(self):
         eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
-        r = lcall.Result(te.CLEAN, secs=40 * 60)
+        r = dl.CallResult(te.CLEAN, secs=40 * 60)
         eng.anomalies("write", r, 1)
         eng.anomalies("review", r, 1)
         warned = [json.loads(x)["text"] for x in Path(eng.log_path).read_text().splitlines() if '"warn"' in x]

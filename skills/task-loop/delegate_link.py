@@ -91,12 +91,12 @@ class ProcRunner:
     """The `runner` seam over core.procs.run_proc: the engine's log, the write-idle watcher and the kill record
     (`stop`, `obs`: why the call was ended, the pids that outlived it, the process boundaries). One per call."""
 
-    def __init__(self, log_path, idle=None):
-        self.log_path, self.idle = log_path, idle
+    def __init__(self, log_path, idle=None, wall=None):
+        self.log_path, self.idle, self.wall = log_path, idle, wall   # wall: the limit that holds while a write's activity cannot be seen
         self.stop, self.obs, self.secs = {}, {}, 0.0
 
     def __call__(self, cmd, **kw):
-        res, self.secs = procs.run_proc(cmd, kw.get("cwd"), kw.get("timeout") or 3600, self.log_path, idle=self.idle,
+        res, self.secs = procs.run_proc(cmd, kw.get("cwd"), self.wall or kw.get("timeout") or 3600, self.log_path, idle=self.idle,
                                         stop=self.stop, obs=self.obs)
         if res is None:
             raise Stopped(self.stop.get("why") or "timeout")
@@ -159,6 +159,19 @@ def resolve(path="", pinned=None, installed=None, contract=CONTRACT):
     return Resolved(d.parent if d.suffix == ".py" else d, route, c, source)
 
 
+def role_status(route, timeout=60):
+    """`route.py status --json` roles{}: {role: {"usable": True | False | None, "lane", "why", "until", ...}}; {} when it cannot be read.
+    Read-only: delegate holds the truth about a role, a caller only looks."""
+    try:
+        r = subprocess.run([sys.executable, route, "status", "--json"], capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           timeout=timeout, env=procs.child_env())
+        j = json.loads(r.stdout.strip().splitlines()[-1]) if r.returncode == 0 and r.stdout.strip() else {}
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return {}
+    roles = j.get("roles") if isinstance(j, dict) else None
+    return roles if isinstance(roles, dict) else {}
+
+
 def facts_of(contract, reason, default):
     """(scope, permanence, retry kind) of a reason as the install's contract.json states it; default when it lists none."""
     r = (contract.get("reasons") or {}).get(reason)
@@ -202,8 +215,8 @@ def argv_of(resolved, req, brief_file, schema_file):
     """The `route.py run` command. Every flag is listed in contract.json run_args (the caller's test asserts it)."""
     cmd = [sys.executable, resolved.route, "run", req.role, "--brief", brief_file, "--cwd", req.cwd, "--schema", schema_file,
            "--unattended", "--parent", req.parent, "--task", req.task, "--title", req.title[:120]]
-    if req.timeout_s:
-        cmd += ["--timeout", str(max(1, req.timeout_s - NODE_MARGIN_S))]
+    if req.timeout_s:  # a short call (a reflection) passes its whole limit; a node passes its limit less the margin
+        cmd += ["--timeout", str(req.timeout_s - NODE_MARGIN_S if req.timeout_s > 2 * NODE_MARGIN_S else req.timeout_s)]
     for flag, val in (("--resume", req.resume), ("--authored-by", req.authored_by), ("--call-id", req.call_id)):
         if val:
             cmd += [flag, val]

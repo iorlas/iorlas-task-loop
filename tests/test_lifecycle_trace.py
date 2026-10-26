@@ -10,7 +10,9 @@ import unittest
 from unittest import mock
 
 import test_engine as te
-from test_engine import CLEAN, PLAN, PY, WRITE, ans
+import delegate_link as dl
+import fake_route
+from test_engine import CLEAN, PLAN, PY, WRITE, stop
 
 import engine
 import lifecycle
@@ -189,19 +191,19 @@ class TraceTelemetry(unittest.TestCase):
     def test_a_paused_run_has_a_vendor_error_record_and_a_fingerprint(self):
         due = time.time() + 3 * 3600
         rc, _ = self.run_engine({"plan": [PLAN], "write": [
-            ans("lane_out", "lane_out", "retry", retry_after=due, say="out", lane="OPENAI_SUBSCRIPTION")] * 3})
+            stop("rate_limited", at=due, say="out", lane="OPENAI_SUBSCRIPTION")]})
         self.assertEqual(rc, 2)
         self.assert_row("blocked")
         errors = self.records("vendor_error")
         self.assertTrue(errors)
-        self.assertTrue(any(e.get("reason") == "lane_out" for e in errors))
+        self.assertTrue(any(e.get("reason") == "rate_limited" for e in errors))
         for key in ("started_t", "ended_t", "first_error_t", "last_event_t", "kill_t", "error_observed"):
             self.assertIn(key, errors[0])
         self.assertFalse(errors[0]["error_observed"])
         self.assertIsNone(errors[0]["first_error_t"])
 
     def test_a_failed_run_has_a_fingerprint(self):
-        rc, _ = self.run_engine({"plan": [ans("failed", "error", "fail", say="boom")]})
+        rc, _ = self.run_engine({"plan": [stop("worker_failed", say="boom")] * 2})
         self.assertEqual(rc, 2)
         row = self.assert_row("failed")
         self.assertTrue(row["fingerprint"])
@@ -243,7 +245,7 @@ class TraceTelemetry(unittest.TestCase):
         self.run_engine({}, route="")
         first = self.traces()[-1]
         time.sleep(1.05)  # a run's name is its start second
-        rc, _ = self.run_engine({"plan": [ans("failed", "error", "fail", say="different cause")]})
+        rc, _ = self.run_engine({"plan": [stop("worker_failed", say="different cause")] * 2})
         self.assertEqual(rc, 2)
         row = self.assert_row("failed", because="retry")
         self.assertEqual(row["prev_run"], first["run"])
@@ -440,8 +442,12 @@ class TraceTelemetry(unittest.TestCase):
 
     def test_a_stopped_delegate_worker_that_survives_still_leaves_a_kill_record(self):
         eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False)
-        r = engine.lcall.Result(secs=2, error="timeout (timeout 1 min)", stop="timeout 1 min", alive=[4242])
-        with mock.patch.object(engine.lcall, "call_delegate", return_value=(r, None)):
+
+        class Survivor(fake_route.Script):  # the engine ended the call, and the worker outlived every signal
+            def reply(this, *a, **kw):
+                this.stop = {"alive": [4242], "why": "timeout 1 min"}
+                raise dl.Stopped("timeout 1 min")
+        with te.delegate_stack(Survivor({})):
             with self.assertRaises(engine.Blocked):
                 eng._ai("plan", "title", "prompt")
         kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()

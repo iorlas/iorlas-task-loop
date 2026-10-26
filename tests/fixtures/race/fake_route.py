@@ -1,4 +1,4 @@
-"""delegate's route.py for the race test (worker-run v2): plan one stage, the worker writes f-<bead>.txt after a seeded
+"""delegate's route.py for the race test (contract 3): plan one stage, the worker writes f-<bead>.txt after a seeded
 pause, the review passes. Each worker call appends a witness line to $FAKE_ROUTE_LOG: the worktree's branch and engine
 lock at its start and end, so a reset under a live engine shows."""
 
@@ -9,7 +9,6 @@ import subprocess
 import sys
 import time
 
-CONTRACT = {"worker_run": 2, "features": ["reason", "next", "context"], "reasons": {}, "lanes": {"codex": {}}}
 
 
 def opt(args, flag):
@@ -30,11 +29,11 @@ def branch(cwd):
 
 
 def main(a):
-    if a[0] == "contract":
-        print(json.dumps(CONTRACT))
-        return 0
     if a[0] == "status":
-        print(json.dumps({"lanes": {}}))
+        print(json.dumps({"v": 1, "lanes": {}, "roles": {}}))
+        return 0
+    if a[0] == "net":
+        print(json.dumps({"v": 1, "up": True, "ip_up": True, "why": "", "ms": 1, "hosts": [], "at": 0, "since": None}))
         return 0
     cwd, bead = opt(a, "--cwd"), opt(a, "--task")
     with open(opt(a, "--schema"), encoding="utf-8") as f:
@@ -61,10 +60,14 @@ def main(a):
     else:
         node, data = "review", {"findings": [], "unmet": [], "question": "", "options": [], "decided": "", "leftovers": [],
                                 "unchecked": [], "look": ""}
-    print(json.dumps({"v": 2, "status": "done", "reason": None, "next": None, "data": data, "ref": "ref-%s-%s" % (
-        node, bead), "cost": 0.0, "secs": 1, "family": "openai" if node == "write" else "claude", "lane": "L",
-        "model": "m", "effort": "e", "git_violation": [], "tokens": {"in": 1, "cached": 0, "out": 1},
-        "context": {"instructions": [], "env_keys": []}}))
+    ref, family = "ref-%s-%s" % (node, bead), "openai" if node == "write" else "claude"
+    tokens = {"in": 1, "cached": 0, "out": 1}
+    print(json.dumps({"contract": 3, "data": data, "text": "ok", "say": "", "ref": ref, "lane": "L", "model": "m", "effort": "e",
+                      "family": family, "flag": None, "fallback": False, "first_lane": "L", "rung": 0, "tokens": tokens, "cost": 0.0,
+                      "secs": 1, "run_id": "race", "call_id": "race", "transcript": None, "transcript_info": None, "denied": [],
+                      "git_violation": [], "warnings": [], "usage": {"tokens": tokens, "cost": 0.0, "secs": 1, "turns": 1,
+                                                                      "context_k": None, "answer_bytes": 0, "ref": ref},
+                      "stop": None, "resumed": False}))
     return 0
 
 

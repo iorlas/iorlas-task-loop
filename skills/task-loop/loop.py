@@ -15,7 +15,6 @@ import datetime
 import hashlib
 import json
 import os
-import random
 import re
 import signal
 import sqlite3
@@ -27,22 +26,22 @@ import uuid
 from pathlib import Path
 
 import beadlint
+import delegate_link as dl
 import engine
 import loop_health
 import netgate
 import outcome as oc
 import tl
-from lanes import call as lcall
-from lanes import route as lroute
 
 POLL = 2               # seconds between looks at a running child (stop file, slot heartbeat)
 HEARTBEAT = 60         # the slot bead's lease is kept alive this often while a bead runs
 DRAINED_POLL = 300     # --wait-drained: how often an empty queue is looked at again
-PAUSE_WAIT_MAX = 3600  # a lane back within this long is waited for; later, the next bead is tried
 SELFTEST_WAIT = 30     # a newer install must pass `tl.py selftest` (a few seconds of work) within this long
 HELP_WAIT = 20         # a newer install must answer `tl.py --help` within this long to be moved to
-PAUSE_RETRY = 900      # a pause with no time the lane frees (login, lane), or a bead another session holds:
-                       # try that bead again after this. A network pause is not here: it is probed every NET_PROBE s (tl-kyy)
+PAUSE_RETRY = 900      # a bead another session holds, or a pause with no delegate to ask about its role: try it again after this.
+                       # A network pause is not here: it is probed every NET_PROBE s (tl-kyy); a lane pause waits on its role (GateRole)
+GATE_CACHE_S = 30      # delegate's role view is looked at no more often than this
+GATE_UNKNOWN_S = 900   # a role whose usability delegate cannot say (unknown) is tried again after this long: unknown fails open
 NET_PROBE = netgate.PROBE_EVERY  # while the network is down the loop claims nothing and looks every this many seconds
 BEAT_EVERY = 60        # the loop's state file carries a beat, refreshed at most this often (tl-7y6.2.12)
 LOGS_KEPT = 5          # loop-<pid>.log files kept per repo
@@ -53,11 +52,10 @@ SLOT_ASIDE_MIN = 720           # minutes a slot set aside stays held
 FAILS_TO_STOP = 2      # runs in a row that gave no verdict (run-task died with no outcome) that stop the loop. A run that gave a Kind
                        # is the storm detector's (a FAULT_* cools its bead, the same fingerprint on two beads stops every loop);
                        # parks and pauses never count, a landing ends the run
-PAUSES_TO_REST = 3     # a bead paused this often in one loop run rests for REST while the loop takes others
+PAUSES_TO_REST = 3     # a bead paused this often in one loop run rests for REST while the loop takes others: a role that is usable
+                       # and still pauses the bead is not a lane to wait for
 REST = 3600
 AREA_POLL = 60         # every ready bead waits for its area: look again this often
-MARGIN = (30, 90)      # a paused bead wakes this many seconds (random) after its retry_after: the lane is surely back,
-                       # and two loops paused on one lane do not knock in the same second (tl-bxk.10.6)
 
 clock = time.time
 STOP_NOW = threading.Event()  # SIGTERM or Ctrl-C to the loop itself: end the running bead as `tl stop --now` does
@@ -407,8 +405,48 @@ def touch_beat(repo):
         write_state(repo, **dict({k: v for k, v in st.items() if k not in ("repo", "stop_protocol", "version", "code_dir")}, beat=clock()))
 
 
-def margin():
-    return random.uniform(*MARGIN)
+class GateRole:
+    """What a paused bead waits for (tl-7y6.2.8): its role, not a clock. delegate's `route.py status --json` roles[role].usable says
+    True (wake), False (keep waiting) or None (unknown: wake once the bead has waited GATE_UNKNOWN_S). The bead's own retry_after is
+    a hint and never blocks. The view is cached GATE_CACHE_S. Loop-local: nothing is written to a bead, a label or a file by this
+    class, and the held beads travel only in the loop's own state across a move to a newer install."""
+
+    def __init__(self, route_fn, now=None):
+        self.route_fn, self.now = route_fn, now or (lambda: clock())
+        self.held = {}              # bead -> [role, since]
+        self.seen = (None, {})      # (when the view was read, roles)
+
+    def hold(self, bead, role):
+        self.held[bead] = [role, self.now()]
+
+    def view(self):
+        t = self.now()
+        if self.seen[0] is None or t - self.seen[0] >= GATE_CACHE_S:
+            route = self.route_fn()
+            self.seen = (t, dl.role_status(route) if route else {})
+        return self.seen[1]
+
+    def usable(self, role):
+        """True, False or None (delegate does not say)."""
+        v = (self.view().get(role) or {}).get("usable")
+        return v if isinstance(v, bool) else None
+
+    def ready(self, bead):
+        """True when `bead` is not held, or its role is usable now, or its role has been unknown long enough."""
+        if bead not in self.held:
+            return True
+        role, since = self.held[bead]
+        u = self.usable(role)
+        if u is True or (u is None and self.now() - since >= GATE_UNKNOWN_S):
+            del self.held[bead]
+            return True
+        return False
+
+    def next_look(self, bead):
+        """When `bead` is worth asking about again (epoch)."""
+        role, since = self.held[bead]
+        t = (self.seen[0] or self.now()) + GATE_CACHE_S
+        return min(t, since + GATE_UNKNOWN_S) if self.usable(role) is None else t
 
 
 LOG = [None]  # this loop's own log file: what say() prints is kept after the session that started the loop is gone
@@ -747,6 +785,8 @@ def inherited():
           "ran": lambda v: isinstance(v, int) and not isinstance(v, bool),
           "later": lambda v: isinstance(v, dict) and all(text(k) and num(x) for k, x in v.items()),
           "pauses": lambda v: isinstance(v, dict) and all(text(k) and isinstance(x, int) for k, x in v.items()),
+          "gated": lambda v: isinstance(v, dict) and all(text(k) and isinstance(x, list) and len(x) == 2 and text(x[0]) and num(x[1])
+                                                         for k, x in v.items()),
           "until": lambda v: v is None or num(v), "wt": lambda v: v is None or text(v),
           "actor": lambda v: v is None or text(v), "STARTED": num, "started": num}
     out = {}
@@ -872,9 +912,15 @@ def storm_banner(rec, repo):
                                            loop_health.storm_path(tl.config_dir(), repo_id(repo)), oc.KNOBS["storm_window_s"] // 60))
 
 
-def make_probe():
+def delegate_route(repo):
+    """The route.py of the delegate this repo's engine would use (its `delegate` config, the pin, the install), or None."""
+    res = dl.resolve(engine.load_cfg(str(repo)).get("delegate", ""))
+    return res.route if isinstance(res, dl.Resolved) else None
+
+
+def make_probe(repo):
     """delegate's `route.py net` as a NetProbe, or None when no delegate is installed (the old PAUSE_RETRY rest then)."""
-    route = lroute.find_route()
+    route = delegate_route(repo)
     return netgate.RouteProbe(route) if route else None
 
 
@@ -906,6 +952,8 @@ def passes(repo, a, started, st=None):
     later, pauses = dict(st.get("later") or {}), dict(st.get("pauses") or {})
     warned = list(st.get("warned") or [])
     net, net_first, net_down_t, probe = netgate.NetState(), [], [0.0], None  # tl-kyy: the network pause; probe made at the first one
+    gate = GateRole(lambda: delegate_route(repo))  # a lane pause waits for its role to be usable, not for a clock
+    gate.held = {k: list(v) for k, v in (st.get("gated") or {}).items()}
     while True:
         if stop_mode(repo):
             say("stopped on request after %d bead(s)" % ran)
@@ -931,7 +979,7 @@ def passes(repo, a, started, st=None):
             down_s = round(clock() - net_down_t[0])
             say("network is back after %d s: %s first" % (down_s, ", ".join(net_first) or "the queue"))
             tl.event("net_up", ",".join(net_first), who="loop", repo=repo, down_s=down_s)
-        if maybe_move(a, repo, {"fails": fails, "ran": ran, "later": later, "pauses": pauses, "warned": warned, "until": until,
+        if maybe_move(a, repo, {"fails": fails, "ran": ran, "later": later, "pauses": pauses, "gated": gate.held, "warned": warned, "until": until,
                              "wt": wt, "actor": os.environ.get("TASK_LOOP_ACTOR"), "STARTED": STARTED[0],
                              "started": started}):
             continue
@@ -956,15 +1004,16 @@ def passes(repo, a, started, st=None):
         now = clock()
         for rested, due in read_rests(repo).items():  # another loop's pre-engine failure rests the bead here too
             later[rested] = max(later.get(rested, 0), due)
-        cands = [b for b, _ in ranked if later.get(b["id"], 0) <= now]
+        cands = [b for b, _ in ranked if later.get(b["id"], 0) <= now and gate.ready(b["id"])]
         cands.sort(key=lambda b: b["id"] not in net_first)  # a bead the network paused goes first, the same one (stable sort)
         net_first = [] if cands and cands[0]["id"] not in net_first else net_first
         if cands:
             area_wait[0] = 0.0
         if not cands:
             if ranked:
-                wake = min(later[b["id"]] for b, _ in ranked)
-                say("every ready bead waits for a lane or another session: sleeping until %s"
+                wake = min(gate.next_look(b["id"]) if b["id"] in gate.held and later.get(b["id"], 0) <= now else later[b["id"]]
+                           for b, _ in ranked)
+                say("every ready bead waits for a lane or another session: looking again at %s"
                     % time.strftime("%H:%M:%S", time.localtime(wake)))
                 nap(wake - now, repo, until)
                 continue
@@ -1081,7 +1130,7 @@ def passes(repo, a, started, st=None):
             # tl-kyy: the machine is offline. It is no run, no failure and no pause of the bead's: no label is touched, no
             # counter moves (ran, pauses, fails), and the bead is not rested. The loop probes and resumes the same bead.
             if probe is None:
-                probe = make_probe()
+                probe = make_probe(repo)
             if probe is None:
                 later[bid] = clock() + PAUSE_RETRY
                 say("%s paused for the network and no delegate is installed to probe it: the next bead first" % bid)
@@ -1119,13 +1168,12 @@ def passes(repo, a, started, st=None):
                 pauses[bid] = 0
                 later[bid] = clock() + REST
                 say("%s paused %d times: it rests an hour, the next bead first" % (bid, PAUSES_TO_REST))
-            elif due and due - clock() <= PAUSE_WAIT_MAX:
-                wake = due + margin()
-                say("%s paused for a lane until %s: waiting for it, retry at %s" % (
-                    bid, time.strftime("%H:%M:%S", time.localtime(due)), time.strftime("%H:%M:%S", time.localtime(wake))))
-                nap(max(0, wake - clock()), repo, until)
+            elif r.get("role") and delegate_route(repo):
+                gate.hold(bid, r["role"])  # the lane's own time (due) is a hint: the bead wakes when delegate says the role is usable
+                say("%s paused for the %s role%s: it wakes when delegate says the role is usable, the next bead first" % (
+                    bid, r["role"], (" (a time hint: " + time.strftime("%H:%M:%S", time.localtime(due)) + ")") if due else ""))
             else:
-                later[bid] = due + margin() if due else clock() + PAUSE_RETRY
+                later[bid] = clock() + PAUSE_RETRY
                 say("%s paused (%s): the next bead first" % (bid, (r.get("why") or "")[:120]))
 
 
@@ -1361,9 +1409,9 @@ def selftest():
     bead = {"id": "t-1", "title": "Add f", "metadata": {}, "acceptance_criteria": "f.txt exists"}
     closed, blocked = [], []
 
-    def lane(route, role, prompt, schema, cwd, resume, timeout, log_path, writer=None, parent="", task="", title="",
-             access="", idle=None):  # fake route.py run
-        props = (json.loads(schema) if isinstance(schema, str) else schema).get("properties", {})
+    def lane(cmd, **kw):  # fake route.py run: one contract 3 answer on stdout
+        schema = json.loads(Path(cmd[cmd.index("--schema") + 1]).read_text(encoding="utf-8"))
+        props, cwd = schema.get("properties", {}), cmd[cmd.index("--cwd") + 1]
         if "stages" in props:
             data, node = plan, "plan"
         elif "checks_run" in props:
@@ -1371,10 +1419,20 @@ def selftest():
             Path(cwd, "f.txt").write_text("f\n", encoding="utf-8")
         else:
             data, node = review, "review"
-        j = {"v": 2, "status": "done", "reason": None, "next": None, "data": data, "ref": "ref-" + node, "cost": 0.0,
-             "secs": 1, "family": "openai" if node == "write" else "claude", "lane": "L", "model": "m", "effort": "e",
-             "git_violation": [], "tokens": {"in": 1, "cached": 0, "out": 1}, "context": {"instructions": [], "env_keys": []}}
-        return lcall.Result(data, "", j["ref"], 0.0, 1, "", j["family"]), j
+        tokens = {"in": 1, "cached": 0, "out": 1}
+        j = {"contract": dl.CONTRACT, "data": data, "text": "ok", "say": "", "ref": "ref-" + node, "lane": "L", "model": "m", "effort": "e",
+             "family": "openai" if node == "write" else "claude", "flag": None, "fallback": False, "first_lane": "L", "rung": 0,
+             "tokens": tokens, "cost": 0.0, "secs": 1, "run_id": "selftest", "call_id": "selftest", "denied": [], "git_violation": [],
+             "warnings": [], "usage": {"tokens": tokens, "cost": 0.0, "secs": 1, "turns": 1, "ref": "ref-" + node}, "stop": None,
+             "resumed": False}
+        return subprocess.CompletedProcess(cmd, 0, json.dumps(j), "")
+
+    class Runner:  # the engine's process seam for the fake lane
+        stop, obs, secs = {}, {}, 0.0
+
+        def __call__(self, cmd, **kw):
+            self.stop, self.obs = {}, {}
+            return lane(cmd, **kw)
 
     with tempfile.TemporaryDirectory(prefix="tl-selftest-") as tmp:
         home = Path(os.path.realpath(tmp))
@@ -1392,17 +1450,18 @@ def selftest():
                 r = subprocess.run(["git"] + cmd, cwd=wt, capture_output=True, text=True)
                 if r.returncode:
                     return "git %s: %s" % (cmd[0], r.stderr.strip()[-200:])
-            contract = {"worker_run": 2, "features": ["reason", "next", "context"], "reasons": {}, "lanes": {"codex": {}}}
+            cfg = engine.load_cfg(str(wt))
+            res = dl.resolve(cfg.get("delegate", ""))  # the configured delegate's own contract when there is one; else a bare one
+            contract = res.contract if isinstance(res, dl.Resolved) else {"contract": dl.CONTRACT, "reasons": {}, "run_args": []}
+            resolved = dl.Resolved(Path("/selftest"), "/selftest/route.py", contract, "explicit")
             fake_bd = types.SimpleNamespace(returncode=0, stdout="bead t-1: Add f\n", stderr="")
             with mock.patch.object(tl, "bd", return_value=fake_bd), mock.patch.object(tl, "show", return_value=bead), \
                     mock.patch.object(tl, "comments", return_value=[]), \
                     mock.patch.object(tl, "cmd_close", side_effect=lambda a: closed.append(a.reason) or 0), \
                     mock.patch.object(tl, "cmd_block", side_effect=lambda a: blocked.append(a.why) or 0), \
                     mock.patch.object(tl, "cmd_land", return_value=0), \
-                    mock.patch.object(lroute, "find_route", return_value="/selftest/route.py"), \
-                    mock.patch.object(lroute, "contract", return_value=contract), \
-                    mock.patch.object(lcall, "call_delegate", lane), mock.patch.object(engine.time, "sleep"):
-                cfg = engine.load_cfg(str(wt))
+                    mock.patch.object(dl, "resolve", return_value=resolved), \
+                    mock.patch.object(engine, "make_runner", lambda *a, **k: Runner()), mock.patch.object(engine.time, "sleep"):
                 cfg.update({"reflect": False})
                 os.chdir(wt)  # the engine reads cwd
                 try:

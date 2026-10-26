@@ -11,13 +11,18 @@ import tempfile
 import threading
 import time
 import unittest
+import contextlib
 from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
+import delegate_link as dl  # noqa: E402,F401
 import engine  # noqa: E402
+import fake_route  # noqa: E402
+import lane_policy as lp  # noqa: E402,F401
+import netgate  # noqa: E402,F401
 from checks import lint  # noqa: E402,F401
 from core import procs  # noqa: E402,F401
 import tl  # noqa: E402
@@ -58,13 +63,6 @@ WRITE = {"summary": "wrote f", "checks_run": [{"cmd": "test -f f.txt", "exit": 0
          "new_cases": [], "unchecked": [], "logic_only": ""}
 ROUTE = "/h/.claude/plugins/cache/m/iorlas-delegate/%s/skills/delegate/route.py"
 CLEAN = {"findings": [], "unmet": [], "question": "", "options": [], "decided": "", "leftovers": [], "unchecked": [], "look": ""}
-CONTRACT = {"worker_run": 2, "features": ["reason", "next", "context"], "reasons": {},
-            "lanes": {"codex": {"hidden": ["every skill"]}, "claude": {"hidden": ["skills"]}}}
-
-
-def ans(status, reason, nxt, **kw):
-    """A v2 answer that is not done."""
-    return dict({"v": 2, "status": status, "reason": reason, "next": nxt, "data": None, "family": "openai"}, **kw)
 BEAD = {"id": "t-1", "title": "Add f", "metadata": {}, "acceptance_criteria": "f.txt exists"}
 
 
@@ -79,43 +77,34 @@ def verdict(n, v, evidence="", why="", kind="other", source=""):
 STILL_OPEN = {"items": [verdict(1, "open", why="only the owner can open it")]}
 
 
+def stop(reason, ref="", **kw):
+    """A stopped answer, contract 3: the row of `reason` in delegate's contract.json (kw: at, fix, partial, say, family, lane ...)."""
+    return fake_route.stop_answer(reason, ref, **kw)
+
+
+def full(data, ref="w2", **kw):
+    """A done answer with its lane facts spelled out (a test where the lane, the family or the fallback fields differ)."""
+    fields = dict(cost=0.5, secs=1, family="claude", lane="C", model="sonnet", effort="e",
+                  tokens={"in": 1000, "cached": 800, "out": 50}, context={"instructions": [], "env_keys": []})
+    fields.update(kw)
+    return fake_route.answer(fake_route.contract(), None, ref, False, data, **fields)
+
+
+CAT_ENV = {"kind": "policy", "tool": "shell", "path": ".env", "input": "cat .env"}
+
+
 def finding(severity):
     return {"file": "f.txt", "line": 1, "severity": severity, "fix": "a %s fix" % severity}
 
 
-class DelegateScript:
-    """Fake `route.py run`: answers per role from a queue; a write creates the file like a real writer."""
-
-    def __init__(self, answers, j_extra=None):
-        self.answers, self.calls, self.prompts = {k: list(v) for k, v in answers.items()}, [], []
-        self.access = []
-        self.cwds = []
-        self.j_extra = {k: list(v) for k, v in (j_extra or {}).items()}  # per node, per call: fields the answer gains
-
-    def __call__(self, route, role, prompt, schema, cwd, resume, timeout, log_path, writer=None, parent="", task="",
-                 title="", access="", idle=None):
-        # the engine sends each contract in strict form (engine.strict), a visual stage's with its look field too
-        node = next(k for k in engine.SCHEMAS if schema in (engine.strict(engine.schema_for(k)),
-                                                             engine.strict(engine.schema_for(k, True))))
-        self.calls.append((role, resume, writer))
-        self.cwds.append(cwd)
-        self.access.append((role, access))
-        self.prompts.append(prompt)
-        a = self.answers[node].pop(0)
-        if isinstance(a, dict) and a.get("v") is not None:
-            j = a
-        else:
-            if node == "write":
-                Path(cwd, "f.txt").write_text("d%d\n" % len(self.calls))
-            j = {"v": 2, "status": "done", "reason": None, "next": None, "data": a, "ref": "ref-" + node, "cost": 0.5,
-                 "secs": 1, "family": "openai" if node == "write" else "claude", "lane": "L", "model": "m",
-                 "effort": "e", "git_violation": [], "tokens": {"in": 1000, "cached": 800, "out": 50},
-                 "context": {"instructions": ["/repo/AGENTS.md"], "env_keys": ["PATH"]}}
-            if self.j_extra.get(node):
-                j.update(self.j_extra[node].pop(0))
-        r = lcall.Result(j.get("data"), "", j.get("ref") or "", float(j.get("cost") or 0), 1, "" if j["status"] == "done" else j["status"],
-                          j.get("family") or "delegate")
-        return r, j
+def delegate_stack(script, route="/fake/route.py"):
+    """The engine's delegate for a test: `route` resolved on fake_route's contract 3, `script` as the process seam, no real sleep."""
+    res = dl.Resolved(Path(route).parent, route, fake_route.CONTRACT, "explicit")
+    stack = contextlib.ExitStack()
+    for p in (mock.patch.object(dl, "resolve", return_value=res), mock.patch.object(engine, "make_runner", lambda *a, **k: script),
+              mock.patch.object(engine.time, "sleep")):
+        stack.enter_context(p)
+    return stack
 
 
 class EngineTest(unittest.TestCase):
@@ -178,21 +167,17 @@ class EngineTest(unittest.TestCase):
         self.bd_calls.append(a)
         return mock.Mock(returncode=0, stdout="bead t-1: Add f\n", stderr="")
 
-    def run_engine(self, answers, route="/fake/route.py", raw=None, j_extra=None, bead="t-1", **cfg):
-        """Access keys (host, no_sandbox, host_beads) are committed to origin/main's .task-loop.json first: the engine
-        reads them only from there. `raw` puts keys in the loaded config without committing them."""
-        access = {k: cfg.pop(k) for k in ("host", "no_sandbox", "host_beads") if k in cfg}
-        if access:
-            self.commit_base_cfg(access)
-        script = DelegateScript(answers, j_extra)
+    def run_engine(self, answers, route="/fake/route.py", raw=None, j_extra=None, bead="t-1", probe=None, **cfg):
+        """`raw` puts keys in the loaded config without committing them. probe: the network probe (netgate.FakeProbe)."""
+        script = fake_route.Script(answers, j_extra)
         c = engine.load_cfg(str(self.wt))
         c.update({"reflect": False})  # the reflection is one more call; its own tests switch it on
         c.update(cfg)
         c.update(raw or {})
-        with mock.patch.object(lroute, "find_route", return_value=route), \
-                mock.patch.object(lroute, "contract", return_value=getattr(self, "contract_answer", CONTRACT)), \
-                mock.patch.object(lcall, "call_delegate", script), mock.patch.object(engine.time, "sleep"):
+        with delegate_stack(script, route):
             self.eng = engine.Engine(bead, str(self.wt), c)
+            if probe is not None:
+                self.eng.probe = probe
             rc = self.eng.run()
         return rc, script
 
@@ -652,15 +637,15 @@ class EngineTest(unittest.TestCase):
             self.fail("the check's child outlived the stop")
 
     def test_a_worker_edit_to_the_plan_file_is_undone_before_the_next_step(self):
-        real = DelegateScript.__call__
+        real = fake_route.Script.reply
 
-        def tamper(this, route, role, prompt, schema, cwd, *a, **kw):
+        def tamper(this, role, prompt, schema, cwd, *a, **kw):
             if role == "worker":
                 (self.eng.run_dir / "plan.json").write_text('{"tampered": true}')
             if role == "reviewer":
                 this.seen_plan = (self.eng.run_dir / "plan.json").read_text()
-            return real(this, route, role, prompt, schema, cwd, *a, **kw)
-        with mock.patch.object(DelegateScript, "__call__", tamper):
+            return real(this, role, prompt, schema, cwd, *a, **kw)
+        with mock.patch.object(fake_route.Script, "reply", tamper):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
         self.assertNotIn("tampered", s.seen_plan)
@@ -1191,7 +1176,7 @@ class EngineTest(unittest.TestCase):
         first = tl.git("rev-parse", "task/t-1", cwd=str(self.wt))
         self.assertEqual(tl.git("show", "task/t-1:f.txt", cwd=str(self.wt)), "d2")
         idle = dict(WRITE, summary="re-proved, no change")
-        with mock.patch.object(DelegateScript, "__call__", self.no_write(DelegateScript.__call__)), \
+        with mock.patch.object(fake_route.Script, "reply", self.no_write(fake_route.Script.reply)), \
                 mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Rerun it."}]):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [idle], "review": [CLEAN]})
         self.assertEqual(rc, 0)
@@ -1203,9 +1188,9 @@ class EngineTest(unittest.TestCase):
 
     @staticmethod
     def no_write(real):
-        def call(this, route, role, prompt, schema, cwd, *a, **kw):
+        def call(this, role, prompt, schema, cwd, *a, **kw):
             before = Path(cwd, "f.txt").read_text() if Path(cwd, "f.txt").exists() else None
-            r = real(this, route, role, prompt, schema, cwd, *a, **kw)
+            r = real(this, role, prompt, schema, cwd, *a, **kw)
             if role == "worker" and before is not None:
                 Path(cwd, "f.txt").write_text(before)  # the rerun's writer changes nothing
             return r
@@ -1218,15 +1203,15 @@ class EngineTest(unittest.TestCase):
 
     def stop_at(self, role, nth):
         """The nth call of a role is where the engine is stopped (SIGTERM raises Blocked in the main thread)."""
-        real, seen = DelegateScript.__call__, {"n": 0}
+        real, seen = fake_route.Script.reply, {"n": 0}
 
-        def call(this, route, r, *a, **kw):
+        def call(this, r, *a, **kw):
             if r == role:
                 seen["n"] += 1
                 if seen["n"] == nth:
                     raise engine.Blocked("failed: stopped (SIGTERM)", kind=engine.oc.Kind.PAUSE_KILLED)
-            return real(this, route, r, *a, **kw)
-        return mock.patch.object(DelegateScript, "__call__", call)
+            return real(this, r, *a, **kw)
+        return mock.patch.object(fake_route.Script, "reply", call)
 
     def checkpoint(self):
         p = tl.config_dir() / "checkpoints" / "t-1.json"
@@ -1362,19 +1347,19 @@ class EngineTest(unittest.TestCase):
     def test_a_fault_in_a_conflict_fix_round_resumes_at_land(self):
         # lifesim-6dq0: the fix round's checkpoint was saved mid-rebase (detached HEAD), so the rerun re-planned
         other = Path(self.tmp.name, "other")
-        real = DelegateScript.__call__
+        real = fake_route.Script.reply
 
-        def main_moves(this, route, role, *a, **kw):
+        def main_moves(this, role, *a, **kw):
             if role == "reviewer" and not other.exists():
                 sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(other), cwd=self.tmp.name)
                 (other / "f.txt").write_text("theirs\n")
                 sh("git", "add", "-A", cwd=other)
                 sh("git", "commit", "-qm", "theirs", cwd=other)
                 sh("git", "push", "-q", "origin", "HEAD:main", cwd=other)
-            return real(this, route, role, *a, **kw)
-        denied = {"v": 2, "status": "failed", "reason": "secrets", "next": "owner", "data": None, "text": "", "ref": "w1", "family": "openai",
-                  "denied": [{"tool": "Bash", "input": "rg -n --glob '!**/.env*' '^<<<<<<<' ."}]}
-        with mock.patch.object(DelegateScript, "__call__", main_moves):
+            return real(this, role, *a, **kw)
+        denied = stop("secrets", "w1", family="openai",
+                      denied=[{"kind": "policy", "tool": "Bash", "path": "", "input": "rg -n --glob '!**/.env*' '^<<<<<<<' ."}])
+        with mock.patch.object(fake_route.Script, "reply", main_moves):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE, denied], "review": [CLEAN]})
         self.assertEqual(rc, 2)
         self.assertIsNone(self.ask())  # tl-7y6.2.2: the refusal is a machine fault; the checkpoint is what resumes the run
@@ -1696,17 +1681,17 @@ class EngineTest(unittest.TestCase):
     @ENGINE_BASH
     def test_a_rebase_conflict_goes_to_a_fix_round_not_blocked(self):
         other = Path(self.tmp.name, "other")
-        real = DelegateScript.__call__
+        real = fake_route.Script.reply
 
-        def main_moves(this, route, role, *a, **kw):
+        def main_moves(this, role, *a, **kw):
             if role == "reviewer" and not other.exists():  # another task lands f.txt while this one is reviewed
                 sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(other), cwd=self.tmp.name)
                 (other / "f.txt").write_text("theirs\n")
                 sh("git", "add", "-A", cwd=other)
                 sh("git", "commit", "-qm", "theirs", cwd=other)
                 sh("git", "push", "-q", "origin", "HEAD:main", cwd=other)
-            return real(this, route, role, *a, **kw)
-        with mock.patch.object(DelegateScript, "__call__", main_moves):
+            return real(this, role, *a, **kw)
+        with mock.patch.object(fake_route.Script, "reply", main_moves):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertIn("conflict", s.prompts[3])
@@ -1718,17 +1703,17 @@ class EngineTest(unittest.TestCase):
     def conflict_run(self, answers, **cfg):
         """A run where another task lands f.txt while this one is reviewed: the land hits a planted conflict."""
         other = Path(self.tmp.name, "other")
-        real = DelegateScript.__call__
+        real = fake_route.Script.reply
 
-        def main_moves(this, route, role, *a, **kw):
+        def main_moves(this, role, *a, **kw):
             if role == "reviewer" and not other.exists():
                 sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(other), cwd=self.tmp.name)
                 (other / "f.txt").write_text("theirs\n")
                 sh("git", "add", "-A", cwd=other)
                 sh("git", "commit", "-qm", "theirs", cwd=other)
                 sh("git", "push", "-q", "origin", "HEAD:main", cwd=other)
-            return real(this, route, role, *a, **kw)
-        with mock.patch.object(DelegateScript, "__call__", main_moves):
+            return real(this, role, *a, **kw)
+        with mock.patch.object(fake_route.Script, "reply", main_moves):
             return self.run_engine(answers, **cfg)
 
     def count_check(self, name):
@@ -1762,14 +1747,14 @@ class EngineTest(unittest.TestCase):
     @ENGINE_BASH
     def test_a_conflict_fix_leaving_markers_is_not_accepted_the_marker_check_still_runs(self):
         marked = dict(WRITE)
-        real = DelegateScript.__call__
+        real = fake_route.Script.reply
 
-        def write_markers(this, route, role, *a, **kw):
-            r = real(this, route, role, *a, **kw)
+        def write_markers(this, role, *a, **kw):
+            r = real(this, role, *a, **kw)
             if role == "worker" and len(this.calls) == 4:  # the conflict fix's first write
                 Path(this.cwds[-1], "f.txt").write_text("<<<<<<< HEAD\nx\n=======\ny\n>>>>>>> t\n")
             return r
-        with mock.patch.object(DelegateScript, "__call__", write_markers):
+        with mock.patch.object(fake_route.Script, "reply", write_markers):
             rc, s = self.conflict_run({"plan": [PLAN], "write": [WRITE, marked, WRITE], "review": [CLEAN, CLEAN, CLEAN]})
         recs = [{i["id"]: i["status"] for i in r["items"]} for r in self.checks_records()]
         self.assertEqual(recs[1][engine.Engine.MARKERS], "failed")  # the marker check judged it, not a stage check
@@ -2014,7 +1999,7 @@ class EngineTest(unittest.TestCase):
 
     def test_push_race_interrupted_validation_fix_resume_requires_acceptance(self):
         real_fix, real_stage = engine.Engine.fix, engine.Engine.stage
-        real_delegate = DelegateScript.__call__
+        real_delegate = fake_route.Script.reply
         real_sh, real_checks = engine.Engine.sh, engine.Engine.run_checks
         real_brief = engine.failure_brief
         real_checkpoint, real_transition = engine.Engine.save_checkpoint, engine.Engine.transition
@@ -2071,7 +2056,7 @@ class EngineTest(unittest.TestCase):
                             seen["fix_initialized"] = True
                         return real_stage(this, plan, i, state)
 
-                    def delegate(this, route, current_role, *a, **kw):
+                    def delegate(this, current_role, *a, **kw):
                         if seen.get("in_fix") and current_role == role:
                             seen["interrupted"] = True
                             if interruption == "SIGTERM":
@@ -2079,14 +2064,14 @@ class EngineTest(unittest.TestCase):
                             raise engine.Blocked("paused: validation writer unavailable" if interruption == "pause"
                                                  else "needs a human: validation command denied",
                                                  kind=engine.oc.Kind.PAUSE_LANE if interruption == "pause" else engine.oc.Kind.FAULT_DENIED)
-                        return real_delegate(this, route, current_role, *a, **kw)
+                        return real_delegate(this, current_role, *a, **kw)
 
                     with mock.patch.object(engine.Engine, "fix", fix), \
                             mock.patch.object(engine.Engine, "stage", stage), \
                             mock.patch.object(engine, "failure_brief", brief), \
                             mock.patch.object(engine.Engine, "save_checkpoint", checkpoint), \
                             mock.patch.object(engine.Engine, "transition", transition), \
-                            mock.patch.object(DelegateScript, "__call__", delegate):
+                            mock.patch.object(fake_route.Script, "reply", delegate):
                         rc, events, race = self.run_push_race(failure="checks_fixed", max_rounds=1, max_check_tries=1)
                     self.assertEqual(rc, 2, self.blocked)
                     self.assertEqual(bool(seen.get("fix_initialized")), role in ("worker", "reviewer"))
@@ -2286,15 +2271,15 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(seen.read_text(), "11")
 
     def test_screenshots_in_evidence_are_kept_outside_the_worktree_and_named_on_the_bead(self):
-        real = DelegateScript.__call__
+        real = fake_route.Script.reply
 
-        def shoot(this, route, role, prompt, schema, cwd, *a, **kw):
+        def shoot(this, role, prompt, schema, cwd, *a, **kw):
             if role == "worker":
                 ev = Path(cwd, ".task", "t-1", "evidence")
                 ev.mkdir(parents=True, exist_ok=True)
                 (ev / "traits.png").write_bytes(b"\x89PNG fake")
-            return real(this, route, role, prompt, schema, cwd, *a, **kw)
-        with mock.patch.object(DelegateScript, "__call__", shoot):
+            return real(this, role, prompt, schema, cwd, *a, **kw)
+        with mock.patch.object(fake_route.Script, "reply", shoot):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
         kept = self.eng.run_dir / "evidence" / "traits.png"
@@ -2370,7 +2355,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(self.ask()["kind"], "stuck")
 
     def test_a_machine_pause_is_no_ask(self):
-        out = ans("failed", "logged_out", "owner", family="claude", say="Failed to authenticate: OAuth session expired")
+        out = stop("logged_out", family="claude", say="Failed to authenticate: OAuth session expired")
         self.run_engine({"plan": [out]})
         self.assertIsNone(self.ask())
 
@@ -2828,7 +2813,7 @@ class EngineTest(unittest.TestCase):
     def test_a_verify_fix_round_that_pauses_verifies_its_items_again_on_resume_never_lands_them(self):
         answer = {"items": [verdict(1, "wrong", why="the guid is also in Old.cs.meta"), verdict(2, "settled", "Boot.cs:14"),
                             verdict(3, "open", why="taste")]}
-        busy = ans("failed", "busy", "retry", retry_after=time.time() + 7200, say="lane busy")
+        busy = stop("rate_limited", at=time.time() + 7200, say="lane out")
         rc, _ = self.verified(answer, write=[WRITE, busy])
         self.assertEqual(rc, 2)
         self.assertTrue(self.blocked == [] and self.ask() is None)  # paused: the bead stays open, nothing asked
@@ -2852,8 +2837,8 @@ class EngineTest(unittest.TestCase):
         self.assertIn("the guid is also in Old.cs.meta", a["why"])
 
     def test_a_verifier_that_cannot_run_leaves_every_item_to_the_owner(self):
-        out = ans("failed", "lane_out", "retry", retry_after=time.time() + 7200, say="no lane")
-        rc, _ = self.verified(out, verify=[out] * 3)  # routed again twice, then given up
+        out = stop("rate_limited", at=time.time() + 7200, say="no lane")
+        rc, _ = self.verified(out, verify=[out])  # the lane is out for hours: given up at once
         self.assertEqual(rc, 2)
         q = self.ask()["question"]
         for item in self.GAPS:
@@ -2926,45 +2911,6 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertIn(("reviewer", None, "openai"), s.calls)
 
-    def test_host_from_the_base_config_goes_to_every_step(self):
-        for cfg in ({"host": True}, {"no_sandbox": True}):  # no_sandbox: the 0.6 name, still read
-            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, **cfg)
-            self.assertEqual(rc, 0)
-            self.assertEqual(s.access, [("planner", "--host"), ("worker", "--host"), ("reviewer", "--host")], cfg)
-            self.assertTrue(all(x["host"] for x in self.eng.sessions))
-
-    def test_sandbox_is_the_default_and_the_sandbox_label_turns_the_host_off(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
-        self.assertFalse(any(u for _, u in s.access))
-        with mock.patch.object(tl, "show", return_value=dict(BEAD, labels=["sandbox"])):
-            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, host=True)
-        self.assertFalse(any(u for _, u in s.access))
-
-    def test_a_host_label_alone_grants_nothing(self):
-        # a worker with Bash can label its own bead: only the committed config on the base branch grants the host
-        for label in ("host", "no-sandbox"):
-            with mock.patch.object(tl, "show", return_value={"id": "t-1", "title": "Add f", "metadata": {}, "acceptance_criteria": "f.txt exists", "labels": [label]}):
-                rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
-            self.assertEqual(s.access[1], ("worker", ""), label)
-            self.assertIn("label %s is ignored" % label, self.eng.log_path.read_text())
-
-    def test_host_beads_on_the_base_branch_grant_the_host_to_one_bead(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
-                                host_beads=["t-1"])
-        self.assertEqual(s.access[1], ("worker", "--host"))
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
-                                host_beads=["t-2"])
-        self.assertEqual(s.access[1], ("worker", ""))
-
-    def test_host_in_a_checkout_config_is_not_enough(self):
-        # the main checkout's or the worktree's own .task-loop.json can be edited by a worker; origin/main cannot
-        (self.wt / ".task-loop.json").write_text(json.dumps({"engine": {"host": True}}))
-        sh("git", "add", "-A", cwd=self.wt)
-        sh("git", "commit", "-qm", "local only, never pushed", cwd=self.wt)
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
-                                raw={"host": True, "host_beads": ["t-1"]})
-        self.assertEqual(s.access[1], ("worker", ""))
-
     def test_run_task_refuses_the_main_checkout(self):
         a = mock.Mock(id="t-1", worktree=str(self.wt), slot=None, dry_run=True, fresh=False, quiet=True, outcome_file=None)
         with mock.patch.object(tl, "repo_root", return_value=str(self.wt)), \
@@ -2974,16 +2920,14 @@ class EngineTest(unittest.TestCase):
         made.assert_not_called()
 
     def test_a_denied_command_with_a_valid_answer_is_a_warning_in_the_trace(self):
-        ok = {"v": 2, "status": "done", "data": WRITE, "ref": "w1", "family": "claude",
-              "denied": [{"tool": "Bash", "input": "curl -X POST https://x"}]}
+        ok = full(WRITE, "w1", denied=[{"kind": "policy", "tool": "Bash", "path": "", "input": "curl -X POST https://x"}])
         rc, s = self.run_engine({"plan": [PLAN], "write": [ok, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)  # (a raw answer writes no f.txt: the stage's check sends it to a second write)
         self.assertIn("write was denied `curl -X POST https://x`", self.eng.log_path.read_text())
         self.assertEqual(self.eng.sessions[1]["denied"], ok["denied"])
 
     def test_a_denied_command_with_no_valid_answer_needs_a_human_at_once(self):
-        stuck = {"v": 2, "status": "done", "data": None, "text": "I could not run it", "ref": "w1", "family": "claude",
-                 "denied": [{"tool": "Bash", "input": "unity open client"}]}
+        stuck = full(None, "w1", text="I could not run it", denied=[{"kind": "policy", "tool": "Bash", "path": "", "input": "unity open client"}])
         rc, s = self.run_engine({"plan": [PLAN], "write": [stuck, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 2)
         self.assertEqual([c[0] for c in s.calls].count("worker"), 1)
@@ -2994,8 +2938,8 @@ class EngineTest(unittest.TestCase):
 
     def test_a_refused_read_only_command_gets_one_retry_on_a_fresh_thread_with_a_note(self):
         """tl-bxk.10.21 (lifesim-6dq0): a guard refused a head+rg chain, no answer: one retry, told what was refused."""
-        refused = {"v": 2, "status": "done", "data": None, "text": "", "ref": "w1", "family": "openai", "reason": "guard",
-                   "denied": [{"tool": "shell", "input": "/bin/zsh -lc \"head -n 20 a.txt | rg -n 'x' b\""}]}
+        refused = full(None, "w1", family="openai", text="",
+                       denied=[{"kind": "policy", "tool": "shell", "path": "", "input": "/bin/zsh -lc \"head -n 20 a.txt | rg -n 'x' b\""}])
         rc, s = self.run_engine({"plan": [PLAN], "write": [refused, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         workers = [c for c in s.calls if c[0] == "worker"]
@@ -3005,9 +2949,8 @@ class EngineTest(unittest.TestCase):
         self.assertIn("denied_retry", log)
 
     def test_a_second_refusal_after_the_retry_leaves_the_bead_open_with_a_fault(self):
-        refused = {"v": 2, "status": "done", "data": None, "text": "", "ref": "w1", "family": "openai",
-                   "denied": [{"tool": "Bash", "input": "rg -n foo src"}]}
-        rc, s = self.run_engine({"plan": [PLAN], "write": [refused, dict(refused, ref="w2"), WRITE], "review": [CLEAN]})
+        refused = full(None, "w1", family="openai", text="", denied=[{"kind": "policy", "tool": "Bash", "path": "", "input": "rg -n foo src"}])
+        rc, s = self.run_engine({"plan": [PLAN], "write": [refused, full(None, "w2", family="openai", text="", denied=refused["denied"]), WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 2)
         self.assertEqual([c[0] for c in s.calls].count("worker"), 2)
         self.assertEqual(self.blocked, [])
@@ -3017,11 +2960,13 @@ class EngineTest(unittest.TestCase):
         for denied, reason in (([{"tool": "Bash", "input": "rm -rf build"}], ""), ([{"tool": "shell", "input": "cat > f"}], ""),
                                ([{"tool": "shell", "input": "rg -n x ."}], "secrets"),
                                ([{"tool": "Bash", "input": "rg -n x ."}, {"tool": "Bash", "input": "curl x"}], "")):
-            stuck = {"v": 2, "status": "done", "data": None, "text": "no", "ref": "w1", "family": "claude", "reason": reason, "denied": denied}
+            denied = [dict(x, kind="policy", path="") for x in denied]
+            stuck = stop("secrets", "w1", denied=denied) if reason else full(None, "w1", text="no", denied=denied)
             for f in (tl.config_dir() / "asks" / "t-1.json", tl.config_dir() / "checkpoints" / "t-1.json"):
                 f.unlink() if f.exists() else None  # each case starts as a new bead: an open ask would make the run wait
-            rc, s = self.run_engine({"plan": [PLAN], "write": [stuck, WRITE], "review": [CLEAN]})
-            self.assertEqual((rc, [c[0] for c in s.calls].count("worker")), (2, 1), denied)
+            # a secrets stop gets the one new thread told to use apply_patch (lane_policy), then the fault; the rest is not retried
+            rc, s = self.run_engine({"plan": [PLAN], "write": [stuck, stuck if reason else WRITE], "review": [CLEAN]})
+            self.assertEqual((rc, [c[0] for c in s.calls].count("worker")), (2, 2 if reason else 1), denied)
 
     def test_read_only_commands_are_told_from_the_rest(self):
         for c in ("rg -n foo src", "head -n 5 a | rg x", "git log --oneline -5", "git diff main...HEAD -- a", "find . -name '*.cs' | head",
@@ -3101,10 +3046,8 @@ class EngineTest(unittest.TestCase):
                       " ".join(str(c) for c in self.bd_calls))
 
     def test_a_second_denied_write_in_a_bead_needs_a_human_with_every_denied_command(self):
-        first = {"v": 2, "status": "done", "data": WRITE, "ref": "w1", "family": "claude",
-                 "denied": [{"tool": "Bash", "input": "git checkout x && pick"}]}
-        second = {"v": 2, "status": "done", "data": WRITE, "ref": "w2", "family": "openai",
-                  "denied": [{"tool": "shell", "input": "git restore x; pick"}]}
+        first = full(WRITE, "w1", denied=[{"kind": "policy", "tool": "Bash", "path": "", "input": "git checkout x && pick"}])
+        second = full(WRITE, "w2", family="openai", denied=[{"kind": "policy", "tool": "shell", "path": "", "input": "git restore x; pick"}])
         rc, s = self.run_engine({"plan": [PLAN], "write": [first, second, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 2)
         self.assertEqual([c[0] for c in s.calls].count("worker"), 2)
@@ -3113,11 +3056,10 @@ class EngineTest(unittest.TestCase):
             self.assertIn(cmd, self.said())
 
     def test_denied_writes_count_across_runs_of_a_bead(self):
-        first = {"v": 2, "status": "done", "data": WRITE, "ref": "w1", "family": "claude",
-                 "denied": [{"tool": "Bash", "input": "curl -X POST x"}]}
+        first = full(WRITE, "w1", denied=[{"kind": "policy", "tool": "Bash", "path": "", "input": "curl -X POST x"}])
         with self.stop_at("worker", 2):
             self.run_engine({"plan": [PLAN], "write": [first]})
-        again = dict(first, denied=[{"tool": "Bash", "input": "curl --data @f x"}])
+        again = full(WRITE, "w1", denied=[{"kind": "policy", "tool": "Bash", "path": "", "input": "curl --data @f x"}])
         rc, _ = self.run_engine({"write": [again, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 2)
         self.assertIn("curl -X POST x", self.said())
@@ -3125,19 +3067,17 @@ class EngineTest(unittest.TestCase):
 
     def test_the_secrets_tripwire_stops_the_bead_for_a_human_at_once(self):
         # delegate 0.25: a Codex command on a credential path stops the worker: failed, the command in denied
-        trip = {"v": 2, "status": "failed", "reason": "secrets", "next": "owner", "data": None, "text": "", "ref": "w1", "family": "openai",
-                "say": "stopped: the command touches a credential file",
-                "denied": [{"tool": "shell", "input": "cat .env"}]}
-        rc, s = self.run_engine({"plan": [PLAN], "write": [trip, WRITE], "review": [CLEAN]})
+        trip = stop("secrets", "w1", say="stopped: the command touches a credential file", denied=[CAT_ENV])
+        rc, s = self.run_engine({"plan": [PLAN], "write": [trip, trip], "review": [CLEAN]})
         self.assertEqual(rc, 2)
-        self.assertEqual([c[0] for c in s.calls].count("worker"), 1)
+        self.assertEqual([c[0] for c in s.calls].count("worker"), 2)  # one new thread told to use apply_patch, then the fault
         self.assertEqual(self.blocked, [])
         self.assertIn("needs a human", self.said())
         self.assertIn("cat .env", self.said())
         self.assertIsNone(self.ask())  # tl-7y6.2.2: the tripwire is a machine fault, not an owner ask
 
     def test_fail_on_a_plan_tries_once_more_then_fails_the_task(self):
-        bad = ans("failed", "worker_failed", "fail", say="the worker exited 1")
+        bad = stop("worker_failed", say="the worker exited 1")
         rc, s = self.run_engine({"plan": [bad, bad]})
         self.assertEqual(rc, 2)
         self.assertEqual(len(s.calls), 2)
@@ -3145,7 +3085,7 @@ class EngineTest(unittest.TestCase):
         self.assertIn("the worker exited 1", self.said())
 
     def test_fail_on_a_resumed_write_retries_once_as_a_new_thread(self):
-        refused = ans("error", "caller", "fail", say="--resume: the host flag differs from the original run")
+        refused = stop("worker_failed", "ref-write", say="the resumed thread failed")
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, refused, WRITE], "review": [review(unmet=["more"]), CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         workers = [c for c in s.calls if c[0] == "worker"]
@@ -3154,21 +3094,21 @@ class EngineTest(unittest.TestCase):
         self.assertIsNone(workers[2][1])     # the fail made it start a new one
 
     def test_no_answer_object_counts_as_fail(self):
-        real = DelegateScript.__call__
+        real = fake_route.Script.__call__
+        seen = []
 
-        def crash(this, route, role, *a, **kw):
-            if role == "planner" and not this.calls:
-                this.calls.append((role, None, None))
-                this.prompts.append("")
-                return lcall.Result(error="route.py exit 1, no answer object", backend="delegate"), None
-            return real(this, route, role, *a, **kw)
-        with mock.patch.object(DelegateScript, "__call__", crash):
+        def crash(this, cmd, **kw):
+            if cmd[3] == "planner" and not seen:
+                seen.append(cmd)
+                return subprocess.CompletedProcess(cmd, 1, "", "route.py exit 1, no answer object")
+            return real(this, cmd, **kw)
+        with mock.patch.object(fake_route.Script, "__call__", crash):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)  # one more try, then it went on
+        self.assertEqual(rc, 0, self.blocked)  # delegate died once: again after a rest, then it went on
 
     def test_secrets_stop_leaves_the_bead_open_with_no_ask(self):
-        trip = ans("failed", "secrets", "owner", say="stopped: credential path", denied=[{"tool": "shell", "input": "cat .env"}])
-        rc, _ = self.run_engine({"plan": [PLAN], "write": [trip]})
+        trip = stop("secrets", "w1", say="stopped: credential path", denied=[CAT_ENV])
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [trip, trip]})
         self.assertEqual(rc, 2)
         self.assertIsNone(self.ask())  # tl-7y6.2.2: a refused credential read is a machine fault, never an owner ask
         self.assertEqual(self.blocked, [])
@@ -3180,8 +3120,7 @@ class EngineTest(unittest.TestCase):
                   "'codex_output_schema': Missing 'accept_files'.\",\"code\":\"invalid_json_schema\"},\"status\":400}")
 
     def bad_request(self, **kw):
-        return dict({"v": 2, "status": "error", "reason": "bad_request", "next": "owner", "data": None, "family": "openai",
-                     "text": self.BAD_SCHEMA, "say": self.BAD_SCHEMA}, **kw)
+        return stop("bad_request", family="openai", text=self.BAD_SCHEMA, say=self.BAD_SCHEMA, **kw)
 
     def test_a_rejected_request_is_an_infrastructure_failure_that_leaves_the_bead_open_with_no_ask(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [self.bad_request()]})
@@ -3232,8 +3171,8 @@ class EngineTest(unittest.TestCase):
         self.assertTrue(any(c[:1] == ("update",) and "open" in c for c in self.bd_calls))
 
     def test_an_owner_reason_without_denied_is_a_fault_quoting_say(self):
-        bad = ans("failed", "worker_failed", "owner", say="HTTP 500: upstream error")
-        rc, _ = self.run_engine({"plan": [bad]})
+        bad = stop("worker_failed", say="HTTP 500: upstream error")
+        rc, _ = self.run_engine({"plan": [bad, bad]})
         self.assertEqual(rc, 2)
         self.assertIsNone(self.ask())
         self.assertEqual(self.blocked, [])
@@ -3252,30 +3191,24 @@ class EngineTest(unittest.TestCase):
         self.assertEqual((rc, self.ask(), self.blocked), (2, None, []))
         self.assertTrue(self.eng.result()["why"].startswith("failed: infrastructure: bad_request"))
 
-    def test_an_invalid_json_schema_in_the_text_is_infrastructure_whatever_the_reason(self):
-        out = self.bad_request(reason="worker_failed", status="failed", next="fail")
-        rc, _ = self.run_engine({"plan": [out]})
-        self.assertEqual((rc, self.ask(), self.blocked), (2, None, []))
-        self.assertIn("infrastructure", self.eng.result()["why"])
-
     def test_the_trace_records_reason_context_and_the_lanes(self):
-        rc, _ = self.run_engine({"plan": [PLAN], "write": [ans("lane_out", "lane_out", "retry", retry_after=0), WRITE],
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [stop("rate_limited", at=time.time() + 30), WRITE],
                                  "review": [CLEAN]})
         self.assertEqual(rc, 0)
-        self.assertEqual(self.eng.sessions[1]["reason"], "lane_out")
+        self.assertEqual(self.eng.sessions[1]["reason"], "rate_limited")
         self.assertEqual(self.eng.sessions[-1]["context"]["instructions"], ["/repo/AGENTS.md"])
         trace = [json.loads(l) for l in (tl.config_dir() / "traces.jsonl").read_text().splitlines()][-1]
-        self.assertEqual(trace["lanes"], CONTRACT["lanes"])
+        self.assertNotIn("lanes", trace)
 
-    def test_a_delegate_that_speaks_worker_run_v1_blocks_before_any_step(self):
+    def test_a_delegate_of_another_contract_blocks_before_any_step(self):
         c = engine.load_cfg(str(self.wt))
-        with mock.patch.object(lroute, "find_route", return_value="/fake/route.py"), \
-                mock.patch.object(lroute, "contract", return_value=None), \
-                mock.patch.object(lcall, "call_delegate") as called:
+        refusal = dl.Refusal("skew_delegate_older", "delegate speaks contract 2")
+        script = fake_route.Script({})
+        with mock.patch.object(dl, "resolve", return_value=refusal), mock.patch.object(engine, "make_runner", lambda *a, **k: script):
             rc = engine.Engine("t-1", str(self.wt), c).run()
         self.assertEqual(rc, 2)
-        called.assert_not_called()
-        self.assertIn("worker-run v2", self.said())
+        self.assertEqual(script.calls, [])
+        self.assertIn("contract 3", self.said())
         self.assertIn("update", self.said())
 
     def test_child_env_drops_session_identity(self):
@@ -3382,7 +3315,7 @@ class EngineTest(unittest.TestCase):
 
     def test_a_pause_is_a_comment_never_a_line_of_notes(self):
         calls = []
-        late = ans("stop", "no_lane", "retry", retry_after=engine.time.time() + 3600, family="openai", lane="OPENAI", say="no lane. Hold the task; advice")
+        late = stop("no_lane", at=engine.time.time() + 3600, family="openai", lane="OPENAI", say="no lane. Hold the task; advice")
         with mock.patch.object(tl, "bd", side_effect=lambda *a, **k: calls.append(a) or mock.Mock(returncode=0)):
             self.run_engine({"plan": [late]})
         self.assertFalse([c for c in calls if "--append-notes" in c], calls)
@@ -3649,16 +3582,16 @@ class EngineTest(unittest.TestCase):
         self.assertNotIn("Linked beads", a)
 
 
-class StrayWriteScript(DelegateScript):
+class StrayWriteScript(fake_route.Script):
     """A writer whose play-mode run leaves Unity's scene and its .meta behind (lifesim-fld.6)."""
 
-    def __call__(self, route, role, prompt, schema, cwd, resume, timeout, log_path, *a, **kw):
+    def reply(self, role, prompt, schema, cwd, resume, *a, **kw):
         if role == "worker":
             d = Path(cwd, "client", "Assets")
             d.mkdir(parents=True, exist_ok=True)
             (d / "InitTestScene123.unity").write_text("scene\n")
             (d / "InitTestScene123.unity.meta").write_text("meta\n")
-        return super().__call__(route, role, prompt, schema, cwd, resume, timeout, log_path, *a, **kw)
+        return super().reply(role, prompt, schema, cwd, resume, *a, **kw)
 
 
 class LandReview(EngineTest):
@@ -3681,8 +3614,7 @@ class LandReview(EngineTest):
             (self.wt / n).write_text("x\n")
 
     def run_with(self, script):
-        with mock.patch.object(lroute, "find_route", return_value="/r.py"), mock.patch.object(lroute, "contract", return_value=CONTRACT), \
-                mock.patch.object(lcall, "call_delegate", script), mock.patch.object(engine.time, "sleep"):
+        with delegate_stack(script, "/r.py"):
             self.eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
             return self.eng.run()
 
@@ -3963,7 +3895,7 @@ class LandReview(EngineTest):
 
     # -- tl-bxk.10.18
     def reviewer_brief(self, cap=40000):
-        script = DelegateScript({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        script = fake_route.Script({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         with mock.patch.object(engine.Engine, "STAGE_DIFF_CAP", cap):
             self.assertEqual(self.run_with(script), 0)
         return next(p for c, p in zip(script.calls, script.prompts) if c[0] == "reviewer")
@@ -4102,14 +4034,14 @@ class Outcome(unittest.TestCase):
 
     def test_a_lane_out_for_long_is_paused_with_the_time_the_lane_is_back(self):
         due = time.time() + 3 * 3600
-        self.run_engine({"plan": [PLAN], "write": [ans("lane_out", "lane_out", "retry", retry_after=due, say="out")] * 3})
+        self.run_engine({"plan": [PLAN], "write": [stop("rate_limited", at=due, say="out")]})
         r = self.eng.result()
         self.assertEqual(r["outcome"], "paused")
         self.assertAlmostEqual(r["retry_after"], due, delta=1)
 
     def test_a_logged_out_worker_is_paused_with_no_time(self):
-        out = ans("failed", "logged_out", "owner", family="claude", say="Failed to authenticate")
-        self.run_engine({"plan": [out, out]})
+        out = stop("logged_out", family="claude", say="Failed to authenticate")
+        self.run_engine({"plan": [out]})
         r = self.eng.result()
         self.assertEqual((r["outcome"], r["retry_after"], r["asked"]), ("paused", 0, False))
 
@@ -4176,23 +4108,21 @@ class DelegateLauncher(unittest.TestCase):
     setUp, tearDown, fake_bd, run_engine, said = EngineTest.setUp, EngineTest.tearDown, EngineTest.fake_bd, EngineTest.run_engine, EngineTest.said
 
     def test_same_family_review_is_recorded(self):
-        same = {"v": 2, "status": "done", "data": CLEAN, "ref": "r", "family": "openai", "flag": "same_family"}
+        same = full(CLEAN, "r", family="openai", flag="same_family")
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [same]})
         self.assertEqual(rc, 0)
         self.assertTrue(any(c[:2] == ("comments", "add") and "same family as the writer" in c[3] for c in self.bd_calls))
 
     def test_lane_out_waits_then_runs(self):
-        out = ans("lane_out", "lane_out", "retry", retry_after=0, say="codex out")
+        out = stop("rate_limited", at=time.time() + 30, say="codex out")
         rc, s = self.run_engine({"plan": [PLAN], "write": [out, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
         self.assertEqual([c[0] for c in s.calls].count("worker"), 2)
 
     # lifesim-d5f.58 2026-10-21: a resumed Codex writer answered lane_out for an hour and the bead paused; delegate never
     # switches lanes on a resume, but a fresh call gets the role's next rung (Sonnet on the claude lane) at once
-    OUT_LONG = ans("lane_out", "lane_out", "retry", retry_after=time.time() + 3600, say="cannot continue t now")
-    FRESH = {"v": 2, "status": "done", "reason": None, "next": None, "data": WRITE, "ref": "w2", "cost": 0.5, "secs": 1,
-             "family": "claude", "lane": "C", "model": "sonnet", "effort": "e", "git_violation": [],
-             "tokens": {"in": 1000, "cached": 800, "out": 50}, "context": {"instructions": [], "env_keys": []}}
+    OUT_LONG = stop("rate_limited", at=time.time() + 3600, say="cannot continue t now")
+    FRESH = full(WRITE, "w2", fallback=True, first_lane="OPENAI_SUBSCRIPTION")  # delegate says the writer fell back off its first lane
 
     def test_a_resumed_write_whose_lane_is_out_goes_on_at_once_as_a_new_thread(self):
         with self.lanes(OPENAI_SUBSCRIPTION=True):
@@ -4209,7 +4139,7 @@ class DelegateLauncher(unittest.TestCase):
 
     # tl-bxk.10.5 2026-10-21: after a real outage the Sonnet thread stayed the writer for every later round of
     # lifesim-fld.27.7, d5f.33, 1eg2 and d5f.54 while Codex was usable again
-    BACK = dict(FRESH, ref="w3", family="openai", lane="OPENAI_SUBSCRIPTION", model="gpt")
+    BACK = full(WRITE, "w3", family="openai", lane="OPENAI_SUBSCRIPTION", model="gpt")
     OUT_L = dict(OUT_LONG, lane="OPENAI_SUBSCRIPTION")
 
     def transitions(self):
@@ -4257,7 +4187,7 @@ class DelegateLauncher(unittest.TestCase):
 
     def test_a_fallback_writer_is_retaken_in_the_next_run_once_its_lane_is_back(self):
         with self.lanes(OPENAI_SUBSCRIPTION=True):
-            busy = ans("stop", "busy", "retry", retry_after=time.time() + 3600, family="claude")
+            busy = stop("no_lane", family="claude")
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_L, self.FRESH, busy],
                                      "review": [review(unmet=["more"]), review(unmet=["more"])]})
         self.assertEqual(rc, 2)  # round 3 resumed the fallback (Codex still out) and paused
@@ -4270,14 +4200,12 @@ class DelegateLauncher(unittest.TestCase):
         self.assertIn(engine.FRESH_WRITER_TEXT, s.prompts[0])
         self.assertEqual(s.calls[1], ("reviewer", None, "openai"))
 
-    # delegate 0.32: an answer that picked a lane says whether it is a fallback (and from which first lane, when it can)
-    V032 = dict(CONTRACT, features=CONTRACT["features"] + ["rung", "fallback", "busy_wait"])
+    # contract 3: an answer that picked a lane says whether it is a fallback (and from which first lane, when it can)
     SONNET_FB = dict(FRESH, rung=1, fallback=True, fallback_reason="ceiling", first_lane="OPENAI_SUBSCRIPTION")
     CODEX_FIRST = dict(BACK, rung=0, fallback=False, fallback_reason=None)
     no_checks = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[])])  # FRESH writes no f.txt
 
-    def test_v032_a_fallback_answer_is_retaken_fresh_once_its_first_lane_is_back(self):
-        self.contract_answer = self.V032
+    def test_the_answer_a_fallback_answer_is_retaken_fresh_once_its_first_lane_is_back(self):
         with self.lanes(OPENAI_SUBSCRIPTION=False):
             rc, s = self.run_engine({"plan": [self.no_checks], "write": [self.SONNET_FB, self.CODEX_FIRST, self.CODEX_FIRST],
                                      "review": [review(unmet=["more"])] * 2 + [CLEAN]})
@@ -4285,16 +4213,14 @@ class DelegateLauncher(unittest.TestCase):
         self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, None, "w3"])
         self.assertEqual([c[2] for c in s.calls if c[0] == "reviewer"], ["claude", "openai", "openai"])
 
-    def test_v032_a_fallback_answer_is_resumed_while_its_first_lane_is_out(self):
-        self.contract_answer = self.V032
+    def test_the_answer_a_fallback_answer_is_resumed_while_its_first_lane_is_out(self):
         with self.lanes(OPENAI_SUBSCRIPTION=True):
             rc, s = self.run_engine({"plan": [self.no_checks], "write": [self.SONNET_FB, self.SONNET_FB],
                                      "review": [review(unmet=["more"]), CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, "w2"])
 
-    def test_v032_a_fallback_answer_with_no_lane_known_is_asked_fresh_next_round(self):
-        self.contract_answer = self.V032
+    def test_the_answer_a_fallback_answer_with_no_lane_known_is_asked_fresh_next_round(self):
         anon = dict(self.SONNET_FB)
         anon.pop("first_lane")
         with mock.patch.object(lroute, "lane_status") as st:
@@ -4304,21 +4230,12 @@ class DelegateLauncher(unittest.TestCase):
         self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, None])
         st.assert_not_called()
 
-    def test_v032_a_first_choice_answer_is_resumed(self):
-        self.contract_answer = self.V032
+    def test_the_answer_a_first_choice_answer_is_resumed(self):
         with mock.patch.object(lroute, "lane_status") as st:
             rc, s = self.run_engine({"plan": [self.no_checks], "write": [self.CODEX_FIRST, self.CODEX_FIRST],
                                      "review": [review(unmet=["more"]), CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, "w3"])
-        st.assert_not_called()
-
-    def test_without_the_fallback_feature_the_fields_are_not_read(self):
-        with mock.patch.object(lroute, "lane_status") as st:  # CONTRACT has no fallback feature: the answer's field is ignored
-            rc, s = self.run_engine({"plan": [self.no_checks], "write": [self.SONNET_FB, self.SONNET_FB],
-                                     "review": [review(unmet=["more"]), CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, "w2"])
         st.assert_not_called()
 
     def test_lane_status_reads_route_status_json(self):
@@ -4331,7 +4248,7 @@ class DelegateLauncher(unittest.TestCase):
 
     # lifesim-5ar.6 2026-10-21: the resumed writer's lane_out came with no retry_after, so next was owner, and the bead
     # blocked "needs a human" after 114 min of work
-    OUT_OWNER = ans("lane_out", "lane_out", "owner", retry_after=None, say="cannot say when OPENAI_SUBSCRIPTION frees")
+    OUT_OWNER = stop("rate_limited", say="cannot say when OPENAI_SUBSCRIPTION frees")
 
     def test_a_resumed_write_whose_lane_is_out_with_no_time_goes_on_at_once_as_a_new_thread(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_OWNER, self.FRESH],
@@ -4342,35 +4259,33 @@ class DelegateLauncher(unittest.TestCase):
         self.assertIn(engine.FRESH_WRITER_TEXT, workers[2][1])
 
     def test_a_new_thread_whose_lane_is_out_with_no_time_pauses_without_an_ask(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_OWNER, self.OUT_OWNER, self.OUT_OWNER, self.OUT_OWNER],
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_OWNER, self.OUT_OWNER],
                                  "review": [review(unmet=["more"])]})
         self.assertEqual(rc, 2)
-        # the resumed thread's lane is out: a new thread; that lane out too: routed again twice, then the pause
-        self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, "ref-write", None, None, None])
+        # the resumed thread's lane is out: a new thread; that lane out too, with no time: the pause
+        self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, "ref-write", None])
         self.assertEqual(self.blocked, [])
         self.assertTrue(any(c[:3] == ("comments", "add", "t-1") and any("paused: no lane for write" in x for x in c)
                             for c in self.bd_calls))
         self.assertNotIn("needs a human", self.eng.log_path.read_text())
 
-    def test_a_resumed_write_told_busy_waits_and_resumes_the_same_thread(self):
-        busy = ans("stop", "busy", "retry", retry_after=0, say="state lock held")
+    def test_a_resumed_write_told_busy_polls_and_goes_on(self):
+        busy = stop("busy", "ref-write", say="state lock held")
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, busy, WRITE], "review": [review(unmet=["more"]), CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, "ref-write", "ref-write"])
+        self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, "ref-write", None])
 
     def test_the_writer_brief_has_no_sandbox_or_git_text(self):
         # delegate 0.29 owns what the worker is told about its sandbox, escalation and git (worker-run v2)
-        for host in (False, True):
-            with mock.patch.object(engine.Engine, "granted_host", return_value=host):
-                rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
-            self.assertEqual(rc, 0, self.blocked)
-            w = next(p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker")
-            for gone in ("sandbox", "escalat", "permissions", "You have the host", "no commits", "no pushing"):
-                self.assertNotIn(gone, w, (host, gone))
-            self.assertIn("Never run the gate", w)
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        w = next(p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker")
+        for gone in ("sandbox", "escalat", "permissions", "You have the host", "no commits", "no pushing"):
+            self.assertNotIn(gone, w, gone)
+        self.assertIn("Never run the gate", w)
 
     def test_network_down_waits_and_retries(self):
-        down = ans("failed", "network", "retry", retry_after=0, say="ENOTFOUND api.anthropic.com")
+        down = stop("network", "ref-review", say="ENOTFOUND api.anthropic.com")
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [down, CLEAN]})
         self.assertEqual(rc, 0)
         self.assertEqual([c[0] for c in s.calls].count("reviewer"), 2)
@@ -4378,90 +4293,72 @@ class DelegateLauncher(unittest.TestCase):
 
     # lifesim 2026-10-20: woken from sleep, Codex ended its turn after 12 s with a vendor error and no tokens; delegate
     # 0.26 answered failed and the engine closed two beads as failed
-    QUICK = ans("stop", "vendor_prework", "retry", retry_after=0, ref="w1", tokens=None,
-                say="codex failed before any work: workspace routing discovery failed")
+    QUICK = stop("vendor_blip", "w1", say="codex failed before any work: workspace routing discovery failed")
 
     def test_a_failure_before_any_work_waits_and_retries(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [self.QUICK, self.QUICK, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual([c[0] for c in s.calls].count("worker"), 3)
         log = self.eng.log_path.read_text()
-        self.assertIn("vendor_prework", log)
+        self.assertIn("vendor_blip", log)
         self.assertNotIn("did not match the required output schema", "".join(s.prompts))
 
     def test_a_failure_before_any_work_that_keeps_coming_pauses_the_bead_open(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [self.QUICK] * 20}, lane_wait_min=5)
+        rc, s = self.run_engine({"plan": [PLAN], "write": [self.QUICK] * 4 + [stop("no_lane", say="every lane is out")]})
         self.assertEqual(rc, 2)
         self.assertEqual(self.blocked, [])  # paused, not failed: the bead stays open for the next run
         self.assertTrue(any(c[:1] == ("update",) and "open" in c for c in self.bd_calls))
         self.assertIn("workspace routing discovery failed", self.eng.log_path.read_text())
-        self.assertLess([c[0] for c in s.calls].count("worker"), 20)
+        self.assertEqual([c[0] for c in s.calls].count("worker"), 5)  # three polls, one other pick, then the pause
 
     # tl-bxk.10.22: the dashboard says which lane a run waits for and until when
     def test_a_wait_for_a_lane_records_the_lane_and_when_it_ends(self):
-        out = ans("lane_out", "lane_out", "retry", retry_after=time.time() + 120, lane="OPENAI_SUBSCRIPTION")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [out, out, out, WRITE], "review": [CLEAN]})  # two re-routes first
+        out = stop("rate_limited", at=time.time() + 120, lane="OPENAI_SUBSCRIPTION")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [out, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         waits = [json.loads(ln) for ln in self.eng.log_path.read_text().splitlines() if '"lane_wait"' in ln and '"transition"' in ln]
         self.assertEqual([w["lane"] for w in waits], ["OPENAI_SUBSCRIPTION"])
         self.assertGreater(waits[0]["until"], time.time() + 30)
 
     def test_a_failure_after_work_still_fails(self):
-        worked = ans("failed", "worker_failed", "fail", tokens={"in": 90000, "cached": 0, "out": 4000}, say="codex: turn failed")
+        worked = stop("worker_failed", tokens={"in": 90000, "cached": 0, "out": 4000}, say="codex: turn failed")
         rc, s = self.run_engine({"plan": [PLAN], "write": [worked, worked]})
         self.assertEqual(rc, 2)
         self.assertTrue(self.said().startswith("Engine failed:"), self.said())
 
+    LOGIN_CLAUDE = "run `claude auth login`"
+
     def test_a_logged_out_worker_pauses_without_retry_and_leaves_the_bead_open(self):
-        out = ans("failed", "logged_out", "owner", family="claude", say="Failed to authenticate: OAuth session expired")
+        out = stop("logged_out", family="claude", say="Failed to authenticate: OAuth session expired", fix=self.LOGIN_CLAUDE)
         rc, s = self.run_engine({"plan": [out, out]})
         self.assertEqual(rc, 2)
-        self.assertEqual([c[0] for c in s.calls], ["planner", "planner"])
+        self.assertEqual([c[0] for c in s.calls], ["planner"])
         self.assertEqual(self.blocked, [])
         self.assertTrue(any(c[:1] == ("update",) and "open" in c for c in self.bd_calls))
         self.assertIn("claude auth login", self.eng.log_path.read_text())
 
-    # tl-bxk.10.15, delegate 0.35: logged_out answers lane_out/retry; every lane out answers stop/no_lane
-    def test_a_logged_out_lane_is_retried_at_once_with_a_login_note(self):
-        out = ans("lane_out", "logged_out", "retry", retry_after=time.time() + 60, family="claude",
-                  say="claude is not logged in (claude auth login)")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [out, WRITE], "review": [CLEAN]})
-        self.assertEqual(rc, 0)
-        self.assertEqual([c[0] for c in s.calls].count("worker"), 2)  # write twice; no wait
-        log = self.eng.log_path.read_text()
-        self.assertIn("Claude logged out: run `claude auth login`", log)
-
-    def test_a_logged_out_lane_twice_pauses_with_the_login_note_and_no_ask(self):
-        out = ans("lane_out", "logged_out", "retry", retry_after=time.time() + 60, family="claude",
-                  say="claude is not logged in (claude auth login)")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [out, out, WRITE]})
+    # contract 3: logged_out is lane / needs_owner: the lane waits for its owner, the step never retries it and never asks
+    def test_a_logged_out_lane_pauses_with_the_login_fix_and_no_ask(self):
+        out = stop("logged_out", family="claude", say="claude is not logged in", fix=self.LOGIN_CLAUDE)
+        rc, s = self.run_engine({"plan": [PLAN], "write": [out, WRITE]})
         self.assertEqual(rc, 2)
-        self.assertEqual([c[0] for c in s.calls].count("worker"), 2)
-        self.assertEqual(self.blocked, [])
+        self.assertEqual([c[0] for c in s.calls].count("worker"), 1)
+        self.assertEqual((self.blocked, self.ask()), ([], None))
         self.assertTrue(any(c[:3] == ("comments", "add", "t-1") and any("run `claude auth login`" in x for x in c)
                             for c in self.bd_calls))
-        self.assertIn("claude auth login", self.eng.log_path.read_text())
 
-    def test_a_resumed_write_on_a_logged_out_lane_retried_fresh_then_paused_without_an_ask(self):
-        out = ans("lane_out", "logged_out", "retry", retry_after=time.time() + 60, family="openai", say="codex login")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, out, out], "review": [review(unmet=["more"])]})
+    def test_a_resumed_write_on_a_logged_out_lane_pauses_without_an_ask(self):
+        out = stop("logged_out", "ref-write", family="openai", say="codex login", fix="run `codex login`")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, out], "review": [review(unmet=["more"])]})
         self.assertEqual(rc, 2)
         self.assertEqual(self.blocked, [])
+        self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, "ref-write"])
         self.assertTrue(any(c[:3] == ("comments", "add", "t-1") and any("run `codex login`" in x for x in c)
                             for c in self.bd_calls))
 
-    def test_a_logged_out_retry_that_meets_no_lane_pauses_with_the_note_kept(self):
-        out = ans("lane_out", "logged_out", "retry", retry_after=time.time() + 60, family="claude", say="login")
-        stop = ans("stop", "no_lane", "owner", retry_after=None, say="every lane is out")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [out, stop]})
-        self.assertEqual(rc, 2)
-        self.assertEqual(self.blocked, [])
-        self.assertTrue(any(c[:3] == ("comments", "add", "t-1") and any("Claude logged out" in x for x in c)
-                            for c in self.bd_calls))
-
     def test_every_lane_out_with_no_time_pauses_a_resumed_write_without_an_ask(self):
-        stop = ans("stop", "no_lane", "owner", retry_after=None, say="every lane is out")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_OWNER, stop],
+        none = stop("no_lane", say="every lane is out")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_OWNER, none],
                                  "review": [review(unmet=["more"])]})
         self.assertEqual(rc, 2)
         self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, "ref-write", None])
@@ -4472,8 +4369,8 @@ class DelegateLauncher(unittest.TestCase):
 
     def test_every_lane_out_with_a_time_pauses_until_it(self):
         due = time.time() + 3 * 3600
-        stop = ans("stop", "no_lane", "retry", retry_after=due, say="every lane is out")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_OWNER, stop],
+        none = stop("no_lane", at=due, say="every lane is out")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_OWNER, none],
                                  "review": [review(unmet=["more"])]})
         self.assertEqual(rc, 2)
         self.assertEqual(self.blocked, [])
@@ -4485,19 +4382,19 @@ class DelegateLauncher(unittest.TestCase):
         eng.close("failed", "", "", "")
         self.assertTrue(self.blocked)
 
-    def test_no_lane_for_too_long_blocks(self):
-        stop = ans("stop", "no_lane", "retry", retry_after=0, say="no adequate model")
-        rc, _ = self.run_engine({"plan": [stop] * 3}, lane_wait_min=2)
+    def test_no_lane_pauses_the_bead_open(self):
+        none = stop("no_lane", say="no adequate model")
+        rc, _ = self.run_engine({"plan": [none]})
         self.assertEqual(rc, 2)
         self.assertEqual(self.blocked, [])  # a machine-wide wait is not the bead's fault: it stays open
         self.assertTrue(any(c[:3] == ("comments", "add", "t-1") and any("paused: no lane for plan" in x for x in c)
                             for c in self.bd_calls))
 
     def test_a_lane_out_for_long_pauses_at_once_and_frees_the_slot(self):
-        later = ans("lane_out", "lane_out", "retry", retry_after=time.time() + 3 * 3600, say="codex out until 21:00")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [later] * 3})
+        later = stop("rate_limited", at=time.time() + 3 * 3600, say="codex out until 21:00")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [later]})
         self.assertEqual(rc, 2)
-        self.assertEqual([c[0] for c in s.calls].count("worker"), 3)  # routed again twice, no hour of sleeping in the slot
+        self.assertEqual([c[0] for c in s.calls].count("worker"), 1)  # no hour of sleeping in the slot
         self.assertEqual(self.blocked, [])
         self.assertTrue(any(c[:3] == ("comments", "add", "t-1") and any("paused: no lane for write until" in x for x in c)
                             for c in self.bd_calls))
@@ -4525,83 +4422,17 @@ class DelegateLauncher(unittest.TestCase):
         self.assertIn(shown(other), self.said())
         self.assertTrue(Path(other, "dirty.txt").exists())
 
-    def test_another_answer_version_blocks(self):
-        rc, _ = self.run_engine({"plan": [{"v": 3, "status": "done"}]})
+    def test_an_answer_of_another_contract_pauses(self):
+        rc, _ = self.run_engine({"plan": [dict(full(PLAN), contract=4)]})
         self.assertEqual(rc, 2)
-        self.assertIn("worker-run v3", self.said())
+        self.assertIn("contract_violation", self.said())
 
     def test_no_delegate_blocks_with_the_install_command(self):
         c = engine.load_cfg(str(self.wt))
-        with mock.patch.object(lroute, "find_route", return_value=None):
+        with mock.patch.object(dl, "resolve", return_value=dl.Refusal("not_installed")):
             rc = engine.Engine("t-1", str(self.wt), c).run()
         self.assertEqual(rc, 2)
-        self.assertIn("claude plugin install iorlas-delegate", self.said())
-
-
-class DelegateCall(unittest.TestCase):
-    def test_call_delegate_runs_route_py_and_reads_its_answer(self):
-        with tempfile.TemporaryDirectory() as d:
-            route = Path(d, "route.py")
-            route.write_text("import json,sys\nprint('chatter', file=sys.stderr)\n"
-                             "print(json.dumps({'v': 2, 'status': 'done', 'data': {'argv': sys.argv[1:]}, 'ref': 'r1',"
-                             " 'cost': 0, 'family': 'openai'}))\n")
-            r, j = lcall.call_delegate(str(route), "worker", "do it", {"type": "object"}, d, "r0", 60,
-                                        Path(d, "err.log"), writer="claude", parent="p", task="t-1", title="x")
-        argv = r.data["argv"]
-        self.assertEqual(argv[:2], ["run", "worker"])
-        for flag, val in (("--resume", "r0"), ("--authored-by", "claude"), ("--parent", "p"), ("--task", "t-1")):
-            self.assertEqual(argv[argv.index(flag) + 1], val)
-        self.assertEqual((r.ref, r.backend, r.error), ("r1", "openai", ""))
-        self.assertIn("--unattended", argv)
-        self.assertNotIn("--timeout", argv)
-        self.assertNotIn("--no-sandbox", argv)
-
-    def test_call_delegate_passes_the_access_flag(self):
-        with tempfile.TemporaryDirectory() as d:
-            route = Path(d, "route.py")
-            route.write_text("import json,sys\nprint(json.dumps({'v': 2, 'status': 'done', 'data': {'argv': sys.argv[1:]}}))\n")
-            r, _ = lcall.call_delegate(str(route), "worker", "x", {"type": "object"}, d, None, 60, Path(d, "e.log"),
-                                        access="--host")
-        self.assertIn("--host", r.data["argv"])
-
-    def test_contract_reads_the_handshake_and_refuses_another_version(self):
-        with tempfile.TemporaryDirectory() as d:
-            route = Path(d, "route.py")
-            route.write_text("import json\nprint(json.dumps({'worker_run': 2, 'lanes': {'codex': {}}}))\n")
-            self.assertEqual(lroute.contract(str(route))["worker_run"], 2)
-            route.write_text("import sys\nprint('usage: route.py {run,status}', file=sys.stderr); sys.exit(2)\n")
-            self.assertIsNone(lroute.contract(str(route)))
-            route.write_text("import json\nprint(json.dumps({'worker_run': 3}))\n")
-            self.assertIsNone(lroute.contract(str(route)))
-
-    def test_find_route_picks_the_newest_contract_version(self):
-        with tempfile.TemporaryDirectory() as home:
-            for v in ("0.9.1", "0.29.0", "0.30.2", "0.2.0"):
-                p = Path(home, ".claude/plugins/cache/m/iorlas-delegate", v, "skills/delegate")
-                p.mkdir(parents=True)
-                (p / "route.py").write_text("")
-            with mock.patch.object(engine.Path, "home", return_value=Path(home)):
-                self.assertIn("0.30.2", lroute.find_route())
-        with tempfile.TemporaryDirectory() as home, mock.patch.object(engine.Path, "home", return_value=Path(home)):
-            self.assertIsNone(lroute.find_route())
-            self.assertIsNone(lroute.find_route(str(Path(home, "missing.py"))))
-
-    def test_find_route_honors_the_delegate_pin_not_the_newest(self):
-        with tempfile.TemporaryDirectory() as home, mock.patch.object(engine.Path, "home", return_value=Path(home)), \
-                mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(Path(home, "cfg"))}):
-            os.environ.pop("CLAUDE_CONFIG_DIR", None)
-            for v in ("0.29.0", "0.30.2"):
-                p = Path(home, ".claude/plugins/cache/m/iorlas-delegate", v, "skills/delegate")
-                p.mkdir(parents=True)
-                (p / "route.py").write_text("")
-            pin = Path(home, "cfg", "task-loop", "pinned.json")
-            pin.parent.mkdir(parents=True)
-            pin.write_text(json.dumps({"delegate": "0.29.0"}))
-            self.assertIn("0.29.0", lroute.find_route())
-            pin.write_text(json.dumps({"task-loop": "0.23.1"}))  # a pin that names no delegate leaves the newest
-            self.assertIn("0.30.2", lroute.find_route())
-            pin.write_text(json.dumps({"delegate": "0.28.0"}))  # a pinned dir that is gone: no route, no fallback
-            self.assertIsNone(lroute.find_route())
+        self.assertIn("claude plugin update iorlas-delegate", self.said())
 
 
 BRIEFS = ROOT / "tests" / "fixtures" / "briefs"

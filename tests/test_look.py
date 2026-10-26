@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import fake_route  # noqa: E402
 import test_engine as T  # noqa: E402
 from test_engine import BEAD, CLEAN, PLAN, WRITE, engine, tl, verdict  # noqa: E402
 
@@ -14,16 +15,16 @@ VISUAL = {"include": ["*.txt"], "exclude": ["docs/**"]}
 LOOK_ASK = "Whether smiles-front.png matches the rung B ladder image. Only the owner can judge the look."
 
 
-class Shooting(T.DelegateScript):
+class Shooting(fake_route.Script):
     """The fake writer also saves a screenshot, from its `shots`-th write on (class attribute: 0 = never)."""
     first_shot = 0
 
-    def __call__(self, route, role, prompt, schema, cwd, *a, **kw):
+    def reply(self, role, prompt, schema, cwd, *a, **kw):
         if role == "worker" and self.first_shot and sum(c[0] == "worker" for c in self.calls) + 1 >= self.first_shot:
             d = Path(cwd, ".task", "t-1", "evidence")
             d.mkdir(parents=True, exist_ok=True)
             (d / "home-screen.png").write_bytes(b"PNG fake")
-        return super().__call__(route, role, prompt, schema, cwd, *a, **kw)
+        return super().reply(role, prompt, schema, cwd, *a, **kw)
 
 
 class LookTest(unittest.TestCase):
@@ -33,7 +34,7 @@ class LookTest(unittest.TestCase):
 
     def go(self, answers, first_shot=0, bead=BEAD, **cfg):
         script = type("S", (Shooting,), {"first_shot": first_shot})
-        with mock.patch.object(T, "DelegateScript", script), mock.patch.object(tl, "show", return_value=bead):
+        with mock.patch.object(fake_route, "Script", script), mock.patch.object(tl, "show", return_value=bead):
             return self.run_engine(answers, **cfg)
 
     def creates(self):

@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 import test_engine as te
-from test_engine import CLEAN, FALSE, HAS_F, PLAN, PY, WRITE, ans, review
+from test_engine import CLEAN, FALSE, HAS_F, PLAN, PY, WRITE, review, stop
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop" / "dash"))
@@ -124,13 +124,12 @@ class TraceRecords(unittest.TestCase):
         t = next(r for r in records(self.eng, "transition") if r["cause"] == "lane_out")
         self.assertEqual((t["from"], t["to"]), (6, "write"))
         sess = [s for s in records(self.eng, "session") if s["node_id"] == 6]
-        self.assertEqual([(s["status"], s["resume"]) for s in sess], [("lane_out", True), ("done", False)])
+        self.assertEqual([(s["status"], s["resume"]) for s in sess], [("rate_limited", True), ("done", False)])
         self.assertEqual(sess[1]["model"], "sonnet")
 
     def test_a_long_lane_out_pauses_with_the_time_the_lane_is_back(self):
         due = time.time() + 3 * 3600
-        self.run_engine({"plan": [PLAN], "write": [ans("lane_out", "lane_out", "retry", retry_after=due, say="out",
-                                                       lane="OPENAI_SUBSCRIPTION")] * 3})
+        self.run_engine({"plan": [PLAN], "write": [stop("rate_limited", at=due, say="out", lane="OPENAI_SUBSCRIPTION")]})
         t = next(r for r in records(self.eng, "transition") if r["cause"] == "paused")
         self.assertEqual((t["from"], t["to"]), (3, "pause"))
         self.assertAlmostEqual(t["until"], due, delta=1)
@@ -173,7 +172,7 @@ class TraceRecords(unittest.TestCase):
         self.assertEqual((run["started_because"], run["prev_run"]), ("resume", first))
 
     def test_a_rerun_without_a_checkpoint_is_a_retry(self):
-        self.run_engine({"plan": [ans("failed", "error", "fail", say="boom")] * 2})
+        self.run_engine({"plan": [stop("worker_failed", say="boom")] * 2})
         first = self.eng.log_path.stem
         self.assertFalse((tl.config_dir() / "checkpoints" / "t-1.json").exists())
         time.sleep(1.05)

@@ -34,10 +34,14 @@ from checks import speed as cs
 from core import fmt, procs
 from lanes import call as lcall
 from lanes import route as lroute
+import call_state as callstate
+import delegate_link as dl
+import lane_policy as lp
 import lifecycle
 import links
 import looks
 import loop_health
+import netgate
 import notifier
 import outcome as oc
 import tl
@@ -79,13 +83,8 @@ DEFAULTS = {
     "check_idle_min": 10,             # a check with no new output this long is stopped as hung (process group and all), never retried; 0 = off
     "gate_timeout_min": 90,           # the same for the gate at land
     "budget_min_by_label": {},        # {label: minutes}: a bead with a label here gets that budget_min if larger (the largest of its labels)
-    "delegate": "",                   # path to delegate's route.py; "" = the newest installed iorlas-delegate
-    "lane_wait_min": 10,              # how long a step waits in its slot for a lane; longer: the run pauses (slot freed)
     "untracked_ignore": [],           # globs of untracked files never staged and never listed for the review (lifesim: client/Assets/InitTestScene*.unity*)
     "checks": [],                     # repo checks: [{id, cmd, group: static|tests|acceptance, when: [globs], retry, timeout_min}]
-    "host": False,                    # the work needs the host (Unity, an editor): write steps get delegate's --host
-                                      # a bead label `sandbox` turns it off for one bead
-    "no_sandbox": False,              # the 0.6 name of `host`, still read
     "worker_rules": "",               # repo file whose text (3 KB at most) the planner's and the writer's first prompts carry (lifesim: docs/agents/worker-rules.md)
     "brief_kb": 5,
     "test_pattern": r"^\s*(def test_|async def test_|\[(Test|UnityTest|Fact|Theory|TestMethod|TestCase)\b|#\[test\]|(it|test)\(|func Test)",                    # a brief bigger than this gets a ⚠ (never cut: the bead may be too big)
@@ -503,6 +502,25 @@ def drop_reexec(bead):
         reexec_path(bead).unlink()
 
 
+def net_pause_path(bead):
+    return tl.config_dir() / "pauses" / ("%s.json" % bead)
+
+
+def take_net_pause(bead):
+    """The note a run leaves when it pauses for the network ({run, bead, t}), taken once; {} when there is none, it is older
+    than NET_PAUSE_ADOPT_S, or the run it names is gone."""
+    p = net_pause_path(bead)
+    try:
+        rec = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    with contextlib.suppress(OSError):
+        p.unlink()
+    if not isinstance(rec, dict) or not isinstance(rec.get("run"), str) or time.time() - float(rec.get("t") or 0) > NET_PAUSE_ADOPT_S:
+        return {}
+    return rec if (tl.config_dir() / "runs" / rec["run"] / "pause.json").is_file() else {}
+
+
 def take_reexec_env():
     """The hand-over an exec'd (or fallback) run-task finds in TL_REEXEC: {run, bead, from, owned}; {} on a normal start."""
     raw = os.environ.pop("TL_REEXEC", "")
@@ -544,12 +562,11 @@ def exec_in_place(argv):
     os.execv(sys.executable, argv)
 
 
+PUSH_UP_FAILS = 3  # network errors on the push while the probe says the network is up: the fault is not the network's to cure (a proxy, DNS)
 # tl-bxk.13.16.4: a push that died of the network (lifesim-l4ow: curl 56 broken pipe, after a 17 min hook) is retried with a rest
 TRANSIENT_PUSH = re.compile(r"curl \d+|Broken pipe|Connection (?:reset|timed out|refused)|Could not resolve host|early EOF|RPC failed|"
                             r"remote end hung up|SSL_ERROR|TLS|Operation timed out|Network is unreachable|"
                             r"Temporary failure in name resolution|error: 5\d\d|HTTP/\d(?:\.\d)? 5\d\d", re.I)
-PUSH_RESTS = (30, 120, 300)  # seconds before the 2nd, 3rd and 4th try
-CRASH_RESTS = (30, 120)      # a delegate that crashed (lifesim-rl4s: UnicodeDecodeError): two more tries, with these rests
 # tl-fsj: a configured check that fails because the tree lacks what the base's config names is the engine's, never a writer's amend
 STALE_TREE = re.compile(r"does not contain recipe|This checkout has no |no recipe (?:named|called)|Justfile does not contain", re.I)
 
@@ -592,9 +609,6 @@ def tree_problem(wt):
 
 # ---- the engine -----------------------------------------------------------------------------------------------------
 
-# tl-bxk.10.31: delegate reasons (route.py REASONS) that say the request itself is malformed, and the words a lane uses for it
-INFRA_REASONS = ("bad_request",)  # not "caller": a refused resume is retried as a new thread
-SIGNALLED = re.compile(r"\bexited -\d+\b|\b(?:killed|terminated) by signal\b", re.I)  # a worker a supervisor stopped: no answer, no fault of the bead
 LINT_MISSING = re.compile(r"missing required sections?[^:\n]*:\s*(.+)", re.I)
 LINT_FILLER = {
     "acceptance criteria": "- The follow-up named in the title is done, and the checks of the code it touches pass.",
@@ -622,7 +636,66 @@ def with_sections(body, headings, bead):
     return (body or "").rstrip() + ("\n\n" + "\n\n".join(add) if add else "")
 
 
-INFRA_TEXT = re.compile(r"\"code\":\s*\"invalid_json_schema\"|invalid schema for response_format|unrecognized arguments:|error: unknown argument", re.I)
+NET_BACKOFF = (5, 10, 20, 40, 60, 120)  # seconds between the probes of a step that waits for the network
+RESUME_AFTER_STOP = ("\nYour last attempt at this step stopped before it gave an answer. Continue from where you stopped and "
+                     "answer in the required format; do not start over.")
+NOTES = {"apply_patch": ("\nAn earlier attempt at this step ran a command on a secret path and was stopped. Do not read or write "
+                         "secret files (.env, keys, credentials); change files with your editing tool, never through a shell redirect."),
+         "lane_out": ""}
+NET_PAUSE_ADOPT_S = lp.KNOBS["net_pause_max_s"]  # a run paused for the network is taken up again by the next run-task within this long
+
+
+class Call:
+    """One AI step in flight: its prompts, thread and counters, which change between its delegate calls."""
+
+    def __init__(self, node, role, schema, cwd, full, text, writer, resume, key, resume_key, writer_family, step, title):
+        self.node, self.role, self.schema, self.cwd, self.full, self.text = node, role, schema, cwd, full, text
+        self.writer, self.resume, self.key, self.resume_key, self.writer_family = writer, resume or None, key, resume_key, writer_family
+        self.step, self.title = step, title
+        self.visual = False
+        self.tries = 1          # calls that came back with no valid answer, from 1: two at most
+        self.counts = {"attempt": 0, "polls": 0, "crashes": 0, "waited_lane_s": 0.0, "waited_net_s": 0.0}  # lane_policy.Ctx's counters
+        self.denied_retried = False
+        self.was_resumed = bool(resume)
+        self.out_on = ""        # the lane that went out under this step (the writer's fallback lane)
+        self.up_now = None      # the network probe at the last network stop
+        self.finished = None    # an answer the last run left on disk
+        self.state = None       # CallState
+        self.sha = ""
+
+
+def make_runner(log_path, idle=None, wall=None):
+    """The process seam of a delegate call (a test sets a fake_route.Script here)."""
+    return dl.ProcRunner(log_path, idle, wall)
+
+
+def denied_cmd(d):
+    """The command a refusal names: contract 3 gives the tool's input as an object."""
+    inp = d.get("input")
+    return str(inp.get("command") or inp.get("cmd") or json.dumps(inp) if isinstance(inp, dict) else inp or d.get("tool") or "")
+
+
+def stop_say(stop):
+    return ("%s %s" % (stop.reason, stop.fix)).strip() or "%s/%s/%s" % (stop.scope, stop.permanence, stop.retry_kind)
+
+
+def stop_why(node, kind, stop, said, until=0.0, crashes=1, denied=()):
+    """The run's `why` for a step that ended on a stop. The facts decided the kind; the reason and the wording are only text."""
+    k, said = oc.Kind, (said or "").strip()[:200]
+    at = (" until " + time.strftime("%H:%M:%S", time.localtime(until))) if until > time.time() else ""
+    if kind in (k.PAUSE_NETWORK, k.PAUSE_LANE):
+        return "paused: no %s for %s%s (%s: %s)%s" % ("network" if kind == k.PAUSE_NETWORK else "lane", node, at, stop.reason, said,
+                                                       (" [%s]" % stop.fix) if stop.fix else "")
+    if kind == k.PAUSE_KILLED:
+        return "failed: stopped (the %s worker was ended by a signal: %s)" % (node, said)
+    if kind == k.FAULT_BAD_REQUEST:
+        return "failed: infrastructure: %s: %s%s" % (stop.reason, said, (" [%s]" % stop.fix) if stop.fix else "")
+    if kind == k.FAULT_DENIED:
+        cmds = "; ".join("`%s`" % denied_cmd(d) for d in denied)
+        return "needs a human: delegate stopped the %s step (%s): %s%s" % (node, stop.reason, said, (" (refused: %s)" % cmds) if cmds else "")
+    if kind == k.FAULT_CRASHED:
+        return "failed: delegate crashed %d times on the %s step: %s" % (crashes, node, said)
+    return "failed: the %s step stopped (%s) and did not recover: %s" % (node, stop.reason, said)
 
 
 class Blocked(Exception):
@@ -678,8 +751,11 @@ class Engine:
         self.answered = None  # the owner ask this run starts from, once answered
         self.verify_answer = ""  # the owner's answer to a verify ask, when it asks for more than a yes
         self.stuck_why = ""
-        self.host = False  # granted after reset, from the base branch's .task-loop.json only (granted_host)
-        self.contract = None  # delegate's worker-run v2 handshake: features, reasons, what each lane's workers see
+        self.resolved, self.refusal, self.route, self.contract = None, None, "", None  # the delegate install in use (delegate_link.resolve) and its contract.json
+        self.probe = None  # the network probe (a test's); None: delegate's `route.py net`
+        self.net_up_times = []  # when a network stop came while the probe said up (lane_policy: three in five minutes pause the run)
+        self.at_stage = 0  # the stage a call belongs to, for its key
+        self.pause_role, self.pause_lane = "", ""  # the role and lane a paused run waits for: the loop wakes the bead when the role is usable
         self.budget_warned = set()
         self.writer = {}  # backend -> thread/session id, so later rounds of a task resume the same writer
         self.writer_family = None  # the family of the last write: the verifier comes from another one when it can
@@ -716,7 +792,8 @@ class Engine:
         self.reexec = take_reexec_env()  # this run-task came from an exec into a newer install, or a fallback to the older
         if self.reexec.get("bead") != bead:
             self.reexec = {}
-        stem = self.reexec.get("run") or "%s-%s" % (bead, stamp)  # the same run id: log, run dir and trace go on
+        pause = {} if self.reexec else take_net_pause(bead)  # a run paused for the network: its run id and counters go on
+        stem = self.reexec.get("run") or pause.get("run") or "%s-%s" % (bead, stamp)  # the same run id: log, run dir and trace go on
         self.log_path = d / (stem + ".jsonl")
         self.err_path = d / (stem + ".stderr")
         self.exec_fn, self.newer_fn, self.argv, self.moved = None, None, None, False  # a test's exec, newer-install lookup and run-task argv
@@ -730,14 +807,18 @@ class Engine:
         self.brief_file = self.task_dir / "brief.md"  # the brief as the writer can re-read it: the engine's copy stays in run_dir
         self.evidence_dir = self.task_dir / "evidence"  # the writer's proof of what the engine cannot rerun
         self.evidence_dir.mkdir(exist_ok=True)
-        self.route = lroute.find_route(cfg.get("delegate", ""))
+        self.delegate_route(quiet=True)
         if self.reexec:
             self.restore_run()
+        elif pause:
+            self.restore_run("pause.json")
+            self.log("note", "back from a network pause: run %s goes on" % stem)
 
-    def restore_run(self):
-        """The counters of the run that exec'd (run_dir/reexec.json), so the run's cost, time and trace go on across the move."""
+    def restore_run(self, name="reexec.json"):
+        """The counters of the run that exec'd (run_dir/reexec.json) or paused for the network (pause.json), so the run's cost,
+        time and trace go on across the move; the time between is neither spent nor waited."""
         try:
-            c = json.loads((self.run_dir / "reexec.json").read_text(encoding="utf-8"))
+            c = json.loads((self.run_dir / name).read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return
         if not isinstance(c, dict):
@@ -749,6 +830,18 @@ class Engine:
         self.sessions = list(c.get("sessions") or [])
         self.write_rounds = list(c.get("write_rounds") or [])
         self.node_n = int(c.get("node_n") or 0)
+
+    def save_net_pause(self):
+        """The run paused for the network: its counters and a pointer for the next run-task of this bead, which takes the same
+        run id, cost and time budget up again (the pause itself is neither spent nor waited)."""
+        counters = {"elapsed": time.time() - self.t0, "waited": self.waited, "cost": self.cost, "stats": self.stats,
+                    "sessions": self.sessions, "write_rounds": self.write_rounds, "node_n": self.node_n}
+        try:
+            (self.run_dir / "pause.json").write_text(json.dumps(counters), encoding="utf-8")
+            net_pause_path(self.bead).parent.mkdir(parents=True, exist_ok=True)
+            net_pause_path(self.bead).write_text(json.dumps({"run": self.log_path.stem, "bead": self.bead, "t": time.time()}), encoding="utf-8")
+        except OSError as e:
+            self.warn("could not keep the network pause for the next run: %s" % e)
 
     def safe_point(self, step):
         """A step boundary whose checkpoint is current (tl-7y6.9): when a newer task-loop is installed and its selftest
@@ -806,19 +899,20 @@ class Engine:
             drop_reexec(self.bead)
             self.warn("could not move to task-loop %s: %s" % (ver, e))
 
-    def delegate_route(self):
-        """The delegate route.py for the next call (tl-6ax): resolved again each call (a configured path, then the pin, then the
-        newest installed). A different path is taken only when it speaks worker-run v2, else the one in use stays (noted)."""
-        new = lroute.find_route(self.cfg.get("delegate", ""))
-        if new and new != self.route:
-            if not self.route:
-                self.route = new
-            elif (handshake := lroute.contract(new)):
-                self.log("note", "delegate switched: %s -> %s" % (self.route, new))
-                self.route, self.contract = new, handshake
-            else:
-                self.log("note", "delegate %s does not speak worker-run v2: keeping %s" % (new, self.route))
-        if self.route:
+    def delegate_route(self, quiet=False):
+        """The delegate for the next call (tl-6ax): resolved again each call (a configured path, then the pin, then the installed
+        one). A refused one (another contract, a pin that is gone) keeps the one in use (noted); with none in use the run says why."""
+        new = dl.resolve(self.cfg.get("delegate", ""))
+        if isinstance(new, dl.Refusal):
+            if self.resolved is None:
+                self.refusal = new
+            elif not quiet:
+                self.log("note", "delegate not switched: %s %s; keeping %s" % (new.kind, new.detail, self.route))
+            return self.route
+        if self.resolved is not None and new.route != self.resolved.route and not quiet:
+            self.log("note", "delegate switched: %s -> %s" % (self.route, new.route))
+        self.resolved, self.route, self.contract, self.refusal = new, new.route, new.contract, None
+        if not quiet:
             self.log("note", "delegate call via %s" % self.route, delegate=self.route)
         return self.route
 
@@ -896,15 +990,18 @@ class Engine:
         self.log("run", "run: %s" % o["started_because"], run=self.log_path.stem, bead=self.bead, worktree=str(self.wt),
                  slot=(procs.LOCK.data.get("slot") if procs.LOCK else "") or "", **o)
 
-    def trace_call(self, node, role, attempt, r, j, host=False):
-        """One AI call into the run's trace: which worker session did what, and where its transcript is."""
-        j = j or {}
-        rec = {"node": node, "role": role, "attempt": attempt, "status": j.get("status") or r.error or "none",
-               "ref": j.get("ref") or r.ref or "", "run_id": j.get("run_id") or "", "transcript": j.get("transcript") or "",
-               "family": j.get("family") or "", "lane": j.get("lane") or "", "model": j.get("model") or "",
-               "effort": j.get("effort") or "", "turns": j.get("turns"), "secs": round(r.secs or 0), "cost": r.cost or 0.0, "t": time.time(),
-               "host": host, "stopped": r.stop, "tokens": j.get("tokens"), "denied": j.get("denied") or [],  # tokens {in, cached, out}
-               "reason": j.get("reason"), "next": j.get("next"), "warning": j.get("warning"), "context": j.get("context"),
+    def trace_call(self, node, role, tries, res, stopped=""):
+        """One AI call into the run's trace: which worker session did what, and where its transcript is. `status` is done or
+        stopped; a stop keeps its reason and its three facts. stopped: why the engine ended the call, when it did."""
+        j, st = res.raw or {}, res.stop
+        rec = {"node": node, "role": role, "attempt": tries, "status": "done" if st is None else "stopped",
+               "ref": res.ref, "run_id": res.run_id, "transcript": j.get("transcript") or "",
+               "family": res.family, "lane": res.lane, "model": res.model,
+               "effort": j.get("effort") or "", "turns": j.get("turns") or (res.usage or {}).get("turns"), "secs": round(res.secs or 0),
+               "cost": res.cost or 0.0, "t": time.time(), "stopped": stopped, "tokens": j.get("tokens"),  # tokens {in, cached, out}
+               "denied": j.get("denied") or [], "reason": st.reason if st else None,
+               "stop": {"scope": st.scope, "permanence": st.permanence, "retry": st.retry_kind} if st else None,
+               "warning": j.get("warning"), "context": j.get("context"),
                "node_id": (self.cur or {}).get("id"), "resume": bool(getattr(self, "_resume", None)), "flag": j.get("flag"),
                "prompt_chars": getattr(self, "_prompt_chars", None)}
         if node == "write" and not rec["transcript"] and tl.opencode_id(rec["ref"]):  # OpenCode: the session id stands for the transcript,
@@ -932,14 +1029,16 @@ class Engine:
         try:
             prompt = self.reflect_prompt(outcome, why)
             # a short wait: the close step ignores a stop while this runs (route.py adds 120 s to the limit)
-            r, j = lcall.call_delegate(self.delegate_route(), "reviewer", prompt, strict(SCHEMAS["reflect"]), self.wt, None, 45, self.err_path, None,
-                                 self.session, self.bead, "%s · reflect" % self.bead)
+            self.delegate_route()
+            req = dl.CallRequest("reviewer", prompt, strict(SCHEMAS["reflect"]), self.wt, task=self.bead, parent=self.session,
+                                 title="%s · reflect" % self.bead, timeout_s=45)
+            res = dl.call(self.resolved, req, runner=make_runner(self.err_path))
             saved = {k: v for k, v in self.stats.items() if k.startswith("tokens_")}
-            self.trace_call("reflect", "reviewer", 1, r, j)
+            self.trace_call("reflect", "reviewer", 1, res)
             self.stats.update(saved)  # the run's counts are the run's, as the Reflect comment says them
-            if r.data is None or (j or {}).get("status") != "done":
+            if res.data is None or res.stop is not None:
                 return None
-            data = unstrict(r.data, SCHEMAS["reflect"])
+            data = unstrict(res.data, SCHEMAS["reflect"])
             if validate(data, SCHEMAS["reflect"]):
                 return None
             return data
@@ -978,8 +1077,8 @@ class Engine:
                "version": plugin_version(), "started": self.t0, "ended": time.time(), "outcome": outcome, "why": (why or "")[:500], "sha": sha or "",
                "fingerprint": lifecycle.run_fingerprint(outcome, why),
                "kfp": self.fp, "kind": self.kind.value if self.kind else "", "loop": oc.POLICY[self.kind].trace if self.kind else "",
-               "cost": self.cost, "stats": self.stats, "host": self.host, "delegate": self.route or "", "log": str(self.log_path),
-               "stderr": str(self.err_path), "lanes": (self.contract or {}).get("lanes"), "sessions": self.sessions,
+               "cost": self.cost, "stats": self.stats, "delegate": self.route or "", "log": str(self.log_path),
+               "stderr": str(self.err_path), "sessions": self.sessions,
                "verified": self.verified, "write_rounds": self.write_rounds, "strays": self.strays,
                "reflection": getattr(self, "reflection", None), "lane_notes": self.lane_notes, "salvaged": self.salvaged}
         rec.update(self.origin())
@@ -1059,11 +1158,40 @@ class Engine:
         self.assert_tree(kw.get("step") or node, "after")
         return out
 
-    def _ai(self, node, title, prompt, resume_key=None, writer_family=None, step=None, resume_ref=None, visual=False, delta=None, cwd=None, **meta):
-        """One AI node through delegate (worker-run v1): it picks lane and model, limits apply, it records the run.
-        `delta`: what a resumed writer is sent instead of `prompt` (a new thread always gets `prompt`)."""
+    def _ai(self, node, title, prompt, resume_key=None, writer_family=None, step=None, resume_ref=None, visual=False, delta=None, cwd=None,
+            at=(0, 0, 0), **meta):
+        """One AI node through delegate (contract 3): it picks lane and model, limits apply, it records the run. A call that
+        stops goes to lane_policy.decide (the stop's facts in, one Action out) and this loop does what the Action says.
+        `delta`: what a resumed writer is sent instead of `prompt` (a new thread always gets `prompt`). `at`: the step's
+        place (stage, round, write), which with `step` keys the call on disk (CallState)."""
         self.budget_check()
         self.stats["nodes"] += 1
+        c = self.start_call(node, title, prompt, resume_key, writer_family, step, resume_ref, visual, delta, cwd, at)
+        self.node(step or node, "%s: %s" % (node, title), node=node, backend="delegate", role=c.role, resume=bool(c.resume), **meta)
+        while True:
+            res, c.finished = c.finished or self.call_once(c), None
+            denied = dl.real_denied(res.raw)
+            if res.stop is not None:
+                if denied and res.stop.scope == "bead" and res.stop.reason != "secrets" and self.refused(c, res, denied):
+                    continue
+                self.note_net(c, res.stop)
+                self.act(c, res, lp.decide(res.stop, self.ctx_of(c)))
+                continue
+            errs = self.take_answer(c, res)
+            if denied and self.refused(c, res, denied, errs):
+                continue
+            if not errs:
+                break
+            self.log("note", "%s output invalid (try %d): %s" % (node, c.tries, "; ".join(errs[:4])))
+            if c.tries >= 2:
+                raise Blocked("failed: %s node produced no valid output (%s)" % (node, "; ".join(errs[:3])), kind=oc.Kind.FAULT_INFRA)
+            self.transition(step or node, "invalid_output", "; ".join(errs[:2]))
+            c.tries += 1
+            self.again(c)  # a refused or broken resume is not worth a second attempt: a new thread
+        self.end_call(c, res)
+        return res.data, res.family or "delegate"
+
+    def start_call(self, node, title, prompt, resume_key, writer_family, step, resume_ref, visual, delta, cwd, at):
         role = lroute.ROLES[node]
         writer = writer_family if node in ("review", "verify", "look") else None
         resume = resume_ref or (self.writer.get("delegate") if resume_key else None)
@@ -1078,252 +1206,303 @@ class Engine:
                                                           self.writer_family or "?"),
                                 lane=self.fallback_lane, family=self.writer_family or "")
                 resume, prompt = None, prompt + FRESH_WRITER_TEXT
-        out_on = ""
         if getattr(self, "plan_data", None):  # an unsandboxed worker can write here: every step reads the engine's plan
             (self.run_dir / "plan.json").write_text(json.dumps(self.plan_data, indent=1))
-        flag = lroute.access(self.host)
-        self.node(step or node, "%s: %s" % (node, title), node=node, backend="delegate", role=role, resume=bool(resume),
-                  **meta)
+        text = delta if (delta and resume and resume_key) else prompt
+        c = Call(node, role, strict(schema_for(node, visual)), cwd or self.wt, prompt, text, writer, resume, (step or node,) + tuple(at),
+                 bool(resume_key), writer_family, step, title)
+        c.visual = visual
+        self.attach(c)
+        return c
+
+    def attach(self, c):
+        """What the last run left of this call on disk (CallState): a finished answer is used as it stands (output is never
+        discarded), a call that had a thread goes on in that thread with a short note; else the call is made as usual."""
+        c.sha = hashlib.sha1(c.full.encode("utf-8")).hexdigest()[:16]
+        done = self.done_answer(c)
+        if done is not None:  # this run (before a network pause or a move) already had this answer for this very prompt
+            self.log("note", "%s: the answer of this run's earlier pass is on disk: used, not asked again" % c.node)
+            c.finished = dl.answer_of(self.contract, done, done.get("ref") or "")
+            return
+        st = callstate.load_for(self.call_dir(), self.bead, c.key)
+        what = callstate.reattach(st) if st is not None and st.prompt_sha == c.sha else None
+        if what and what[0] == "answer":
+            self.log("note", "%s: the answer of the last run is on disk: used, not asked again" % c.node)
+            c.finished = dl.answer_of(self.contract, what[1], what[1].get("ref") or "")
+            c.state = st
+        elif what:
+            self.log("note", "%s: the last run left thread %s: going on in it" % (c.node, what[1]))
+            c.resume, c.text = what[1], what[2]
+            c.was_resumed = True
+
+    def call_dir(self):
+        return tl.config_dir() / "checkpoints"
+
+    def done_answer(self, c):
+        """The raw answer this run already took for call `c` (same place, same prompt), or None. A run that paused for the network, or
+        moved to a newer install, goes on from its checkpoint, which can sit before steps that were finished: their output is kept."""
+        try:
+            rec = json.loads((self.run_dir / "done.json").read_text(encoding="utf-8")).get(json.dumps(list(c.key)))
+            if isinstance(rec, dict) and rec.get("sha") == c.sha:
+                raw = json.loads(Path(rec["file"]).read_text(encoding="utf-8"))
+                return raw if isinstance(raw, dict) else None
+        except (OSError, ValueError, TypeError, KeyError):
+            pass
+        return None
+
+    def note_done(self, c):
+        """The answer of call `c` was valid and used: remember where its raw copy is, for done_answer."""
+        if c.state is None or not c.state.answer_file:
+            return
+        f = self.run_dir / "done.json"
+        try:
+            m = json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
+            m[json.dumps(list(c.key))] = {"sha": c.sha, "file": c.state.answer_file}
+            f.write_text(json.dumps(m), encoding="utf-8")
+        except (OSError, ValueError):
+            pass
+
+    def ctx_of(self, c):
+        k, now = c.counts, self.clock.now()
+        self.net_up_times = [t for t in self.net_up_times if now - t < lp.KNOBS["net_probe_window_s"]]
+        return lp.Ctx(now, bool(c.resume), k["attempt"], k["polls"], k["crashes"], k["waited_lane_s"], k["waited_net_s"],
+                      len(self.net_up_times), c.denied_retried)
+
+    def call_once(self, c):
+        """One `route.py run`: through the process seam (a write has its idle watcher), then the records a call leaves."""
         timeout = float(self.cfg["node_timeout_min"]) * 60
-        waited, attempt_prompt, attempt, errs = 0.0, delta if (delta and resume and resume_key) else prompt, 1, ["not run"]
-        crashes = 0  # delegate crashes retried on this call
-        denied_retried = False  # one retry after a refused read-only command, on a fresh thread
-        rerouted = 0  # fresh calls made at once after a lane went out on a new thread: delegate marks it out, the next call takes the next rung
-        login_note = ""  # set once a lane answered logged_out and the engine retried afresh (delegate puts that lane out 15 min)
-        while attempt <= 2:
-            self._resume = resume
-            idle = None
-            if node == "write":  # a write follows its worker's activity; the other nodes keep the wall-clock limit
-                idle = lcall.Idle(*(float(self.cfg[k]) * 60 for k in ("write_idle_warn_min", "write_idle_stop_min", "write_cap_min")),
-                            on_warn=self.warn)
-            try:
-                r, j = lcall.call_delegate(self.delegate_route(), role, attempt_prompt, strict(schema_for(node, visual)), cwd or self.wt, resume, timeout,
-                                           self.err_path, writer, self.session, self.bead, "%s · %s: %s" % (self.bead, node, title),
-                                           access=flag, **({"idle": idle} if idle else {}))
-            except BaseException as e:  # an interruption stopped the delegate inside run_proc: record that stop here
-                obs = getattr(e, "engine_obs", None) or {}
-                stop = getattr(e, "engine_stop", None) or {}
-                if obs.get("kill_t") or stop.get("alive"):
-                    timing = dict(started_t=obs.get("started_t"), ended_t=obs.get("ended_t"),
-                                  first_error_t=obs.get("first_error_t"), last_event_t=obs.get("last_event_t"),
-                                  kill_t=obs.get("kill_t"))
-                    started = obs.get("started_t")
-                    self.log("kill", "%s: interrupted" % node, node=node, step=step or node,
-                             why=obs.get("why") or stop.get("why") or "interrupted",
-                             secs=round(time.time() - started) if started else 0,
-                             alive=list(stop.get("alive") or []), observed_t=obs.get("kill_t"),
-                             node_id=(self.cur or {}).get("id"), **timing)
-                raise
-            if j is not None and j.get("v") != 2:
-                raise Blocked("failed: delegate answered worker-run v%s, this engine speaks v2 (update task-loop or "
-                              "delegate)" % j.get("v"), kind=oc.Kind.FAULT_CONTRACT_SKEW)
-            self._prompt_chars = len(attempt_prompt)
-            self.trace_call(node, role, attempt, r, j, bool(flag))
-            timing = dict(started_t=r.started_t, ended_t=r.ended_t, first_error_t=r.first_error_t,
-                          last_event_t=r.last_event_t, kill_t=r.kill_t)
-            if r.stop or r.alive:  # the actual stop path, including a worker that outlived every signal
-                self.log("kill", "%s: stopped (%s)" % (node, (r.stop or "worker survived")[:160]), node=node,
-                         step=step or node, why=r.stop or "worker survived the stop", secs=round(r.secs or 0),
-                         alive=list(r.alive or []), observed_t=r.kill_t or r.ended_t,
-                         node_id=(self.cur or {}).get("id"), **timing)
-            if r.alive:  # a retry would write into the tree the old worker still writes in
-                raise Blocked("failed: the %s worker (pid %s) is still alive after the stop (%s), SIGTERM and SIGKILL; "
-                              "not retrying into this worktree. Kill it, then rerun." % (node, ", ".join(map(str, r.alive)), r.stop), kind=oc.Kind.FAULT_SLOT)
-            j = j or {}
-            nxt, reason, said = j.get("next"), j.get("reason") or "", (j.get("say") or r.error or "").strip()
-            if j and j.get("status") == "done":
-                nxt = None
-            elif not j:
-                nxt, reason = "fail", "no_answer"  # route.py crashed, printed nothing, or the node timeout killed it
-            status = j.get("status") or "none"
-            if r.stop or r.error or status != "done":
-                self.log("vendor_error", "%s: %s" % (node, (reason or r.error or status)[:200]), node=node,
-                         step=step or node, attempt=attempt, status=status, reason=reason, error=r.error or "",
-                         stop=r.stop or "", secs=round(r.secs or 0), lane=j.get("lane") or "",
-                         model=j.get("model") or "", family=j.get("family") or "",
-                         error_observed=r.first_error_t is not None, node_id=(self.cur or {}).get("id"), **timing)
-            if reason == "logged_out" and nxt in ("retry", "owner"):
-                # delegate 0.35 marks a logged-out lane out for 15 min on purpose: the next fresh call goes to the role's
-                # next rung. Retry once at once, note the fix for the dashboard; a second logged_out pauses (tl-bxk.10.15)
-                if login_note:
-                    self.pause_logged_out(node, j, said)
-                login_note = login_fix(j)
-                self.log("note", "%s: %s; retrying at once as a fresh call" % (node, login_note))
-                self.transition(step or node, "logged_out", login_note, lane=j.get("lane") or "")
-                resume, out_on = None, j.get("lane") or ""
-                if self._resume:
-                    attempt_prompt = prompt + FRESH_WRITER_TEXT
-                continue
-            crashed = reason == "crash" or (reason in ("no_answer", "crash", "") and bool(SIGNALLED.search("%s %s" % (said, r.error or "")))
-                                            and not str(r.error or "").startswith("timeout") and not INFRA_TEXT.search("%s %s" % (r.error or "", r.text or ""))) or (reason == "no_answer" and not str(r.error or "").startswith("timeout")
-                                            and not INFRA_TEXT.search("%s %s" % (r.error or "", r.text or "")))  # not a timeout, not a bad request
-            if crashed and crashes < len(CRASH_RESTS):
-                # tl-bxk.13.16.4: delegate itself died (a decode error, a broken pipe): not the bead's, not the owner's. Again as a
-                # fresh call after a rest; out of tries it pauses, it never asks
-                rest = CRASH_RESTS[crashes]
-                crashes += 1
-                self.cost += r.cost
-                self.warn("%s: delegate crashed (%s), trying again in %d s (%d of %d)" % (node, (said or reason)[:160], rest, crashes, len(CRASH_RESTS)))
-                self.transition(step or node, "delegate_crash", "delegate crashed: %s" % (said or reason)[:160], lane=j.get("lane") or "")
-                time.sleep(rest)
-                self.add_wait(rest, "a delegate crash")
-                resume, attempt_prompt = None, prompt + (FRESH_WRITER_TEXT if self._resume else "")
-                continue
-            if crashed and crashes >= len(CRASH_RESTS):
-                raise Blocked("failed: delegate crashed %d times on the %s step: %s" % (crashes + 1, node, said[:300]), kind=oc.Kind.FAULT_INFRA)
-            if reason == "lane_out" and nxt in ("retry", "owner") and resume:
-                # delegate never moves a resumed thread to another lane; a new thread gets the role's next rung at once.
-                # next is owner when delegate cannot say when the lane frees (no retry_after): the same move (lifesim-5ar.6)
-                self.log("note", "%s: the resumed writer's lane is out (%s); going on at once as a new thread"
-                         % (node, said[:160]))
-                self.transition(step or node, "lane_out", "the resumed thread's lane is out: a new thread",
-                                lane=j.get("lane") or "")
-                resume, attempt_prompt, out_on = None, prompt + FRESH_WRITER_TEXT, j.get("lane") or ""
-                continue
-            if reason == "lane_out" and nxt in ("owner", "retry") and not resume and rerouted < 2 and not j.get("denied"):
-                # a lane that went out while the call ran (ZAI, lifesim 0.23.34; delegate answers next=retry with the dead lane's own reset
-                # time, so the wait ran past lane_wait_min and the bead paused 'no lane ... until 19:48') paused it while
-                # `route.py next worker` already named another one: the lane is marked out now, so a fresh call is routed
-                # again. Two tries; the pause stays for a role with no lane left
-                rerouted += 1
-                self.cost += r.cost
-                self.log("note", "%s: the lane went out (%s); routing the call again at once (%d of 2)" % (node, said[:160], rerouted))
-                self.transition(step or node, "lane_out", "the lane went out: routed again", lane=j.get("lane") or "")
-                out_on = j.get("lane") or out_on
-                continue
-            if nxt == "retry":  # worker-run v2: delegate says when; how long a slot waits is this engine's policy
-                if (node in ("review", "verify", "look") and not resume and j.get("family") in ("openai", "claude", "xai")
-                        and j["family"] != writer and reason not in ("busy", "network", "lane_out", "logged_out")):
-                    # a lane that failed to start (Grok out of credits answered 'vendor_prework' without being marked out, lifesim
-                    # o67g and 5ban.28 waited 10 minutes and paused): the next try is routed as if that family had written the work, so
-                    # the others come first and the failing one last. When the route then lands on the real writer's own family, it
-                    # is flagged same_family below: a review by the same model is better than a parked bead (the owner's word)
-                    self.log("note", "%s: %s failed to start (%s): the next try is routed past it" % (node, j["family"], reason))
-                    writer = j["family"]
-                due = float(j.get("retry_after") or 0)
-                wait = max(60.0, due - time.time())
-                if waited + wait > float(self.cfg["lane_wait_min"]) * 60:  # a long wait frees the slot; the checkpoint resumes
-                    self.retry_after = due if due > time.time() else 0.0
-                    self.outcome_of("paused", reason)
-                    self.transition("pause", "paused", "%s for %s until %s" % (
-                        "no network" if reason == "network" else "no lane", node,
-                        time.strftime("%H:%M:%S", time.localtime(due)) if due > time.time() else "a lane frees"),
-                        until=self.retry_after, lane=j.get("lane") or "", reason=reason)
-                    raise Blocked("paused: %s for %s until %s (%s: %s)" % (
-                        "no network" if reason == "network" else "no lane", node,
-                        time.strftime("%H:%M:%S", time.localtime(due)) if due > time.time() else "a lane frees",
-                        reason, said[:200]) + (" [%s]" % login_note if login_note else ""), kind=(oc.Kind.PAUSE_NETWORK if reason == "network" else oc.Kind.PAUSE_LANE))
-                wait = min(600.0, wait)
-                self.warn("%s waits %d min (%s): %s" % (node, wait // 60, reason, said[:160]))
-                self.transition(step or node, "lane_wait", "waited %d min for a lane (%s)" % (wait // 60, reason),
-                                lane=j.get("lane") or "", until=time.time() + wait)
-                time.sleep(wait)
-                waited += wait
-                self.add_wait(wait, "a lane")
-                continue
-            if j.get("status") != "done" and (reason in INFRA_REASONS or INFRA_TEXT.search(said)):  # `said` is the lane's error, never the model's text
-                # tl-bxk.10.31: the lane rejected the request itself (a schema it cannot take, an argument it does not
-                # know): the same call fails for every bead, so it is the engine's or the config's fault, never the bead's
-                self.cost += r.cost
-                self.warn("INFRASTRUCTURE FAILURE: delegate answered %s on the %s step: %s" % (reason, node, said[:300]))
-                raise Blocked("failed: infrastructure: %s: %s" % (reason, said[:200]), kind=(oc.Kind.FAULT_BAD_REQUEST if reason == "bad_request" or INFRA_TEXT.search(said) else oc.Kind.FAULT_INFRA))
-            self.cost += r.cost
-            denied = "; ".join("`%s`" % (d.get("input") or d.get("tool")) for d in j.get("denied") or [])
-            if nxt == "owner" and not denied:
-                if reason in ("lane_out", "no_lane"):  # a new thread found no lane either and no time it frees: the bead waits, no ask
-                    self.outcome_of("paused", reason)
-                    self.transition("pause", "paused", "no lane for %s, no time it frees" % node, lane=j.get("lane") or "",
-                                    reason=reason)
-                    raise Blocked("paused: no lane for %s (%s, no time it frees): %s" % (node, reason, said[:200])
-                                  + (" [%s]" % login_note if login_note else ""), kind=oc.Kind.PAUSE_LANE)
-                if reason in ("logged_out", "setup"):  # the machine's to fix, not the bead's: it stays open, no ask
-                    fix = ("run `codex login`" if j.get("family") == "openai" else "run `claude auth login`") \
-                        if reason == "logged_out" else "set up delegate (/iorlas-delegate:init)"
-                    raise Blocked("paused: %s on %s; %s on this machine, then rerun. (%s)" % (reason, node, fix, said[:200]), kind=oc.Kind.PAUSE_LANE)
-                raise Blocked("needs a human: delegate stopped the %s step (%s): %s" % (node, reason, said[:400]), kind=oc.Kind.FAULT_INFRA)
-            if j.get("git_violation"):
-                self.warn("%s changed git: %s" % (node, "; ".join(j["git_violation"])))
-            if resume_key and r.ref and j.get("status") == "done":
-                said_fb = j.get("fallback") if "fallback" in ((self.contract or {}).get("features") or []) else None
-                if isinstance(said_fb, bool):  # delegate 0.32 says it on every answer, a resumed one too
-                    self.writer_fallback = said_fb
-                    self.fallback_lane = (j.get("first_lane") or out_on or self.fallback_lane) if said_fb else ""
-                elif r.ref != resume:  # a new thread: a fallback only when it runs elsewhere than a lane seen out
-                    gone = out_on or self.fallback_lane
-                    self.fallback_lane = gone if gone and (j.get("lane") or "") != gone else ""
-                    self.writer_fallback = bool(self.fallback_lane)
-                self.writer["delegate"] = resume = r.ref
-                self.writer["ctx"] = (self.sessions[-1] if self.sessions else {}).get("context_k")  # k tokens, None = unknown
-                self.writer["seen"] = self.seen_now()  # the brief and plan this session now holds
-            if r.data is not None:
-                r.data = unstrict(r.data, schema_for(node, visual))
-            errs = validate(r.data, schema_for(node, visual)) if (r.data is not None and nxt is None) else [
-                "%s: %s" % (reason or "no structured output", said[:300])]
-            if (denied and errs and not denied_retried and reason != "secrets" and j.get("denied")
-                    and all(isinstance(d, dict) and d.get("tool") in ("Bash", "shell", "bash") and read_only_command(d.get("input"))
-                            for d in j["denied"])):
-                # tl-bxk.10.21: a guard refused only commands that read (lifesim-6dq0: a head+rg chain, 12 s, no answer; the next
-                # run found the work done). One retry on a fresh thread that is told what was refused; a second denial blocks
-                denied_retried = True
-                note = ("\nAn earlier attempt at this step (thread %s) was refused a read-only command: %s. Do not run it again. "
-                        "Read with one plain command at a time, such as `rg -n PATTERN PATH`, `cat FILE` or `git diff`, "
-                        "with no pipes, chains or substitutions, then give your answer." % (r.ref or "unknown", denied))
-                self.warn("%s: read-only command refused (%s); retrying once on a fresh thread" % (node, denied))
-                self.transition(step or node, "denied_retry", "refused read-only: %s" % denied[:200], lane=j.get("lane") or "")
-                resume, attempt_prompt = None, prompt + (FRESH_WRITER_TEXT if self._resume else "") + note
-                continue
-            if denied and errs:  # asking again meets the same refusal
-                raise Blocked("needs a human: the %s step was denied %s and gave no answer; run it or allow it, then "
-                              "rerun. (%s)" % (node, denied, (j.get("text") or said or "")[:200]), kind=oc.Kind.FAULT_DENIED)
-            if denied and node == "write":  # once is a warning; twice in a bead is a pattern the owner must see
-                self.denials.append(denied)
-                if len(self.denials) >= 2:
-                    raise Blocked("needs a human: the writer was refused commands %d times in this task (a reworded "
-                                  "command may be a way around a refusal): %s. Run or allow them, then rerun."
-                                  % (len(self.denials), " | ".join(self.denials)), kind=oc.Kind.FAULT_DENIED)
-            if denied:
-                self.warn("%s was denied %s and found another way" % (node, denied))
-            if not errs:
-                break
-            self.log("note", "%s output invalid (try %d): %s" % (node, attempt, "; ".join(errs[:4])))
-            if attempt < 2:
-                self.transition(step or node, "invalid_output", "; ".join(errs[:2]))
-            if resume:  # one more try as a new thread: a refused or broken resume is not worth a second attempt
-                resume, attempt_prompt = None, prompt
-            attempt += 1
-        if errs:
-            raise Blocked("failed: %s node produced no valid output (%s)" % (node, "; ".join(errs[:3])), kind=oc.Kind.FAULT_INFRA)
-        if node == "plan" and r.ref:
-            self.planner_ref = r.ref
-        self.last_flag = (j or {}).get("flag")  # same_family | degraded | ...: delegate could not give the usual lane
-        if node in ("review", "verify", "look") and writer_family and (j or {}).get("family") == writer_family and not self.last_flag:
+        idle = None
+        if c.node == "write":  # a write follows its worker's activity; the other nodes keep the wall-clock limit
+            idle = lcall.Idle(*(float(self.cfg[k]) * 60 for k in ("write_idle_warn_min", "write_idle_stop_min", "write_cap_min")),
+                              on_warn=self.warn)
+        self.delegate_route()
+        runner = make_runner(self.err_path, idle, timeout + dl.BACKSTOP_S)
+        limit = float(self.cfg["write_cap_min"]) * 60 + dl.NODE_MARGIN_S if c.node == "write" else timeout
+        req = dl.CallRequest(c.role, c.text, c.schema, c.cwd, c.resume or "", c.writer or "", self.bead, self.session,
+                             "%s · %s: %s" % (self.bead, c.node, c.title), int(limit))
+        self._resume, self._prompt_chars = c.resume, len(c.text)
+        c.state = callstate.begin(self.call_dir(), self.log_path.stem, self.bead, c.key, c.role, resume_of=c.resume or "",
+                                  prompt_sha=c.sha, now=self.clock.now())
+        try:
+            res = dl.call(self.resolved, req, runner=runner)
+        except BaseException as e:  # an interruption stopped the delegate inside run_proc: record that stop here
+            if runner.obs.get("kill_t") or runner.stop.get("alive"):
+                self.log_kill(c, runner, e)
+            raise
+        self.cost += res.cost
+        stopped = runner.stop.get("why") or ""
+        self.trace_call(c.node, c.role, c.tries, res, stopped)
+        if stopped or runner.stop.get("alive"):  # the actual stop path, including a worker that outlived every signal
+            self.log_kill(c, runner)
+        if runner.stop.get("alive"):  # a retry would write into the tree the old worker still writes in
+            raise Blocked("failed: the %s worker (pid %s) is still alive after the stop (%s), SIGTERM and SIGKILL; "
+                          "not retrying into this worktree. Kill it, then rerun." % (
+                              c.node, ", ".join(map(str, runner.stop["alive"])), stopped), kind=oc.Kind.FAULT_SLOT)
+        if res.stop is not None:
+            s = res.stop
+            self.log("vendor_error", "%s: %s" % (c.node, (s.reason or res.say or "stopped")[:200]), node=c.node, step=c.step or c.node,
+                     attempt=c.tries, status="stopped", reason=s.reason, scope=s.scope, permanence=s.permanence, retry=s.retry_kind,
+                     error=res.say, stop=stopped, secs=round(res.secs or runner.secs), lane=res.lane, model=res.model,
+                     family=res.family, error_observed=runner.obs.get("first_error_t") is not None,
+                     node_id=(self.cur or {}).get("id"), **self.timing(runner))
+            if res.ref and s.resumable:  # the thread this stop can go on in; any other stop forgets it (a lane that is out cannot resume)
+                c.state.note_ref(res.ref, self.clock.now())
+            else:
+                c.state.ref = ""
+                c.state.save()
+        else:
+            c.state.returned(res.raw, self.run_dir / ("%s-%d.raw.json" % (c.node, self.stats["nodes"])), self.clock.now())
+        return res
+
+    def timing(self, runner):
+        o = runner.obs
+        return dict(started_t=o.get("started_t"), ended_t=o.get("ended_t"), first_error_t=o.get("first_error_t"),
+                    last_event_t=o.get("last_event_t"), kill_t=o.get("kill_t"))
+
+    def log_kill(self, c, runner, exc=None):
+        o, st = runner.obs, runner.stop
+        started = o.get("started_t")
+        why = st.get("why") or o.get("why") or ("interrupted" if exc is not None else "worker survived the stop")
+        self.log("kill", "%s: %s" % (c.node, ("interrupted" if exc is not None else "stopped (%s)" % why[:160])), node=c.node,
+                 step=c.step or c.node, why=why,
+                 secs=round(time.time() - started) if started else 0, alive=list(st.get("alive") or []),
+                 observed_t=o.get("kill_t") or o.get("ended_t"), node_id=(self.cur or {}).get("id"), **self.timing(runner))
+
+    def take_answer(self, c, res):
+        """A done answer: the writer's thread and fallback bookkeeping, then the data against its schema. -> the errors ([] valid)."""
+        j = res.raw
+        if j.get("git_violation"):
+            self.warn("%s changed git: %s" % (c.node, "; ".join(map(str, j["git_violation"]))))
+        if c.resume_key and res.ref:
+            if isinstance(j.get("fallback"), bool):  # delegate says it on every answer that picked a lane, a resumed one too
+                self.writer_fallback = j["fallback"]
+                self.fallback_lane = (j.get("first_lane") or c.out_on or self.fallback_lane) if j["fallback"] else ""
+            self.writer["delegate"] = c.resume = res.ref
+            self.writer["ctx"] = (self.sessions[-1] if self.sessions else {}).get("context_k")  # k tokens, None = unknown
+            self.writer["seen"] = self.seen_now()  # the brief and plan this session now holds
+        schema = schema_for(c.node, c.visual)
+        if res.data is not None:
+            res.data = unstrict(res.data, schema)
+        return validate(res.data, schema) if res.data is not None else ["no structured output: %s" % (res.say or res.text)[:300]]
+
+    def refused(self, c, res, denied, errs=True):
+        """The guard refused commands during this step. -> True when the step goes again on a fresh thread (it refused only reads)."""
+        said = "; ".join("`%s`" % denied_cmd(d) for d in denied)
+        if errs and not c.denied_retried and all(d.get("tool") in ("Bash", "shell", "bash") and read_only_command(denied_cmd(d)) for d in denied):
+            # tl-bxk.10.21: a guard refused only commands that read (lifesim-6dq0: a head+rg chain, 12 s, no answer; the next
+            # run found the work done). One retry on a fresh thread that is told what was refused; a second denial blocks
+            c.denied_retried = True
+            note = ("\nAn earlier attempt at this step (thread %s) was refused a read-only command: %s. Do not run it again. "
+                    "Read with one plain command at a time, such as `rg -n PATTERN PATH`, `cat FILE` or `git diff`, "
+                    "with no pipes, chains or substitutions, then give your answer." % (res.ref or "unknown", said))
+            self.warn("%s: read-only command refused (%s); retrying once on a fresh thread" % (c.node, said))
+            self.transition(c.step or c.node, "denied_retry", "refused read-only: %s" % said[:200], lane=res.lane)
+            self.again(c, note=note)
+            return True
+        if errs:  # asking again meets the same refusal
+            raise Blocked("needs a human: the %s step was denied %s and gave no answer; run it or allow it, then "
+                          "rerun. (%s)" % (c.node, said, (res.text or res.say or "")[:200]), kind=oc.Kind.FAULT_DENIED)
+        if c.node == "write":  # once is a warning; twice in a bead is a pattern the owner must see
+            self.denials.append(said)
+            if len(self.denials) >= 2:
+                raise Blocked("needs a human: the writer was refused commands %d times in this task (a reworded "
+                              "command may be a way around a refusal): %s. Run or allow them, then rerun."
+                              % (len(self.denials), " | ".join(self.denials)), kind=oc.Kind.FAULT_DENIED)
+        self.warn("%s was denied %s and found another way" % (c.node, said))
+        return False
+
+    def again(self, c, resume="", note="", stop=None):
+        """The next call of this step: on thread `resume` with a short note of why, else on a new thread with the whole prompt."""
+        if resume:
+            c.resume = resume
+            c.text = callstate.NETWORK_RESUME_DELTA if stop is not None and stop.reason == "network" else RESUME_AFTER_STOP
+        else:
+            c.text = c.full + (FRESH_WRITER_TEXT if c.resume else "") + note
+            c.resume = None
+
+    def charge(self, c, name, secs=0.0):
+        if name == "denied_retried":
+            c.denied_retried = True
+        elif name in ("waited_lane_s", "waited_net_s"):
+            c.counts[name] += secs
+        elif name:
+            c.counts[name] += 1
+
+    def act(self, c, res, a):
+        """Do what lane_policy.decide said about a stopped call. A Yield or Fail ends the step (Blocked); the rest set up the next call."""
+        stop, step = res.stop, c.step or c.node
+        if isinstance(a, lp.WaitNet):
+            return self.wait_net(c, res, a)
+        if isinstance(a, (lp.Retry, lp.Wait)):
+            secs = max(0.0, (a.not_before if isinstance(a, lp.Retry) else a.until) - self.clock.now())
+            crash = a.charges == "crashes"
+            if secs:
+                self.warn("%s: %s (%s), trying again in %d s" % (c.node, "delegate crashed" if crash else "waiting for the lane",
+                                                               (res.say or stop.reason)[:160], secs))
+                self.transition(step, "delegate_crash" if crash else "lane_wait", "%s (%s): %d s" % (
+                    "delegate crashed" if crash else "waited for a lane", stop.reason, secs), lane=stop.lane, until=self.clock.now() + secs)
+                time.sleep(secs)
+                self.add_wait(secs, "a delegate crash" if crash else "a lane")
+            self.charge(c, a.charges, secs)
+            return self.again(c, a.resume, stop=stop, note="")
+        if isinstance(a, lp.NewThread):
+            self.transition(step, "denied_retry" if a.note == "apply_patch" else "lane_out",
+                            "%s: a new thread" % (stop.reason or "the lane is out"), lane=stop.lane)
+            if a.note == "lane_out":
+                c.out_on = stop.lane or c.out_on
+            self.charge(c, a.charges)
+            return self.again(c, note=NOTES.get(a.note, ""))
+        if isinstance(a, lp.Reroute):
+            self.log("note", "%s: %s stopped the call (%s); routing it again" % (c.node, a.exclude or "the pick", stop.reason))
+            self.transition(step, "lane_out", "%s: routed again" % (stop.reason or "the lane stopped"), lane=stop.lane)
+            if c.node in ("review", "verify", "look") and res.family in ("openai", "claude", "xai"):
+                c.writer = res.family  # routed as if that family had written the work: the others come first, the failing one last
+            c.out_on = stop.lane or c.out_on
+            self.charge(c, a.charges)
+            return self.again(c)
+        if isinstance(a, lp.Yield):
+            self.retry_after = a.retry_after if a.retry_after > self.clock.now() else 0.0  # a hint: the loop wakes the bead when its role is usable
+            self.pause_role, self.pause_lane = c.role, stop.lane
+            if a.banner:
+                self.warn("the network looks up but delegate calls keep failing: %s" % stop_say(stop))
+            self.outcome_of("paused", stop.reason)
+            self.transition("pause", "paused", "%s for %s%s" % (a.outcome.kind.name.lower().replace("pause_", ""), c.node,
+                            (" until " + time.strftime("%H:%M:%S", time.localtime(self.retry_after))) if self.retry_after else ""),
+                            until=self.retry_after, lane=stop.lane, reason=stop.reason)
+        raise Blocked(stop_why(c.node, a.outcome.kind, stop, res.say, getattr(a, "retry_after", 0.0), c.counts["crashes"] + 1,
+                               dl.real_denied(res.raw)), kind=a.outcome.kind)
+
+    def wait_net(self, c, res, a):
+        """The network is down: probe until it is back (backoff), at most a.max_s; then the same thread goes on with a short
+        note, no counter charged. Out of time the run yields, the loop probes and wakes the bead."""
+        stop = res.stop
+        self.warn("%s: no network (%s); resuming %s when it is back" % (c.node, (res.say or stop.reason)[:120],
+                                                                        ("thread " + a.resume) if a.resume else "on a new thread"))
+        waited, back = self.await_net(c.up_now, a.max_s)
+        c.counts["waited_net_s"] += waited
+        if not back:
+            return self.act(c, res, lp.Yield(oc.make(oc.Kind.PAUSE_NETWORK, stop_say(stop))))
+        self.transition(c.step or c.node, "network_wait", "the network was down %d s; the step goes on in %s" % (
+            waited, ("thread " + a.resume) if a.resume else "a new thread"), lane=stop.lane)
+        self.again(c, a.resume, stop=stop)
+
+    def await_net(self, up, max_s):
+        """Wait until the probe passes, at most max_s (backoff NET_BACKOFF); `up` is the probe's last answer. -> (seconds waited,
+        whether the network is back). The time is neither the budget's nor a failure's: it is written as a wait."""
+        waited, i = 0.0, 0
+        if up is not False:  # the probe says up, or could not run: a beat, then go and see
+            time.sleep(NET_BACKOFF[0])
+            waited, up = NET_BACKOFF[0], True
+        while up is False and waited < max_s:
+            gap = NET_BACKOFF[min(i, len(NET_BACKOFF) - 1)]
+            i += 1
+            time.sleep(gap)
+            waited += gap
+            up = self.net_up()
+            if up is None:  # the probe could not run: go and see
+                up = True
+        if waited:
+            self.add_wait(waited, "the network")
+        return waited, up is not False
+
+    def note_net(self, c, stop):
+        """A stop of the machine that polls (the network): ask the probe now. Up at a stop is counted: three in five minutes
+        mean the calls fail for something the probe cannot see (a proxy, DNS), which the policy pauses visibly."""
+        if (stop.scope, stop.permanence, stop.retry_kind) == ("machine", "transient", "poll"):
+            c.up_now = self.net_up()
+            if c.up_now is True:
+                self.net_up_times.append(self.clock.now())
+
+    def net_up(self):
+        """True, False, or None (the probe could not run). delegate's `route.py net`: sockets only, no model call."""
+        return (self.probe or netgate.RouteProbe(self.route)).up()
+
+    def end_call(self, c, res):
+        j = res.raw
+        if c.state is not None:
+            c.state.consumed()
+            self.note_done(c)
+        if c.node == "plan" and res.ref:
+            self.planner_ref = res.ref
+        self.last_flag = j.get("flag")  # same_family | degraded | ...: delegate could not give the usual lane
+        if c.node in ("review", "verify", "look") and c.writer_family and res.family == c.writer_family and not self.last_flag:
             self.last_flag = "same_family"  # routed past a dead lane to the writer's own family: say so
-        warning = str((j or {}).get("warning") or "").strip()
+        warning = str(j.get("warning") or "").strip()
         if self.last_flag == "same_family" or warning:
             # the owner's word: when only one family is up, it reviews its own work; say so (delegate's warning when it gives one),
             # in the log, the trace and the bead, and never pause for it
-            note = "the %s step ran on the writer's own model family%s" % (node, (": " + warning[:300]) if warning else " (no other lane was free)")
+            note = "the %s step ran on the writer's own model family%s" % (c.node, (": " + warning[:300]) if warning else " (no other lane was free)")
             if note not in self.lane_notes:
                 self.lane_notes.append(note)
                 self.warn(note)
                 self.comment("Lane (engine): " + note)
-        fam = r.backend  # openai | claude: the family that wrote, for the reviewer
-        model = "%s %s on %s" % ((j or {}).get("model"), (j or {}).get("effort"), (j or {}).get("lane"))
-        (self.run_dir / ("%s-%d.json" % (node, self.stats["nodes"]))).write_text(json.dumps(r.data, indent=1))
+        model = "%s %s on %s" % (res.model, j.get("effort"), res.lane)
+        (self.run_dir / ("%s-%d.json" % (c.node, self.stats["nodes"]))).write_text(json.dumps(res.data, indent=1))
         self.log("msg", "%s → %s  [%s%s, %ds, $%.2f, total $%.2f]" % (
-            node, summarize(node, r.data), fam, (":" + model) if model else "", r.secs, r.cost, self.cost),
-            node=node, data=r.data, cost=r.cost, secs=round(r.secs), backend=fam, node_id=(self.cur or {}).get("id"))
-        self.detail(details(node, r.data))
-        self.anomalies(node, r, attempt)
-        return r.data, fam
-
-    def pause_logged_out(self, node, j, said):  # the retry was logged out too
-        """A lane that needs a login: the bead stays open and the run pauses with the fix, never an owner ask."""
-        lane = j.get("lane") or ""
-        fix = "run " + login_fix(j).rsplit("run ", 1)[-1]
-        self.outcome_of("paused", "logged_out")
-        self.transition("pause", "paused", "logged out for %s: %s" % (node, fix), lane=lane, reason="logged_out")
-        raise Blocked("paused: logged_out on %s; %s on this machine, then rerun. (%s)" % (node, fix, said[:200]), kind=oc.Kind.PAUSE_LANE)
+            c.node, summarize(c.node, res.data), res.family or "delegate", (":" + model) if model else "", res.secs, res.cost, self.cost),
+            node=c.node, data=res.data, cost=res.cost, secs=round(res.secs), backend=res.family or "delegate", node_id=(self.cur or {}).get("id"))
+        self.detail(details(c.node, res.data))
+        self.anomalies(c.node, res, c.tries)
 
     def anomalies(self, node, r, attempt):
         d = r.data
@@ -1736,24 +1915,6 @@ class Engine:
         kb = len(text.encode("utf-8")) / 1024
         if kb > float(self.cfg["brief_kb"]):
             self.warn("the brief is %.0f KB (over %s KB): the bead may be too big for one task" % (kb, self.cfg["brief_kb"]))
-
-    def granted_host(self, labels):
-        """Whether write steps get the host. Only the committed config on the base branch grants it (engine.host for the
-        repo, engine.host_beads for listed beads): a worker with Bash can label its own bead, or edit a checkout's
-        .task-loop.json, but not origin/main without review and the gate. The label `sandbox` still turns it off."""
-        committed = self.git("rev-parse", "--verify", "-q", self.cfg["base"] + "^{commit}")  # never the working tree
-        base = (tl.profile(str(self.wt), self.cfg["base"]).get("engine") or {}) if committed else {}
-        granted = bool(base.get("host") or base.get("no_sandbox")) or self.bead in (base.get("host_beads") or [])
-        for label in ("host", "no-sandbox"):
-            if label in labels and not granted:
-                self.warn("label %s is ignored: the host is granted only by engine.host or engine.host_beads in "
-                          ".task-loop.json on %s" % (label, self.cfg["base"]))
-        if "sandbox" in labels and granted:
-            self.log("note", "bead label sandbox: the write step runs sandboxed")
-            granted = False
-        if granted:
-            self.log("note", "the write step gets the host (.task-loop.json on %s)" % self.cfg["base"])
-        return granted
 
     def add_cases(self, new):
         """A writer may add the cases it discovers; it can never remove one (the plan is the engine's)."""
@@ -2267,18 +2428,16 @@ class Engine:
             self.bead_title = bead.get("title") or ""
             self.bead_parent = bead.get("parent") or ""
             hb.start()
+            self.delegate_route()
             if not self.route:
-                raise Blocked("failed: the engine needs the iorlas-delegate plugin (0.14.0 or later): "
-                              "claude plugin install iorlas-delegate@iorlas-marketplace", kind=oc.Kind.FAULT_CONTRACT_SKEW)
-            self.contract = lroute.contract(self.route)
-            if not self.contract:
-                raise Blocked("failed: delegate at %s does not speak worker-run v2; update delegate (claude plugin "
-                              "update iorlas-delegate@iorlas-marketplace) or this engine" % self.route, kind=oc.Kind.FAULT_CONTRACT_SKEW)
-            self.log("note", "workers: delegate %s (worker-run v2)" % self.route)
+                why = self.refusal or dl.Refusal("not_installed")
+                raise Blocked("failed: the engine needs the iorlas-delegate plugin that speaks contract %d (%s %s); update both: "
+                              "claude plugin update iorlas-delegate@iorlas-marketplace" % (dl.CONTRACT, why.kind, why.detail),
+                              kind=oc.Kind.FAULT_CONTRACT_SKEW)
+            self.log("note", "workers: delegate %s (contract %d)" % (self.route, dl.CONTRACT))
             self.log("note", "task-loop %s" % (plugin_version() or "(unknown version)"), version=plugin_version())
             self.reset(bead)
             self.labels = list(bead.get("labels") or [])
-            self.host = self.granted_host(self.labels)
             self.check_ask()
             self.grant_cap()
             if not has_criteria(bead):
@@ -2360,6 +2519,8 @@ class Engine:
                         outcome, why, sha, question, kind = "landed", "", self.landed_sha, "", oc.Kind.LANDED
                     hb.stop()
                     drop_reexec(self.bead)  # a run that ended is no crash after an exec
+                    if kind == oc.Kind.PAUSE_NETWORK and not self.dry:
+                        self.save_net_pause()
                     self.outcome, self.why = outcome, why
                     self.close(outcome, why, sha, question, kind)
         return 0 if self.moved or outcome in ("landed", "done") else 2
@@ -2373,7 +2534,8 @@ class Engine:
                 "log": str(self.log_path), "minutes": round((time.time() - self.t0) / 60, 1),
                 "rounds": self.stats["rounds"], "tests_added": self.stats["tests_added"], "asked": self.asked,
                 "retry_after": self.retry_after if out == "paused" else 0.0, "cost": round(self.cost, 2),
-                "kind": self.kind.value if self.kind else "", "fingerprint": self.fp, "storm": self.storm}
+                "kind": self.kind.value if self.kind else "", "fingerprint": self.fp, "storm": self.storm,
+                "role": self.pause_role if out == "paused" else "", "lane": self.pause_lane if out == "paused" else ""}
 
     def self_verify(self, gaps):
         """One read-only verifier call before a verify ask; returns the items that still go to the owner. Per item:
@@ -2409,10 +2571,10 @@ class Engine:
                 d, _ = self.ai("verify", "%d unchecked item(s) before land" % len(gaps), VERIFY_PROMPT.format(
                     brief=self.brief_text(), work=self.work_summary(), evidence=self.evidence_dir,
                     checks=self.checks_evidence(), where=self.where("verify"), items=items) + self.deferred_text(),
-                    writer_family=self.writer_family, items=len(gaps))
+                    writer_family=self.writer_family, items=len(gaps), at=(self.at_stage, 0, 0))
             except Blocked as b:
-                if b.why.startswith("failed: infrastructure"):  # tl-bxk.10.31: the request is malformed for every bead
-                    raise
+                if b.kind in (oc.Kind.FAULT_BAD_REQUEST, oc.Kind.PAUSE_NETWORK, oc.Kind.PAUSE_KILLED):
+                    raise  # tl-bxk.10.31: the request is malformed for every bead; the network and a kill resume this step, they do not skip it
                 # no verifier now is no reason to land unchecked: the owner checks them, as before
                 self.warn("could not self-verify before land, the owner checks every item: %s" % b.why[:300])
                 return gaps + failed
@@ -2778,7 +2940,7 @@ class Engine:
     def ask_plan(self, prompt, step, title, mode="plan"):
         """One planner answer. Its checks are validated before any write; the ones that read the tracker, run gate-only
         commands, or cannot run (dry_check) go back once, on the same planner thread, with the exact errors."""
-        data, _ = self.ai("plan", title, prompt, step=step, mode=mode)
+        data, _ = self.ai("plan", title, prompt, step=step, mode=mode, at=(self.planned, 0, 0))
         if self.plan_fits(data):  # checkpoint first: a SIGTERM during the send-back below resumes with this plan
             self.plan_data = json.loads(json.dumps(data))
             self.save_checkpoint(stage=0, rounds=0, n=0, feedback="", step="write")
@@ -2824,7 +2986,7 @@ class Engine:
                 (["checks repeat a slow command"] if rep else []) + (["checks cannot run"] if dry else [])))
             ref = self.planner_ref
             back = (why.lstrip() + "\n\nYour plan, to correct (same output schema):\n" + json.dumps(data, indent=1)) if ref else prompt + why
-            data, _ = self.ai("plan", "rewrite checks", back, step=step, mode="checks_back", resume_ref=ref or None)
+            data, _ = self.ai("plan", "rewrite checks", back, step=step, mode="checks_back", resume_ref=ref or None, at=(self.planned, 1, 0))
             bad, gated = lint.tracker_checks(data), lint.gate_only_checks(data, self.cfg)
             only = gate_only_criteria(data, self.cfg)
             if only:
@@ -3359,6 +3521,7 @@ class Engine:
         last = i == len(plan["stages"]) - 1
         state = state or {}
         fix = state.get("fix")
+        sk = self.at_stage = 1000 + int(state.get("fix_n") or 0) if fix else i  # the stage's place in a call's key (CallState)
         if not state or fix:  # a resumed stage keeps the checkpoint's start; the first stage starts at the task's base
             self.stage_tree = self.tree_hash() if (i or fix or self.amended) else ""
         name = state.get("name") or "stage %d/%d" % (i + 1, len(plan["stages"]))
@@ -3405,7 +3568,7 @@ class Engine:
             else:  # a whole prompt (a first write, a fresh writer): what the tasks beside this one are doing (tl-bxk.13.8)
                 prompt += self.shared_text() + self.deferred_text()
             w, wfam = self.ai("write", "%s write %d" % (name, n), prompt, delta=delta, resume_key="writer", write=n,
-                              visual=self.stage_visual(st), round=rounds + 1, **where)
+                              visual=self.stage_visual(st), round=rounds + 1, at=(sk, rounds, n), **where)
             self.writer_family = wfam
             self.writer["last_stage"] = last
             wr = self.sessions[-1] if self.sessions else {}
@@ -3440,7 +3603,7 @@ class Engine:
                 tip = SHOTS_FIX % looks.table_text(self.shot_methods())
                 self.transition("write", "shots_contract", "a visual write named no shots and gave no reason: asked once more")
                 w2, wfam = self.ai("write", "%s shots contract" % name, prompt + tip, delta=tip, resume_key="writer", write=n,
-                                   visual=True, round=rounds + 1, **where)
+                                   visual=True, round=rounds + 1, at=(sk, rounds, n + 500), **where)
                 self.stats["writes"] += 1
                 self.writer_family = wfam
                 self.writer["last_stage"] = last
@@ -3523,7 +3686,7 @@ class Engine:
                      "- %s (%s)\n" % (u["what"], u["kind"]) for u in open_items) if open_items else "") +
                 ("" if last else LATER_CASES) + self.deferred_text() + self.seen_lows_text() + self.flakes_text() + UNCHECKED_TEXT + self.look_review(st, w, fix) +
                 (self.new_files_brief(kinds["unexplained"]) if kinds["unexplained"] else ""),
-                writer_family=wfam, visual=not fix and self.stage_visual(st), round=rounds + 1, **where)
+                writer_family=wfam, visual=not fix and self.stage_visual(st), round=rounds + 1, at=(sk, rounds, n), **where)
             self.accepted_new += [p for p in review.get("accept_files") or [] if p in kinds["unexplained"] and p not in self.accepted_new]
             review = dict(review, findings=list(review["findings"]))
             kept = [u for u in review["unmet"] if not self.ledger_route(u)]  # tl-bxk.13.16.1: the ledger settles these
@@ -3953,9 +4116,29 @@ class Engine:
                       "why": c.get("why") or "", "log": "" if c.get("cached") or c.get("reused") else c.get("log") or ""} for c in out])
         return out
 
+    def landed_already(self, fetch=True):
+        """tl-7y6.2.13: a push that died of the network after origin took it. The task branch's tip is the land commit
+        (titled `... (<bead>)`) and it is on the base: it landed, and nothing is pushed twice. -> its sha, or ''."""
+        if self.dry or (fetch and self.fetch()[0]):
+            return ""
+        tip = self.git("rev-parse", "--verify", "-q", "HEAD")
+        if not tip or not self.git("log", "-1", "--format=%s").endswith("(%s)" % self.bead):
+            return ""
+        return tip if self.sh(["git", "merge-base", "--is-ancestor", tip, self.cfg["base"]], pin=True)[0] == 0 else ""
+
+    def landed_found(self, sha):
+        self.landed_sha = sha
+        tl.cmd_land(Args(id=self.bead, sha=sha, worktree=self.wt))
+        self.outcome_of("landed", sha[:12])
+        self.warn("the push had already gone through (%s is on %s): not pushed again" % (sha[:12], self.cfg["base"]))
+        return sha
+
     def finish(self, bead):
         if self.pending_land_validation:
             raise Blocked("land retry validation still needs accepted checks and review; branch kept", kind=oc.Kind.FAULT_LAND)
+        found = self.landed_already()  # the last run's push may have gone through before the network cut its answer
+        if found:
+            return self.landed_found(found)
         if not self.git("status", "--porcelain"):
             if self.git("rev-list", "--count", "%s..HEAD" % self.cfg["base"]) in ("", "0"):
                 self.log("note", "nothing changed")
@@ -3974,20 +4157,26 @@ class Engine:
         if self.dry:
             self.log("note", "dry run: not landing")
             return ""
-        flaky_push, rest = 0, 0
+        flaky_push, rest, net_failed = 0, False, False
         self.task_branch = self.git("symbolic-ref", "--short", "-q", "HEAD")
         while True:  # one land at a time per repo: rebase, gate and push see the latest base; a fix runs outside the lock
             problem = None
-            if rest:  # a rest after a network failure, with the lock let go
-                time.sleep(rest)
-                self.add_wait(rest, "the network")
-                rest = 0
+            if rest:  # a network failure, with the lock let go: wait for the network, then fetch and look again
+                waited, back = self.await_net(self.net_up(), lp.KNOBS["net_wait_cap_s"])
+                if not back:
+                    raise Blocked("paused: no network for the land push after %d s; the branch is kept and the next run lands it" % waited,
+                                  kind=oc.Kind.PAUSE_NETWORK)
+                rest = False
             with self.land_lock():
                 pushes = 0
                 while True:  # initial push plus at most two main-moved retries in this hold
                     self.node("land", "land (try %d)" % (pushes + 1), **{"try": pushes + 1})
                     self.quarantine_strays()
                     rc, tail = self.fetch()
+                    if rc == 0 and (pushes or net_failed):
+                        found = self.landed_already(fetch=False)  # an earlier push of this land may have gone through
+                        if found:
+                            return self.landed_found(found)
                     if rc == 0:
                         rc, tail = self.sh(["git", "rebase", "-q", self.cfg["base"]], pin=True)
                     if rc:
@@ -4060,14 +4249,15 @@ class Engine:
                             raise Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)
                         if not re.search(r"rejected|non-fast-forward|fetch first|stale info", tail):
                             if TRANSIENT_PUSH.search(tail[-600:]):  # the push's own last lines, not a hook's test output before them
-                                if flaky_push >= len(PUSH_RESTS):
-                                    raise Blocked("paused: the land push failed %d times with a network error; the branch is kept and "
-                                                  "the next run lands it again: %s" % (flaky_push + 1, tail.strip()[-200:]), kind=oc.Kind.PAUSE_NETWORK)
-                                rest = PUSH_RESTS[flaky_push]
-                                flaky_push += 1
-                                self.warn("the push failed with a network error, trying again in %d s (%d of %d): %s" % (
-                                    rest, flaky_push, len(PUSH_RESTS), tail.strip()[-160:]))
-                                self.transition("land", "push_network", "network error on the push; try %d after %d s" % (flaky_push + 1, rest))
+                                if self.net_up() is not False:  # the probe cannot see the fault: counted, a proxy or DNS looks like this
+                                    flaky_push += 1
+                                if flaky_push >= PUSH_UP_FAILS:
+                                    raise Blocked("paused: the land push failed %d times with a network error while the network looks up; "
+                                                  "the branch is kept and the next run lands it again: %s" % (flaky_push, tail.strip()[-200:]),
+                                                  kind=oc.Kind.PAUSE_NETWORK)
+                                rest = net_failed = True
+                                self.warn("the push failed with a network error, trying again when the network is back: %s" % tail.strip()[-160:])
+                                self.transition("land", "push_network", "network error on the push; the land looks again after the network is back")
                                 break
                             raise Blocked("land failed\n" + tail, kind=oc.Kind.FAULT_LAND)
                         pushes += 1
@@ -4382,11 +4572,11 @@ class Engine:
         prompt = looks.judge_prompt(self.cases_of("look-objective") if last else [], names, shown, pairs, summary)
         try:
             d, _ = self.ai("look", "round %d: %d picture%s" % (rnd, len(names), "" if len(names) == 1 else "s"), prompt,
-                           writer_family=self.writer_family, cwd=str(base), round=rnd)
+                           writer_family=self.writer_family, cwd=str(base), round=rnd, at=(self.at_stage, rnd, 0))
         except Blocked as b:
-            if not b.why.startswith(("paused: no lane", "paused: no network")):
-                raise  # a login to fix, a crash: not this node's to swallow
-            self.retry_after = 0.0  # the run goes on: _ai had noted a pause for the loop
+            if not b.why.startswith("paused: no lane"):
+                raise  # the network (the step resumes), a crash: not this node's to swallow
+            self.retry_after, self.pause_role, self.pause_lane = 0.0, "", ""  # the run goes on: _ai had noted a pause for the loop
             self.outcome_of("skipped", "no lane")
             # no lane for the judge: the pictures go unjudged to the owner-look bead; a look judge never parks the bead
             self.warn("the look judge had no lane, the pictures are not judged: %s" % b.why[:200])
@@ -5466,16 +5656,6 @@ def split_top(cmd):
 COMPILE_FAIL = re.compile(r"error CS(?!0006\b|2001\b)\d+|SyntaxError")
 IMPORT_RACE = re.compile(r"Library/|Temp/|asset import|importing asset|refresh", re.I)
 LOCK_FAIL = re.compile(r"another Unity instance|Multiple Unity instances|It looks like another Unity instance is running", re.I)
-
-
-def login_fix(j):
-    """The trace note for a logged-out lane: which login to run."""
-    lane = j.get("lane") or ""
-    if j.get("family") == "xai" or (not j.get("family") and ("GROK" in lane.upper() or lane.upper().endswith("XAI"))):
-        return "Grok logged out: run `opencode auth login`"
-    if j.get("family") == "openai" or lane.upper().startswith("OPENAI"):
-        return "Codex logged out: run `codex login`"
-    return "Claude logged out: run `claude auth login`"
 
 
 LOCK_BACKOFF = (15, 30, 60)  # seconds; the last repeats until LOCK_WAIT_MAX

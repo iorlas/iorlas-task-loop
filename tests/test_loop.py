@@ -325,22 +325,17 @@ class FakeChild:
         self.terminated = True
 
 
-class Margin(unittest.TestCase):
-    def test_the_wake_margin_is_a_jitter_of_30_to_90_seconds(self):
-        got = [loop.margin() for _ in range(200)]
-        self.assertTrue(all(30 <= m <= 90 for m in got))
-        self.assertGreater(len(set(got)), 1)  # two loops paused on one lane do not wake in the same second
-
-
 class LoopBase(Base):
     """The loop with run-task faked (FakeChild) and slot setup skipped; no tests of its own."""
 
     def setUp(self):
         super().setUp()
         self.clock = Clock()
+        self.roles = lambda: {"worker": {"usable": True}}  # delegate's `status --json` roles{}: a test makes it a function of the clock
         self.script, self.hold, self.started, self.during = {}, {}, [], []
         for p in (mock.patch.object(loop, "clock", self.clock), mock.patch.object(loop, "nap", self.clock.nap),
-                  mock.patch.object(loop, "margin", return_value=45),
+                  mock.patch.object(loop, "delegate_route", return_value="/fake/route.py"),
+                  mock.patch.object(loop.dl, "role_status", side_effect=lambda route: self.roles()),
                   mock.patch.object(loop, "spawn", side_effect=lambda cmd, log: FakeChild(self, cmd)),
                   mock.patch.object(loop, "prepare", return_value=(0, ""))):
             p.start()
@@ -493,7 +488,7 @@ class Loop(LoopBase):
 
     def test_a_bead_paused_three_times_waits_an_hour_while_others_run(self):
         def soon():
-            return rec("paused", retry_after=self.clock.t + 60)
+            return rec("paused", kind="pause_lane", role="worker", retry_after=self.clock.t + 60)
         self.beads({"x-1": [None, None, None, rec("landed")], "x-2": [rec("landed")]})
         self.script["x-1"][:3] = [soon(), soon(), soon()]
         self.assertEqual(self.run_loop(), 0)
@@ -595,35 +590,49 @@ class Loop(LoopBase):
         self.assertEqual(self.lines()[0]["outcome"], "failed")
         self.assertIn("no outcome", self.lines()[0]["why"])
 
-    def test_a_pause_with_the_lane_back_soon_waits_for_it_and_runs_the_bead_again(self):
-        self.beads({"x-1": [rec("paused", retry_after=self.clock.t + 600), rec("landed")], "x-2": [rec("landed")]})
+    # tl-7y6.2.8: a paused bead wakes when delegate says its role is usable, not at a clock
+    def test_a_lane_pause_wakes_when_the_role_is_usable_not_at_the_hint(self):
+        up_at = self.clock.t0 + 200
+        self.roles = lambda: {"worker": {"usable": self.clock.t >= up_at, "until": self.clock.t0 + 2 * 3600}}
+        self.beads({"x-1": [rec("paused", kind="pause_lane", role="worker", retry_after=self.clock.t + 2 * 3600), rec("landed")],
+                    "x-2": [rec("landed")]})
         self.assertEqual(self.run_loop(), 0)
-        self.assertEqual([b for b, _ in self.started], ["x-1", "x-1", "x-2"])
-        self.assertIn(645, self.clock.naps)  # tl-bxk.10.6: retry_after plus a margin, never a fixed step
+        self.assertEqual([b for b, _ in self.started], ["x-1", "x-2", "x-1"])  # the next bead runs while the role is down
+        self.assertLess(self.clock.t - self.clock.t0, 600)  # woken by the role coming back, 2 hours before the hint
+        self.assertFalse([n for n in self.clock.naps if n > loop.GATE_CACHE_S + 1])
+        self.assertIn("worker role", self.out)
 
-    def test_a_pause_beyond_the_cap_is_retried_at_its_retry_after_plus_the_margin(self):
-        # lifesim-d5f.58 2026-10-21: Codex was back at 09:02 and the bead's first Codex call came 47 min later
-        self.beads({"x-1": [rec("paused", retry_after=self.clock.t + 2 * 3600), rec("landed")],
-                    "x-2": [rec("paused", retry_after=self.clock.t + 3 * 3600), rec("landed")]})
+    def test_a_stale_hint_never_blocks_a_usable_role(self):
+        self.beads({"x-1": [rec("paused", kind="pause_lane", role="worker", retry_after=self.clock.t + 5 * 3600), rec("landed")]})
         self.assertEqual(self.run_loop(), 0)
-        self.assertEqual([b for b, _ in self.started], ["x-1", "x-2", "x-1", "x-2"])
-        self.assertIn(2 * 3600 + 45, self.clock.naps)  # asleep until x-1's retry_after + margin, no fixed step
-        due = time.strftime("%H:%M:%S", time.localtime(self.clock.t0 + 2 * 3600 + 45))
-        self.assertIn("sleeping until %s" % due, self.out)
+        self.assertEqual([b for b, _ in self.started], ["x-1", "x-1"])
+        self.assertFalse([n for n in self.clock.naps if n > 60])
 
-    def test_a_pause_with_no_time_tries_the_next_bead_and_when_all_pause_sleeps_to_the_earliest(self):
+    def test_a_role_delegate_cannot_judge_fails_open_after_the_unknown_wait(self):
+        self.roles = lambda: {}
+        self.beads({"x-1": [rec("paused", kind="pause_lane", role="worker"), rec("landed")]})
+        self.assertEqual(self.run_loop(), 0)
+        self.assertEqual([b for b, _ in self.started], ["x-1", "x-1"])
+        self.assertGreaterEqual(self.clock.t - self.clock.t0, loop.GATE_UNKNOWN_S)
+        self.assertLess(self.clock.t - self.clock.t0, loop.GATE_UNKNOWN_S + 2 * loop.GATE_CACHE_S)
+
+    def test_a_role_that_stays_down_keeps_the_bead_waiting_while_others_run(self):
+        self.roles = lambda: {"worker": {"usable": False}}
+        self.beads({"x-1": [rec("paused", kind="pause_lane", role="worker")], "x-2": [rec("landed")]})
+        self.assertEqual(self.run_loop("--until", time.strftime("%H:%M", time.localtime(self.clock.t + 3600))), 0)
+        self.assertEqual([b for b, _ in self.started], ["x-1", "x-2"])  # x-1 is never run again while its role is down
+
+    def test_a_pause_with_no_role_rests_pause_retry(self):
         self.beads({"x-1": [rec("paused"), rec("landed")], "x-2": [rec("paused"), rec("landed")]})
         self.assertEqual(self.run_loop(), 0)
         self.assertEqual([b for b, _ in self.started], ["x-1", "x-2", "x-1", "x-2"])
-        self.assertTrue(any(n >= 60 for n in self.clock.naps))
-        self.assertIn("lane", self.out)
+        self.assertIn(loop.PAUSE_RETRY, self.clock.naps)
 
-    def test_a_pause_beyond_the_cap_tries_the_next_bead(self):
-        far = self.clock.t + 5 * 3600
-        self.beads({"x-1": [rec("paused", retry_after=far)], "x-2": [rec("landed")]})
-        self.run_loop("--max-beads", "2")
-        self.assertEqual([b for b, _ in self.started], ["x-1", "x-2"])
-        self.assertFalse([n for n in self.clock.naps if n > 3600])
+    def test_the_held_beads_go_across_a_move_to_a_newer_install(self):
+        with mock.patch.dict(os.environ, {"TL_LOOP_STATE": json.dumps({"gated": {"x-1": ["worker", 5.0]}, "ran": 1})}):
+            self.assertEqual(loop.inherited()["gated"], {"x-1": ["worker", 5.0]})
+        with mock.patch.dict(os.environ, {"TL_LOOP_STATE": json.dumps({"gated": {"x-1": ["worker"]}})}):
+            self.assertNotIn("gated", loop.inherited())  # a field of the wrong shape is dropped, never trusted
 
     def test_drained_waits_when_asked_and_polls_until_the_end_time(self):
         self.beads({})
@@ -898,12 +907,13 @@ class LoopNetwork(LoopBase):
         self.assertIn("no delegate is installed", self.out)
         self.assertEqual(self.kinds(), [])
 
-    def test_a_lane_pause_still_waits_pause_retry_not_a_probe(self):
+    def test_a_lane_pause_waits_on_its_role_not_on_a_probe(self):
         probe = self.probe(netgate.FakeProbe([True]))
-        self.beads({"x-1": [rec("paused", kind="pause_lane"), rec("landed")], "x-2": [rec("paused", kind="pause_lane"), rec("landed")]})
+        self.beads({"x-1": [rec("paused", kind="pause_lane", role="worker"), rec("landed")],
+                    "x-2": [rec("paused", kind="pause_lane", role="worker"), rec("landed")]})
         self.assertEqual(self.run_loop(), 0)
         self.assertEqual(probe.calls, 0)
-        self.assertTrue(any(n >= 60 for n in self.clock.naps))
+        self.assertEqual([b for b, _ in self.started], ["x-1", "x-1", "x-2", "x-2"])  # the role is usable: the same bead again
 
 
 class LoopHealth(LoopBase):
