@@ -42,6 +42,29 @@ Worker ids:
 - Retention: the page lists finished runs for 7 days; transcripts are never touched.
 
 ## UI
+The vendor lane cockpit sits above the main view, with a row for every lane, including available and credit lanes.
+It reads `delegate` from the unauthenticated GET `/api/asks` response. The server invokes only
+`route.py status --json` on each request, without the former 60-second cache; this is a reporting operation,
+not a vendor call. The page polls every 2.5 seconds after the previous refresh completes while visible, and
+refreshes immediately when brought back into view. Outages and recoveries appear on the next completed refresh.
+
+`delegate.lanes` is an ordered array of `{name, family, kind, model, emoji, out, out_until, reason, notes, usage}`.
+`out` is true, false or unknown; `out_until` is Unix seconds or null. Each usage item supplies
+`{window, used_pct, resets_at}` (reset time in Unix seconds). The server accepts named lane maps or lists and
+adapts legacy `five`/`week` percentages into `5h`/`week` windows without duplicating supplied windows.
+Existing `ok`, `out`, `detail`, and `needs_input` fields remain available to older clients.
+The UI shows the supplied emoji, or a state emoji when none is supplied, and labels missing model, reason,
+unlock time and usage as unknown. Every supplied window has a labelled usage bar and reset time; unknown
+percentages stay indeterminate. Bar widths clamp to 0–100 while the label preserves the reported percentage.
+Unlock dates use the browser's local time. Countdowns tick every second; expiry says "awaiting delegate status"
+and never changes availability. Status failures replace stale rows with an explicit message. Vendor text is
+escaped. Rows stack their fields at phone width. No additional login or authentication is introduced.
+
+`tests/cockpit_scenario.py --evidence-dir <directory>` exercises the real page and dashboard GET handler with
+mocked delegate subprocess responses. Tracker/local state access and external requests are blocked. It checks
+fields, unknown values, escaping, countdowns, automatic outage/recovery, failure/recovery and phone bounds,
+and saves desktop/phone screenshots and `cockpit-assertions.json` in the supplied directory.
+
 One page, vanilla JS + CSS, no build; dark-first; mobile stacked, desktop three panes:
 repos -> task tree (epic > children, deps as badges, filter in flight / ready / blocked / all; in-flight rows pulse)
 | the task's sessions and workers (kind, model, state, last activity) | live log (text, tool calls one line each,

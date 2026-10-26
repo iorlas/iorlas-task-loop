@@ -23,6 +23,7 @@ import glob
 import hashlib
 import ipaddress
 import json
+import math
 import os
 import re
 import shutil
@@ -1742,24 +1743,90 @@ def lane_banners(j):
     return out
 
 
+def status_lanes(j):
+    """name -> lane record of a `route.py status --json` answer, in delegate's own order: its v1 dict, or the named
+    list agent-runs v1 records carry."""
+    lanes = j.get("lanes") if isinstance(j, dict) else None
+    if isinstance(lanes, dict) and all(isinstance(ln, dict) for ln in lanes.values()):
+        return {str(n): ln for n, ln in lanes.items()}
+    if isinstance(lanes, list) and all(isinstance(ln, dict) and isinstance(ln.get("name"), str)
+                                       and ln["name"] for ln in lanes):
+        named = {ln["name"]: ln for ln in lanes}
+        if len(named) == len(lanes):
+            return named
+    raise ValueError("invalid lanes")
+
+
+def cockpit_usage(ln):
+    """The lane's usage windows: delegate's `usage` list, plus the bare `five`/`week` percentages older answers carry."""
+    supplied = ln.get("usage")
+    usage = [{"window": str(u.get("window") or "?"), "used_pct": u.get("used_pct"), "resets_at": u.get("resets_at")}
+             for u in (supplied if isinstance(supplied, list) else []) if isinstance(u, dict)]
+    for u in usage:
+        pct = u["used_pct"]
+        if not isinstance(pct, (int, float)) or isinstance(pct, bool) or not math.isfinite(pct):
+            u["used_pct"] = None
+    for key, window in (("five", "5h"), ("week", "week")):
+        if (isinstance(ln.get(key), (int, float)) and not isinstance(ln.get(key), bool)
+                and math.isfinite(ln[key]) and not any(u["window"] == window for u in usage)):
+            usage.append({"window": window, "used_pct": ln[key]})
+    return usage
+
+
+def cockpit_lanes(j):
+    """One record per lane for the dash's cockpit (tl-7y6.3.1): only what delegate said, in its order. A lane that
+    named no model, no unlock time and no usage keeps them empty; task-loop never asks a vendor to fill them in."""
+    return [{"name": n, "family": ln.get("family"), "kind": ln.get("kind"), "model": ln.get("model"),
+             "emoji": ln.get("emoji"), "out": ln.get("out"), "out_until": ln.get("out_until"),
+             "reason": ln.get("reason", ln.get("why")),
+             "notes": [str(x) for x in ln.get("notes") or []], "usage": cockpit_usage(ln)}
+            for n, ln in status_lanes(j).items()]
+
+
 def delegate_status():
-    """The banner: what delegate says about its lanes (route.py status --json v1); task-loop never reads vendors."""
-    def load():
-        routes = glob.glob(os.path.expanduser("~/.claude/plugins/cache/*/iorlas-delegate/*/skills/delegate/route.py"))
-        if not routes:
-            return {"ok": False, "say": "delegate is not installed"}
-        key = lambda p: [int(x) if x.isdigit() else 0 for x in p.split("/iorlas-delegate/")[1].split("/")[0].split(".")]
+    """The banner and the cockpit: what delegate says about its lanes (route.py status --json v1); task-loop never
+    reads vendors. `status --json` only reports, it spends no quota. Never cached: the page polls every 2.5 s, and a
+    lane that just went out or came back must show on the next refresh (tl-7y6.3.1)."""
+    routes = glob.glob(os.path.expanduser("~/.claude/plugins/cache/*/iorlas-delegate/*/skills/delegate/route.py"))
+    if not routes:
+        return {"ok": False, "say": "delegate is not installed"}
+    key = lambda p: [int(x) if x.isdigit() else 0 for x in p.split("/iorlas-delegate/")[1].split("/")[0].split(".")]
+    try:
+        r = subprocess.run([sys.executable, max(routes, key=key), "status", "--json"],
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=20)
+    except (OSError, subprocess.SubprocessError) as e:  # it never ran, or never answered
+        return {"ok": False, "say": "delegate status failed: %s" % e}
+    if isinstance(r.returncode, int) and r.returncode != 0:
+        err = ((r.stderr or "").strip().splitlines() or [""])[-1][:200]
+        return {"ok": False, "say": "delegate status exited %d%s" % (r.returncode, ": " + err if err else "")}
+    out = (r.stdout or "").strip()
+    j = None
+    if "{" in out:
         try:
-            r = subprocess.run([sys.executable, max(routes, key=key), "status", "--json", "--recent", "5"],
-                               capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=20)
-            out = r.stdout.strip()
             j = json.loads(out[out.index("{"):])  # one object, pretty-printed or not
-        except (OSError, ValueError, IndexError, subprocess.SubprocessError) as e:
-            return {"ok": False, "say": "delegate status failed: %s" % e}
-        det = lane_banners(j)
-        out = sorted(det)
-        return {"ok": not out, "out": out, "detail": det, "needs_input": j.get("needs_input") or []}
-    return cached("delegate", 60, load)
+        except ValueError:
+            j = None
+    if not isinstance(j, dict):
+        return {"ok": False, "say": "delegate status printed no JSON status"}  # malformed: nothing to show
+    try:
+        lanes = status_lanes(j)
+        for ln in lanes.values():
+            until = ln.get("out_until")
+            if (until is not None and (isinstance(until, bool) or not isinstance(until, (int, float))
+                                       or not math.isfinite(until))):
+                raise ValueError("invalid unlock time")
+            if until is not None:
+                timeline.when(until)  # finite numbers can still exceed the platform's timestamp range
+            if ln.get("out") is not None and not isinstance(ln["out"], bool):
+                raise ValueError("invalid lane state")
+            if ln.get("notes") is not None and not isinstance(ln["notes"], list):
+                raise ValueError("invalid lane notes")
+    except (ValueError, OverflowError, OSError) as e:
+        return {"ok": False, "say": "delegate status malformed: %s" % e}
+    det = lane_banners({"lanes": lanes})
+    out = sorted(det)
+    return {"ok": not out, "out": out, "detail": det, "needs_input": j.get("needs_input") or [],
+            "lanes": cockpit_lanes(j), "at": time.time()}
 
 
 def ask_for(ask_id, amend=False, withdrawing=False):

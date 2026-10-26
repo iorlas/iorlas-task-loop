@@ -655,7 +655,7 @@ class LaneBanner(unittest.TestCase):
         self.assertEqual(b["OPENAI_SUBSCRIPTION"]["text"], "Codex logged out: run codex login")
 
     def test_a_limit_says_the_local_time_it_ends(self):
-        until = 1793104732
+        until = time.time() + 2 * 86400  # a future date distinct from today, whenever the test runs
         b = self.banners({"OPENAI_SUBSCRIPTION": self.lane(family="openai", out=True, out_until=until,
                                                            notes=["limit refusal: try again later"])})
         self.assertEqual(b["OPENAI_SUBSCRIPTION"]["text"], "Codex out until " + time.strftime("%a %H:%M", time.localtime(until)))
