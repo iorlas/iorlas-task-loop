@@ -2276,16 +2276,16 @@ class Engine:
         finally:
             if self.moved:
                 hb.stop()
-                return 0
-            with self.stop_deferred():  # a stop here would skip the close: no trace, no bead update
-                if self.landed_sha and outcome != "landed":  # stopped after the push: on the base, close it as landed
-                    self.warn("%s after the land went through; closing it landed" % (why or outcome))
-                    outcome, why, sha, question = "landed", "", self.landed_sha, ""
-                hb.stop()
-                drop_reexec(self.bead)  # a run that ended is no crash after an exec
-                self.outcome, self.why = outcome, why
-                self.close(outcome, why, sha, question)
-        return 0 if outcome in ("landed", "done") else 2
+            else:
+                with self.stop_deferred():  # a stop here would skip the close: no trace, no bead update
+                    if self.landed_sha and outcome != "landed":  # stopped after the push: on the base, close it as landed
+                        self.warn("%s after the land went through; closing it landed" % (why or outcome))
+                        outcome, why, sha, question = "landed", "", self.landed_sha, ""
+                    hb.stop()
+                    drop_reexec(self.bead)  # a run that ended is no crash after an exec
+                    self.outcome, self.why = outcome, why
+                    self.close(outcome, why, sha, question)
+        return 0 if self.moved or outcome in ("landed", "done") else 2
 
     def result(self):
         """The run's outcome for the loop: landed (closed, done too), parked (blocked for the owner: an ask, or one

@@ -46,6 +46,10 @@ class Reload(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
         self.execs = []
+        for p in (mock.patch.object(lroute, "find_route", return_value="/fake/route.py"),
+                  mock.patch.object(lroute, "contract", return_value=te.CONTRACT)):  # no delegate in an isolated HOME
+            p.start()
+            self.addCleanup(p.stop)
 
     def install(self, ver, plant=None, fake=False):
         """An installed version: a copy of this checkout's skill (its selftest is the real one), or a stub for the running one."""
@@ -88,9 +92,7 @@ class Reload(unittest.TestCase):
                 fired.append(1)
                 during()
             return script(*a, **kw)
-        return (mock.patch.object(lroute, "find_route", return_value="/fake/route.py"),
-                mock.patch.object(lroute, "contract", return_value=te.CONTRACT),
-                mock.patch.object(lcall, "call_delegate", call), mock.patch.object(engine.time, "sleep"))
+        return (mock.patch.object(lcall, "call_delegate", call), mock.patch.object(engine.time, "sleep"))
 
     def run_with(self, eng, script, during=None):
         ps = self.patches(script, during)
