@@ -11,7 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import test_engine as te  # noqa: E402
 from test_engine import PY, engine  # noqa: E402,F401
-import checks_speed as cs  # noqa: E402
+from checks import speed as cs  # noqa: E402
 
 
 class SpeedTest(unittest.TestCase):

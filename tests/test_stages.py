@@ -8,7 +8,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import test_engine as te  # noqa: E402
-from test_engine import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, tl  # noqa: E402,F401
+from test_engine import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint, tl  # noqa: E402,F401
 
 
 _REAL_CMD_BLOCK = tl.cmd_block  # te's harness patches it per test; this is the real one
@@ -393,11 +393,11 @@ class Fdyo(StagesTest):
         te.sh("git", "commit", "-qm", "tools", cwd=self.wt)
         te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=self.wt)
         bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["python3 -I -m unittest tools.tests.test_x"])])
-        self.assertEqual(len(engine.dry_check(bad, str(self.wt))), 1)
-        self.assertIn("python -I removes the working directory", engine.dry_check(bad, str(self.wt))[0])
+        self.assertEqual(len(lint.dry_check(bad, str(self.wt))), 1)
+        self.assertIn("python -I removes the working directory", lint.dry_check(bad, str(self.wt))[0])
         for ok in ("python3 -I -m unittest discover -s tools/tests -p 'test_x.py'", "python3 -m unittest tools.tests.test_x",
                    "python3 -I -m json.tool f.json", "python3 -I -c 'import tools.x'"):
-            self.assertEqual(engine.dry_check(dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[ok])]), str(self.wt)), [], ok)
+            self.assertEqual(lint.dry_check(dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[ok])]), str(self.wt)), [], ok)
         rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
         self.assertIn("python -I removes the working directory", s.prompts[1])
@@ -730,7 +730,7 @@ class Executable(StagesTest):
     @te.NO_BASH
     def test_a_sentence_is_not_a_command(self):
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["After building the current player: python3 tools/x.py", HAS_F])])
-        errs = engine.dry_check(plan, str(self.wt))
+        errs = lint.dry_check(plan, str(self.wt))
         self.assertEqual(len(errs), 1)
         self.assertIn("`After` is not a command here", errs[0])
 
@@ -738,46 +738,46 @@ class Executable(StagesTest):
         for ok in ("grep -q x a.txt && test -f a.txt", "! grep -q zzz a.txt", "FOO=1 bash -c 'echo hi' | wc -l",
                    "echo hi > out.txt 2>&1 && test -s out.txt", "for f in a b; do echo $f; done", "(cd . && ls)",
                    "git status --short", "python3 -c 'a;b'", te.PY + " -c 'pass'"):
-            self.assertEqual(engine.command_problems(ok, str(self.wt)), [], ok)
+            self.assertEqual(lint.command_problems(ok, str(self.wt)), [], ok)
 
     @unittest.skipUnless(shutil.which("just"), "needs the real `just` (the engine asks it for the recipes)")
     @te.NO_BASH
     def test_a_just_recipe_must_exist_in_the_tree(self):
         (self.wt / "justfile").write_text("fmt-check:\n\techo ok\n")
-        engine._RECIPES.clear()
-        self.assertEqual(engine.command_problems("just fmt-check && echo done", str(self.wt)), [])
-        bad = engine.command_problems("just fmt-check && just unity-play-tests", str(self.wt))
+        lint._RECIPES.clear()
+        self.assertEqual(lint.command_problems("just fmt-check && echo done", str(self.wt)), [])
+        bad = lint.command_problems("just fmt-check && just unity-play-tests", str(self.wt))
         self.assertEqual(len(bad), 1)
         self.assertIn("no recipe unity-play-tests", bad[0])
         self.assertIn("fmt-check", bad[0])
-        engine._RECIPES.clear()
+        lint._RECIPES.clear()
 
     def test_valid_checks_the_word_check_must_not_block(self):
         for ok in ("command -v git >/dev/null", "env -i PATH=$PATH git --version", "f () { echo hi; }; f",
                    "cat <<EOF2 > x.txt\nhello\nEOF2\ntest -s x.txt", "cd sub && ./x.sh", "make && ./build/x", "npm ci && node_modules/.bin/jest",
                    "~/bin/foo", ".venv/bin/python -c pass", "source env.sh && git status", "time git status"):
-            self.assertEqual(engine.command_problems(ok, str(self.wt)), [], ok)
+            self.assertEqual(lint.command_problems(ok, str(self.wt)), [], ok)
 
     @unittest.skipUnless(shutil.which("just"), "needs the real `just` (the engine asks it for the recipes)")
     @te.NO_BASH
     def test_just_aliases_private_recipes_options_and_a_recipe_a_stage_adds(self):
         (self.wt / "justfile").write_text("alias ci := check\ncheck:\n\techo ok\n_private:\n\techo p\n")
-        engine._RECIPES.clear()
+        lint._RECIPES.clear()
         for ok in ("just ci", "just _private", "just --justfile justfile check", "just --set v x check", "just -d . check", "just check"):
-            self.assertEqual(engine.command_problems(ok, str(self.wt)), [], ok)
-        self.assertEqual(len(engine.command_problems("just nope", str(self.wt))), 1)
-        self.assertEqual(engine.command_problems("just newrecipe", str(self.wt), made=["justfile"]), [])  # a stage adds it
+            self.assertEqual(lint.command_problems(ok, str(self.wt)), [], ok)
+        self.assertEqual(len(lint.command_problems("just nope", str(self.wt))), 1)
+        self.assertEqual(lint.command_problems("just newrecipe", str(self.wt), made=["justfile"]), [])  # a stage adds it
         (self.wt / "justfile").write_text("newrecipe:\n\techo n\n")  # a rebase changes the file: seen at once
-        self.assertEqual(engine.command_problems("just newrecipe", str(self.wt)), [])
-        engine._RECIPES.clear()
+        self.assertEqual(lint.command_problems("just newrecipe", str(self.wt)), [])
+        lint._RECIPES.clear()
 
     @te.NO_BASH
     def test_a_missing_script_is_found_unless_a_stage_makes_it(self):
         check = "./tools/probe.sh --all"
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[check])])
-        self.assertIn("is not a file of this tree", engine.dry_check(plan, str(self.wt))[0])
+        self.assertIn("is not a file of this tree", lint.dry_check(plan, str(self.wt))[0])
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], files=["tools/probe.sh"], checks=[check])])
-        self.assertEqual([e for e in engine.dry_check(plan, str(self.wt)) if "not a file" in e], [])
+        self.assertEqual([e for e in lint.dry_check(plan, str(self.wt)) if "not a file" in e], [])
 
     @te.NO_BASH
     def test_the_plan_with_a_sentence_goes_back_once(self):
@@ -918,13 +918,13 @@ class Ledger(StagesTest):
         rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
         self.assertIn("case `the rows exist` has no check", s.prompts[1])
-        self.assertEqual(engine.ledger_problems(self.plan()), [])
+        self.assertEqual(lint.ledger_problems(self.plan()), [])
 
     def test_ledgered_cases_run_no_command(self):
         e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
         e.plan_data = self.plan()
         self.assertEqual(e.case_checks(), [HAS_F])
-        self.assertEqual(engine.plan_checks(self.plan()), [HAS_F] + [c for st in PLAN["stages"] for c in st["checks"] if c != HAS_F])
+        self.assertEqual(lint.plan_checks(self.plan()), [HAS_F] + [c for st in PLAN["stages"] for c in st["checks"] if c != HAS_F])
 
 
 def review_with(unmet):
@@ -1674,20 +1674,20 @@ class PlanTimeout(StagesTest):
         for check, minutes in (("just play --timeout_ms 2400000", 40.0), ("tool -testTimeoutMs=1800000", 30.0), ("run --timeout=40m", 40.0),
                                ("run --timeout 2h", 120.0), ("timeout 2400 python3 t.py", 40.0), ("x --timeout-min 45", 45.0),
                                ("x timeout_seconds=600", 10.0), ("x --timeout 90", 1.5)):
-            got = [m for m, _ in engine.own_timeouts(check)]
+            got = [m for m, _ in lint.own_timeouts(check)]
             self.assertEqual(got, [minutes], check)
         for check in ("pytest tests", "grep -q timeout config.yaml", "x --timeouts 5", "x --no-timeout", "x timeout_msg"):
-            self.assertEqual(engine.own_timeouts(check), [], check)
+            self.assertEqual(lint.own_timeouts(check), [], check)
 
     def test_yxbb3s_play_test_of_40_minutes_under_a_30_minute_cap_is_found(self):
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["just unity-play-tests --timeout_ms 2400000", HAS_F])])
-        got = engine.timeout_problems(plan, 30)
+        got = lint.timeout_problems(plan, 30)
         self.assertEqual(len(got), 1)
         self.assertIn("= 40 min, above the engine's check limit of 30 min", got[0])
-        self.assertEqual(engine.timeout_problems(plan, 40), [])  # equal is fine
-        self.assertEqual(engine.timeout_problems(plan, 60), [])
+        self.assertEqual(lint.timeout_problems(plan, 40), [])  # equal is fine
+        self.assertEqual(lint.timeout_problems(plan, 60), [])
         cases = dict(PLAN, cases=[{"criterion": "c", "check": "x --timeout 5400", "class": "test"}])
-        self.assertEqual(len(engine.timeout_problems(cases, 60)), 1)  # cases are checks too
+        self.assertEqual(len(lint.timeout_problems(cases, 60)), 1)  # cases are checks too
 
     def test_the_plan_goes_back_to_the_planner_once_with_the_reason(self):
         bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[HAS_F + " ; true --timeout_ms 2400000"])])

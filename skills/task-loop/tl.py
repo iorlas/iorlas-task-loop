@@ -1825,7 +1825,7 @@ def doctor_warnings(repo, source=None):
                    "the one .git/config every slot shares, so a stray one redirects all slots; `git config "
                    "extensions.worktreeConfig true` gives each worktree its own config file." % repo)
     try:  # engine.checks[].inputs globs that match no tracked file would cache a green over changed code
-        import checks_speed
+        from checks import speed as checks_speed
         if source is None:
             import engine
             source = engine.cfg_source(repo)
