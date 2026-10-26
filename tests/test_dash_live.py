@@ -74,6 +74,18 @@ class Feed(unittest.TestCase):
             self.assertEqual([(x["k"], x["t"]) for x in e["events"]], [("msg", T + 10), ("warn", T + 11)])
             self.assertEqual(len(live.feed(log, "garbage!")["events"]), len(a["events"]) + 3)  # a bad cursor starts over, with what grew since
 
+    def test_every_engine_kind_passes_through(self):
+        with tempfile.TemporaryDirectory() as d:
+            log, lf = make_run(d)
+            put(log, [{"t": T + 12, "kind": "wait", "text": "a lane", "what": "lane", "secs": 60, "in_budget": False},
+                      {"t": T + 13, "kind": "vendor_error", "text": "write: hung", "reason": "hung", "items": [1]},
+                      {"t": T + 14, "kind": "kill", "text": "k"}])
+            got = {e["k"]: e for e in live.feed(log)["events"]}
+            for k in ("wait", "vendor_error", "kill"):
+                self.assertIn(k, got)
+            self.assertEqual((got["wait"]["secs"], got["vendor_error"]["reason"]), (60, "hung"))
+            self.assertNotIn("items", got["vendor_error"])
+
     def test_run_without_worker_files(self):
         with tempfile.TemporaryDirectory() as d:
             log, lf = make_run(d)
@@ -143,6 +155,7 @@ class Served(unittest.TestCase):
                 put(lf, [{"t": T + 20, "k": "tool", "id": "2", "text": "edit a.py"}])
                 b = get("/api/live?bead=%s&run=%s-%s&since=%s" % (BEAD, BEAD, STAMP, a["cursor"]))
                 self.assertEqual([e["k"] for e in b["events"]], ["tool"])
+                self.assertEqual(a["newest"], a["run"])
                 self.assertFalse(get("/api/live?bead=nope.1")["found"])
                 self.assertFalse(get("/api/live?bead=--help")["found"])
                 page = urllib.request.urlopen(base + "/live?bead=" + BEAD, timeout=60).read()

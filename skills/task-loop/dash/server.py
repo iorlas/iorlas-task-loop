@@ -1534,12 +1534,13 @@ def api_live(bead, run="", since=""):
         if not logs:
             return {"bead": bead, "found": False, "error": "no engine run for this bead"}
         path = logs[-1]
+    newest = timeline.run_name((engine_logs(retain=False).get(bead) or [path])[-1])
     f = live.feed(path, since)
     running = run_alive(path, {"worktree": f["worktree"]} if f["worktree"] else None, None)
     meta = f["meta"]
     return {"found": True, "bead": bead, "run": timeline.run_name(path), "step": f["step"], "lane": meta.get("lane"),
             "model": meta.get("model"), "effort": meta.get("effort"), "started": f["started"], "now": time.time(),
-            "running": running, "worker_detail": f["worker_detail"], "events": f["events"], "cursor": f["cursor"]}
+            "running": running, "newest": newest, "worker_detail": f["worker_detail"], "events": f["events"], "cursor": f["cursor"]}
 
 
 def run_path(run):

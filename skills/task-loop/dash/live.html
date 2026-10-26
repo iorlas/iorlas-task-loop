@@ -63,50 +63,61 @@ function build(){
   const ev=St.ev;
   for(let i=0;i<ev.length;i++){const e=ev[i];
     if(e.k==='cmd_end'){const c=cmds[e.id];if(c){c.end=e.t;c.exit=e.exit;c.secs=e.secs!=null?e.secs:e.t-c.t;c.out=e.out;openCmds=Math.max(0,openCmds-1)}continue}
-    if(e.k==='tool_end'){const c=tools[e.id];if(c){c.secs=e.t-c.t;if(e.text)c.text=e.text}continue}
+    if(e.k==='tool_end'){const c=tools[e.id];if(c){c.secs=e.t-c.t;if(e.text)c.text=e.text;openCmds=Math.max(0,openCmds-1)}continue}
     if(['tokens','step_end','raw','start'].includes(e.k))continue;
     if(prevT!=null&&e.t-prevT>10&&openCmds===0)rows.push({k:'gap',secs:e.t-prevT});
     prevT=Math.max(prevT||0,e.t);
     if(e.k==='step'){sec={k:'sec',t:e.t,step:e.step||e.text,end:null};rows.push(sec);continue}
     if(e.k==='cmd'){const c={k:'cmd',id:e.id,t:e.t,text:e.text,exit:null,secs:null,end:null};cmds[e.id]=c;openCmds++;rows.push(c);continue}
-    if(e.k==='tool'){const c={k:'tool',id:e.id,t:e.t,text:e.text,secs:null};tools[e.id]=c;rows.push(c);continue}
+    if(e.k==='tool'){const c={k:'tool',id:e.id,t:e.t,text:e.text,secs:null};tools[e.id]=c;openCmds++;rows.push(c);continue}
     rows.push(Object.assign({},e));
   }
   const secs=rows.filter(r=>r.k==='sec');secs.forEach((s,i)=>{s.end=i+1<secs.length?secs[i+1].t:null});
   return rows;
 }
+function htmlOf(r,open){
+  if(r.k==='sec')return `<div class="sec"><span>&sect; ${esc(r.step)}</span><span class="d tick" data-t0="${r.t}" ${r.end?`data-t1="${r.end}"`:(St.running?'':`data-t1="${St.ev.length?St.ev[St.ev.length-1].t:r.t}"`)}></span></div>`;
+  if(r.k==='gap')return `<div class="gap">idle ${dur0(r.secs)}</div>`;
+  if(r.k==='cmd'){const done=r.exit!=null||r.end,bad=done&&r.exit!==0&&r.exit!=null,cls=!done?'go':bad?'bad':'ok';
+    return `<div><div class="row cmd ${cls}" data-id="${esc(r.id)}"><span class="t">${esc(r.text)}</span><span class="m">${done?`<b>${r.exit==null?'?':'exit '+r.exit}</b> ${dur(r.secs)}`:`<span class="tick" data-t0="${r.t}"></span>`}</span></div>`
+      +(open.has(r.id)?`<div class="out">${r.out?esc(r.out):'<i>no output captured</i>'}</div>`:'')+'</div>'}
+  if(r.k==='tool')return `<div class="row tool">${esc(r.text)} <span class="m">${r.secs!=null?dur(r.secs):`<span class="tick" data-t0="${r.t}"></span>`}</span></div>`;
+  if(r.k==='msg')return `<div class="row msg${open.has('m'+r.t)?' open':''}" data-id="m${r.t}">${esc(r.text)}</div>`;
+  if(r.k==='think')return `<div class="row think${open.has('t'+r.t)?' open':''}" data-id="t${r.t}">${esc(r.text)}</div>`;
+  if(r.k==='warn')return `<div class="row warn">&#9888; ${esc(r.text)}</div>`;
+  if(r.k==='stall')return `<div class="row warn">no output for ${dur0(r.secs)}</div>`;
+  if(r.k==='session')return `<div class="row note">${esc(r.text)}${r.secs!=null?' \u00b7 '+dur0(r.secs):''}</div>`;
+  if(r.k==='end')return `<div class="row ${r.status==='done'?'note':'bad'}">worker ${esc(r.status)} \u00b7 ${dur0(r.secs||0)}${r.cost_usd?' \u00b7 $'+Number(r.cost_usd).toFixed(2):''}</div>`;
+  if(r.k==='note')return `<div class="row note">${esc(r.text)}</div>`;
+  // any other kind (wait, vendor_error, kill, transition, gate...): one dim line with its facts
+  const x=Object.keys(r).filter(k=>!['t','k','text','src','_o'].includes(k)).map(k=>k+'='+r[k]).join(' ');
+  return `<div class="row note">${esc(r.k)}: ${esc(r.text||'')}${x?' \u00b7 '+esc(x):''}</div>`}
+let shown=[];   // the rows on screen: {h: their html, el}; a poll touches only the rows that changed
 function render(){
-  const rows=build(),open=St.open,t=$('term');let h='';
-  for(const r of rows){
-    if(r.k==='sec')h+=`<div class="sec"><span>&sect; ${esc(r.step)}</span><span class="d tick" data-t0="${r.t}" ${r.end?`data-t1="${r.end}"`:(St.running?'':`data-t1="${St.ev.length?St.ev[St.ev.length-1].t:r.t}"`)}></span></div>`;
-    else if(r.k==='gap')h+=`<div class="gap">idle ${dur0(r.secs)}</div>`;
-    else if(r.k==='cmd'){const done=r.exit!=null||r.end,bad=done&&r.exit!==0&&r.exit!=null;
-      const cls=!done?'go':bad?'bad':'ok',id=esc(r.id);
-      h+=`<div class="row cmd ${cls}" data-id="${id}"><span class="t">${esc(r.text)}</span><span class="m">${done?`<b>${r.exit==null?'?':'exit '+r.exit}</b> ${dur(r.secs)}`:`<span class="tick" data-t0="${r.t}"></span>`}</span></div>`;
-      if(open.has(r.id))h+=`<div class="out">${r.out?esc(r.out):'<i>no output captured</i>'}</div>`}
-    else if(r.k==='tool')h+=`<div class="row tool">${esc(r.text)} <span class="m">${r.secs!=null?dur(r.secs):''}</span></div>`;
-    else if(r.k==='msg')h+=`<div class="row msg${open.has('m'+r.t)?' open':''}" data-id="m${r.t}">${esc(r.text)}</div>`;
-    else if(r.k==='think')h+=`<div class="row think${open.has('t'+r.t)?' open':''}" data-id="t${r.t}">${esc(r.text)}</div>`;
-    else if(r.k==='warn')h+=`<div class="row warn">&#9888; ${esc(r.text)}</div>`;
-    else if(r.k==='stall')h+=`<div class="row warn">no output for ${dur0(r.secs)}</div>`;
-    else if(r.k==='session')h+=`<div class="row note">${esc(r.text)}${r.secs!=null?' · '+dur0(r.secs):''}</div>`;
-    else if(r.k==='end')h+=`<div class="row ${r.status==='done'?'note':'bad'}">worker ${esc(r.status)} · ${dur0(r.secs||0)}${r.cost_usd?' · $'+Number(r.cost_usd).toFixed(2):''}</div>`;
-    else if(r.k==='note')h+=`<div class="row note">${esc(r.text)}</div>`;
+  const rows=build(),open=St.open,t=$('term'),stick=atBottom();
+  St.busy=null;for(const r of rows){if((r.k==='cmd'&&r.exit==null&&!r.end)||(r.k==='tool'&&r.secs==null))St.busy=r}
+  if(!rows.length){t.innerHTML='<div class="note">no events yet</div>';shown=[]}
+  else{
+    if(!shown.length)t.innerHTML='';
+    const tpl=document.createElement('template');
+    rows.forEach((r,i)=>{const h=htmlOf(r,open);if(shown[i]&&shown[i].h===h)return;
+      tpl.innerHTML=h;const el=tpl.content.firstElementChild;
+      if(shown[i]){t.replaceChild(el,shown[i].el)}else t.appendChild(el);shown[i]={h,el}});
+    while(shown.length>rows.length){const x=shown.pop();x.el.remove()}
   }
-  if(!h)h='<div class="note">no events yet</div>';
-  const stick=atBottom();t.innerHTML=h;if(stick)toEnd();tick();
+  if(stick)toEnd();tick();
 }
 // ---- header and tickers ------------------------------------------------------------------------------------------------
 function tick(){
   const n=nowS(),lastT=St.ev.length?St.ev[St.ev.length-1].t:0,t0=St.started||(St.ev[0]&&St.ev[0].t)||n;
-  document.querySelectorAll('.tick').forEach(el=>{const a=+el.dataset.t0,b=el.dataset.t1?+el.dataset.t1:n;el.textContent=dur(b-a)});
-  const idle=Math.max(0,n-lastT),cls=!St.running?'':idle>300?'rd':idle>60?'am':'';
+  const b=St.busy,idle=Math.max(0,n-lastT),cls=!St.running||b?'':idle>300?'rd':idle>60?'am':'';
   const meta=[St.step&&`step <b>${esc(St.step)}</b>`,(St.lane||St.model)&&`<b>${esc([St.lane,St.model,St.effort].filter(Boolean).join(' / '))}</b>`,
     `elapsed <b>${dur0((St.running?n:lastT||n)-t0)}</b>`,
-    St.running&&lastT?`<span class="idle ${cls}">idle ${dur0(idle)}</span>`:'',
+    St.running&&b?`<span>busy <b>${esc(String(b.text).slice(0,40))}</b> <span class="tick" data-t0="${b.t}"></span></span>`:St.running&&lastT?`<span class="idle ${cls}">idle ${dur0(idle)}</span>`:'',
     St.tok?`tokens <b>${Math.round((St.tok.in||0)/1000)}k in / ${Math.round((St.tok.out||0)/1000)}k out</b>`:'',
     St.err?`<span class="bad">${esc(St.err)}</span>`:''].filter(Boolean);
   $('h2').innerHTML=`<span class="${St.running?'run':''}"><i class="dot ${cls}"></i>${St.running?'running':St.loaded?'ended':'…'}</span>`+meta.map(x=>`<span>${x}</span>`).join('');
+  document.querySelectorAll('.tick').forEach(el=>{const a=+el.dataset.t0,z=el.dataset.t1?+el.dataset.t1:n;el.textContent=dur(z-a)});
   $('note').hidden=!(St.loaded&&!St.detail);
 }
 // ---- scroll -----------------------------------------------------------------------------------------------------------
@@ -117,13 +128,17 @@ $('latest').onclick=()=>{toEnd()};
 $('term').addEventListener('click',e=>{const el=e.target.closest('[data-id]');if(!el||window.getSelection().toString())return;
   const id=el.dataset.id;St.open.has(id)?St.open.delete(id):St.open.add(id);const y=window.scrollY,stick=atBottom();render();if(!stick)window.scrollTo(0,y)});
 // ---- polling ----------------------------------------------------------------------------------------------------------
+const LINGER=120;  // seconds a view keeps polling after its run ended: a retry of the same bead starts a new run
+let endedAt=0;
+function reset(){St.ev=[];St.seen=new Set();St.cursor='';St.step='';St.lane=St.model=St.effort='';St.started=0;St.tok=null;St.open=new Set();St.loaded=false;shown=[];$('term').innerHTML=''}
 async function poll(){
   let delay=1000;
   try{
-    const q=new URLSearchParams({bead:BEAD,since:St.cursor});if(RUN)q.set('run',RUN);
+    const q=new URLSearchParams({bead:BEAD,since:St.cursor});const run=RUN||St.run;if(run)q.set('run',run);
     const r=await fetch('/api/live?'+q,{cache:'no-store'});if(!r.ok)throw new Error('HTTP '+r.status);
     const d=await r.json();
     if(!d.found){St.err=d.error||'not found';St.running=false;St.loaded=true;tick();return}
+    if(!RUN&&d.newest&&d.newest!==d.run){St.run=d.newest;reset();return setTimeout(poll,0)}  // a retry started: follow it
     St.err='';St.skew=d.now-Date.now()/1000;St.run=d.run;St.running=d.running;St.detail=d.worker_detail;
     if(d.step)St.step=d.step;if(d.lane)St.lane=d.lane;if(d.model)St.model=d.model;if(d.effort)St.effort=d.effort;if(d.started)St.started=d.started;
     St.cursor=d.cursor;let fresh=false;
@@ -131,8 +146,9 @@ async function poll(){
       if(e.k==='tokens')St.tok=e;if(e.k==='start'){if(e.lane)St.lane=e.lane;if(e.model)St.model=e.model;if(e.effort)St.effort=e.effort}}
     if(fresh){St.ev.sort((a,b)=>a.t-b.t);const s=[...St.ev].reverse().find(e=>e.k==='step');if(s)St.step=s.step||s.text}
     const first=!St.loaded;St.loaded=true;
-    if(fresh||first){render();if(first)toEnd()}else tick();
-    if(!d.running)return;   // the bead ended: this was the last fetch
+    if(fresh||first||!St.running){render();if(first)toEnd()}else tick();
+    if(d.running)endedAt=0;
+    else{if(!endedAt)endedAt=nowS();if(nowS()-endedAt>LINGER)return;delay=2000}
   }catch(e){St.err='disconnected: '+e.message;delay=3000;tick()}
   setTimeout(poll,delay);
 }

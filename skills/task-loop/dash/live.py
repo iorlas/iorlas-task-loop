@@ -10,7 +10,7 @@ import re
 import time
 
 CHUNK = 1 << 20  # bytes read from one file per call; a long backlog arrives over several polls
-ENGINE_KINDS = ("node", "end", "session", "msg", "warn", "cmd", "note")
+SKIP = {"_o", "kind", "t", "text", "items", "data", "sessions"}  # engine fields never forwarded (the rest, if scalar, are)
 NOTE_MAX = 300
 
 
@@ -59,7 +59,7 @@ def read_new(path, offset):
 def engine_event(d, state):
     """One engine row -> a normalised event or None. `state` holds the open command's id between calls."""
     k, t = d.get("kind"), d.get("t")
-    if t is None or k not in ENGINE_KINDS:
+    if t is None or not k:
         return None
     text = str(d.get("text") or "")
     if k == "cmd":
@@ -80,7 +80,12 @@ def engine_event(d, state):
     if k == "session":
         return {"t": t, "k": "session", "text": text, "node": d.get("node"), "lane": d.get("lane"), "model": d.get("model"),
                 "effort": d.get("effort"), "status": d.get("status"), "secs": d.get("secs"), "src": "engine"}
-    return {"t": t, "k": k, "text": text[:NOTE_MAX * 4], "src": "engine"}
+    # every other kind (wait, vendor_error, kill, transition, gate, checks...) passes through: those rows are the evidence
+    # of throttling and stalls. Scalar fields ride along; the client shows one dim line.
+    e = {x: v for x, v in d.items() if x not in SKIP and isinstance(v, (str, int, float)) and not isinstance(v, bool)}
+    e = {x: (v[:200] if isinstance(v, str) else v) for x, v in e.items()}
+    e.update({"t": t, "k": k, "text": text[:NOTE_MAX * 4], "src": "engine"})
+    return e
 
 
 def live_event(d, tag):
