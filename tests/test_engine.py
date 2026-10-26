@@ -4343,7 +4343,7 @@ class DelegateLauncher(unittest.TestCase):
         rc, s = self.run_engine({"plan": [PLAN], "write": [out, WRITE]})
         self.assertEqual(rc, 2)
         self.assertEqual([c[0] for c in s.calls].count("worker"), 1)
-        self.assertEqual((self.blocked, self.ask()), ([], None))
+        self.assertEqual((self.blocked, (tl.config_dir() / "asks" / "t-1.json").exists()), ([], False))
         self.assertTrue(any(c[:3] == ("comments", "add", "t-1") and any("run `claude auth login`" in x for x in c)
                             for c in self.bd_calls))
 
