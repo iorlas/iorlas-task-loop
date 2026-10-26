@@ -54,23 +54,22 @@ writer reads first). The profile gives:
 host: the writer runs Unity and tests itself, on this machine. Only the `.task-loop.json` committed on the base branch
 (`origin/main`) counts: a worker can label its own bead or edit a checkout's config, but not main without review and
 the gate. The labels `host` / `no-sandbox` alone grant nothing (a ⚠ says so); `sandbox` still turns it off for one bead.
-Workers go through delegate's worker-run v2 (`docs/contracts/worker-run-v2.md`, delegate 0.29+): the engine checks
-`route.py contract --json` before any step and blocks the task when delegate speaks another version. A granted host is
-`--host` on every step. Delegate, not the engine, tells each worker what its sandbox allows, how to ask for a blocked
-command and the git and credential rules; the engine's briefs say only what the step is for. Each answer's `next` is
-the whole policy: `retry` waits until `retry_after` (past `engine.lane_wait_min` the run pauses, bead open), except
-that a resumed writer answering `lane_out` (`next` retry, or owner when delegate cannot say when the lane frees) goes on at once as a new thread (delegate gives it the role's next rung, e.g.
-Sonnet while Codex is out; its brief says to continue the earlier writer's work in the tree), which then becomes the
-writer and the review's `--authored-by`. A writer is a fallback when delegate's answer says `fallback: true` (0.32,
-feature `fallback`), else when it is that new thread; its first-choice lane is the answer's `first_lane`, else the lane
-seen out (the checkpoint keeps `writer_fallback` and `fallback_lane`). Each later write round, in this run or after a
-pause, reads `route.py status --json`: while that lane is out the fallback thread is resumed (no context lost); once it
-is not, or when no lane is known, it asks delegate fresh with the same continue-the-work brief, so Codex takes over
-again (transition `fallback_retake`); a lane the status does not list makes it no fallback (tl-bxk.10.5). Any other
-writer is resumed as before. Only a retry from that new thread waits, and its `lane_out`
-with no time pauses ("no lane", bead open, no ask); `owner` pauses for a login or setup or raises a verify ask, `fail` tries once more as a new thread, then fails the task. The
-trace keeps each session's `reason` and `context` (instruction files, env key names) and the run's lane manifest. A command the worker was denied shows as a ⚠; denied with no answer, or a second denied write in the bead (across lanes and runs), blocks it "needs a human:
-<command>". `tl run-task` refuses the main checkout as a worktree (it holds the bead database and the config).
+Workers go through delegate's contract 3 (`docs/contracts/worker-run-v3.md`; the contract itself is delegate's `contract.json`): the
+engine resolves delegate before any step and blocks the task when it speaks another contract. Delegate, not the engine,
+tells each worker what its sandbox allows and the git and credential rules; the engine's briefs say only what the step is for.
+A stopped answer carries `stop{reason, scope, permanence, retry}`, and `lane_policy.decide` (a pure function of those facts)
+is the whole policy: wait, retry, a new thread, reroute, pause, or fail. The engine matches no error text. A network
+stop never counts as a lane failure or toward any retry, replan, ask or storm cap and never opens a breaker: every step
+(plan, write, review, verify, look, checks, land) waits for the network on the same ref, with a short resume prompt, and
+a finished answer is not asked for again (`done.json`). Past the network wait cap the run pauses (bead open, auto
+label, run id and time budget kept; pause time is not charged) and the next run adopts it. Land detects a push that
+already went through. A paused bead wakes when its lane is usable (`route.py status --json`, loop `GateRole`), not at a
+clock. A writer is a fallback when delegate's answer says `fallback: true`; its first-choice lane is `first_lane`. Each
+later write round reads `route.py status --json`: while that lane is out the fallback thread is resumed, once it is not
+the engine asks fresh so the first choice takes over again (transition `fallback_retake`). The trace keeps each session's
+`reason` and `context` and the run's lane manifest. A command the worker was denied shows as a warning; a `sandbox_limit`
+denial never counts; denied with no answer, a second denied write in the bead (across lanes and runs), or a repeated
+`secrets` stop blocks it "needs a human: <command>". `tl run-task` refuses the main checkout as a worktree (it holds the bead database and the config).
 
 A rerun resumes, never restarts. Each step saves a checkpoint (`~/.config/task-loop/checkpoints/<bead>.json`): the
 plan, the accepted stages, the stage, round and feedback, the writer's thread, the branch head. The next run on that

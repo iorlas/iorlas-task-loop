@@ -1,6 +1,6 @@
 # worker-run v2: how the engine asks delegate to run one AI step
 
-Status: implemented (task-loop 0.15.0, delegate 0.29). Owner: task-loop (the consumer). Producer: delegate's
+Status: superseded by [worker-run v3](worker-run-v3.md) (R21). Was implemented in task-loop 0.15.0, delegate 0.29. Owner: task-loop (the consumer). Producer: delegate's
 `route.py run`. Replaces [worker-run v1](worker-run-v1.md); there is no v1 shim on either side.
 
 ## Why v2

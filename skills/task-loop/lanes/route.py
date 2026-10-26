@@ -38,19 +38,3 @@ def lane_status(route):
         return {}
     lanes = j.get("lanes") if isinstance(j, dict) else None
     return lanes if isinstance(lanes, dict) else {}
-
-
-def contract(route):
-    """delegate's worker-run handshake (`route.py contract --json`): the answer when it speaks v2, else None."""
-    try:
-        r = subprocess.run([sys.executable, route, "contract", "--json"], capture_output=True, text=True,
-                           encoding="utf-8", errors="replace", timeout=60, env=procs.child_env())
-        j = json.loads(r.stdout.strip().splitlines()[-1]) if r.returncode == 0 and r.stdout.strip() else None
-    except (OSError, ValueError, subprocess.SubprocessError):
-        return None
-    return j if isinstance(j, dict) and j.get("worker_run") == 2 else None
-
-
-def access(wanted):
-    """The flag that gives a step the host, when the task was granted it (worker-run v2: every step takes `--host`)."""
-    return "--host" if wanted else ""
