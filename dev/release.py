@@ -28,6 +28,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -136,9 +137,9 @@ def isolated_env(home):
     return env
 
 
-def merge_outputs(parts, planned):
+def merge_outputs(parts, planned, wall=None):
     """One unittest-shaped output from the (name, returncode, output) of each shard: their text without their own summaries, then a
-    single "Ran N tests" and "OK" / "FAILED (..)". A shard that died without a summary, or a count that is not the planned one, is an ERROR."""
+    single "Ran N tests in <wall>s" and "OK" / "FAILED (..)". A shard that died without a summary, or a count that is not the planned one, is an ERROR."""
     body, total, secs, bad = [], 0, 0.0, {"failures": 0, "errors": 0}
     other = {}
     for name, rc, out in parts:
@@ -165,6 +166,7 @@ def merge_outputs(parts, planned):
         bad["errors"] += 1
     stats = ", ".join("%s=%d" % kv for kv in list(bad.items()) + sorted(other.items()) if kv[1])
     red = bad["failures"] or bad["errors"]
+    secs = wall if wall is not None else secs
     summary = "Ran %d tests in %.3fs\n\n%s" % (total, secs, ("FAILED (%s)" % stats) if red else ("OK (%s)" % stats if stats else "OK"))
     return "\n".join(x for x in body if x.strip()) + "\n\n" + summary, not red
 
@@ -182,6 +184,7 @@ def suite(repo):
         out = (r.stdout + r.stderr).strip()
         raise Abort("the suite is red; nothing released:\ncould not plan the shards\n%s\nfull output: %s" % (out[-2000:], save_output(out)))
     work = Path(tempfile.mkdtemp(prefix="tl-suite-"))
+    began = time.monotonic()
     try:
         def start(name, ids):
             f = work / (name + ".ids")
@@ -201,7 +204,8 @@ def suite(repo):
             parts.append(finish(*start("serial", plan["serial"])))
     finally:
         shutil.rmtree(work, ignore_errors=True)
-    out, green = merge_outputs(parts, sum(len(s) for s in plan["shards"]) + len(plan["serial"]))
+    out, green = merge_outputs(parts, sum(len(s) for s in plan["shards"]) + len(plan["serial"]),
+                              time.monotonic() - began)
     tail = out.splitlines()
     if not green:
         report = failure_report(out) or "\n".join(tail[-40:])
