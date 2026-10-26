@@ -24,6 +24,36 @@ def render_review(fix=False, last=False):
         added=1, removed=0, fix=fix, last=last, fix_scope=FIX_SCOPE)
 
 
+RULES = "Unity runs on the host, not in a sandbox.\nNever run `just check`: the engine does."
+CHECKS = ["python3 -m unittest tests.test_f", "just unity-tests"]
+
+
+def stub_engine(rules="worker-rules.md"):
+    """An Engine with a config and no run: enough to render the writer's check lists."""
+    eng = engine.Engine.__new__(engine.Engine)
+    eng.cfg = dict(engine.DEFAULTS, gate="just check", worker_rules=rules, checks=[{"id": "fmt", "cmd": "just fmt-check", "group": "static"}])
+    eng.check_secs = lambda: {}
+    return eng
+
+
+def render_write(rules=RULES, failed=None):
+    """The stage-1 write prompt as Engine.stage builds it: stage checks, where text, rules inlined."""
+    eng = stub_engine()
+    where = eng.where("write", [c["cmd"] for c in eng.cfg["checks"]] + CHECKS, failed, listed=CHECKS)
+    return engine.write_prompt(
+        rules, brief="<brief text>", plan="<plan text>", n=1, goal="Add the greeting", files="greet.py",
+        checks=eng.stage_checks_text(CHECKS, skip=failed), feedback="", evidence=".task/t-1/evidence", where=where, gate=" (`just check`)")
+
+
+def render_resume(failed=None):
+    """The delta a resumed writer gets (Engine.write_delta) for the same stage."""
+    eng = stub_engine()
+    where = eng.where("write", [c["cmd"] for c in eng.cfg["checks"]] + CHECKS, failed, listed=CHECKS)
+    return engine.WRITE_RESUME_PROMPT.format(
+        brief=".task/t-1/brief.md", plan="The plan is unchanged.", n=1, goal="Add the greeting", files="greet.py",
+        checks=eng.stage_checks_text(CHECKS, skip=failed), where=where, feedback="")
+
+
 class Golden(unittest.TestCase):
     def check(self, name, text):
         path = GOLDEN / (name + ".txt")
@@ -35,6 +65,46 @@ class Golden(unittest.TestCase):
         for name in ("PLAN_PROMPT", "WRITE_PROMPT", "WRITE_RESUME_PROMPT", "REVIEW_PROMPT", "VERIFY_PROMPT", "REFLECT_PROMPT"):
             with self.subTest(name):
                 self.check("template-" + name.lower(), getattr(engine, name))
+
+    def test_write_prompt(self):
+        self.check("write-first", render_write())
+
+    def test_write_prompt_after_a_red_round(self):
+        self.check("write-red", render_write(failed=["just unity-tests", "just fmt-check"]))
+
+    def test_write_prompt_without_rules(self):
+        self.assertNotIn("worker_rules", render_write(rules=""))
+
+    def test_resumed_write_delta(self):
+        self.check("write-resume", render_resume())
+
+    def test_fresh_writer_prompt_carries_the_rules_and_what_was_done(self):
+        text = render_write() + engine.DONE_SO_FAR % (" greet.py | 3 +++", "wrote the greeting", "(none)\n")
+        self.check("write-fresh", text)
+
+    def test_rules_are_inlined_once_and_no_prompt_names_codex_md(self):
+        full = render_write()
+        self.assertEqual(full.count(RULES), 1)
+        self.assertLessEqual(len(RULES.encode("utf-8")), engine.RULES_MAX)
+        resume = render_resume()
+        self.assertNotIn("Read ", resume)
+        self.assertNotIn(RULES, resume)
+        self.assertNotIn("worker_rules", resume)
+        every = [getattr(engine, n) for n in ("PLAN_PROMPT", "WRITE_PROMPT", "WRITE_RESUME_PROMPT", "REVIEW_PROMPT", "VERIFY_PROMPT",
+                                              "REFLECT_PROMPT", "WRITE_RULES", "DONE_SO_FAR", "STAGES_DONE")]
+        for text in every + [full, resume, render_review(), render_review(last=True), render_review(fix=True, last=True)]:
+            self.assertNotIn("codex.md", text)
+
+    def test_each_check_command_is_named_once_in_the_may_run_lists(self):
+        for failed in (None, ["just unity-tests"], ["python3 -m unittest tests.test_f", "just fmt-check"]):
+            for text in (render_write(failed=failed), render_resume(failed=failed)):
+                with self.subTest(failed=failed):
+                    lists = text[text.index("The stage's checks"):text.index("If a command is refused")]
+                    for cmd in CHECKS + ["just fmt-check"]:
+                        self.assertLessEqual(lists.count("- " + cmd), 1, cmd)
+                    if failed is None:  # the whole list: every command named, once
+                        for cmd in CHECKS + ["just fmt-check"]:
+                            self.assertEqual(lists.count("- " + cmd), 1, cmd)
 
     def test_review_stage(self):
         self.check("review-stage", render_review())
