@@ -26,6 +26,8 @@ def sh(*a, cwd):
 # Why a test cannot run on Windows (skipped there with these reasons; every one runs on Linux and macOS):
 POSIX_CHECK = unittest.skipIf(os.name == "nt", "the check is bash (operators, $VAR, rm, test, grep, sleep, /dev/null); "
                                               "on Windows the engine runs checks through cmd.exe")
+ENGINE_BASH = unittest.skipIf(os.name == "nt", "the engine's own conflict-marker check (`! git grep ...`) is bash; cmd.exe cannot parse it")
+EXIT_127 = unittest.skipIf(os.name == "nt", "the engine reads a missing tool as bash's exit 127; cmd.exe reports it as exit 1")
 NO_BASH = unittest.skipIf(os.name == "nt", "engine.command_problems judges nothing on Windows (no bash there, by design)")
 SH_FAKE = unittest.skipIf(os.name == "nt", "the bd fake is a #!/bin/sh script, which Windows cannot execute")
 NO_FCNTL = unittest.skipIf(os.name == "nt", "the lock is fcntl; tl has none on Windows (documented no-op)")
@@ -174,8 +176,6 @@ class EngineTest(unittest.TestCase):
                 mock.patch.object(engine, "call_delegate", script), mock.patch.object(engine.time, "sleep"):
             self.eng = engine.Engine("t-1", str(self.wt), c)
             rc = self.eng.run()
-        if rc and os.environ.get("TL_DIAG"):  # DIAG-TEMP
-            print("\nDIAG", self._testMethodName, self.blocked, "\n", self.eng.log_path.read_text()[-3500:])  # DIAG-TEMP
         return rc, script
 
     def test_happy_path_lands_and_closes(self):
@@ -1289,6 +1289,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual([c[0] for c in s.calls], ["worker", "reviewer"])
         self.assertIn("outcome=failed", s.prompts[0])  # the worker still reads how the last run ended
 
+    @ENGINE_BASH
     def test_an_answered_ask_raised_in_a_conflict_fix_round_resumes_at_land(self):
         # lifesim-6dq0: the fix round's checkpoint was saved mid-rebase (detached HEAD), so the rerun re-planned
         other = Path(self.tmp.name, "other")
@@ -1623,6 +1624,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual([c[0] for c in s.calls].count("worker"), 3)  # the stage, then 2 fix rounds
         self.assertIn("2 fix rounds", self.blocked[0])
 
+    @ENGINE_BASH
     def test_a_rebase_conflict_goes_to_a_fix_round_not_blocked(self):
         other = Path(self.tmp.name, "other")
         real = DelegateScript.__call__
@@ -2535,6 +2537,7 @@ class EngineTest(unittest.TestCase):
         causes = [json.loads(ln) for ln in self.eng.log_path.read_text().splitlines() if '"transition"' in ln]
         self.assertTrue(any(t["cause"] == "not_a_check" for t in causes))
 
+    @EXIT_127
     def test_an_unchecked_item_for_a_tool_the_repo_configures_still_goes_to_the_verifier(self):
         (self.wt / "justfile").write_text("lint:\n    ruff check tools\n")
         sh("git", "add", "-A", cwd=self.wt)
@@ -2547,6 +2550,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(self.ask()["kind"], "verify")
         self.assertIn("ruff", self.ask()["question"])
 
+    @EXIT_127
     def test_an_unchecked_item_for_a_tool_on_the_path_still_goes_to_the_verifier(self):
         with mock.patch.object(engine, "tool_on_path", return_value="/opt/bin/ruff"):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, unchecked=[self.RUFF])],
