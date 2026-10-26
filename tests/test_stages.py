@@ -652,6 +652,7 @@ class VisualWork(StagesTest):
         e.rendered_names = {"main.png"}
         self.assertEqual(e.shots(), ["main.png"])
 
+    @te.POSIX_CHECK
     def test_a_failed_shot_command_is_a_defect_even_if_it_left_a_picture(self):
         self.TABLE["methods"][0]["cmd"] = te.PY + " tools/shot.py {out}{args}; exit 3"
         try:
@@ -726,6 +727,7 @@ class VisualWork(StagesTest):
 class Executable(StagesTest):
     """tl-bxk.13.16.2: a plan check must be able to start; an accepted stage's promised files must exist on resume."""
 
+    @te.NO_BASH
     def test_a_sentence_is_not_a_command(self):
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["After building the current player: python3 tools/x.py", HAS_F])])
         errs = engine.dry_check(plan, str(self.wt))
@@ -739,6 +741,7 @@ class Executable(StagesTest):
             self.assertEqual(engine.command_problems(ok, str(self.wt)), [], ok)
 
     @unittest.skipUnless(shutil.which("just"), "needs the real `just` (the engine asks it for the recipes)")
+    @te.NO_BASH
     def test_a_just_recipe_must_exist_in_the_tree(self):
         (self.wt / "justfile").write_text("fmt-check:\n\techo ok\n")
         engine._RECIPES.clear()
@@ -756,6 +759,7 @@ class Executable(StagesTest):
             self.assertEqual(engine.command_problems(ok, str(self.wt)), [], ok)
 
     @unittest.skipUnless(shutil.which("just"), "needs the real `just` (the engine asks it for the recipes)")
+    @te.NO_BASH
     def test_just_aliases_private_recipes_options_and_a_recipe_a_stage_adds(self):
         (self.wt / "justfile").write_text("alias ci := check\ncheck:\n\techo ok\n_private:\n\techo p\n")
         engine._RECIPES.clear()
@@ -767,6 +771,7 @@ class Executable(StagesTest):
         self.assertEqual(engine.command_problems("just newrecipe", str(self.wt)), [])
         engine._RECIPES.clear()
 
+    @te.NO_BASH
     def test_a_missing_script_is_found_unless_a_stage_makes_it(self):
         check = "./tools/probe.sh --all"
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[check])])
@@ -774,6 +779,7 @@ class Executable(StagesTest):
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], files=["tools/probe.sh"], checks=[check])])
         self.assertEqual([e for e in engine.dry_check(plan, str(self.wt)) if "not a file" in e], [])
 
+    @te.NO_BASH
     def test_the_plan_with_a_sentence_goes_back_once(self):
         bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["Confirm that f exists", HAS_F])])
         rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]})

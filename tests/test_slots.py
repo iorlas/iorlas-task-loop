@@ -28,6 +28,9 @@ POSIX = os.name != "nt"
 REAL_PREPARE = loop.prepare  # LoopBase stubs it
 
 
+NO_FCNTL = unittest.skipIf(os.name == "nt", "the lock is fcntl; tl has none on Windows (documented no-op)")
+
+
 def sleeper():
     return subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
 
@@ -429,6 +432,7 @@ class HoldRaces(Slots):
         tl.free_expired(str(self.repo))
         self.assertEqual((bd.slots["sl-1"]["status"], bd.slots["sl-1"]["assignee"]), ("open", ""))
 
+    @NO_FCNTL
     def test_a_hold_taken_while_the_loop_releases_the_slot_is_kept(self):
         # race test (tl-bxk.11.1): the release unclaimed the slot bead, a person's hold claimed it at once, and the
         # release's own clean-up then wiped the hold's metadata: the hold was gone, the slot only leased

@@ -16,6 +16,9 @@ sys.path.insert(0, str(ROOT / "skills" / "task-loop" / "dash"))
 import server  # noqa: E402
 
 
+SH_FAKE = unittest.skipIf(os.name == "nt", "the bd fake is a #!/bin/sh script, which Windows cannot execute")
+
+
 def line(**kw):
     return json.dumps(kw) + "\n"
 
@@ -222,6 +225,7 @@ class Asks(unittest.TestCase):
     """The owner answers an ask from the phone: a token only from outside loopback and Tailscale, first answer wins,
     the bead is commented and opened."""
 
+    @SH_FAKE
     def test_answer_needs_the_token_and_reaches_the_bead_once(self):
         with tempfile.TemporaryDirectory() as d:
             port = free_port()
@@ -278,6 +282,7 @@ class Asks(unittest.TestCase):
 class AskOptions(unittest.TestCase):
     """An option is one click: it posts its answer text through /api/answer, and bd gets that exact text."""
 
+    @SH_FAKE
     def test_an_option_answer_reaches_bd_with_the_exact_text_and_shows_as_answered(self):
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)
@@ -339,6 +344,7 @@ class AskFailures(unittest.TestCase):
         a.update(kw)
         (self.asks / ("%s.json" % bead)).write_text(json.dumps(a))
 
+    @SH_FAKE
     def test_a_bead_bd_does_not_know_says_the_ask_is_out_of_date(self):
         self.bd("echo 'Error: resolving demo: no issue found matching \"demo\"' >&2; exit 1\n")
         self.ask("demo")
@@ -347,6 +353,7 @@ class AskFailures(unittest.TestCase):
         self.assertNotIn("resolving", out["error"])
         self.assertIn("dismiss", out["error"])
 
+    @SH_FAKE
     def test_any_other_bd_failure_keeps_its_last_line_and_says_nothing_was_sent(self):
         self.bd("echo 'boom: disk full' >&2; exit 1\n")
         self.ask()
@@ -471,6 +478,7 @@ class AskFailures(unittest.TestCase):
             self.assertEqual(server.beads_of(str(self.d)), [{"id": "a", "status": "open"}])
         self.assertEqual(run.call_count, 1)
 
+    @SH_FAKE
     def test_amend_replaces_an_unused_answer_and_keeps_the_history(self):
         """tl-ptv: a second answer is refused; --amend replaces one no run has used yet, and nothing is lost."""
         self.bd("echo \"$*\" >> %s\n" % (self.d / "bd.log"))
@@ -511,6 +519,7 @@ class AskFailures(unittest.TestCase):
         self.assertEqual(server.answer({"ask": "y-1", "text": "one", "amend": True})[0], 200)
         self.assertNotIn("answers", json.loads((self.asks / "y.json").read_text()))
 
+    @SH_FAKE
     def test_amending_replaces_the_line_filed_for_the_old_answer(self):
         self.bd("""case "$1" in
 show) python3 -c "import json,sys;print(json.dumps([{'id':'x','notes':open(sys.argv[1]).read()}]))" NOTES ;;
@@ -527,6 +536,7 @@ esac
         self.assertEqual(server.answer({"ask": "x-1", "text": "run again", "amend": True})[0], 200)  # a bare answer removes the line
         self.assertNotIn("(ask x-1)", (self.d / "notes.txt").read_text())
 
+    @SH_FAKE
     def test_withdrawing_an_answered_but_unused_ask_drops_the_answer_and_notes_it(self):
         """tl-gy4: withdraw refused 'already answered'; only --fresh worked, which dropped the answer unseen."""
         self.bd("echo \"$*\" >> %s\n" % (self.d / "bd.log"))
@@ -541,6 +551,7 @@ esac
         (self.asks / "x-1.json").write_text(json.dumps(a))
         self.assertEqual(server.withdraw({"ask": "x-1-1"})[1]["code"], "answered")
 
+    @SH_FAKE
     def test_an_answer_for_an_ask_the_engine_replaced_meanwhile_writes_nothing(self):
         self.ask("x", n=1)
         real = server.subprocess.run
@@ -556,6 +567,7 @@ esac
         a = json.loads((self.asks / "x.json").read_text())
         self.assertEqual((a["id"], a.get("answer")), ("x-2", None))  # the new ask is whole, no stale answer on it
 
+    @SH_FAKE
     def test_a_parked_ask_is_listed_last_flagged_and_answerable(self):
         self.bd("echo \"$*\" >> %s\n" % (self.d / "bd.log"))
         self.ask("quiet", status="parked")
@@ -564,6 +576,7 @@ esac
         self.assertEqual([(r["bead"], r["parked"]) for r in rows], [("loud", False), ("quiet", True)])
         self.assertEqual(server.answer({"ask": "quiet-1", "text": "go on"})[0], 200)
 
+    @SH_FAKE
     def test_a_substantive_answer_is_filed_on_the_bead_under_decisions_or_testing(self):
         notes = {"v": "existing note"}
         self.bd("""case "$1" in

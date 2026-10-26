@@ -16,6 +16,9 @@ sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 import tl  # noqa: E402
 
 
+SH_FAKE = unittest.skipIf(os.name == "nt", "the bd fake is a #!/bin/sh script, which Windows cannot execute")
+
+
 def sh(*args, cwd):
     subprocess.run(list(args), cwd=cwd, check=True, capture_output=True)
 
@@ -328,6 +331,7 @@ if __name__ == "__main__":
 class AskCli(unittest.TestCase):
     """tl ask: the inbox from the terminal, through the dashboard's own answer and withdraw."""
 
+    @SH_FAKE
     def test_list_answer_and_withdraw(self):
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)
@@ -363,6 +367,7 @@ class AskCli(unittest.TestCase):
 class ParkStaleAsks(unittest.TestCase):
     """tl-bxk.8.25: an ask with no answer 3 days after it was asked is parked, once, with a comment; it still waits."""
 
+    @SH_FAKE
     def test_parks_only_late_unanswered_open_asks(self):
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)

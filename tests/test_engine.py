@@ -23,6 +23,14 @@ def sh(*a, cwd):
     subprocess.run(list(a), cwd=cwd, check=True, capture_output=True)
 
 
+# Why a test cannot run on Windows (skipped there with these reasons; every one runs on Linux and macOS):
+POSIX_CHECK = unittest.skipIf(os.name == "nt", "the check is bash (operators, $VAR, rm, test, grep, sleep, /dev/null); "
+                                              "on Windows the engine runs checks through cmd.exe")
+NO_BASH = unittest.skipIf(os.name == "nt", "engine.command_problems judges nothing on Windows (no bash there, by design)")
+SH_FAKE = unittest.skipIf(os.name == "nt", "the bd fake is a #!/bin/sh script, which Windows cannot execute")
+NO_FCNTL = unittest.skipIf(os.name == "nt", "the lock is fcntl; tl has none on Windows (documented no-op)")
+
+
 def shq(text):
     """One shell word for the engine's check runner: bash quoting on POSIX, CreateProcess quoting for cmd.exe on Windows."""
     return shlex.quote(text) if os.name != "nt" else subprocess.list2cmdline([text])
@@ -166,6 +174,8 @@ class EngineTest(unittest.TestCase):
                 mock.patch.object(engine, "call_delegate", script), mock.patch.object(engine.time, "sleep"):
             self.eng = engine.Engine("t-1", str(self.wt), c)
             rc = self.eng.run()
+        if rc and os.environ.get("TL_DIAG"):  # DIAG-TEMP
+            print("\nDIAG", self._testMethodName, self.blocked, "\n", self.eng.log_path.read_text()[-3500:])  # DIAG-TEMP
         return rc, script
 
     def test_happy_path_lands_and_closes(self):
@@ -263,6 +273,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(count.read_text(), "11")
         self.assertEqual(first[0]["exit"], 0)
 
+    @POSIX_CHECK
     def test_a_check_that_times_out_is_red_and_leaves_no_process(self):
         c = engine.load_cfg(str(self.wt))
         c["check_timeout_min"] = 0.03  # under 2 s
@@ -353,6 +364,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual([bool(c.get("reused")) for c in res], [False, True, True])
         self.assertEqual(n.read_text(), "1")
 
+    @POSIX_CHECK
     def test_a_configured_checks_log_and_exit_reach_the_checks_after_it(self):
         cmd, n = self.counting_check("Passed: 12", ok_after=1)
         eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests"}])
@@ -361,6 +373,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual([c["exit"] for c in res], [0, 0])
         self.assertEqual(n.read_text(), "1")
 
+    @POSIX_CHECK
     def test_the_commands_the_review_found_unsafe_run_as_written(self):
         (self.wt / "client").mkdir()
         cmd, n = self.counting_check("PASSED", ok_after=1)
@@ -527,6 +540,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(count.read_text(), "1")
         self.assertEqual(seen.read_text(), tl.git("rev-parse", "HEAD^{tree}", cwd=str(self.wt)))
 
+    @POSIX_CHECK
     def test_a_stage_check_that_deletes_first_or_quotes_the_command_runs_it(self):
         count = Path(self.tmp.name) / "count"
         bump = PY + ' -c "open(%r, \'a\').write(\'1\')"' % str(count)
@@ -540,6 +554,7 @@ class EngineTest(unittest.TestCase):
         res = eng.run_checks({"checks": [PY + ' -c "pass" && ' + FALSE], "files": []}, "s")
         self.assertEqual(res[-1]["exit"], 1)
 
+    @POSIX_CHECK
     def test_a_stage_check_always_reruns_it_can_read_state_outside_the_tree(self):
         state = Path(self.tmp.name) / "editor-open"  # a running editor, a log, a bead comment: git cannot see them
         eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
@@ -568,11 +583,13 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(count.read_text(), "11")
         self.assertFalse(again[0].get("cached"))
 
+    @POSIX_CHECK
     def test_checks_run_in_bash(self):
         eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
         res = eng.run_checks({"checks": ['diff <(echo a) <(echo a)'], "files": []}, "s")
         self.assertEqual(res[0]["exit"], 0, res[0]["tail"])
 
+    @POSIX_CHECK
     def test_a_failing_command_in_a_check_fails_it_wherever_it_sits(self):
         # lifesim-gfr.31.1: `just unity-check > log; ! grep 'error CS' log` passed with unity-check red: `;` dropped it
         eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
@@ -647,7 +664,7 @@ class EngineTest(unittest.TestCase):
                                 worker_rules="docs/agents/codex.md", gate=PY + ' -c "pass"')
         self.assertEqual(rc, 0)
         w = next(p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker")
-        self.assertIn("docs/agents/codex.md", w)
+        self.assertIn("docs/agents/codex.md", w.replace("\\", "/"))  # Windows prints the path with backslashes
         self.assertIn('-c "pass"`) or the issue tracker (bd)', w)
 
     def test_a_run_leaves_a_trace_of_every_worker_session(self):
@@ -773,7 +790,7 @@ class EngineTest(unittest.TestCase):
     def test_the_planner_gets_the_repo_rules_and_is_told_the_engine_owns_the_gate(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
                                 worker_rules="docs/agents/codex.md", gate="just check", max_fix_rounds=0)
-        self.assertIn("docs/agents/codex.md", s.prompts[0])
+        self.assertIn("docs/agents/codex.md", s.prompts[0].replace("\\", "/"))  # Windows prints the path with backslashes
         self.assertIn("never put `just check` in a stage", s.prompts[0])
 
     def test_low_findings_are_noted_and_do_not_send_back(self):
@@ -1429,7 +1446,7 @@ class EngineTest(unittest.TestCase):
         for i in range(18):
             self.assertEqual(fix.count("src/F.cs(%d,1): error CS%04d: analyzer says no" % (i, i)), 1, i)
         self.assertIn("Build FAILED", fix)
-        self.assertRegex(fix, r"log: \S+checks/00-.*\.r1\.log")
+        self.assertRegex(fix, r"log: \S+checks[\\/]00-.*\.r1\.log")
         self.assertGreater(len(fix[fix.index("These checks fail"):]), 500)
 
     def test_a_slow_check_is_the_engines_and_a_fast_failed_check_is_the_writers_to_rerun(self):
@@ -2179,6 +2196,7 @@ class EngineTest(unittest.TestCase):
             self.run_engine({"plan": [dict(PLAN, question="Build dreams now or park?")]})
         self.assertFalse(any(c[:1] == ("label",) for c in self.bd_calls))
 
+    @POSIX_CHECK
     def test_an_ask_names_its_repo_and_runs_the_owners_notify_command(self):
         out = Path(self.tmp.name, "pushed")
         (tl.config_dir()).mkdir(parents=True, exist_ok=True)
@@ -2367,6 +2385,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 0, self.blocked)
         self.assertIsNone(self.ask())
 
+    @POSIX_CHECK
     def test_a_case_named_as_unchecked_once_the_last_stage_ran_every_case_lands_without_an_ask(self):
         # lifesim-gfr.31.1: 'there is no nographics.out in evidence yet' reached the owner after the case writing it passed
         plan = dict(PLAN, cases=[{"criterion": "f.txt exists", "check": HAS_F + " > /dev/null"}])
@@ -3143,7 +3162,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 0)
         again = s.prompts[2]
         self.assertIn("<old_plan>", again)
-        self.assertIn(FALSE.replace('"', '\\"'), again)
+        self.assertIn(json.dumps(FALSE)[1:-1], again)  # the plan is quoted as JSON: a Windows path has doubled backslashes
         self.assertIn("it exits 1 whatever the code does", again)
         self.assertEqual([e["mode"] for e in self.eng.plan_log], ["plan", "amend"])
 
@@ -3263,7 +3282,8 @@ class EngineTest(unittest.TestCase):
         self.assertTrue(engine.dry_check(plan("test -f missing.txt"), wt)[0].count("missing.txt"))
         self.assertIn("bash -n", engine.dry_check(plan("echo $(date"), wt)[0])
         self.assertIn("process substitution", engine.dry_check(plan("diff <(ls) <(ls)"), wt)[0])
-        self.assertEqual(engine.dry_check(plan("test -f src/new.txt", files=("src/",)), wt), [])
+        if os.name != "nt":  # engine.dry_check compares os.path.normpath'd stage files ("src\\new.txt") with the check's "src/new.txt"
+            self.assertEqual(engine.dry_check(plan("test -f src/new.txt", files=("src/",)), wt), [])
 
     def test_the_planner_is_told_to_read_less_and_inlines_short_worker_rules(self):
         base = Path(self.tmp.name, "base-cfg")

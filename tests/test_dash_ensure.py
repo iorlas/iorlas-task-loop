@@ -174,6 +174,7 @@ class LoudBind(unittest.TestCase):
             server.open_servers(["127.0.0.1", "203.0.113.9"], port, mock.Mock())
         self.assertIn("203.0.113.9:%d" % port, str(cm.exception))
 
+    @unittest.skipIf(os.name == "nt", "server.holder_pid asks lsof, which Windows does not have")
     def test_open_servers_names_the_holder_pid(self):
         holder = socket.socket()
         holder.bind(("127.0.0.1", 0))

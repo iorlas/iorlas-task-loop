@@ -83,4 +83,5 @@ jobs:
       - shell: pwsh
         run: |
           $k = Get-Content winfast-names.txt | Where-Object { $_ } | ForEach-Object { "-k"; $_ }
+          $env:TL_DIAG = '1'
           python -m unittest discover -s tests -v @k

@@ -26,6 +26,9 @@ HERE = Path(__file__).resolve().parents[1] / "skills" / "task-loop"
 AREAS = {"area_label_prefix": "lane:", "areas": {"core": ["e-core"], "build": ["build"]}}
 
 
+NO_FCNTL = unittest.skipIf(os.name == "nt", "the lock is fcntl; tl has none on Windows (documented no-op)")
+
+
 class AreaOf(unittest.TestCase):
     def test_the_areas_map_first_then_the_label_prefix_first_match_wins_and_none_is_unrestricted(self):
         cache = {"e-core.1": "e-core", "e-core": None, "e-9": None}
@@ -239,6 +242,7 @@ class Line(Slots):
         self.assertEqual(got[0], "s1")
         self.assertEqual(self.tickets(), [])  # the dead waiter's ticket was dropped
 
+    @NO_FCNTL
     def test_two_takers_of_one_actor_never_both_win_a_slot(self):
         """bd lets an actor re-claim its own bead, and hand runs of one session share its actor: a `--slot any` that
         listed s1 free must not win it after a hand `--slot s1` took it (race test, seed 3)."""
@@ -370,6 +374,7 @@ class ReviewFixes(AreasBase):
         bd.slots[sb].update(status="in_progress", assignee="tl-old", metadata={
             "held_by": "tl-old", "held_since": "2026-10-21T10:00:00", "held_why": "screenshots", "hold_until": "1"})
 
+    @NO_FCNTL
     def test_two_freers_of_one_expired_hold_and_a_taker_never_wipe_the_takers_slot(self):
         bd = self.beads({}, slots=1)
         self.expired(bd)
@@ -455,6 +460,7 @@ class ReviewFixes(AreasBase):
         self.assertIn("reached", self.out)
         self.assertEqual(self.started, [])
 
+    @NO_FCNTL
     def test_two_exclusive_hand_runs_in_one_area_let_the_first_in_win(self):
         bd = self.lanes({"x-1": [], "x-2": []}, {"x-1": "live", "x-2": "live"})
         outs, real, gate, done = {}, engine.take_area, threading.Barrier(2, timeout=5), threading.Barrier(2, timeout=5)

@@ -208,6 +208,7 @@ class CheapFirst(SpeedTest):
     def seed(self, eng, cmd, secs):
         cs.record_durations(str(self.wt), [(cmd, secs)] * 3, config_dir=os.environ["XDG_CONFIG_HOME"] + "/task-loop")
 
+    @te.POSIX_CHECK
     def test_the_cheaper_check_runs_first_and_a_red_stops_the_round(self):
         mark, slow, quick = self.slow_then_fast()
         eng = self.checks_engine(checks=[{"id": "slow", "cmd": slow, "group": "tests"},
@@ -261,6 +262,7 @@ class Duplicates(SpeedTest):
         n = Path(self.tmp.name) / "unity-runs"
         return PY + ' -c "import sys; open(%r, \'a\').write(\'1\'); print(\'Passed: 12\'); sys.exit(%d)"' % (str(n), code), n
 
+    @te.POSIX_CHECK
     def test_a_wrapper_that_redirects_the_recipe_reads_the_engines_log_and_runs_only_its_extra_part(self):
         cmd, n = self.counter()
         eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests"}])
@@ -277,6 +279,7 @@ class Duplicates(SpeedTest):
         res = eng.run_checks({"checks": ["%s > ev.log && grep -q 'Passed: 99' ev.log" % cmd], "files": []}, "s")
         self.assertEqual((n.read_text(), res[-1]["status"]), ("1", "failed"))
 
+    @te.POSIX_CHECK
     def test_no_wrapper_pattern_that_is_not_the_bare_command_skips_the_repo_check(self):
         n = Path(self.tmp.name) / "runs"
         (self.wt / "t.sh").write_text("echo x >> %s\necho 'Passed: 12'\n" % n)
@@ -360,6 +363,7 @@ class Watchdog(SpeedTest):
     def alive(self, mark):
         return subprocess.run(["pgrep", "-f", "sleep " + mark], capture_output=True, text=True).stdout.strip()
 
+    @te.POSIX_CHECK
     def test_a_silent_check_is_stopped_as_hung_with_its_last_lines_and_its_tree_is_gone(self):
         mark = "71.%d" % os.getpid()
         n = Path(self.tmp.name) / "tries"
@@ -400,6 +404,7 @@ class Watchdog(SpeedTest):
         res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertIn("no output, file writes or CPU", res[0]["tail"])
 
+    @te.POSIX_CHECK
     def test_a_timeout_keeps_the_output_and_kills_a_setsid_descendant(self):
         mark = "72.%d" % os.getpid()
         code = "import os,subprocess,sys,time\nprint('before', flush=True)\nsubprocess.Popen(['sleep','%s'], start_new_session=True)\ntime.sleep(30)" % mark

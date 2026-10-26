@@ -271,6 +271,7 @@ class NoBlock(unittest.TestCase):
         self.assertEqual(u2[3].count("## t-2: Second"), 1)
         self.assertEqual(u2[3].count("## t-1: First"), 1)
 
+    @T.NO_FCNTL
     def test_three_beads_of_one_epic_landing_together_file_one_review_bead_with_all_sections(self):
         store, lock = {}, threading.Lock()
         epic = {"id": "t-0", "issue_type": "epic"}

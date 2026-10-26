@@ -116,6 +116,7 @@ class SlotGitTest(unittest.TestCase):
         self.assertEqual(sh("git", "diff", "--cached", "--name-status", cwd=self.wt).split("\n"),
                          ["D\ta.txt", "A\tnew file.txt"])
 
+    @te.POSIX_CHECK
     def test_workers_and_checks_are_not_pinned_but_the_engines_own_git_is(self):
         route = Path(self.tmp.name) / "route.py"
         route.write_text("import json, os\nprint(json.dumps({'v': 2, 'status': 'done', 'data': {'env': [k for k in "
@@ -133,6 +134,7 @@ class SlotGitTest(unittest.TestCase):
         self.assertEqual((os.path.realpath(d), os.path.realpath(w)), (gitdir, str(self.wt)))
         self.assertEqual(tl.pinned_env(self.repo)["GIT_DIR"], str(self.repo / ".git"))
 
+    @te.POSIX_CHECK
     def test_a_check_runs_git_on_another_repo(self):
         other = Path(self.tmp.name) / "other"
         sh("git", "init", "-q", "-b", "main", str(other), cwd=self.tmp.name)

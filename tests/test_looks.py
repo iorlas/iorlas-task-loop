@@ -1,4 +1,5 @@
 """tl-bxk.13.15: looks.py, the shot table and what the engine builds from a writer's shot request."""
+import os
 import json
 import sys
 import tempfile
@@ -53,7 +54,8 @@ class Table(unittest.TestCase):
         cmd, _, err = looks.build(m, {"method": "CreatorShots", "args": []}, "/o")
         self.assertTrue(cmd.endswith("Run -logFile client/Logs/c.log"))
         cmd, _, err = looks.build(m, {"method": "ShellShots", "args": [{"name": "who", "value": "me"}]}, "/tmp/o dir")
-        self.assertEqual(cmd, "Unity -executeMethod Shell.Run -out '/tmp/o dir' --who me")  # no {args}: appended
+        out = '"/tmp/o dir"' if os.name == "nt" else "'/tmp/o dir'"  # looks.quote: CreateProcess quoting on Windows, shell quoting elsewhere
+        self.assertEqual(cmd, "Unity -executeMethod Shell.Run -out %s --who me" % out)  # no {args}: appended
 
     def test_a_request_the_table_does_not_allow_builds_nothing(self):
         m = self.methods()

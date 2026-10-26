@@ -11,6 +11,9 @@ TL = ROOT / "skills" / "task-loop" / "tl.py"
 PY = sys.executable
 
 
+NO_FCNTL = unittest.skipIf(os.name == "nt", "the lock is fcntl; tl has none on Windows (documented no-op)")
+
+
 class LandLockTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -40,6 +43,7 @@ class LandLockTests(unittest.TestCase):
         self.assertIn("hi", r.stdout)
         self.assertEqual(self.run_ll("--", PY, "-c", "pass").returncode, 0)
 
+    @NO_FCNTL
     def test_second_waits_while_first_holds(self):
         p = self.holder(1.5, Path(self.tmp.name) / "ready")
         t = time.time()
@@ -58,6 +62,7 @@ class LandLockTests(unittest.TestCase):
         self.assertNotIn("waiting", r.stdout)
         self.assertLess(time.time() - t, 5)
 
+    @NO_FCNTL
     def test_wait_min_times_out_with_75(self):
         p = self.holder(3, Path(self.tmp.name) / "ready")
         r = self.run_ll("--wait-min", "0.01", "--", PY, "-c", "print('never')")
