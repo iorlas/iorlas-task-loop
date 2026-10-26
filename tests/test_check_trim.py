@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(ROOT / "tests"))
 import engine  # noqa: E402
 import test_engine as te  # noqa: E402
-import trim  # noqa: E402
+from checks import trim  # noqa: E402
 
 FIX = Path(__file__).parent / "fixtures" / "checklogs"
 

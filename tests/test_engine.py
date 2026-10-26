@@ -16,6 +16,8 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 import engine  # noqa: E402
+from checks import lint  # noqa: E402,F401
+from core import procs  # noqa: E402,F401
 import tl  # noqa: E402
 
 
@@ -28,7 +30,7 @@ POSIX_CHECK = unittest.skipIf(os.name == "nt", "the check is bash (operators, $V
                                               "on Windows the engine runs checks through cmd.exe")
 ENGINE_BASH = unittest.skipIf(os.name == "nt", "the engine's own conflict-marker check (`! git grep ...`) is bash; cmd.exe cannot parse it")
 EXIT_127 = unittest.skipIf(os.name == "nt", "the engine reads a missing tool as bash's exit 127; cmd.exe reports it as exit 1")
-NO_BASH = unittest.skipIf(os.name == "nt", "engine.command_problems judges nothing on Windows (no bash there, by design)")
+NO_BASH = unittest.skipIf(os.name == "nt", "lint.command_problems judges nothing on Windows (no bash there, by design)")
 SH_FAKE = unittest.skipIf(os.name == "nt", "the bd fake is a #!/bin/sh script, which Windows cannot execute")
 NO_FCNTL = unittest.skipIf(os.name == "nt", "the lock is fcntl; tl has none on Windows (documented no-op)")
 
@@ -392,8 +394,8 @@ class EngineTest(unittest.TestCase):
         cfg = {"checks": [{"id": "unity-tests", "cmd": "just unity-tests"}]}
         plan = dict(PLAN, risks=[{"what": "x", "check": "mkdir -p x && just unity-tests > x/f && grep -q a x/f"},
                                  {"what": "y", "check": "just unity-tests-extra"}])
-        self.assertEqual([i for _, i in engine.rerun_checks(plan, cfg)], ["unity-tests"])
-        self.assertEqual(engine.check_env_name("unity-tests"), "TL_CHECK_LOG_UNITY_TESTS")
+        self.assertEqual([i for _, i in lint.rerun_checks(plan, cfg)], ["unity-tests"])
+        self.assertEqual(lint.check_env_name("unity-tests"), "TL_CHECK_LOG_UNITY_TESTS")
 
     def test_the_same_command_with_another_timeout_is_not_a_duplicate(self):
         cmd, n = self.counting_check("ok", ok_after=1)
@@ -747,10 +749,10 @@ class EngineTest(unittest.TestCase):
         self.assertTrue(self.blocked and "read the issue tracker" in self.blocked[0])
 
     def test_tracker_checks_are_told_apart_from_code_that_mentions_bd(self):
-        self.assertEqual(engine.tracker_checks(dict(PLAN, risks=[{"what": "x", "check": "cd sub && bd show t-1"}])),
+        self.assertEqual(lint.tracker_checks(dict(PLAN, risks=[{"what": "x", "check": "cd sub && bd show t-1"}])),
                          ["cd sub && bd show t-1"])
         for ok in (HAS_F, "! grep -rn 'bd list' src", "pytest tests/test_bd.py", "test -f abd"):
-            self.assertEqual(engine.tracker_checks(dict(PLAN, risks=[{"what": "x", "check": ok}])), [], ok)
+            self.assertEqual(lint.tracker_checks(dict(PLAN, risks=[{"what": "x", "check": ok}])), [], ok)
 
     UNITY = {"cmd": "just unity-check", "why": "it fails on uncommitted client/ changes"}
 
@@ -775,9 +777,9 @@ class EngineTest(unittest.TestCase):
         cfg = {"gate": "just check", "gate_only": ["just unity-check", self.UNITY]}
         bad = ["just check", "cd x && just unity-check --fast", "true; just check | tail"]
         ok = [HAS_F, "just check-fmt", "just unity-checks", "grep 'just check' AGENTS.md", "just fmt"]
-        got = engine.gate_only_checks(dict(PLAN, risks=[{"what": "x", "check": c} for c in bad + ok]), cfg)
+        got = lint.gate_only_checks(dict(PLAN, risks=[{"what": "x", "check": c} for c in bad + ok]), cfg)
         self.assertEqual([c for c, _ in got], bad)
-        self.assertEqual(engine.gate_only_checks(dict(PLAN, risks=[{"what": "x", "check": "just check"}]),
+        self.assertEqual(lint.gate_only_checks(dict(PLAN, risks=[{"what": "x", "check": "just check"}]),
                                                  dict(engine.DEFAULTS)), [])
 
     def test_follow_up_work_in_the_plan_is_filed_by_the_engine(self):
@@ -3088,7 +3090,7 @@ class EngineTest(unittest.TestCase):
 
     def test_child_env_drops_session_identity(self):
         with mock.patch.dict(os.environ, {"ANTHROPIC_BASE_URL": "x", "CLAUDE_CODE_SESSION_ID": "s"}):
-            env = engine.child_env()
+            env = procs.child_env()
         self.assertNotIn("ANTHROPIC_BASE_URL", env)
         self.assertNotIn("CLAUDE_CODE_SESSION_ID", env)
         self.assertEqual(env["DELEGATE_DEPTH"], "1")
@@ -3278,16 +3280,16 @@ class EngineTest(unittest.TestCase):
         def plan(*checks, files=("new.txt",)):
             return dict(PLAN, stages=[dict(PLAN["stages"][0], checks=list(checks), files=list(files))])
         wt = str(self.wt)
-        self.assertEqual(engine.dry_check(plan("test -f a.txt", "test -f new.txt", "grep -q '<(' a.txt", HAS_F), wt), [])
-        self.assertEqual(engine.dry_check(plan("cd sub && cat nope.txt", "echo hi > out.log; test -f out.log"), wt), [])
-        self.assertEqual(engine.dry_check(plan("test -f $HOME/x", "cat dir/*.txt"), wt), [])
-        self.assertEqual(engine.dry_check(plan("python3 -m pytest -q tests", "bash -c 'true'", "python3 -c 'pass'"), wt), [])
-        self.assertTrue(engine.dry_check(plan("python3 tests/nope.py"), wt))
-        self.assertTrue(engine.dry_check(plan("test -f missing.txt"), wt)[0].count("missing.txt"))
-        self.assertIn("bash -n", engine.dry_check(plan("echo $(date"), wt)[0])
-        self.assertIn("process substitution", engine.dry_check(plan("diff <(ls) <(ls)"), wt)[0])
-        if os.name != "nt":  # engine.dry_check compares os.path.normpath'd stage files ("src\\new.txt") with the check's "src/new.txt"
-            self.assertEqual(engine.dry_check(plan("test -f src/new.txt", files=("src/",)), wt), [])
+        self.assertEqual(lint.dry_check(plan("test -f a.txt", "test -f new.txt", "grep -q '<(' a.txt", HAS_F), wt), [])
+        self.assertEqual(lint.dry_check(plan("cd sub && cat nope.txt", "echo hi > out.log; test -f out.log"), wt), [])
+        self.assertEqual(lint.dry_check(plan("test -f $HOME/x", "cat dir/*.txt"), wt), [])
+        self.assertEqual(lint.dry_check(plan("python3 -m pytest -q tests", "bash -c 'true'", "python3 -c 'pass'"), wt), [])
+        self.assertTrue(lint.dry_check(plan("python3 tests/nope.py"), wt))
+        self.assertTrue(lint.dry_check(plan("test -f missing.txt"), wt)[0].count("missing.txt"))
+        self.assertIn("bash -n", lint.dry_check(plan("echo $(date"), wt)[0])
+        self.assertIn("process substitution", lint.dry_check(plan("diff <(ls) <(ls)"), wt)[0])
+        if os.name != "nt":  # lint.dry_check compares os.path.normpath'd stage files ("src\\new.txt") with the check's "src/new.txt"
+            self.assertEqual(lint.dry_check(plan("test -f src/new.txt", files=("src/",)), wt), [])
 
     def test_the_planner_is_told_to_read_less_and_inlines_short_worker_rules(self):
         base = Path(self.tmp.name, "base-cfg")
