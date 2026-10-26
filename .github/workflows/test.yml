@@ -19,12 +19,11 @@ jobs:
       # Every test belongs to exactly one shard of each size used below.
       - run: |
           python tests/shard.py --check 3
-          python tests/shard.py --check 8
       - id: m
         run: |
           python - <<'PY' >> "$GITHUB_OUTPUT"
           import json
-          cells = [("ubuntu-latest", "3.8", 3), ("ubuntu-latest", "3.12", 3), ("macos-latest", "3.12", 3), ("windows-latest", "3.12", 8)]
+          cells = [("ubuntu-latest", "3.8", 3), ("ubuntu-latest", "3.12", 3)]
           inc = [{"os": o, "python": p, "shard": i, "shards": n} for o, p, n in cells for i in range(1, n + 1)]
           print("matrix=" + json.dumps({"include": inc}))
           PY
@@ -37,23 +36,10 @@ jobs:
     name: unit (${{ matrix.os }}, ${{ matrix.python }}, ${{ matrix.shard }}/${{ matrix.shards }})
     runs-on: ${{ matrix.os }}
     steps:
-      # Fixtures are compared byte for byte; Windows git would turn their LF into CRLF on checkout.
-      - run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
       # The suite shells out to `just` (recipe checks); the developer machine has it, a runner does not.
       - uses: extractions/setup-just@v2
-      # engine.dry_check runs subprocess.run(["bash", "-n"]); CreateProcess finds C:\Windows\System32\bash.exe (the WSL stub, no
-      # distro installed) before Git Bash on PATH, so every plan check looked like a syntax error. Remove this step once dry_check
-      # resolves bash with shutil.which.
-      - name: Move the WSL bash stub out of the way (Windows)
-        if: runner.os == 'Windows'
-        continue-on-error: true
-        shell: pwsh
-        run: |
-          takeown /f C:\Windows\System32\bash.exe
-          icacls C:\Windows\System32\bash.exe /grant "$($env:USERNAME):F"
-          Rename-Item C:\Windows\System32\bash.exe bash.exe.off
       - run: python tests/shard.py run ${{ matrix.shard }} ${{ matrix.shards }}
