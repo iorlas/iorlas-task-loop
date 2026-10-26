@@ -1,0 +1,524 @@
+{
+ "contract": 3,
+ "about": "Hand-edited with any classifier change. contract 3: every answer carries `stop` (null = done, or the agent-tool handoff when `agent_model` is set); no `status`, `next`, `reason`, `retry_after`. Reasons are an open list, facts are closed. A bump means a change to the answer or to the `run` flags the engine passes.",
+ "scopes": [
+  "bead",
+  "caller",
+  "machine",
+  "lane",
+  "model"
+ ],
+ "permanences": [
+  "transient",
+  "needs_owner"
+ ],
+ "retry_kinds": [
+  "none",
+  "predicted",
+  "poll"
+ ],
+ "health_effects": [
+  "none",
+  "exhausted",
+  "breaker"
+ ],
+ "denied_kinds": [
+  "policy",
+  "sandbox_limit",
+  "secret"
+ ],
+ "reasons": {
+  "secrets": {
+   "scope": "bead",
+   "permanence": "needs_owner",
+   "retry": "none",
+   "health": "none",
+   "wording": "the worker ran a command on a secret path and was stopped"
+  },
+  "rate_limited": {
+   "scope": "lane",
+   "permanence": "transient",
+   "retry": "predicted",
+   "health": "exhausted",
+   "wording": "the lane hit a usage limit"
+  },
+  "credit_exhausted": {
+   "scope": "lane",
+   "permanence": "needs_owner",
+   "retry": "none",
+   "health": "exhausted",
+   "wording": "the lane is out of credits or hit a spending limit"
+  },
+  "logged_out": {
+   "scope": "lane",
+   "permanence": "needs_owner",
+   "retry": "none",
+   "health": "exhausted",
+   "wording": "the vendor CLI is not logged in"
+  },
+  "hung": {
+   "scope": "model",
+   "permanence": "transient",
+   "retry": "predicted",
+   "health": "breaker",
+   "wording": "the worker printed nothing and was stopped"
+  },
+  "timeout": {
+   "scope": "bead",
+   "permanence": "transient",
+   "retry": "none",
+   "health": "none",
+   "wording": "the worker did not finish within --timeout and was killed"
+  },
+  "killed": {
+   "scope": "machine",
+   "permanence": "transient",
+   "retry": "none",
+   "health": "none",
+   "wording": "the worker was ended by a signal route.py did not send"
+  },
+  "bad_request": {
+   "scope": "caller",
+   "permanence": "needs_owner",
+   "retry": "none",
+   "health": "none",
+   "wording": "the vendor rejected the request itself (schema, flags, arguments)"
+  },
+  "network": {
+   "scope": "machine",
+   "permanence": "transient",
+   "retry": "poll",
+   "health": "none",
+   "wording": "the vendor could not be reached"
+  },
+  "vendor_blip": {
+   "scope": "lane",
+   "permanence": "transient",
+   "retry": "poll",
+   "health": "breaker",
+   "wording": "the vendor failed before the worker did anything"
+  },
+  "worker_failed": {
+   "scope": "bead",
+   "permanence": "transient",
+   "retry": "none",
+   "health": "breaker",
+   "wording": "the worker failed after it started"
+  },
+  "schema_invalid": {
+   "scope": "bead",
+   "permanence": "transient",
+   "retry": "none",
+   "health": "none",
+   "wording": "the answer does not match the schema, after one re-ask"
+  },
+  "held": {
+   "scope": "lane",
+   "permanence": "transient",
+   "retry": "predicted",
+   "health": "none",
+   "wording": "the owner holds the lane for this role until a stated time"
+  },
+  "busy": {
+   "scope": "lane",
+   "permanence": "transient",
+   "retry": "poll",
+   "health": "none",
+   "wording": "every slot of the lane is taken"
+  },
+  "no_lane": {
+   "scope": "machine",
+   "permanence": "needs_owner",
+   "retry": "none",
+   "health": "none",
+   "wording": "no lane can take this role now"
+  },
+  "duplicate_task": {
+   "scope": "bead",
+   "permanence": "transient",
+   "retry": "poll",
+   "health": "none",
+   "wording": "the task already has a running worker"
+  },
+  "lock": {
+   "scope": "machine",
+   "permanence": "transient",
+   "retry": "poll",
+   "health": "none",
+   "wording": "the state lock was held too long"
+  },
+  "caller": {
+   "scope": "caller",
+   "permanence": "needs_owner",
+   "retry": "none",
+   "health": "none",
+   "wording": "the call itself is wrong (empty brief, unknown ref, bad flag)"
+  },
+  "setup": {
+   "scope": "machine",
+   "permanence": "needs_owner",
+   "retry": "none",
+   "health": "none",
+   "wording": "a CLI or key is missing"
+  },
+  "crash": {
+   "scope": "machine",
+   "permanence": "needs_owner",
+   "retry": "none",
+   "health": "none",
+   "wording": "route.py itself failed"
+  }
+ },
+ "run_args": [
+  "--authored-by",
+  "--failed",
+  "--premium",
+  "--allow-degraded",
+  "--claude-usage",
+  "--cwd",
+  "--brief",
+  "--timeout",
+  "--unattended",
+  "--schema",
+  "--resume",
+  "--cap",
+  "--parent",
+  "--task",
+  "--title",
+  "--call-id"
+ ],
+ "usage": {
+  "tokens": "in includes cached; also per call, never cumulative: in_fresh (uncached input), cache_read, cache_write (null when the vendor does not report it), out, and cache_write_by_ttl {5m,1h} on claude",
+  "turns": "claude num_turns; opencode step_finish count; codex turn.completed count",
+  "context_k": "input tokens of the last model request in thousands, null when the vendor does not say",
+  "answer_bytes": "utf-8 length of text",
+  "ref": "the vendor session or thread id the call ran in (same as the top-level ref)",
+  "last_activity_at": "ISO 8601 UTC time the call ended; null without a ref",
+  "warm_until": "last_activity_at + ttl_s: when the vendor prompt cache probably expires. Telemetry only; no routing uses it. null = unknown",
+  "ttl_s": "cache lifetime assumed: claude subscription 3600, claude credit 300, codex 3600; null for opencode lanes",
+  "ttl_source": "vendor_default | observed | unknown",
+  "cost_usd": "what the harness returned for this call (claude total_cost_usd, opencode step cost summed); null when it returns none (codex, zai)",
+  "cost_source": "harness | unknown | free",
+  "accounting": "exact (codex tokens) | estimated (harness-computed cost) | unknown"
+ },
+ "answer_schema": {
+  "type": "object",
+  "required": [
+   "contract",
+   "data",
+   "text",
+   "ref",
+   "lane",
+   "model",
+   "tokens",
+   "cost",
+   "secs",
+   "run_id",
+   "call_id",
+   "transcript",
+   "transcript_info",
+   "denied",
+   "say",
+   "git_violation",
+   "usage",
+   "stop"
+  ],
+  "properties": {
+   "contract": {
+    "type": "integer",
+    "enum": [
+     3
+    ]
+   },
+   "text": {
+    "type": "string"
+   },
+   "say": {
+    "type": "string"
+   },
+   "denied": {
+    "type": "array",
+    "items": {
+     "type": "object",
+     "required": [
+      "kind",
+      "tool"
+     ],
+     "properties": {
+      "kind": {
+       "type": "string",
+       "enum": [
+        "policy",
+        "sandbox_limit",
+        "secret"
+       ]
+      },
+      "tool": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "path": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "input": {
+       "type": "object"
+      }
+     }
+    }
+   },
+   "git_violation": {
+    "type": "array"
+   },
+   "call_id": {
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "run_id": {
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "transcript": {
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "transcript_info": {
+    "type": [
+     "object",
+     "null"
+    ],
+    "properties": {
+     "path": {
+      "type": "string"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "codex",
+       "claude",
+       "opencode_export"
+      ]
+     },
+     "from": {
+      "type": "integer"
+     },
+     "to": {
+      "type": "integer"
+     },
+     "bytes": {
+      "type": "integer"
+     }
+    }
+   },
+   "usage": {
+    "type": "object",
+    "required": [
+     "tokens",
+     "cost",
+     "secs",
+     "turns",
+     "context_k",
+     "answer_bytes"
+    ],
+    "properties": {
+     "tokens": {
+      "type": [
+       "object",
+       "null"
+      ],
+      "properties": {
+       "in_fresh": {
+        "type": [
+         "integer",
+         "null"
+        ]
+       },
+       "cache_read": {
+        "type": [
+         "integer",
+         "null"
+        ]
+       },
+       "cache_write": {
+        "type": [
+         "integer",
+         "null"
+        ]
+       },
+       "out": {
+        "type": [
+         "integer",
+         "null"
+        ]
+       }
+      }
+     },
+     "cost": {
+      "type": "number"
+     },
+     "secs": {
+      "type": "number"
+     },
+     "turns": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "context_k": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "answer_bytes": {
+      "type": "integer"
+     },
+     "ref": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "last_activity_at": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "warm_until": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "ttl_s": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "ttl_source": {
+      "type": "string",
+      "enum": [
+       "vendor_default",
+       "observed",
+       "unknown"
+      ]
+     },
+     "cost_usd": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "cost_source": {
+      "type": "string",
+      "enum": [
+       "harness",
+       "unknown",
+       "free"
+      ]
+     },
+     "accounting": {
+      "type": "string",
+      "enum": [
+       "exact",
+       "estimated",
+       "unknown"
+      ]
+     }
+    }
+   },
+   "stop": {
+    "type": [
+     "object",
+     "null"
+    ],
+    "required": [
+     "reason",
+     "scope",
+     "permanence",
+     "retry"
+    ],
+    "properties": {
+     "reason": {
+      "type": "string"
+     },
+     "scope": {
+      "type": "string",
+      "enum": [
+       "bead",
+       "caller",
+       "machine",
+       "lane",
+       "model"
+      ]
+     },
+     "permanence": {
+      "type": "string",
+      "enum": [
+       "transient",
+       "needs_owner"
+      ]
+     },
+     "retry": {
+      "type": "object",
+      "required": [
+       "kind",
+       "at"
+      ],
+      "properties": {
+       "kind": {
+        "type": "string",
+        "enum": [
+         "none",
+         "predicted",
+         "poll"
+        ]
+       },
+       "at": {
+        "type": [
+         "number",
+         "null"
+        ]
+       }
+      }
+     },
+     "ref": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "resumable": {
+      "type": "boolean"
+     },
+     "partial": {
+      "type": "boolean"
+     },
+     "fix": {
+      "type": "string"
+     }
+    }
+   },
+   "agent_model": {
+    "type": [
+     "string",
+     "null"
+    ],
+    "description": "set only on the agent-tool handoff (stop is null): the model the orchestrator's Agent tool should run"
+   }
+  }
+ }
+}

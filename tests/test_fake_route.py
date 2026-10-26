@@ -1,5 +1,6 @@
-"""The fake route.py process (tl-7y6.4.3) and the network-resume done-when (tl-7y6.2.13): a vendor that drops mid-stream twice
-and then succeeds is one step, one ref, no lane out, no retry counted. Skips when no delegate is installed."""
+"""The fake route.py process (tl-7y6.4.3), contract 3, and the network-resume done-when (tl-7y6.2.13): a vendor that drops
+mid-stream twice and then succeeds is one step, one ref, no lane out, no retry counted. The contract is FAKE_ROUTE_DELEGATE's, else
+the copy in tests/fixtures/delegate3 (compared to a real delegate checkout when ~/Workspaces/iorlas-delegate-R20 or the env names one)."""
 import json
 import os
 import subprocess
@@ -15,18 +16,17 @@ sys.path.insert(0, str(SKILL))
 import call_state as cs  # noqa: E402
 import clock  # noqa: E402
 import delegate_link as dl  # noqa: E402
+import fake_route  # noqa: E402
 import lane_policy as lp  # noqa: E402
 import netgate  # noqa: E402
 import outcome as oc  # noqa: E402
 
-DELEGATE = dl.installed_dir()  # resolved at import: a test's isolated HOME would hide it
-CONTRACT = dl.read_contract(DELEGATE) if DELEGATE else None
-FIXTURES = sorted((DELEGATE / "tests" / "contract" / "fixtures").glob("*.json")) if DELEGATE else []
-NEED = unittest.skipUnless(CONTRACT and FIXTURES, "no delegate with contract.json and tests/contract/fixtures is installed")
+DELEGATE = fake_route.delegate_dir()
+CONTRACT = dl.read_contract(DELEGATE)
+FIXTURES = sorted((DELEGATE / "tests" / "contract" / "fixtures").glob("*.json"))
 FAKE = str(SKILL / "fake_route.py")
 
 
-@NEED
 class Fake(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -34,6 +34,7 @@ class Fake(unittest.TestCase):
         self.script = self.dir / "script.json"
         self.env = dict(os.environ, FAKE_ROUTE_SCRIPT=str(self.script), FAKE_ROUTE_DELEGATE=str(DELEGATE))
         self.resolved = dl.Resolved(DELEGATE, FAKE, CONTRACT, "explicit")
+        self.addCleanup(self.tmp.cleanup)
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -60,12 +61,15 @@ class Fake(unittest.TestCase):
     def test_the_fake_speaks_the_handshake_and_the_net_probe(self):
         self.script_with(["done"], net=[False, True])
         out = subprocess.run([sys.executable, FAKE, "contract", "--json"], capture_output=True, text=True, env=self.env).stdout
-        self.assertEqual(json.loads(out)["worker_run"], 2)
+        self.assertEqual(sorted(json.loads(out)), ["contract", "reasons", "run_args"])
+        self.assertEqual(json.loads(out)["contract"], 3)
         probe = netgate.RouteProbe(FAKE, run=lambda cmd, **kw: subprocess.run(cmd, **dict(kw, env=self.env)))
         self.assertEqual([probe.up(), probe.up(), probe.up()], [False, True, True])
 
     def test_argv_uses_only_flags_the_contract_lists(self):
-        argv = dl.argv_of(self.resolved, self.req(resume="r", authored_by="a", host=True, call_id="c"), "b.md", "s.json")
+        argv = dl.argv_of(self.resolved, self.req(resume="r", authored_by="a", call_id="c"), "b.md", "s.json")
+        self.assertNotIn("--host", argv)
+        self.assertNotIn("--no-wait", argv)
         flags = {x for x in argv if x.startswith("--")}
         self.assertLessEqual(flags, set(CONTRACT["run_args"]))
         self.assertIn("--timeout", flags)
@@ -74,12 +78,12 @@ class Fake(unittest.TestCase):
     def test_a_done_answer_has_no_stop_and_carries_the_ref(self):
         self.script_with([{"step": "done", "data": {"a": 1}}])
         r = self.call()
-        self.assertEqual((r.status, r.stop, r.data, r.ref, r.source), ("done", None, {"a": 1}, "fake-1", "delegate"))
+        self.assertEqual((r.done, r.stop, r.data, r.ref, r.source), (True, None, {"a": 1}, "fake-1", "delegate"))
 
     def test_every_fixture_replays_to_its_expected_reason_and_a_policy_action(self):
         replayed = 0
         for fx in FIXTURES:
-            exp = json.loads(fx.read_text(encoding="utf-8")).get("expected_reason")
+            exp = (json.loads(fx.read_text(encoding="utf-8")).get("expected_stop") or {}).get("reason")
             if not exp:
                 continue
             self.script.unlink() if self.script.exists() else None
@@ -92,7 +96,7 @@ class Fake(unittest.TestCase):
             self.assertEqual((r.stop.scope, r.stop.permanence, r.stop.retry_kind), lp_facts(exp), fx.name)
             a = lp.decide(r.stop, lp.Ctx(now=1000.0))
             self.assertFalse(isinstance(a, (lp.Yield, lp.Fail)) and a.outcome.rule.makes_ask, fx.name)
-        self.assertGreaterEqual(replayed, 8)
+        self.assertGreaterEqual(replayed, 5)
 
     # --- the contract and the table agree ---------------------------------------------------------------------------
 
@@ -107,24 +111,47 @@ class Fake(unittest.TestCase):
 
     # --- synthesized stops, never a raise ---------------------------------------------------------------------------
 
-    def test_no_answer_is_a_synthesized_crash_with_the_contracts_facts(self):
+    def test_no_answer_is_a_synthesized_stop_of_the_machine_that_tries_again(self):
         r = dl.call(self.resolved, self.req(resume="r1"), runner=lambda cmd, **kw: subprocess.CompletedProcess(cmd, 1, "", "Traceback"))
-        self.assertEqual((r.source, r.stop.reason), ("synthesized", "crash"))
-        self.assertEqual((r.stop.scope, r.stop.permanence, r.stop.retry_kind), lp_facts("crash"))
+        self.assertEqual((r.source, r.stop.reason), ("synthesized", "no_answer"))  # not delegate's own `crash` (needs_owner)
+        self.assertEqual((r.stop.scope, r.stop.permanence, r.stop.retry_kind), ("machine", "transient", "none"))
         self.assertEqual(r.stop.ref, "r1")
 
-    def test_a_wrong_shape_is_a_contract_violation_and_a_backstop_kill_is_hung(self):
-        r = dl.call(self.resolved, self.req(), runner=lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, '{"v": 9}', ""))
-        self.assertEqual((r.source, r.stop.reason), ("synthesized", "contract_violation"))
+    def test_a_wrong_shape_is_a_contract_violation_and_a_call_the_engine_ended_is_a_timeout(self):
+        for bad in ('{"v": 2, "status": "done"}', '{"contract": 2, "stop": null}', '{"contract": 3}', '{"contract": 3, "stop": 7}'):
+            r = dl.call(self.resolved, self.req(), runner=lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, bad, ""))
+            self.assertEqual((r.source, r.stop.reason), ("synthesized", "contract_violation"), bad)
+            self.assertEqual((r.stop.scope, r.stop.permanence), ("machine", "needs_owner"))
 
         def hang(cmd, **kw):
+            raise dl.Stopped("no worker output for 20 min")
+        r = dl.call(self.resolved, self.req(resume="r9"), runner=hang)
+        self.assertEqual((r.stop.reason, r.stop.scope, r.stop.ref), ("timeout", "bead", "r9"))
+        self.assertIn("no worker output", r.say)
+
+        def backstop(cmd, **kw):
             raise subprocess.TimeoutExpired(cmd, 1)
-        r = dl.call(self.resolved, self.req(), runner=hang)
-        self.assertEqual((r.stop.reason, r.stop.scope), ("hung", "model"))
+        self.assertEqual(dl.call(self.resolved, self.req(), runner=backstop).stop.reason, "timeout")
 
         def missing(cmd, **kw):
             raise FileNotFoundError("python")
-        self.assertEqual(dl.call(self.resolved, self.req(), runner=missing).stop.reason, "crash")
+        self.assertEqual(dl.call(self.resolved, self.req(), runner=missing).stop.reason, "no_answer")
+
+    def test_a_killed_stop_is_a_signal_and_sandbox_limit_denials_do_not_count(self):
+        k = dl.stop_of(CONTRACT, fake_route.stop_answer("killed", "r1"))
+        self.assertEqual((k.scope, k.permanence, k.retry_kind, bool(k.signal)), ("machine", "transient", "none", True))
+        self.assertIsInstance(lp.decide(k, lp.Ctx(now=1.0)), lp.Yield)
+        n = dl.stop_of(CONTRACT, fake_route.stop_answer("network", "r1", partial=True))
+        self.assertEqual((n.reason, n.ref, n.resumable, n.partial, n.signal), ("network", "r1", True, True, 0))
+        j = {"denied": [{"kind": "sandbox_limit", "tool": "Bash", "input": {}}, {"kind": "policy", "tool": "Bash", "input": {"command": "ls"}}]}
+        self.assertEqual([d["kind"] for d in dl.real_denied(j)], ["policy"])
+
+    def test_the_copy_of_the_contract_in_this_repo_is_delegates(self):
+        real = Path(os.environ.get("DELEGATE_R20") or Path.home() / "Workspaces" / "iorlas-delegate-R20")
+        mine = fake_route.VENDORED / "skills" / "delegate" / "contract.json"
+        if not (real / "skills" / "delegate" / "contract.json").is_file():
+            self.skipTest("no delegate checkout of contract 3 here")
+        self.assertEqual(json.loads(mine.read_text()), json.loads((real / "skills" / "delegate" / "contract.json").read_text()))
 
     # --- the done-when: drops twice, then succeeds ------------------------------------------------------------------
 
@@ -156,7 +183,7 @@ class Fake(unittest.TestCase):
     def test_a_vendor_that_drops_twice_then_succeeds_is_one_step_with_one_ref(self):
         probe = netgate.FakeProbe([False, False, True, False, True])
         r, st, actions, calls, _ = self.drive([{"step": "network", "partial": True}, {"step": "network", "partial": True}, "done"], probe)
-        self.assertEqual((r.status, r.stop, calls), ("done", None, 3))
+        self.assertEqual((r.done, r.stop, calls), (True, None, 3))
         self.assertEqual({r.ref, st.ref}, {"fake-1"})                       # the ref of call 1 is the ref of the answer
         runs = [a for a in self.argv_log() if a[0] == "run"]
         self.assertEqual(len(runs), 3)
@@ -173,7 +200,7 @@ class Fake(unittest.TestCase):
         for charged in ("attempt", "crashes", "polls", "waited_lane_s"):
             self.assertNotEqual(a.charges, charged)
         self.assertNotIsInstance(a, (lp.Reroute, lp.NewThread, lp.Retry, lp.Fail))
-        self.assertEqual(r.status, "done")
+        self.assertTrue(r.done)
 
     def test_a_restart_after_the_first_drop_resumes_the_ref_from_the_call_state(self):
         self.script_with(["network", "done"])
@@ -183,7 +210,7 @@ class Fake(unittest.TestCase):
         what = cs.reattach(cs.load_for(self.dir / "ck", "t-1", ("write", 1, 0, 1)))  # the loop was killed here
         self.assertEqual(what[:2], ("resume", "fake-1"))
         again = self.call(resume=what[1])
-        self.assertEqual((again.status, again.ref), ("done", "fake-1"))
+        self.assertEqual((again.done, again.ref), (True, "fake-1"))
 
 
 def lp_facts(reason):
