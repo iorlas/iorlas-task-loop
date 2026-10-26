@@ -1191,7 +1191,7 @@ def selftest():
     closed, blocked = [], []
 
     def lane(route, role, prompt, schema, cwd, resume, timeout, log_path, writer=None, parent="", task="", title="",
-             access="", idle=None):  # fake route.py run
+             access="", idle=None, live=""):  # fake route.py run
         props = (json.loads(schema) if isinstance(schema, str) else schema).get("properties", {})
         if "stages" in props:
             data, node = plan, "plan"
