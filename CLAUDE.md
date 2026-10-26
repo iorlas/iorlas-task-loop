@@ -62,9 +62,11 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 
 ```bash
 python3 -m unittest discover -s tests
+just check        # ruff + pyrefly + the suite (tools pinned in mise.toml; `mise install`)
 ```
 
-CI runs it on Ubuntu, macOS and Windows with Python 3.8 and 3.12. Linux locally: `docker run --rm -v "$PWD":/src:ro python:3.8-slim ...`.
+CI runs the suite and `just check` on Ubuntu with Python 3.12. Linux locally: `docker run --rm -v "$PWD":/src:ro python:3.12-slim ...`.
+Caps (tests/test_rules.py): 400 SLOC per file, 80 per function, 800 per test file; the KNOWN_OVERSIZE table may only shrink.
 
 ## Architecture Overview
 
@@ -78,7 +80,7 @@ agent-runs), its one reader, and how delegate connects (worker-run v1, agent-run
 
 ## Conventions & Patterns
 
-- Python 3.8+, standard library only, no third-party packages; must run on macOS, Linux (in containers too) and Windows.
+- Python 3.12+, standard library only, no third-party packages at runtime; macOS and Linux (in containers too), POSIX only.
 - The page is one HTML file, no build, no CDN.
 - The engine requires the iorlas-delegate plugin (worker-run v1) and has no launcher of its own; never add one back.
   Only the contract is shared: never read delegate's files or call anything but `route.py run` and `status`.

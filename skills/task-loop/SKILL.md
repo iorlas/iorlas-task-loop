@@ -16,8 +16,8 @@ constraint; time is: run independent work in parallel, and when a check is slow,
 
 Read this skill and the profile in full at the start and again after every context compaction.
 
-`tl` below means `python3 ${CLAUDE_SKILL_DIR}/tl.py` (`python` or `py -3` on Windows). It names the session for bd,
-records what the loop does for the dashboard, and runs slots. Python 3.8+, standard library only.
+`tl` below means `python3 ${CLAUDE_SKILL_DIR}/tl.py` (macOS and Linux). It names the session for bd,
+records what the loop does for the dashboard, and runs slots. Python 3.12+, standard library only.
 
 ## The loop profile
 

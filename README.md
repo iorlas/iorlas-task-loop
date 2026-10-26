@@ -12,8 +12,8 @@ claude plugin marketplace add iorlas/iorlas-marketplace
 claude plugin install iorlas-task-loop@iorlas-marketplace
 ```
 
-Then in a repo that uses bd, say "task loop". Requirements: Python 3.8+ (standard library only), git, bd 1.3+,
-Claude Code. macOS and Linux (also inside a container); Windows is expected to work and is untested.
+Then in a repo that uses bd, say "task loop". Requirements: Python 3.12+ (standard library only), git, bd 1.3+,
+Claude Code. macOS and Linux (also inside a container); Windows is not supported.
 
 Required: [iorlas-delegate](https://github.com/iorlas/iorlas-delegate) 0.14+ from the same marketplace
 (`claude plugin install iorlas-delegate@iorlas-marketplace`). The engine runs every AI step through it
@@ -81,7 +81,7 @@ skills/task-loop/dash/index.html dashboard page: the task view (no build, no dep
 skills/task-loop/dash/timeline.py engine logs -> runs, blocks, arrows for the task view
 skills/task-loop/dash/classic.html the three-pane log viewer (/classic)
 hooks/hooks.json                 SessionStart: index session id -> transcript path
-tests/                           python3 -m unittest discover -s tests   (CI: 3 OS x Python 3.8 and 3.12)
+tests/                           python3 -m unittest discover -s tests   (CI: Ubuntu, Python 3.12)
 dev/release.py                   the only way to release: release lock, version from origin, suite, marketplace, install
 docs/design/                     design notes
 docs/contracts/agent-runs-v1.md  the format other tools use to show their workers on the dashboard
