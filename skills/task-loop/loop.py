@@ -28,6 +28,9 @@ from pathlib import Path
 
 import beadlint
 import engine
+import loop_health
+import netgate
+import outcome as oc
 import tl
 from lanes import call as lcall
 from lanes import route as lroute
@@ -38,13 +41,18 @@ DRAINED_POLL = 300     # --wait-drained: how often an empty queue is looked at a
 PAUSE_WAIT_MAX = 3600  # a lane back within this long is waited for; later, the next bead is tried
 SELFTEST_WAIT = 30     # a newer install must pass `tl.py selftest` (a few seconds of work) within this long
 HELP_WAIT = 20         # a newer install must answer `tl.py --help` within this long to be moved to
-PAUSE_RETRY = 900      # a pause with no time the lane frees (login, network), or a bead another session holds:
-                       # try that bead again after this
+PAUSE_RETRY = 900      # a pause with no time the lane frees (login, lane), or a bead another session holds:
+                       # try that bead again after this. A network pause is not here: it is probed every NET_PROBE s (tl-kyy)
+NET_PROBE = netgate.PROBE_EVERY  # while the network is down the loop claims nothing and looks every this many seconds
+BEAT_EVERY = 60        # the loop's state file carries a beat, refreshed at most this often (tl-7y6.2.12)
+LOGS_KEPT = 5          # loop-<pid>.log files kept per repo
 SLOT_FAILS_TO_SET_ASIDE = 2  # instant failures in a row on one slot that set the slot aside (tl-g6a); not the loop's stop count
 QUICK_FAIL_MIN = 1.5           # a failed run shorter than this, in minutes, is an instant failure
 SLOT_FAILURE = re.compile(r"worktree \S+ has uncommitted work|did not give a clean tree|index\.lock|not a git repository|could not commit the leftover", re.I)  # the slot's own git state
 SLOT_ASIDE_MIN = 720           # minutes a slot set aside stays held
-FAILS_TO_STOP = 2      # failures in a row that stop the loop; parks and pauses never count, a landing ends the run
+FAILS_TO_STOP = 2      # runs in a row that gave no verdict (run-task died with no outcome) that stop the loop. A run that gave a Kind
+                       # is the storm detector's (a FAULT_* cools its bead, the same fingerprint on two beads stops every loop);
+                       # parks and pauses never count, a landing ends the run
 PAUSES_TO_REST = 3     # a bead paused this often in one loop run rests for REST while the loop takes others
 REST = 3600
 AREA_POLL = 60         # every ready bead waits for its area: look again this often
@@ -256,6 +264,7 @@ def write_state(repo, **st):
     d, key = paths(repo)["states"]
     f = d / ("%s.%d.json" % (key, st.get("pid") or os.getpid()))
     tmp = f.with_suffix(".tmp")
+    st = dict({"beat": clock(), "log": str(LOG[0] or "")}, **st)  # every write is a sign of life; the log path outlives the session
     tmp.write_text(json.dumps(dict(st, repo=repo, stop_protocol=1, version=tl.HERE.parents[1].name, code_dir=str(tl.HERE))), encoding="utf-8")
     os.replace(tmp, f)
 
@@ -289,8 +298,9 @@ def live_loops(repo, but=None):
         except (OSError, ValueError):
             continue
         if not pid_alive(st.get("pid")):
-            with contextlib.suppress(OSError):
-                f.unlink()
+            with contextlib.suppress(OSError):  # a loop that died with no exit line leaves its state as evidence (a SIGKILL, a reboot)
+                paths(repo)["runs"].mkdir(exist_ok=True)
+                os.replace(f, paths(repo)["runs"] / ("died-%s.json" % st.get("pid")))
         elif st.get("pid") != but:
             out.append(st)
     return sorted(out, key=lambda st: st.get("started") or 0)
@@ -384,15 +394,44 @@ def nap(secs, repo=None, until=0):
     """Sleep, waking early for a stop or the end time."""
     end = clock() + secs
     while clock() < end and not (repo and stop_mode(repo)) and not (until and clock() >= until):
+        if repo:
+            touch_beat(repo)
         time.sleep(min(POLL, max(0.05, end - clock())))
+
+
+def touch_beat(repo):
+    """The loop is alive: stamp `beat` in its state file, at most every BEAT_EVERY s. Liveness itself is the pid; the beat is
+    how long ago a loop last looked, for the absent-loop line."""
+    st = read_state(repo)
+    if st and clock() - float(st.get("beat") or 0) >= BEAT_EVERY:
+        write_state(repo, **dict({k: v for k, v in st.items() if k not in ("repo", "stop_protocol", "version", "code_dir")}, beat=clock()))
 
 
 def margin():
     return random.uniform(*MARGIN)
 
 
+LOG = [None]  # this loop's own log file: what say() prints is kept after the session that started the loop is gone
+
+
 def say(text):
-    engine.say("[%s] loop: %s" % (time.strftime("%H:%M:%S", time.localtime(clock())), text))
+    line = "[%s] loop: %s" % (time.strftime("%H:%M:%S", time.localtime(clock())), text)
+    engine.say(line)
+    if LOG[0]:
+        with contextlib.suppress(OSError), open(LOG[0], "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+
+
+def open_log(repo):
+    """loop-<pid>.log under the repo's runs dir (the newest LOGS_KEPT stay); its path is shown by `tl loop status`."""
+    d = paths(repo)["runs"]
+    d.mkdir(exist_ok=True)
+    LOG[0] = d / ("loop-%d.log" % os.getpid())
+    old = sorted((f for f in d.glob("loop-*.log") if f != LOG[0]), key=lambda f: f.stat().st_mtime)
+    for f in old[:max(0, len(old) - (LOGS_KEPT - 1))]:
+        with contextlib.suppress(OSError):
+            f.unlink()
+    return LOG[0]
 
 
 # ---- one bead -------------------------------------------------------------------------------------------------------
@@ -473,6 +512,7 @@ def run_bead(repo, b, slot, wt, slot_bead, started, code=None):
                     break
                 except subprocess.TimeoutExpired:
                     pass
+                touch_beat(repo)
                 if not stopped and stop_mode(repo) == "now":
                     say("stop now: SIGTERM to %s (its close step still runs)" % b["id"])
                     p.terminate()  # SIGTERM on POSIX, which the engine traps; TerminateProcess on Windows
@@ -778,18 +818,64 @@ def cmd_loop(a):
     p = paths(repo)
     STARTED[0] = st.get("STARTED", st.get("started", clock()))
     started = st.get("started", STARTED[0])
+    open_log(repo)
     with stop_lock(repo):
         write_state(repo, pid=os.getpid(), started=started)
         clean_stop(repo, live_loops(repo))
+    EXIT.clear()
     try:
         return passes(repo, a, started, st)
     finally:
+        write_exit(repo, started)
         with stop_lock(repo):
             with contextlib.suppress(FileNotFoundError):
                 p["state"].unlink()
             clean_stop(repo, live_loops(repo))
         for sig, h in old.items():
             signal.signal(getattr(signal, sig), h)
+
+
+EXIT = {}  # why passes() returned: {"reason": ..., "detail": ...}; empty when it did not (an exception, a signal)
+
+
+def left(reason, detail=""):
+    EXIT.update(reason=reason, detail=detail)
+
+
+def write_exit(repo, started):
+    """A loop that exits writes its reason (drained, until, max_beads, stop_request, signal, storm, crash) to the repo's
+    exits file and its event log; `tl loop status` shows the last one. A loop that cannot (SIGKILL) leaves died-<pid>.json."""
+    reason = EXIT.get("reason") or ("signal" if STOP_NOW.is_set() else "crash")
+    rec = {"v": 1, "pid": os.getpid(), "repo": repo, "t": clock(), "started": started, "reason": reason,
+           "detail": EXIT.get("detail", ""), "log_path": str(LOG[0] or "")}
+    with contextlib.suppress(OSError):
+        d = paths(repo)["runs"]
+        d.mkdir(exist_ok=True)
+        with open(d / "exits.jsonl", "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec) + "\n")
+    with contextlib.suppress(Exception):
+        tl.event("loop_exit", who="loop", repo=repo, pid=os.getpid(), reason=reason, detail=rec["detail"][:200])
+
+
+def repo_id(repo):
+    """The key the engine files a storm record under (engine.repo_id: the origin url, else the worktree)."""
+    return tl.git("remote", "get-url", "origin", cwd=repo) or str(repo)
+
+
+def live_storm(repo):
+    return loop_health.read_storm(loop_health.storm_path(tl.config_dir(), repo_id(repo)), clock())
+
+
+def storm_banner(rec, repo):
+    return ("STOPPED: storm %s on %s; the beads stay open (look at their logs). Record %s expires %d min after it was written; "
+            "delete it to start sooner" % (rec.get("fingerprint"), ",".join(rec.get("beads") or []),
+                                           loop_health.storm_path(tl.config_dir(), repo_id(repo)), oc.KNOBS["storm_window_s"] // 60))
+
+
+def make_probe():
+    """delegate's `route.py net` as a NetProbe, or None when no delegate is installed (the old PAUSE_RETRY rest then)."""
+    route = lroute.find_route()
+    return netgate.RouteProbe(route) if route else None
 
 
 def worktree_name(repo):
@@ -819,16 +905,32 @@ def passes(repo, a, started, st=None):
     fails, ran = list(st.get("fails") or []), int(st.get("ran") or 0)  # kept across a move to a newer install
     later, pauses = dict(st.get("later") or {}), dict(st.get("pauses") or {})
     warned = list(st.get("warned") or [])
+    net, net_first, net_down_t, probe = netgate.NetState(), [], [0.0], None  # tl-kyy: the network pause; probe made at the first one
     while True:
         if stop_mode(repo):
             say("stopped on request after %d bead(s)" % ran)
+            left("stop_request")
             return 0
         if until and clock() >= until:
             say("%s reached after %d bead(s)" % (a.until, ran))
+            left("until")
             return 0
         if a.max_beads and ran >= a.max_beads:
             say("%d bead(s) run (--max-beads)" % ran)
+            left("max_beads")
             return 0
+        storm = live_storm(repo)  # another run (any loop) tripped the storm detector: nothing is claimed until it expires
+        if storm:
+            print(storm_banner(storm, repo))
+            left("storm", storm.get("fingerprint") or "")
+            return 2
+        if net.down:  # tl-kyy: the network is down. No claim; a probe every NET_PROBE s; the same bead first when it is back
+            if net.poll(probe, clock()) is None:
+                nap(max(1.0, net.next_probe - clock()), repo, until)
+                continue
+            down_s = round(clock() - net_down_t[0])
+            say("network is back after %d s: %s first" % (down_s, ", ".join(net_first) or "the queue"))
+            tl.event("net_up", ",".join(net_first), who="loop", repo=repo, down_s=down_s)
         if maybe_move(a, repo, {"fails": fails, "ran": ran, "later": later, "pauses": pauses, "warned": warned, "until": until,
                              "wt": wt, "actor": os.environ.get("TASK_LOOP_ACTOR"), "STARTED": STARTED[0],
                              "started": started}):
@@ -855,6 +957,8 @@ def passes(repo, a, started, st=None):
         for rested, due in read_rests(repo).items():  # another loop's pre-engine failure rests the bead here too
             later[rested] = max(later.get(rested, 0), due)
         cands = [b for b, _ in ranked if later.get(b["id"], 0) <= now]
+        cands.sort(key=lambda b: b["id"] not in net_first)  # a bead the network paused goes first, the same one (stable sort)
+        net_first = [] if cands and cands[0]["id"] not in net_first else net_first
         if cands:
             area_wait[0] = 0.0
         if not cands:
@@ -879,6 +983,7 @@ def passes(repo, a, started, st=None):
             area_wait[0] = 0.0
             if not a.wait_drained:
                 print("DRAINED: no ready bead after %d bead(s)" % ran)
+                left("drained")
                 return 0
             nap(DRAINED_POLL, repo, until)
             continue
@@ -971,19 +1076,41 @@ def passes(repo, a, started, st=None):
             later[bid] = clock() + REST
             say("%s failed before its engine started: it rests an hour for every loop on the repo, the next bead first" % bid)
             continue
+        kind = r.get("kind") or ""
+        if r.get("outcome") == "paused" and kind == oc.Kind.PAUSE_NETWORK.value:
+            # tl-kyy: the machine is offline. It is no run, no failure and no pause of the bead's: no label is touched, no
+            # counter moves (ran, pauses, fails), and the bead is not rested. The loop probes and resumes the same bead.
+            if probe is None:
+                probe = make_probe()
+            if probe is None:
+                later[bid] = clock() + PAUSE_RETRY
+                say("%s paused for the network and no delegate is installed to probe it: the next bead first" % bid)
+                continue
+            if net.mark_down(clock()):
+                net_down_t[0] = clock()
+                say("NETWORK DOWN: %s paused; no bead is claimed until the probe passes (every %d s)" % (bid, NET_PROBE))
+                tl.event("net_down", bid, who="loop", repo=repo, why=(r.get("why") or "")[:200])
+            if bid not in net_first:
+                net_first.append(bid)
+            continue
         ran += 1
         out = r.get("outcome")
+        if r.get("storm"):  # this run's close tripped the storm detector (the engine wrote the record and the banner)
+            print(r["storm"])
+            left("storm", r["storm"][:200])
+            return 2
         if out == "landed":
             fails = []
         elif out == "failed":
-            if not (slots and name and slot_quick.get(name)):  # a slot's own instant failure is the slot's (set aside after two)
-                fails.append(bid)  # an infrastructure failure counts too: one config bug stops the loop after 2 beads
-            if (r.get("why") or "").startswith("failed: infrastructure"):  # the bead is open again: others first, for every loop
-                rest_bead(repo, bid, clock() + REST)
-                later[bid] = clock() + REST
+            if kind.startswith("fault_"):  # a fault of the machine or the engine: the bead is open, labelled, cooled; the storm is the stop
+                rest_bead(repo, bid, clock() + oc.KNOBS["fault_cooldown_s"])
+                later[bid] = clock() + oc.KNOBS["fault_cooldown_s"]
+            elif not (slots and name and slot_quick.get(name)):  # no verdict at all (run-task died); a slot's own instant failure is the slot's
+                fails.append(bid)
             if len(fails) >= FAILS_TO_STOP:
                 print("STOPPED: %d failures in a row (%s); look at their logs (tl loop status) before starting again"
                       % (len(fails), ", ".join(fails)))
+                left("storm", "%d runs gave no outcome" % len(fails))
                 return 2
         elif out == "paused":
             due = float(r.get("retry_after") or 0)
@@ -1000,6 +1127,46 @@ def passes(repo, a, started, st=None):
             else:
                 later[bid] = due + margin() if due else clock() + PAUSE_RETRY
                 say("%s paused (%s): the next bead first" % (bid, (r.get("why") or "")[:120]))
+
+
+def last_exit(repo):
+    """The repo's newest exit line ({} when none)."""
+    try:
+        lines = (paths(repo)["runs"] / "exits.jsonl").read_text(encoding="utf-8").splitlines()
+        return json.loads(lines[-1])
+    except (OSError, ValueError, IndexError):
+        return {}
+
+
+def health(repo, loops):
+    """loop_health for the repo: loops alive, ready beads (one bd call, here only), the newest beat of any loop, live or dead."""
+    beats = [float(st.get("beat") or st.get("started") or 0) for st in loops]
+    if not beats:
+        for f in paths(repo)["runs"].glob("died-*.json"):
+            with contextlib.suppress(OSError, ValueError):
+                st = json.loads(f.read_text(encoding="utf-8"))
+                beats.append(float(st.get("beat") or st.get("started") or 0))
+        beats.append(float(last_exit(repo).get("t") or 0))
+    try:
+        ready = len(queue(repo)[0])
+    except Exception as e:  # a status line never fails on a bd error
+        say("health: ready beads unreadable: %s" % e)
+        ready = 0
+    return loop_health.loop_health(len(loops), ready, max(beats) if beats else 0.0, clock())
+
+
+def health_lines(repo, loops):
+    """Lines under the loop list: how long since the last beat, the last exit reason, and one RED line for an absent loop."""
+    h, out, ex = health(repo, loops), [], last_exit(repo)
+    ago = lambda t: "%d min ago" % ((clock() - t) // 60)  # noqa: E731
+    if h.last_beat:
+        out.append("last beat %s" % ago(h.last_beat))
+    if ex:
+        out.append("last exit: %s%s (%s)" % (ex.get("reason"), ": " + ex["detail"] if ex.get("detail") else "", ago(float(ex.get("t") or 0))))
+    if h.verdict == "absent":
+        out.append("RED: %s has %d ready bead(s) and no loop alive (last beat %s): start one with `tl loop --repo %s`" % (
+            repo, h.ready, ago(h.last_beat) if h.last_beat else "never", repo))
+    return out
 
 
 def cmd_status(a):
@@ -1020,8 +1187,12 @@ def cmd_status(a):
         mode = stop_for(request, st["pid"], st.get("started") or 0)
         if mode:
             print("  stop requested: %s" % mode)
+        if st.get("log"):
+            print("  log %s" % st["log"])
     if not loops:
         print("no loop running on %s" % repo)
+    for line in health_lines(repo, loops):
+        print(line)
     try:
         refused = json.loads((tl.config_dir() / "bad-versions.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
