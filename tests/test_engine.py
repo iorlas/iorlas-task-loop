@@ -2688,6 +2688,20 @@ class EngineTest(unittest.TestCase):
     def no_ruff(self, name):
         return None if name == "ruff" else "/usr/bin/" + name
 
+    @contextmanager
+    def ruff_cannot_start(self):
+        # Tool discovery is mocked separately; a host install or mise shim must not decide this test's exit code.
+        real_sh = engine.Engine.sh
+
+        def run(eng, cmd, *args, **kwargs):
+            if cmd == "ruff check .":
+                return 127, "ruff: command not found"
+            return real_sh(eng, cmd, *args, **kwargs)
+
+        with mock.patch.object(engine.Engine, "sh", autospec=True, side_effect=run) as run_:
+            yield
+        run_.assert_any_call(self.eng, "ruff check .", timeout=600)
+
     def test_an_unchecked_item_for_a_tool_the_repo_does_not_use_is_dropped_with_the_evidence(self):
         with mock.patch.object(engine, "tool_on_path", side_effect=self.no_ruff):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, unchecked=[self.RUFF])]})
@@ -2708,7 +2722,7 @@ class EngineTest(unittest.TestCase):
         sh("git", "add", "-A", cwd=self.wt)
         sh("git", "commit", "-qm", "justfile", cwd=self.wt)
         sh("git", "push", "-q", "origin", "HEAD:main", cwd=self.wt)
-        with mock.patch.object(engine, "tool_on_path", side_effect=self.no_ruff):
+        with mock.patch.object(engine, "tool_on_path", side_effect=self.no_ruff), self.ruff_cannot_start():
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, unchecked=[self.RUFF])],
                                      "verify": [STILL_OPEN]})
         self.assertEqual(rc, 2)
@@ -2718,7 +2732,7 @@ class EngineTest(unittest.TestCase):
     @EXIT_127
     @without_shims
     def test_an_unchecked_item_for_a_tool_on_the_path_still_goes_to_the_verifier(self):
-        with mock.patch.object(engine, "tool_on_path", return_value="/opt/bin/ruff"):
+        with mock.patch.object(engine, "tool_on_path", return_value="/opt/bin/ruff"), self.ruff_cannot_start():
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, unchecked=[self.RUFF])],
                                      "verify": [STILL_OPEN]})
         self.assertEqual(rc, 2)
