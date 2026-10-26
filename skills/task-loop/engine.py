@@ -1223,12 +1223,17 @@ ROLES = {"plan": "planner", "write": "worker", "review": "reviewer", "verify": "
 
 
 def find_route(path=""):
-    """delegate's route.py: `path` when given (engine.delegate), else the newest installed delegate. Whether it speaks
-    worker-run v2 is the handshake's to say (contract)."""
+    """delegate's route.py: `path` when given (engine.delegate), else the delegate `pinned.json` names (None when that
+    dir is gone: a pin never falls back), else the newest installed delegate. Whether it speaks worker-run v2 is the
+    handshake's to say (contract)."""
     if path:
         return path if os.path.exists(path) else None
+    pinned = tl.pinned_dir("delegate")
+    if pinned:
+        route = pinned / "skills" / "delegate" / "route.py"
+        return str(route) if route.is_file() else None
     found = []
-    for p in (Path.home() / ".claude" / "plugins" / "cache").glob("*/iorlas-delegate/*/skills/delegate/route.py"):
+    for p in (tl.claude_dir() / "plugins" / "cache").glob("*/iorlas-delegate/*/skills/delegate/route.py"):
         found.append((tuple(int(x) for x in re.findall(r"\d+", p.parents[2].name)[:3]), str(p)))
     return max(found)[1] if found else None
 

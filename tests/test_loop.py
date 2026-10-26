@@ -1222,6 +1222,75 @@ class LoopSelfUpdate(LoopBase):
         self.assertEqual(self.execs, [])
         self.assertIn("plugin.json is missing", self.out)
 
+    def pin(self, **v):
+        (tl.config_dir() / "pinned.json").write_text(json.dumps(v))
+
+    def test_a_pin_beats_the_newest_install(self):
+        self.beads({"x-1": [rec("landed")]})
+        self.install("0.2.0")
+        self.install("0.3.0")
+        self.pin(**{"task-loop": "0.2.0"})
+        with self.assertRaises(Moved):
+            self.run_loop()
+        self.assertEqual(self.execs[0][1][1], str(self.cache / "0.2.0" / "skills" / "task-loop" / "tl.py"))
+
+    def test_a_pin_to_an_older_install_moves_the_loop_back(self):
+        self.beads({"x-1": [rec("landed")]})
+        self.install("0.0.5")
+        self.install("0.2.0")
+        self.pin(**{"task-loop": "0.0.5"})
+        with self.assertRaises(Moved):
+            self.run_loop()
+        self.assertIn("0.0.5", self.execs[0][1][1])
+
+    def test_a_pin_to_an_install_from_before_pins_execs_it_with_pin_so_it_stays(self):
+        self.beads({"x-1": [rec("landed")]})
+        self.install("0.0.5", loop_py="# an old loop: no pin reader\n")
+        self.install("0.2.0")
+        self.pin(**{"task-loop": "0.0.5"})
+        with self.assertRaises(Moved):
+            self.run_loop()
+        self.assertEqual(self.execs[0][1].count("--pin"), 1)
+
+    def test_a_pin_to_a_pin_aware_install_is_not_given_pin(self):
+        self.beads({"x-1": [rec("landed")]})
+        self.install("0.0.5", loop_py="# reads read_pin\n")
+        self.pin(**{"task-loop": "0.0.5"})
+        with self.assertRaises(Moved):
+            self.run_loop()
+        self.assertNotIn("--pin", self.execs[0][1])
+
+    def test_a_pin_to_the_running_version_stays_though_a_newer_one_is_installed(self):
+        self.beads({"x-1": [rec("landed")], "x-2": [rec("landed")]})
+        self.install("0.2.0")
+        self.pin(**{"task-loop": "0.1.0"})
+        self.assertEqual(self.run_loop(), 0)
+        self.assertEqual(self.execs, [])
+        self.assertEqual([b for b, _ in self.started], ["x-1", "x-2"])
+
+    def test_a_pin_to_a_missing_dir_stays_where_it_is_and_never_falls_back_to_the_newest(self):
+        self.beads({"x-1": [rec("landed")]})
+        self.install("0.2.0")
+        self.pin(**{"task-loop": "0.9.9"})
+        self.assertEqual(self.run_loop(), 0)
+        self.assertEqual(self.execs, [])
+
+    def test_the_loop_never_writes_pinned_json(self):
+        self.beads({"x-1": [rec("landed")], "x-2": [rec("landed")]})
+        self.install("0.2.0")
+        with self.assertRaises(Moved):
+            self.run_loop()
+        self.assertFalse((tl.config_dir() / "pinned.json").exists())
+        self.pin(**{"task-loop": "0.1.0"})
+        before = (tl.config_dir() / "pinned.json").read_bytes()
+        self.beads({"x-3": [rec("landed")]})
+        self.run_loop()
+        self.assertEqual((tl.config_dir() / "pinned.json").read_bytes(), before)
+        src = Path(loop.__file__).read_text(encoding="utf-8")
+        self.assertNotIn("write_pin", src)
+        self.assertNotIn("write_pin", src)
+        self.assertNotIn("pin_file", src)
+
     def test_a_relative_repo_is_resolved_from_the_start_directory_at_the_exec(self):
         self.beads({"x-1": [rec("landed")]})
         self.install("0.2.0")

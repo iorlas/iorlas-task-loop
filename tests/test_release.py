@@ -29,11 +29,29 @@ class Release(unittest.TestCase):
         h = self.home = Path(self.tmp.name)
         shim = h / "bin"
         shim.mkdir()
-        for name in ("claude", "bd"):
-            f = shim / name
-            f.write_text('#!/bin/sh\necho "$@" >> "%s"\n' % (h / (name + ".log")))
+        (shim / "bd").write_text('#!/bin/sh\necho "$@" >> "%s"\n' % (h / "bd.log"))
+        # claude: `plugin update` lays the new version's cache dir out as the real CLI does, unless FAKE_CLAUDE_FAIL is
+        # "always" (the 0.23.0 fetch-pack error, exit 0, nothing installed) or "once" (the first update fails)
+        (shim / "claude").write_text(textwrap.dedent("""\
+            #!/bin/sh
+            echo "$@" >> "%(log)s"
+            if [ "$1 $2" = "plugin update" ]; then
+              if [ "$FAKE_CLAUDE_FAIL" = always ] || { [ "$FAKE_CLAUDE_FAIL" = once ] && [ ! -e "%(flag)s" ]; }; then
+                touch "%(flag)s"; echo "fatal: fetch-pack: invalid index-pack output"; exit 0
+              fi
+              python3 - "%(market)s" "$CLAUDE_CONFIG_DIR" <<'PY'
+            import json, pathlib, sys
+            v = [p["version"] for p in json.load(open(sys.argv[1]))["plugins"] if p["name"] == "iorlas-task-loop"][0]
+            d = pathlib.Path(sys.argv[2], "plugins/cache/iorlas-marketplace/iorlas-task-loop", v, ".claude-plugin")
+            d.mkdir(parents=True, exist_ok=True)
+            (d / "plugin.json").write_text("{}")
+            PY
+            fi
+            """) % {"log": h / "claude.log", "flag": h / "claude.failed", "market": h / "market" / MARKET})
+        for f in shim.iterdir():
             f.chmod(0o755)
-        self.env = dict(os.environ, XDG_CONFIG_HOME=str(h / "cfg"), PATH="%s%s%s" % (shim, os.pathsep, os.environ["PATH"]),
+        self.env = dict(os.environ, XDG_CONFIG_HOME=str(h / "cfg"), CLAUDE_CONFIG_DIR=str(h / "claude"),
+                        PATH="%s%s%s" % (shim, os.pathsep, os.environ["PATH"]),
                         GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
         for k in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
             self.env.pop(k, None)
@@ -507,6 +525,78 @@ class Release(unittest.TestCase):
         self.assertEqual(subjects[0], "0.1.1: mine")
         self.assertTrue(any(s.startswith("a bead") for s in subjects), subjects)
         self.assertEqual(self.git("rev-list", "--merges", "main", cwd=self.origin), "")
+
+
+    def last(self):
+        return json.loads((self.home / "cfg" / "task-loop" / "releases" / "last.json").read_text())
+
+    def tags(self, bare):
+        return self.git("tag", "-l", cwd=bare).split()
+
+    def test_a_release_tags_both_repos_and_pushes_the_tags(self):
+        r = self.release("fix")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.tags(self.origin), ["v0.1.1"])
+        self.assertEqual(self.tags(self.morigin), ["iorlas-task-loop-v0.1.1"])
+        self.assertEqual(self.git("rev-parse", "v0.1.1^{commit}", cwd=self.origin), self.git("rev-parse", "main", cwd=self.origin))
+        self.assertEqual(self.git("rev-parse", "iorlas-task-loop-v0.1.1^{commit}", cwd=self.morigin),
+                         self.git("rev-parse", "main", cwd=self.morigin))
+        self.assertEqual(self.last()["ok"], True)
+        self.assertEqual(self.last()["version"], "0.1.1")
+
+    def test_no_tag_exists_when_the_suite_is_red_or_the_push_never_happened(self):
+        self.write(self.seed / "tests" / "test_red.py", "import unittest\n\n\nclass R(unittest.TestCase):\n"
+                                                        "    def test_red(self):\n        self.fail('boom')\n")
+        self.commit(self.seed, "red")
+        self.git("pull", "-q", "origin", "main", cwd=self.repo)
+        self.assertNotEqual(self.release("fix").returncode, 0)
+        self.assertEqual(self.tags(self.origin), [])
+        self.assertEqual(self.tags(self.repo), [])
+        self.assertEqual(self.tags(self.morigin), [])
+
+    def test_a_forced_install_error_exits_nonzero_after_one_retry_and_reports_to_the_bead(self):
+        self.env["FAKE_CLAUDE_FAIL"] = "always"
+        r = self.release("fix", "--bead", "tl-x1", "--reason", "done")
+        self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.log("claude").count("plugin update iorlas-task-loop@iorlas-marketplace"), 2)
+        self.assertIn("claude plugin update iorlas-task-loop@iorlas-marketplace", r.stderr)  # the failing command
+        self.assertIn("fetch-pack", r.stderr)
+        last_line = r.stderr.strip().splitlines()[-1]
+        self.assertTrue(last_line.startswith("release FAILED: 0.1.1 was pushed but"), last_line)
+        rec = self.last()
+        self.assertEqual((rec["ok"], rec["version"]), (False, "0.1.1"))
+        self.assertIn("comment tl-x1 release FAILED", " ".join(self.log("bd")))
+        self.assertEqual(self.version(self.origin)["version"], "0.1.1")  # pushed all the same: the failure is the install's
+        self.assertEqual(self.tags(self.origin), ["v0.1.1"])
+
+    def test_an_install_that_fails_once_is_retried_and_the_release_succeeds(self):
+        self.env["FAKE_CLAUDE_FAIL"] = "once"
+        r = self.release("fix")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.log("claude").count("plugin update iorlas-task-loop@iorlas-marketplace"), 2)
+        self.assertTrue((self.home / "claude/plugins/cache/iorlas-marketplace/iorlas-task-loop/0.1.1/.claude-plugin/plugin.json").is_file())
+
+    def test_a_red_suite_writes_a_failure_record_with_the_failing_tests_and_comments_on_the_bead(self):
+        self.write(self.seed / "tests" / "test_red.py", "import unittest\n\n\nclass R(unittest.TestCase):\n"
+                                                        "    def test_red(self):\n        self.fail('boom')\n")
+        self.commit(self.seed, "red")
+        self.git("pull", "-q", "origin", "main", cwd=self.repo)
+        r = self.release("fix", "--bead", "tl-x2")
+        self.assertNotEqual(r.returncode, 0)
+        rec = self.last()
+        self.assertFalse(rec["ok"])
+        self.assertEqual(rec["branch"], "main")
+        self.assertTrue(any("test_red" in t for t in rec["tests"]), rec)
+        self.assertTrue(Path(rec["log"]).is_file())
+        self.assertIn("comment tl-x2 release FAILED", " ".join(self.log("bd")))
+        self.assertTrue(r.stderr.strip().splitlines()[-1].startswith("release FAILED: nothing released: "))
+        self.assertNotIn("close tl-x2", " ".join(self.log("bd")))
+        # a later success replaces the failure record
+        self.git("rm", "-q", "tests/test_red.py", cwd=self.repo)
+        self.git("commit", "-qm", "green", cwd=self.repo)
+        self.git("push", "-q", "origin", "HEAD:main", cwd=self.repo)
+        self.assertEqual(self.release("fix").returncode, 0)
+        self.assertTrue(self.last()["ok"])
 
 
 if __name__ == "__main__":

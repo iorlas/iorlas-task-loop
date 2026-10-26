@@ -506,12 +506,17 @@ def version_key(name):
 
 
 def newest_install(skip=()):
-    """(version, dir) of the newest sibling version dir of this plugin root when it is newer than the running one, else
-    None. A root that is no version dir (a dev checkout) never moves."""
+    """(version, dir) of the pinned sibling version dir (pinned.json) when it is not the running one; without a pin the
+    newest sibling version dir of this plugin root when it is newer than the running one, else None. A root that is no version dir (a dev checkout) never moves."""
     root = tl.HERE.parents[1]
     mine = version_key(root.name)
     if mine is None:
         return None
+    pinned = tl.read_pin().get("task-loop")  # the owner's pin (tl pin): that version, newer or older; never a newer one
+    if pinned:
+        d = root.parent / str(pinned)
+        k = version_key(str(pinned))
+        return (d.name, d) if k and k != mine and d.is_dir() and d.name not in skip else None
     best = None
     with contextlib.suppress(OSError):
         for d in root.parent.iterdir():
@@ -541,6 +546,14 @@ def complete(d):
     return None if r.returncode == 0 else "importing tl, loop, engine exited %d" % r.returncode
 
 
+def pin_aware(d):
+    """True when the install in `d` reads pinned.json when it picks its version (loop.py names read_pin)."""
+    try:
+        return "read_pin" in (d / "skills" / "task-loop" / "loop.py").read_text(encoding="utf-8")
+    except OSError:
+        return False
+
+
 def maybe_move(a, repo, state):  # returns True when a stop arrived during the check: the caller looks at it first
     """Between beads: exec the newest complete install with the loop's own argv and `state` (TL_LOOP_STATE). The pid
     stays, so what is keyed by it (slot line, state file, stop file readers) carries over. A broken install is warned
@@ -565,7 +578,10 @@ def maybe_move(a, repo, state):  # returns True when a stop arrived during the c
             os.chdir(START_CWD[0])  # cmd_loop chdir'd into the repo; a relative --repo in argv means the start directory
         sys.stdout.flush()
         sys.stderr.flush()
-        os.execv(sys.executable, [sys.executable, str(d / "skills" / "task-loop" / "tl.py"), *a.argv])
+        argv = list(a.argv)
+        if tl.read_pin().get("task-loop") and "--pin" not in argv and not pin_aware(d):
+            argv.append("--pin")  # an install from before pins would move straight back to the newest one
+        os.execv(sys.executable, [sys.executable, str(d / "skills" / "task-loop" / "tl.py"), *argv])
     except OSError as e:  # execv itself failed: the loop goes on where it is
         os.environ.pop("TL_LOOP_STATE", None)
         with contextlib.suppress(OSError):

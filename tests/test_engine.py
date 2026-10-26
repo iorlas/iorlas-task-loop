@@ -4309,6 +4309,23 @@ class DelegateCall(unittest.TestCase):
             self.assertIsNone(engine.find_route())
             self.assertIsNone(engine.find_route(str(Path(home, "missing.py"))))
 
+    def test_find_route_honors_the_delegate_pin_not_the_newest(self):
+        with tempfile.TemporaryDirectory() as home, mock.patch.object(engine.Path, "home", return_value=Path(home)), \
+                mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(Path(home, "cfg"))}):
+            os.environ.pop("CLAUDE_CONFIG_DIR", None)
+            for v in ("0.29.0", "0.30.2"):
+                p = Path(home, ".claude/plugins/cache/m/iorlas-delegate", v, "skills/delegate")
+                p.mkdir(parents=True)
+                (p / "route.py").write_text("")
+            pin = Path(home, "cfg", "task-loop", "pinned.json")
+            pin.parent.mkdir(parents=True)
+            pin.write_text(json.dumps({"delegate": "0.29.0"}))
+            self.assertIn("0.29.0", engine.find_route())
+            pin.write_text(json.dumps({"task-loop": "0.23.1"}))  # a pin that names no delegate leaves the newest
+            self.assertIn("0.30.2", engine.find_route())
+            pin.write_text(json.dumps({"delegate": "0.28.0"}))  # a pinned dir that is gone: no route, no fallback
+            self.assertIsNone(engine.find_route())
+
 
 class Confirms(unittest.TestCase):
     def test_a_plain_yes_is_a_confirmation_anything_else_is_work(self):
