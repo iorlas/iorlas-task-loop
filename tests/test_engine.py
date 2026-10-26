@@ -1,5 +1,6 @@
 import hashlib
 import io
+import functools
 import json
 import os
 import re
@@ -33,6 +34,17 @@ def sh(*a, cwd):
 POSIX_CHECK = unittest.skipIf(os.name == "nt", "the check is bash (operators, $VAR, rm, test, grep, sleep, /dev/null); "
                                               "on Windows the engine runs checks through cmd.exe")
 ENGINE_BASH = unittest.skipIf(os.name == "nt", "the engine's own conflict-marker check (`! git grep ...`) is bash; cmd.exe cannot parse it")
+def without_shims(fn):
+    """A tool the machine's version manager shims but has not installed (mise: `ruff is not a valid shim`) exits 1, not 127:
+    the test means a tool that is missing, so the shim directories leave PATH."""
+    @functools.wraps(fn)
+    def run(*a, **kw):
+        keep = os.pathsep.join(d for d in os.environ.get("PATH", "").split(os.pathsep) if "shims" not in d)
+        with mock.patch.dict(os.environ, {"PATH": keep}):
+            return fn(*a, **kw)
+    return run
+
+
 EXIT_127 = unittest.skipIf(os.name == "nt", "the engine reads a missing tool as bash's exit 127; cmd.exe reports it as exit 1")
 NO_BASH = unittest.skipIf(os.name == "nt", "lint.command_problems judges nothing on Windows (no bash there, by design)")
 SH_FAKE = unittest.skipIf(os.name == "nt", "the bd fake is a #!/bin/sh script, which Windows cannot execute")
@@ -2690,6 +2702,7 @@ class EngineTest(unittest.TestCase):
         self.assertTrue(any(t["cause"] == "not_a_check" for t in causes))
 
     @EXIT_127
+    @without_shims
     def test_an_unchecked_item_for_a_tool_the_repo_configures_still_goes_to_the_verifier(self):
         (self.wt / "justfile").write_text("lint:\n    ruff check tools\n")
         sh("git", "add", "-A", cwd=self.wt)
@@ -2703,6 +2716,7 @@ class EngineTest(unittest.TestCase):
         self.assertIn("ruff", self.ask()["question"])
 
     @EXIT_127
+    @without_shims
     def test_an_unchecked_item_for_a_tool_on_the_path_still_goes_to_the_verifier(self):
         with mock.patch.object(engine, "tool_on_path", return_value="/opt/bin/ruff"):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, unchecked=[self.RUFF])],
