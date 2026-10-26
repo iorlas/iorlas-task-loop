@@ -1593,7 +1593,7 @@ class Contracts(StagesTest):
         rc, s = self.run_engine({"plan": [PLAN], "write": [out, out, out], "review": [CLEAN]})
         self.assertEqual(rc, 2)
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "worker", "worker"])
-        self.assertTrue(any(c[:1] == ("update",) and any("paused: no lane for write" in x for x in c) for c in self.bd_calls))
+        self.assertTrue(any(c[:3] == ("comments", "add", "t-1") and c[3].startswith("Engine paused:") and "paused: no lane for write" in c[3] for c in self.bd_calls))
 
     def test_a_delegate_that_keeps_crashing_pauses_the_bead_and_asks_nobody(self):
         crash = te.ans("failed", "crash", "owner", say="UnicodeDecodeError")
@@ -1761,8 +1761,9 @@ class ClaimPerBead(StagesTest):
         late = te.ans("stop", "no_lane", "retry", retry_after=engine.time.time() + 3600, family="openai", lane="OPENAI", say="no lane")
         rc, s = self.run_engine({"plan": [late]})
         self.assertTrue(self.eng.why.startswith("paused:"), self.eng.why)
-        updates = [c for c in self.bd_calls if c[:2] == ("update", "t-1") and "--append-notes" in c]
+        updates = [c for c in self.bd_calls if c[:2] == ("update", "t-1") and "--append-notes" not in c]
         self.assertTrue(updates and updates[-1][2:6] == ("--status", "open", "--assignee", ""), updates)
+        self.assertTrue([c for c in self.bd_calls if c[:3] == ("comments", "add", "t-1") and c[3].startswith("Engine paused:")], self.bd_calls)
 
 
 class FreshAside(StagesTest):
