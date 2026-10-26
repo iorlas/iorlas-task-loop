@@ -1,12 +1,41 @@
 name: test
 on: [push, pull_request]
+
+# A newer push to the same ref makes the older run pointless.
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.m.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Every test belongs to exactly one shard of each size used below.
+      - run: |
+          python tests/shard.py --check 3
+          python tests/shard.py --check 4
+          python tests/shard.py --check 6
+      - id: m
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          cells = [("ubuntu-latest", "3.8", 3), ("ubuntu-latest", "3.12", 3), ("macos-latest", "3.12", 4), ("windows-latest", "3.12", 6)]
+          inc = [{"os": o, "python": p, "shard": i, "shards": n} for o, p, n in cells for i in range(1, n + 1)]
+          print("matrix=" + json.dumps({"include": inc}))
+          PY
+
   unit:
+    needs: plan
     strategy:
       fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        python: ["3.8", "3.12"]
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    name: unit (${{ matrix.os }}, ${{ matrix.python }}, ${{ matrix.shard }}/${{ matrix.shards }})
     runs-on: ${{ matrix.os }}
     steps:
       # Fixtures are compared byte for byte; Windows git would turn their LF into CRLF on checkout.
@@ -28,4 +57,4 @@ jobs:
           takeown /f C:\Windows\System32\bash.exe
           icacls C:\Windows\System32\bash.exe /grant "$($env:USERNAME):F"
           Rename-Item C:\Windows\System32\bash.exe bash.exe.off
-      - run: python -m unittest discover -s tests -v
+      - run: python tests/shard.py run ${{ matrix.shard }} ${{ matrix.shards }}
