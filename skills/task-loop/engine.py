@@ -643,6 +643,22 @@ class Engine:
         self.evidence_dir.mkdir(exist_ok=True)
         self.route = lroute.find_route(cfg.get("delegate", ""))
 
+    def delegate_route(self):
+        """The delegate route.py for the next call (tl-6ax): resolved again each call (a configured path, then the pin, then the
+        newest installed). A different path is taken only when it speaks worker-run v2, else the one in use stays (noted)."""
+        new = lroute.find_route(self.cfg.get("delegate", ""))
+        if new and new != self.route:
+            if not self.route:
+                self.route = new
+            elif (handshake := lroute.contract(new)):
+                self.log("note", "delegate switched: %s -> %s" % (self.route, new))
+                self.route, self.contract = new, handshake
+            else:
+                self.log("note", "delegate %s does not speak worker-run v2: keeping %s" % (new, self.route))
+        if self.route:
+            self.log("note", "delegate call via %s" % self.route, delegate=self.route)
+        return self.route
+
     # -- records
     def log(self, kind, text, **kw):
         rec = {"t": time.time(), "kind": kind, "text": text}
@@ -747,7 +763,7 @@ class Engine:
         try:
             prompt = self.reflect_prompt(outcome, why)
             # a short wait: the close step ignores a stop while this runs (route.py adds 120 s to the limit)
-            r, j = lcall.call_delegate(self.route, "reviewer", prompt, strict(SCHEMAS["reflect"]), self.wt, None, 45, self.err_path, None,
+            r, j = lcall.call_delegate(self.delegate_route(), "reviewer", prompt, strict(SCHEMAS["reflect"]), self.wt, None, 45, self.err_path, None,
                                  self.session, self.bead, "%s · reflect" % self.bead)
             saved = {k: v for k, v in self.stats.items() if k.startswith("tokens_")}
             self.trace_call("reflect", "reviewer", 1, r, j)
@@ -881,7 +897,7 @@ class Engine:
         writer = writer_family if node in ("review", "verify", "look") else None
         resume = resume_ref or (self.writer.get("delegate") if resume_key else None)
         if resume and resume_key and self.writer_fallback:  # tl-bxk.10.5: a fallback writer would keep the bead off Codex for good
-            lane = lroute.lane_status(self.route or "").get(self.fallback_lane) if self.fallback_lane else None
+            lane = lroute.lane_status(self.delegate_route() or "").get(self.fallback_lane) if self.fallback_lane else None
             if self.fallback_lane and not isinstance(lane, dict):  # that lane is not configured here: no fallback
                 self.writer_fallback, self.fallback_lane = False, ""
             elif lane is None or lane.get("out") is False:  # back again, or no lane known to wait for
@@ -909,7 +925,7 @@ class Engine:
             if node == "write":  # a write follows its worker's activity; the other nodes keep the wall-clock limit
                 idle = lcall.Idle(*(float(self.cfg[k]) * 60 for k in ("write_idle_warn_min", "write_idle_stop_min", "write_cap_min")),
                             on_warn=self.warn)
-            r, j = lcall.call_delegate(self.route, role, attempt_prompt, strict(schema_for(node, visual)), cwd or self.wt, resume, timeout,
+            r, j = lcall.call_delegate(self.delegate_route(), role, attempt_prompt, strict(schema_for(node, visual)), cwd or self.wt, resume, timeout,
                                  self.err_path, writer, self.session, self.bead, "%s · %s: %s" % (self.bead, node, title),
                                  access=flag, **({"idle": idle} if idle else {}))
             if j is not None and j.get("v") != 2:
