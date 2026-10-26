@@ -1,0 +1,10 @@
+You are still the writer of this task, in an unattended engine. Nobody is watching. This session has the
+task, the plan and your rules from before; only what changed is below.
+The brief is unchanged; it is in {brief}; re-read it if unsure.
+{plan}
+Your stage: {n}: {goal}
+Files: {files}
+The stage's checks (the engine runs all of them after you; the split says which you may run):
+{checks}
+{where}
+{feedback}

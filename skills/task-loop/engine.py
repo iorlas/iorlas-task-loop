@@ -239,9 +239,9 @@ def bead_snapshot(bead, comments):
     comments, as the planner saw them."""
     deps = sorted("%s:%s" % (d.get("id"), d.get("dependency_type") or d.get("type") or "")
                   for d in bead.get("dependencies") or [] if isinstance(d, dict) and d.get("id"))
-    return {"fields": {k: (bead.get(k) or "").strip() for k in FIELDS},
+    return {"fields": {k: people_lines(bead.get(k)) for k in FIELDS},
             "issue_type": (bead.get("issue_type") or "").strip(), "deps": deps,
-            "comments": [(c.get("text") or "").strip() for c in comments if not (c.get("text") or "").startswith(ENGINE_NOTES)]}
+            "comments": [(c.get("text") or "").strip() for c in comments if not engine_written(c.get("text"))]}
 
 
 DIFF_CAP = 4096
@@ -252,7 +252,7 @@ def bead_diff(old, new, answer="", comments=True):
     dependencies, new comments, the owner's answer). '' when nothing."""
     out = []
     for k in FIELDS:
-        a, b = old["fields"].get(k, ""), new["fields"].get(k, "")
+        a, b = people_lines(old["fields"].get(k, "")), people_lines(new["fields"].get(k, ""))  # a checkpoint older than this rule holds engine lines
         if a != b:
             d = "\n".join(difflib.unified_diff(a.splitlines(), b.splitlines(), "was", "now", n=1, lineterm=""))
             out.append("- %s changed:\n%s" % (k, d if len(d) <= DIFF_CAP else d[:DIFF_CAP] + "\n... (diff cut at 4 KB)"))
@@ -279,7 +279,7 @@ def linked_text(bead_id, bead, comments, show, comments_of, cap=10, each=400):
     at most `each` chars, at most `cap` beads. tl-bxk.10.10"""
     pre = bead_id.split("-")[0]
     text = " ".join(str(bead.get(k) or "") for k in FIELDS) + " " + " ".join(
-        c.get("text") or "" for c in comments if not (c.get("text") or "").startswith(ENGINE_NOTES))
+        c.get("text") or "" for c in comments if not engine_written(c.get("text")))
     deps = {d.get("id"): d for d in bead.get("dependencies") or [] if isinstance(d, dict) and d.get("id")}
     ids = list(deps) + [bead.get("parent")]
     ids += re.findall(r"(?<![\w.-])(%s-[A-Za-z0-9]+(?:\.[0-9]+)*)" % re.escape(pre), text)
@@ -293,7 +293,7 @@ def linked_text(bead_id, bead, comments, show, comments_of, cap=10, each=400):
         if not d.get("id"):
             continue
         # no field tells an owner from another author: a comment is anyone's but the engine's
-        notes = [c for c in comments_of(i) if not (c.get("text") or "").startswith(ENGINE_NOTES)]
+        notes = [c for c in comments_of(i) if not engine_written(c.get("text"))]
         line = "- %s [%s] %s" % (i, d.get("status") or "?", " ".join(str(d.get("title") or "").split()))
         if (d.get("close_reason") or "").strip():
             line += "\n  closed: " + " ".join(d["close_reason"].split())
@@ -2742,7 +2742,7 @@ class Engine:
         start = max([k + 1 for k, c in enumerate(comments)
                      if (c.get("text") or "").startswith("Ask (engine) %s " % a["id"])] or [0])
         return "\n".join((c.get("text") or "").strip() for c in comments[start:]
-                         if not (c.get("text") or "").startswith(ENGINE_NOTES)).strip()
+                         if not engine_written(c.get("text"))).strip()
 
     def raise_ask(self, kind, why, question):
         try:
@@ -3153,14 +3153,12 @@ class Engine:
             self.stats["reviews"] += 1
             open_items = list({u["what"]: u for u in ([] if fix else self.unchecked) + wrote_unchecked}.values())
             kinds = self.new_by_kind()
-            review, _ = self.ai("review", name, REVIEW_PROMPT.format(
+            review, _ = self.ai("review", name, review_prompt(
                 brief=self.brief_text(), plan=self.plan_text(), n=i + 1, goal=st["goal"],
                 work=self.stage_work(kinds["unexplained"], kinds["ignored"]), checks=compact(checks), summary=w["summary"], evidence=self.evidence_dir,
                 gate=(" (`%s`)" % self.cfg["gate"]) if self.cfg["gate"] else "",
                 added=self.stats["tests_added"], removed=self.stats["tests_removed"],
-                scope=(state["scope"] if fix else
-                       "the stage goal and every requirement and acceptance criterion of the task" if last else
-                       "the stage goal (later stages cover the rest of the task)")) +
+                fix=fix, last=last, fix_scope=state["scope"] if fix else "") +
                 ("\n" + self.where("review") if self.where("review") else "") + self.cases_text() +
                 ("The engine ran every case above with the checks, so a case is never an unchecked item; a case whose "
                  "check does not prove its criterion is a finding.\n" if last and self.case_checks() else "") +
@@ -4473,12 +4471,14 @@ class Engine:
         elif outcome == "done":
             rc = tl.cmd_close(Args(id=self.bead, reason="done with nothing to land: " + (summary or stats)))
         elif why.startswith("failed: infrastructure"):  # the engine's or the config's fault: the bead is as it was
-            r = tl.bd("update", self.bead, "--status", "open", "--assignee", "", "--append-notes", "Engine failed: " + why[:400])
+            r = tl.bd("update", self.bead, "--status", "open", "--assignee", "")  # the reason is a comment, never Notes (tl-7y6.6.2)
             rc = getattr(r, "returncode", 0)
+            self.comment("Engine failed: " + why[:400])
         elif why.startswith("paused:"):  # the machine's problem (login, network, lanes), not the bead's: keep it open
             self.warn(why)
-            r = tl.bd("update", self.bead, "--status", "open", "--assignee", "", "--append-notes", "Engine paused: " + why[:400])  # (tl-kwo: it lets go)
+            r = tl.bd("update", self.bead, "--status", "open", "--assignee", "")  # (tl-kwo: it lets go)
             rc = getattr(r, "returncode", 0)
+            self.comment("Engine paused: " + why[:400])  # a comment, never Notes: the delegate's advice in it is no part of the bead (tl-7y6.6.2)
         else:
             text = why + (("\n\nQuestion: " + question) if question else "")
             rc = tl.cmd_block(Args(id=self.bead, why=text))
@@ -4575,7 +4575,21 @@ Answer:
 - change: up to 3 lines, what to change, naming the cause class.
 Cite only what the data above shows; do not guess a cause it does not support."""
 
-ENGINE_NOTES = ("Plan (engine)", "Review (engine", "Reflect (engine)", "Blocked:", "Ask (engine)", "Evidence (engine)", "Parked (engine)")
+# tl-7y6.6.2: what the engine writes into a bead (comments, and lines of Notes). It is never the owner's: not in the brief, not in the
+# brief hash, not in the snapshot an amend diffs against, not in an answer. Every prefix an engine comment starts with is listed.
+ENGINE_NOTES = ("Plan (engine", "Review (engine", "Reflect (engine", "Blocked:", "Ask (engine", "Evidence (engine", "Parked (engine",
+                "Lane (engine", "Verify (engine", "Resume (engine", "Look (engine", "Land (engine", "Follow-up (engine",
+                "Engine paused:", "Engine failed:", "Parked over budget", "Reflect:", "Last engine run")
+
+
+def engine_written(text):
+    """True when a comment (or a line of Notes) is the engine's own record."""
+    return (text or "").lstrip().startswith(ENGINE_NOTES)
+
+
+def people_lines(text):
+    """A text field without the lines the engine appended to it (Notes: 'Engine paused: ...')."""
+    return "\n".join(l for l in (text or "").splitlines() if not engine_written(l)).strip()
 
 
 VERIFY_GAPS = "verify: before land, "  # the ask for what the workers could not check; its answer may ask for work
@@ -4832,9 +4846,9 @@ ENGINE_LABELS = ("needs-owner-check",)
 
 
 def brief_digest(bead, comments, owner_only=False, ignore=()):
-    """Markdown brief: title, the bead's text fields whole, related beads by title, people's comments whole, and one
-    line on how the last engine run ended. owner_only leaves out what the engine writes itself (that line, its
-    labels): the checkpoint compares that text, so an engine run never looks like the owner's edit."""
+    """Markdown brief: title, the bead's text fields whole, related beads by title, people's comments whole, and the bead's
+    labels. Nothing the engine wrote (comments, Notes lines) is in it (tl-7y6.6.2). owner_only also leaves out the engine's labels:
+    the checkpoint compares that text, so an engine run never looks like the owner's edit."""
     out = ["# %s: %s" % (bead.get("id", ""), bead.get("title", ""))]
     labels = [x for x in bead.get("labels") or [] if not (owner_only and (x in ENGINE_LABELS or x in ignore))]
     meta = [bead.get("issue_type"), "P%s" % bead["priority"] if bead.get("priority") is not None else "",
@@ -4843,19 +4857,16 @@ def brief_digest(bead, comments, owner_only=False, ignore=()):
         out.append(" · ".join(m for m in meta if m))
     for key, head in (("description", "Description"), ("acceptance_criteria", "Acceptance criteria"),
                       ("design", "Design"), ("notes", "Notes")):
-        if (bead.get(key) or "").strip():
-            out += ["", "## " + head, bead[key].strip()]
+        if people_lines(bead.get(key)):
+            out += ["", "## " + head, people_lines(bead.get(key))]
     rel = [d for d in (bead.get("dependencies") or []) if isinstance(d, dict)]
     if rel:
         out += ["", "## Related beads (titles only)"] + ["- %s %s [%s]" % (d.get("id"), d.get("title"),
                                                                            d.get("status") or "?") for d in rel]
-    people = [c for c in comments if not (c.get("text") or "").startswith(ENGINE_NOTES)]
+    people = [c for c in comments if not engine_written(c.get("text"))]
     if people:
         out += ["", "## Comments"] + ["- %s: %s" % (c.get("author") or "?", (c.get("text") or "").strip())
                                       for c in people]
-    last = [c for c in comments if (c.get("text") or "").startswith(("Reflect (engine)", "Blocked:"))]
-    if last and not owner_only:
-        out += ["", "## Last engine run", last[-1]["text"].strip()[:400]]
     return "\n".join(out) + "\n"
 
 
@@ -5394,7 +5405,7 @@ REVIEW_PROMPT = """You review one stage of a task, from another model family tha
 {plan}
 </plan>
 Stage {n}: {goal}
-{work}
+{fix_line}{work}
 The engine ran the checks outside any sandbox, one at a time, and they all pass; these results are facts:
 {checks}
 The engine runs the gate{gate} once, at land, on the tree rebased onto the latest base, before anything merges; a red
@@ -5412,6 +5423,15 @@ Return:
 - question: empty, unless only the owner can decide something about the task itself (then explain it for a phone:
   what you found, the options, your recommendation).
 - leftovers: real follow-up work you noticed outside this task, else empty.""" + "\n" + OPTIONS_RULE + "\n" + DECIDED_RULE
+
+def review_prompt(fix, last, fix_scope, **fields):
+    """REVIEW_PROMPT for one stage. The scope of the `unmet:` line is a fixed phrase (the template's line never takes text from
+    the stage); in a fix round the fix's own scope is a line of its own (tl-7y6.6.11: it was spliced into the sentence)."""
+    scope = ("the stage goal" if fix else
+             "the stage goal and every requirement and acceptance criterion of the task" if last else
+             "the stage goal (later stages cover the rest of the task)")
+    return REVIEW_PROMPT.format(scope=scope, fix_line=("Scope of this fix round: %s\n" % fix_scope) if fix else "", **fields)
+
 
 NEW_FILES_TEXT = ("\nUnexplained new files: untracked, and no stage lists them nor the writer names them. They are NOT in the "
                   "commit unless you accept them, and they are moved out of the tree before the land gate. Decide EVERY one: "
@@ -5511,7 +5531,7 @@ def reclaim(bead_id, repo):
         if not blocks:
             return False, "blocked by a person, not by the engine"
         after = [c for c in cs if (c.get("created_at") or "") > (blocks[-1].get("created_at") or "")
-                 and not (c.get("text") or "").startswith(ENGINE_NOTES)]
+                 and not engine_written(c.get("text"))]
         try:
             ask = json.loads((tl.config_dir() / "asks" / ("%s.json" % bead_id)).read_text())
         except (OSError, ValueError):

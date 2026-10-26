@@ -1,6 +1,8 @@
+import hashlib
 import io
 import json
 import os
+import re
 import shlex
 import signal
 import subprocess
@@ -3130,6 +3132,73 @@ class EngineTest(unittest.TestCase):
         self.assertNotIn("an edit with no ask", self.eng.log_path.read_text())
         self.assertIn("nothing the plan reads", self.eng.log_path.read_text())
 
+    # -- tl-7y6.6.2: what the engine writes into a bead is not an edit
+    def engine_noise(self, name):
+        """Notes lines and comments the engine wrote, from the stored brief of a run that was cap-parked (tests/fixtures/briefs)."""
+        notes, comments = stored_brief(name)
+        return [dict(author=a, text=t) for a, t in comments if engine.engine_written(t)] + [
+            dict(author="tl-x", text="Engine paused: paused: no lane for write until 10:00 (no_lane: Hold the task)")], notes
+
+    def only_engine_written(self, name):
+        noise, _ = self.engine_noise(name)
+        self.assertTrue(len(noise) > 1, "the fixture has engine comments")
+        self.stopped_run()
+        with mock.patch.object(tl, "show", return_value=dict(BEAD, notes="Engine paused: paused: no lane for write")), \
+                mock.patch.object(tl, "comments", return_value=noise):
+            rc, s = self.run_engine({"write": [WRITE, WRITE], "review": [CLEAN, CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        log = self.eng.log_path.read_text()
+        self.assertNotIn("planner", [c[0] for c in s.calls])
+        self.assertNotIn("an edit with no ask", log)
+        self.assertNotIn("amending its plan", log)
+        self.assertEqual(self.eng.planned, 1)  # the first plan only: nothing charged
+        self.assertIsNone(self.ask())
+
+    def test_o67g_engine_comments_and_notes_cost_no_replan(self):
+        self.only_engine_written(CAP_PARKS[0])
+
+    def test_yxbb2_engine_comments_and_notes_cost_no_replan(self):
+        self.only_engine_written(CAP_PARKS[1])
+
+    def test_d5f40_engine_comments_and_notes_cost_no_replan(self):
+        self.only_engine_written(CAP_PARKS[2])
+
+    def test_the_brief_hash_ignores_engine_comments_and_notes_lines(self):
+        h = lambda bead, cs: hashlib.sha1(engine.brief_digest(bead, cs, owner_only=True).encode()).hexdigest()
+        people = [{"author": "denis", "text": "Keep it small."}]
+        base = h(BEAD, people)
+        for name in CAP_PARKS:
+            noise, _ = self.engine_noise(name)
+            self.assertEqual(h(dict(BEAD, notes="Engine paused: x\nBlocked: y"), people + noise), base)
+        self.assertNotEqual(h(BEAD, people + [{"author": "denis", "text": "A real remark."}]), base)
+
+    def test_answer_text_and_reclaim_skip_engine_comments(self):
+        a, eng = {"id": "t-1-1", "answer": ""}, engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        cs = [{"author": "tl-x", "text": "Ask (engine) t-1-1 stuck: why"}, {"author": "tl-x", "text": "Lane (engine): the review ran on the writer's family"},
+              {"author": "tl-x", "text": "Resume (engine): the earlier work conflicts"}, {"author": "tl-x", "text": "Verify (engine): self-verified"}]
+        with mock.patch.object(tl, "comments", return_value=cs):
+            self.assertEqual(eng.answer_text(a), "")
+        with mock.patch.object(tl, "comments", return_value=cs + [{"author": "denis", "text": "Use the new format."}]):
+            self.assertEqual(eng.answer_text(a), "Use the new format.")
+
+    def test_a_lane_comment_after_a_block_does_not_hide_the_reopen(self):
+        blocked = dict(BEAD, status="blocked", assignee="")
+        cs = [{"author": "tl-x", "text": "Blocked: stuck", "created_at": "2026-10-25T10:00:00Z"},
+              {"author": "tl-x", "text": "Lane (engine): the look step ran on the writer's own family", "created_at": "2026-10-25T10:01:00Z"}]
+        calls = []
+        with mock.patch.object(tl, "show", return_value=blocked), mock.patch.object(tl, "comments", return_value=cs), \
+                mock.patch.object(tl, "bd", side_effect=lambda *a, **k: calls.append(a) or mock.Mock(returncode=0)):
+            ok, why = engine.reclaim("t-1", str(self.wt))
+        self.assertTrue(ok, why)
+
+    def test_a_pause_is_a_comment_never_a_line_of_notes(self):
+        calls = []
+        late = ans("stop", "no_lane", "retry", retry_after=engine.time.time() + 3600, family="openai", lane="OPENAI", say="no lane. Hold the task; advice")
+        with mock.patch.object(tl, "bd", side_effect=lambda *a, **k: calls.append(a) or mock.Mock(returncode=0)):
+            self.run_engine({"plan": [late]})
+        self.assertFalse([c for c in calls if "--append-notes" in c], calls)
+        self.assertTrue([c for c in calls if c[:3] == ("comments", "add", "t-1") and c[3].startswith("Engine paused:")], calls)
+
     def test_an_owner_answer_to_an_ask_amends_the_plan_with_the_answer(self):
         ask = dict(WRITE, question="Which format?")
         rc, _ = self.run_engine({"plan": [PLAN], "write": [ask]})
@@ -4329,6 +4398,51 @@ class DelegateCall(unittest.TestCase):
             self.assertIn("0.30.2", lroute.find_route())
             pin.write_text(json.dumps({"delegate": "0.28.0"}))  # a pinned dir that is gone: no route, no fallback
             self.assertIsNone(lroute.find_route())
+
+
+BRIEFS = ROOT / "tests" / "fixtures" / "briefs"
+CAP_PARKS = ("lifesim-o67g-20261025-005827", "lifesim-yxbb.2-20261024-014147", "lifesim-d5f.40-20261025-071741")  # the runs of o67g 10-25 00:58, yxbb.2 10-24 01:41, d5f.40 10-25 07:18
+
+
+def stored_brief(name):
+    """(notes, [(author, text)]) read back out of a stored brief.md: the sections the engine's own records leaked into."""
+    text = (BRIEFS / (name + ".md")).read_text(encoding="utf-8")
+    parts = re.split(r"(?m)^## ", text)
+    sec = {p.split("\n", 1)[0]: (p.split("\n", 1) + [""])[1] for p in parts[1:]}
+    comments = []
+    for line in (sec.get("Comments") or "").splitlines():
+        m = re.match(r"- ([^:\n]+): (.*)$", line)
+        if m:
+            comments.append((m.group(1), m.group(2)))
+        elif comments and line.strip():
+            comments[-1] = (comments[-1][0], comments[-1][1] + "\n" + line)
+    return sec.get("Notes", "").strip(), comments
+
+
+ENGINE_LINE = re.compile(r"^(?:- [^:\n]*: )?(?:Lane|Verify|Resume|Look|Land|Parked|Plan|Review|Reflect|Blocked|Ask|Evidence|Follow-up) ?(?:\(engine|:|over budget)"
+                         r"|^(?:- [^:\n]*: )?Engine (?:paused|failed):|^Last engine run|^## Last engine run")
+
+
+class StoredBriefs(unittest.TestCase):
+    """tl-7y6.6.2: a sample of the stored run briefs (tests/fixtures/briefs, from ~/.config/task-loop/runs/*/brief.md).
+    The briefs were written before the fix and 252 of the 405 carried engine lines; each is read back into notes and comments and
+    rebuilt through brief_digest, which must leave none of them in."""
+
+    def test_the_sample_has_engine_lines_to_remove(self):
+        names = sorted(p.stem for p in BRIEFS.glob("*.md"))
+        self.assertGreaterEqual(len(names), 30)
+        self.assertGreater(sum(any(ENGINE_LINE.match(l) for l in (BRIEFS / (n + ".md")).read_text().splitlines()) for n in names), 20)
+        self.assertLessEqual(sum(p.stat().st_size for p in BRIEFS.glob("*.md")), 200 * 1024)
+
+    def test_no_rebuilt_brief_contains_an_engine_prefixed_line_and_none_is_larger(self):
+        for p in sorted(BRIEFS.glob("*.md")):
+            notes, comments = stored_brief(p.stem)
+            bead = {"id": "x", "title": "t", "notes": notes}
+            out = engine.brief_digest(bead, [{"author": a, "text": t} for a, t in comments])
+            bad = [l for l in out.splitlines() if ENGINE_LINE.match(l)]
+            self.assertEqual(bad, [], p.name)
+            old = p.read_text(encoding="utf-8")
+            self.assertLessEqual(len(out), len(old) + 200, p.name)  # the sections rebuilt are never larger than as stored
 
 
 class Confirms(unittest.TestCase):

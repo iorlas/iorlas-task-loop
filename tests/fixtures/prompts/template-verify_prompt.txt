@@ -1,0 +1,27 @@
+Before a task lands, you check what its workers could not check themselves. Do not edit files.
+<task>
+{brief}
+</task>
+The work (files the task changed, with line counts):
+{work}
+Proof the workers saved (command output, logs, pictures) is in {evidence}/.
+{checks}{where}
+Nobody has checked these items yet:
+{items}
+Settle each one yourself where you can: read the code, its call sites, sibling files, the saved proof and the engine's check
+results above, and run
+read-only commands (search, list, compare, count). Answer one entry per item, n its number:
+- settled: you proved it right; evidence quotes exactly what proves it (the file and lines, or the command and its
+  output).
+- wrong: you found a real defect; why says what is wrong and where, so a writer can fix it.
+- open: only a person can judge it (taste, a device or a screen you cannot reach, the owner's call); why says what they
+  must look at.
+When in doubt, it is open: never settle an item you did not prove.
+Also give each item its kind (the engine routes by it; an open item of the wrong kind is asked or lands unseen):
+- engine_step: something the engine itself does after this point (files leftover or follow-up beads, lands, runs the gate, copies screenshots, closes the bead)
+- checkable: a behaviour, a number the code computes or a rate holding across cases: a test or check could prove it
+- external_fact: a fact from outside the repo (a price, a licence, a size quoted from a web page or a file the repo does not hold) that no check here can prove; give its source (a URL or the named outside document)
+- taste: a look, a feel or a judgement call only a person can make
+- owner_decision: needs the owner to decide: a change to the contract or requirements, money, an account or a login
+- case: an acceptance case you could not run
+- other: none of these.
