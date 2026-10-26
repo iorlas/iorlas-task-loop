@@ -15,6 +15,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 import loop  # noqa: E402
+import netgate  # noqa: E402
 import tl  # noqa: E402
 
 
@@ -314,7 +315,7 @@ class FakeChild:
         if r is not None:
             Path(self.out).write_text(json.dumps(dict(r, bead=self.bead)))
             b = self.test.bd.beads[self.bead]
-            b["status"] = "open" if "infrastructure" in r.get("why", "") else self.AFTER.get(r["outcome"], b["status"])
+            b["status"] = "open" if r.get("kind", "").startswith(("fault_", "pause_")) else self.AFTER.get(r["outcome"], b["status"])
             if b["status"] != "in_progress":
                 b["assignee"] = b["assignee"] if b["status"] == "blocked" else ""
         self.returncode = 0 if r and r["outcome"] == "landed" else 2
@@ -505,17 +506,40 @@ class Loop(LoopBase):
         self.assertEqual([b for b, _ in self.started], ["x-1", "x-2", "x-3"])
         self.assertIn("2 failures in a row", self.out)
 
-    def test_two_infrastructure_failures_in_a_row_stop_the_loop_and_leave_the_beads_open(self):
-        # tl-bxk.10.31: Codex rejected the schema for every bead; the loop drained 53 of them. Two stop it.
-        infra = lambda: rec("failed", why="failed: infrastructure: bad_request: codex rejected the request: Invalid schema ...")
-        self.beads({"x-1": [infra()], "x-2": [infra()], "x-3": [rec("landed")]})
+    def test_faults_with_a_kind_cool_their_bead_and_do_not_count_toward_a_stop(self):
+        # tl-7y6.2.3: a FAULT_* is the storm detector's, not a failure count. Two different faults: both beads rest, the third runs.
+        fault = lambda fp: rec("failed", why="failed: infrastructure: x", kind="fault_infra", fingerprint=fp)
+        self.beads({"x-1": [fault("FAULT_INFRA a")], "x-2": [fault("FAULT_INFRA b")], "x-3": [rec("landed")]})
+        self.assertEqual(self.run_loop("--max-beads", "3"), 0)
+        self.assertEqual([b for b, _ in self.started], ["x-1", "x-2", "x-3"])
+        self.assertEqual([self.bd.beads[b]["status"] for b in ("x-1", "x-2")], ["open", "open"])
+        rests = loop.read_rests(str(self.repo))
+        self.assertEqual(sorted(rests), ["x-1", "x-2"])
+        self.assertTrue(all(abs(t - (self.clock.t0 + 1800)) < 600 for t in rests.values()))  # fault_cooldown_s, not an hour
+
+    def test_a_run_that_tripped_the_storm_stops_the_loop_with_its_banner_and_leaves_the_beads_open(self):
+        # tl-bxk.10.31: Codex rejected the schema for every bead; the loop drained 53 of them. The second bead trips the storm.
+        banner = "STOPPED: storm FAULT_BAD_REQUEST bad_request on x-1,x-2 (the beads stay open; look at their logs)"
+        bad = lambda **kw: rec("failed", why="failed: infrastructure: bad_request", kind="fault_bad_request", fingerprint="FAULT_BAD_REQUEST bad_request", **kw)
+        self.beads({"x-1": [bad()], "x-2": [bad(storm=banner)], "x-3": [rec("landed")]})
         self.assertEqual(self.run_loop(), 2)
         self.assertEqual([b for b, _ in self.started], ["x-1", "x-2"])
-        self.assertIn("2 failures in a row", self.out)
+        self.assertEqual(self.out.count("STOPPED: storm"), 1)
         self.assertEqual([self.bd.beads[b]["status"] for b in ("x-1", "x-2")], ["open", "open"])
-        self.assertEqual([l["outcome"] for l in self.lines()], ["failed", "failed"])
-        self.assertIn("infrastructure", self.lines()[0]["why"])
-        self.assertEqual(sorted(loop.read_rests(str(self.repo))), ["x-1", "x-2"])  # rests an hour for every loop
+        self.assertEqual(loop.last_exit(str(self.repo))["reason"], "storm")
+
+    def test_a_live_storm_record_stops_a_loop_before_any_claim_with_one_line(self):
+        from loop_health import StormTrip, write_storm, storm_path
+        self.beads({"x-1": [rec("landed")]})
+        path = storm_path(tl.config_dir(), loop.repo_id(str(self.repo)))
+        write_storm(path, StormTrip("FAULT_INFRA y", ("x-8", "x-9"), self.clock.t), self.clock.t)
+        self.assertEqual(self.run_loop(), 2)
+        self.assertEqual(self.started, [])
+        self.assertEqual(self.out.count("STOPPED: storm FAULT_INFRA y on x-8,x-9"), 1)
+        self.assertIn(str(path), self.out)
+        self.clock.t += 31 * 60  # it expires by itself
+        self.assertEqual(self.run_loop(), 0)
+        self.assertEqual([b for b, _ in self.started], ["x-1"])
 
     def test_two_instant_failures_on_one_slot_set_the_slot_aside_and_the_loop_goes_on(self):
         # tl-g6a: s4 fed 7 beads in under a minute each, 'worktree has uncommitted work of another branch'
@@ -776,6 +800,185 @@ class Loop(LoopBase):
         self.assertIn("s2", s)
         self.assertIn("x-1", s)
         self.assertIn("parked", s)
+
+
+class UpAt:
+    """A NetProbe that says up from a wall time on (the fake clock's), so a test can say how soon after that the loop looked."""
+
+    def __init__(self, clock, t_up):
+        self.clock, self.t_up, self.calls = clock, t_up, []
+
+    def up(self):
+        self.calls.append(self.clock.t)
+        return self.clock.t >= self.t_up
+
+
+NET = dict(kind="pause_network", why="paused: network on write; resume when it is back")
+
+
+class LoopNetwork(LoopBase):
+    """tl-kyy: a network pause probes every 60 s and resumes the same bead; it counts against nothing."""
+
+    def setUp(self):
+        super().setUp()
+        self.events = []
+        for p in (mock.patch.object(tl, "event", side_effect=lambda kind, bead="", **kw: self.events.append((kind, bead)) or {}),):
+            p.start()
+            self.addCleanup(p.stop)
+
+    def probe(self, probe):
+        p = mock.patch.object(loop, "make_probe", return_value=probe)
+        p.start()
+        self.addCleanup(p.stop)
+        return probe
+
+    def kinds(self):
+        return [k for k, _ in self.events if k.startswith("net_")]
+
+    def test_the_probe_is_down_for_three_ticks_then_up_and_the_same_bead_resumes_within_a_minute(self):
+        times = []
+        t_up = self.clock.t0 + 150  # up between the 3rd and the 4th look
+        probe = self.probe(UpAt(self.clock, t_up))
+        bd = self.beads({"x-1": [rec("paused", **NET), rec("landed", run="run-1")], "x-2": [rec("landed")]})
+        self.during.extend([lambda: times.append(self.clock.t)] * 2)
+        self.assertEqual(self.run_loop(), 0)
+        self.assertEqual([b for b, _ in self.started], ["x-1", "x-1", "x-2"])  # no other bead while the network is down
+        self.assertEqual(len(probe.calls), 4)
+        self.assertEqual(probe.calls, [self.clock.t0 + 60 * i for i in range(4)])  # a probe a minute while down
+        self.assertEqual(sum(1 for c in probe.calls if c < t_up), 3)
+        self.assertGreaterEqual(times[1], t_up)
+        self.assertLessEqual(times[1] - t_up, 60)  # resumed within 60 s of the probe going up
+        self.assertEqual(self.kinds(), ["net_down", "net_up"])
+        self.assertNotIn(loop.PAUSE_RETRY, self.clock.naps)
+        self.assertIn(60, self.clock.naps)
+        self.assertEqual([l["outcome"] for l in self.lines()], ["paused", "landed", "landed"])
+        self.assertEqual(self.lines()[1]["trace"], "run-1")
+
+    def test_a_network_pause_keeps_the_label_the_budget_and_every_counter(self):
+        self.probe(netgate.FakeProbe([True]))
+        # four network pauses in a row: PAUSES_TO_REST (3) would rest the bead an hour; --max-beads would count them
+        bd = self.beads({"x-1": [rec("paused", **NET)] * 4 + [rec("landed")]})
+        self.assertEqual(self.run_loop("--max-beads", "1"), 0)
+        self.assertEqual([b for b, _ in self.started], ["x-1"] * 5)
+        self.assertFalse([n for n in self.clock.naps if n >= 3000])
+        self.assertEqual(self.kinds(), ["net_down", "net_up"] * 4)
+        self.assertFalse([c for c in bd.calls if c[0] == "label" or {"--add-label", "--remove-label", "--set-labels"} & set(c)])  # none stripped or added
+        self.assertEqual(loop.read_rests(str(self.repo)), {})  # never rested, never a failed run
+        self.assertEqual(bd.beads["x-1"]["status"], "closed")
+
+    def test_one_outage_is_one_down_and_one_up_for_every_slot(self):
+        probe = self.probe(UpAt(self.clock, self.clock.t0 + 500))
+        self.beads({"x-1": [rec("paused", **NET), rec("landed")], "x-2": [rec("landed")], "x-3": [rec("landed")]})
+        self.assertEqual(self.run_loop(), 0)
+        self.assertEqual(self.kinds(), ["net_down", "net_up"])
+        self.assertEqual([b for b, _ in self.started][:2], ["x-1", "x-1"])
+        self.assertEqual(len([c for c in probe.calls if c < self.clock.t0 + 500]), 9)
+
+    def test_a_stop_during_an_outage_ends_the_loop_without_probing_forever(self):
+        self.probe(netgate.FakeProbe([False]))
+        self.beads({"x-1": [rec("paused", **NET)]})
+        polls = []
+
+        def nap(secs, repo=None, until=0):
+            polls.append(round(secs))
+            self.clock.t += secs
+            if len(polls) == 2:
+                loop.paths(str(self.repo))["stop"].write_text(json.dumps({"mode": "after", "t": self.clock.t, "targets": []}))
+        with mock.patch.object(loop, "nap", nap), mock.patch.object(loop, "stop_mode", side_effect=lambda r: "after" if len(polls) >= 2 else ""):
+            self.assertEqual(self.run_loop(), 0)
+        self.assertEqual(polls, [60, 60])
+        self.assertEqual(loop.last_exit(str(self.repo))["reason"], "stop_request")
+
+    def test_without_a_delegate_to_probe_a_network_pause_rests_like_a_lane_pause_and_the_next_bead_runs(self):
+        self.probe(None)
+        self.beads({"x-1": [rec("paused", **NET), rec("landed")], "x-2": [rec("landed")]})
+        self.assertEqual(self.run_loop(), 0)
+        self.assertEqual([b for b, _ in self.started], ["x-1", "x-2", "x-1"])
+        self.assertIn(loop.PAUSE_RETRY, self.clock.naps)
+        self.assertIn("no delegate is installed", self.out)
+        self.assertEqual(self.kinds(), [])
+
+    def test_a_lane_pause_still_waits_pause_retry_not_a_probe(self):
+        probe = self.probe(netgate.FakeProbe([True]))
+        self.beads({"x-1": [rec("paused", kind="pause_lane"), rec("landed")], "x-2": [rec("paused", kind="pause_lane"), rec("landed")]})
+        self.assertEqual(self.run_loop(), 0)
+        self.assertEqual(probe.calls, 0)
+        self.assertTrue(any(n >= 60 for n in self.clock.naps))
+
+
+class LoopHealth(LoopBase):
+    """tl-7y6.2.12: a loop that exits says why; a repo with ready beads and no loop alive is a red line; the log outlives the session."""
+
+    def status(self):
+        out = io.StringIO()
+        with redirect_stdout(out):
+            tl.main(["loop", "status", "--repo", str(self.repo)])
+        return out.getvalue()
+
+    def test_ready_beads_with_no_loop_alive_and_no_recent_beat_is_one_red_line_naming_repo_and_command(self):
+        self.beads({"x-1": [rec("landed")]})
+        out = self.status()
+        self.assertEqual(out.count("RED:"), 1)
+        self.assertIn("%s has 1 ready bead(s) and no loop alive" % self.repo, out)
+        self.assertIn("tl loop --repo %s" % self.repo, out)
+
+    def test_a_live_loop_or_a_recent_beat_or_nothing_ready_is_no_warning(self):
+        self.beads({"x-1": [rec("landed")]})
+        loop.write_state(str(self.repo), pid=os.getpid(), started=self.clock.t)  # this process is alive
+        self.assertNotIn("RED:", self.status())
+        os.unlink(next(loop.paths(str(self.repo))["states"][0].glob("*.json")))
+        self.run_loop()  # drains: a fresh exit line is a fresh beat
+        self.assertNotIn("RED:", self.status())
+        self.beads({"x-1": [rec("landed")]})  # the bead is ready again
+        self.clock.t += 11 * 60
+        self.assertIn("RED:", self.status())  # 10 min with no beat and a ready bead
+        self.beads({})
+        self.assertNotIn("RED:", self.status())  # nothing ready: idle, not absent
+
+    def test_a_loop_that_exits_writes_its_reason_and_status_shows_the_last_one_and_the_log_path(self):
+        self.beads({"x-1": [rec("landed")]})
+        self.run_loop()
+        ex = loop.last_exit(str(self.repo))
+        self.assertEqual((ex["reason"], ex["pid"], ex["v"]), ("drained", os.getpid(), 1))
+        self.assertTrue(Path(ex["log_path"]).is_file())
+        self.assertIn("last exit: drained", self.status())
+        self.beads({"x-1": [rec("landed")]})
+        self.run_loop("--max-beads", "1")
+        self.assertEqual(loop.last_exit(str(self.repo))["reason"], "max_beads")
+
+    def test_a_loop_killed_without_an_exit_line_leaves_its_state_as_died_pid_json(self):
+        self.beads({})
+        loop.write_state(str(self.repo), pid=999999, started=self.clock.t)
+        with mock.patch.object(loop, "pid_alive", return_value=False):
+            self.assertEqual(loop.live_loops(str(self.repo)), [])
+        died = loop.paths(str(self.repo))["runs"] / "died-999999.json"
+        self.assertEqual(json.loads(died.read_text())["pid"], 999999)
+
+    def test_the_loops_own_log_keeps_what_it_said_and_is_pruned_to_five(self):
+        runs = loop.paths(str(self.repo))["runs"]
+        runs.mkdir()
+        for i in range(8):
+            f = runs / ("loop-%d.log" % (100 + i))
+            f.write_text("old")
+            os.utime(f, (1000 + i, 1000 + i))
+        self.beads({"x-1": [rec("landed")]})
+        self.run_loop()
+        log = runs / ("loop-%d.log" % os.getpid())
+        self.assertIn("x-1 in s1", log.read_text())
+        self.assertEqual(len(list(runs.glob("loop-*.log"))), loop.LOGS_KEPT)
+        self.assertIn("loop-107.log", [f.name for f in runs.glob("loop-*.log")])  # the newest old ones stay
+        self.assertNotIn("loop-100.log", [f.name for f in runs.glob("loop-*.log")])
+
+    def test_the_beat_is_refreshed_while_a_bead_runs_at_most_once_a_minute(self):
+        st_beats = []
+        real = loop.write_state
+        with mock.patch.object(loop, "write_state", side_effect=lambda repo, **kw: st_beats.append(kw.get("beat")) or real(repo, **kw)):
+            self.beads({"x-1": [rec("landed")]})
+            self.hold["x-1"] = 100
+            self.run_loop()
+        refreshed = [b for b in st_beats if b]
+        self.assertGreaterEqual(len(refreshed), 2)
+        self.assertTrue(all(b2 - b1 >= loop.BEAT_EVERY for b1, b2 in zip(refreshed, refreshed[1:])))
 
 
 class StopRequests(LoopBase):
