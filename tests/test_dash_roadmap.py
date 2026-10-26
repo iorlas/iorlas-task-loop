@@ -31,7 +31,8 @@ def stamp(ago):
 
 def road(beads, lanes=(), ranked=(), skipped=(), history=(), trails=None, running=(), queued=()):
     g = graph.build(beads, CFG, set(queued) or {i for i, _ in ranked}, set(running), (), now=NOW)
-    return roadmap.build(g, list(lanes), list(ranked), list(skipped), list(history), trails or {}, now=NOW)
+    return roadmap.build(g, list(lanes), list(ranked), list(skipped), list(history), trails or {}, now=NOW,
+                         closed=[b for b in beads if b.get("status") == "closed"])
 
 
 def blocks(*kinds):
@@ -117,12 +118,13 @@ class Build(unittest.TestCase):
         self.assertEqual([(h["id"], h["unblocks"], [k["id"] for k in h["tree"]]) for h in r["held"]], [("held1", 1, ["kid2"])])
         self.assertEqual(r["held_total"], 1)  # an id the graph does not know is dropped
         self.assertEqual((r["summary"]["parked"], r["summary"]["landed"], r["summary"]["ready"]), (1, 1, 1))
-        self.assertEqual([p["id"] for p in r["recent"]], ["landed1", "run1"])  # newest first
+        self.assertEqual([(d["id"], d["by"]) for d in r["done"]], [("landed1", "loop"), ("run1", "loop")])  # newest first
 
     def test_landed_pass_names_what_it_released(self):
         beads = [bead("a", status="closed", closed_at=stamp(60)), bead("b", blocks=["a"])]
-        r = road(beads, history=[{"ts": stamp(60), "bead": "a", "slot": "s1", "outcome": "landed", "minutes": 3}], queued={"b"})
-        self.assertEqual([x["id"] for x in r["recent"][0]["released"]], ["b"])
+        r = road(beads, history=[{"ts": stamp(60), "bead": "a", "slot": "s1", "outcome": "landed", "minutes": 3}], queued={"b"},
+                 lanes=[{"slot": "s1", "bead": None, "since": None}])
+        self.assertEqual([x["id"] for x in r["lanes"][0]["past"][0]["released"]], ["b"])
 
     def test_review_fixes_blank_slot_matches_its_passes_odd_log_lines_are_skipped_nodes_not_mutated(self):
         beads = [bead("a", status="closed", closed_at=stamp(60)), bead("b", blocks=["a"])]
@@ -136,7 +138,49 @@ class Build(unittest.TestCase):
 
     def test_empty_everything(self):
         r = road([])
-        self.assertEqual((r["lanes"], r["queue"], r["held"], r["recent"]), ([], [], [], []))
+        self.assertEqual((r["lanes"], r["queue"], r["held"], r["done"]), ([], [], [], []))
+
+
+class DoneFeed(unittest.TestCase):
+    """tl-nig: 20 beads closed today and the lane said 'nothing has left this slot yet'."""
+
+    def test_a_slot_rename_keeps_the_lane_past_and_the_feed(self):
+        beads = [bead("a", status="closed", closed_at=stamp(600))]
+        hist = [{"ts": stamp(600), "bead": "a", "slot": "loop-2be89f88", "outcome": "landed", "minutes": 4, "trace": "r7"}]
+        r = road(beads, lanes=[{"slot": "loop-9c1d00aa", "bead": None, "since": None}], history=hist)  # the loop restarted
+        self.assertEqual([p["id"] for p in r["lanes"][0]["past"]], ["a"])
+        self.assertEqual([(d["id"], d["by"], d["minutes"], d["run"]) for d in r["done"]], [("a", "loop", 4, "r7")])
+
+    def test_lane_past_ignores_another_slot_family(self):
+        hist = [{"ts": stamp(60), "bead": "a", "slot": "s1", "outcome": "landed", "minutes": 1}]
+        r = road([bead("a", status="closed", closed_at=stamp(60))], lanes=[{"slot": "loop-1", "bead": None, "since": None}], history=hist)
+        self.assertEqual(r["lanes"][0]["past"], [])
+
+    def test_a_bead_closed_by_hand_shows_up(self):
+        beads = [bead("h", status="closed", closed_at=stamp(300), close_reason="released by hand"),
+                 bead("l", status="closed", closed_at=stamp(200))]
+        hist = [{"ts": stamp(200), "bead": "l", "slot": "loop-x", "outcome": "landed", "minutes": 9}]
+        r = road(beads, history=hist)
+        self.assertEqual([(d["id"], d["by"], d["outcome"], d["why"]) for d in r["done"]],
+                         [("l", "loop", "landed", ""), ("h", "hand", "closed", "released by hand")])  # one row per bead, newest first
+
+    def test_window_today_flag_seven_days_and_nothing_older(self):
+        beads = [bead("t", status="closed", closed_at=stamp(60)), bead("w", status="closed", closed_at=stamp(3 * 86400)),
+                 bead("old", status="closed", closed_at=stamp(9 * 86400)), bead("o")]
+        r = road(beads)
+        self.assertEqual([(d["id"], d["today"]) for d in r["done"]], [("t", True), ("w", False)])
+
+    def test_parked_pass_and_slot_records_and_empty(self):
+        hist = [{"ts": stamp(60), "bead": "p", "slot": "s1", "outcome": "parked", "minutes": 2, "why": "needs you"}]
+        r = road([bead("p"), bead("slot1", status="closed", closed_at=stamp(5), labels=["slot"])], history=hist)
+        self.assertEqual([(d["id"], d["outcome"]) for d in r["done"]], [("p", "parked")])
+        self.assertEqual(road([])["done"], [])
+
+    def test_page_words_live_in_index_html(self):
+        html = (ROOT / "skills" / "task-loop" / "dash" / "index.html").read_text(encoding="utf-8")
+        for txt in ("nothing closed today", "nothing closed in the last 7 days", "data-win", "by hand / agent"):
+            self.assertIn(txt, html)
+        self.assertNotIn("recent", json.dumps(sorted(road([]))))
 
 
 class Lanes(unittest.TestCase):

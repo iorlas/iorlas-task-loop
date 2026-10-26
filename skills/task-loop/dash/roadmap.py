@@ -3,12 +3,14 @@ passes that left the slot) and the queue in the order the loop takes it, each en
 tree. Pure: server.py gathers the inputs and calls build(). Python 3.8+, standard library only."""
 
 import time
+from datetime import datetime
 
 import signals
 
 STEPS = ("plan", "write", "checks", "review", "verify", "land")
 OUTCOMES = ("landed", "parked", "failed", "paused")   # "taken" (lost a claim race) is not an outcome of a pass
 DEPTH, WIDE, PAST = 3, 5, 8
+DONE_DAYS = 7   # the Done feed reaches this far back; the page narrows it to today or shows all of it
 
 
 def epoch(s):
@@ -16,6 +18,54 @@ def epoch(s):
         return time.mktime(time.strptime(str(s)[:19], "%Y-%m-%dT%H:%M:%S"))
     except (ValueError, TypeError):
         return 0
+
+
+def when(s):
+    """Epoch of a bd timestamp (ISO, with an offset or Z; a bare one is local time, like the loop log's); 0 when unreadable."""
+    try:
+        d = datetime.fromisoformat(str(s).replace("Z", "+00:00"))
+    except ValueError:
+        return 0
+    return d.timestamp()
+
+
+def family(slot):
+    """The slot's family: loop slots are named per run (loop-<session>, loop-<session>-<suffix>), so a restart is a new
+    slot name in the same family. Any other name is its own family."""
+    slot = slot or ""
+    return "loop" if slot == "loop" or slot.startswith("loop-") else slot
+
+
+def done_feed(passes, closed, now):
+    """The repo-wide Done feed, newest first: every bd-closed bead of the last DONE_DAYS days, whoever closed it, merged with
+    the loop's passes. A bead the loop landed is one row (by "loop", with the pass's minutes and run); a closed bead with no
+    landed pass is by "hand" (an agent worktree, release.py, a person); a parked/failed/paused pass is a loop row.
+    -> [{id, title, t, by, outcome, minutes, run, why, today}]; typed data only, the page words it."""
+    since = now - DONE_DAYS * 86400
+    day = time.strftime("%Y-%m-%d", time.localtime(now))
+    landed = {p["id"]: p for p in passes if p["outcome"] == "landed"}
+    rows, seen = [], set()
+    for b in closed:
+        if b.get("status") != "closed" or "slot" in (b.get("labels") or []):
+            continue
+        t = when(b.get("closed_at"))
+        if t < since:
+            continue
+        p = landed.get(b["id"])
+        seen.add(b["id"])
+        why = (p or {}).get("why") or b.get("close_reason") or ""
+        rows.append({"id": b["id"], "title": b.get("title") or "", "t": t, "by": "loop" if p else "hand",
+                     "outcome": "landed" if p else "closed", "minutes": p["minutes"] if p else 0,
+                     "run": p["run"] if p else "", "why": why[:160]})
+    for p in passes:
+        if p["t"] < since or (p["outcome"] == "landed" and p["id"] in seen):
+            continue
+        rows.append({"id": p["id"], "title": p["title"], "t": p["t"], "by": "loop", "outcome": p["outcome"],
+                     "minutes": p["minutes"], "run": p["run"], "why": p["why"]})
+    rows.sort(key=lambda r: (-r["t"], r["id"]))
+    for r in rows:
+        r["today"] = time.strftime("%Y-%m-%d", time.localtime(r["t"])) == day
+    return rows
 
 
 def rail(blocks, run_no):
@@ -53,10 +103,10 @@ def released(i, out, by_id):
             if by_id.get(t) and by_id[t]["state"] not in ("done", "epic", "blocked") and not by_id[t]["is_epic"]]
 
 
-def build(graph_data, lanes, ranked, skipped, history, trails, now=None, rows=None, lane_records=(), asks=(), waiting=0, looks=()):
+def build(graph_data, lanes, ranked, skipped, history, trails, now=None, rows=None, lane_records=(), asks=(), waiting=0, looks=(), closed=()):
     """graph_data: graph.build() output. lanes: [{slot, bead, since}] (bead None = an idle loop). ranked: [(id, reason)] in
     the order `tl next` takes them. skipped: [(id, why)]. history: loop-log rows, oldest first. trails: {bead: {run,
-    stage, blocks: [{kind, label, status, text}]}}."""
+    stage, blocks: [{kind, label, status, text}]}}. closed: the repo's bd beads (the closed ones feed Done)."""
     now = now or time.time()
     by_id = {n["id"]: dict(n) for n in graph_data["nodes"]}  # copies: build() adds keys, and the graph is cached and shared
     out = {}
@@ -74,7 +124,7 @@ def build(graph_data, lanes, ranked, skipped, history, trails, now=None, rows=No
             t = epoch(r.get("ts"))
             title = (by_id.get(r["bead"]) or {}).get("title", "")
             passes.append({"id": r["bead"], "title": title, "slot": r.get("slot") or "", "outcome": r["outcome"], "t": t,
-                           "minutes": r.get("minutes") or 0, "asked": bool(r.get("asked")), "why": (r.get("why") or "")[:160],
+                           "minutes": r.get("minutes") or 0, "asked": bool(r.get("asked")), "run": r.get("trace") or "", "why": (r.get("why") or "")[:160],
                            "released": released(r["bead"], out, by_id) if r["outcome"] == "landed" else []})
     lane_out = []
     for ln in sorted(lanes, key=lambda x: x["slot"]):
@@ -86,7 +136,7 @@ def build(graph_data, lanes, ranked, skipped, history, trails, now=None, rows=No
             "rail": rail(tr.get("blocks") or [], tr.get("run") or 0) if b else [],
             "trail": tr.get("blocks") or [], "unlocks": tree(b, out, by_id) if b else [],
             "unblocks": node.get("unblocks", 0),
-            "past": [p for p in passes if p["slot"] == (ln["slot"] or "")][-PAST:]})
+            "past": [p for p in passes if family(p["slot"]) == family(ln["slot"])][-PAST:]})
     queue = []
     for i, why in ranked:
         n = by_id.get(i) or {}
@@ -104,7 +154,7 @@ def build(graph_data, lanes, ranked, skipped, history, trails, now=None, rows=No
     summary = {o: sum(1 for p in today if p["outcome"] == o) for o in OUTCOMES}
     summary["ready"] = len(queue)
     out = {"now": now, "repo": graph_data.get("repo", ""), "lanes": lane_out, "queue": queue, "held": held[:12],
-           "held_total": len(held), "summary": summary, "recent": passes[-12:][::-1]}
+           "held_total": len(held), "summary": summary, "done": done_feed(passes, closed, now)}
     out["loops_waiting"] = waiting
     out["briefs"] = briefs(out, by_id, rows or {})
     mine = [r for r in (rows or {}).values() if not graph_data.get("repo") or r.get("repo") == graph_data["repo"]]
@@ -130,7 +180,7 @@ def ids_shown(out):
     for q in out["queue"] + out["held"]:
         seen.add(q["id"])
         walk(q["tree"])
-    seen.update(p["id"] for p in out["recent"])
+    seen.update(p["id"] for p in out["done"])
     return seen
 
 

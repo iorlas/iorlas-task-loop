@@ -1375,7 +1375,7 @@ def api_roadmap(repo=""):
     _last_seen[0] = time.time()
     g = api_graph(repo)
     if g.get("error"):
-        return dict(g, lanes=[], queue=[], held=[], recent=[], summary={})
+        return dict(g, lanes=[], queue=[], held=[], done=[], summary={})
     path = resolve_repo(g["repo"], "")
 
     def build():
@@ -1420,7 +1420,7 @@ def api_roadmap(repo=""):
         mine_asks = [a for a in asks()["asks"] if os.path.basename(str(a.get("repo") or "").rstrip("/\\")) == g["repo"]]
         looks = [i for i in look_items(path)[1] if i["status"] == "open"]
         return roadmap.build(g, lanes, ranked, skipped, rows, trails, rows=tasks, lane_records=api["lanes"], asks=mine_asks, waiting=len(waiting),
-                             looks=looks)
+                             looks=looks, closed=[b for b in beads if b.get("status") == "closed"])
 
     out = cached("roadmap:" + path, 5, build)
     return dict(out, repos=g["repos"])
