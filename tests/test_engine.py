@@ -3136,7 +3136,8 @@ class EngineTest(unittest.TestCase):
     def engine_noise(self, name):
         """Notes lines and comments the engine wrote, from the stored brief of a run that was cap-parked (tests/fixtures/briefs)."""
         notes, comments = stored_brief(name)
-        return [dict(author=a, text=t) for a, t in comments if engine.engine_written(t)] + [
+        last = [("tl-x", l) for l in re.findall(r"(?m)^(?:Blocked:|Reflect \(engine\)).*$", (BRIEFS / (name + ".md")).read_text(encoding="utf-8"))]
+        return [dict(author=a, text=t) for a, t in comments + last if engine.engine_written(t)] + [
             dict(author="tl-x", text="Engine paused: paused: no lane for write until 10:00 (no_lane: Hold the task)")], notes
 
     def only_engine_written(self, name):
@@ -3169,8 +3170,10 @@ class EngineTest(unittest.TestCase):
         base = h(BEAD, people)
         for name in CAP_PARKS:
             noise, _ = self.engine_noise(name)
-            self.assertEqual(h(dict(BEAD, notes="Engine paused: x\nBlocked: y"), people + noise), base)
+            self.assertEqual(h(dict(BEAD, notes="Engine paused: x\nEngine failed: y"), people + noise), base)
         self.assertNotEqual(h(BEAD, people + [{"author": "denis", "text": "A real remark."}]), base)
+        self.assertNotEqual(h(dict(BEAD, description="Blocked: needs the design first"), people), base)  # the owner's own words stay
+        self.assertNotEqual(h(BEAD, people + [{"author": "denis", "text": "Parked over budget (226 of 180 min): scope change"}]), base)
 
     def test_answer_text_and_reclaim_skip_engine_comments(self):
         a, eng = {"id": "t-1-1", "answer": ""}, engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
@@ -4419,8 +4422,8 @@ def stored_brief(name):
     return sec.get("Notes", "").strip(), comments
 
 
-ENGINE_LINE = re.compile(r"^(?:- [^:\n]*: )?(?:Lane|Verify|Resume|Look|Land|Parked|Plan|Review|Reflect|Blocked|Ask|Evidence|Follow-up) ?(?:\(engine|:|over budget)"
-                         r"|^(?:- [^:\n]*: )?Engine (?:paused|failed):|^Last engine run|^## Last engine run")
+ENGINE_LINE = re.compile(r"^(?:- [^:\n]*: )?(?:(?:Lane|Verify|Resume|Look|Land|Plan|Review|Reflect|Ask|Evidence|Follow-up|Parked) \(engine|Blocked:"
+                         r"|Engine (?:paused|failed):)")
 
 
 class StoredBriefs(unittest.TestCase):

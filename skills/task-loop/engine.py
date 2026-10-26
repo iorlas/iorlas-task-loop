@@ -239,7 +239,7 @@ def bead_snapshot(bead, comments):
     comments, as the planner saw them."""
     deps = sorted("%s:%s" % (d.get("id"), d.get("dependency_type") or d.get("type") or "")
                   for d in bead.get("dependencies") or [] if isinstance(d, dict) and d.get("id"))
-    return {"fields": {k: people_lines(bead.get(k)) for k in FIELDS},
+    return {"fields": {k: (people_lines if k == "notes" else str.strip)(bead.get(k) or "") for k in FIELDS},
             "issue_type": (bead.get("issue_type") or "").strip(), "deps": deps,
             "comments": [(c.get("text") or "").strip() for c in comments if not engine_written(c.get("text"))]}
 
@@ -252,7 +252,7 @@ def bead_diff(old, new, answer="", comments=True):
     dependencies, new comments, the owner's answer). '' when nothing."""
     out = []
     for k in FIELDS:
-        a, b = people_lines(old["fields"].get(k, "")), people_lines(new["fields"].get(k, ""))  # a checkpoint older than this rule holds engine lines
+        a, b = old["fields"].get(k, ""), new["fields"].get(k, "")
         if a != b:
             d = "\n".join(difflib.unified_diff(a.splitlines(), b.splitlines(), "was", "now", n=1, lineterm=""))
             out.append("- %s changed:\n%s" % (k, d if len(d) <= DIFF_CAP else d[:DIFF_CAP] + "\n... (diff cut at 4 KB)"))
@@ -4576,10 +4576,11 @@ Answer:
 Cite only what the data above shows; do not guess a cause it does not support."""
 
 # tl-7y6.6.2: what the engine writes into a bead (comments, and lines of Notes). It is never the owner's: not in the brief, not in the
-# brief hash, not in the snapshot an amend diffs against, not in an answer. Every prefix an engine comment starts with is listed.
+# brief hash, not in the snapshot an amend diffs against, not in an answer. Every prefix an engine comment starts with is listed;
+# "Engine paused:" and "Engine failed:" are also the only lines it ever appended to Notes.
 ENGINE_NOTES = ("Plan (engine", "Review (engine", "Reflect (engine", "Blocked:", "Ask (engine", "Evidence (engine", "Parked (engine",
                 "Lane (engine", "Verify (engine", "Resume (engine", "Look (engine", "Land (engine", "Follow-up (engine",
-                "Engine paused:", "Engine failed:", "Parked over budget", "Reflect:", "Last engine run")
+                "Engine paused:", "Engine failed:")
 
 
 def engine_written(text):
@@ -4588,8 +4589,8 @@ def engine_written(text):
 
 
 def people_lines(text):
-    """A text field without the lines the engine appended to it (Notes: 'Engine paused: ...')."""
-    return "\n".join(l for l in (text or "").splitlines() if not engine_written(l)).strip()
+    """Notes without the lines the engine appended to it ('Engine paused: ...', 'Engine failed: ...'): the only fields it writes."""
+    return "\n".join(l for l in (text or "").splitlines() if not l.lstrip().startswith(("Engine paused:", "Engine failed:"))).strip()
 
 
 VERIFY_GAPS = "verify: before land, "  # the ask for what the workers could not check; its answer may ask for work
@@ -4857,8 +4858,9 @@ def brief_digest(bead, comments, owner_only=False, ignore=()):
         out.append(" · ".join(m for m in meta if m))
     for key, head in (("description", "Description"), ("acceptance_criteria", "Acceptance criteria"),
                       ("design", "Design"), ("notes", "Notes")):
-        if people_lines(bead.get(key)):
-            out += ["", "## " + head, people_lines(bead.get(key))]
+        text = people_lines(bead.get(key)) if key == "notes" else (bead.get(key) or "").strip()
+        if text:
+            out += ["", "## " + head, text]
     rel = [d for d in (bead.get("dependencies") or []) if isinstance(d, dict)]
     if rel:
         out += ["", "## Related beads (titles only)"] + ["- %s %s [%s]" % (d.get("id"), d.get("title"),
