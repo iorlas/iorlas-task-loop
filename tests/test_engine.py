@@ -93,7 +93,7 @@ class DelegateScript:
         self.j_extra = {k: list(v) for k, v in (j_extra or {}).items()}  # per node, per call: fields the answer gains
 
     def __call__(self, route, role, prompt, schema, cwd, resume, timeout, log_path, writer=None, parent="", task="",
-                 title="", access="", idle=None):
+                 title="", access="", idle=None, live=""):
         # the engine sends each contract in strict form (engine.strict), a visual stage's with its look field too
         node = next(k for k in engine.SCHEMAS if schema in (engine.strict(engine.schema_for(k)),
                                                              engine.strict(engine.schema_for(k, True))))

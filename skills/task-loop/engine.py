@@ -814,6 +814,17 @@ class Engine:
             self.log("note", "delegate call via %s" % self.route, delegate=self.route)
         return self.route
 
+    def live(self, step):
+        """The live file for the next delegate call (delegate appends worker events there; the dashboard's Live view reads them)."""
+        self.live_n = getattr(self, "live_n", 0) + 1
+        path = lcall.live_file(self.log_path, self.live_n, step)
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+        except OSError:
+            return ""
+        self.log("note", "live: %s" % path, live=path, step=step, n=self.live_n)
+        return path
+
     # -- records
     def log(self, kind, text, **kw):
         rec = {"t": time.time(), "kind": kind, "text": text}
@@ -925,7 +936,7 @@ class Engine:
             prompt = self.reflect_prompt(outcome, why)
             # a short wait: the close step ignores a stop while this runs (route.py adds 120 s to the limit)
             r, j = lcall.call_delegate(self.delegate_route(), "reviewer", prompt, strict(SCHEMAS["reflect"]), self.wt, None, 45, self.err_path, None,
-                                 self.session, self.bead, "%s · reflect" % self.bead)
+                                 self.session, self.bead, "%s · reflect" % self.bead, live=self.live("reflect"))
             saved = {k: v for k, v in self.stats.items() if k.startswith("tokens_")}
             self.trace_call("reflect", "reviewer", 1, r, j)
             self.stats.update(saved)  # the run's counts are the run's, as the Reflect comment says them
@@ -1090,7 +1101,7 @@ class Engine:
             try:
                 r, j = lcall.call_delegate(self.delegate_route(), role, attempt_prompt, strict(schema_for(node, visual)), cwd or self.wt, resume, timeout,
                                            self.err_path, writer, self.session, self.bead, "%s · %s: %s" % (self.bead, node, title),
-                                           access=flag, **({"idle": idle} if idle else {}))
+                                           access=flag, live=self.live(step or node), **({"idle": idle} if idle else {}))
             except BaseException as e:  # an interruption stopped the delegate inside run_proc: record that stop here
                 obs = getattr(e, "engine_obs", None) or {}
                 stop = getattr(e, "engine_stop", None) or {}

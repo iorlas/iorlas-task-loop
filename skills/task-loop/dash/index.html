@@ -330,6 +330,8 @@ main.wide{max-width:1400px}
 .rx i{display:block;font-style:normal;font-size:12px;color:var(--c,var(--mute));font-variant-numeric:tabular-nums;white-space:nowrap}
 .rx u{display:block;text-decoration:none;color:var(--mute);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .o-landed{--c:var(--ok)}.o-parked{--c:var(--ask)}.o-failed{--c:var(--fail)}.o-paused{--c:var(--wait)}
+.livebtn{display:inline-flex;align-items:center;gap:6px;font:600 12px var(--mono);color:#7ee787;background:#0d1117;border-radius:999px;padding:3px 11px;text-decoration:none;box-shadow:inset 0 0 0 1px #30363d;white-space:nowrap}.livebtn:hover{background:#161b22}.livebtn::before{content:'>';opacity:.7}
+.rlane .livebtn{grid-column:3;justify-self:end;margin-top:-8px}
 .rnow{display:block;background:var(--surface);border-radius:12px;padding:12px 16px 14px;box-shadow:inset 0 0 0 1.5px var(--run),var(--shadow)}
 .rnow:hover{background:var(--hover)}
 .rnow.idle{box-shadow:inset 0 0 0 1px var(--line);color:var(--mute);padding:16px}
@@ -385,6 +387,7 @@ details.rheld>summary .rsec::before{content:"▸";color:var(--mute);font-size:11
 @media (prefers-reduced-motion:reduce){.live{animation:none}}
 @media (max-width:1100px){
   .rlane,.rlane.unl{grid-template-columns:32px minmax(0,1fr);gap:12px 16px}
+  .rlane .livebtn{grid-column:2;justify-self:start;margin-top:0}
   .rpast,.rnow,.runl{grid-column:2;min-width:0}.rpast{justify-content:flex-start;-webkit-mask-image:none;mask-image:none;padding-right:0}.rpast::after{display:none}
   .gc .h,.gc.nn .h{grid-template-columns:2.4ch minmax(0,1fr)}.gc.nn .h{grid-template-columns:minmax(0,1fr)}.gc .rs{grid-column:2;text-align:left}.gc.nn .rs{grid-column:1}
 }
@@ -632,7 +635,7 @@ function endHtml(e){if(!e)return'';const cls={landed:'s-ok',done:'s-ok',asks:'s-
 function renderTask(){const d=S.tl;if(!d||!d.task||d.task.id!=S.task){paint($('main'),'main',`<a class="back" href="#tasks">‹ Tasks</a><div class="loading">Loading ${esc(S.task)}…</div>`);return}
   const t=d.task,total=d.runs.reduce((s,r)=>s+(r.secs||0),0),toks=d.runs.reduce((s,r)=>s+((r.tokens||{}).in||0)+((r.tokens||{}).out||0),0);
   let html=`<a class="back" href="#tasks">‹ Tasks</a><div class="thead"><div style="flex:1;min-width:0"><h1>${esc(t.title||t.id)}</h1>
-    <div class="tmeta"><span class="mono">${esc(t.id)}</span>${t.repo?'<span>'+esc(t.repo)+'</span>':''}${t.slot?'<span>slot <span class="slot">'+esc(t.slot)+'</span></span>':''}
+    <div class="tmeta"><span class="mono">${esc(t.id)}</span><a class="livebtn" href="/live?bead=${encodeURIComponent(t.id)}">live</a>${t.repo?'<span>'+esc(t.repo)+'</span>':''}${t.slot?'<span>slot <span class="slot">'+esc(t.slot)+'</span></span>':''}
     <span>${d.runs.length} run${d.runs.length==1?'':'s'}</span>${total?'<span>'+dur(total)+' in all</span>':''}${toks?'<span>'+tok({in:toks})+'</span>':''}</div></div>
     ${chip(STATE[t.state]||'s-info',t.label||t.state||'')}</div>`;
   if(t.ask)html+=askBox(Object.assign({bead:t.id},t.ask));
@@ -807,7 +810,7 @@ function laneHtml(l,repo,waiting){
   const meta=[`<span class="live" title="running"></span>`,`<span class="mono">${esc(l.bead)}</span>`,l.run>1?'run '+l.run:'',l.since?esc(dur(Math.floor((Date.now()/1000-l.since)/60)*60)):'',esc(stage),l.version?'loop '+esc(l.version):'',l.engine?'engine '+esc(l.engine):'',l.lags?'lags '+l.lags:'',l.stopping=='after'?'stopping after this bead':l.stopping=='now'?'stopping now':''].filter(Boolean).map(x=>x.startsWith('<')?x:`<span>${x}</span>`).join('');
   return `<div class="rlane${unl?' unl':''}"><div class="rslot">${esc(l.slot||'·')}</div>${past}
     <a class="rnow" href="${taskHref(l.bead,repo)}" data-bead="${esc(l.bead)}"><div class="t">${esc(l.title||l.bead)}</div><div class="m">${meta}</div>
-      <div class="rail">${rail}</div>${l.verdict?`<div class="rverd">${esc(l.verdict)}</div>`:''}${hist?`<div class="rhist"><em>${l.trail.length>8?'last 8 of '+l.trail.length:'so far'}</em>${hist}</div>`:''}</a>${unl}</div>`}
+      <div class="rail">${rail}</div>${l.verdict?`<div class="rverd">${esc(l.verdict)}</div>`:''}${hist?`<div class="rhist"><em>${l.trail.length>8?'last 8 of '+l.trail.length:'so far'}</em>${hist}</div>`:''}</a><a class="livebtn" href="/live?bead=${encodeURIComponent(l.bead)}" title="Watch this bead work, live">live</a>${unl}</div>`}
 function signalsHtml(d){const sg=d.signals||[];if(!sg.length)return '<div class="sigs"><div class="sig green"><b>Nothing wrong</b><span>no signal fires: no lane out, no churn, no cluster of parks, no old ask</span></div></div>';
   const card=s=>{const look=(s.look||[]).map(i=>`<a class="lk" href="${taskHref(i,d.repo)}" data-bead="${esc(i)}">${esc(shortId(i))}</a>`).join(' ');
     const t=s.href?`<a href="${esc(s.href)}">${esc(s.title)}</a>`:esc(s.title);
@@ -878,7 +881,7 @@ function renderBead(){const p=$('bpanel'),sc=$('bscrim');if(!p)return;const on=S
   const cost=br&&br.tok?`<div class="cost"><b>${esc(costLine(br,R.d&&R.d.stats))}</b><span>${br.runs} run${br.runs>1?'s':''} · ${br.blocks} steps · ${esc(dur(br.secs))} in all</span></div>`:'';
   const why=br&&br.why?`<div class="why">${esc(String(br.why).split('\n')[0].slice(0,220))}</div>`:'';
   paint(p,'bpanel',`<div class="bh"><div style="min-width:0"><h2>${esc(b.title||S.bead)}</h2>
-      <div class="sub"><span class="mono">${esc(b.id)}</span> · ${esc(b.status||'')}${b.priority!=null?' · P'+b.priority:''}${b.assignee?' · '+esc(b.assignee):''} ${(b.labels||[]).map(l=>`<span class="tag">${esc(l)}</span>`).join(' ')}</div></div>
+      <div class="sub"><span class="mono">${esc(b.id)}</span> <a class="livebtn" href="/live?bead=${encodeURIComponent(b.id)}">live</a> · ${esc(b.status||'')}${b.priority!=null?' · P'+b.priority:''}${b.assignee?' · '+esc(b.assignee):''} ${(b.labels||[]).map(l=>`<span class="tag">${esc(l)}</span>`).join(' ')}</div></div>
       <button class="iconbtn x" data-bclose="1" aria-label="Close">${X}</button></div>
     <div class="bb">${why}${cost}${timeHtml(b.timeline)}${sec('Description',pre(b.description))}${sec('Acceptance criteria',pre(b.acceptance))}${sec('Design',pre(b.design))}${sec('Notes',pre(b.notes))}
       ${sec('Comments ('+b.comments.length+', newest first)',cm)}${sec('Transitions',histHtml(b.runs||[]))}${sec('Depends on',deps)}

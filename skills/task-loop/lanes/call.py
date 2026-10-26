@@ -1,6 +1,7 @@
 """A delegate call: its Result, the write-idle watcher, call_delegate (moved unchanged from engine.py, E2)."""
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -115,8 +116,15 @@ class Idle:
                     return why
 
 
+def live_file(log_path, n, step):
+    """Where delegate appends the worker's live events for call n of a run: <engine log without .jsonl>.live/<NN>-<step>.jsonl."""
+    log_path = str(log_path)
+    base = log_path[:-len(".jsonl")] if log_path.endswith(".jsonl") else log_path
+    return "%s.live/%02d-%s.jsonl" % (base, n, re.sub(r"[^A-Za-z0-9_-]+", "-", step or "call").strip("-") or "call")
+
+
 def call_delegate(route, role, prompt, schema, cwd, resume, timeout, log_path, writer=None, parent="", task="",
-                  title="", access="", idle=None):
+                  title="", access="", idle=None, live=""):
     """One AI step through `route.py run` (worker-run v2). Returns (Result, the answer object or None)."""
     with tempfile.TemporaryDirectory() as d:
         bf, sf = os.path.join(d, "brief.md"), os.path.join(d, "schema.json")
@@ -133,7 +141,8 @@ def call_delegate(route, role, prompt, schema, cwd, resume, timeout, log_path, w
         # unpinned: a worker's git may run on other repos; engine.assert_tree catches a redirect after the node
         stop, obs = {}, {}
         try:
-            res, secs = procs.run_proc(cmd, cwd, timeout + 120, log_path, idle=idle, stop=stop, obs=obs)
+            res, secs = procs.run_proc(cmd, cwd, timeout + 120, log_path, idle=idle, stop=stop, obs=obs,
+                                       env={"DELEGATE_LIVE_FILE": live} if live else None)
         except BaseException as e:  # the stop ran inside run_proc: keep its observations for the engine's kill record
             try:
                 e.engine_stop = dict(stop)
