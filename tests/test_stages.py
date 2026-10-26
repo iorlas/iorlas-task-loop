@@ -41,7 +41,8 @@ class EmptyPlan(StagesTest):
     def test_an_empty_plan_with_nothing_to_file_still_fails(self):
         rc, s = self.run_engine({"plan": [dict(PLAN, stages=[]), dict(PLAN, stages=[])]})  # sent back once (tl-wjj), still empty
         self.assertNotEqual(rc, 0)
-        self.assertTrue(self.blocked and "no stages" in self.blocked[0])
+        self.assertEqual(self.blocked, [])
+        self.assertIn("no stages", te.EngineTest.said(self))
 
     def test_an_empty_plan_over_work_no_review_accepted_is_not_done(self):
         te.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
@@ -52,7 +53,8 @@ class EmptyPlan(StagesTest):
         plan = dict(PLAN, stages=[], leftovers=[{"title": "File the table bead", "why": "x"}])
         rc, s = self.run_engine({"plan": [plan]})
         self.assertNotEqual(rc, 0)
-        self.assertTrue(self.blocked and "no stages" in self.blocked[0])
+        self.assertEqual(self.blocked, [])
+        self.assertIn("no stages", te.EngineTest.said(self))
         self.assertEqual(self.created(), [])
 
     def test_done_when_counts_as_acceptance_criteria(self):
@@ -1291,7 +1293,8 @@ class Claims(StagesTest):
         empty = dict(PLAN, stages=[])
         rc, s = self.run_engine({"plan": [empty, empty]})
         self.assertNotEqual(rc, 0)
-        self.assertTrue(self.blocked and "no stages" in self.blocked[0])
+        self.assertEqual(self.blocked, [])
+        self.assertIn("no stages", te.EngineTest.said(self))
         self.assertEqual([c[0] for c in s.calls], ["planner", "planner"])
 
     def test_an_empty_plan_with_leftovers_or_a_question_is_not_sent_back(self):
@@ -1735,8 +1738,10 @@ class Contracts(StagesTest):
         crash = te.ans("failed", "crash", "owner", say="UnicodeDecodeError")
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [crash, crash, crash]})
         self.assertNotEqual(rc, 0)
-        self.assertTrue(self.eng.why.startswith("paused: delegate crashed 3 times on the review step"), self.eng.why)
-        self.assertFalse(self.eng.asked)
+        self.assertTrue(self.eng.why.startswith("failed: delegate crashed 3 times on the review step"), self.eng.why)
+        self.assertFalse(self.eng.asked)  # a machine fault: the bead stays open, labelled engine-fault, nobody is asked
+        self.assertEqual(self.blocked, [])
+        self.assertTrue(any(c[:3] == ("label", "add", "t-1") and c[3] == "engine-fault" for c in self.bd_calls), self.bd_calls)
 
     def test_a_run_again_answer_keeps_the_plan_and_is_no_amend(self):
         ask = dict(WRITE, question="Which format?")
