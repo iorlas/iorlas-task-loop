@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["what", "kind"],
+  "properties": {
+    "what": {"type": "string"},
+    "kind": {"type": "string", "enum": ["engine_step", "checkable", "external_fact", "taste", "owner_decision",
+                                        "requirement", "number", "deletion", "link", "case", "tooling", "other"]},
+    "source": {"type": "string"}
+  }
+}
