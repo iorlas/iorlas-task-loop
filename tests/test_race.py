@@ -73,7 +73,11 @@ class Race(unittest.TestCase):
         for d in ("bin", "home", "cfg", "bd", "hooks"):
             (h / d).mkdir()
         shim(h / "bin" / "bd", FIX / "fake_bd.py")
-        (h / "bin" / "claude").write_text('#!/bin/sh\necho "$@" >> "%s"\n' % (h / "claude.log"))
+        # a real `plugin update` leaves the new version in the cache and release.py checks for it (tl-7y6.5.10); the two
+        # racing releases publish 0.1.1 and 0.1.2 in either order, so the fake installs both
+        cache = h / "home" / ".claude" / "plugins" / "cache" / "iorlas-marketplace" / "iorlas-task-loop"
+        (h / "bin" / "claude").write_text('#!/bin/sh\necho "$@" >> "%s"\nfor v in 0.1.1 0.1.2; do mkdir -p "%s/$v/.claude-plugin"; echo "{}" > "%s/$v/.claude-plugin/plugin.json"; done\n'
+                                          % (h / "claude.log", cache, cache))
         (h / "bin" / "claude").chmod(0o755)
         shim(h / "hooks" / "post-checkout", FIX / "post_checkout.py")
         env = {k: v for k, v in os.environ.items() if not k.startswith(DROP)}
