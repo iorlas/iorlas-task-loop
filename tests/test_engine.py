@@ -19,6 +19,8 @@ import engine  # noqa: E402
 from checks import lint  # noqa: E402,F401
 from core import procs  # noqa: E402,F401
 import tl  # noqa: E402
+from lanes import call as lcall  # noqa: E402,F401
+from lanes import route as lroute  # noqa: E402,F401
 
 
 def sh(*a, cwd):
@@ -109,7 +111,7 @@ class DelegateScript:
                  "context": {"instructions": ["/repo/AGENTS.md"], "env_keys": ["PATH"]}}
             if self.j_extra.get(node):
                 j.update(self.j_extra[node].pop(0))
-        r = engine.Result(j.get("data"), "", j.get("ref") or "", float(j.get("cost") or 0), 1, "" if j["status"] == "done" else j["status"],
+        r = lcall.Result(j.get("data"), "", j.get("ref") or "", float(j.get("cost") or 0), 1, "" if j["status"] == "done" else j["status"],
                           j.get("family") or "delegate")
         return r, j
 
@@ -173,9 +175,9 @@ class EngineTest(unittest.TestCase):
         c.update({"reflect": False})  # the reflection is one more call; its own tests switch it on
         c.update(cfg)
         c.update(raw or {})
-        with mock.patch.object(engine, "find_route", return_value=route), \
-                mock.patch.object(engine, "contract", return_value=getattr(self, "contract_answer", CONTRACT)), \
-                mock.patch.object(engine, "call_delegate", script), mock.patch.object(engine.time, "sleep"):
+        with mock.patch.object(lroute, "find_route", return_value=route), \
+                mock.patch.object(lroute, "contract", return_value=getattr(self, "contract_answer", CONTRACT)), \
+                mock.patch.object(lcall, "call_delegate", script), mock.patch.object(engine.time, "sleep"):
             self.eng = engine.Engine("t-1", str(self.wt), c)
             rc = self.eng.run()
         return rc, script
@@ -3006,7 +3008,7 @@ class EngineTest(unittest.TestCase):
             if role == "planner" and not this.calls:
                 this.calls.append((role, None, None))
                 this.prompts.append("")
-                return engine.Result(error="route.py exit 1, no answer object", backend="delegate"), None
+                return lcall.Result(error="route.py exit 1, no answer object", backend="delegate"), None
             return real(this, route, role, *a, **kw)
         with mock.patch.object(DelegateScript, "__call__", crash):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
@@ -3079,9 +3081,9 @@ class EngineTest(unittest.TestCase):
 
     def test_a_delegate_that_speaks_worker_run_v1_blocks_before_any_step(self):
         c = engine.load_cfg(str(self.wt))
-        with mock.patch.object(engine, "find_route", return_value="/fake/route.py"), \
-                mock.patch.object(engine, "contract", return_value=None), \
-                mock.patch.object(engine, "call_delegate") as called:
+        with mock.patch.object(lroute, "find_route", return_value="/fake/route.py"), \
+                mock.patch.object(lroute, "contract", return_value=None), \
+                mock.patch.object(lcall, "call_delegate") as called:
             rc = engine.Engine("t-1", str(self.wt), c).run()
         self.assertEqual(rc, 2)
         called.assert_not_called()
@@ -3406,8 +3408,8 @@ class LandReview(EngineTest):
             (self.wt / n).write_text("x\n")
 
     def run_with(self, script):
-        with mock.patch.object(engine, "find_route", return_value="/r.py"), mock.patch.object(engine, "contract", return_value=CONTRACT), \
-                mock.patch.object(engine, "call_delegate", script), mock.patch.object(engine.time, "sleep"):
+        with mock.patch.object(lroute, "find_route", return_value="/r.py"), mock.patch.object(lroute, "contract", return_value=CONTRACT), \
+                mock.patch.object(lcall, "call_delegate", script), mock.patch.object(engine.time, "sleep"):
             self.eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
             return self.eng.run()
 
@@ -3942,7 +3944,7 @@ class DelegateLauncher(unittest.TestCase):
 
     def lanes(self, **out):
         """`route.py status --json` lanes: name -> {out}."""
-        return mock.patch.object(engine, "lane_status", return_value={k: {"out": v} for k, v in out.items()})
+        return mock.patch.object(lroute, "lane_status", return_value={k: {"out": v} for k, v in out.items()})
 
     def test_a_fallback_writer_is_asked_fresh_once_its_lane_is_back_and_codex_takes_over(self):
         with self.lanes(OPENAI_SUBSCRIPTION=False, CLAUDE_SUBSCRIPTION=False):
@@ -3973,7 +3975,7 @@ class DelegateLauncher(unittest.TestCase):
         self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, "ref-write", None, "w2"])
 
     def test_the_first_choice_writer_still_resumes_and_no_status_is_read(self):
-        with mock.patch.object(engine, "lane_status") as st:
+        with mock.patch.object(lroute, "lane_status") as st:
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE, WRITE],
                                      "review": [review(unmet=["more"]), review(unmet=["more"]), CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
@@ -4022,7 +4024,7 @@ class DelegateLauncher(unittest.TestCase):
         self.contract_answer = self.V032
         anon = dict(self.SONNET_FB)
         anon.pop("first_lane")
-        with mock.patch.object(engine, "lane_status") as st:
+        with mock.patch.object(lroute, "lane_status") as st:
             rc, s = self.run_engine({"plan": [self.no_checks], "write": [anon, self.CODEX_FIRST],
                                      "review": [review(unmet=["more"]), CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
@@ -4031,7 +4033,7 @@ class DelegateLauncher(unittest.TestCase):
 
     def test_v032_a_first_choice_answer_is_resumed(self):
         self.contract_answer = self.V032
-        with mock.patch.object(engine, "lane_status") as st:
+        with mock.patch.object(lroute, "lane_status") as st:
             rc, s = self.run_engine({"plan": [self.no_checks], "write": [self.CODEX_FIRST, self.CODEX_FIRST],
                                      "review": [review(unmet=["more"]), CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
@@ -4039,7 +4041,7 @@ class DelegateLauncher(unittest.TestCase):
         st.assert_not_called()
 
     def test_without_the_fallback_feature_the_fields_are_not_read(self):
-        with mock.patch.object(engine, "lane_status") as st:  # CONTRACT has no fallback feature: the answer's field is ignored
+        with mock.patch.object(lroute, "lane_status") as st:  # CONTRACT has no fallback feature: the answer's field is ignored
             rc, s = self.run_engine({"plan": [self.no_checks], "write": [self.SONNET_FB, self.SONNET_FB],
                                      "review": [review(unmet=["more"]), CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
@@ -4049,10 +4051,10 @@ class DelegateLauncher(unittest.TestCase):
     def test_lane_status_reads_route_status_json(self):
         out = json.dumps({"v": 1, "lanes": {"OPENAI_SUBSCRIPTION": {"out": True}}})
         with mock.patch.object(engine.subprocess, "run", return_value=mock.Mock(returncode=0, stdout=out + "\n")) as run:
-            self.assertEqual(engine.lane_status("/r/route.py"), {"OPENAI_SUBSCRIPTION": {"out": True}})
+            self.assertEqual(lroute.lane_status("/r/route.py"), {"OPENAI_SUBSCRIPTION": {"out": True}})
         self.assertEqual(run.call_args[0][0][1:], ["/r/route.py", "status", "--json"])
         with mock.patch.object(engine.subprocess, "run", side_effect=OSError("gone")):
-            self.assertEqual(engine.lane_status("/r/route.py"), {})
+            self.assertEqual(lroute.lane_status("/r/route.py"), {})
 
     # lifesim-5ar.6 2026-10-21: the resumed writer's lane_out came with no retry_after, so next was owner, and the bead
     # blocked "needs a human" after 114 min of work
@@ -4257,7 +4259,7 @@ class DelegateLauncher(unittest.TestCase):
 
     def test_no_delegate_blocks_with_the_install_command(self):
         c = engine.load_cfg(str(self.wt))
-        with mock.patch.object(engine, "find_route", return_value=None):
+        with mock.patch.object(lroute, "find_route", return_value=None):
             rc = engine.Engine("t-1", str(self.wt), c).run()
         self.assertEqual(rc, 2)
         self.assertIn("claude plugin install iorlas-delegate", self.blocked[0])
@@ -4270,7 +4272,7 @@ class DelegateCall(unittest.TestCase):
             route.write_text("import json,sys\nprint('chatter', file=sys.stderr)\n"
                              "print(json.dumps({'v': 2, 'status': 'done', 'data': {'argv': sys.argv[1:]}, 'ref': 'r1',"
                              " 'cost': 0, 'family': 'openai'}))\n")
-            r, j = engine.call_delegate(str(route), "worker", "do it", {"type": "object"}, d, "r0", 60,
+            r, j = lcall.call_delegate(str(route), "worker", "do it", {"type": "object"}, d, "r0", 60,
                                         Path(d, "err.log"), writer="claude", parent="p", task="t-1", title="x")
         argv = r.data["argv"]
         self.assertEqual(argv[:2], ["run", "worker"])
@@ -4285,7 +4287,7 @@ class DelegateCall(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             route = Path(d, "route.py")
             route.write_text("import json,sys\nprint(json.dumps({'v': 2, 'status': 'done', 'data': {'argv': sys.argv[1:]}}))\n")
-            r, _ = engine.call_delegate(str(route), "worker", "x", {"type": "object"}, d, None, 60, Path(d, "e.log"),
+            r, _ = lcall.call_delegate(str(route), "worker", "x", {"type": "object"}, d, None, 60, Path(d, "e.log"),
                                         access="--host")
         self.assertIn("--host", r.data["argv"])
 
@@ -4293,11 +4295,11 @@ class DelegateCall(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             route = Path(d, "route.py")
             route.write_text("import json\nprint(json.dumps({'worker_run': 2, 'lanes': {'codex': {}}}))\n")
-            self.assertEqual(engine.contract(str(route))["worker_run"], 2)
+            self.assertEqual(lroute.contract(str(route))["worker_run"], 2)
             route.write_text("import sys\nprint('usage: route.py {run,status}', file=sys.stderr); sys.exit(2)\n")
-            self.assertIsNone(engine.contract(str(route)))
+            self.assertIsNone(lroute.contract(str(route)))
             route.write_text("import json\nprint(json.dumps({'worker_run': 3}))\n")
-            self.assertIsNone(engine.contract(str(route)))
+            self.assertIsNone(lroute.contract(str(route)))
 
     def test_find_route_picks_the_newest_contract_version(self):
         with tempfile.TemporaryDirectory() as home:
@@ -4306,10 +4308,10 @@ class DelegateCall(unittest.TestCase):
                 p.mkdir(parents=True)
                 (p / "route.py").write_text("")
             with mock.patch.object(engine.Path, "home", return_value=Path(home)):
-                self.assertIn("0.30.2", engine.find_route())
+                self.assertIn("0.30.2", lroute.find_route())
         with tempfile.TemporaryDirectory() as home, mock.patch.object(engine.Path, "home", return_value=Path(home)):
-            self.assertIsNone(engine.find_route())
-            self.assertIsNone(engine.find_route(str(Path(home, "missing.py"))))
+            self.assertIsNone(lroute.find_route())
+            self.assertIsNone(lroute.find_route(str(Path(home, "missing.py"))))
 
     def test_find_route_honors_the_delegate_pin_not_the_newest(self):
         with tempfile.TemporaryDirectory() as home, mock.patch.object(engine.Path, "home", return_value=Path(home)), \
@@ -4322,11 +4324,11 @@ class DelegateCall(unittest.TestCase):
             pin = Path(home, "cfg", "task-loop", "pinned.json")
             pin.parent.mkdir(parents=True)
             pin.write_text(json.dumps({"delegate": "0.29.0"}))
-            self.assertIn("0.29.0", engine.find_route())
+            self.assertIn("0.29.0", lroute.find_route())
             pin.write_text(json.dumps({"task-loop": "0.23.1"}))  # a pin that names no delegate leaves the newest
-            self.assertIn("0.30.2", engine.find_route())
+            self.assertIn("0.30.2", lroute.find_route())
             pin.write_text(json.dumps({"delegate": "0.28.0"}))  # a pinned dir that is gone: no route, no fallback
-            self.assertIsNone(engine.find_route())
+            self.assertIsNone(lroute.find_route())
 
 
 class Confirms(unittest.TestCase):

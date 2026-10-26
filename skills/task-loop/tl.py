@@ -2140,8 +2140,8 @@ def main(argv=None):
         import engine
         return engine.main(a)
     if a.cmd == "usage":
-        import engine
-        route = engine.find_route()
+        from lanes import route as lroute
+        route = lroute.find_route()
         if not route:
             print("no delegate installed: nothing to feed")
             return 0

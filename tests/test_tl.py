@@ -397,9 +397,9 @@ class PinAndRollback(Base):
         self.assertEqual(self.pinned()["task-loop"], "0.1.0")
 
     def test_the_drill_pin_decides_what_loop_and_find_route_pick_then_clear_returns_to_the_newest(self):
-        import engine
         import loop
-        route = lambda: engine.find_route()
+        from lanes import route as lroute
+        route = lambda: lroute.find_route()
         self.assertIn("0.6.0", route())  # no pin: the newest
         self.assertEqual(self.pin("0.1.0", "--delegate", "0.5.0")[0], 0)
         self.assertIn("/iorlas-delegate/0.5.0/", route())

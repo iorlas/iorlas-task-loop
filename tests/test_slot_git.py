@@ -16,6 +16,8 @@ sys.path.insert(0, str(ROOT / "tests"))
 import engine  # noqa: E402
 import test_engine as te  # noqa: E402
 import tl  # noqa: E402
+from lanes import call as lcall  # noqa: E402,F401
+from lanes import route as lroute  # noqa: E402,F401
 
 
 def sh(*a, cwd):
@@ -65,9 +67,9 @@ class SlotGitTest(unittest.TestCase):
                 mock.patch.object(tl, "show", return_value=te.BEAD), mock.patch.object(tl, "comments", return_value=[]), \
                 mock.patch.object(tl, "cmd_close", side_effect=lambda a: closed.append(a.reason) or 0), \
                 mock.patch.object(tl, "cmd_block", side_effect=lambda a: blocked.append(a.why) or 0), \
-                mock.patch.object(engine, "find_route", return_value="/fake/route.py"), \
-                mock.patch.object(engine, "contract", return_value=te.CONTRACT), \
-                mock.patch.object(engine, "call_delegate", script), mock.patch.object(engine.time, "sleep"):
+                mock.patch.object(lroute, "find_route", return_value="/fake/route.py"), \
+                mock.patch.object(lroute, "contract", return_value=te.CONTRACT), \
+                mock.patch.object(lcall, "call_delegate", script), mock.patch.object(engine.time, "sleep"):
             eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
             rc = eng.run()
         self.assertEqual(rc, 2)
@@ -123,7 +125,7 @@ class SlotGitTest(unittest.TestCase):
         route.write_text("import json, os\nprint(json.dumps({'v': 2, 'status': 'done', 'data': {'env': [k for k in "
                          "('GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE') if k in os.environ]}}))\n")
         with mock.patch.dict(os.environ, {"GIT_DIR": "/x", "GIT_WORK_TREE": "/y", "GIT_INDEX_FILE": "/z"}):
-            r, j = engine.call_delegate(str(route), "worker", "p", {"type": "object"}, str(self.wt), None, 30,
+            r, j = lcall.call_delegate(str(route), "worker", "p", {"type": "object"}, str(self.wt), None, 30,
                                         Path(self.tmp.name) / "err.log")
             eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
             rc, tail = eng.sh('echo "[$GIT_DIR|$GIT_WORK_TREE|$GIT_INDEX_FILE]"')
@@ -165,9 +167,9 @@ class SlotGitTest(unittest.TestCase):
                 mock.patch.object(tl, "cmd_close", side_effect=lambda a: landed.append(1) or 0), \
                 mock.patch.object(tl, "cmd_land", side_effect=lambda a: landed.append(1) or 0), \
                 mock.patch.object(tl, "cmd_block", return_value=0), \
-                mock.patch.object(engine, "find_route", return_value="/fake/route.py"), \
-                mock.patch.object(engine, "contract", return_value=te.CONTRACT), \
-                mock.patch.object(engine, "call_delegate", script), mock.patch.object(engine.time, "sleep"):
+                mock.patch.object(lroute, "find_route", return_value="/fake/route.py"), \
+                mock.patch.object(lroute, "contract", return_value=te.CONTRACT), \
+                mock.patch.object(lcall, "call_delegate", script), mock.patch.object(engine.time, "sleep"):
             eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
             rc = eng.run()
         self.assertEqual(rc, 2)

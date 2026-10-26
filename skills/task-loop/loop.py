@@ -28,6 +28,8 @@ from pathlib import Path
 
 import engine
 import tl
+from lanes import call as lcall
+from lanes import route as lroute
 
 POLL = 2               # seconds between looks at a running child (stop file, slot heartbeat)
 HEARTBEAT = 60         # the slot bead's lease is kept alive this often while a bead runs
@@ -1135,7 +1137,7 @@ def selftest():
         j = {"v": 2, "status": "done", "reason": None, "next": None, "data": data, "ref": "ref-" + node, "cost": 0.0,
              "secs": 1, "family": "openai" if node == "write" else "claude", "lane": "L", "model": "m", "effort": "e",
              "git_violation": [], "tokens": {"in": 1, "cached": 0, "out": 1}, "context": {"instructions": [], "env_keys": []}}
-        return engine.Result(data, "", j["ref"], 0.0, 1, "", j["family"]), j
+        return lcall.Result(data, "", j["ref"], 0.0, 1, "", j["family"]), j
 
     with tempfile.TemporaryDirectory(prefix="tl-selftest-") as tmp:
         home = Path(os.path.realpath(tmp))
@@ -1160,9 +1162,9 @@ def selftest():
                     mock.patch.object(tl, "cmd_close", side_effect=lambda a: closed.append(a.reason) or 0), \
                     mock.patch.object(tl, "cmd_block", side_effect=lambda a: blocked.append(a.why) or 0), \
                     mock.patch.object(tl, "cmd_land", return_value=0), \
-                    mock.patch.object(engine, "find_route", return_value="/selftest/route.py"), \
-                    mock.patch.object(engine, "contract", return_value=contract), \
-                    mock.patch.object(engine, "call_delegate", lane), mock.patch.object(engine.time, "sleep"):
+                    mock.patch.object(lroute, "find_route", return_value="/selftest/route.py"), \
+                    mock.patch.object(lroute, "contract", return_value=contract), \
+                    mock.patch.object(lcall, "call_delegate", lane), mock.patch.object(engine.time, "sleep"):
                 cfg = engine.load_cfg(str(wt))
                 cfg.update({"reflect": False})
                 os.chdir(wt)  # the engine reads cwd

@@ -23,6 +23,7 @@ from test_loop import LoopBase, rec  # noqa: E402
 import engine  # noqa: E402  (test_loop put skills/task-loop on sys.path)
 import loop  # noqa: E402
 import tl  # noqa: E402
+from core import procs  # noqa: E402,F401
 
 POSIX = os.name != "nt"
 REAL_PREPARE = loop.prepare  # LoopBase stubs it
@@ -485,7 +486,7 @@ class TreeKillAndPidReuse(unittest.TestCase):
                 mock.patch.object(engine.os, "killpg", side_effect=lambda g, s: kills.append(("pg", g, s))), \
                 mock.patch.object(engine.os, "kill", side_effect=lambda q, s: kills.append(("p", q, s))), \
                 mock.patch.object(tl, "proc_alive", return_value=False):
-            engine.stop_tree(p)
+            procs.stop_tree(p)
         self.assertIn(("pg", route, signal.SIGTERM), kills)
         hit = {k[1] for k in kills if k[2] == 9}
         self.assertIn(500, hit)
@@ -554,8 +555,8 @@ class StoppedEngineKillsItsWorker(unittest.TestCase):
         cmd = [sys.executable, str(self.d / "route.py"), str(self.d / "w.pid"), mode] + (["names"] if names else [])
         log = self.d / "err.log"
         if how == "timeout":
-            with mock.patch.object(engine, "STOP_GRACE", 1):
-                res, _ = engine.run_proc(cmd, str(self.d), 1.5, log)
+            with mock.patch.object(procs, "STOP_GRACE", 1):
+                res, _ = procs.run_proc(cmd, str(self.d), 1.5, log)
             self.assertIsNone(res)
             return
         old = signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(engine.Blocked("failed: stopped (SIGTERM)")))
@@ -572,8 +573,8 @@ class StoppedEngineKillsItsWorker(unittest.TestCase):
         t = __import__("threading").Timer(0, stop_once_the_worker_runs)
         t.start()
         try:
-            with mock.patch.object(engine, "STOP_GRACE", 1), self.assertRaises(engine.Blocked):
-                engine.run_proc(cmd, str(self.d), 60, log)
+            with mock.patch.object(procs, "STOP_GRACE", 1), self.assertRaises(engine.Blocked):
+                procs.run_proc(cmd, str(self.d), 60, log)
         finally:
             done.set()
             t.join()
@@ -615,7 +616,7 @@ class KillTreeGroupTest(unittest.TestCase):
     def test_kill_tree_kills_a_check_and_the_runner_survives(self):
         p = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], start_new_session=True)
         self.assertNotEqual(os.getpgid(p.pid), os.getpgrp())
-        engine.kill_tree(p)
+        procs.kill_tree(p)
         self.assertIsNotNone(p.returncode)
 
     def test_kill_tree_refuses_a_child_in_our_own_group(self):
@@ -623,7 +624,7 @@ class KillTreeGroupTest(unittest.TestCase):
         try:
             self.assertEqual(os.getpgid(p.pid), os.getpgrp())
             with mock.patch.object(engine.os, "killpg") as kp, self.assertRaises(RuntimeError):
-                engine.kill_tree(p)
+                procs.kill_tree(p)
             kp.assert_not_called()
         finally:
             p.kill()
@@ -637,23 +638,23 @@ class NeverSignalOneself(unittest.TestCase):
     def test_send_group_refuses_our_group_and_our_parents(self):
         for gid in (os.getpgrp(), os.getpid(), os.getppid(), 0, 1):
             with mock.patch.object(engine.os, "killpg") as kp, self.assertRaises(RuntimeError):
-                engine.send_group(gid, signal.SIGTERM)
+                procs.send_group(gid, signal.SIGTERM)
             kp.assert_not_called()
 
     def test_send_pid_refuses_ourselves_and_our_parent(self):
         for pid in (os.getpid(), os.getppid(), 0, 1):
             with mock.patch.object(engine.os, "kill") as k, self.assertRaises(RuntimeError):
-                engine.send_pid(pid, signal.SIGTERM)
+                procs.send_pid(pid, signal.SIGTERM)
             k.assert_not_called()
 
     def test_a_named_worker_must_still_be_that_process_in_that_group(self):
         w = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], start_new_session=True)
         try:
             with mock.patch.object(engine.os, "killpg") as kp:
-                self.assertFalse(engine.send_group(w.pid, 9, pid=w.pid, start="not when it started"))  # pid reused
-                self.assertFalse(engine.send_group(os.getpgid(w.pid), 9, pid=os.getpid(), start=""))   # not in that group
+                self.assertFalse(procs.send_group(w.pid, 9, pid=w.pid, start="not when it started"))  # pid reused
+                self.assertFalse(procs.send_group(os.getpgid(w.pid), 9, pid=os.getpid(), start=""))   # not in that group
                 kp.assert_not_called()
-            self.assertTrue(engine.send_group(w.pid, 9, pid=w.pid, start=tl.proc_start(w.pid)))
+            self.assertTrue(procs.send_group(w.pid, 9, pid=w.pid, start=tl.proc_start(w.pid)))
         finally:
             w.kill()
             w.wait()
@@ -662,8 +663,8 @@ class NeverSignalOneself(unittest.TestCase):
         p = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], start_new_session=True)
         w = {"pid": os.getpid(), "pgid": os.getpgrp(), "start": tl.proc_start(os.getpid())}
         try:
-            with mock.patch.object(engine, "STOP_GRACE", 1):
-                engine.stop_named(p, None, w)  # a route.py that names the runner as its worker
+            with mock.patch.object(procs, "STOP_GRACE", 1):
+                procs.stop_named(p, None, w)  # a route.py that names the runner as its worker
         finally:
             p.kill()
             p.wait()

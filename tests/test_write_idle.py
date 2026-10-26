@@ -19,6 +19,9 @@ import test_engine as te  # noqa: E402
 
 import engine  # noqa: E402
 import tl  # noqa: E402
+from core import procs  # noqa: E402,F401
+from lanes import call as lcall  # noqa: E402,F401
+from lanes import route as lroute  # noqa: E402,F401
 
 POSIX = os.name != "nt"
 MIN = 60.0
@@ -64,8 +67,8 @@ class WriteFollowsTheWorker(unittest.TestCase):
         runs.mkdir(parents=True)
         (runs / "run1.json").write_text(json.dumps({"id": "run1", "transcript": str(self.d / "session.jsonl")}))
         for p in (mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(self.d / "cfg"), "APPDATA": str(self.d / "cfg")}),
-                  mock.patch.object(engine, "POLL", 0.02), mock.patch.object(engine, "STOP_GRACE", 1),
-                  mock.patch.object(engine, "PROOF_TERM", 0.5), mock.patch.object(engine, "PROOF_KILL", 1)):
+                  mock.patch.object(lcall, "POLL", 0.02), mock.patch.object(procs, "STOP_GRACE", 1),
+                  mock.patch.object(procs, "PROOF_TERM", 0.5), mock.patch.object(procs, "PROOF_KILL", 1)):
             p.start()
             self.addCleanup(p.stop)
         self.clock, self.warns = Clock(), []
@@ -90,11 +93,11 @@ class WriteFollowsTheWorker(unittest.TestCase):
         return False
 
     def call(self, mtime, mode="", wall=47 * MIN, **kw):
-        idle = engine.Idle(15 * MIN, 25 * MIN, 120 * MIN, on_warn=self.warns.append, clock=self.clock, mtime=mtime)
+        idle = lcall.Idle(15 * MIN, 25 * MIN, 120 * MIN, on_warn=self.warns.append, clock=self.clock, mtime=mtime)
         cmd = [sys.executable, str(self.d / "route.py"), "--cwd", str(self.d)]
         stop = {}
         with mock.patch.dict(os.environ, {"FAKE_MODE": mode}):
-            res, _ = engine.run_proc(cmd, str(self.d), wall, self.d / "err.log", idle=idle, stop=stop, **kw)
+            res, _ = procs.run_proc(cmd, str(self.d), wall, self.d / "err.log", idle=idle, stop=stop, **kw)
         return res, stop
 
     def test_a_worker_that_keeps_writing_past_the_old_45_min_cap_is_not_stopped(self):
@@ -143,8 +146,8 @@ class WriteFollowsTheWorker(unittest.TestCase):
         self.assertTrue(self.gone(self.worker()))
 
     def test_a_worker_that_survives_every_signal_is_reported_alive(self):
-        with mock.patch.object(engine, "send_group", return_value=False), mock.patch.object(engine, "send_pid", return_value=False), \
-                mock.patch.object(engine, "signal_child", return_value=False):
+        with mock.patch.object(procs, "send_group", return_value=False), mock.patch.object(procs, "send_pid", return_value=False), \
+                mock.patch.object(procs, "signal_child", return_value=False):
             res, stop = self.call(lambda path: 1000.0, mode="stubborn")
         self.assertIsNone(res)
         self.assertEqual(stop["alive"], [self.worker()])
@@ -152,10 +155,10 @@ class WriteFollowsTheWorker(unittest.TestCase):
 
     def test_call_delegate_hands_the_survivors_to_the_engine(self):
         route = self.d / "route.py"
-        idle = engine.Idle(15 * MIN, 25 * MIN, 120 * MIN, clock=self.clock, mtime=lambda p: 1000.0)
-        with mock.patch.object(engine, "send_group", return_value=False), mock.patch.object(engine, "send_pid", return_value=False), \
-                mock.patch.object(engine, "signal_child", return_value=False), mock.patch.dict(os.environ, {"FAKE_MODE": "stubborn"}):
-            r, j = engine.call_delegate(str(route), "worker", "x", {"type": "object"}, str(self.d), None, 47 * MIN - 120,
+        idle = lcall.Idle(15 * MIN, 25 * MIN, 120 * MIN, clock=self.clock, mtime=lambda p: 1000.0)
+        with mock.patch.object(procs, "send_group", return_value=False), mock.patch.object(procs, "send_pid", return_value=False), \
+                mock.patch.object(procs, "signal_child", return_value=False), mock.patch.dict(os.environ, {"FAKE_MODE": "stubborn"}):
+            r, j = lcall.call_delegate(str(route), "worker", "x", {"type": "object"}, str(self.d), None, 47 * MIN - 120,
                                         self.d / "err.log", idle=idle)
         self.assertIsNone(j)
         self.assertEqual(r.alive, [self.worker()])
@@ -190,9 +193,9 @@ class ChildInItsOwnSession(unittest.TestCase):
             self.assertNotEqual(os.getpgid(c), os.getpgid(w))
             worker = {"pid": w, "pgid": w, "start": tl.proc_start(w)}
             try:
-                with mock.patch.object(engine, "STOP_GRACE", 1), mock.patch.object(engine, "PROOF_TERM", 1), \
-                        mock.patch.object(engine, "PROOF_KILL", 2):
-                    alive = engine.stop_and_prove(p, None, worker)
+                with mock.patch.object(procs, "STOP_GRACE", 1), mock.patch.object(procs, "PROOF_TERM", 1), \
+                        mock.patch.object(procs, "PROOF_KILL", 2):
+                    alive = procs.stop_and_prove(p, None, worker)
                 self.assertEqual(alive, [])
                 end = time.monotonic() + 30
                 while tl.proc_alive(c) and time.monotonic() < end:
@@ -207,7 +210,7 @@ class ChildInItsOwnSession(unittest.TestCase):
 class IdleRules(unittest.TestCase):
     def watch(self, mtime, **kw):
         self.warns, self.t = [], [0.0]
-        w = engine.Idle(15 * MIN, 25 * MIN, 120 * MIN, on_warn=self.warns.append, clock=lambda: self.t[0], mtime=mtime,
+        w = lcall.Idle(15 * MIN, 25 * MIN, 120 * MIN, on_warn=self.warns.append, clock=lambda: self.t[0], mtime=mtime,
                         session=lambda run_id: "/s.jsonl", **kw)
         w.begin()
         return w
@@ -250,14 +253,14 @@ class IdleRules(unittest.TestCase):
         self.assertEqual(self.warns, [])
 
 
-@unittest.skipIf(os.name == "nt", "POSIX process groups (os.getpgrp); engine.own_ids needs it")
+@unittest.skipIf(os.name == "nt", "POSIX process groups (os.getpgrp); procs.own_ids needs it")
 class ProveDead(unittest.TestCase):
     TABLE = {888: (1, 900, "x")}  # a stranger in group 900
 
     def lingering(self, table, worker):
         alive = lambda pid, start="": pid in table and (not start or table[pid][2] == start)  # noqa: E731
         with mock.patch.object(tl, "proc_table", return_value=table), mock.patch.object(tl, "proc_alive", side_effect=alive):
-            return engine.lingering([], worker)
+            return procs.lingering([], worker)
 
     def test_a_reused_group_id_with_another_leader_is_not_ours_to_signal(self):
         worker = {"pid": 777, "pgid": 900, "start": "old"}
@@ -277,8 +280,8 @@ class ProveDead(unittest.TestCase):
                 mock.patch.object(engine.os, "kill", side_effect=lambda p, s: sent.append(p)), \
                 mock.patch.object(engine.os, "killpg", side_effect=lambda g, s: sent.append(("g", g))), \
                 mock.patch.object(engine.os, "getpgid", side_effect=lambda p: table[p][1]), \
-                mock.patch.object(engine, "PROOF_TERM", 0.05), mock.patch.object(engine, "PROOF_KILL", 0.05):
-            alive = engine.prove_dead([], worker)
+                mock.patch.object(procs, "PROOF_TERM", 0.05), mock.patch.object(procs, "PROOF_KILL", 0.05):
+            alive = procs.prove_dead([], worker)
         self.assertEqual(alive, [777])  # still "alive" in this fake world
         self.assertIn(777, sent)
         self.assertNotIn(os.getpid(), sent)
@@ -293,14 +296,14 @@ class SurvivorBlocksTheRetry(te.EngineTest):
                 if role != "worker":
                     return super().__call__(route, role, *a, **kw)
                 self.calls.append((role, None, None))
-                return engine.Result(secs=2820, error="timeout (no worker output for 25 min)", backend="delegate",
+                return lcall.Result(secs=2820, error="timeout (no worker output for 25 min)", backend="delegate",
                                      alive=[4242]), None
 
         script = Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         c = engine.load_cfg(str(self.wt))
-        with mock.patch.object(engine, "find_route", return_value="/fake/route.py"), \
-                mock.patch.object(engine, "contract", return_value=te.CONTRACT), \
-                mock.patch.object(engine, "call_delegate", script), mock.patch.object(engine.time, "sleep"):
+        with mock.patch.object(lroute, "find_route", return_value="/fake/route.py"), \
+                mock.patch.object(lroute, "contract", return_value=te.CONTRACT), \
+                mock.patch.object(lcall, "call_delegate", script), mock.patch.object(engine.time, "sleep"):
             self.eng = engine.Engine("t-1", str(self.wt), c)
             rc = self.eng.run()
         self.assertEqual(rc, 2)
@@ -318,9 +321,9 @@ class SurvivorBlocksTheRetry(te.EngineTest):
 
         script = Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         c = engine.load_cfg(str(self.wt))
-        with mock.patch.object(engine, "find_route", return_value="/fake/route.py"), \
-                mock.patch.object(engine, "contract", return_value=te.CONTRACT), \
-                mock.patch.object(engine, "call_delegate", script), mock.patch.object(engine.time, "sleep"):
+        with mock.patch.object(lroute, "find_route", return_value="/fake/route.py"), \
+                mock.patch.object(lroute, "contract", return_value=te.CONTRACT), \
+                mock.patch.object(lcall, "call_delegate", script), mock.patch.object(engine.time, "sleep"):
             engine.Engine("t-1", str(self.wt), c).run()
         self.assertEqual((seen["worker"].warn, seen["worker"].stop, seen["worker"].cap), (15 * MIN, 25 * MIN, 120 * MIN))
         self.assertIsNone(seen["planner"])
@@ -328,7 +331,7 @@ class SurvivorBlocksTheRetry(te.EngineTest):
 
     def test_a_write_under_the_idle_rules_gets_no_close_to_the_limit_warning(self):
         eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
-        r = engine.Result(te.CLEAN, secs=40 * 60)
+        r = lcall.Result(te.CLEAN, secs=40 * 60)
         eng.anomalies("write", r, 1)
         eng.anomalies("review", r, 1)
         warned = [json.loads(x)["text"] for x in Path(eng.log_path).read_text().splitlines() if '"warn"' in x]

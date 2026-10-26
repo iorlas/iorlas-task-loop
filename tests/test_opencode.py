@@ -17,6 +17,7 @@ import engine  # noqa: E402
 import server  # noqa: E402
 import timeline  # noqa: E402
 import tl  # noqa: E402
+from lanes import call as lcall  # noqa: E402,F401
 
 SID = "ses_abc123"
 T = 1_790_000_000_000  # OpenCode stores milliseconds
@@ -123,8 +124,8 @@ class OpenCode(unittest.TestCase):
 
     def test_agent_run_session_and_mtime_follow_an_opencode_id(self):
         (self.runs / "r1.json").write_text(json.dumps({"v": 1, "id": "r1", "kind": "opencode", "transcript": SID}))
-        self.assertEqual(engine.agent_run_session("r1"), "opencode:" + SID)
-        self.assertAlmostEqual(engine.file_mtime("opencode:" + SID), 1_790_000_009.0)
+        self.assertEqual(lcall.agent_run_session("r1"), "opencode:" + SID)
+        self.assertAlmostEqual(lcall.file_mtime("opencode:" + SID), 1_790_000_009.0)
 
     def test_contract_runs_find_the_session_by_session_thread_or_transcript(self):
         now = time.time()
@@ -167,14 +168,14 @@ class OpenCode(unittest.TestCase):
         con.close()
         self.assertAlmostEqual(tl.opencode_updated(SID), 1_790_000_099.0)  # a part newer than every message
         t = [1_790_000_100.0]
-        w = engine.Idle(900, 1500, 7200, clock=lambda: t[0], session=lambda r: "opencode:" + SID)
+        w = lcall.Idle(900, 1500, 7200, clock=lambda: t[0], session=lambda r: "opencode:" + SID)
         w.begin()
         w.t0 = t[0] - 60
         self.assertEqual(w.check({"run_id": "r"}, 2820), "")
         t[0] += 600
         self.assertEqual(w.check({"run_id": "r"}, 2820), "")
         with mock.patch.dict(os.environ, {"OPENCODE_DB": os.path.join(self.tmp.name, "gone.db")}):  # unreadable now: last time kept
-            self.assertAlmostEqual(engine.file_mtime("opencode:" + SID), 1_790_000_099.0)
+            self.assertAlmostEqual(lcall.file_mtime("opencode:" + SID), 1_790_000_099.0)
             t[0] += 300
             self.assertEqual(w.check({"run_id": "r"}, 2820), "")
 
