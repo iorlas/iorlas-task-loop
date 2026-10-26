@@ -82,7 +82,7 @@ DEFAULTS = {
     "host": False,                    # the work needs the host (Unity, an editor): write steps get delegate's --host
                                       # a bead label `sandbox` turns it off for one bead
     "no_sandbox": False,              # the 0.6 name of `host`, still read
-    "worker_rules": "",               # repo file the planner and writer read first (lifesim: docs/agents/codex.md)
+    "worker_rules": "",               # repo file whose text (3 KB at most) the planner's and the writer's first prompts carry (lifesim: docs/agents/worker-rules.md)
     "brief_kb": 5,
     "test_pattern": r"^\s*(def test_|async def test_|\[(Test|UnityTest|Fact|Theory|TestMethod|TestCase)\b|#\[test\]|(it|test)\(|func Test)",                    # a brief bigger than this gets a ⚠ (never cut: the bead may be too big)
 }
@@ -1612,6 +1612,21 @@ class Engine:
         live outside it so the worker cannot change them."""
         return (self.run_dir / "brief.md").read_text(encoding="utf-8")
 
+    def rules_text(self):
+        """tl-7y6.6.1: the repo's worker rules (engine.worker_rules), inlined; "" when none. A file over RULES_MAX is cut at a line
+        and the engine warns: the limit is hard, so the planner and the writer share one text and nobody reads a path."""
+        rel = self.cfg["worker_rules"]
+        if not rel:
+            return ""
+        try:
+            text = (Path(self.wt) / rel).read_text(encoding="utf-8").strip()
+        except (OSError, ValueError):
+            return ""
+        if len(text.encode("utf-8")) > RULES_MAX:
+            self.warn("worker rules %s are over %d bytes: only the first lines that fit are sent" % (rel, RULES_MAX))
+            text = text.encode("utf-8")[:RULES_MAX].decode("utf-8", "ignore").rsplit("\n", 1)[0].rstrip()
+        return text
+
     def plan_text(self):
         return json.dumps(getattr(self, "plan_data", None) or {}, indent=1)
 
@@ -2460,6 +2475,7 @@ class Engine:
             self.save_checkpoint(stage=0, rounds=0, n=0, feedback="", step="write")
         bad, gated, dry = lint.tracker_checks(data), lint.gate_only_checks(data, self.cfg), lint.dry_check(data, self.wt)
         rep = self.repeated_slow(data)
+        only = gate_only_criteria(data, self.cfg)
         led = lint.ledger_problems(data) + lint.timeout_problems(data, self.cfg["check_timeout_min"])
         if led:
             dry = dry + led  # sent back with the checks that cannot run
@@ -2467,7 +2483,7 @@ class Engine:
         # to the planner once. With leftovers it is the finished-work plan (tl-bxk.13.2); with the owner's verify answer it may be empty.
         empty = (not data["stages"] and not data["question"].strip() and not data.get("leftovers") and not self.leftovers
                  and not self.verify_answer)
-        if bad or gated or dry or rep or empty:  # asked once to rewrite them, like an invalid answer; not a counted re-plan
+        if bad or gated or dry or rep or empty or only:  # asked once to rewrite them, like an invalid answer; not a counted re-plan
             why = ""
             if empty:
                 self.warn("the plan has no stages, no question and nothing to file, sent back")
@@ -2476,6 +2492,9 @@ class Engine:
                 self.warn("the plan's checks run a slow command more than once, sent back: %s" % "; ".join(r[0] for r in rep)[:300])
                 why += REPEAT_TEXT % "\n".join("- `%s` in %s" % (part, "; ".join("`%s`" % c[:80] for c in cs) if cs else "a repo check (%s)" % rid)
                                                for part, cs, rid in rep)
+            if only:
+                self.warn("the plan's acceptance is only the gate, sent back (%s): %s" % (GATE_ONLY_ACCEPTANCE, "; ".join(only)[:300]))
+                why += GATE_ONLY_ACCEPTANCE_TEXT % (GATE_ONLY_ACCEPTANCE, self.cfg["gate"] or "the gate", "\n".join("- %s" % c for c in only))
             if bad:
                 self.warn("the plan's checks read the issue tracker, sent back: %s" % "; ".join(bad)[:300])
                 why += TRACKER_TEXT % "\n".join("- `%s`" % c for c in bad)
@@ -2490,12 +2509,17 @@ class Engine:
                             else "it has no stages")
             self.transition(step, "plan_sent_back", "plan %s" % "; ".join(
                 (["has no stages"] if empty else []) + (["checks read the issue tracker"] if bad else []) +
+                (["acceptance is only the gate (%s)" % GATE_ONLY_ACCEPTANCE] if only else []) +
                 (["checks run gate-only commands"] if gated else []) +
                 (["checks repeat a slow command"] if rep else []) + (["checks cannot run"] if dry else [])))
             ref = self.planner_ref
             back = (why.lstrip() + "\n\nYour plan, to correct (same output schema):\n" + json.dumps(data, indent=1)) if ref else prompt + why
             data, _ = self.ai("plan", "rewrite checks", back, step=step, mode="checks_back", resume_ref=ref or None)
             bad, gated = lint.tracker_checks(data), lint.gate_only_checks(data, self.cfg)
+            only = gate_only_criteria(data, self.cfg)
+            if only:
+                raise Blocked("failed: the plan's acceptance is still only the gate after one rewrite (%s): %s"
+                              % (GATE_ONLY_ACCEPTANCE, "; ".join(only)[:400]))
             if bad:
                 raise Blocked("failed: the plan's checks still read the issue tracker after one rewrite: %s"
                               % "; ".join(bad)[:400])
@@ -2613,18 +2637,10 @@ class Engine:
         if old or again:
             extra += self.deferred_text()
         rules = []
-        if self.cfg["worker_rules"]:
-            rf = Path(self.wt) / self.cfg["worker_rules"]
-            try:  # a short rules file is inlined: reading it costs the planner a turn
-                inline = rf.read_text(encoding="utf-8") if rf.stat().st_size < RULES_INLINE_MAX else None
-            except OSError:
-                inline = None
-            if inline is not None:
-                rules.append("This repo's rules for workers (what runs where, known pitfalls of its tools); the checks you "
-                             "write must follow them:\n<worker_rules>\n%s\n</worker_rules>" % inline.strip())
-            else:
-                rules.append("Read %s: this repo's rules for workers (what runs where, known pitfalls of its tools); the "
-                             "checks you write must follow them." % rf)
+        wr = self.rules_text()
+        if wr:
+            rules.append("This repo's rules for workers (what runs where, known pitfalls of its tools); the checks you "
+                         "write must follow them:\n<worker_rules>\n%s\n</worker_rules>" % wr)
         notes = self.planner_notes()
         if notes:
             rules.append("Facts about this factory and project that the plan must respect:\n" + notes)
@@ -3038,17 +3054,15 @@ class Engine:
                 self.warn("%s: write %d (round %d)" % (name, n, rounds + 1))
             boundary = n == 1 and i > 0 and not state  # the first write of a later stage
             fresh = self.drop_big_writer(boundary)
-            stage_checks = self.stage_checks_text(st["checks"])
-            where_text = self.where("write", [c["cmd"] for c in self.cfg["checks"]] + st["checks"], failed_cmds)
+            stage_checks = self.stage_checks_text(st["checks"], skip=failed_cmds)
+            where_text = self.where("write", [c["cmd"] for c in self.cfg["checks"]] + st["checks"], failed_cmds, listed=st["checks"])
             tail = ("\nThe plan's acceptance cases run on the last stage. If you find a case they miss, add it to new_cases (the "
                     "criterion it proves, the check, why); never remove or weaken one." + ("" if last else LATER_CASES) +
                     UNCHECKED_TEXT + self.look_write(st))
-            prompt = WRITE_PROMPT.format(
-                brief=self.brief_text(), plan=self.plan_text(), n=i + 1, goal=st["goal"],
+            prompt = write_prompt(
+                self.rules_text(), brief=self.brief_text(), plan=self.plan_text(), n=i + 1, goal=st["goal"],
                 files=", ".join(st["files"]), checks=stage_checks,
-                feedback=feedback, evidence=self.evidence_dir, where=where_text, gate=(" (`%s`)" % self.cfg["gate"]) if self.cfg["gate"] else "",
-                rules=("\nRead %s first: this repo's rules for work in your sandbox (what runs there, what does not)."
-                       % (Path(self.wt) / self.cfg["worker_rules"])) if self.cfg["worker_rules"] else "") + tail
+                feedback=feedback, evidence=self.evidence_dir, where=where_text, gate=(" (`%s`)" % self.cfg["gate"]) if self.cfg["gate"] else "") + tail
             if fresh:
                 prompt += self.stages_done_text() if boundary else self.done_so_far()
             dtail = ""  # what a resumed writer still needs that its first prompt did not say for this stage
@@ -3056,8 +3070,6 @@ class Engine:
                 dtail += "\nThe plan's acceptance cases run on this last stage. If you find a case they miss, add it to new_cases (the criterion it proves, the check, why); never remove or weaken one."
             if self.unchecked:
                 dtail += UNCHECKED_TEXT
-            if self.cfg["worker_rules"]:
-                dtail += "\nRead %s first: this repo's rules for work in your sandbox." % (Path(self.wt) / self.cfg["worker_rules"])
             delta = None if fresh else self.write_delta(i + 1, st["goal"], ", ".join(st["files"]), stage_checks, where_text, feedback,
                                                         dtail + self.look_write(st))
             if delta:  # the writer may have edited its copy: the engine's brief goes back before it reads it again
@@ -3299,10 +3311,17 @@ class Engine:
             return True
         return s > float(self.cfg["writer_check_max_s"]) if s is not None else bool(SLOW_CMD.search(cmd))
 
-    def stage_checks_text(self, checks):
-        """The stage's check list split for the writer: the fast ones it may run, the slow ones the engine runs alone."""
+    def stage_checks_text(self, checks, skip=None):
+        """The stage's check list split for the writer: the fast ones it may run, the slow ones the engine runs alone.
+        `skip`: the commands the last engine run found red: where() lists those, so each command is named once (tl-7y6.6.12)."""
+        checks = list(dict.fromkeys(checks))
         if not checks:
             return "- (none named)"
+        if skip is not None:
+            gone = {norm_cmd(c) for c in skip}
+            checks = [c for c in checks if norm_cmd(c) not in gone]
+            if not checks:
+                return "- (the failed ones are listed below)"
         secs = self.check_secs()
         slow = [c for c in checks if self.engine_only(c, secs)]
         fast = [c for c in checks if c not in slow]
@@ -3313,12 +3332,16 @@ class Engine:
             text += ("\n" if text else "") + "The engine runs these, do not run them:\n" + "\n".join("- " + c for c in slow)
         return text
 
-    def where(self, node, checks=(), failed=None):
+    def where(self, node, checks=(), failed=None, listed=()):
         """What the step is for, never what its sandbox allows: delegate tells each worker that (worker-run v2).
-        For the writer: which checks it may run (fast ones) and which are the engine's (slow ones)."""
+        For the writer: which checks it may run (fast ones) and which are the engine's (slow ones), minus `listed` (the
+        commands the stage's own check list already names)."""
         if node == "write":
             secs = self.check_secs()
             pool = list(dict.fromkeys(checks)) if failed is None else list(dict.fromkeys(failed))
+            if failed is None:  # the stage's own checks are in stage_checks_text: name each command once (tl-7y6.6.12)
+                have = {norm_cmd(c) for c in listed}
+                pool = [c for c in pool if norm_cmd(c) not in have]
             slow = [c for c in pool if self.engine_only(c, secs)]
             fast = [c for c in pool if c not in slow]
             if failed is None:
@@ -5115,6 +5138,31 @@ def reflection_text(r):
                                            (" | change: " + fmt.clip("; ".join(r["change"]), 200)) if r.get("change") else "")
 
 
+GATE_ONLY_ACCEPTANCE = "plan-lint rule gate-only-acceptance"
+GATE_ONLY_ACCEPTANCE_TEXT = ("\n\nYour plan was sent back (%s): these acceptance cases or Done-when items are only the "
+                             "gate command, and the engine runs the gate (`%s`) once at land on its own:\n%s\nReplace each with what "
+                             "the task asks for that the gate does not show (a behaviour, a number, a file), or drop it.")
+GATE_FILLER = frozenset("the a an of and or is are be pass passes passed passing green succeed succeeds succeeded success clean ok okay "
+                        "exit exits exited code zero 0 run runs running ran must should shall without no error errors fail fails "
+                        "failure failures all full complete completes whole gate check checks done when it that on with".split())
+
+
+def gate_only_criteria(plan, cfg):
+    """[criterion]: the plan's cases (its acceptance) whose text is only a gate command, e.g. "`just check` passes" or "just check
+    green". The engine runs the gate at land (tl-7y6.7.15); a case for it proves nothing the land does not."""
+    clean = lambda t: " ".join(re.sub(r"[`'\"*_.,;:()\[\]]", " ", t).lower().split())  # noqa: E731
+    cmds = [clean(c) for c, _ in lint.gate_only(cfg)]
+    out = []
+    for x in plan.get("cases") or []:
+        text = clean(x.get("criterion") or "")
+        rest = text
+        for c in sorted(cmds, key=len, reverse=True):
+            rest = rest.replace(c, " ")
+        if rest != text and not [w for w in rest.split() if w not in GATE_FILLER]:
+            out.append(x.get("criterion", "").strip())
+    return out
+
+
 def norm_cmd(cmd):
     return " ".join(str(cmd).split())
 
@@ -5295,7 +5343,7 @@ your proposal first) and plan no check for it.
 RERUN_ANSWER = re.compile(r"(?:run|try|start) again|re ?run|retry")  # the dashboard's Run again, or the same said by hand
 MAX_REBASE_RESETS = 2   # per bead, across runs (tl-19i)
 REPLAN_CAP = "stuck: the bead was re-planned "  # the cap's ask; an owner's answer to it allows one more
-RULES_INLINE_MAX = 6 * 1024   # a worker_rules file under this goes into the planner's brief
+RULES_MAX = 3 * 1024          # a worker_rules file is inlined once, in the planner's and the writer's first prompts: this many bytes at most
 PLAN_BRIEF_KB = 12            # the planner's whole brief should stay under this
 DECIDED_TEXT = ("\nYou asked: %s\nAn accepted requirement already decides it: %s\nMeet that requirement: change the "
                 "work, never the requirement.\n")
@@ -5385,6 +5433,18 @@ Only that proof goes there, never your own runs of the checks.
 Rules: no suppressions; do not weaken, skip or delete tests; stay inside the
 stage. question: empty unless only the owner can decide something about the task itself (then explain it for a
 phone); never a question about tools or access.""" + "\n" + OPTIONS_RULE + "\n" + DECIDED_RULE
+
+WRITE_RULES = """
+This repo's rules for work in your sandbox (what runs there, what does not):
+<worker_rules>
+%s
+</worker_rules>"""
+
+
+def write_prompt(rules, **fields):
+    """WRITE_PROMPT with the repo's worker rules inlined (a resumed writer's delta never repeats them)."""
+    return WRITE_PROMPT.format(rules=WRITE_RULES % rules if rules else "", **fields)
+
 
 WRITE_RESUME_PROMPT = """You are still the writer of this task, in an unattended engine. Nobody is watching. This session has the
 task, the plan and your rules from before; only what changed is below.

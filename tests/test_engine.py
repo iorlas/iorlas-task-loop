@@ -158,6 +158,18 @@ class EngineTest(unittest.TestCase):
         sh("git", "commit", "-qm", "engine config", "--allow-empty", cwd=base)
         sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
 
+    def put_repo_file(self, rel, text):
+        """A file committed to origin/main (the engine's worktree starts from it)."""
+        base = Path(self.tmp.name, "base-cfg")
+        if not base.exists():
+            sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(base), cwd=self.tmp.name)
+        sh("git", "pull", "-q", "origin", "main", cwd=base)
+        (base / rel).parent.mkdir(parents=True, exist_ok=True)
+        (base / rel).write_text(text)
+        sh("git", "add", "-A", cwd=base)
+        sh("git", "commit", "-qm", "add " + rel, cwd=base)
+        sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
+
     def tearDown(self):
         self.env.stop()
         self.tmp.cleanup()
@@ -665,11 +677,14 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(engine.count_tests(diff, engine.DEFAULTS["test_pattern"]), (3, 1))
 
     def test_writer_is_told_the_repo_worker_rules_and_never_to_run_the_gate(self):
+        self.put_repo_file("docs/agents/worker-rules.md", "RULES-MARK: unity runs on the host\n")
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
-                                worker_rules="docs/agents/codex.md", gate=PY + ' -c "pass"')
+                                worker_rules="docs/agents/worker-rules.md", gate=PY + ' -c "pass"')
         self.assertEqual(rc, 0)
         w = next(p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker")
-        self.assertIn("docs/agents/codex.md", w.replace("\\", "/"))  # Windows prints the path with backslashes
+        self.assertEqual(w.count("RULES-MARK"), 1)  # inlined once, by text
+        self.assertNotIn("worker-rules.md", w)  # no path to read (tl-7y6.6.1)
+        self.assertNotIn("Read ", w.split("<worker_rules>")[0].rsplit("Your stage", 1)[-1])
         self.assertIn('-c "pass"`) or the issue tracker (bd)', w)
 
     def test_a_run_leaves_a_trace_of_every_worker_session(self):
@@ -776,6 +791,45 @@ class EngineTest(unittest.TestCase):
         self.assertIn("just check runs only in the gate at land", s.prompts[1])
         self.assertTrue(self.blocked and "gate" in self.blocked[0])
 
+    def test_acceptance_that_is_only_the_gate_is_sent_back_naming_the_rule(self):
+        # tl-7y6.7.15: the engine runs the gate at land; "just check green" as acceptance proves nothing the land does not
+        gate = PY + ' -c "pass"'
+        crit = "`%s` passes (green)" % gate
+        only = dict(PLAN, cases=[{"criterion": crit, "check": "", "class": "taste"}])
+        good = dict(PLAN, cases=[{"criterion": "f.txt exists", "check": HAS_F}])
+        rc, s = self.run_engine({"plan": [only, good], "write": [WRITE], "review": [CLEAN]}, gate=gate)
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
+        self.assertIn("plan-lint rule gate-only-acceptance", s.prompts[1])
+        self.assertIn("- " + crit, s.prompts[1])
+
+    def test_acceptance_still_only_the_gate_after_one_rewrite_blocks(self):
+        only = dict(PLAN, cases=[{"criterion": "Done when: just check is green", "check": HAS_F}])
+        rc, s = self.run_engine({"plan": [only, only]}, gate="just check")
+        self.assertEqual([c[0] for c in s.calls], ["planner", "planner"])
+        self.assertTrue(self.blocked and "gate-only-acceptance" in self.blocked[0])
+
+    def test_gate_only_criteria_match_the_gate_alone_not_a_case_that_names_it_with_more(self):
+        cfg = {"gate": "just check", "gate_only": ["just unity-check"]}
+        cases = lambda *cs: {"cases": [{"criterion": c, "check": ""} for c in cs]}  # noqa: E731
+        bad = ["just check", "`just  check` passes", "The gate (just check) is green.", "just unity-check exits 0", "Done when: just check green"]
+        ok = ["f.txt exists", "just check-fmt passes", "the greeting shows after just check ran the migration", "just fmt is clean"]
+        self.assertEqual(engine.gate_only_criteria(cases(*bad, *ok), cfg), bad)
+        self.assertEqual(engine.gate_only_criteria(cases("just check passes"), dict(engine.DEFAULTS)), [])
+
+    def test_a_write_prompt_names_each_check_command_once_in_its_may_run_lists(self):
+        # tl-7y6.6.12: the stage's checks and the where() text both listed "You may run these"
+        cmd = PY + ' -c "print(1)"'
+        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[cmd, HAS_F])])
+        rc, s = self.run_engine({"plan": [plan], "write": [WRITE], "review": [CLEAN]},
+                                raw={"checks": [{"id": "x", "cmd": cmd, "group": "static"}, {"id": "y", "cmd": "echo only-repo"}]})
+        self.assertEqual(rc, 0, self.blocked)
+        w = next(p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker")
+        may = w[w.index("The stage's checks"):w.index("A check that mentions")]
+        self.assertEqual(may.count(cmd), 1)
+        self.assertEqual(may.count(HAS_F), 1)
+        self.assertEqual(may.count("only-repo"), 1)
+
     def test_gate_only_checks_match_a_command_not_a_longer_name_or_an_argument(self):
         cfg = {"gate": "just check", "gate_only": ["just unity-check", self.UNITY]}
         bad = ["just check", "cd x && just unity-check --fast", "true; just check | tail"]
@@ -795,7 +849,7 @@ class EngineTest(unittest.TestCase):
     def test_the_planner_gets_the_repo_rules_and_is_told_the_engine_owns_the_gate(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
                                 worker_rules="docs/agents/codex.md", gate="just check", max_fix_rounds=0)
-        self.assertIn("docs/agents/codex.md", s.prompts[0].replace("\\", "/"))  # Windows prints the path with backslashes
+        self.assertNotIn("codex.md", s.prompts[0])
         self.assertIn("never put `just check` in a stage", s.prompts[0])
 
     def test_low_findings_are_noted_and_do_not_send_back(self):
@@ -1610,7 +1664,9 @@ class EngineTest(unittest.TestCase):
         self.assertIn("acceptance cases run on this last stage", s.prompts[3])
         self.assertIn("new_cases", s.prompts[3])
         self.assertNotIn("acceptance cases run on this last stage", s.prompts[1])
-        self.assertIn(str(Path(self.wt) / "a.txt"), s.prompts[3])  # the rules, short, every time
+        self.assertNotIn("a.txt", s.prompts[3])  # tl-7y6.6.1: the rules are in the first prompt only; a resume never says Read <rules>
+        self.assertNotIn("Read ", s.prompts[3])
+        self.assertNotIn("worker_rules", s.prompts[3])
 
     def test_a_resumed_write_gets_the_engines_brief_back_in_the_worktree(self):
         brief = Path(self.wt) / ".task" / "t-1" / "brief.md"
@@ -3383,8 +3439,23 @@ class EngineTest(unittest.TestCase):
         self.assertNotIn("Read the code it names", p)
         self.assertLess(len(p.encode("utf-8")), 12 * 1024)
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, worker_rules="docs/agents/big.md")
-        self.assertIn("Read %s" % (self.wt / "docs/agents/big.md"), s.prompts[0])
-        self.assertNotIn("xxxxxxxx", s.prompts[0])
+        self.assertNotIn("Read %s" % (self.wt / "docs/agents/big.md"), s.prompts[0])  # tl-7y6.6.1: a hard 3 KB cap, no path to read
+        self.assertIn("x" * engine.RULES_MAX, s.prompts[0])
+        self.assertNotIn("x" * (engine.RULES_MAX + 1), s.prompts[0])
+        self.assertLess(len(s.prompts[0].encode("utf-8")), 12 * 1024)
+
+    def test_worker_rules_are_clipped_at_a_line_and_missing_ones_say_nothing(self):
+        self.put_repo_file("r.md", "line\n" * 1000)
+        eng = engine.Engine.__new__(engine.Engine)
+        eng.cfg, eng.wt, eng.warn = {"worker_rules": "r.md"}, self.wt, mock.Mock()
+        sh("git", "pull", "-q", "origin", "main", cwd=self.wt)
+        text = eng.rules_text()
+        self.assertLessEqual(len(text.encode("utf-8")), engine.RULES_MAX)
+        self.assertTrue(text.endswith("line") and eng.warn.called)
+        eng.cfg = {"worker_rules": "nope.md"}
+        self.assertEqual(eng.rules_text(), "")
+        eng.cfg = {"worker_rules": ""}
+        self.assertEqual(eng.rules_text(), "")
 
     def test_the_brief_carries_what_linked_beads_decided(self):
         # lifesim-fld.25.17 asked which rung was picked in yxd6.3, whose close reason said so

@@ -1,0 +1,16 @@
+You are still the writer of this task, in an unattended engine. Nobody is watching. This session has the
+task, the plan and your rules from before; only what changed is below.
+The brief is unchanged; it is in .task/t-1/brief.md; re-read it if unsure.
+The plan is unchanged.
+Your stage: 1: Add the greeting
+Files: greet.py
+The stage's checks (the engine runs all of them after you; the split says which you may run):
+You may run these:
+- python3 -m unittest tests.test_f
+The engine runs these, do not run them:
+- just unity-tests
+Before you say it is done, run the stage's fast checks so an error never reaches the engine; the engine reruns every check after you.
+The engine runs these after you; do not run them:
+- just fmt-check
+If a command is refused, do not reword it to get around the refusal: say which command and why you needed it.
+Never start a command you expect to take over a minute; never poll a running command more than 3 times.
