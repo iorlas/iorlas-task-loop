@@ -6,6 +6,10 @@ Reads only: traces.jsonl, the loop's log, engine/*.jsonl and *.stderr, the repo'
   tl.py report [--repo DIR] [--since T] [--until T] [--json]   beads run, landed, landed with no ask, parked, paused,
                                                                 failed, crashes, lost work, minutes, rounds, tokens, M2,
                                                                 a planner line
+  tl.py report lifecycle [--repo DIR] [--since T] [--until T] [--json]   (default: the last 28 days)
+                                                                weekly lifecycle metrics: landed beads/day, slot-min,
+                                                                asks, run-1 landings, dead time, fingerprints, gate,
+                                                                hung steps, tokens, reverts, quota observations
   tl.py report --planner [--prefix P] [--since T] [--until T]   planner calls and input tokens per bead (delegate's
                                                                 history.jsonl + the engine logs); no repo or bd needed
   tl.py lost [--repo DIR] [--since T] [--json]                  every task/* and wip/* commit not on the base, classed
@@ -24,6 +28,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import engine
+import lifecycle
 import loop
 import tl
 
@@ -435,6 +440,237 @@ def print_planner(p):
                                                         x["back"], x["other"], x["input"] / 1e6))
 
 
+# ---- tl-7y6.1.1: the weekly lifecycle report --------------------------------------------------------------------------
+
+def lifecycle_asks(traces):
+    """The ask files are the ask ledger. Only when there is no ledger at all, reconstruct asks from blocked traces.
+
+    Trace rows are not a second ledger: a blocked run can be an engine failure or a pause, and older asks may share a
+    bead with a newer file. Counting both inflated the weekly ask count. No authorship is used.
+    """
+    rows, seen = [], set()
+    for f in sorted((tl.config_dir() / "asks").glob("*.json")):
+        try:
+            a = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(a, dict):
+            continue
+        key = a.get("id") or (a.get("bead"), lifecycle.fingerprint(a.get("why") or a.get("question") or ""))
+        if key in seen:
+            continue
+        seen.add(key)
+        rows.append(a)
+    if rows:
+        return rows
+    for r in traces:
+        kind = engine.ask_kind(r.get("why") or "") if r.get("outcome") == "blocked" else ""
+        if not kind:
+            continue
+        aid = r.get("ask") or ""
+        key = aid or (r.get("bead"), lifecycle.fingerprint(r.get("why") or ""))
+        if key in seen:
+            continue
+        seen.add(key)
+        rows.append({"id": aid, "bead": r.get("bead"), "kind": kind, "why": r.get("why") or "",
+                     "t": r.get("ended") or r.get("started"), "run": r.get("run")})
+    return rows
+
+
+def history_rows(path=None):
+    """(delegate history rows, available). A missing file is unavailable; an empty one is an empty history."""
+    p = Path(path or os.path.expanduser(HISTORY))
+    if not p.exists():
+        return None, False
+    return read_jsonl(p), True
+
+
+def lane_observations():
+    """Timestamped quota readings from agent-runs lane records; one snapshot is not a history."""
+    out = []
+    for f in sorted((tl.config_dir() / "agent-runs" / "lanes").glob("*.json")):
+        try:
+            d = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        at = d.get("at") if isinstance(d, dict) else None
+        lanes = d.get("lanes") if isinstance(d, dict) else None
+        if not isinstance(at, (int, float)) or not isinstance(lanes, list):
+            continue
+        for ln in lanes:
+            if not isinstance(ln, dict):
+                continue
+            for u in ln.get("usage") or []:
+                if isinstance(u, dict) and isinstance(u.get("used_pct"), (int, float)):
+                    out.append({"t": at, "lane": ln.get("name") or "?", "window": u.get("window") or "?",
+                                "used_pct": u["used_pct"]})
+    return out
+
+
+def quota_snapshot(route=None, lanes=None, now=None):
+    """What delegate says now: a snapshot, never a measurement of what the window consumed."""
+    now = time.time() if now is None else now
+    if lanes is None:
+        route = engine.find_route() if route is None else route
+        lanes = engine.lane_status(route) if route else {}
+    if isinstance(lanes, list):
+        lanes = {str(x.get("name") or "?"): x for x in lanes if isinstance(x, dict)}
+    rows = []
+    for name, ln in (lanes or {}).items():
+        if not isinstance(ln, dict):
+            continue
+        for u in ln.get("usage") or []:
+            if not isinstance(u, dict) or not isinstance(u.get("used_pct"), (int, float)):
+                continue
+            rows.append({"lane": name, "window": u.get("window") or "?", "used_pct": u["used_pct"],
+                         "resets_at": u.get("resets_at"), "out": bool(ln.get("out")),
+                         "out_until": ln.get("out_until"), "why": ln.get("why")})
+    return {"available": bool(rows), "at": now, "at_iso": lifecycle.utc_iso(now), "lanes": rows}
+
+
+def reverts_of(repo, traces, until, base=None):
+    """Landing run -> reverted/fixed_forward/clean/censored/unknown, from git's messages only.
+
+    A revert names the landed sha (or its exact subject); a fixed-forward explicitly says so and names the sha or bead.
+    A later commit that merely touches the same files is never linked. A landing whose seven-day follow-up runs past
+    `until` is censored: it is listed, but not put in the rate's denominator.
+    """
+    base = base or default_base(repo)
+    bases = bases_of(repo, base)
+    if not bases:
+        return {(r.get("run") or r.get("bead")): {"status": "unknown"} for r in traces if r.get("bead")}
+    r = tl.run_git(repo, "log", "--format=%H%x1f%ct%x1f%B%x1e", *bases, capture_output=True, text=True,
+                   encoding="utf-8", errors="replace")
+    if r.returncode != 0:
+        return {(x.get("run") or x.get("bead")): {"status": "unknown"} for x in traces if x.get("bead")}
+    commits = []
+    for chunk in (r.stdout or "").split("\x1e"):
+        parts = chunk.strip().split("\x1f")
+        if len(parts) < 3 or not parts[0]:
+            continue
+        try:
+            commits.append((parts[0], int(parts[1]), parts[2]))
+        except ValueError:
+            continue
+    commits.sort(key=lambda x: x[1])
+    out = {}
+    for x in lifecycle._landings(traces):
+        r = x["run"]
+        key = r.get("run") or x["bead"]
+        sha = str(r.get("sha") or "").lower()
+        if not sha:
+            out[key] = {"status": "unknown"}
+            continue
+        short = sha[:12]
+        subj = ""
+        landed_at = None
+        # The landed commit's own subject and time, when the sha is in this repository.
+        for csha, ct, body in commits:
+            if csha == sha or csha.startswith(short):
+                subj = (body.strip().splitlines() or [""])[0]
+                landed_at = ct
+                break
+        if landed_at is None:
+            out[key] = {"status": "unknown"}
+            continue
+        t = (lifecycle.span(r) or (None, None))[1]
+        if t is None:
+            t = landed_at
+        if t + 7 * lifecycle.DAY > until:
+            out[key] = {"status": "censored"}
+            continue
+        status = "clean"
+        for csha, ct, body in commits:
+            if not (t < ct <= t + 7 * lifecycle.DAY):
+                continue
+            low = body.lower()
+            names = sha in low or (short and short in low) or (subj and subj.lower() in low)
+            if "revert" in low and names:
+                status = "reverted"
+                break
+            if re.search(r"\bfix(?:ed)?[- ]forward\b", low) and (names or (x["bead"] and x["bead"] in body)):
+                status = "fixed_forward"
+                break
+        out[key] = {"status": status, "at": t}
+    return out
+
+
+def lifecycle_stats(repo, since, until, traces=None, history=None, quota=None, reverts=None, now=None,
+                    quota_observations=None):
+    repo = tl.repo_root(repo)
+    traces = repo_traces(repo) if traces is None else traces
+    records = {r.get("run"): read_jsonl(r.get("log") or "") for r in traces if r.get("run")}
+    if history is None:
+        history, available = history_rows()
+        if not available:
+            history = None
+    if quota is None:
+        quota = quota_snapshot(now=now)
+    if reverts is None:
+        reverts = reverts_of(repo, traces, until, base=default_base(repo))
+    asks = lifecycle_asks(traces)
+    observations = lane_observations() if quota_observations is None else quota_observations
+    return lifecycle.lifecycle_report(traces, records_by_run=records, asks=asks, history=history, quota=quota,
+                                      since=since, until=until, reverts=reverts,
+                                      quota_observations=observations)
+
+
+def fmt(v, suffix="", pct=False, nd=1):
+    if v is None:
+        return "unavailable"
+    if pct:
+        return "%.1f%%" % (v * 100)
+    return ("%." + str(nd) + "f") % v + suffix
+
+
+def print_lifecycle(r):
+    print("tl report lifecycle  %s -> %s  (UTC weeks)" % (r["since_iso"], r["until_iso"]))
+    for w in r["weeks"]:
+        print("week %s .. %s (%.1f d)" % (w["start_iso"], w["end_iso"], w["days"]))
+        print("  landed beads/day: %s (%d in %.1f d)" % (
+            fmt(w["landed_beads_per_day"], nd=2), w["landed_beads"], w["days"]))
+        print("  slot-min per landed bead: %s (%.1f slot-min / %d landed)" % (
+            fmt(w["slot_min_per_landed"]), w["slot_min"], w["landed_beads"]))
+        print("  non-landing slot-min share: %s (%.1f of %.1f slot-min)" % (
+            fmt(w["non_landing_share"], pct=True), w["non_landing_slot_min"], w["slot_min"]))
+        print("  avoidable asks/week: %d (of %d asks)" % (w["avoidable_asks"], w["asks"]))
+        print("  beads landed on run 1: %d (%s of %d landed; %s of %d touched)" % (
+            w["landed_run1"], fmt(w["landed_run1_share"], pct=True), w["landed_beads"],
+            fmt(w.get("landed_run1_share_touched"), pct=True), w.get("touched", 0)))
+        print("  runs per landed bead: %s (%d runs / %d landed)" % (
+            fmt(w["runs_per_landed"], nd=2), w["runs"], w["landed_beads"]))
+        print("  median dead time per started_because (min): " + ", ".join(
+            "%s %s" % (k, fmt(w["dead_time_min"].get(k))) for k in lifecycle.STARTED_BECAUSE))
+        fps = w["fingerprints"]
+        print("  fingerprint top-5 (beads/day): " + ("; ".join(
+            "%s %.2f (%d)" % (x["fingerprint"][:48], x["per_day"], x["beads"]) for x in fps) or "none"))
+        streaks = w["fingerprint_streaks"]
+        print("  max consecutive same-fingerprint non-done runs per (lane,model): " + (
+            "unavailable" if streaks is None else ("; ".join(
+                "%s/%s %d" % (x["lane"], x["model"], x["max"]) for x in streaks[:5]) or "none")))
+        print("  slot-min in runs >180 min: %.1f" % w["slot_min_over_180"])
+        print("  verify-stage slot-min: %s" % fmt(w["verify_slot_min"]))
+        print("  hung-step slot-min: %s (%d kills)" % (fmt(w["hung_slot_min"]), w["hung_kills"]))
+        print("  median release-gate minutes: %s (%d gates)" % (
+            fmt(w["release_gate_median_min"]), w["release_gates"]))
+        print("  uncached input tokens per landed bead: %s (%d uncached)" % (
+            fmt(w["uncached_input_per_landed"]), w["uncached_input"]))
+        print("  reverts per 100 landings: %s (reverted %d, fixed-forward %d, censored %d, eligible %d)" % (
+            fmt(w["reverts_per_100"], nd=2), w["reverts"], w["fixed_forward"], w["revert_censored"],
+            w["revert_eligible"]))
+        print("  quota %% consumed per landed bead: %s (a single current snapshot cannot measure a week)" % (
+            fmt(w["quota_pct_per_landed"], nd=2)))
+        if w["unavailable"]:
+            print("  unavailable: " + ", ".join(w["unavailable"]))
+    q = r.get("quota") or {}
+    if q.get("available"):
+        print("quota snapshot %s:" % q.get("at_iso"))
+        for x in q.get("lanes") or []:
+            print("  %s %s: %.1f%%%s" % (x["lane"], x["window"], x["used_pct"], " (out)" if x.get("out") else ""))
+    else:
+        print("quota snapshot: unavailable")
+
+
 # ---- CLI --------------------------------------------------------------------------------------------------------------
 
 def mtok(d):
@@ -477,7 +713,21 @@ def window(a):
     return since, until
 
 
+def cmd_lifecycle(a):
+    now = time.time()
+    since = parse_time(getattr(a, "since", None), now) if getattr(a, "since", None) else now - 28 * 86400
+    until = parse_time(getattr(a, "until", None), now, forward=True) if getattr(a, "until", None) else now
+    r = lifecycle_stats(tl.repo_root(getattr(a, "repo", None)), since, until, now=now)
+    if getattr(a, "json", False):
+        print(json.dumps(r, indent=1, ensure_ascii=False))
+    else:
+        print_lifecycle(r)
+    return 0
+
+
 def cmd_report(a):
+    if getattr(a, "kind", None) == "lifecycle":
+        return cmd_lifecycle(a)
     since, until = window(a)
     if getattr(a, "planner", False):
         pre = {x.strip() for x in (getattr(a, "prefix", "") or "").split(",") if x.strip()}

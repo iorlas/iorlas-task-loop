@@ -12,11 +12,15 @@ from core import procs
 
 
 class Result:
-    def __init__(self, data=None, text="", ref="", cost=0.0, secs=0.0, error="", backend="", alive=None, stop=""):
+    def __init__(self, data=None, text="", ref="", cost=0.0, secs=0.0, error="", backend="", alive=None, stop="",
+                 started_t=None, ended_t=None, first_error_t=None, last_event_t=None, kill_t=None):
         self.data, self.text, self.ref, self.cost, self.secs, self.error, self.backend = (
             data, text, ref, cost, secs, error, backend)
         self.alive = alive or []  # pids of a stopped call's worker that outlived every signal
         self.stop = stop          # why the engine stopped the call ("" = it was not stopped)
+        # Process observations, not completion summaries: None means the boundary was not observed.
+        self.started_t, self.ended_t = started_t, ended_t
+        self.first_error_t, self.last_event_t, self.kill_t = first_error_t, last_event_t, kill_t
 
 
 POLL = 5  # seconds between the engine's looks at a running delegate call
@@ -127,12 +131,23 @@ def call_delegate(route, role, prompt, schema, cwd, resume, timeout, log_path, w
         if access:
             cmd.append(access)
         # unpinned: a worker's git may run on other repos; engine.assert_tree catches a redirect after the node
-        stop = {}
-        res, secs = procs.run_proc(cmd, cwd, timeout + 120, log_path, idle=idle, stop=stop)
+        stop, obs = {}, {}
+        try:
+            res, secs = procs.run_proc(cmd, cwd, timeout + 120, log_path, idle=idle, stop=stop, obs=obs)
+        except BaseException as e:  # the stop ran inside run_proc: keep its observations for the engine's kill record
+            try:
+                e.engine_stop = dict(stop)
+                e.engine_obs = dict(obs)
+            except Exception:
+                pass
+            raise
+    timing = dict(started_t=obs.get("started_t"), ended_t=obs.get("ended_t"),
+                  first_error_t=obs.get("first_error_t"), last_event_t=obs.get("last_event_t"),
+                  kill_t=obs.get("kill_t"))
     if res is None:
         why = stop.get("why") or "timeout"
         return Result(secs=secs, error="timeout (%s)" % why, backend="delegate", ref=resume or "", alive=stop.get("alive"),
-                      stop=why), None
+                      stop=why, **timing), None
     code, out = res
     try:
         j = json.loads(out.strip().splitlines()[-1]) if out.strip() else None
@@ -140,8 +155,8 @@ def call_delegate(route, role, prompt, schema, cwd, resume, timeout, log_path, w
         j = None
     if not isinstance(j, dict):
         return Result(text=out[-2000:], secs=secs, error="route.py exit %d, no answer object" % code,
-                      backend="delegate"), None
+                      backend="delegate", **timing), None
     st = j.get("status")
     err = "" if st == "done" else "%s: %s" % (st, j.get("say") or "")
     return Result(j.get("data"), j.get("text") or "", j.get("ref") or "", float(j.get("cost") or 0),
-                  float(j.get("secs") or secs), err, j.get("family") or "delegate"), j
+                  float(j.get("secs") or secs), err, j.get("family") or "delegate", **timing), j
