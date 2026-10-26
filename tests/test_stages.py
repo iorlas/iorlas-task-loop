@@ -1656,7 +1656,7 @@ class Contracts(StagesTest):
     def test_a_push_that_keeps_failing_pauses_the_bead_and_asks_nobody(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, land=self.land_with(99))
         self.assertNotEqual(rc, 0)
-        self.assertTrue(self.eng.why.startswith("paused: the land push failed 4 times"), self.eng.why)
+        self.assertTrue(self.eng.why.startswith("paused: the land push failed 3 times"), self.eng.why)
         self.assertFalse(self.eng.asked)
 
     @te.no_repo

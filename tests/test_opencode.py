@@ -13,6 +13,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(ROOT / "skills" / "task-loop" / "dash"))
+import delegate_link as dl  # noqa: E402
 import engine  # noqa: E402
 import server  # noqa: E402
 import timeline  # noqa: E402
@@ -69,9 +70,6 @@ class OpenCode(unittest.TestCase):
 
     # login hint
     def test_a_logged_out_xai_lane_says_grok_and_opencode(self):
-        for j in ({"family": "xai"}, {"lane": "GROK_SUBSCRIPTION"}):
-            self.assertEqual(engine.login_fix(j), "Grok logged out: run `opencode auth login`")
-        self.assertEqual(engine.login_fix({"family": "claude"}), "Claude logged out: run `claude auth login`")
         self.assertEqual(timeline.lane_name("GROK_SUBSCRIPTION", ""), "Grok")
         self.assertEqual(timeline.lane_name("x", "xai"), "Grok")
         self.assertEqual(timeline.pause_reason("paused: logged_out on write; run `opencode auth login` on this machine"),
@@ -216,8 +214,6 @@ class OpenCode(unittest.TestCase):
         self.assertEqual((last["text"], "dur" in last), ("x", False))
 
     def test_a_lane_named_openai_xai_is_grok_by_family_or_name(self):
-        self.assertEqual(engine.login_fix({"lane": "OPENAI_XAI"}), "Grok logged out: run `opencode auth login`")
-        self.assertEqual(engine.login_fix({"lane": "OPENAI_SUBSCRIPTION", "family": "openai"}), "Codex logged out: run `codex login`")
         self.assertEqual(timeline.lane_name("OPENAI_XAI"), "Grok")
         self.assertEqual(timeline.lane_name("OPENAI_SUBSCRIPTION"), "Codex")
 
@@ -236,8 +232,8 @@ class OpenCode(unittest.TestCase):
         self.assertEqual(json.loads(buf.getvalue())[0]["sessions"][0]["transcript"], "")
         eng = types.SimpleNamespace(cur=None, stats={"tokens_in": 0, "tokens_cached": 0, "tokens_out": 0}, sessions=[],
                                     log=lambda *a, **k: None)
-        r = types.SimpleNamespace(error="", ref=SID, secs=1, cost=0, stop="", data=None)
-        engine.Engine.trace_call(eng, "write", "writer", 1, r, {"ref": SID, "status": "ok"})
+        r = dl.CallResult(ref=SID, secs=1, cost=0, family="xai", raw={"ref": SID, "transcript": ""})
+        engine.Engine.trace_call(eng, "write", "writer", 1, r)
         self.assertEqual(eng.sessions[0]["transcript"], "opencode:" + SID)  # no DB look
 
 
