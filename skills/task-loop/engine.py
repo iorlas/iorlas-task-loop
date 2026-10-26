@@ -472,6 +472,70 @@ def plugin_version():
         return ""
 
 
+# ---- moving to a newer install between steps (tl-7y6.9): by exec only, no module is ever reloaded in place ----------------------------
+RELOAD_FALLBACK_S = 120  # a run-task that dies this soon after an exec is put back on the version it came from (by the loop)
+RUN_SLOT = {"owned": ""}  # the slot this process took itself (run_in, run_any_slot) and gives back at the end
+
+
+def reexec_path(bead):
+    return tl.config_dir() / "reexec" / ("%s.json" % bead)
+
+
+def read_reexec(bead):
+    """The note an engine leaves just before it execs into a newer install: {run, from, to, from_dir, t}; {} when none."""
+    try:
+        rec = json.loads(reexec_path(bead).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return rec if isinstance(rec, dict) else {}
+
+
+def drop_reexec(bead):
+    with contextlib.suppress(OSError):
+        reexec_path(bead).unlink()
+
+
+def take_reexec_env():
+    """The hand-over an exec'd (or fallback) run-task finds in TL_REEXEC: {run, bead, from, owned}; {} on a normal start."""
+    raw = os.environ.pop("TL_REEXEC", "")
+    try:
+        rec = json.loads(raw) if raw else {}
+    except ValueError:
+        return {}
+    return rec if isinstance(rec, dict) and isinstance(rec.get("run"), str) else {}
+
+
+def reexec_args(argv, slot, wt):
+    """run-task's own argv with its slot and worktree made explicit (`--slot any` has resolved to a slot) and --fresh/--wait
+    dropped (a re-exec goes on from the checkpoint, never from the start). None when argv is not a run-task command line."""
+    if not argv or argv[0] != "run-task":
+        return None
+    out, skip = [], False
+    for x in argv:
+        if skip:
+            skip = False
+        elif x in ("--slot", "--worktree"):
+            skip = True
+        elif x.startswith(("--slot=", "--worktree=")) or x in ("--fresh", "--wait"):
+            pass
+        else:
+            out.append(x)
+    return out + (["--slot", slot] if slot else []) + ["--worktree", str(wt)]
+
+
+def vet_newer():
+    import loop  # imports engine itself
+    return loop.vet_newer()
+
+
+class Exec(BaseException):
+    """Raised after a test's injected exec function returns (the real exec never does): unwinds run() without its close."""
+
+
+def exec_in_place(argv):
+    os.execv(sys.executable, argv)
+
+
 # tl-bxk.13.16.4: a push that died of the network (lifesim-l4ow: curl 56 broken pipe, after a 17 min hook) is retried with a rest
 TRANSIENT_PUSH = re.compile(r"curl \d+|Broken pipe|Connection (?:reset|timed out|refused)|Could not resolve host|early EOF|RPC failed|"
                             r"remote end hung up|SSL_ERROR|TLS|Operation timed out|Network is unreachable|"
@@ -630,8 +694,13 @@ class Engine:
         d = tl.config_dir() / "engine"
         d.mkdir(exist_ok=True)
         stamp = time.strftime("%Y%m%d-%H%M%S")
-        self.log_path = d / ("%s-%s.jsonl" % (bead, stamp))
-        self.err_path = d / ("%s-%s.stderr" % (bead, stamp))
+        self.reexec = take_reexec_env()  # this run-task came from an exec into a newer install, or a fallback to the older
+        if self.reexec.get("bead") != bead:
+            self.reexec = {}
+        stem = self.reexec.get("run") or "%s-%s" % (bead, stamp)  # the same run id: log, run dir and trace go on
+        self.log_path = d / (stem + ".jsonl")
+        self.err_path = d / (stem + ".stderr")
+        self.exec_fn, self.newer_fn, self.argv, self.moved = None, None, None, False  # a test's exec, newer-install lookup and run-task argv
         # Engine files (brief, plan, node answers, check results) live outside the worktree, where no worker can write
         # them; in lifesim-vbo a writer's sandbox runs kept in .task/ were read as engine results by four planners.
         self.run_dir = tl.config_dir() / "runs" / self.log_path.stem
@@ -643,6 +712,80 @@ class Engine:
         self.evidence_dir = self.task_dir / "evidence"  # the writer's proof of what the engine cannot rerun
         self.evidence_dir.mkdir(exist_ok=True)
         self.route = lroute.find_route(cfg.get("delegate", ""))
+        if self.reexec:
+            self.restore_run()
+
+    def restore_run(self):
+        """The counters of the run that exec'd (run_dir/reexec.json), so the run's cost, time and trace go on across the move."""
+        try:
+            c = json.loads((self.run_dir / "reexec.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return
+        if not isinstance(c, dict):
+            return
+        self.t0 = time.time() - float(c.get("elapsed") or 0)
+        self.waited, self.cost = float(c.get("waited") or 0), float(c.get("cost") or 0)
+        if isinstance(c.get("stats"), dict):
+            self.stats.update(c["stats"])
+        self.sessions = list(c.get("sessions") or [])
+        self.write_rounds = list(c.get("write_rounds") or [])
+        self.node_n = int(c.get("node_n") or 0)
+
+    def safe_point(self, step):
+        """A step boundary whose checkpoint is current (tl-7y6.9): when a newer task-loop is installed and its selftest
+        passes, exec into it and go on with this bead and run from the checkpoint. A refused version stays on this one
+        with a red event; the refusal is recorded (bad-versions.json), so the next boundary does not test it again."""
+        if self.dry:
+            return
+        try:
+            found = (self.newer_fn or vet_newer)()
+        except Exception as e:  # looking for a newer install never stops a run
+            self.warn("looking for a newer task-loop failed: %s" % e)
+            return
+        if not found:
+            return
+        ver, d, why = found
+        here = plugin_version() or Path(__file__).resolve().parents[2].name
+        if why:
+            self.warn("not moving to task-loop %s at %s: %s; staying on %s" % (ver, step, why, here))
+            tl.event("reload_refused", self.bead, who="engine", version=ver, why=why[:300], running=here, step=step,
+                     run=self.log_path.stem)
+            return
+        self.switch(step, ver, d, here)
+
+    def switch(self, step, ver, d, here):
+        slot = (procs.LOCK.data.get("slot") if procs.LOCK else "") or ""
+        argv = reexec_args(self.argv if self.argv is not None else sys.argv[1:], slot, self.wt)
+        if argv is None:
+            self.log("note", "not moving to task-loop %s: this run was not started by `tl.py run-task`" % ver)
+            return
+        run = self.log_path.stem
+        self.end_node("moved")
+        counters = {"elapsed": time.time() - self.t0, "waited": self.waited, "cost": self.cost, "stats": self.stats,
+                    "sessions": self.sessions, "write_rounds": self.write_rounds, "node_n": self.node_n}
+        try:
+            (self.run_dir / "reexec.json").write_text(json.dumps(counters), encoding="utf-8")
+            reexec_path(self.bead).parent.mkdir(parents=True, exist_ok=True)
+            reexec_path(self.bead).write_text(json.dumps({"run": run, "bead": self.bead, "from": here, "to": ver, "step": step,
+                                                           "from_dir": str(Path(__file__).resolve().parent), "t": time.time()}), encoding="utf-8")
+        except OSError as e:
+            self.warn("not moving to task-loop %s: could not write the hand-over: %s" % (ver, e))
+            return
+        tl.event("reload", self.bead, who="engine", old=here, new=ver, step=step, run=run, code_dir=str(d))
+        self.log("note", "moving to task-loop %s (was %s) at %s; run %s goes on from its checkpoint" % (ver, here, step, run),
+                 reload={"old": here, "new": ver, "step": step})
+        os.environ["TL_REEXEC"] = json.dumps({"run": run, "bead": self.bead, "from": here, "owned": RUN_SLOT["owned"]})
+        for f in (sys.stdout, sys.stderr):
+            with contextlib.suppress(Exception):
+                f.flush()
+        try:
+            (self.exec_fn or exec_in_place)([sys.executable, str(d / "skills" / "task-loop" / "tl.py"), *argv])
+            self.moved = True
+            raise Exec()  # reached only when the exec function is a test's
+        except OSError as e:  # exec itself failed: this version goes on where it is
+            os.environ.pop("TL_REEXEC", None)
+            drop_reexec(self.bead)
+            self.warn("could not move to task-loop %s: %s" % (ver, e))
 
     def delegate_route(self):
         """The delegate route.py for the next call (tl-6ax): resolved again each call (a configured path, then the pin, then the
@@ -715,7 +858,7 @@ class Engine:
             older = sorted(p.stem for p in self.log_path.parent.glob("%s-*.jsonl" % self.bead)
                            if p.name < mine and RUN_STEM.match(p.stem[len(self.bead) + 1:]))
             prev = older[-1] if older else ""
-        why = ("fresh" if self.cfg.get("fresh") else "answer" if self.answered else "resume" if self.resumed
+        why = ("reexec" if self.reexec else "fresh" if self.cfg.get("fresh") else "answer" if self.answered else "resume" if self.resumed
                else "retry" if prev else "first")
         return {"prev_run": prev, "started_because": lifecycle.normalize_started_because(why, prev),
                 "ask": (self.answered or {}).get("id") or ""}
@@ -725,6 +868,11 @@ class Engine:
         if self.run_logged:
             return
         self.run_logged = True
+        if self.reexec:  # the run record is in the log already (the exec kept the log): a note says what happened
+            self.log("note", "task-loop %s took over run %s from %s%s" % (plugin_version() or "?", self.log_path.stem, self.reexec.get("from"),
+                                                                       " (fallback after a crash)" if self.reexec.get("fallback") else ""),
+                     version=plugin_version())
+            return
         o = self.origin()
         self.log("run", "run: %s" % o["started_because"], run=self.log_path.stem, bead=self.bead, worktree=str(self.wt),
                  slot=(procs.LOCK.data.get("slot") if procs.LOCK else "") or "", **o)
@@ -2075,6 +2223,8 @@ class Engine:
                 plan, i, state = None, 0, None
             elif moved == "rebased" and plan is not None:
                 self.stage_tree = ""  # the stage's diff starts at the base now: the rebase moved what it was measured from
+            if plan is None:  # a move here loses nothing: the new image reads the same checkpoint (or none) and plans
+                self.safe_point("plan")
             if plan is None:
                 plan, i, state = self.plan(again=self.replan_first), 0, None
             while i < len(plan["stages"]):
@@ -2099,6 +2249,8 @@ class Engine:
                 if i == len(plan["stages"]):
                     self.pending_land_validation = ""  # every recovery stage passed checks and review
                 self.save_checkpoint(stage=i, rounds=0, n=0, feedback="", step="write" if i < len(plan["stages"]) else "land")
+                if i == len(plan["stages"]):
+                    self.safe_point("land")  # the checkpoint says land: the close and the land run on the newest code
             if self.render_stale and self.last_reqs and self.shot_methods() and not self.dry:
                 # code changed after the last render (a fix round past the render rounds): the pictures that land show the tree
                 self.log("note", "rendering the last shots again: code changed since the pictures were made")
@@ -2117,14 +2269,20 @@ class Engine:
         except Blocked as b:
             outcome = "failed" if b.why.startswith("failed:") else "blocked"
             why, question, self.blocked_options = b.why, b.question, b.options
+        except Exec:
+            pass  # the process image is gone; nothing below runs in a real exec
         except Exception as e:  # the close-out must run whatever broke
             outcome, why = "failed", "failed: engine error %s: %s" % (type(e).__name__, e)
         finally:
+            if self.moved:
+                hb.stop()
+                return 0
             with self.stop_deferred():  # a stop here would skip the close: no trace, no bead update
                 if self.landed_sha and outcome != "landed":  # stopped after the push: on the base, close it as landed
                     self.warn("%s after the land went through; closing it landed" % (why or outcome))
                     outcome, why, sha, question = "landed", "", self.landed_sha, ""
                 hb.stop()
+                drop_reexec(self.bead)  # a run that ended is no crash after an exec
                 self.outcome, self.why = outcome, why
                 self.close(outcome, why, sha, question)
         return 0 if outcome in ("landed", "done") else 2
@@ -3122,6 +3280,7 @@ class Engine:
         while True:
             if not fix:  # a fix runs at land: its checkpoint stays at land, and a resume lands again
                 self.save_checkpoint(stage=i, rounds=rounds, n=n, feedback=feedback, step="write")
+                self.safe_point("write")  # the round's write, checks and review run on the code that is installed now
             n += 1
             self.stats["writes"] += 1
             if n >= 2:
@@ -5832,6 +5991,7 @@ def run_any_slot(a, repo, cfg):
         return {"v": 1, "outcome": "taken", "bead": a.id, "why": why}
     a.slot, a.worktree, sb = got
     os.environ["TASK_LOOP_SLOT_BEAD"] = sb  # run_in sees the slot as taken; the engine heartbeats it
+    RUN_SLOT["owned"] = a.slot  # a re-exec hands the slot on (TL_REEXEC) and its next run-task gives it back
     try:
         return run_in(a, repo, cfg)
     finally:
@@ -5870,6 +6030,14 @@ def take_area(a, repo, cfg, lock, sb=""):
         return why
 
 
+def _handed_slot(slot):
+    """True when TL_REEXEC (set by the run-task that exec'd into this one, not yet read by the Engine) says it took `slot` itself."""
+    try:
+        return json.loads(os.environ.get("TL_REEXEC") or "{}").get("owned") == slot
+    except (ValueError, AttributeError):
+        return False
+
+
 def run_in(a, repo, cfg):
     wt = a.worktree
     if not wt and a.slot:  # the slot is the worktree
@@ -5894,12 +6062,16 @@ def run_in(a, repo, cfg):
         # it already: TASK_LOOP_SLOT_BEAD names that very slot's bead
         slot = a.slot or tl.slot_of(repo, wt)
         sb = (tl.slot_bead(repo, slot) or {}).get("id") if slot else ""
-        if slot and not (sb and os.environ.get("TASK_LOOP_SLOT_BEAD") == sb):
+        if slot and sb and os.environ.get("TASK_LOOP_SLOT_BEAD") == sb and _handed_slot(slot):
+            took = sb  # exec'd by the run-task that took this slot: it is still ours, and this process gives it back
+            RUN_SLOT["owned"] = slot
+        elif slot and not (sb and os.environ.get("TASK_LOOP_SLOT_BEAD") == sb):
             took, why = tl.take_named_slot(repo, slot, tl.profile_slots(repo), "run-task " + a.id)
             if not took:
                 print("TAKEN: %s" % why)
                 return {"v": 1, "outcome": "taken", "bead": a.id, "why": why}
             os.environ["TASK_LOOP_SLOT_BEAD"] = took  # the engine's heartbeat keeps it
+            RUN_SLOT["owned"] = slot
         lock = procs.EngineLock(wt, a.id, slot)
         busy = take_area(a, repo, cfg, lock, sb=took or sb if slot else "")
         if busy:

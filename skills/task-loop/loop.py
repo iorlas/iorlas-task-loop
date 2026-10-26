@@ -253,7 +253,7 @@ def write_state(repo, **st):
     d, key = paths(repo)["states"]
     f = d / ("%s.%d.json" % (key, st.get("pid") or os.getpid()))
     tmp = f.with_suffix(".tmp")
-    tmp.write_text(json.dumps(dict(st, repo=repo, stop_protocol=1)), encoding="utf-8")
+    tmp.write_text(json.dumps(dict(st, repo=repo, stop_protocol=1, version=tl.HERE.parents[1].name, code_dir=str(tl.HERE))), encoding="utf-8")
     os.replace(tmp, f)
 
 
@@ -446,13 +446,14 @@ def landed_on_base(repo, wt, bead_id):
     return tl.run_git(wt, "merge-base", "--is-ancestor", tip, base, capture_output=True).returncode == 0
 
 
-def run_bead(repo, b, slot, wt, slot_bead, started):
-    """One bead through `tl run-task` as a child; returns its outcome record (failed when it gave none)."""
+def run_bead(repo, b, slot, wt, slot_bead, started, code=None):
+    """One bead through `tl run-task` as a child; returns its outcome record (failed when it gave none). code: the
+    task-loop dir to run from (the fallback after a crash-after-exec; default this loop's own)."""
     runs = paths(repo)["runs"]
     runs.mkdir(exist_ok=True)
     stem = "%s-%s" % (b["id"], time.strftime("%Y%m%d-%H%M%S", time.localtime(clock())))
     out, log_path = runs / (stem + ".outcome.json"), runs / (stem + ".log")
-    cmd = [sys.executable, str(tl.HERE / "tl.py"), "run-task", b["id"], "--worktree", wt, "--outcome-file", str(out)]
+    cmd = [sys.executable, str((code or tl.HERE) / "tl.py"), "run-task", b["id"], "--worktree", wt, "--outcome-file", str(out)]
     cmd += ["--slot", slot] if slot else []
     t0 = clock()
     os.environ["TASK_LOOP_SLOT_BEAD"] = slot_bead or ""  # the engine heartbeats it too (see Beat)
@@ -479,8 +480,24 @@ def run_bead(repo, b, slot, wt, slot_bead, started):
             raise
     try:
         r = json.loads(out.read_text(encoding="utf-8"))
+        gave = True
     except (OSError, ValueError):
         r = {"outcome": "failed", "why": "failed: no outcome from run-task (exit %s); see %s" % (rc, log_path)}
+        gave = False
+    moved = engine.read_reexec(b["id"])  # the engine exec'd into a newer install and left this note; a clean end removes it
+    engine.drop_reexec(b["id"])
+    if moved and not gave and not stopped and rc not in (0, None) and code is None and time.time() - float(moved.get("t") or 0) < engine.RELOAD_FALLBACK_S:
+        back = Path(moved.get("from_dir") or "")
+        if (back / "tl.py").is_file():  # died within RELOAD_FALLBACK_S of the exec: that version is refused, once more on the old one
+            why = "run-task died (exit %s) %d s after the exec into it" % (rc, time.time() - float(moved.get("t") or 0))
+            record_bad_version(str(moved.get("to")), why)
+            tl.event("reload_fallback", b["id"], who="loop", old=moved.get("to"), new=moved.get("from"), why=why, run=moved.get("run"))
+            say("RED: %s died after the move to task-loop %s; %s goes on from its checkpoint on %s" % (b["id"], moved.get("to"), b["id"], moved.get("from")))
+            os.environ["TL_REEXEC"] = json.dumps({"run": moved.get("run"), "bead": b["id"], "from": moved.get("to"), "owned": "", "fallback": True})
+            try:
+                return run_bead(repo, b, slot, wt, slot_bead, started, code=back)
+            finally:
+                os.environ.pop("TL_REEXEC", None)  # the fallback run took it; no later run-task of this loop may inherit it
     if stopped and r.get("outcome") == "failed":  # a stop is no verdict on the bead: back to the queue, unclaimed,
         if landed_on_base(repo, wt, b["id"]):     # unless the stop came during a land that went through
             r["why"] = "%s; its land commit is on the base: not reopened, close it by hand" % (r.get("why") or "stopped")
@@ -548,7 +565,9 @@ def complete(d):
     except OSError as e:
         return "python did not start: %s" % e
     if r.returncode != 0:
-        return "importing tl, loop, engine exited %d" % r.returncode
+        why = "importing tl, loop, engine exited %d" % r.returncode
+        record_bad_version(d.name, why)
+        return why
     why = selftest_of(here)
     if why:
         why = "selftest failed: " + why
@@ -580,13 +599,47 @@ def record_bad_version(version, why):
     if not isinstance(bad, dict):
         bad = {}
     bad[version] = {"why": why[:400], "at": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
-                    "seen_by": tl.HERE.parents[1].name}
+                    "seen_by": tl.HERE.parents[1].name, "key": install_key(tl.HERE.parents[1].parent / version)}
     tmp = f.with_name(f.name + ".%d.tmp" % os.getpid())
     try:
         tmp.write_text(json.dumps(bad, indent=1), encoding="utf-8")
         os.replace(tmp, f)
     except OSError:
         pass  # the refusal stands; only its record is lost
+
+
+def install_key(d):
+    """Size and mtime of the install's tl.py, loop.py and engine.py: a version re-installed under the same number differs."""
+    out = []
+    for f in ("tl.py", "loop.py", "engine.py"):
+        try:
+            st = (d / "skills" / "task-loop" / f).stat()
+        except OSError:
+            return ""
+        out.append("%d:%d" % (st.st_size, st.st_mtime_ns))
+    return ",".join(out)
+
+
+def bad_versions():
+    """The version names bad-versions.json refuses: an entry holds while the install's key is the one recorded (an entry
+    without a key holds for good). A refused version is not tested again at every step boundary."""
+    try:
+        bad = json.loads((tl.config_dir() / "bad-versions.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    root = tl.HERE.parents[1].parent
+    return {v for v, rec in (bad.items() if isinstance(bad, dict) else ())
+            if not isinstance(rec, dict) or not rec.get("key") or rec["key"] == install_key(root / v)}
+
+
+def vet_newer(skip=()):
+    """(version, dir, why) for the newest install above the running one that is not refused: why is None when it is usable
+    (complete() passed, selftest included), else what failed (and the version is now in bad-versions.json). None when
+    there is nothing newer to look at. One test per call; the caller is a step boundary."""
+    found = newest_install(set(skip) | bad_versions())
+    if not found:
+        return None
+    return found[0], found[1], complete(found[1])
 
 
 def pin_aware(d):
@@ -604,18 +657,19 @@ def maybe_move(a, repo, state):  # returns True when a stop arrived during the c
     if getattr(a, "pin", False) or not getattr(a, "argv", None):
         return
     try:
-        found = newest_install(state["warned"])  # a version that failed is not looked at again
+        found = vet_newer(state["warned"])  # a version that failed is not looked at again (bad-versions.json)
         if not found:
             return
-        ver, d = found
-        why = complete(d)
+        ver, d, why = found
         if why:
             state["warned"].append(ver)
             say("warn: not moving to %s: %s; staying on %s" % (ver, why, tl.HERE.parents[1].name))
+            tl.event("reload_refused", "", who="loop", version=ver, why=why[:300], running=tl.HERE.parents[1].name)
             return
         if STOP_NOW.is_set() or stop_mode(repo):  # the check took a while; a stop written meanwhile is read by this process
             return True
         say("moving to %s (was %s)" % (ver, tl.HERE.parents[1].name))
+        tl.event("reload", "", who="loop", old=tl.HERE.parents[1].name, new=ver, code_dir=str(d))
         os.environ["TL_LOOP_STATE"] = json.dumps(state)
         if START_CWD[0]:
             os.chdir(START_CWD[0])  # cmd_loop chdir'd into the repo; a relative --repo in argv means the start directory
@@ -954,6 +1008,9 @@ def cmd_status(a):
     request = read_stop(repo)
     for st in loops:
         print("LOOP pid %s on %s since %s" % (st["pid"], repo, t(st.get("started") or 0)))
+        if st.get("version"):
+            lag = tl.releases_behind(st["version"])
+            print("  running task-loop %s from %s%s" % (st["version"], st.get("code_dir") or "?", "; lags %d release(s)" % lag if lag else ""))
         if st.get("bead"):
             print("  now: %s in %s since %s; log %s" % (st["bead"], st.get("slot") or "its worktree", t(st["since"]),
                                                        st.get("run_log")))
@@ -962,6 +1019,12 @@ def cmd_status(a):
             print("  stop requested: %s" % mode)
     if not loops:
         print("no loop running on %s" % repo)
+    try:
+        refused = json.loads((tl.config_dir() / "bad-versions.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        refused = {}
+    for v in sorted(bad_versions()):  # a refused install that is still in the cache (a red line until a fixed release replaces it)
+        print("RED: task-loop %s refused: %s" % (v, (refused.get(v) or {}).get("why", "")[:160]))
     f = paths(repo)["log"]
     lines = f.read_text(encoding="utf-8").splitlines()[-a.last:] if f.exists() else []
     if lines:

@@ -18,6 +18,7 @@ Sources, all local and read-only:
 """
 
 import argparse
+import contextlib
 import glob
 import hashlib
 import ipaddress
@@ -1334,6 +1335,26 @@ def loop_version(pid):
     return m.group(1) if m else ""
 
 
+def engine_version(log):
+    """The task-loop version the run in engine log `log` runs now: its last note that names one (a re-exec writes a new one)."""
+    ver = ""
+    try:
+        with open(log, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                if '"version"' in line and '"kind": "note"' in line:
+                    with contextlib.suppress(ValueError):
+                        ver = json.loads(line).get("version") or ver
+    except OSError:
+        pass
+    return ver
+
+
+def installed_versions():
+    _engine_dir()
+    import tl
+    return sorted(tl.cache_dirs("task-loop"))
+
+
 def loop_files(repo):
     """(lanes, rows, waiting loops): one lane per slot (roadmap.lanes_of), the repo's pass log rows oldest first. Read only: a
     dead loop's state file is left (loop.live_loops would delete it)."""
@@ -1346,7 +1367,7 @@ def loop_files(repo):
         st = read_json(str(f), {}) or {}
         if isinstance(st, dict) and st.get("pid") and tl.pid_alive(st["pid"]):
             loops.append({"pid": st["pid"], "slot": st.get("slot") or "", "bead": st.get("bead"), "since": st.get("since"),
-                          "started": st.get("started") or 0, "version": loop_version(st["pid"])})
+                          "started": st.get("started") or 0, "version": st.get("version") or loop_version(st["pid"])})
     try:
         slots = [b["title"].split()[-1] for b in tl.slot_beads(repo)]
         running = loop.running(repo)
@@ -1412,6 +1433,7 @@ def api_roadmap(repo=""):
             except Exception:
                 continue
             ln["since"] = ln["since"] or (tasks.get(b) or {}).get("started")
+            ln["engine"] = engine_version(logs[b][-1])
             trails[b] = {"run": len(logs[b]), "stage": (tasks.get(b) or {}).get("stage") or "",
                          "blocks": [{"kind": x["kind"], "label": x["label"], "stage": x.get("stage_index"),
                                      "stages": x.get("stage_count"), "secs": x.get("secs"),
@@ -1420,7 +1442,7 @@ def api_roadmap(repo=""):
         mine_asks = [a for a in asks()["asks"] if os.path.basename(str(a.get("repo") or "").rstrip("/\\")) == g["repo"]]
         looks = [i for i in look_items(path)[1] if i["status"] == "open"]
         return roadmap.build(g, lanes, ranked, skipped, rows, trails, rows=tasks, lane_records=api["lanes"], asks=mine_asks, waiting=len(waiting),
-                             looks=looks, closed=[b for b in beads if b.get("status") == "closed"])
+                             looks=looks, closed=[b for b in beads if b.get("status") == "closed"], installed=installed_versions())
 
     out = cached("roadmap:" + path, 5, build)
     return dict(out, repos=g["repos"])

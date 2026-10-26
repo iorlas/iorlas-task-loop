@@ -1955,6 +1955,12 @@ def cmd_pin(a):
     return 0
 
 
+def releases_behind(version, key="task-loop"):
+    """How many installed releases of plugin `key` are newer than `version` (0 when it is the newest or unknown)."""
+    mine = version_tuple(version)
+    return sum(1 for v in cache_dirs(key) if mine and version_tuple(v) > mine)
+
+
 def previous_version(key, current):
     below = [v for v in cache_dirs(key) if version_tuple(v) < version_tuple(current)]
     return max(below, key=version_tuple) if below else ""
