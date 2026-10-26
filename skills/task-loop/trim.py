@@ -40,19 +40,26 @@ def trim_log(text, log="", cap=CAP, tail_lines=TAIL):
     if not rows:
         return ""
     if len(rows) <= tail_lines and sum(_size(r) for r in rows) + _size(foot) <= cap:
-        return "\n".join(rows + ([foot] if log else []))
+        said, short = set(), []
+        for r in rows:  # a failure line the log repeats word for word is said once
+            if FAIL_LINE.search(r) and r in said:
+                continue
+            said.add(r)
+            short.append(r)
+        return "\n".join(short + ([foot] if log else []))
     budget = cap - _size(foot)
-    keep = set()
+    keep, seen = set(), set()
     used = 0
 
-    def take(i):
+    def take(i, once=False):
         nonlocal used
-        if i in keep or not 0 <= i < len(rows) or not rows[i].strip():
-            return True
+        if i in keep or not 0 <= i < len(rows) or not rows[i].strip() or (once and rows[i] in seen):
+            return True  # a line the log repeats word for word is said once
         cost = _size(rows[i]) + GAP_COST
         if used + cost > budget:
             return False
         keep.add(i)
+        seen.add(rows[i])
         used += cost
         return True
 
@@ -82,10 +89,10 @@ def trim_log(text, log="", cap=CAP, tail_lines=TAIL):
     # fair order: every name and its assertion before any second hit, then context, then the rest of the tail
     full = False
     for i in tail_idx:
-        take(i)
+        take(i, once=True)
     for group in (sorted(set(names) | set(firsts)), rest, ctx):
         for i in group:
-            if not take(i):
+            if not take(i, once=True):
                 full = True
                 break
         if full:
