@@ -1515,7 +1515,7 @@ class EngineTest(unittest.TestCase):
         rc, s = self.run_engine({"plan": [self.plan_with(slow, fast)], "write": [WRITE, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         first, again = s.prompts[1], s.prompts[2]
-        self.assertIn("The engine runs these after you; do not run them:\n- " + slow, first)
+        self.assertIn("The engine runs these, do not run them:\n- " + slow, first)
         self.assertIn("You may run these:\n- " + fast, first)
         self.assertIn("never start a command you expect to take over a minute; never poll a running command more than 3 times",
                       first.replace("Never", "never"))
