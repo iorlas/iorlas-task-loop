@@ -27,6 +27,7 @@ import tl  # noqa: E402
 
 T0 = datetime(2026, 10, 19, tzinfo=timezone.utc).timestamp()  # Monday 00:00 UTC
 H = 3600.0
+DAY = 24 * H
 M = 60.0
 
 
@@ -293,6 +294,49 @@ class Core(Base):
             {"window": "5h", "used_pct": 30, "resets_at": 0}]}}, now=T0)
         self.assertTrue(snap["available"])
         self.assertEqual((snap["lanes"][0]["lane"], snap["lanes"][0]["used_pct"]), ("OPENAI", 30))
+
+    def test_quota_snapshot_reads_the_five_and_week_percentages_delegate_prints_today(self):
+        snap = report.quota_snapshot(lanes={"OPENAI": {"out": False, "five": None, "week": 2.0},
+                                            "CLAUDE": {"out": True, "five": None, "week": None}}, now=T0)
+        self.assertEqual([(x["lane"], x["window"], x["used_pct"]) for x in snap["lanes"]], [("OPENAI", "week", 2.0)])
+
+    def test_whole_window_is_one_bucket_not_split_at_the_utc_monday(self):
+        ws = lifecycle.weeks(T0 - 2 * DAY, T0 + 9 * DAY, whole=True)
+        self.assertEqual(len(ws), 1)
+        self.assertEqual((ws[0]["start"], ws[0]["end"]), (T0 - 2 * DAY, T0 + 9 * DAY))
+        self.assertGreater(len(lifecycle.weeks(T0 - 2 * DAY, T0 + 9 * DAY)), 1)
+
+
+class StudyWindow(unittest.TestCase):
+    """The bead's window (131 landed / 17,541 slot-min / 9,774 non-landing) as a synthetic fixture whose totals are fixed
+    by construction (not by the code under test), laid over a window that crosses a UTC Monday."""
+
+    def fixture(self):
+        runs, t = [], T0 - 2 * DAY
+        for i in range(131):  # 130 runs of 59 min and one of 97: 7,767 landed minutes
+            mins = 97 if i == 0 else 59
+            runs.append(trace("b%d" % i, "landed", (t - T0) / H, (t - T0) / H + mins / 60, sha="%040x" % i))
+            t += 83 * M
+        for i in range(60):  # 59 runs of 162 min and one of 216: 9,774 non-landing minutes
+            mins = 216 if i == 0 else 162
+            runs.append(trace("n%d" % i, "blocked", (t - T0) / H, (t - T0) / H + mins / 60, why="needs a human: x"))
+            t += 170 * M
+        return runs, T0 - 2 * DAY, t + DAY
+
+    def test_the_study_totals_are_reproduced_within_two_percent(self):
+        runs, since, until = self.fixture()
+        w = lifecycle.lifecycle_report(runs, since=since, until=until, whole=True)["weeks"][0]
+        self.assertEqual(w["landed_beads"], 131)
+        self.assertAlmostEqual(w["slot_min"], 17541, delta=17541 * 0.02)
+        self.assertAlmostEqual(w["non_landing_slot_min"], 9774, delta=9774 * 0.02)
+
+    def test_weekly_buckets_add_up_to_the_whole_window(self):
+        runs, since, until = self.fixture()
+        whole = lifecycle.lifecycle_report(runs, since=since, until=until, whole=True)["weeks"]
+        split = lifecycle.lifecycle_report(runs, since=since, until=until)["weeks"]
+        self.assertGreater(len(split), 1)
+        self.assertEqual(sum(x["landed_beads"] for x in split), whole[0]["landed_beads"])
+        self.assertAlmostEqual(sum(x["slot_min"] for x in split), whole[0]["slot_min"], places=1)
 
 
 class Cli(Base):

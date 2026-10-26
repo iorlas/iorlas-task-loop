@@ -106,12 +106,13 @@ def utc_iso(t):
     return datetime.fromtimestamp(float(t), timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def weeks(since, until):
-    """[start, end) UTC weeks clipped to [since, until); explicit half-open boundaries."""
+def weeks(since, until, whole=False):
+    """[start, end) UTC weeks clipped to [since, until); explicit half-open boundaries. whole=True: the window is one
+    bucket, so a baseline over a window that is not week-aligned has window totals and window medians."""
     out = []
     start = utc_week_start(since)
     while start < until:
-        end = start + WEEK
+        end = until if whole else start + WEEK
         a, b = max(start, since), min(end, until)
         if b > a:
             out.append({"start": a, "end": b, "week_start": start, "week_end": end,
@@ -410,7 +411,7 @@ def _quota_per_landed(observations, since, until, landed):
 
 
 def lifecycle_report(traces, records_by_run=None, asks=(), history=None, quota=None, since=None, until=None,
-                     reverts=None, quota_observations=None):
+                     reverts=None, quota_observations=None, whole=False):
     """The weekly lifecycle report as data. Pure: callers load traces, engine logs, asks, delegate history and git facts.
 
     `reverts` maps a landing run name (or bead) to {"status": reverted|fixed_forward|clean|censored|unknown}; the caller
@@ -421,7 +422,7 @@ def lifecycle_report(traces, records_by_run=None, asks=(), history=None, quota=N
     landings = _landings(traces)
     dead = _dead_times(traces)
     out = []
-    for w in weeks(since, until):
+    for w in weeks(since, until, whole):
         a, b, days = w["start"], w["end"], w["days"]
         total = non = over180 = 0.0
         timed = runs = non_untimed = 0

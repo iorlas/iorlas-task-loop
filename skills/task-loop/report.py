@@ -31,6 +31,7 @@ import engine
 import lifecycle
 import loop
 import tl
+from lanes import route as lroute
 
 M2 = {"beads": 10, "landed_no_ask": 7}  # at least; lost and crashes must be 0 (docs/roadmap.md)
 QUIET_MIN = 30  # an engine log with no close and no trace, untouched this long and with no live run-task: a crash
@@ -511,15 +512,19 @@ def quota_snapshot(route=None, lanes=None, now=None):
     """What delegate says now: a snapshot, never a measurement of what the window consumed."""
     now = time.time() if now is None else now
     if lanes is None:
-        route = engine.find_route() if route is None else route
-        lanes = engine.lane_status(route) if route else {}
+        route = lroute.find_route() if route is None else route
+        lanes = lroute.lane_status(route) if route else {}
     if isinstance(lanes, list):
         lanes = {str(x.get("name") or "?"): x for x in lanes if isinstance(x, dict)}
     rows = []
     for name, ln in (lanes or {}).items():
         if not isinstance(ln, dict):
             continue
-        for u in ln.get("usage") or []:
+        usage = list(ln.get("usage") or [])
+        for key, window in (("five", "5h"), ("week", "week")):  # delegate status --json today: five/week percentages
+            if isinstance(ln.get(key), (int, float)) and not isinstance(ln.get(key), bool):
+                usage.append({"window": window, "used_pct": ln[key]})
+        for u in usage:
             if not isinstance(u, dict) or not isinstance(u.get("used_pct"), (int, float)):
                 continue
             rows.append({"lane": name, "window": u.get("window") or "?", "used_pct": u["used_pct"],
@@ -596,7 +601,7 @@ def reverts_of(repo, traces, until, base=None):
 
 
 def lifecycle_stats(repo, since, until, traces=None, history=None, quota=None, reverts=None, now=None,
-                    quota_observations=None):
+                    quota_observations=None, whole=False):
     repo = tl.repo_root(repo)
     traces = repo_traces(repo) if traces is None else traces
     records = {r.get("run"): read_jsonl(r.get("log") or "") for r in traces if r.get("run")}
@@ -612,7 +617,7 @@ def lifecycle_stats(repo, since, until, traces=None, history=None, quota=None, r
     observations = lane_observations() if quota_observations is None else quota_observations
     return lifecycle.lifecycle_report(traces, records_by_run=records, asks=asks, history=history, quota=quota,
                                       since=since, until=until, reverts=reverts,
-                                      quota_observations=observations)
+                                      quota_observations=observations, whole=whole)
 
 
 def fmt(v, suffix="", pct=False, nd=1):
