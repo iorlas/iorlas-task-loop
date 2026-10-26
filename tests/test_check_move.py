@@ -84,12 +84,44 @@ class CheckMove(unittest.TestCase):
         rc, out = self.run_tool(b, self.move(cls))
         self.assertEqual(rc, 0, out)
 
-    def test_in_place_change_is_not_a_move(self):
+    def edit_in_place(self):
         b = self.base()
         self.write("a.py", "import os\n\n" + FUNC.replace("w * h", "w + h") + "\ndef keep():\n    return 1\n")
-        rc, out = self.run_tool(b, self.commit("edit"))
+        return b, self.commit("edit")
+
+    def test_in_place_edit_fails_and_names(self):
+        b, h = self.edit_in_place()
+        rc, out = self.run_tool(b, h)
+        self.assertNotEqual(rc, 0)
+        self.assertIn("a.py:area changed in place", out)
+
+    def test_allow_edit_passes_in_place(self):
+        b, h = self.edit_in_place()
+        rc, out = self.run_tool(b, h, "--allow-edit", "a.py:area")
         self.assertEqual(rc, 0, out)
-        self.assertIn("not a move", out)
+
+    def test_unaccounted_new_function_fails_then_allowed(self):
+        b = self.base()
+        self.write("a.py", open(os.path.join(self.d, "a.py")).read() + "\ndef extra():\n    return 3\n")
+        h = self.commit("add")
+        rc, out = self.run_tool(b, h)
+        self.assertNotEqual(rc, 0)
+        self.assertIn("a.py:extra added", out)
+        rc, out = self.run_tool(b, h, "--allow-edit", "a.py:extra")
+        self.assertEqual(rc, 0, out)
+
+    def test_top_level_statement_change_fails(self):
+        b = self.base()
+        self.write("a.py", open(os.path.join(self.d, "a.py")).read() + "\nLIMIT = 5\n")
+        rc, out = self.run_tool(b, self.commit("const"))
+        self.assertNotEqual(rc, 0)
+        self.assertIn("a.py:<module>", out)
+
+    def test_import_and_comment_only_passes(self):
+        b = self.base()
+        self.write("a.py", "# note\nimport os\nimport sys\n\n\n" + FUNC + "\n\ndef keep():\n    return 1\n")
+        rc, out = self.run_tool(b, self.commit("imports"))
+        self.assertEqual(rc, 0, out)
 
     def test_real_trim_commit(self):
         # Runs against this repo's history; skipped if history is shallow.
@@ -98,10 +130,19 @@ class CheckMove(unittest.TestCase):
         sha = r.stdout.split()[-1] if r.stdout.split() else None
         if not sha:
             self.skipTest("trim.py history unavailable")
-        r = subprocess.run([sys.executable, TOOL, sha + "~1", sha], cwd=ROOT,
-                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+
+        def run(*extra):
+            return subprocess.run([sys.executable, TOOL, sha + "~1", sha] + list(extra), cwd=ROOT,
+                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+        r = run()
+        self.assertNotEqual(r.returncode, 0, r.stdout)
+        self.assertIn("engine.py:Engine.fix changed in place", r.stdout)
+        allow = []
+        for line in r.stdout.splitlines():
+            if line.startswith("FAIL: "):
+                allow += ["--allow-edit", line[6:].split(" ")[0]]
+        r = run(*allow)
         self.assertEqual(r.returncode, 0, r.stdout)
-        self.assertNotIn("moved:", r.stdout)
 
 
 if __name__ == "__main__":
