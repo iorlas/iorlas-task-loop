@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import fake_route  # noqa: E402
 import test_engine as te  # noqa: E402
 from test_engine import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint, tl  # noqa: E402,F401
 
@@ -485,7 +486,7 @@ class VisualWork(StagesTest):
         return [c[0] for c in s.calls]
 
     def test_a_look_judge_with_no_lane_leaves_the_pictures_unjudged_and_the_bead_unparked(self):
-        late = te.ans("stop", "no_lane", "retry", retry_after=engine.time.time() + 3600, family="xai", lane="GROK", say="no lane")
+        late = te.stop("no_lane", at=engine.time.time() + 3600, family="xai", lane="GROK", say="no lane")
         rc, s = self.go({"plan": [PLAN], "write": [self.write()], "look": [late], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertIn("the look judge had no lane", self.eng.log_path.read_text())
@@ -493,7 +494,7 @@ class VisualWork(StagesTest):
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer", "reviewer"])  # the judge's one try, then the review
 
     def test_a_login_or_a_crash_is_not_swallowed_by_the_look_judge(self):
-        out = te.ans("stop", "logged_out", "owner", family="claude", lane="CLAUDE", say="logged out")
+        out = te.stop("logged_out", family="claude", lane="CLAUDE", say="logged out")
         rc, s = self.go({"plan": [PLAN], "write": [self.write()], "look": [out, out]})
         self.assertIn("paused", self.eng.why)
 
@@ -1121,14 +1122,14 @@ class ResumeCount(StagesTest):
 
     def resolving_worker(self, which=1, file="a.txt", text="merged"):
         """The `which`-th worker call resolves `file` (the conflict fix), as a real writer would."""
-        real = te.DelegateScript.__call__
+        real = fake_route.Script.reply
 
-        def call(this, route, role, *a, **kw):
-            r = real(this, route, role, *a, **kw)
+        def call(this, role, *a, **kw):
+            r = real(this, role, *a, **kw)
             if role == "worker" and [c[0] for c in this.calls].count("worker") == which:
                 Path(this.cwds[-1], file).write_text(text + "\n")
             return r
-        return mock.patch.object(te.DelegateScript, "__call__", call)
+        return mock.patch.object(fake_route.Script, "reply", call)
 
     def last_trace(self):
         return json.loads((tl.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
@@ -1175,15 +1176,15 @@ class ResumeCount(StagesTest):
     def test_exactly_ten_conflicted_files_are_still_fixed(self):
         files = ["c%d.txt" % n for n in range(10)]
         self.wip_branch(["mine"], "theirs", files=files)
-        real = te.DelegateScript.__call__
+        real = fake_route.Script.reply
 
-        def fix_all(this, route, role, *a, **kw):
-            r = real(this, route, role, *a, **kw)
+        def fix_all(this, role, *a, **kw):
+            r = real(this, role, *a, **kw)
             if role == "worker" and not any(Path(this.cwds[-1], f).read_text() == "merged\n" for f in files):
                 for f in files:
                     Path(this.cwds[-1], f).write_text("merged\n")
             return r
-        with mock.patch.object(te.DelegateScript, "__call__", fix_all):
+        with mock.patch.object(fake_route.Script, "reply", fix_all):
             rc, s = self.run_engine({"write": [WRITE, WRITE], "review": [CLEAN, CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertTrue(self.last_trace()["salvaged"])
@@ -1314,7 +1315,7 @@ class Claims(StagesTest):
         self.assertEqual(last["stats"]["tokens_in"], sum(s["tokens"]["in"] for s in last["sessions"] if s["node"] != "reflect"))
 
     def test_a_reflection_that_fails_changes_nothing(self):
-        crash = te.ans("failed", "crash", "owner", say="boom")
+        crash = fake_route.NO_ANSWER
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN], "reflect": [crash, crash, crash]}, reflect=True)
         self.assertEqual(rc, 0, self.blocked)
         last = json.loads((tl.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
@@ -1566,14 +1567,14 @@ class SlotHygiene(StagesTest):
         self.put_ignore_on_main("client/log.txt\n")
         (self.wt / "tests").mkdir(exist_ok=True)
 
-        class Writer(te.DelegateScript):  # a writer that makes a new feature file nothing in the plan names, and Unity's log
-            def __call__(this, route, role, prompt, schema, cwd, *a, **kw):
+        class Writer(fake_route.Script):  # a writer that makes a new feature file nothing in the plan names, and Unity's log
+            def reply(this, role, prompt, schema, cwd, *a, **kw):
                 if role == "worker":
                     Path(cwd, "tests", "edit_content.feature").write_text("Feature: x\n")
                     (Path(cwd) / "client").mkdir(exist_ok=True)
                     (Path(cwd) / "client" / "log.txt").write_text("unity\n")
-                return super().__call__(route, role, prompt, schema, cwd, *a, **kw)
-        with mock.patch.object(te, "DelegateScript", Writer):
+                return super().reply(role, prompt, schema, cwd, *a, **kw)
+        with mock.patch.object(fake_route, "Script", Writer):
             rc, s = self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which format?")]})
         self.assertEqual(rc, 2)
         branch_files = self.eng.git("ls-tree", "-r", "--name-only", "task/t-1").splitlines()
@@ -1585,19 +1586,20 @@ class SlotHygiene(StagesTest):
 class DeadLane(StagesTest):
     """A lane that fails to start without being marked out must not hold a read-only step for ten minutes."""
 
+    def blips(self, n, lane="GROK_SUBSCRIPTION"):
+        """vendor_blip (lane / transient / poll): the lane failed to start. Three polls wait for it, the next try goes elsewhere."""
+        return [te.stop("vendor_blip", family="xai", lane=lane, say="opencode failed before any work: spending limit")] * n
+
     def test_a_retry_from_a_failing_family_routes_the_next_try_past_it(self):
-        dead = te.ans("stop", "vendor_prework", "retry", retry_after=engine.time.time() + 30, family="xai", lane="GROK_SUBSCRIPTION",
-                      say="opencode failed before any work: spending limit")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [dead, CLEAN]})
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": self.blips(4) + [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         reviews = [c for c in s.calls if c[0] == "reviewer"]
-        self.assertEqual(len(reviews), 2)
-        self.assertEqual(reviews[1][2], "xai")  # authored-by the failing family: the route puts the others first
+        self.assertEqual(len(reviews), 5)  # three polls of the lane, then the route is asked again
+        self.assertEqual(reviews[4][2], "xai")  # authored-by the failing family: the route puts the others first
         self.assertNotEqual(reviews[0][2], "xai")
 
     def test_the_writers_own_family_after_a_dead_lane_is_flagged_same_family(self):
-        dead = te.ans("stop", "vendor_prework", "retry", retry_after=engine.time.time() + 30, family="xai", lane="GROK_SUBSCRIPTION", say="x")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [dead, CLEAN]},
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": self.blips(4) + [CLEAN]},
                                 j_extra={"review": [{"family": "openai"}]})  # the route landed on openai, the writer's family
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(self.eng.last_flag, "same_family")
@@ -1618,13 +1620,12 @@ class DeadLane(StagesTest):
         self.assertTrue(self.closed)  # it landed
 
     def test_one_family_failing_twice_is_not_switched_back_and_forth(self):
-        dead = te.ans("stop", "vendor_prework", "retry", retry_after=engine.time.time() + 30, family="xai", lane="GROK", say="x")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [dead, dead, CLEAN]})
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": self.blips(5, "GROK") + [CLEAN]})
         reviews = [c for c in s.calls if c[0] == "reviewer"]
-        self.assertEqual([c[2] for c in reviews][1:], ["xai", "xai"])  # rebound once, kept
+        self.assertEqual([c[2] for c in reviews][4:], ["xai", "xai"])  # rebound once, kept
 
     def test_a_busy_lane_is_waited_for_as_before(self):
-        busy = te.ans("stop", "busy", "retry", retry_after=engine.time.time() + 30, family="openai", lane="OPENAI_SUBSCRIPTION", say="no free slot")
+        busy = te.stop("busy", family="openai", lane="OPENAI_SUBSCRIPTION", say="no free slot")
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [busy, CLEAN]})
         reviews = [c for c in s.calls if c[0] == "reviewer"]
         self.assertEqual(reviews[1][2], reviews[0][2])
@@ -1670,15 +1671,8 @@ class Contracts(StagesTest):
         self.assertTrue(engine.TRANSIENT_PUSH.search("fatal: unable to access 'https://x/': Could not resolve host: x"))
 
     def test_a_delegate_crash_is_retried_fresh_and_the_run_goes_on(self):
-        crash = te.ans("failed", "crash", "owner", say="UnicodeDecodeError: 'utf-8' codec can't decode bytes in position 65534-65535")
+        crash = fake_route.NO_ANSWER  # route.py died: delegate printed no answer
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [crash, CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer", "reviewer"])
-        self.assertIn("delegate crashed", self.eng.log_path.read_text())
-
-    def test_a_worker_a_supervisor_stopped_gets_one_fresh_try_not_the_final_failure(self):
-        killed = te.ans("failed", "no_answer", "owner", say="opencode exited -15 without an error")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [killed, CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer", "reviewer"])
         self.assertIn("delegate crashed", self.eng.log_path.read_text())
@@ -1702,30 +1696,27 @@ class Contracts(StagesTest):
         self.assertIn("wip commit", warn.call_args[0][0])
         self.assertIn("boom", warn.call_args[0][0])
 
-    def test_a_lane_that_went_out_during_the_call_is_routed_again_at_once(self):
-        out = te.ans("failed", "lane_out", "owner", say="lane_out: ZAI", lane="ZAI")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [out, WRITE], "review": [CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "worker", "reviewer"])
-
-    def test_a_lane_that_went_out_mid_call_with_a_far_reset_time_is_routed_again_not_waited_for(self):
-        # lifesim r0yc/rl4s: delegate answered next=retry with the dead lane's own reset time (hours away); another lane was free
+    def test_a_lane_that_is_out_for_hours_pauses_with_its_reset_time_and_is_not_waited_for(self):
+        # lifesim r0yc/rl4s: the dead lane's own reset time is hours away; delegate re-routes inside the call, so a stop is final
         import time
-        out = te.ans("failed", "lane_out", "retry", say="lane_out: ZAI", lane="ZAI", retry_after=time.time() + 3 * 3600)
+        due = time.time() + 3 * 3600
+        out = te.stop("rate_limited", say="lane_out: ZAI", lane="ZAI", at=due)
         rc, s = self.run_engine({"plan": [PLAN], "write": [out, WRITE], "review": [CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "worker", "reviewer"])
-        self.assertFalse(any(c[:1] == ("update",) and any("no lane" in x for x in c) for c in self.bd_calls))
-
-    def test_a_role_with_no_lane_left_still_pauses_after_two_reroutes(self):
-        out = te.ans("failed", "lane_out", "owner", say="lane_out: ZAI", lane="ZAI")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [out, out, out], "review": [CLEAN]})
         self.assertEqual(rc, 2)
-        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "worker", "worker"])
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker"])
+        self.assertAlmostEqual(self.eng.retry_after, due, delta=1)
+        self.assertTrue(any(c[:3] == ("comments", "add", "t-1") and c[3].startswith("Engine paused:") and "paused: no lane for write until" in c[3]
+                            for c in self.bd_calls))
+
+    def test_a_lane_that_is_out_with_no_reset_time_pauses_at_once(self):
+        out = te.stop("rate_limited", say="lane_out: ZAI", lane="ZAI")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [out], "review": [CLEAN]})
+        self.assertEqual(rc, 2)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker"])
         self.assertTrue(any(c[:3] == ("comments", "add", "t-1") and c[3].startswith("Engine paused:") and "paused: no lane for write" in c[3] for c in self.bd_calls))
 
     def test_a_delegate_that_keeps_crashing_pauses_the_bead_and_asks_nobody(self):
-        crash = te.ans("failed", "crash", "owner", say="UnicodeDecodeError")
+        crash = fake_route.NO_ANSWER
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [crash, crash, crash]})
         self.assertNotEqual(rc, 0)
         self.assertTrue(self.eng.why.startswith("failed: delegate crashed 3 times on the review step"), self.eng.why)
@@ -1882,7 +1873,7 @@ class ClaimPerBead(StagesTest):
         self.assertIn("changed hands", why)
 
     def test_a_loop_that_pauses_a_bead_clears_its_assignee(self):
-        late = te.ans("stop", "no_lane", "retry", retry_after=engine.time.time() + 3600, family="openai", lane="OPENAI", say="no lane")
+        late = te.stop("no_lane", at=engine.time.time() + 3600, family="openai", lane="OPENAI", say="no lane")
         rc, s = self.run_engine({"plan": [late]})
         self.assertTrue(self.eng.why.startswith("paused:"), self.eng.why)
         updates = [c for c in self.bd_calls if c[:2] == ("update", "t-1") and "--append-notes" not in c]

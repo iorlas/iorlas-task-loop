@@ -13,6 +13,7 @@ RACE_SEED sets the jitter (default 1); every process gets one Claude session id,
 import json
 import os
 import random
+import shutil
 import signal
 import subprocess
 import sys
@@ -73,6 +74,9 @@ class Race(unittest.TestCase):
         for d in ("bin", "home", "cfg", "bd", "hooks"):
             (h / d).mkdir()
         shim(h / "bin" / "bd", FIX / "fake_bd.py")
+        (h / "delegate").mkdir()  # the engine reads contract.json beside the route.py it is told to use
+        shutil.copy(str(ROOT / "tests" / "fixtures" / "delegate3" / "skills" / "delegate" / "contract.json"), str(h / "delegate" / "contract.json"))
+        shutil.copy(str(FIX / "fake_route.py"), str(h / "delegate" / "route.py"))
         # a real `plugin update` leaves the new version in the cache and release.py checks for it (tl-7y6.5.10); the two
         # racing releases publish 0.1.1 and 0.1.2 in either order, so the fake installs both
         cache = h / "home" / ".claude" / "plugins" / "cache" / "iorlas-marketplace" / "iorlas-task-loop"
@@ -94,7 +98,7 @@ class Race(unittest.TestCase):
         r = self.repo
         sh("git", "checkout", "-q", "-B", "main", cwd=r, env=env)
         (r / ".task-loop.json").write_text(json.dumps({"slots": {"count": len(SLOTS)},
-                                                       "engine": {"delegate": str(FIX / "fake_route.py"),
+                                                       "engine": {"delegate": str(h / "delegate" / "route.py"),
                                                                   "area_label_prefix": "lane:",
                                                                   "areas": {"b": ["ep-b"]}}}, indent=1))
         (r / ".claude-plugin").mkdir()

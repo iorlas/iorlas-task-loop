@@ -125,46 +125,60 @@ def opt(argv, flag):
     return argv[argv.index(flag) + 1] if flag in argv else ""
 
 
+NO_ANSWER = "no_answer"  # an answers entry: route.py died without printing an answer (exit 1, nothing on stdout)
+
+
 class Script:
-    """The in-process route.py: a `runner(cmd, **kw)` for delegate_link.call. Answers per node from queues; a write creates f.txt
-    in the worktree like a real writer. answers: {node: [data | a full answer dict (has "contract")]}; j_extra: {node: [fields the
-    next done answer gains]}. calls: (role, resume, authored_by) per call; prompts, cwds, schemas, timeouts per call."""
+    """The in-process route.py: a `runner(cmd, **kw)` for delegate_link.call (the engine's `make_runner` seam), which also has the
+    runner's `stop`, `obs` and `secs` (a test sets `stop` to say the engine ended the call: `reply` may also raise
+    delegate_link.Stopped). Answers per node from queues; a write creates f.txt in the worktree like a real writer.
+    answers: {node: [data | a full answer dict (has "contract") | a callable(script, node, cwd, resume)]};
+    j_extra: {node: [fields the next done answer gains]}. calls: (role, resume, authored_by) per call; prompts, cwds, nodes,
+    timeouts per call. A test wraps `reply(role, prompt, schema, cwd, resume, writer, timeout)` to change what a call does."""
 
     def __init__(self, answers, j_extra=None, delegate=None):
         self.answers, self.calls, self.prompts, self.cwds, self.timeouts = {k: list(v) for k, v in answers.items()}, [], [], [], []
         self.j_extra = {k: list(v) for k, v in (j_extra or {}).items()}  # per node, per call: fields the answer gains
         self.c = contract(delegate)
         self.nodes = []
+        self.stop, self.obs, self.secs = {}, {}, 0.0
 
     def node_of(self, schema):
         import engine  # the engine sends each contract in strict form, a visual stage's with its look field too
         return next(k for k in engine.SCHEMAS if schema in (engine.strict(engine.schema_for(k)), engine.strict(engine.schema_for(k, True))))
 
     def __call__(self, cmd, **kw):
-        role, cwd = cmd[3], opt(cmd, "--cwd")
-        prompt = Path(opt(cmd, "--brief")).read_text(encoding="utf-8")
+        self.stop, self.obs, self.secs = {}, {}, 0.0
         schema = json.loads(Path(opt(cmd, "--schema")).read_text(encoding="utf-8"))
+        j = self.reply(cmd[3], Path(opt(cmd, "--brief")).read_text(encoding="utf-8"), schema, opt(cmd, "--cwd"), opt(cmd, "--resume"),
+                       opt(cmd, "--authored-by"), kw.get("timeout"))
+        if j == NO_ANSWER:
+            return subprocess.CompletedProcess(cmd, 1, "", "route.py exit 1, no answer object")
+        return subprocess.CompletedProcess(cmd, 0, json.dumps(j), "")
+
+    def reply(self, role, prompt, schema, cwd, resume, writer=None, timeout=None):
+        """-> the answer object of one call."""
         node = self.node_of(schema)
-        resume = opt(cmd, "--resume")
-        self.calls.append((role, resume or None, opt(cmd, "--authored-by") or None))
+        self.calls.append((role, resume or None, writer or None))
         self.nodes.append(node)
         self.cwds.append(cwd)
         self.prompts.append(prompt)
-        self.timeouts.append(kw.get("timeout"))
+        self.timeouts.append(timeout)
         a = self.answers[node].pop(0)
         if callable(a):
             a = a(self, node, cwd, resume)
+        if a == NO_ANSWER:
+            return a
         if isinstance(a, dict) and a.get("contract") is not None:
-            j = a
-        else:
-            if node == "write":
-                Path(cwd, "f.txt").write_text("d%d\n" % len(self.calls))
-            j = answer(self.c, None, "ref-" + node, bool(resume), a, cost=0.5, secs=1, family="openai" if node == "write" else "claude",
-                       lane="L", model="m", tokens={"in": 1000, "cached": 800, "out": 50},
-                       context={"instructions": ["/repo/AGENTS.md"], "env_keys": ["PATH"]})
-            if self.j_extra.get(node):
-                j.update(self.j_extra[node].pop(0))
-        return subprocess.CompletedProcess(cmd, 0, json.dumps(j), "")
+            return a
+        if node == "write":
+            Path(cwd, "f.txt").write_text("d%d\n" % len(self.calls))
+        j = answer(self.c, None, "ref-" + node, bool(resume), a, cost=0.5, secs=1, family="openai" if node == "write" else "claude",
+                   lane="L", model="m", tokens={"in": 1000, "cached": 800, "out": 50},
+                   context={"instructions": ["/repo/AGENTS.md"], "env_keys": ["PATH"]})
+        if self.j_extra.get(node):
+            j.update(self.j_extra[node].pop(0))
+        return j
 
 
 DelegateScript = Script

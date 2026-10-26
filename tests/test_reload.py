@@ -26,8 +26,8 @@ import loop  # noqa: E402
 import roadmap  # noqa: E402
 import test_engine as te  # noqa: E402
 import tl  # noqa: E402
-from lanes import call as lcall  # noqa: E402
-from lanes import route as lroute  # noqa: E402
+import delegate_link as dl  # noqa: E402
+import fake_route  # noqa: E402
 
 BREAK_PLAN = ("    def plan(self, again=False):\n", "    def plan(self, again=False):\n        raise RuntimeError('planted: cannot plan')\n")
 
@@ -46,10 +46,13 @@ class Reload(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
         self.execs = []
-        for p in (mock.patch.object(lroute, "find_route", return_value="/fake/route.py"),
-                  mock.patch.object(lroute, "contract", return_value=te.CONTRACT)):  # no delegate in an isolated HOME
+        for p in (mock.patch.object(dl, "resolve", return_value=self.res("/fake/route.py")),):  # no delegate in an isolated HOME
             p.start()
             self.addCleanup(p.stop)
+
+    @staticmethod
+    def res(route):
+        return dl.Resolved(Path(route).parent, route, fake_route.CONTRACT, "explicit")
 
     def install(self, ver, plant=None, fake=False):
         """An installed version: a copy of this checkout's skill (its selftest is the real one), or a stub for the running one."""
@@ -87,12 +90,16 @@ class Reload(unittest.TestCase):
         """The delegate faked; `during` runs on the first writer call (a release lands mid-bead)."""
         fired = []
 
-        def call(*a, **kw):
-            if during and not fired and a[1] == "worker":
-                fired.append(1)
-                during()
-            return script(*a, **kw)
-        return (mock.patch.object(lcall, "call_delegate", call), mock.patch.object(engine.time, "sleep"))
+        class Runner:  # the script as the process seam, with `during` run on the first writer call
+            def __call__(this, cmd, **kw):
+                if during and not fired and cmd[3] == "worker":
+                    fired.append(1)
+                    during()
+                return script(cmd, **kw)
+
+            def __getattr__(this, name):
+                return getattr(script, name)
+        return (mock.patch.object(engine, "make_runner", lambda *a, **k: Runner()), mock.patch.object(engine.time, "sleep"))
 
     def run_with(self, eng, script, during=None):
         ps = self.patches(script, during)
@@ -106,7 +113,7 @@ class Reload(unittest.TestCase):
 
     # -- point 5: a newer install mid-bead -> exec at the next boundary, same run id, finished on the new version
     def test_a_newer_install_mid_bead_execs_at_the_next_step_boundary_and_the_bead_finishes_on_it_with_the_same_run(self):
-        script = te.DelegateScript({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
+        script = fake_route.Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         eng = self.engine_for(script)
         self.run_with(eng, script, during=lambda: self.install("0.2.0"))
         self.assertTrue(eng.moved)
@@ -154,7 +161,7 @@ class Reload(unittest.TestCase):
 
     def test_a_dry_run_and_a_run_not_started_by_run_task_never_move(self):
         self.install("0.2.0")
-        script = te.DelegateScript({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
+        script = fake_route.Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         eng = self.engine_for(script)
         eng.argv = ["something-else"]
         self.assertEqual(self.run_with(eng, script), 0)
@@ -163,7 +170,7 @@ class Reload(unittest.TestCase):
 
     # -- a broken install keeps the old one running, one red event, tested once
     def test_a_broken_install_keeps_the_old_one_running_with_one_red_event_and_is_tested_once(self):
-        script = te.DelegateScript({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
+        script = fake_route.Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         eng = self.engine_for(script)
         tests = []
         real = loop.selftest_of
@@ -236,8 +243,7 @@ class Reload(unittest.TestCase):
     # -- point 2: delegate is resolved per call, never held
     def test_delegate_route_is_resolved_again_each_call(self):
         c = engine.load_cfg(str(self.wt))
-        with mock.patch.object(lroute, "find_route", side_effect=["/a/route.py", "/b/route.py", "/b/route.py"]) as fr, \
-                mock.patch.object(lroute, "contract", return_value=te.CONTRACT):
+        with mock.patch.object(dl, "resolve", side_effect=[self.res("/a/route.py"), self.res("/b/route.py"), self.res("/b/route.py")]) as fr:
             eng = engine.Engine("t-1", str(self.wt), c)
             self.assertEqual(eng.delegate_route(), "/b/route.py")
             self.assertEqual(eng.delegate_route(), "/b/route.py")
@@ -259,19 +265,20 @@ class Reload(unittest.TestCase):
                         return n.name
                 return None
             for n in ast.walk(tree):
-                if isinstance(n, ast.Call) and getattr(n.func, "attr", getattr(n.func, "id", "")) == "find_route":
+                if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "resolve" \
+                        and isinstance(n.func.value, ast.Name) and n.func.value.id == "dl":
                     where = inside(n)
-                    if where not in ("__init__", "delegate_route", "find_route", None) and f.name == "engine.py":
-                        bad.append("%s: find_route called in %s" % (f.name, where))
+                    if where not in ("__init__", "delegate_route", None) and f.name == "engine.py":
+                        bad.append("%s: dl.resolve called in %s" % (f.name, where))
                     stmt = parents.get(n)
                     while stmt is not None and not isinstance(stmt, (ast.Assign, ast.AnnAssign, ast.FunctionDef, ast.Module)):
                         stmt = parents.get(stmt)
                     if isinstance(stmt, ast.Assign):
                         for t in stmt.targets:
                             if isinstance(t, ast.Attribute) and not (f.name == "engine.py" and t.attr == "route" and where in ("__init__", "delegate_route")):
-                                bad.append("%s:%d stores find_route() in .%s" % (f.name, n.lineno, t.attr))
+                                bad.append("%s:%d stores dl.resolve() in .%s" % (f.name, n.lineno, t.attr))
                             if isinstance(t, ast.Name) and where is None:
-                                bad.append("%s:%d keeps find_route() in module global %s" % (f.name, n.lineno, t.id))
+                                bad.append("%s:%d keeps dl.resolve() in module global %s" % (f.name, n.lineno, t.id))
                 if isinstance(n, ast.Assign) and f.name == "engine.py":  # no delegate module object held: self.x = <module>
                     v = n.value
                     if isinstance(v, ast.Call) and getattr(v.func, "attr", "") in ("import_module", "spec_from_file_location", "module_from_spec"):
