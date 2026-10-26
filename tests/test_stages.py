@@ -1416,7 +1416,7 @@ class StaleTree(StagesTest):
         self.assertTrue(engine.STALE_TREE.search(noisy))  # the whole log matches...
         self.assertFalse(engine.STALE_TREE.search(noisy[-500:]))  # ...its last lines, which the engine reads, do not
 
-    def test_the_checkpoint_head_follows_a_rebase_over_the_wip_commit(self):
+    def test_the_checkpoint_head_follows_a_squash_and_rebase_over_the_wip_commit(self):
         te.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
         (self.wt / "g.txt").write_text("work\n")
         te.sh("git", "add", "-A", cwd=self.wt)
@@ -1431,7 +1431,8 @@ class StaleTree(StagesTest):
         self.main_moves()
         te.sh("git", "fetch", "-q", "origin", cwd=self.wt)
         self.assertEqual(e.rebase_onto_base(), "rebased")
-        self.assertEqual(json.loads(e.checkpoint_path().read_text())["head"], e.git("rev-parse", "HEAD~1"))
+        self.assertEqual(json.loads(e.checkpoint_path().read_text())["head"], e.git("rev-parse", "HEAD"))  # tl-7y6.2.19: the wip commit is squashed in
+        self.assertEqual(e.git("rev-list", "--count", "origin/main..HEAD"), "1")
 
     def test_the_lifesim_wording_is_found_too_and_a_plain_red_check_is_not(self):
         self.assertTrue(engine.STALE_TREE.search("This checkout has no fmt-check-changed; rebase onto main"))

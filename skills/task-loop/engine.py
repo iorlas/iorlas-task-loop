@@ -2059,7 +2059,9 @@ class Engine:
         fixes, ok = self.fixes, False
         try:
             d = self.fix("conflict", self.salvage_tail, resume=True)
-            ok = d == "accept" and not self.git("diff", "--name-only", "--diff-filter=U")
+            ok = not self.git("diff", "--name-only", "--diff-filter=U")  # (a fix the review sent back still continued the rebase: the stage checks it again)
+            if d != "accept":
+                self.warn("resume: the conflict fix did not pass its checks and review; the stage goes on from it")
         except FixFailed as e:
             self.warn("the resume conflict fix failed: %s" % str(e).splitlines()[0][:200])
         finally:
@@ -4125,7 +4127,7 @@ class Engine:
                 self.sh(["git", "rebase", "--abort"], pin=True)
             raise (FixFailed if kind == "conflict" else Blocked)("%s after %d fix rounds: it needs the owner's hint\n%s" % (
                 what, limit, trim.trim_log(tail, log=str(getattr(self, "gate_log", "") or "") if kind == "gate" else "")))
-        self.warn("land: %s, fix round %d of %d" % (what, self.fixes, limit))
+        self.warn("%s: %s, fix round %d of %d" % ("resume" if resume else "land", what, self.fixes, limit))
         if not resume:
             self.save_checkpoint(stage=len((self.plan_data or {}).get("stages") or []), rounds=0, n=0, feedback="", step="land")
         checks = list(dict.fromkeys(c for s in (self.plan_data or {}).get("stages") or [] for c in s["checks"]))
@@ -4147,7 +4149,7 @@ class Engine:
             "scope": "the fix only: it must %s without breaking what the accepted stages built" % goal})
         if kind == "conflict":
             if self.sh(self.MARKERS, pin=True)[0]:
-                return self.fix("conflict", "conflict markers are still in the tree after the fix")
+                return self.fix("conflict", "conflict markers are still in the tree after the fix", resume=resume)
             self.stage_all(check=True)
             rc, out = self.sh(["git", "-c", "core.editor=true", "rebase", "--continue"], pin=True)
             if rc:
