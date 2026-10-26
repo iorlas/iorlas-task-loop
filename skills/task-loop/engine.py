@@ -37,8 +37,11 @@ from lanes import route as lroute
 import lifecycle
 import links
 import looks
+import loop_health
 import notifier
+import outcome as oc
 import tl
+from clock import SystemClock
 
 DEFAULTS = {
     "gate": "",                       # command run on the rebased tree before landing ("" = the push hook gates)
@@ -623,9 +626,12 @@ INFRA_TEXT = re.compile(r"\"code\":\s*\"invalid_json_schema\"|invalid schema for
 
 
 class Blocked(Exception):
-    def __init__(self, why, question="", options=None):
+    """A stop. kind: the outcome.Kind that says what the engine does at the close (POLICY); None only for the verify gaps ask,
+    which waits for the ask contract (R18) and keeps the prefix reading of ask_kind."""
+
+    def __init__(self, why, question="", options=None, kind=None):
         super().__init__(why)
-        self.why, self.question, self.options = why, question, options or []
+        self.why, self.question, self.options, self.kind = why, question, options or [], kind
 
 
 class FixFailed(Blocked):
@@ -695,6 +701,8 @@ class Engine:
         self.scope = ""  # the bead's acceptance text: an unchecked item outside it is a follow-up, not a gap (tl-bxk.13.5)
         self.sessions = []  # every AI call of this run: the trace a later reflection reads (traces.jsonl)
         self.outcome, self.why, self.asked = "failed", "", False  # what result() tells the loop
+        self.kind, self.fp, self.storm = None, "", ""  # the run's outcome.Kind (None: the verify-gaps ask), its fingerprint, a storm banner
+        self.clock, self.disp = SystemClock(), None
         self.retry_after = 0.0  # a pause for a lane: when delegate says it is back (epoch; 0 = unknown)
         self.landed_sha = ""  # set the moment the push goes through: whatever stops the run after it, the bead landed
         # the machine-readable trace the dashboard draws (docs/design/dashboard.md, Timeline records)
@@ -968,7 +976,8 @@ class Engine:
                "repo": self.git("remote", "get-url", "origin") or str(self.wt), "worktree": str(self.wt),
                "branch": self.git("symbolic-ref", "--short", "-q", "HEAD"), "coordinator_session": self.session,
                "version": plugin_version(), "started": self.t0, "ended": time.time(), "outcome": outcome, "why": (why or "")[:500], "sha": sha or "",
-               "fingerprint": lifecycle.run_fingerprint(outcome, why),
+               "fingerprint": self.fp or lifecycle.run_fingerprint(outcome, why),
+               "kind": self.kind.value if self.kind else "", "loop": oc.POLICY[self.kind].trace if self.kind else "",
                "cost": self.cost, "stats": self.stats, "host": self.host, "delegate": self.route or "", "log": str(self.log_path),
                "stderr": str(self.err_path), "lanes": (self.contract or {}).get("lanes"), "sessions": self.sessions,
                "verified": self.verified, "write_rounds": self.write_rounds, "strays": self.strays,
@@ -1041,7 +1050,7 @@ class Engine:
             went = run_breakdown(self.log_path, self.cur)
             raise Blocked("over budget: %s%s%s" % (", ".join(over), (". Where it went: " + went) if went else "",
                                                    (" (%d min waiting for shared resources not counted)" % (self.waited // 60))
-                                                   if self.waited >= 60 else ""))
+                                                   if self.waited >= 60 else ""), kind=oc.Kind.ASK_BUDGET)
 
     # -- AI node
     def ai(self, node, title, prompt, *a, **kw):
@@ -1107,7 +1116,7 @@ class Engine:
                 raise
             if j is not None and j.get("v") != 2:
                 raise Blocked("failed: delegate answered worker-run v%s, this engine speaks v2 (update task-loop or "
-                              "delegate)" % j.get("v"))
+                              "delegate)" % j.get("v"), kind=oc.Kind.FAULT_CONTRACT_SKEW)
             self._prompt_chars = len(attempt_prompt)
             self.trace_call(node, role, attempt, r, j, bool(flag))
             timing = dict(started_t=r.started_t, ended_t=r.ended_t, first_error_t=r.first_error_t,
@@ -1119,7 +1128,7 @@ class Engine:
                          node_id=(self.cur or {}).get("id"), **timing)
             if r.alive:  # a retry would write into the tree the old worker still writes in
                 raise Blocked("failed: the %s worker (pid %s) is still alive after the stop (%s), SIGTERM and SIGKILL; "
-                              "not retrying into this worktree. Kill it, then rerun." % (node, ", ".join(map(str, r.alive)), r.stop))
+                              "not retrying into this worktree. Kill it, then rerun." % (node, ", ".join(map(str, r.alive)), r.stop), kind=oc.Kind.FAULT_SLOT)
             j = j or {}
             nxt, reason, said = j.get("next"), j.get("reason") or "", (j.get("say") or r.error or "").strip()
             if j and j.get("status") == "done":
@@ -1161,7 +1170,7 @@ class Engine:
                 resume, attempt_prompt = None, prompt + (FRESH_WRITER_TEXT if self._resume else "")
                 continue
             if crashed and crashes >= len(CRASH_RESTS):
-                raise Blocked("paused: delegate crashed %d times on the %s step: %s" % (crashes + 1, node, said[:300]))
+                raise Blocked("failed: delegate crashed %d times on the %s step: %s" % (crashes + 1, node, said[:300]), kind=oc.Kind.FAULT_INFRA)
             if reason == "lane_out" and nxt in ("retry", "owner") and resume:
                 # delegate never moves a resumed thread to another lane; a new thread gets the role's next rung at once.
                 # next is owner when delegate cannot say when the lane frees (no retry_after): the same move (lifesim-5ar.6)
@@ -1203,7 +1212,7 @@ class Engine:
                     raise Blocked("paused: %s for %s until %s (%s: %s)" % (
                         "no network" if reason == "network" else "no lane", node,
                         time.strftime("%H:%M:%S", time.localtime(due)) if due > time.time() else "a lane frees",
-                        reason, said[:200]) + (" [%s]" % login_note if login_note else ""))
+                        reason, said[:200]) + (" [%s]" % login_note if login_note else ""), kind=(oc.Kind.PAUSE_NETWORK if reason == "network" else oc.Kind.PAUSE_LANE))
                 wait = min(600.0, wait)
                 self.warn("%s waits %d min (%s): %s" % (node, wait // 60, reason, said[:160]))
                 self.transition(step or node, "lane_wait", "waited %d min for a lane (%s)" % (wait // 60, reason),
@@ -1217,7 +1226,7 @@ class Engine:
                 # know): the same call fails for every bead, so it is the engine's or the config's fault, never the bead's
                 self.cost += r.cost
                 self.warn("INFRASTRUCTURE FAILURE: delegate answered %s on the %s step: %s" % (reason, node, said[:300]))
-                raise Blocked("failed: infrastructure: %s: %s" % (reason, said[:200]))
+                raise Blocked("failed: infrastructure: %s: %s" % (reason, said[:200]), kind=(oc.Kind.FAULT_BAD_REQUEST if reason == "bad_request" or INFRA_TEXT.search(said) else oc.Kind.FAULT_INFRA))
             self.cost += r.cost
             denied = "; ".join("`%s`" % (d.get("input") or d.get("tool")) for d in j.get("denied") or [])
             if nxt == "owner" and not denied:
@@ -1226,12 +1235,12 @@ class Engine:
                     self.transition("pause", "paused", "no lane for %s, no time it frees" % node, lane=j.get("lane") or "",
                                     reason=reason)
                     raise Blocked("paused: no lane for %s (%s, no time it frees): %s" % (node, reason, said[:200])
-                                  + (" [%s]" % login_note if login_note else ""))
+                                  + (" [%s]" % login_note if login_note else ""), kind=oc.Kind.PAUSE_LANE)
                 if reason in ("logged_out", "setup"):  # the machine's to fix, not the bead's: it stays open, no ask
                     fix = ("run `codex login`" if j.get("family") == "openai" else "run `claude auth login`") \
                         if reason == "logged_out" else "set up delegate (/iorlas-delegate:init)"
-                    raise Blocked("paused: %s on %s; %s on this machine, then rerun. (%s)" % (reason, node, fix, said[:200]))
-                raise Blocked("needs a human: delegate stopped the %s step (%s): %s" % (node, reason, said[:400]))
+                    raise Blocked("paused: %s on %s; %s on this machine, then rerun. (%s)" % (reason, node, fix, said[:200]), kind=oc.Kind.PAUSE_LANE)
+                raise Blocked("needs a human: delegate stopped the %s step (%s): %s" % (node, reason, said[:400]), kind=oc.Kind.FAULT_INFRA)
             if j.get("git_violation"):
                 self.warn("%s changed git: %s" % (node, "; ".join(j["git_violation"])))
             if resume_key and r.ref and j.get("status") == "done":
@@ -1265,13 +1274,13 @@ class Engine:
                 continue
             if denied and errs:  # asking again meets the same refusal
                 raise Blocked("needs a human: the %s step was denied %s and gave no answer; run it or allow it, then "
-                              "rerun. (%s)" % (node, denied, (j.get("text") or said or "")[:200]))
+                              "rerun. (%s)" % (node, denied, (j.get("text") or said or "")[:200]), kind=oc.Kind.FAULT_DENIED)
             if denied and node == "write":  # once is a warning; twice in a bead is a pattern the owner must see
                 self.denials.append(denied)
                 if len(self.denials) >= 2:
                     raise Blocked("needs a human: the writer was refused commands %d times in this task (a reworded "
                                   "command may be a way around a refusal): %s. Run or allow them, then rerun."
-                                  % (len(self.denials), " | ".join(self.denials)))
+                                  % (len(self.denials), " | ".join(self.denials)), kind=oc.Kind.FAULT_DENIED)
             if denied:
                 self.warn("%s was denied %s and found another way" % (node, denied))
             if not errs:
@@ -1283,7 +1292,7 @@ class Engine:
                 resume, attempt_prompt = None, prompt
             attempt += 1
         if errs:
-            raise Blocked("failed: %s node produced no valid output (%s)" % (node, "; ".join(errs[:3])))
+            raise Blocked("failed: %s node produced no valid output (%s)" % (node, "; ".join(errs[:3])), kind=oc.Kind.FAULT_INFRA)
         if node == "plan" and r.ref:
             self.planner_ref = r.ref
         self.last_flag = (j or {}).get("flag")  # same_family | degraded | ...: delegate could not give the usual lane
@@ -1314,7 +1323,7 @@ class Engine:
         fix = "run " + login_fix(j).rsplit("run ", 1)[-1]
         self.outcome_of("paused", "logged_out")
         self.transition("pause", "paused", "logged out for %s: %s" % (node, fix), lane=lane, reason="logged_out")
-        raise Blocked("paused: logged_out on %s; %s on this machine, then rerun. (%s)" % (node, fix, said[:200]))
+        raise Blocked("paused: logged_out on %s; %s on this machine, then rerun. (%s)" % (node, fix, said[:200]), kind=oc.Kind.PAUSE_LANE)
 
     def anomalies(self, node, r, attempt):
         d = r.data
@@ -1339,7 +1348,7 @@ class Engine:
         if bad:
             why = "tree: %s (%s %s)" % (bad[0], when, step)
             self.transition("ask", "wrong_tree", bad[0])
-            raise Blocked(why, bad[1])
+            raise Blocked(why, bad[1], kind=oc.Kind.ASK_STUCK)
 
     def sh(self, cmd, timeout=3600, check=False, save=None, env=None, pin=False, idle=0):
         """A command: a string goes through bash with -e and pipefail (checks, profile commands), so a red command in a
@@ -1395,7 +1404,7 @@ class Engine:
         tail = "\n".join(text.strip().splitlines()[-15:])
         self.log("note", "exit %d%s" % (rc, (": " + tail[-600:]) if rc else ""), exit=rc)
         if check and rc:
-            raise Blocked("failed: `%s` exit %d\n%s" % (cmd, rc, tail))
+            raise Blocked("failed: `%s` exit %d\n%s" % (cmd, rc, tail), kind=oc.Kind.FAULT_INFRA)
         return rc, tail
 
     def _freeze_check(self, why, idle=None, now=None):
@@ -1586,7 +1595,7 @@ class Engine:
             rc = r.returncode
             st = r
         if check and rc:
-            raise Blocked("failed: staging the slot's paths exit %d\n%s" % (rc, st.stderr.decode("utf-8", "replace")[-600:]))
+            raise Blocked("failed: staging the slot's paths exit %d\n%s" % (rc, st.stderr.decode("utf-8", "replace")[-600:]), kind=oc.Kind.FAULT_SLOT)
         return rc
 
     def fetch(self, check=False):
@@ -1597,7 +1606,7 @@ class Engine:
                 break
             time.sleep(0.1 * (i + 1))
         if check and rc:
-            raise Blocked("failed: `git fetch -q origin` exit %d\n%s" % (rc, tail))
+            raise Blocked("failed: `git fetch -q origin` exit %d\n%s" % (rc, tail), kind=oc.Kind.FAULT_INFRA)
         return rc, tail
 
     def base_sha(self):
@@ -1620,7 +1629,7 @@ class Engine:
         self.left_dirty = False
         if self.dirty_status():
             if self.git("symbolic-ref", "--short", "-q", "HEAD") != branch:
-                raise Blocked("failed: worktree %s has uncommitted work of another branch" % self.wt)
+                raise Blocked("failed: worktree %s has uncommitted work of another branch" % self.wt, kind=oc.Kind.FAULT_SLOT)
             self.wip("left from an earlier run")
             self.left_dirty = True
         if exists and self.cfg.get("fresh"):
@@ -1633,7 +1642,7 @@ class Engine:
                     stale += "-2"
                 rc, tail = self.sh(["git", "branch", "-m", branch, stale], pin=True)
                 if rc:
-                    raise Blocked("failed: --fresh could not keep the old branch aside as %s: %s" % (stale, tail.strip()[-200:]))
+                    raise Blocked("failed: --fresh could not keep the old branch aside as %s: %s" % (stale, tail.strip()[-200:]), kind=oc.Kind.FAULT_SLOT)
                 self.log("note", "--fresh: the old branch %s is kept as %s; the task starts again on %s" % (branch, stale, self.cfg["base"]))
                 self.comment("Fresh (engine): --fresh: the earlier work on %s is kept as the branch %s; the task starts again on %s." % (
                     branch, stale, self.cfg["base"]))
@@ -1709,7 +1718,7 @@ class Engine:
             elif line == "branch refs/heads/" + branch and path and str(Path(path).resolve()) != here:
                 if tl.git("status", "--porcelain", cwd=path):
                     raise Blocked("failed: %s is checked out in %s with uncommitted work; commit or clean it there" % (
-                        branch, path))
+                        branch, path), kind=oc.Kind.FAULT_SLOT)
                 tl.git("checkout", "-q", "--detach", cwd=path)
                 self.log("note", "%s was checked out in %s: detached it there to resume here" % (branch, path))
 
@@ -2243,7 +2252,7 @@ class Engine:
             pass
 
     def run(self):
-        outcome, why, sha, question = "failed", "", "", ""
+        outcome, why, sha, question, kind = "failed", "", "", "", oc.Kind.FAULT_ENGINE
         hb = Heartbeat(self.bead, os.environ.get("TASK_LOOP_SLOT_BEAD", ""))
         try:
             self.prev_ck = (json.loads(self.checkpoint_path().read_text()) or {}).get("run") or ""
@@ -2251,20 +2260,20 @@ class Engine:
             self.prev_ck = ""
         try:
             if getattr(self, "stop_pending", False):  # stopped during the claim (run_bead): close it as stopped
-                raise Blocked("failed: stopped (SIGTERM)")
+                raise Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)
             bead = tl.show(self.bead)
             if not bead:
-                raise Blocked("failed: bead %s not found" % self.bead)
+                raise Blocked("failed: bead %s not found" % self.bead, kind=oc.Kind.FAULT_INFRA)
             self.bead_title = bead.get("title") or ""
             self.bead_parent = bead.get("parent") or ""
             hb.start()
             if not self.route:
                 raise Blocked("failed: the engine needs the iorlas-delegate plugin (0.14.0 or later): "
-                              "claude plugin install iorlas-delegate@iorlas-marketplace")
+                              "claude plugin install iorlas-delegate@iorlas-marketplace", kind=oc.Kind.FAULT_CONTRACT_SKEW)
             self.contract = lroute.contract(self.route)
             if not self.contract:
                 raise Blocked("failed: delegate at %s does not speak worker-run v2; update delegate (claude plugin "
-                              "update iorlas-delegate@iorlas-marketplace) or this engine" % self.route)
+                              "update iorlas-delegate@iorlas-marketplace) or this engine" % self.route, kind=oc.Kind.FAULT_CONTRACT_SKEW)
             self.log("note", "workers: delegate %s (worker-run v2)" % self.route)
             self.log("note", "task-loop %s" % (plugin_version() or "(unknown version)"), version=plugin_version())
             self.reset(bead)
@@ -2274,7 +2283,7 @@ class Engine:
             self.grant_cap()
             if not has_criteria(bead):
                 raise Blocked("ticket: the bead has no acceptance criteria", "What proves this bead done? Add acceptance "
-                              "criteria (the field, or a ## Acceptance Criteria section), then rerun.")
+                              "criteria (the field, or a ## Acceptance Criteria section), then rerun.", kind=oc.Kind.ASK_TICKET)
             self.scope = acceptance_text(bead)
             plan, i, state = self.resume_point()
             self.log_run()
@@ -2329,16 +2338,18 @@ class Engine:
                         u["what"] for u in gaps))
             sha = self.finish(bead)
             outcome = "landed" if sha else "done"
+            kind = oc.Kind.LANDED if sha else oc.Kind.DONE
             if sha:
                 self.file_owner_look()  # before the checkpoint goes: a crash from here on still files it on resume
             self.drop_checkpoint()
         except Blocked as b:
-            outcome = "failed" if b.why.startswith("failed:") else "blocked"
+            kind = b.kind
+            outcome = outcome_for(kind, b.why)
             why, question, self.blocked_options = b.why, b.question, b.options
         except Exec:
             pass  # the process image is gone; nothing below runs in a real exec
         except Exception as e:  # the close-out must run whatever broke
-            outcome, why = "failed", "failed: engine error %s: %s" % (type(e).__name__, e)
+            outcome, why, kind = "failed", "failed: engine error %s: %s" % (type(e).__name__, e), oc.Kind.FAULT_ENGINE
         finally:
             if self.moved:
                 hb.stop()
@@ -2346,22 +2357,23 @@ class Engine:
                 with self.stop_deferred():  # a stop here would skip the close: no trace, no bead update
                     if self.landed_sha and outcome != "landed":  # stopped after the push: on the base, close it as landed
                         self.warn("%s after the land went through; closing it landed" % (why or outcome))
-                        outcome, why, sha, question = "landed", "", self.landed_sha, ""
+                        outcome, why, sha, question, kind = "landed", "", self.landed_sha, "", oc.Kind.LANDED
                     hb.stop()
                     drop_reexec(self.bead)  # a run that ended is no crash after an exec
                     self.outcome, self.why = outcome, why
-                    self.close(outcome, why, sha, question)
+                    self.close(outcome, why, sha, question, kind)
         return 0 if self.moved or outcome in ("landed", "done") else 2
 
     def result(self):
         """The run's outcome for the loop: landed (closed, done too), parked (blocked for the owner: an ask, or one
         still open), paused (the machine's trouble: lanes, login, network; the bead stays open), failed."""
-        out = ("landed" if self.outcome in ("landed", "done") else "failed" if self.outcome == "failed"
-               else "paused" if self.why.startswith("paused:") else "parked")
+        out = ("landed" if self.outcome in ("landed", "done") else oc.POLICY[self.kind].loop if self.kind
+               else "failed" if self.outcome == "failed" else "parked")
         return {"v": 1, "outcome": out, "bead": self.bead, "why": self.why[:500], "run": self.log_path.stem,
                 "log": str(self.log_path), "minutes": round((time.time() - self.t0) / 60, 1),
                 "rounds": self.stats["rounds"], "tests_added": self.stats["tests_added"], "asked": self.asked,
-                "retry_after": self.retry_after if out == "paused" else 0.0, "cost": round(self.cost, 2)}
+                "retry_after": self.retry_after if out == "paused" else 0.0, "cost": round(self.cost, 2),
+                "kind": self.kind.value if self.kind else "", "fingerprint": self.fp, "storm": self.storm}
 
     def self_verify(self, gaps):
         """One read-only verifier call before a verify ask; returns the items that still go to the owner. Per item:
@@ -2472,7 +2484,7 @@ class Engine:
 
     def proof_stuck(self, items):
         return Blocked("the check before land: nothing proves %s after %d fix rounds: it needs the owner's hint" % (
-            "; ".join(u["what"] for u in items)[:600], int(self.cfg["max_fix_rounds"])))
+            "; ".join(u["what"] for u in items)[:600], int(self.cfg["max_fix_rounds"])), kind=oc.Kind.ASK_STUCK)
 
     def diff_text(self):
         tree = self.tree_hash()
@@ -2817,13 +2829,13 @@ class Engine:
             only = gate_only_criteria(data, self.cfg)
             if only:
                 raise Blocked("failed: the plan's acceptance is still only the gate after one rewrite (%s): %s"
-                              % (GATE_ONLY_ACCEPTANCE, "; ".join(only)[:400]))
+                              % (GATE_ONLY_ACCEPTANCE, "; ".join(only)[:400]), kind=oc.Kind.FAULT_PLAN)
             if bad:
                 raise Blocked("failed: the plan's checks still read the issue tracker after one rewrite: %s"
-                              % "; ".join(bad)[:400])
+                              % "; ".join(bad)[:400], kind=oc.Kind.FAULT_PLAN)
             if gated:
                 raise Blocked("failed: the plan's checks still run gate-only commands after one rewrite: %s"
-                              % "; ".join("%s (%s)" % g for g in gated)[:400])
+                              % "; ".join("%s (%s)" % g for g in gated)[:400], kind=oc.Kind.FAULT_PLAN)
             for r in self.repeated_slow(data):  # a heuristic like dry_check: the send-back was the remedy, no second one
                 self.warn("the plan's checks still run `%s` more than once after one rewrite" % r[0][:200])
             dry = lint.dry_check(data, self.wt)
@@ -2868,7 +2880,7 @@ class Engine:
             self.planned, 1, int(self.cfg["max_replans"]) + self.extra, why, ("; " + detail) if detail else ""),
             "This bead was planned %d times, so the engine stops instead of burning more planner runs. Why each time: %s\n"
             "Choose: split the bead; clarify it (comment what the plan keeps missing); or reply \"allow one more\"." % (
-                self.planned, why))
+                self.planned, why), kind=oc.Kind.ASK_STUCK)
 
     def grant_cap(self):
         """The owner answered the cap's ask: an answer with "allow" or "more" (any case) lets the bead plan once more.
@@ -3015,7 +3027,7 @@ class Engine:
         self.plan_data = data
         if data["question"].strip():
             self.outcome_of("asks", data["question"][:200])
-            raise Blocked("owner decision needed", data["question"], data.get("options"))
+            raise Blocked("owner decision needed", data["question"], data.get("options"), kind=oc.Kind.ASK_DECISION)
         self.outcome_of("%d stage%s" % (len(data["stages"]), "" if len(data["stages"]) == 1 else "s"),
                         data["summary"][:200])
         self.check_unresolved(data)
@@ -3028,12 +3040,12 @@ class Engine:
                 self.plan_summary = data["summary"]
                 (self.run_dir / "plan.json").write_text(json.dumps(data, indent=1))
                 return data
-            raise Blocked("failed: the plan has no stages")
+            raise Blocked("failed: the plan has no stages", kind=oc.Kind.FAULT_PLAN)
         big = int(self.cfg["max_stages"])
         if len(data["stages"]) > big and (self.answered or {}).get("kind") != "ticket":
             raise Blocked("ticket: the plan has %d stages (more than %d): the bead may be too big for one task" % (
                 len(data["stages"]), big), "Split the bead into these, or comment that it stays one bead:\n" + "\n".join(
-                "%d. %s" % (k + 1, s["goal"]) for k, s in enumerate(data["stages"])))
+                "%d. %s" % (k + 1, s["goal"]) for k, s in enumerate(data["stages"])), kind=oc.Kind.ASK_TICKET)
         self.ledger_fill(data)
         self.plan_leftovers(data)
         lines = ["Plan (engine): " + data["summary"]]
@@ -3074,7 +3086,7 @@ class Engine:
             return
         given = bool(str(a.get("answer") or "").strip())  # tl-gy4: an answer filed on the ask is an answer, whether or not the bead changed
         if a.get("brief") == self.brief_hash and not self.cfg.get("fresh") and not given:
-            raise Blocked("waiting: for the owner's answer to ask %s (%s): %s" % (a["id"], a["kind"], fmt.clip(push_text(a["question"]), 200)))
+            raise Blocked("waiting: for the owner's answer to ask %s (%s): %s" % (a["id"], a["kind"], fmt.clip(push_text(a["question"]), 200)), kind=oc.Kind.WAIT_ASK)
         a.update(status="answered", answered=time.time())
         self.ask_path().write_text(json.dumps(a, indent=1))
         self.answered = a
@@ -3419,7 +3431,7 @@ class Engine:
                 continue
             if w["question"].strip():
                 self.outcome_of("asks", w["question"][:200])
-                raise Blocked("owner decision needed", w["question"], w.get("options"))
+                raise Blocked("owner decision needed", w["question"], w.get("options"), kind=oc.Kind.ASK_DECISION)
             if (self.look_ready(st) and not fix and not shots_fixed and not (w.get("shots") or [])
                     and not (w.get("logic_only") or "").strip()):
                 # tl-tno: the review's 'asked for no shots' finding was a writer amend and burned lifesim-d5f.39's re-plan cap; the contract
@@ -3436,7 +3448,7 @@ class Engine:
                 self.last_summary = w2["summary"]
                 if w2["question"].strip():
                     self.outcome_of("asks", w2["question"][:200])
-                    raise Blocked("owner decision needed", w2["question"], w2.get("options"))
+                    raise Blocked("owner decision needed", w2["question"], w2.get("options"), kind=oc.Kind.ASK_DECISION)
                 w = dict(w2, summary=w["summary"] + "\n" + w2["summary"], new_cases=(w.get("new_cases") or []) + (w2.get("new_cases") or []),
                          unchecked=(w.get("unchecked") or []) + (w2.get("unchecked") or []),
                          bad_checks=(w.get("bad_checks") or []) + (w2.get("bad_checks") or []))
@@ -3545,7 +3557,7 @@ class Engine:
                     review["decided"], review["question"])]
             elif review["question"].strip():
                 self.outcome_of("asks", review["question"][:200])
-                raise Blocked("owner decision needed", review["question"], review.get("options"))
+                raise Blocked("owner decision needed", review["question"], review.get("options"), kind=oc.Kind.ASK_DECISION)
             blocking = [f for f in review["findings"] if f["severity"] in ("high", "medium")]
             said = "%d finding%s, %d unmet" % (len(blocking), "" if len(blocking) == 1 else "s", len(review["unmet"]))
             if not blocking and not review["unmet"]:
@@ -3884,7 +3896,7 @@ class Engine:
                     stale = STALE_TREE.search((seen or tail)[-500:])  # its last lines: a test that talks about recipes is no stale tree
                     if stale:  # tl-fsj: not a writer's amend; the engine's tree is older than the config it runs
                         raise Blocked("failed: infrastructure: the configured check `%s` needs something this tree lacks (\"%s\"): the "
-                                      "tree is older than the base's .task-loop.json, which no writer can fix" % (c["id"], stale.group(0)))
+                                      "tree is older than the base's .task-loop.json, which no writer can fix" % (c["id"], stale.group(0)), kind=oc.Kind.FAULT_STALE_BASE)
                 res = dict(base, exit=rc, status="ran" if rc == 0 else "failed", tries=tries, tail=tail[-1500:],
                            secs=round(time.time() - t), log="checks/" + log_name, log_abs=str(logs / log_name), hung=bool(hung))
                 if hung:
@@ -3943,7 +3955,7 @@ class Engine:
 
     def finish(self, bead):
         if self.pending_land_validation:
-            raise Blocked("land retry validation still needs accepted checks and review; branch kept")
+            raise Blocked("land retry validation still needs accepted checks and review; branch kept", kind=oc.Kind.FAULT_LAND)
         if not self.git("status", "--porcelain"):
             if self.git("rev-list", "--count", "%s..HEAD" % self.cfg["base"]) in ("", "0"):
                 self.log("note", "nothing changed")
@@ -3958,7 +3970,7 @@ class Engine:
         msg = "%s (%s)" % (bead.get("title", self.bead)[:72], self.bead)
         rc, tail = self.sh(["git", "commit", "-q", "-m", msg], pin=True)
         if rc:
-            raise Blocked("failed: commit refused (hooks)\n" + tail)
+            raise Blocked("failed: commit refused (hooks)\n" + tail, kind=oc.Kind.FAULT_LAND)
         if self.dry:
             self.log("note", "dry run: not landing")
             return ""
@@ -3982,7 +3994,7 @@ class Engine:
                         unmerged = self.git("diff", "--name-only", "--diff-filter=U")
                         if not unmerged:
                             self.sh(["git", "rebase", "--abort"], pin=True)
-                            raise Blocked("failed: fetch or rebase onto %s failed; branch kept\n%s" % (self.cfg["base"], tail))
+                            raise Blocked("failed: fetch or rebase onto %s failed; branch kept\n%s" % (self.cfg["base"], tail), kind=oc.Kind.FAULT_LAND)
                         problem = ("conflict", "Conflicted files: %s\n%s" % (", ".join(unmerged.split()), tail))
                         self.outcome_of("conflict", ", ".join(unmerged.split()))
                     if not problem and pushes:
@@ -3998,7 +4010,7 @@ class Engine:
                             self.save_checkpoint(stage=len((self.plan_data or {}).get("stages") or []), rounds=0, n=0,
                                                  feedback="", step="land-verify-red")
                         if stop:
-                            raise Blocked("failed: stopped (SIGTERM)")
+                            raise Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)
                         results = self.run_checks({"checks": checks, "files": []}, "land retry")
                         with self.stop_deferred() as stop:
                             bad = [c for c in results if c["status"] == "failed"]
@@ -4010,7 +4022,7 @@ class Engine:
                             self.save_checkpoint(stage=len((self.plan_data or {}).get("stages") or []), rounds=0, n=0,
                                                  feedback="", step="land-verify-red" if bad else "land")
                         if stop:
-                            raise Blocked("failed: stopped (SIGTERM)")
+                            raise Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)
                         self.node("land", "land (try %d)" % (pushes + 1), **{"try": pushes + 1})
                     if not problem and self.cfg["gate"]:
                         self.gate_log = self.run_dir / ("gate.r%d.log" % (self.fixes + 1))
@@ -4045,23 +4057,23 @@ class Engine:
                                 self.warn("a stop came during the land: landed first, closing now")
                             return sha
                         if stop:
-                            raise Blocked("failed: stopped (SIGTERM)")
+                            raise Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)
                         if not re.search(r"rejected|non-fast-forward|fetch first|stale info", tail):
                             if TRANSIENT_PUSH.search(tail[-600:]):  # the push's own last lines, not a hook's test output before them
                                 if flaky_push >= len(PUSH_RESTS):
                                     raise Blocked("paused: the land push failed %d times with a network error; the branch is kept and "
-                                                  "the next run lands it again: %s" % (flaky_push + 1, tail.strip()[-200:]))
+                                                  "the next run lands it again: %s" % (flaky_push + 1, tail.strip()[-200:]), kind=oc.Kind.PAUSE_NETWORK)
                                 rest = PUSH_RESTS[flaky_push]
                                 flaky_push += 1
                                 self.warn("the push failed with a network error, trying again in %d s (%d of %d): %s" % (
                                     rest, flaky_push, len(PUSH_RESTS), tail.strip()[-160:]))
                                 self.transition("land", "push_network", "network error on the push; try %d after %d s" % (flaky_push + 1, rest))
                                 break
-                            raise Blocked("land failed\n" + tail)
+                            raise Blocked("land failed\n" + tail, kind=oc.Kind.FAULT_LAND)
                         pushes += 1
                         self.outcome_of("rejected", "main moved")
                         if pushes >= 3:
-                            raise Blocked("land rejected 3 times: main moves too fast")
+                            raise Blocked("land rejected 3 times: main moves too fast", kind=oc.Kind.FAULT_LAND)
                         self.warn("push rejected (main moved), try %d of 3" % (pushes + 1))
                         self.transition("land", "push_race", "push rejected (main moved): try %d of 3" % (pushes + 1))
                         continue
@@ -4077,7 +4089,7 @@ class Engine:
                 self.pending_land_validation += "\n" + self.stuck_why
                 self.save_checkpoint(stage=len((self.plan_data or {}).get("stages") or []), rounds=0, n=0,
                                      feedback="", step="land-verify-red")
-                raise Blocked("land retry validation fix did not pass its checks and review; branch kept")
+                raise Blocked("land retry validation fix did not pass its checks and review; branch kept", kind=oc.Kind.FAULT_LAND)
             if problem[0] == "verify":
                 self.pending_land_validation = ""
                 self.save_checkpoint(stage=len((self.plan_data or {}).get("stages") or []), rounds=0, n=0,
@@ -4149,7 +4161,7 @@ class Engine:
             if kind == "conflict":
                 self.sh(["git", "rebase", "--abort"], pin=True)
             raise (FixFailed if kind == "conflict" else Blocked)("%s after %d fix rounds: it needs the owner's hint\n%s" % (
-                what, limit, trim.trim_log(tail, log=str(getattr(self, "gate_log", "") or "") if kind == "gate" else "")))
+                what, limit, trim.trim_log(tail, log=str(getattr(self, "gate_log", "") or "") if kind == "gate" else "")), kind=oc.Kind.ASK_STUCK)
         self.warn("%s: %s, fix round %d of %d" % ("resume" if resume else "land", what, self.fixes, limit))
         if not resume:
             self.save_checkpoint(stage=len((self.plan_data or {}).get("stages") or []), rounds=0, n=0, feedback="", step="land")
@@ -4177,7 +4189,7 @@ class Engine:
             rc, out = self.sh(["git", "-c", "core.editor=true", "rebase", "--continue"], pin=True)
             if rc:
                 self.sh(["git", "rebase", "--abort"], pin=True)
-                raise FixFailed("failed: the rebase did not continue after the conflict fix\n" + out)
+                raise FixFailed("failed: the rebase did not continue after the conflict fix\n" + out, kind=oc.Kind.FAULT_LAND)
         elif kind == "gate" and self.git("status", "--porcelain"):
             self.stage_all(check=True)
             self.sh(["git", "commit", "-q", "--no-verify", "--amend", "--no-edit"], check=True, pin=True)
@@ -4759,19 +4771,48 @@ class Engine:
             self.log("note", "wip commit failed: %s" % (tail or "").strip()[-300:])
         return rc == 0
 
-    def close(self, outcome, why, sha, question):
+    def close(self, outcome, why, sha, question, kind=None):
         old = None
         if hasattr(signal, "SIGTERM") and threading.current_thread() is threading.main_thread():
             old = signal.signal(signal.SIGTERM, signal.SIG_IGN)  # a second stop must not break the close-out
         branch = self.git("symbolic-ref", "--short", "-q", "HEAD")
         try:
-            self._close(outcome, why, sha, question)
+            self._close(outcome, why, sha, question, kind)
             if not self.dry:
                 with contextlib.suppress(Exception):  # last: the trace and the comments above read the branch
                     self.leave_slot(outcome, branch)
         finally:  # what the process starts after this (a notify command, the next test) must stay stoppable
             if old is not None:
                 signal.signal(signal.SIGTERM, old)
+
+    def repo_id(self):
+        return self.git("remote", "get-url", "origin") or str(self.wt)
+
+    def decide_close(self, outcome, why, kind):
+        """The close's Kind after POLICY: a fault seen too often on one bead becomes one ask; the trace fields, the
+        fingerprint and the storm check (never for a pause or an ask) are set here. kind None: the verify-gaps ask."""
+        self.disp = None
+        if kind is None:
+            return None
+        now = self.clock.now()
+        o = oc.make(kind, why)
+        self.fp = o.fingerprint
+        try:
+            history = loop_health.recent_closes(tl.config_dir() / "traces.jsonl", self.repo_id(), now)
+        except OSError:
+            history = []
+        self.disp = oc.apply(o, self.bead, history, now)
+        self.kind = self.disp.kind
+        if self.disp.escalated:
+            self.warn("the same fault %d times on this bead: asking the owner once" % oc.KNOBS["fault_retries"])
+        trip = loop_health.storm_trip(history, self.bead, kind, o.fingerprint, now)
+        if trip and not self.dry:
+            path = loop_health.storm_path(tl.config_dir(), self.repo_id())
+            if loop_health.write_storm(path, trip, now, why):
+                self.storm = loop_health.banner(trip)
+                self.warn(self.storm)
+                say(self.storm)
+        return self.kind
 
     def leave_slot(self, outcome, branch):
         """tl-g6a: a bead that parked leaves its work on its own branch (wip committed above) and the slot at the detached base,
@@ -4784,8 +4825,13 @@ class Engine:
         if rc:
             self.warn("the slot could not be left at the base: %s" % tail.strip()[-160:])
 
-    def _close(self, outcome, why, sha, question):
+    def _close(self, outcome, why, sha, question, kind=None):
         why = why or ("stopped before a reason was recorded" if outcome == "failed" else "")
+        kind = self.decide_close(outcome, why, kind)
+        outcome = outcome_for(kind, why) if kind and kind not in oc.FINISH else outcome
+        if self.disp and self.disp.escalated and not question:
+            question = "The same fault happened %d times on this bead (%s). Fix the cause, or say how to go on." % (
+                oc.KNOBS["fault_retries"], why.splitlines()[0][:200])
         mins = (time.time() - self.t0) / 60
         gd = Path(self.git("rev-parse", "--absolute-git-dir") or ".")
         if (gd / "rebase-merge").exists() or (gd / "rebase-apply").exists():  # stopped mid-conflict-fix: back to the branch
@@ -4801,11 +4847,11 @@ class Engine:
         last = self.cur or self.last_node
         if last and (self.moved_from != last["id"] or self.moved_to not in ("ask", "pause", "close")):
             # no move out of the run was logged from the last node: the close is it
-            to, cause = close_move(outcome, why)
+            to, cause = close_move(outcome, why, kind)
             self.transition(to, cause, why.splitlines()[0][:200] if why else outcome)
-        self.end_node(node_outcome(outcome, why))
-        self.node("close", "close: %s" % outcome, outcome=outcome, why=why,
-                  fingerprint=lifecycle.run_fingerprint(outcome, why))
+        self.end_node(node_outcome(outcome, why, kind))
+        self.node("close", "close: %s" % outcome, outcome=outcome, why=why, fingerprint=self.fp or lifecycle.run_fingerprint(outcome, why),
+                  exit_kind=kind.value if kind else "")
         self.outcome_of(outcome, why.splitlines()[0][:200] if why else "")
         self.end_node()
         self.reflection = self.reflect_run(outcome, why)  # after the close node: the outcome is decided and nothing here changes it
@@ -4816,13 +4862,13 @@ class Engine:
         if self.dry:
             self.log("note", "dry run: bead left as it was. %s" % stats)
             return
-        if why.startswith("waiting:"):  # asked already: the bead stays as the ask left it, nothing is said twice
+        if kind == oc.Kind.WAIT_ASK or (kind is None and why.startswith("waiting:")):  # asked already: the bead stays as the ask left it, nothing is said twice
             self.log("note", why)
             return
-        kind = ask_kind(why) if outcome not in ("landed", "done") else None
-        self.asked = bool(kind)
-        if kind:
-            self.raise_ask(kind, why, question)
+        ask = (oc.ASK_NAME.get(kind) if kind else ask_kind(why)) if outcome not in ("landed", "done") else None
+        self.asked = bool(ask)
+        if ask:
+            self.raise_ask(ask, why, question)
         elif outcome in ("landed", "done") and self.ask_path().exists():
             try:
                 a = json.loads(self.ask_path().read_text())
@@ -4868,15 +4914,16 @@ class Engine:
                 sha[:12], self.cfg["base"].split("/")[-1], summary or "the task's stages passed", stats)))
         elif outcome == "done":
             rc = tl.cmd_close(Args(id=self.bead, reason="done with nothing to land: " + (summary or stats)))
-        elif why.startswith("failed: infrastructure"):  # the engine's or the config's fault: the bead is as it was
-            r = tl.bd("update", self.bead, "--status", "open", "--assignee", "")  # the reason is a comment, never Notes (tl-7y6.6.2)
-            rc = getattr(r, "returncode", 0)
-            self.comment("Engine failed: " + why[:400])
-        elif why.startswith("paused:"):  # the machine's problem (login, network, lanes), not the bead's: keep it open
-            self.warn(why)
+        elif kind and oc.POLICY[kind].bd == "open":  # a machine fault or pause (login, network, lanes, kill): the bead stays open and unassigned
+            fault = kind.name.startswith("FAULT_")
+            if not fault:
+                self.warn(why)
             r = tl.bd("update", self.bead, "--status", "open", "--assignee", "")  # (tl-kwo: it lets go)
             rc = getattr(r, "returncode", 0)
-            self.comment("Engine paused: " + why[:400])  # a comment, never Notes: the delegate's advice in it is no part of the bead (tl-7y6.6.2)
+            if oc.POLICY[kind].label:
+                tl.bd("label", "add", self.bead, oc.POLICY[kind].label)
+            if self.disp.comment:  # a comment, never Notes (tl-7y6.6.2); one per (bead, kind, fingerprint) per hour
+                self.comment("Engine %s: %s" % ("failed" if fault else "paused", re.sub(r"^(failed|paused): ", "", why)[:400]))
         else:
             text = why + (("\n\nQuestion: " + question) if question else "")
             rc = tl.cmd_block(Args(id=self.bead, why=text))
@@ -4909,10 +4956,23 @@ def prune_check_rounds(runs, days=CHECK_ROUNDS_DAYS):
             pass
 
 
-def node_outcome(outcome, why):
+def outcome_for(kind, why):
+    """The trace's `outcome` word: landed, done, failed (a fault) or blocked (an ask, a pause, a wait). kind None: the
+    verify-gaps ask, read from its prefix."""
+    if kind in oc.FINISH:
+        return kind.value
+    if kind:
+        return "failed" if oc.POLICY[kind].loop == "failed" else "blocked"
+    return "failed" if why.startswith("failed:") else "blocked"
+
+
+def node_outcome(outcome, why, kind=None):
     """What a node still open at the close came to: the run's own end."""
     if outcome in ("landed", "done"):
         return outcome
+    if kind:
+        return ("stopped" if kind == oc.Kind.PAUSE_KILLED else "paused" if kind.name.startswith("PAUSE_")
+                else "waiting" if kind == oc.Kind.WAIT_ASK else "failed" if outcome == "failed" else "asks")
     if why.startswith("paused:"):
         return "paused"
     if why.startswith("waiting:"):
@@ -4924,10 +4984,18 @@ def node_outcome(outcome, why):
     return "asks" if ask_kind(why) else "blocked"
 
 
-def close_move(outcome, why):
+def close_move(outcome, why, kind=None):
     """(to, cause) of the last move, when no decision point logged one: landed, an ask, a pause, a wait, a failure."""
     if outcome in ("landed", "done"):
         return "close", outcome
+    if kind:
+        if kind == oc.Kind.PAUSE_KILLED:
+            return "pause", "stopped"
+        if kind.name.startswith("PAUSE_"):
+            return "pause", "paused"
+        if kind == oc.Kind.WAIT_ASK:
+            return "ask", "waiting"
+        return ("ask", oc.ASK_NAME[kind]) if kind in oc.ASKS else ("close", "failed")
     if why.startswith("paused:"):
         return "pause", "paused"
     if why.startswith("waiting:"):
@@ -6042,7 +6110,7 @@ def main(a):
     try:
         rc = run_main(a)
     except Blocked as b:  # a stop (SIGTERM) before the engine ran: the slot and the lock are already given back
-        rc = {"v": 1, "outcome": "failed", "bead": a.id, "why": b.why}
+        rc = {"v": 1, "outcome": "failed", "bead": a.id, "why": b.why, "kind": b.kind.value if b.kind else ""}
     if isinstance(rc, dict):  # stopped before the engine ran: nothing in the bead changed
         report(a, rc)
         return 1
@@ -6054,7 +6122,7 @@ def run_main(a):
     host) must not leave it behind, turning any later stray SIGTERM there into a Blocked."""
     old = None
     if hasattr(signal, "SIGTERM") and threading.current_thread() is threading.main_thread():
-        old = signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(Blocked("failed: stopped (SIGTERM)")))
+        old = signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)))
     try:
         return run_main_stoppable(a)
     finally:
