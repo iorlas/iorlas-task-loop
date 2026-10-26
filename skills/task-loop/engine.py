@@ -34,6 +34,7 @@ from checks import speed as cs
 from core import fmt, procs
 from lanes import call as lcall
 from lanes import route as lroute
+import lifecycle
 import links
 import looks
 import notifier
@@ -716,7 +717,8 @@ class Engine:
             prev = older[-1] if older else ""
         why = ("fresh" if self.cfg.get("fresh") else "answer" if self.answered else "resume" if self.resumed
                else "retry" if prev else "first")
-        return {"prev_run": prev, "started_because": why, "ask": (self.answered or {}).get("id") or ""}
+        return {"prev_run": prev, "started_because": lifecycle.normalize_started_because(why, prev),
+                "ask": (self.answered or {}).get("id") or ""}
 
     def log_run(self):
         """The run record: why it started, once that is known (after the checkpoint is read), or at the close."""
@@ -807,6 +809,7 @@ class Engine:
                "repo": self.git("remote", "get-url", "origin") or str(self.wt), "worktree": str(self.wt),
                "branch": self.git("symbolic-ref", "--short", "-q", "HEAD"), "coordinator_session": self.session,
                "version": plugin_version(), "started": self.t0, "ended": time.time(), "outcome": outcome, "why": (why or "")[:500], "sha": sha or "",
+               "fingerprint": lifecycle.run_fingerprint(outcome, why),
                "cost": self.cost, "stats": self.stats, "host": self.host, "delegate": self.route or "", "log": str(self.log_path),
                "stderr": str(self.err_path), "lanes": (self.contract or {}).get("lanes"), "sessions": self.sessions,
                "verified": self.verified, "write_rounds": self.write_rounds, "strays": self.strays,
@@ -925,14 +928,36 @@ class Engine:
             if node == "write":  # a write follows its worker's activity; the other nodes keep the wall-clock limit
                 idle = lcall.Idle(*(float(self.cfg[k]) * 60 for k in ("write_idle_warn_min", "write_idle_stop_min", "write_cap_min")),
                             on_warn=self.warn)
-            r, j = lcall.call_delegate(self.delegate_route(), role, attempt_prompt, strict(schema_for(node, visual)), cwd or self.wt, resume, timeout,
-                                 self.err_path, writer, self.session, self.bead, "%s · %s: %s" % (self.bead, node, title),
-                                 access=flag, **({"idle": idle} if idle else {}))
+            try:
+                r, j = lcall.call_delegate(self.delegate_route(), role, attempt_prompt, strict(schema_for(node, visual)), cwd or self.wt, resume, timeout,
+                                           self.err_path, writer, self.session, self.bead, "%s · %s: %s" % (self.bead, node, title),
+                                           access=flag, **({"idle": idle} if idle else {}))
+            except BaseException as e:  # an interruption stopped the delegate inside run_proc: record that stop here
+                obs = getattr(e, "engine_obs", None) or {}
+                stop = getattr(e, "engine_stop", None) or {}
+                if obs.get("kill_t") or stop.get("alive"):
+                    timing = dict(started_t=obs.get("started_t"), ended_t=obs.get("ended_t"),
+                                  first_error_t=obs.get("first_error_t"), last_event_t=obs.get("last_event_t"),
+                                  kill_t=obs.get("kill_t"))
+                    started = obs.get("started_t")
+                    self.log("kill", "%s: interrupted" % node, node=node, step=step or node,
+                             why=obs.get("why") or stop.get("why") or "interrupted",
+                             secs=round(time.time() - started) if started else 0,
+                             alive=list(stop.get("alive") or []), observed_t=obs.get("kill_t"),
+                             node_id=(self.cur or {}).get("id"), **timing)
+                raise
             if j is not None and j.get("v") != 2:
                 raise Blocked("failed: delegate answered worker-run v%s, this engine speaks v2 (update task-loop or "
                               "delegate)" % j.get("v"))
             self._prompt_chars = len(attempt_prompt)
             self.trace_call(node, role, attempt, r, j, bool(flag))
+            timing = dict(started_t=r.started_t, ended_t=r.ended_t, first_error_t=r.first_error_t,
+                          last_event_t=r.last_event_t, kill_t=r.kill_t)
+            if r.stop or r.alive:  # the actual stop path, including a worker that outlived every signal
+                self.log("kill", "%s: stopped (%s)" % (node, (r.stop or "worker survived")[:160]), node=node,
+                         step=step or node, why=r.stop or "worker survived the stop", secs=round(r.secs or 0),
+                         alive=list(r.alive or []), observed_t=r.kill_t or r.ended_t,
+                         node_id=(self.cur or {}).get("id"), **timing)
             if r.alive:  # a retry would write into the tree the old worker still writes in
                 raise Blocked("failed: the %s worker (pid %s) is still alive after the stop (%s), SIGTERM and SIGKILL; "
                               "not retrying into this worktree. Kill it, then rerun." % (node, ", ".join(map(str, r.alive)), r.stop))
@@ -942,6 +967,13 @@ class Engine:
                 nxt = None
             elif not j:
                 nxt, reason = "fail", "no_answer"  # route.py crashed, printed nothing, or the node timeout killed it
+            status = j.get("status") or "none"
+            if r.stop or r.error or status != "done":
+                self.log("vendor_error", "%s: %s" % (node, (reason or r.error or status)[:200]), node=node,
+                         step=step or node, attempt=attempt, status=status, reason=reason, error=r.error or "",
+                         stop=r.stop or "", secs=round(r.secs or 0), lane=j.get("lane") or "",
+                         model=j.get("model") or "", family=j.get("family") or "",
+                         error_observed=r.first_error_t is not None, node_id=(self.cur or {}).get("id"), **timing)
             if reason == "logged_out" and nxt in ("retry", "owner"):
                 # delegate 0.35 marks a logged-out lane out for 15 min on purpose: the next fresh call goes to the role's
                 # next rung. Retry once at once, note the fix for the dashboard; a second logged_out pauses (tl-bxk.10.15)
@@ -1160,11 +1192,14 @@ class Engine:
         # the worker env, so a check never inherits this launcher's Claude session.
         bash = shutil.which("bash") if isinstance(cmd, str) and os.name != "nt" else None  # plans write bash
         run = [bash, "-e", "-o", "pipefail", "-c", cmd] if bash else cmd  # Windows: cmd.exe, as before
+        started = time.time()
         p = subprocess.Popen(run, shell=isinstance(run, str), cwd=self.wt,
                              env=dict(procs.child_env(), **(tl.pinned_env(self.wt) if pin else {}), **(env or {})),
                              stdin=subprocess.DEVNULL,
                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=(os.name != "nt"))
-        self.hung = False
+        self.hung, self.killed, self.kill_t, self.kill_why = False, False, 0.0, ""
+        self.last_event_t, self._event_frozen = started, False
+        self._event_lock = threading.Lock()
         try:
             if idle:
                 out, rc = self.watch_output(p, timeout, idle)
@@ -1172,15 +1207,30 @@ class Engine:
                 out, _ = p.communicate(timeout=timeout)
                 rc = p.returncode
         except subprocess.TimeoutExpired as e:
+            if not self.killed:
+                self._freeze_check("timeout")
             procs.kill_tree(p)
             out, _ = p.communicate()
             out = (e.output or b"") + out if idle else out  # the watched path read the output itself: keep what it collected
             out += b"\n(timed out after %g min: the engine stopped it and everything it started)" % round(timeout / 60, 2)
             rc = 124
         except BaseException:  # stopped: never leave a check (just check, Unity) running
+            if not self.killed:
+                self._freeze_check("interrupted")
             procs.kill_tree(p)
+            self.log("kill", "command: %s" % self.kill_why, what="check" if idle else "command", why=self.kill_why,
+                     exit=None, hung=bool(self.hung), started_t=started,
+                     last_event_t=self.last_event_t if idle else None, kill_t=self.kill_t,
+                     observed_t=self.kill_t, secs=round(self.kill_t - started),
+                     node_id=(self.cur or {}).get("id"))
             raise
         text = out.decode("utf-8", "replace")
+        if self.killed:  # only a stop the engine performed; a command that exits 124 by itself is not a kill
+            self.log("kill", "command: %s" % self.kill_why, what="check" if idle else "command",
+                     why=self.kill_why, exit=rc, hung=bool(self.hung), started_t=started,
+                     last_event_t=self.last_event_t if idle else None, kill_t=self.kill_t,
+                     observed_t=self.kill_t, secs=round(self.kill_t - started),
+                     node_id=(self.cur or {}).get("id"))
         if save:
             Path(save).write_text(text, encoding="utf-8")
         tail = "\n".join(text.strip().splitlines()[-15:])
@@ -1189,12 +1239,34 @@ class Engine:
             raise Blocked("failed: `%s` exit %d\n%s" % (cmd, rc, tail))
         return rc, tail
 
+    def _freeze_check(self, why, idle=None, now=None):
+        """Freeze the check's last observed activity and kill time before signaling or draining output. With `idle`,
+        read the current activity and decide under the same lock, so a stale read cannot hide recent output."""
+        with self._event_lock:
+            if self._event_frozen:
+                return False
+            if idle is not None:
+                now = time.time() if now is None else now
+                if now - self.last_event_t <= idle:
+                    return False
+            self._event_frozen = True
+            self.kill_t = time.time()
+            self.last_event_t = min(self.last_event_t, self.kill_t)
+            self.killed, self.kill_why = True, why
+            return True
+
     def watch_output(self, p, timeout, idle):
         """Collect p's output until it ends. Stopped as hung when, for `idle` seconds, all three are flat: its output, any
         file written under the worktree (a check that redirects to a file is not silent), the CPU time of its process tree.
         Then the whole tree is stopped, self.hung is set and the exit is 124 (the output ends with the hang notice).
-        `timeout` still applies, as TimeoutExpired carrying the output so far."""
-        chunks, last = [], [time.time()]
+        `timeout` still applies, as TimeoutExpired carrying the output so far. The last observed activity and the kill
+        time are frozen before the stop, so shutdown output and the synthetic hang notice cannot move the boundary."""
+        chunks = []
+
+        def mark(t):
+            with self._event_lock:
+                if not self._event_frozen:
+                    self.last_event_t = max(self.last_event_t, t)
 
         def pump():
             while True:
@@ -1202,7 +1274,7 @@ class Engine:
                 if not b:
                     return
                 chunks.append(b)
-                last[0] = time.time()
+                mark(time.time())
         th = threading.Thread(target=pump, daemon=True)
         th.start()
         start = time.time()
@@ -1212,14 +1284,15 @@ class Engine:
             th.join(0.5)
             now = time.time()
             if now - start > timeout:
+                self._freeze_check("timeout")
                 procs.kill_tree(p)
                 th.join(5)
                 raise subprocess.TimeoutExpired(p.args, timeout, output=b"".join(chunks))
             if th.is_alive() and now >= nxt:
                 nxt = now + poll
                 if cs.activity(self.wt, p.pid, seen):
-                    last[0] = max(last[0], now)
-            if th.is_alive() and now - last[0] > idle:
+                    mark(time.time())  # the scan may have taken longer than the idle limit
+            if th.is_alive() and self._freeze_check("hung", idle=idle):
                 self.hung = True
                 procs.kill_tree(p)
                 th.join(5)
@@ -3594,6 +3667,16 @@ class Engine:
         if by_inputs:
             saved["inputs"] = by_inputs
         cache_path.write_text(json.dumps(saved))
+        try:
+            changed_now = changed if changed is not None else self.changed_paths()
+        except Exception:
+            changed_now = []
+        hits = [c for c in out if c.get("cached")]
+        self.log("cache", "cache: %d hit, %d miss" % (len(hits), len(out) - len(hits)),
+                 node_id=(self.cur or {}).get("id"), round=self.check_round, tree=tree,
+                 base=self.git("rev-parse", self.cfg["base"]), hits=len(hits), misses=len(out) - len(hits),
+                 items=[{"id": c["id"], "group": c["group"], "cached": bool(c.get("cached"))} for c in out],
+                 changed=changed_now)
         bad = [c for c in out if c["status"] == "failed"]
         hung = [c for c in bad if c.get("hung")]
         self.outcome_of("red" if bad else "green", "%d failed%s: %s" % (len(bad), " (%d hung: no output, file writes or CPU, stopped)" % len(hung) if hung else "",
@@ -3680,15 +3763,19 @@ class Engine:
                     if not problem and self.cfg["gate"]:
                         self.gate_log = self.run_dir / ("gate.r%d.log" % (self.fixes + 1))
                         gtree = self.git("rev-parse", "HEAD^{tree}")
+                        gate_t, gate_skipped = time.time(), False
                         if self.gate_green(gtree):  # the gate already passed on exactly this tree (a push rejected, a re-land)
                             self.log("note", "gate skipped: `%s` already passed on tree %s" % (self.cfg["gate"][:80], gtree[:12]))
-                            rc, tail = 0, ""
+                            rc, tail, gate_skipped = 0, "", True
                         else:
                             green = self.green_checks(gtree)  # repo checks green on this tree's inputs: the gate may skip their part
                             rc, tail = self.sh(self.cfg["gate"], save=self.gate_log, timeout=float(self.cfg["gate_timeout_min"]) * 60,
                                                env={"TL_CHECKS_GREEN": ",".join(green)} if green else None)
                             if rc == 0:
                                 self.gate_record(gtree)
+                        self.log("gate", "gate: %s" % ("skipped" if gate_skipped else "exit %d" % rc),
+                                 tree=gtree, cmd=self.cfg["gate"], exit=rc, secs=round(time.time() - gate_t),
+                                 cached=gate_skipped, node_id=(self.cur or {}).get("id"))
                         if rc:
                             problem = ("gate", tail)
                             self.outcome_of("gate red", (tail.strip().splitlines() or [""])[-1])
@@ -4462,7 +4549,8 @@ class Engine:
             to, cause = close_move(outcome, why)
             self.transition(to, cause, why.splitlines()[0][:200] if why else outcome)
         self.end_node(node_outcome(outcome, why))
-        self.node("close", "close: %s" % outcome, outcome=outcome, why=why)
+        self.node("close", "close: %s" % outcome, outcome=outcome, why=why,
+                  fingerprint=lifecycle.run_fingerprint(outcome, why))
         self.outcome_of(outcome, why.splitlines()[0][:200] if why else "")
         self.end_node()
         self.reflection = self.reflect_run(outcome, why)  # after the close node: the outcome is decided and nothing here changes it
@@ -4547,7 +4635,8 @@ GHERKIN_TEST = re.compile(r"^\s*Scenario( Outline)?:")  # a use-case scenario (R
 
 WAIT_KINDS = {"a lane": "lane", "a Unity slot": "unity_slot", "an editor lock": "editor_lock", "a delegate crash": "delegate_crash",
               "the network": "network"}  # add_wait's wording -> the `wait` record's kind (the dashboard names them)
-QUIET_KINDS = ("end", "transition", "checks", "run", "wait", "wait_start")  # trace records for the dashboard, never printed
+QUIET_KINDS = ("end", "transition", "checks", "run", "wait", "wait_start", "gate", "vendor_error", "kill",
+               "cache")  # trace records for the dashboard and the lifecycle report, never printed
 RUN_STEM = re.compile(r"^\d{8}-\d{6}$")  # <bead>-<YYYYMMDD-HHMMSS>: an engine log of that bead, not of a child bead
 
 

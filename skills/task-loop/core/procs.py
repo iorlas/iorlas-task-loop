@@ -25,12 +25,30 @@ def child_env():
 WORKER_LINE = re.compile(r"delegate: worker pid=(\d+) pgid=(\d+)(?: run_id=(\S+))?")  # route.py 0.31.1+, on stderr when it starts one
 
 
-def run_proc(cmd, cwd, timeout, log_path, on_line=None, env=None, idle=None, stop=None):
+VENDOR_ERROR_LINE = re.compile(r"\b(?:error|failed|failure|exception|timeout|timed out|refused|denied|"
+                               r"rate.?limit|quota|out of credits|unavailable|crash(?:ed)?)\b", re.I)
+
+
+def run_proc(cmd, cwd, timeout, log_path, on_line=None, env=None, idle=None, stop=None, obs=None):
     """Run a delegate call. timeout: the wall-clock limit; with `idle` (a write) it holds only while the worker's activity
     cannot be seen. A call stopped by a limit returns (None, secs) and, in `stop`, why and the pids of its worker that
-    outlived the stop (prove_dead): the caller must not start another worker in the same tree while any lives."""
+    outlived the stop (prove_dead): the caller must not start another worker in the same tree while any lives.
+    `obs` gets the process boundaries: started_t, ended_t, first_error_t, last_event_t, kill_t, why and alive. A missing
+    boundary is None, never the completion time."""
     t = time.time()
     lines, worker = [], {}
+    obs = {} if obs is None else obs
+    obs.update(started_t=t, ended_t=None, first_error_t=None, last_event_t=None, kill_t=None, why="", alive=[])
+    obs_lock, state = threading.Lock(), {"frozen": False}
+
+    def note(ln):
+        now = time.time()
+        with obs_lock:  # the stop path freezes the last event and first error at the kill boundary
+            if state["frozen"]:
+                return
+            obs["last_event_t"] = now
+            if obs["first_error_t"] is None and VENDOR_ERROR_LINE.search(ln):
+                obs["first_error_t"] = now
     with open(log_path, "ab") as log:
         p = subprocess.Popen(cmd, cwd=cwd, env=dict(child_env(), **(env or {})), stdin=subprocess.DEVNULL,
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=(os.name != "nt"))
@@ -40,6 +58,7 @@ def run_proc(cmd, cwd, timeout, log_path, on_line=None, env=None, idle=None, sto
         def read():
             for raw in p.stdout:
                 ln = raw.decode("utf-8", "replace")
+                note(ln)
                 lines.append(ln)
                 if idle:
                     idle.touch()
@@ -51,6 +70,8 @@ def run_proc(cmd, cwd, timeout, log_path, on_line=None, env=None, idle=None, sto
 
         def read_err():  # route.py's stderr to the log; its worker line says which process group to stop
             for raw in p.stderr:
+                text = raw.decode("utf-8", "replace")
+                note(text)
                 if idle:
                     idle.touch()
                 try:
@@ -58,7 +79,7 @@ def run_proc(cmd, cwd, timeout, log_path, on_line=None, env=None, idle=None, sto
                     log.flush()
                 except (ValueError, OSError):  # the call is over and its log closed
                     pass
-                m = WORKER_LINE.search(raw.decode("utf-8", "replace"))
+                m = WORKER_LINE.search(text)
                 if m:
                     pid = int(m.group(1))
                     worker.update(pid=pid, pgid=int(m.group(2)), start=tl.proc_start(pid), run_id=m.group(3) or "")
@@ -75,13 +96,23 @@ def run_proc(cmd, cwd, timeout, log_path, on_line=None, env=None, idle=None, sto
                 why = idle.wait(p, worker, timeout) if idle else wait_wall(p, timeout)
             except BaseException:  # stopped: never leave the worker running
                 stopped = True
-                stop_and_prove(p, log, worker)
+                with obs_lock:
+                    state["frozen"] = True
+                    obs.update(kill_t=time.time(), why="interrupted")
+                obs["alive"] = stop_and_prove(p, log, worker)
+                obs["ended_t"] = time.time()
+                if stop is not None:
+                    stop.update(obs)
                 raise
             if why:
                 stopped = True
-                alive = stop_and_prove(p, log, worker)
+                with obs_lock:
+                    state["frozen"] = True
+                    obs.update(kill_t=time.time(), why=why)
+                obs["alive"] = stop_and_prove(p, log, worker)
+                obs["ended_t"] = time.time()
                 if stop is not None:
-                    stop.update(why=why, alive=alive)
+                    stop.update(obs)
                 for r in readers:
                     r.join(2)
                 return None, time.time() - t
@@ -90,6 +121,7 @@ def run_proc(cmd, cwd, timeout, log_path, on_line=None, env=None, idle=None, sto
                 LOCK.note(route_pid=None, **({} if stopped else {"workers": []}))
         for r in readers:
             r.join(10)
+        obs["ended_t"] = time.time()
     return (p.returncode, "".join(lines)), time.time() - t
 
 

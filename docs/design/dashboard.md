@@ -85,13 +85,19 @@ The engine log `engine/<bead>-<YYYYMMDD-HHMMSS>.jsonl` keeps its old records and
 | `transition` | `from` (node id), `to` (a step, `next`, `ask`, `pause`, `close`), `cause`, `detail`; `lane`, `until` on pauses |
 | `checks` | `node_id`, `round`, `items` [{id, cmd, group, exit, status, secs, tries, cached, why, log}] |
 | `run` | `run`, `bead`, `prev_run`, `started_because` first/answer/resume/retry/fresh, `ask`, `slot`, `worktree` |
+| `gate` | `tree`, `cmd`, `exit`, `secs`, `cached` (already green on this tree), `node_id` |
+| `vendor_error` | `node`, `step`, `attempt`, `status`, `reason`, `error`, `stop`, `secs`, `lane`, `model`, `family`, `node_id`, `error_observed`; `started_t`, `first_error_t`, `last_event_t`, `ended_t`, `kill_t` (null when the boundary was not observed) |
+| `kill` | `what` (check/command/delegate), `why`, `exit`, `hung`, `secs`, `node_id`, `alive` (worker pids that survived), `observed_t` (actual stop time), `started_t`, `last_event_t` (last observed check output/file/CPU activity, frozen before the stop), `kill_t`, `ended_t`; written only when the engine really stopped a tree, so a command that exits 124 by itself has no kill record. Shutdown output and the synthetic hang notice do not advance `last_event_t` or `kill_t` |
+| `cache` | `round`, `tree`, `base`, `hits`, `misses`, `items`, `changed` (task paths), `node_id` |
 | `session`, `msg` (existing) | + `node_id`; session + `resume`, `flag` |
 
 Causes: checks_red, checks_green, review_sendback, accepted, bad_checks, rounds_used, writer_decided, plan_sent_back,
 invalid_output, lane_out (a new thread), lane_wait, paused, decision/verify/ticket/stuck/waiting (an ask), verify_open,
 verify_wrong, verified, gate_red, conflict, push_race, landed, done, failed, stopped. Check logs keep every round:
 `checks/NN-id.rK.log`, `engine-checks.rK.json` (`engine-checks.json` is the latest). `traces.jsonl` lines add
-`prev_run`, `started_because`, `ask`. Logs from before these records are read from their node/session/warn text.
+`prev_run`, `started_because`, `ask`, and `fingerprint`: a stable slug of the failure cause (bead ids, session refs,
+paths, shas, numbers and quoted payloads normalised; empty for a landed/done run) so the lifecycle report can group
+runs across weeks. Logs from before these records are read from their node/session/warn text.
 There is no `judge` step: the engine has none yet.
 
 ## Roadmap (v4, 2026-10-23, replaces the Plan graph)
