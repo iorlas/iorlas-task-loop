@@ -628,22 +628,29 @@ def fmt(v, suffix="", pct=False, nd=1):
     return ("%." + str(nd) + "f") % v + suffix
 
 
+def kpi(id):
+    """The registry id a sidecar's `metric` may use, printed in brackets after the line's own numbers (tl-7y6.1.2)."""
+    return "  [%s]" % id
+
+
 def print_lifecycle(r):
     print("tl report lifecycle  %s -> %s  (UTC weeks)" % (r["since_iso"], r["until_iso"]))
     for w in r["weeks"]:
         print("week %s .. %s (%.1f d)" % (w["start_iso"], w["end_iso"], w["days"]))
-        print("  landed beads/day: %s (%d in %.1f d)" % (
-            fmt(w["landed_beads_per_day"], nd=2), w["landed_beads"], w["days"]))
-        print("  slot-min per landed bead: %s (%.1f slot-min / %d landed)" % (
-            fmt(w["slot_min_per_landed"]), w["slot_min"], w["landed_beads"]))
-        print("  non-landing slot-min share: %s (%.1f of %.1f slot-min)" % (
-            fmt(w["non_landing_share"], pct=True), w["non_landing_slot_min"], w["slot_min"]))
-        print("  avoidable asks/week: %d (of %d asks)" % (w["avoidable_asks"], w["asks"]))
-        print("  beads landed on run 1: %d (%s of %d landed; %s of %d touched)" % (
+        print("  landed beads/day: %s (%d in %.1f d)%s" % (
+            fmt(w["landed_beads_per_day"], nd=2), w["landed_beads"], w["days"], kpi("landed_beads_per_day")))
+        print("  slot-min per landed bead: %s (%.1f slot-min / %d landed)%s" % (
+            fmt(w["slot_min_per_landed"]), w["slot_min"], w["landed_beads"], kpi("slot_min_per_landed")))
+        print("  non-landing slot-min share: %s (%.1f of %.1f slot-min)%s" % (
+            fmt(w["non_landing_share"], pct=True), w["non_landing_slot_min"], w["slot_min"],
+            kpi("non_landing_slot_min_share")))
+        print("  avoidable asks/week: %d (of %d asks)%s" % (
+            w["avoidable_asks"], w["asks"], kpi("avoidable_asks_per_week")))
+        print("  beads landed on run 1: %d (%s of %d landed; %s of %d touched)%s" % (
             w["landed_run1"], fmt(w["landed_run1_share"], pct=True), w["landed_beads"],
-            fmt(w.get("landed_run1_share_touched"), pct=True), w.get("touched", 0)))
-        print("  runs per landed bead: %s (%d runs / %d landed)" % (
-            fmt(w["runs_per_landed"], nd=2), w["runs"], w["landed_beads"]))
+            fmt(w.get("landed_run1_share_touched"), pct=True), w.get("touched", 0), kpi("landed_run1_share")))
+        print("  runs per landed bead: %s (%d runs / %d landed)%s" % (
+            fmt(w["runs_per_landed"], nd=2), w["runs"], w["landed_beads"], kpi("runs_per_landed")))
         print("  median dead time per started_because (min): " + ", ".join(
             "%s %s" % (k, fmt(w["dead_time_min"].get(k))) for k in lifecycle.STARTED_BECAUSE))
         fps = w["fingerprints"]
@@ -653,18 +660,19 @@ def print_lifecycle(r):
         print("  max consecutive same-fingerprint non-done runs per (lane,model): " + (
             "unavailable" if streaks is None else ("; ".join(
                 "%s/%s %d" % (x["lane"], x["model"], x["max"]) for x in streaks[:5]) or "none")))
-        print("  slot-min in runs >180 min: %.1f" % w["slot_min_over_180"])
-        print("  verify-stage slot-min: %s" % fmt(w["verify_slot_min"]))
-        print("  hung-step slot-min: %s (%d kills)" % (fmt(w["hung_slot_min"]), w["hung_kills"]))
-        print("  median release-gate minutes: %s (%d gates)" % (
-            fmt(w["release_gate_median_min"]), w["release_gates"]))
-        print("  uncached input tokens per landed bead: %s (%d uncached)" % (
-            fmt(w["uncached_input_per_landed"]), w["uncached_input"]))
-        print("  reverts per 100 landings: %s (reverted %d, fixed-forward %d, censored %d, eligible %d)" % (
+        print("  slot-min in runs >180 min: %.1f%s" % (w["slot_min_over_180"], kpi("slot_min_over_180")))
+        print("  verify-stage slot-min: %s%s" % (fmt(w["verify_slot_min"]), kpi("verify_stage_slot_min")))
+        print("  hung-step slot-min: %s (%d kills)%s" % (fmt(w["hung_slot_min"]), w["hung_kills"],
+                                                          kpi("hung_step_slot_min")))
+        print("  median release-gate minutes: %s (%d gates)%s" % (
+            fmt(w["release_gate_median_min"]), w["release_gates"], kpi("median_release_gate_minutes")))
+        print("  uncached input tokens per landed bead: %s (%d uncached)%s" % (
+            fmt(w["uncached_input_per_landed"]), w["uncached_input"], kpi("uncached_input_tokens_per_landed_bead")))
+        print("  reverts per 100 landings: %s (reverted %d, fixed-forward %d, censored %d, eligible %d)%s" % (
             fmt(w["reverts_per_100"], nd=2), w["reverts"], w["fixed_forward"], w["revert_censored"],
-            w["revert_eligible"]))
-        print("  quota %% consumed per landed bead: %s (a single current snapshot cannot measure a week)" % (
-            fmt(w["quota_pct_per_landed"], nd=2)))
+            w["revert_eligible"], kpi("reverts_per_100_landings")))
+        print("  quota %% consumed per landed bead: %s (a single current snapshot cannot measure a week)%s" % (
+            fmt(w["quota_pct_per_landed"], nd=2), kpi("quota_percent_per_landed_bead")))
         if w["unavailable"]:
             print("  unavailable: " + ", ".join(w["unavailable"]))
     q = r.get("quota") or {}

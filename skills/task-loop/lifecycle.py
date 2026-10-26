@@ -658,3 +658,49 @@ def lifecycle_report(traces, records_by_run=None, asks=(), history=None, quota=N
     return {"v": 1, "since": since, "until": until, "since_iso": utc_iso(since), "until_iso": utc_iso(until),
             "window": {"since": since, "until": until, "since_iso": utc_iso(since), "until_iso": utc_iso(until)},
             "weeks": out, "quota": quota, "quota_snapshot": quota, "history_available": history is not None}
+
+
+# ---- tl-7y6.1.2: the KPI registry (what an experiment sidecar may measure) ---------------------------------------------
+# Every KPI is a key the week row above already carries: the registry only names the measures the lifecycle report
+# computes (tl-7y6.1.1); it never calculates anything itself. `unavailable` is the token the report lists in
+# week["unavailable"] when a measure cannot be computed; a None value says the same. `tl report lifecycle` prints each
+# id in brackets at the end of its line, so a sidecar's `metric` is always an id the report has printed.
+
+KPIS = (
+    {"id": "landed_beads_per_day", "key": "landed_beads_per_day", "label": "landed beads/day"},
+    {"id": "slot_min_per_landed", "key": "slot_min_per_landed", "label": "slot-min per landed bead",
+     "unavailable": "slot-min-per-landed"},
+    {"id": "non_landing_slot_min_share", "key": "non_landing_slot_min_share", "label": "non-landing slot-min share",
+     "unavailable": "non-landing-slot-min-share"},
+    {"id": "avoidable_asks_per_week", "key": "avoidable_asks_per_week", "label": "avoidable asks/week"},
+    {"id": "landed_run1_share", "key": "landed_run1_share", "label": "beads landed on run 1",
+     "unavailable": "beads-landed-on-run-1"},
+    {"id": "runs_per_landed", "key": "runs_per_landed", "label": "runs per landed bead",
+     "unavailable": "runs-per-landed"},
+    {"id": "slot_min_over_180", "key": "slot_min_over_180", "label": "slot-min in runs >180 min"},
+    {"id": "verify_stage_slot_min", "key": "verify_stage_slot_min", "label": "verify-stage slot-min",
+     "unavailable": "verify-stage-slot-min"},
+    {"id": "hung_step_slot_min", "key": "hung_step_slot_min", "label": "hung-step slot-min",
+     "unavailable": "hung-step-slot-min"},
+    {"id": "median_release_gate_minutes", "key": "median_release_gate_minutes", "label": "median release-gate minutes",
+     "unavailable": "median-release-gate-minutes"},
+    {"id": "uncached_input_tokens_per_landed_bead", "key": "uncached_input_tokens_per_landed_bead",
+     "label": "uncached input tokens per landed bead", "unavailable": "uncached-input-per-landed"},
+    {"id": "reverts_per_100_landings", "key": "reverts_per_100_landings", "label": "reverts per 100 landings",
+     "unavailable": "reverts-per-100-landings"},
+    {"id": "quota_percent_per_landed_bead", "key": "quota_percent_per_landed_bead",
+     "label": "quota % consumed per landed bead", "unavailable": "quota-percent-per-landed"},
+)
+
+KPI_BY_ID = {k["id"]: k for k in KPIS}
+
+
+def kpi_value(week, kpi_id):
+    """A week row's value for a KPI id, or None when the report marked it unavailable (never 0 for a missing measure)."""
+    k = KPI_BY_ID.get(kpi_id)
+    if k is None or not isinstance(week, dict):
+        return None
+    if k.get("unavailable") and k["unavailable"] in (week.get("unavailable") or []):
+        return None
+    v = week.get(k["key"])
+    return v if isinstance(v, (int, float)) and not isinstance(v, bool) else None

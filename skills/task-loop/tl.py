@@ -27,7 +27,13 @@
   tl.py loop status [--repo DIR] [--last N]     the running loop and its last beads
   tl.py stop [--repo DIR] [--now]               stop the loop after its current bead, or now (SIGTERM)
   tl.py report [--repo DIR] [--since T] [--until T] [--json]
-                                                the M2 scorecard of a window (see SKILL.md, Report)
+                                                 the M2 scorecard of a window (see SKILL.md, Report)
+  tl.py experiments [list|check] [--repo DIR] [--since T] [--until T] [--json]
+                                                 typed experiment sidecars (.task-loop/experiments/): open
+                                                 experiments, current metric vs baseline, due/overdue, NO VERDICT,
+                                                 the WIP cap 8 (check exits 1 over it, or on a rejected sidecar)
+  tl.py experiments verdict ID keep|revert|extend [--date D]
+                                                 record the verdict in the sidecar; it closes the experiment
   tl.py lost [--repo DIR] [--since T] [--json]  bead-branch commits that are not landed, reclaimed or pending
   tl.py dash ensure|stop|status|url             the dashboard server (one per machine)
   tl.py pin [VERSION] [--delegate V] [--clear]  pin the plugin install a loop and run-task use (owner override; the loop never pins)
@@ -2148,6 +2154,16 @@ def main(argv=None):
     p.add_argument("--repo")
     p.add_argument("--since", metavar="T")
     p.add_argument("--json", action="store_true")
+    p = sp.add_parser("experiments", help="typed experiment sidecars: open experiments vs baselines, due/overdue, WIP cap 8")
+    p.add_argument("op", nargs="?", choices=["list", "check", "verdict"], default="list",
+                   help="check: exit 1 when more than 8 are open or a sidecar is rejected; verdict: close one")
+    p.add_argument("bead", nargs="?", help="verdict: the experiment's bead id")
+    p.add_argument("kind", nargs="?", help="verdict: keep | revert | extend")
+    p.add_argument("--repo")
+    p.add_argument("--since", metavar="T", help="reporting window start (default 7d back)")
+    p.add_argument("--until", metavar="T", help="reporting window end (default now)")
+    p.add_argument("--json", action="store_true")
+    p.add_argument("--date", metavar="YYYY-MM-DD", help="verdict: its date (default today, UTC)")
     p = sp.add_parser("pin", help="pin the plugin install loops and runs use (owner override; --clear removes the pin)")
     p.add_argument("version", nargs="?", help="task-loop version (a cache dir under ~/.claude/plugins/cache)")
     p.add_argument("--delegate", metavar="V", help="delegate version")
@@ -2192,6 +2208,9 @@ def main(argv=None):
     if a.cmd in ("report", "lost"):
         import report
         return {"report": report.cmd_report, "lost": report.cmd_lost}[a.cmd](a)
+    if a.cmd == "experiments":
+        import experiments
+        return experiments.cmd_experiments(a)
     if a.cmd == "trace":
         return cmd_trace(a)
     if a.cmd == "bd":
