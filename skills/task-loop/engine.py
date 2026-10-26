@@ -976,8 +976,8 @@ class Engine:
                "repo": self.git("remote", "get-url", "origin") or str(self.wt), "worktree": str(self.wt),
                "branch": self.git("symbolic-ref", "--short", "-q", "HEAD"), "coordinator_session": self.session,
                "version": plugin_version(), "started": self.t0, "ended": time.time(), "outcome": outcome, "why": (why or "")[:500], "sha": sha or "",
-               "fingerprint": self.fp or lifecycle.run_fingerprint(outcome, why),
-               "kind": self.kind.value if self.kind else "", "loop": oc.POLICY[self.kind].trace if self.kind else "",
+               "fingerprint": lifecycle.run_fingerprint(outcome, why),
+               "kfp": self.fp, "kind": self.kind.value if self.kind else "", "loop": oc.POLICY[self.kind].trace if self.kind else "",
                "cost": self.cost, "stats": self.stats, "host": self.host, "delegate": self.route or "", "log": str(self.log_path),
                "stderr": str(self.err_path), "lanes": (self.contract or {}).get("lanes"), "sessions": self.sessions,
                "verified": self.verified, "write_rounds": self.write_rounds, "strays": self.strays,
@@ -4850,7 +4850,7 @@ class Engine:
             to, cause = close_move(outcome, why, kind)
             self.transition(to, cause, why.splitlines()[0][:200] if why else outcome)
         self.end_node(node_outcome(outcome, why, kind))
-        self.node("close", "close: %s" % outcome, outcome=outcome, why=why, fingerprint=self.fp or lifecycle.run_fingerprint(outcome, why),
+        self.node("close", "close: %s" % outcome, outcome=outcome, why=why, fingerprint=lifecycle.run_fingerprint(outcome, why),
                   exit_kind=kind.value if kind else "")
         self.outcome_of(outcome, why.splitlines()[0][:200] if why else "")
         self.end_node()
@@ -4961,8 +4961,8 @@ def outcome_for(kind, why):
     verify-gaps ask, read from its prefix."""
     if kind in oc.FINISH:
         return kind.value
-    if kind:
-        return "failed" if oc.POLICY[kind].loop == "failed" else "blocked"
+    if kind:  # a stop keeps the word `failed` in the trace (the reports count it); its `loop` field says paused
+        return "failed" if oc.POLICY[kind].loop == "failed" or kind == oc.Kind.PAUSE_KILLED else "blocked"
     return "failed" if why.startswith("failed:") else "blocked"
 
 
