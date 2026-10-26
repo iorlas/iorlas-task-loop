@@ -241,10 +241,9 @@ class EngineTest(unittest.TestCase):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
         brief = (self.eng.run_dir / "brief.md").read_text()
-        for kept in ("Add the file f.", "f.txt exists", "owner: keep it short", "Use the old format", "t-0 The epic",
-                     "Blocked: failed: stopped (SIGTERM)"):
+        for kept in ("Add the file f.", "f.txt exists", "owner: keep it short", "Use the old format", "t-0 The epic"):
             self.assertIn(kept, brief)
-        for dropped in ("p" * 50, "r" * 50, "x" * 50, "minutes=26"):
+        for dropped in ("p" * 50, "r" * 50, "x" * 50, "minutes=26", "Blocked: failed: stopped", "Last engine run"):  # tl-7y6.6.2
             self.assertNotIn(dropped, brief)
         self.assertLess(len(brief.encode()), 5000)
 
@@ -1293,7 +1292,7 @@ class EngineTest(unittest.TestCase):
             rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual([c[0] for c in s.calls], ["worker", "reviewer"])
-        self.assertIn("outcome=failed", s.prompts[0])  # the worker still reads how the last run ended
+        self.assertNotIn("outcome=failed", s.prompts[0])  # tl-7y6.6.2: no engine record in the brief, so none in the prompt
 
     @ENGINE_BASH
     def test_an_answered_ask_raised_in_a_conflict_fix_round_resumes_at_land(self):
@@ -4147,7 +4146,7 @@ class DelegateLauncher(unittest.TestCase):
         # the resumed thread's lane is out: a new thread; that lane out too: routed again twice, then the pause
         self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, "ref-write", None, None, None])
         self.assertEqual(self.blocked, [])
-        self.assertTrue(any(c[:1] == ("update",) and "open" in c and any("paused: no lane for write" in x for x in c)
+        self.assertTrue(any(c[:3] == ("comments", "add", "t-1") and any("paused: no lane for write" in x for x in c)
                             for c in self.bd_calls))
         self.assertNotIn("needs a human", self.eng.log_path.read_text())
 
@@ -4237,7 +4236,7 @@ class DelegateLauncher(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertEqual([c[0] for c in s.calls].count("worker"), 2)
         self.assertEqual(self.blocked, [])
-        self.assertTrue(any(c[:1] == ("update",) and "open" in c and any("run `claude auth login`" in x for x in c)
+        self.assertTrue(any(c[:3] == ("comments", "add", "t-1") and any("run `claude auth login`" in x for x in c)
                             for c in self.bd_calls))
         self.assertIn("claude auth login", self.eng.log_path.read_text())
 
@@ -4246,7 +4245,7 @@ class DelegateLauncher(unittest.TestCase):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, out, out], "review": [review(unmet=["more"])]})
         self.assertEqual(rc, 2)
         self.assertEqual(self.blocked, [])
-        self.assertTrue(any(c[:1] == ("update",) and "open" in c and any("run `codex login`" in x for x in c)
+        self.assertTrue(any(c[:3] == ("comments", "add", "t-1") and any("run `codex login`" in x for x in c)
                             for c in self.bd_calls))
 
     def test_a_logged_out_retry_that_meets_no_lane_pauses_with_the_note_kept(self):
@@ -4255,7 +4254,7 @@ class DelegateLauncher(unittest.TestCase):
         rc, s = self.run_engine({"plan": [PLAN], "write": [out, stop]})
         self.assertEqual(rc, 2)
         self.assertEqual(self.blocked, [])
-        self.assertTrue(any(c[:1] == ("update",) and "open" in c and any("Claude logged out" in x for x in c)
+        self.assertTrue(any(c[:3] == ("comments", "add", "t-1") and any("Claude logged out" in x for x in c)
                             for c in self.bd_calls))
 
     def test_every_lane_out_with_no_time_pauses_a_resumed_write_without_an_ask(self):
@@ -4265,7 +4264,7 @@ class DelegateLauncher(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, "ref-write", None])
         self.assertEqual(self.blocked, [])
-        self.assertTrue(any(c[:1] == ("update",) and "open" in c and any("paused: no lane for write" in x for x in c)
+        self.assertTrue(any(c[:3] == ("comments", "add", "t-1") and any("paused: no lane for write" in x for x in c)
                             for c in self.bd_calls))
         self.assertNotIn("needs a human", self.eng.log_path.read_text())
 
@@ -4289,7 +4288,7 @@ class DelegateLauncher(unittest.TestCase):
         rc, _ = self.run_engine({"plan": [stop] * 3}, lane_wait_min=2)
         self.assertEqual(rc, 2)
         self.assertEqual(self.blocked, [])  # a machine-wide wait is not the bead's fault: it stays open
-        self.assertTrue(any(c[:1] == ("update",) and "open" in c and any("paused: no lane for plan" in x for x in c)
+        self.assertTrue(any(c[:3] == ("comments", "add", "t-1") and any("paused: no lane for plan" in x for x in c)
                             for c in self.bd_calls))
 
     def test_a_lane_out_for_long_pauses_at_once_and_frees_the_slot(self):
@@ -4298,7 +4297,7 @@ class DelegateLauncher(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertEqual([c[0] for c in s.calls].count("worker"), 3)  # routed again twice, no hour of sleeping in the slot
         self.assertEqual(self.blocked, [])
-        self.assertTrue(any(c[:1] == ("update",) and "open" in c and any("paused: no lane for write until" in x for x in c)
+        self.assertTrue(any(c[:3] == ("comments", "add", "t-1") and any("paused: no lane for write until" in x for x in c)
                             for c in self.bd_calls))
 
     def test_a_bead_branch_left_in_another_clean_slot_is_resumed_here(self):
