@@ -19,13 +19,12 @@ jobs:
       # Every test belongs to exactly one shard of each size used below.
       - run: |
           python tests/shard.py --check 3
-          python tests/shard.py --check 4
-          python tests/shard.py --check 6
+          python tests/shard.py --check 8
       - id: m
         run: |
           python - <<'PY' >> "$GITHUB_OUTPUT"
           import json
-          cells = [("ubuntu-latest", "3.8", 3), ("ubuntu-latest", "3.12", 3), ("macos-latest", "3.12", 4), ("windows-latest", "3.12", 6)]
+          cells = [("ubuntu-latest", "3.8", 3), ("ubuntu-latest", "3.12", 3), ("macos-latest", "3.12", 3), ("windows-latest", "3.12", 8)]
           inc = [{"os": o, "python": p, "shard": i, "shards": n} for o, p, n in cells for i in range(1, n + 1)]
           print("matrix=" + json.dumps({"include": inc}))
           PY
