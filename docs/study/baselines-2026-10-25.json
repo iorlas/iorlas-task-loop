@@ -1,0 +1,801 @@
+{
+ "bead": "tl-7y6.1.1",
+ "cache_hit_table": {
+  "after_commit": "5c05cccc",
+  "after_ts": 1792803918,
+  "available": true,
+  "hit": 2,
+  "hit_rate": 0.017,
+  "miss": 113,
+  "paths_basis": "the landed commit's changed paths (per-round paths are not in pre-HEAD engine logs)",
+  "reading": "the docs/design-only rounds missed the check cache 113 times and hit 2: S6 docs-only caching is still needed",
+  "runs": [
+   {
+    "bead": "lifesim-gfr.27",
+    "changed_path_count": 1,
+    "changed_paths": [
+     "design/research/gate-speed/README.md"
+    ],
+    "class": "design-only",
+    "rounds": [
+     {
+      "hit": 0,
+      "miss": 6,
+      "reused": 1,
+      "round": 1,
+      "skipped": 3
+     },
+     {
+      "hit": 0,
+      "miss": 6,
+      "reused": 1,
+      "round": 2,
+      "skipped": 3
+     }
+    ],
+    "run": "lifesim-gfr.27-20261024-093029",
+    "sha": "fd07561829f4"
+   },
+   {
+    "bead": "lifesim-yxbb.12",
+    "changed_path_count": 18,
+    "changed_paths": [
+     "design/decisions/2026-10-13-action-menu-is-a-pie.md",
+     "design/decisions/2026-10-13-order-queue-is-a-row-of-icons-top-left.md",
+     "design/decisions/2026-10-14-social-pie-has-category-and-action-rings.md",
+     "design/decisions/2026-10-24-action-pie-supports-click-and-hold-drag.md",
+     "design/decisions/2026-10-24-live-queue-distinguishes-running-and-waiting-orders.md",
+     "design/decisions/2026-10-24-social-pie-keeps-category-context-during-navigation.md",
+     "design/look-reviews/lifesim-yxbb.12/live-rest.png",
+     "design/look-reviews/lifesim-yxbb.12/mood-queue-notices.png",
+     "design/look-reviews/lifesim-yxbb.12/object-pie.png",
+     "design/look-reviews/lifesim-yxbb.12/pie-head-left.png",
+     "design/look-reviews/lifesim-yxbb.12/pie-head-right.png",
+     "design/look-reviews/lifesim-yxbb.12/references/sims4-lessons-annotated.png",
+     "design/look-reviews/lifesim-yxbb.12/references/sims4-live-screen-annotated.png",
+     "design/look-reviews/lifesim-yxbb.12/small-window.png",
+     "design/look-reviews/lifesim-yxbb.12/social-actions.png",
+     "design/look-reviews/lifesim-yxbb.12/social-categories.png",
+     "design/research/live-interaction-ui/README.md",
+     "design/systems/interface.md"
+    ],
+    "class": "design-only",
+    "rounds": [
+     {
+      "hit": 0,
+      "miss": 5,
+      "reused": 0,
+      "round": 1,
+      "skipped": 3
+     },
+     {
+      "hit": 0,
+      "miss": 5,
+      "reused": 0,
+      "round": 2,
+      "skipped": 3
+     },
+     {
+      "hit": 0,
+      "miss": 5,
+      "reused": 0,
+      "round": 3,
+      "skipped": 3
+     },
+     {
+      "hit": 0,
+      "miss": 10,
+      "reused": 0,
+      "round": 4,
+      "skipped": 3
+     },
+     {
+      "hit": 0,
+      "miss": 10,
+      "reused": 0,
+      "round": 5,
+      "skipped": 3
+     },
+     {
+      "hit": 0,
+      "miss": 10,
+      "reused": 0,
+      "round": 6,
+      "skipped": 3
+     }
+    ],
+    "run": "lifesim-yxbb.12-20261024-121436",
+    "sha": "f4670b1c18b9"
+   },
+   {
+    "bead": "lifesim-log",
+    "changed_path_count": 4,
+    "changed_paths": [
+     "design/decisions/2026-10-12-player-text-is-funny-codes-are-explicit.md",
+     "design/decisions/2026-10-22-warning-countdown-is-part-of-the-difficulty-setting.md",
+     "design/systems/attention.md",
+     "design/systems/needs.md"
+    ],
+    "class": "design-only",
+    "rounds": "unavailable: engine log has no checks record",
+    "run": "lifesim-log-20261024-122446",
+    "sha": "7ae2eca3bcc1"
+   },
+   {
+    "bead": "lifesim-y7ll",
+    "changed_path_count": 18,
+    "changed_paths": [
+     "design/decisions/2026-10-22-cheaper-first-versions-named-for-layer-3.md",
+     "design/decisions/2026-10-22-godot-work-parked-except-yxd6-and-ivgk.md",
+     "design/decisions/2026-10-22-log-and-crash-file-live-next-to-the-saves.md",
+     "design/decisions/2026-10-22-macos-only-for-now-windows-onboarding-parked.md",
+     "design/decisions/2026-10-22-memory-sensitivity-is-a-random-draw-within-a-range.md",
+     "design/decisions/2026-10-22-sleep-ends-when-energy-is-full.md",
+     "design/decisions/2026-10-22-tests-drive-input-through-unity-native-test-input.md",
+     "design/decisions/2026-10-22-the-shipped-catalogue-has-a-table-chairs-a-sink-plates-and-a-second-bed.md",
+     "design/decisions/2026-10-22-warning-countdown-is-part-of-the-difficulty-setting.md",
+     "design/systems/attention.md",
+     "design/systems/build-mode.md",
+     "design/systems/decision-making.md",
+     "design/systems/distribution.md",
+     "design/systems/events.md",
+     "design/systems/household-lifecycle.md",
+     "design/systems/memory.md",
+     "design/systems/needs.md",
+     "design/systems/toolchain.md"
+    ],
+    "class": "design-only",
+    "rounds": [
+     {
+      "hit": 0,
+      "miss": 7,
+      "reused": 0,
+      "round": 1,
+      "skipped": 3
+     },
+     {
+      "hit": 0,
+      "miss": 7,
+      "reused": 0,
+      "round": 2,
+      "skipped": 3
+     }
+    ],
+    "run": "lifesim-y7ll-20261024-123742",
+    "sha": "c79de050b372"
+   },
+   {
+    "bead": "lifesim-j43r",
+    "changed_path_count": 1,
+    "changed_paths": [
+     "design/research/shared-interaction-runner/README.md"
+    ],
+    "class": "design-only",
+    "rounds": [
+     {
+      "hit": 0,
+      "miss": 5,
+      "reused": 0,
+      "round": 1,
+      "skipped": 3
+     },
+     {
+      "hit": 0,
+      "miss": 5,
+      "reused": 0,
+      "round": 2,
+      "skipped": 3
+     },
+     {
+      "hit": 0,
+      "miss": 5,
+      "reused": 0,
+      "round": 3,
+      "skipped": 3
+     }
+    ],
+    "run": "lifesim-j43r-20261024-131445",
+    "sha": "b142688a588c"
+   },
+   {
+    "bead": "lifesim-5ban.7",
+    "changed_path_count": 2,
+    "changed_paths": [
+     "design/decisions/2026-10-24-content-requirements-ship-by-rung.md",
+     "design/systems/content.md"
+    ],
+    "class": "design-only",
+    "rounds": [
+     {
+      "hit": 0,
+      "miss": 5,
+      "reused": 0,
+      "round": 1,
+      "skipped": 3
+     }
+    ],
+    "run": "lifesim-5ban.7-20261024-183823",
+    "sha": "0e648713c2da"
+   },
+   {
+    "bead": "lifesim-r6z",
+    "changed_path_count": 6,
+    "changed_paths": [
+     "design/decisions/2026-10-11-sims-alike-look-and-feel.md",
+     "design/decisions/2026-10-11-the-creator-character-shows-life-and-emotion.md",
+     "design/decisions/2026-10-11-ui-icon-set.md",
+     "design/research/look-and-feel/README.md",
+     "design/research/ui-icons/README.md",
+     "design/runbooks/asset-sources.md"
+    ],
+    "class": "design-only",
+    "rounds": [
+     {
+      "hit": 0,
+      "miss": 6,
+      "reused": 0,
+      "round": 1,
+      "skipped": 3
+     }
+    ],
+    "run": "lifesim-r6z-20261024-214434",
+    "sha": "87ac4d96fe34"
+   },
+   {
+    "bead": "lifesim-h1fw",
+    "changed_path_count": 1,
+    "changed_paths": [
+     "docs/agents/unity.md"
+    ],
+    "class": "docs-only",
+    "rounds": [
+     {
+      "hit": 0,
+      "miss": 7,
+      "reused": 0,
+      "round": 1,
+      "skipped": 3
+     },
+     {
+      "hit": 2,
+      "miss": 5,
+      "reused": 0,
+      "round": 2,
+      "skipped": 3
+     }
+    ],
+    "run": "lifesim-h1fw-20261024-233528",
+    "sha": "a690ef82b0f1"
+   },
+   {
+    "bead": "lifesim-hclf.43",
+    "changed_path_count": 1,
+    "changed_paths": [
+     "design/testing/check-speed-results-2026-10.md"
+    ],
+    "class": "design-only",
+    "rounds": [
+     {
+      "hit": 0,
+      "miss": 4,
+      "reused": 0,
+      "round": 1,
+      "skipped": 3
+     }
+    ],
+    "run": "lifesim-hclf.43-20261025-034827",
+    "sha": "c9da874369aa"
+   }
+  ]
+ },
+ "corrections": [
+  {
+   "delta_pct": -11.4,
+   "metric": "landed_beads_per_day",
+   "recomputed": 16.84,
+   "study": 19,
+   "why": "window ends later than the study snapshot; at 2026-10-25T10:00:00+03:00 the value is 17.66 (-7.1%)"
+  },
+  {
+   "delta_pct": null,
+   "metric": "median_dead_time_h[answer]",
+   "recomputed": 2.03,
+   "study": "2.8-6.5 h",
+   "why": "the study gives one range for all start reasons; the engine measures it per started_because"
+  },
+  {
+   "delta_pct": null,
+   "metric": "median_dead_time_h[retry]",
+   "recomputed": 0.57,
+   "study": "2.8-6.5 h",
+   "why": "the study gives one range for all start reasons; the engine measures it per started_because"
+  }
+ ],
+ "engine": {
+  "branch": "hand/tl-7y6.1.1",
+  "dirty": true,
+  "source_sha": "75cb77f6954dd50025bdfd7ff9259bc611f25793",
+  "version": "0.23.51"
+ },
+ "metrics": {
+  "asks": 93,
+  "asks_total": 93,
+  "avoidable_asks": 79,
+  "avoidable_asks_per_week": 79,
+  "beads_landed_on_run_1": 59,
+  "beads_touched": 166,
+  "days": 7.838518518518518,
+  "dead_time_min": {
+   "answer": 121.9,
+   "first": null,
+   "fresh": 230.6,
+   "resume": 297.2,
+   "retry": 34.3
+  },
+  "end": 1792948048.0,
+  "end_iso": "2026-10-25T17:07:28Z",
+  "fingerprint_streaks": [
+   {
+    "fingerprint": "vendor_prework",
+    "lane": "GROK_SUBSCRIPTION",
+    "max": 115,
+    "model": "grok-4.7"
+   },
+   {
+    "fingerprint": "bad_request",
+    "lane": "OPENAI_SUBSCRIPTION",
+    "max": 53,
+    "model": "gpt-6.1-sol"
+   },
+   {
+    "fingerprint": "busy",
+    "lane": "OPENAI_SUBSCRIPTION",
+    "max": 40,
+    "model": "?"
+   },
+   {
+    "fingerprint": "busy",
+    "lane": "DEEPSEEK_FREE",
+    "max": 22,
+    "model": "?"
+   },
+   {
+    "fingerprint": "lane_out",
+    "lane": "ZAI_CODING_SUBSCRIPTION",
+    "max": 11,
+    "model": "glm-5.3"
+   },
+   {
+    "fingerprint": "no_lane",
+    "lane": "worker",
+    "max": 11,
+    "model": "?"
+   },
+   {
+    "fingerprint": "worker_failed",
+    "lane": "DEEPSEEK_FREE",
+    "max": 7,
+    "model": "deepseek-v4.1-flash-free"
+   },
+   {
+    "fingerprint": "unknown",
+    "lane": "CLAUDE_SUBSCRIPTION",
+    "max": 6,
+    "model": "opus-5.5"
+   },
+   {
+    "fingerprint": "no_lane",
+    "lane": "planner",
+    "max": 5,
+    "model": "?"
+   },
+   {
+    "fingerprint": "lane_out",
+    "lane": "ZAI_CODING_SUBSCRIPTION",
+    "max": 4,
+    "model": "?"
+   },
+   {
+    "fingerprint": "no_lane",
+    "lane": "reviewer",
+    "max": 3,
+    "model": "?"
+   },
+   {
+    "fingerprint": "duplicate_task",
+    "lane": "CLAUDE_SUBSCRIPTION",
+    "max": 2,
+    "model": "sonnet-5.5"
+   },
+   {
+    "fingerprint": "busy",
+    "lane": "GROK_SUBSCRIPTION",
+    "max": 2,
+    "model": "?"
+   }
+  ],
+  "fingerprint_top5": [
+   {
+    "beads": 51,
+    "beads_per_day": 6.51,
+    "count": 51,
+    "fingerprint": "needs a human: delegate stopped the write step (bad_request): codex rejected the request: { <quoted> : <quoted>#71eccd24",
+    "per_day": 6.51
+   },
+   {
+    "beads": 18,
+    "beads_per_day": 2.3,
+    "count": 18,
+    "fingerprint": "owner decision needed",
+    "per_day": 2.3
+   },
+   {
+    "beads": 11,
+    "beads_per_day": 1.4,
+    "count": 11,
+    "fingerprint": "failed: worktree <path> has uncommitted work of another branch",
+    "per_day": 1.4
+   },
+   {
+    "beads": 9,
+    "beads_per_day": 1.15,
+    "count": 9,
+    "fingerprint": "paused: no lane for review until <n> : <n> : <n> (vendor_prework: opencode failed before any work: personal-team#dc11aa82",
+    "per_day": 1.15
+   },
+   {
+    "beads": 8,
+    "beads_per_day": 1.02,
+    "count": 8,
+    "fingerprint": "failed: stopped (sigterm)",
+    "per_day": 1.02
+   }
+  ],
+  "fingerprints": [
+   {
+    "beads": 51,
+    "beads_per_day": 6.51,
+    "count": 51,
+    "fingerprint": "needs a human: delegate stopped the write step (bad_request): codex rejected the request: { <quoted> : <quoted>#71eccd24",
+    "per_day": 6.51
+   },
+   {
+    "beads": 18,
+    "beads_per_day": 2.3,
+    "count": 18,
+    "fingerprint": "owner decision needed",
+    "per_day": 2.3
+   },
+   {
+    "beads": 11,
+    "beads_per_day": 1.4,
+    "count": 11,
+    "fingerprint": "failed: worktree <path> has uncommitted work of another branch",
+    "per_day": 1.4
+   },
+   {
+    "beads": 9,
+    "beads_per_day": 1.15,
+    "count": 9,
+    "fingerprint": "paused: no lane for review until <n> : <n> : <n> (vendor_prework: opencode failed before any work: personal-team#dc11aa82",
+    "per_day": 1.15
+   },
+   {
+    "beads": 8,
+    "beads_per_day": 1.02,
+    "count": 8,
+    "fingerprint": "failed: stopped (sigterm)",
+    "per_day": 1.02
+   }
+  ],
+  "fixed_forward": 0,
+  "hung_kills": 0,
+  "hung_slot_min": 0.0,
+  "hung_step_slot_min": "unavailable",
+  "landed": 132,
+  "landed_beads": 132,
+  "landed_beads_per_day": 16.84,
+  "landed_per_day": 16.84,
+  "landed_run1": 59,
+  "landed_run1_share": 0.447,
+  "landed_run1_share_of_landed": 0.447,
+  "landed_run1_share_touched": 0.3554,
+  "max_consecutive_same_fingerprint": [
+   {
+    "fingerprint": "vendor_prework",
+    "lane": "GROK_SUBSCRIPTION",
+    "max": 115,
+    "model": "grok-4.7"
+   },
+   {
+    "fingerprint": "bad_request",
+    "lane": "OPENAI_SUBSCRIPTION",
+    "max": 53,
+    "model": "gpt-6.1-sol"
+   },
+   {
+    "fingerprint": "busy",
+    "lane": "OPENAI_SUBSCRIPTION",
+    "max": 40,
+    "model": "?"
+   },
+   {
+    "fingerprint": "busy",
+    "lane": "DEEPSEEK_FREE",
+    "max": 22,
+    "model": "?"
+   },
+   {
+    "fingerprint": "lane_out",
+    "lane": "ZAI_CODING_SUBSCRIPTION",
+    "max": 11,
+    "model": "glm-5.3"
+   },
+   {
+    "fingerprint": "no_lane",
+    "lane": "worker",
+    "max": 11,
+    "model": "?"
+   },
+   {
+    "fingerprint": "worker_failed",
+    "lane": "DEEPSEEK_FREE",
+    "max": 7,
+    "model": "deepseek-v4.1-flash-free"
+   },
+   {
+    "fingerprint": "unknown",
+    "lane": "CLAUDE_SUBSCRIPTION",
+    "max": 6,
+    "model": "opus-5.5"
+   },
+   {
+    "fingerprint": "no_lane",
+    "lane": "planner",
+    "max": 5,
+    "model": "?"
+   },
+   {
+    "fingerprint": "lane_out",
+    "lane": "ZAI_CODING_SUBSCRIPTION",
+    "max": 4,
+    "model": "?"
+   },
+   {
+    "fingerprint": "no_lane",
+    "lane": "reviewer",
+    "max": 3,
+    "model": "?"
+   },
+   {
+    "fingerprint": "duplicate_task",
+    "lane": "CLAUDE_SUBSCRIPTION",
+    "max": 2,
+    "model": "sonnet-5.5"
+   },
+   {
+    "fingerprint": "busy",
+    "lane": "GROK_SUBSCRIPTION",
+    "max": 2,
+    "model": "?"
+   }
+  ],
+  "max_consecutive_same_fingerprint_non_done_runs": [
+   {
+    "fingerprint": "vendor_prework",
+    "lane": "GROK_SUBSCRIPTION",
+    "max": 115,
+    "model": "grok-4.7"
+   },
+   {
+    "fingerprint": "bad_request",
+    "lane": "OPENAI_SUBSCRIPTION",
+    "max": 53,
+    "model": "gpt-6.1-sol"
+   },
+   {
+    "fingerprint": "busy",
+    "lane": "OPENAI_SUBSCRIPTION",
+    "max": 40,
+    "model": "?"
+   },
+   {
+    "fingerprint": "busy",
+    "lane": "DEEPSEEK_FREE",
+    "max": 22,
+    "model": "?"
+   },
+   {
+    "fingerprint": "lane_out",
+    "lane": "ZAI_CODING_SUBSCRIPTION",
+    "max": 11,
+    "model": "glm-5.3"
+   },
+   {
+    "fingerprint": "no_lane",
+    "lane": "worker",
+    "max": 11,
+    "model": "?"
+   },
+   {
+    "fingerprint": "worker_failed",
+    "lane": "DEEPSEEK_FREE",
+    "max": 7,
+    "model": "deepseek-v4.1-flash-free"
+   },
+   {
+    "fingerprint": "unknown",
+    "lane": "CLAUDE_SUBSCRIPTION",
+    "max": 6,
+    "model": "opus-5.5"
+   },
+   {
+    "fingerprint": "no_lane",
+    "lane": "planner",
+    "max": 5,
+    "model": "?"
+   },
+   {
+    "fingerprint": "lane_out",
+    "lane": "ZAI_CODING_SUBSCRIPTION",
+    "max": 4,
+    "model": "?"
+   },
+   {
+    "fingerprint": "no_lane",
+    "lane": "reviewer",
+    "max": 3,
+    "model": "?"
+   },
+   {
+    "fingerprint": "duplicate_task",
+    "lane": "CLAUDE_SUBSCRIPTION",
+    "max": 2,
+    "model": "sonnet-5.5"
+   },
+   {
+    "fingerprint": "busy",
+    "lane": "GROK_SUBSCRIPTION",
+    "max": 2,
+    "model": "?"
+   }
+  ],
+  "median_dead_time_min": {
+   "answer": 121.9,
+   "first": null,
+   "fresh": 230.6,
+   "resume": 297.2,
+   "retry": 34.3
+  },
+  "median_dead_time_per_started_because": {
+   "answer": 121.9,
+   "first": null,
+   "fresh": 230.6,
+   "resume": 297.2,
+   "retry": 34.3
+  },
+  "median_release_gate_min": null,
+  "median_release_gate_minutes": null,
+  "non_landing_share": 0.5658,
+  "non_landing_slot_min": 10242.3,
+  "non_landing_slot_min_share": 0.5658,
+  "quota_pct_per_landed": null,
+  "quota_percent_per_landed_bead": null,
+  "release_gate_median_min": null,
+  "release_gates": 0,
+  "revert_censored": 132,
+  "revert_eligible": 0,
+  "reverted": 0,
+  "reverts": 0,
+  "reverts_per_100": null,
+  "reverts_per_100_landings": null,
+  "run1": 59,
+  "runs": 402,
+  "runs_per_landed": 3.05,
+  "runs_per_landed_bead": 3.05,
+  "slot_min": 18102.6,
+  "slot_min_in_runs_over_180_min": 3836.7,
+  "slot_min_over_180": 3836.7,
+  "slot_min_per_landed": 137.1,
+  "slot_min_per_landed_bead": 137.1,
+  "slot_min_runs_over_180": 3836.7,
+  "start": 1792270800.0,
+  "start_iso": "2026-10-17T21:00:00Z",
+  "touched": 166,
+  "unavailable": [
+   "median-release-gate-minutes",
+   "quota-percent-per-landed"
+  ],
+  "uncached_input": 98282700,
+  "uncached_input_per_landed": 744565.9,
+  "uncached_input_tokens_per_landed_bead": 744565.9,
+  "verify_slot_min": 67.4,
+  "verify_stage_slot_min": 67.4,
+  "week_end": 1792948048.0,
+  "week_start": 1791763200.0
+ },
+ "quota_snapshot": {
+  "at": 1793029637.9293702,
+  "at_iso": "2026-10-26T15:47:17Z",
+  "available": true,
+  "lanes": [
+   {
+    "lane": "OPENAI_SUBSCRIPTION",
+    "out": false,
+    "out_until": null,
+    "resets_at": null,
+    "used_pct": 2.0,
+    "why": null,
+    "window": "week"
+   }
+  ]
+ },
+ "scope": {
+  "note": "lifesim only: the study's landed/slot-min figures are lifesim-only (docs/baseline-2026-10-25.md)",
+  "repo": "/Users/iorlas/Workspaces/lifesim",
+  "traces": "/Users/iorlas/.config/task-loop/traces.jsonl"
+ },
+ "snapshot_at_study": {
+  "metrics": {
+   "asks": 91,
+   "avoidable_asks": 77,
+   "beads_landed_on_run_1": 59,
+   "beads_touched": 164,
+   "landed_beads": 131,
+   "landed_beads_per_day": 17.66,
+   "landed_run1_share_touched": 0.3598,
+   "non_landing_slot_min": 9773.2,
+   "non_landing_slot_min_share": 0.5572,
+   "runs": 384,
+   "runs_per_landed_bead": 2.93,
+   "slot_min": 17540.6,
+   "slot_min_per_landed_bead": 133.9
+  },
+  "until": "2026-10-25T10:00:00+03:00"
+ },
+ "study_figures": {
+  "asks": 94,
+  "avoidable_asks": 83,
+  "beads_landed_on_run_1": 59,
+  "beads_touched": 164,
+  "landed_beads": 131,
+  "landed_beads_per_day": 19,
+  "landed_run1_share_touched": 0.36,
+  "non_landing_slot_min": 9774,
+  "non_landing_slot_min_share": 0.56,
+  "runs": 398,
+  "runs_per_landed_bead": 3.0,
+  "slot_min": 17541,
+  "slot_min_per_landed_bead": 134
+ },
+ "unavailable": [
+  {
+   "metric": "median_release_gate_min",
+   "reason": "gate records exist only in runs written by this engine; none are in the window"
+  },
+  {
+   "metric": "hung_step_slot_min",
+   "reason": "kill and vendor_error records exist only in runs written by this engine; the window predates them"
+  },
+  {
+   "metric": "reverts_per_100_landings",
+   "reason": "every landing's 7-day follow-up runs past the window end (132 landings censored)"
+  },
+  {
+   "metric": "quota_percent_per_landed_bead",
+   "reason": "delegate keeps no per-bead quota history; a current `status --json` snapshot cannot measure a past week"
+  },
+  {
+   "metric": "quota_codex_claude_85_92",
+   "reason": "the study's 85% / 92% are past snapshots; not reconstructible from history.jsonl"
+  }
+ ],
+ "v": 1,
+ "window": {
+  "bucketing": "one bucket for the whole window (tl report lifecycle splits at UTC Mondays)",
+  "since": "2026-10-18T00:00:00+03:00",
+  "since_iso": "2026-10-17T21:00:00Z",
+  "until": "2026-10-25T20:07:28+03:00",
+  "until_iso": "2026-10-25T17:07:28Z"
+ }
+}
