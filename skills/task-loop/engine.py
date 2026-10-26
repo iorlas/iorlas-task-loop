@@ -34,6 +34,7 @@ import links
 import looks
 import notifier
 import tl
+import trim
 
 DEFAULTS = {
     "gate": "",                       # command run on the rebased tree before landing ("" = the push hook gates)
@@ -3652,7 +3653,7 @@ class Engine:
             return
         ck.update(head=self.git("rev-parse", "HEAD"), closed=True, filed=self.filed)
         if why.startswith("gate red") and not ck.get("pending_land_validation"):
-            ck.update(step="gate-red", gate_tail=why[-3000:])
+            ck.update(step="gate-red", gate_tail=trim.trim_log(why, log=str(getattr(self, "gate_log", "") or "")))
         self.checkpoint_path().write_text(json.dumps(ck, indent=1))
 
     def drop_checkpoint(self):
@@ -4570,7 +4571,8 @@ class Engine:
         if self.fixes > limit:
             if kind == "conflict":
                 self.sh(["git", "rebase", "--abort"], pin=True)
-            raise Blocked("%s after %d fix rounds: it needs the owner's hint\n%s" % (what, limit, tail[-3000:]))
+            raise Blocked("%s after %d fix rounds: it needs the owner's hint\n%s" % (
+                what, limit, trim.trim_log(tail, log=str(getattr(self, "gate_log", "") or "") if kind == "gate" else "")))
         self.warn("land: %s, fix round %d of %d" % (what, self.fixes, limit))
         self.save_checkpoint(stage=len((self.plan_data or {}).get("stages") or []), rounds=0, n=0, feedback="", step="land")
         checks = list(dict.fromkeys(c for s in (self.plan_data or {}).get("stages") or [] for c in s["checks"]))
@@ -4584,9 +4586,9 @@ class Engine:
             "feedback": text % tail if kind == "verify" else text % (
                 (" (`%s`)" % self.cfg["gate"]) if kind == "gate" and self.cfg["gate"] else "",
                 failure_brief([{"cmd": self.cfg["gate"] or "rebase", "exit": 1, "status": "failed", "group": "gate",
-                                "tail": tail[-4000:], "log": str(getattr(self, "gate_log", "") or "")}], self.run_dir)
+                                "tail": tail, "log": str(getattr(self, "gate_log", "") or "")}], self.run_dir)
                 if kind == "gate" else compact([{"cmd": "rebase", "exit": 1, "status": "failed", "group": "gate",
-                                                 "tail": tail[-4000:]}])),
+                                                 "tail": tail}])),
             "scope": "the fix only: it must %s without breaking what the accepted stages built" % goal})
         if kind == "conflict":
             if self.sh(self.MARKERS, pin=True)[0]:
@@ -5886,7 +5888,7 @@ def compact(checks):
             continue
         lines = [ln.strip() for ln in c["tail"].splitlines() if ln.strip()]
         if c["exit"]:
-            body = " | ".join(lines)[-400:]
+            body = " | ".join(x.strip() for x in trim.trim_log(c["tail"], cap=600, tail_lines=3).splitlines())
         else:
             body = " | ".join(([ln for ln in lines[:-1] if NOTABLE.search(ln)][-3:] + lines[-1:]))[-300:]
         out.append("- `%s` exit %d%s" % (c["cmd"], c["exit"], (": " + body) if body else ""))
@@ -5894,10 +5896,6 @@ def compact(checks):
 
 
 SLOW_CMD = re.compile(r"(?i)(?<![a-z])(unity|play|test[-_]all|check|build|dotnet)")
-ERR_LINE = re.compile(r"(?i:error|fail|exception|assert)|: E")
-NOISE_LINE = re.compile(r"\b0 Error|\bwarning [A-Z]+\d+:")
-STRONG_LINE = re.compile(r"\berror [A-Z]*\d+|: error")
-FRAME_LINE = re.compile(r'^\s*File ".*", line \d+')
 
 
 STOP_WORDS = {"that", "this", "with", "from", "into", "have", "been", "were", "which", "their", "there", "than", "then", "when",
@@ -5983,11 +5981,10 @@ def context_tokens(path, tail=1 << 20):
     return None
 
 
-def failure_brief(checks, run_dir, each=6000, total=12000, lines=40):
-    """The failing checks for a fix brief: command (cut at 300 chars), log path ("none" when no log), then the error lines
-    of the saved log (noise dropped, real compiler errors first, deduplicated, up to `lines`, newline layout kept), else
-    its last `lines` lines; the last python traceback frame; then always the log's last line (a timeout says so there).
-    `each` bytes per check, `total` for all; a cut never drops that last part."""
+def failure_brief(checks, run_dir, each=trim.CAP, total=3 * trim.CAP, lines=trim.TAIL):
+    """The failing checks for a prompt: command (cut at 300 chars), log path ("none" when no log), then the saved log
+    trimmed by trim.trim_log (failure lines with their context, plus its last `lines` lines), then a timeout note. Each
+    check is at most `each` bytes in all, `total` for all checks; the full log stays on disk at the path given."""
     out, left = [], total
     for c in checks:
         log = Path(run_dir, c["log"]) if c.get("log") else None
@@ -5995,32 +5992,20 @@ def failure_brief(checks, run_dir, each=6000, total=12000, lines=40):
             text = log.read_text(encoding="utf-8", errors="replace") if log else c.get("tail") or ""
         except OSError:
             text, log = c.get("tail") or "", None
-        rows = [ln.rstrip() for ln in text.splitlines() if ln.strip()]
-        hits = list(dict.fromkeys(ln for ln in rows if ERR_LINE.search(ln) and not NOISE_LINE.search(ln)))
-        hits = ([ln for ln in hits if STRONG_LINE.search(ln)] + [ln for ln in hits if not STRONG_LINE.search(ln)])[:lines]
-        body = hits or [ln for ln in rows if not NOISE_LINE.search(ln)][-lines:]
-        frames = [i for i, ln in enumerate(rows) if FRAME_LINE.match(ln)]
-        if frames:
-            body = [ln for ln in rows[frames[-1]:frames[-1] + 2] if ln not in body] + body
         code = c.get("exit")
-        end = []
+        end = ""
         if isinstance(code, int) and (code == 124 or code < 0):
             secs = c.get("secs")
-            end.append("timed out after %s s" % (int(secs) if isinstance(secs, (int, float)) else "?"))
-        if rows and rows[-1] not in body:
-            end.append(rows[-1])
+            end = "timed out after %s s" % (int(secs) if isinstance(secs, (int, float)) else "?")
         cmd = c["cmd"] if len(c["cmd"]) <= 300 else c["cmd"][:300] + "..."
         head = "- `%s` exit %s\n  log: %s" % (cmd, code, log or "none")
         room = min(each, left)
-        if room <= 0:
+        if room <= len(head) + 80:
             out.append(head + "\n  (output left out: see the log)")
             continue
-        tail = "\n".join(end)
-        main = "\n".join(body)
-        if len(main) > max(room - len(tail), 0):
-            main = main[:max(room - len(tail), 0)] + "\n... (cut: see the log)"
-        text = "\n".join(x for x in (main, tail) if x)
-        left -= len(text)
+        body = trim.trim_log(text, cap=room - len(head.encode("utf-8")) - len(end) - 2, tail_lines=lines)
+        text = "\n".join(x for x in (body, end) if x)
+        left -= len(head.encode("utf-8")) + len(text.encode("utf-8")) + 1
         out.append(head + ("\n" + text if text else ""))
     return "\n".join(out) or "- (no checks)"
 

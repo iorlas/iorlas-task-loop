@@ -1,0 +1,5 @@
++ cd /work
++ ./scripts/check-env.sh
+checking toolchain... ok
+checking config... ok
+missing file: /work/.env.local

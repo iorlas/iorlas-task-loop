@@ -1,0 +1,62 @@
+MSBuild version 17.8.3 for .NET
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+/proj/Assets/Gen/File00.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File01.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File02.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File03.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File04.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File05.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File06.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File07.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File08.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File09.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File10.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File11.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File12.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File13.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File14.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File15.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File16.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File17.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File18.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File19.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File20.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File21.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File22.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File23.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File24.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File25.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File26.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File27.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File28.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File29.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File30.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File31.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File32.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File33.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File34.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File35.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File36.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File37.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File38.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File39.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File40.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File41.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File42.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File43.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File44.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File45.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File46.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File47.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File48.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Gen/File49.cs(1,1): warning CS8019: Unnecessary using directive.
+/proj/Assets/Combat/Weapon.cs(52,17): error CS1002: ; expected [/proj/Game.csproj]
+/proj/Assets/Combat/Weapon.cs(60,9): error CS0103: The name 'dmg' does not exist in the current context [/proj/Game.csproj]
+/proj/Assets/Ui/Hud.cs(14,22): error CS0246: The type or namespace name 'Slider' could not be found [/proj/Game.csproj]
+
+Build FAILED.
+    50 Warning(s)
+    3 Error(s)
+
+Time Elapsed 00:00:06.21

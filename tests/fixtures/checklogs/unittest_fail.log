@@ -1,0 +1,65 @@
+test_case_00 (tests.test_orders.OrderTests.test_case_00) ... ok
+test_case_01 (tests.test_orders.OrderTests.test_case_01) ... ok
+test_case_02 (tests.test_orders.OrderTests.test_case_02) ... ok
+test_case_03 (tests.test_orders.OrderTests.test_case_03) ... ok
+test_case_04 (tests.test_orders.OrderTests.test_case_04) ... ok
+test_case_05 (tests.test_orders.OrderTests.test_case_05) ... ok
+test_case_06 (tests.test_orders.OrderTests.test_case_06) ... ok
+test_case_07 (tests.test_orders.OrderTests.test_case_07) ... ok
+test_case_08 (tests.test_orders.OrderTests.test_case_08) ... ok
+test_case_09 (tests.test_orders.OrderTests.test_case_09) ... ok
+test_case_10 (tests.test_orders.OrderTests.test_case_10) ... ok
+test_case_11 (tests.test_orders.OrderTests.test_case_11) ... ok
+test_refund_rounds (tests.test_orders.OrderTests.test_refund_rounds) ... FAIL
+test_case_12 (tests.test_orders.OrderTests.test_case_12) ... ok
+test_case_13 (tests.test_orders.OrderTests.test_case_13) ... ok
+test_case_14 (tests.test_orders.OrderTests.test_case_14) ... ok
+test_case_15 (tests.test_orders.OrderTests.test_case_15) ... ok
+test_case_16 (tests.test_orders.OrderTests.test_case_16) ... ok
+test_case_17 (tests.test_orders.OrderTests.test_case_17) ... ok
+test_case_18 (tests.test_orders.OrderTests.test_case_18) ... ok
+test_case_19 (tests.test_orders.OrderTests.test_case_19) ... ok
+test_case_20 (tests.test_orders.OrderTests.test_case_20) ... ok
+test_case_21 (tests.test_orders.OrderTests.test_case_21) ... ok
+test_case_22 (tests.test_orders.OrderTests.test_case_22) ... ok
+test_case_23 (tests.test_orders.OrderTests.test_case_23) ... ok
+test_case_24 (tests.test_orders.OrderTests.test_case_24) ... ok
+test_case_25 (tests.test_orders.OrderTests.test_case_25) ... ok
+test_case_26 (tests.test_orders.OrderTests.test_case_26) ... ok
+test_case_27 (tests.test_orders.OrderTests.test_case_27) ... ok
+test_case_28 (tests.test_orders.OrderTests.test_case_28) ... ok
+test_total_tax (tests.test_orders.OrderTests.test_total_tax) ... ERROR
+test_case_29 (tests.test_orders.OrderTests.test_case_29) ... ok
+test_case_30 (tests.test_orders.OrderTests.test_case_30) ... ok
+test_case_31 (tests.test_orders.OrderTests.test_case_31) ... ok
+test_case_32 (tests.test_orders.OrderTests.test_case_32) ... ok
+test_case_33 (tests.test_orders.OrderTests.test_case_33) ... ok
+test_case_34 (tests.test_orders.OrderTests.test_case_34) ... ok
+test_case_35 (tests.test_orders.OrderTests.test_case_35) ... ok
+test_case_36 (tests.test_orders.OrderTests.test_case_36) ... ok
+test_case_37 (tests.test_orders.OrderTests.test_case_37) ... ok
+test_case_38 (tests.test_orders.OrderTests.test_case_38) ... ok
+test_case_39 (tests.test_orders.OrderTests.test_case_39) ... ok
+
+======================================================================
+FAIL: test_refund_rounds (tests.test_orders.OrderTests.test_refund_rounds)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/work/tests/test_orders.py", line 88, in test_refund_rounds
+    self.assertEqual(order.refund(), Decimal('10.05'))
+AssertionError: Decimal('10.04') != Decimal('10.05')
+
+======================================================================
+ERROR: test_total_tax (tests.test_orders.OrderTests.test_total_tax)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/work/tests/test_orders.py", line 121, in test_total_tax
+    order.total_tax('XX')
+  File "/work/shop/orders.py", line 57, in total_tax
+    rate = RATES[region]
+KeyError: 'XX'
+
+----------------------------------------------------------------------
+Ran 42 tests in 0.314s
+
+FAILED (failures=1, errors=1)

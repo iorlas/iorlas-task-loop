@@ -1,0 +1,133 @@
+Running Unity tests: EditMode
+Starting editor 2022.3.21f1 ...
+[Licensing::Module] Channel: dispatch 0 ok
+[Licensing::Module] Channel: dispatch 1 ok
+[Licensing::Module] Channel: dispatch 2 ok
+[Licensing::Module] Channel: dispatch 3 ok
+[Licensing::Module] Channel: dispatch 4 ok
+[Licensing::Module] Channel: dispatch 5 ok
+[Licensing::Module] Channel: dispatch 6 ok
+[Licensing::Module] Channel: dispatch 7 ok
+[Licensing::Module] Channel: dispatch 8 ok
+[Licensing::Module] Channel: dispatch 9 ok
+[Licensing::Module] Channel: dispatch 10 ok
+[Licensing::Module] Channel: dispatch 11 ok
+[Licensing::Module] Channel: dispatch 12 ok
+[Licensing::Module] Channel: dispatch 13 ok
+[Licensing::Module] Channel: dispatch 14 ok
+[Licensing::Module] Channel: dispatch 15 ok
+[Licensing::Module] Channel: dispatch 16 ok
+[Licensing::Module] Channel: dispatch 17 ok
+[Licensing::Module] Channel: dispatch 18 ok
+[Licensing::Module] Channel: dispatch 19 ok
+[Licensing::Module] Channel: dispatch 20 ok
+[Licensing::Module] Channel: dispatch 21 ok
+[Licensing::Module] Channel: dispatch 22 ok
+[Licensing::Module] Channel: dispatch 23 ok
+[Licensing::Module] Channel: dispatch 24 ok
+[Licensing::Module] Channel: dispatch 25 ok
+[Licensing::Module] Channel: dispatch 26 ok
+[Licensing::Module] Channel: dispatch 27 ok
+[Licensing::Module] Channel: dispatch 28 ok
+[Licensing::Module] Channel: dispatch 29 ok
+[Licensing::Module] Channel: dispatch 30 ok
+[Licensing::Module] Channel: dispatch 31 ok
+[Licensing::Module] Channel: dispatch 32 ok
+[Licensing::Module] Channel: dispatch 33 ok
+[Licensing::Module] Channel: dispatch 34 ok
+[Licensing::Module] Channel: dispatch 35 ok
+[Licensing::Module] Channel: dispatch 36 ok
+[Licensing::Module] Channel: dispatch 37 ok
+[Licensing::Module] Channel: dispatch 38 ok
+[Licensing::Module] Channel: dispatch 39 ok
+[Licensing::Module] Channel: dispatch 40 ok
+[Licensing::Module] Channel: dispatch 41 ok
+[Licensing::Module] Channel: dispatch 42 ok
+[Licensing::Module] Channel: dispatch 43 ok
+[Licensing::Module] Channel: dispatch 44 ok
+[Licensing::Module] Channel: dispatch 45 ok
+[Licensing::Module] Channel: dispatch 46 ok
+[Licensing::Module] Channel: dispatch 47 ok
+[Licensing::Module] Channel: dispatch 48 ok
+[Licensing::Module] Channel: dispatch 49 ok
+[Licensing::Module] Channel: dispatch 50 ok
+[Licensing::Module] Channel: dispatch 51 ok
+[Licensing::Module] Channel: dispatch 52 ok
+[Licensing::Module] Channel: dispatch 53 ok
+[Licensing::Module] Channel: dispatch 54 ok
+[Licensing::Module] Channel: dispatch 55 ok
+[Licensing::Module] Channel: dispatch 56 ok
+[Licensing::Module] Channel: dispatch 57 ok
+[Licensing::Module] Channel: dispatch 58 ok
+[Licensing::Module] Channel: dispatch 59 ok
+##utp:{"type":"TestStatus","phase":"Begin"}
+Test Run Started: 31 tests
+Passed  Game.Tests.Inventory.Case00 [3 ms]
+Passed  Game.Tests.Inventory.Case01 [3 ms]
+Passed  Game.Tests.Inventory.Case02 [3 ms]
+Passed  Game.Tests.Inventory.Case03 [3 ms]
+Passed  Game.Tests.Inventory.Case04 [3 ms]
+Passed  Game.Tests.Inventory.Case05 [3 ms]
+Passed  Game.Tests.Inventory.Case06 [3 ms]
+Passed  Game.Tests.Inventory.Case07 [3 ms]
+Passed  Game.Tests.Inventory.Case08 [3 ms]
+Passed  Game.Tests.Inventory.Case09 [3 ms]
+Passed  Game.Tests.Inventory.Case10 [3 ms]
+Passed  Game.Tests.Inventory.Case11 [3 ms]
+Passed  Game.Tests.Inventory.Case12 [3 ms]
+Passed  Game.Tests.Inventory.Case13 [3 ms]
+Passed  Game.Tests.Inventory.Case14 [3 ms]
+Passed  Game.Tests.Inventory.Case15 [3 ms]
+Passed  Game.Tests.Inventory.Case16 [3 ms]
+Passed  Game.Tests.Inventory.Case17 [3 ms]
+Passed  Game.Tests.Inventory.Case18 [3 ms]
+Passed  Game.Tests.Inventory.Case19 [3 ms]
+Passed  Game.Tests.Inventory.Case20 [3 ms]
+Passed  Game.Tests.Inventory.Case21 [3 ms]
+Passed  Game.Tests.Inventory.Case22 [3 ms]
+Passed  Game.Tests.Inventory.Case23 [3 ms]
+Passed  Game.Tests.Inventory.Case24 [3 ms]
+Failed  Game.Tests.Combat.DamageTests.CritDoublesDamage [12 ms]
+  Error Message:
+     Expected: 40
+  But was:  20
+  Stack Trace:
+     at Game.Tests.Combat.DamageTests.CritDoublesDamage () [0x00021] in /proj/Assets/Tests/Combat/DamageTests.cs:44
+Failed  Game.Tests.Save.RoundTripTests.LoadsLegacySlot [8 ms]
+  Error Message:
+     System.NullReferenceException : Object reference not set to an instance of an object
+  Stack Trace:
+     at Game.Save.SlotReader.Read (System.String path) [0x00007] in /proj/Assets/Save/SlotReader.cs:19
+Passed  Game.Tests.Ui.Case00 [2 ms]
+Passed  Game.Tests.Ui.Case01 [2 ms]
+Passed  Game.Tests.Ui.Case02 [2 ms]
+Passed  Game.Tests.Ui.Case03 [2 ms]
+Passed  Game.Tests.Ui.Case04 [2 ms]
+Passed  Game.Tests.Ui.Case05 [2 ms]
+Passed  Game.Tests.Ui.Case06 [2 ms]
+Passed  Game.Tests.Ui.Case07 [2 ms]
+Passed  Game.Tests.Ui.Case08 [2 ms]
+Passed  Game.Tests.Ui.Case09 [2 ms]
+Passed  Game.Tests.Ui.Case10 [2 ms]
+Passed  Game.Tests.Ui.Case11 [2 ms]
+Passed  Game.Tests.Ui.Case12 [2 ms]
+Passed  Game.Tests.Ui.Case13 [2 ms]
+Passed  Game.Tests.Ui.Case14 [2 ms]
+Passed  Game.Tests.Ui.Case15 [2 ms]
+Passed  Game.Tests.Ui.Case16 [2 ms]
+Passed  Game.Tests.Ui.Case17 [2 ms]
+Passed  Game.Tests.Ui.Case18 [2 ms]
+Passed  Game.Tests.Ui.Case19 [2 ms]
+Passed  Game.Tests.Ui.Case20 [2 ms]
+Passed  Game.Tests.Ui.Case21 [2 ms]
+Passed  Game.Tests.Ui.Case22 [2 ms]
+Passed  Game.Tests.Ui.Case23 [2 ms]
+Passed  Game.Tests.Ui.Case24 [2 ms]
+Passed  Game.Tests.Ui.Case25 [2 ms]
+Passed  Game.Tests.Ui.Case26 [2 ms]
+Passed  Game.Tests.Ui.Case27 [2 ms]
+Passed  Game.Tests.Ui.Case28 [2 ms]
+Passed  Game.Tests.Ui.Case29 [2 ms]
+Test Run Completed
+Failed!  - Failed: 2, Passed: 29, Skipped: 0, Total: 31, Duration: 1 s
+Exiting editor with code 2
