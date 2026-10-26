@@ -2,6 +2,7 @@
 passes that left the slot) and the queue in the order the loop takes it, each entry with the beads it unblocks as a
 tree. Pure: server.py gathers the inputs and calls build(). Python 3.8+, standard library only."""
 
+import os
 import re
 import time
 from datetime import datetime
@@ -104,6 +105,19 @@ def released(i, out, by_id):
             if by_id.get(t) and by_id[t]["state"] not in ("done", "epic", "blocked") and not by_id[t]["is_epic"]]
 
 
+def idle_why(ranked, skipped):
+    """Why a loop with no bead has nothing to take: '' when the queue has a bead (it is between picks), else the skipped list's top reasons."""
+    if ranked:
+        return ""
+    if not skipped:
+        return "idle: no ready auto bead"
+    n = {}
+    for _, why in skipped:
+        n[why] = n.get(why, 0) + 1
+    top = ", ".join(w + (" ×%d" % c if c > 1 else "") for w, c in sorted(n.items(), key=lambda x: (-x[1], x[0]))[:2])
+    return "idle: no ready auto bead (%d skipped: %s)" % (len(skipped), top)
+
+
 def build(graph_data, lanes, ranked, skipped, history, trails, now=None, rows=None, lane_records=(), asks=(), waiting=0, looks=(), closed=(), installed=()):
     """graph_data: graph.build() output. lanes: [{slot, bead, since}] (bead None = an idle loop). ranked: [(id, reason)] in
     the order `tl next` takes them. skipped: [(id, why)]. history: loop-log rows, oldest first. trails: {bead: {run,
@@ -137,7 +151,7 @@ def build(graph_data, lanes, ranked, skipped, history, trails, now=None, rows=No
             "run": tr.get("run") or 0, "stage": tr.get("stage") or "",
             "rail": rail(tr.get("blocks") or [], tr.get("run") or 0) if b else [],
             "trail": tr.get("blocks") or [], "unlocks": tree(b, out, by_id) if b else [],
-            "unblocks": node.get("unblocks", 0),
+            "unblocks": node.get("unblocks", 0), "idle": idle_why(ranked, skipped) if ln.get("loop") and not b else "",
             "past": [p for p in passes if family(p["slot"]) == family(ln["slot"])][-PAST:]})
     queue = []
     for i, why in ranked:
@@ -235,7 +249,9 @@ def lanes_of(slots, running, loops, stop=(0, "")):
     a live engine lock); loops: live loop states [{pid, slot, bead, since, started, version}]; stop: {pid: applicable mode},
     or a legacy (mtime, mode) pair. -> (lanes, waiting): a lane {slot, bead, since, version, stopping, loop}, and loops without a slot
     (they wait in line; they are a note on the queue, not a lane). A slot with no bead is free; a loop with a bead but no
-    slot name (run in a worktree) gets a lane named after its bead's slot or '-'."""
+    slot name (run in a worktree) gets a lane named after the worktree folder, or '-'; an idle loop in a worktree too."""
+    def wt(lp):
+        return os.path.basename(str(lp.get("worktree") or "").rstrip("/\\"))
     def mode(lp):
         if isinstance(stop, dict):
             return stop.get(lp.get("pid"), "")
@@ -253,7 +269,12 @@ def lanes_of(slots, running, loops, stop=(0, "")):
     placed = {l["loop"] for l in lanes if l["loop"]}
     for lp in loops:  # a loop on a bead whose slot nobody named
         if lp.get("bead") and lp.get("pid") not in placed and lp["bead"] not in {l["bead"] for l in lanes}:
-            lanes.append({"slot": lp.get("slot") or "-", "bead": lp["bead"], "since": lp.get("since"), "version": lp.get("version") or "",
+            lanes.append({"slot": lp.get("slot") or wt(lp) or "-", "bead": lp["bead"], "since": lp.get("since"), "version": lp.get("version") or "",
+                          "stopping": mode(lp), "loop": lp.get("pid")})
+            placed.add(lp.get("pid"))
+    for lp in loops:  # a live loop in a worktree with no slot and no bead: idle, but running
+        if not lp.get("bead") and not lp.get("slot") and wt(lp) and lp.get("pid") not in placed:
+            lanes.append({"slot": wt(lp), "bead": None, "since": None, "version": lp.get("version") or "", "engine": "",
                           "stopping": mode(lp), "loop": lp.get("pid")})
             placed.add(lp.get("pid"))
     waiting = [lp for lp in loops if not lp.get("bead") and lp.get("pid") not in placed]

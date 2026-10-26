@@ -772,7 +772,7 @@ function doneHtml(d){const w=R.win||'today',rows=(d.done||[]).filter(r=>w=='week
     +(rows.length?`<div class="list dfeed">${rows.map(row).join('')}</div>`:`<div class="list"><div class="empty"><b>${DONE_TXT.empty[w]}</b></div></div>`)}
 function laneHtml(l,repo,waiting){
   const past=`<div class="rpast">${l.past.map(p=>pastCard(p,repo)).join('')||'<span class="none">nothing has left this slot yet</span>'}</div>`;
-  if(!l.bead)return `<div class="rlane"><div class="rslot">${esc(l.slot||'·')}</div>${past}<div class="rnow idle"><div class="t">${waiting?'free':'idle'}</div><div class="m">${waiting?'a waiting loop takes #1 of the queue next':'free, and no loop waits for it'}</div></div></div>`;
+  if(!l.bead)return `<div class="rlane"><div class="rslot">${esc(l.slot||'·')}</div>${past}<div class="rnow idle"><div class="t">${waiting&&!l.idle?'free':'idle'}</div><div class="m">${l.idle?esc(l.idle):waiting?'a waiting loop takes #1 of the queue next':'free, and no loop waits for it'}</div></div></div>`;
   const last={};l.trail.forEach(b=>{last[RSTEP[b.kind]||b.kind]=b});
   const rail=l.rail.map(r=>{const b=last[r.step];return `<span class="${r.state}">${esc(r.step)}${r.state=='now'&&b&&b.secs?`<small>${esc(dur(b.secs))}</small>`:''}</span>`}).join('');
   const sb=[...l.trail].reverse().find(b=>b.stages),stage=sb&&sb.stages>1?`stage ${sb.stage} of ${sb.stages}`:'';
@@ -799,7 +799,7 @@ function renderRoadmap(){const d=R.d;if(!d)return;
     <div class="rtools">${names.length>1?`<select id="rrepo" aria-label="Repo">${names.map(n=>`<option ${n==d.repo?'selected':''}>${esc(n)}</option>`).join('')}</select>`:''}</div></div>`;
   html+=signalsHtml(d);
   html+='<div class="rsec">Slots <small>finished passes, then the bead running now</small></div>';
-  html+=d.lanes.length?d.lanes.map(l=>laneHtml(l,d.repo,d.loops_waiting)).join(''):`<div class="list"><div class="empty"><b>No loop is running on ${esc(d.repo)}</b>Start one with <code>tl loop</code>; its slots show here.</div></div>`;
+  html+=d.lanes.length?d.lanes.map(l=>laneHtml(l,d.repo,d.loops_waiting)).join(''):d.loops_waiting?`<div class="list"><div class="empty"><b>${d.loops_waiting} loop${d.loops_waiting>1?'s':''} running on ${esc(d.repo)}</b>Waiting for a free slot.</div></div>`:`<div class="list"><div class="empty"><b>No loop is running on ${esc(d.repo)}</b>Start one with <code>tl loop</code>; its slots show here.</div></div>`;
   html+=doneHtml(d);
   html+=`<div class="rsec">Up next <small>the order <code>tl next</code> takes. A branch is a bead that waits on the one above it.${d.loops_waiting?` ${d.loops_waiting} loop${d.loops_waiting>1?'s':''} wait${d.loops_waiting>1?'':'s'} for a free slot.`:''}</small></div>`;
   html+=d.queue.length?queueHtml(d.queue,d.repo):'<div class="list"><div class="empty"><b>Nothing ready</b>No open bead the loop may take.</div></div>';

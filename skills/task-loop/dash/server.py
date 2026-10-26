@@ -1367,7 +1367,7 @@ def loop_files(repo):
         st = read_json(str(f), {}) or {}
         if isinstance(st, dict) and st.get("pid") and tl.pid_alive(st["pid"]):
             loops.append({"pid": st["pid"], "slot": st.get("slot") or "", "bead": st.get("bead"), "since": st.get("since"),
-                          "started": st.get("started") or 0, "version": st.get("version") or loop_version(st["pid"])})
+                          "started": st.get("started") or 0, "worktree": st.get("worktree") or "", "version": st.get("version") or loop_version(st["pid"])})
     try:
         slots = [b["title"].split()[-1] for b in tl.slot_beads(repo)]
         running = loop.running(repo)

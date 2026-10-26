@@ -210,6 +210,20 @@ class Lanes(unittest.TestCase):
         lanes, _ = roadmap.lanes_of([], {}, [{"pid": 9, "slot": "", "bead": "bz", "since": 7, "started": 1, "version": ""}])
         self.assertEqual([(l["slot"], l["bead"], l["stopping"]) for l in lanes], [("-", "bz", "")])
 
+    def test_a_live_idle_loop_in_a_worktree_gets_a_lane_named_after_it_and_says_why(self):
+        # shape of ~/.config/task-loop/loop/<repo>.<pid>.json of an idle worktree loop: worktree, no slot, no bead
+        st = {"pid": 1789, "started": 1792811528.6, "worktree": "/w/repo/.worktrees/loop-2be89f88", "repo": "/w/repo",
+              "stop_protocol": 1, "version": "0.23.55"}
+        lanes, waiting = roadmap.lanes_of([], {}, [dict(st, slot="", bead=None)])
+        self.assertEqual([(l["slot"], l["bead"], l["loop"]) for l in lanes], [("loop-2be89f88", None, 1789)])
+        self.assertEqual(waiting, [])
+        r = road([bead("b1")], lanes=lanes, skipped=[("b1", "busy area"), ("b2", "busy area"), ("b3", "needs facts")])
+        self.assertEqual(r["lanes"][0]["idle"], "idle: no ready auto bead (3 skipped: busy area ×2, needs facts)")
+        self.assertEqual(road([bead("b1")], lanes=lanes)["lanes"][0]["idle"], "idle: no ready auto bead")
+        self.assertEqual(road([bead("b1")], lanes=lanes, ranked=[("b1", "")])["lanes"][0]["idle"], "")
+        html = (ROOT / "skills" / "task-loop" / "dash" / "index.html").read_text(encoding="utf-8")
+        self.assertIn("d.loops_waiting?`", html)  # the empty text shows only with no live loop
+
     def test_targeted_stop_indicators(self):
         lanes, _ = roadmap.lanes_of(["s1", "s2", "s3"], {}, self.loops(), {3: "now", 4: "after"})
         self.assertEqual([l["stopping"] for l in lanes], ["after", "now", ""])
