@@ -178,7 +178,7 @@ class EngineTest(unittest.TestCase):
         self.bd_calls.append(a)
         return mock.Mock(returncode=0, stdout="bead t-1: Add f\n", stderr="")
 
-    def run_engine(self, answers, route="/fake/route.py", raw=None, j_extra=None, **cfg):
+    def run_engine(self, answers, route="/fake/route.py", raw=None, j_extra=None, bead="t-1", **cfg):
         """Access keys (host, no_sandbox, host_beads) are committed to origin/main's .task-loop.json first: the engine
         reads them only from there. `raw` puts keys in the loaded config without committing them."""
         access = {k: cfg.pop(k) for k in ("host", "no_sandbox", "host_beads") if k in cfg}
@@ -192,7 +192,7 @@ class EngineTest(unittest.TestCase):
         with mock.patch.object(lroute, "find_route", return_value=route), \
                 mock.patch.object(lroute, "contract", return_value=getattr(self, "contract_answer", CONTRACT)), \
                 mock.patch.object(lcall, "call_delegate", script), mock.patch.object(engine.time, "sleep"):
-            self.eng = engine.Engine("t-1", str(self.wt), c)
+            self.eng = engine.Engine(bead, str(self.wt), c)
             rc = self.eng.run()
         return rc, script
 
@@ -636,7 +636,7 @@ class EngineTest(unittest.TestCase):
                     break
                 time.sleep(0.05)
             started.append(this.pid)
-            raise engine.Blocked("failed: stopped (SIGTERM)")
+            raise engine.Blocked("failed: stopped (SIGTERM)", kind=engine.oc.Kind.PAUSE_KILLED)
         with mock.patch.object(subprocess.Popen, "communicate", stopped):
             with self.assertRaises(engine.Blocked):
                 eng.sh("sleep 30 & echo $! > child.pid; wait")
@@ -771,7 +771,8 @@ class EngineTest(unittest.TestCase):
         bad = dict(PLAN, cases=[{"criterion": "a follow-up exists", "check": "test -n \"$(cat .beads/issues.jsonl)\""}])
         rc, s = self.run_engine({"plan": [bad, bad]})
         self.assertEqual([c[0] for c in s.calls], ["planner", "planner"])
-        self.assertTrue(self.blocked and "read the issue tracker" in self.blocked[0])
+        self.assertEqual(self.blocked, [])
+        self.assertIn("read the issue tracker", self.said())
 
     def test_tracker_checks_are_told_apart_from_code_that_mentions_bd(self):
         self.assertEqual(lint.tracker_checks(dict(PLAN, risks=[{"what": "x", "check": "cd sub && bd show t-1"}])),
@@ -796,7 +797,8 @@ class EngineTest(unittest.TestCase):
         rc, s = self.run_engine({"plan": [bad, bad]}, gate="just check")
         self.assertEqual([c[0] for c in s.calls], ["planner", "planner"])
         self.assertIn("just check runs only in the gate at land", s.prompts[1])
-        self.assertTrue(self.blocked and "gate" in self.blocked[0])
+        self.assertEqual(self.blocked, [])
+        self.assertIn("gate", self.said())
 
     def test_acceptance_that_is_only_the_gate_is_sent_back_naming_the_rule(self):
         # tl-7y6.7.15: the engine runs the gate at land; "just check green" as acceptance proves nothing the land does not
@@ -814,7 +816,8 @@ class EngineTest(unittest.TestCase):
         only = dict(PLAN, cases=[{"criterion": "Done when: just check is green", "check": HAS_F}])
         rc, s = self.run_engine({"plan": [only, only]}, gate="just check")
         self.assertEqual([c[0] for c in s.calls], ["planner", "planner"])
-        self.assertTrue(self.blocked and "gate-only-acceptance" in self.blocked[0])
+        self.assertEqual(self.blocked, [])
+        self.assertIn("gate-only-acceptance", self.said())
 
     def test_gate_only_criteria_match_the_gate_alone_not_a_case_that_names_it_with_more(self):
         cfg = {"gate": "just check", "gate_only": ["just unity-check"]}
@@ -1000,13 +1003,13 @@ class EngineTest(unittest.TestCase):
             self.skipTest("POSIX signal")
         with mock.patch.object(engine.Engine, "plan", side_effect=lambda *a, **k: os.kill(os.getpid(), sig.SIGTERM)):
             old = sig.getsignal(sig.SIGTERM)
-            sig.signal(sig.SIGTERM, lambda *_: (_ for _ in ()).throw(engine.Blocked("failed: stopped (SIGTERM)")))
+            sig.signal(sig.SIGTERM, lambda *_: (_ for _ in ()).throw(engine.Blocked("failed: stopped (SIGTERM)", kind=engine.oc.Kind.PAUSE_KILLED)))
             try:
                 rc, _ = self.run_engine({})
             finally:
                 sig.signal(sig.SIGTERM, old)
         self.assertEqual(rc, 2)
-        self.assertIn("stopped (SIGTERM)", self.blocked[0])
+        self.assertIn("stopped (SIGTERM)", self.said())
 
     def test_sigterm_between_the_run_and_its_close_still_closes(self):  # it escaped with no trace (M2 review)
         import signal as sig
@@ -1023,7 +1026,7 @@ class EngineTest(unittest.TestCase):
         with mock.patch.object(engine.Engine, "stop_pending", True, create=True):
             rc, s = self.run_engine({"plan": [PLAN]})
         self.assertEqual((rc, s.calls), (2, []))
-        self.assertIn("stopped (SIGTERM)", self.blocked[0])
+        self.assertIn("stopped (SIGTERM)", self.said())
         runs = [json.loads(l) for l in (tl.config_dir() / "traces.jsonl").read_text().splitlines()]
         self.assertEqual(runs[-1]["why"], "failed: stopped (SIGTERM)")
 
@@ -1096,7 +1099,7 @@ class EngineTest(unittest.TestCase):
         @contextlib.contextmanager
         def cm():
             old = sig.getsignal(sig.SIGTERM)
-            sig.signal(sig.SIGTERM, lambda *_: (_ for _ in ()).throw(engine.Blocked("failed: stopped (SIGTERM)")))
+            sig.signal(sig.SIGTERM, lambda *_: (_ for _ in ()).throw(engine.Blocked("failed: stopped (SIGTERM)", kind=engine.oc.Kind.PAUSE_KILLED)))
             try:
                 yield
             finally:
@@ -1134,7 +1137,7 @@ class EngineTest(unittest.TestCase):
         with self.stoppable():
             rc, _ = self.run_engine({"plan": [plan], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 2)
-        self.assertIn("stopped (SIGTERM)", self.blocked[0])
+        self.assertIn("stopped (SIGTERM)", self.said())
         self.assertDead(self.child_of(pidfile))
         self.assertIn("wip (t-1)", tl.git("log", "-1", "--format=%s", "task/t-1", cwd=str(self.wt)))
 
@@ -1144,7 +1147,7 @@ class EngineTest(unittest.TestCase):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
                                     gate=self.SPAWN % pidfile + "kill -TERM $PPID; wait")
         self.assertEqual(rc, 2)
-        self.assertIn("stopped (SIGTERM)", self.blocked[0])
+        self.assertIn("stopped (SIGTERM)", self.said())
         self.assertDead(self.child_of(pidfile))
         self.assertEqual(self.closed, [])
         self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "")
@@ -1173,7 +1176,7 @@ class EngineTest(unittest.TestCase):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
                                     land="kill -TERM $PPID; sleep 0.3; echo '! [rejected] (fetch first)' >&2; exit 1")
         self.assertEqual(rc, 2)
-        self.assertIn("stopped (SIGTERM)", self.blocked[0])
+        self.assertIn("stopped (SIGTERM)", self.said())
 
     def test_the_heartbeat_keeps_the_slot_bead_the_loop_names(self):
         hb = engine.Heartbeat("t-1", "sl-1")
@@ -1221,7 +1224,7 @@ class EngineTest(unittest.TestCase):
             if r == role:
                 seen["n"] += 1
                 if seen["n"] == nth:
-                    raise engine.Blocked("failed: stopped (SIGTERM)")
+                    raise engine.Blocked("failed: stopped (SIGTERM)", kind=engine.oc.Kind.PAUSE_KILLED)
             return real(this, route, r, *a, **kw)
         return mock.patch.object(DelegateScript, "__call__", call)
 
@@ -1356,7 +1359,7 @@ class EngineTest(unittest.TestCase):
         self.assertNotIn("outcome=failed", s.prompts[0])  # tl-7y6.6.2: no engine record in the brief, so none in the prompt
 
     @ENGINE_BASH
-    def test_an_answered_ask_raised_in_a_conflict_fix_round_resumes_at_land(self):
+    def test_a_fault_in_a_conflict_fix_round_resumes_at_land(self):
         # lifesim-6dq0: the fix round's checkpoint was saved mid-rebase (detached HEAD), so the rerun re-planned
         other = Path(self.tmp.name, "other")
         real = DelegateScript.__call__
@@ -1374,12 +1377,10 @@ class EngineTest(unittest.TestCase):
         with mock.patch.object(DelegateScript, "__call__", main_moves):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE, denied], "review": [CLEAN]})
         self.assertEqual(rc, 2)
-        self.assertEqual(self.ask()["kind"], "denied")
+        self.assertIsNone(self.ask())  # tl-7y6.2.2: the refusal is a machine fault; the checkpoint is what resumes the run
         ck = self.checkpoint()
         self.assertEqual((ck["step"], ck["branch"]), ("land", tl.git("symbolic-ref", "--short", "HEAD", cwd=str(self.wt))))
-        answer = [{"author": "denis", "text": "False positive; rerun.", "created_at": "2026-10-20T23:25:00Z"}]
-        with mock.patch.object(tl, "comments", return_value=answer):
-            rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
+        rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual([c[0] for c in s.calls], ["worker", "reviewer"])  # the fix round again, no plan
         self.assertIn("conflict", s.prompts[0])
@@ -1901,7 +1902,7 @@ class EngineTest(unittest.TestCase):
             reviews = [CLEAN, review(findings=[finding("high")])] if failure == "review_exhausted" else [CLEAN] * 2
             rc, _ = self.run_engine({"plan": [plan], "write": [WRITE] * 2, "review": reviews}, gate=gate, **cfg)
             if resume_failed_fix:
-                state["first_rc"], state["first_blocked"] = rc, self.blocked[-1]
+                state["first_rc"], state["first_blocked"] = rc, self.said()
                 state["checkpoint"] = self.checkpoint()
                 state["resuming"] = True
                 # An owner comment answers the stuck ask without discarding the checkpoint.
@@ -1935,7 +1936,7 @@ class EngineTest(unittest.TestCase):
                 self.assertEqual(events.count("exit"), 1)
                 self.assertEqual(events[-1], "exit")
                 if expected:
-                    self.assertIn("land rejected 3 times", self.blocked[-1])
+                    self.assertIn("land rejected 3 times", self.said())
                     self.assertFalse(self.eng.landed_sha)
                 else:
                     self.assertTrue(self.eng.landed_sha)
@@ -2076,7 +2077,8 @@ class EngineTest(unittest.TestCase):
                             if interruption == "SIGTERM":
                                 signal.raise_signal(signal.SIGTERM)
                             raise engine.Blocked("paused: validation writer unavailable" if interruption == "pause"
-                                                 else "needs a human: validation command denied")
+                                                 else "needs a human: validation command denied",
+                                                 kind=engine.oc.Kind.PAUSE_LANE if interruption == "pause" else engine.oc.Kind.FAULT_DENIED)
                         return real_delegate(this, route, current_role, *a, **kw)
 
                     with mock.patch.object(engine.Engine, "fix", fix), \
@@ -2160,7 +2162,7 @@ class EngineTest(unittest.TestCase):
         with self.stoppable(), mock.patch.object(tl, "cmd_land") as land:
             rc, events, race = self.run_push_race(failure="checks_stop", check_timeout_min=0.03)
         self.assertEqual(rc, 2, self.blocked)
-        self.assertIn("stopped (SIGTERM)", self.blocked[-1])
+        self.assertIn("stopped (SIGTERM)", self.said())
         self.assertDead(self.child_of(race["pidfile"]))
         self.assertFalse(race["next_check"].exists(), "another check ran after SIGTERM")
         self.assertEqual(events.count("enter"), 1)
@@ -2300,6 +2302,10 @@ class EngineTest(unittest.TestCase):
         self.assertTrue(any(c[:2] == ("comments", "add") and str(kept) in c[3] for c in self.bd_calls))
 
     # -- asks: every block is an ask the owner answers; an unanswered ask is never asked again
+    def said(self):
+        """The engine's own comments (Engine failed / Engine paused): where a machine fault or pause now says why."""
+        return "\n".join(c[3] for c in self.bd_calls if c[:2] == ("comments", "add") and str(c[3]).startswith("Engine "))
+
     def ask(self):
         p = tl.config_dir() / "asks" / "t-1.json"
         return json.loads(p.read_text()) if p.exists() else None
@@ -2896,7 +2902,7 @@ class EngineTest(unittest.TestCase):
         rc, s = self.run_engine({"plan": [{"summary": "x"}, {"summary": "x"}]})
         self.assertEqual(rc, 2)
         self.assertEqual([c[:2] for c in s.calls], [("planner", None), ("planner", None)])  # delegate re-asked in-thread already
-        self.assertTrue(self.blocked[0].startswith("failed: plan node"))
+        self.assertIn("plan node", self.said())
 
     def test_rounds_are_bounded(self):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE] * 2, "review": [review(unmet=["x"])] * 2},
@@ -2913,7 +2919,7 @@ class EngineTest(unittest.TestCase):
         with mock.patch.object(engine.Engine, "plan", side_effect=RuntimeError("boom")):
             rc, _ = self.run_engine({})
         self.assertEqual(rc, 2)
-        self.assertIn("engine error RuntimeError: boom", self.blocked[0])
+        self.assertIn("engine error RuntimeError: boom", self.said())
 
     def test_every_green_stage_gets_a_cross_family_review(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
@@ -2981,8 +2987,10 @@ class EngineTest(unittest.TestCase):
         rc, s = self.run_engine({"plan": [PLAN], "write": [stuck, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 2)
         self.assertEqual([c[0] for c in s.calls].count("worker"), 1)
-        self.assertIn("needs a human", self.blocked[0])
-        self.assertIn("unity open client", self.blocked[0])
+        self.assertEqual(self.blocked, [])  # a refusal is a machine fault: the bead stays open, nobody is asked
+        self.assertIsNone(self.ask())
+        self.assertIn("needs a human", self.said())
+        self.assertIn("unity open client", self.said())
 
     def test_a_refused_read_only_command_gets_one_retry_on_a_fresh_thread_with_a_note(self):
         """tl-bxk.10.21 (lifesim-6dq0): a guard refused a head+rg chain, no answer: one retry, told what was refused."""
@@ -2996,13 +3004,14 @@ class EngineTest(unittest.TestCase):
         self.assertIn("read-only command refused", log)
         self.assertIn("denied_retry", log)
 
-    def test_a_second_refusal_after_the_retry_keeps_the_block(self):
+    def test_a_second_refusal_after_the_retry_leaves_the_bead_open_with_a_fault(self):
         refused = {"v": 2, "status": "done", "data": None, "text": "", "ref": "w1", "family": "openai",
                    "denied": [{"tool": "Bash", "input": "rg -n foo src"}]}
         rc, s = self.run_engine({"plan": [PLAN], "write": [refused, dict(refused, ref="w2"), WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 2)
         self.assertEqual([c[0] for c in s.calls].count("worker"), 2)
-        self.assertIn("needs a human", self.blocked[0])
+        self.assertEqual(self.blocked, [])
+        self.assertIn("needs a human", self.said())
 
     def test_a_refused_command_that_writes_or_a_secrets_stop_is_not_retried(self):
         for denied, reason in (([{"tool": "Bash", "input": "rm -rf build"}], ""), ([{"tool": "shell", "input": "cat > f"}], ""),
@@ -3099,9 +3108,9 @@ class EngineTest(unittest.TestCase):
         rc, s = self.run_engine({"plan": [PLAN], "write": [first, second, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 2)
         self.assertEqual([c[0] for c in s.calls].count("worker"), 2)
-        self.assertIn("needs a human", self.blocked[0])
+        self.assertIn("needs a human", self.said())
         for cmd in ("git checkout x && pick", "git restore x; pick"):
-            self.assertIn(cmd, self.blocked[0])
+            self.assertIn(cmd, self.said())
 
     def test_denied_writes_count_across_runs_of_a_bead(self):
         first = {"v": 2, "status": "done", "data": WRITE, "ref": "w1", "family": "claude",
@@ -3111,8 +3120,8 @@ class EngineTest(unittest.TestCase):
         again = dict(first, denied=[{"tool": "Bash", "input": "curl --data @f x"}])
         rc, _ = self.run_engine({"write": [again, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 2)
-        self.assertIn("curl -X POST x", self.blocked[-1])
-        self.assertIn("curl --data @f x", self.blocked[-1])
+        self.assertIn("curl -X POST x", self.said())
+        self.assertIn("curl --data @f x", self.said())
 
     def test_the_secrets_tripwire_stops_the_bead_for_a_human_at_once(self):
         # delegate 0.25: a Codex command on a credential path stops the worker: failed, the command in denied
@@ -3122,17 +3131,18 @@ class EngineTest(unittest.TestCase):
         rc, s = self.run_engine({"plan": [PLAN], "write": [trip, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 2)
         self.assertEqual([c[0] for c in s.calls].count("worker"), 1)
-        self.assertIn("needs a human", self.blocked[0])
-        self.assertIn("cat .env", self.blocked[0])
-        self.assertEqual(self.ask()["kind"], "denied")
+        self.assertEqual(self.blocked, [])
+        self.assertIn("needs a human", self.said())
+        self.assertIn("cat .env", self.said())
+        self.assertIsNone(self.ask())  # tl-7y6.2.2: the tripwire is a machine fault, not an owner ask
 
     def test_fail_on_a_plan_tries_once_more_then_fails_the_task(self):
         bad = ans("failed", "worker_failed", "fail", say="the worker exited 1")
         rc, s = self.run_engine({"plan": [bad, bad]})
         self.assertEqual(rc, 2)
         self.assertEqual(len(s.calls), 2)
-        self.assertTrue(self.blocked[0].startswith("failed:"))
-        self.assertIn("the worker exited 1", self.blocked[0])
+        self.assertEqual(self.blocked, [])
+        self.assertIn("the worker exited 1", self.said())
 
     def test_fail_on_a_resumed_write_retries_once_as_a_new_thread(self):
         refused = ans("error", "caller", "fail", say="--resume: the host flag differs from the original run")
@@ -3156,12 +3166,13 @@ class EngineTest(unittest.TestCase):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)  # one more try, then it went on
 
-    def test_secrets_raise_one_verify_ask(self):
+    def test_secrets_stop_leaves_the_bead_open_with_no_ask(self):
         trip = ans("failed", "secrets", "owner", say="stopped: credential path", denied=[{"tool": "shell", "input": "cat .env"}])
         rc, _ = self.run_engine({"plan": [PLAN], "write": [trip]})
         self.assertEqual(rc, 2)
-        self.assertEqual(self.ask()["n"], 1)
-        self.assertIn("cat .env", self.blocked[0])
+        self.assertIsNone(self.ask())  # tl-7y6.2.2: a refused credential read is a machine fault, never an owner ask
+        self.assertEqual(self.blocked, [])
+        self.assertIn("cat .env", self.said())
 
     # tl-bxk.10.31 (lifesim 2026-10-22: Codex rejected the output schema, 53 beads blocked "needs a human"): a lane that
     # rejects the request itself is the engine's or the config's fault, never the bead's
@@ -3186,12 +3197,47 @@ class EngineTest(unittest.TestCase):
         self.assertLessEqual(len(r["why"].split("bad_request: ", 1)[1]), 200)
         self.assertIn("infrastructure", self.eng.log_path.read_text())
 
-    def test_an_owner_reason_without_denied_is_a_verify_ask_quoting_say(self):
+    # tl-7y6.2.3 / tl-7y6.2.2: the same fault on a second bead is a storm: one record, one banner; a third identical fault on
+    # one bead is the one ask
+    def test_the_same_fault_on_a_second_bead_trips_the_storm_once(self):
+        self.run_engine({"plan": [PLAN], "write": [self.bad_request()]})
+        first = self.eng.result()
+        self.assertEqual((first["outcome"], first["kind"], first["storm"]), ("failed", "fault_bad_request", ""))
+        self.run_engine({"plan": [PLAN], "write": [self.bad_request()]}, bead="t-2")
+        second = self.eng.result()
+        self.assertTrue(second["storm"].startswith("STOPPED: storm FAULT_BAD_REQUEST"), second["storm"])
+        self.assertIn("t-1,t-2", second["storm"])
+        self.run_engine({"plan": [PLAN], "write": [self.bad_request()]}, bead="t-3")
+        self.assertEqual(self.eng.result()["storm"], "")  # the record is live: no second banner
+        self.assertEqual((self.blocked, self.ask()), ([], None))
+        self.assertEqual(len(list((tl.config_dir() / "storm").glob("*.json"))), 1)
+
+    def test_the_third_identical_fault_on_one_bead_raises_exactly_one_ask(self):
+        for n in range(2):
+            self.run_engine({"plan": [PLAN], "write": [self.bad_request()]})
+            self.assertEqual((self.eng.result()["outcome"], self.blocked, self.ask()), ("failed", [], None), n)
+        self.run_engine({"plan": [PLAN], "write": [self.bad_request()]})
+        r = self.eng.result()
+        self.assertEqual((r["outcome"], r["kind"], r["asked"]), ("parked", "ask_stuck", True))
+        self.assertEqual(self.ask()["kind"], "stuck")
+        self.assertEqual(len(self.blocked), 1)
+
+    def test_a_stop_is_a_pause_with_the_bead_open_and_never_a_fault(self):
+        with self.stop_at("worker", 1):
+            self.run_engine({"plan": [PLAN], "write": [WRITE]})
+        r = self.eng.result()
+        self.assertEqual((r["outcome"], r["kind"]), ("paused", "pause_killed"))
+        self.assertEqual((self.blocked, self.ask()), ([], None))
+        self.assertFalse(any(c[:3] == ("label", "add", "t-1") for c in self.bd_calls))
+        self.assertTrue(any(c[:1] == ("update",) and "open" in c for c in self.bd_calls))
+
+    def test_an_owner_reason_without_denied_is_a_fault_quoting_say(self):
         bad = ans("failed", "worker_failed", "owner", say="HTTP 500: upstream error")
         rc, _ = self.run_engine({"plan": [bad]})
         self.assertEqual(rc, 2)
-        self.assertEqual(self.ask()["kind"], "denied")
-        self.assertIn("HTTP 500", self.blocked[0])
+        self.assertIsNone(self.ask())
+        self.assertEqual(self.blocked, [])
+        self.assertIn("HTTP 500", self.said())
 
     def test_a_done_answer_whose_text_says_unknown_argument_lands_normally(self):
         said = "the CLI printed: error: unknown argument; schema note: \"code\":\"invalid_json_schema\""
@@ -3229,8 +3275,8 @@ class EngineTest(unittest.TestCase):
             rc = engine.Engine("t-1", str(self.wt), c).run()
         self.assertEqual(rc, 2)
         called.assert_not_called()
-        self.assertIn("worker-run v2", self.blocked[0])
-        self.assertIn("update", self.blocked[0])
+        self.assertIn("worker-run v2", self.said())
+        self.assertIn("update", self.said())
 
     def test_child_env_drops_session_identity(self):
         with mock.patch.dict(os.environ, {"ANTHROPIC_BASE_URL": "x", "CLAUDE_CODE_SESSION_ID": "s"}):
@@ -3447,7 +3493,7 @@ class EngineTest(unittest.TestCase):
 
     def test_the_plan_is_in_the_checkpoint_the_moment_the_planner_answers(self):
         # d5f.38: a SIGTERM after the planner answered lost a finished plan before the checkpoint
-        with mock.patch.object(engine.Engine, "plan_leftovers", side_effect=engine.Blocked("failed: stopped (SIGTERM)")):
+        with mock.patch.object(engine.Engine, "plan_leftovers", side_effect=engine.Blocked("failed: stopped (SIGTERM)", kind=engine.oc.Kind.PAUSE_KILLED)):
             rc, _ = self.run_engine({"plan": [PLAN]})
         self.assertEqual(rc, 2)
         ck = self.checkpoint()
@@ -4038,7 +4084,7 @@ class FailureBriefAndDurations(unittest.TestCase):
 
 class Outcome(unittest.TestCase):
     """What run-task tells the loop (tl loop): landed, parked, paused, failed or taken, as one JSON record."""
-    setUp, tearDown, fake_bd, run_engine = EngineTest.setUp, EngineTest.tearDown, EngineTest.fake_bd, EngineTest.run_engine
+    setUp, tearDown, fake_bd, run_engine, said = EngineTest.setUp, EngineTest.tearDown, EngineTest.fake_bd, EngineTest.run_engine, EngineTest.said
 
     def test_a_landed_run_reports_its_stats_trace_and_log(self):
         self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
@@ -4127,7 +4173,7 @@ class Outcome(unittest.TestCase):
 
 
 class DelegateLauncher(unittest.TestCase):
-    setUp, tearDown, fake_bd, run_engine = EngineTest.setUp, EngineTest.tearDown, EngineTest.fake_bd, EngineTest.run_engine
+    setUp, tearDown, fake_bd, run_engine, said = EngineTest.setUp, EngineTest.tearDown, EngineTest.fake_bd, EngineTest.run_engine, EngineTest.said
 
     def test_same_family_review_is_recorded(self):
         same = {"v": 2, "status": "done", "data": CLEAN, "ref": "r", "family": "openai", "flag": "same_family"}
@@ -4364,7 +4410,7 @@ class DelegateLauncher(unittest.TestCase):
         worked = ans("failed", "worker_failed", "fail", tokens={"in": 90000, "cached": 0, "out": 4000}, say="codex: turn failed")
         rc, s = self.run_engine({"plan": [PLAN], "write": [worked, worked]})
         self.assertEqual(rc, 2)
-        self.assertTrue(self.blocked and self.blocked[0].startswith("failed:"))
+        self.assertTrue(self.said().startswith("Engine failed:"), self.said())
 
     def test_a_logged_out_worker_pauses_without_retry_and_leaves_the_bead_open(self):
         out = ans("failed", "logged_out", "owner", family="claude", say="Failed to authenticate: OAuth session expired")
@@ -4476,20 +4522,20 @@ class DelegateLauncher(unittest.TestCase):
         Path(other, "dirty.txt").write_text("someone's work\n")
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 2)
-        self.assertIn(shown(other), self.blocked[0])
+        self.assertIn(shown(other), self.said())
         self.assertTrue(Path(other, "dirty.txt").exists())
 
     def test_another_answer_version_blocks(self):
         rc, _ = self.run_engine({"plan": [{"v": 3, "status": "done"}]})
         self.assertEqual(rc, 2)
-        self.assertIn("worker-run v3", self.blocked[0])
+        self.assertIn("worker-run v3", self.said())
 
     def test_no_delegate_blocks_with_the_install_command(self):
         c = engine.load_cfg(str(self.wt))
         with mock.patch.object(lroute, "find_route", return_value=None):
             rc = engine.Engine("t-1", str(self.wt), c).run()
         self.assertEqual(rc, 2)
-        self.assertIn("claude plugin install iorlas-delegate", self.blocked[0])
+        self.assertIn("claude plugin install iorlas-delegate", self.said())
 
 
 class DelegateCall(unittest.TestCase):

@@ -1,0 +1,11 @@
+{"bead": "lifesim-d5f.62", "t": 1792623196.5, "kind": "fault_slot", "text": "failed: worktree /Users/iorlas/Workspaces/lifesim/.slots/s3 has uncommitted work of another branch"}
+{"bead": "lifesim-jva", "t": 1792854344.4, "kind": "fault_slot", "text": "failed: worktree /Users/iorlas/Workspaces/lifesim/.slots/s4 has uncommitted work of another branch"}
+{"bead": "lifesim-r0yc", "t": 1792854397.9, "kind": "fault_slot", "text": "failed: worktree /Users/iorlas/Workspaces/lifesim/.slots/s4 has uncommitted work of another branch"}
+{"bead": "lifesim-3i2", "t": 1792854515.8, "kind": "fault_slot", "text": "failed: worktree /Users/iorlas/Workspaces/lifesim/.slots/s4 has uncommitted work of another branch"}
+{"bead": "lifesim-hclf.29", "t": 1792854634.8, "kind": "fault_slot", "text": "failed: worktree /Users/iorlas/Workspaces/lifesim/.slots/s4 has uncommitted work of another branch"}
+{"bead": "lifesim-hclf.40", "t": 1792854737.4, "kind": "fault_slot", "text": "failed: worktree /Users/iorlas/Workspaces/lifesim/.slots/s4 has uncommitted work of another branch"}
+{"bead": "lifesim-fld.27.12", "t": 1792854838.4, "kind": "fault_slot", "text": "failed: worktree /Users/iorlas/Workspaces/lifesim/.slots/s4 has uncommitted work of another branch"}
+{"bead": "lifesim-22b3", "t": 1792854928.0, "kind": "fault_slot", "text": "failed: worktree /Users/iorlas/Workspaces/lifesim/.slots/s4 has uncommitted work of another branch"}
+{"bead": "lifesim-hclf.32", "t": 1792869273.2, "kind": "fault_slot", "text": "failed: worktree /Users/iorlas/Workspaces/lifesim/.slots/s4 has uncommitted work of another branch"}
+{"bead": "lifesim-rl4s", "t": 1792897491.5, "kind": "fault_slot", "text": "failed: worktree /Users/iorlas/Workspaces/lifesim/.slots/s3 has uncommitted work of another branch"}
+{"bead": "lifesim-d5f.40", "t": 1792945272.7, "kind": "fault_slot", "text": "failed: worktree /Users/iorlas/Workspaces/lifesim/.slots/s4 has uncommitted work of another branch"}

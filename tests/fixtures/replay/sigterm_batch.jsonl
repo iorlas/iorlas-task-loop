@@ -1,0 +1,13 @@
+{"bead": "lifesim-vbo", "t": 1792354200.0, "kind": "pause_killed", "text": "stopped by the coordinator (SIGTERM) to apply engine 0.5.4"}
+{"bead": "lifesim-vbo", "t": 1792355820.0, "kind": "pause_killed", "text": "stopped by the coordinator (SIGTERM) to apply engine 0.5.5"}
+{"bead": "lifesim-vbo", "t": 1792356390.0, "kind": "pause_killed", "text": "stopped by the coordinator (SIGTERM) to apply engine 0.5.7"}
+{"bead": "lifesim-d5f.38", "t": 1792433537.4, "kind": "pause_killed", "text": "failed: stopped (SIGTERM)"}
+{"bead": "lifesim-r32", "t": 1792433537.4, "kind": "pause_killed", "text": "failed: stopped (SIGTERM)"}
+{"bead": "lifesim-hcp7", "t": 1792503905.6, "kind": "pause_killed", "text": "failed: stopped (SIGTERM)"}
+{"bead": "lifesim-5ar.7", "t": 1792595903.4, "kind": "pause_killed", "text": "failed: stopped (SIGTERM)"}
+{"bead": "lifesim-d5f.40", "t": 1792878403.5, "kind": "pause_killed", "text": "failed: stopped (SIGTERM)"}
+{"bead": "lifesim-fld.27.12", "t": 1792878409.1, "kind": "pause_killed", "text": "failed: stopped (SIGTERM)"}
+{"bead": "lifesim-yxbb.10.3", "t": 1792896246.7, "kind": "pause_killed", "text": "failed: stopped (SIGTERM)"}
+{"bead": "lifesim-yxbb.3", "t": 1792896247.6, "kind": "pause_killed", "text": "failed: stopped (SIGTERM)"}
+{"bead": "lifesim-d5f.40", "t": 1792951099.8, "kind": "pause_killed", "text": "failed: stopped (SIGTERM)"}
+{"bead": "lifesim-6pld", "t": 1792951807.1, "kind": "pause_killed", "text": "failed: stopped (SIGTERM)"}

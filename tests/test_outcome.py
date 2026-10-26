@@ -1,5 +1,7 @@
 """R16: Kind/POLICY exhaustiveness, apply, the storm detector and loop_health (tl-7y6.2.1/2/3)."""
+import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -133,6 +135,75 @@ class Health(unittest.TestCase):
         self.assertEqual(lh.loop_health(0, 0, 0, 1000).verdict, "idle_ok")
         self.assertEqual(lh.loop_health(0, 3, 900, 1000).verdict, "idle_ok")
         self.assertEqual(lh.loop_health(0, 3, 100, 1000).verdict, "absent")
+
+
+FIX = Path(__file__).resolve().parent / "fixtures" / "replay"
+
+
+def rows(name):
+    return [json.loads(ln) for ln in (FIX / name).read_text(encoding="utf-8").splitlines() if ln.strip()]
+
+
+def replay(name, stop_on_trip=True, squeeze=None):
+    """Feed a corpus fixture through the close path (fingerprint, apply, storm) one row = one engine call. Returns
+    (calls made, banners printed, dispositions). squeeze: spacing in seconds that replaces the real times."""
+    clk, history, banners, disps, calls = clock.FakeClock(), [], [], [], 0
+    path = lh.storm_path(tempfile.mkdtemp(), "repo")
+    for n, r in enumerate(rows(name)):
+        clk.t = r["t"] if squeeze is None else 1_000_000.0 + n * squeeze
+        calls += 1
+        kind = Kind(r["kind"])
+        o = oc.make(kind, r["text"])
+        disps.append(oc.apply(o, r["bead"], history, clk.now()))
+        trip = lh.storm_trip(history, r["bead"], kind, o.fingerprint, clk.now())
+        history.append({"bead": r["bead"], "kind": kind.value, "fingerprint": o.fingerprint, "t": clk.now()})
+        if trip and lh.write_storm(path, trip, clk.now(), r["text"]):
+            banners.append(lh.banner(trip))
+            if stop_on_trip:
+                break
+    return calls, banners, disps
+
+
+class Replay(unittest.TestCase):
+    def test_the_53_schema_parks_stop_after_two_calls_with_one_banner(self):
+        self.assertEqual(len(rows("schema_park_53.jsonl")), 53)
+        calls, banners, disps = replay("schema_park_53.jsonl")
+        self.assertEqual((calls, len(banners)), (2, 1))
+        self.assertTrue(all(not d.ask and d.bd == "open" and d.label == "engine-fault" for d in disps))
+
+    def test_without_the_stop_the_wave_still_writes_one_banner_not_53(self):
+        calls, banners, _ = replay("schema_park_53.jsonl", stop_on_trip=False, squeeze=20)
+        self.assertEqual((calls, len(banners)), (53, 1))
+
+    def test_a_dirty_slot_wave_trips_on_the_second_bead_inside_the_window(self):
+        calls, banners, disps = replay("dirty_slot.jsonl")
+        self.assertEqual(len(banners), 1)
+        self.assertIn("lifesim-jva,lifesim-r0yc", banners[0])  # the first bead of the file is days earlier: outside the window
+        self.assertTrue(all(d.bd == "open" and not d.ask for d in disps))
+
+    def test_the_sigterm_batch_is_paused_never_failed_never_a_storm(self):
+        calls, banners, disps = replay("sigterm_batch.jsonl", stop_on_trip=False, squeeze=5)
+        self.assertEqual((calls, banners), (13, []))
+        self.assertTrue(all((d.loop_result, d.bd, d.ask, d.label) == ("paused", "open", False, "") for d in disps))
+
+    def test_the_grok_batch_is_a_lane_pause_the_lane_owner_handles_not_a_run_storm(self):
+        calls, banners, disps = replay("grok_prework_batch.jsonl", stop_on_trip=False, squeeze=5)
+        self.assertEqual((calls, banners), (15, []))
+        self.assertTrue(all((d.loop_result, d.ask) == ("paused", False) for d in disps))
+
+    def test_a_network_drop_never_charges_a_cap(self):
+        one = rows("network_drop.jsonl")[0]
+        o = oc.make(Kind.PAUSE_NETWORK, one["text"])
+        history = []
+        for i in range(25):  # the same bead dropping 25 times
+            d = oc.apply(o, one["bead"], history, 1000.0 + i * 4000)
+            self.assertEqual((d.kind, d.loop_result, d.ask, d.escalated, d.bd), (Kind.PAUSE_NETWORK, "paused", False, False, "open"))
+            history.append({"bead": one["bead"], "kind": d.kind.value, "fingerprint": o.fingerprint, "t": 1000.0 + i * 4000})
+        self.assertIsNone(lh.storm_trip(history, "other-bead", Kind.PAUSE_NETWORK, o.fingerprint, 1000.0 + 25 * 4000))
+
+    def test_distinct_failures_do_not_trip(self):
+        calls, banners, _ = replay("distinct_faults.jsonl", stop_on_trip=False, squeeze=60)
+        self.assertEqual((calls, banners), (6, []))
 
 
 if __name__ == "__main__":
