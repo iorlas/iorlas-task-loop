@@ -19,6 +19,7 @@ import test_engine as te  # noqa: E402
 
 import delegate_link as dl  # noqa: E402
 import engine  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "task-loop"))
 import fake_route  # noqa: E402
 import tl  # noqa: E402
 from core import procs  # noqa: E402,F401
