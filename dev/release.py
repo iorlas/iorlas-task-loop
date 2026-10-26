@@ -24,8 +24,10 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -112,12 +114,96 @@ def save_output(out):
     return f
 
 
+def workers():
+    """How many shards the suite runs in at once: TASK_LOOP_SUITE_WORKERS, else min(8, cpu count)."""
+    n = os.environ.get("TASK_LOOP_SUITE_WORKERS")
+    return max(1, int(n)) if n and n.isdigit() else max(1, min(8, os.cpu_count() or 1))
+
+
+def isolated_env(home):
+    """The environment of one shard: its own HOME, config dirs and temp dir, so shards do not share state under ~ or in /tmp.
+    The real git config is copied in, since tests commit with the identity it holds."""
+    home.mkdir(parents=True, exist_ok=True)
+    for sub in ("tmp", ".config"):
+        (home / sub).mkdir(exist_ok=True)
+    real = Path.home() / ".gitconfig"
+    if real.is_file():
+        (home / ".gitconfig").write_bytes(real.read_bytes())
+    env = dict(os.environ, HOME=str(home), USERPROFILE=str(home), XDG_CONFIG_HOME=str(home / ".config"),
+               APPDATA=str(home / ".config"), TMPDIR=str(home / "tmp"), TEMP=str(home / "tmp"), TMP=str(home / "tmp"))
+    for k in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
+        env.pop(k, None)
+    return env
+
+
+def merge_outputs(parts, planned):
+    """One unittest-shaped output from the (name, returncode, output) of each shard: their text without their own summaries, then a
+    single "Ran N tests" and "OK" / "FAILED (..)". A shard that died without a summary, or a count that is not the planned one, is an ERROR."""
+    body, total, secs, bad = [], 0, 0.0, {"failures": 0, "errors": 0}
+    other = {}
+    for name, rc, out in parts:
+        ran = re.search(r"^Ran (\d+) tests? in ([\d.]+)s$", out, re.M)
+        if not ran:
+            body.append("ERROR: shard %s crashed (exit %s) without a summary\n%s" % (name, rc, "\n".join(out.splitlines()[-40:])))
+            bad["errors"] += 1
+            continue
+        total += int(ran.group(1))
+        secs = max(secs, float(ran.group(2)))
+        tail = re.search(r"^(?:OK|FAILED) ?\((.*)\)$", out, re.M)
+        for k, v in re.findall(r"(\w[\w ]*?)=(\d+)", tail.group(1) if tail else ""):
+            if k in bad:
+                bad[k] += int(v)
+            else:
+                other[k] = other.get(k, 0) + int(v)
+        cut = out.rfind("\n" + "-" * 70 + "\nRan ")
+        body.append(out[:cut] if cut >= 0 else out)
+        if rc and not (bad["failures"] or bad["errors"]):
+            body.append("ERROR: shard %s exited %s but reported no failure" % (name, rc))
+            bad["errors"] += 1
+    if total != planned:
+        body.append("ERROR: %d tests ran, %d were planned" % (total, planned))
+        bad["errors"] += 1
+    stats = ", ".join("%s=%d" % kv for kv in list(bad.items()) + sorted(other.items()) if kv[1])
+    red = bad["failures"] or bad["errors"]
+    summary = "Ran %d tests in %.3fs\n\n%s" % (total, secs, ("FAILED (%s)" % stats) if red else ("OK (%s)" % stats if stats else "OK"))
+    return "\n".join(x for x in body if x.strip()) + "\n\n" + summary, not red
+
+
 def suite(repo):
-    say("running the full suite")
-    r = run([sys.executable, "-m", "unittest", "discover", "-s", "tests"], repo, check=False)
-    out = (r.stdout + r.stderr).strip()
+    """The whole suite as N parallel shards, each its own process with its own HOME, then the tests of tests/shard.py SERIAL in one process."""
+    n = workers()
+    say("running the full suite in %d shards, then the serial group" % n)
+    shard = [sys.executable, str(HERE.parent / "tests" / "shard.py")]
+    root = str(Path(repo) / "tests")
+    r = run(shard + ["plan", str(n), "--root", root], repo, check=False)
+    try:
+        plan = json.loads(r.stdout)
+    except ValueError:
+        out = (r.stdout + r.stderr).strip()
+        raise Abort("the suite is red; nothing released:\ncould not plan the shards\n%s\nfull output: %s" % (out[-2000:], save_output(out)))
+    work = Path(tempfile.mkdtemp(prefix="tl-suite-"))
+    try:
+        def start(name, ids):
+            f = work / (name + ".ids")
+            f.write_text("\n".join(ids) + "\n", encoding="utf-8")
+            log = open(work / (name + ".log"), "w", encoding="utf-8", errors="replace")  # a file, not a pipe: a full pipe stalls the shard
+            p = subprocess.Popen(shard + ["ids", str(f), "--root", root], cwd=str(repo), env=isolated_env(work / name),
+                                 stdout=log, stderr=subprocess.STDOUT, text=True)
+            log.close()
+            return name, p
+
+        def finish(name, p):
+            p.wait()
+            return name, p.returncode, (work / (name + ".log")).read_text(encoding="utf-8", errors="replace")
+        procs = [start("shard%d" % i, ids) for i, ids in enumerate(plan["shards"], 1) if ids]
+        parts = [finish(name, p) for name, p in procs]
+        if plan["serial"]:
+            parts.append(finish(*start("serial", plan["serial"])))
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+    out, green = merge_outputs(parts, sum(len(s) for s in plan["shards"]) + len(plan["serial"]))
     tail = out.splitlines()
-    if r.returncode:
+    if not green:
         report = failure_report(out) or "\n".join(tail[-40:])
         raise Abort("the suite is red; nothing released:\n%s\nfull output: %s" % (report, save_output(out)))
     say("suite green: " + " ".join(x for x in tail[-3:] if x.strip()))
