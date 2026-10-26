@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Freeze the lifecycle baseline (tl-7y6.1.1): python3 tools/freeze_baseline.py [--repo PATH] [--out FILE].
+"""Freeze the lifecycle baseline (tl-7y6.1.1): python3 dev/freeze_baseline.py [--repo PATH] [--out FILE].
 
 Recomputes every `tl report lifecycle` metric on this checkout's engine over the study window, compares the study
 figures, and writes docs/study/baselines-2026-10-25.json. Read-only on the repo and on ~/.config/task-loop. A number that
@@ -125,7 +125,7 @@ def main(argv=None):
         "v": 1, "bead": "tl-7y6.1.1",
         "engine": {"version": json.loads((engine_repo / ".claude-plugin" / "plugin.json").read_text())["version"],
                    "source_sha": git(engine_repo, "rev-parse", "HEAD"), "branch": git(engine_repo, "branch", "--show-current"),
-                   "dirty": bool(git(engine_repo, "status", "--porcelain", "--", "skills", "tools"))},
+                   "dirty": bool(git(engine_repo, "status", "--porcelain", "--", "skills", "dev"))},
         "scope": {"repo": str(repo), "traces": str(tl.config_dir() / "traces.jsonl"),
                   "note": "lifesim only: the study's landed/slot-min figures are lifesim-only (docs/baseline-2026-10-25.md)"},
         "window": {"since": WINDOW[0].isoformat(), "until": WINDOW[1].isoformat(),

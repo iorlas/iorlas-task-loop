@@ -12,7 +12,7 @@ from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "tools"))
+sys.path.insert(0, str(ROOT / "dev"))
 import select_tests  # noqa: E402
 
 EVIDENCE = ROOT / ".task" / "tl-7y6.7.25" / "evidence"
@@ -39,7 +39,7 @@ def inventory():
 
 def run_cli(*args):
     env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
-    return subprocess.run([sys.executable, str(ROOT / "tools" / "select_tests.py")] + list(args),
+    return subprocess.run([sys.executable, str(ROOT / "dev" / "select_tests.py")] + list(args),
                           cwd=str(ROOT), env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                           text=True)
 
@@ -79,9 +79,9 @@ class CLITests(unittest.TestCase):
 
 
 class FallbackTests(unittest.TestCase):
-    def test_unmapped_core_tools_config_and_plugin_paths_select_every_test(self):
+    def test_unmapped_core_dev_config_and_plugin_paths_select_every_test(self):
         full = inventory()
-        for changed in ("unknown/planted.py", "skills/task-loop/core/planted.py", "tools/planted_tool.py",
+        for changed in ("unknown/planted.py", "skills/task-loop/core/planted.py", "dev/planted_tool.py",
                         ".task-loop.json", ".claude-plugin/plugin.json"):
             with self.subTest(path=changed):
                 proc = run_cli("--paths", changed, "--list")
@@ -90,7 +90,7 @@ class FallbackTests(unittest.TestCase):
 
     def test_shared_layers_flat_hub_and_unassigned_test_modules_select_every_test(self):
         full = inventory()
-        for changed in ("tests/test_layers.py", "skills/task-loop/engine.py", "tests/test_engine.py",
+        for changed in ("tests/test_rules.py", "skills/task-loop/engine.py", "tests/test_engine.py",
                         "tests/fixtures/briefs/planted.json"):
             with self.subTest(path=changed):
                 proc = run_cli("--paths", changed, "--list")

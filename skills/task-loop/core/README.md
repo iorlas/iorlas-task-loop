@@ -6,4 +6,4 @@ Contracts, records, run state, config, git/proc seams. Every folder may import i
   `prove_dead`, `kill_tree`, `send_group`, `send_pid` ...); `EngineLock` and `LOCK` (the worktree's engine lock they note into).
 - `fmt.py`: `clip`.
 
-Moved here by E1 (child_env, clip: checks/lint.py needs them) and E2 (process code: lanes/ needs it). Allowed imports: tests/test_layers.py.
+Moved here by E1 (child_env, clip: checks/lint.py needs them) and E2 (process code: lanes/ needs it). Allowed imports: tests/test_rules.py.
