@@ -313,8 +313,8 @@
  ],
  "engine": {
   "branch": "hand/tl-7y6.1.1",
-  "dirty": true,
-  "source_sha": "75cb77f6954dd50025bdfd7ff9259bc611f25793",
+  "dirty": false,
+  "source_sha": "4485e106608d4763871cbbb07daa126166f9e94c",
   "version": "0.23.51"
  },
  "metrics": {
@@ -715,8 +715,8 @@
   "week_start": 1791763200.0
  },
  "quota_snapshot": {
-  "at": 1793029637.9293702,
-  "at_iso": "2026-10-26T15:47:17Z",
+  "at": 1793029659.952393,
+  "at_iso": "2026-10-26T15:47:39Z",
   "available": true,
   "lanes": [
    {
