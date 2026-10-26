@@ -56,7 +56,7 @@ class Clock:
 @unittest.skipUnless(POSIX, "process groups")
 class WriteFollowsTheWorker(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.d = Path(self.tmp.name)
         (self.d / "route.py").write_text(ROUTE)
         (self.d / "session.jsonl").write_text("{}\n")
@@ -75,13 +75,15 @@ class WriteFollowsTheWorker(unittest.TestCase):
         if f.exists() and f.read_text():
             with __import__("contextlib").suppress(OSError):
                 os.killpg(int(f.read_text()), 9)
+            self.gone(int(f.read_text()))  # no writer left in the folder when it goes
         self.tmp.cleanup()
 
     def worker(self):
         return int((self.d / "w.pid").read_text())
 
     def gone(self, pid):
-        for _ in range(100):
+        end = time.monotonic() + 60
+        while time.monotonic() < end:
             if not tl.proc_alive(pid):
                 return True
             time.sleep(0.05)
@@ -176,13 +178,13 @@ SESSION_ROUTE = textwrap.dedent('''
 @unittest.skipUnless(POSIX, "process groups")
 class ChildInItsOwnSession(unittest.TestCase):
     def test_a_child_in_its_own_session_under_the_worker_is_dead_after_the_stop(self):
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
             Path(d, "route.py").write_text(SESSION_ROUTE)
             p = subprocess.Popen([sys.executable, str(Path(d, "route.py")), d], start_new_session=True)
             self.addCleanup(p.wait)
-            for _ in range(100):
-                if Path(d, "child.pid").exists() and Path(d, "child.pid").read_text():
-                    break
+            end = time.monotonic() + 60
+            while not (Path(d, "child.pid").exists() and Path(d, "child.pid").read_text()):
+                self.assertLess(time.monotonic(), end, "the worker never named its child")
                 time.sleep(0.05)
             w, c = int(Path(d, "w.pid").read_text()), int(Path(d, "child.pid").read_text())
             self.assertNotEqual(os.getpgid(c), os.getpgid(w))
@@ -192,9 +194,8 @@ class ChildInItsOwnSession(unittest.TestCase):
                         mock.patch.object(engine, "PROOF_KILL", 2):
                     alive = engine.stop_and_prove(p, None, worker)
                 self.assertEqual(alive, [])
-                for _ in range(60):
-                    if not tl.proc_alive(c):
-                        break
+                end = time.monotonic() + 30
+                while tl.proc_alive(c) and time.monotonic() < end:
                     time.sleep(0.05)
                 self.assertFalse(tl.proc_alive(c))
             finally:

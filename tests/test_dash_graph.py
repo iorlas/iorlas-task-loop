@@ -140,7 +140,7 @@ class Api(unittest.TestCase):
 
     def test_endpoint(self):
         import server
-        with tempfile.TemporaryDirectory() as home:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as home:
             repo = Path(home) / "demo"
             repo.mkdir()
             cfg = Path(home) / "cfg" / "task-loop"

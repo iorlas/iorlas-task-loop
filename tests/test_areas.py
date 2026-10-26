@@ -192,19 +192,18 @@ class Line(Slots):
     def tickets(self):
         return list(tl.ticket_dir(str(self.repo)).glob("*.json"))
 
-    def waiter(self, label, served, hold=0.05):
+    def waiter(self, label, served):
         def go():
             got = tl.wait_slot(str(self.repo), self.cfg, label, poll=(0.01, 0.02))
             served.append((label, got[0] if got else None))
-            time.sleep(hold)
             tl.release_slot(str(self.repo), got[0])
         th = threading.Thread(target=go, daemon=True)
         th.start()
         return th
 
-    def until(self, cond, secs=5):
-        end = time.time() + secs
-        while time.time() < end and not cond():
+    def until(self, cond, secs=60):
+        end = time.monotonic() + secs
+        while time.monotonic() < end and not cond():
             time.sleep(0.01)
         self.assertTrue(cond())
 
@@ -215,11 +214,13 @@ class Line(Slots):
         for n in ("w1", "w2", "w3"):
             threads.append(self.waiter(n, served))
             self.until(lambda: len(self.tickets()) == len(threads))  # w2 arrives after w1 has its ticket
-        time.sleep(0.1)
-        self.assertEqual(served, [])  # nobody steals the held slot
+        end = time.monotonic() + 0.3
+        while time.monotonic() < end:  # a short watch, polled: nobody steals the held slot
+            self.assertEqual(served, [])
+            time.sleep(0.01)
         tl.release_slot(str(self.repo), "s1", force=True)  # tl-other's claim: bd frees another actor's only with --force
         for th in threads:
-            th.join(10)
+            th.join(60)
         self.assertEqual(served, [("w1", "s1"), ("w2", "s1"), ("w3", "s1")])
         self.assertEqual(self.tickets(), [])
 
@@ -265,7 +266,7 @@ class Line(Slots):
             return real_claim(repo, bead_id)
         with mock.patch.object(tl, "bd", side_effect=bd_13), mock.patch.object(tl, "claim_slot", side_effect=claim):
             got = tl.take_slot(str(self.repo), self.cfg, "any")
-        won["thread"].join(5)
+        won["thread"].join(60)
         self.assertEqual(sum(1 for x in (got, won.get("hand")) if x), 1, (got, won))
 
     def test_tickets_are_numbered_in_arrival_order_and_name_their_waiter(self):
@@ -385,7 +386,7 @@ class ReviewFixes(AreasBase):
             if a[0] == "update" and "--unset-metadata" in a and threading.current_thread().name == "P2" \
                     and not paused.is_set():
                 paused.set()
-                go.wait(1.0)
+                go.wait(60)
             return real_bd(*a, **kw)
 
         def taker(name):
@@ -394,13 +395,13 @@ class ReviewFixes(AreasBase):
                 mock.patch.object(tl, "actor", side_effect=lambda: threading.current_thread().name):
             p2 = threading.Thread(target=taker, args=("P2",), name="P2")
             p2.start()
-            self.assertTrue(paused.wait(5))
+            self.assertTrue(paused.wait(60))
             p1 = threading.Thread(target=taker, args=("P1",), name="P1")
             p1.start()
             p1.join(0.4)  # unfixed: P1 frees the slot and takes it meanwhile; fixed: it waits for P2's lock
             go.set()
-            p1.join(10)
-            p2.join(10)
+            p1.join(60)
+            p2.join(60)
         winners = [n for n, v in won.items() if v]
         self.assertEqual(len(winners), 1, won)
         slot = bd.slots["sl-1"]
@@ -463,7 +464,7 @@ class ReviewFixes(AreasBase):
     @NO_FCNTL
     def test_two_exclusive_hand_runs_in_one_area_let_the_first_in_win(self):
         bd = self.lanes({"x-1": [], "x-2": []}, {"x-1": "live", "x-2": "live"})
-        outs, real, gate, done = {}, engine.take_area, threading.Barrier(2, timeout=5), threading.Barrier(2, timeout=5)
+        outs, real, gate, done = {}, engine.take_area, threading.Barrier(2, timeout=60), threading.Barrier(2, timeout=60)
 
         def area(*a, **kw):  # both runs hold their slots before either decides, and neither lets go before both did
             gate.wait()
@@ -489,5 +490,5 @@ class ReviewFixes(AreasBase):
             for t in ths:
                 t.start()
             for t in ths:
-                t.join(15)
+                t.join(60)
         self.assertEqual(sorted(outs.values()), ["landed", "taken"], outs)

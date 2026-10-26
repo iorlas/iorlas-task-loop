@@ -2,6 +2,7 @@
 (before the structured records) are read from their node, session and warn text: the fixture is six real runs of
 lifesim-d5f.58 (2026-10-21), trimmed."""
 
+import contextlib
 import json
 import os
 import shutil
@@ -14,6 +15,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop" / "dash"))
+sys.path.insert(0, str(ROOT / "tests"))
 import server  # noqa: E402
 import timeline  # noqa: E402
 
@@ -132,7 +134,7 @@ class Api(unittest.TestCase):
     """The endpoints over a state dir holding the fixture."""
 
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         home = Path(self.tmp.name)
         self.cfg = home / "task-loop"
         shutil.copytree(str(FIXTURE), str(self.cfg))
@@ -246,22 +248,45 @@ class Api(unittest.TestCase):
         self.assertEqual((t["state"], t["label"]), ("paused", "paused: Codex out until 09:02"))
 
     def test_a_running_run_waiting_for_a_lane_says_which_and_until_when(self):
+        now = time.mktime((2026, 10, 21, 12, 0, 0, 0, 0, -1))  # local noon: due (+5 min) never crosses midnight, whatever the real time is
+        with self.frozen(now):
+            self.waiting_for_a_lane(now)
+
+    def frozen(self, now):
+        class Frozen:
+            def time(self):
+                return now
+
+            def localtime(self, t=None):
+                return time.localtime(now if t is None else t)
+
+            def strftime(self, fmt, tup=None):
+                return time.strftime(fmt, self.localtime() if tup is None else tup)
+
+            def __getattr__(self, name):
+                return getattr(time, name)
+        stack = contextlib.ExitStack()
+        for mod in (server, timeline):
+            stack.enter_context(mock.patch.object(mod, "time", Frozen()))
+        return stack
+
+    def waiting_for_a_lane(self, now):
         wt = Path(self.tmp.name) / "slots" / "s1"
         (wt / ".task").mkdir(parents=True)
         (wt / ".task" / "engine.lock").write_text(json.dumps({"pid": os.getpid(), "bead": "x-1", "slot": "s1"}))
-        due = time.time() + 300
-        recs = [{"t": time.time() - 600, "kind": "run", "text": "run: first", "run": "x-1-20261021-120000", "bead": "x-1",
+        due = now + 300
+        recs = [{"t": now - 600, "kind": "run", "text": "run: first", "run": "x-1-20261021-120000", "bead": "x-1",
                  "worktree": str(wt), "slot": "s1", "started_because": "first", "prev_run": "", "ask": ""},
-                {"t": time.time() - 590, "kind": "node", "text": "write: stage 1/1 write 1", "id": 3, "step": "write",
+                {"t": now - 590, "kind": "node", "text": "write: stage 1/1 write 1", "id": 3, "step": "write",
                  "stage": 1, "stages": 1, "write": 1, "round": 1},
-                {"t": time.time() - 10, "kind": "transition", "text": "lane_wait -> write: waited", "from": 3, "to": "write",
+                {"t": now - 10, "kind": "transition", "text": "lane_wait -> write: waited", "from": 3, "to": "write",
                  "cause": "lane_wait", "detail": "waited 5 min for a lane (lane_out)", "lane": "OPENAI_SUBSCRIPTION",
                  "until": due}]
         path = self.cfg / "engine" / "x-1-20261021-120000.jsonl"
         path.write_text("".join(json.dumps(r) + "\n" for r in recs))
         t = self.task("x-1")
         self.assertEqual((t["state"], t["label"]), ("running", "waiting for Codex until " + timeline.hhmm(due)))
-        recs[-1]["until"] = time.time() - 5  # the wait is over: back to what the run is doing
+        recs[-1]["until"] = now - 5  # the wait is over: back to what the run is doing
         path.write_text("".join(json.dumps(r) + "\n" for r in recs))
         server._cache.clear()
         timeline._parsed.clear()
@@ -410,7 +435,7 @@ class Stages(unittest.TestCase):
     block names its stage, with the title from the run's plan.json, and a review by the writer's family says so."""
 
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.root = Path(self.tmp.name) / "task-loop"
         shutil.copytree(str(FIXTURE), str(self.root))
         timeline._parsed.clear()
@@ -498,7 +523,7 @@ class LiveTaskView(unittest.TestCase):
         import subprocess
         import urllib.request
         from test_dash import free_port
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
             shutil.copytree(str(FIXTURE), os.path.join(d, "task-loop"))
             port = free_port()
             env = dict(os.environ, XDG_CONFIG_HOME=d, APPDATA=d, TASK_LOOP_DASH_BIND="127.0.0.1", HOME=d, USERPROFILE=d)
@@ -506,31 +531,40 @@ class LiveTaskView(unittest.TestCase):
                                   "--port", str(port)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             try:
                 base = "http://127.0.0.1:%d" % port
-                for _ in range(50):
+                end = time.monotonic() + 90  # generous: a loaded machine starts a server slowly; a poll, never a fixed wait
+                while True:
                     try:
-                        urllib.request.urlopen(base + "/api/version", timeout=1)
+                        urllib.request.urlopen(base + "/api/version", timeout=5)
                         break
                     except OSError:
+                        self.assertLess(time.monotonic(), end, "the server never answered")
                         time.sleep(0.1)
 
                 def get(u):
-                    return json.loads(urllib.request.urlopen(base + u).read())
+                    return json.loads(urllib.request.urlopen(base + u, timeout=60).read())
+
+                def raw(u):
+                    return urllib.request.urlopen(base + u, timeout=60)
                 self.assertEqual(sorted(t["id"] for t in get("/api/tasks")["tasks"]), sorted([BEAD, STAGED]))
                 tl_ = get("/api/task-timeline?id=" + BEAD)
                 self.assertEqual(len(tl_["runs"]), 6)
                 run = tl_["runs"][0]
                 blk = get("/api/block?run=%s&node=%s&k=0" % (run["run"], run["blocks"][2]["node"]))
                 self.assertEqual(len(blk["checks"]), 8)
-                page = urllib.request.urlopen(base + "/").read()
+                page = raw("/").read()
                 self.assertIn(b"task-loop", page)
                 self.assertIn(b"Asks", page)
                 self.assertIn(b"same family as writer", page)
-                r = urllib.request.urlopen(base + "/api/tasks")
+                r = raw("/api/tasks")
                 self.assertEqual(r.headers.get("X-Content-Type-Options"), "nosniff")
-                self.assertIn(b"task-loop", urllib.request.urlopen(base + "/classic").read())
+                self.assertIn(b"task-loop", raw("/classic").read())
             finally:
                 p.terminate()
-                p.wait(5)
+                try:
+                    p.wait(60)
+                except subprocess.TimeoutExpired:
+                    p.kill()
+                    p.wait()
 
 
 if __name__ == "__main__":

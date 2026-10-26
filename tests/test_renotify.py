@@ -18,7 +18,7 @@ NOW = 1_800_000_000.0
 
 class Renotify(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         env = {"XDG_CONFIG_HOME": self.tmp.name, "APPDATA": self.tmp.name}
         self.env = mock.patch.dict(os.environ, env)
         self.env.start()
@@ -40,7 +40,8 @@ class Renotify(unittest.TestCase):
         (self.asks / (bead + ".json")).write_text(json.dumps(a))
 
     def pushed(self, n=1):
-        for _ in range(100):
+        end = time.monotonic() + 60
+        while time.monotonic() < end:
             lines = self.out.read_text().splitlines() if self.out.exists() else []
             if len(lines) >= n:
                 return lines

@@ -12,6 +12,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
+sys.path.insert(0, str(ROOT / "tests"))
 import engine  # noqa: E402
 import test_engine as te  # noqa: E402
 import tl  # noqa: E402
@@ -23,7 +24,7 @@ def sh(*a, cwd):
 
 class SlotGitTest(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         home = Path(os.path.realpath(self.tmp.name))
         env = {"HOME": str(home), "XDG_CONFIG_HOME": str(home / "cfg"), "APPDATA": str(home / "cfg"),
                "CLAUDE_CODE_SESSION_ID": "sess1234-x", "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
