@@ -324,6 +324,144 @@ class SlotReset(Base):
         self.assertEqual((self.slot / "setup.log").read_text().count("run"), 1)
 
 
+class PinAndRollback(Base):
+    """pinned.json and the verbs that write it, against a scratch CLAUDE_CONFIG_DIR laid out as the plugin cache is."""
+
+    def setUp(self):
+        super().setUp()
+        self.claude = self.home / "claude"
+        p = mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(self.claude)})
+        p.start()
+        self.addCleanup(p.stop)
+        for v in ("0.1.0", "0.2.0", "0.10.0"):
+            self.layout("iorlas-task-loop", v, "skills/task-loop/tl.py")
+        for v in ("0.5.0", "0.6.0"):
+            self.layout("iorlas-delegate", v, "skills/delegate/route.py")
+        self.record("iorlas-task-loop", "0.10.0")
+        self.record("iorlas-delegate", "0.6.0")
+
+    def layout(self, plugin, v, main):
+        d = self.claude / "plugins" / "cache" / "iorlas-marketplace" / plugin / v
+        (d / main).parent.mkdir(parents=True)
+        (d / main).write_text("")
+        return d
+
+    def record(self, plugin, v):
+        f = self.claude / "plugins" / "installed_plugins.json"
+        recs = json.loads(f.read_text()) if f.exists() else {"version": 2, "plugins": {}}
+        d = self.claude / "plugins" / "cache" / "iorlas-marketplace" / plugin / v
+        recs["plugins"]["%s@iorlas-marketplace" % plugin] = [{"scope": "user", "installPath": str(d), "version": v}]
+        f.write_text(json.dumps(recs))
+
+    def pin(self, *args):
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(sys, "stdout", out), mock.patch.object(sys, "stderr", err):
+            rc = tl.main(["pin", *args])
+        return rc, out.getvalue(), err.getvalue()
+
+    def pinned(self):
+        return json.loads((tl.config_dir() / "pinned.json").read_text())
+
+    def test_pin_writes_both_versions_and_clear_removes_the_file(self):
+        rc, out, _ = self.pin("0.2.0", "--delegate", "0.5.0")
+        self.assertEqual(rc, 0, out)
+        pin = self.pinned()
+        self.assertEqual((pin["task-loop"], pin["delegate"]), ("0.2.0", "0.5.0"))
+        self.assertEqual(self.pin("--delegate", "0.6.0")[0], 0)  # one side only: the other stays
+        self.assertEqual((self.pinned()["task-loop"], self.pinned()["delegate"]), ("0.2.0", "0.6.0"))
+        self.assertEqual(self.pin("--clear")[0], 0)
+        self.assertFalse((tl.config_dir() / "pinned.json").exists())
+        self.assertEqual(self.pin("--clear")[0], 0)  # clearing nothing is fine
+
+    def test_a_pin_to_a_missing_cache_dir_is_refused_and_writes_nothing(self):
+        rc, _, err = self.pin("0.3.0")
+        self.assertEqual(rc, 2)
+        self.assertIn("0.3.0 is not installed", err)
+        self.assertIn("0.1.0, 0.2.0, 0.10.0", err)
+        self.assertEqual(self.pin("0.2.0", "--delegate", "9.9.9")[0], 2)
+        self.assertFalse((tl.config_dir() / "pinned.json").exists())  # not even the valid half
+        shutil.rmtree(self.claude / "plugins/cache/iorlas-marketplace/iorlas-task-loop/0.1.0/skills")  # half-copied
+        self.assertEqual(self.pin("0.1.0")[0], 2)
+
+    def test_rollback_pins_the_previous_version_and_keeps_the_installed_delegate(self):
+        out = io.StringIO()
+        with mock.patch.object(sys, "stdout", out):
+            self.assertEqual(tl.main(["rollback"]), 0)
+        pin = self.pinned()
+        self.assertEqual((pin["task-loop"], pin["delegate"]), ("0.2.0", "0.6.0"))  # numbers: 0.2.0 comes before 0.10.0
+        with mock.patch.object(sys, "stdout", out):
+            self.assertEqual(tl.main(["rollback"]), 0)  # again: one step further back from the pin
+        self.assertEqual(self.pinned()["task-loop"], "0.1.0")
+        with mock.patch.object(sys, "stdout", out), mock.patch.object(sys, "stderr", io.StringIO()):
+            self.assertEqual(tl.main(["rollback"]), 2)  # nothing older
+        self.assertEqual(self.pinned()["task-loop"], "0.1.0")
+
+    def test_the_drill_pin_decides_what_loop_and_find_route_pick_then_clear_returns_to_the_newest(self):
+        import engine
+        import loop
+        route = lambda: engine.find_route()
+        self.assertIn("0.6.0", route())  # no pin: the newest
+        self.assertEqual(self.pin("0.1.0", "--delegate", "0.5.0")[0], 0)
+        self.assertIn("/iorlas-delegate/0.5.0/", route())
+        root = self.claude / "plugins/cache/iorlas-marketplace/iorlas-task-loop/0.2.0"
+        with mock.patch.object(tl, "HERE", root / "skills" / "task-loop"):
+            self.assertEqual(loop.newest_install(), ("0.1.0", root.parent / "0.1.0"))  # older than the running one: still the pin
+            self.assertEqual(loop.newest_install(skip=["0.1.0"]), None)
+            self.assertEqual(self.pin("--clear")[0], 0)
+            self.assertEqual(loop.newest_install(), ("0.10.0", root.parent / "0.10.0"))
+        self.assertIn("0.6.0", route())
+        # the CLI end to end, in a fresh process with only the scratch dirs in its environment
+        env = dict(os.environ, HOME=str(self.home))
+        cli = [sys.executable, str(ROOT / "skills" / "task-loop" / "tl.py"), "pin"]
+        r = subprocess.run(cli + ["0.2.0", "--delegate", "0.5.0"], env=env, capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("/iorlas-delegate/0.5.0/", route())
+        r = subprocess.run(cli + ["0.4.0"], env=env, capture_output=True, text=True)
+        self.assertEqual(r.returncode, 2)
+        self.assertEqual(self.pinned()["task-loop"], "0.2.0")
+
+
+@unittest.skipIf(os.name == "nt", "the fixture's live process is a POSIX ps lookup")
+class CutoverCheck(Base):
+    def setUp(self):
+        super().setUp()
+        self.repo = self.home / "repo"
+        self.repo.mkdir()
+        sh("git", "init", "-q", cwd=self.repo)
+        tl.register_repo(str(self.repo))
+        p = mock.patch.object(tl, "slot_beads", return_value=[])
+        p.start()
+        self.addCleanup(p.stop)
+
+    def check(self, *args):
+        out = io.StringIO()
+        with mock.patch.object(sys, "stdout", out):
+            rc = tl.main(["cutover", "check", *args])
+        return rc, out.getvalue()
+
+    def test_nothing_live_exits_0(self):
+        rc, out = self.check()
+        self.assertEqual((rc, out.split()[0]), (0, "CLEAR:"))
+
+    def test_a_live_loop_and_a_live_run_exit_1_and_are_listed_a_dead_one_is_not(self):
+        import loop
+        child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+        self.addCleanup(child.kill)
+        self.addCleanup(child.wait)
+        loop.write_state(str(self.repo), pid=child.pid, started=time.time(), bead="x-9")
+        tl.write_engine_lock(str(self.repo), {"pid": child.pid, "start": tl.proc_start(child.pid), "bead": "x-7",
+                                              "by": "engine", "started": time.time()})
+        rc, out = self.check()
+        self.assertEqual(rc, 1, out)
+        self.assertIn("LIVE loop pid %d on %s running x-9" % (child.pid, self.repo), out)
+        self.assertIn("LIVE run in %s: engine pid %d runs x-7" % (self.repo, child.pid), out)
+        rc, out = self.check("--json")
+        self.assertEqual((rc, sorted(x["kind"] for x in json.loads(out)["live"])), (1, ["loop", "run"]))
+        child.kill()
+        child.wait()
+        self.assertEqual(self.check()[0], 0)
+
+
 if __name__ == "__main__":
     unittest.main()
 

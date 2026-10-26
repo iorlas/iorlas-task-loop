@@ -30,6 +30,9 @@
                                                 the M2 scorecard of a window (see SKILL.md, Report)
   tl.py lost [--repo DIR] [--since T] [--json]  bead-branch commits that are not landed, reclaimed or pending
   tl.py dash ensure|stop|status|url             the dashboard server (one per machine)
+  tl.py pin [VERSION] [--delegate V] [--clear]  pin the plugin install a loop and run-task use (owner override; the loop never pins)
+  tl.py rollback                                pin the previous task-loop version (the delegate stays as it is)
+  tl.py cutover check [--json]                  live runs and loops on this machine; exit 1 if any (docs/cutover.md)
   tl.py hook session-start                      SessionStart hook: index session id -> transcript path
 
 State: ~/.config/task-loop (%APPDATA%\\task-loop on Windows): repos.json, events.jsonl, sessions/, dash.*.
@@ -1857,6 +1860,152 @@ def cmd_doctor(a):
 
 # ---- main ---------------------------------------------------------------------------------------------------------
 
+# ---- pin, rollback, cutover check ---------------------------------------------------------------------------------------
+# pinned.json ({"task-loop": "0.23.38", "delegate": "0.40.1"}, each key optional) is written by `tl pin` and `tl rollback`
+# only: the owner's override. The loop reads it, never writes it. A pin names a plugin cache dir that must exist.
+
+PLUGINS = {"task-loop": ("iorlas-task-loop", "skills/task-loop/tl.py"), "delegate": ("iorlas-delegate", "skills/delegate/route.py")}
+
+
+def claude_dir():
+    return Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+
+
+def version_tuple(name):
+    return tuple(int(x) for x in name.split(".")) if re.fullmatch(r"\d+(\.\d+)*", name) else None
+
+
+def cache_dirs(key):
+    """{version: dir} of the installed cache dirs of plugin `key` ("task-loop" | "delegate") that hold the plugin's main
+    file: <claude dir>/plugins/cache/<marketplace>/<plugin>/<version>. Half-copied dirs and non-version names are left out."""
+    plugin, mark = PLUGINS[key]
+    out = {}
+    for d in sorted((claude_dir() / "plugins" / "cache").glob("*/%s/*" % plugin)):
+        if version_tuple(d.name) and (d / mark).is_file():
+            out.setdefault(d.name, d)
+    return out
+
+
+def installed_version(key):
+    """The version in installed_plugins.json (user scope) for plugin `key`, else ""."""
+    plugin = PLUGINS[key][0]
+    try:
+        recs = json.loads((claude_dir() / "plugins" / "installed_plugins.json").read_text(encoding="utf-8"))["plugins"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return ""
+    for name, entries in recs.items():
+        if name.split("@")[0] == plugin and isinstance(entries, list):
+            for e in entries:
+                if isinstance(e, dict) and e.get("scope") == "user":
+                    return Path(str(e.get("installPath") or "")).name
+    return ""
+
+
+def pin_file():
+    return config_dir() / "pinned.json"
+
+
+def read_pin():
+    try:
+        pin = json.loads(pin_file().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return pin if isinstance(pin, dict) else {}
+
+
+def write_pin(pin):
+    f = pin_file()
+    tmp = f.with_name(f.name + ".%d.tmp" % os.getpid())
+    tmp.write_text(json.dumps(pin, indent=1), encoding="utf-8")
+    os.replace(tmp, f)
+
+
+def pinned_dir(key):
+    """The cache dir `pinned.json` names for plugin `key`, None when it pins no version of it. A pin whose dir is gone gives
+    a path that does not exist (the caller refuses; no fallback to another version)."""
+    v = read_pin().get(key)
+    if not v:
+        return None
+    return cache_dirs(key).get(str(v)) or claude_dir() / "plugins" / "cache" / "-" / PLUGINS[key][0] / str(v)
+
+
+def cmd_pin(a):
+    pin = read_pin()
+    if a.clear:
+        if a.version or a.delegate:
+            sys.exit("tl: pin --clear takes no version")
+        with contextlib.suppress(OSError):
+            pin_file().unlink()
+        print("PIN CLEARED" if pin else "no pin was set")
+        return 0
+    if not (a.version or a.delegate):
+        print(json.dumps(pin) if pin else "no pin")
+        return 0
+    want = {"task-loop": a.version, "delegate": a.delegate}
+    for key, v in want.items():
+        if v and v not in cache_dirs(key):
+            have = sorted(cache_dirs(key), key=version_tuple)
+            print("tl: refused: %s %s is not installed under %s (installed: %s)"
+                  % (PLUGINS[key][0], v, claude_dir() / "plugins" / "cache", ", ".join(have) or "none"), file=sys.stderr)
+            return 2
+    pin.update({k: v for k, v in want.items() if v})
+    pin["pinned_at"] = now()
+    write_pin(pin)
+    print("PINNED " + " ".join("%s %s" % (k, pin[k]) for k in want if k in pin))
+    return 0
+
+
+def previous_version(key, current):
+    below = [v for v in cache_dirs(key) if version_tuple(v) < version_tuple(current)]
+    return max(below, key=version_tuple) if below else ""
+
+
+def cmd_rollback(a):
+    pin = read_pin()
+    cur = pin.get("task-loop") or installed_version("task-loop") or max(cache_dirs("task-loop"), key=version_tuple, default="")
+    if not cur:
+        print("tl: refused: no task-loop install to roll back from", file=sys.stderr)
+        return 2
+    prev = previous_version("task-loop", cur)
+    if not prev:
+        print("tl: refused: no task-loop version older than %s is installed" % cur, file=sys.stderr)
+        return 2
+    a.version, a.delegate, a.clear = prev, "", False
+    pin_delegate = pin.get("delegate") or installed_version("delegate")
+    if pin_delegate in cache_dirs("delegate"):
+        a.delegate = pin_delegate
+    return cmd_pin(a)
+
+
+def live_work():
+    """What runs on this machine: ("loop"|"run", text) for every live loop and every busy engine lock of the registered repos."""
+    import loop
+    try:
+        repos = [r for r in json.loads((config_dir() / "repos.json").read_text(encoding="utf-8")) if os.path.isdir(r)]
+    except (OSError, ValueError):
+        repos = []
+    out = []
+    for r in repos:
+        for st in loop.live_loops(r):
+            out.append(("loop", "loop pid %s on %s%s" % (st.get("pid"), r, (" running " + st["bead"]) if st.get("bead") else "")))
+        for wt in [r] + worktrees(r, slots=None if shutil.which("bd") else []):  # slot dirs need bd
+            busy = engine_busy(wt)
+            if busy:
+                out.append(("run", "run in %s: %s" % (wt, busy)))
+    return out
+
+
+def cmd_cutover(a):
+    live = live_work()
+    if a.json:
+        print(json.dumps({"live": [{"kind": k, "what": w} for k, w in live]}))
+    elif live:
+        print("\n".join("LIVE %s" % w for _, w in live))
+    else:
+        print("CLEAR: no live loop or run")
+    return 1 if live else 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="tl.py", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sp = ap.add_subparsers(dest="cmd", required=True)
@@ -1971,6 +2120,14 @@ def main(argv=None):
     p.add_argument("--repo")
     p.add_argument("--since", metavar="T")
     p.add_argument("--json", action="store_true")
+    p = sp.add_parser("pin", help="pin the plugin install loops and runs use (owner override; --clear removes the pin)")
+    p.add_argument("version", nargs="?", help="task-loop version (a cache dir under ~/.claude/plugins/cache)")
+    p.add_argument("--delegate", metavar="V", help="delegate version")
+    p.add_argument("--clear", action="store_true")
+    sp.add_parser("rollback", help="pin the previous task-loop version")
+    p = sp.add_parser("cutover", help="cutover check: live runs and loops; exit 1 if any (docs/cutover.md)")
+    p.add_argument("op", choices=["check"])
+    p.add_argument("--json", action="store_true")
     p = sp.add_parser("hook")
     p.add_argument("op", choices=["session-start"])
     a = ap.parse_args(argv)
@@ -2011,7 +2168,8 @@ def main(argv=None):
         return r.returncode
     return {"register": cmd_register, "claim": cmd_claim, "heartbeat": cmd_heartbeat, "stage": cmd_stage, "worker": cmd_worker,
             "land": cmd_land, "close": cmd_close, "block": cmd_block, "slot": cmd_slot, "worktree": cmd_worktree,
-            "dash": cmd_dash, "ask": cmd_ask, "notify": cmd_notify, "digest": cmd_digest, "reflect": cmd_reflect, "hook": cmd_hook, "doctor": cmd_doctor, "land-lock": cmd_land_lock}[a.cmd](a)
+            "dash": cmd_dash, "ask": cmd_ask, "notify": cmd_notify, "digest": cmd_digest, "reflect": cmd_reflect, "hook": cmd_hook, "doctor": cmd_doctor, "land-lock": cmd_land_lock,
+            "pin": cmd_pin, "rollback": cmd_rollback, "cutover": cmd_cutover}[a.cmd](a)
 
 
 if __name__ == "__main__":

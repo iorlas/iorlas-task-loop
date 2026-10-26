@@ -12,8 +12,12 @@ bump the patch version of origin/main's
 plugin.json as "<version>: <message>", push under the land lock, so no loop lands in between. When origin/main moved
 since the bump (a land during the suite) it drops the bump, rebases, takes the next version and runs the suite again
 first, still under the lock; a push refused all the same gets one more such round. Then close the bead, bump the plugin's entry in the marketplace
-checkout, push it, `claude plugin marketplace update` and `claude plugin update`. Nothing is ever deleted: a plugin
-cache dir a live engine runs from stays.
+checkout, push it, tag both pushed commits (`v<version>` in the repo, `iorlas-task-loop-v<version>` in the marketplace; the
+tag is pushed only after its branch push succeeded), `claude plugin marketplace update` and `claude plugin update`. The
+installed cache dir for the new version must exist afterwards: if not, the install runs once more, then the release
+exits non-zero naming the failing command. Every release, green or red, writes ~/.config/task-loop/releases/last.json
+and a failed one also comments on --bead and ends with a one-line "release FAILED" summary. Nothing is ever deleted: a
+plugin cache dir a live engine runs from stays.
 
 Run it from any worktree; it acts on the main checkout. Python 3.8+, standard library only.
 """
@@ -43,7 +47,12 @@ TRAILER = "\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 
 class Abort(Exception):
-    pass
+    """A refusal or failure that stops the release. `log`: the saved full suite output; `tests`: the failing test ids;
+    `version`: set once main was pushed (the failure came after, e.g. the install)."""
+
+    def __init__(self, msg, log="", tests=(), version=""):
+        super().__init__(msg)
+        self.log, self.tests, self.version = str(log or ""), list(tests), version
 
 
 def run(cmd, cwd, check=True):
@@ -182,7 +191,8 @@ def suite(repo):
         plan = json.loads(r.stdout)
     except ValueError:
         out = (r.stdout + r.stderr).strip()
-        raise Abort("the suite is red; nothing released:\ncould not plan the shards\n%s\nfull output: %s" % (out[-2000:], save_output(out)))
+        log = save_output(out)
+        raise Abort("the suite is red; nothing released:\ncould not plan the shards\n%s\nfull output: %s" % (out[-2000:], log), log)
     work = Path(tempfile.mkdtemp(prefix="tl-suite-"))
     began = time.monotonic()
     try:
@@ -209,7 +219,9 @@ def suite(repo):
     tail = out.splitlines()
     if not green:
         report = failure_report(out) or "\n".join(tail[-40:])
-        raise Abort("the suite is red; nothing released:\n%s\nfull output: %s" % (report, save_output(out)))
+        log = save_output(out)
+        tests = ["%s (%s)" % m for m in re.findall(r"^(?:FAIL|ERROR): (\S+) \(([^)]*)\)", out, re.M)]
+        raise Abort("the suite is red; nothing released:\n%s\nfull output: %s" % (report, log), log, tests)
     say("suite green: " + " ".join(x for x in tail[-3:] if x.strip()))
 
 
@@ -271,6 +283,44 @@ def bump_marketplace(market, version):
         git(market, "push", "-q", "origin", "HEAD:main")
 
 
+def tag(cwd, name, what):
+    """Tag HEAD of `cwd` as `name` and push the tag. Called only after the branch push succeeded. A tag that cannot be made or
+    pushed is a warning: the release is out and must not be reported as failed for it."""
+    if git(cwd, "rev-parse", "-q", "--verify", "refs/tags/" + name, check=False):
+        say("warning: %s already has the tag %s; left as it is" % (what, name))
+        return
+    r = run(["git", "tag", name, "HEAD"], cwd, check=False)
+    if not r.returncode:
+        r = run(["git", "push", "-q", "origin", "refs/tags/" + name], cwd, check=False)
+    if r.returncode:
+        say("warning: tag %s in %s failed: %s" % (name, what, (r.stdout + r.stderr).strip()[-300:]))
+    else:
+        say("tagged %s in %s" % (name, what))
+
+
+def install(repo, version):
+    """Update the marketplace and the plugin, then check the new version's cache dir exists. A silent failure (0.23.0: a git
+    fetch-pack error with exit 0) leaves the old version installed: run both commands once more, then fail loudly."""
+    cache = tl.claude_dir() / "plugins" / "cache" / MARKETPLACE / NAME / version
+    cmds = [["claude", "plugin", "marketplace", "update", MARKETPLACE], ["claude", "plugin", "update", "%s@%s" % (NAME, MARKETPLACE)]]
+    failing, text = None, ""
+    for attempt in (1, 2):
+        for c in cmds:
+            try:
+                r = run(c, repo, check=False)
+                rc, out = r.returncode, (r.stdout + r.stderr).strip()
+            except OSError as e:
+                rc, out = 127, str(e)
+            if rc or c is cmds[-1]:
+                failing, text = (c, out) if rc else (failing, out)
+        if (cache / ".claude-plugin" / "plugin.json").is_file():
+            say("installed: %s (%s)" % (version, cache))
+            return
+        say("install attempt %d left no %s; %s" % (attempt, cache, "trying once more" if attempt == 1 else "giving up"))
+    raise Abort("the plugin install failed: %s is not installed (no %s).\nfailing command: %s\n%s"
+                % (version, cache, " ".join(failing or cmds[-1]), text[-1000:]), version=version)
+
+
 def release(a, repo, market):
     require_clean_main(repo, "main")
     require_clean_main(market, "marketplace")
@@ -296,17 +346,36 @@ def release(a, repo, market):
         run(["git", "reset", "-q", "--hard", start], repo, check=False)
         raise
     say("pushed %s: %s" % (version, a.message))
+    tag(repo, "v" + version, "the plugin repo")
     if a.bead:
         r = run(["bd", "close", a.bead, "--reason", a.reason or a.message], repo, check=False)
         if r.returncode:
             say("warning: bd close %s failed: %s" % (a.bead, (r.stdout + r.stderr).strip()[-300:]))
-    bump_marketplace(market, version)
+    try:
+        bump_marketplace(market, version)
+    except Abort as e:
+        e.version = version
+        raise
     say("marketplace at %s" % version)
-    run(["claude", "plugin", "marketplace", "update", MARKETPLACE], repo, check=False)
-    r = run(["claude", "plugin", "update", "%s@%s" % (NAME, MARKETPLACE)], repo, check=False)
-    tail = (r.stdout + r.stderr).strip().splitlines()
-    say("installed: " + (tail[-1] if tail else "rc %d" % r.returncode))
+    tag(market, "%s-v%s" % (NAME, version), "the marketplace")
+    install(repo, version)
     return version
+
+
+def record(result, a, repo):
+    """releases/last.json: the latest release's result (a later success replaces a failure); and, when it failed, a comment on --bead."""
+    d = tl.config_dir() / "releases"
+    d.mkdir(parents=True, exist_ok=True)
+    result.update(branch=a.from_branch or "main", message=a.message, at=time.time())
+    f = d / "last.json"
+    tmp = f.with_name("last.%d.tmp" % os.getpid())
+    tmp.write_text(json.dumps(result, indent=1), encoding="utf-8")
+    os.replace(tmp, f)
+    if not result["ok"] and a.bead:
+        text = "release FAILED: %s%s" % (result["summary"], ("; log " + result["log"]) if result.get("log") else "")
+        r = run(["bd", "comment", a.bead, text], repo, check=False)
+        if r.returncode:
+            say("warning: bd comment %s failed: %s" % (a.bead, (r.stdout + r.stderr).strip()[-300:]))
 
 
 def main(argv=None):
@@ -325,9 +394,14 @@ def main(argv=None):
     holder = "pid %d since %s: %s" % (os.getpid(), datetime.datetime.now().strftime("%H:%M:%S"), a.message)
     try:
         with tl.os_lock(path, holder, lambda who: say("waiting for the release lock (held by %s)" % who)):
-            release(a, repo, market)
+            version = release(a, repo, market)
+        record({"ok": True, "version": version, "summary": "released " + version}, a, repo)
     except Abort as e:
         print("release: " + str(e), file=sys.stderr)
+        first = str(e).strip().splitlines()[0] if str(e).strip() else "failed"
+        summary = ("%s was pushed but " % e.version if e.version else "nothing released: ") + first
+        record({"ok": False, "version": e.version, "summary": summary, "tests": e.tests, "log": e.log}, a, repo)
+        print("release FAILED: " + summary + ((" (log %s)" % e.log) if e.log else ""), file=sys.stderr)  # the last line: a tail-reading watcher sees it
         return 1
     return 0
 
