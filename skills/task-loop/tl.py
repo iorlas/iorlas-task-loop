@@ -279,10 +279,147 @@ def run_git(path, *args, **kw):
     return subprocess.run(["git", "-C", str(path)] + list(args), env=git_env(path), **kw)
 
 
+def _sig(path):
+    """What a file is now, as the file system says: (inode, mtime ns, size); None when it is missing. A git ref or lock file is replaced
+    by a rename, so a changed ref always changes this."""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    return (st.st_ino, st.st_dev, st.st_mtime_ns, st.st_size)
+
+
+def _git_dirs(cwd):
+    """(git dir, common dir, the `.git` entry of the checkout) read from the file system, or None when `cwd` is no plain checkout or uses
+    a ref backend this reads nothing of (reftable)."""
+    pin = pinned_env(cwd)
+    gd = pin.get("GIT_DIR")
+    if not gd:
+        return None
+    gd = Path(gd)
+    common = gd
+    try:
+        c = (gd / "commondir").read_text(encoding="utf-8", errors="replace").strip()
+        common = (gd / c).resolve()
+    except OSError:
+        pass
+    if (common / "reftable").exists():
+        return None
+    return gd, common, Path(pin["GIT_WORK_TREE"]) / ".git"
+
+
+def config_key(path):
+    """What decides every `git config` answer for the checkout at `path`, as the file system shows it: its `.git`, each config file git
+    reads for it, and the GIT_ environment that moves them. None when `path` is no plain checkout (nothing is to be cached then)."""
+    dirs = _git_dirs(path)
+    if not dirs:
+        return None
+    gd, common, dot_git = dirs
+    home = Path(os.environ.get("HOME") or os.path.expanduser("~"))
+    xdg = Path(os.environ.get("XDG_CONFIG_HOME") or (home / ".config"))
+    files = [gd / "config.worktree", common / "config", common / "config.worktree", home / ".gitconfig", xdg / "git" / "config",
+             Path("/etc/gitconfig"), Path("/opt/homebrew/etc/gitconfig"), Path("/usr/local/etc/gitconfig")]
+    env = tuple(sorted((k, v) for k, v in os.environ.items() if k.startswith("GIT_") and k not in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR"))
+                + [("HOME", str(home))])
+    return (str(path), _is_dir_sig(dot_git), tuple(_sig(f) for f in files), env)
+
+
+# Answers of read-only git questions that the file system can vouch for. `git()` runs a process (~14 ms) for each of
+# them and the engine asks the same few dozen times per run (tl-speedgit).
+_COMMON_DIR_MEMO = {}   # (resolved cwd, sig of its .git entry) -> the absolute git common dir
+_REF_MEMO = {}          # (git dir, args) -> (sigs of every file the answer comes from, answer)
+
+
+def _is_dir_sig(p):
+    """A `.git` directory changes its mtime with every lock file; only which directory it is counts. A `.git` file (a slot) is stable."""
+    try:
+        st = os.stat(p)
+    except OSError:
+        return None
+    return (st.st_ino, st.st_dev) if os.path.isdir(p) else (st.st_ino, st.st_dev, st.st_mtime_ns, st.st_size)
+
+
+_COMMON_ARGS = ("rev-parse", "--path-format=absolute", "--git-common-dir")
+
+
+_BAD_NAME = re.compile(r"[~^@:{}*?\\[\s]|\.\.|\.lock$|^-|^[0-9a-f]{4,40}$")
+
+
+def _ref_files(args, dirs):
+    """The files a `git rev-parse`, `symbolic-ref` or `merge-base` of ref names reads (loose refs, HEAD, packed-refs); None when it is a
+    question the memo does not know (a revision expression, a sha that may be a prefix)."""
+    gd, common, _ = dirs
+    if args == ("symbolic-ref", "--short", "-q", "HEAD"):
+        return [gd / "HEAD"]
+    if len(args) == 2 and args[0] == "rev-parse":
+        names = [args[1]]
+    elif len(args) == 4 and args[:3] == ("rev-parse", "--verify", "-q"):
+        names = [args[3]]
+    elif len(args) == 3 and args[0] == "merge-base":
+        names = list(args[1:])
+    else:
+        return None
+    files = [common / "packed-refs", common / "shallow"]
+    for name in names:
+        for suffix in ("^{commit}", "^{tree}"):
+            if name.endswith(suffix):
+                name = name[:-len(suffix)]
+        if not name or _BAD_NAME.search(name):
+            return None
+        if name == "HEAD":
+            files.append(gd / "HEAD")
+            try:
+                head = (gd / "HEAD").read_text(encoding="utf-8", errors="replace").strip()
+            except OSError:
+                return None
+            if head.startswith("ref:"):
+                files.append(common / head[4:].strip())
+            continue
+        files += [common / (pre + name) for pre in ("", "refs/", "refs/tags/", "refs/heads/", "refs/remotes/")]
+        files.append(common / "refs" / "remotes" / name / "HEAD")
+    return files
+
+
 def git(*args, cwd=None):
+    common_key = ref_key = sigs = None
+    if cwd is None and args == _COMMON_ARGS and not any(k in os.environ for k in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR")):
+        try:
+            here = os.getcwd()  # the process's own checkout (repo_root() of every event): nothing is pinned, so only plain checkouts count
+        except OSError:  # its folder is gone: git answers "" below
+            here = None
+        dirs = _git_dirs(here) if here else None
+        if dirs:
+            common_key = (here, _is_dir_sig(dirs[2]))
+            if common_key in _COMMON_DIR_MEMO:
+                return _COMMON_DIR_MEMO[common_key]
+    elif cwd and args == ("remote", "get-url", "origin"):
+        dirs = _git_dirs(cwd)
+        ck = config_key(cwd) if dirs else None  # the url comes from config only (insteadOf included)
+        if ck:
+            common_key = ("get-url", ck)
+            if common_key in _COMMON_DIR_MEMO:
+                return _COMMON_DIR_MEMO[common_key]
+    elif cwd:
+        dirs = _git_dirs(cwd) if args and args[0] in ("rev-parse", "symbolic-ref", "merge-base") else None
+        if dirs and args == _COMMON_ARGS:
+            common_key = (str(Path(cwd).resolve()), _is_dir_sig(dirs[2]))
+            if common_key in _COMMON_DIR_MEMO:
+                return _COMMON_DIR_MEMO[common_key]
+        elif dirs:
+            files = _ref_files(args, dirs)
+            if files:
+                ref_key, sigs = (str(dirs[0]), args), tuple(_sig(f) for f in files)  # taken before git runs: a change during it shows next time
+                hit = _REF_MEMO.get(ref_key)
+                if hit and hit[0] == sigs:
+                    return hit[1]
     r = subprocess.run(["git"] + list(args), cwd=cwd, env=git_env(cwd) if cwd else None, capture_output=True, text=True,
                        encoding="utf-8", errors="replace")
-    return r.stdout.strip() if r.returncode == 0 else ""
+    out = r.stdout.strip() if r.returncode == 0 else ""
+    if common_key and out:
+        _COMMON_DIR_MEMO[common_key] = out
+    elif ref_key and (out or "--verify" in args):  # a ref that is missing is an answer too, until a file for it appears
+        _REF_MEMO[ref_key] = (sigs, out)
+    return out
 
 
 # another process fetching into the same repo (worktrees share refs/remotes) at the same moment: the ref is then where
