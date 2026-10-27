@@ -1227,7 +1227,6 @@
 "test_selftest.SelfTest.test_a_good_install_is_complete_and_moved_to": 12.196,
 "test_selftest.SelfTest.test_a_good_newer_install_is_still_moved_to": 12.009,
 "test_selftest.SelfTest.test_an_install_that_imports_but_cannot_plan_is_refused_and_recorded": 6.75,
-"test_selftest.SelfTest.test_the_scenario_through_engine_run_passes_in_under_10_seconds": 11.062,
 "test_slot_git.SlotGitTest.test_a_check_runs_git_on_another_repo": 0.927,
 "test_slot_git.SlotGitTest.test_a_clean_slot_passes_the_tree_assert": 1.062,
 "test_slot_git.SlotGitTest.test_a_worker_that_redirects_git_is_caught_after_its_node": 2.765,

@@ -41,8 +41,6 @@ def cost(test_id, durations):
 # reading the code, not guessed: a module is listed only with the reason that makes it unsafe beside others.
 SERIAL = (
     ("test_race", None, "races real processes on one repo and SIGKILLs them (os.kill / killpg of started PIDs); its timing windows need a quiet machine"),
-    ("test_selftest", "SelfTest.test_the_scenario_through_engine_run_passes_in_under_10_seconds",
-     "asserts the whole scenario takes under 10 s of wall clock; a loaded machine fails it, as every run beside two live loops did"),
     ("test_write_idle", None, "starts real worker process groups and asserts how long a writer stays idle against the wall clock; load moves the clock"),
 )
 
