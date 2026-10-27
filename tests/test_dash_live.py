@@ -99,17 +99,19 @@ class CallSite(unittest.TestCase):
         self.assertEqual(p, "/e/tl-1-20261026-100000.live/03-write.jsonl")
         self.assertTrue(call.live_file("/e/x.jsonl", 12, "re view/2").endswith(".live/12-re-view-2.jsonl"))
 
-    def test_call_delegate_sets_the_env(self):
-        seen = {}
+    def test_the_call_sets_the_env(self):
+        import delegate_link as dl
+        import fake_route
+        seen = []
 
-        def fake(cmd, cwd, timeout, log_path, **kw):
-            seen.update(kw)
-            return (0, json.dumps({"v": 2, "status": "done", "data": {}, "text": "", "secs": 1})), 1.0
-        with mock.patch.object(call.procs, "run_proc", fake):
-            call.call_delegate("route.py", "worker", "p", {}, ".", None, 10, "/dev/null", live="/x/y.live/01-write.jsonl")
-            self.assertEqual(seen["env"], {"DELEGATE_LIVE_FILE": "/x/y.live/01-write.jsonl"})
-            call.call_delegate("route.py", "worker", "p", {}, ".", None, 10, "/dev/null")
-            self.assertIsNone(seen["env"])
+        def runner(cmd, **kw):
+            seen.append(kw.get("env"))
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+        res = dl.Resolved(Path("/fake"), "/fake/route.py", fake_route.CONTRACT, "explicit")
+        dl.call(res, dl.CallRequest("worker", "p", {}, ".", live="/x/y.live/01-write.jsonl"), runner=runner)
+        self.assertEqual(seen[0]["DELEGATE_LIVE_FILE"], "/x/y.live/01-write.jsonl")
+        dl.call(res, dl.CallRequest("worker", "p", {}, "."), runner=runner)
+        self.assertIsNone(seen[1])
 
     def test_engine_numbers_its_calls_and_logs_a_note(self):
         import engine
