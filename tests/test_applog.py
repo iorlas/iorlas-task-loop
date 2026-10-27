@@ -27,7 +27,7 @@ class AppLogTest(unittest.TestCase):
 
     def test_a_tailing_reader_sees_every_line_at_once(self):
         self.path.write_text("")
-        with open(self.path, "r", encoding="utf-8") as reader:  # opened first, like a dashboard tailing the file
+        with open(self.path, encoding="utf-8") as reader:  # opened first, like a dashboard tailing the file
             for i in range(50):
                 applog.append(self.path, json.dumps({"i": i, "text": "ü %d" % i}, ensure_ascii=False) + "\n")
                 self.assertEqual(json.loads(reader.readline())["i"], i)

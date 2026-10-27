@@ -35,5 +35,5 @@
   "tests/test_engine.py::EngineTest.run_push_race": 111,
   "tests/test_loop.py::StopRequests.check_legacy_windows_stop": 149
  },
- "pyrefly_baseline_errors": 1694
+ "pyrefly_baseline_errors": 1928
 }
