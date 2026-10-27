@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1])); import support.paths  # noqa: E402,F401
-from taskloop.contracts import ask, bead, config, delegate, events, ids, locks, loop, run, snapshots, trace  # noqa: E402
+from taskloop.contracts import ask, bead, checkpoint, config, delegate, events, ids, locks, loop, run, snapshots, trace  # noqa: E402
 from taskloop.contracts import log  # noqa: E402
 from taskloop.contracts.enums import AskKind, AskStatus, LockWhat, Outcome, WaitWhat, WhyCode  # noqa: E402
 
@@ -108,6 +108,15 @@ OTHERS = {
                    why_code=WhyCode.OWNER_DECISION, why="w", parks_at=T + 3600, brief_hash="b0c0",
                    options=[ask.AskOption(label="Right", cost="free", answer="right", recommended=True)], repo="/r", title="t",
                    answer=ask.AskAnswer(action="confirm", text="ok", t=T, by="denis"), answered=T + 5),
+    "Checkpoint": checkpoint.Checkpoint(
+        bead="tl-1", run=str(RUN), t=T, branch="task/tl-1", step="write", stage=2, rounds=3, n=4, head="abc", brief_hash="b0",
+        plan={"summary": "s", "stages": [{"goal": "g"}]}, plan_log=[checkpoint.PlanLogLine(mode="plan", counted=True, why="first")],
+        done=["g1"], accepted=[0], writer="codex", writer_seen=["abc"], writer_ctx=35,
+        unchecked=[checkpoint.Unchecked(what="w", kind="tooling", proof_round=True)],
+        unverified=[checkpoint.Unverified(what="u", kind="taste")], filed=["f1"],
+        unfiled=[checkpoint.Unfiled(title="t", why="lint")], look_prev=[checkpoint.LookVerdict(item="i", verdict="defect")],
+        rendered=["r"], last_reqs=[checkpoint.RenderReq(method="Shots", names=["n"], args=[checkpoint.RenderArg(name="a", value="b")])],
+        handoff={"rounds": [{"stage": "1/1"}]}, pending_land_validation="red"),
     "RunOutcome": OUTCOME,
     "LoopLogLine": run.LoopLogLine(outcome=OUTCOME, t=T, slot="s1", run_log="/rl"),
     "Reexec": run.Reexec(run=str(RUN), bead="tl-1", from_version="0.23.56", to_version="0.23.57", step="write", owned=["a"], fallback="f",

@@ -195,6 +195,125 @@
   },
   "answered": 1793050205.5
  },
+ "Checkpoint": {
+  "v": 2,
+  "bead": "tl-1",
+  "run": "tl-7y6.3.1-20261027-002239",
+  "t": 1793050200.5,
+  "branch": "task/tl-1",
+  "step": "write",
+  "stage": 2,
+  "rounds": 3,
+  "n": 4,
+  "head": "abc",
+  "closed": false,
+  "brief_hash": "b0",
+  "plan": {
+   "summary": "s",
+   "stages": [
+    {
+     "goal": "g"
+    }
+   ]
+  },
+  "plan_log": [
+   {
+    "mode": "plan",
+    "counted": true,
+    "why": "first"
+   }
+  ],
+  "planner_ref": "",
+  "planned": 0,
+  "replans": 0,
+  "fixes": 0,
+  "extra": 0,
+  "rebase_resets": 0,
+  "snap": null,
+  "done": [
+   "g1"
+  ],
+  "accepted": [
+   0
+  ],
+  "accepted_new": [],
+  "denials": [],
+  "writer": "codex",
+  "writer_family": "",
+  "writer_fallback": false,
+  "fallback_lane": "",
+  "writer_ctx": 35,
+  "writer_seen": [
+   "abc"
+  ],
+  "writer_said": "",
+  "unchecked": [
+   {
+    "what": "w",
+    "kind": "tooling",
+    "source": "",
+    "why": "",
+    "proof_round": true
+   }
+  ],
+  "unverified": [
+   {
+    "what": "u",
+    "kind": "taste",
+    "why": "",
+    "source": ""
+   }
+  ],
+  "filed": [
+   "f1"
+  ],
+  "unfiled": [
+   {
+    "title": "t",
+    "why": "lint"
+   }
+  ],
+  "look_paths": [],
+  "look_notes": [],
+  "look_unjudged": {},
+  "look_done": 0,
+  "look_prev": [
+   {
+    "item": "i",
+    "verdict": "defect",
+    "where": "",
+    "why": ""
+   }
+  ],
+  "rendered": [
+   "r"
+  ],
+  "last_reqs": [
+   {
+    "method": "Shots",
+    "names": [
+     "n"
+    ],
+    "args": [
+     {
+      "name": "a",
+      "value": "b"
+     }
+    ]
+   }
+  ],
+  "render_stale": false,
+  "handoff": {
+   "rounds": [
+    {
+     "stage": "1/1"
+    }
+   ]
+  },
+  "stage_tree": "",
+  "feedback": "",
+  "pending_land_validation": "red"
+ },
  "RunOutcome": {
   "v": 2,
   "outcome": "blocked",
