@@ -8,7 +8,8 @@ import time
 from pathlib import Path
 from typing import Any
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1])); import support.paths  # noqa: E402,F401
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import support.paths  # noqa: E402,F401
 from taskloop.contracts import codec, paths  # noqa: E402
 from taskloop.contracts.enums import LockWhat  # noqa: E402
 from taskloop.contracts.locks import LockRecord  # noqa: E402

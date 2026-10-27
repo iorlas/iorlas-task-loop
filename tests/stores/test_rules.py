@@ -5,7 +5,8 @@ import sys
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1])); import support.paths  # noqa: E402,F401
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import support.paths  # noqa: E402,F401
 from contracts.test_rules import FILE_CAP, FUNC_CAP, code_lines  # noqa: E402
 
 PKG = Path(__file__).resolve().parents[2] / "src" / "taskloop" / "stores"
