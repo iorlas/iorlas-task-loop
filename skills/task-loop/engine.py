@@ -793,7 +793,14 @@ class Engine:
         if self.reexec.get("bead") != bead:
             self.reexec = {}
         pause = {} if self.reexec else take_net_pause(bead)  # a run paused for the network: its run id and counters go on
-        stem = self.reexec.get("run") or pause.get("run") or "%s-%s" % (bead, stamp)  # the same run id: log, run dir and trace go on
+        stem = self.reexec.get("run") or pause.get("run")  # the same run id: log, run dir and trace go on
+        if not stem:  # a fresh run has its own id, also when the last run of this bead began in the same second: the stamp moves on
+            t0, n = time.time(), 0
+            while True:
+                stem = "%s-%s" % (bead, time.strftime("%Y%m%d-%H%M%S", time.localtime(t0 + n)))
+                if not ((d / (stem + ".jsonl")).exists() or (tl.config_dir() / "runs" / stem).exists()):
+                    break
+                n += 1
         self.log_path = d / (stem + ".jsonl")
         self.err_path = d / (stem + ".stderr")
         self.exec_fn, self.newer_fn, self.argv, self.moved = None, None, None, False  # a test's exec, newer-install lookup and run-task argv
