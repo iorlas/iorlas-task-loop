@@ -1,0 +1,13 @@
+{
+  "created_at": "2026-10-27T01:40:01.35213Z",
+  "created_by": "x",
+  "description": "d",
+  "id": "t-gold",
+  "issue_type": "task",
+  "owner": "owner@example.com",
+  "priority": 2,
+  "schema_version": 1,
+  "status": "open",
+  "title": "gold",
+  "updated_at": "2026-10-27T01:40:01.35213Z"
+}

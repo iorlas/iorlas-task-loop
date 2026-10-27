@@ -1,0 +1,26 @@
+[
+  {
+    "id": "t-gold",
+    "title": "gold",
+    "description": "d",
+    "status": "in_progress",
+    "priority": 2,
+    "issue_type": "task",
+    "assignee": "x",
+    "owner": "owner@example.com",
+    "created_at": "2026-10-27T01:40:01Z",
+    "created_by": "x",
+    "updated_at": "2026-10-27T01:40:03Z",
+    "started_at": "2026-10-27T01:40:02Z",
+    "lease_expires_at": "2026-10-27T01:45:02Z",
+    "heartbeat_at": "2026-10-27T01:40:02Z",
+    "metadata": {
+      "slot": "s1",
+      "held_bead": "t-dhc"
+    },
+    "dependent_count": 0,
+    "dependency_count": 0,
+    "comment_count": 0,
+    "revision": "-2950878197086243701"
+  }
+]
