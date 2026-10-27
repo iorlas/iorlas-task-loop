@@ -75,7 +75,7 @@ class Checkpoint:
     n: int = 0
     head: str = ""
     closed: bool = False
-    brief: str = ""
+    brief_hash: str = ""
     plan: dict[str, Any] | None = None
     plan_log: list[PlanLogLine] = field(default_factory=list)
     planner_ref: str = ""
