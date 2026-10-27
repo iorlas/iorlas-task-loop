@@ -4,7 +4,8 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills" / "task-loop"))
-sys.path.insert(0, str(Path(__file__).resolve().parent)); import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import beadlint  # noqa: E402
 
 ROOT = "/Users/me/Workspaces/proj"

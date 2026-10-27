@@ -13,7 +13,8 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "dev"))
-sys.path.insert(0, str(Path(__file__).resolve().parent)); import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import select_tests  # noqa: E402
 
 EVIDENCE = ROOT / ".task" / "tl-7y6.7.25" / "evidence"

@@ -5,7 +5,8 @@ from dataclasses import field
 from pathlib import Path
 from typing import Literal
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1])); import support.paths  # noqa: E402,F401
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import support.paths  # noqa: E402,F401
 from taskloop.contracts.codec import record  # noqa: E402
 
 Kind = Literal["engine_step", "checkable", "external_fact", "taste", "owner_decision", "requirement", "number", "deletion", "link",

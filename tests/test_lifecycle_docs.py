@@ -9,7 +9,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
-sys.path.insert(0, str(Path(__file__).resolve().parent)); import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import lifecycle  # noqa: E402
 import report  # noqa: E402
 

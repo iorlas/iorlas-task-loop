@@ -11,7 +11,8 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop" / "dash"))
-sys.path.insert(0, str(Path(__file__).resolve().parent)); import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import server  # noqa: E402
 
 T0 = datetime(2026, 10, 24, 0, 0, 0, tzinfo=timezone.utc).timestamp()

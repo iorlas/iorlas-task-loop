@@ -4,7 +4,8 @@ import unittest
 from pathlib import Path
 from typing import get_args, get_type_hints
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1])); import support.paths  # noqa: E402,F401
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import support.paths  # noqa: E402,F401
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills" / "task-loop"))
 import delegate_link as dl  # noqa: E402
 import lane_policy as lp  # noqa: E402

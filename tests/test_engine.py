@@ -24,7 +24,8 @@ sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 import applog  # noqa: E402
 import delegate_link as dl  # noqa: E402,F401
 from clock import FakeClock  # noqa: E402
-sys.path.insert(0, str(Path(__file__).resolve().parent)); import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import engine  # noqa: E402
 import fake_route  # noqa: E402
 import lane_policy as lp  # noqa: E402,F401

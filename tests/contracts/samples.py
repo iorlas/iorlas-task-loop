@@ -3,7 +3,8 @@ import datetime
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1])); import support.paths  # noqa: E402,F401
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import support.paths  # noqa: E402,F401
 from taskloop.contracts import ask, bead, config, delegate, events, ids, locks, loop, run, snapshots, trace  # noqa: E402
 from taskloop.contracts import log  # noqa: E402
 from taskloop.contracts.enums import AskKind, AskStatus, LockWhat, Outcome, WaitWhat, WhyCode  # noqa: E402
