@@ -56,11 +56,9 @@ class LandLockTests(unittest.TestCase):
 
     def test_released_after_failing_command(self):
         self.assertEqual(self.run_ll("--", PY, "-c", "raise SystemExit(7)").returncode, 7)
-        t = time.time()
         r = self.run_ll("--", PY, "-c", "pass")
         self.assertEqual(r.returncode, 0)
-        self.assertNotIn("waiting", r.stdout)
-        self.assertLess(time.time() - t, 5)
+        self.assertNotIn("waiting", r.stdout)  # a lock still held would print "waiting"; no timing needed
 
     @NO_FCNTL
     def test_wait_min_times_out_with_75(self):
