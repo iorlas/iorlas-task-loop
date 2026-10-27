@@ -733,7 +733,8 @@ class Loop(LoopBase):
         (d / (key + ".json")).write_text(json.dumps({"pid": k.pid, "started": self.clock.t, "repo": str(self.repo)}))
         self.assertEqual([s["pid"] for s in loop.live_loops(str(self.repo))], [k.pid])
         out = io.StringIO()
-        with redirect_stdout(out):
+        empty = subprocess.CompletedProcess([], 0, "[]", "")  # no real bd: status asks it for the ready queue
+        with redirect_stdout(out), mock.patch.object(tl, "bd", return_value=empty):
             self.assertEqual(tl.main(["loop", "status", "--repo", str(self.repo)]), 0)
             self.assertEqual(tl.main(["stop", "--repo", str(self.repo)]), 0)
         self.assertIn("LOOP pid %d" % k.pid, out.getvalue())

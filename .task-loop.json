@@ -1,6 +1,6 @@
 {
   "engine": {
-    "gate": "python3 dev/suite.py",
+    "gate": "python3 dev/suite-docker.py",
     "land": "git push origin HEAD:main",
     "pick_label": "auto",
     "needs_info_label": "needs-info"

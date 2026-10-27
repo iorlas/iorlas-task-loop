@@ -1,4 +1,4 @@
-"""The land gate in .task-loop.json: its script exists and dev/suite.py's exit code follows the suite result."""
+"""The land gate in .task-loop.json: its script exists; dev/suite.py's exit code follows the suite result."""
 import json
 import shlex
 import sys
@@ -19,7 +19,7 @@ class GateCommand(unittest.TestCase):
         words = shlex.split(gate)
         self.assertEqual(words[0], "python3")
         self.assertTrue((ROOT / words[1]).is_file(), gate)
-        self.assertEqual((ROOT / words[1]).resolve(), (ROOT / "dev" / "suite.py").resolve())
+        self.assertEqual((ROOT / words[1]).resolve(), (ROOT / "dev" / "suite-docker.py").resolve())
 
     def test_exit_code_follows_the_suite(self):
         with mock.patch.object(release, "suite", return_value=None) as s:

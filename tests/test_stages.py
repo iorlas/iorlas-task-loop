@@ -2,6 +2,7 @@
 import json
 import shutil
 import sys
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -755,6 +756,8 @@ class Executable(StagesTest):
         lint._RECIPES.clear()
 
     def test_valid_checks_the_word_check_must_not_block(self):
+        for tool in ("make", "npm"):  # tools a dev machine has; this test is about the grammar, not about what is installed
+            lint._WORDS[(str(self.wt), tool)] = (True, time.time())
         for ok in ("command -v git >/dev/null", "env -i PATH=$PATH git --version", "f () { echo hi; }; f",
                    "cat <<EOF2 > x.txt\nhello\nEOF2\ntest -s x.txt", "cd sub && ./x.sh", "make && ./build/x", "npm ci && node_modules/.bin/jest",
                    "~/bin/foo", ".venv/bin/python -c pass", "source env.sh && git status", "time git status"):

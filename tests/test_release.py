@@ -50,7 +50,7 @@ class Release(unittest.TestCase):
             """) % {"log": h / "claude.log", "flag": h / "claude.failed", "market": h / "market" / MARKET})
         for f in shim.iterdir():
             f.chmod(0o755)
-        self.env = dict(os.environ, XDG_CONFIG_HOME=str(h / "cfg"), CLAUDE_CONFIG_DIR=str(h / "claude"),
+        self.env = dict(os.environ, TASK_LOOP_SUITE_HOST="1", XDG_CONFIG_HOME=str(h / "cfg"), CLAUDE_CONFIG_DIR=str(h / "claude"),
                         PATH="%s%s%s" % (shim, os.pathsep, os.environ["PATH"]),
                         GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
         for k in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):

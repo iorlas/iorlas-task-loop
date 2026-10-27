@@ -246,11 +246,32 @@ def suite(repo, record=False):
     return {"workers": n, "wall": time.monotonic() - began, "shards": shard_wall, "serial": serial_wall, "times": times}
 
 
+def container_suite(repo):
+    """The suite through dev/suite-docker.py (a Linux container's own disk; the host suite when docker is not reachable).
+    TASK_LOOP_SUITE_HOST=1 runs it on the host. Streams its output; red raises Abort like suite() does. The container's own log is gone with it, so the saved one is this output."""
+    if os.environ.get("TASK_LOOP_SUITE_HOST"):  # the release tests' fake repos: no container, the host runner
+        return suite(repo)
+    say("running the full suite in a container (dev/suite-docker.py)")
+    p = subprocess.Popen([sys.executable, str(HERE / "suite-docker.py"), "--repo", str(repo)], stdout=subprocess.PIPE,
+                         stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
+    lines = []
+    for line in p.stdout:
+        lines.append(line)
+        sys.stdout.write(line)
+        sys.stdout.flush()
+    if p.wait() == 0:
+        return
+    out = "".join(lines)
+    log = save_output(out)
+    tests = ["%s (%s)" % m for m in re.findall(r"^(?:FAIL|ERROR): (\S+) \(([^)]*)\)", out, re.M)]
+    raise Abort("the suite is red; nothing released:\n%s\nfull output: %s" % (failure_report(out) or "\n".join(lines[-40:]), log), log, tests)
+
+
 def bump_and_commit(repo, message, minor):
     version = next_version(repo, minor)
     f = Path(repo) / PLUGIN
     f.write_text(set_version(f.read_text(encoding="utf-8"), version), encoding="utf-8")
-    suite(repo)
+    container_suite(repo)
     git(repo, "add", PLUGIN)
     git(repo, "commit", "-q", "-m", "%s: %s%s" % (version, message, TRAILER))
     return version
