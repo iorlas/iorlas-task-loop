@@ -22,6 +22,46 @@ def child_env():
     return env
 
 
+class TermHold:
+    """Holds a SIGTERM that arrives while a child is being spawned, so the caller can stop that child first.
+    Python runs its handler between bytecodes of the main thread, and the engine's handler raises: raised from inside
+    Popen(), the exception leaves the constructor, the caller never gets the Popen object and the new child (and its tree)
+    runs on unowned. A check that signals the engine at once (or a stop arriving right at a spawn) hits that window, more
+    often when the machine is loaded. `with TermHold() as hold: p = Popen(...)`, then `hold.replay()` as the first line of the caller's
+    try (the handler stays swapped until then), where the handler's raise finds p and the cleanup kills it. A no-op off the main thread or for a non-callable handler."""
+
+    def __enter__(self):
+        self.old, self.held = None, False
+        if os.name != "nt" and threading.current_thread() is threading.main_thread():
+            old = signal.getsignal(signal.SIGTERM)
+            if callable(old):
+                self.old = old
+                signal.signal(signal.SIGTERM, lambda *_: setattr(self, "held", True))
+        return self
+
+    def __exit__(self, kind, *_):
+        if kind:  # a failed spawn has nothing to stop: the real handler is back at once
+            self.release()
+        return False
+
+    def release(self):
+        if self.old is not None:
+            signal.signal(signal.SIGTERM, self.old)
+
+    def replay(self):
+        """The handler goes back and a held SIGTERM runs it now. Call it first thing inside the try that stops the child."""
+        self.release()
+        if self.held:
+            self.held = False
+            self.old(signal.SIGTERM, None)
+
+
+def popen_held(*args, **kw):
+    """(Popen(*args, **kw), the TermHold that kept a SIGTERM from unwinding the spawn); the caller calls hold.replay() inside its try."""
+    with TermHold() as hold:
+        return subprocess.Popen(*args, **kw), hold
+
+
 WORKER_LINE = re.compile(r"delegate: worker pid=(\d+) pgid=(\d+)(?: run_id=(\S+))?")  # route.py 0.31.1+, on stderr when it starts one
 
 

@@ -1202,6 +1202,24 @@ class EngineTest(unittest.TestCase):
         self.assertDead(self.child_of(pidfile))
         self.assertIn("wip (t-1)", tl.git("log", "-1", "--format=%s", "task/t-1", cwd=str(self.wt)))
 
+    def test_sigterm_landing_inside_popen_still_stops_the_new_child(self):
+        # tl-10s: the stop arrived before Popen() returned (a loaded machine runs the check ahead of the engine), the handler's
+        # raise left the constructor, and the check's whole tree ran on unowned
+        class SignalledPopen(subprocess.Popen):
+            def __init__(self, *a, **kw):
+                super().__init__(*a, **kw)
+                os.kill(os.getpid(), signal.SIGTERM)
+                for _ in range(100):  # a Python handler runs between bytecodes of this thread: give it its turn here
+                    time.sleep(0.001)
+
+        pidfile = Path(self.tmp.name, "child.pid")
+        eng = self.checks_engine()
+        with self.stoppable(), mock.patch.object(subprocess, "Popen", SignalledPopen):
+            with self.assertRaises(engine.Blocked) as cm:
+                eng.sh(self.SPAWN % pidfile + "wait")
+        self.assertEqual(cm.exception.kind, engine.oc.Kind.PAUSE_KILLED)
+        self.assertDead(self.child_of(pidfile))
+
     def test_sigterm_during_the_land_gate_stops_it_and_pushes_nothing(self):
         pidfile = Path(self.tmp.name, "child.pid")
         with self.stoppable():

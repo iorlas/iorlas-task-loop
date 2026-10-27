@@ -1592,14 +1592,14 @@ class Engine:
         bash = shutil.which("bash") if isinstance(cmd, str) and os.name != "nt" else None  # plans write bash
         run = [bash, "-e", "-o", "pipefail", "-c", cmd] if bash else cmd  # Windows: cmd.exe, as before
         started = time.time()
-        p = subprocess.Popen(run, shell=isinstance(run, str), cwd=self.wt,
-                             env=dict(procs.child_env(), **(tl.pinned_env(self.wt) if pin else {}), **(env or {})),
-                             stdin=subprocess.DEVNULL,
-                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=(os.name != "nt"))
-        self.hung, self.killed, self.kill_t, self.kill_why = False, False, 0.0, ""
-        self.last_event_t, self._event_frozen = started, False
+        p, hold = procs.popen_held(run, shell=isinstance(run, str), cwd=self.wt,  # tl-10s: see TermHold
+                                   env=dict(procs.child_env(), **(tl.pinned_env(self.wt) if pin else {}), **(env or {})),
+                                   stdin=subprocess.DEVNULL,
+                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=(os.name != "nt"))
+        self.hung, self.killed, self.kill_t, self.kill_why, self.last_event_t, self._event_frozen = False, False, 0.0, "", started, False
         self._event_lock = threading.Lock()
         try:
+            hold.replay()
             if idle:
                 out, rc = self.watch_output(p, timeout, idle)
             else:
