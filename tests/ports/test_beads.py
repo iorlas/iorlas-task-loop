@@ -37,19 +37,28 @@ class RealBdContract(BeadsContract, unittest.TestCase):
     database is shared. Skipped when bd is not installed or cannot init."""
 
     root: str = ""
+    why_not: str = ""  # a skip is per test, never in setUpClass: unittest does not count the tests of a class skipped there,
+    # and the release gate fails a run whose count differs from the planned one (the container has no bd)
 
     @classmethod
     def setUpClass(cls) -> None:
         exe = shutil.which("bd")
         if not exe:
-            raise unittest.SkipTest("bd is not installed")
+            cls.why_not = "bd is not installed"
+            return
         cls.root = tempfile.mkdtemp(prefix="ports-bd-")
         subprocess.run(["git", "init", "-q"], cwd=cls.root, check=True)
         r = subprocess.run([exe, "init", "--quiet", "--prefix", "pt"], cwd=cls.root, capture_output=True, text=True,
                            env=dict(os.environ, HOME=cls.root))
         if r.returncode != 0:
             shutil.rmtree(cls.root, ignore_errors=True)
-            raise unittest.SkipTest("bd init failed: %s" % r.stderr[-200:])
+            cls.root = ""
+            cls.why_not = "bd init failed: %s" % r.stderr[-200:]
+
+    def setUp(self) -> None:
+        if self.why_not:
+            self.skipTest(self.why_not)
+        super().setUp()
 
     @classmethod
     def tearDownClass(cls) -> None:
