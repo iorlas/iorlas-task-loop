@@ -581,8 +581,22 @@ def same_dir(a, b):
         return os.path.realpath(str(a)) == os.path.realpath(str(b))
 
 
+_TREE_MEMO = {}   # (slot, what the config files and environment are now) -> tree_problem's answer
+
+
 def tree_problem(wt):
-    """(what is wrong, the owner's fix) when git at `wt`, read as ambient config has it, is not that checkout; else None."""
+    """(what is wrong, the owner's fix) when git at `wt`, read as ambient config has it, is not that checkout; else None.
+    Two git calls, none while the config files are as they were: a run asks eleven times."""
+    key = tl.config_key(wt)
+    if key and key in _TREE_MEMO:
+        return _TREE_MEMO[key]
+    out = _tree_problem(wt)
+    if key:
+        _TREE_MEMO[key] = out
+    return out
+
+
+def _tree_problem(wt):
     clean = {k: v for k, v in os.environ.items() if k not in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR")}
 
     def g(*a):
@@ -590,18 +604,32 @@ def tree_problem(wt):
                            errors="replace")
         return r.stdout.strip() if r.returncode == 0 else ""
 
-    repo = str(Path(g("rev-parse", "--path-format=absolute", "--git-common-dir") or ".").parent)
-    origin = g("config", "--show-origin", "--get", "core.worktree")
+    both = g("rev-parse", "--path-format=absolute", "--git-common-dir", "--show-toplevel").split("\n")
+    if len(both) == 2:
+        common, top = both
+    else:  # one of the two fails (core.bare=true has no top level): ask for each alone, as the message needs what is left
+        common, top = g("rev-parse", "--path-format=absolute", "--git-common-dir"), None
+    repo = str(Path(common or ".").parent)
+    origin = bare = ""
+    for ln in g("config", "--show-origin", "--get-regexp", r"^core\.(worktree|bare)$").splitlines():  # the last of each key wins, as `--get` does
+        where, _, kv = ln.partition("\t")
+        k, _, v = kv.partition(" ")
+        if k.lower() == "core.worktree":
+            origin = "%s\t%s" % (where, v) if v else where
+        elif k.lower() == "core.bare":
+            bare = v
+    origin = origin.strip()
     if origin:
         where = origin.split("\t")[0].replace("file:", "")
         return ("core.worktree is set (%s)" % origin.replace("\t", " = ", 1),
                 "core.worktree redirects every worktree of this repo to another folder. Remove it: "
                 "`git config --unset core.worktree` in %s (it was set in %s), then rerun." % (repo, where))
-    if g("config", "--get", "core.bare").lower() == "true":
+    if bare.strip().lower() == "true":
         return ("core.bare is true",
                 "core.bare=true in the repo's config makes git refuse the work tree. Fix: `git config core.bare false` "
                 "in %s, then rerun." % repo)
-    top = g("rev-parse", "--show-toplevel")
+    if top is None:
+        top = g("rev-parse", "--show-toplevel")
     if not top or not same_dir(top, wt):
         return ("git's top-level folder is %s, not the slot %s" % (top or "(none)", wt),
                 "Something redirects git away from the slot. Check `git config --show-origin --list` in %s for "
@@ -3883,12 +3911,50 @@ class Engine:
 
     def tree_hash(self):
         """The worktree as git would commit it now, untracked files included, without touching the real index."""
+        state = self.tree_state()
+        memo = getattr(self, "_tree_hash_memo", None)
+        if state and memo and memo[0] == state:
+            return memo[1]
         with tempfile.TemporaryDirectory() as d:
             env = dict(tl.git_env(self.wt), GIT_INDEX_FILE=os.path.join(d, "index"))
             for args in (["read-tree", "HEAD"], ["add", "-A"]):
                 subprocess.run(["git"] + args, cwd=self.wt, env=env, capture_output=True)
             r = subprocess.run(["git", "write-tree"], cwd=self.wt, env=env, capture_output=True, text=True)
-            return r.stdout.strip()
+            tree = r.stdout.strip()
+        if state and tree:
+            self._tree_hash_memo = (state, tree)
+        return tree
+
+    def tree_state(self):
+        """Everything that decides tree_hash, from one `git status`: HEAD, every path that differs from it or is untracked, and the
+        size, mtime and mode of each of those files (status alone says 'modified' before and after a second edit). None when git
+        cannot say; a run of tree_hash is then never skipped."""
+        r = subprocess.run(["git", "--no-optional-locks", "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all"],
+                           cwd=self.wt, env=tl.git_env(self.wt), capture_output=True)
+        if r.returncode != 0:
+            return None
+        recs = r.stdout.split(b"\0")
+        paths, i = [], 0
+        while i < len(recs):
+            rec = recs[i]
+            if rec[:2] in (b"1 ", b"u "):
+                paths.append(rec.split(b" ", 8 if rec[:1] == b"1" else 10)[-1])
+            elif rec[:2] == b"2 ":
+                paths.append(rec.split(b" ", 9)[-1])
+                i += 1  # the original path follows as its own record
+                paths.append(recs[i] if i < len(recs) else b"")
+            elif rec[:2] == b"? ":
+                paths.append(rec[2:])
+            i += 1
+        base = os.fsencode(str(self.wt))
+        stats = []
+        for p in paths:
+            try:
+                st = os.lstat(os.path.join(base, p))
+                stats.append((st.st_size, st.st_mtime_ns, st.st_mode, st.st_ino))
+            except OSError:
+                stats.append(None)
+        return (r.stdout, tuple(stats))
 
     def task_diff(self):
         """The task's diff against where it started, untracked files included."""

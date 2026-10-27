@@ -195,6 +195,19 @@ class InputKeys:
 
 # --- duration history -----------------------------------------------------------------------------------------------
 
+_ORIGIN_MEMO = {}   # (checkout, config files as the file system shows them) -> remote.origin.url
+
+
+def _origin_url(wt, git):
+    """`git config --get remote.origin.url`, asked again only when a config file git reads for `wt` changed."""
+    key = tl.config_key(wt)
+    if not key:
+        return git("config", "--get", "remote.origin.url")
+    if key not in _ORIGIN_MEMO:
+        _ORIGIN_MEMO[key] = git("config", "--get", "remote.origin.url")
+    return _ORIGIN_MEMO[key]
+
+
 def repo_key(wt):
     """One name per repo, shared by its slots and worktrees: the origin url, else the common git dir."""
     env = tl.git_env(wt)
@@ -202,7 +215,7 @@ def repo_key(wt):
     def git(*a):
         r = subprocess.run(["git"] + list(a), cwd=wt, env=env, capture_output=True, text=True)
         return r.stdout.strip() if r.returncode == 0 else ""
-    ident = git("config", "--get", "remote.origin.url") or git("rev-parse", "--path-format=absolute", "--git-common-dir") or str(wt)
+    ident = _origin_url(wt, git) or tl.git("rev-parse", "--path-format=absolute", "--git-common-dir", cwd=wt) or str(wt)
     return "%s-%s" % (re.sub(r"[^\w.-]+", "_", Path(ident.rstrip("/")).name)[:40] or "repo",
                       hashlib.sha1(ident.encode("utf-8", "surrogateescape")).hexdigest()[:10])
 
