@@ -22,6 +22,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 import delegate_link as dl  # noqa: E402,F401
+from clock import FakeClock  # noqa: E402
 import engine  # noqa: E402
 import fake_route  # noqa: E402
 import lane_policy as lp  # noqa: E402,F401
@@ -613,6 +614,37 @@ class EngineTest(unittest.TestCase):
         self.assertLess(time.time() - t, 20)
         self.assertNotEqual(rc, 0)
         self.assertIn("timed out after 0.02 min", self.eng.log_path.read_text())
+
+    @POSIX_CHECK
+    def test_a_gate_killed_by_a_signal_starts_no_fix_round_and_leaves_the_bead_open(self):
+        # tl-y35: `gate: exit -15` (the parent stopped it) is the machine's outcome, not the code's
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, gate="kill -TERM $$", max_fix_rounds=2)
+        self.assertNotEqual(rc, 0)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])  # no fix round: no second worker call
+        self.assertEqual((self.eng.fixes, self.blocked, self.closed), (0, [], []))
+        self.assertIn(("update", "t-1", "--status", "open", "--assignee", ""), self.bd_calls)
+        log = self.eng.log_path.read_text()
+        self.assertIn("gate: exit -15", log)
+        self.assertNotIn("gate red", log)
+
+    def test_a_land_lock_wait_is_not_budget(self):
+        # tl-y35: 2251 s on the fake clock waiting for the land lock move the budget by exactly that
+        eng = self.checks_engine(budget_min=180)
+        eng.clock = FakeClock()
+        before = eng.spent_min()
+
+        @contextlib.contextmanager
+        def held_by_another(path, holder, waiting=None, timeout=None):
+            waiting("tl-266")
+            eng.clock.advance(2251)
+            yield path
+        with mock.patch.object(tl, "os_lock", held_by_another):
+            with eng.locked("land_lock", Path(self.tmp.name) / "land.lock"):
+                pass
+        self.assertEqual(eng.waited, 2251)
+        self.assertAlmostEqual(before - eng.spent_min(), 2251 / 60, delta=0.5)  # real time moved by ms; no real sleep
+        waits = [json.loads(l) for l in eng.log_path.read_text().splitlines() if '"kind": "wait"' in l]
+        self.assertEqual([(w["secs"], w["in_budget"], w["holder"]) for w in waits], [(2251, False, "tl-266")])
 
     def test_the_gate_runs_once_at_land_and_tells_the_push_which_tree_it_gated(self):
         count, seen = Path(self.tmp.name) / "gates", Path(self.tmp.name) / "gated-tree"
@@ -2242,7 +2274,7 @@ class EngineTest(unittest.TestCase):
         t.join()
         recs = [json.loads(x) for x in Path(eng.log_path).read_text().splitlines()]
         (w,) = [r for r in recs if r.get("kind") == "wait"]
-        self.assertEqual((w["what"], w["holder"], w["in_budget"]), ("land_lock", "other-bead", True))
+        self.assertEqual((w["what"], w["holder"], w["in_budget"]), ("land_lock", "other-bead", False))  # tl-y35: a lock wait is not budget
         self.assertGreaterEqual(w["secs"], 0)
         end = next(r for r in recs if r.get("kind") == "end")
         self.assertLess(recs.index(end), recs.index(w))  # the review node ended before the wait began: the wait is not its time

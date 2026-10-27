@@ -1137,18 +1137,21 @@ class Engine:
     def locked(self, what, path, holder=None):
         """tl.os_lock with a wait recorded as its own segment (tl-9h2): the open node ends before the wait starts (it was
         booked to the step before), and a `wait` record names the lock, who held it, when the wait began and how long it took.
-        Unlike add_wait's, a lock wait still counts against budget_min (it always did): the record says in_budget=True."""
-        who, t_req = [], [time.time()]
+        tl-y35: the wait is a wait for a shared resource like any other: it is added to `waited`, so budget_min does not
+        count it (the budget message says so), and the record says in_budget=False. Timed on self.clock."""
+        who, t_req = [], [self.clock.now()]
 
         def waiting(w):
             who.append(w)
             self.end_node()
-            t_req[0] = time.time()  # the wait starts when the node before it has ended
+            t_req[0] = self.clock.now()  # the wait starts when the node before it has ended
             self.log("wait_start", what.replace("_", " "), what=what, holder=w, t0=t_req[0])  # a wait still going (or cut off) shows up
             self.log("note", "waiting for the %s (held by %s)" % (what.replace("_", " "), w))
         with tl.os_lock(path, holder or self.bead, waiting):
             if who:
-                self.log("wait", what.replace("_", " "), what=what, holder=who[0], t0=t_req[0], secs=round(time.time() - t_req[0]), in_budget=True)
+                secs = max(0.0, self.clock.now() - t_req[0])
+                self.waited += secs
+                self.log("wait", what.replace("_", " "), what=what, holder=who[0], t0=t_req[0], secs=round(secs), in_budget=False)
             yield path
 
     def note_slot_waits(self, text, wall):
@@ -4080,6 +4083,9 @@ class Engine:
                     if stale:  # tl-fsj: not a writer's amend; the engine's tree is older than the config it runs
                         raise Blocked("failed: infrastructure: the configured check `%s` needs something this tree lacks (\"%s\"): the "
                                       "tree is older than the base's .task-loop.json, which no writer can fix" % (c["id"], stale.group(0)), kind=oc.Kind.FAULT_STALE_BASE)
+                if rc is not None and rc < 0 and not hung and not self.killed:  # tl-y35: a signal ended it, not its verdict
+                    raise Blocked("failed: stopped: check `%s` was killed by signal %d; the bead goes back to open and the next run "
+                                  "runs it again (no fix round, no failure counted)" % (c["id"], -rc), kind=oc.Kind.PAUSE_KILLED)
                 res = dict(base, exit=rc, status="ran" if rc == 0 else "failed", tries=tries, tail=tail[-1500:],
                            secs=round(time.time() - t), log="checks/" + log_name, log_abs=str(logs / log_name), hung=bool(hung))
                 if hung:
@@ -4249,6 +4255,9 @@ class Engine:
                         self.log("gate", "gate: %s" % ("skipped" if gate_skipped else "exit %d" % rc),
                                  tree=gtree, cmd=self.cfg["gate"], exit=rc, secs=round(time.time() - gate_t),
                                  cached=gate_skipped, node_id=(self.cur or {}).get("id"))
+                        if rc < 0 and not self.killed:  # tl-y35: killed by a signal (an operator's SIGTERM, the machine): not the code's fault
+                            raise Blocked("failed: stopped: the gate was killed by signal %d; the bead goes back to open and the next run "
+                                          "runs the gate again (no fix round, no failure counted)" % -rc, kind=oc.Kind.PAUSE_KILLED)
                         if rc:
                             problem = ("gate", tail)
                             self.outcome_of("gate red", (tail.strip().splitlines() or [""])[-1])
