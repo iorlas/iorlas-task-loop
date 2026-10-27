@@ -54,9 +54,10 @@ line; a message between sessions is never the guard. Clashes may happen; they mu
 | a slot's git | the engine's own git calls (`run_git`, `tl.git`, `Engine.git`, tree hash, staging, fetch, checkout, rebase, land) run with `GIT_DIR` = the slot's own gitdir and `GIT_WORK_TREE` = the slot, so a `core.worktree` in the shared `.git/config` (lifesim-1mm) cannot redirect them; workers, reviewers, verifiers and checks run unpinned (`GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE` stripped, so their git on other repos works); an unpinned `rev-parse --show-toplevel` must be the slot, `core.worktree` unset, `core.bare` not true, asserted before and after every node (write, hard, fix, checks) and before the land; land stages only the slot's own `git status` paths | a wrong tree stops the run with an owner ask naming the setting, its file and the fix (`git config --unset core.worktree`), before review or land; `tl doctor` warns when `extensions.worktreeConfig` is off (`tests/test_slot_git.py`, tl-bxk.10.12) | |
 | a stopped engine's worker | engine SIGTERMs route.py, which kills the worker's group; SIGKILL after a grace | | |
 
-All of it is proven together by one race test (tl-bxk.11.1, `tests/test_race.py`): two loops, a hand run, a
-`--slot any --wait` waiter, a slot hold and two releases at once, on beads in two areas, real processes on a fake repo,
-in under a minute.
+Each rule has its own deterministic test in the gate (tl-vgo, `tests/test_race_invariants.py`: threads, events and a fake
+clock on the real lock and lease code, no child process). The end-to-end check is `python3 dev/race.py` (seeds 1..5, outside
+the gate): two loops, a hand run, a `--slot any --wait` waiter, a slot hold and two releases at once, on beads in two areas,
+real processes on a fake repo.
 
 ## Not on the roadmap
 

@@ -40,7 +40,6 @@ def cost(test_id, durations):
 # runs them in ONE process after the parallel shards. (module, class or None for the whole module, reason); found by measurement and by
 # reading the code, not guessed: a module is listed only with the reason that makes it unsafe beside others.
 SERIAL = (
-    ("test_race", None, "races real processes on one repo and SIGKILLs them (os.kill / killpg of started PIDs); its timing windows need a quiet machine"),
     ("test_write_idle", None, "starts real worker process groups and asserts how long a writer stays idle against the wall clock; load moves the clock"),
 )
 

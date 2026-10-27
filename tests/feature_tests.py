@@ -17,7 +17,7 @@ FEATURES = {
     "plan": [],
     "slots": ["test_slots", "test_slot_git"],
     "review": ["test_verify_noblock"],
-    "loop": ["test_loop", "test_race"],
+    "loop": ["test_loop", "test_race_invariants"],
     "release": ["test_release"],
     "land": ["test_land_lock", "test_held_branch"],
     "look": ["test_look", "test_looks"],

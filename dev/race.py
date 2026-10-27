@@ -1,7 +1,17 @@
-"""Safe by construction (tl-bxk.11.1): two `tl loop`s, a hand `run-task --slot s1`, a hand `run-task --slot any --wait`,
+"""The real-process race (tl-bxk.11.1, tl-vgo): two `tl loop`s, a hand `run-task --slot s1`, a hand `run-task --slot any --wait`,
 a `tl slot hold s2` and two `dev/release.py` at once, all real processes, on a fake repo (bare origin, fake bd, fake
-delegate, fake marketplace).
+delegate, fake marketplace). About 40 s per seed, more under load; NOT in the default gate (python3 dev/suite.py).
 
+    python3 dev/race.py                  seeds 1..5, one after another
+    python3 dev/race.py --seeds 3        one seed (or 1,4,7 or 2-6)
+    TASK_LOOP_RACE=1 python3 -m unittest dev.race     the same, one seed (RACE_SEED, default 1)
+
+Exit 0 when every seed passed, 1 when one failed. A failed seed prints `RACE_SEED=n FAILED` and then the checks that broke,
+the stderr of every process that exited non-zero, and the tail of every process log; rerun that seed alone to reproduce
+(the jitter is seeded, the machine's load is not).
+
+The invariants it checks are each proven deterministically, at the lock and lease level and in the gate, by
+tests/test_race_invariants.py; this run is the end-to-end check that the pieces still fit together under real processes.
 Nothing may be shared that is not taken through a lock or lease: no bead claimed or run twice, no slot used by two at
 once (a hold included), no two beads of one area at once (tl-bxk.11.4), slots served in ticket order (tl-bxk.11.5), no
 checkout in a worktree under another process's live engine lock, every land rebased onto the base and pushed once,
@@ -65,6 +75,7 @@ def shim(path, script):
 
 
 @unittest.skipIf(os.name == "nt", "fcntl locks and POSIX process groups")
+@unittest.skipUnless(__name__ == "__main__" or os.environ.get("TASK_LOOP_RACE"), "a real-process race: python3 dev/race.py, or TASK_LOOP_RACE=1")
 class Race(unittest.TestCase):
     def setUp(self):
         self.seed = os.environ.get("RACE_SEED", "1")
@@ -149,17 +160,18 @@ class Race(unittest.TestCase):
     # -- the actors -------------------------------------------------------------------------------------------------
 
     def spawn(self, name, cmd):
-        log = open(self.h / (name + ".log"), "ab")
+        log, err = open(self.h / (name + ".log"), "ab"), open(self.h / (name + ".err"), "ab")
         env = dict(self.env, RACE_ACTOR=name.split("-")[0])  # fake bd notes whose tree claimed
         p = subprocess.Popen(cmd, cwd=str(self.repo), env=env, stdin=subprocess.DEVNULL, stdout=log,
-                             stderr=subprocess.STDOUT, start_new_session=True)
+                             stderr=err, start_new_session=True)
         log.close()
+        err.close()
         self.procs.append((name, p))
         return p
 
     def tl(self, name, *args):
         p = self.spawn(name, [PY, str(TL)] + list(args))
-        return p.wait(), (self.h / (name + ".log")).read_text(errors="replace")
+        return p.wait(), (self.h / (name + ".log")).read_text(errors="replace") + (self.h / (name + ".err")).read_text(errors="replace")
 
     def store(self):
         return json.loads((self.h / "bd" / "store.json").read_text())["beads"]
@@ -227,7 +239,11 @@ class Race(unittest.TestCase):
                     pass
 
     def dump(self):
-        parts = []
+        parts = ["RACE_SEED=%s" % self.seed]
+        for name, p in self.procs:  # the stderr of a process that failed, whole
+            err = (self.h / (name + ".err"))
+            if p.returncode and err.exists() and err.read_text(errors="replace").strip():
+                parts.append("== %s exit %s, stderr\n%s" % (name, p.returncode, err.read_text(errors="replace")))
         for f in sorted(self.h.glob("*.log")):
             parts.append("== %s\n%s" % (f.name, "\n".join(f.read_text(errors="replace").splitlines()[-25:])))
         for f in sorted((self.h / "cfg" / "task-loop" / "loop").glob("*.jsonl")):
@@ -355,5 +371,35 @@ class Race(unittest.TestCase):
         print("race duration (metric only): %.1f s" % secs)
 
 
+def seeds_of(text):
+    """'1,4' -> [1, 4]; '2-6' -> [2..6]; '3' -> [3]."""
+    out = []
+    for part in text.split(","):
+        lo, _, hi = part.partition("-")
+        out += list(range(int(lo), int(hi or lo) + 1))
+    return out
+
+
+def main(argv=None):
+    import argparse
+    import io
+    ap = argparse.ArgumentParser(prog="race.py", description="The real-process race, one run per seed (see the file docstring).")
+    ap.add_argument("--seeds", default="1-5", help="seeds to run: 1-5 (default), 3, or 1,4,7")
+    args = ap.parse_args(argv)
+    failed = []
+    for seed in seeds_of(args.seeds):
+        os.environ["RACE_SEED"] = str(seed)
+        out = io.StringIO()
+        t = time.time()
+        res = unittest.TextTestRunner(stream=out, verbosity=0).run(unittest.defaultTestLoader.loadTestsFromTestCase(Race))
+        ok = res.wasSuccessful() and not res.skipped
+        print("RACE_SEED=%d %s in %.0f s" % (seed, "ok" if ok else "FAILED", time.time() - t), flush=True)
+        if not ok:
+            failed.append(seed)
+            print(out.getvalue(), file=sys.stderr, flush=True)
+    print("failed seeds: %s" % (failed or "none"))
+    return 1 if failed else 0
+
+
 if __name__ == "__main__":
-    unittest.main()
+    sys.exit(main())

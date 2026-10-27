@@ -104,7 +104,7 @@ class MappingTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         modules = {test_id.split(".", 1)[0] for test_id in proc.stdout.splitlines()}
         self.assertLessEqual({"test_checks_speed", "test_check_trim", "test_stages", "test_verify_noblock",
-                              "test_land_lock", "test_held_branch", "test_loop", "test_race"}, modules)
+                              "test_land_lock", "test_held_branch", "test_loop", "test_race_invariants"}, modules)
         self.assertIn("test_engine", modules)
         for unrelated in ("test_tl", "test_dash", "test_slots", "test_opencode", "test_renotify",
                           "test_release", "test_look"):

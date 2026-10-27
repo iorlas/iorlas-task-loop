@@ -1175,7 +1175,6 @@
 "test_prompt_golden.Golden.test_write_prompt": 0.001,
 "test_prompt_golden.Golden.test_write_prompt_after_a_red_round": 0.001,
 "test_prompt_golden.Golden.test_write_prompt_without_rules": 0.0,
-"test_race.Race.test_two_loops_a_hand_run_a_hold_and_releases_at_once_share_nothing": 29.647,
 "test_reflect_digest.Api.test_the_dashboard_api_returns_the_view": 0.059,
 "test_reflect_digest.Clusters.test_a_bare_shared_file_alone_does_not_merge_unrelated_items": 0.016,
 "test_reflect_digest.Clusters.test_a_shared_file_joins_items_that_say_different_things": 0.02,
