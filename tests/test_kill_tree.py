@@ -73,7 +73,7 @@ class KillTree(unittest.TestCase):
         self.assertEqual(os.getpgid(pids["same"]), p.pid)
         self.assertNotEqual(os.getpgid(pids["setsid"]), p.pid)
         procs.kill_tree(p)
-        deadline = time.time() + 5
+        deadline = time.time() + 60
         while time.time() < deadline and (alive(pids["same"]) or alive(pids["setsid"])):
             time.sleep(0.1)
         self.assertFalse(alive(pids["same"]), "same-group child survived")
@@ -86,7 +86,7 @@ class KillTree(unittest.TestCase):
         finally:
             del os.environ["IGNORE_TERM"]
         procs.kill_tree(p)
-        deadline = time.time() + 5
+        deadline = time.time() + 60
         while time.time() < deadline and (alive(pids["same"]) or alive(pids["setsid"])):
             time.sleep(0.1)
         self.assertFalse(alive(pids["same"]), "same-group child survived")

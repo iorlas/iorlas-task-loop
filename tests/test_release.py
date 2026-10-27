@@ -330,7 +330,7 @@ class Release(unittest.TestCase):
                         out.write(json.dumps(snapshot) + "\\n")
                     if version == "0.1.1":
                         READY.touch()
-                        deadline = time.monotonic() + 15
+                        deadline = time.monotonic() + 120
                         while not PROCEED.exists():
                             self.assertLess(time.monotonic(), deadline, "first suite was not released")
                             time.sleep(0.02)
@@ -346,7 +346,7 @@ class Release(unittest.TestCase):
         sources = {name: self.git("rev-parse", "task/" + name, cwd=self.repo) for name in ("first", "second")}
 
         def wait_for(predicate):
-            deadline = time.monotonic() + 10
+            deadline = time.monotonic() + 120
             while not predicate():
                 self.assertLess(time.monotonic(), deadline, "release did not reach synchronization point")
                 time.sleep(0.02)

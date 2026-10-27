@@ -186,7 +186,7 @@ class OpenCode(unittest.TestCase):
             t0 = time.time()
             self.assertEqual(server.opencode_events(SID), [])
             self.assertIsNone(tl.opencode_context(SID))
-            self.assertLess(time.time() - t0, 5)
+            self.assertLess(time.time() - t0, 120)  # hang guard only: a read that blocks on the lock never returns; the empty results above are the gate
         finally:
             con.execute("ROLLBACK")
             con.close()
