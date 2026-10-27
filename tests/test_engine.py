@@ -21,6 +21,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
+import applog  # noqa: E402
 import delegate_link as dl  # noqa: E402,F401
 from clock import FakeClock  # noqa: E402
 import engine  # noqa: E402
@@ -209,6 +210,7 @@ class EngineTest(unittest.TestCase):
         sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
 
     def tearDown(self):
+        applog.close_all()  # tl-64i: the held log handles live in the temp dir that goes now
         self.env.stop()
         self.tmp.cleanup()
 

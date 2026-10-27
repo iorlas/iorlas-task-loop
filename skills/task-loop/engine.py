@@ -34,6 +34,7 @@ from checks import speed as cs
 from core import fmt, procs
 from lanes import call as lcall
 from lanes import route as lroute
+import applog
 import call_state as callstate
 import delegate_link as dl
 import lane_policy as lp
@@ -559,6 +560,7 @@ class Exec(BaseException):
 
 
 def exec_in_place(argv):
+    applog.close_all()
     os.execv(sys.executable, argv)
 
 
@@ -938,8 +940,7 @@ class Engine:
     def log(self, kind, text, **kw):
         rec = {"t": time.time(), "kind": kind, "text": text}
         rec.update(kw)
-        with open(self.log_path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        applog.append(self.log_path, json.dumps(rec, ensure_ascii=False) + "\n")  # tl-64i: one held handle, a line at a time
         if kind == "node":
             tl.event("stage", self.bead, text=text)
         if kind in QUIET_KINDS:
@@ -2436,6 +2437,12 @@ class Engine:
             pass
 
     def run(self):
+        try:
+            return self.run_once()
+        finally:
+            applog.close(self.log_path)  # tl-64i: the run's log handle ends with the run
+
+    def run_once(self):
         outcome, why, sha, question, kind = "failed", "", "", "", oc.Kind.FAULT_ENGINE
         hb = Heartbeat(self.bead, os.environ.get("TASK_LOOP_SLOT_BEAD", ""))
         try:

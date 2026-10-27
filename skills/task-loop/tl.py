@@ -62,6 +62,8 @@ import urllib.request
 from pathlib import Path
 from urllib.parse import quote
 
+import applog
+
 try:
     import fcntl
 except ImportError:  # Windows
@@ -387,8 +389,7 @@ def event(kind, bead="", **fields):
            "repo": fields.pop("repo", None) or repo_root(), "host": socket.gethostname()}
     rec.update({k: v for k, v in fields.items() if v is not None})
     line = json.dumps(rec, ensure_ascii=False) + "\n"
-    with open(config_dir() / "events.jsonl", "a", encoding="utf-8") as f:
-        f.write(line)
+    applog.append(config_dir() / "events.jsonl", line)  # tl-64i: one held handle per process, a line at a time
     register_repo(rec["repo"])
     return rec
 

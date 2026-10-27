@@ -25,6 +25,7 @@ import time
 import uuid
 from pathlib import Path
 
+import applog
 import beadlint
 import delegate_link as dl
 import engine
@@ -456,8 +457,8 @@ def say(text):
     line = "[%s] loop: %s" % (time.strftime("%H:%M:%S", time.localtime(clock())), text)
     engine.say(line)
     if LOG[0]:
-        with contextlib.suppress(OSError), open(LOG[0], "a", encoding="utf-8") as f:
-            f.write(line + "\n")
+        with contextlib.suppress(OSError):
+            applog.append(LOG[0], line + "\n")
 
 
 def open_log(repo):
@@ -594,8 +595,7 @@ def record(repo, bead_id, slot, r):
             "outcome": r.get("outcome"), "minutes": r.get("minutes", 0), "rounds": r.get("rounds"),
             "tests_added": r.get("tests_added"), "asked": bool(r.get("asked")), "trace": r.get("run"),
             "engine_log": r.get("log"), "run_log": r.get("run_log"), "why": (r.get("why") or "")[:300]}
-    with open(paths(repo)["log"], "a", encoding="utf-8") as f:
-        f.write(json.dumps(line, ensure_ascii=False) + "\n")
+    applog.append(paths(repo)["log"], json.dumps(line, ensure_ascii=False) + "\n")
     say("%s %s%s" % (bead_id, line["outcome"], (": " + line["why"][:160]) if line["why"] else ""))
 
 
@@ -759,6 +759,7 @@ def maybe_move(a, repo, state):  # returns True when a stop arrived during the c
         argv = list(a.argv)
         if tl.read_pin().get("task-loop") and "--pin" not in argv and not pin_aware(d):
             argv.append("--pin")  # an install from before pins would move straight back to the newest one
+        applog.close_all()
         os.execv(sys.executable, [sys.executable, str(d / "skills" / "task-loop" / "tl.py"), *argv])
     except OSError as e:  # execv itself failed: the loop goes on where it is
         os.environ.pop("TL_LOOP_STATE", None)
@@ -867,6 +868,7 @@ def cmd_loop(a):
         return passes(repo, a, started, st)
     finally:
         write_exit(repo, started)
+        applog.close_all()  # tl-64i: the loop's log handles end with the loop
         with stop_lock(repo):
             with contextlib.suppress(FileNotFoundError):
                 p["state"].unlink()
