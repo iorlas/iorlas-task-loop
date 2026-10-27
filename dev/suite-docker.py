@@ -12,8 +12,10 @@ When docker is not reachable: one warning line, then the suite on the host. Pyth
 import argparse
 import hashlib
 import os
+import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -62,9 +64,28 @@ def main(argv=None):
     sha = git(repo, "rev-parse", "HEAD").decode().strip()
     common = Path(os.fsdecode(git(repo, "rev-parse", "--path-format=absolute", "--git-common-dir")).strip())
     patch = git(repo, "diff", "HEAD", "--binary")
-    cmd = ["docker", "run", "--rm", "--init", "-i", "-w", "/", "-e", "SHA=" + sha, "-v", "%s:/src.git:ro" % common,
-           args.image, "sh", "-c", INSIDE]
-    return subprocess.run(cmd, input=patch).returncode
+    name = "tl-suite-%d-%d" % (os.getpid(), time.time())
+    inside = os.environ.get("TASK_LOOP_SUITE_INSIDE") or INSIDE  # the override is for the wrapper's own test
+    cmd = ["docker", "run", "--rm", "--init", "-i", "--name", name, "-w", "/", "-e", "SHA=" + sha, "-v", "%s:/src.git:ro" % common,
+           args.image, "sh", "-c", inside]
+    p = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+
+    def stop(signum, _frame):
+        # killing the `docker run` client leaves the container running in the VM: kill it by name
+        subprocess.run(["docker", "kill", name], capture_output=True)
+        p.terminate()
+        try:
+            p.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            p.kill()
+        sys.exit(128 + signum)
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+    try:
+        p.communicate(patch)
+    except BrokenPipeError:
+        pass
+    return p.wait()
 
 
 if __name__ == "__main__":

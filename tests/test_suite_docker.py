@@ -1,6 +1,10 @@
 """dev/suite-docker.py: without a reachable docker it warns once and runs the host suite."""
 import importlib.util
+import os
+import signal
+import subprocess
 import sys
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -20,6 +24,30 @@ class SuiteDocker(unittest.TestCase):
         self.assertEqual(run.call_args[0][0][:2], [sys.executable, str(ROOT / "dev" / "suite.py")])
         warned = "".join(c.args[0] for c in err.write.call_args_list)
         self.assertEqual(warned.count("WARNING"), 1)
+
+    @unittest.skipUnless(sd.docker_ok(), "needs a reachable docker")
+    def test_sigterm_removes_the_named_container(self):
+        env = dict(os.environ, TASK_LOOP_SUITE_INSIDE="cat >/dev/null; sleep 300")
+        p = subprocess.Popen([sys.executable, str(ROOT / "dev" / "suite-docker.py"), "--repo", str(ROOT)], env=env,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.addCleanup(lambda: p.poll() is None and p.kill())
+        name = "tl-suite-%d-" % p.pid
+
+        def containers():
+            r = subprocess.run(["docker", "ps", "-q", "--filter", "name=" + name], capture_output=True, text=True)
+            return r.stdout.split()
+        for _ in range(300):
+            if containers():
+                break
+            time.sleep(0.1)
+        self.assertTrue(containers(), "the container never started")
+        p.send_signal(signal.SIGTERM)
+        p.wait(timeout=20)
+        for _ in range(50):
+            if not containers():
+                break
+            time.sleep(0.1)
+        self.assertEqual(containers(), [])
 
 
 if __name__ == "__main__":
