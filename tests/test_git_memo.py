@@ -107,6 +107,35 @@ class GitMemoTest(unittest.TestCase):
         sh("git", "commit", "-qam", "three", cwd=r)
         self.assertEqual(eng.tree_hash(), tl.git("rev-parse", "HEAD^{tree}", cwd=r))
 
+    def test_tree_hash_sees_two_same_size_edits_within_one_timestamp_tick(self):
+        r = self.repo
+        eng = engine.Engine.__new__(engine.Engine)
+        eng.wt = r
+        f = r / "f.txt"
+        f.write_text("2\n")
+        stamp = os.stat(f).st_mtime_ns
+        a = eng.tree_hash()
+        f.write_text("3\n")  # same size, same inode (rewritten in place) ...
+        os.utime(f, ns=(stamp, stamp))  # ... and the same mtime_ns: size, mtime and inode cannot tell the two edits apart
+        self.assertEqual(os.stat(f).st_mtime_ns, stamp)
+        self.assertNotEqual(eng.tree_hash(), a)
+
+    def test_tree_hash_follows_a_commit_and_a_checkout_made_by_another_process(self):
+        r = self.repo
+        eng = engine.Engine.__new__(engine.Engine)
+        eng.wt = r
+        (r / "f.txt").write_text("2\n")
+        dirty = eng.tree_hash()
+        self.assertEqual(eng.tree_hash(), dirty)  # remembered
+        sh("git", "commit", "-qam", "two", cwd=r)  # a worker commits: the tree is clean, HEAD moved
+        committed = eng.tree_hash()
+        self.assertEqual(committed, tl.git("rev-parse", "HEAD^{tree}", cwd=r))
+        sh("git", "checkout", "-q", "-b", "other", "HEAD~1", cwd=r)  # a worker checks out older content
+        self.assertEqual(eng.tree_hash(), tl.git("rev-parse", "HEAD^{tree}", cwd=r))
+        self.assertNotEqual(eng.tree_hash(), committed)
+        sh("git", "checkout", "-q", "main", cwd=r)
+        self.assertEqual(eng.tree_hash(), committed)
+
 
 if __name__ == "__main__":
     unittest.main()

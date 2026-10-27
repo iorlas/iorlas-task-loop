@@ -3927,7 +3927,7 @@ class Engine:
 
     def tree_state(self):
         """Everything that decides tree_hash, from one `git status`: HEAD, every path that differs from it or is untracked, and the
-        size, mtime and mode of each of those files (status alone says 'modified' before and after a second edit). None when git
+        size, mtime, ctime, mode, inode and (small files) content hash of each of those files (status alone says 'modified' before and after a second edit). None when git
         cannot say; a run of tree_hash is then never skipped."""
         r = subprocess.run(["git", "--no-optional-locks", "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all"],
                            cwd=self.wt, env=tl.git_env(self.wt), capture_output=True)
@@ -3951,7 +3951,13 @@ class Engine:
         for p in paths:
             try:
                 st = os.lstat(os.path.join(base, p))
-                stats.append((st.st_size, st.st_mtime_ns, st.st_mode, st.st_ino))
+                # mtime can be set back and two writes can land in one timestamp tick (coarse clocks), so a small file also
+                # counts by its content; ctime cannot be set from user space and covers the large ones
+                body = None
+                if stat.S_ISREG(st.st_mode) and st.st_size <= 1 << 20:
+                    with open(os.path.join(base, p), "rb") as fh:
+                        body = hashlib.sha1(fh.read()).digest()
+                stats.append((st.st_size, st.st_mtime_ns, st.st_ctime_ns, st.st_mode, st.st_ino, body))
             except OSError:
                 stats.append(None)
         return (r.stdout, tuple(stats))
