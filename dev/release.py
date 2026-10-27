@@ -249,7 +249,7 @@ def suite(repo, record=False):
 def container_suite(repo):
     """The suite through dev/suite-docker.py (a Linux container's own disk; the host suite when docker is not reachable).
     TASK_LOOP_SUITE_HOST=1 runs it on the host. Streams its output; red raises Abort like suite() does. The container's own log is gone with it, so the saved one is this output."""
-    if os.environ.get("TASK_LOOP_SUITE_HOST"):  # the release tests' fake repos: no container, the host runner
+    if os.environ.get("TASK_LOOP_SUITE_HOST") or not (Path(repo) / "dev" / "suite.py").is_file():  # a fake repo (the tests') has no runner of its own: the host runner
         return suite(repo)
     say("running the full suite in a container (dev/suite-docker.py)")
     p = subprocess.Popen([sys.executable, str(HERE / "suite-docker.py"), "--repo", str(repo)], stdout=subprocess.PIPE,
