@@ -545,10 +545,20 @@
   ]
  },
  "DelegateResult": {
-  "v": 3,
-  "status": "stop",
-  "reason": "lane_out",
-  "next": "retry",
+  "contract": 3,
+  "stop": {
+   "reason": "rate_limited",
+   "scope": "lane",
+   "permanence": "transient",
+   "retry": {
+    "kind": "predicted",
+    "at": 1793050200.5
+   },
+   "ref": "r",
+   "fix": "f",
+   "resumable": true,
+   "partial": false
+  },
   "data": {
    "summary": "s"
   },
@@ -567,7 +577,9 @@
   },
   "denied": [
    {
+    "kind": "policy",
     "tool": "Bash",
+    "path": null,
     "input": {}
    }
   ],
@@ -575,58 +587,51 @@
   "run_id": "r1",
   "call_id": "c1",
   "transcript": "/t",
+  "transcript_info": {
+   "path": "/t",
+   "kind": "codex",
+   "from": 0,
+   "to": 9,
+   "bytes": 9
+  },
   "transcript_status": "ok",
-  "retry_after": 1793050200.5,
   "say": "s",
   "git_violation": [
    "g"
   ],
-  "stop": {
-   "reason": "lane_out",
-   "scope": "lane",
-   "permanence": "transient",
-   "retry": {
-    "kind": "predicted",
-    "at": 1793050200.5
-   },
-   "ref": "r",
-   "fix": "f",
-   "resumable": true,
-   "partial": false
-  },
   "usage": {
    "tokens": {
-    "in": 412000,
-    "cached": 380000,
-    "out": 5100
+    "in_fresh": 1,
+    "cache_read": 2,
+    "cache_write": null,
+    "out": 3,
+    "cache_write_by_ttl": null
    },
    "cost": 0.1,
    "secs": 3.0,
    "turns": 4,
    "context_k": 35.5,
-   "ref": "r"
+   "answer_bytes": 1,
+   "ref": "r",
+   "last_activity_at": null,
+   "warm_until": null,
+   "ttl_s": 3600,
+   "ttl_source": "vendor_default",
+   "cost_usd": 0.1,
+   "cost_source": "harness",
+   "accounting": "exact"
   },
-  "fallback": "f",
-  "first_lane": "L",
-  "rung": 2,
+  "context": {
+   "instructions": [],
+   "env_keys": []
+  },
+  "worker": {
+   "end": "ok"
+  },
   "warnings": [
    "w"
   ],
-  "needs_input": false,
-  "ask_user": ""
- },
- "DelegateContract": {
-  "worker_run": 3,
-  "features": [
-   "a",
-   "b"
-  ],
-  "reasons": [
-   "busy"
-  ],
-  "lanes": [
-   "L"
-  ]
+  "agent_model": null
  },
  "WorkerStarted": {
   "v": 1,
@@ -658,14 +663,6 @@
     "until": 1793050200.5,
     "why": "w"
    },
-   "looks": [
-    {
-     "item": "i",
-     "verdict": "pass",
-     "where": "w",
-     "why": "y"
-    }
-   ],
    "extra": {
     "k": 1
    }

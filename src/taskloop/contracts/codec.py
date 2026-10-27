@@ -26,6 +26,7 @@ class StaleRecord(CodecError):
         self.want = want
 
 
+@typing.dataclass_transform(frozen_default=True, kw_only_default=True)
 def record[T](cls: type[T]) -> type[T]:
     """The decorator of every record: a frozen, keyword-only, slotted dataclass."""
     return dataclasses.dataclass(frozen=True, kw_only=True, slots=True)(cls)

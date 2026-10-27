@@ -6,7 +6,7 @@ from dataclasses import field
 from typing import Any, ClassVar, Literal
 
 from taskloop.contracts.codec import record, table_of
-from taskloop.contracts.trace import Denied, Tokens
+from taskloop.contracts.trace import Tokens
 
 
 @record
@@ -57,58 +57,86 @@ class StopFacts:
 
 
 @record
+class UsageTokens:
+    """Per call, never cumulative; in_fresh is the uncached input, cache_write null when the vendor does not report it."""
+
+    in_fresh: int | None = None
+    cache_read: int | None = None
+    cache_write: int | None = None
+    out: int | None = None
+    cache_write_by_ttl: dict[str, int] | None = None
+
+
+@record
 class Usage:
-    tokens: Tokens | None = None
+    tokens: UsageTokens | None = None
     cost: float = 0.0
     secs: float = 0.0
     turns: int | None = None
     context_k: float | None = None
+    answer_bytes: int = 0
     ref: str | None = None
+    last_activity_at: str | None = None
+    warm_until: str | None = None
+    ttl_s: int | None = None
+    ttl_source: Literal["vendor_default", "observed", "unknown"] = "unknown"
+    cost_usd: float | None = None
+    cost_source: Literal["harness", "unknown", "free"] = "unknown"
+    accounting: Literal["exact", "estimated", "unknown"] = "unknown"
+
+
+@record
+class Denial:
+    """One refusal in the answer; `sandbox_limit` ones are noise."""
+
+    kind: Literal["policy", "sandbox_limit", "secret"]
+    tool: str | None = None
+    path: str | None = None
+    input: dict[str, Any] = field(default_factory=dict)
+
+
+@record
+class TranscriptInfo:
+    """The transcript file and the byte window this call wrote."""
+
+    path: str
+    kind: Literal["codex", "claude", "opencode_export"]
+    from_: int = field(metadata={"name": "from"})
+    to: int
+    bytes: int
 
 
 @record
 class DelegateResult:
-    """The answer of `route.py run` (worker-run wire v3)."""
+    """The answer of `route.py run` (delegate contract 3): `stop` is None for a done call or the agent-tool handoff
+    (`agent_model` set); no status, next, reason or retry_after."""
 
-    V: ClassVar[int] = 3
-    status: Literal["done", "agent", "stop", "lane_out", "error", "failed", "timeout"]
-    reason: str | None = None
-    next: Literal["retry", "owner", "fail"] | None = None
+    contract: Literal[3] = 3
+    stop: StopFacts | None = None
     data: dict[str, Any] | None = None
     text: str = ""
     ref: str | None = None
-    lane: str = ""
-    model: str = ""
-    effort: str = ""
-    family: str = ""
+    lane: str | None = None
+    model: str | None = None
+    effort: str | None = None
+    family: str | None = None
     flag: str | None = None
     cost: float = 0.0
-    tokens: Tokens = field(default_factory=Tokens)
-    denied: list[Denied] = field(default_factory=list)
+    tokens: Tokens | None = None
+    denied: list[Denial] = field(default_factory=list)
     secs: float = 0.0
     run_id: str | None = None
     call_id: str | None = None
     transcript: str | None = None
-    transcript_status: str = ""
-    retry_after: float | None = None
+    transcript_info: TranscriptInfo | None = None
+    transcript_status: str | None = None
     say: str = ""
     git_violation: list[str] = field(default_factory=list)
-    stop: StopFacts | None = None
     usage: Usage | None = None
-    fallback: str | None = None
-    first_lane: str | None = None
-    rung: int | None = None
+    context: dict[str, Any] | None = None
+    worker: dict[str, Any] | None = None
     warnings: list[str] = field(default_factory=list)
-    needs_input: bool = False
-    ask_user: str = ""
-
-
-@record
-class DelegateContract:
-    worker_run: int
-    features: frozenset[str] = frozenset()
-    reasons: list[str] = field(default_factory=list)
-    lanes: list[str] = field(default_factory=list)
+    agent_model: str | None = None
 
 
 @record

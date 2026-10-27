@@ -161,8 +161,11 @@ class Wire(unittest.TestCase):
         self.assertEqual(list(codec.to_json(S.LOG["lock"]))[:3], ["v", "kind", "t"])
 
     def test_a_set_is_written_sorted_and_a_tuple_as_an_array(self):
-        d = codec.to_json(S.OTHERS["DelegateContract"])
-        self.assertEqual(d["features"], ["a", "b"])
+        @codec.record
+        class WithSet:
+            features: frozenset[str]
+
+        self.assertEqual(codec.to_json(WithSet(features=frozenset({"b", "a"})))["features"], ["a", "b"])
         self.assertEqual(codec.to_json(S.LOCK)["route"], [10, S.T])
 
     def test_an_optional_nested_record_is_null_or_a_dict(self):

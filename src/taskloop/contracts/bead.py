@@ -21,20 +21,9 @@ class SlotHold:
 
 
 @record
-class LookEntry:
-    """One verdict of the look judge, as kept in bead metadata."""
-
-    item: str
-    verdict: str
-    where: str = ""
-    why: str = ""
-
-
-@record
 class BeadMeta:
     held_bead: str = ""
     slot_hold: SlotHold | None = None
-    looks: list[LookEntry] = field(default_factory=list)
     extra: dict[str, Any] = field(default_factory=dict)
 
 
