@@ -125,9 +125,9 @@ def save_output(out):
 
 
 def workers():
-    """How many shards the suite runs in at once: TASK_LOOP_SUITE_WORKERS, else min(8, cpu count)."""
+    """How many shards the suite runs in at once: TASK_LOOP_SUITE_WORKERS, else max(2, cpu count - 2)."""
     n = os.environ.get("TASK_LOOP_SUITE_WORKERS")
-    return max(1, int(n)) if n and n.isdigit() else max(1, min(8, os.cpu_count() or 1))
+    return max(1, int(n)) if n and n.isdigit() else max(2, (os.cpu_count() or 1) - 2)
 
 
 def isolated_env(home):
@@ -180,8 +180,10 @@ def merge_outputs(parts, planned, wall=None):
     return "\n".join(x for x in body if x.strip()) + "\n\n" + summary, not red
 
 
-def suite(repo):
-    """The whole suite as N parallel shards, each its own process with its own HOME, then the tests of tests/shard.py SERIAL in one process."""
+def suite(repo, record=False):
+    """The whole suite as N parallel shards, each its own process with its own HOME, then the tests of tests/shard.py SERIAL in one process.
+    record=True also writes every test's seconds to tests/durations.json (what the splitter balances on) when the run is green.
+    Returns {"workers", "wall", "shards": {name: seconds}, "serial": seconds, "times": {test id: seconds}}."""
     n = workers()
     say("running the full suite in %d shards, then the serial group" % n)
     shard = [sys.executable, str(HERE.parent / "tests" / "shard.py")]
@@ -200,7 +202,7 @@ def suite(repo):
             f = work / (name + ".ids")
             f.write_text("\n".join(ids) + "\n", encoding="utf-8")
             log = open(work / (name + ".log"), "w", encoding="utf-8", errors="replace")  # a file, not a pipe: a full pipe stalls the shard
-            p = subprocess.Popen(shard + ["ids", str(f), "--root", root], cwd=str(repo), env=isolated_env(work / name),
+            p = subprocess.Popen(shard + ["ids", str(f), "--root", root, "--times", str(work / (name + ".times"))], cwd=str(repo), env=isolated_env(work / name),
                                  stdout=log, stderr=subprocess.STDOUT, text=True)
             log.close()
             return name, p
@@ -210,19 +212,38 @@ def suite(repo):
             return name, p.returncode, (work / (name + ".log")).read_text(encoding="utf-8", errors="replace")
         procs = [start("shard%d" % i, ids) for i, ids in enumerate(plan["shards"], 1) if ids]
         parts = [finish(name, p) for name, p in procs]
+        serial_began = time.monotonic()
         if plan["serial"]:
             parts.append(finish(*start("serial", plan["serial"])))
+        serial_wall = time.monotonic() - serial_began if plan["serial"] else 0.0
+        times = {}
+        for name, _ in procs + ([("serial", None)] if plan["serial"] else []):
+            try:
+                times.update(json.loads((work / (name + ".times")).read_text(encoding="utf-8")))
+            except (OSError, ValueError):
+                pass
     finally:
         shutil.rmtree(work, ignore_errors=True)
     out, green = merge_outputs(parts, sum(len(s) for s in plan["shards"]) + len(plan["serial"]),
                               time.monotonic() - began)
     tail = out.splitlines()
+    if record and len(times) == len(set(times)) and len(times) >= sum(len(x) for x in plan["shards"]) + len(plan["serial"]):
+        dur = Path(repo) / "tests" / "durations.json"
+        dur.write_text(json.dumps({k: round(v, 3) for k, v in sorted(times.items())}, indent=0) + "\n", encoding="utf-8")
+        say("recorded %d test durations in %s" % (len(times), dur))
+    shard_wall = {}
+    for name, _, o in parts:
+        m = re.search(r"^Ran \d+ tests? in ([\d.]+)s$", o, re.M)
+        if m:
+            shard_wall[name] = float(m.group(1))
+    say("shards: " + " ".join("%s=%.0fs" % kv for kv in sorted(shard_wall.items())))
     if not green:
         report = failure_report(out) or "\n".join(tail[-40:])
         log = save_output(out)
         tests = ["%s (%s)" % m for m in re.findall(r"^(?:FAIL|ERROR): (\S+) \(([^)]*)\)", out, re.M)]
         raise Abort("the suite is red; nothing released:\n%s\nfull output: %s" % (report, log), log, tests)
     say("suite green: " + " ".join(x for x in tail[-3:] if x.strip()))
+    return {"workers": n, "wall": time.monotonic() - began, "shards": shard_wall, "serial": serial_wall, "times": times}
 
 
 def bump_and_commit(repo, message, minor):

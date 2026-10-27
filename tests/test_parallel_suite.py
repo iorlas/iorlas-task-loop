@@ -53,6 +53,25 @@ class Splitter(unittest.TestCase):
         placed = [t for s in shard.split(3, self.root) for t in s]
         self.assertEqual(sorted(placed), self.all_ids())
 
+    def test_a_test_entry_takes_only_that_test(self):
+        serial = (("test_c", "D.test_2", "r"),)
+        p = shard.plan(2, self.root, serial)
+        self.assertEqual(p["serial"], ["test_c.D.test_2"])
+        self.assertEqual(sorted([t for s in p["shards"] for t in s] + p["serial"]), self.all_ids())
+
+    def test_measured_durations_set_the_balance_and_a_new_test_falls_back_to_its_module_weight(self):
+        (self.root / "durations.json").write_text('{"test_a.A.test_1": 100, "test_a.A.test_2": 100, "test_c.D.test_1": 1}')
+        load = {}
+        shards = shard.split(2, self.root)
+        d = shard.load_durations(self.root)
+        for i, s in enumerate(shards):
+            load[i] = sum(shard.cost(t, d) for t in s)
+        self.assertEqual(shard.cost("test_c.D.test_3", d), shard.DEFAULT_WEIGHT)
+        self.assertEqual(shard.cost("test_engine.X.test_new", d), shard.WEIGHT["test_engine"])
+        self.assertEqual(shard.cost("test_a.A.test_1", d), 100)
+        heavy = [sh for sh in shards if "test_a.A.test_1" in sh][0]
+        self.assertEqual(sorted(heavy), ["test_a.A.test_1", "test_a.A.test_2"])  # 200 s alone; the rest (5 tests) share the other
+
     def test_a_class_entry_does_not_take_the_other_classes_of_its_module(self):
         self.assertTrue(shard.is_serial("test_b.C.test_1", (("test_b", "C", "r"),)))
         self.assertFalse(shard.is_serial("test_b.B.test_1", (("test_b", "C", "r"),)))
@@ -66,7 +85,7 @@ class Splitter(unittest.TestCase):
         every = [t for ids in shard.tests().values() for t in ids]
         for module, cls, why in shard.SERIAL:
             self.assertTrue(why.strip(), module)
-            self.assertTrue(any(t.split(".")[0] == module and cls in (None, t.split(".")[1]) for t in every), (module, cls))
+            self.assertTrue(any(shard.is_serial(t, ((module, cls, "r"),)) for t in every), (module, cls))
 
     def test_the_real_plan_covers_every_test_once(self):
         p = shard.plan(8)
@@ -146,10 +165,10 @@ class Merge(unittest.TestCase):
 
 
 class Workers(unittest.TestCase):
-    def test_default_is_the_cpu_count_capped_at_eight(self):
+    def test_default_is_the_cpu_count_less_two_and_at_least_two(self):
         env = {k: v for k, v in os.environ.items() if k != "TASK_LOOP_SUITE_WORKERS"}
         with mock.patch.dict(os.environ, env, clear=True):
-            for cpus, want in ((2, 2), (8, 8), (14, 8), (None, 1)):
+            for cpus, want in ((2, 2), (4, 2), (8, 6), (14, 12), (None, 2)):
                 with mock.patch.object(os, "cpu_count", return_value=cpus):
                     self.assertEqual(release.workers(), want)
 

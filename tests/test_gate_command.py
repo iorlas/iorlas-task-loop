@@ -24,7 +24,7 @@ class GateCommand(unittest.TestCase):
     def test_exit_code_follows_the_suite(self):
         with mock.patch.object(release, "suite", return_value=None) as s:
             self.assertEqual(suite.main(["--repo", "x"]), 0)
-            s.assert_called_once_with("x")
+            s.assert_called_once_with("x", record=False)
         with mock.patch.object(release, "suite", side_effect=release.Abort("red")), mock.patch("sys.stderr"):
             self.assertEqual(suite.main(["--repo", "x"]), 1)
 
