@@ -490,14 +490,15 @@ class TraceTelemetry(unittest.TestCase):
         self.assertLessEqual(obs["last_event_t"], obs["kill_t"])
 
     def test_a_delegate_interruption_leaves_a_kill_record(self):
-        def interrupted(cmd, cwd, timeout, log_path, on_line=None, env=None, idle=None, stop=None, obs=None):
-            stop.update(why="interrupted", alive=[4242])
-            obs.update(started_t=100.0, ended_t=102.0, first_error_t=100.5, last_event_t=101.0,
-                       kill_t=101.5, why="interrupted", alive=[4242])
-            raise KeyboardInterrupt()
+        class Interrupted(fake_route.Script):  # ctrl-C while the worker ran: the runner kept what it saw
+            def reply(this, *a, **kw):
+                this.stop.update(why="interrupted", alive=[4242])
+                this.obs.update(started_t=100.0, ended_t=102.0, first_error_t=100.5, last_event_t=101.0,
+                                kill_t=101.5, why="interrupted", alive=[4242])
+                raise KeyboardInterrupt()
 
         eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False)
-        with mock.patch.object(engine.procs, "run_proc", side_effect=interrupted):
+        with te.delegate_stack(Interrupted({})):
             with self.assertRaises(KeyboardInterrupt):
                 eng._ai("plan", "title", "prompt")
         kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
