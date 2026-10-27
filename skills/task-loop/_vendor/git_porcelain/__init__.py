@@ -1,0 +1,163 @@
+"""git-porcelain — a pure, fail-loud git surface over the git binary.
+
+One place to shell out to git. Every function takes a repo path (and git args) and
+returns git data: repo state, porcelain status, ahead/behind, index-stage blobs, and —
+for a program that owns a repo — exact-path commits, history reads, push/fetch and merge. It
+knows nothing about any host's domain model — a caller maps that git data onto its own
+concerns.
+
+We shell to the real git binary rather than adopt a library (pygit2/dulwich bypass the
+user's credential helper + SSH agent; GitPython is a maintenance-mode subprocess wrapper
+that hangs on credential-helper repos). The binary is the reference implementation the
+user already configured; the only hardening is `GIT_TERMINAL_PROMPT=0` (fail loud instead
+of hanging on a credential prompt) and `GIT_SSH_COMMAND=BatchMode` — the git-fidelity
+contract, deliberately kept here. Failures raise :class:`GitError`; a host translates it
+into its own error type at the seam.
+"""
+
+from __future__ import annotations
+
+from git_porcelain.api import (
+    Aborted,
+    BranchHeld,
+    BranchTaken,
+    Change,
+    Conflict,
+    Diff,
+    Dirty,
+    Health,
+    HookRejected,
+    LogEntry,
+    NothingToRecord,
+    Offline,
+    Pushed,
+    Rebased,
+    Recorded,
+    Rejected,
+    Relation,
+    Released,
+    Repo,
+    RepoIdentity,
+    Sha,
+    Snapshot,
+    StillHeld,
+    Synced,
+    Transient,
+    Tree,
+    TreeId,
+    UpToDate,
+    Worktree,
+    WorktreeInfo,
+)
+from git_porcelain.errors import GitError, GitUnavailable
+from git_porcelain.history import (
+    Commit,
+    Identity,
+    MergeResult,
+    MergeState,
+    RemoteError,
+    RemoteFailure,
+    classify_remote_failure,
+    commit_paths,
+    fetch,
+    finish_merge,
+    head,
+    is_ancestor,
+    log_grep,
+    merge,
+    push,
+    show_at,
+    upstream,
+)
+from git_porcelain.lfs import lfs_available, lfs_checkout, lfs_fetch, lfs_paths, lfs_push, lfs_setup
+from git_porcelain.porcelain import (
+    StatusEntry,
+    dirty_rels,
+    git_dir,
+    git_returncode,
+    has_conflict_markers,
+    has_upstream,
+    is_repo,
+    merge_in_progress,
+    readiness,
+    run_git,
+    show_stage,
+    status,
+    sync_status,
+    unmerged_paths,
+)
+from git_porcelain.real import RealRepo, RealWorktree
+
+__all__ = [
+    "Aborted",
+    "BranchHeld",
+    "BranchTaken",
+    "Change",
+    "Commit",
+    "Conflict",
+    "Diff",
+    "Dirty",
+    "GitError",
+    "GitUnavailable",
+    "Health",
+    "HookRejected",
+    "Identity",
+    "LogEntry",
+    "MergeResult",
+    "MergeState",
+    "NothingToRecord",
+    "Offline",
+    "Pushed",
+    "RealRepo",
+    "RealWorktree",
+    "Rebased",
+    "Recorded",
+    "Rejected",
+    "Relation",
+    "Released",
+    "RemoteError",
+    "RemoteFailure",
+    "Repo",
+    "RepoIdentity",
+    "Sha",
+    "Snapshot",
+    "StatusEntry",
+    "StillHeld",
+    "Synced",
+    "Transient",
+    "Tree",
+    "TreeId",
+    "UpToDate",
+    "Worktree",
+    "WorktreeInfo",
+    "classify_remote_failure",
+    "commit_paths",
+    "dirty_rels",
+    "fetch",
+    "finish_merge",
+    "git_dir",
+    "git_returncode",
+    "has_conflict_markers",
+    "has_upstream",
+    "head",
+    "is_ancestor",
+    "is_repo",
+    "lfs_available",
+    "lfs_checkout",
+    "lfs_fetch",
+    "lfs_paths",
+    "lfs_push",
+    "lfs_setup",
+    "log_grep",
+    "merge",
+    "merge_in_progress",
+    "push",
+    "readiness",
+    "run_git",
+    "show_at",
+    "show_stage",
+    "status",
+    "sync_status",
+    "unmerged_paths",
+    "upstream",
+]
