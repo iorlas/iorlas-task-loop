@@ -1,3 +1,4 @@
+import atexit
 import hashlib
 import io
 import functools
@@ -5,6 +6,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import signal
 import subprocess
 import sys
@@ -130,6 +132,38 @@ class DelegateScript:
         return r, j
 
 
+_TEMPLATE = []
+
+
+def _template():
+    """origin (o.git) + clone (wt) with one pushed commit, built once per process: on a machine where every new file and
+    process costs 5-30 ms (Defender) a copy is ~4x cheaper than the 5 git calls that make it."""
+    if not _TEMPLATE:
+        d = Path(tempfile.mkdtemp(prefix="tl-engine-template-"))
+        atexit.register(shutil.rmtree, d, True)
+        env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+        def g(*a, cwd):
+            subprocess.run(list(a), cwd=cwd, check=True, capture_output=True, env=env)
+        g("git", "init", "-q", "--bare", "-b", "main", str(d / "o.git"), cwd=d)
+        g("git", "clone", "-q", str(d / "o.git"), str(d / "wt"), cwd=d)
+        (d / "wt" / "a.txt").write_text("a\n")
+        g("git", "add", "-A", cwd=d / "wt")
+        g("git", "commit", "-qm", "init", cwd=d / "wt")
+        g("git", "push", "-q", "origin", "HEAD:main", cwd=d / "wt")
+        _TEMPLATE.append(d)
+    return _TEMPLATE[0]
+
+
+def copy_origin_and_clone(home):
+    """Put a fresh o.git and wt in `home` (what five git calls used to build); the clone's origin URL is rewritten to `home`."""
+    t = _template()
+    for name in ("o.git", "wt"):
+        shutil.copytree(t / name, home / name, ignore=shutil.ignore_patterns("*.sample"))
+    cfg = home / "wt" / ".git" / "config"
+    cfg.write_text(cfg.read_text().replace(str(t / "o.git"), str(home / "o.git")))
+
+
+
 class EngineTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -139,13 +173,8 @@ class EngineTest(unittest.TestCase):
                                                 "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
                                                 "GIT_COMMITTER_EMAIL": "t@t"})
         self.env.start()
-        origin, self.wt = home / "o.git", home / "wt"
-        sh("git", "init", "-q", "--bare", "-b", "main", str(origin), cwd=home)
-        sh("git", "clone", "-q", str(origin), str(self.wt), cwd=home)
-        (self.wt / "a.txt").write_text("a\n")
-        sh("git", "add", "-A", cwd=self.wt)
-        sh("git", "commit", "-qm", "init", cwd=self.wt)
-        sh("git", "push", "-q", "origin", "HEAD:main", cwd=self.wt)
+        self.wt = home / "wt"
+        copy_origin_and_clone(home)
         self.bd_calls = []
         self.closed, self.blocked = [], []
         patches = [
