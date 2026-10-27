@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """tl-7y6.1.2 stage 2: load experiments from a bead snapshot into typed sidecars (one-off importer).
 
-python3 tools/migrate_experiments.py --snapshot beads.json [--mappings overrides.json] [--repo R] [--json]
+python3 dev/migrate_experiments.py --snapshot beads.json [--mappings overrides.json] [--repo R] [--json]
 
 The snapshot is an explicit worktree-local JSON file — `bd list --json --all -n 0` output saved to a file, or
 {"beads": [...]} — the importer never queries the tracker. Only a bead's `## Experiment` description block is

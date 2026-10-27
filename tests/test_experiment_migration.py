@@ -1,6 +1,6 @@
 """tl-7y6.1.2 stage 2: the one-off importer from a bead snapshot into typed experiment sidecars.
 
-The importer runs as a real subprocess (python3 tools/migrate_experiments.py) against synthetic snapshots in a
+The importer runs as a real subprocess (python3 dev/migrate_experiments.py) against synthetic snapshots in a
 temporary repo under this worktree: no tracker, no git, no user config is read or written. The checked-in fixture is
 deliberately synthetic (tests/fixtures/experiments/migration-beads.json); the real stage snapshot does not exist in
 the worktree yet (docs/study/README.md).
@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "tools" / "migrate_experiments.py"
+SCRIPT = ROOT / "dev" / "migrate_experiments.py"
 FIXTURE = ROOT / "tests" / "fixtures" / "experiments" / "migration-beads.json"
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 import experiments  # noqa: E402  (the stage-1 contract this importer must satisfy)

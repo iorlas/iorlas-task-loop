@@ -79,7 +79,7 @@ current value is exactly the number the lifecycle report printed for the same wi
 
 ### Loading experiments from beads (one-off importer)
 
-`python3 tools/migrate_experiments.py --snapshot beads.json [--mappings overrides.json] [--repo R] [--json]`
+`python3 dev/migrate_experiments.py --snapshot beads.json [--mappings overrides.json] [--repo R] [--json]`
 (tl-7y6.1.2 stage 2) reads an explicit worktree-local bead snapshot — `bd list --json --all -n 0` output saved to a
 file, or `{"beads": [...]}` — and never queries the tracker. `--repo` is resolved as given (no git): a one-off
 writer writes exactly where it is told. Only a bead's `## Experiment` description block is extracted (the exact
