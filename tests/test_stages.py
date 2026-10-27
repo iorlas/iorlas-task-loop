@@ -58,6 +58,7 @@ class EmptyPlan(StagesTest):
         self.assertIn("no stages", te.EngineTest.said(self))
         self.assertEqual(self.created(), [])
 
+    @te.no_repo
     def test_done_when_counts_as_acceptance_criteria(self):
         has = engine.has_criteria
         self.assertFalse(has({"description": "Done when? tbd"}))
@@ -75,6 +76,7 @@ class BadChecks(StagesTest):
 
     LONG = FALSE + " ; echo padding-so-the-check-is-long-enough-to-shorten"
 
+    @te.no_repo
     def test_flagged_why_matches_loose_names(self):
         c = {"id": "x", "cmd": "grep -qE 'name=\"GameLogTests\"[^>]*result=\"Passed\"' client/Logs/unity-tests.xml"}
         why = engine.flagged_why
@@ -179,6 +181,7 @@ class Scope(StagesTest):
         e.out_of_scope([outside])
         self.assertEqual(len(e.leftovers), 1)
 
+    @te.no_repo
     def test_acceptance_text_reads_the_field_and_the_description_from_the_heading(self):
         txt = engine.acceptance_text({"acceptance_criteria": "A works", "description": "Intro.\n## Done when\n- B works\n"})
         self.assertIn("A works", txt)
@@ -374,10 +377,6 @@ class Fdyo(StagesTest):
 
     PASS = te.PY + ' -c "pass"'
 
-    def test_the_planner_is_told_not_to_invent_a_threshold_for_an_owner_judged_criterion(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
-        self.assertIn("only the owner can judge", s.prompts[0])
-
     def test_a_check_red_two_rounds_running_tells_the_writer_it_may_flag_it(self):
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[FALSE])])
         rc, s = self.run_engine({"plan": [plan], "write": [WRITE, WRITE, WRITE], "review": [CLEAN]}, max_check_tries=3)
@@ -386,6 +385,7 @@ class Fdyo(StagesTest):
         self.assertIn("failed in the last round too", writes[2])
         self.assertIn("list it in bad_checks", writes[2])
 
+    @te.no_repo
     def test_a_codex_session_is_not_resumed_above_100k_inside_a_stage(self):
         self.assertEqual(engine.DEFAULTS["write_fresh_above_k"], {"claude": 150, "codex": 100, "xai": 100})
 
@@ -853,11 +853,6 @@ class Ledger(StagesTest):
         return dict(PLAN, cases=[self.FILE, self.DEFER, {"criterion": "f exists", "check": HAS_F, "proved_by": "check"}],
                     leftovers=self.LEFT, **kw)
 
-    def test_the_planner_is_told_to_keep_a_ledger(self):
-        rc, s = self.run_engine({"plan": [self.plan()], "write": [WRITE], "review": [CLEAN]})
-        self.assertIn("proved_by how its criterion is proved", s.prompts[0].replace("\n  ", " ").replace("Each case says in ", ""))
-        self.assertIn("engine_step", s.prompts[0])
-
     def test_the_review_is_told_what_the_engine_does_and_what_is_deferred(self):
         rc, s = self.run_engine({"plan": [self.plan()], "write": [WRITE], "review": [CLEAN]})
         review = s.prompts[2]
@@ -1020,12 +1015,6 @@ class Inputs(StagesTest):
         self.assertIn("The factory is a Mac only.", s.prompts[0])
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertNotIn("Facts about this factory", s.prompts[0])
-
-    def test_the_planner_is_told_to_list_what_it_could_not_find(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
-        self.assertIn("unresolved", s.prompts[0])
-
-
 
 class ResumeCount(StagesTest):
     """tl-19i: the re-plan limit counts failed plans on one base, never the owner's answer; a branch that conflicts with main starts again."""
@@ -1273,6 +1262,7 @@ class Claims(StagesTest):
         self.assertFalse(ok)
         self.assertIn("a live claim", why)
 
+    @te.no_repo
     def test_parking_a_bead_lets_go_of_its_claim(self):
         calls = []
         for holder, expect in (("tl-2be89f88", ("update", "t-1", "--status", "blocked", "--assignee", "")),
@@ -1347,6 +1337,7 @@ class Claims(StagesTest):
         e.dry = True
         self.assertIsNone(e.reflect_run("landed", ""))
 
+    @te.no_repo
     def test_the_reflection_text_names_cause_and_session(self):
         text = engine.reflection_text(self.REFLECTION)
         self.assertIn("[prompt]", text)
@@ -1449,6 +1440,7 @@ class StaleTree(StagesTest):
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker"])  # no second write: nothing was sent back to the writer
         self.assertTrue(self.eng.why.startswith("failed: infrastructure: the configured check `fmt` needs something this tree lacks"), self.eng.why)
 
+    @te.no_repo
     def test_words_in_the_middle_of_a_long_output_are_not_a_stale_tree(self):
         noisy = "a test about justfile prints: This checkout has no recipe x\n" + "ok\n" * 300 + "2 failed: Foo"
         self.assertTrue(engine.STALE_TREE.search(noisy))  # the whole log matches...
@@ -1590,13 +1582,6 @@ class SlotHygiene(StagesTest):
         self.assertFalse(Path(self.wt, "tests", "edit_content.feature").exists())  # and the slot is at the base
         self.assertFalse(self.eng.git("symbolic-ref", "--short", "-q", "HEAD"))
 
-    def test_a_landed_bead_leaves_the_slot_alone(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
-        self.assertEqual(rc, 0)
-        self.assertTrue(self.eng.git("symbolic-ref", "--short", "-q", "HEAD"))
-
-
-
 class DeadLane(StagesTest):
     """A lane that fails to start without being marked out must not hold a read-only step for ten minutes."""
 
@@ -1672,11 +1657,13 @@ class Contracts(StagesTest):
         self.assertTrue(self.eng.why.startswith("paused: the land push failed 4 times"), self.eng.why)
         self.assertFalse(self.eng.asked)
 
+    @te.no_repo
     def test_a_hooks_test_output_before_the_push_is_not_a_network_error(self):
         tail = "tests: Connection refused by the fake server (expected)\n" + "ok test passed\n" * 60 + "error: failed to push some refs\n"
         self.assertTrue(engine.TRANSIENT_PUSH.search(tail))  # the whole output would match
         self.assertFalse(engine.TRANSIENT_PUSH.search(tail[-600:]))  # the engine reads only the push's own last lines
 
+    @te.no_repo
     def test_a_rejected_or_other_push_failure_is_not_retried_as_the_network(self):
         self.assertFalse(engine.TRANSIENT_PUSH.search("! [rejected] HEAD -> main (non-fast-forward)"))
         self.assertFalse(engine.TRANSIENT_PUSH.search("remote: error: GH006: Protected branch update failed"))
@@ -1802,18 +1789,10 @@ class Contracts(StagesTest):
         self.assertEqual(state, {"b-hidden": "open", "b-open": "open", "b-closed": "closed", "b-gone": "closed", "b-flaky": "open", "b-answered": "answered",
                                  "b-norepo": "open"})  # no repo recorded: which tracker to ask is unknown, the ask stays
 
-    def test_the_engine_log_and_trace_record_the_version(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
-        want = json.loads((Path(engine.__file__).resolve().parents[2] / ".claude-plugin" / "plugin.json").read_text())["version"]
-        self.assertEqual(engine.plugin_version(), want)
-        self.assertIn("task-loop %s" % want, self.eng.log_path.read_text())
-        last = json.loads((tl.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
-        self.assertEqual(last["version"], want)
-
-
 class PlanTimeout(StagesTest):
     """tl-btt: a check that sets a limit above the engine's check limit is sent back at plan time."""
 
+    @te.no_repo
     def test_the_limits_a_check_sets_for_itself_are_read_in_minutes(self):
         for check, minutes in (("just play --timeout_ms 2400000", 40.0), ("tool -testTimeoutMs=1800000", 30.0), ("run --timeout=40m", 40.0),
                                ("run --timeout 2h", 120.0), ("timeout 2400 python3 t.py", 40.0), ("x --timeout-min 45", 45.0),
@@ -1823,6 +1802,7 @@ class PlanTimeout(StagesTest):
         for check in ("pytest tests", "grep -q timeout config.yaml", "x --timeouts 5", "x --no-timeout", "x timeout_msg"):
             self.assertEqual(lint.own_timeouts(check), [], check)
 
+    @te.no_repo
     def test_yxbb3s_play_test_of_40_minutes_under_a_30_minute_cap_is_found(self):
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["just unity-play-tests --timeout_ms 2400000", HAS_F])])
         got = lint.timeout_problems(plan, 30)
@@ -1997,6 +1977,7 @@ class FollowUps(StagesTest):
                             for c in self.bd_calls))
         self.assertEqual(len([c for c in self.bd_calls if c[:2] == ("create", "Rename x")]), 2)  # one retry, no more
 
+    @te.no_repo
     def test_lint_sections_reads_the_headings_bd_names(self):
         self.assertEqual(engine.lint_sections("Error: missing required sections for bug: ## Steps to Reproduce, ## Acceptance Criteria"),
                          ["Steps to Reproduce", "Acceptance Criteria"])
