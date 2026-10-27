@@ -11,7 +11,7 @@ from typing import Any
 from taskloop.adapters import delegate_wire
 from taskloop.adapters.proc import run_group
 from taskloop.contracts import codec
-from taskloop.contracts.delegate import DelegateResult, LIVE_EVENT, RunRequest
+from taskloop.contracts.delegate import LIVE_EVENT, DelegateResult, RunRequest
 from taskloop.contracts.jsonl import Jsonl
 from taskloop.contracts.ports import EventSink
 

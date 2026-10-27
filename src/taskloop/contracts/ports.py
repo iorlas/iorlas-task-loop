@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import field
 from typing import Any, Protocol
 
-from taskloop.contracts.bead import Bead, BdError, Comment
+from taskloop.contracts.bead import BdError, Bead, Comment
 from taskloop.contracts.codec import record
 from taskloop.contracts.delegate import DelegateResult, LiveEvent, RunRequest
 

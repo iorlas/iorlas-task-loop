@@ -1,10 +1,10 @@
 """delegate's contract-3 answer (one JSON object) as a `DelegateResult`. Reads are tolerant of keys we do not model; an answer
-that breaks the shape becomes a synthesized stop, never an exception. `status` and `next` are derived from `stop` here and
-nowhere else (contract 3 removed them from the wire)."""
+that breaks the shape becomes a synthesized stop, never an exception. A status word and a next step are derived from `stop`
+here and nowhere else (`answer_status`, `answer_next`): contract 3 removed them from the wire and from `DelegateResult`."""
 from typing import Any
 
-from taskloop.contracts.delegate import DelegateResult, Retry, StopFacts, Usage
-from taskloop.contracts.trace import Denied, Tokens
+from taskloop.contracts.delegate import DelegateResult, Denial, Retry, StopFacts, TranscriptInfo, Usage, UsageTokens
+from taskloop.contracts.trace import Tokens
 
 CONTRACT = 3
 SCOPES = ("bead", "caller", "machine", "lane", "model")
@@ -14,11 +14,19 @@ _FAILED = ("worker_failed", "schema_invalid", "secrets")
 _ERROR = ("bad_request", "caller", "setup", "crash", "contract_violation")
 
 
-def synth(reason: str, scope: str, permanence: str, text: str, ref: str = "", status: str = "") -> DelegateResult:
+def synth(reason: str, scope: str, permanence: str, text: str, ref: str = "") -> DelegateResult:
     """A result delegate did not write: the engine's own account of a call that gave no usable answer."""
     stop = StopFacts(reason=reason, scope=scope, permanence=permanence, retry=Retry(kind="none"), ref=ref)  # type: ignore[arg-type]
-    return DelegateResult(status=status_of(stop) if not status else status, reason=reason, next=next_of(stop),  # type: ignore[arg-type]
-                          text=text[-2000:], say=text[:300], ref=ref or None, stop=stop)
+    return DelegateResult(text=text[-2000:], say=text[:300], ref=ref or None, stop=stop)
+
+
+def answer_status(res: DelegateResult) -> str:
+    """done | agent (the agent-tool handoff) | timeout | failed | error | lane_out | stop."""
+    return "agent" if res.stop is None and res.agent_model else status_of(res.stop)
+
+
+def answer_next(res: DelegateResult) -> str | None:
+    return next_of(res.stop)
 
 
 def status_of(stop: StopFacts | None) -> str:
@@ -63,35 +71,66 @@ def stop_of(raw: Any) -> StopFacts | None:
                      resumable=bool(raw.get("resumable")), partial=bool(raw.get("partial")))
 
 
-def tokens_of(raw: Any) -> Tokens:
+def tokens_of(raw: Any) -> Tokens | None:
     if not isinstance(raw, dict):
-        return Tokens()
-    if "in_fresh" in raw or "cache_read" in raw:  # usage.tokens: the input split into fresh and cached
-        cached = _int(raw.get("cache_read"))
-        return Tokens(in_=_int(raw.get("in_fresh")) + cached, cached=cached, out=_int(raw.get("out")))
+        return None
     return Tokens(in_=_int(raw.get("in")), cached=_int(raw.get("cached")), out=_int(raw.get("out")))
+
+
+def _oint(v: Any) -> int | None:
+    return int(v) if isinstance(v, int) and not isinstance(v, bool) else None
+
+
+def _pick(v: Any, allowed: tuple[str, ...], default: str) -> str:
+    return v if v in allowed else default
+
+
+def usage_tokens_of(raw: Any) -> UsageTokens | None:
+    """Per call, as the wire has it: the uncached input apart from the cache reads and writes."""
+    if not isinstance(raw, dict):
+        return None
+    by_ttl = raw.get("cache_write_by_ttl")
+    return UsageTokens(in_fresh=_oint(raw.get("in_fresh")), cache_read=_oint(raw.get("cache_read")),
+                       cache_write=_oint(raw.get("cache_write")), out=_oint(raw.get("out")),
+                       cache_write_by_ttl={str(k): _int(v) for k, v in by_ttl.items()} if isinstance(by_ttl, dict) else None)
 
 
 def usage_of(raw: Any) -> Usage | None:
     if not isinstance(raw, dict):
         return None
-    turns, ctx = raw.get("turns"), raw.get("context_k")
-    return Usage(tokens=tokens_of(raw["tokens"]) if isinstance(raw.get("tokens"), dict) else None,
-                 cost=_num(raw.get("cost_usd") if raw.get("cost_usd") is not None else raw.get("cost")),
-                 secs=_num(raw.get("secs")), turns=turns if isinstance(turns, int) else None,
-                 context_k=_num(ctx) if isinstance(ctx, (int, float)) else None, ref=raw.get("ref") or None)
+    turns, ctx, cost = raw.get("turns"), raw.get("context_k"), raw.get("cost_usd")
+    return Usage(tokens=usage_tokens_of(raw.get("tokens")), cost=_num(raw.get("cost")), secs=_num(raw.get("secs")),
+                 turns=turns if isinstance(turns, int) else None, context_k=_num(ctx) if isinstance(ctx, (int, float)) else None,
+                 answer_bytes=_int(raw.get("answer_bytes")), ref=_opt(raw, "ref"), last_activity_at=_opt(raw, "last_activity_at"),
+                 warm_until=_opt(raw, "warm_until"), ttl_s=_oint(raw.get("ttl_s")),
+                 ttl_source=_pick(raw.get("ttl_source"), ("vendor_default", "observed", "unknown"), "unknown"),  # type: ignore[arg-type]
+                 cost_usd=_num(cost) if isinstance(cost, (int, float)) and not isinstance(cost, bool) else None,
+                 cost_source=_pick(raw.get("cost_source"), ("harness", "unknown", "free"), "unknown"),  # type: ignore[arg-type]
+                 accounting=_pick(raw.get("accounting"), ("exact", "estimated", "unknown"), "unknown"))  # type: ignore[arg-type]
 
 
-def denied_of(raw: Any) -> list[Denied]:
+def denied_of(raw: Any) -> list[Denial]:
     """`sandbox_limit` is noise, never a failure: it is not carried."""
     rows = raw if isinstance(raw, list) else []
-    return [Denied(tool=str(d.get("tool") or ""), input=d["input"] if isinstance(d.get("input"), dict) else {})
+    return [Denial(kind=d.get("kind") if d.get("kind") in ("policy", "secret") else "policy",  # type: ignore[arg-type]
+                   tool=_opt(d, "tool"), path=_opt(d, "path"), input=d["input"] if isinstance(d.get("input"), dict) else {})
             for d in rows if isinstance(d, dict) and d.get("kind") != "sandbox_limit"]
+
+
+def transcript_info_of(raw: Any) -> TranscriptInfo | None:
+    if not (isinstance(raw, dict) and isinstance(raw.get("path"), str) and raw.get("kind") in ("codex", "claude", "opencode_export")):
+        return None
+    return TranscriptInfo(path=raw["path"], kind=raw["kind"], from_=_int(raw.get("from")), to=_int(raw.get("to")),
+                          bytes=_int(raw.get("bytes")))
 
 
 def _opt(j: dict[str, Any], key: str) -> str | None:
     v = j.get(key)
     return v if isinstance(v, str) and v else None
+
+
+def _dict(v: Any) -> dict[str, Any] | None:
+    return v if isinstance(v, dict) else None
 
 
 def result_of(j: Any) -> DelegateResult:
@@ -101,16 +140,13 @@ def result_of(j: Any) -> DelegateResult:
         stop = stop_of(j["stop"])
     except ValueError as e:
         return synth("contract_violation", "machine", "needs_owner", "%s: %.300r" % (e, j["stop"]), str(j.get("ref") or ""))
-    data = j.get("data")
     warnings = j.get("warnings")
     return DelegateResult(
-        status=status_of(stop), reason=stop.reason if stop else None, next=next_of(stop),  # type: ignore[arg-type]
-        data=data if isinstance(data, dict) else None, text=str(j.get("text") or ""), ref=_opt(j, "ref"),
-        lane=str(j.get("lane") or ""), model=str(j.get("model") or ""), effort=str(j.get("effort") or ""),
-        family=str(j.get("family") or ""), flag=_opt(j, "flag"), cost=_num(j.get("cost")), tokens=tokens_of(j.get("tokens")),
-        denied=denied_of(j.get("denied")), secs=_num(j.get("secs")), run_id=_opt(j, "run_id"), call_id=_opt(j, "call_id"),
-        transcript=_opt(j, "transcript"), transcript_status=str(j.get("transcript_status") or ""),
-        say=str(j.get("say") or ""), git_violation=[str(x) for x in j.get("git_violation") or []], stop=stop,
-        usage=usage_of(j.get("usage")), fallback=_opt(j, "fallback"), first_lane=_opt(j, "first_lane"),
-        rung=j["rung"] if isinstance(j.get("rung"), int) else None,
-        warnings=[str(x) for x in warnings] if isinstance(warnings, list) else [])
+        stop=stop, data=_dict(j.get("data")), text=str(j.get("text") or ""), ref=_opt(j, "ref"),
+        lane=_opt(j, "lane"), model=_opt(j, "model"), effort=_opt(j, "effort"), family=_opt(j, "family"), flag=_opt(j, "flag"),
+        cost=_num(j.get("cost")), tokens=tokens_of(j.get("tokens")), denied=denied_of(j.get("denied")), secs=_num(j.get("secs")),
+        run_id=_opt(j, "run_id"), call_id=_opt(j, "call_id"), transcript=_opt(j, "transcript"),
+        transcript_info=transcript_info_of(j.get("transcript_info")), transcript_status=_opt(j, "transcript_status"),
+        say=str(j.get("say") or ""), git_violation=[str(x) for x in j.get("git_violation") or []], usage=usage_of(j.get("usage")),
+        context=_dict(j.get("context")), worker=_dict(j.get("worker")),
+        warnings=[str(x) for x in warnings] if isinstance(warnings, list) else [], agent_model=_opt(j, "agent_model"))

@@ -5,7 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1])); import support.paths  # noqa: E402,F401
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import support.paths  # noqa: E402,F401
 from support.tags import contract, domain  # noqa: E402
 from taskloop.adapters.checks_shell import ShellChecks  # noqa: E402
 from taskloop.adapters.fake_checks import FakeChecks, failed, hung, passed  # noqa: E402

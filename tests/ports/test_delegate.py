@@ -7,10 +7,12 @@ import unittest
 from pathlib import Path
 from typing import Any
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1])); import support.paths  # noqa: E402,F401
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import support.paths  # noqa: E402,F401
 from ports.delegate_contract import SCHEMA, DelegateContract, req  # noqa: E402
 from support.tags import contract, domain  # noqa: E402
 from taskloop.adapters import delegate_wire  # noqa: E402
+from taskloop.adapters.delegate_wire import answer_status  # noqa: E402
 from taskloop.adapters.delegate_route import RouteDelegate  # noqa: E402
 from taskloop.adapters.fake_delegate import FakeDelegate, Step, done, stopped  # noqa: E402
 from taskloop.contracts import codec  # noqa: E402
@@ -80,7 +82,7 @@ class RouteDelegateFailures(RouteHarness, unittest.TestCase):
 
     def test_no_answer_is_a_crash(self) -> None:
         got = self.stop_of(answer=None)
-        self.assertEqual((got.status, got.stop.reason, got.stop.permanence), ("error", "crash", "needs_owner"))
+        self.assertEqual((answer_status(got), got.stop.reason, got.stop.permanence), ("error", "crash", "needs_owner"))
 
     def test_garbage_is_a_crash(self) -> None:
         self.assertEqual(self.stop_of(raw="Traceback ...").stop.reason, "crash")
@@ -94,7 +96,7 @@ class RouteDelegateFailures(RouteHarness, unittest.TestCase):
 
     def test_a_child_past_the_deadline_is_stopped(self) -> None:
         got = self.stop_of(answer=None, sleep=30)
-        self.assertEqual((got.status, got.stop.reason), ("timeout", "timeout"))
+        self.assertEqual((answer_status(got), got.stop.reason), ("timeout", "timeout"))
         self.assertLess(got.secs, 5)
 
     def test_the_old_contract_is_visible_to_the_gate(self) -> None:
@@ -106,20 +108,21 @@ class RouteDelegateFailures(RouteHarness, unittest.TestCase):
         a["denied"] = [{"kind": "sandbox_limit", "tool": "ps"}, {"kind": "policy", "tool": "rm", "input": {"a": 1}}]
         self.write(answer=a)
         got = self.route().run(req(), "b", SCHEMA)
-        self.assertEqual([(d.tool, d.input) for d in got.denied], [("rm", {"a": 1})])
+        self.assertEqual([(d.kind, d.tool, d.input) for d in got.denied], [("policy", "rm", {"a": 1})])
 
-    def test_usage_tokens_fold_fresh_and_cached_input(self) -> None:
+    def test_usage_tokens_keep_fresh_and_cached_input_apart(self) -> None:
         a = answer_of(done(ref="r"))
         a["usage"]["tokens"] = {"in_fresh": 10, "cache_read": 90, "cache_write": None, "out": 5}
         self.write(answer=a)
         got = self.route().run(req(), "b", SCHEMA)
         assert got.usage is not None and got.usage.tokens is not None
-        self.assertEqual((got.usage.tokens.in_, got.usage.tokens.cached, got.usage.tokens.out), (100, 90, 5))
+        self.assertEqual((got.usage.tokens.in_fresh, got.usage.tokens.cache_read, got.usage.tokens.cache_write, got.usage.tokens.out),
+                         (10, 90, None, 5))
 
     def test_an_unknown_live_line_is_passed_over(self) -> None:
         self.write(answer=answer_of(done(ref="r")), live=[{"v": 1, "kind": "from_the_future", "t": 1.0}])
         seen: list[Any] = []
-        self.assertEqual(self.route().run(req(), "b", SCHEMA, seen.append).status, "done")
+        self.assertEqual(answer_status(self.route().run(req(), "b", SCHEMA, seen.append)), "done")
         self.assertEqual(seen, [])
 
 
@@ -135,7 +138,7 @@ class FakeDelegateLogic(unittest.TestCase):
                  ("busy", "lane", "lane_out"), ("network", "machine", "stop")]
         for reason, scope, want in cases:
             with self.subTest(reason):
-                self.assertEqual(stopped(reason, scope).result.status, want)
+                self.assertEqual(answer_status(stopped(reason, scope).result), want)
 
     def test_calls_are_recorded(self) -> None:
         d = FakeDelegate()

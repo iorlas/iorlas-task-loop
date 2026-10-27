@@ -5,7 +5,8 @@ import sys
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1])); import support.paths  # noqa: E402,F401
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import support.paths  # noqa: E402,F401
 from contracts.test_rules import code_lines  # noqa: E402
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "taskloop"
@@ -25,7 +26,7 @@ class PortRules(unittest.TestCase):
             self.assertLessEqual(len(code), 400, f.name)
             for n in ast.walk(tree):
                 if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    self.assertLessEqual(len({i for i in code if n.lineno <= i <= n.end_lineno}), 80, "%s.%s" % (f.name, n.name))
+                    self.assertLessEqual(len({i for i in code if n.lineno <= i <= (n.end_lineno or n.lineno)}), 80, "%s.%s" % (f.name, n.name))
 
     def test_imports(self) -> None:
         for f, _, tree in self.parsed():

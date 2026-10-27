@@ -9,7 +9,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1])); import support.paths  # noqa: E402,F401
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import support.paths  # noqa: E402,F401
 from ports.beads_contract import BeadsContract  # noqa: E402
 from support.tags import contract, domain  # noqa: E402
 from taskloop.adapters import bd_json  # noqa: E402
