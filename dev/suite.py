@@ -17,9 +17,13 @@ import release  # noqa: E402
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="suite.py", description=__doc__.split("\n\n")[0])
     ap.add_argument("--repo", default=str(HERE.parent), help="the checkout whose tests run (default: this one)")
+    ap.add_argument("--record", action="store_true", help="also write each test's seconds to tests/durations.json (the splitter balances on it)")
     args = ap.parse_args(argv)
     try:
-        release.suite(args.repo)
+        r = release.suite(args.repo, record=args.record)
+        sh = sorted(v for k, v in (r or {}).get("shards", {}).items() if k != "serial")
+        if sh:
+            print("workers=%d wall=%.0fs shards max=%.0fs min=%.0fs serial=%.0fs" % (r["workers"], r["wall"], sh[-1], sh[0], r["serial"]))
     except release.Abort as e:
         print(str(e), file=sys.stderr)
         return 1

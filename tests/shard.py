@@ -20,12 +20,29 @@ sys.path.insert(0, str(HERE))
 WEIGHT = {"test_engine": 3.7, "test_stages": 3.1, "test_look": 5.3, "test_checks_speed": 2.1, "test_trace_records": 5.1, "test_release": 4.3,
           "test_verify_noblock": 3.3, "test_doctor": 0.9, "test_slot_git": 0.95, "test_land_lock": 1.5, "test_held_branch": 0.55}
 DEFAULT_WEIGHT = 0.3
+DURATIONS = HERE / "durations.json"  # {test id: seconds}, measured by `python3 dev/suite.py --record`; a test not in it falls back to WEIGHT
+
+
+def load_durations(root=HERE):
+    """{test id: seconds} from durations.json next to the tests of `root` (empty when absent or unreadable)."""
+    try:
+        return json.loads((Path(root) / "durations.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def cost(test_id, durations):
+    """What a test costs the shard that runs it: its measured seconds, else the per-test weight of its module."""
+    d = durations.get(test_id)
+    return d if isinstance(d, (int, float)) else WEIGHT.get(test_id.split(".")[0], DEFAULT_WEIGHT)
 
 # Tests that must not share a clock, a port, a lock or a process group with another test running at the same moment, so the release gate
 # runs them in ONE process after the parallel shards. (module, class or None for the whole module, reason); found by measurement and by
 # reading the code, not guessed: a module is listed only with the reason that makes it unsafe beside others.
 SERIAL = (
     ("test_race", None, "races real processes on one repo and SIGKILLs them (os.kill / killpg of started PIDs); its timing windows need a quiet machine"),
+    ("test_selftest", "SelfTest.test_the_scenario_through_engine_run_passes_in_under_10_seconds",
+     "asserts the whole scenario takes under 10 s of wall clock; a loaded machine fails it, as every run beside two live loops did"),
     ("test_write_idle", None, "starts real worker process groups and asserts how long a writer stays idle against the wall clock; load moves the clock"),
 )
 
@@ -35,7 +52,8 @@ CHUNK = 40
 
 
 def tests(root=HERE):
-    """{unit: [test id]}: a small class is one unit, a big one is several."""
+    """{unit: [test id]}: a small class is one unit, a big one is several (dealt so the chunks cost about the same)."""
+    durations = load_durations(root)
     by_class = {}
     suite = unittest.defaultTestLoader.discover(str(root), top_level_dir=str(root))
 
@@ -51,22 +69,29 @@ def tests(root=HERE):
         ids.sort()
         if len(ids) > BIG:
             k = -(-len(ids) // CHUNK)
-            for j in range(k):  # every k-th test: slow neighbours (same name prefix) land in different chunks
-                units["%s#%d" % (cls, j)] = ids[j::k]
+            chunks, load = [[] for _ in range(k)], [0.0] * k
+            for t in sorted(ids, key=lambda t: (-cost(t, durations), t)):  # heaviest first onto the lightest chunk
+                j = load.index(min(load))
+                chunks[j].append(t)
+                load[j] += cost(t, durations)
+            for j, c in enumerate(chunks):
+                units["%s#%d" % (cls, j)] = sorted(c)
         else:
             units[cls] = ids
     return units
 
 
 def is_serial(test_id, serial=SERIAL):
-    module, cls = (test_id.split(".") + [""])[:2]
-    return any(m == module and c in (None, cls) for m, c, _ in serial)
+    module, cls, name = (test_id.split(".") + ["", ""])[:3]
+    return any(m == module and c in (None, cls, cls + "." + name) for m, c, _ in serial)
 
 
 def split(count, root=HERE, serial=()):
     """count shards of every test not in `serial` (a SERIAL-shaped tuple; none by default: CI runs everything)."""
-    units = {u: ids for u, ids in tests(root).items() if not is_serial(ids[0], serial)}
-    weight = {u: len(ids) * WEIGHT.get(u.split(".")[0], DEFAULT_WEIGHT) for u, ids in units.items()}
+    units = {u: [t for t in ids if not is_serial(t, serial)] for u, ids in tests(root).items()}
+    units = {u: ids for u, ids in units.items() if ids}
+    durations = load_durations(root)
+    weight = {u: sum(cost(t, durations) for t in ids) for u, ids in units.items()}
     shards, load = [[] for _ in range(count)], [0] * count
     for u in sorted(units, key=lambda u: (-weight[u], u)):
         i = load.index(min(load))
@@ -128,7 +153,7 @@ if __name__ == "__main__":
         p = plan(count)
         assert sorted([t for s in p["shards"] for t in s] + p["serial"]) == sorted(placed), "the release plan loses or doubles a test"
         for m, c, why in SERIAL:
-            assert any(t.split(".")[0] == m and c in (None, t.split(".")[1]) for t in placed), "SERIAL names %s.%s, no such test" % (m, c)
+            assert any(is_serial(t, ((m, c, why),)) for t in placed), "SERIAL names %s.%s, no such test" % (m, c)
             assert why.strip(), "SERIAL %s has no reason" % m
     else:  # run INDEX COUNT
         ids = split(int(sys.argv[3]))[int(sys.argv[2]) - 1]
