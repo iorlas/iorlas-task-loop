@@ -92,5 +92,3 @@ Rendering is the engine's job. Judging taste is the owner's job. The writer writ
 creates. A method with neither writes to `out` and the engine copies what is new there. Nothing a writer says reaches a
 shell except values matching an argument's pattern. Config: `shot_table`, `look_rounds` (2), `look_max_px` (1280).
 Without `shot_table` a visual stage works the old way.
-
-Not built: the owner gallery UI (dash-chain); a lifesim shot table file (sims qs).

@@ -5,7 +5,7 @@
 Retry | Wait | WaitNet | NewThread | Reroute | Yield(RunOutcome) | Fail(RunOutcome). Nothing here asks the owner.
 
 A network stop charges nothing: not `attempt`, not `crashes`, not `polls`, not `waited_lane_s`, no ask, replan or storm
-counter, and it never marks a lane out (the delegate holds lane truth). Unused by the engine until R21.
+counter, and it never marks a lane out (the delegate holds lane truth).
 Design: 60-design-A1 sec 2.2, 60-design-A3 sec 2.2, 61-integration sec 5.5. Python 3.8+, stdlib only; imports outcome only.
 """
 

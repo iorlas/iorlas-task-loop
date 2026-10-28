@@ -535,7 +535,6 @@ class LiveTaskView(unittest.TestCase):
                 self.assertIn(b"same family as writer", page)
                 r = raw("/api/tasks")
                 self.assertEqual(r.headers.get("X-Content-Type-Options"), "nosniff")
-                self.assertIn(b"task-loop", raw("/classic").read())
             finally:
                 p.terminate()
                 try:

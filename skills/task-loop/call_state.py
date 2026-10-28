@@ -4,7 +4,7 @@ the step instead of the run (tl-7y6.2.13; 60-design-A1 sec 2.3, `CallState` was 
 File: <dir>/<bead>.call.json, written by tmp + os.replace, one writer (the engine that owns the bead). Phases:
 calling (written BEFORE the call) -> returned (the raw answer is on disk BEFORE it is validated) -> consumed (the node file
 exists). `reattach` says what a restart does with it: use the finished answer (never discard output), resume the vendor
-thread with a short note (never restart a thread that has a ref), or start the call. Unused by the engine until R21.
+thread with a short note (never restart a thread that has a ref), or start the call.
 Python 3.8+, stdlib only.
 """
 

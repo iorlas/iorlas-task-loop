@@ -182,9 +182,6 @@ class Live(unittest.TestCase):
                 else:
                     self.fail("server did not start")
                 self.assertTrue(v["version"])
-                s = json.loads(urllib.request.urlopen(base + "/api/summary").read())
-                self.assertEqual(s["repos"], [])
-                self.assertEqual(json.loads(urllib.request.urlopen(base + "/api/runs").read()), [])
                 self.assertIn(b"task-loop", urllib.request.urlopen(base + "/").read())
             finally:
                 p.terminate()

@@ -326,10 +326,6 @@ def transcript_index():
     return out
 
 
-def session_dirs(session):
-    return cached("sd:" + session, 30, lambda: glob.glob(str(PROJECTS / "*" / session)))
-
-
 # ---- runs: one adapter per harness ----------------------------------------------------------------------------------
 
 def claude_events(path, t0=None, t1=None):
@@ -599,80 +595,10 @@ def status_of(path, done_hint=False):
     return ("running" if time.time() - m < LIVE_SECONDS else "idle"), m
 
 
-def subagent_run(path, t0=0, t1=None):
-    """One subagent transcript as a run, or None when it started outside the window."""
-    first = parse_ts(first_json(path).get("timestamp")) or os.path.getmtime(path)
-    if first < t0 - 1 or (t1 and first > t1 + 1):
-        return None
-    meta = read_json(path[:-6] + ".meta.json", {}) or {}
-    tail = "\n".join(tail_lines(path, 30000)[-20:])
-    done = '"SubagentHandback"' in tail or '"stop_reason":"end_turn"' in tail
-    st, m = status_of(path, done)
-    return {"id": "subagent:" + path, "kind": "subagent", "title": meta.get("description") or "Subagent",
-            "model": meta.get("model", ""), "role": meta.get("agentType", ""), "status": st,
-            "started": first, "updated": m, "ended": m if done else None}
 
 
-def subagent_runs(session, t0=0, t1=None):
-    runs = []
-    for d in session_dirs(session):
-        for path in glob.glob(os.path.join(d, "subagents", "agent-*.jsonl")):
-            r = subagent_run(path, t0, t1)
-            if r:
-                runs.append(r)
-    return runs
 
 
-def codex_jobs(since):
-    def load():
-        jobs = []
-        for meta in glob.glob(str(CODEX_JOBS / "*" / "jobs" / "*.json")):
-            try:
-                if os.path.getmtime(meta) < since:
-                    continue
-            except OSError:
-                continue
-            j = read_json(meta, {}) or {}
-            if not j.get("id"):
-                continue
-            log = j.get("logFile") or meta[:-5] + ".log"
-            status = j.get("status", "?")
-            if status == "running" and not pid_alive(j.get("pid")):
-                status = "dead"
-            try:
-                upd = max(os.path.getmtime(meta), os.path.getmtime(log) if os.path.exists(log) else 0)
-            except OSError:
-                upd = None
-            jobs.append({"id": "codex:" + log, "kind": "codex", "session": j.get("sessionId"),
-                         "cwd": j.get("workspaceRoot", ""), "title": (j.get("summary") or "Codex task").split("\n")[0][:110],
-                         "model": "Codex", "role": j.get("kindLabel", ""), "status": status,
-                         "started": parse_ts(j.get("startedAt") or j.get("createdAt")),
-                         "ended": parse_ts(j.get("completedAt")), "updated": upd, "thread": j.get("threadId")})
-        return jobs
-    return cached("codexjobs:%d" % int(since / 60), 4, load)
-
-
-def codex_rollouts(since):
-    """Codex runs started directly (codex exec), not through the codex plugin."""
-    def load():
-        out = []
-        days = {time.strftime("%Y/%m/%d", time.localtime(time.time() - i * 86400)) for i in range(8)}
-        for day in days:
-            for path in glob.glob(str(CODEX_SESSIONS / day / "rollout-*.jsonl")):
-                try:
-                    m = os.path.getmtime(path)
-                except OSError:
-                    continue
-                if m < since:
-                    continue
-                meta = (first_json(path).get("payload") or {})
-                st, _ = status_of(path)
-                out.append({"id": "codex-exec:" + path, "kind": "codex-exec", "cwd": meta.get("cwd", ""),
-                            "thread": meta.get("id") or meta.get("session_id"), "title": "Codex run",
-                            "model": meta.get("model_provider", "Codex"), "status": st,
-                            "started": parse_ts(meta.get("timestamp")), "updated": m, "ended": None})
-        return out
-    return cached("rollouts:%d" % int(since / 60), 5, load)
 
 
 def rollout_files():
@@ -753,11 +679,6 @@ def path_of(run_id):
     return run_id.split(":", 1)[1] if ":" in run_id else ""
 
 
-def run_for_path(kind, path, title, started=None):
-    st, m = status_of(path)
-    return {"id": kind + ":" + path, "kind": kind, "title": title, "status": st, "started": started, "updated": m}
-
-
 # ---- tasks: a bead + the sessions and workers that worked on it ------------------------------------------------------
 
 def task_spans():
@@ -796,106 +717,6 @@ def same_tree(a, b):
     return bool(a and b) and (a == b or a.startswith(b + os.sep))
 
 
-def runs_for_span(span):
-    t0, t1 = span["from"], span["to"]
-    runs = []
-    sess = span.get("session")
-    tr = transcript_of(sess)
-    if tr:
-        st, m = status_of(tr)
-        runs.append({"id": "claude:%s@%s@%s" % (tr, t0, t1 or ""), "kind": "claude", "title": "Orchestrator session",
-                     "role": "orchestrator", "status": st if not t1 else "completed", "started": t0, "updated": m,
-                     "ended": t1, "session": sess})
-    runs += engine_runs(span["bead"], t0, t1)
-    if sess:
-        runs += subagent_runs(sess, t0, t1)
-        for j in codex_jobs(t0 - 60):
-            if j.get("session") != sess or not j.get("started") or j["started"] < t0 - 1 or (t1 and j["started"] > t1 + 1):
-                continue
-            if span.get("worktree") and j.get("cwd") and not same_tree(j["cwd"], span["worktree"]):
-                continue  # one session may drive several tasks, each in its own worktree
-            runs.append(j)
-    wt = span.get("worktree") or ""
-    threads = {r.get("thread") for r in runs if r.get("thread")}
-    contract = []
-    for j in contract_runs(t0 - 60):
-        if j.get("thread") and j["thread"] in threads:
-            continue
-        if j.get("parent") != sess or not j.get("started") or j["started"] < t0 - 1 or (t1 and j["started"] > t1 + 1):
-            continue
-        if span.get("worktree") and j.get("cwd") and not same_tree(j["cwd"], span["worktree"]):
-            continue
-        contract.append(j)
-    runs += contract
-    threads |= {r.get("thread") for r in contract if r.get("thread")}
-    starts = [r["started"] for r in contract if r.get("started") and r.get("kind") == "codex"]
-    for j in codex_rollouts(t0 - 60):
-        if j.get("thread") in threads:
-            continue
-        if any(abs((j.get("started") or 0) - s0) < 30 for s0 in starts):
-            continue  # the launcher already recorded this run (its thread id may not be written yet)
-        if wt and same_tree(j.get("cwd"), wt) and j.get("started") and j["started"] >= t0 - 1 and \
-                (not t1 or j["started"] <= t1 + 1):
-            runs.append(j)
-    for w in span.get("workers", []):
-        if w.get("worker_kind") == "claude-p":
-            tr2 = transcript_of(w.get("ref"))
-            if tr2:
-                r = run_for_path("claude-p", tr2, w.get("title") or "claude -p worker", w.get("t"))
-                runs.append(r)
-    seen, out = set(), []
-    for r in runs:
-        if r["id"] not in seen:
-            seen.add(r["id"])
-            out.append(r)
-    out.sort(key=lambda r: r.get("started") or 0)
-    return out
-
-
-def summary():
-    spans = task_spans()
-    now = time.time()
-    repo_list = repos()
-    data = {"version": VERSION, "now": now, "repos": [], "host": socket.gethostname()}
-    for repo in repo_list:
-        beads = beads_of(repo)
-        by_id = {b["id"]: b for b in beads}
-        tasks = []
-        for b in beads:
-            if b.get("issue_type") == "epic" and not b.get("parent"):
-                pass
-            sp = spans.get(b["id"], [])
-            last = sp[-1] if sp else None
-            live = None
-            if last and last["to"] is None and b.get("status") == "in_progress":
-                tr = transcript_of(last.get("session"))
-                upd = os.path.getmtime(tr) if tr and os.path.exists(tr) else last["from"]
-                live = {"session": last.get("session"), "actor": last.get("actor"), "worktree": last.get("worktree"),
-                        "slot": last.get("slot"), "since": last["from"], "stage": last.get("stage"), "updated": upd}
-            closed_t = parse_ts(b.get("closed_at"))
-            tasks.append({
-                "id": b["id"], "title": b.get("title", ""), "status": b.get("status"), "type": b.get("issue_type"),
-                "priority": b.get("priority"), "parent": b.get("parent"), "labels": b.get("labels") or [],
-                "assignee": b.get("assignee"), "deps": len(b.get("dependencies") or []),
-                "updated": parse_ts(b.get("updated_at")), "closed": closed_t, "live": live,
-                "spans": len(sp), "slot": "slot" in (b.get("labels") or []),
-            })
-        data["repos"].append({"path": repo, "name": os.path.basename(repo), "tasks": tasks,
-                              "counts": count_status(tasks), "known": len(by_id)})
-    data["lanes"] = contract_lanes()
-    return data
-
-
-def count_status(tasks):
-    c = {}
-    for t in tasks:
-        if t["slot"]:
-            continue
-        c[t["status"]] = c.get(t["status"], 0) + 1
-    c["live"] = sum(1 for t in tasks if t["live"])
-    return c
-
-
 def resolve_repo(repo, bead=""):
     """A link may name a repo by path or by folder name, or not at all: find the registered repo it means."""
     known = repos()
@@ -905,37 +726,6 @@ def resolve_repo(repo, bead=""):
     if named:
         return named[0]
     return next((p for p in known if bead and any(x["id"] == bead for x in beads_of(p))), "")
-
-
-def task_detail(repo, bead):
-    spans = task_spans().get(bead, [])
-    repo = resolve_repo(repo, bead)
-    b = next((x for x in beads_of(repo) if x["id"] == bead), {}) if repo else {}
-    return {"bead": {k: b.get(k) for k in ("id", "title", "status", "description", "acceptance_criteria", "assignee",
-                                           "labels", "priority", "parent", "issue_type", "notes", "updated_at")},
-            "spans": [dict({k: v for k, v in s.items() if k != "workers"}, runs=runs_for_span(s)) for s in spans]}
-
-
-def all_runs(hours):
-    since = time.time() - hours * 3600
-    runs = []
-    for path in glob.glob(str(PROJECTS / "*" / "*" / "subagents" / "agent-*.jsonl")):
-        try:
-            if os.path.getmtime(path) < since:
-                continue
-        except OSError:
-            continue
-        r = subagent_run(path)  # this file only: not every agent of its session, once per file
-        if r:
-            r["where"] = os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(path)))).split("-")[-1]
-            runs.append(r)
-    for j in codex_jobs(since) + codex_rollouts(since) + contract_runs(since):
-        j = dict(j)
-        j["where"] = os.path.basename(j.get("cwd") or "")
-        runs.append(j)
-    order = {"running": 0, "queued": 1, "dead": 2, "failed": 2, "idle": 3, "completed": 4}
-    runs.sort(key=lambda r: (order.get(r.get("status"), 5), -(r.get("updated") or 0)))
-    return runs[:300]
 
 
 def split_window(rest):
@@ -2179,13 +1969,6 @@ def make_handler(port, addrs):
                 if u.path == "/api/version":
                     body = {"version": VERSION, "pid": os.getpid(), "urls": urls(addrs, port), "started": STARTED,
                             "script": str(Path(__file__).resolve()), "binds": list(addrs), "port": port}
-                elif u.path == "/api/summary":
-                    _last_seen[0] = time.time()
-                    body = summary()
-                elif u.path == "/api/task":
-                    body = task_detail(q.get("repo", ""), q.get("id", ""))
-                elif u.path == "/api/runs":
-                    body = all_runs(float(q.get("hours", "24")))
                 elif u.path == "/api/events":
                     body = run_events(q.get("id", ""))
                 elif u.path == "/api/asks":
@@ -2220,8 +2003,6 @@ def make_handler(port, addrs):
                     if data is None:
                         return self.send(404, b"not found", "text/plain")
                     return self.send(200, data, "text/plain; charset=utf-8")
-                elif u.path == "/classic":
-                    return self.send(200, (HERE / "classic.html").read_bytes(), "text/html; charset=utf-8")
                 elif u.path in ("/", "/index.html"):
                     return self.send(200, page.read_bytes(), "text/html; charset=utf-8")
                 else:

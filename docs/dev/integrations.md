@@ -9,10 +9,10 @@ returns an error for that request; parsers skip lines they cannot read).
 | source | owner | reader | what breaks if it changes |
 |---|---|---|---|
 | agent-runs v1 (`~/.config/agent-runs`) | **us** (`docs/contracts/agent-runs-v1.md`); delegate is one producer | `contract_runs`, `contract_lanes` | nothing silently: other major versions are skipped |
-| Claude Code transcripts `~/.claude/projects/*/<session>.jsonl`, subagents `<session>/subagents/agent-*.jsonl` + `.meta.json` | Anthropic, undocumented | `claude_events`, `subagent_runs`, `transcript_of`, `find_transcript` (a task-view block's session) | orchestrator and subagent logs |
+| Claude Code transcripts `~/.claude/projects/*/<session>.jsonl`, subagents `<session>/subagents/agent-*.jsonl` + `.meta.json` | Anthropic, undocumented | `claude_events`, `transcript_of`, `find_transcript` (a task-view block's session) | orchestrator and subagent logs |
 | `$CLAUDE_CODE_SESSION_ID`, `$CLAUDE_PID` in a session's Bash env; SessionStart hook stdin (`session_id`, `transcript_path`) | Anthropic | `tl.actor`, `tl.session_alive`, `tl.cmd_hook` | the per-session bd actor (fallbacks exist), heartbeat exit, log lookup |
-| codex plugin job state `~/.claude/plugins/data/codex-openai-codex/state/*/jobs/*.json` (+ `.log`) | OpenAI's codex plugin | `codex_jobs`, `codex_log_events` | Codex runs started through the plugin (they carry the launching `sessionId`) |
-| Codex rollouts `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` | OpenAI | `codex_rollouts`, `rollout_events` (with `exec_cmds` for the `exec` tool's code input), `find_transcript` | Codex runs started with `codex exec` |
+| codex plugin job state `~/.claude/plugins/data/codex-openai-codex/state/*/jobs/*.json` (+ `.log`) | OpenAI's codex plugin | `codex_log_events` | Codex runs started through the plugin (they carry the launching `sessionId`) |
+| Codex rollouts `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` | OpenAI | `rollout_events` (with `exec_cmds` for the `exec` tool's code input), `find_transcript` | Codex runs started with `codex exec` |
 | OpenCode sessions, SQLite `~/.local/share/opencode/opencode.db` (`OPENCODE_DB` overrides), tables `session`, `message`, `part` only (never the credential tables); delegate's family `xai`, kind `opencode` | OpenCode | `tl.opencode_*`, `opencode_events` (ADAPTERS `opencode`), `tl.transcript_of("xai", ses_...)` -> `opencode:ses_...`, `context_tokens` | Grok lane runs; read only, short timeout, a missing DB or unknown id is empty |
 | `bd list --json`, `bd show --json`, `bd update --claim`, `bd heartbeat`, `bd reclaim`, `bd unclaim`, `bd provenance record` | beads (bd 1.3+) | `beads_of`, `tl.py` | the tree, claims, slots, provenance (provenance failures only warn) |
 

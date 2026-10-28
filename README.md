@@ -79,7 +79,6 @@ skills/task-loop/loop.py         tl loop / next / stop: one sequential loop over
 skills/task-loop/dash/server.py  dashboard server (stdlib)
 skills/task-loop/dash/index.html dashboard page: the task view (no build, no dependencies)
 skills/task-loop/dash/timeline.py engine logs -> runs, blocks, arrows for the task view
-skills/task-loop/dash/classic.html the three-pane log viewer (/classic)
 hooks/hooks.json                 SessionStart: index session id -> transcript path
 tests/                           python3 -m unittest discover -s tests   (CI: Ubuntu, Python 3.12)
 dev/release.py                   the only way to release: release lock, version from origin, suite, marketplace, install

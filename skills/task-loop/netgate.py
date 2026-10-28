@@ -3,8 +3,7 @@
 `NetProbe.up()` answers True, False, or None (unknown: the probe could not run). The production adapter is delegate's
 `route.py net` (sockets only, no model call, no quota); FakeProbe scripts answers for tests. `NetState` is the loop's
 detector: a PAUSE_NETWORK close sets it down (one `down` transition), then it probes every PROBE_EVERY seconds while down
-(one `up` transition). Unknown never holds a loop down: it reads as "go and see" after the probe gap. Unused by the engine
-until R21. Python 3.8+, stdlib only; no sockets of its own.
+(one `up` transition). Unknown never holds a loop down: it reads as "go and see" after the probe gap. Python 3.8+, stdlib only; no sockets of its own.
 """
 
 import json

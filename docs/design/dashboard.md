@@ -84,7 +84,7 @@ HH:MM), slot, time. A task (`#task=<id>`) shows every run of the bead, oldest fi
 run is a chain of blocks (one stage + one session), the arrow into each block says why the run moved there. A block
 (`#task=..&run=<run>&block=<node>.<k>&tab=transcript|checks|engine|answer`) opens a drawer: the session's
 transcript cut to the block's time, the checks of its round (command, exit, output tail, full log), the engine lines of
-the step. Asks are answered on the task (and on `#asks`). The old three-pane viewer is `/classic`.
+the step. Asks are answered on the task (and on `#asks`).
 
 Endpoints: `/api/tasks`, `/api/task-timeline?repo&id`, `/api/block?run&node&k`, `/api/file?run&path` (a file of the
 run's folder only). `dash/timeline.py` builds runs -> blocks -> arrows.
@@ -120,7 +120,7 @@ verify_wrong, verified, gate_red, conflict, push_race, landed, done, failed, sto
 `checks/NN-id.rK.log`, `engine-checks.rK.json` (`engine-checks.json` is the latest). `traces.jsonl` lines add
 `prev_run`, `started_because`, `ask`, and `fingerprint`: a stable slug of the failure cause (bead ids, session refs,
 paths, shas, numbers and quoted payloads normalised; empty for a landed/done run) so the lifecycle report can group
-runs across weeks. Logs from before these records are read from their node/session/warn text.
+runs across weeks.
 There is no `judge` step: the engine has none yet.
 
 ## Roadmap (v4, 2026-10-23, replaces the Plan graph)
