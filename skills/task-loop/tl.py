@@ -33,14 +33,19 @@
   tl.py pin [VERSION] [--delegate V] [--clear]  pin the plugin install a loop and run-task use (owner override; the loop never pins)
   tl.py rollback                                pin the previous task-loop version (the delegate stays as it is)
   tl.py cutover check [--json]                  live runs and loops on this machine; exit 1 if any (docs/cutover.md)
-  tl.py hook session-start                      SessionStart hook: index session id -> transcript path
+  tl.py status [--brief] [--json] [--repo DIR]  loop RUNNING or NOT RUNNING, asks, slots, versions, recent beads (<= 40 lines, 8 KB)
+  tl.py handoff write|show [--repo DIR]         the <= 4 KB handoff a compaction hands to the next session (hooks/hook.py writes and injects it)
 
 State: ~/.config/task-loop : repos.json, events.jsonl, sessions/, dash.*.
 """
 
 import argparse
+import importlib
 import sys
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Final
 
 import vendored  # noqa: F401  (puts _vendor on sys.path)
 
@@ -50,29 +55,42 @@ from taskloop.adapters import beadtools, gitrepo, ident, landlock
 from taskloop.app.release import pins
 from taskloop.app.track import trail, verbs
 from taskloop.app.wire import asks as wire_asks
-from taskloop.app.wire import doctor, hook as wire_hook
+from taskloop.app.wire import doctor
+from taskloop.app.wire import hook as hook_wire
 from taskloop.app.wire import slots as wslots
 from taskloop.app.wire import usage as wire_usage
 from taskloop.cli import asks as cli_asks
 from taskloop.cli import slots as slots_cli
+from taskloop.cli import status
 
 HERE = Path(__file__).resolve().parent
 
 
-def cmd_slot(a, now=trail.now):
-    return slots_cli.run(wslots.slot_env(gitrepo.repo_root(), now=now), a)
+@dataclass(frozen=True)
+class Ctx:
+    """What a verb may need besides its arguments: the install this run executes from, the clock, the argv a loop re-execs itself with."""
+    here: Path
+    now: Callable[[], float]
+    argv: list[str]
 
 
-def cmd_ask(a):
+Handler = Callable[[Any, Ctx], int]
+
+
+def v_slot(a: Any, c: Ctx) -> int:
+    return slots_cli.run(wslots.slot_env(gitrepo.repo_root(), now=c.now), a)
+
+
+def v_ask(a: Any, c: Ctx) -> int:
     """The owner's inbox and typed verbs (answer, hint, hold, override) from the terminal: src/taskloop/cli/asks.py over the AskStore. A
     bead's ask names its repo, and the bd of that repo takes the bead's state."""
     if a.op == "list":
         for b in wire_asks.sweep("close"):  # throttled: the loop sweeps too
-            print("closed the ask of %s: its bead is closed or gone" % b)
-    return cli_asks.run(a, wire_asks.store(), lambda repo: beadtools.bd_store(repo or None), trail.now, ident.actor())
+            print(f"closed the ask of {b}: its bead is closed or gone")
+    return cli_asks.run(a, wire_asks.store(), lambda repo: beadtools.bd_store(repo or None), c.now, ident.actor())
 
 
-def cmd_land_lock(a):
+def v_land_lock(a: Any, c: Ctx) -> int:
     """Run a command while holding the repo's land lock (what the engine takes around fetch, rebase, gate, push)."""
     cmd = list(a.cmd_args)
     if cmd and cmd[0] == "--":
@@ -81,12 +99,6 @@ def cmd_land_lock(a):
         print("land-lock: no command (usage: tl.py land-lock [--repo DIR] -- CMD...)", file=sys.stderr)
         return 2
     return landlock.run_locked(cmd, str(Path(a.repo).resolve()), a.wait_min)
-
-
-def cmd_reflect(a):
-    import reflect_digest
-    return reflect_digest.cmd_reflect(a)
-
 
 
 def owner_parsers(sp):
@@ -190,8 +202,13 @@ def engine_parsers(sp):
     p = sp.add_parser("cutover", help="cutover check: live runs and loops; exit 1 if any (docs/cutover.md)")
     p.add_argument("op", choices=["check"])
     p.add_argument("--json", action="store_true")
-    p = sp.add_parser("hook")
-    p.add_argument("op", choices=["session-start"])
+    p = sp.add_parser("status", help="loop RUNNING or NOT RUNNING, asks, slots, versions, recent beads: <= 40 lines, 8 KB")
+    p.add_argument("--brief", action="store_true", help="the only form (kept for the name the skill uses)")
+    p.add_argument("--json", action="store_true")
+    p.add_argument("--repo")
+    p = sp.add_parser("handoff", help="write or show the <= 4 KB handoff for the next session (made from the stores, never summarised)")
+    p.add_argument("op", choices=["write", "show"])
+    p.add_argument("--repo")
 
 
 def build_parser():
@@ -202,40 +219,84 @@ def build_parser():
     return ap
 
 
-def main(argv=None, here=HERE, now=trail.now):
+def lazy(module: str, name: str) -> Handler:
+    """A verb whose module is imported when the verb runs (the engine and the loop are heavy; `tl actor` should not load them)."""
+    def call(a: Any, c: Ctx) -> int:
+        return int(getattr(importlib.import_module(module), name)(a))
+    return call
+
+
+def of_args(fn: Callable[..., int], *names: str) -> Handler:
+    """A verb that is a function of some of its parsed arguments, by name."""
+    def call(a: Any, c: Ctx) -> int:
+        return fn(*[getattr(a, n) for n in names])
+    return call
+
+
+def v_actor(a: Any, c: Ctx) -> int:
+    print(ident.actor())
+    return 0
+
+
+def v_loop(a: Any, c: Ctx) -> int:
+    a.argv = list(c.argv)  # the loop re-execs itself with these
+    return importlib.import_module("loop_env").cmd_loop(a, c.here, c.now)
+
+
+def v_next(a: Any, c: Ctx) -> int:
+    return importlib.import_module("loop_env").cmd_next(a, c.here, c.now)
+
+
+def v_stop(a: Any, c: Ctx) -> int:
+    return importlib.import_module("loop_env").cmd_stop(a, c.here, c.now)
+
+
+def repo_of(a: Any) -> str:
+    return a.repo or hook_wire.main_checkout(str(Path.cwd()))
+
+
+def v_status(a: Any, c: Ctx) -> int:
+    return status.run_status(repo_of(a), c.here.parents[1], c.now(), a.json)
+
+
+def v_handoff(a: Any, c: Ctx) -> int:
+    return status.run_handoff(a.op, repo_of(a), c.here.parents[1], c.now())
+
+
+VERBS: Final[dict[str, Handler]] = {
+    "actor": v_actor,
+    "bd": of_args(verbs.passthrough, "rest"),
+    "register": of_args(verbs.register, "directory"),
+    "claim": of_args(verbs.claim, "id", "worktree", "slot"),
+    "land": of_args(verbs.land, "id", "sha", "worktree"),
+    "close": of_args(verbs.close, "id", "reason"),
+    "block": of_args(verbs.block, "id", "why"),
+    "trace": of_args(verbs.trace, "id", "last", "json"),
+    "usage": of_args(wire_usage.feed, "windows"),
+    "worktree": of_args(wslots.worktree, "op", "self_too"),
+    "dash": of_args(dash_server.run, "op"),
+    "pin": of_args(pins.run_pin, "version", "delegate", "clear"),
+    "rollback": of_args(pins.run_rollback),
+    "doctor": of_args(doctor.run),
+    "slot": v_slot,
+    "ask": v_ask, "answer": v_ask, "hint": v_ask, "hold": v_ask, "override": v_ask,
+    "reflect": lazy("reflect_digest", "cmd_reflect"),
+    "land-lock": v_land_lock,
+    "status": v_status,
+    "handoff": v_handoff,
+    "run-task": lazy("engine", "main"),
+    "selftest": lazy("selftest", "cmd_selftest"),
+    "cutover": lazy("loop_env", "cmd_cutover"),
+    "next": v_next, "loop": v_loop, "stop": v_stop,
+    "report": lazy("report", "cmd_report"),
+    "lost": lazy("report", "cmd_lost"),
+}
+
+
+def main(argv: list[str] | None = None, here: Path = HERE, now: Callable[[], float] = trail.now) -> int:
     """`here`: the install this run executes from, `now`: the clock (a test runs the loop as another version, at another time)."""
     a = build_parser().parse_args(argv)
-
-    if a.cmd == "run-task":
-        import engine
-        return engine.main(a)
-    if a.cmd == "selftest":
-        import selftest
-        return selftest.cmd_selftest(a)
-    if a.cmd == "cutover":
-        import loop_env
-        return loop_env.cmd_cutover(a)
-    if a.cmd in ("next", "loop", "stop"):
-        import loop_env
-        a.argv = list(argv) if argv is not None else sys.argv[1:]  # the loop re-execs itself with these
-        return {"next": loop_env.cmd_next, "loop": loop_env.cmd_loop, "stop": loop_env.cmd_stop}[a.cmd](a, here, now)
-    if a.cmd in ("report", "lost"):
-        import report
-        return {"report": report.cmd_report, "lost": report.cmd_lost}[a.cmd](a)
-    if a.cmd == "hook":
-        wire_hook.session_start(sys.stdin.read())
-        dash_server.restart_stale()
-        return 0
-    table = {"actor": lambda a: print(ident.actor()) or 0, "bd": lambda a: verbs.passthrough(a.rest),
-             "register": lambda a: verbs.register(a.directory), "claim": lambda a: verbs.claim(a.id, a.worktree, a.slot),
-             "land": lambda a: verbs.land(a.id, a.sha, a.worktree), "close": lambda a: verbs.close(a.id, a.reason),
-             "block": lambda a: verbs.block(a.id, a.why), "trace": lambda a: verbs.trace(a.id, a.last, a.json),
-             "usage": lambda a: wire_usage.feed(a.windows), "worktree": lambda a: wslots.worktree(a.op, a.self_too),
-             "dash": lambda a: dash_server.run(a.op), "pin": lambda a: pins.run_pin(a.version, a.delegate, a.clear),
-             "rollback": lambda a: pins.run_rollback(), "doctor": lambda a: doctor.run(), "slot": lambda a: cmd_slot(a, now), "ask": cmd_ask,
-             "answer": cmd_ask, "hint": cmd_ask, "hold": cmd_ask, "override": cmd_ask, "reflect": cmd_reflect,
-             "land-lock": cmd_land_lock}
-    return table[a.cmd](a)
+    return VERBS[a.cmd](a, Ctx(here, now, list(argv) if argv is not None else sys.argv[1:]))
 
 
 if __name__ == "__main__":

@@ -69,7 +69,7 @@ class HeldBranch(unittest.TestCase):
         a = engine.Args(op="reset", name="s1", bead="x-1", n=None, force=False)
         out = io.StringIO()
         with redirect_stdout(out), redirect_stderr(io.StringIO()):
-            rc = tl.cmd_slot(a)
+            rc = tl.v_slot(a, tl.Ctx(tl.HERE, tl.trail.now, []))
         return rc, out.getvalue(), getattr(a, "error", "")
 
     def branch_in_slot(self):

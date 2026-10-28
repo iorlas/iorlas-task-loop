@@ -1,14 +1,25 @@
 {
-  "description": "Index each session's transcript path so the task-loop dashboard can show its live log.",
+  "description": "task-loop: index each session's transcript for the dashboard, write the handoff before a compaction and give it back after, refuse an Agent call without a model and a pkill/killall.",
   "hooks": {
     "SessionStart": [
       {
         "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/skills/task-loop/tl.py\" hook session-start",
-            "timeout": 5
-          }
+          {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/hook.py\" session-start", "timeout": 5}
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/hook.py\" precompact", "timeout": 10}
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Agent|Task|Bash",
+        "hooks": [
+          {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/hook.py\" pretool", "timeout": 3}
         ]
       }
     ]

@@ -177,14 +177,3 @@ def run(op: str) -> int:
         print(json.dumps(v) if v else "DOWN")
         return 0 if v else 1
     return url() if op == "url" else ensure()
-
-
-def restart_stale() -> None:
-    """A dashboard left running by an older plugin version restarts on this code (it ran 0.5.3 for days). Never raises."""
-    try:
-        v = ping()
-        if v and v.get("version") != code_version():
-            procs.spawn([sys.executable, str(HERE / "tl.py"), "dash", "ensure"], stdin=subprocess.DEVNULL,
-                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except Exception:
-        pass

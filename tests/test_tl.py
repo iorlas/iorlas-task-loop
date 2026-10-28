@@ -30,6 +30,7 @@ from contracts import samples as S  # noqa: E402
 from taskloop.contracts import codec  # noqa: E402
 
 
+CTX = tl.Ctx(tl.HERE, trail.now, [])
 SH_FAKE = unittest.skipIf(os.name == "nt", "the bd fake is a #!/bin/sh script, which Windows cannot execute")
 
 
@@ -106,26 +107,6 @@ class Records(Base):
         f.write_text((old + "\n") * 120000 + new + "\n")
         trail.prune_events()
         self.assertEqual([json.loads(l)["kind"] for l in f.read_text().splitlines()], ["new"])
-
-    def test_hook_indexes_session(self):
-        # never the real dashboard: an installed one of another version on :7878 was restarted from this tree, with the
-        # test's empty config dir, and the owner's dashboard showed no tasks (2026-10-21)
-        with mock.patch("sys.stdin", io.StringIO(json.dumps({"session_id": "s1", "transcript_path": "/t.jsonl"}))), \
-                mock.patch.object(dash_server, "ping", return_value=None), mock.patch.object(dash_server.procs, "spawn") as po:
-            self.assertEqual(tl.main(["hook", "session-start"]), 0)
-        po.assert_not_called()
-        d = json.loads((ident.config_dir() / "sessions" / "s1.json").read_text())
-        self.assertEqual(d["transcript"], "/t.jsonl")
-
-    def test_hook_never_fails(self):
-        with mock.patch("sys.stdin", io.StringIO("not json")), mock.patch.object(dash_server, "ping", return_value=None):
-            self.assertEqual(tl.main(["hook", "session-start"]), 0)
-
-    def test_hook_restarts_an_older_dashboard_without_touching_the_real_one(self):
-        with mock.patch("sys.stdin", io.StringIO("{}")), mock.patch.object(dash_server, "ping", return_value={"version": "0"}), \
-                mock.patch.object(dash_server.procs, "spawn") as po:
-            self.assertEqual(tl.main(["hook", "session-start"]), 0)
-        self.assertIn("ensure", po.call_args[0][0])
 
 
 class RegisterCLI(Base):
@@ -518,12 +499,12 @@ class AskCli(unittest.TestCase):
             with mock.patch.dict(os.environ, env):
                 out = io.StringIO()
                 with mock.patch("sys.stdout", out):
-                    self.assertEqual(tl.cmd_ask(ns()), 0)
-                    self.assertEqual(tl.cmd_ask(ns(op="answer", bead="x-1", text=["right"])), 0)
-                    self.assertEqual(tl.cmd_ask(ns(op="withdraw", bead="x-2", text=["no", "longer"])), 0)
-                    self.assertEqual(tl.cmd_ask(ns(op="answer", bead="nope", text=["x"])), 1)
-                    self.assertEqual(tl.cmd_ask(ns(op="answer", bead="x-1", text=["again"])), 1)  # already answered
-                    self.assertEqual(tl.cmd_ask(ns(op="answer", bead="x-1", text=["again"], amend=True)), 0)
+                    self.assertEqual(tl.v_ask(ns(), CTX), 0)
+                    self.assertEqual(tl.v_ask(ns(op="answer", bead="x-1", text=["right"]), CTX), 0)
+                    self.assertEqual(tl.v_ask(ns(op="withdraw", bead="x-2", text=["no", "longer"]), CTX), 0)
+                    self.assertEqual(tl.v_ask(ns(op="answer", bead="nope", text=["x"]), CTX), 1)
+                    self.assertEqual(tl.v_ask(ns(op="answer", bead="x-1", text=["again"]), CTX), 1)  # already answered
+                    self.assertEqual(tl.v_ask(ns(op="answer", bead="x-1", text=["again"], amend=True), CTX), 0)
                 self.assertIn("x-1", out.getvalue())
                 a = json.loads((asks / "x-1.json").read_text())
                 self.assertEqual((a["status"], a["answer"]["action"], a["answer"]["text"]), ("answered", "text", "again"))

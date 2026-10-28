@@ -193,7 +193,7 @@ class Invariants(test_loop.Base):
             self.bd.before = lambda a: None
 
     def hold(self, name, minutes=30, why="shots"):
-        return tl.cmd_slot(Args(op="hold", name=name, why=why, for_min=minutes, n=None, bead=None, force=False), self.clock.now)
+        return tl.v_slot(Args(op="hold", name=name, why=why, for_min=minutes, n=None, bead=None, force=False), tl.Ctx(tl.HERE, self.clock.now, []))
 
     # -- 1: no bead claimed or run twice ---------------------------------------------------------------------------------
 
@@ -546,7 +546,7 @@ class Invariants(test_loop.Base):
 
         def holder():
             if self.hold("s4") == 0:
-                tl.cmd_slot(Args(op="release", name="s4", force=False), self.clock.now)
+                tl.v_slot(Args(op="release", name="s4", force=False), tl.Ctx(tl.HERE, self.clock.now, []))
         self.together({"L1": loop_run("w-1"), "L2": loop_run("w-2"), "H": hand, "W": waiter, "P": holder})
         self.nothing_held(names)
         # left behind by processes that died

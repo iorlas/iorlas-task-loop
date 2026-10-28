@@ -117,6 +117,9 @@ class ConfigDir:
     def reflect_view(self) -> Path:
         return self.root / "reflect-view.json"
 
+    def handoff(self, repo_key: str) -> Path:
+        return self.root / "handoff" / ("%s.md" % repo_key)
+
     def dash_state(self) -> Path:
         return self.root / "dash.json"
 
