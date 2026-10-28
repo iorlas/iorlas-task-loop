@@ -12,7 +12,7 @@ from typing import Any, ClassVar
 
 from taskloop.contracts import codec
 from taskloop.contracts.codec import record
-from taskloop.contracts.review import ReviewState, Unfiled
+from taskloop.contracts.review import ReviewState
 
 
 def fresh_handoff() -> dict[str, Any]:
@@ -45,8 +45,6 @@ class RunState:
     writer_fallback: bool = False
     fallback_lane: str = ""
     writer_said: str = ""
-    filed: list[str] = field(default_factory=list)
-    unfiled: list[Unfiled] = field(default_factory=list)
     look_paths: list[str] = field(default_factory=list)
     look_notes: list[str] = field(default_factory=list)
     look_unjudged: dict[str, Any] = field(default_factory=dict)
@@ -63,7 +61,7 @@ class RunState:
     def start_again(self) -> "RunState":
         """The state of a task that starts again on the base: nothing of the old attempt, but what belongs to the bead (the follow-ups
         filed or refused, the owner's extra amends, the rebase resets, the brief as it is now, the planner thread)."""
-        keep = ("filed", "unfiled", "extra", "rebase_resets", "brief_hash", "snap", "planner_ref", "pending_land_validation")
+        keep = ("extra", "rebase_resets", "brief_hash", "snap", "planner_ref", "pending_land_validation")
         return RunState(**{k: getattr(self, k) for k in keep})
 
     def dump(self) -> dict[str, Any]:

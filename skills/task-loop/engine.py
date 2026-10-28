@@ -372,7 +372,7 @@ class Engine(StateAttrs):
         self.session, self.fresh = tl.session_id(), fresh
         self.leftovers = []
         self.bead_parent = ""  # tl-bxk.10.23
-        self.look_filed = False
+        self.look_filed, self.filed, self.unfiled = False, [], []  # unfiled: follow-ups bd refused (the ReviewState keeps both)
         self.look_retried, self.shots_skipped = set(), set()
         self.unverified = []  # tl-bxk.10.28: items that land for the owner
         self.link_ok, self.link_bad, self.link_fn, self.link_tries = set(), {}, None, {}  # tl-bxk.7: links opened from this host (link_fn: a test's check)

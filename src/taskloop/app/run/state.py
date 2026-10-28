@@ -96,9 +96,9 @@ class Checkpoints:
         if ck is None:
             return
         red = why.startswith("gate red") and not ck.state.pending_land_validation
-        done = dataclasses.replace(
-            ck, head=self.e.git("rev-parse", "HEAD"), closed=True, state=dataclasses.replace(ck.state, filed=list(self.e.filed))
-        )
+        review = dataclasses.replace(ck.state.review, filed=list(self.e.filed))
+        state = dataclasses.replace(ck.state, review=review)
+        done = dataclasses.replace(ck, head=self.e.git("rev-parse", "HEAD"), closed=True, state=state)
         if red:
             done = dataclasses.replace(done, step="gate-red", gate_tail=trim.trim_log(why, log=str(self.e.gate_log or "")))
         self.doc.write(done)
@@ -108,7 +108,7 @@ class Checkpoints:
         self.e.unfiled += [Unfiled(title=lo["title"], why=lo["why"]) for lo in lost or []]
         ck = self.read()
         if ck is not None:
-            kept = dataclasses.replace(ck.state, filed=list(self.e.filed), unfiled=list(self.e.unfiled))
+            kept = dataclasses.replace(ck.state, review=review_of(self.e))
             self.doc.write(dataclasses.replace(ck, state=kept))
 
     def keep_look(self) -> None:

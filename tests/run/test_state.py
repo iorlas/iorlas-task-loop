@@ -20,7 +20,7 @@ SAMPLE: dict[str, Any] = {
     "plan_data": {"summary": "s", "stages": []}, "brief_hash": "b", "snap": {"title": "t"}, "planner_ref": "ref", "planned": 2, "replans": 1,
     "fixes": 1, "extra": 1, "rebase_resets": 1, "plan_log": [{"mode": "plan"}], "done": ["g"], "accepted": [0], "accepted_new": ["f.txt"],
     "denials": ["rm"], "writer": {"delegate": "w1", "ctx": 5, "seen": ["a"]}, "writer_family": "codex", "writer_fallback": True,
-    "fallback_lane": "L", "writer_said": "said", "filed": ["x"], "unfiled": [Unfiled(title="t", why="w")], "look_paths": ["p.png"],
+    "fallback_lane": "L", "writer_said": "said", "look_paths": ["p.png"],
     "look_notes": ["n"], "look_unjudged": {"i": "why"}, "look_done": 1, "look_prev": [{"item": "i"}], "rendered_names": {"a.png"},
     "last_reqs": [{"method": "m"}], "render_stale": True, "handoff": {"rounds": [{"r": 1}], "seen_lows": ["l"]}, "stage_tree": "T",
     "pending_land_validation": "red",
@@ -35,7 +35,7 @@ class Host(StateAttrs):
         self.checkpoints = Checkpoints(self)
         self.log_path = Path("t-1-20260101-000000.jsonl")
         self.unchecked = [{"what": "u", "kind": "", "source": "", "why": "", "proof_round": False}]
-        self.unverified, self.unfiled = [{"what": "v", "kind": "", "why": "", "source": ""}], []
+        self.unverified, self.filed, self.unfiled = [{"what": "v", "kind": "", "why": "", "source": ""}], [], []
         self.look_paths, self.look_notes, self.look_unjudged = [], [], {}
         self.task_branch, self.gate_log, self.head = "task/t-1", None, "h0"
 
@@ -68,7 +68,7 @@ class Fields(unittest.TestCase):
         self.assertEqual(set(dump["review"]), {f.name for f in dataclasses.fields(ReviewState)})
 
     def test_a_dump_loads_back_to_the_same_state(self):
-        s = RunState(**{k: v for k, v in SAMPLE.items() if k != "unfiled"}, unfiled=[Unfiled(title="t", why="w")])
+        s = RunState(**SAMPLE)
         self.assertEqual(RunState.from_dump(s.dump()), s)
 
 
@@ -79,6 +79,7 @@ class Park(unittest.TestCase):
         a = Host()
         for name in state_names():
             setattr(a, name, SAMPLE[name])
+        a.filed, a.unfiled = ["x"], [Unfiled(title="t", why="w")]
         a.checkpoints.save(step="write", stage=1, rounds=2, n=3, feedback="fb")
         b = Host()
         b.stores = a.stores
@@ -96,13 +97,14 @@ class Park(unittest.TestCase):
             want = a.state.pending_land_validation if name == "pending_land_validation" else getattr(a.state, name)
             self.assertEqual(getattr(b, name), want, name)
         self.assertEqual((b.snap, b.brief_hash), ({"now": 1}, "now"))  # the bead as it is now, not as it was planned
-        self.assertEqual(b.unverified, a.unverified)
+        self.assertEqual((b.unverified, b.filed, b.unfiled), (a.unverified, a.filed, a.unfiled))  # the ReviewState folds them in
 
     def test_an_edit_from_outside_hands_back_only_what_every_resume_keeps(self):
         a, b = self.parked()
         Resume(b).restore(stored(b), late=False)
         for name in LATE:
             self.assertEqual(getattr(b, name), getattr(RunState(), name), name)
+        self.assertEqual((b.filed, b.unfiled), ([], []))  # filed titles are the late ones too
         self.assertEqual(b.look_paths, ["p.png"])
 
     def test_a_pending_land_validation_parks_at_land_verify_red(self):
@@ -116,7 +118,7 @@ class Park(unittest.TestCase):
         a.filed.append("y")
         a.checkpoints.close()
         ck = stored(a)
-        self.assertEqual((ck.closed, ck.head, ck.state.filed), (True, "h9", ["x", "y"]))
+        self.assertEqual((ck.closed, ck.head, ck.state.review.filed), (True, "h9", ["x", "y"]))
 
     def test_a_red_gate_at_land_parks_the_next_run_at_gate_red(self):
         a, _ = self.parked()
@@ -128,7 +130,7 @@ class Park(unittest.TestCase):
     def test_refused_follow_ups_are_kept_beside_the_filed_ones(self):
         a, _ = self.parked()
         a.checkpoints.keep_filed([{"title": "t2", "why": "lint"}])
-        self.assertEqual([u.title for u in stored(a).state.unfiled], ["t", "t2"])
+        self.assertEqual([u.title for u in stored(a).state.review.unfiled], ["t", "t2"])
 
     def test_drop_removes_the_record(self):
         a, _ = self.parked()

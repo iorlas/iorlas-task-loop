@@ -17,7 +17,6 @@ LATE = (
     "replans",
     "fixes",
     "denials",
-    "filed",
     "stage_tree",
     "writer_said",
     "accepted_new",
@@ -105,7 +104,7 @@ class Resume:
         for name in state_names():
             if name not in KEEP_FOR_ACTIVE and (late or name not in LATE):
                 setattr(e, name, getattr(saved, name))
-        apply_review(self.e, saved.review, unchecked=False)
+        apply_review(self.e, saved.review, unchecked=False, late=late)
         e.extra = e.extra + saved.extra
         e.planner_ref = saved.planner_ref or e.planner_ref
         self.e.pending_land_validation = saved.pending_land_validation or (ck.feedback if ck.step == "land-verify-red" else "")

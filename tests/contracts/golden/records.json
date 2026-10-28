@@ -264,15 +264,6 @@
    "writer_fallback": false,
    "fallback_lane": "",
    "writer_said": "",
-   "filed": [
-    "f1"
-   ],
-   "unfiled": [
-    {
-     "title": "t",
-     "why": "lint"
-    }
-   ],
    "look_paths": [],
    "look_notes": [],
    "look_unjudged": {},
