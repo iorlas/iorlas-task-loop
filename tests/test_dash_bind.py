@@ -37,7 +37,7 @@ class Env(unittest.TestCase):
     def run_server(self, where, *args, public=False):
         env = {k: v for k, v in os.environ.items() if not k.startswith("TASK_LOOP_")}
         env.update(HOME=str(self.home), USERPROFILE=str(self.home), XDG_CONFIG_HOME=str(self.home / ".config"),
-                   APPDATA=str(self.home / ".config"))  # Windows: Path.home() reads USERPROFILE
+                   APPDATA=str(self.home / ".config"), PYTHONPATH=str(ROOT / "src"))  # a copied dash/ has no src/ beside it
         if public:
             env["TASK_LOOP_DASH_DEV_PUBLIC"] = "1"
         return subprocess.run([sys.executable, str(where / "server.py"), *args], env=env,

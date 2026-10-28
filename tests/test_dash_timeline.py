@@ -19,7 +19,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 sys.path.insert(0, str(ROOT / "tests"))
 import server  # noqa: E402
-import timeline  # noqa: E402
+from support.logs import typed, write_log  # noqa: E402
+from taskloop_dash.cache import FileCache  # noqa: E402
+from taskloop_dash.views import arrows, names, timeline  # noqa: E402
 
 FIXTURE = ROOT / "tests" / "fixtures" / "state"
 BEAD = "lifesim-d5f.58"
@@ -77,10 +79,10 @@ class Runs(unittest.TestCase):
         self.assertEqual(r["end"]["text"], "Codex out → paused until 09:02")
 
     def test_a_pause_says_what_it_waits_for(self):
-        self.assertEqual(timeline.pause_reason("paused: logged_out on plan; run `claude auth login` on this machine"),
+        self.assertEqual(arrows.pause_reason("paused: logged_out on plan; run `claude auth login` on this machine"),
                          "Claude logged out")
-        self.assertEqual(timeline.pause_reason("paused: no network for write until 09:00 (network: dns)"), "no network")
-        self.assertEqual(timeline.pause_reason("paused: no lane for write until 09:02 (lane_out: OPENAI_SUBSCRIPTION)"),
+        self.assertEqual(arrows.pause_reason("paused: no network for write until 09:00 (network: dns)"), "no network")
+        self.assertEqual(arrows.pause_reason("paused: no lane for write until 09:02 (lane_out: OPENAI_SUBSCRIPTION)"),
                          "Codex out")
 
     def test_run_3_resumes_after_the_pause_and_a_write_with_no_session_still_shows(self):
@@ -111,22 +113,22 @@ class Runs(unittest.TestCase):
         self.assertEqual(kinds(r), ["plan", "write", "checks", "review", "land"])
         self.assertEqual(r["blocks"][4]["arrow"]["cause"], "accepted")
         self.assertEqual(r["end"]["outcome"], "landed")
-        self.assertEqual(r["end"]["text"], "landed " + timeline.when(r["end"]["t"]))
+        self.assertEqual(r["end"]["text"], "landed " + names.when(r["end"]["t"]))
         # the fixture's end is 08:20 UTC (11:20 where it was recorded); the label is local time, so it follows the machine's zone
         self.assertEqual(time.strftime("%H:%M", time.gmtime(r["end"]["t"])), "08:20")
-        self.assertTrue(timeline.when(r["end"]["t"]).endswith(time.strftime("%H:%M", time.localtime(r["end"]["t"]))))
+        self.assertTrue(names.when(r["end"]["t"]).endswith(time.strftime("%H:%M", time.localtime(r["end"]["t"]))))
 
     def test_block_detail_has_the_checks_of_its_round_and_the_engine_lines_of_its_step(self):
         r = self.run_of("072411")
         checks = r["blocks"][2]
-        d = timeline.block_detail(log("072411"), checks["node"])
+        d = server.block_detail(log("072411"), checks["node"])
         self.assertEqual(len(d["checks"]), 8)
         red = [c for c in d["checks"] if c["exit"]]
         self.assertEqual([c["exit"] for c in red], [2])
         self.assertTrue(red[0]["tail"])
         self.assertTrue(all(ln["kind"] in ("cmd", "note", "warn") for ln in d["lines"]))
         self.assertTrue(any(ln["kind"] == "cmd" for ln in d["lines"]))
-        w = timeline.block_detail(log("072411"), r["blocks"][1]["node"])  # a write shows the checks that judged it
+        w = server.block_detail(log("072411"), r["blocks"][1]["node"])  # a write shows the checks that judged it
         self.assertEqual([c["exit"] for c in w["checks"] if c["exit"]], [2])
         self.assertEqual(w["session"]["ref"], "01a15cb6-4820-73e0-be53-4cef9422cb4b")
 
@@ -142,7 +144,7 @@ class Api(unittest.TestCase):
         self.env = mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(home), "APPDATA": str(home)})
         self.env.start()
         server._cache.clear()
-        timeline._parsed.clear()
+        server.FILES.items.clear()
         self.codex = home / "codex"
         p = mock.patch.object(server, "CODEX_SESSIONS", self.codex)
         p.start()
@@ -267,7 +269,7 @@ class Api(unittest.TestCase):
             def __getattr__(self, name):
                 return getattr(time, name)
         stack = contextlib.ExitStack()
-        for mod in (server, timeline):
+        for mod in (server, timeline, names):
             stack.enter_context(mock.patch.object(mod, "time", Frozen()))
         return stack
 
@@ -276,7 +278,7 @@ class Api(unittest.TestCase):
         (wt / ".task").mkdir(parents=True)
         (wt / ".task" / "engine.lock").write_text(json.dumps({"pid": os.getpid(), "bead": "x-1", "slot": "s1"}))
         due = now + 300
-        recs = [{"v": 2, "t": now - 600, "kind": "run_start", "run": "x-1-20261021-120000", "bead": "x-1", "repo_url": "", "worktree": str(wt),
+        recs = [{"v": 2, "t": now - 600, "kind": "run_start", "run": "x-1-20261021-120000", "bead": "x-1", "worktree": str(wt),
                  "slot": "s1", "started_because": "first", "prev_run": "", "ask": ""},
                 {"v": 2, "t": now - 590, "kind": "step_start", "id": "n3", "step": "write", "text": "write: stage 1/1 write 1",
                  "stage": 1, "stages": 1, "write": 1, "round": 1},
@@ -284,18 +286,18 @@ class Api(unittest.TestCase):
         path = self.cfg / "engine" / "x-1-20261021-120000.jsonl"
         path.write_text("".join(json.dumps(r) + "\n" for r in recs))
         t = self.task("x-1")
-        self.assertEqual((t["state"], t["label"]), ("running", "waiting for Codex until " + timeline.hhmm(due)))
+        self.assertEqual((t["state"], t["label"]), ("running", "waiting for Codex until " + names.hhmm(due)))
         recs.append({"v": 2, "t": now - 5, "kind": "wait_end", "id": "w1", "secs": 5})  # the wait is over: back to what the run is doing
         path.write_text("".join(json.dumps(r) + "\n" for r in recs))
         server._cache.clear()
-        timeline._parsed.clear()
+        server.FILES.items.clear()
         self.assertEqual(self.task("x-1")["label"], "writing")
 
     def test_a_running_run_shows_its_stage_from_its_engine_lock(self):
         wt = Path(self.tmp.name) / "slots" / "s1"
         (wt / ".task").mkdir(parents=True)
         (wt / ".task" / "engine.lock").write_text(json.dumps({"pid": os.getpid(), "bead": "x-1", "slot": "s1"}))
-        recs = [{"v": 2, "t": time.time() - 600, "kind": "run_start", "run": "x-1-20261021-120000", "bead": "x-1", "repo_url": "",
+        recs = [{"v": 2, "t": time.time() - 600, "kind": "run_start", "run": "x-1-20261021-120000", "bead": "x-1",
                  "worktree": str(wt), "slot": "s1", "started_because": "first", "prev_run": "", "ask": ""},
                 {"v": 2, "t": time.time() - 590, "kind": "step_start", "text": "write: stage 2/3 write 1", "id": "n3", "step": "write",
                  "stage": 2, "stages": 3, "write": 1, "round": 1}]
@@ -305,7 +307,7 @@ class Api(unittest.TestCase):
         self.assertGreaterEqual(t["since"], 590)
         (wt / ".task" / "engine.lock").unlink()
         server._cache.clear()
-        timeline._parsed.clear()
+        server.FILES.items.clear()
         self.assertEqual(self.task("x-1")["state"], "stopped")
 
     def test_an_engine_run_silent_in_a_long_check_is_running_not_idle(self):
@@ -313,7 +315,7 @@ class Api(unittest.TestCase):
         (wt / ".task").mkdir(parents=True)
         (wt / ".task" / "engine.lock").write_text(json.dumps({"pid": os.getpid(), "bead": "x-1", "slot": "s1"}))
         old = time.time() - 600  # no record for ten minutes: the checks are running
-        recs = [{"v": 2, "t": old, "kind": "run_start", "run": "x-1-20261021-120000", "bead": "x-1", "repo_url": "", "worktree": str(wt),
+        recs = [{"v": 2, "t": old, "kind": "run_start", "run": "x-1-20261021-120000", "bead": "x-1", "worktree": str(wt),
                  "slot": "s1", "started_because": "first", "prev_run": "", "ask": ""}]
         path = self.cfg / "engine" / "x-1-20261021-120000.jsonl"
         path.write_text("".join(json.dumps(r) + "\n" for r in recs))
@@ -395,18 +397,19 @@ class Api(unittest.TestCase):
         self.assertIsNone(server.run_file(run, "checks/00-x.log"))
 
     def test_the_log_cache_forgets_gone_files_and_stays_small(self):
+        cache = FileCache(limit=30)
         p = Path(self.tmp.name) / "x-1-20261021-120000.jsonl"
-        p.write_text('{"kind": "note", "text": "a"}\n')
-        timeline.read(str(p))
-        self.assertIn(str(p), timeline._parsed)
+        p.write_text('{"v": 2, "kind": "note", "t": 1, "text": "a"}\n')
+        self.assertEqual(len(timeline.read(str(p), cache)), 1)
+        self.assertIn(str(p), cache.items)
         p.unlink()
-        self.assertEqual(timeline.read(str(p)), [])
-        self.assertNotIn(str(p), timeline._parsed)
-        for i in range(timeline.CACHE_MAX + 20):
+        self.assertEqual(timeline.read(str(p), cache), [])
+        self.assertNotIn(str(p), cache.items)
+        for i in range(50):
             q = Path(self.tmp.name) / ("y-%d.jsonl" % i)
             q.write_text("{}\n")
-            timeline.read(str(q))
-        self.assertLessEqual(len(timeline._parsed), timeline.CACHE_MAX)
+            timeline.read(str(q), cache)
+        self.assertLessEqual(len(cache.items), 30)
 
 
 STAGED = "lifesim-d5f.56"
@@ -425,7 +428,7 @@ class Stages(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.root = Path(self.tmp.name) / "task-loop"
         shutil.copytree(str(FIXTURE), str(self.root))
-        timeline._parsed.clear()
+        server.FILES.items.clear()
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -455,24 +458,13 @@ class Stages(unittest.TestCase):
         self.assertEqual((rev["kind"], rev["who"]["family"]), ("review", "claude"))
         self.assertFalse(rev["same_family"])  # the writer was Codex
 
-    def test_without_plan_json_the_title_comes_from_the_plan_in_the_log_and_else_is_empty(self):
+    def test_without_plan_json_the_stage_title_is_empty(self):
         shutil.rmtree(str(self.root / "runs" / STAGED_RUN))
-        b = timeline.run_timeline(staged_log(self.root))["blocks"]
-        self.assertEqual(b[1]["stage_title"], "Add the knob")
-        legacy = staged_log(self.root) + ".tmp"
-        recs = [json.loads(x) for x in open(staged_log(self.root))]
-        with open(legacy, "w") as f:
-            for r in recs:
-                if r.get("kind") == "msg":
-                    r.pop("data", None)
-                f.write(json.dumps(r) + "\n")
-        os.replace(legacy, staged_log(self.root))
-        timeline._parsed.clear()
         b = timeline.run_timeline(staged_log(self.root))["blocks"]
         self.assertEqual((b[4]["stage_index"], b[4]["stage_count"], b[4]["stage_title"]), (2, 2, ""))
 
     def test_stage_title_is_the_goals_first_sentence_cut_short(self):
-        t = timeline.stage_title
+        t = arrows.stage_title
         self.assertEqual(t("Add the knob: in content/ui/default.yaml under `live:`"), "Add the knob")
         self.assertEqual(t("Add the layout test.\n\n(1) Pull"), "Add the layout test")
         long = t("word " * 40)
@@ -540,6 +532,31 @@ class LiveTaskView(unittest.TestCase):
                 except subprocess.TimeoutExpired:
                     p.kill()
                     p.wait()
+
+
+class WorkerCalls(unittest.TestCase):
+    """block_detail shows every worker call of the step from the typed CallStart/CallEnd pair (lane, model, time, tokens, ref)."""
+
+    def test_a_block_lists_its_calls_with_lane_model_secs_tokens_and_ref(self):
+        T = 1_800_000_000.0
+        recs = [typed("run_start", T, run="c-1-20261024-010101", bead="c-1", worktree=""),
+                typed("step_start", T + 1, id="n1", step="write", text="write", stage=1, stages=1, write=1),
+                typed("call_start", T + 2, id="c1", n=1, step="write", node="n1", role="worker"),
+                typed("call_end", T + 9, id="c1", status="stopped", reason="lane_out", ref="ses_1", lane="ZAI", model="glm", effort="high", secs=7,
+                      tokens={"in": 5, "cached": 1, "out": 2}, family="xai", transcript="opencode:ses_1"),
+                typed("call_start", T + 10, id="c2", n=2, step="write", node="n1", role="worker", resume=True),
+                typed("call_end", T + 20, id="c2", status="done", ref="ses_2", lane="OPENAI_SUBSCRIPTION", model="gpt", effort="high", secs=10,
+                      tokens={"in": 9, "cached": 0, "out": 4}, family="openai"),
+                typed("step_end", T + 21, id="n1", step="write", outcome="done", secs=20)]
+        with tempfile.TemporaryDirectory() as d:
+            p = write_log(Path(d, "c-1-20261024-010101.jsonl"), recs)
+            first, second = server.block_detail(p, 1, 0), server.block_detail(p, 1, 1)
+        self.assertEqual([(c["k"], c["lane"], c["model"], c["secs"], c["ref"], c["status"]) for c in first["calls"]],
+                         [(0, "ZAI", "glm", 7, "ses_1", "stopped"), (1, "OPENAI_SUBSCRIPTION", "gpt", 10, "ses_2", "done")])
+        self.assertEqual(first["calls"][0]["tokens"], {"in": 5, "cached": 1, "out": 2})
+        self.assertEqual(first["calls"][0]["transcript"], "opencode:ses_1")
+        self.assertTrue(first["calls"][1]["resume"])
+        self.assertEqual((first["session"]["lane"], second["session"]["lane"]), ("ZAI", "OPENAI_SUBSCRIPTION"))
 
 
 if __name__ == "__main__":

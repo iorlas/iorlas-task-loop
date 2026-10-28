@@ -1,6 +1,5 @@
-"""The engine log (EngineLog v2, one typed record per line) as the flat rows the dashboard panels read: node, end, session, cmd,
-note, checks, wait ... The panels (dash/timeline.py, dash/server.py) keep this shape until the dashboard reads the typed records
-itself (P1); a row that has no `v` is already a flat row and passes through. Standard library only."""
+"""TEST HELPER (leftover from the deleted dash bridge): typed engine-log records as the flat rows test_trace_records still asserts on.
+note, checks, wait ... Rewrite that test over the typed records and delete this file."""
 import json
 import re
 

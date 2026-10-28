@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / "skills" / "task-loop" / "dash"))
 import delegate_link as dl  # noqa: E402
 import engine  # noqa: E402
 import server  # noqa: E402
-import timeline  # noqa: E402
+from taskloop_dash.views import arrows, names  # noqa: E402
 from taskloop.app.run.calls import Calls  # noqa: E402
 import tl  # noqa: E402
 from lanes import call as lcall  # noqa: E402,F401
@@ -73,9 +73,9 @@ class OpenCode(unittest.TestCase):
 
     # login hint
     def test_a_logged_out_xai_lane_says_grok_and_opencode(self):
-        self.assertEqual(timeline.lane_name("GROK_SUBSCRIPTION", ""), "Grok")
-        self.assertEqual(timeline.lane_name("x", "xai"), "Grok")
-        self.assertEqual(timeline.pause_reason("paused: logged_out on write; run `opencode auth login` on this machine"),
+        self.assertEqual(names.lane_name("GROK_SUBSCRIPTION", ""), "Grok")
+        self.assertEqual(names.lane_name("x", "xai"), "Grok")
+        self.assertEqual(arrows.pause_reason("paused: logged_out on write; run `opencode auth login` on this machine"),
                          "Grok logged out")
         lane = {"out": True, "reason": "logged_out", "family": "xai"}
         b = server.lane_banners({"v": 1, "lanes": {"GROK_SUBSCRIPTION": lane}})
@@ -217,8 +217,8 @@ class OpenCode(unittest.TestCase):
         self.assertEqual((last["text"], "dur" in last), ("x", False))
 
     def test_a_lane_named_openai_xai_is_grok_by_family_or_name(self):
-        self.assertEqual(timeline.lane_name("OPENAI_XAI"), "Grok")
-        self.assertEqual(timeline.lane_name("OPENAI_SUBSCRIPTION"), "Codex")
+        self.assertEqual(names.lane_name("OPENAI_XAI"), "Grok")
+        self.assertEqual(names.lane_name("OPENAI_SUBSCRIPTION"), "Codex")
 
     def test_trace_with_a_missing_db_prints_and_the_engine_trace_keeps_the_session_id(self):
         os.environ["OPENCODE_DB"] = os.path.join(self.tmp.name, "gone.db")

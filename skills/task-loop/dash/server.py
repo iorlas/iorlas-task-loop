@@ -43,11 +43,11 @@ sys.path.insert(0, str(HERE.parents[2] / "src"))
 import gallery  # noqa: E402
 import graph  # noqa: E402
 import live  # noqa: E402
-import logrows  # noqa: E402
 import roadmap  # noqa: E402
 import signals  # noqa: F401,E402
-import timeline  # noqa: E402
-from timeline import block_detail, run_timeline  # noqa: E402,F401  (the engine tests read them here)
+from runlogs import FILES, block_detail, run_facts, run_timeline, timeline  # noqa: E402,F401  (the engine tests read them here)
+from taskloop.contracts import log as rec  # noqa: E402
+from taskloop_dash import jsonl  # noqa: E402
 HOME = Path.home()
 PROJECTS = HOME / ".claude" / "projects"
 CODEX_JOBS = HOME / ".claude" / "plugins" / "data" / "codex-openai-codex" / "state"
@@ -539,19 +539,18 @@ def clean_cmd(s):
 def engine_events(path, t0=None, t1=None):
     """The engine's own log (engine.py): one line per node, decision, command."""
     out = []
-    for d in logrows.read(tail_lines(path)):
-        if d.get("kind") in ("end", "transition", "checks", "run"):  # the task view's records
-            continue
-        e = {"t": d.get("t"), "kind": d.get("kind", "note"), "text": d.get("text", "")}
-        if e["kind"] == "cmd":
-            e["tool"], e["state"] = "sh", "ok"
-        if e["kind"] == "note" and out and out[-1]["kind"] == "cmd" and str(e["text"]).startswith("exit "):
-            out[-1]["state"] = "ok" if d.get("exit") == 0 else "fail"
-            out[-1]["detail"] = e["text"]
-            continue
-        if d.get("cost"):
-            e["text"] += "  ($%.2f, %ss)" % (d["cost"], d.get("secs", "?"))
-        out.append(e)
+    for r in (jsonl.parse(ln) for ln in tail_lines(path)):
+        if isinstance(r, rec.CmdStart):
+            out.append({"t": r.t, "kind": "cmd", "text": r.text, "tool": "sh", "state": "ok"})
+        elif isinstance(r, rec.CmdEnd) and out and out[-1]["kind"] == "cmd":
+            out[-1]["state"] = "ok" if r.exit == 0 else "fail"
+            out[-1]["detail"] = "exit %d%s" % (r.exit, (": " + r.out) if r.out else "")
+        elif isinstance(r, (rec.Note, rec.Warn)):
+            out.append({"t": r.t, "kind": r.KIND, "text": r.text})
+        elif isinstance(r, rec.StepStart):
+            out.append({"t": r.t, "kind": "node", "text": r.text})
+        elif isinstance(r, rec.CallEnd):
+            out.append({"t": r.t, "kind": "session", "text": "%s %s  ($%.2f, %ss)" % (r.family or "?", r.ref or "(no session)", r.cost, r.secs)})
     return out
 
 
@@ -869,11 +868,11 @@ TASK_STATES = {"running": 0, "asks": 1, "paused": 2, "queued": 2, "blocked_by": 
 def wait_label(recs):
     """"waiting for Codex until 09:02" while the engine sleeps in its slot for a lane, else "". The engine logs the wait's
     start (the lane, until) before it sleeps; its end, or the next step, ends the wait."""
-    last = next((r for r in reversed(recs) if r.get("kind") in ("wait_start", "wait", "node")), None)
-    if not last or last.get("kind") != "wait_start" or last.get("what") != "lane" or float(last.get("until") or 0) <= time.time():
+    last = next((r for r in reversed(recs) if isinstance(r, (rec.WaitStart, rec.WaitEnd, rec.StepStart))), None)
+    if not isinstance(last, rec.WaitStart) or str(last.what) != "lane" or float(last.until or 0) <= time.time():
         return ""
-    who = timeline.lane_name(last.get("holder") or "", "")
-    return ("waiting for %s until %s" % (who, timeline.when(last["until"]))) if who else ""
+    who = timeline.lane_name(last.holder or "", "")
+    return ("waiting for %s until %s" % (who, timeline.when(last.until))) if who else ""
 
 
 def task_row(bead, paths, spans, tr):
@@ -881,8 +880,7 @@ def task_row(bead, paths, spans, tr):
     name = timeline.run_name(newest)
     span = (spans.get(bead) or [None])[-1]
     recs = timeline.read(newest)
-    run_rec = next((r for r in reversed(recs) if r.get("kind") == "run"), None)
-    closed = any(r.get("kind") == "node" and str(r.get("text") or "").startswith("close:") for r in recs[-40:])
+    run_rec, closed = run_facts(recs)
     alive = not closed and run_alive(newest, run_rec, span)
     run = timeline.run_timeline(newest, alive=alive)
     end, ask = run["end"], open_ask(bead)
@@ -926,7 +924,7 @@ def task_row(bead, paths, spans, tr):
                 writes += 1
                 big_turn = max(big_turn, ((b.get("tokens") or {}).get("in") or 0) + ((b.get("tokens") or {}).get("out") or 0))
             sendbacks += (b.get("arrow") or {}).get("cause") == "review_sendback"
-    last_t = (recs[-1].get("t") if recs else None) or started
+    last_t = (recs[-1].t if recs else None) or started
     return {"id": bead, "title": (span or {}).get("title") or (ask or {}).get("title") or "", "state": state,
             "label": label, "slot": slot_of(run_rec, span, trace), "repo": repo_name(span, trace, ask),
             "runs": len(paths), "run": name, "started": started, "updated": last_t,
@@ -1289,8 +1287,7 @@ def api_task_timeline(repo, bead):
         alive = False
         if p == paths[-1]:
             recs = timeline.read(p)
-            rr = next((r for r in reversed(recs) if r.get("kind") == "run"), None)
-            closed = any(r.get("kind") == "node" and str(r.get("text") or "").startswith("close:") for r in recs[-40:])
+            rr, closed = run_facts(recs)
             alive = not closed and run_alive(p, rr, (spans.get(bead) or [None])[-1])
         r = timeline.run_timeline(p, alive=alive)
         r["because"] = timeline.because_text(r, runs[-1] if runs else None)
