@@ -138,7 +138,7 @@ class MemoryLimits(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             info = Path(d) / "meminfo"
             info.write_text("MemTotal: 99999999 kB\nMemAvailable:     3145728 kB\nMemFree: 1 kB\n")
-            with mock.patch.object(suite, "MEMINFO", info):
+            with mock.patch.object(suite, "MEMINFO", info), mock.patch.object(suite, "PROC_CGROUP", Path(d) / "no-cgroup"):
                 self.assertEqual(suite.available_mb(), 3072)
                 suite.refuse_if_short(1, suite.available_mb())  # 3072 MB covers one shard
                 with self.assertRaises(Abort) as raised:
@@ -152,7 +152,8 @@ class MemoryLimits(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             info = Path(d) / "meminfo"
             info.write_text("MemAvailable:     1024 kB\n")
-            with mock.patch.object(suite, "MEMINFO", info), mock.patch.object(suite, "suite_lock_path", return_value=Path(d) / "l.lock"), \
+            with mock.patch.object(suite, "MEMINFO", info), mock.patch.object(suite, "PROC_CGROUP", Path(d) / "no-cgroup"), \
+                    mock.patch.object(suite, "suite_lock_path", return_value=Path(d) / "l.lock"), \
                     mock.patch.object(suite, "run") as planned, mock.patch.dict(os.environ, {"TASK_LOOP_SUITE_WORKERS": "2"}), \
                     self.assertRaises(Abort):
                 suite.host_suite(ROOT, ROOT)

@@ -26,6 +26,8 @@ LONG = 3 * 3600.0  # a hang guard for a whole gate run
 SHARD_WALL_S = 1200.0  # one shard's wall limit (the longest recorded shard is ~2.5 min at 3 workers: 8x); then its tree is stopped
 SHARD_BUDGET_MB = 2048  # per shard: sets the shard count (RAM / budget), caps its address space (healthy ~430 MB) and is the refusal bar
 MEMINFO = Path("/proc/meminfo")
+PROC_CGROUP = Path("/proc/self/cgroup")
+CGROUP_ROOT = Path("/sys/fs/cgroup")
 
 
 def save_output(out: str) -> Path:
@@ -43,8 +45,28 @@ def red(out: str, lines: list[str]) -> Abort:
                  log, failing_tests(out))
 
 
+def cgroup_headroom_mb() -> int | None:
+    """memory.max minus memory.current of this process's cgroup v2, MB; None when there is no numeric limit (v1, "max", missing or
+    garbage files)."""
+    try:
+        line = next(ln for ln in PROC_CGROUP.read_text(encoding="utf-8").splitlines() if ln.startswith("0::"))
+        d = CGROUP_ROOT / line[3:].strip().lstrip("/")
+        limit = int((d / "memory.max").read_text(encoding="utf-8").strip())
+        used = int((d / "memory.current").read_text(encoding="utf-8").strip())
+    except (OSError, ValueError, StopIteration):
+        return None
+    return max(0, limit - used) // (1024 * 1024)
+
+
 def available_mb() -> int | None:
-    """RAM that can be used now, MB: MemAvailable on Linux, else the free pages sysconf reports (macOS: physical pages)."""
+    """RAM that can be used now, MB: MemAvailable on Linux, else the free pages sysconf reports (macOS: physical pages); on Linux capped
+    by the cgroup headroom, because inside a container /proc/meminfo shows the HOST's memory, not the container's limit."""
+    host = host_available_mb()
+    cap = cgroup_headroom_mb()
+    return host if cap is None else cap if host is None else min(host, cap)
+
+
+def host_available_mb() -> int | None:
     try:
         for line in MEMINFO.read_text(encoding="utf-8").splitlines():
             if line.startswith("MemAvailable:"):
