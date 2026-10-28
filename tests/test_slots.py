@@ -26,6 +26,7 @@ from support import slots as sl  # noqa: E402
 from support import tlbd  # noqa: E402
 
 import engine  # noqa: E402  (test_loop put skills/task-loop on sys.path)
+from taskloop.app.run import entry  # noqa: E402
 import loop_env  # noqa: E402
 from taskloop.app.loop.take import Taker  # noqa: E402
 import tl  # noqa: E402
@@ -90,20 +91,20 @@ class Slots(LoopBase):
         return rc, out.getvalue()
 
     def run_task(self, bead_id, slot=None, worktree=None, engine_run=None, flags=None, **env):
-        """engine.main as `tl run-task` calls it, with the engine itself stubbed: engine_run(eng) is its run(). flags:
+        """entry.main as `tl run-task` calls it, with the engine itself stubbed: engine_run(eng) is its run(). flags:
         more run-task options (wait, exclusive_area)."""
         f = Path(self.home, "out-%s.json" % bead_id)
-        a = engine.Args(id=bead_id, worktree=worktree, slot=slot, dry_run=False, fresh=False, quiet=True,
+        a = entry.Args(id=bead_id, worktree=worktree, slot=slot, dry_run=False, fresh=False, quiet=True,
                         outcome_file=str(f), **(flags or {}))
         made = mock.Mock()
         made.return_value.run.side_effect = lambda: (engine_run or (lambda: 0))()
         made.return_value.result.return_value = {"outcome": "landed", "bead": bead_id}
         made.return_value.log_path = Path(self.home, "e.jsonl")
         out = io.StringIO()
-        with mock.patch.dict(os.environ, env), mock.patch.object(engine, "reclaim", return_value=(True, "")), \
-                mock.patch.object(engine, "Engine", made), \
+        with mock.patch.dict(os.environ, env), mock.patch.object(entry, "reclaim", return_value=(True, "")), \
+                mock.patch.object(entry, "Engine", made), \
                 mock.patch.object(signal, "signal"), redirect_stdout(out):
-            rc = engine.main(a)
+            rc = entry.main(a)
         self.made = made
         return rc, json.loads(f.read_text()), out.getvalue()
 
@@ -177,12 +178,12 @@ class RunTaskTakesItsSlot(Slots):
 
         def stopped(*a, **kw):
             raise engine.Blocked("failed: stopped (SIGTERM)")
-        with mock.patch.object(engine, "reclaim", side_effect=stopped):
+        with mock.patch.object(entry, "reclaim", side_effect=stopped):
             f = Path(self.home, "o.json")
-            a = engine.Args(id="x-1", worktree=None, slot="s1", dry_run=False, fresh=False, quiet=True,
+            a = entry.Args(id="x-1", worktree=None, slot="s1", dry_run=False, fresh=False, quiet=True,
                             outcome_file=str(f))
             with mock.patch.object(signal, "signal"), redirect_stdout(io.StringIO()):
-                rc = engine.main(a)
+                rc = entry.main(a)
         self.assertNotEqual(rc, 0)
         self.assertEqual(json.loads(f.read_text())["outcome"], "failed")
         self.assertEqual(bd.slots["sl-1"]["status"], "open")
@@ -500,6 +501,6 @@ class NeverSignalOneself(unittest.TestCase):
 
     def test_run_main_leaves_no_sigterm_handler_behind(self):
         before = signal.getsignal(signal.SIGTERM)
-        with mock.patch.object(engine, "run_main_stoppable", return_value=0):
-            engine.run_main(mock.Mock())
+        with mock.patch.object(entry, "run_main_stoppable", return_value=0):
+            entry.run_main(mock.Mock())
         self.assertIs(signal.getsignal(signal.SIGTERM), before)

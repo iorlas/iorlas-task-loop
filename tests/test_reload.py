@@ -24,6 +24,7 @@ from support.checkpoints import put_ck, read_ck  # noqa: E402
 sys.path.insert(0, str(ROOT / "tests"))
 from taskloop.app.release import reexec  # noqa: E402
 import engine  # noqa: E402
+from taskloop.app.run import entry  # noqa: E402
 from support.builders import cfg_with  # noqa: E402
 import seams  # noqa: E402
 from taskloop_dash.views import graph  # noqa: E402
@@ -171,11 +172,11 @@ class Reload(unittest.TestCase):
                          ["run-task", "t-1", "--quiet", "--slot", "s2", "--worktree", "/wt"])
         self.assertIsNone(reexec.reexec_args(["loop", "--repo", "."], "", "/wt"))
         with mock.patch.dict(os.environ, {"TL_REEXEC": json.dumps({"run": "x", "owned": "s2"})}):
-            self.assertTrue(engine._handed_slot("s2"))
-            self.assertFalse(engine._handed_slot("s3"))
+            self.assertTrue(entry._handed_slot("s2"))
+            self.assertFalse(entry._handed_slot("s3"))
         with mock.patch.dict(os.environ, {}, clear=False):
             os.environ.pop("TL_REEXEC", None)
-            self.assertFalse(engine._handed_slot("s2"))
+            self.assertFalse(entry._handed_slot("s2"))
 
     def test_a_dry_run_and_a_run_not_started_by_run_task_never_move(self):
         self.install("0.2.0")

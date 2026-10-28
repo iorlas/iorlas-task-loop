@@ -8212,7 +8212,7 @@
       "severity": "error"
     },
     {
-      "column": 63,
+      "column": 62,
       "path": "tests/test_stages_land.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `ClaimPerBead` has no attribute `store`",

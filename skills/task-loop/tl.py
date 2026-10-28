@@ -288,7 +288,7 @@ VERBS: Final[dict[str, Handler]] = {
     "land-lock": v_land_lock,
     "status": v_status,
     "handoff": v_handoff,
-    "run-task": lazy("engine", "main"),
+    "run-task": lazy("taskloop.app.run.entry", "main"),
     "selftest": lazy("selftest", "cmd_selftest"),
     "cutover": lazy("loop_env", "cmd_cutover"),
     "next": v_next, "loop": v_loop, "stop": v_stop,

@@ -21,6 +21,8 @@ from taskloop.app.track import verbs  # noqa: E402
 from support.builders import cfg_with, make_engine  # noqa: E402
 import test_engine as te  # noqa: E402
 from test_engine import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint  # noqa: E402,F401
+from taskloop.app.run import entry  # noqa: E402
+from taskloop.app.run import running as wrunning  # noqa: E402
 
 
 from test_stages import StagesTest  # noqa: E402
@@ -529,8 +531,8 @@ class Claims(StagesTest):
         comments = [{"text": "Blocked: stuck: re-planned 3 times", "created_at": "1", "author": "engine"}]
         import loop_env
         with self.store.stub(show=parked), mock.patch.object(wslots, "live_actors", return_value={"tl-2be89f88"}), \
-                self.store.stub(comments=comments), mock.patch.object(loop_env, "running", return_value={}):
-            ok, why = engine.reclaim("t-1", str(self.wt), store=self.store)
+                self.store.stub(comments=comments), mock.patch.object(wrunning, "running", return_value={}):
+            ok, why = entry.reclaim("t-1", str(self.wt), store=self.store)
         self.assertTrue(ok, why)
         self.assertEqual(why, "reopened")
         self.assertEqual(self.store.calls[0], ("update", "t-1", "--status", "open", "--if-assignee", "tl-2be89f88", "--assignee", ""))
@@ -539,15 +541,15 @@ class Claims(StagesTest):
         parked = {"id": "t-1", "status": "blocked", "assignee": "tl-2be89f88", "lease_expires_at": "", "dependencies": []}
         import loop_env
         with self.store.stub(show=parked), mock.patch.object(wslots, "live_actors", return_value=set()), \
-                mock.patch.object(loop_env, "running", return_value={"t-1": "s2"}):
-            ok, why = engine.reclaim("t-1", str(self.wt), store=self.store)
+                mock.patch.object(wrunning, "running", return_value={"t-1": "s2"}):
+            ok, why = entry.reclaim("t-1", str(self.wt), store=self.store)
         self.assertFalse(ok)
         self.assertIn("a live claim", why)
 
     def test_a_working_bead_of_a_live_actor_is_still_a_live_claim(self):
         busy = {"id": "t-1", "status": "in_progress", "assignee": "tl-2be89f88", "lease_expires_at": "", "dependencies": []}
         with self.store.stub(show=busy), mock.patch.object(wslots, "live_actors", return_value={"tl-2be89f88"}):
-            ok, why = engine.reclaim("t-1", str(self.wt), store=self.store)
+            ok, why = entry.reclaim("t-1", str(self.wt), store=self.store)
         self.assertFalse(ok)
         self.assertIn("a live claim", why)
 

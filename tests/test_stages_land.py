@@ -21,6 +21,8 @@ from taskloop.domain.checks import matchers  # noqa: E402
 from taskloop.domain.checks.cmd import matchers as sh_matchers  # noqa: E402
 import test_engine as te  # noqa: E402
 from test_engine import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint  # noqa: E402,F401
+from taskloop.app.run import entry  # noqa: E402
+from taskloop.app.run import running as wrunning  # noqa: E402
 
 
 from test_stages import StagesTest  # noqa: E402
@@ -504,9 +506,9 @@ class ClaimPerBead(StagesTest):
         import loop_env
         with self.store.stub(show=bead), mock.patch.object(wslots, "slot_beads", return_value=[as_bead(x) for x in slots]), \
                 mock.patch.object(wslots, "live_actors", return_value={"tl-2be89f88"} if hand_live or slots else set()), \
-                mock.patch.object(loop_env, "running", return_value=running), self.store.stub(comments=[]), \
+                mock.patch.object(wrunning, "running", return_value=running), self.store.stub(comments=[]), \
                 self.store.stub(bd_fn=lambda *a, **k: mock.Mock(returncode=0)):
-            return engine.reclaim("o67g", str(self.wt), store=self.store)
+            return entry.reclaim("o67g", str(self.wt), store=self.store)
 
     BEAD = {"id": "o67g", "status": "open", "assignee": "tl-2be89f88", "lease_expires_at": "2999-01-01T00:00:00Z", "dependencies": []}
     SLOT = {"id": "sl-5", "status": "in_progress", "assignee": "tl-2be89f88", "lease_expires_at": "2999-01-01T00:00:00Z",
@@ -536,19 +538,19 @@ class ClaimPerBead(StagesTest):
         import loop_env
         calls = []
         with self.store.stub(show=self.BEAD), mock.patch.object(wslots, "slot_beads", return_value=[as_bead(self.SLOT)]), \
-                mock.patch.object(wslots, "live_actors", return_value={"tl-2be89f88"}), mock.patch.object(loop_env, "running", return_value={}), \
+                mock.patch.object(wslots, "live_actors", return_value={"tl-2be89f88"}), mock.patch.object(wrunning, "running", return_value={}), \
                 self.store.stub(comments=[]), \
                 self.store.stub(bd_fn=lambda *a, **k: calls.append(a) or mock.Mock(returncode=0)):
-            ok, why = engine.reclaim("o67g", str(self.wt), store=self.store)
+            ok, why = entry.reclaim("o67g", str(self.wt), store=self.store)
         self.assertTrue(ok, why)
         self.assertEqual(calls[-1], ("update", "o67g", "--if-assignee", "tl-2be89f88", "--assignee", ""))
 
     def test_a_claim_that_changed_hands_meanwhile_is_not_taken(self):
         import loop_env
         with self.store.stub(show=self.BEAD), mock.patch.object(wslots, "slot_beads", return_value=[as_bead(self.SLOT)]), \
-                mock.patch.object(wslots, "live_actors", return_value={"tl-2be89f88"}), mock.patch.object(loop_env, "running", return_value={}), \
+                mock.patch.object(wslots, "live_actors", return_value={"tl-2be89f88"}), mock.patch.object(wrunning, "running", return_value={}), \
                 self.store.stub(comments=[]), self.store.stub(bd_fn=lambda *a, **k: mock.Mock(returncode=1)):
-            ok, why = engine.reclaim("o67g", str(self.wt), store=self.store)
+            ok, why = entry.reclaim("o67g", str(self.wt), store=self.store)
         self.assertFalse(ok)
         self.assertIn("changed hands", why)
 

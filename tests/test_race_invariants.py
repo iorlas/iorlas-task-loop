@@ -38,6 +38,8 @@ import test_loop  # noqa: E402  (puts skills/task-loop on sys.path)
 
 import clock as clocks  # noqa: E402
 import engine  # noqa: E402
+from taskloop.app.run import entry  # noqa: E402
+from taskloop.app.run import running  # noqa: E402
 from support.builders import cfg_with  # noqa: E402
 import loop_env  # noqa: E402
 import tl  # noqa: E402
@@ -64,7 +66,7 @@ except ImportError:  # Windows
 
 GUARD = 60  # hang guard only, seconds: no assertion reads a duration
 OTHER_ENGINE = 4242  # a pid the fake process table says is alive, and not ours
-Args = engine.Args
+Args = entry.Args
 
 
 class SafeBd(test_loop.FakeBd):
@@ -268,15 +270,15 @@ class Invariants(test_loop.Base):
 
         def run(bead, slot, who):
             return lambda: ((a_in.wait(GUARD) if who == "B" else None),
-                            engine.take_area(Args(id=bead, exclusive_area=True), self.repo_s, cfg, Lock(who), sb=slot))[1]
+                            entry.take_area(Args(id=bead, exclusive_area=True), self.repo_s, cfg, Lock(who), sb=slot))[1]
 
-        real_hold = loop_env.hold_path
+        real_hold = running.hold_path
 
         def hold(*a, **kw):  # B reaches the area decision when it asks for the area lock
             if threading.current_thread().name == "B":
                 arrived.set()
             return real_hold(*a, **kw)
-        with mock.patch.object(loop_env, "hold_path", hold):
+        with mock.patch.object(running, "hold_path", hold):
             got = self.together({"A": run("w-1", "sl-1", "A"), "B": run("w-2", "sl-2", "B")})
         self.assertEqual(got["A"], "", got)
         self.assertIn("area a busy: w-1 in s1", got["B"])
@@ -284,7 +286,7 @@ class Invariants(test_loop.Base):
         marked = [s for s, b in bd.slots.items() if (b.get("metadata") or {}).get("held_bead")]
         self.assertEqual(marked, ["sl-1"])
         self.assertEqual(run("w-3", "sl-3", "C")(), "")  # area b is free
-        self.assertEqual(sorted(loop_env.running(self.repo_s).items()), [("w-1", "s1"), ("w-3", "s3")])
+        self.assertEqual(sorted(running.running(self.repo_s).items()), [("w-1", "s1"), ("w-3", "s3")])
 
     # -- 4: slots served in ticket order ---------------------------------------------------------------------------------
 

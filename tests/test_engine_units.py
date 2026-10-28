@@ -36,6 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from support.briefs import brief_digest  # noqa: E402
 from support.builders import cfg_with, make_engine  # noqa: E402
 import engine  # noqa: E402
+from taskloop.app.run import entry  # noqa: E402
 import seams  # noqa: E402
 from support.fakes import FakeBeadStore, as_bead, as_comment  # noqa: E402
 from support.logs import records  # noqa: E402
@@ -173,7 +174,7 @@ class Outcome(unittest.TestCase):
         Path(a.worktree).mkdir(exist_ok=True)
         out = io.StringIO()
         with contextlib.chdir(self.wt), redirect_stdout(out), mock.patch.object(signal, "signal"):  # pyrefly: ignore[missing-attribute]
-            rc = engine.main(a, self.store)  # pyrefly: ignore[missing-attribute]
+            rc = entry.main(a, self.store)  # pyrefly: ignore[missing-attribute]
         last = json.loads(out.getvalue().strip().splitlines()[-1])
         return rc, json.loads(Path(outcome_file).read_text()), last
 
@@ -182,7 +183,7 @@ class Outcome(unittest.TestCase):
         made = mock.Mock()
         made.return_value.run.return_value = 0
         made.return_value.result.return_value = {"outcome": "landed", "bead": "t-1"}
-        with mock.patch.object(engine, "reclaim", return_value=(True, "")), mock.patch.object(engine, "Engine", made):
+        with mock.patch.object(entry, "reclaim", return_value=(True, "")), mock.patch.object(entry, "Engine", made):
             rc, rec, last = self.main(f)
         self.assertEqual((rc, rec["outcome"], last["outcome"]), (0, "landed", "landed"))
 
@@ -196,21 +197,21 @@ class Outcome(unittest.TestCase):
                       quiet=True, outcome_file=None)
         Path(a.worktree).mkdir(exist_ok=True)
         out = io.StringIO()
-        with mock.patch.object(engine, "reclaim", return_value=(True, "")), mock.patch.object(engine, "Engine", made), \
+        with mock.patch.object(entry, "reclaim", return_value=(True, "")), mock.patch.object(entry, "Engine", made), \
                 contextlib.chdir(self.wt), redirect_stdout(out), mock.patch.object(signal, "signal"):  # pyrefly: ignore[missing-attribute]
-            engine.main(a, self.store)  # pyrefly: ignore[missing-attribute]
+            entry.main(a, self.store)  # pyrefly: ignore[missing-attribute]
         lines = out.getvalue().strip().splitlines()
         self.assertEqual(json.loads(lines[-1])["retry_after"], due)  # the loop reads the last line: still the outcome
         self.assertTrue(any("PAUSED t-1: the lane is back at %s; rerun then: tl run-task t-1"
                             % time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(due)) in ln for ln in lines), lines)
 
     def test_a_pause_with_no_time_says_so(self):
-        self.assertIn("no time", engine.pause_line({"outcome": "paused", "bead": "t-1", "retry_after": 0}))
-        self.assertEqual(engine.pause_line({"outcome": "landed", "bead": "t-1"}), "")
+        self.assertIn("no time", entry.pause_line({"outcome": "paused", "bead": "t-1", "retry_after": 0}))
+        self.assertEqual(entry.pause_line({"outcome": "landed", "bead": "t-1"}), "")
 
     def test_a_refused_claim_is_taken_and_keeps_exit_1(self):
         f = Path(self.tmp.name, "out.json")
-        with mock.patch.object(engine, "reclaim", return_value=(False, "claimed by denis")):
+        with mock.patch.object(entry, "reclaim", return_value=(False, "claimed by denis")):
             rc, rec, last = self.main(f)
         self.assertEqual((rc, rec["outcome"]), (1, "taken"))
         self.assertIn("denis", rec["why"])

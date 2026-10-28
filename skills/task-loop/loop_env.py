@@ -15,6 +15,8 @@ from typing import Any
 from taskloop.adapters import applog, beadtools, gitrepo, ident, pidcheck
 from taskloop.domain.beads import matchers as beadlint
 import engine
+from taskloop.app.run import entry
+from taskloop.app.run.running import area_busy, area_lock, running
 from taskloop.app.run import console
 import loop_health as lh
 import seams
@@ -50,32 +52,6 @@ START_CWD = [""]  # the directory the loop was started in: where its argv's rela
 def cfgdir():
     return paths.ConfigDir(ident.config_dir())
 
-
-def running(repo, store=None):
-    """{bead: where} of the beads running now: a slot bead held for one (held_bead), or a live engine lock naming one, in a slot
-    or any worktree of the repo."""
-    out, slots = {}, wslots.slot_beads(repo, store)
-    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    for b in slots:
-        bid = b.metadata.get("held_bead")
-        if bid and b.status == "in_progress" and not (b.lease_expires_at and b.lease_expires_at < stamp):
-            out[bid] = b.title.split()[-1]
-    for wt in wslots.worktrees(repo, slots):
-        lock = engine_lock.read_engine_lock(wt)
-        if lock.get("bead") and lock.get("pid") and pidcheck.proc_alive(lock["pid"], lock.get("start") or ""):
-            out.setdefault(lock["bead"], lock.get("slot") or Path(wt).name)
-    return out
-
-
-def area_lock(repo):
-    return hold_path(cfgdir().lock_record(LockWhat.AREA.value, wslots.repo_key(repo)), "pid %d" % os.getpid(), what=LockWhat.AREA)
-
-
-def area_busy(repo, cfg, bead, store=None):
-    """(area, "area A busy: B in S") for a bead whose area runs elsewhere, (area, "") when it is free, ("", "") for none (run-task's
-    check before it takes the engine lock)."""
-    store = store or beadtools.bd_store(repo)
-    return area_busy_text(QueueRule(store, cfg, running(repo, store), lambda b: "", console.say), bead)
 
 
 def files_of(repo, now=trail.now):
@@ -152,7 +128,7 @@ def chores(repo):
 
 
 def claim(repo, store, bead, wt, slot, now=trail.now):
-    ok, why = engine.reclaim(bead, repo, store, now())  # a paused run leaves its bead open and still assigned: released here when that run is gone
+    ok, why = entry.reclaim(bead, repo, store, now())  # a paused run leaves its bead open and still assigned: released here when that run is gone
     if not ok:
         return False, why
     return verbs.claim(bead, wt, slot, store=store) == 0, "claimed by another session"

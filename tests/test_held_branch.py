@@ -17,6 +17,7 @@ sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import engine  # noqa: E402
+from taskloop.app.run import entry  # noqa: E402
 import loop_env  # noqa: E402
 from support import looptest  # noqa: E402
 from taskloop.app.loop import verdict as vd  # noqa: E402
@@ -66,7 +67,7 @@ class HeldBranch(unittest.TestCase):
         self.addCleanup(os.chdir, before)
 
     def reset(self):
-        a = engine.Args(op="reset", name="s1", bead="x-1", n=None, force=False)
+        a = entry.Args(op="reset", name="s1", bead="x-1", n=None, force=False)
         out = io.StringIO()
         with redirect_stdout(out), redirect_stderr(io.StringIO()):
             rc = tl.v_slot(a, tl.Ctx(tl.HERE, tl.trail.now, []))

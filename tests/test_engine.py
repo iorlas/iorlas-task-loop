@@ -57,6 +57,8 @@ from taskloop.app.run.state import Checkpoints  # noqa: E402
 from taskloop.contracts.argv import checks_to_wire  # noqa: E402
 from taskloop.contracts.config import EngineConfig  # noqa: E402
 import engine  # noqa: E402
+from taskloop.app.run import entry  # noqa: E402
+from taskloop.app.asks import intake  # noqa: E402
 import seams  # noqa: E402
 from support.fakes import FakeBeadStore, as_bead, as_comment, must_bead  # noqa: E402
 from support.logs import records  # noqa: E402
@@ -1154,7 +1156,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(runs[-1]["why"], "failed: stopped (SIGTERM)")
 
     def run_bead_stopped_in(self, where):
-        """engine.run_bead with a SIGTERM sent inside `where` (claim or report): the stop waits, the run still reports."""
+        """entry.run_bead with a SIGTERM sent inside `where` (claim or report): the stop waits, the run still reports."""
         import signal as sig
         if not hasattr(sig, "SIGTERM") or os.name == "nt":
             self.skipTest("POSIX signal")
@@ -1174,10 +1176,10 @@ class EngineTest(unittest.TestCase):
         made.return_value.run.return_value = 2
         made.return_value.result.return_value = {"v": 1, "outcome": "failed", "why": "failed: stopped (SIGTERM)"}
         made.return_value.stop_pending = False
-        with self.stoppable(), mock.patch.object(engine, "Engine", made), \
-                mock.patch.object(engine, "reclaim", return_value=(True, "")), \
-                self.store.stub(bd_fn=claim), mock.patch.object(engine, "say", side_effect=say):
-            rc = engine.run_bead(a, str(self.wt), {}, str(self.wt), self.store)
+        with self.stoppable(), mock.patch.object(entry, "Engine", made), \
+                mock.patch.object(entry, "reclaim", return_value=(True, "")), \
+                self.store.stub(bd_fn=claim), mock.patch.object(entry, "say", side_effect=say):
+            rc = entry.run_bead(a, str(self.wt), {}, str(self.wt), self.store)
         return rc, made, said
 
     def test_a_stop_during_the_claim_waits_and_the_engine_closes_it(self):
@@ -1531,7 +1533,7 @@ class EngineTest(unittest.TestCase):
             p.write_text(json.dumps(ask))
         leases = [dict(BEAD, id="live-%d" % n, status="in_progress", assignee=who, lease_expires_at="2999-01-01T00:00:00Z") for n, who in enumerate(live)]
         with self.store.stub(show=dict(BEAD, **bead), comments=list(comments), find_fn=lambda q: leases):
-            ok, why = engine.reclaim("t-1", str(self.wt), store=self.store)
+            ok, why = entry.reclaim("t-1", str(self.wt), store=self.store)
         updates = [c for c in self.bd_calls if c[:1] == ("update",)]
         return ok, why, updates
 
@@ -1572,7 +1574,7 @@ class EngineTest(unittest.TestCase):
         with open(log, "w") as f:
             f.write("CLAIMED t-1\n" * 50)
             f.flush()
-            engine.append_output(f)
+            entry.append_output(f)
             with open(log, "w") as other:
                 other.write("TAKEN\n")
             f.write("[07:00] review\n")
@@ -3019,8 +3021,8 @@ class EngineTest(unittest.TestCase):
 
     def test_run_task_refuses_the_main_checkout(self):
         a = mock.Mock(id="t-1", worktree=str(self.wt), slot=None, dry_run=True, fresh=False, quiet=True, outcome_file=None)
-        with mock.patch.object(engine, "Engine") as made, contextlib.chdir(self.wt):
-            rc = engine.main(a, self.store)
+        with mock.patch.object(entry, "Engine") as made, contextlib.chdir(self.wt):
+            rc = entry.main(a, self.store)
         self.assertEqual(rc, 1)
         made.assert_not_called()
 
@@ -3354,7 +3356,7 @@ class EngineTest(unittest.TestCase):
         """Notes lines and comments the engine wrote, from the stored brief of a run that was cap-parked (tests/fixtures/briefs)."""
         notes, comments = stored_brief(name)
         last = [("tl-x", l) for l in re.findall(r"(?m)^(?:Blocked:|Reflect \(engine\)).*$", (BRIEFS / (name + ".md")).read_text(encoding="utf-8"))]
-        return [dict(author=a, text=t) for a, t in comments + last if engine.engine_written(t)] + [
+        return [dict(author=a, text=t) for a, t in comments + last if intake.engine_written(t)] + [
             dict(author="tl-x", text="Engine paused: paused: no lane for write until 10:00 (no_lane: Hold the task)")], notes
 
     def only_engine_written(self, name):
@@ -3400,7 +3402,7 @@ class EngineTest(unittest.TestCase):
         calls = []
         with self.store.stub(show=blocked), self.store.stub(comments=cs), \
                 self.store.stub(bd_fn=lambda *a, **k: calls.append(a) or mock.Mock(returncode=0)):
-            ok, why = engine.reclaim("t-1", str(self.wt), store=self.store)
+            ok, why = entry.reclaim("t-1", str(self.wt), store=self.store)
         self.assertTrue(ok, why)
 
     def test_a_pause_is_a_comment_never_a_line_of_notes(self):

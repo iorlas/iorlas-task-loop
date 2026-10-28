@@ -23,7 +23,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import engine
+from taskloop.app.asks import intake
 from taskloop.adapters import beadtools, gitrepo, ident, procs as sproc
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import paths
@@ -273,7 +273,7 @@ def who_answered(comments, n):
     out = []
     asks = [i for i, c in enumerate(comments) if c.text.startswith("Ask (engine) ")]
     for i in asks[-n:] if n else []:
-        reply = next((c for c in comments[i + 1:] if not engine.engine_written(c.text)), None)
+        reply = next((c for c in comments[i + 1:] if not intake.engine_written(c.text)), None)
         out.append("open" if reply is None else "supervisor" if SUPERVISOR.search(reply.text) else "owner")
     return out + ["unknown"] * (n - len(out))
 
