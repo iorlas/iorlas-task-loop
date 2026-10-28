@@ -106,12 +106,11 @@ The engine log `engine/<bead>-<YYYYMMDD-HHMMSS>.jsonl` keeps its old records and
 | `node` (existing) | + `id` (run-scoped, from 1), `step` reset/plan/replan/write/checks/review/verify/land/close, `stage`, `stages`, `write`, `round`, `fix`, `fixes`, `try` |
 | `end` | `id`, `step`, `outcome` (green, red, clean, sent back, asks, paused, landed, gate red, ...), `detail`, `secs`, `sessions` [refs] |
 | `transition` | `from` (node id), `to` (a step, `next`, `ask`, `pause`, `close`), `cause`, `detail`; `lane`, `until` on pauses |
-| `checks` | `node_id`, `round`, `items` [{id, cmd, group, exit, status, secs, tries, cached, why, log}] |
+| `checks` | `node_id`, `round`, `items` [{id, cmd, group, exit, status, secs, tries, wall_hit, cached, why, log}] |
 | `run` | `run`, `bead`, `prev_run`, `started_because` first/answer/resume/retry/fresh, `ask`, `slot`, `worktree` |
 | `gate` | `tree`, `cmd`, `exit`, `secs`, `cached` (already green on this tree), `node_id` |
 | `vendor_error` | `node`, `step`, `attempt`, `status`, `reason`, `error`, `stop`, `secs`, `lane`, `model`, `family`, `node_id`, `error_observed`; `started_t`, `first_error_t`, `last_event_t`, `ended_t`, `kill_t` (null when the boundary was not observed) |
-| `kill` | `what` (check/command/delegate), `why`, `exit`, `secs`, `node_id`, `alive` (worker pids that survived), `observed_t` (actual stop time), `started_t`, `last_event_t` (last observed check output or activity sample, frozen before the stop), `kill_t`, `ended_t`; written only when the engine really stopped a tree, so a command that exits 124 by itself has no kill record. Shutdown output and the synthetic hang notice do not advance `last_event_t` or `kill_t` |
-| `activity` | `cmd_id` (the check's command), `secs`, `out_bytes`, `silent_s`, `pids`, `cpu_s` (null: no process table), `files`, `file_bytes`, `newest_mtime_ns`; one per 30 s per running check, logged only, nothing stops a check but its wall limit |
+| `kill` | `what` (check/command/delegate), `why`, `exit`, `secs`, `node_id`, `alive` (worker pids that survived), `observed_t` (actual stop time), `started_t`, `last_event_t` , `kill_t`, `ended_t`; written only when the engine really stopped a tree, so a command that exits 124 by itself has no kill record. Shutdown output and the synthetic hang notice do not advance `last_event_t` or `kill_t` |
 | `cache` | `round`, `tree`, `base`, `hits`, `misses`, `items`, `changed` (task paths), `node_id` |
 | `session`, `msg` (existing) | + `node_id`; session + `resume`, `flag` |
 

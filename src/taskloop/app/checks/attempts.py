@@ -21,6 +21,7 @@ class Outcome:
     tries: int
     secs: float  # of the last run
     base_red: bool = False
+    wall_hit: bool = False  # stopped at the check's wall limit
 
 
 class Attempts:
@@ -35,7 +36,7 @@ class Attempts:
         while True:
             tries += 1
             rc, tail, seen, took = self._once(c, log, env)
-            out = Outcome(rc, tail, seen, tries, took)
+            out = Outcome(rc, tail, seen, tries, took, wall_hit=self.host.wall_hit)
             if rc in {0, 124}:
                 self._say_stop(c, out)
                 return out
@@ -44,14 +45,14 @@ class Attempts:
             if kind == "lock":
                 return self._wait_lock(c, log, env, out)
             if tries == 1 and c.repo and self.base.red(c, took):
-                return Outcome(rc, tail, seen, tries, took, base_red=True)
+                return Outcome(rc, tail, seen, tries, took, base_red=True, wall_hit=self.host.wall_hit)
             if not self._again(c, out, tries, sig, prior):
                 return out
             prior = sig
 
     def _once(self, c: Check, log: Path, env: Mapping[str, str]) -> tuple[int, str, str, float]:
         t0 = time.time()
-        rc, tail = self.host.sh(argv_of(c.cmd), timeout=c.wall_min * 60, save=log, env=env, watch=True)
+        rc, tail = self.host.sh(argv_of(c.cmd), timeout=c.wall_min * 60, save=log, env=env, what="check")
         seen = self._read(log, tail)
         took = time.time() - t0
         self.host.note_slot_waits(seen, took)
@@ -94,7 +95,7 @@ class Attempts:
             wid = self.host.wait_start(WaitWhat.EDITOR_LOCK)
             self.sleep(wait)
             self.host.add_wait(wait, WaitWhat.EDITOR_LOCK, wid)
-            rc, tail = self.host.sh(argv_of(c.cmd), timeout=c.wall_min * 60, save=log, env=env, watch=True)
+            rc, tail = self.host.sh(argv_of(c.cmd), timeout=c.wall_min * 60, save=log, env=env, what="check")
             seen = self._read(log, tail)
             self.host.note_slot_waits(seen, time.time() - started)
             if rc == 0 or matchers.failure_kind(seen) != "lock":
@@ -103,4 +104,4 @@ class Attempts:
             pids = check_files.lock_holders(str(self.host.wt), matchers.lock_files(seen))
             holder = "; the lock holder is pid " + pids if pids else ""
             tail += f"\n(still locked after {retry.LOCK_WAIT_MAX} s of waiting{holder})"
-        return Outcome(rc, tail, seen, out.tries, out.secs)
+        return Outcome(rc, tail, seen, out.tries, out.secs, wall_hit=self.host.wall_hit)

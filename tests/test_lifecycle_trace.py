@@ -1,6 +1,7 @@
 """Lifecycle telemetry: a stable fingerprint and started_because on every trace row, whatever ended the run, plus
 the structured timing records the lifecycle report reads (gate, vendor error, kill, check cache)."""
 
+import _thread
 import json
 import os
 import sys
@@ -25,34 +26,6 @@ from support.builders import make_engine  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
 
 DASH = make_dash()
-
-
-class FakeCheckProc:
-    """A check process with a real output pipe and a scripted stop, for deterministic idle-path tests."""
-    pid, args = 4242, ["fake-check"]
-
-    def __init__(self):
-        read_fd, self.write_fd = os.pipe()
-        self.stdout = os.fdopen(read_fd, "rb", buffering=0)
-        self.returncode = None
-        self.shutdown_sent = False
-
-    def emit(self, text):
-        os.write(self.write_fd, text.encode())
-
-    def stop(self, text):
-        if self.shutdown_sent:
-            return
-        self.shutdown_sent = True
-        os.write(self.write_fd, text.encode())
-        os.close(self.write_fd)
-        self.returncode = 0
-
-    def communicate(self, timeout=None):
-        return b"", 0
-
-    def wait(self, timeout=None):
-        return 0
 
 
 class Fingerprint(unittest.TestCase):
@@ -289,77 +262,19 @@ class TraceTelemetry(unittest.TestCase):
                  if json.loads(line)["kind"] == "kill"]
         self.assertEqual(kills, [])
 
-    def test_a_keyboard_interrupt_after_kill_leaves_a_record(self):
-        class FakeProc:
-            pid, returncode, args = 999999, None, ["fake"]
-
-            def communicate(self, timeout=None):
-                raise KeyboardInterrupt()
-
-            def wait(self, timeout=None):
-                return 0
-
+    @unittest.skipIf(os.name == "nt", "the engine stops a process group; sleep is POSIX")
+    def test_an_interrupted_command_leaves_a_kill_record_and_its_tree_is_stopped(self):
         eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False, store=self.store)
-        with mock.patch.object(engine.subprocess, "Popen", return_value=FakeProc()), \
-                mock.patch.object(engine.sproc, "stop_tree") as kill:
-            with self.assertRaises(KeyboardInterrupt):
-                eng.sh(["fake"], timeout=5)
-        self.assertTrue(kill.called)
+        timer = threading.Timer(0.5, _thread.interrupt_main)
+        timer.start()
+        self.addCleanup(timer.cancel)
+        with self.assertRaises(KeyboardInterrupt):
+            eng.sh(["sleep", "30"], timeout=60)
         kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
                  if json.loads(line)["kind"] == "kill"]
         self.assertTrue(kills)
         self.assertEqual(kills[-1]["why"], "interrupted")
         self.assertIn("observed_t", kills[-1])
-
-    def test_a_wall_timeout_freezes_last_event_before_shutdown_output(self):
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False, store=self.store)
-        p = FakeCheckProc()
-        p.emit("productive output\n")
-
-        def stop(proc):
-            proc.stop("shutdown output after timeout\n")
-
-        with mock.patch.object(engine.subprocess, "Popen", return_value=p), \
-                mock.patch.object(engine.sproc, "stop_tree", side_effect=stop), \
-                mock.patch.object(engine.activity, "activity", return_value=False):
-            rc, tail = eng.sh(["fake-check"], timeout=0.4, watch=True)
-        self.assertEqual(rc, 124)
-        self.assertIn("shutdown output after timeout", tail)
-        kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
-                 if json.loads(line)["kind"] == "kill"]
-        self.assertTrue(kills)
-        kill = kills[-1]
-        self.assertEqual(kill["why"], "timeout")
-        self.assertIsNotNone(kill["last_event_t"])
-        self.assertIsNotNone(kill["kill_t"])
-        self.assertEqual(kill["observed_t"], kill["kill_t"])
-        self.assertLess(kill["last_event_t"], kill["kill_t"])
-        self.assertGreaterEqual(kill["kill_t"] - kill["last_event_t"], 0.2)
-
-    def test_a_watched_interruption_freezes_last_event_before_shutdown_output(self):
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False, store=self.store)
-        p = FakeCheckProc()
-        p.emit("productive output\n")
-
-        def stop(proc):
-            proc.stop("shutdown output after interrupt\n")
-
-        with mock.patch.object(engine.subprocess, "Popen", return_value=p), \
-                mock.patch.object(engine.sproc, "stop_tree", side_effect=stop), \
-                mock.patch.object(engine.activity, "activity", side_effect=KeyboardInterrupt):
-            with self.assertRaises(KeyboardInterrupt):
-                eng.sh(["fake-check"], timeout=10, watch=True)
-        self.assertTrue(p.shutdown_sent)
-        kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
-                 if json.loads(line)["kind"] == "kill"]
-        self.assertTrue(kills)
-        kill = kills[-1]
-        self.assertEqual(kill["why"], "interrupted")
-        self.assertIsNotNone(kill["last_event_t"])
-        self.assertIsNotNone(kill["kill_t"])
-        self.assertEqual(kill["observed_t"], kill["kill_t"])
-        self.assertLess(kill["last_event_t"], kill["kill_t"])
-        self.assertGreaterEqual(kill["kill_t"] - kill["last_event_t"], 0.2)
 
     def test_a_stopped_delegate_worker_that_survives_still_leaves_a_kill_record(self):
         eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False, store=self.store)

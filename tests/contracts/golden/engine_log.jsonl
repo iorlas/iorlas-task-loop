@@ -8,7 +8,7 @@
 {"v": 2, "kind": "cmd_start", "t": 1793050200.5, "id": "k1", "text": "git status", "cwd": "/w"}
 {"v": 2, "kind": "cmd_end", "t": 1793050200.5, "id": "k1", "exit": 0, "secs": 0.4, "out": "clean"}
 {"v": 2, "kind": "check_start", "t": 1793050200.5, "id": "k5.1", "check": "unittest", "group": "tests", "cmd": "python3 -m unittest", "round": 1, "log": "checks/01.log", "timeout_s": 1200.0}
-{"v": 2, "kind": "check_end", "t": 1793050200.5, "id": "k5.1", "exit": 1, "status": "failed", "tries": 2, "secs": 43.4}
+{"v": 2, "kind": "check_end", "t": 1793050200.5, "id": "k5.1", "exit": 1, "status": "failed", "tries": 2, "secs": 43.4, "wall_hit": true}
 {"v": 2, "kind": "gate_start", "t": 1793050200.5, "cmd": "just check", "log": "g.log", "tree": "deadbeef"}
 {"v": 2, "kind": "gate_end", "t": 1793050200.5, "exit": 0, "secs": 2101.0, "skipped": false}
 {"v": 2, "kind": "wait_start", "t": 1793050200.5, "id": "w1", "what": "lane", "holder": "", "until": 1793050260.5}
@@ -17,10 +17,9 @@
 {"v": 2, "kind": "unlock", "t": 1793050200.5, "what": "land", "secs": 240.0}
 {"v": 2, "kind": "vendor_error", "t": 1793050200.5, "node": "n4", "reason": "lane_out", "lane": "L", "model": "m", "until": 1793051100.5, "error": "out", "started_t": 1793050195.5, "ended_t": 1793050200.5, "first_error_t": 1793050199.5, "last_event_t": 1793050198.5, "kill_t": null, "error_observed": true}
 {"v": 2, "kind": "kill", "t": 1793050200.5, "what": "check", "why": "timeout", "secs": 600.0, "exit": 124, "alive": [4242], "started_t": 1793049600.5, "ended_t": null, "first_error_t": null, "last_event_t": 1793049900.5, "kill_t": 1793050200.5, "observed_t": 1793050200.5}
-{"v": 2, "kind": "activity", "t": 1793050200.5, "cmd_id": "m1", "secs": 61.5, "out_bytes": 0, "silent_s": 61.5, "pids": [4242, 4243], "cpu_s": 0.0, "files": 120, "file_bytes": 40960, "newest_mtime_ns": 1700000000000000000}
 {"v": 2, "kind": "transition", "t": 1793050200.5, "from": "n4", "to": "write", "cause": "gate_red", "detail": "red"}
 {"v": 2, "kind": "reload", "t": 1793050200.5, "old": "0.23.56", "new": "0.23.57", "step": "write"}
-{"v": 2, "kind": "checks", "t": 1793050200.5, "node_id": "n5", "run": {"round": 1, "tree": "deadbeef", "results": [{"id": "unittest", "cmd": "python3 -m unittest", "group": "tests", "exit": 1, "status": "failed", "tries": 2, "tail": "", "secs": 43.4, "log": "checks/01.log", "cached": false, "reused": false, "why": "", "note": "", "base_red": true, "producer": "", "sig": "boom"}, {"id": "lint", "cmd": "ruff check", "group": "static", "exit": 0, "status": "passed", "tries": 1, "tail": "", "secs": 0.0, "log": "", "cached": true, "reused": false, "why": "", "note": "inputs unchanged", "base_red": false, "producer": "", "sig": ""}], "hits": 1, "misses": 1}}
+{"v": 2, "kind": "checks", "t": 1793050200.5, "node_id": "n5", "run": {"round": 1, "tree": "deadbeef", "results": [{"id": "unittest", "cmd": "python3 -m unittest", "group": "tests", "exit": 1, "status": "failed", "tries": 2, "tail": "", "secs": 43.4, "log": "checks/01.log", "wall_hit": false, "cached": false, "reused": false, "why": "", "note": "", "base_red": true, "producer": "", "sig": "boom"}, {"id": "lint", "cmd": "ruff check", "group": "static", "exit": 0, "status": "passed", "tries": 1, "tail": "", "secs": 0.0, "log": "", "wall_hit": false, "cached": true, "reused": false, "why": "", "note": "inputs unchanged", "base_red": false, "producer": "", "sig": ""}], "hits": 1, "misses": 1}}
 {"v": 2, "kind": "warn", "t": 1793050200.5, "text": "careful"}
 {"v": 2, "kind": "note", "t": 1793050200.5, "text": "fyi"}
 {"v": 2, "kind": "close", "t": 1793050200.5, "outcome": "landed", "why_code": null, "sha": "abc", "why": "landed abc"}

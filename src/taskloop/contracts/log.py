@@ -117,6 +117,7 @@ class CheckEnd(LogRec):
     status: str
     tries: int = 1
     secs: float = 0.0
+    wall_hit: bool = False  # the engine stopped it at its wall limit (start: the CheckStart of the same id; end: this record's t)
 
 
 @record
@@ -208,23 +209,6 @@ class Kill(LogRec):
 
 
 @record
-class ActivitySample(LogRec):
-    """What a running check showed at one look (at most one per ACTIVITY_EVERY s per check): nothing here stops it, the wall limit
-    alone does; the log is how a stuck one is told from a quiet one afterwards."""
-
-    KIND: ClassVar[str] = "activity"
-    cmd_id: str  # the CmdStart of the check
-    secs: float  # since the check started
-    out_bytes: int  # output so far
-    silent_s: float  # since the check last printed, wrote a file under the worktree or used CPU
-    pids: list[int] = field(default_factory=list)  # its process tree and process group; empty where the table is unknown
-    cpu_s: float | None = None  # their CPU seconds in all; None: no process table, which is not the same as idle
-    files: int = 0  # under the worktree (.git left out)
-    file_bytes: int = 0
-    newest_mtime_ns: int = 0
-
-
-@record
 class Overrun(LogRec):
     """A call that used its wall-time budget (the reviewer's) and was stopped through delegate; the loop goes on with the next rung."""
 
@@ -290,10 +274,10 @@ class Close(LogRec):
 
 
 EngineLog = (RunStart | StepStart | StepEnd | CallStart | CallEnd | CmdStart | CmdEnd | CheckStart | CheckEnd | GateStart | GateEnd
-             | WaitStart | WaitEnd | Lock | Unlock | VendorError | Kill | ActivitySample | Overrun | RetryDecision | Transition
+             | WaitStart | WaitEnd | Lock | Unlock | VendorError | Kill | Overrun | RetryDecision | Transition
              | Reload | Checks | Warn | Note | Close)
 ENGINE_LOG = table_of(RunStart, StepStart, StepEnd, CallStart, CallEnd, CmdStart, CmdEnd, CheckStart, CheckEnd, GateStart,
-                      GateEnd, WaitStart, WaitEnd, Lock, Unlock, VendorError, Kill, ActivitySample, Overrun, RetryDecision, Transition,
+                      GateEnd, WaitStart, WaitEnd, Lock, Unlock, VendorError, Kill, Overrun, RetryDecision, Transition,
                       Reload, Checks, Warn, Note, Close)
 
 

@@ -357,11 +357,12 @@ class Schedule(SpeedTest):
         eng = self.checks_engine(checks=repo, **cfg)
         launched = []
 
-        def fake(argv, timeout=3600, check=False, save=None, env=None, pin=False, watch=False, **kw):
+        def fake(argv, timeout=3600, check=False, save=None, env=None, pin=False, what="command", **kw):
             if argv[0] == "git":
-                return real(argv, timeout=timeout, check=check, save=save, env=env, pin=pin, watch=watch)
+                return real(argv, timeout=timeout, check=check, save=save, env=env, pin=pin, what=what)
             cmd = text_of(argv)
             launched.append(cmd)
+            eng.wall_hit = False
             if save:
                 Path(save).write_text("ran %s\n" % cmd)
             return (1 if cmd in red else 0), "passed"

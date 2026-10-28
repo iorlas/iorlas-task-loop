@@ -49,9 +49,10 @@ class CheckHost(Protocol):
     checklog: CheckLog
     stores: Stores
     killed: bool  # the last sh() was stopped by the engine
+    wall_hit: bool  # the last sh() was stopped at its wall limit
 
     def sh(self, cmd: Sequence[str], timeout: float = ..., check: bool = ..., save: Path | None = ..., env: Mapping[str, str] | None = ...,
-           pin: bool = ..., watch: bool = ..., cwd: Path | None = ...) -> tuple[int, str]:
+           pin: bool = ..., what: str = ..., cwd: Path | None = ...) -> tuple[int, str]:
         """Run a command, an argv with no shell: (exit code, the last lines of its output). The whole output goes to `save`."""
         ...
 

@@ -41,11 +41,11 @@ import outcome as oc
 import seams
 import tl
 import vendored  # noqa: F401
+import stream_proc
 from clock import SystemClock
 from taskloop.adapters import delegate as dg
 from taskloop.adapters import procs as sproc
 from taskloop.adapters.runner import live_path
-from taskloop.adapters import activity
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.app.asks import intake, raiser
 from taskloop.app.checks import evidence as check_evidence
@@ -876,54 +876,39 @@ class Engine:
             self.steps.move("fault", "wrong_tree", bad[0])
             raise Blocked("failed: %s. %s" % (why, bad[1]), kind=oc.Kind.FAULT_SLOT)
 
-    def sh(self, cmd, timeout=3600, check=False, save=None, env=None, pin=False, watch=False, cwd=None):
-        """A command: an argv list, exec'd as given (no shell, no quoting rules; a string is a programming error). pin=True: an
-        engine git command, run with GIT_DIR/GIT_WORK_TREE of the slot; checks and gates run unpinned (they may run git on other repos)."""
+    @cached_property
+    def halt(self):
+        """The stop flag of the running command: set it from any thread and sh() ends the command's whole tree."""
+        return threading.Event()
+
+    def sh(self, cmd, timeout=3600, check=False, save=None, env=None, pin=False, what="command", cwd=None):
+        """A command: an argv list, exec'd as given (no shell, no quoting rules; a string is a programming error), run by stream-proc
+        in a group of its own. It ends by itself, at `timeout` seconds of wall time (exit 124; its tree is stopped), or when
+        `self.halt` is set. Nothing else stops it: a quiet command may be waiting. pin=True: an engine git command, run with
+        GIT_DIR/GIT_WORK_TREE of the slot; checks and gates run unpinned (they may run git on other repos)."""
         if isinstance(cmd, str):
             raise TypeError("a command is an argv list, never a string: %r" % cmd[:80])
         cid = self.log.next_id("m")
         cwd = cwd or self.wt  # a check on the untouched base runs in its own checkout
         self.log.emit(rec.CmdStart(id=cid, text=text_of(cmd), cwd=str(cwd)))
-        # Its own process group, so a timeout stops the whole tree (dotnet build nodes, Unity) and not just the shell;
-        # the worker env, so a check never inherits this launcher's Claude session.
-        started = time.time()
-        p, hold = sproc.popen_held(list(cmd), cwd=cwd,  # tl-10s: see TermHold
-                                   env=dict(sproc.current_env(), **(tl.pinned_env(self.wt) if pin else {}), **(env or {})),
-                                   stdin=subprocess.DEVNULL,
-                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
-        self.killed, self.kill_t, self.kill_why, self.last_event_t, self._event_frozen = False, 0.0, "", started, False
-        self._event_lock = threading.Lock()
+        started, chunks = time.time(), []
+        self.killed = self.wall_hit = False
         try:
-            hold.replay()
-            if watch:
-                out, rc = self.watch_output(p, timeout, cid)
-            else:
-                out, _ = p.communicate(timeout=timeout)
-                rc = p.returncode
-        except subprocess.TimeoutExpired as e:
-            if not self.killed:
-                self._freeze_check("timeout")
-            sproc.stop_tree(p)
-            out, _ = p.communicate()
-            out = (e.output or b"") + out if watch else out  # the watched path read the output itself: keep what it collected
-            out += b"\n(timed out after %g min: the engine stopped it and everything it started)" % round(timeout / 60, 2)
-            rc = 124
-        except BaseException:  # stopped: never leave a check (just check, Unity) running
-            if not self.killed:
-                self._freeze_check("interrupted")
-            sproc.stop_tree(p)
-            self.log.emit(rec.Kill(what="check" if watch else "command", why=self.kill_why, secs=round(self.kill_t - started),
-                                   started_t=started, last_event_t=self.last_event_t if watch else None, kill_t=self.kill_t, observed_t=self.kill_t))
-            self.log.emit(rec.CmdEnd(id=cid, exit=-1, secs=round(time.time() - started, 1)))
+            res = stream_proc.run(list(cmd), cwd=cwd, env=dict(sproc.current_env(), **(tl.pinned_env(self.wt) if pin else {}), **(env or {})),
+                                  on_stdout=chunks.append, on_stderr=chunks.append, timeout=timeout, stop=self.halt)
+        except BaseException:  # stopped (stream-proc stopped the tree first): never leave a check (just check, Unity) running
+            self.killed, now = True, time.time()
+            self.log.emit(rec.Kill(what=what, why="interrupted", secs=round(now - started), started_t=started, kill_t=now, observed_t=now))
+            self.log.emit(rec.CmdEnd(id=cid, exit=-1, secs=round(now - started, 1)))
             raise
-        finally:
-            if getattr(p, "stdout", None):  # the pump thread reads the descriptor, never closes it (ResourceWarning: unclosed file)
-                p.stdout.close()
-        text = out.decode("utf-8", "replace")
-        if self.killed:  # only a stop the engine performed; a command that exits 124 by itself is not a kill
-            self.log.emit(rec.Kill(what="check" if watch else "command", why=self.kill_why, secs=round(self.kill_t - started), exit=rc,
-                                    started_t=started, last_event_t=self.last_event_t if watch else None, kill_t=self.kill_t,
-                                   observed_t=self.kill_t))
+        rc = 124 if res.timed_out == "wall" else -res.signal if res.signal else res.returncode or 0
+        text = "".join(chunks)
+        if res.timed_out:  # only a stop the engine performed; a command that exits 124 by itself is not a kill
+            self.killed, self.wall_hit, now = True, res.timed_out == "wall", time.time()
+            if self.wall_hit:
+                text += "\n(timed out after %g min: the engine stopped it and everything it started)" % round(timeout / 60, 2)
+            self.log.emit(rec.Kill(what=what, why="timeout" if self.wall_hit else res.timed_out, secs=round(res.secs), exit=rc,
+                                   started_t=started, kill_t=now, observed_t=now, alive=list(res.survivors)))
         if save:
             Path(save).write_text(text, encoding="utf-8")
         tail = "\n".join(text.strip().splitlines()[-15:])
@@ -931,58 +916,6 @@ class Engine:
         if check and rc:
             raise Blocked("failed: `%s` exit %d\n%s" % (text_of(cmd), rc, tail), kind=oc.Kind.FAULT_INFRA)
         return rc, tail
-
-    def _freeze_check(self, why):
-        """Freeze the check's last observed activity and kill time before signaling or draining output."""
-        with self._event_lock:
-            if self._event_frozen:
-                return False
-            self._event_frozen = True
-            self.kill_t = time.time()
-            self.last_event_t = min(self.last_event_t, self.kill_t)
-            self.killed, self.kill_why = True, why
-            return True
-
-    def watch_output(self, p, timeout, cmd_id):
-        """Collect p's output until it ends or `timeout` (the check's wall limit) passes: then the whole tree is stopped and
-        TimeoutExpired carries the output so far. Nothing else stops a check: a quiet one may be waiting (asleep, on a lock, on
-        the network, Unity importing). Its tree CPU, files written and output are logged as ActivitySample, one per 30 s."""
-        chunks = []
-
-        def mark(t):
-            with self._event_lock:
-                if not self._event_frozen:
-                    self.last_event_t = max(self.last_event_t, t)
-
-        def pump():
-            while True:
-                try:
-                    b = os.read(p.stdout.fileno(), 65536)
-                except (OSError, ValueError):  # closed under it: the command was stopped
-                    return
-                if not b:
-                    return
-                chunks.append(b)
-                mark(time.time())
-        th = threading.Thread(target=pump, daemon=True)
-        th.start()
-        start = time.time()
-        sampler = activity.Sampler(self.wt, p.pid, cmd_id, start)
-        while th.is_alive():
-            th.join(0.5)
-            now = time.time()
-            if now - start > timeout:
-                self._freeze_check("timeout")
-                sproc.stop_tree(p)
-                th.join(5)
-                raise subprocess.TimeoutExpired(p.args, timeout, output=b"".join(chunks))
-            if th.is_alive():
-                s = sampler.take(sum(map(len, chunks)), self.last_event_t)
-                if s:
-                    self.log.emit(s)
-                    mark(sampler.moved_t)
-        p.wait()
-        return b"".join(chunks), p.returncode
 
     def slot_status(self):
         """(tracked paths changed, untracked paths, git's result) from the slot's own `git status`."""

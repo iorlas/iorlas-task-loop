@@ -6,10 +6,10 @@ import contextlib
 import io
 import subprocess
 import sys
+import threading
 import time
 import unittest
 from pathlib import Path
-from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
@@ -18,7 +18,6 @@ import tl  # noqa: E402
 from taskloop.contracts import config  # noqa: E402
 from test_engine import engine, pyc  # noqa: E402
 from test_checks_speed import SpeedTest  # noqa: E402
-from taskloop.adapters import activity  # noqa: E402
 
 SLEEP_S = 5  # well past the 1.2 s the old watchdog allowed in this test
 
@@ -37,18 +36,8 @@ class Quiet(SpeedTest):
         self.assertEqual((res.status, res.exit), ("passed", 0))
         self.assertEqual(self.log(eng, "kill"), [])
 
-    def test_the_same_with_the_process_table_flat_by_construction(self):
-        with mock.patch.object(activity, "tree_cpu", lambda pid: {pid: 0.0}):  # table available, CPU never grows
-            eng, res = self.run_one(pyc("import time; time.sleep(%d)" % SLEEP_S))
-        self.assertEqual((res.status, res.exit), ("passed", 0))
-
     def test_a_busy_silent_check_passes(self):
         eng, res = self.run_one(pyc("import time\nt=time.time()\nwhile time.time()-t < 3: sum(range(10000))"))
-        self.assertEqual(res.status, "passed")
-
-    def test_an_unknown_process_table_never_stops_a_check(self):
-        with mock.patch.object(activity.procs, "table", lambda: None):
-            eng, res = self.run_one(pyc("import time; time.sleep(%d)" % SLEEP_S))
         self.assertEqual(res.status, "passed")
 
     def test_the_wall_limit_stops_a_silent_check_and_its_whole_tree(self):
@@ -62,16 +51,29 @@ class Quiet(SpeedTest):
         time.sleep(0.5)
         self.assertEqual(subprocess.run(["pgrep", "-f", "sleep " + mark], capture_output=True, text=True).stdout.strip(), "")
 
-    def test_every_look_at_a_quiet_check_is_in_the_run_log(self):
-        with mock.patch.object(activity, "ACTIVITY_EVERY", 1.0):
-            eng, res = self.run_one(pyc("import time; time.sleep(%d)" % SLEEP_S))
-        self.assertEqual(res.status, "passed")
-        got = self.log(eng, "activity")
-        self.assertGreaterEqual(len(got), 3)
-        self.assertLessEqual(len(got), SLEEP_S + 1)
-        s = got[-1]
-        self.assertIn(s["cmd_id"], [c["id"] for c in self.log(eng, "cmd_start")])
-        self.assertTrue(s["pids"] and s["cpu_s"] is not None and s["out_bytes"] == 0 and s["silent_s"] > 1)
+    def test_a_wall_hit_check_leaves_one_start_and_end_with_wall_hit_and_a_quiet_one_does_not(self):
+        eng, res = self.run_one(pyc("import time; time.sleep(30)"), wall_min=0.03)
+        self.assertEqual((res.exit, res.wall_hit), (124, True))
+        start, end = self.log(eng, "check_start")[-1], self.log(eng, "check_end")[-1]
+        self.assertEqual((end["id"], end["exit"], end["wall_hit"]), (start["id"], 124, True))
+        self.assertGreaterEqual(end["t"] - start["t"], 1.5)
+        eng, res = self.run_one(pyc("import time; time.sleep(1)"))
+        self.assertFalse(self.log(eng, "check_end")[-1]["wall_hit"])
+
+    def test_the_stop_flag_ends_a_running_check_and_its_tree(self):
+        mark = "74.%d" % os.getpid()
+        eng = self.checks_engine(checks=[{"id": "q", "cmd": pyc("import subprocess; subprocess.call(['sleep', %r])" % mark),  # pyrefly: ignore[bad-argument-type]
+                                          "group": "tests"}])
+        timer = threading.Timer(1.0, eng.halt.set)
+        timer.start()
+        self.addCleanup(timer.cancel)
+        t = time.time()
+        res = eng.run_checks({"checks": [], "files": []}, "s")[0]
+        self.assertLess(time.time() - t, 30)
+        self.assertEqual((res.status, res.wall_hit), ("failed", False))
+        self.assertEqual([k["why"] for k in self.log(eng, "kill")], ["stopped"])
+        time.sleep(0.5)
+        self.assertEqual(subprocess.run(["pgrep", "-f", "sleep " + mark], capture_output=True, text=True).stdout.strip(), "")
 
 
 class RetiredKeys(unittest.TestCase):

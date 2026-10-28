@@ -761,19 +761,19 @@ class EngineTest(unittest.TestCase):
             self.skipTest("POSIX process groups")
         eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         pidfile = Path(self.wt, "child.pid")
-        real = subprocess.Popen.communicate
-        started = []
 
-        def stopped(this, *a, **kw):
+        def stopped(*_):  # what the run's SIGTERM handler does, from the same thread, once the check has started its child
             until(lambda: pidfile.exists() and pidfile.read_text().strip(), 5)
-            started.append(this.pid)
             raise engine.Blocked("failed: stopped (SIGTERM)", kind=engine.oc.Kind.PAUSE_KILLED)
-        with mock.patch.object(subprocess.Popen, "communicate", stopped):
-            with self.assertRaises(engine.Blocked):
-                eng.sh(shlex.split(self.spawn(pidfile)))
+        old = signal.signal(signal.SIGALRM, stopped)
+        self.addCleanup(signal.signal, signal.SIGALRM, old)
+        signal.setitimer(signal.ITIMER_REAL, 0.5)
+        self.addCleanup(signal.setitimer, signal.ITIMER_REAL, 0)
+        with self.assertRaises(engine.Blocked):
+            eng.sh(shlex.split(self.spawn(pidfile)))
         child = int(pidfile.read_text())
         if not until(lambda: pid_gone(child), 2.5):
-            os.killpg(started[0], 9)
+            os.kill(child, 9)
             self.fail("the check's child outlived the stop")
 
     def test_a_worker_edit_to_the_plan_file_is_undone_before_the_next_step(self):
