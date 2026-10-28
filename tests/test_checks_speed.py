@@ -1,4 +1,4 @@
-"""Check rounds that cost less: per-check input cache, cheap-first order, duplicate runs, hang watchdog."""
+"""Check rounds that cost less: per-check input cache, cheap-first order, duplicate runs, wall limits."""
 import json
 import os
 import shlex
@@ -337,8 +337,8 @@ class Schedule(SpeedTest):
     # .task-loop.json (timeout_min 30 on the two test checks) and the round's items with the seconds they took.
     REPO = [{"id": "fmt", "cmd": "just fmt-check-changed", "group": "static"}, {"id": "text", "cmd": "just text", "group": "static"},
             {"id": "unity-analyzers", "cmd": "just unity-analyzers", "group": "static"},
-            {"id": "unity-tests", "cmd": "just unity-tests", "group": "tests", "timeout_min": 30},
-            {"id": "unity-play-tests", "cmd": "just unity-play-tests", "group": "tests", "timeout_min": 30}]
+            {"id": "unity-tests", "cmd": "just unity-tests", "group": "tests", "wall_min": 30},
+            {"id": "unity-play-tests", "cmd": "just unity-play-tests", "group": "tests", "wall_min": 30}]
     GREP = shlex.join(["python3", "tools/assert_log.py", "TL_CHECK_RC_UNITY_PLAY_TESTS", "TL_CHECK_LOG_UNITY_PLAY_TESTS",
                        "total=[1-9][0-9]* passed=[1-9][0-9]* failed=0 skipped=0"])
     R1 = {"just fmt-check-changed": 2, "just text": 0, "just worker-plan": 0, "python3 tools/select_tests.py --phase coordinator": 0,
@@ -357,12 +357,11 @@ class Schedule(SpeedTest):
         eng = self.checks_engine(checks=repo, **cfg)
         launched = []
 
-        def fake(argv, timeout=3600, check=False, save=None, env=None, pin=False, idle=0, **kw):
+        def fake(argv, timeout=3600, check=False, save=None, env=None, pin=False, watch=False, **kw):
             if argv[0] == "git":
-                return real(argv, timeout=timeout, check=check, save=save, env=env, pin=pin, idle=idle)
+                return real(argv, timeout=timeout, check=check, save=save, env=env, pin=pin, watch=watch)
             cmd = text_of(argv)
             launched.append(cmd)
-            eng.hung = False
             if save:
                 Path(save).write_text("ran %s\n" % cmd)
             return (1 if cmd in red else 0), "passed"
@@ -373,9 +372,9 @@ class Schedule(SpeedTest):
 
     def test_a_plan_copy_with_a_longer_limit_than_the_repo_check_is_one_launch(self):
         cmd, n = self.counter()
-        eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests", "timeout_min": 30, "cache": False}])
-        res = eng.run_checks({"checks": [cmd], "files": []}, "s")  # the plan's copy gets check_timeout_min, 60
-        self.assertEqual(eng.cfg.check_timeout_min, 60)
+        eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests", "wall_min": 30, "cache": False}])
+        res = eng.run_checks({"checks": [cmd], "files": []}, "s")  # the plan's copy gets check_wall_min, 60
+        self.assertEqual(eng.cfg.check_wall_min, 60)
         self.assertEqual((n.read_text(), [bool(c.reused) for c in res]), ("1", [False, True]))
 
     def counter(self, code=0):
@@ -385,8 +384,8 @@ class Schedule(SpeedTest):
     def test_a_first_run_that_timed_out_under_a_shorter_limit_is_not_reused_by_a_longer_one(self):
         n = Path(self.tmp.name) / "slow-runs"
         slow = pyc("import time; open(%r, 'a').write('1'); time.sleep(3)" % str(n))
-        eng = self.checks_engine(checks=[{"id": "short", "cmd": slow, "group": "tests", "timeout_min": 0.02, "cache": False},
-                                         {"id": "long", "cmd": slow, "group": "tests", "timeout_min": 1, "cache": False}])
+        eng = self.checks_engine(checks=[{"id": "short", "cmd": slow, "group": "tests", "wall_min": 0.02, "cache": False},
+                                         {"id": "long", "cmd": slow, "group": "tests", "wall_min": 1, "cache": False}])
         res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertEqual(([c.exit for c in res], n.read_text()), ([124, 0], "11"))
 
@@ -438,62 +437,20 @@ class Schedule(SpeedTest):
         self.assertIsNone(lint.repo_check_of("just unity-tests foo", cfg))
 
 
-class Watchdog(SpeedTest):
+class WallLimit(SpeedTest):
     def alive(self, mark):
         return subprocess.run(["pgrep", "-f", "sleep " + mark], capture_output=True, text=True).stdout.strip()
-
-    def test_a_silent_check_is_stopped_as_hung_with_its_last_lines_and_its_tree_is_gone(self):
-        mark = "71.%d" % os.getpid()
-        n = Path(self.tmp.name) / "tries"
-        cmd = pyc("import subprocess,sys; open(%r, 'a').write('started\\n'); print('last words', flush=True); "
-                  "subprocess.call(['sleep', %r])" % (str(n), mark))
-        eng = self.checks_engine(checks=[{"id": "hang", "cmd": cmd, "group": "tests", "retry": 2}], check_idle_min=0.02)
-        t = time.time()
-        res = eng.run_checks({"checks": [], "files": []}, "s")
-        self.assertLess(time.time() - t, 60)  # hang guard only: below the 71 s sleep, so waiting it out fails; the hung/124/tree-gone asserts below are the real gate
-        self.assertEqual((res[0].status, res[0].hung, res[0].exit), ("failed", True, 124))
-        self.assertIn("HUNG", res[0].tail)
-        self.assertIn("last words", res[0].tail)
-        self.assertEqual(len(n.read_text().split()), 1)  # never retried
-        self.assertEqual(self.alive(mark), "")
-        items = [json.loads(l) for l in eng.log_path.read_text().splitlines() if '"kind": "checks"' in l][0]["run"]["results"]
-        self.assertTrue(items[0]["hung"])
-
-    def test_a_check_that_keeps_printing_is_not_hung(self):
-        code = "import time\nfor i in range(5):\n print(i, flush=True); time.sleep(0.6)"
-        eng = self.checks_engine(checks=[{"id": "chatty", "cmd": PY + " -c " + te.shq(code), "group": "tests"}],
-                                 check_idle_min=0.025)  # 1.5 s of silence allowed, 3 s run
-        res = eng.run_checks({"checks": [], "files": []}, "s")
-        self.assertEqual((res[0].status, res[0].hung), ("passed", False))
-
-    def test_a_check_writing_a_file_under_the_worktree_without_printing_is_not_hung(self):
-        code = "import time\nfor i in range(7):\n open('out.log','a').write('x'*50); time.sleep(0.6)"
-        eng = self.checks_engine(checks=[{"id": "w", "cmd": PY + " -c " + te.shq(code), "group": "tests"}], check_idle_min=0.03)
-        res = eng.run_checks({"checks": [], "files": []}, "s")
-        self.assertEqual((res[0].status, res[0].hung), ("passed", False))
-
-    def test_the_hang_notice_names_all_three_signals(self):
-        eng = self.checks_engine(checks=[{"id": "h", "cmd": "sleep 30", "group": "tests"}], check_idle_min=0.02)
-        res = eng.run_checks({"checks": [], "files": []}, "s")
-        self.assertIn("no output, file writes or CPU", res[0].tail)
 
     @te.POSIX_CHECK
     def test_a_timeout_keeps_the_output_and_kills_a_setsid_descendant(self):
         mark = "72.%d" % os.getpid()
         code = "import os,subprocess,sys,time\nprint('before', flush=True)\nsubprocess.Popen(['sleep','%s'], start_new_session=True)\ntime.sleep(30)" % mark
-        eng = self.checks_engine(checks=[{"id": "t", "cmd": PY + " -c " + te.shq(code), "group": "tests", "timeout_min": 0.05}],
-                                 check_idle_min=5)
+        eng = self.checks_engine(checks=[{"id": "t", "cmd": PY + " -c " + te.shq(code), "group": "tests", "wall_min": 0.05}])
         res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertEqual(res[0].exit, 124)
         self.assertIn("before", (Path(eng.run_dir) / res[0].log).read_text())
         time.sleep(1)
         self.assertEqual(self.alive(mark), "")
-
-    def test_idle_min_zero_turns_the_watchdog_off_and_a_check_can_set_its_own(self):
-        eng = self.checks_engine(checks=[{"id": "q", "cmd": "sleep 2", "group": "tests"}], check_idle_min=0)
-        self.assertEqual(eng.run_checks({"checks": [], "files": []}, "s")[0].status, "passed")
-        eng = self.checks_engine(checks=[{"id": "q", "cmd": "sleep 30", "group": "tests", "idle_min": 0.02}], check_idle_min=0)
-        self.assertTrue(eng.run_checks({"checks": [], "files": []}, "s")[0].hung)
 
 
 if __name__ == "__main__":

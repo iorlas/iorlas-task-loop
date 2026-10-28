@@ -311,87 +311,7 @@ class TraceTelemetry(unittest.TestCase):
         self.assertEqual(kills[-1]["why"], "interrupted")
         self.assertIn("observed_t", kills[-1])
 
-    def test_a_check_that_goes_silent_freezes_its_last_event_at_the_hang_boundary(self):
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False, store=self.store)
-        code = (
-            "import signal,sys,time\n"
-            "def bye(*_):\n"
-            "    sys.stderr.write('shutdown output after the hang\\n'); sys.stderr.flush()\n"
-            "    time.sleep(0.2)\n"
-            "    sys.exit(0)\n"
-            "signal.signal(signal.SIGTERM, bye)\n"
-            "sys.stderr.write('productive start\\n'); sys.stderr.flush()\n"
-            "time.sleep(0.8)\n"
-            "sys.stderr.write('productive end\\n'); sys.stderr.flush()\n"
-            "time.sleep(10)\n"
-        )
-        rc, tail = eng.sh([sys.executable, "-c", code], timeout=10, idle=1)
-        self.assertEqual(rc, 124)
-        self.assertIn("productive end", tail)
-        self.assertIn("shutdown output after the hang", tail)
-        kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
-                 if json.loads(line)["kind"] == "kill"]
-        self.assertTrue(kills)
-        kill = kills[-1]
-        self.assertEqual(kill["why"], "hung")
-        self.assertTrue(kill["hung"])
-        self.assertIsNotNone(kill["last_event_t"])
-        self.assertIsNotNone(kill["kill_t"])
-        self.assertLessEqual(kill["last_event_t"], kill["kill_t"])
-        self.assertGreaterEqual(kill["kill_t"] - kill["last_event_t"], 0.8)
-        self.assertGreaterEqual(kill["last_event_t"] - kill["started_t"], 0.5)
-
-    def test_hung_freeze_rechecks_activity_inside_the_lock(self):
-        eng = make_engine(self.wt, verbose=False, store=self.store, attrs={"last_event_t": 100.0, "_event_frozen": False, "killed": False, "kill_why": ""})
-
-        class LateActivityLock:
-            def __enter__(self):
-                eng.last_event_t = 100.9  # output arrives after a stale read, before the freeze
-                return self
-
-            def __exit__(self, *exc):
-                return False
-
-        eng._event_lock = LateActivityLock()
-        self.assertFalse(eng._freeze_check("hung", idle=1.0, now=101.0))
-        self.assertFalse(eng.killed)
-        self.assertFalse(eng._event_frozen)
-        self.assertEqual(eng.last_event_t, 100.9)
-        self.assertTrue(eng._freeze_check("hung", idle=1.0, now=101.91))
-        self.assertTrue(eng.killed)
-        self.assertTrue(eng._event_frozen)
-        self.assertEqual(eng.kill_why, "hung")
-
-    def test_a_slow_activity_scan_is_timestamped_when_it_returns(self):
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False, store=self.store)
-        p = FakeCheckProc()
-        scan_returned = []
-
-        def slow_activity(*_):
-            if not scan_returned:
-                time.sleep(1.0)
-                scan_returned.append(time.time())
-                return True
-            return False
-
-        def stop(proc):
-            proc.stop("shutdown after slow scan\n")
-
-        with mock.patch.object(engine.subprocess, "Popen", return_value=p), \
-                mock.patch.object(engine.sproc, "stop_tree", side_effect=stop), \
-                mock.patch.object(engine.activity, "activity", side_effect=slow_activity):
-            rc, _ = eng.sh(["fake-check"], timeout=10, idle=0.5)
-        self.assertEqual(rc, 124)
-        kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
-                 if json.loads(line)["kind"] == "kill"]
-        self.assertTrue(kills)
-        kill = kills[-1]
-        self.assertEqual(kill["why"], "hung")
-        self.assertTrue(scan_returned)
-        self.assertGreaterEqual(kill["last_event_t"], scan_returned[0])
-        self.assertGreaterEqual(kill["kill_t"] - scan_returned[0], 0.4)
-
-    def test_an_idle_timeout_freezes_last_event_before_shutdown_output(self):
+    def test_a_wall_timeout_freezes_last_event_before_shutdown_output(self):
         eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False, store=self.store)
         p = FakeCheckProc()
         p.emit("productive output\n")
@@ -402,7 +322,7 @@ class TraceTelemetry(unittest.TestCase):
         with mock.patch.object(engine.subprocess, "Popen", return_value=p), \
                 mock.patch.object(engine.sproc, "stop_tree", side_effect=stop), \
                 mock.patch.object(engine.activity, "activity", return_value=False):
-            rc, tail = eng.sh(["fake-check"], timeout=0.4, idle=10)
+            rc, tail = eng.sh(["fake-check"], timeout=0.4, watch=True)
         self.assertEqual(rc, 124)
         self.assertIn("shutdown output after timeout", tail)
         kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
@@ -416,7 +336,7 @@ class TraceTelemetry(unittest.TestCase):
         self.assertLess(kill["last_event_t"], kill["kill_t"])
         self.assertGreaterEqual(kill["kill_t"] - kill["last_event_t"], 0.2)
 
-    def test_an_idle_interruption_freezes_last_event_before_shutdown_output(self):
+    def test_a_watched_interruption_freezes_last_event_before_shutdown_output(self):
         eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False, store=self.store)
         p = FakeCheckProc()
         p.emit("productive output\n")
@@ -428,7 +348,7 @@ class TraceTelemetry(unittest.TestCase):
                 mock.patch.object(engine.sproc, "stop_tree", side_effect=stop), \
                 mock.patch.object(engine.activity, "activity", side_effect=KeyboardInterrupt):
             with self.assertRaises(KeyboardInterrupt):
-                eng.sh(["fake-check"], timeout=10, idle=10)
+                eng.sh(["fake-check"], timeout=10, watch=True)
         self.assertTrue(p.shutdown_sent)
         kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
                  if json.loads(line)["kind"] == "kill"]

@@ -63,8 +63,7 @@ class Checker:
         hits = sum(1 for c in st.results if c.cached)
         run = CheckRun(round=st.n, tree=tree, results=st.results, hits=hits, misses=len(st.results) - hits)
         host.stores.check_run(host.run_dir.name, st.n).write(run)
-        bad, hung = run.failed, [c for c in run.failed if c.hung]
-        host.steps.outcome("red" if bad else "green", evidence.round_outcome(run, hung))
+        host.steps.outcome("red" if run.failed else "green", evidence.round_outcome(run))
         self.latest = run
         return run
 

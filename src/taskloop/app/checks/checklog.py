@@ -12,7 +12,7 @@ class CheckLog:
     def start(self, c: Check, rnd: int, log: str = "") -> str:
         """A check begins running: its id, which `close` ends."""
         cid = self.log.next_id("k")
-        self.log.emit(CheckStart(id=cid, check=c.id, group=c.group, cmd=c.cmd, round=rnd, log=log, timeout_s=c.timeout_min * 60))
+        self.log.emit(CheckStart(id=cid, check=c.id, group=c.group, cmd=c.cmd, round=rnd, log=log, timeout_s=c.wall_min * 60))
         return cid
 
     def close(self, c: Check, res: CheckResult, cid: str | None, rnd: int) -> None:

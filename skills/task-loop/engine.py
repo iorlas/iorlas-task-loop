@@ -876,7 +876,7 @@ class Engine:
             self.steps.move("fault", "wrong_tree", bad[0])
             raise Blocked("failed: %s. %s" % (why, bad[1]), kind=oc.Kind.FAULT_SLOT)
 
-    def sh(self, cmd, timeout=3600, check=False, save=None, env=None, pin=False, idle=0, cwd=None):
+    def sh(self, cmd, timeout=3600, check=False, save=None, env=None, pin=False, watch=False, cwd=None):
         """A command: an argv list, exec'd as given (no shell, no quoting rules; a string is a programming error). pin=True: an
         engine git command, run with GIT_DIR/GIT_WORK_TREE of the slot; checks and gates run unpinned (they may run git on other repos)."""
         if isinstance(cmd, str):
@@ -891,12 +891,12 @@ class Engine:
                                    env=dict(sproc.current_env(), **(tl.pinned_env(self.wt) if pin else {}), **(env or {})),
                                    stdin=subprocess.DEVNULL,
                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
-        self.hung, self.killed, self.kill_t, self.kill_why, self.last_event_t, self._event_frozen = False, False, 0.0, "", started, False
+        self.killed, self.kill_t, self.kill_why, self.last_event_t, self._event_frozen = False, 0.0, "", started, False
         self._event_lock = threading.Lock()
         try:
             hold.replay()
-            if idle:
-                out, rc = self.watch_output(p, timeout, idle)
+            if watch:
+                out, rc = self.watch_output(p, timeout, cid)
             else:
                 out, _ = p.communicate(timeout=timeout)
                 rc = p.returncode
@@ -905,15 +905,15 @@ class Engine:
                 self._freeze_check("timeout")
             sproc.stop_tree(p)
             out, _ = p.communicate()
-            out = (e.output or b"") + out if idle else out  # the watched path read the output itself: keep what it collected
+            out = (e.output or b"") + out if watch else out  # the watched path read the output itself: keep what it collected
             out += b"\n(timed out after %g min: the engine stopped it and everything it started)" % round(timeout / 60, 2)
             rc = 124
         except BaseException:  # stopped: never leave a check (just check, Unity) running
             if not self.killed:
                 self._freeze_check("interrupted")
             sproc.stop_tree(p)
-            self.log.emit(rec.Kill(what="check" if idle else "command", why=self.kill_why, secs=round(self.kill_t - started), hung=bool(self.hung),
-                                   started_t=started, last_event_t=self.last_event_t if idle else None, kill_t=self.kill_t, observed_t=self.kill_t))
+            self.log.emit(rec.Kill(what="check" if watch else "command", why=self.kill_why, secs=round(self.kill_t - started),
+                                   started_t=started, last_event_t=self.last_event_t if watch else None, kill_t=self.kill_t, observed_t=self.kill_t))
             self.log.emit(rec.CmdEnd(id=cid, exit=-1, secs=round(time.time() - started, 1)))
             raise
         finally:
@@ -921,8 +921,8 @@ class Engine:
                 p.stdout.close()
         text = out.decode("utf-8", "replace")
         if self.killed:  # only a stop the engine performed; a command that exits 124 by itself is not a kill
-            self.log.emit(rec.Kill(what="check" if idle else "command", why=self.kill_why, secs=round(self.kill_t - started), exit=rc,
-                                   hung=bool(self.hung), started_t=started, last_event_t=self.last_event_t if idle else None, kill_t=self.kill_t,
+            self.log.emit(rec.Kill(what="check" if watch else "command", why=self.kill_why, secs=round(self.kill_t - started), exit=rc,
+                                    started_t=started, last_event_t=self.last_event_t if watch else None, kill_t=self.kill_t,
                                    observed_t=self.kill_t))
         if save:
             Path(save).write_text(text, encoding="utf-8")
@@ -932,28 +932,21 @@ class Engine:
             raise Blocked("failed: `%s` exit %d\n%s" % (text_of(cmd), rc, tail), kind=oc.Kind.FAULT_INFRA)
         return rc, tail
 
-    def _freeze_check(self, why, idle=None, now=None):
-        """Freeze the check's last observed activity and kill time before signaling or draining output. With `idle`,
-        read the current activity and decide under the same lock, so a stale read cannot hide recent output."""
+    def _freeze_check(self, why):
+        """Freeze the check's last observed activity and kill time before signaling or draining output."""
         with self._event_lock:
             if self._event_frozen:
                 return False
-            if idle is not None:
-                now = time.time() if now is None else now
-                if now - self.last_event_t <= idle:
-                    return False
             self._event_frozen = True
             self.kill_t = time.time()
             self.last_event_t = min(self.last_event_t, self.kill_t)
             self.killed, self.kill_why = True, why
             return True
 
-    def watch_output(self, p, timeout, idle):
-        """Collect p's output until it ends. Stopped as hung when, for `idle` seconds, all three are flat: its output, any
-        file written under the worktree (a check that redirects to a file is not silent), the CPU time of its process tree.
-        Then the whole tree is stopped, self.hung is set and the exit is 124 (the output ends with the hang notice).
-        `timeout` still applies, as TimeoutExpired carrying the output so far. The last observed activity and the kill
-        time are frozen before the stop, so shutdown output and the synthetic hang notice cannot move the boundary."""
+    def watch_output(self, p, timeout, cmd_id):
+        """Collect p's output until it ends or `timeout` (the check's wall limit) passes: then the whole tree is stopped and
+        TimeoutExpired carries the output so far. Nothing else stops a check: a quiet one may be waiting (asleep, on a lock, on
+        the network, Unity importing). Its tree CPU, files written and output are logged as ActivitySample, one per 30 s."""
         chunks = []
 
         def mark(t):
@@ -974,8 +967,7 @@ class Engine:
         th = threading.Thread(target=pump, daemon=True)
         th.start()
         start = time.time()
-        poll, nxt = min(60.0, max(0.3, idle / 4)), start
-        seen = {"files": None, "cpu": {}}
+        sampler = activity.Sampler(self.wt, p.pid, cmd_id, start)
         while th.is_alive():
             th.join(0.5)
             now = time.time()
@@ -984,17 +976,11 @@ class Engine:
                 sproc.stop_tree(p)
                 th.join(5)
                 raise subprocess.TimeoutExpired(p.args, timeout, output=b"".join(chunks))
-            if th.is_alive() and now >= nxt:
-                nxt = now + poll
-                if activity.activity(self.wt, p.pid, seen):
-                    mark(time.time())  # the scan may have taken longer than the idle limit
-            if th.is_alive() and self._freeze_check("hung", idle=idle):
-                self.hung = True
-                sproc.stop_tree(p)
-                th.join(5)
-                chunks.append(b"\n(hung: no output, file writes or CPU for %g min; the engine stopped it and everything it started)"
-                              % round(idle / 60, 2))
-                return b"".join(chunks), 124
+            if th.is_alive():
+                s = sampler.take(sum(map(len, chunks)), self.last_event_t)
+                if s:
+                    self.log.emit(s)
+                    mark(sampler.moved_t)
         p.wait()
         return b"".join(chunks), p.returncode
 

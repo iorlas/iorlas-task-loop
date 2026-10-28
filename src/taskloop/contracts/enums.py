@@ -92,7 +92,6 @@ class CheckStatus(StrEnum):
     PASSED = "passed"
     FAILED = "failed"
     SKIPPED = "skipped"
-    HUNG = "hung"
     TIMEOUT = "timeout"
     CACHED = "cached"
 

@@ -25,20 +25,19 @@ def round_lines(results: Sequence[CheckResult]) -> list[str]:
     """The round, one line per check, and a failed one's last lines under it."""
     out: list[str] = []
     for c in results:
-        mark = "⏸ hung" if c.hung else MARKS[c.status]
+        mark = MARKS[c.status]
         out.append("{} [{}] `{}` {}{}".format(mark, c.group, c.id, c.status if c.exit is None else f"exit {c.exit}", _because(c)))
         if c.status == "failed":
-            out += c.tail.splitlines()[-(8 if c.hung else 3):]
+            out += c.tail.splitlines()[-3:]
     return out
 
 
-def round_outcome(run: CheckRun, hung: Sequence[CheckResult]) -> str:
+def round_outcome(run: CheckRun) -> str:
     """The step's outcome text: what failed, or how many passed."""
     bad = run.failed
     if not bad:
         return f"{len(run.passed)} passed"
-    stopped = f" ({len(hung)} hung: no output, file writes or CPU, stopped)" if hung else ""
-    return f"{len(bad)} failed{stopped}: " + ", ".join(c.id[:60] for c in bad)
+    return f"{len(bad)} failed: " + ", ".join(c.id[:60] for c in bad)
 
 
 def compact(checks: Sequence[CheckResult]) -> str:

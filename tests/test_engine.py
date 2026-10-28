@@ -421,7 +421,7 @@ class EngineTest(unittest.TestCase):
 
     @POSIX_CHECK
     def test_a_check_that_times_out_is_red_and_leaves_no_process(self):
-        c = cfg_with(engine.load_cfg(str(self.wt)), check_timeout_min=0.03)  # under 2 s
+        c = cfg_with(engine.load_cfg(str(self.wt)), check_wall_min=0.03)  # under 2 s
         eng = engine.Engine("t-1", str(self.wt), c, store=self.store)
         mark = "61.%d" % os.getpid()  # unique: a second suite running at once has its own sleep
         res = eng.run_checks({"checks": ["bash -c 'sleep %s; true'" % mark], "files": []}, "s")
@@ -473,7 +473,7 @@ class EngineTest(unittest.TestCase):
     def test_a_timed_out_check_is_never_retried(self):
         n = Path(self.tmp.name) / "runs-timeout"
         eng = self.checks_engine(checks=[{"id": "hang", "cmd": self.sleeping_check(30, n), "group": "tests", "retry": 1}],
-                                 check_timeout_min=0.02)
+                                 check_wall_min=0.02)
         with mock.patch.object(eng, "warn") as warn:
             res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertEqual((res[0].exit, res[0].tries, n.read_text()), (124, 1, "1"))
@@ -486,14 +486,14 @@ class EngineTest(unittest.TestCase):
         res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertEqual((res[0].tries, n.read_text()), (1, "1"))
 
-    def test_a_checks_own_timeout_min_overrides_the_global_one(self):
+    def test_a_checks_own_wall_min_overrides_the_global_one(self):
         n = Path(self.tmp.name) / "runs-own"
         slow = self.sleeping_check(2, n)
-        eng = self.checks_engine(checks=[{"id": "short", "cmd": slow, "group": "tests", "timeout_min": 0.01}],
-                                 check_timeout_min=5)
+        eng = self.checks_engine(checks=[{"id": "short", "cmd": slow, "group": "tests", "wall_min": 0.01}],
+                                 check_wall_min=5)
         self.assertEqual(eng.run_checks({"checks": [], "files": []}, "s")[0].exit, 124)
-        eng2 = self.checks_engine(checks=[{"id": "long", "cmd": slow, "group": "tests", "timeout_min": 0.5}],
-                                  check_timeout_min=0.01)
+        eng2 = self.checks_engine(checks=[{"id": "long", "cmd": slow, "group": "tests", "wall_min": 0.5}],
+                                  check_wall_min=0.01)
         self.assertEqual(eng2.run_checks({"checks": [], "files": []}, "s")[0].exit, 0)
 
     def test_a_command_repeated_in_one_block_runs_once(self):
@@ -529,8 +529,8 @@ class EngineTest(unittest.TestCase):
 
     def test_the_same_command_with_another_timeout_is_one_launch(self):
         cmd, n = self.counting_check("ok", ok_after=1)
-        eng = self.checks_engine(checks=[{"id": "a", "cmd": cmd, "group": "static", "timeout_min": 1, "cache": False},
-                                         {"id": "b", "cmd": cmd, "group": "tests", "timeout_min": 2, "cache": False}])
+        eng = self.checks_engine(checks=[{"id": "a", "cmd": cmd, "group": "static", "wall_min": 1, "cache": False},
+                                         {"id": "b", "cmd": cmd, "group": "tests", "wall_min": 2, "cache": False}])
         res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertEqual((n.read_text(), [bool(c.reused) for c in res]), ("1", [False, True]))
 
@@ -1199,7 +1199,7 @@ class EngineTest(unittest.TestCase):
         if os.name == "nt":
             self.skipTest("POSIX process groups")
         pidfile = Path(self.tmp.name, "child.pid")
-        eng = self.checks_engine(check_timeout_min=0.03)
+        eng = self.checks_engine(check_wall_min=0.03)
         t = time.time()
         res = eng.run_checks({"checks": [self.spawn(pidfile)], "files": []}, "s")
         self.assertLess(time.time() - t, 15, "the engine waited for the check's child to end by itself")
@@ -1210,10 +1210,10 @@ class EngineTest(unittest.TestCase):
 
     @no_repo
     def test_check_timeout_defaults_to_60_min_and_the_gate_to_90(self):
-        self.assertEqual((EngineConfig().check_timeout_min, EngineConfig().gate_timeout_min), (60, 90))
+        self.assertEqual((EngineConfig().check_wall_min, EngineConfig().gate_timeout_min), (60, 90))
 
-    def test_a_sleeping_check_is_cut_at_check_timeout_min_not_node_timeout_min(self):
-        eng = self.checks_engine(check_timeout_min=0.02, node_timeout_min=45)
+    def test_a_sleeping_check_is_cut_at_check_wall_min_not_node_timeout_min(self):
+        eng = self.checks_engine(check_wall_min=0.02, node_timeout_min=45)
         t = time.time()
         res = eng.run_checks({"checks": [PY + ' -c "import time; time.sleep(30)"'], "files": []}, "s")
         self.assertLess(time.time() - t, 15)
@@ -2260,7 +2260,7 @@ class EngineTest(unittest.TestCase):
 
     def test_push_race_sigterm_during_retry_check_stops_child_and_keeps_barrier(self):
         with self.stoppable(), mock.patch.object(tl, "cmd_land") as land:
-            rc, events, race = self.run_push_race(failure="checks_stop", check_timeout_min=0.03)
+            rc, events, race = self.run_push_race(failure="checks_stop", check_wall_min=0.03)
         self.assertEqual(rc, 2, self.blocked)
         self.assertIn("stopped (SIGTERM)", self.said())
         self.assertDead(self.child_of(race["pidfile"]))

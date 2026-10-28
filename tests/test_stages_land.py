@@ -474,14 +474,14 @@ class PlanTimeout(StagesTest):
 
     def test_the_plan_goes_back_to_the_planner_once_with_the_reason(self):
         bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[HAS_F, "echo play --timeout_ms 2400000"])])
-        rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]}, check_timeout_min=30)
+        rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]}, check_wall_min=30)
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
         self.assertIn("above the engine's check limit of 30 min", s.prompts[1])
 
     def test_a_plan_inside_the_limit_is_not_sent_back(self):
         ok = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[HAS_F, "echo play --timeout_ms 600000"])])
-        rc, s = self.run_engine({"plan": [ok], "write": [WRITE], "review": [CLEAN]}, check_timeout_min=30)
+        rc, s = self.run_engine({"plan": [ok], "write": [WRITE], "review": [CLEAN]}, check_wall_min=30)
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])
 
 

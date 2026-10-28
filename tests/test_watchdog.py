@@ -1,17 +1,14 @@
-"""The hang watchdog's decisions, on fake CPU, file and clock samples: no process, no load, no sleep. `cs.activity` says whether a
-check did anything since the last look (CPU of its tree, files under the worktree); `Engine._freeze_check` says, at a given
-`now`, whether the silence has outlasted the idle limit. One real process checks the CPU sampler itself (slow tier)."""
+"""The activity look at a running check, on fake CPU, file and clock samples: no process, no load, no sleep. `cs.activity` says whether
+a check did anything since the last look (CPU of its tree, files under the worktree); `cs.Sampler` logs it, throttled. Nothing here
+stops a check: only its wall limit does. One real process checks the CPU sampler itself (slow tier)."""
 import subprocess
 import sys
-import types
 import unittest
 from pathlib import Path
-from threading import Lock
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from test_engine import engine  # noqa: E402
 from taskloop.adapters import activity as cs  # noqa: E402
 from support import tags, waits  # noqa: E402
 
@@ -79,51 +76,56 @@ class Activity(unittest.TestCase):
 
 
 @tags.domain
-class Verdict(unittest.TestCase):
-    """Engine._freeze_check(why, idle, now): hung only when `now` is more than `idle` past the last observed activity."""
+class Samples(unittest.TestCase):
+    """The look at a running check: at most one ActivitySample per 30 s of its clock, whatever the check does. It judges nothing."""
 
-    def check(self, last=100.0):
-        return types.SimpleNamespace(_event_lock=Lock(), _event_frozen=False, last_event_t=last, kill_t=0.0, killed=False, kill_why="")
+    def sampler(self, cpu, now):
+        clock = lambda: now[0]  # noqa: E731
+        s = cs.Sampler("wt", 1, "m7", started=100.0, clock=clock)
+        patches = (mock.patch.object(cs, "tree_cpu", lambda pid: None if cpu() is None else dict(cpu())),
+                   mock.patch.object(cs, "files_signature", lambda wt: FILES))
+        for pt in patches:
+            pt.start()
+            self.addCleanup(pt.stop)
+        return s
 
-    def verdict(self, c, now, idle=60.0):
-        return engine.Engine._freeze_check(c, "hung", idle=idle, now=now)
+    def test_one_sample_per_30_seconds_and_it_carries_cpu_files_and_output(self):
+        now = [100.0]
+        s = self.sampler(lambda: {1: 1.0, 2: 0.5}, now)
+        first = s.take(out_bytes=10, last_output_t=100.0)
+        assert first is not None
+        self.assertEqual((first.cmd_id, first.secs, first.out_bytes, first.pids, first.cpu_s, first.files, first.file_bytes,
+                          first.newest_mtime_ns), ("m7", 0.0, 10, [1, 2], 1.5, 3, 120, 1_000))
+        for t in (101.0, 110.0, 129.9):
+            now[0] = t
+            self.assertIsNone(s.take(10, 100.0), t)
+        now[0] = 130.0
+        later = s.take(10, 100.0)
+        assert later is not None
+        self.assertEqual((later.secs, later.silent_s), (30.0, 30.0))  # flat CPU, flat files, no output: 30 s since anything moved
 
-    def test_silence_up_to_the_limit_is_not_hung_and_past_it_is(self):
-        c = self.check()
-        self.assertFalse(self.verdict(c, now=100.0))
-        self.assertFalse(self.verdict(c, now=159.9))
-        self.assertFalse(self.verdict(c, now=160.0))  # exactly the limit still waits
-        self.assertTrue(self.verdict(c, now=160.1))
-        self.assertEqual((c.killed, c.kill_why, c._event_frozen), (True, "hung", True))
+    def test_a_flat_tree_is_sampled_not_stopped_over_and_over(self):
+        now = [100.0]
+        s = self.sampler(lambda: {1: 0.0}, now)
+        got = []
+        for t in range(100, 100 + 600, 5):  # ten minutes of a sleeping check
+            now[0] = float(t)
+            x = s.take(0, 100.0)
+            if x:
+                got.append(x)
+        self.assertEqual(len(got), 20)
+        self.assertEqual(got[-1].silent_s, 570.0)
 
-    def test_output_or_a_file_write_resets_the_clock(self):
-        c = self.check()
-        self.assertFalse(self.verdict(c, now=150.0))
-        c.last_event_t = 150.0  # what watch_output's mark() does for a chunk of output or a positive activity()
-        self.assertFalse(self.verdict(c, now=209.0))
-        self.assertTrue(self.verdict(c, now=210.5))
-
-    def test_a_check_burning_cpu_keeps_the_clock_moving_a_silent_idle_one_does_not(self):
-        busy, idle = self.check(), self.check()
-        busy_look, idle_look = Look({1: 0.0}), Look({1: 0.0})
-        for tick in range(1, 20):  # one look every 10 s of fake time; only the busy check spends CPU
-            now = 100.0 + tick * 10
-            if busy_look.look({1: float(tick)}):
-                busy.last_event_t = now
-            if idle_look.look():
-                idle.last_event_t = now
-            self.assertFalse(self.verdict(busy, now), tick)
-        self.assertTrue(self.verdict(idle, 100.0 + 19 * 10))
-
-    def test_it_decides_once_and_a_stopped_check_stays_stopped(self):
-        c = self.check()
-        self.assertTrue(self.verdict(c, now=500.0))
-        self.assertFalse(self.verdict(c, now=900.0))
-        self.assertLessEqual(c.last_event_t, c.kill_t)  # the boundary is frozen before the stop
+    def test_an_unknown_table_is_logged_as_unknown_cpu(self):
+        now = [100.0]
+        s = self.sampler(lambda: None, now)
+        x = s.take(0, 100.0)
+        assert x is not None
+        self.assertEqual((x.cpu_s, x.pids), (None, []))
 
 
 @tags.slow
-class Sampler(unittest.TestCase):
+class RealCpu(unittest.TestCase):
     def test_the_cpu_sampler_sees_a_real_process_spend_cpu(self):
         p = subprocess.Popen([sys.executable, "-c", "while True: sum(range(10000))"])
         self.addCleanup(p.wait)

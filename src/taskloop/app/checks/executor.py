@@ -75,7 +75,7 @@ class CheckExecutor:
         else:
             cid = self.checklog.start(c, st.n, "checks/" + name)
             res, where = self._launch(step, st, name, ikey, nocache), str(self.logs / name)
-        st.ran[(norm(c.cmd), str(self.host.wt))] = (res, c.timeout_min)
+        st.ran[(norm(c.cmd), str(self.host.wt))] = (res, c.wall_min)
         self._publish(c, res, where, st)
         if res.exit != 0 and not res.base_red:
             st.red = c.group
@@ -117,7 +117,7 @@ class CheckExecutor:
         """Each distinct command runs once per block, whatever limit its copy carries; the limit matters only when the first run
         timed out under a shorter one."""
         before = st.ran.get((norm(c.cmd), str(self.host.wt)))
-        if before is None or (before[0].exit == 124 and before[1] < c.timeout_min):
+        if before is None or (before[0].exit == 124 and before[1] < c.wall_min):
             return None
         self.host.log.note(f"`{c.cmd[:120]}` already ran in this block: its result is reused")
         return dataclasses.replace(before[0], id=c.id, cmd=c.cmd, group=c.group, cached=False, reused=True, log="")
@@ -155,18 +155,16 @@ class CheckExecutor:
         if stale:
             raise CheckFault(CheckFaultKind.STALE_BASE, f"failed: infrastructure: the configured check `{c.id}` needs something this tree "
                              f"lacks (\"{stale}\"): the tree is older than the base's .task-loop.json, which no writer can fix")
-        if out.rc < 0 and not out.hung and not self.host.killed:
+        if out.rc < 0 and not self.host.killed:
             raise CheckFault(CheckFaultKind.KILLED, f"failed: stopped: check `{c.id}` was killed by signal {-out.rc}; the bead goes "
                              "back to open and the next run runs it again (no fix round, no failure counted)")
 
     def _result(self, c: Check, out: Outcome, name: str, secs: int) -> CheckResult:
         tail = out.tail[-1500:]
-        if out.hung:
-            tail = f"HUNG (no output, file writes or CPU for {c.idle_s / 60:g} min), last output:\n{out.tail[-1400:]}"
-        elif out.rc and not out.base_red:
+        if out.rc and not out.base_red:
             tail += self._project_log(c, out.seen, self.logs / name)
         return CheckResult(id=c.id, cmd=c.cmd, group=c.group, exit=out.rc, status="passed" if out.rc == 0 else "failed", tries=out.tries,
-                           tail=tail, secs=secs, log="checks/" + name, hung=out.hung, base_red=out.base_red,
+                           tail=tail, secs=secs, log="checks/" + name, base_red=out.base_red,
                            sig=output_signature(out.seen) if out.rc else "")
 
     def _project_log(self, c: Check, seen: str, log: Path) -> str:

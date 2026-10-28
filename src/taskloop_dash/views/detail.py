@@ -73,7 +73,6 @@ def checks_of(n: dict) -> list[dict]:
                 "status": it.status,
                 "secs": it.secs,
                 "tries": it.tries,
-                "hung": it.hung,
                 "cached": it.cached,
                 "reused": it.reused,
                 "why": it.why,

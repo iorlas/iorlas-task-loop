@@ -666,9 +666,9 @@ def profile_source(repo, base=None):
 
 
 def load_profile(data):
-    """A parsed .task-loop.json as a RepoProfile; an unknown key or a wrong type exits, naming it."""
+    """A parsed .task-loop.json as a RepoProfile; an unknown key or a wrong type exits, naming it. A retired key is said once."""
     try:
-        return config.load(data)
+        return config.load(data, say_to=sys.stderr)
     except config.ConfigError as e:
         sys.exit("task-loop: %s" % e)
 

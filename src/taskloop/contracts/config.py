@@ -1,6 +1,6 @@
 """RepoProfile: the repo's .task-loop.json as typed records . An unknown key is an error, not a silent no-op."""
 from dataclasses import field, fields
-from typing import Any, Literal
+from typing import Any, Literal, TextIO
 
 from taskloop.contracts.argv import FORM, shape_problem, text_of
 from taskloop.contracts.codec import CodecError, from_json, record
@@ -40,8 +40,7 @@ class CheckSpec:
     group: Literal["static", "tests", "acceptance"] = "tests"
     when: list[str] = field(default_factory=list)
     retry: int = 0
-    timeout_min: float | None = None
-    idle_min: float | None = None
+    wall_min: float | None = None  # this check's wall-time limit; absent: engine.check_wall_min
     cache: bool | None = None
     inputs: list[str] | str = field(default_factory=list)
     inputs_only: bool = False
@@ -141,8 +140,7 @@ class EngineConfig:
     base_red: bool = True  # a check's first red is run once on the untouched base: red there too, it is not the writer's
     max_same_red: int = 3  # rounds in a row that end red with the same checks and output: then stop and ask (0: never)
     max_total_reviews: int = 12  # reviews in all of a run, replans included: then stop and ask (0: never)
-    check_timeout_min: float = 60
-    check_idle_min: float = 10
+    check_wall_min: float = 60  # a check is stopped only when it runs this long; a quiet or idle one is never stopped before
     gate_timeout_min: float = 90
     lane_wait_min: float = 10
     look_rounds: int = 2
@@ -179,8 +177,49 @@ def _string_commands(data: Any) -> list[str]:
     return found
 
 
-def load(data: Any) -> RepoProfile:
-    """The repo's .task-loop.json (parsed) as a RepoProfile; ConfigError names the offending key."""
+ENG = next(f.name for f in fields(RepoProfile))  # the profile's first block, engine
+RETIRED_ENGINE = ("check_idle_min",)  # keys that once did something and now do nothing: loaded without them, not an error
+RETIRED_CHECK = ("idle_min",)  # the same, on one entry of engine.checks
+
+
+def retired_keys(data: Any) -> list[str]:
+    """The retired keys a parsed .task-loop.json still carries, spelled as `engine.check_idle_min` and `engine.checks[0].idle_min`."""
+    eng = data.get(ENG) if isinstance(data, dict) else None
+    if not isinstance(eng, dict):
+        return []
+    found = [f"{ENG}.{k}" for k in RETIRED_ENGINE if k in eng]
+    for n, c in enumerate(eng.get("checks") or []):
+        found += [f"{ENG}.checks[{n}].{k}" for k in RETIRED_CHECK if isinstance(c, dict) and k in c]
+    return found
+
+
+_SAID: set[str] = set()
+
+
+def say_retired(data: Any, out: TextIO) -> None:
+    """One line on `out` per retired key of `data` not yet said in this process."""
+    for k in retired_keys(data):
+        if k not in _SAID:
+            _SAID.add(k)
+            print(f"task-loop: .task-loop.json: {k} is retired and ignored; safe to delete", file=out)
+
+
+def _without_retired(data: Any) -> Any:
+    """`data` less its retired keys; `data` itself is left as it was."""
+    if not retired_keys(data):
+        return data
+    eng = {k: v for k, v in data[ENG].items() if k not in RETIRED_ENGINE}
+    if isinstance(eng.get("checks"), list):
+        eng["checks"] = [{k: v for k, v in c.items() if k not in RETIRED_CHECK} if isinstance(c, dict) else c for c in eng["checks"]]
+    return {**data, ENG: eng}
+
+
+def load(data: Any, say_to: TextIO | None = None) -> RepoProfile:
+    """The repo's .task-loop.json (parsed) as a RepoProfile; ConfigError names the offending key. With `say_to`, a retired key
+    is said there once per process."""
+    if say_to:
+        say_retired(data, say_to)
+    data = _without_retired(data)
     old = _string_commands(data)
     if old:
         raise ConfigError(f"the repo profile: {', '.join(old)} is a string command: {FORM}")

@@ -1,4 +1,4 @@
-"""Attempts: one check run until it is decided: passed, red for good, hung, timed out, or held by an editor lock and waited out."""
+"""Attempts: one check run until it is decided: passed, red for good, timed out, or held by an editor lock and waited out."""
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -19,7 +19,6 @@ class Outcome:
     tail: str  # the last lines of the last run's output
     seen: str  # all of its output
     tries: int
-    hung: bool
     secs: float  # of the last run
     base_red: bool = False
 
@@ -35,9 +34,9 @@ class Attempts:
         tries, prior = 0, ""
         while True:
             tries += 1
-            rc, tail, seen, took, hung = self._once(c, log, env)
-            out = Outcome(rc, tail, seen, tries, hung, took)
-            if rc == 0 or hung or rc == 124:
+            rc, tail, seen, took = self._once(c, log, env)
+            out = Outcome(rc, tail, seen, tries, took)
+            if rc in {0, 124}:
                 self._say_stop(c, out)
                 return out
             sig = matchers.output_signature(seen)
@@ -45,19 +44,18 @@ class Attempts:
             if kind == "lock":
                 return self._wait_lock(c, log, env, out)
             if tries == 1 and c.repo and self.base.red(c, took):
-                return Outcome(rc, tail, seen, tries, hung, took, base_red=True)
+                return Outcome(rc, tail, seen, tries, took, base_red=True)
             if not self._again(c, out, tries, sig, prior):
                 return out
             prior = sig
 
-    def _once(self, c: Check, log: Path, env: Mapping[str, str]) -> tuple[int, str, str, float, bool]:
+    def _once(self, c: Check, log: Path, env: Mapping[str, str]) -> tuple[int, str, str, float]:
         t0 = time.time()
-        rc, tail = self.host.sh(argv_of(c.cmd), timeout=c.timeout_min * 60, save=log, env=env, idle=c.idle_s)
-        hung = self.host.hung
+        rc, tail = self.host.sh(argv_of(c.cmd), timeout=c.wall_min * 60, save=log, env=env, watch=True)
         seen = self._read(log, tail)
         took = time.time() - t0
         self.host.note_slot_waits(seen, took)
-        return rc, tail, seen, took, hung
+        return rc, tail, seen, took
 
     @staticmethod
     def _read(log: Path, fallback: str) -> str:
@@ -67,9 +65,7 @@ class Attempts:
             return fallback
 
     def _say_stop(self, c: Check, out: Outcome) -> None:
-        if out.hung:  # silent for check_idle_min: a rerun hangs the same way, and this round has waited enough
-            self.host.warn(f"`{c.id}` hung: no output, file writes or CPU for {c.idle_s / 60:g} min, stopped; not retried")
-        elif out.rc == 124 and c.retry:  # the engine's timeout or the command's own: a rerun hangs the same way
+        if out.rc == 124 and c.retry:  # the engine's timeout or the command's own: a rerun hangs the same way
             self.host.warn(f"`{c.id}` failed (exit 124), no retry: timed out after {round(out.secs / 60, 1):g} min")
 
     def _again(self, c: Check, out: Outcome, tries: int, sig: str, prior: str) -> bool:
@@ -98,7 +94,7 @@ class Attempts:
             wid = self.host.wait_start(WaitWhat.EDITOR_LOCK)
             self.sleep(wait)
             self.host.add_wait(wait, WaitWhat.EDITOR_LOCK, wid)
-            rc, tail = self.host.sh(argv_of(c.cmd), timeout=c.timeout_min * 60, save=log, env=env)
+            rc, tail = self.host.sh(argv_of(c.cmd), timeout=c.wall_min * 60, save=log, env=env, watch=True)
             seen = self._read(log, tail)
             self.host.note_slot_waits(seen, time.time() - started)
             if rc == 0 or matchers.failure_kind(seen) != "lock":
@@ -107,4 +103,4 @@ class Attempts:
             pids = check_files.lock_holders(str(self.host.wt), matchers.lock_files(seen))
             holder = "; the lock holder is pid " + pids if pids else ""
             tail += f"\n(still locked after {retry.LOCK_WAIT_MAX} s of waiting{holder})"
-        return Outcome(rc, tail, seen, out.tries, self.host.hung, out.secs)
+        return Outcome(rc, tail, seen, out.tries, out.secs)

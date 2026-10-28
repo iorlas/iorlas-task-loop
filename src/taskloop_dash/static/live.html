@@ -115,7 +115,7 @@ class Term{
   }
   cmdEnd(e){
     const w=this.rows.get(this.pairKey(e));if(!w)return;
-    const bad=e.exit!=null&&e.exit!==0||e.status==='failed'||e.status==='hung',m=w._m;m.textContent='';
+    const bad=e.exit!=null&&e.exit!==0||e.status==='failed',m=w._m;m.textContent='';
     m.append(el('b',null,e.exit==null?(e.status||'?'):'exit '+e.exit),document.createTextNode(' '+dur(e.secs!=null?e.secs:e.t-w._t0)));
     w._n.className='row cmd '+(bad?'bad':'ok');if(e.exit!=null)w._n.dataset.exit=e.exit;w._n.dataset.secs=e.secs!=null?e.secs:e.t-w._t0;
     if(e.out){const o=el('div','out',e.out);o.hidden=true;w.appendChild(o)}

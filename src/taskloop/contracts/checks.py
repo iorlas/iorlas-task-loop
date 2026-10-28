@@ -26,8 +26,7 @@ class Check:
     group: Group = "tests"
     when: list[str] = field(default_factory=list)
     retry: int = 0
-    timeout_min: float = 60.0
-    idle_s: float = 0.0
+    wall_min: float = 60.0
     cache: bool = True
     inputs: list[str] = field(default_factory=list)
     inputs_only: bool = False
@@ -50,7 +49,6 @@ class CheckResult:
     tail: str = ""
     secs: float = 0.0
     log: str = ""  # relative to the run folder; empty when this run wrote none (skipped, cached, reused)
-    hung: bool = False
     cached: bool = False
     reused: bool = False
     why: str = ""  # a skip's reason
@@ -71,11 +69,9 @@ class CheckResult:
 
     @property
     def word(self) -> CheckStatus:
-        """The one word the log shows: cached, hung, timeout, passed, failed or skipped."""
+        """The one word the log shows: cached, timeout, passed, failed or skipped."""
         if self.cached:
             return CheckStatus.CACHED
-        if self.hung:
-            return CheckStatus.HUNG
         if self.exit == 124:
             return CheckStatus.TIMEOUT
         return CheckStatus(self.status)
