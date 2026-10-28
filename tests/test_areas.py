@@ -23,10 +23,12 @@ from test_slots import Slots  # noqa: E402
 
 import engine  # noqa: E402
 import loop  # noqa: E402
+from support.builders import cfg_with  # noqa: E402
 import tl  # noqa: E402
 
 HERE = Path(__file__).resolve().parents[1] / "skills" / "task-loop"
-AREAS = {"area_label_prefix": "lane:", "areas": {"core": ["e-core"], "build": ["build"]}}
+AREAS_JSON = {"area_label_prefix": "lane:", "areas": {"core": ["e-core"], "build": ["build"]}}
+AREAS = cfg_with(**AREAS_JSON)
 
 
 NO_FCNTL = unittest.skipIf(os.name == "nt", "the lock is fcntl; tl has none on Windows (documented no-op)")
@@ -39,13 +41,13 @@ class AreaOf(unittest.TestCase):
         self.assertEqual(loop.area_of(bead("x-2", labels=["lane:live", "lane:sim"]), AREAS, cache), "live")
         self.assertEqual(loop.area_of(bead("x-3", labels=["build"]), AREAS, cache), "build")
         self.assertEqual(loop.area_of(bead("x-4", parent="e-9", labels=["auto"]), AREAS, cache), "")
-        self.assertEqual(loop.area_of(bead("x-5", labels=["lane:live"]), {}, cache), "")  # no area config: none
+        self.assertEqual(loop.area_of(bead("x-5", labels=["lane:live"]), cfg_with(), cache), "")  # no area config: none
 
 
 class AreasBase(Slots):
     def setUp(self):
         super().setUp()
-        (self.repo / ".task-loop.json").write_text(json.dumps({"slots": {"count": 2}, "engine": AREAS}))
+        (self.repo / ".task-loop.json").write_text(json.dumps({"slots": {"count": 2}, "engine": AREAS_JSON}))
 
     def lanes(self, script, lanes, slots=2):
         bd = self.beads(script, slots=slots)

@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "task
 from support import fake_route  # noqa: E402
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support.builders import make_engine  # noqa: E402
+from taskloop.contracts.config import VisualConfig  # noqa: E402
 import test_engine as T  # noqa: E402
 from test_engine import BEAD, CLEAN, PLAN, WRITE, engine, tl, verdict  # noqa: E402
 
@@ -44,8 +45,8 @@ class LookTest(unittest.TestCase):
         return [c for c in self.bd_calls if c[0] == "create"]
 
     def test_glob_include_exclude(self):
-        vp = {"include": ["client/Assets/Features/**", "client/Assets/**/*.{uss,uxml}", "client/Assets/*.asset"],
-              "exclude": ["client/Assets/Tests/**", "**/*.md", "**/*.meta"]}
+        vp = VisualConfig(include=["client/Assets/Features/**", "client/Assets/**/*.{uss,uxml}", "client/Assets/*.asset"],
+                          exclude=["client/Assets/Tests/**", "**/*.md", "**/*.meta"])
         yes = ["client/Assets/Features/Live/LiveScreen.cs", "client/Assets/Kit/a/b.uss", "client/Assets/x.asset"]
         no = ["client/Assets/Tests/Features/T.cs", "client/Assets/Features/README.md", "client/Assets/Features/A.cs.meta",
               "client/Assets/Kit/a/b.cs", "client/Assets/sub/x.asset", "tools/x.py"]
@@ -205,7 +206,7 @@ class LookTest(unittest.TestCase):
         self.assertEqual(self.creates(), [])
         saved = json.loads(self.eng.checkpoint_path().read_text())
         self.assertEqual(saved["look_paths"], ["design/look-reviews/t-1/home-screen.png"])
-        eng2 = engine.Engine("t-1", str(self.wt), dict(self.eng.cfg), store=self.store)
+        eng2 = engine.Engine("t-1", str(self.wt), self.eng.cfg, store=self.store)
         eng2.reset(BEAD)
         eng2.bead_title = "Add f"
         eng2.resume_point()

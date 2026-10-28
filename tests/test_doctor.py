@@ -84,7 +84,7 @@ class DoctorSource(unittest.TestCase):
         self.assertIn("base origin/main at commit " + commit, out)
         self.assertIn("stale", (self.repo / ".task-loop.json").read_text())
         self.assertNotEqual(self.git("rev-parse", "HEAD"), commit)
-        self.assertEqual(engine.load_cfg(str(self.wt))["checks"][0]["id"], "new-base")
+        self.assertEqual(engine.load_cfg(str(self.wt)).checks[0].id, "new-base")
         self.assertIn("check new-base:", self.doctor(self.repo))
 
     def test_worktree_and_nested_directory_use_base(self):
@@ -104,7 +104,7 @@ class DoctorSource(unittest.TestCase):
         self.assertIn("base release at commit " + commit, out)
         self.assertIn("check custom:", out)
         self.assertNotIn("check stale:", out)
-        self.assertEqual(engine.load_cfg(str(self.wt))["checks"][0]["id"], "custom")
+        self.assertEqual(engine.load_cfg(str(self.wt)).checks[0].id, "custom")
 
     def test_reports_exact_commit_with_warnings(self):
         commit = self.advance_base(self.config("bad-glob"))
@@ -139,8 +139,8 @@ class DoctorSource(unittest.TestCase):
         (self.wt / "old.txt").unlink()
         (self.wt / "new.txt").write_text("new\n")
         cfg = {"engine": {"checks": [
-            {"id": "added", "inputs": ["new.txt"]},
-            {"id": "removed", "inputs": ["old.txt"]}]}}
+            {"id": "added", "cmd": "x", "inputs": ["new.txt"]},
+            {"id": "removed", "cmd": "x", "inputs": ["old.txt"]}]}}
         commit = self.advance_base(cfg)
         # Both the stale main index and worker index now disagree with the base tree.
         (self.wt / "new.txt").unlink()
@@ -163,7 +163,7 @@ class DoctorSource(unittest.TestCase):
         self.assertIn("working tree " + shown(self.wt), out)
         self.assertIn("base missing-base unresolved; no commit read", out)
         self.assertIn("ok:", out)
-        self.assertEqual(engine.load_cfg(str(self.wt))["checks"][0]["id"], "fallback")
+        self.assertEqual(engine.load_cfg(str(self.wt)).checks[0].id, "fallback")
 
     def test_default_unresolved_base_falls_back(self):
         self.git("update-ref", "-d", "refs/remotes/origin/main")
@@ -188,7 +188,7 @@ class DoctorSource(unittest.TestCase):
                 self.assertIn("base origin/main at commit " + commit, out)
                 self.assertIn("ok:", out)
                 self.assertNotIn("WARN", out)
-                self.assertEqual(engine.load_cfg(str(self.wt))["checks"], [])
+                self.assertEqual(engine.load_cfg(str(self.wt)).checks, [])
 
     def test_config_and_paths_use_one_resolved_commit(self):
         commit = self.advance_base(self.config("good", "old.txt"))

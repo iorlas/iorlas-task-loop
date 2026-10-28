@@ -2,7 +2,14 @@
 from dataclasses import field
 from typing import Any, Literal
 
-from taskloop.contracts.codec import record
+from taskloop.contracts.codec import CodecError, from_json, record
+
+FRESH_ABOVE_K = {"claude": 150, "codex": 100, "xai": 100}
+TEST_PATTERN = r"^\s*(def test_|async def test_|\[(Test|UnityTest|Fact|Theory|TestMethod|TestCase)\b|#\[test\]|(it|test)\(|func Test)"
+
+
+class ConfigError(ValueError):
+    """.task-loop.json is not a RepoProfile (an unknown key is the usual cause)."""
 
 
 @record
@@ -25,7 +32,7 @@ class VisualConfig:
 class CheckSpec:
     id: str
     cmd: str
-    group: Literal["static", "tests", "acceptance"]
+    group: Literal["static", "tests", "acceptance"] = "tests"
     when: list[str] = field(default_factory=list)
     retry: int = 0
     timeout_min: float | None = None
@@ -65,14 +72,14 @@ class EngineConfig:
     planner_notes: str = ""
     shot_table: str = ""
     write_fresh_stage_k: float = 100
-    write_fresh_above_k: float | dict[str, float] = field(default_factory=lambda: {"claude": 150, "codex": 100, "xai": 100})
+    write_fresh_above_k: float | dict[str, float] = field(default_factory=lambda: dict(FRESH_ABOVE_K))
     delegate: str = ""
     untracked_ignore: list[str] = field(default_factory=list)
     checks: list[CheckSpec] = field(default_factory=list)
     host: bool = False
     no_sandbox: bool = False
     worker_rules: str = ""
-    test_pattern: str = ""
+    test_pattern: str = TEST_PATTERN
     area_label_prefix: str = ""
     areas: dict[str, Any] = field(default_factory=dict)
     evidence_dir: str = ""
@@ -105,3 +112,11 @@ class RepoProfile:
 
     engine: EngineConfig = field(default_factory=EngineConfig)
     slots: SlotsConfig = field(default_factory=SlotsConfig)
+
+
+def load(data: Any) -> RepoProfile:
+    """The repo's .task-loop.json (parsed) as a RepoProfile; ConfigError names the offending key."""
+    try:
+        return from_json(RepoProfile, data or {})
+    except CodecError as e:
+        raise ConfigError("the repo profile: %s" % e) from None

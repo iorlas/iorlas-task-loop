@@ -265,7 +265,7 @@ class QueueRuleFromBase(Base):
         self.push_rule({"engine": {"brief_kb": 7}})
         self.sh("git", "fetch", "-q", "origin", cwd=self.repo)
         (self.repo / ".task-loop.json").write_text(json.dumps({"engine": {"brief_kb": 99}}))
-        self.assertEqual(loop.engine.load_cfg(str(self.repo))["brief_kb"], 7)
+        self.assertEqual(loop.engine.load_cfg(str(self.repo)).brief_kb, 7)
 
     def test_no_remote_falls_back_to_the_working_tree(self):
         self.sh("git", "remote", "remove", "origin", cwd=self.repo)

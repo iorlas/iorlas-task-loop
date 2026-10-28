@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import engine  # noqa: E402
 import seams  # noqa: E402
+from support.builders import cfg_with  # noqa: E402
 
 C3 = {"contract": 3, "reasons": {}}
 OLD = {"contract": 2, "reasons": {}}
@@ -22,7 +23,7 @@ OLD = {"contract": 2, "reasons": {}}
 class Stub:
     """Just what Engine.delegate_route touches."""
     def __init__(self, cfg, route):
-        self.cfg, self.route, self.contract, self.notes = cfg, route, {"contract": 3}, []
+        self.cfg, self.route, self.contract, self.notes = cfg_with(**cfg), route, {"contract": 3}, []
         self.resolved, self.refusal, self.router = None, None, seams.DelegateRoute()
         self.log = types.SimpleNamespace(note=self.notes.append)
 

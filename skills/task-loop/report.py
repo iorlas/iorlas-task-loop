@@ -73,7 +73,7 @@ def git(repo, *args):
 
 
 def default_base(repo):
-    return engine.load_cfg(repo)["base"]
+    return engine.load_cfg(repo).base
 
 
 def bases_of(repo, base):

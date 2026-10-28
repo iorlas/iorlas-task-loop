@@ -10,6 +10,7 @@ docs/design/coordinator-less.md. Python 3.8+, standard library only.
 
 import contextlib
 import copy
+import dataclasses
 import difflib
 import fcntl
 import fnmatch
@@ -52,54 +53,12 @@ from clock import SystemClock
 from taskloop.app.run import trace as runtrace
 from taskloop.app.run.calls import timing
 from taskloop.app.run.context import RunContext
-from taskloop.contracts import log as rec
+from taskloop.contracts import config, log as rec
+from taskloop.contracts.config import FRESH_ABOVE_K
 from taskloop.contracts.enums import Outcome, WaitWhat
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.stores import JsonlStore
 from taskloop.stores.real import real_stores
-
-DEFAULTS = {
-    "gate": "",                       # command run on the rebased tree before landing ("" = the push hook gates)
-    "land": "git push origin HEAD:main",
-    "base": "origin/main",
-    "budget_usd": 15,
-    "check_links": True,  # tl-bxk.7: open every link a task adds to a text file from this host; one that does not open goes back to the writer
-    "budget_min": 180,
-    "max_rounds": 3,                  # review send-backs per stage before a replan
-    "max_check_tries": 3,             # red checks in a row that end a round (checks never reach the reviewer red)
-    "max_replans": 2,                 # per bead, across runs: plans after the first (amends of any cause); then an owner ask
-    "max_fix_rounds": 2,              # per bead: a red gate, a conflict or what the check before land found wrong
-    "pick_label": "",                 # the label an unattended runner picks by (lifesim: auto); a decision or ticket ask removes it
-    "needs_info_label": "needs-info", # and adds this one, so the bead leaves the queue until the owner relabels it
-    "skip_labels": [],                # the loop's queue (tl next, tl loop) never takes a bead with one of these labels
-    "epic_order": [],                 # within a priority, beads under an earlier epic here (at any depth) come first
-    "epic_only": False,               # true: beads under none of epic_order's epics are not taken at all
-    "gate_only": [],                  # commands no plan check may run, only the gate at land: "cmd" or {cmd, why}
-    "max_stages": 3,                  # a bigger plan is a split ask (ticket), unless the owner already answered one
-    "node_timeout_min": 45,           # a plan, review or verify call running longer is stopped; a write follows the keys below
-    "write_idle_warn_min": 15,        # a write whose worker has been silent this long (session file, process output) is warned about
-    "write_idle_stop_min": 25,        # and stopped at this; a write whose activity cannot be seen keeps node_timeout_min
-    "reflect": True,                  # tl-05s: one cheap call after the close writes a short reflection into the trace and the bead's Reflect comment
-    "planner_notes": "",              # facts the planner must plan by (what the factory has and has not: platforms, engines, tools), text or "@repo/file"
-    "shot_table": "",                 # the project's shot methods (docs/design/visual-work.md; looks.py): a repo path, read from the base branch.
-                                      # With it a visual stage renders by the engine's hand, judged by a look judge; without it the old way (the writer saves shots)
-    "look_rounds": 2,                 # render + judge rounds per visual stage
-    "look_max_px": 1280,              # the look judge's pictures are shrunk to this many pixels on the long side
-    "write_fresh_stage_k": 100,       # at a stage boundary a writer session above this (k tokens) is not resumed (0 = never): the next stage is a fresh session told what is done
-    "write_cap_min": 120,             # a write is stopped at this however active the worker is
-    "write_fresh_above_k": {"claude": 150, "codex": 100, "xai": 100},  # a writer session whose context ended above this (k tokens, by its family;
-                                      # a number sets both, 0 = never) is not resumed: a fresh writer gets the brief and what is done
-    "writer_check_max_s": 60,         # a check whose last run took longer is the engine's, never the writer's to run
-    "check_timeout_min": 60,          # one check (engine.checks, a stage's check) running longer is killed, process group and all: exit 124
-    "check_idle_min": 10,             # a check with no new output this long is stopped as hung (process group and all), never retried; 0 = off
-    "gate_timeout_min": 90,           # the same for the gate at land
-    "budget_min_by_label": {},        # {label: minutes}: a bead with a label here gets that budget_min if larger (the largest of its labels)
-    "untracked_ignore": [],           # globs of untracked files never staged and never listed for the review (lifesim: client/Assets/InitTestScene*.unity*)
-    "checks": [],                     # repo checks: [{id, cmd, group: static|tests|acceptance, when: [globs], retry, timeout_min}]
-    "worker_rules": "",               # repo file whose text (3 KB at most) the planner's and the writer's first prompts carry (lifesim: docs/agents/worker-rules.md)
-    "brief_kb": 5,
-    "test_pattern": r"^\s*(def test_|async def test_|\[(Test|UnityTest|Fact|Theory|TestMethod|TestCase)\b|#\[test\]|(it|test)\(|func Test)",                    # a brief bigger than this gets a ⚠ (never cut: the bead may be too big)
-}
 
 # ---- output contracts -----------------------------------------------------------------------------------------------
 
@@ -177,10 +136,15 @@ LOOK_LABEL = "owner-look"
 glob_re = cs.glob_re  # one glob dialect for visual_paths and a check's `inputs` (defined in checks_speed)
 
 
+def check_inputs(c):
+    """A configured check's `inputs` as a list (the file allows one glob as a string)."""
+    return [c.inputs] if isinstance(c.inputs, str) else list(c.inputs)
+
+
 def visual_hit(vp, paths):
     """True when a path matches an include glob and no exclude glob."""
-    inc = [glob_re(g) for g in (vp or {}).get("include") or []]
-    exc = [glob_re(g) for g in (vp or {}).get("exclude") or []]
+    inc = [glob_re(g) for g in vp.include] if vp else []
+    exc = [glob_re(g) for g in vp.exclude] if vp else []
     return any(any(r.match(p) for r in inc) and not any(r.match(p) for r in exc) for p in paths)
 
 TRACKER_TEXT = ("\n\nYour plan was sent back: these checks read the issue tracker (they run bd or read .beads/), which "
@@ -233,7 +197,7 @@ def unused_tool(what, root, cfg):
     tools = tools_named(what)
     if not tools:
         return ""
-    engine_text = " ".join([cfg.get("gate") or ""] + [str(c) for c in cfg.get("checks") or []])
+    engine_text = " ".join([cfg.gate or ""] + [str(c) for c in cfg.checks])
     said = []
     for t in tools:
         r = tl.run_git(root, "grep", "-w", "-I", "-l", "-F", t, capture_output=True, text=True, encoding="utf-8",
@@ -748,11 +712,11 @@ class FixFailed(Blocked):
 
 class Engine:
     def __init__(self, bead, wt, cfg, dry_run=False, verbose=True, store=seams.TlStore(), route=seams.DelegateRoute(), clock=None, git=None,
-                 stores=None):
+                 stores=None, fresh=False):
         self.bead, self.wt, self.cfg, self.dry, self.verbose, self.store, self.router, self.repo = bead, wt, cfg, dry_run, verbose, store, route, git
         self.stats = {"writes": 0, "rounds": 0, "reviews": 0, "replans": 0, "nodes": 0, "tests_added": 0, "tests_removed": 0,
                       "tokens_in": 0, "tokens_cached": 0, "tokens_out": 0}
-        self.session = tl.session_id()
+        self.session, self.fresh = tl.session_id(), fresh
         self.leftovers = []
         self.look_notes, self.look_paths, self.bead_parent = [], [], ""  # tl-bxk.10.23
         self.look_filed = False
@@ -947,7 +911,7 @@ class Engine:
     def delegate_route(self, quiet=False):
         """The delegate for the next call (tl-6ax): resolved again each call (a configured path, then the pin, then the installed
         one). A refused one (another contract, a pin that is gone) keeps the one in use (noted); with none in use the run says why."""
-        new = self.router.resolve(self.cfg.get("delegate", ""))
+        new = self.router.resolve(self.cfg.delegate)
         if isinstance(new, dl.Refusal):
             if self.resolved is None:
                 self.refusal = new
@@ -982,7 +946,7 @@ class Engine:
             older = sorted(p.stem for p in self.log_path.parent.glob("%s-*.jsonl" % self.bead)
                            if p.name < mine and RUN_STEM.match(p.stem[len(self.bead) + 1:]))
             prev = older[-1] if older else ""
-        why = ("reexec" if self.reexec else "fresh" if self.cfg.get("fresh") else "answer" if self.answered else "resume" if self.resumed
+        why = ("reexec" if self.reexec else "fresh" if self.fresh else "answer" if self.answered else "resume" if self.resumed
                else "retry" if prev else "first")
         return {"prev_run": prev, "started_because": lifecycle.normalize_started_because(why, prev),
                 "ask": (self.answered or {}).get("id") or ""}
@@ -1003,7 +967,7 @@ class Engine:
         """tl-05s: one cheap read-only call that reflects on this run: what went well and badly (each bad item with its cause class
         and the session it comes from), what wasted tokens or minutes, what to change. Never blocks or changes the outcome: any
         failure, a missing lane, a paused run, a stop, is no reflection. -> the answer dict or None."""
-        if not self.cfg.get("reflect", True) or self.dry or not self.route or getattr(self, "stop_pending", False):
+        if not self.cfg.reflect or self.dry or not self.route or getattr(self, "stop_pending", False):
             return None
         if not any(s.get("node") in ("write", "review", "verify") for s in self.sessions):
             return None  # a run that only planned has nothing to reflect on
@@ -1243,14 +1207,14 @@ class Engine:
 
     def call_once(self, c):
         """One `route.py run`: through the process seam (a write has its idle watcher), then the records a call leaves."""
-        timeout = float(self.cfg["node_timeout_min"]) * 60
+        timeout = float(self.cfg.node_timeout_min) * 60
         idle = None
         if c.node == "write":  # a write follows its worker's activity; the other nodes keep the wall-clock limit
-            idle = lcall.Idle(*(float(self.cfg[k]) * 60 for k in ("write_idle_warn_min", "write_idle_stop_min", "write_cap_min")),
+            idle = lcall.Idle(*(float(getattr(self.cfg, k)) * 60 for k in ("write_idle_warn_min", "write_idle_stop_min", "write_cap_min")),
                               on_warn=self.warn)
         self.delegate_route()
         runner = self.router.runner(self.err_path, idle, timeout + dl.BACKSTOP_S)
-        limit = float(self.cfg["write_cap_min"]) * 60 + dl.NODE_MARGIN_S if c.node == "write" else timeout
+        limit = float(self.cfg.write_cap_min) * 60 + dl.NODE_MARGIN_S if c.node == "write" else timeout
         req = dl.CallRequest(c.role, c.text, c.schema, c.cwd, c.resume or "", c.writer or "", self.bead, self.session,
                              "%s · %s: %s" % (self.bead, c.node, c.title), int(limit), live=self.live(c.step or c.node))
         cid = self.calls.start(c.step or c.node, c.node, c.role, bool(c.resume), self.live_n)
@@ -1474,8 +1438,8 @@ class Engine:
         d = r.data
         if attempt > 1:
             self.warn("%s needed a retry to produce valid output" % node)
-        if node != "write" and r.secs > float(self.cfg["node_timeout_min"]) * 60 * 0.6:  # a write follows its worker's activity
-            self.warn("%s took %d min, close to the %s min limit" % (node, r.secs // 60, self.cfg["node_timeout_min"]))
+        if node != "write" and r.secs > float(self.cfg.node_timeout_min) * 60 * 0.6:  # a write follows its worker's activity
+            self.warn("%s took %d min, close to the %s min limit" % (node, r.secs // 60, self.cfg.node_timeout_min))
         spent = self.budget.used()
         for mark in (0.5, 0.8):
             if spent > mark and mark not in self.budget_warned:
@@ -1631,7 +1595,7 @@ class Engine:
         its folder in files, the writer's answer names it, or a review accepted it) or "unexplained" (left out of the
         commit, listed in the review brief). A .meta follows the file it belongs to."""
         p = path.replace("\\", "/")
-        if any(fnmatch.fnmatchcase(p, g) for g in self.cfg.get("untracked_ignore") or []):
+        if any(fnmatch.fnmatchcase(p, g) for g in self.cfg.untracked_ignore or []):
             return "ignored"
         if p in self.look_paths or p.startswith(".task/"):  # the look flow's own screenshot copies (copy_looks) are meant
             return "meant" if p in self.look_paths else "ignored"
@@ -1753,7 +1717,7 @@ class Engine:
 
     def base_sha(self):
         """Where the task's work starts: an earlier run's commits on the task branch count as the task's diff."""
-        return self.git("merge-base", self.cfg["base"], "HEAD") or self.cfg["base"]
+        return self.git("merge-base", self.cfg.base, "HEAD") or self.cfg.base
 
     def git(self, *a):
         return tl.git(*a, cwd=self.wt)
@@ -1774,26 +1738,26 @@ class Engine:
                 raise Blocked("failed: worktree %s has uncommitted work of another branch" % self.wt, kind=oc.Kind.FAULT_SLOT)
             self.wip("left from an earlier run")
             self.left_dirty = True
-        if exists and self.cfg.get("fresh"):
+        if exists and self.fresh:
             # tl-19i: --fresh starts the task again on the base: the old branch is kept as task/<id>-stale-<time>, never reset in place
             # and never checked out (lifesim-6pld ran --fresh on its old branch, 56 commits behind, and failed on a missing recipe)
             self.free_branch(branch)
-            if self.git("rev-list", "--count", "%s..%s" % (self.cfg["base"], branch)) not in ("", "0"):
+            if self.git("rev-list", "--count", "%s..%s" % (self.cfg.base, branch)) not in ("", "0"):
                 stale = "%s-stale-%s" % (branch, time.strftime("%Y%m%d-%H%M%S"))
                 if self.git("rev-parse", "--verify", "-q", "refs/heads/" + stale):
                     stale += "-2"
                 rc, tail = self.sh(["git", "branch", "-m", branch, stale], pin=True)
                 if rc:
                     raise Blocked("failed: --fresh could not keep the old branch aside as %s: %s" % (stale, tail.strip()[-200:]), kind=oc.Kind.FAULT_SLOT)
-                self.log.note("--fresh: the old branch %s is kept as %s; the task starts again on %s" % (branch, stale, self.cfg["base"]))
+                self.log.note("--fresh: the old branch %s is kept as %s; the task starts again on %s" % (branch, stale, self.cfg.base))
                 self.comment("Fresh (engine): --fresh: the earlier work on %s is kept as the branch %s; the task starts again on %s." % (
-                    branch, stale, self.cfg["base"]))
+                    branch, stale, self.cfg.base))
             exists = False
         if exists:
             self.free_branch(branch)
             self.sh(["git", "checkout", "-q", branch], check=True, pin=True)
         else:
-            self.sh(["git", "checkout", "-q", "-B", branch, self.cfg["base"]], check=True, pin=True)
+            self.sh(["git", "checkout", "-q", "-B", branch, self.cfg.base], check=True, pin=True)
         for old in self.task_dir.iterdir():  # earlier runs' files are no facts; only the writer's evidence carries over
             if old.name != "evidence":
                 shutil.rmtree(old) if old.is_dir() else old.unlink()
@@ -1817,7 +1781,7 @@ class Engine:
         if not paths:
             return set()
         rules = []
-        base = self.cfg["base"]
+        base = self.cfg.base
         for path in (self.git("ls-tree", "-r", "--name-only", base) or "").splitlines():
             if path.split("/")[-1] != ".gitignore":
                 continue
@@ -1873,11 +1837,11 @@ class Engine:
         (self.run_dir / "brief.md").write_text(text, encoding="utf-8")
         self.brief_file.write_text(text, encoding="utf-8")  # a resumed writer is told where to re-read it (tl-bxk.10.29)
         # the hash is what tells a rerun the owner changed something: the engine's own close line and labels are not that
-        ours = [x for x in (self.cfg.get("pick_label"), self.cfg.get("needs_info_label")) if x]
+        ours = [x for x in (self.cfg.pick_label, self.cfg.needs_info_label) if x]
         self.brief_hash = hashlib.sha1(brief_digest(bead, comments, owner_only=True, ignore=ours).encode("utf-8")).hexdigest()
         kb = len(text.encode("utf-8")) / 1024
-        if kb > float(self.cfg["brief_kb"]):
-            self.warn("the brief is %.0f KB (over %s KB): the bead may be too big for one task" % (kb, self.cfg["brief_kb"]))
+        if kb > float(self.cfg.brief_kb):
+            self.warn("the brief is %.0f KB (over %s KB): the bead may be too big for one task" % (kb, self.cfg.brief_kb))
 
     def add_cases(self, new):
         """A writer may add the cases it discovers; it can never remove one (the plan is the engine's)."""
@@ -1896,7 +1860,7 @@ class Engine:
         on verify asks for the gate; lifesim-gfr.31.1 on 'there is no nographics.out in evidence yet' after the case
         that writes it passed."""
         ran = [c["cmd"] for c in checks if c["exit"] == 0]
-        names = [" ".join(x.split()).lower() for x in [self.cfg["gate"]] + ran if x.strip()]
+        names = [" ".join(x.split()).lower() for x in [self.cfg.gate] + ran if x.strip()]
         cases = self.case_checks()
         cases_ran = bool(cases) and all(c in ran for c in cases)
         out = []
@@ -1980,7 +1944,7 @@ class Engine:
     def rules_text(self):
         """tl-7y6.6.1: the repo's worker rules (engine.worker_rules), inlined; "" when none. A file over RULES_MAX is cut at a line
         and the engine warns: the limit is hard, so the planner and the writer share one text and nobody reads a path."""
-        rel = self.cfg["worker_rules"]
+        rel = self.cfg.worker_rules
         if not rel:
             return ""
         try:
@@ -2001,10 +1965,10 @@ class Engine:
         return [h(self.brief_text()), h(self.plan_text())]
 
     def fresh_above_k(self, family):
-        v = self.cfg.get("write_fresh_above_k", DEFAULTS["write_fresh_above_k"])
+        v = self.cfg.write_fresh_above_k
         if isinstance(v, dict):
             key = "codex" if family == "openai" else family
-            v = v.get(key, DEFAULTS["write_fresh_above_k"].get(key, 0))
+            v = v.get(key, FRESH_ABOVE_K.get(key, 0))
         return float(v or 0)
 
     def drop_big_writer(self, boundary=False):
@@ -2014,7 +1978,7 @@ class Engine:
         ref, ctx = self.writer.get("delegate"), self.writer.get("ctx")
         limit = self.fresh_above_k(self.writer_family or "")
         if boundary and limit:  # write_fresh_above_k 0 means never: the stage limit does not override it
-            b = float(self.cfg.get("write_fresh_stage_k", DEFAULTS["write_fresh_stage_k"]) or 0)
+            b = float(self.cfg.write_fresh_stage_k or 0)
             limit = min(limit, b) if b else limit
         if not ref or not ctx or not limit or ctx <= limit:
             return ""
@@ -2108,7 +2072,7 @@ class Engine:
 
     def landed_since(self):
         """Subjects of what landed on the base since this task's branch left it (as far as the last fetch knows)."""
-        log = self.git("log", "--format=%s", "-n", "8", "%s..%s" % (self.base_sha(), self.cfg["base"]))
+        log = self.git("log", "--format=%s", "-n", "8", "%s..%s" % (self.base_sha(), self.cfg.base))
         return [x[:100] for x in log.splitlines() if x.strip()]
 
     def flakes_text(self):
@@ -2130,7 +2094,7 @@ class Engine:
                        "".join("- %s%s%s\n" % (b, (": " + sm) if sm else "", (" [files: %s]" % ", ".join(fs)) if fs else "") for b, sm, fs in sib))
         landed = self.landed_since()
         if landed:
-            out.append("Landed on %s since this branch left it:\n%s" % (self.cfg["base"], "".join("- %s\n" % x for x in landed)))
+            out.append("Landed on %s since this branch left it:\n%s" % (self.cfg.base, "".join("- %s\n" % x for x in landed)))
         flakes = self.flakes_text()
         return ("\n" + "".join(out) + flakes) if (out or flakes) else ""
 
@@ -2146,13 +2110,13 @@ class Engine:
         is fixed once. The branch is left as it was in the conflict (squash undone), and when there is nothing to do."""
         if self.dry or self.dirty_status():  # (the base-ignored files of an old branch, Unity's logs, are no reason not to rebase)
             return ""
-        behind = self.git("rev-list", "--count", "HEAD..%s" % self.cfg["base"])
+        behind = self.git("rev-list", "--count", "HEAD..%s" % self.cfg.base)
         if behind in ("", "0"):
             return ""
         orig = self.git("rev-parse", "HEAD")
         old_parent = self.git("rev-parse", "-q", "--verify", "HEAD~1") if getattr(self, "left_dirty", False) else ""
         self.squashed = False
-        mb = self.git("merge-base", "HEAD", self.cfg["base"])
+        mb = self.git("merge-base", "HEAD", self.cfg.base)
         if mb and self.git("rev-list", "--count", "%s..HEAD" % mb) not in ("", "0", "1"):  # the wip commits become one, like finish()
             rc, tail = self.sh(["git", "reset", "-q", "--soft", mb], pin=True)
             if not rc:
@@ -2163,7 +2127,7 @@ class Engine:
                 self.squashed = True
                 self.log.note("squashed the branch's wip commits into one before rebasing")
         self.rebase_orig, self.rebase_pre = orig, [x for x in (orig, old_parent) if x]
-        rc, tail = self.sh(["git", "rebase", "-q", self.cfg["base"]], pin=True)
+        rc, tail = self.sh(["git", "rebase", "-q", self.cfg.base], pin=True)
         if rc:
             unmerged = self.git("diff", "--name-only", "--diff-filter=U").split()
             if salvage and unmerged and len(unmerged) <= self.SALVAGE_MAX_FILES:
@@ -2173,10 +2137,10 @@ class Engine:
             if self.squashed:
                 self.sh(["git", "reset", "-q", "--hard", orig], pin=True)
             self.warn("the task branch could not be rebased onto %s before planning: %s"
-                      % (self.cfg["base"], tail.strip().splitlines()[-1][:200] if tail.strip() else "conflict"))
+                      % (self.cfg.base, tail.strip().splitlines()[-1][:200] if tail.strip() else "conflict"))
             return "conflict"
         self.follow_checkpoint()
-        self.log.note("rebased the task branch onto the latest %s (%s commits behind) before planning" % (self.cfg["base"], behind))
+        self.log.note("rebased the task branch onto the latest %s (%s commits behind) before planning" % (self.cfg.base, behind))
         return self.rebased_plan_count()
 
     def follow_checkpoint(self):
@@ -2241,7 +2205,7 @@ class Engine:
         if rc:  # never reset a branch whose work could not be kept
             self.warn("resume conflict, but the branch could not be kept aside (%s): it stays as it was" % tail.strip()[-160:])
             return False
-        self.sh(["git", "checkout", "-q", "-B", branch, self.cfg["base"]], pin=True, check=True)
+        self.sh(["git", "checkout", "-q", "-B", branch, self.cfg.base], pin=True, check=True)
         self.drop_checkpoint()
         self.old_plan, self.amend_why, self.amend_text, self.replan_first = None, "", "", False
         self.plan_data, self.plan_summary = None, ""  # verify_answer stays: the owner's word still goes to the planner
@@ -2253,10 +2217,10 @@ class Engine:
         self.rendered_names, self.last_reqs, self.render_stale = set(), [], False
         self.handoff = {"rounds": [], "seen_lows": []}
         self.steps.move("plan", "resume_conflict", "the branch's earlier work conflicts with %s: kept as %s, planning fresh. %s" % (
-            self.cfg["base"], stale, why[:160]))
-        self.log.note("resume conflict: %s kept as %s; the task starts again on %s" % (branch, stale, self.cfg["base"]))
+            self.cfg.base, stale, why[:160]))
+        self.log.note("resume conflict: %s kept as %s; the task starts again on %s" % (branch, stale, self.cfg.base))
         self.comment("Resume (engine): the earlier work on %s conflicts with %s. It is kept as the branch %s; the task starts again on "
-                     "%s with a fresh plan." % (branch, self.cfg["base"], stale, self.cfg["base"]))
+                     "%s with a fresh plan." % (branch, self.cfg.base, stale, self.cfg.base))
         return True
 
     # -- tl-bxk.13: the handoff record (docs/design/stages.md section 5): what a stage after this one needs to know
@@ -2419,7 +2383,7 @@ class Engine:
             if moved == "conflict-fixable":
                 self.plan_data = self.plan_data or plan
                 moved = self.salvage_resume_conflict()
-            if moved == "conflict" and self.start_again_on_base("Its work: %s" % (self.git("log", "--oneline", "-n", "3", "%s..HEAD" % self.cfg["base"]) or "").replace("\n", "; ")):
+            if moved == "conflict" and self.start_again_on_base("Its work: %s" % (self.git("log", "--oneline", "-n", "3", "%s..HEAD" % self.cfg.base) or "").replace("\n", "; ")):
                 plan, i, state = None, 0, None
             elif moved == "rebased" and plan is not None:
                 self.stage_tree = ""  # the stage's diff starts at the base now: the rebase moved what it was measured from
@@ -2436,9 +2400,9 @@ class Engine:
                         self.save_checkpoint(stage=i, rounds=0, n=0, feedback="", step="write")
                     self.replans += 1
                     self.stats["replans"] = replans = self.replans
-                    if replans > int(self.cfg["max_replans"]) + self.extra:
+                    if replans > int(self.cfg.max_replans) + self.extra:
                         raise self.cap_blocked("stage %d stuck after %s rounds. What failed: %s" % (
-                            i + 1, self.cfg["max_rounds"], self.stuck_why[:600]))
+                            i + 1, self.cfg.max_rounds, self.stuck_why[:600]))
                     self.accepted = []
                     plan = self.plan(again=True)
                     i = 0
@@ -2584,7 +2548,7 @@ class Engine:
             else:
                 self.steps.move("land", "verified", counts)
             return still
-        if self.fixes >= int(self.cfg["max_fix_rounds"]):
+        if self.fixes >= int(self.cfg.max_fix_rounds):
             self.steps.move("ask", "verify_wrong", "%d found wrong, no fix round left" % len(wrong))
             return still + [dict(u, why="found wrong: %s; no fix round left" % u["why"]) for u in wrong]
         self.steps.move("fix", "verify_wrong", "%d found wrong: %s" % (len(wrong), "; ".join(u["why"] for u in wrong)))
@@ -2605,14 +2569,14 @@ class Engine:
             pending = [u for u in left if u.get("proof_round")]
             if not pending:
                 return left
-            if self.fixes >= int(self.cfg["max_fix_rounds"]):  # a bead with an unproven checkable item never lands
+            if self.fixes >= int(self.cfg.max_fix_rounds):  # a bead with an unproven checkable item never lands
                 raise self.proof_stuck(pending)
             still = [u for u in left if not u.get("proof_round")]
             self.steps.move("fix", "verify_unproven", "%d still unproven after the fix round" % len(pending))
 
     def proof_stuck(self, items):
         return Blocked("the check before land: nothing proves %s after %d fix rounds: it needs the owner's hint" % (
-            "; ".join(u["what"] for u in items)[:600], int(self.cfg["max_fix_rounds"])), kind=oc.Kind.ASK_STUCK)
+            "; ".join(u["what"] for u in items)[:600], int(self.cfg.max_fix_rounds)), kind=oc.Kind.ASK_STUCK)
 
     def diff_text(self):
         tree = self.tree_hash()
@@ -2699,7 +2663,7 @@ class Engine:
         if k == "engine_step" or route == "engine_step":
             return "settled", dict(a, evidence="the engine does this at land"), "the engine does this at land", ""
         if k == "checkable":
-            if self.fixes >= int(self.cfg["max_fix_rounds"]):
+            if self.fixes >= int(self.cfg.max_fix_rounds):
                 raise self.proof_stuck([u])
             return "wrong", a, "add a test or check that proves: %s" % u["what"], "proof"
         if k in ("external_fact", "taste"):
@@ -2747,9 +2711,9 @@ class Engine:
     def gate_names(self):
         """Names a verify item can use for a check the engine runs by itself (the gate, a configured check, a plan stage
         check or case): its id, its command, and the command without its runner (`just unity-tests` -> unity-tests)."""
-        cmds = [self.cfg.get("gate") or ""] + [c.get("cmd", "") for c in self.cfg.get("checks") or []] + [
+        cmds = [self.cfg.gate or ""] + [c.cmd for c in self.cfg.checks] + [
             c for st in (getattr(self, "plan_data", None) or {}).get("stages") or [] for c in st["checks"]] + self.case_checks()
-        names = [str(c.get("id") or "") for c in self.cfg.get("checks") or []]
+        names = [c.id for c in self.cfg.checks]
         for c in cmds:
             c = " ".join(c.split())
             rest = self.GATE_RUNNER.sub("", c)
@@ -2913,7 +2877,7 @@ class Engine:
         bad, gated, dry = lint.tracker_checks(data), lint.gate_only_checks(data, self.cfg), lint.dry_check(data, self.wt)
         rep = self.repeated_slow(data)
         only = gate_only_criteria(data, self.cfg)
-        led = (lint.ledger_problems(data) + lint.timeout_problems(data, self.cfg["check_timeout_min"])
+        led = (lint.ledger_problems(data) + lint.timeout_problems(data, self.cfg.check_timeout_min)
                + lint.unity_problems(data, self.cfg))
         if led:
             dry = dry + led  # sent back with the checks that cannot run
@@ -2932,7 +2896,7 @@ class Engine:
                                                for part, cs, rid in rep)
             if only:
                 self.warn("the plan's acceptance is only the gate, sent back (%s): %s" % (GATE_ONLY_ACCEPTANCE, "; ".join(only)[:300]))
-                why += GATE_ONLY_ACCEPTANCE_TEXT % (GATE_ONLY_ACCEPTANCE, self.cfg["gate"] or "the gate", "\n".join("- %s" % c for c in only))
+                why += GATE_ONLY_ACCEPTANCE_TEXT % (GATE_ONLY_ACCEPTANCE, self.cfg.gate or "the gate", "\n".join("- %s" % c for c in only))
             if bad:
                 self.warn("the plan's checks read the issue tracker, sent back: %s" % "; ".join(bad)[:300])
                 why += TRACKER_TEXT % "\n".join("- `%s`" % c for c in bad)
@@ -2982,7 +2946,7 @@ class Engine:
         already runs, redirects aside. lifesim-fld.10: `just unity-tests` three times a round, 99 min in two rounds; the exact
         repeat is reused (tl-bxk.10.27), a repeat wrapped in `mkdir && cmd > a.out && grep` is not."""
         secs, out = self.check_secs(), {}
-        repo = {norm_cmd(k.get("cmd") or ""): k.get("id") or k.get("cmd") for k in self.cfg.get("checks") or []}
+        repo = {norm_cmd(k.cmd): k.id for k in self.cfg.checks}
         stages = plan.get("stages") or []
         extra = [x["check"] for k in ("risks", "cases") for x in plan.get(k) or []]  # they run with the last stage
         blocks = [list(st["checks"]) + (extra if k == len(stages) - 1 else []) for k, st in enumerate(stages)] or [extra]
@@ -2993,7 +2957,7 @@ class Engine:
                 for part in dict.fromkeys(norm_cmd(self.REDIRECT.sub("", p)) for p, _ in (parts or [(c, "")]) if p.strip()):
                     if not (self.GATE_RUNNER.match(part) or self.SLOW_RUNNER.match(part)):
                         continue
-                    if SLOW_CMD.search(part) or secs.get(part, 0) > float(self.cfg["writer_check_max_s"]):
+                    if SLOW_CMD.search(part) or secs.get(part, 0) > float(self.cfg.writer_check_max_s):
                         found.setdefault(part, []).append(c)
             for part, cs in found.items():
                 if (len(set(cs)) >= 2 or part in repo) and any(norm_cmd(c) != part for c in cs):
@@ -3005,7 +2969,7 @@ class Engine:
         """The re-plan cap's ask: the planner ran `planned` times. An answer with "allow" or "more" gives one more."""
         why = "; ".join("%d. %s: %s" % (k + 1, e["mode"], e["why"]) for k, e in enumerate(self.plan_log))[:1500]
         return Blocked(REPLAN_CAP + "%d times (the limit is %d plan + %d amends): %s%s" % (
-            self.planned, 1, int(self.cfg["max_replans"]) + self.extra, why, ("; " + detail) if detail else ""),
+            self.planned, 1, int(self.cfg.max_replans) + self.extra, why, ("; " + detail) if detail else ""),
             "This bead was planned %d times, so the engine stops instead of burning more planner runs. Why each time: %s\n"
             "Choose: split the bead; clarify it (comment what the plan keeps missing); or reply \"allow one more\"." % (
                 self.planned, why), kind=oc.Kind.ASK_STUCK)
@@ -3051,7 +3015,7 @@ class Engine:
         # parked 'stuck: re-planned 3 times' on 'the owner answered ask yxbb.3-1')
         owner = (bool(old) and not again and (self.amend_why or "").startswith("bead changed: the owner answered")
                  and not (self.answered or {}).get("why", "").startswith(REPLAN_CAP))  # a cap ask answered 'split' stays blocked
-        if not owner and self.planned >= 1 + int(self.cfg["max_replans"]) + self.extra:
+        if not owner and self.planned >= 1 + int(self.cfg.max_replans) + self.extra:
             raise self.cap_blocked()
         if not owner:
             self.planned += 1
@@ -3088,15 +3052,15 @@ class Engine:
         if self.visual_cfg() and self.shot_methods():  # the classes mean "the engine renders": only with a shot table
             rules.append(VISUAL_PLAN % self.references_text())
             vp = self.visual_cfg()
-            rules.append(VISUAL_STAGES % (", ".join(vp.get("include") or [])[:300], looks.table_text(self.shot_methods())))
+            rules.append(VISUAL_STAGES % (", ".join(vp.include)[:300], looks.table_text(self.shot_methods())))
         rules.append("Proof files that a check reads or a reviewer looks at (screenshots, logs, probe output) go under "
                      "%s: it is kept across runs, and nothing else under %s is." % (self.evidence_dir, self.task_dir))
         rules.append("Checks run on the uncommitted working tree after each write. The engine runs the gate%s once, on "
                      "the rebased tree at land: never put %s in a stage's checks, and a criterion that names it is proven "
                      "by that land gate: write no case for it." % (
-                         (" (`%s`)" % self.cfg["gate"]) if self.cfg["gate"] else "",
-                         ("`%s`" % self.cfg["gate"]) if self.cfg["gate"] else "it"))
-        extra_gated = [(c, why) for c, why in lint.gate_only(self.cfg) if c != " ".join(self.cfg["gate"].split())]
+                         (" (`%s`)" % self.cfg.gate) if self.cfg.gate else "",
+                         ("`%s`" % self.cfg.gate) if self.cfg.gate else "it"))
+        extra_gated = [(c, why) for c, why in lint.gate_only(self.cfg) if c != " ".join(self.cfg.gate.split())]
         if extra_gated:
             rules.append("These run only in the gate at land too, never in a check: " + "; ".join(
                 "`%s`%s" % (c, " (%s)" % why if why else "") for c, why in extra_gated) + ".")
@@ -3169,7 +3133,7 @@ class Engine:
                 (self.run_dir / "plan.json").write_text(json.dumps(data, indent=1))
                 return data
             raise Blocked("failed: the plan has no stages", kind=oc.Kind.FAULT_PLAN)
-        big = int(self.cfg["max_stages"])
+        big = int(self.cfg.max_stages)
         if len(data["stages"]) > big and (self.answered or {}).get("kind") != "ticket":
             raise Blocked("ticket: the plan has %d stages (more than %d): the bead may be too big for one task" % (
                 len(data["stages"]), big), "Split the bead into these, or comment that it stays one bead:\n" + "\n".join(
@@ -3191,7 +3155,7 @@ class Engine:
     def plan_fits(self, data):
         """A plan worth keeping through a stop: it has stages, asks nothing, and is not a split ask."""
         return bool(data["stages"] and not data["question"].strip() and (
-            len(data["stages"]) <= int(self.cfg["max_stages"]) or (self.answered or {}).get("kind") == "ticket"))
+            len(data["stages"]) <= int(self.cfg.max_stages) or (self.answered or {}).get("kind") == "ticket"))
 
     def plan_leftovers(self, data):
         """The follow-up work the plan wants filed: filed at the close with the reviews' leftovers. Only a plan the run
@@ -3213,7 +3177,7 @@ class Engine:
         if a.get("status") not in ("open", "parked"):  # a parked ask (3 days, no answer) still waits
             return
         given = bool(str(a.get("answer") or "").strip())  # tl-gy4: an answer filed on the ask is an answer, whether or not the bead changed
-        if a.get("brief") == self.brief_hash and not self.cfg.get("fresh") and not given:
+        if a.get("brief") == self.brief_hash and not self.fresh and not given:
             raise Blocked("waiting: for the owner's answer to ask %s (%s): %s" % (a["id"], a["kind"], fmt.clip(ask_line(a["question"]), 200)), kind=oc.Kind.WAIT_ASK)
         a.update(status="answered", answered=time.time())
         self.ask_path().write_text(json.dumps(a, indent=1))
@@ -3253,7 +3217,7 @@ class Engine:
         """A decision or ticket ask means the bead lacks what it needs to be done unattended: drop the pick label so no
         runner takes it again, add needs-info. Answering does not put it back; the owner relabels it (an answer can
         split the bead). Verify and stuck asks keep it: the work is there, a fact or a hint is missing."""
-        pick, info = self.cfg.get("pick_label") or "", self.cfg.get("needs_info_label") or ""
+        pick, info = self.cfg.pick_label or "", self.cfg.needs_info_label or ""
         if not pick or self.dry or pick not in ((self.store.show(self.bead) or {}).get("labels") or []):
             return ""
         self.store.bd("label", "remove", self.bead, pick)
@@ -3326,7 +3290,7 @@ class Engine:
         the rest; otherwise the run goes on at the same stage and round, with the same writer thread, or straight to
         land when every stage was accepted."""
         self.replan_first = False
-        if self.cfg.get("fresh"):
+        if self.fresh:
             self.drop_checkpoint()
         try:
             ck = json.loads(self.checkpoint_path().read_text())
@@ -3497,14 +3461,14 @@ class Engine:
             boundary = n == 1 and i > 0 and not state  # the first write of a later stage
             fresh = self.drop_big_writer(boundary)
             stage_checks = self.stage_checks_text(st["checks"], skip=failed_cmds)
-            where_text = self.where("write", [c["cmd"] for c in self.cfg["checks"]] + st["checks"], failed_cmds, listed=st["checks"])
+            where_text = self.where("write", [c.cmd for c in self.cfg.checks] + st["checks"], failed_cmds, listed=st["checks"])
             tail = ("\nThe plan's acceptance cases run on the last stage. If you find a case they miss, add it to new_cases (the "
                     "criterion it proves, the check, why); never remove or weaken one." + ("" if last else LATER_CASES) +
                     UNCHECKED_TEXT + self.look_write(st))
             prompt = write_prompt(
                 self.rules_text(), brief=self.brief_text(), plan=self.plan_text(), n=i + 1, goal=st["goal"],
                 files=", ".join(st["files"]), checks=stage_checks,
-                feedback=feedback, evidence=self.evidence_dir, where=where_text, gate=(" (`%s`)" % self.cfg["gate"]) if self.cfg["gate"] else "") + tail
+                feedback=feedback, evidence=self.evidence_dir, where=where_text, gate=(" (`%s`)" % self.cfg.gate) if self.cfg.gate else "") + tail
             if fresh:
                 prompt += self.stages_done_text() if boundary else self.done_so_far()
             dtail = ""  # what a resumed writer still needs that its first prompt did not say for this stage
@@ -3536,7 +3500,7 @@ class Engine:
                 self.stats["rounds"] += 1
                 self.stuck_why = "the writer asked what an accepted requirement decides: %s" % w["decided"]
                 self.warn("%s: %s" % (name, self.stuck_why[:300]))
-                if rounds >= int(self.cfg["max_rounds"]):
+                if rounds >= int(self.cfg.max_rounds):
                     (self.run_dir / "replan.md").write_text(self.stuck_why + "\n\nThe question: " + w["question"])
                     self.steps.move("replan", "rounds_used", "%d rounds used: %s" % (rounds, self.stuck_why))
                     return "replan"
@@ -3579,7 +3543,7 @@ class Engine:
             (self.run_dir / "engine-checks.json").write_text(json.dumps(checks, indent=1))
             (self.run_dir / ("engine-checks.r%d.json" % self.check_round)).write_text(json.dumps(checks, indent=1))
             self.last_checks, self.checks_tree = checks, self.tree_hash()
-            self.stats["tests_added"], self.stats["tests_removed"] = count_tests(self.task_diff(), self.cfg["test_pattern"])
+            self.stats["tests_added"], self.stats["tests_removed"] = count_tests(self.task_diff(), self.cfg.test_pattern)
             if self.stats["tests_removed"]:
                 self.warn("the task's diff removes %d tests" % self.stats["tests_removed"])
             failed = [c for c in checks if c["exit"] not in (0, None)]
@@ -3606,13 +3570,13 @@ class Engine:
                     feedback += REPEAT_RED % "\n".join("- %s" % c[:200] for c in again)
                 red_text = "%d failed: %s" % (len(failed), ", ".join(c["id"][:60] for c in failed))
                 self.note_round(name, rounds + 1, "checks_red", w["summary"], [c["id"] for c in failed])
-                if red < int(self.cfg["max_check_tries"]):
+                if red < int(self.cfg.max_check_tries):
                     self.steps.move("write", "checks_red", red_text)
                     continue
                 red, rounds = 0, rounds + 1
                 self.stats["rounds"] += 1
-                self.stuck_why = "checks still red after %s tries: %s" % (self.cfg["max_check_tries"], compact(failed))
-                if rounds >= int(self.cfg["max_rounds"]):
+                self.stuck_why = "checks still red after %s tries: %s" % (self.cfg.max_check_tries, compact(failed))
+                if rounds >= int(self.cfg.max_rounds):
                     (self.run_dir / "replan.md").write_text(self.stuck_why + "\n\nTheir output:\n" + failure_brief(failed, self.run_dir))
                     self.steps.move("replan", "rounds_used", "%s; %d rounds used" % (red_text, rounds))
                     return "replan"
@@ -3626,7 +3590,7 @@ class Engine:
             review, _ = self.ai("review", name, review_prompt(
                 brief=self.brief_text(), plan=self.plan_text(), n=i + 1, goal=st["goal"],
                 work=self.stage_work(kinds["unexplained"], kinds["ignored"]), checks=compact(checks), summary=w["summary"], evidence=self.evidence_dir,
-                gate=(" (`%s`)" % self.cfg["gate"]) if self.cfg["gate"] else "",
+                gate=(" (`%s`)" % self.cfg.gate) if self.cfg.gate else "",
                 added=self.stats["tests_added"], removed=self.stats["tests_removed"],
                 fix=fix, last=last, fix_scope=state["scope"] if fix else "") +
                 ("\n" + self.where("review") if self.where("review") else "") + self.cases_text() +
@@ -3686,7 +3650,7 @@ class Engine:
             self.stats["rounds"] += 1
             self.stuck_why = "the review still sends it back: %s" % "; ".join(
                 review["unmet"] + ["%s:%s %s" % (f["file"], f["line"], f["fix"]) for f in blocking])
-            if rounds >= int(self.cfg["max_rounds"]):
+            if rounds >= int(self.cfg.max_rounds):
                 (self.run_dir / "replan.md").write_text(self.stuck_why)
                 self.steps.move("replan", "rounds_used", "review sent it back: %s; %d rounds used" % (said, rounds))
                 return "replan"
@@ -3749,9 +3713,9 @@ class Engine:
         """A check the writer must not run: its longest passing run (else longest run) took over engine.writer_check_max_s,
         or it never ran and looks like a Unity, play, full test, check or build run."""
         s = secs.get(norm_cmd(cmd), secs.get(cmd))
-        if cmd == self.cfg.get("gate"):
+        if cmd == self.cfg.gate:
             return True
-        return s > float(self.cfg["writer_check_max_s"]) if s is not None else bool(SLOW_CMD.search(cmd))
+        return s > float(self.cfg.writer_check_max_s) if s is not None else bool(SLOW_CMD.search(cmd))
 
     def stage_checks_text(self, checks, skip=None):
         """The stage's check list split for the writer: the fast ones it may run, the slow ones the engine runs alone.
@@ -3881,17 +3845,14 @@ class Engine:
         the repo's build checks only; every other check is recorded as skipped (conflict_fix) and the gate verifies the result."""
         self.steps.begin("checks", "checks: %s" % name, **meta)
         self.check_round += 1
-        items = [{"id": c.get("id") or c["cmd"], "cmd": c["cmd"], "group": c.get("group") or "tests",
-                  "when": c.get("when") or [], "retry": int(c.get("retry") or 0),
-                  "timeout": float(c.get("timeout_min") or self.cfg["check_timeout_min"]),
-                  "cache": c.get("cache", True) is not False,
-                  "idle": float(c.get("idle_min", self.cfg["check_idle_min"]) or 0) * 60,
-                  "inputs": [c["inputs"]] if isinstance(c.get("inputs"), str) else list(c.get("inputs") or []),
-                  "inputs_only": bool(c.get("inputs_only")), "exclude": list(c.get("exclude") or []), "env": c.get("env") or {},
-                  "repo": True} for c in self.cfg["checks"]]
+        items = [{"id": c.id, "cmd": c.cmd, "group": c.group, "when": list(c.when), "retry": c.retry,
+                  "timeout": float(c.timeout_min or self.cfg.check_timeout_min), "cache": c.cache is not False,
+                  "idle": float(self.cfg.check_idle_min if c.idle_min is None else c.idle_min) * 60,
+                  "inputs": check_inputs(c), "inputs_only": c.inputs_only, "exclude": list(c.exclude), "env": dict(c.env),
+                  "repo": True} for c in self.cfg.checks]
         items += [{"id": c, "cmd": c, "group": "acceptance", "when": [], "retry": 0,
-                   "timeout": float(self.cfg["check_timeout_min"]), "cache": False, "inputs": [], "inputs_only": False, "env": {},
-                   "idle": float(self.cfg["check_idle_min"] or 0) * 60} for c in st["checks"]]
+                   "timeout": float(self.cfg.check_timeout_min), "cache": False, "inputs": [], "inputs_only": False, "env": {},
+                   "idle": float(self.cfg.check_idle_min or 0) * 60} for c in st["checks"]]
         pre_skipped = []
         if conflict_fix is not None:
             keep = [c for c in items if c["cmd"] == self.MARKERS or (c.get("repo") and CONFLICT_BUILD.search(c["id"] + " " + c["cmd"]))]
@@ -3943,9 +3904,9 @@ class Engine:
         except (OSError, ValueError):
             cache = {}
         tree = self.tree_hash()
-        key = "%s %s" % (tree, self.git("rev-parse", self.cfg["base"]))
+        key = "%s %s" % (tree, self.git("rev-parse", self.cfg.base))
         by_inputs = cache.get("inputs") if isinstance(cache.get("inputs"), dict) else {}  # per-check: command + hash of its `inputs` files
-        keys = cs.InputKeys(self.wt, tree, self.git("rev-parse", self.cfg["base"]))  # per-check keys, listed lazily
+        keys = cs.InputKeys(self.wt, tree, self.git("rev-parse", self.cfg.base))  # per-check keys, listed lazily
         logs = self.run_dir / "checks"
         logs.mkdir(exist_ok=True)
         timings = []  # (cmd, secs) of what ran, for the duration history
@@ -4114,13 +4075,13 @@ class Engine:
         tip = self.git("rev-parse", "--verify", "-q", "HEAD")
         if not tip or not self.git("log", "-1", "--format=%s").endswith("(%s)" % self.bead):
             return ""
-        return tip if self.sh(["git", "merge-base", "--is-ancestor", tip, self.cfg["base"]], pin=True)[0] == 0 else ""
+        return tip if self.sh(["git", "merge-base", "--is-ancestor", tip, self.cfg.base], pin=True)[0] == 0 else ""
 
     def landed_found(self, sha):
         self.landed_sha = sha
         tl.cmd_land(Args(id=self.bead, sha=sha, worktree=self.wt))
         self.steps.outcome("landed", sha[:12])
-        self.warn("the push had already gone through (%s is on %s): not pushed again" % (sha[:12], self.cfg["base"]))
+        self.warn("the push had already gone through (%s is on %s): not pushed again" % (sha[:12], self.cfg.base))
         return sha
 
     def finish(self, bead):
@@ -4130,11 +4091,11 @@ class Engine:
         if found:
             return self.landed_found(found)
         if not self.git("status", "--porcelain"):
-            if self.git("rev-list", "--count", "%s..HEAD" % self.cfg["base"]) in ("", "0"):
+            if self.git("rev-list", "--count", "%s..HEAD" % self.cfg.base) in ("", "0"):
                 self.log.note("nothing changed")
                 return ""
         # one commit per task, titled after the bead: earlier runs' wip commits are folded in
-        base = self.git("merge-base", "HEAD", self.cfg["base"])
+        base = self.git("merge-base", "HEAD", self.cfg.base)
         if base:
             self.sh(["git", "reset", "-q", "--soft", base], check=True, pin=True)
         self.copy_looks()
@@ -4168,12 +4129,12 @@ class Engine:
                         if found:
                             return self.landed_found(found)
                     if rc == 0:
-                        rc, tail = self.sh(["git", "rebase", "-q", self.cfg["base"]], pin=True)
+                        rc, tail = self.sh(["git", "rebase", "-q", self.cfg.base], pin=True)
                     if rc:
                         unmerged = self.git("diff", "--name-only", "--diff-filter=U")
                         if not unmerged:
                             self.sh(["git", "rebase", "--abort"], pin=True)
-                            raise Blocked("failed: fetch or rebase onto %s failed; branch kept\n%s" % (self.cfg["base"], tail), kind=oc.Kind.FAULT_LAND)
+                            raise Blocked("failed: fetch or rebase onto %s failed; branch kept\n%s" % (self.cfg.base, tail), kind=oc.Kind.FAULT_LAND)
                         problem = ("conflict", "Conflicted files: %s\n%s" % (", ".join(unmerged.split()), tail))
                         self.steps.outcome("conflict", ", ".join(unmerged.split()))
                     if not problem and pushes:
@@ -4203,17 +4164,17 @@ class Engine:
                         if stop:
                             raise Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)
                         self.steps.begin("land", "land (try %d)" % (pushes + 1), **{"try": pushes + 1})
-                    if not problem and self.cfg["gate"]:
+                    if not problem and self.cfg.gate:
                         self.gate_log = self.run_dir / ("gate.r%d.log" % (self.fixes + 1))
                         gtree = self.git("rev-parse", "HEAD^{tree}")
                         gate_t, gate_skipped = time.time(), False
-                        self.log.emit(rec.GateStart(cmd=self.cfg["gate"], log=str(self.gate_log), tree=gtree))
+                        self.log.emit(rec.GateStart(cmd=self.cfg.gate, log=str(self.gate_log), tree=gtree))
                         if self.gate_green(gtree):  # the gate already passed on exactly this tree (a push rejected, a re-land)
-                            self.log.note("gate skipped: `%s` already passed on tree %s" % (self.cfg["gate"][:80], gtree[:12]))
+                            self.log.note("gate skipped: `%s` already passed on tree %s" % (self.cfg.gate[:80], gtree[:12]))
                             rc, tail, gate_skipped = 0, "", True
                         else:
                             green = self.green_checks(gtree)  # repo checks green on this tree's inputs: the gate may skip their part
-                            rc, tail = self.sh(self.cfg["gate"], save=self.gate_log, timeout=float(self.cfg["gate_timeout_min"]) * 60,
+                            rc, tail = self.sh(self.cfg.gate, save=self.gate_log, timeout=float(self.cfg.gate_timeout_min) * 60,
                                                env={"TL_CHECKS_GREEN": ",".join(green)} if green else None)
                             if rc == 0:
                                 self.gate_record(gtree)
@@ -4227,8 +4188,8 @@ class Engine:
                     if not problem:
                         with self.stop_deferred() as stop:  # a push half done is no state to stop in: finish it, then stop
                             gated = self.git("rev-parse", "HEAD^{tree}")  # a pre-push hook may skip a gate this exact tree passed
-                            rc, tail = self.sh(self.cfg["land"], pin=True, env={"TASK_LOOP_GATED_TREE": gated, "TL_GATE_PASSED": gated}
-                                               if self.cfg["gate"] else None)
+                            rc, tail = self.sh(self.cfg.land, pin=True, env={"TASK_LOOP_GATED_TREE": gated, "TL_GATE_PASSED": gated}
+                                               if self.cfg.gate else None)
                             if rc == 0:
                                 self.landed_sha = sha = self.git("rev-parse", "HEAD")
                                 tl.cmd_land(Args(id=self.bead, sha=sha, worktree=self.wt))
@@ -4262,7 +4223,7 @@ class Engine:
                     break  # a red check/gate or conflict is fixed outside the land lock
             if rest:
                 continue
-            if self.fixes < int(self.cfg["max_fix_rounds"]):
+            if self.fixes < int(self.cfg.max_fix_rounds):
                 self.steps.move("fix", {"gate": "gate_red", "verify": "checks_red", "conflict": "conflict"}[problem[0]],
                                 "gate red on the rebased tree: %s" % (problem[1].strip().splitlines() or [""])[-1][:200]
                                 if problem[0] == "gate" else problem[1].splitlines()[0])
@@ -4289,11 +4250,11 @@ class Engine:
             got = json.loads(self.gate_file().read_text())
         except (OSError, ValueError):
             return False
-        return bool(tree) and got.get("tree") == tree and got.get("cmd") == cs.norm(self.cfg.get("gate") or "")
+        return bool(tree) and got.get("tree") == tree and got.get("cmd") == cs.norm(self.cfg.gate or "")
 
     def gate_record(self, tree):
         try:
-            self.gate_file().write_text(json.dumps({"tree": tree, "cmd": cs.norm(self.cfg.get("gate") or "")}))
+            self.gate_file().write_text(json.dumps({"tree": tree, "cmd": cs.norm(self.cfg.gate or "")}))
         except OSError:
             pass
 
@@ -4304,18 +4265,18 @@ class Engine:
         except (OSError, ValueError):
             return []
         by_inputs = cache.get("inputs") if isinstance(cache.get("inputs"), dict) else {}
-        whole = cache.get("%s %s" % (tree, self.git("rev-parse", self.cfg["base"]))) or {}
-        keys, out = cs.InputKeys(self.wt, tree, self.git("rev-parse", self.cfg["base"])), []
-        for c in self.cfg.get("checks") or []:
-            if c.get("cache", True) is False:
+        whole = cache.get("%s %s" % (tree, self.git("rev-parse", self.cfg.base))) or {}
+        keys, out = cs.InputKeys(self.wt, tree, self.git("rev-parse", self.cfg.base)), []
+        for c in self.cfg.checks:
+            if c.cache is False:
                 continue
-            globs = [c["inputs"]] if isinstance(c.get("inputs"), str) else list(c.get("inputs") or [])
-            if globs:
-                ok = not keys.dead(dict(c, inputs=globs)) and bool(by_inputs.get(keys.key(dict(c, inputs=globs)) or "-"))
+            d = dict(dataclasses.asdict(c), inputs=check_inputs(c))
+            if d["inputs"]:
+                ok = not keys.dead(d) and bool(by_inputs.get(keys.key(d) or "-"))
             else:
-                ok = c["cmd"] in whole
+                ok = c.cmd in whole
             if ok:
-                out.append(str(c.get("id") or c["cmd"]))
+                out.append(c.id)
         return out
 
     FIX = {"gate": ("make the gate pass on the tree rebased onto the latest base",
@@ -4336,7 +4297,7 @@ class Engine:
         before the task's commit) stays in the tree. max_fix_rounds per bead, then stuck. Returns the fix stage's end.
         resume: the conflict is the resume rebase's (tl-7y6.2.19), so the checkpoint stays where it is."""
         self.fixes += 1
-        limit = int(self.cfg["max_fix_rounds"])
+        limit = int(self.cfg.max_fix_rounds)
         what = {"gate": "gate red on the rebased tree", "conflict": "merge conflict with main",
                 "verify": "the check before land found defects"}[kind]
         if self.fixes > limit:
@@ -4356,10 +4317,10 @@ class Engine:
         st = {"goal": "Fix: " + goal, "files": [], "checks": checks, "hard": False}
         d = self.stage({"stages": [st]}, 0, {
             "fix": True, "conflict_fix": skip, "name": "fix %d/%d" % (self.fixes, limit), "fix_n": self.fixes, "fix_of": limit,
-            "failed": [self.cfg["gate"] or "rebase"] if kind == "gate" else None,
+            "failed": [self.cfg.gate or "rebase"] if kind == "gate" else None,
             "feedback": text % tail if kind == "verify" else text % (
-                (" (`%s`)" % self.cfg["gate"]) if kind == "gate" and self.cfg["gate"] else "",
-                failure_brief([{"cmd": self.cfg["gate"] or "rebase", "exit": 1, "status": "failed", "group": "gate",
+                (" (`%s`)" % self.cfg.gate) if kind == "gate" and self.cfg.gate else "",
+                failure_brief([{"cmd": self.cfg.gate or "rebase", "exit": 1, "status": "failed", "group": "gate",
                                 "tail": tail, "log": str(getattr(self, "gate_log", "") or "")}], self.run_dir)
                 if kind == "gate" else compact([{"cmd": "rebase", "exit": 1, "status": "failed", "group": "gate",
                                                  "tail": tail}])),
@@ -4388,8 +4349,8 @@ class Engine:
 
     # -- look and feel (tl-bxk.10.23): screenshots for a visual change, judged by the agent, held for the owner's batch
     def visual_cfg(self):
-        vp = self.cfg.get("visual_paths")
-        return vp if isinstance(vp, dict) and vp.get("include") else None
+        vp = self.cfg.visual_paths
+        return vp if vp and vp.include else None
 
     def is_look(self, u):
         return bool(self.visual_cfg()) and bool(LOOK_ITEM.search(u["what"]))
@@ -4425,10 +4386,10 @@ class Engine:
         {} when unset or unreadable (then a visual stage works the old way)."""
         if getattr(self, "_shot_methods", None) is None:
             self._shot_methods = {}
-            rel = (self.cfg.get("shot_table") or "").strip()
+            rel = (self.cfg.shot_table or "").strip()
             if rel:
-                text = self.git("show", "%s:%s" % (self.cfg["base"], rel))
-                methods, err = looks.parse_table(text) if text else ({}, "%s is not on %s" % (rel, self.cfg["base"]))
+                text = self.git("show", "%s:%s" % (self.cfg.base, rel))
+                methods, err = looks.parse_table(text) if text else ({}, "%s is not on %s" % (rel, self.cfg.base))
                 if err:
                     self.warn("engine.shot_table: %s; visual stages work the old way" % err)
                 self._shot_methods = methods
@@ -4439,7 +4400,7 @@ class Engine:
 
     def planner_notes(self):
         """engine.planner_notes: text, or "@path" of a repo file (read from the worktree), at most 2000 characters."""
-        v = (self.cfg.get("planner_notes") or "").strip()
+        v = (self.cfg.planner_notes or "").strip()
         if v.startswith("@"):
             try:
                 v = (Path(self.wt) / v[1:]).read_text(encoding="utf-8").strip()
@@ -4488,7 +4449,7 @@ class Engine:
         for rel in dict.fromkeys(re.findall(r"[\w./-]+\.(?:png|jpe?g)\b", self.brief_text(), re.I)):
             if (Path(self.wt) / rel).is_file():
                 found.append(rel)
-        dest = (self.cfg.get("evidence_dir") or "").strip("/")
+        dest = (self.cfg.evidence_dir or "").strip("/")
         before = sorted(Path(self.wt, dest).glob("*/*.png"))[-6:] if dest and Path(self.wt, dest).is_dir() else []
         if not (found or before):
             return ("No reference image is in the task or under the repo's look reviews. If the task does not say what it should "
@@ -4497,7 +4458,7 @@ class Engine:
 
     def before_shot(self, name):
         """A landed picture of the same screen (same file name under evidence_dir, another bead's folder): the newest."""
-        dest = (self.cfg.get("evidence_dir") or "").strip("/")
+        dest = (self.cfg.evidence_dir or "").strip("/")
         if not dest or not Path(self.wt, dest).is_dir():
             return None
         cands = [f for f in Path(self.wt, dest).glob("*/" + glob.escape(name)) if f.parent.name != self.bead]
@@ -4537,7 +4498,7 @@ class Engine:
                 names.append(name)
                 self.evidence_dir.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(f, self.evidence_dir / name)
-                looks.downscale(f, base / name, int(self.cfg["look_max_px"]))
+                looks.downscale(f, base / name, int(self.cfg.look_max_px))
         self.rendered_names |= set(names)
         if names:
             self.render_stale = False
@@ -4582,7 +4543,7 @@ class Engine:
         """After a visual write: the cheap checks, the shots the writer asked for, the look judge. -> the feedback that sends the
         writer back with the defects (text and picture paths), or "" to go on to the full checks. At most engine.look_rounds
         render rounds per stage; a defect that comes back is a leftover with the pictures, not another write."""
-        if not self.look_ready(st) or self.look_done >= int(self.cfg["look_rounds"]) or self.dry:
+        if not self.look_ready(st) or self.look_done >= int(self.cfg.look_rounds) or self.dry:
             return ""
         reqs = [r for r in w.get("shots") or [] if isinstance(r, dict)]
         if not reqs:
@@ -4604,7 +4565,7 @@ class Engine:
         prev, self.look_prev = self.look_prev, defects
         again = [d for d in defects if any(looks.same_defect(d["why"] + " " + d["where"], p["why"] + " " + p["where"]) for p in prev)]
         fresh = [d for d in defects if d not in again]
-        out_of_rounds = self.look_done >= int(self.cfg["look_rounds"])
+        out_of_rounds = self.look_done >= int(self.cfg.look_rounds)
         for d in again + (fresh if out_of_rounds else []):  # tl-bxk.13.15.5: the same defect twice is not the writer's to fix again
             self.look_leftover(d, names)
         if not fresh or out_of_rounds:
@@ -4662,7 +4623,7 @@ class Engine:
         and 'verified' there means nothing). One that does not open is a finding for the writer: replace it, or write `unverified` on
         its line; a link marked unverified lands as an item for the owner with the claim it carries (a bot-blocking site answers
         403 from here and opens for a person). Opened links are not asked again."""
-        if not self.cfg.get("check_links", True):
+        if not self.cfg.check_links:
             return
         try:
             found = links.added_urls(self.task_diff())
@@ -4774,7 +4735,7 @@ class Engine:
 
     def copy_looks(self):
         """The screenshots of a visual change go into the repo (engine.evidence_dir/<bead>/), in the land's commit."""
-        vp, dest = self.visual_cfg(), (self.cfg.get("evidence_dir") or "").strip("/")
+        vp, dest = self.visual_cfg(), (self.cfg.evidence_dir or "").strip("/")
         shots = self.shots()
         if not (vp and shots and visual_hit(vp, self.changed_paths())):
             self.persist_look()
@@ -5004,7 +4965,7 @@ class Engine:
             return
         if self.dirty_status() or self.git("symbolic-ref", "--short", "-q", "HEAD") != branch:
             return  # work that could not be committed, or files stage_all left out, stay where they are for the next run
-        rc, tail = self.sh(["git", "checkout", "-q", "--detach", self.cfg["base"]], pin=True)
+        rc, tail = self.sh(["git", "checkout", "-q", "--detach", self.cfg.base], pin=True)
         if rc:
             self.warn("the slot could not be left at the base: %s" % tail.strip()[-160:])
 
@@ -5094,7 +5055,7 @@ class Engine:
         summary = (getattr(self, "plan_summary", "") or "")[:300]
         if outcome == "landed":
             rc = tl.cmd_close(Args(id=self.bead, reason="merged %s to %s: %s; %s" % (
-                sha[:12], self.cfg["base"].split("/")[-1], summary or "the task's stages passed", stats)))
+                sha[:12], self.cfg.base.split("/")[-1], summary or "the task's stages passed", stats)))
         elif outcome == "done":
             rc = tl.cmd_close(Args(id=self.bead, reason="done with nothing to land: " + (summary or stats)))
         elif kind and oc.POLICY[kind].bd == "open":  # a machine fault or pause (login, network, lanes, kill): the bead stays open and unassigned
@@ -6128,21 +6089,24 @@ Also give each item its kind (the engine routes by it; an open item of the wrong
 # ---- entry ----------------------------------------------------------------------------------------------------------
 
 def cfg_source(repo):
-    """The selected profile, base hint, and pinned commit (empty for a local fallback)."""
-    local = tl.profile(repo).get("engine") or {}
-    base = local.get("base") or DEFAULTS["base"]
+    """(the RepoProfile, the base hint, the pinned commit: empty for a local fallback). A bad .task-loop.json exits loudly."""
+    base = load_profile(tl.profile(repo)).engine.base
     data, commit = tl.profile_source(repo, base)
-    return data, base, commit
+    return load_profile(data), base, commit
+
+
+def load_profile(data):
+    try:
+        return config.load(data)
+    except config.ConfigError as e:
+        sys.exit("task-loop: %s" % e)
 
 
 def load_cfg(repo):
-    """DEFAULTS plus the `engine` block of the repo's .task-loop.json as committed on the base branch (tl.profile).
-    The base is itself a key: the working tree (or DEFAULTS) names it, then the base's copy is read. A caller fetches
-    first (the loop's queue does; run-task reads the last fetch, and resets onto the base anyway)."""
-    cfg = json.loads(json.dumps(DEFAULTS))
-    data, _, _ = cfg_source(repo)
-    cfg.update(data.get("engine") or {})
-    return cfg
+    """The `engine` block of the repo's .task-loop.json as committed on the base branch (tl.profile), defaults for what it leaves out.
+    The base is itself a key: the working tree names it, then the base's copy is read. A caller fetches first (the loop's queue
+    does; run-task reads the last fetch, and resets onto the base anyway)."""
+    return cfg_source(repo)[0].engine
 
 
 def busy_elsewhere(repo, actor, bead_id):
@@ -6427,8 +6391,7 @@ def run_bead(a, repo, cfg, wt):
         if not a.dry_run and tl.cmd_claim(Args(id=a.id, worktree=wt, slot=a.slot)) != 0:
             # bd lets this session re-claim its own bead (a reopened one); another session's claim stops here
             return {"v": 1, "outcome": "taken", "bead": a.id, "why": "claimed by another session"}
-        cfg["fresh"] = bool(getattr(a, "fresh", False))
-        eng = Engine(a.id, wt, cfg, dry_run=a.dry_run, verbose=not getattr(a, "quiet", False))
+        eng = Engine(a.id, wt, cfg, dry_run=a.dry_run, verbose=not getattr(a, "quiet", False), fresh=bool(getattr(a, "fresh", False)))
         eng.stop_pending = bool(stop)
         say("engine log: %s" % eng.log_path)
     rc = eng.run()

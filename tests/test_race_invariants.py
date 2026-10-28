@@ -35,6 +35,7 @@ import test_loop  # noqa: E402  (puts skills/task-loop on sys.path)
 
 import clock as clocks  # noqa: E402
 import engine  # noqa: E402
+from support.builders import cfg_with  # noqa: E402
 import loop  # noqa: E402
 import tl  # noqa: E402
 from support import tlbd  # noqa: E402
@@ -220,7 +221,7 @@ class Invariants(test_loop.Base):
         beads = [dict(test_loop.bead(b, labels=["lane:" + area]), status="in_progress") for b, area in
                  (("w-1", "a"), ("w-2", "a"), ("w-3", "b"))]
         bd = self.tracker(beads, slots=3, cfg={"area_label_prefix": "lane:"})
-        cfg = {"area_label_prefix": "lane:"}
+        cfg = cfg_with(area_label_prefix="lane:")
         for s, who in (("sl-1", "A"), ("sl-2", "B"), ("sl-3", "C")):
             bd.slots[s].update(status="in_progress", assignee=who)
         arrived, a_in = threading.Event(), threading.Event()

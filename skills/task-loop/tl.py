@@ -1819,15 +1819,15 @@ def doctor_warnings(repo, source=None):
         if source is None:
             import engine
             source = engine.cfg_source(repo)
-        data, base, commit = source
+        profile, base, commit = source
         files = (git("ls-tree", "-r", "--name-only", "-z", commit, cwd=repo).split("\0") if commit
                  else git("ls-files", "-z", cwd=repo).split("\0"))
         files = [path for path in files if path]
-        for c in (data.get("engine") or {}).get("checks") or []:
-            ins = [c["inputs"]] if isinstance(c.get("inputs"), str) else list(c.get("inputs") or [])
+        for c in profile.engine.checks:
+            ins = [c.inputs] if isinstance(c.inputs, str) else list(c.inputs)
             for g in checks_speed.dead_globs(files, ins):
                 out.append("check %s: inputs glob %s matches no tracked file, so the check is never cached; braces are "
-                           "{a,b}, `*` stays in one folder, `**` crosses." % (c.get("id") or c.get("cmd"), g))
+                           "{a,b}, `*` stays in one folder, `**` crosses." % (c.id, g))
     except Exception:
         pass
     return out

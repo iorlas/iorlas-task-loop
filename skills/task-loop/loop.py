@@ -83,7 +83,7 @@ def epics_of(bead, cache):
 # ---- areas (tl-bxk.11.4): two beads of one area never run at once ---------------------------------------------------
 
 def has_areas(cfg):
-    return bool(cfg.get("areas") or cfg.get("area_label_prefix"))
+    return bool(cfg.areas or cfg.area_label_prefix)
 
 
 def area_of(b, cfg, cache):
@@ -92,12 +92,12 @@ def area_of(b, cfg, cache):
     (lane:live is area live). First match wins."""
     labels = b.get("labels") or []
     ups = None
-    for name, members in (cfg.get("areas") or {}).items():
+    for name, members in cfg.areas.items():
         if ups is None:
             ups = [b.get("id")] + epics_of(b, cache)
         if any(m in ups or m in labels for m in members or []):
             return name
-    prefix = cfg.get("area_label_prefix") or ""
+    prefix = cfg.area_label_prefix
     if prefix:
         for x in labels:
             if x.startswith(prefix) and len(x) > len(prefix):
@@ -171,12 +171,12 @@ def queue(repo):
     area runs elsewhere is skipped (`area A busy: B in S`); the claim checks again under the area lock."""
     tl.fetch(repo)
     cfg = engine.load_cfg(repo)
-    args = ["ready", "--json", "-n", "0"] + (["--label", cfg["pick_label"]] if cfg.get("pick_label") else [])
+    args = ["ready", "--json", "-n", "0"] + (["--label", cfg.pick_label] if cfg.pick_label else [])
     try:
         ready = json.loads(tl.bd(*args, cwd=repo).stdout or "[]")
     except ValueError:
         ready = []
-    order, skip = list(cfg.get("epic_order") or []), list(cfg.get("skip_labels") or [])
+    order, skip = list(cfg.epic_order), list(cfg.skip_labels)
     keep, skipped, cache = [], [], {}
     for b in ready:
         labels = b.get("labels") or []
@@ -187,7 +187,7 @@ def queue(repo):
         if not why and order:
             ups = epics_of(b, cache)
             rank = min([order.index(e) for e in ups if e in order] or [len(order)])
-            if rank == len(order) and cfg.get("epic_only"):
+            if rank == len(order) and cfg.epic_only:
                 why = "under no epic in epic_order (epic_only)"
         if not why:
             why = beadlint.why(b, str(repo))
@@ -480,7 +480,7 @@ def landed_on_base(repo, wt, bead_id):
     """True when the bead's land commit (titled `... (<id>)`) is the tip of its branch and already on the base."""
     if not os.path.isdir(wt):
         return False
-    base = engine.load_cfg(repo)["base"]
+    base = engine.load_cfg(repo).base
     branch = (tl.show(bead_id).get("metadata") or {}).get("branch") or "task/" + bead_id
     tl.fetch(wt)
     tip = tl.git("rev-parse", "--verify", "-q", "refs/heads/" + branch, cwd=wt)
@@ -877,7 +877,7 @@ def storm_banner(rec, repo):
 
 def delegate_route(repo):
     """The route.py of the delegate this repo's engine would use (its `delegate` config, the pin, the install), or None."""
-    res = dl.resolve(engine.load_cfg(str(repo)).get("delegate", ""))
+    res = dl.resolve(engine.load_cfg(str(repo)).delegate)
     return res.route if isinstance(res, dl.Resolved) else None
 
 
@@ -1301,7 +1301,7 @@ def selftest():
                 if r.returncode:
                     return "git %s: %s" % (cmd[0], r.stderr.strip()[-200:])
             cfg = engine.load_cfg(str(wt))
-            res = dl.resolve(cfg.get("delegate", ""))  # the configured delegate's own contract when there is one; else a bare one
+            res = dl.resolve(cfg.delegate)  # the configured delegate's own contract when there is one; else a bare one
             contract = res.contract if isinstance(res, dl.Resolved) else {"contract": dl.CONTRACT, "reasons": {}, "run_args": []}
             resolved = dl.Resolved(Path("/selftest"), "/selftest/route.py", contract, "explicit")
             fake_bd = types.SimpleNamespace(returncode=0, stdout="bead t-1: Add f\n", stderr="")
@@ -1311,7 +1311,7 @@ def selftest():
                     mock.patch.object(tl, "cmd_block", side_effect=lambda a: blocked.append(a.why) or 0), \
                     mock.patch.object(tl, "cmd_land", return_value=0), \
                     mock.patch.object(engine.time, "sleep"):
-                cfg.update({"reflect": False})
+                cfg = engine.dataclasses.replace(cfg, reflect=False)
                 os.chdir(wt)  # the engine reads cwd
                 try:
                     rc = engine.Engine("t-1", str(wt), cfg, route=seams.FixedRoute(resolved, Runner())).run()

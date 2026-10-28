@@ -18,6 +18,7 @@ import delegate_link as dl  # noqa: E402
 import engine  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
 from taskloop_dash.api import lanes as lanes_mod  # noqa: E402
+from support.builders import cfg_with  # noqa: E402
 from taskloop_dash.views import arrows, names  # noqa: E402
 from taskloop.app.run.calls import Calls  # noqa: E402
 import tl  # noqa: E402
@@ -130,12 +131,11 @@ class OpenCode(unittest.TestCase):
 
     # fresh-writer limit
     def test_xai_has_its_own_fresh_writer_limit(self):
-        self.assertEqual(engine.DEFAULTS["write_fresh_above_k"]["xai"], 100)
-        eng = types.SimpleNamespace(cfg={})
+        eng = types.SimpleNamespace(cfg=cfg_with())
         self.assertEqual(engine.Engine.fresh_above_k(eng, "xai"), 100.0)
-        eng.cfg = {"write_fresh_above_k": {"xai": 40}}
+        eng.cfg = cfg_with(write_fresh_above_k={"xai": 40})
         self.assertEqual(engine.Engine.fresh_above_k(eng, "xai"), 40.0)
-        eng.cfg = {"write_fresh_above_k": {"claude": 1}}
+        eng.cfg = cfg_with(write_fresh_above_k={"claude": 1})
         self.assertEqual(engine.Engine.fresh_above_k(eng, "xai"), 100.0)
 
 

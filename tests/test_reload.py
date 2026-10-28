@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 sys.path.insert(0, str(ROOT / "tests"))
 import engine  # noqa: E402
+from support.builders import cfg_with  # noqa: E402
 import seams  # noqa: E402
 from taskloop_dash.views import graph  # noqa: E402
 import loop  # noqa: E402
@@ -79,8 +80,7 @@ class Reload(unittest.TestCase):
 
     def engine_for(self, script, **cfg):
         c = engine.load_cfg(str(self.wt))
-        c.update({"reflect": False})
-        c.update(cfg)
+        c = cfg_with(c, **{"reflect": False, **cfg})
         eng = engine.Engine("t-1", str(self.wt), c, store=self.store)
         eng.argv = ["run-task", "t-1", "--worktree", str(self.wt), "--fresh", "--outcome-file", "/x/out.json"]
 

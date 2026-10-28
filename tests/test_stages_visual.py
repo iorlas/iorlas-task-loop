@@ -13,7 +13,7 @@ from support import fake_route  # noqa: E402
 from support import tlbd  # noqa: E402
 from support.fakes import FakeBeadStore  # noqa: E402
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from support.builders import make_engine  # noqa: E402
+from support.builders import cfg_with, make_engine  # noqa: E402
 import test_engine as te  # noqa: E402
 from test_engine import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint, tl  # noqa: E402,F401
 
@@ -185,11 +185,11 @@ class VisualWork(StagesTest):
 
     def test_the_table_is_read_from_the_base_branch_not_the_working_copy(self):
         (self.wt / "shots.json").write_text(json.dumps({"v": 1, "methods": [{"method": "Evil", "cmd": "touch pwned"}]}))
-        e = engine.Engine("t-1", str(self.wt), dict(engine.load_cfg(str(self.wt)), shot_table="shots.json"), store=self.store)
+        e = engine.Engine("t-1", str(self.wt), cfg_with(engine.load_cfg(str(self.wt)), shot_table="shots.json"), store=self.store)
         self.assertEqual(list(e.shot_methods()), ["ScreenShots"])
 
     def test_a_missing_table_is_warned_once_and_the_old_way_stands(self):
-        e = engine.Engine("t-1", str(self.wt), dict(engine.load_cfg(str(self.wt)), shot_table="nowhere.json"), store=self.store)
+        e = engine.Engine("t-1", str(self.wt), cfg_with(engine.load_cfg(str(self.wt)), shot_table="nowhere.json"), store=self.store)
         self.assertEqual(e.shot_methods(), {})
         self.assertEqual(e.shot_methods(), {})
 

@@ -2,12 +2,13 @@
 (a Unity slot, a lane, an editor lock) is booked as waited and is not the run's minutes."""
 import dataclasses
 from collections.abc import Callable
-from typing import Any
+
+from taskloop.contracts.config import EngineConfig
 
 
 @dataclasses.dataclass
 class Budget:
-    cfg: dict[str, Any]  # the run's config, read live: budget_usd, budget_min, budget_min_by_label
+    cfg: EngineConfig  # the run's config: budget_usd, budget_min, budget_min_by_label
     now: Callable[[], float]
     t0: float = 0.0
     waited: float = 0.0
@@ -19,8 +20,8 @@ class Budget:
 
     def limit_min(self) -> float:
         """budget_min, or the largest budget_min_by_label of this bead's labels."""
-        by = self.cfg.get("budget_min_by_label") or {}
-        return max([float(self.cfg["budget_min"])] + [float(by[x]) for x in self.labels if x in by])
+        by = self.cfg.budget_min_by_label
+        return max([float(self.cfg.budget_min)] + [float(by[x]) for x in self.labels if x in by])
 
     def spent_min(self) -> float:
         """Minutes against the budget: wall clock without the time spent waiting for a shared resource."""
@@ -41,9 +42,9 @@ class Budget:
 
     def used(self) -> float:
         """The larger share used, of the dollars and of the minutes (1.0 = all)."""
-        return max(self.spent / float(self.cfg["budget_usd"]), self.spent_min() / self.limit_min())
+        return max(self.spent / float(self.cfg.budget_usd), self.spent_min() / self.limit_min())
 
     def over(self) -> list[str]:
         """What is past its cap, one phrase each ('181 of 180 min', '$16.00 of $15'); empty while inside."""
-        mins, limit, usd = self.spent_min(), self.limit_min(), self.cfg["budget_usd"]
+        mins, limit, usd = self.spent_min(), self.limit_min(), self.cfg.budget_usd
         return (["%d of %g min" % (mins, limit)] if mins > limit else []) + (["$%.2f of $%s" % (self.spent, usd)] if self.spent > float(usd) else [])

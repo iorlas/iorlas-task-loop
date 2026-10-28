@@ -12,6 +12,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills" / "task-loop"))
 import applog  # noqa: E402
 import engine  # noqa: E402
+from support.builders import cfg_with  # noqa: E402
 import tl  # noqa: E402
 
 
@@ -129,7 +130,7 @@ class WiringTest(unittest.TestCase):
         self.assertEqual(applog.open_count(path), 1)
 
     def test_engine_log_is_one_typed_line_per_record_readable_at_once(self):
-        eng = engine.Engine("t-1", self.tmp.name, dict(engine.DEFAULTS))
+        eng = engine.Engine("t-1", self.tmp.name, cfg_with())
         with mock.patch.object(engine, "say"), mock.patch.object(tl, "event"):
             for i in range(1000):
                 eng.log.note("line %d" % i)

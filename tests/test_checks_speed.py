@@ -13,6 +13,7 @@ import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import test_engine as te  # noqa: E402
 from test_engine import PY, engine  # noqa: E402,F401
 from checks import lint  # noqa: E402
+from support.builders import cfg_with  # noqa: E402
 from checks import speed as cs  # noqa: E402
 
 
@@ -404,7 +405,7 @@ class Schedule(SpeedTest):
         cmd, n = self.counter()
         eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests", "timeout_min": 30, "cache": False}])
         res = eng.run_checks({"checks": [cmd], "files": []}, "s")  # the plan's copy gets check_timeout_min, 60
-        self.assertEqual(eng.cfg["check_timeout_min"], 60)
+        self.assertEqual(eng.cfg.check_timeout_min, 60)
         self.assertEqual((n.read_text(), [bool(c.get("reused")) for c in res]), ("1", [False, True]))
 
     def counter(self, code=0):
@@ -432,7 +433,7 @@ class Schedule(SpeedTest):
         self.assertEqual(([c["exit"] for c in res], n.read_text()), ([124, 0], "11"))
 
     def test_replay_yxbb3_r1_the_acceptance_copies_of_the_unity_checks_add_nothing(self):
-        res, launched, secs = self.replay(self.REPO, self.ACCEPTANCE_R1, self.R1, cache=True)
+        res, launched, secs = self.replay(self.REPO, self.ACCEPTANCE_R1, self.R1)
         for c in ("just unity-analyzers", "just unity-tests", "just unity-play-tests"):
             self.assertEqual(launched.count(c), 1, c)  # r1 launched unity-tests and unity-play-tests twice
         copies = [r for r in res if r["group"] == "acceptance" and r["cmd"].startswith("just unity-")]
@@ -459,12 +460,12 @@ class Schedule(SpeedTest):
     def test_replay_of_acceptance_only_red_rounds_never_relaunches_unity(self):
         # a round shaped like yxbb.3 r1 whose only red is a cheap acceptance check, replayed three times (the rounds a writer fixes)
         for bad in ("just worker-plan", "just text theme-check client-layers", "python3 tools/select_tests.py --phase coordinator"):
-            res, launched, _ = self.replay(self.REPO, self.ACCEPTANCE_R1, self.R1, red={bad}, cache=True)
+            res, launched, _ = self.replay(self.REPO, self.ACCEPTANCE_R1, self.R1, red={bad})
             self.assertFalse([c for c in launched if "unity" in c], bad)
             self.assertEqual([c["id"] for c in res if c["status"] == "failed"], [bad])
 
     def test_the_plan_validator_rejects_unity_recipes_in_acceptance_and_a_limit_above_the_cap(self):
-        cfg = {"checks": self.REPO}
+        cfg = cfg_with(checks=self.REPO)
         plan = dict(te.PLAN, stages=[dict(te.PLAN["stages"][0], checks=[
             "just unity-tests", "mkdir -p e && just unity-play-tests > e/log && grep -q ok e/log", "echo 'just unity-tests'", "just unity-foo", "just fmt"])])
         got = lint.unity_problems(plan, cfg)

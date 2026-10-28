@@ -41,8 +41,8 @@ GATE_ONLY_TEXT = ("\n\nYour plan was sent back: these checks run a command that 
 
 def gate_only(cfg):
     """[(cmd, why)]: the gate command and engine.gate_only's entries ("cmd" or {cmd, why})."""
-    out = [(cfg.get("gate") or "", "the engine runs the gate once, on the rebased tree")]
-    out += [(x, "") if isinstance(x, str) else (x.get("cmd") or "", x.get("why") or "") for x in cfg.get("gate_only") or []]
+    out = [(cfg.gate, "the engine runs the gate once, on the rebased tree")]
+    out += [(x, "") if isinstance(x, str) else (x.cmd, x.why) for x in cfg.gate_only]
     return [(" ".join(c.split()), why) for c, why in out if c.strip()]
 
 
@@ -50,10 +50,10 @@ def rerun_checks(plan, cfg):
     """[(check, id)]: the plan's checks that contain a configured check's command as a whole word."""
     out = []
     for c in plan_checks(plan):
-        for k in cfg.get("checks") or []:
-            words = (k.get("cmd") or "").split()
+        for k in cfg.checks:
+            words = k.cmd.split()
             if words and re.search(r"(?<![\w-])" + r"\s+".join(map(re.escape, words)) + r"(?![\w-])", c):
-                out.append((c, k.get("id") or k["cmd"]))
+                out.append((c, k.id))
                 break
     return out
 
@@ -231,7 +231,7 @@ UNITY_RECIPE = re.compile(r"(?<![\w-])just\s+(unity-[\w-]+)(?![\w-])")
 def repo_check_of(cmd, cfg):
     """The id of the configured check a plan check is, wrappers aside (`mkdir -p e && just unity-tests > e/log` is `unity-tests`), or None."""
     want = speed.canon(cmd)
-    return next((k.get("id") or k["cmd"] for k in cfg.get("checks") or [] if speed.canon(k.get("cmd") or "") == want), None)
+    return next((k.id for k in cfg.checks if speed.canon(k.cmd) == want), None)
 
 
 def unity_problems(plan, cfg):
@@ -243,7 +243,7 @@ def unity_problems(plan, cfg):
         m = UNITY_RECIPE.search(bare)
         if not m:
             continue
-        rid = repo_check_of(c, cfg) or next((k.get("id") for k in cfg.get("checks") or [] if (k.get("cmd") or "").split()[-1:] == [m.group(1)]), None)
+        rid = repo_check_of(c, cfg) or next((k.id for k in cfg.checks if k.cmd.split()[-1:] == [m.group(1)]), None)
         use = ("the repo check `%s` already runs it: read $%s and $%s" % (rid, check_env_name(rid), check_env_name(rid).replace("_LOG_", "_RC_"))
                if rid else "it is a Unity run the repo's checks own: do not launch it from acceptance")
         out.append("`%s`: runs `just %s`; %s" % (clip(c, 120), m.group(1), use))

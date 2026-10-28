@@ -27,7 +27,7 @@ import delegate_link as dl  # noqa: E402,F401
 from clock import FakeClock  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from support.builders import make_engine  # noqa: E402
+from support.builders import cfg_with, make_engine  # noqa: E402
 import engine  # noqa: E402
 import seams  # noqa: E402
 from support.fakes import FakeBeadStore  # noqa: E402
@@ -111,12 +111,12 @@ class FailureBriefAndDurations(unittest.TestCase):
         self.assertEqual(secs["just unity-analyzers"], 140)
         self.assertEqual(secs["just lint"], 40)  # nothing passed: the longest run
         self.assertEqual(secs["just fmt"], 3)
-        e = mock.Mock(cfg={"writer_check_max_s": 60})
+        e = mock.Mock(cfg=cfg_with(writer_check_max_s=60))
         self.assertTrue(engine.Engine.engine_only(e, "just unity-analyzers", secs))
         self.assertFalse(engine.Engine.engine_only(e, "just lint", secs))
 
     def test_check_build_and_dotnet_commands_without_history_are_engine_only(self):
-        e = mock.Mock(cfg={"writer_check_max_s": 60})
+        e = mock.Mock(cfg=cfg_with(writer_check_max_s=60))
         for cmd in ("just check", "dotnet test", "dotnet build", "just build"):
             self.assertTrue(engine.Engine.engine_only(e, cmd, {}), cmd)
 

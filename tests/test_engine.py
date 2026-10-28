@@ -26,7 +26,8 @@ import delegate_link as dl  # noqa: E402,F401
 from clock import FakeClock  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from support.builders import make_engine  # noqa: E402
+from support.builders import cfg_with, make_engine  # noqa: E402
+from taskloop.contracts.config import EngineConfig  # noqa: E402
 import engine  # noqa: E402
 import seams  # noqa: E402
 from support.fakes import FakeBeadStore  # noqa: E402
@@ -236,11 +237,10 @@ class EngineTest(unittest.TestCase):
         """`raw` puts keys in the loaded config without committing them. probe: the network probe (netgate.FakeProbe)."""
         script = fake_route.Script(answers, j_extra)
         c = engine.load_cfg(str(self.wt))
-        c.update({"reflect": False})  # the reflection is one more call; its own tests switch it on
-        c.update(cfg)
-        c.update(raw or {})
+        fresh = cfg.pop("fresh", False)
+        c = cfg_with(c, **{"reflect": False, **cfg, **(raw or {})})  # the reflection is one more call; its own tests switch it on
         with delegate_stack(script, route):
-            self.eng = engine.Engine(bead, str(self.wt), c, store=self.store)
+            self.eng = engine.Engine(bead, str(self.wt), c, store=self.store, fresh=fresh)
             if probe is not None:
                 self.eng.probe = probe
             rc = self.eng.run()
@@ -368,8 +368,7 @@ class EngineTest(unittest.TestCase):
 
     @POSIX_CHECK
     def test_a_check_that_times_out_is_red_and_leaves_no_process(self):
-        c = engine.load_cfg(str(self.wt))
-        c["check_timeout_min"] = 0.03  # under 2 s
+        c = cfg_with(engine.load_cfg(str(self.wt)), check_timeout_min=0.03)  # under 2 s
         eng = engine.Engine("t-1", str(self.wt), c, store=self.store)
         mark = "61.%d" % os.getpid()  # unique: a second suite running at once has its own sleep
         res = eng.run_checks({"checks": ["bash -c 'sleep %s; true'" % mark], "files": []}, "s")
@@ -477,7 +476,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(marks, [(0, "3")] * 4)  # 1 + the configured check + the wrapper, which ran itself
 
     def test_a_plan_check_that_re_runs_a_configured_check_is_found(self):
-        cfg = {"checks": [{"id": "unity-tests", "cmd": "just unity-tests"}]}
+        cfg = cfg_with(checks=[{"id": "unity-tests", "cmd": "just unity-tests", "group": "tests"}])
         plan = dict(PLAN, risks=[{"what": "x", "check": "mkdir -p x && just unity-tests > x/f && grep -q a x/f"},
                                  {"what": "y", "check": "just unity-tests-extra"}])
         self.assertEqual([i for _, i in lint.rerun_checks(plan, cfg)], ["unity-tests"])
@@ -766,19 +765,19 @@ class EngineTest(unittest.TestCase):
     def test_tests_added_and_removed_come_from_the_diff(self):
         diff = ("+++ b/tests/test_a.py\n+def test_one():\n+    pass\n+def test_two():\n-def test_old():\n"
                 "+++ b/T.cs\n+    [Fact]\n+    [Test]\n")
-        self.assertEqual(engine.count_tests(diff, engine.DEFAULTS["test_pattern"]), (4, 1))
+        self.assertEqual(engine.count_tests(diff, EngineConfig().test_pattern), (4, 1))
 
     def test_a_unity_play_mode_test_counts(self):  # lifesim-d5f.59: a [UnityTest] read as tests_added=0
         diff = ("+++ b/client/Assets/Tests/PlayMode/LiveSpeedBarTests.cs\n+        [UnityTest]\n"
                 "+        public IEnumerator SpeedButtonsChooseAndLightTheHostSpeed()\n")
-        self.assertEqual(engine.count_tests(diff, engine.DEFAULTS["test_pattern"]), (1, 0))
+        self.assertEqual(engine.count_tests(diff, EngineConfig().test_pattern), (1, 0))
 
     def test_gherkin_scenarios_count_in_feature_files_only(self):  # lifesim-fld.26.10: four scenarios read as 0
         diff = ("+++ b/specs/Build.feature\n+  Scenario: a wall is painted\n+    Given a room\n"
                 "+  Scenario Outline: <tint> paint\n-  Scenario: an old one\n"
                 "+++ b/docs/notes.md\n+Scenario: prose, not a test\n"
                 "+++ b/T.cs\n+    [Test]\n")
-        self.assertEqual(engine.count_tests(diff, engine.DEFAULTS["test_pattern"]), (3, 1))
+        self.assertEqual(engine.count_tests(diff, EngineConfig().test_pattern), (3, 1))
 
     def test_writer_is_told_the_repo_worker_rules_and_never_to_run_the_gate(self):
         self.put_repo_file("docs/agents/worker-rules.md", "RULES-MARK: unity runs on the host\n")
@@ -900,12 +899,12 @@ class EngineTest(unittest.TestCase):
         self.assertIn("gate-only-acceptance", self.said())
 
     def test_gate_only_criteria_match_the_gate_alone_not_a_case_that_names_it_with_more(self):
-        cfg = {"gate": "just check", "gate_only": ["just unity-check"]}
+        cfg = cfg_with(gate="just check", gate_only=["just unity-check"])
         cases = lambda *cs: {"cases": [{"criterion": c, "check": ""} for c in cs]}  # noqa: E731
         bad = ["just check", "`just  check` passes", "The gate (just check) is green.", "just unity-check exits 0", "Done when: just check green"]
         ok = ["f.txt exists", "just check-fmt passes", "the greeting shows after just check ran the migration", "just fmt is clean"]
         self.assertEqual(engine.gate_only_criteria(cases(*bad, *ok), cfg), bad)
-        self.assertEqual(engine.gate_only_criteria(cases("just check passes"), dict(engine.DEFAULTS)), [])
+        self.assertEqual(engine.gate_only_criteria(cases("just check passes"), cfg_with()), [])
 
     def test_a_write_prompt_names_each_check_command_once_in_its_may_run_lists(self):
         # tl-7y6.6.12: the stage's checks and the where() text both listed "You may run these"
@@ -921,13 +920,13 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(may.count("only-repo"), 1)
 
     def test_gate_only_checks_match_a_command_not_a_longer_name_or_an_argument(self):
-        cfg = {"gate": "just check", "gate_only": ["just unity-check", self.UNITY]}
+        cfg = cfg_with(gate="just check", gate_only=["just unity-check", self.UNITY])
         bad = ["just check", "cd x && just unity-check --fast", "true; just check | tail"]
         ok = [HAS_F, "just check-fmt", "just unity-checks", "grep 'just check' AGENTS.md", "just fmt"]
         got = lint.gate_only_checks(dict(PLAN, risks=[{"what": "x", "check": c} for c in bad + ok]), cfg)
         self.assertEqual([c for c, _ in got], bad)
         self.assertEqual(lint.gate_only_checks(dict(PLAN, risks=[{"what": "x", "check": "just check"}]),
-                                                 dict(engine.DEFAULTS)), [])
+                                                 cfg_with()), [])
 
     def test_follow_up_work_in_the_plan_is_filed_by_the_engine(self):
         lo = {"title": "Track hard-to-undo moves", "why": "the plan wants it filed"}
@@ -1177,7 +1176,7 @@ class EngineTest(unittest.TestCase):
 
     @no_repo
     def test_check_timeout_defaults_to_60_min_and_the_gate_to_90(self):
-        self.assertEqual((engine.DEFAULTS["check_timeout_min"], engine.DEFAULTS["gate_timeout_min"]), (60, 90))
+        self.assertEqual((EngineConfig().check_timeout_min, EngineConfig().gate_timeout_min), (60, 90))
 
     def test_a_sleeping_check_is_cut_at_check_timeout_min_not_node_timeout_min(self):
         eng = self.checks_engine(check_timeout_min=0.02, node_timeout_min=45)
@@ -1607,7 +1606,7 @@ class EngineTest(unittest.TestCase):
 
     @no_repo
     def test_a_check_is_engine_only_by_its_last_duration_else_by_its_name(self):
-        e = mock.Mock(cfg={"writer_check_max_s": 60})
+        e = mock.Mock(cfg=cfg_with(writer_check_max_s=60))
         only = lambda cmd, secs: engine.Engine.engine_only(e, cmd, secs)
         self.assertTrue(only("just lint", {"just lint": 61}))
         self.assertFalse(only("just unity-tests", {"just unity-tests": 60}))
@@ -1926,7 +1925,7 @@ class EngineTest(unittest.TestCase):
                 state["gates"] += 1
                 if failure == "gate" and state["gates"] == 2:
                     return 1, "gate red"
-            if cmd == this.cfg["land"]:
+            if cmd == this.cfg.land:
                 self.assertTrue(held)
                 events.append("push")
                 state["pushes"] += 1
@@ -2169,7 +2168,7 @@ class EngineTest(unittest.TestCase):
                 return result
 
             def command(this, cmd, *a, **kw):
-                if cmd == this.cfg["land"]:
+                if cmd == this.cfg.land:
                     recovery_pushes.append(cmd)
                     self.assertFalse(this.pending_land_validation)
                     self.assertFalse(self.checkpoint()["pending_land_validation"])
@@ -3063,7 +3062,7 @@ class EngineTest(unittest.TestCase):
             eng.link_judged(review)  # the link that opened is not opened again; the two that did not are
             self.assertEqual(sorted(opened), ["https://fab.com/s/abc", "https://sketchfab.com/m/x"])
             self.assertEqual(len(eng.unverified), 1)
-        eng.cfg["check_links"] = False
+        eng.cfg = cfg_with(eng.cfg, check_links=False)
         review = {"findings": []}
         eng.link_judged(review)
         self.assertEqual(review["findings"], [])
@@ -3482,7 +3481,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertEqual(s.calls, [])
         self.assertIn("re-planned 1 times", self.ask()["why"])
-        self.assertEqual(engine.DEFAULTS["max_replans"], 2)
+        self.assertEqual(EngineConfig().max_replans, 2)
 
     def test_the_plan_is_in_the_checkpoint_the_moment_the_planner_answers(self):
         # d5f.38: a SIGTERM after the planner answered lost a finished plan before the checkpoint
@@ -3571,14 +3570,14 @@ class EngineTest(unittest.TestCase):
     def test_worker_rules_are_clipped_at_a_line_and_missing_ones_say_nothing(self):
         self.put_repo_file("r.md", "line\n" * 1000)
         eng = engine.Engine.__new__(engine.Engine)
-        eng.cfg, eng.wt, eng.warn = {"worker_rules": "r.md"}, self.wt, mock.Mock()
+        eng.cfg, eng.wt, eng.warn = cfg_with(worker_rules="r.md"), self.wt, mock.Mock()
         sh("git", "pull", "-q", "origin", "main", cwd=self.wt)
         text = eng.rules_text()
         self.assertLessEqual(len(text.encode("utf-8")), engine.RULES_MAX)
         self.assertTrue(text.endswith("line") and eng.warn.called)
-        eng.cfg = {"worker_rules": "nope.md"}
+        eng.cfg = cfg_with(worker_rules="nope.md")
         self.assertEqual(eng.rules_text(), "")
-        eng.cfg = {"worker_rules": ""}
+        eng.cfg = cfg_with(worker_rules="")
         self.assertEqual(eng.rules_text(), "")
 
     def test_the_brief_carries_what_linked_beads_decided(self):

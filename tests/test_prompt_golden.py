@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import engine  # noqa: E402
+from support.builders import cfg_with  # noqa: E402
 
 GOLDEN = ROOT / "tests" / "fixtures" / "prompts"
 FIX_SCOPE = "the fix only: it must %s without breaking what the accepted stages built" % engine.Engine.FIX["gate"][0]
@@ -33,7 +34,7 @@ CHECKS = ["python3 -m unittest tests.test_f", "just unity-tests"]
 def stub_engine(rules="worker-rules.md"):
     """An Engine with a config and no run: enough to render the writer's check lists."""
     eng = engine.Engine.__new__(engine.Engine)
-    eng.cfg = dict(engine.DEFAULTS, gate="just check", worker_rules=rules, checks=[{"id": "fmt", "cmd": "just fmt-check", "group": "static"}])
+    eng.cfg = cfg_with(gate="just check", worker_rules=rules, checks=[{"id": "fmt", "cmd": "just fmt-check", "group": "static"}])
     eng.check_secs = lambda: {}
     return eng
 
@@ -41,7 +42,7 @@ def stub_engine(rules="worker-rules.md"):
 def render_write(rules=RULES, failed=None):
     """The stage-1 write prompt as Engine.stage builds it: stage checks, where text, rules inlined."""
     eng = stub_engine()
-    where = eng.where("write", [c["cmd"] for c in eng.cfg["checks"]] + CHECKS, failed, listed=CHECKS)
+    where = eng.where("write", [c.cmd for c in eng.cfg.checks] + CHECKS, failed, listed=CHECKS)
     return engine.write_prompt(
         rules, brief="<brief text>", plan="<plan text>", n=1, goal="Add the greeting", files="greet.py",
         checks=eng.stage_checks_text(CHECKS, skip=failed), feedback="", evidence=".task/t-1/evidence", where=where, gate=" (`just check`)")
@@ -50,7 +51,7 @@ def render_write(rules=RULES, failed=None):
 def render_resume(failed=None):
     """The delta a resumed writer gets (Engine.write_delta) for the same stage."""
     eng = stub_engine()
-    where = eng.where("write", [c["cmd"] for c in eng.cfg["checks"]] + CHECKS, failed, listed=CHECKS)
+    where = eng.where("write", [c.cmd for c in eng.cfg.checks] + CHECKS, failed, listed=CHECKS)
     return engine.WRITE_RESUME_PROMPT.format(
         brief=".task/t-1/brief.md", plan="The plan is unchanged.", n=1, goal="Add the greeting", files="greet.py",
         checks=eng.stage_checks_text(CHECKS, skip=failed), where=where, feedback="")

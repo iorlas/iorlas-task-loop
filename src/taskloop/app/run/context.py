@@ -9,6 +9,7 @@ from taskloop.app.run.budget import Budget
 from taskloop.app.run.calls import Calls
 from taskloop.app.run.checklog import CheckLog
 from taskloop.app.run.steps import Steps
+from taskloop.contracts.config import EngineConfig
 from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
 
@@ -16,7 +17,7 @@ from taskloop.stores.runlog import RunLog
 @dataclasses.dataclass
 class RunContext:
     bead: str
-    cfg: dict[str, Any]
+    cfg: EngineConfig
     wt: Path
     run: str  # <bead>-<YYYYMMDD-HHMMSS>: the stem of the run's files
     run_dir: Path
@@ -32,7 +33,7 @@ class RunContext:
     dry: bool = False
 
     @classmethod
-    def open(cls, bead: str, cfg: dict[str, Any], wt: Path, run: str, run_dir: Path, stores: Stores, store: Any, route: Any, clock: Any,
+    def open(cls, bead: str, cfg: EngineConfig, wt: Path, run: str, run_dir: Path, stores: Stores, store: Any, route: Any, clock: Any,
              sessions: list[dict[str, Any]], stats: dict[str, int], opencode: Callable[[str], str], context_tokens: Callable[[str], int | None],
              echo: Callable[[str], None], verbose: bool = True, dry: bool = False, now: Callable[[], float] | None = None,
              guard: Callable[[str], None] | None = None, on_step: Callable[[str], None] | None = None) -> "RunContext":

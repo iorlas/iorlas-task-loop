@@ -12,8 +12,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "task
 from support import fake_route  # noqa: E402
 from support import tlbd, tools  # noqa: E402
 from support.fakes import FakeBeadStore  # noqa: E402
+from taskloop.contracts.config import EngineConfig  # noqa: E402
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from support.builders import make_engine  # noqa: E402
+from support.builders import cfg_with, make_engine  # noqa: E402
 import test_engine as te  # noqa: E402
 from test_engine import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint, tl  # noqa: E402,F401
 
@@ -267,7 +268,7 @@ class RepeatedChecks(StagesTest):
         return "mkdir -p ev && just unity-tests > ev/%s.out 2>&1 && grep -q Passed ev/%s.out" % (out, out)
 
     def test_repeats_are_found_through_redirects_and_wrappers(self):
-        e = engine.Engine("t-1", str(self.wt), dict(engine.load_cfg(str(self.wt)), checks=[
+        e = engine.Engine("t-1", str(self.wt), cfg_with(engine.load_cfg(str(self.wt)), checks=[
             {"id": "tests", "cmd": "just fast-tests", "group": "tests"}]), store=self.store)
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[self.wrap("a"), self.wrap("b"), "just fast-tests", "just lint"])],
                     cases=[{"criterion": "c", "check": self.wrap("c")}])
@@ -278,7 +279,7 @@ class RepeatedChecks(StagesTest):
         self.assertEqual(e.repeated_slow(two), [])  # two stages' checks run in two rounds
         wrapped = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["mkdir -p ev && just fast-tests > ev/o 2>&1"])])
         self.assertEqual([(p, rid) for p, cs, rid in e.repeated_slow(wrapped)], [])  # not slow by name or history
-        e.cfg["checks"][0]["cmd"] = "just unity-tests"
+        e.cfg = cfg_with(e.cfg, checks=[{"id": "tests", "cmd": "just unity-tests", "group": "tests"}])
         one = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[self.wrap("a")])])
         self.assertEqual([(p, rid) for p, cs, rid in e.repeated_slow(one)], [("just unity-tests", "tests")])
 
@@ -398,7 +399,7 @@ class Fdyo(StagesTest):
 
     @te.no_repo
     def test_a_codex_session_is_not_resumed_above_100k_inside_a_stage(self):
-        self.assertEqual(engine.DEFAULTS["write_fresh_above_k"], {"claude": 150, "codex": 100, "xai": 100})
+        self.assertEqual(EngineConfig().write_fresh_above_k, {"claude": 150, "codex": 100, "xai": 100})
 
     def test_python_isolated_mode_with_a_repo_module_is_sent_back(self):
         (self.wt / "tools" / "tests").mkdir(parents=True)
