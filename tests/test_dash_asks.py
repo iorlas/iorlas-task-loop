@@ -13,6 +13,7 @@ import support.paths  # noqa: E402,F401
 from support.narrow import must  # noqa: E402
 from asks.samples import MOCKS  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
+from asks.dash_ports import answering  # noqa: E402
 from taskloop.adapters.bd import BdRun, BdStore  # noqa: E402
 from taskloop.adapters.fake_beads import FakeBeads  # noqa: E402
 from taskloop.contracts import codec  # noqa: E402
@@ -36,7 +37,7 @@ class DashAsks(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.dash = make_dash(Ports(store=fake_store), config=self.tmp.name)
+        self.dash = make_dash(answering(fake_store, self.tmp.name), config=self.tmp.name)
         self.path = self.dash.env.config.ask("b-1")
         self.path.parent.mkdir(parents=True)
 
@@ -98,7 +99,7 @@ class AskFailures(unittest.TestCase):
         self.d = Path(self.tmp.name)
         self.calls = []
         self.bd_says = None  # the BdError the next write fails with
-        self.dash = make_dash(Ports(store=self.store), config=self.tmp.name)
+        self.dash = make_dash(answering(self.store, self.tmp.name), config=self.tmp.name)
         self.dir = self.dash.env.config.ask("x").parent
         self.dir.mkdir(parents=True)
 
@@ -119,27 +120,20 @@ class AskFailures(unittest.TestCase):
     def read(self, bead="x-1"):
         return json.loads((self.dir / ("%s.json" % bead)).read_text())
 
-    def test_a_bead_bd_does_not_know_says_the_ask_is_out_of_date(self):
-        self.bd_says = BdError(kind="not_found", text='Error: resolving demo: no issue found matching "demo"')
-        self.ask("demo")
-        code, out = self.dash.asks.answer({"ask": "demo-1", "text": "b"})
-        self.assertEqual((code, out["code"]), (404, "bead_missing"))
-        self.assertNotIn("resolving", out["error"])
-        self.assertIn("dismiss", out["error"])
-
-    def test_any_other_bd_failure_keeps_its_last_line(self):
-        self.bd_says = BdError(kind="other", text="boom: disk full")
-        self.ask()
-        code, out = self.dash.asks.answer({"ask": "x-1-1", "text": "b"})
-        self.assertEqual((code, out["code"]), (502, "bd"))
-        self.assertIn("boom: disk full", out["error"])
-        self.assertEqual(self.read()["answer"]["text"], "b")  # the answer is the record; only opening the bead failed
+    def test_a_bd_failure_after_the_answer_keeps_the_answer_like_tl_answer_does(self):
+        for kind in ("not_found", "other"):
+            self.bd_says = BdError(kind=kind, text="boom: disk full")
+            self.ask()
+            self.assertEqual(self.dash.asks.answer({"ask": "x-1-1", "text": "b"})[0], 200)
+            self.assertEqual(self.read()["answer"]["text"], "b")  # the answer is the record; opening the bead is best effort
+            (self.dir / "x-1.json").unlink()
 
     def test_no_bd_on_the_path_is_an_error_message_not_a_dropped_connection(self):
         self.ask()
         with mock.patch.object(self.dash.env.ports, "store", side_effect=FileNotFoundError(2, "No such file or directory")):
             code, out = self.dash.asks.answer({"ask": "x-1-1", "text": "b"})
         self.assertEqual((code, out["code"]), (502, "no_bd"))
+        self.assertEqual(self.dash.asks.store.get("x-1").answer, None)  # nothing was filed
 
     def test_a_withdrawn_ask_says_why_and_is_not_listed(self):
         self.ask()

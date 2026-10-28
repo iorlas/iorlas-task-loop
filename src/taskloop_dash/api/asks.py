@@ -8,8 +8,7 @@ from typing import Any, Final
 
 from taskloop.contracts import codec
 from taskloop.contracts.ask import Ask as AskRecord
-from taskloop.contracts.ask import AskAnswer
-from taskloop.contracts.ports import BdFailure, BeadPatch
+from taskloop.contracts.ask import AskAction
 from taskloop.contracts.stores import ORPHAN, AskStore
 from taskloop_dash.api.lanes import Lanes
 from taskloop_dash.env import Env
@@ -27,14 +26,6 @@ PROBLEMS: Final = {
                       "(or Change answer on the dashboard)."),
     "superseded": (409, "The engine asked again for this bead; the new ask replaces this one."),
 }
-
-
-def bd_failed(a: AskRecord, err: BdFailure) -> Reply:
-    out = err.error.text.strip()
-    if err.error.kind == "not_found":
-        return 404, {"code": "bead_missing", "error": "The bead %s no longer exists in %s. The ask is out of date: dismiss it."
-                     % (a.bead, basename(a.repo) or "its repo")}
-    return 502, {"code": "bd", "error": "bd refused the update: %s" % (out.splitlines()[-1][:200] if out else "no output")}
 
 
 def next_step(a: AskRecord) -> str:
@@ -148,17 +139,17 @@ class Asks:
         text = body.get("text") if isinstance(body.get("text"), str) else ""
         text = text.strip()
         opt = body.get("option")
-        action = "text"
+        action: AskAction = "text"
         if isinstance(opt, int) and 0 <= opt < len(a.options):
             o = a.options[opt]
             action, text = o.action, " ".join(x for x in (o.text or (o.label if o.action == "text" else ""), text) if x)
         if not text and action == "text":
             return 400, {"code": "empty", "error": "Write an answer first."}
-        given = AskAnswer(action=action, text=text, t=self.env.clock(), by="dash")  # type: ignore[arg-type]
-        _done, why = (self.store.amend if amend else self.store.answer)(a.bead, a.id, given)
-        if why:
-            return self.refuse(why)
-        return self.open_bead(a) or (200, {"ok": True, "bead": a.bead, "next": next_step(a)})
+        try:
+            _done, why = self.env.ports.answer(a.repo, a.bead, action, text, amend)
+        except OSError as e:
+            return 502, {"code": "no_bd", "error": f"The dashboard cannot run bd ({e.strerror}). Nothing was changed."}
+        return self.refuse(why) if why else (200, {"ok": True, "bead": a.bead, "next": next_step(a)})
 
     def target(self, body: object) -> tuple[AskRecord | None, Reply | None]:
         """(the ask an answer is for, None) or (None, why it cannot be answered). An answered ask is a target only for an amend."""
@@ -170,16 +161,6 @@ class Asks:
         if why == "superseded" and a is not None:
             return None, (409, {"code": why, "new_ask": a.id, "error": PROBLEMS[why][1]})
         return None, self.refuse(why or "gone")
-
-    def open_bead(self, a: AskRecord) -> Reply | None:
-        """Open the bead for the loop. -> None when done, else the reply that says what went wrong."""
-        try:
-            self.env.ports.store(a.repo).update(a.bead, BeadPatch(status="open"))
-        except OSError as e:
-            return 502, {"code": "no_bd", "error": f"The answer is saved, but the dashboard cannot run bd to open the bead ({e.strerror})."}
-        except BdFailure as e:
-            return bd_failed(a, e)
-        return None
 
     def withdraw(self, body: object) -> Reply:
         """The owner dismisses an ask that no longer applies; the bead is not touched."""

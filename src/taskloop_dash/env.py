@@ -10,10 +10,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from taskloop.contracts.ask import Ask
+from taskloop.contracts.ask import Ask, AskAction
 from taskloop.contracts.locks import Ticket
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import Beads
+from taskloop.contracts.ports import AnswerAsk, Beads
 from taskloop_dash.cache import FileCache, TtlCache
 from taskloop_dash.tails import Tails
 
@@ -47,6 +47,10 @@ def _ask_text(ask: Ask) -> str:
     return ask.decision
 
 
+def _no_answer(repo: str, bead: str, action: AskAction, text: str, amend: bool) -> tuple[Ask | None, str]:
+    raise OSError(2, "bd is not installed")
+
+
 def _no_versions() -> list[str]:
     return []
 
@@ -59,6 +63,7 @@ class Ports:
     waiting_line: Callable[[str], list[Ticket]] = _no_tickets  # the live slot tickets, first in line first
     load_cfg: Callable[[str], dict[str, Any]] = _default_cfg  # the repo's engine config: pick_label, skip_labels
     store: Callable[[str], Beads] = _no_store  # the typed bd port for a repo (the engine's BdStore); the only way the dash reaches bd
+    answer: AnswerAsk = _no_answer  # file the owner's answer to an ask: the intake `tl answer` uses, receipt comment included
     reflections: Callable[[int], dict[str, Any]] = _no_reflections  # the run reflections of the last N hours
     ask_text: Callable[[Ask], str] = _ask_text  # the card text of an ask, rendered from its fields (domain/asks/text.py)
     installed_versions: Callable[[], list[str]] = _no_versions  # task-loop versions in the plugin cache
