@@ -27,7 +27,8 @@ from clock import FakeClock  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import engine  # noqa: E402
-import fake_route  # noqa: E402
+import seams  # noqa: E402
+from support import fake_route  # noqa: E402
 import lane_policy as lp  # noqa: E402,F401
 import netgate  # noqa: E402,F401
 from checks import lint  # noqa: E402,F401
@@ -119,7 +120,7 @@ def delegate_stack(script, route="/fake/route.py"):
     """The engine's delegate for a test: `route` resolved on fake_route's contract 3, `script` as the process seam, no real sleep."""
     res = dl.Resolved(Path(route).parent, route, fake_route.CONTRACT, "explicit")
     stack = contextlib.ExitStack()
-    for p in (mock.patch.object(dl, "resolve", return_value=res), mock.patch.object(engine, "make_runner", lambda *a, **k: script),
+    for p in (mock.patch.object(dl, "resolve", return_value=res), mock.patch.object(seams.DelegateRoute, "runner", lambda self, *a, **k: script),
               mock.patch.object(engine.time, "sleep")):
         stack.enter_context(p)
     return stack
@@ -3286,7 +3287,7 @@ class EngineTest(unittest.TestCase):
         c = engine.load_cfg(str(self.wt))
         refusal = dl.Refusal("skew_delegate_older", "delegate speaks contract 2")
         script = fake_route.Script({})
-        with mock.patch.object(dl, "resolve", return_value=refusal), mock.patch.object(engine, "make_runner", lambda *a, **k: script):
+        with mock.patch.object(dl, "resolve", return_value=refusal), mock.patch.object(seams.DelegateRoute, "runner", lambda self, *a, **k: script):
             rc = engine.Engine("t-1", str(self.wt), c).run()
         self.assertEqual(rc, 2)
         self.assertEqual(script.calls, [])

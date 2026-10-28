@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills" / "task-lo
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import call_state as callstate  # noqa: E402
 import delegate_link as dl  # noqa: E402
-import fake_route  # noqa: E402
+from support import fake_route  # noqa: E402
 import loop  # noqa: E402
 import netgate  # noqa: E402
 import outcome as oc  # noqa: E402

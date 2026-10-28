@@ -101,7 +101,7 @@ class CallSite(unittest.TestCase):
 
     def test_the_call_sets_the_env(self):
         import delegate_link as dl
-        import fake_route
+        from support import fake_route
         seen = []
 
         def runner(cmd, **kw):

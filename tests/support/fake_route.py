@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-VENDORED = HERE.parents[1] / "tests" / "fixtures" / "delegate3"
+VENDORED = HERE.parent / "fixtures" / "delegate3"
 
 
 def delegate_dir():

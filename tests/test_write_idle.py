@@ -20,8 +20,9 @@ import test_engine as te  # noqa: E402
 
 import delegate_link as dl  # noqa: E402
 import engine  # noqa: E402
+import seams  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "task-loop"))
-import fake_route  # noqa: E402
+from support import fake_route  # noqa: E402
 import tl  # noqa: E402
 from core import procs  # noqa: E402,F401
 from lanes import call as lcall  # noqa: E402,F401
@@ -317,7 +318,7 @@ class SurvivorBlocksTheRetry(te.EngineTest):
         idles = []
         script = fake_route.Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         c = engine.load_cfg(str(self.wt))
-        with te.delegate_stack(script), mock.patch.object(engine, "make_runner", lambda log, idle=None, wall=None: idles.append(idle) or script):
+        with te.delegate_stack(script), mock.patch.object(seams.DelegateRoute, "runner", lambda self, log, idle=None, wall=None: idles.append(idle) or script):
             engine.Engine("t-1", str(self.wt), c).run()
         seen = dict(zip([x[0] for x in script.calls], idles))  # one runner per call, in call order
         self.assertEqual((seen["worker"].warn, seen["worker"].stop, seen["worker"].cap), (15 * MIN, 25 * MIN, 120 * MIN))

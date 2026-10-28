@@ -19,7 +19,7 @@ import engine  # noqa: E402
 import test_engine as te  # noqa: E402
 import tl  # noqa: E402
 import delegate_link as dl  # noqa: E402
-import fake_route  # noqa: E402
+from support import fake_route  # noqa: E402
 
 
 def sh(*a, cwd):
@@ -125,7 +125,7 @@ class SlotGitTest(unittest.TestCase):
         route.write_text("import json, os, sys\nsys.path.insert(0, %r)\nimport fake_route\n"
                          "env = [k for k in ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE') if k in os.environ]\n"
                          "print(json.dumps(fake_route.answer(fake_route.contract(), None, 'r1', False, {'env': env})))\n"
-                         % str(ROOT / "skills" / "task-loop"))
+                         % str(ROOT / "tests" / "support"))
         with mock.patch.dict(os.environ, {"GIT_DIR": "/x", "GIT_WORK_TREE": "/y", "GIT_INDEX_FILE": "/z"}):
             r = dl.call(dl.Resolved(route.parent, str(route), fake_route.CONTRACT, "explicit"),
                         dl.CallRequest("worker", "p", {"type": "object"}, str(self.wt), timeout_s=30),

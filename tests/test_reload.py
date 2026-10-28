@@ -23,13 +23,14 @@ import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 sys.path.insert(0, str(SRC / "dash"))
 sys.path.insert(0, str(ROOT / "tests"))
 import engine  # noqa: E402
+import seams  # noqa: E402
 import graph  # noqa: E402
 import loop  # noqa: E402
 import roadmap  # noqa: E402
 import test_engine as te  # noqa: E402
 import tl  # noqa: E402
 import delegate_link as dl  # noqa: E402
-import fake_route  # noqa: E402
+from support import fake_route  # noqa: E402
 
 BREAK_PLAN = ("    def plan(self, again=False):\n", "    def plan(self, again=False):\n        raise RuntimeError('planted: cannot plan')\n")
 
@@ -101,7 +102,7 @@ class Reload(unittest.TestCase):
 
             def __getattr__(this, name):
                 return getattr(script, name)
-        return (mock.patch.object(engine, "make_runner", lambda *a, **k: Runner()), mock.patch.object(engine.time, "sleep"))
+        return (mock.patch.object(seams.DelegateRoute, "runner", lambda self, *a, **k: Runner()), mock.patch.object(engine.time, "sleep"))
 
     def run_with(self, eng, script, during=None):
         ps = self.patches(script, during)

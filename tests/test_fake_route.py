@@ -13,10 +13,11 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / "skills" / "task-loop"
 sys.path.insert(0, str(SKILL))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import call_state as cs  # noqa: E402
 import clock  # noqa: E402
 import delegate_link as dl  # noqa: E402
-import fake_route  # noqa: E402
+from support import fake_route  # noqa: E402
 import lane_policy as lp  # noqa: E402
 import netgate  # noqa: E402
 import outcome as oc  # noqa: E402
@@ -24,7 +25,7 @@ import outcome as oc  # noqa: E402
 DELEGATE = fake_route.delegate_dir()
 CONTRACT = dl.read_contract(DELEGATE)
 FIXTURES = sorted((DELEGATE / "tests" / "contract" / "fixtures").glob("*.json"))
-FAKE = str(SKILL / "fake_route.py")
+FAKE = str(Path(__file__).resolve().parent / "support" / "fake_route.py")
 
 
 class Fake(unittest.TestCase):

@@ -29,6 +29,7 @@ import applog
 import beadlint
 import delegate_link as dl
 import engine
+import seams
 import loop_health
 import netgate
 import outcome as oc
@@ -1462,12 +1463,11 @@ def selftest():
                     mock.patch.object(tl, "cmd_close", side_effect=lambda a: closed.append(a.reason) or 0), \
                     mock.patch.object(tl, "cmd_block", side_effect=lambda a: blocked.append(a.why) or 0), \
                     mock.patch.object(tl, "cmd_land", return_value=0), \
-                    mock.patch.object(dl, "resolve", return_value=resolved), \
-                    mock.patch.object(engine, "make_runner", lambda *a, **k: Runner()), mock.patch.object(engine.time, "sleep"):
+                    mock.patch.object(engine.time, "sleep"):
                 cfg.update({"reflect": False})
                 os.chdir(wt)  # the engine reads cwd
                 try:
-                    rc = engine.Engine("t-1", str(wt), cfg).run()
+                    rc = engine.Engine("t-1", str(wt), cfg, route=seams.FixedRoute(resolved, Runner())).run()
                 finally:
                     os.chdir(home.parent)  # out of the directory that is removed next
     if rc != 0 or not closed:

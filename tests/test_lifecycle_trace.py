@@ -11,7 +11,7 @@ from unittest import mock
 
 import test_engine as te
 import delegate_link as dl
-import fake_route
+from support import fake_route
 from test_engine import CLEAN, PLAN, PY, WRITE, stop
 
 import engine
