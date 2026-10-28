@@ -6,7 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402,F401
 from taskloop.contracts import ask, bead, checkpoint, checks, config, delegate, events, ids, locks, loop, run, slots, snapshots, trace  # noqa: E402
-from taskloop.contracts import log  # noqa: E402
+from taskloop.contracts import log, review  # noqa: E402
 from taskloop.contracts.enums import AskClass, AskKind, AskStatus, LockWhat, Outcome, WaitWhat, WhyCode  # noqa: E402
 
 T = 1793050200.5
@@ -120,6 +120,15 @@ ASK = ask.Ask(id="tl-1-1", n=1, bead="tl-1", kind=AskKind.DECISION, ask_class=As
                    why_code=WhyCode.OWNER_DECISION, why="w", parks_at=T + 3600, brief_hash="b0c0",
                    options=[ask.AskOption(label="Right", consequence="lands", action="confirm", cost="free", recommended=True)],
                    repo="/r", title="t", answer=ask.AskAnswer(action="confirm", text="ok", t=T, by="denis"), answered=T + 5, consumed=T + 9)
+REVIEW_STATE = review.ReviewState(
+    reviews=3, rounds=2, seen_lows=["style nit"],
+    book=[review.BookedFinding(fid="f1", stage=1, round=1, axis="spec", severity="high", confidence="likely", category="logic",
+                               file="a.py", line=7, fix="handle none", scenario="a None input raises", status="claimed")],
+    unchecked=[checkpoint.Unchecked(what="w", kind="checkable")], unverified=[checkpoint.Unverified(what="u", kind="taste")],
+    verified=[trace.Verified(what="w", kind="checkable", verdict="settled", evidence="e", why="y")],
+    verify=review.VerifyResult(settled=1, wrong=1, open=0, fixes=1, asked=False), filed=["f"],
+    unfiled=[checkpoint.Unfiled(title="t", why="lint")],
+    replan=review.ReplanDigest(cause="gate red", notes="n", accepted=["g1"], open_findings=["f1"], diff_stat="1 file changed"))
 OTHERS = {
     "RunTrace": TRACE,
     "Ask": ASK,
@@ -132,6 +141,7 @@ OTHERS = {
         unfiled=[checkpoint.Unfiled(title="t", why="lint")], look_prev=[checkpoint.LookVerdict(item="i", verdict="defect")],
         rendered=["r"], last_reqs=[checkpoint.RenderReq(method="Shots", names=["n"], args=[checkpoint.RenderArg(name="a", value="b")])],
         handoff={"rounds": [{"stage": "1/1"}]}, pending_land_validation="red"),
+    "ReviewState": REVIEW_STATE,
     "CheckRun": CHECK_RUN,
     "Check": checks.Check(id="unity-tests", cmd="just unity-tests", group="tests", when=["client/**"], retry=1, wall_min=30.0,
                           inputs=["client/**"], inputs_only=True, exclude=["client/Gen/**"], env={"A": "1"}, repo=True, writer=False,
