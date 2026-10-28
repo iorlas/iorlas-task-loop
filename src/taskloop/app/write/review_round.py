@@ -26,7 +26,7 @@ class ReviewRound:
         e = self.e
         e.stats["reviews"] += 1
         e.review_cap()
-        kinds = e.new_by_kind()
+        kinds = e.newfiles.new_by_kind()
         review, _ = e.ai("review", s.name, self.prompt(s, kinds), writer_family=s.wfam, visual=not s.fix and e.pictures.stage_visual(s.st),
                          round=s.rounds + 1, at=(s.sk, s.rounds, s.n), **s.meta)
         e.accepted_new += [p for p in review.get("accept_files") or [] if p in kinds["unexplained"] and p not in e.accepted_new]
@@ -42,13 +42,13 @@ class ReviewRound:
             bool(s.fix), s.last, s.state["scope"] if s.fix else "", round_no=s.rounds + 1, prior=e.hand.rounds_text(last=3),
             acceptance=acceptance_text(self.items(s)), brief=e.briefs.text(), plan=e.plan_text(s.i),
             n=s.i + 1, goal=st["goal"],
-            work=e.stage_work(kinds["unexplained"], kinds["ignored"]), checks=compact(s.run.results), summary=s.w["summary"],
+            work=e.newfiles.stage_work(kinds["unexplained"], kinds["ignored"]), checks=compact(s.run.results), summary=s.w["summary"],
             evidence=e.evidence_dir, gate=gate, added=e.stats["tests_added"], removed=e.stats["tests_removed"])
         where = e.where("review")
         text += ("\n" + where if where else "") + e.cases_text() + (CASES_RAN if s.last and e.case_checks() else "") + self.open_items(s)
         text += "" if s.last else LATER_CASES
         text += e.routing.ledger().text() + e.hand.seen_lows_text() + e.flakes_text() + UNCHECKED_TEXT + e.judge.look_review(st, s.w, s.fix)
-        return text + (e.new_files_brief(kinds["unexplained"]) if kinds["unexplained"] else "")
+        return text + (e.newfiles.new_files_brief(kinds["unexplained"]) if kinds["unexplained"] else "")
 
     def items(self, s: StageState) -> list[tuple[str, str]]:
         """The acceptance items the last stage's review maps to evidence (a fix round reviews the fix only)."""
@@ -79,7 +79,7 @@ class ReviewRound:
                 e.log.note(f"filed as a follow-up bead, not sent back: {lo['title'][:120]}")
         out = fnd.lows_after_first(routed.findings, s.rounds + 1)
         out += fnd.unmapped(self.items(s), review.get("criteria") or [])
-        for p in e.undecided_new(kinds["unexplained"], review):
+        for p in e.newfiles.undecided_new(kinds["unexplained"], review):
             fix = f"decide: unexplained new file {p} (name it in your summary if the task needs it, else delete it)"
             out.append(fnd.engine_finding(p, 0, fix, f"{p} is untracked and no stage lists it, so it is left out of the commit"))
         return dict(review, findings=out, unmet=routed.unmet)

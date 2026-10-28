@@ -56,7 +56,7 @@ class Pictures:
     def stage_visual(self, st: Any):
         e = self.e
         vp = self.visual_cfg()
-        return bool(vp) and visual_hit(vp, list(st.get("files") or []) + e.changed_paths())
+        return bool(vp) and visual_hit(vp, list(st.get("files") or []) + e.checkout.changed_paths())
 
     def shot_methods(self):
         """{method: entry} from engine.shot_table, read from the base branch (a worker can edit the working copy, not that);
@@ -183,7 +183,7 @@ class Pictures:
         e = self.e
         vp, dest = self.visual_cfg(), (e.cfg.evidence_dir or "").strip("/")
         shots = self.shots()
-        if not (vp and shots and visual_hit(vp, e.changed_paths())):
+        if not (vp and shots and visual_hit(vp, e.checkout.changed_paths())):
             self.persist_look()
             return
         if not dest:

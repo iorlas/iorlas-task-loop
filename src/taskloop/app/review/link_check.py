@@ -22,7 +22,7 @@ class LinkCheck:
         if not e.cfg.check_links:
             return
         try:
-            found = links.added_urls(e.task_diff())
+            found = links.added_urls(e.checkout.task_diff())
         except Exception as err:  # no diff to read is no check, never a failed run
             e.warn(f"link check skipped: {err}")
             return

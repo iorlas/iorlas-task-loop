@@ -16,11 +16,11 @@ class Tree:
         e = self.e
         e.steps.begin("reset", "reset")
         branch = bead.metadata.get("branch") or "task/" + e.bead
-        e.fetch(check=True)
+        e.checkout.fetch(check=True)
         self.exclude_task_folder()
         exists = bool(e.git("rev-parse", "--verify", "-q", "refs/heads/" + branch))
         e.left_dirty = False
-        if e.dirty_status():
+        if e.checkout.dirty_status():
             self.save_other_work(branch)
         if exists and e.fresh:
             self.keep_aside(branch)
@@ -87,7 +87,7 @@ class Tree:
     def wip(self, why: str) -> bool:
         """Save the slot's work as a commit on its branch (nothing the bead made is left behind in a slot that is reset to the base)."""
         e = self.e
-        e.stage_all(everything=True)  # tl-g6a
+        e.checkout.stage_all(everything=True)  # tl-g6a
         # --no-verify: a wip commit saves work, it does not judge it; a pre-commit hook that refused it left staged files in the
         # slot and failed the next bead there (lifesim-6pld, then rl4s)
         rc, tail = e.sh(["git", "commit", "-q", "--no-verify", "-m", f"wip ({e.bead}): {why}"], pin=True)
@@ -102,7 +102,7 @@ class Tree:
         e = self.e
         if outcome in ("landed", "done") or not branch or branch != (e.branch or None):
             return
-        if e.dirty_status() or e.git("symbolic-ref", "--short", "-q", "HEAD") != branch:
+        if e.checkout.dirty_status() or e.git("symbolic-ref", "--short", "-q", "HEAD") != branch:
             return  # work that could not be committed, or files stage_all left out, stay where they are for the next run
         rc, tail = e.sh(["git", "checkout", "-q", "--detach", e.cfg.base], pin=True)
         if rc:

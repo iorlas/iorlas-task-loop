@@ -20,7 +20,7 @@ class Rebase:
         caller starts again, tl-19i), "conflict-fixable" (salvage on: the rebase stopped on few files and is left running for the caller's
         fix(conflict)), or "". More than one commit on the branch (the wip commits) is squashed first, so one conflict is fixed once."""
         e = self.e
-        if e.dry or e.dirty_status():  # (the base-ignored files of an old branch are no reason not to rebase)
+        if e.dry or e.checkout.dirty_status():  # (the base-ignored files of an old branch are no reason not to rebase)
             return ""
         behind = e.git("rev-list", "--count", f"HEAD..{e.cfg.base}")
         if behind in ("", "0"):

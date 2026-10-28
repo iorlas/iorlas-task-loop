@@ -154,7 +154,7 @@ class Planner:
         """tl-bxk.13.2: the work is done and only the filing is left: the engine files and closes. Never after a failed stage (a
         re-plan), and never over work no review accepted: that tree is not "done"."""
         e = self.e
-        if (data["leftovers"] or e.leftovers) and not again and (e.done or not e.task_diff().strip()):
+        if (data["leftovers"] or e.leftovers) and not again and (e.done or not e.checkout.task_diff().strip()):
             e.log.note("the planner finds the work done and leaves only follow-up beads to file: closing")
             self.add_leftovers(data)
             e.plan_summary = data["summary"]

@@ -11,7 +11,7 @@ from taskloop.app.plan.prompt import REPLAN_CALLS, PlanPrompt  # noqa: E402
 
 def host(tree="abc"):
     ledger = SimpleNamespace(text=lambda: "")
-    return SimpleNamespace(tree_hash=lambda: tree, git=lambda *a: " a.py | 2 +-\n", base_sha=lambda: "base",
+    return SimpleNamespace(checkout=SimpleNamespace(tree_hash=lambda: tree, base_sha=lambda: "base"), git=lambda *a: " a.py | 2 +-\n",
                            hand=SimpleNamespace(rounds_text=lambda: "- stage 1, round 1 (review); sent back: x\n"),
                            routing=SimpleNamespace(ledger=lambda: ledger))
 

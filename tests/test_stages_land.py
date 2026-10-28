@@ -192,11 +192,11 @@ class SlotHygiene(StagesTest):
             Path(self.wt, f).parent.mkdir(parents=True, exist_ok=True)
             Path(self.wt, f).write_text("noise\n")
         e = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
-        self.assertEqual(e.dirty_status(), "")
+        self.assertEqual(e.checkout.dirty_status(), "")
         self.assertIn("?? client/", e.git("status", "--porcelain"))  # git alone calls it dirty: the old tree has no such rule
         Path(self.wt, "client/keep.log").write_text("real\n")  # negated by the base: real work
         Path(self.wt, "client/src.cs").write_text("real\n")
-        self.assertEqual(sorted(l[3:] for l in e.dirty_status().splitlines()), ["client/keep.log", "client/src.cs"])
+        self.assertEqual(sorted(l[3:] for l in e.checkout.dirty_status().splitlines()), ["client/keep.log", "client/src.cs"])
 
     def test_the_users_own_global_excludes_still_apply(self):
         self.put_ignore_on_main("client/log.txt\n")
@@ -207,7 +207,7 @@ class SlotHygiene(StagesTest):
         (self.wt / "client").mkdir()
         (self.wt / "client" / "log.txt").write_text("unity\n")
         e = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
-        self.assertEqual(e.dirty_status(), "")
+        self.assertEqual(e.checkout.dirty_status(), "")
 
     def test_files_the_base_does_not_ignore_keep_a_parked_slot_where_it_is(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which format?")]})

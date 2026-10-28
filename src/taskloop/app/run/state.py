@@ -78,7 +78,7 @@ class Checkpoints:
                 bead=e.bead,
                 run=e.log_path.stem,
                 t=time.time(),
-                branch=e.branch_now() or e.task_branch,
+                branch=e.checkout.branch_now() or e.task_branch,
                 head=e.git("rev-parse", "HEAD"),
                 step=step,
                 stage=stage,

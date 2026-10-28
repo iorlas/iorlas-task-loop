@@ -23,7 +23,7 @@ class CheckRound:
                            **s.meta)
         s.run, e.last_run = run, run
         e.stores.check_run(e.run_dir.name, None).write(run)
-        e.stats["tests_added"], e.stats["tests_removed"] = count_tests(e.task_diff(), e.cfg.test_pattern)
+        e.stats["tests_added"], e.stats["tests_removed"] = count_tests(e.checkout.task_diff(), e.cfg.test_pattern)
         if e.stats["tests_removed"]:
             e.warn(f"the task's diff removes {e.stats['tests_removed']} tests")
         failed = run.failed

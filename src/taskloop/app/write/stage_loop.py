@@ -30,7 +30,7 @@ class StageLoop:
         s = StageState(plan, i, state)
         e.at_stage = s.sk
         if not s.state or s.fix:  # a resumed stage keeps the checkpoint's start; the first stage starts at the task's base
-            e.stage_tree = e.tree_hash() if (i or s.fix or e.amended) else ""
+            e.stage_tree = e.checkout.tree_hash() if (i or s.fix or e.amended) else ""
         if not s.state:  # a resumed stage keeps its render rounds (the checkpoint's)
             e.look_done, e.look_prev = 0, list[Any]()
         return s

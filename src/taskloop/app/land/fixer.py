@@ -31,7 +31,7 @@ class Fixer:
         if kind == "conflict":
             return self.continue_rebase(done, tail, resume)
         if kind == "gate" and e.git("status", "--porcelain"):
-            e.stage_all(check=True)
+            e.checkout.stage_all(check=True)
             e.sh(["git", "commit", "-q", "--no-verify", "--amend", "--no-edit"], check=True, pin=True)
         if done != "accept" and kind != "verify":
             e.warn("land: the fix round did not pass its checks and review; landing tries the gate again")
@@ -77,7 +77,7 @@ class Fixer:
         e = self.e
         if e.sh([*e.MARKERS_ARGV], pin=True)[0]:
             return self.fix("conflict", "conflict markers are still in the tree after the fix", resume=resume)
-        e.stage_all(check=True)
+        e.checkout.stage_all(check=True)
         rc, out = e.sh(["git", "-c", "core.editor=true", "rebase", "--continue"], pin=True)
         if rc:
             e.sh(["git", "rebase", "--abort"], pin=True)

@@ -12,7 +12,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 import engine  # noqa: E402
-from taskloop.adapters import gitrepo  # noqa: E402
+from taskloop.adapters import gitrepo, treehash  # noqa: E402
 
 
 def sh(*a, cwd):
@@ -94,18 +94,18 @@ class GitMemoTest(unittest.TestCase):
         eng = engine.Engine.__new__(engine.Engine)
         eng.wt = r
         (r / "f.txt").write_text("2\n")
-        a = eng.tree_hash()
-        self.assertEqual(self.calls(eng.tree_hash), (a, 1))  # one git status, no read-tree / add / write-tree
+        a = eng.checkout.tree_hash()
+        self.assertEqual(self.calls(eng.checkout.tree_hash), (a, 1))  # one git status, no read-tree / add / write-tree
         (r / "f.txt").write_text("3\n")  # status still says ' M'; the size is the same
-        b = eng.tree_hash()
+        b = eng.checkout.tree_hash()
         self.assertNotEqual(a, b)
         (r / "new.txt").write_text("x")
-        c = eng.tree_hash()
+        c = eng.checkout.tree_hash()
         self.assertNotEqual(b, c)
         (r / "new.txt").unlink()
-        self.assertEqual(eng.tree_hash(), b)
+        self.assertEqual(eng.checkout.tree_hash(), b)
         sh("git", "commit", "-qam", "three", cwd=r)
-        self.assertEqual(eng.tree_hash(), gitrepo.git("rev-parse", "HEAD^{tree}", cwd=r))
+        self.assertEqual(eng.checkout.tree_hash(), gitrepo.git("rev-parse", "HEAD^{tree}", cwd=r))
 
     def test_tree_hash_raises_when_read_tree_or_add_fails_instead_of_hashing_the_wrong_tree(self):
         eng = engine.Engine.__new__(engine.Engine)
@@ -119,10 +119,10 @@ class GitMemoTest(unittest.TestCase):
                 return real(cmd, *a, **k)
             with self.subTest(failing), mock.patch.object(engine.subprocess, "run", run):
                 eng.tree_memo = None
-                with self.assertRaises(engine.TreeHashError) as got:
-                    eng.tree_hash()
+                with self.assertRaises(treehash.TreeHashError) as got:
+                    eng.checkout.tree_hash()
                 self.assertIn(failing, str(got.exception))
-        self.assertTrue(eng.tree_hash())
+        self.assertTrue(eng.checkout.tree_hash())
 
     def test_tree_hash_sees_two_same_size_edits_within_one_timestamp_tick(self):
         r = self.repo
@@ -131,27 +131,27 @@ class GitMemoTest(unittest.TestCase):
         f = r / "f.txt"
         f.write_text("2\n")
         stamp = os.stat(f).st_mtime_ns
-        a = eng.tree_hash()
+        a = eng.checkout.tree_hash()
         f.write_text("3\n")  # same size, same inode (rewritten in place) ...
         os.utime(f, ns=(stamp, stamp))  # ... and the same mtime_ns: size, mtime and inode cannot tell the two edits apart
         self.assertEqual(os.stat(f).st_mtime_ns, stamp)
-        self.assertNotEqual(eng.tree_hash(), a)
+        self.assertNotEqual(eng.checkout.tree_hash(), a)
 
     def test_tree_hash_follows_a_commit_and_a_checkout_made_by_another_process(self):
         r = self.repo
         eng = engine.Engine.__new__(engine.Engine)
         eng.wt = r
         (r / "f.txt").write_text("2\n")
-        dirty = eng.tree_hash()
-        self.assertEqual(eng.tree_hash(), dirty)  # remembered
+        dirty = eng.checkout.tree_hash()
+        self.assertEqual(eng.checkout.tree_hash(), dirty)  # remembered
         sh("git", "commit", "-qam", "two", cwd=r)  # a worker commits: the tree is clean, HEAD moved
-        committed = eng.tree_hash()
+        committed = eng.checkout.tree_hash()
         self.assertEqual(committed, gitrepo.git("rev-parse", "HEAD^{tree}", cwd=r))
         sh("git", "checkout", "-q", "-b", "other", "HEAD~1", cwd=r)  # a worker checks out older content
-        self.assertEqual(eng.tree_hash(), gitrepo.git("rev-parse", "HEAD^{tree}", cwd=r))
-        self.assertNotEqual(eng.tree_hash(), committed)
+        self.assertEqual(eng.checkout.tree_hash(), gitrepo.git("rev-parse", "HEAD^{tree}", cwd=r))
+        self.assertNotEqual(eng.checkout.tree_hash(), committed)
         sh("git", "checkout", "-q", "main", cwd=r)
-        self.assertEqual(eng.tree_hash(), committed)
+        self.assertEqual(eng.checkout.tree_hash(), committed)
 
 
 if __name__ == "__main__":

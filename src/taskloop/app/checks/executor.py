@@ -96,7 +96,7 @@ class CheckExecutor:
             # the end, so the writer sees all the cheap failures at once; the Unity group never runs after a red)
             return CheckResult.skipped(c, st.red + FAILED_FIRST)
         if c.when:
-            st.changed = self.host.changed_paths() if st.changed is None else st.changed
+            st.changed = self.host.checkout.changed_paths() if st.changed is None else st.changed
             if not any(fnmatch.fnmatch(p, g) for p in st.changed for g in c.when):
                 return CheckResult.skipped(c, "no change under {}".format(", ".join(c.when)))
         return None

@@ -35,7 +35,7 @@ class Routing:
 
     def names_code(self, what: str) -> bool:
         e = self.e
-        files = set(e.git("ls-files").splitlines()) | set(e.changed_paths())
+        files = set(e.git("ls-files").splitlines()) | set(e.checkout.changed_paths())
         return kinds.names_code(what, files, {f.rsplit("/", 1)[-1] for f in files}, e.diff_text)
 
     def resolve_kind(self, u: Item, a: Item) -> tuple[str, str]:

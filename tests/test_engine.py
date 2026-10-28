@@ -37,6 +37,9 @@ from taskloop.domain.prompts.plan import REPLAN_CAP  # noqa: E402
 from taskloop.contracts import answers  # noqa: E402
 from taskloop.app.plan.planner import Planner  # noqa: E402
 from taskloop.app.land.fixer import Fixer  # noqa: E402
+from taskloop.app.write.newfiles import NewFiles  # noqa: E402
+from taskloop.app.land.checkout import Checkout  # noqa: E402
+from taskloop.domain.look.matchers import writer_names  # noqa: E402
 from taskloop.app.land.lander import Lander  # noqa: E402
 from taskloop.app.review.settles import Settles  # noqa: E402
 from taskloop.domain.review.matchers import Tools  # noqa: E402
@@ -1934,7 +1937,7 @@ class EngineTest(unittest.TestCase):
         events, held = [], []
         state = {"pushes": 0, "fetches": 0, "gates": 0, "results": []}
         real_lock, real_sh, real_wait = Lander.lock, engine.Engine.sh, engine.Engine.add_wait
-        real_fetch, real_checks, real_fix = engine.Engine.fetch, engine.Engine.run_checks, Fixer.fix
+        real_fetch, real_checks, real_fix = Checkout.fetch, engine.Engine.run_checks, Fixer.fix
         gate = [sys.executable, "-c", "pass"]
 
         @contextmanager
@@ -2022,7 +2025,7 @@ class EngineTest(unittest.TestCase):
         state["config_home"] = config_home
         with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": config_home, "APPDATA": config_home}), \
                 mock.patch.object(Lander, "lock", lock), \
-                mock.patch.object(engine.Engine, "fetch", fetch), \
+                mock.patch.object(Checkout, "fetch", fetch), \
                 mock.patch.object(engine.Engine, "run_checks", checks), \
                 mock.patch.object(engine.Engine, "sh", command), \
                 mock.patch.object(Fixer, "fix", fix), \
@@ -3093,7 +3096,7 @@ class EngineTest(unittest.TestCase):
             opened.append(url)
             return (url.startswith("https://docs."), "HTTP 403")
         eng.link_fn = fake
-        with mock.patch.object(engine.Engine, "task_diff", return_value=self.RESEARCH_DIFF):
+        with mock.patch.object(Checkout, "task_diff", return_value=self.RESEARCH_DIFF):
             review = {"findings": []}
             eng.link_check.link_judged(review)
             self.assertEqual(len(review["findings"]), 1)
@@ -3115,7 +3118,7 @@ class EngineTest(unittest.TestCase):
         self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         eng = self.eng
         eng.link_fn = lambda url: (False, "no such host")
-        with mock.patch.object(engine.Engine, "task_diff", return_value=self.RESEARCH_DIFF):
+        with mock.patch.object(Checkout, "task_diff", return_value=self.RESEARCH_DIFF):
             review = {"findings": []}
             eng.link_check.link_judged(review)
             self.assertEqual((review["findings"], eng.unverified), ([], []))  # offline: nothing the writer can fix
@@ -3130,14 +3133,14 @@ class EngineTest(unittest.TestCase):
         self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         eng, opened = self.eng, []
         eng.link_fn = lambda url: (opened.append(url), (False, "HTTP 404"))[1]
-        with mock.patch.object(engine.Engine, "task_diff", return_value=self.RESEARCH_DIFF):
+        with mock.patch.object(Checkout, "task_diff", return_value=self.RESEARCH_DIFF):
             for _ in range(4):
                 eng.link_check.link_judged({"findings": []})
         self.assertEqual(len(opened), 6)  # three links, two rounds each; later reviews keep the verdict
 
     def test_a_task_with_an_unopened_link_is_sent_back_then_asks_when_the_writer_cannot_fix_it(self):
         fake = lambda url: (False, "HTTP 403")
-        with mock.patch.object(engine.links, "check", fake), mock.patch.object(engine.Engine, "task_diff", return_value=self.RESEARCH_DIFF):
+        with mock.patch.object(engine.links, "check", fake), mock.patch.object(Checkout, "task_diff", return_value=self.RESEARCH_DIFF):
             rc, s = self.run_engine({"plan": [PLAN] * 3, "write": [WRITE] * 8, "review": [CLEAN] * 8},
                                     max_rounds=2, max_replans=0)
         self.assertEqual(rc, 2, self.blocked)
@@ -3732,29 +3735,29 @@ class LandReview(EngineTest):
         self.make_files("f.txt", "docs/a/b.md", "docs/a/b.md.meta", *self.STRAY)
         (self.wt / "a.txt").write_text("changed\n")
         e = self.engine_at_land()
-        self.assertEqual(e.stage_all(), 0)
+        self.assertEqual(e.checkout.stage_all(), 0)
         self.assertEqual(self.staged(), ["a.txt", "docs/a/b.md", "docs/a/b.md.meta", "f.txt"])
-        self.assertEqual(e.new_by_kind()["unexplained"], self.STRAY)
+        self.assertEqual(e.newfiles.new_by_kind()["unexplained"], self.STRAY)
 
     def test_an_untracked_file_the_writer_names_or_a_review_accepts_is_staged(self):
         self.make_files("g.txt", *self.STRAY)
         e = self.engine_at_land({"writer_said": "I also added g.txt for the fixture",
                                  "accepted_new": [self.STRAY[0]]})  # the .meta follows its file
-        e.stage_all()
+        e.checkout.stage_all()
         self.assertEqual(self.staged(), sorted(["g.txt"] + self.STRAY))
 
     def test_writer_said_matches_the_path_or_basename_on_word_boundaries(self):
         e = self.engine_at_land({"writer_said": "added tools/g.txt, and `h.cfg`. Not ab.md or c.txt.bak"})
-        self.assertTrue(e.writer_names("tools/g.txt"))
-        self.assertTrue(e.writer_names("other/g.txt"))  # the basename
-        self.assertTrue(e.writer_names("h.cfg"))
-        self.assertFalse(e.writer_names("b.md"))
-        self.assertFalse(e.writer_names("c.txt"))
-        self.assertFalse(e.writer_names("tools/g"))
+        self.assertTrue(writer_names("tools/g.txt", e.writer_said))
+        self.assertTrue(writer_names("other/g.txt", e.writer_said))  # the basename
+        self.assertTrue(writer_names("h.cfg", e.writer_said))
+        self.assertFalse(writer_names("b.md", e.writer_said))
+        self.assertFalse(writer_names("c.txt", e.writer_said))
+        self.assertFalse(writer_names("tools/g", e.writer_said))
 
     def test_a_replanned_first_stage_starts_from_the_current_tree_not_the_task_base(self):
         e = self.engine_at_land({"stage_tree": "old", "amended": True})
-        with mock.patch.object(e, "tree_hash", return_value="T"), mock.patch.object(e.checkpoints, "save", side_effect=RuntimeError("stop")):
+        with mock.patch.object(e.checkout, "tree_hash", return_value="T"), mock.patch.object(e.checkpoints, "save", side_effect=RuntimeError("stop")):
             with self.assertRaises(RuntimeError):
                 e.stage_loop.run({"stages": [{"goal": "g", "files": [], "checks": [], "hard": False}]}, 0)
         self.assertEqual(e.stage_tree, "T")
@@ -3762,9 +3765,9 @@ class LandReview(EngineTest):
     def test_untracked_ignore_globs_are_never_staged_nor_listed_even_when_a_stage_lists_the_folder(self):
         self.make_files("docs/keep.md", "docs/junk.tmp", *self.STRAY)
         e = self.engine_at_land({"accepted_new": [self.STRAY[0]]}, untracked_ignore=["client/Assets/InitTestScene*.unity*", "*.tmp"])
-        e.stage_all()
+        e.checkout.stage_all()
         self.assertEqual(self.staged(), ["docs/keep.md"])
-        kinds = e.new_by_kind()
+        kinds = e.newfiles.new_by_kind()
         self.assertEqual((kinds["unexplained"], sorted(kinds["ignored"])), ([], sorted(["docs/junk.tmp"] + self.STRAY)))
 
     def test_a_stray_scene_is_listed_for_the_review_and_left_out_of_the_land(self):
@@ -3787,14 +3790,14 @@ class LandReview(EngineTest):
         self.make_files("f.txt", "docs/x.md", *self.STRAY)
         (self.wt / "bin.dat").write_bytes(b"\0\1\2")
         e = self.engine_at_land()
-        self.assertEqual(e.new_file_view("bin.dat"), "binary, 3 bytes")
+        self.assertEqual(e.newfiles.new_file_view("bin.dat"), "binary, 3 bytes")
         (self.wt / "long.txt").write_text("".join("l%d\n" % i for i in range(100)))
-        v = e.new_file_view("long.txt")
+        v = e.newfiles.new_file_view("long.txt")
         self.assertIn("l79", v)
         self.assertNotIn("l80\n", v)
         self.assertIn("20 more lines", v)
         e.comment = mock.Mock()
-        moved = e.quarantine_strays()
+        moved = e.newfiles.quarantine_strays()
         self.assertEqual(sorted(moved), sorted(self.STRAY + ["bin.dat", "long.txt"]))
         for p in self.STRAY:
             self.assertFalse((self.wt / p).exists())
@@ -3807,7 +3810,7 @@ class LandReview(EngineTest):
         self.make_files(*self.STRAY)
         e = self.engine_at_land(untracked_ignore=["client/Assets/InitTestScene*.unity*"])
         e.comment = mock.Mock()
-        self.assertEqual(e.quarantine_strays(), [])
+        self.assertEqual(e.newfiles.quarantine_strays(), [])
         self.assertTrue((self.wt / self.STRAY[0]).exists())
 
     def test_a_stray_scene_the_reviewer_accepts_lands_with_its_meta(self):
@@ -3926,7 +3929,7 @@ class LandReview(EngineTest):
 
     def evidenced(self, checks=None, attrs=None):
         e = self.verifier(attrs, checks=self.CFG_CHECKS[:2], gate="just check")
-        e.last_run = CheckRun(round=1, tree=e.tree_hash(), results=checks or self.engine_checks())
+        e.last_run = CheckRun(round=1, tree=e.checkout.tree_hash(), results=checks or self.engine_checks())
         return e
 
     def test_the_yxbb6_item_is_not_settled_by_a_suite_name_but_the_brief_carries_the_evidence_and_the_skip_rule(self):
@@ -3990,7 +3993,7 @@ class LandReview(EngineTest):
     # -- tl-bxk.10.18
     def reviewer_brief(self, cap=40000):
         script = fake_route.Script({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
-        with mock.patch.object(engine.Engine, "STAGE_DIFF_CAP", cap):
+        with mock.patch.object(NewFiles, "STAGE_DIFF_CAP", cap):
             self.assertEqual(self.run_with(script), 0)
         return next(p for c, p in zip(script.calls, script.prompts) if c[0] == "reviewer")
 
@@ -4012,18 +4015,18 @@ class LandReview(EngineTest):
     def test_the_diff_of_a_later_stage_starts_where_that_stage_started(self):
         e = self.engine_at_land()
         (self.wt / "one.txt").write_text("stage one\n")
-        self.assertIn("one.txt", e.stage_work([], []))
-        e.stage_tree = e.tree_hash()  # stage 2 starts here
-        self.assertIn("no file changed", e.stage_work([], []))
+        self.assertIn("one.txt", e.newfiles.stage_work([], []))
+        e.stage_tree = e.checkout.tree_hash()  # stage 2 starts here
+        self.assertIn("no file changed", e.newfiles.stage_work([], []))
         (self.wt / "two.txt").write_text("stage two\n")
-        work = e.stage_work([], [])
+        work = e.newfiles.stage_work([], [])
         self.assertIn("two.txt", work)
         self.assertNotIn("one.txt", work)
 
     def test_a_stray_file_is_not_in_the_stage_diff(self):
         e = self.engine_at_land()
         self.make_files("f.txt", *self.STRAY)
-        work = e.stage_work(self.STRAY, [])
+        work = e.newfiles.stage_work(self.STRAY, [])
         self.assertIn("f.txt", work)
         self.assertNotIn("InitTestScene", work)
 

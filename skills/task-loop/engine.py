@@ -70,7 +70,9 @@ from taskloop.app.land.closer import Closer
 from taskloop.app.land.fixer import Fixer
 from taskloop.app.land.lander import Lander
 from taskloop.app.land.rebase import Rebase
+from taskloop.app.land.checkout import Checkout
 from taskloop.app.land.tree import Tree
+from taskloop.app.write.newfiles import NewFiles
 from taskloop.app.look.judge import Judge
 from taskloop.app.look.owner_look import OwnerLook
 from taskloop.app.look.shots import Pictures
@@ -329,10 +331,6 @@ def _tree_problem(wt):
 # ---- the engine -----------------------------------------------------------------------------------------------------
 
 NET_PAUSE_ADOPT_S = lp.KNOBS["net_pause_max_s"]  # a run paused for the network is taken up again by the next run-task within this long
-
-
-class TreeHashError(RuntimeError):
-    """git could not say what the worktree would commit (read-tree, add or write-tree failed): no hash beats a hash of a half-built index."""
 
 
 class Blocked(Exception):
@@ -601,6 +599,14 @@ class Engine(StateAttrs):
         return Closer(self, SimpleNamespace(oc=oc, loop_health=loop_health, track=verbs, attempt=beadtools.attempt, say=say, outcome_for=outcome_for, node_outcome=node_outcome,
                                             close_move=close_move, reflection_text=reflection_text, why_code=runtrace.why_code,
                                             config_dir=ident.config_dir()))
+
+    @cached_property
+    def checkout(self):
+        return Checkout(self)
+
+    @cached_property
+    def newfiles(self):
+        return NewFiles(self)
 
     @cached_property
     def pictures(self):
@@ -927,208 +933,8 @@ class Engine(StateAttrs):
             raise Blocked("failed: `%s` exit %d\n%s" % (text_of(cmd), rc, tail), kind=oc.Kind.FAULT_INFRA)
         return rc, tail
 
-    def slot_status(self):
-        """(tracked paths changed, untracked paths, git's result) from the slot's own `git status`."""
-        st = run_git(self.wt, "status", "--porcelain", "-z", "--untracked-files=all", capture_output=True)
-        parts, paths, new = st.stdout.decode("utf-8", "surrogateescape").split("\0"), [], []
-        k = 0
-        while k < len(parts):
-            e = parts[k]
-            k += 1
-            if len(e) > 3:
-                (new if e[:2] == "??" else paths).append(e[3:])
-                if e[0] in "RC":  # the next entry is the path it came from: gone from the tree, staged already
-                    k += 1
-        return paths, new, st
-
-    def new_file_kind(self, path):
-        """tl-bxk.10.24: "ignored" (engine.untracked_ignore: never staged, never listed), "meant" (a plan stage lists it or
-        its folder in files, the writer's answer names it, or a review accepted it) or "unexplained" (left out of the
-        commit, listed in the review brief). A .meta follows the file it belongs to."""
-        p = path.replace("\\", "/")
-        if any(fnmatch.fnmatchcase(p, g) for g in self.cfg.untracked_ignore or []):
-            return "ignored"
-        if p in self.look_paths or p.startswith(".task/"):  # the look flow's own screenshot copies (copy_looks) are meant
-            return "meant" if p in self.look_paths else "ignored"
-        for q in (p, p[:-5]) if p.endswith(".meta") else (p,):
-            if q in self.accepted_new or q + ".meta" in self.accepted_new or self.writer_names(q):
-                return "meant"
-            for st in (self.plan_data or {}).get("stages") or []:
-                for f in st["files"]:
-                    f = f.strip().replace("\\", "/")
-                    f = "" if f in (".", "./") else f[2:] if f.startswith("./") else f
-                    if f and (q == f or q.startswith(f.rstrip("/") + "/") or fnmatch.fnmatchcase(q, f)):
-                        return "meant"
-        return "unexplained"
-
-    def writer_names(self, path):
-        """The writer's answers name this file: its full path or its basename, on word boundaries (not `ab.md` for `b.md`)."""
-        for n in dict.fromkeys((path, path.rsplit("/", 1)[-1])):
-            if re.search(r"(?<![\w.-])%s(?![\w-]|\.\w)" % re.escape(n), self.writer_said):
-                return True
-        return False
-
-    def new_by_kind(self):
-        out = {"ignored": [], "meant": [], "unexplained": []}
-        for p in self.slot_status()[1]:
-            out[self.new_file_kind(p)].append(p)
-        return out
-
-    STRAY_LINES, STRAY_CHARS = 80, 6000
-
-    def new_file_view(self, path):
-        """tl-bxk.10.24: what the review brief shows of an unexplained new file: its first 80 lines, or "binary, N bytes"."""
-        f = Path(self.wt) / path
-        try:
-            data = f.read_bytes()
-        except OSError:
-            return "(unreadable)"
-        if b"\0" in data[:8000]:
-            return "binary, %d bytes" % len(data)
-        lines = data.decode("utf-8", "replace").splitlines()
-        text = "\n".join(lines[:self.STRAY_LINES])[:self.STRAY_CHARS]
-        more = len(lines) - self.STRAY_LINES
-        return text + ("\n... (%d more lines)" % more if more > 0 else "")
-
-    def new_files_brief(self, unexplained):
-        return NEW_FILES_TEXT + "".join("- %s\n<content>\n%s\n</content>\n" % (p, self.new_file_view(p)) for p in unexplained)
-
-    def undecided_new(self, unexplained, review):
-        """The unexplained files the review neither accepted nor rejected (a .meta follows the file it belongs to)."""
-        said = set(review.get("accept_files") or []) | set(review.get("reject_files") or [])
-        return [p for p in unexplained if p not in said and not (p.endswith(".meta") and p[:-5] in said)]
-
-    def quarantine_strays(self):
-        """tl-bxk.10.24: before the land gate, every untracked file that is neither meant nor ignored leaves the tree for
-        .task/<bead>/evidence/strays/ (kept), so the gate runs on exactly what is committed. Listed in the trace and on the bead."""
-        moved = []
-        for p in self.new_by_kind()["unexplained"]:
-            dst = self.evidence_dir / "strays" / p
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(Path(self.wt) / p), str(dst))
-            moved.append(p)
-        if moved:
-            self.strays += [p for p in moved if p not in self.strays]
-            self.log.note("stray untracked files moved out of the tree to %s: %s" % (self.evidence_dir / "strays", ", ".join(moved)))
-            self.comment("Land (engine): untracked files no stage or review accepted were left out of the commit and the gate, "
-                         "kept in %s: %s" % (self.evidence_dir / "strays", ", ".join(moved)))
-        return moved
-
-    STAGE_DIFF_CAP = 40000
-
-    def stage_work(self, unexplained, ignored):
-        """tl-bxk.10.18: the review brief's account of the work: this stage's diff (the tree the stage started from to the
-        tree now; the task's base for the first stage), inline up to STAGE_DIFF_CAP chars; over it, the --stat and the
-        instruction to read only the changed files plus the plan. Untracked files not meant for the commit are left out."""
-        tree = self.tree_hash()
-        base = self.stage_tree or self.base_sha()
-        if not tree:
-            return "The work: `git diff %s` and new files." % base
-        skip = ["--", "."] + [":(exclude,literal)" + p for p in unexplained + ignored]
-        diff = gitrepo.git("diff", base, tree, *skip, cwd=self.wt)
-        if len(diff) <= self.STAGE_DIFF_CAP:
-            return ("The work of this stage (the diff from where the stage started to now; earlier stages are in the tree "
-                    "but not in this diff):\n<diff>\n%s</diff>" % (diff if diff.endswith("\n") or not diff else diff + "\n")
-                    if diff else "The work of this stage: no file changed.")
-        stat = gitrepo.git("diff", "--stat", base, tree, *skip, cwd=self.wt)
-        return ("The work of this stage is too big to inline (%d chars; the cap is %d). Its changed files:\n%s\nRead only "
-                "the changed files plus the plan; do not diff the whole task." % (len(diff), self.STAGE_DIFF_CAP, stat))
-
-    def stage_all(self, check=False, everything=False):
-        """Stage the slot's own changes: exactly the paths `git status --porcelain` lists under the pinned env, never a
-        bare `git add -A` (tl-bxk.10.12). Tracked changes always; an untracked file only when a stage meant it
-        (new_file_kind, tl-bxk.10.24). Returns the exit code."""
-        self.log.note("git add -A (the slot's own status paths)")
-        paths, new, st = self.slot_status()
-        if everything:  # a parked bead's work: every new file the base does not ignore goes to its branch, the unexplained ones too
-            ignored = self.base_ignored(new)
-            paths += [p for p in new if p not in ignored]
-        else:
-            paths += [p for p in new if self.new_file_kind(p) == "meant"]
-        rc = st.returncode
-        if rc == 0 and paths:
-            r = run_git(self.wt, "--literal-pathspecs", "add", "-A", "--pathspec-from-file=-", "--pathspec-file-nul",
-                           input="\0".join(paths).encode("utf-8", "surrogateescape"), capture_output=True)
-            rc = r.returncode
-            st = r
-        if check and rc:
-            raise Blocked("failed: staging the slot's paths exit %d\n%s" % (rc, st.stderr.decode("utf-8", "replace")[-600:]), kind=oc.Kind.FAULT_SLOT)
-        return rc
-
-    def fetch(self, check=False):
-        """git fetch, again while it loses a ref lock to another process's fetch into this repo (gitrepo.REF_RACE)."""
-        for i in range(5):
-            rc, tail = self.sh(["git", "fetch", "-q", "origin"], pin=True)
-            if rc == 0 or not gitrepo.REF_RACE.search(tail):
-                break
-            time.sleep(0.1 * (i + 1))
-        if check and rc:
-            raise Blocked("failed: `git fetch -q origin` exit %d\n%s" % (rc, tail), kind=oc.Kind.FAULT_INFRA)
-        return rc, tail
-
-    def git_env(self):
-        """The environment for a git command on this checkout (pinned to it)."""
-        return git_env(self.wt)
-
-    def base_sha(self):
-        """Where the task's work starts: an earlier run's commits on the task branch count as the task's diff."""
-        return self.git("merge-base", self.cfg.base, "HEAD") or self.cfg.base
-
     def git(self, *a):
         return gitrepo.git(*a, cwd=self.wt)
-
-    def branch_now(self):
-        """The branch HEAD is on; "" when detached."""
-        return self.git("symbolic-ref", "--short", "-q", "HEAD")
-
-    def dirty_status(self):
-        """`git status --porcelain` of the slot, leaving out what the BASE's .gitignore files ignore (tl-g6a): Unity's client/log.txt
-        is untracked on an old branch and ignored on main, and made a slot 'dirty with another branch's work' for 7 beads."""
-        out = self.git("status", "--porcelain", "--untracked-files=all")
-        if not out:
-            return ""
-        lines = out.splitlines()
-        untracked = [ln[3:] for ln in lines if ln.startswith("?? ")]
-        ignored = self.base_ignored(untracked)
-        return "\n".join(ln for ln in lines if not (ln.startswith("?? ") and ln[3:] in ignored))
-
-    def base_ignored(self, paths):
-        """The subset of `paths` that the BASE's .gitignore files ignore (the user's own global excludes are not replaced)."""
-        if not paths:
-            return set()
-        rules = []
-        base = self.cfg.base
-        for path in (self.git("ls-tree", "-r", "--name-only", base) or "").splitlines():
-            if path.split("/")[-1] != ".gitignore":
-                continue
-            d = path[:-len(".gitignore")].rstrip("/")
-            for ln in (self.git("show", "%s:%s" % (base, path)) or "").splitlines():
-                ln = ln.rstrip()
-                if not ln or ln.startswith("#"):
-                    continue
-                neg, pat = ("!", ln[1:]) if ln.startswith("!") else ("", ln)
-                if not d:
-                    rules.append(ln)
-                elif pat.startswith("/"):
-                    rules.append(neg + "/" + d + pat)
-                elif "/" in pat.rstrip("/"):
-                    rules.append(neg + "/" + d + "/" + pat)
-                else:
-                    rules.append(neg + "/" + d + "/**/" + pat)
-        if not rules:
-            return set()
-        with tempfile.NamedTemporaryFile("w", suffix=".ignore", delete=False, encoding="utf-8") as f:
-            f.write("\n".join(rules) + "\n")
-            ex = f.name
-        try:
-            # check-ignore reads only the rules given
-            r = subprocess.run(["git", "-C", str(self.wt), "-c", "core.excludesFile=" + ex, "check-ignore", "--no-index", "--stdin", "-z"],
-                               input="\0".join(paths) + "\0", capture_output=True, text=True, encoding="utf-8", errors="replace",
-                               env=sproc.current_env())
-            return set(r.stdout.split("\0")) if r.returncode in (0, 1) else set()
-        finally:
-            with contextlib.suppress(OSError):
-                os.unlink(ex)
 
     def add_cases(self, new):
         """A writer may add the cases it discovers; it can never remove one (the plan is the engine's)."""
@@ -1288,7 +1094,7 @@ class Engine(StateAttrs):
 
     def landed_since(self):
         """Subjects of what landed on the base since this task's branch left it (as far as the last fetch knows)."""
-        log = self.git("log", "--format=%s", "-n", "8", "%s..%s" % (self.base_sha(), self.cfg.base))
+        log = self.git("log", "--format=%s", "-n", "8", "%s..%s" % (self.checkout.base_sha(), self.cfg.base))
         return [x[:100] for x in log.splitlines() if x.strip()]
 
     def flakes_text(self):
@@ -1441,8 +1247,8 @@ class Engine(StateAttrs):
 
 
     def diff_text(self):
-        tree = self.tree_hash()
-        return (gitrepo.git("diff", self.base_sha(), tree, cwd=self.wt) if tree else "") or ""
+        tree = self.checkout.tree_hash()
+        return (gitrepo.git("diff", self.checkout.base_sha(), tree, cwd=self.wt) if tree else "") or ""
 
     # -- review and verify (src/taskloop/app/review): the engine lends its state, the components do the work
     def self_verify(self, gaps):
@@ -1573,70 +1379,6 @@ class Engine(StateAttrs):
                     "why you needed it.\nNever start a command you expect to take over a minute; never poll a running "
                     "command more than 3 times.")
         return "You may run commands to check facts (read files, run a linter or a test); never edit, create or delete files."
-
-    def tree_hash(self):
-        """The worktree as git would commit it now, untracked files included, without touching the real index."""
-        state = self.tree_state()
-        memo = self.tree_memo
-        if state and memo and memo[0] == state:
-            return memo[1]
-        with tempfile.TemporaryDirectory() as d:
-            env = dict(git_env(self.wt), GIT_INDEX_FILE=os.path.join(d, "index"))
-            for args in (["read-tree", "HEAD"], ["add", "-A"], ["write-tree"]):
-                r = subprocess.run(["git"] + args, cwd=self.wt, env=env, capture_output=True, text=True)
-                if r.returncode != 0:
-                    raise TreeHashError("git %s failed (%d): %s" % (args[0], r.returncode, (r.stderr or "").strip()[:300]))
-        if state:
-            self.tree_memo = (state, r.stdout.strip())
-        return r.stdout.strip()
-
-    def tree_state(self):
-        """Everything that decides tree_hash, from one `git status`: HEAD, every path that differs from it or is untracked, and the
-        size, mtime, ctime, mode, inode and (small files) content hash of each of those files (status alone says 'modified' before and after a second edit). None when git
-        cannot say; a run of tree_hash is then never skipped."""
-        r = subprocess.run(["git", "--no-optional-locks", "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all"],
-                           cwd=self.wt, env=git_env(self.wt), capture_output=True)
-        if r.returncode != 0:
-            return None
-        recs = r.stdout.split(b"\0")
-        paths, i = [], 0
-        while i < len(recs):
-            rec = recs[i]
-            if rec[:2] in (b"1 ", b"u "):
-                paths.append(rec.split(b" ", 8 if rec[:1] == b"1" else 10)[-1])
-            elif rec[:2] == b"2 ":
-                paths.append(rec.split(b" ", 9)[-1])
-                i += 1  # the original path follows as its own record
-                paths.append(recs[i] if i < len(recs) else b"")
-            elif rec[:2] == b"? ":
-                paths.append(rec[2:])
-            i += 1
-        base = os.fsencode(str(self.wt))
-        stats = []
-        for p in paths:
-            try:
-                st = os.lstat(os.path.join(base, p))
-                # mtime can be set back and two writes can land in one timestamp tick (coarse clocks), so a small file also
-                # counts by its content; ctime cannot be set from user space and covers the large ones
-                body = None
-                if stat.S_ISREG(st.st_mode) and st.st_size <= 1 << 20:
-                    with open(os.path.join(base, p), "rb") as fh:
-                        body = hashlib.sha1(fh.read()).digest()
-                stats.append((st.st_size, st.st_mtime_ns, st.st_ctime_ns, st.st_mode, st.st_ino, body))
-            except OSError:
-                stats.append(None)
-        return (r.stdout, tuple(stats))
-
-    def task_diff(self):
-        """The task's diff against where it started, untracked files included."""
-        tree = self.tree_hash()
-        return gitrepo.git("diff", self.base_sha(), tree, cwd=self.wt) if tree else self.git("diff", self.base_sha())
-
-    def changed_paths(self):
-        """Paths the task changed since it started, untracked files included."""
-        tree = self.tree_hash()
-        out = gitrepo.git("diff", "--name-only", self.base_sha(), tree, cwd=self.wt) if tree else ""
-        return [p for p in out.splitlines() if p]
 
     def stoppable_checks(self, *a, **kw):  # run_checks, then a stop (it ended a check, which reports itself failed) ends the run here
         run = self.run_checks(*a, **kw)

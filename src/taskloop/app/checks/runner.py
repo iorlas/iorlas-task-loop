@@ -38,15 +38,15 @@ class Checker:
         host = self.host
         host.steps.begin("checks", f"checks: {name}", **meta)
         self.round += 1
-        env = host.git_env()
+        env = host.checkout.git_env()
         history_doc = host.stores.durations.of(check_files.repo_key(str(host.wt), env))
         history = history_doc.read() or Durations()
         plan = CheckPlan.build(items_of(host.cfg, stage_checks), history, groups,
                                acceptance_first, conflict_fix, markers)
-        tree, base = host.tree_hash(), host.git("rev-parse", host.cfg.base)
+        tree, base = host.checkout.tree_hash(), host.git("rev-parse", host.cfg.base)
         cache = CheckCache(host.stores.check_cache.of(host.bead), f"{tree} {base}")
         keys = InputKeys(host.wt, tree, base, env)
-        attempts = Attempts(host, BaseCheck(host, cache, base, host.git_env), self.last_red, self.sleep)
+        attempts = Attempts(host, BaseCheck(host, cache, base, host.checkout.git_env), self.last_red, self.sleep)
         st = CheckExecutor(host, cache, keys, attempts, host.checklog, history).run_group(plan, self.round)
         run = self._finish(st, tree, history, history_doc)
         cache.save(base)
@@ -88,7 +88,7 @@ class Checker:
         return seconds(self.history())
 
     def history(self) -> Durations:
-        return self.host.stores.durations.of(check_files.repo_key(str(self.host.wt), self.host.git_env())).read() or Durations()
+        return self.host.stores.durations.of(check_files.repo_key(str(self.host.wt), self.host.checkout.git_env())).read() or Durations()
 
     def split(self) -> WriterSplit:
         return WriterSplit(self.host.cfg, self.seconds())
@@ -102,4 +102,4 @@ class Checker:
         host = self.host
         base = host.git("rev-parse", host.cfg.base)
         cache = CheckCache(host.stores.check_cache.of(host.bead), f"{tree} {base}")
-        return cache.green_ids([repo_check(k, host.cfg) for k in host.cfg.checks], InputKeys(host.wt, tree, base, host.git_env()))
+        return cache.green_ids([repo_check(k, host.cfg) for k in host.cfg.checks], InputKeys(host.wt, tree, base, host.checkout.git_env()))

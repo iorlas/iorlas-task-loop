@@ -52,8 +52,8 @@ class PlanPrompt:
     def digest(self) -> str:
         """What a replan starts from beyond the old plan, the cause and the rounds: what the tree holds now, and a budget for looking."""
         e = self.e
-        tree = e.tree_hash()
-        stat = (e.git("diff", "--stat", e.base_sha(), tree) if tree else "").strip()
+        tree = e.checkout.tree_hash()
+        stat = (e.git("diff", "--stat", e.checkout.base_sha(), tree) if tree else "").strip()
         return (f"\n\nThe tree now, against the task's base (git diff --stat):\n<tree>\n{stat or '(no file changed yet)'}\n</tree>\n"
                 f"The old plan, the cause and the rounds above are your start: read at most {REPLAN_CALLS} files or run at most "
                 f"{REPLAN_CALLS} commands before you answer.\n")

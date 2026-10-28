@@ -72,7 +72,7 @@ class Settles:
         if run is None:
             saved = self.e.stores.check_run(self.e.run_dir.name, None).read()
             return (saved.results if saved else []), False
-        return run.results, bool(run.tree) and run.tree == self.e.tree_hash()
+        return run.results, bool(run.tree) and run.tree == self.e.checkout.tree_hash()
 
     def evidence_text(self, checks: list[Any] | None = None, current: bool | None = None) -> str:
         """The engine's check results as brief text: per check id, group, command, status, exit code, duration, log path; said plainly to
@@ -106,8 +106,8 @@ class Settles:
 
     def work_summary(self) -> str:
         """The task's changed files with their line counts, untracked files included."""
-        tree = self.e.tree_hash()
-        return (self.e.git("diff", "--stat", self.e.base_sha(), tree) if tree else "") or "(no files changed)"
+        tree = self.e.checkout.tree_hash()
+        return (self.e.git("diff", "--stat", self.e.checkout.base_sha(), tree) if tree else "") or "(no files changed)"
 
     # -- settling
     def settle(self, gaps: list[Item]) -> tuple[list[Item], list[Item]]:

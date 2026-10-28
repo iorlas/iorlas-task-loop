@@ -47,15 +47,15 @@ class Handoff:
 
     def so_far_text(self) -> str:
         """What a fresh writer is told its predecessor did: the diff --stat of the stage so far, and its last summary."""
-        tree = self.e.tree_hash()
-        stat = self.e.git("diff", "--stat", self.e.stage_tree or self.e.base_sha(), tree) if tree else ""
+        tree = self.e.checkout.tree_hash()
+        stat = self.e.git("diff", "--stat", self.e.stage_tree or self.e.checkout.base_sha(), tree) if tree else ""
         return DONE_SO_FAR % ((stat or "(no file changed yet)").strip(), (self.e.last_summary or "(none)").strip(),
                               self.rounds_text(last=4) or "(none)\n")
 
     def accepted_text(self) -> str:
         """What a fresh writer starting a later stage is told: the accepted stages and their diff from the task's base."""
-        tree = self.e.tree_hash()
-        stat = self.e.git("diff", "--stat", self.e.base_sha(), tree) if tree else ""
+        tree = self.e.checkout.tree_hash()
+        stat = self.e.git("diff", "--stat", self.e.checkout.base_sha(), tree) if tree else ""
         goals = "".join(f"- {g}\n" for g in self.e.done) or "(none)\n"
         return STAGES_DONE % (goals, (stat or "(no file changed yet)").strip(), self.rounds_text(last=4) or "(none)\n")
 

@@ -3,6 +3,7 @@ import dataclasses
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -42,8 +43,7 @@ class Host(StateAttrs):
     def git(self, *args: str) -> str:
         return self.head
 
-    def branch_now(self) -> str:
-        return "task/t-1"
+    checkout = SimpleNamespace(branch_now=lambda: "task/t-1")
 
 
 def stored(h: Host) -> Checkpoint:

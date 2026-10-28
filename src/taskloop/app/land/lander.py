@@ -53,8 +53,8 @@ class Lander:
         if base:
             e.sh(["git", "reset", "-q", "--soft", base], check=True, pin=True)
         e.pictures.copy_looks()
-        e.stage_all(check=True)
-        e.quarantine_strays()
+        e.checkout.stage_all(check=True)
+        e.newfiles.quarantine_strays()
         rc, tail = e.sh(["git", "commit", "-q", "-m", f"{bead.title[:72]} ({e.bead})"], pin=True)
         if rc:
             raise e.blocked_for("failed: commit refused (hooks)\n" + tail, "FAULT_LAND")
@@ -63,7 +63,7 @@ class Lander:
         """tl-7y6.2.13: a push that died of the network after origin took it. The task branch's tip is the land commit (titled
         `... (<bead>)`) and it is on the base: it landed, and nothing is pushed twice. -> its sha, or ''."""
         e = self.e
-        if e.dry or (fetch and e.fetch()[0]):
+        if e.dry or (fetch and e.checkout.fetch()[0]):
             return ""
         tip = e.git("rev-parse", "--verify", "-q", "HEAD")
         if not tip or not e.git("log", "-1", "--format=%s").endswith(f"({e.bead})"):
@@ -107,9 +107,9 @@ class Lander:
         e = self.e
         while True:
             e.steps.begin("land", f"land (try {st.pushes + 1})", **{"try": st.pushes + 1})
-            e.quarantine_strays()
+            e.newfiles.quarantine_strays()
             before, head = e.git("rev-parse", e.cfg.base), e.git("rev-parse", "HEAD")
-            rc, tail = e.fetch()
+            rc, tail = e.checkout.fetch()
             if rc == 0 and (st.pushes or st.net_failed):
                 found = self.already(fetch=False)  # an earlier push of this land may have gone through
                 if found:
@@ -225,6 +225,6 @@ class Lander:
             e.pending_land_validation = ""
             e.checkpoints.save(stage=stages, step="land")
             if e.git("status", "--porcelain"):  # unlike verification before finish(), a retry check's fix follows the task commit
-                e.stage_all(check=True)
+                e.checkout.stage_all(check=True)
                 e.sh(["git", "commit", "-q", "--no-verify", "--amend", "--no-edit"], check=True, pin=True)
 
