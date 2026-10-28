@@ -10,8 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from taskloop.contracts.locks import Ticket
 from taskloop.contracts.ask import Ask
+from taskloop.contracts.locks import Ticket
 from taskloop.contracts.paths import ConfigDir
 from taskloop_dash.cache import FileCache, TtlCache
 from taskloop_dash.tails import Tails

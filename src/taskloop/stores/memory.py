@@ -22,8 +22,6 @@ from taskloop.contracts.loop import LoopCommand, LoopState, Rest
 from taskloop.contracts.stores import AskStore, JsonlStore
 from taskloop.contracts.trace import RunTrace
 from taskloop.stores.api import Doc, DocSet
-from taskloop.stores.books import AskBook, CheckpointBook
-from taskloop.stores.api import Doc, DocSet, LockTimeout
 from taskloop.stores.books import CheckpointBook
 from taskloop.stores.bundle import Stores
 
