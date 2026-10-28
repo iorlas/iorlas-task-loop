@@ -1,8 +1,26 @@
 [
   {
+    "name": "atomic_io",
+    "shelf_tag": "atomic-io-v0.2.0",
+    "shelf_commit": "8bc0850c3385226d0ef2f6a71f94373ad845a305",
+    "tree_hash": "915889c7033b4c61f0e5657fc3f0edbe55911cd91980e2a65b06f6ac5d4f553b"
+  },
+  {
     "name": "git_porcelain",
     "shelf_tag": "git-porcelain-v0.7.0",
     "shelf_commit": "8c69826279656d41034604fe3ccf97b546135f43",
     "tree_hash": "c7dcb4d7b6df253beaa45ab40fa3f24165f7980f4a111c7d2548e1d7bccc72f7"
+  },
+  {
+    "name": "jsonl_log",
+    "shelf_tag": "jsonl-log-v0.2.0",
+    "shelf_commit": "629935b1349d4b8f3eccc0c0812b06937cde06b5",
+    "tree_hash": "8682030b820a631ebb3dc7aebf94ecf1ddebe7c41d0fe9c2e7ee6e02426f53e4"
+  },
+  {
+    "name": "process_lock",
+    "shelf_tag": "process-lock-v0.1.0",
+    "shelf_commit": "f8c91a14360abc3f6065b8a6f1643e8e09c95976",
+    "tree_hash": "26c4fb197931213bd5c320733da09eac128e90b290e1d30e04b1b6813d1aff1a"
   }
 ]

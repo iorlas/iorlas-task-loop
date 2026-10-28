@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402,F401
-from contracts.test_rules import FILE_CAP, FUNC_CAP, code_lines  # noqa: E402
+from contracts.test_rules import FILE_CAP, FUNC_CAP, VENDORED, code_lines  # noqa: E402
 
 PKG = Path(__file__).resolve().parents[2] / "src" / "taskloop" / "stores"
 FILES = sorted(PKG.glob("*.py"))
@@ -41,7 +41,7 @@ class StoreRules(unittest.TestCase):
                          [node.module or ""] if isinstance(node, ast.ImportFrom) else [])
                 for name in names:
                     top = name.split(".")[0]
-                    self.assertTrue(top in stdlib or name.startswith(("taskloop.contracts", "taskloop.stores")), "%s: %s" % (f.name, name))
+                    self.assertTrue(top in stdlib or top in VENDORED or name.startswith(("taskloop.contracts", "taskloop.stores")), "%s: %s" % (f.name, name))
                     self.assertNotIn(top, {"re", "subprocess", "socket"}, f.name)
 
     def test_only_the_real_implementations_touch_the_disk(self):

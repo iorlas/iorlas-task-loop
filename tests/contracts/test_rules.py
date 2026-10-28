@@ -1,4 +1,4 @@
-"""The layer-1 rules for src/taskloop/contracts, checked on the tree: stdlib only, no regex, no lazy imports, our file names only
+"""The layer-1 rules for src/taskloop/contracts, checked on the tree: stdlib and the vendored shelf packages only, no regex, no lazy imports, our file names only
 in paths.py, 400 SLOC per file, 80 per function (SLOC: non-blank, non-comment, non-docstring lines)."""
 import ast
 import io
@@ -13,6 +13,7 @@ import support.paths  # noqa: E402,F401
 PKG = Path(__file__).resolve().parents[2] / "src" / "taskloop" / "contracts"
 FILES = sorted(PKG.glob("*.py"))
 FILE_CAP, FUNC_CAP = 400, 80
+VENDORED = {"atomic_io", "jsonl_log", "process_lock"}  # the shelf packages under skills/task-loop/_vendor that src may import
 FORBIDDEN = {"re", "subprocess", "socket", "urllib", "http", "threading", "multiprocessing"}
 OUR_NAMES = {"engine", "asks", "checkpoints", "runs", "loop", "slots", "locks", "snapshots", "sessions", "shared", "releases"}
 
@@ -70,7 +71,7 @@ class ContractRules(unittest.TestCase):
                     top = name.split(".")[0]
                     with self.subTest("%s imports %s" % (f.name, name)):
                         self.assertNotIn(top, FORBIDDEN)
-                        self.assertTrue(top in stdlib or name.startswith("taskloop.contracts") or name == "taskloop.contracts", name)
+                        self.assertTrue(top in stdlib or top in VENDORED or name.startswith("taskloop.contracts") or name == "taskloop.contracts", name)
                 if isinstance(node, ast.ImportFrom):
                     self.assertEqual(node.level, 0, "%s: relative import" % f.name)
 

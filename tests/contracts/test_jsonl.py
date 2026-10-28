@@ -10,8 +10,8 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402,F401
 from contracts import samples as S  # noqa: E402
-from taskloop.contracts import codec, jsonl, paths, stores  # noqa: E402
-from taskloop.contracts.jsonl import Jsonl  # noqa: E402
+from jsonl_log import Jsonl, cursor  # noqa: E402
+from taskloop.contracts import codec, paths, stores  # noqa: E402
 
 
 class JsonlTest(unittest.TestCase):
@@ -108,7 +108,7 @@ class JsonlTest(unittest.TestCase):
         self.assertEqual(seen, written)  # no entry lost, none twice, every offset the one append returned
 
     def test_tail_returns_the_last_entries_oldest_first_across_chunks(self):
-        with mock.patch.object(jsonl, "CHUNK", 64):
+        with mock.patch.object(cursor, "CHUNK", 64):
             for i in range(40):
                 self.j.append({"i": i, "pad": "y" * 20})
             got = self.j.tail(7)
@@ -122,14 +122,14 @@ class JsonlTest(unittest.TestCase):
             self.j.append({"i": i})
         self.raw(b'{"i": 10')
         everything, _ = self.j.read_from(0)
-        with mock.patch.object(jsonl, "CHUNK", 16):
+        with mock.patch.object(cursor, "CHUNK", 16):
             self.assertEqual(self.j.tail(4), everything[-4:])
 
     def test_before_pages_back_through_the_file_exactly_once(self):
         for i in range(23):
             self.j.append({"i": i, "pad": "z" * (i % 5)})
         everything, _ = self.j.read_from(0)
-        with mock.patch.object(jsonl, "CHUNK", 48):
+        with mock.patch.object(cursor, "CHUNK", 48):
             page = self.j.tail(5)
             collected = list(page)
             while page and page[0].start > 0:
@@ -177,7 +177,7 @@ class StoresTest(unittest.TestCase):
     def test_a_failed_write_leaves_no_temp_file_and_keeps_the_old_one(self):
         st = stores.PinStore(self.cfg)
         st.write(S.OTHERS["Pin"])
-        with mock.patch.object(stores.json, "dump", side_effect=OSError("disk")):
+        with mock.patch.object(Path, "replace", side_effect=OSError("disk")):
             with self.assertRaises(OSError):
                 st.write(S.OTHERS["Pin"])
         self.assertEqual(st.read(), S.OTHERS["Pin"])

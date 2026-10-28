@@ -8,11 +8,12 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from jsonl_log import Jsonl
+
 from taskloop.adapters import delegate_wire
 from taskloop.adapters.proc import run_group
 from taskloop.contracts import codec
 from taskloop.contracts.delegate import LIVE_EVENT, DelegateResult, RunRequest
-from taskloop.contracts.jsonl import Jsonl
 from taskloop.contracts.ports import EventSink
 
 LIVE_ENV = "DELEGATE_LIVE_FILE"

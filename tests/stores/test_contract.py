@@ -15,7 +15,7 @@ import support.paths  # noqa: E402,F401
 import suites  # noqa: E402
 from rigs import FakeRig, RealRig  # noqa: E402
 from support.tiers import contract  # noqa: E402
-from taskloop.contracts import jsonl  # noqa: E402
+import jsonl_log as jsonl  # noqa: E402
 from taskloop.contracts.enums import LockWhat  # noqa: E402
 
 WORKER = str(Path(__file__).resolve().parent / "races_worker.py")

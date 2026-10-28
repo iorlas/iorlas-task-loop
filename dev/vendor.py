@@ -92,6 +92,7 @@ def save(entries):
 
 
 def sync(name, tag, shelf):
+    name = name.replace("-", "_")  # `sync process-lock` and `sync process_lock` are one package (import name process_lock)
     entries = load()
     old = next((e for e in entries if e["name"] == name), None)
     tag = tag or (old or {}).get("shelf_tag")

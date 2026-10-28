@@ -3,9 +3,10 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+sys.path.append(str(Path(__file__).resolve().parents[2] / "skills" / "task-loop" / "_vendor"))
 from taskloop.contracts import paths  # noqa: E402
 from taskloop.contracts.enums import LockWhat  # noqa: E402
-from taskloop.contracts.jsonl import Jsonl  # noqa: E402
+from jsonl_log import Jsonl  # noqa: E402
 from taskloop.stores.filelock import FileLockTable  # noqa: E402
 
 

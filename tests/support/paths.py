@@ -9,3 +9,6 @@ ROOT = Path(__file__).resolve().parents[2]
 SRC = str(ROOT / "src")
 if SRC not in sys.path:
     sys.path.insert(0, SRC)
+VENDOR = str(ROOT / "skills" / "task-loop" / "_vendor")  # the vendored shelf packages (dev/vendor.py) src imports by name
+if VENDOR not in sys.path:
+    sys.path.append(VENDOR)

@@ -1,12 +1,13 @@
 """One reader and one writer per file family. A missing, torn or stale (foreign `v`) file reads as absent."""
 import dataclasses
 import json
-import os
-import tempfile
 from pathlib import Path
 from typing import Any
 
-from taskloop.contracts import codec, events, jsonl, log, paths
+from atomic_io import atomic_write_json
+from jsonl_log import Entry, Jsonl
+
+from taskloop.contracts import codec, events, log, paths
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.codec import CodecError
 from taskloop.contracts.ids import BeadId
@@ -29,16 +30,7 @@ class JsonStore[T]:
             return None
 
     def write(self, rec: T) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=self.path.parent, prefix=self.path.name + ".", suffix=".tmp")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(codec.to_json(rec), f, indent=1, ensure_ascii=False)
-                f.write("\n")
-            os.replace(tmp, self.path)
-        except BaseException:
-            Path(tmp).unlink(missing_ok=True)
-            raise
+        atomic_write_json(self.path, codec.to_json(rec), indent=1, fsync=False)
 
     def delete(self) -> None:
         self.path.unlink(missing_ok=True)
@@ -62,7 +54,7 @@ class JsonlStore[T]:
     """An append-only family: one record per line, read back by byte cursor."""
 
     def __init__(self, path: Path, decode: Any, cls: type[Any] | None = None) -> None:
-        self.file = jsonl.Jsonl(path)
+        self.file = Jsonl(path)
         self._decode = decode
         self._cls = cls
 
@@ -77,7 +69,7 @@ class JsonlStore[T]:
         entries = self.file.tail(n, before)
         return self._page(entries, entries[-1].end if entries else (before or 0))
 
-    def _page(self, entries: list[jsonl.Entry], cursor: int) -> Page[T]:
+    def _page(self, entries: list[Entry[dict[str, Any]]], cursor: int) -> Page[T]:
         items: list[Item[T]] = []
         for e in entries:
             try:

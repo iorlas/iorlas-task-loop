@@ -10,7 +10,10 @@ from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any, override
 
-from taskloop.contracts import codec, events, jsonl, log
+from jsonl_log import Entry, Jsonl, decode_object
+from jsonl_log.cursor import _parse  # shelf lacks: a public parse of in-memory bytes
+
+from taskloop.contracts import codec, events, log
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.enums import LockWhat
@@ -53,7 +56,7 @@ class MemDocSet[T](DocSet[T]):
         return sorted(k for k, d in self.docs.items() if d.data is not None)
 
 
-class MemJsonl(jsonl.Jsonl):
+class MemJsonl(Jsonl):
     """The Jsonl file API over a bytearray, parsed by the same code."""
 
     def __init__(self) -> None:
@@ -72,17 +75,17 @@ class MemJsonl(jsonl.Jsonl):
         return len(self.buf)
 
     @override
-    def read_from(self, offset: int = 0, limit: int | None = None) -> tuple[list[jsonl.Entry], int]:
+    def read_from(self, offset: int = 0, limit: int | None = None) -> tuple[list[Entry[dict[str, Any]]], int]:
         if offset > len(self.buf):
             offset = 0
-        return jsonl._parse(bytes(self.buf[offset:]), offset, limit)
+        return _parse(bytes(self.buf[offset:]), offset, limit, decode_object)
 
     @override
-    def tail(self, n: int, before: int | None = None) -> list[jsonl.Entry]:
+    def tail(self, n: int, before: int | None = None) -> list[Entry[dict[str, Any]]]:
         end = len(self.buf) if before is None else min(before, len(self.buf))
         if n <= 0 or end == 0:
             return []
-        entries, _ = jsonl._parse(bytes(self.buf[:end]), 0, None)
+        entries, _ = _parse(bytes(self.buf[:end]), 0, None, decode_object)
         return entries[-n:]
 
 
