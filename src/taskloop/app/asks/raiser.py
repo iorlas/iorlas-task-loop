@@ -4,8 +4,8 @@ from dataclasses import dataclass
 
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.enums import AskStatus, WhyCode
-from taskloop.contracts.ports import BdFailure, Beads
-from taskloop.contracts.stores import AskStore
+from taskloop.contracts.ports import BdFailure, BeadPatch, Beads
+from taskloop.contracts.stores import HAD_PICK, AskStore
 from taskloop.domain.asks.lint import lint
 from taskloop.domain.asks.spec import AskSpec
 
@@ -68,6 +68,7 @@ def leave_queue(store: Beads, bead: str, pick: str, info: str) -> str:
         if not pick or not shown or pick not in shown.labels:
             return ""
         store.remove_label(bead, pick)
+        store.update(bead, BeadPatch(set_metadata={HAD_PICK: pick}))  # typed: only a label the bead had is ever given back
         if info:
             store.add_label(bead, info)
     except BdFailure:

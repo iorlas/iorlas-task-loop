@@ -16,7 +16,7 @@ from taskloop.app.asks import sweeps  # noqa: E402
 from taskloop.cli import asks as cli  # noqa: E402
 from taskloop.contracts.bead import Bead  # noqa: E402
 from taskloop.contracts.paths import ConfigDir  # noqa: E402
-from taskloop.contracts.stores import ORPHAN, AskStore  # noqa: E402
+from taskloop.contracts.stores import HAD_PICK, ORPHAN, AskStore  # noqa: E402
 
 T = 1000.0
 
@@ -44,12 +44,19 @@ class OrphanTest(unittest.TestCase):
         self.assertIn(ORPHAN, listed[0])
 
     def test_the_loop_reopens_it_into_the_pick_queue_once(self) -> None:
+        self.store.beads["tl-7"].metadata[HAD_PICK] = "auto"  # the park took the label off
         marker = self.cfg.ask_marker("orphans")
         self.assertEqual(sweeps.reask_orphans(self.asks, self.store, marker, T, "auto", "needs-info"), ["tl-7"])
         b = self.store.beads["tl-7"]
         self.assertEqual((b.status, "auto" in b.labels, "needs-info" in b.labels), ("open", True, False))
         self.assertEqual(sweeps.reask_orphans(self.asks, self.store, marker, T + 1, "auto", "needs-info"), [])  # throttled
         self.assertEqual(sweeps.reask_orphans(self.asks, self.store, marker, T + 1e4, "auto", "needs-info"), [])  # no longer blocked
+
+    def test_the_sweep_never_adds_a_pick_label_the_bead_did_not_have(self) -> None:
+        marker = self.cfg.ask_marker("orphans")
+        self.assertEqual(sweeps.reask_orphans(self.asks, self.store, marker, T, "auto", "needs-info"), ["tl-7"])
+        b = self.store.beads["tl-7"]
+        self.assertEqual((b.status, b.labels), ("open", []))
 
     def test_answer_rerun_reopens_it_and_a_closed_bead_drops_the_dead_file(self) -> None:
         out: list[str] = []

@@ -65,6 +65,7 @@ class RaiserTest(unittest.TestCase):
         store.beads["t-1"] = Bead(id="t-1", title="T", status="open", labels=["auto"])
         self.assertIn("label auto removed, needs-info added", raiser.leave_queue(store, "t-1", "auto", "needs-info"))
         self.assertEqual(store.beads["t-1"].labels, ["needs-info"])
+        self.assertEqual(store.beads["t-1"].metadata.get("had_pick_label"), "auto")  # recorded, so only this label is ever given back
         self.assertEqual(raiser.leave_queue(store, "t-1", "auto", "needs-info"), "")
 
 

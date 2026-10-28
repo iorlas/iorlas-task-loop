@@ -17,6 +17,7 @@ from taskloop.contracts.snapshots import DashState, Pin, ReleaseResult, ReposInd
 from taskloop.contracts.trace import RunTrace
 
 LIVE = (AskStatus.OPEN, AskStatus.PARKED)
+HAD_PICK: Final = "had_pick_label"  # bead metadata: the pick label the park took off, to give back
 ORPHAN: Final = "parked; its ask was dropped at upgrade; `tl answer --rerun` or reopen to re-ask"
 
 

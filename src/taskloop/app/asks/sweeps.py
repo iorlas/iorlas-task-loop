@@ -7,7 +7,7 @@ from pathlib import Path
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.enums import AskStatus
 from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, Beads
-from taskloop.contracts.stores import ORPHAN, AskStore
+from taskloop.contracts.stores import HAD_PICK, ORPHAN, AskStore
 
 UNUSED_ANSWER_S = 30 * 60
 EVERY_S = 600
@@ -90,8 +90,8 @@ def orphan_lines(asks: AskStore) -> list[str]:
 
 
 def reopen(asks: AskStore, store: Beads, bead: str, pick: str = "", info: str = "") -> bool:
-    """Make a bead parked on a dropped ask re-askable: open again (and back in the pick queue when the labels are known), so the next run
-    goes on from its checkpoint and raises a fresh ask. The dead file stays until that ask replaces it. -> whether it was reopened."""
+    """Make a bead parked on a dropped ask re-askable: open again (back in the pick queue only if the park took its pick label), so the
+    next run goes on from its checkpoint and raises a fresh ask. The dead file stays until that ask replaces it. -> whether reopened."""
     try:
         shown = store.show(bead)
         if shown is None:
@@ -102,8 +102,9 @@ def reopen(asks: AskStore, store: Beads, bead: str, pick: str = "", info: str = 
         if shown.status != "blocked":
             return False
         store.update(bead, BeadPatch(status="open"))
-        if pick:
+        if pick and shown.metadata.get(HAD_PICK) == pick:  # the loop never adds the pick label: it only gives back one the park took
             store.add_label(bead, pick)
+            store.update(bead, BeadPatch(unset_metadata=[HAD_PICK]))
         if info and info in shown.labels:
             store.remove_label(bead, info)
     except BdFailure:
