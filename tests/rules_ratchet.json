@@ -19,7 +19,7 @@
   "tests/test_engine.py::EngineTest.push_race_interrupted_cell": 125,
   "tests/test_engine.py::EngineTest.run_push_race": 111
  },
- "pyrefly_baseline_errors": 1437,
+ "pyrefly_baseline_errors": 1436,
  "pyrefly_baseline_src": {
   "src/taskloop_dash/api/beads.py": 2,
   "src/taskloop_dash/api/live.py": 6,

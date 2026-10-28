@@ -1,5 +1,4 @@
-"""RunTrace: one engine run as the report reads it (traces.jsonl, v2). Replaces the v1 dict; v1 rows enter once through
-dev/traces_import.py. A defaulted field is one the older rows did not carry."""
+"""RunTrace: one engine run as the report reads it (traces.jsonl, v2). A defaulted field is one the older rows did not carry."""
 from dataclasses import field
 from typing import Any, ClassVar
 
