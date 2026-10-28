@@ -22,6 +22,10 @@ def child_env():
     return env
 
 
+class TreeHashError(RuntimeError):
+    """git could not say what the worktree would commit (read-tree, add or write-tree failed): no hash beats a hash of a half-built index."""
+
+
 class TermHold:
     """Holds a SIGTERM that arrives while a child is being spawned, so the caller can stop that child first.
     Python runs its handler between bytecodes of the main thread, and the engine's handler raises: raised from inside

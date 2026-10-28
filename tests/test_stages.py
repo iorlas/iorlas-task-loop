@@ -313,6 +313,14 @@ class SharedNotes(StagesTest):
         e.shared_path().write_text(json.dumps(data))
         self.assertNotIn("SoakTests.HeapGrowth", [f["test"] for f in e.known_flakes()])
 
+    def test_a_flake_entry_without_a_time_has_lapsed(self):
+        e = self.eng_()
+        e.add_flakes([{"test": "Old.Test"}, {"test": "Fresh.Test"}])
+        data = json.loads(e.shared_path().read_text())
+        del data["flakes"][0]["t"]
+        e.shared_path().write_text(json.dumps(data))
+        self.assertEqual([f["test"] for f in e.known_flakes()], ["Fresh.Test"])
+
     def test_a_writer_that_reports_a_flake_tells_the_next_prompts(self):
         flake = dict(WRITE, flakes=[{"test": "SoakTests.HeapGrowth", "note": "failed on the untouched base"}])
         rc, s = self.run_engine({"plan": [PLAN], "write": [flake], "review": [CLEAN]})

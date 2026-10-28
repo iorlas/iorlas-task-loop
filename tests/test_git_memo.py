@@ -12,6 +12,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 import engine  # noqa: E402
+from core import procs  # noqa: E402
 import tl  # noqa: E402
 
 
@@ -106,6 +107,23 @@ class GitMemoTest(unittest.TestCase):
         self.assertEqual(eng.tree_hash(), b)
         sh("git", "commit", "-qam", "three", cwd=r)
         self.assertEqual(eng.tree_hash(), tl.git("rev-parse", "HEAD^{tree}", cwd=r))
+
+    def test_tree_hash_raises_when_read_tree_or_add_fails_instead_of_hashing_the_wrong_tree(self):
+        eng = engine.Engine.__new__(engine.Engine)
+        eng.wt = self.repo
+        (self.repo / "f.txt").write_text("2\n")
+        real = subprocess.run
+        for failing in ("read-tree", "add", "write-tree"):
+            def run(cmd, *a, **k):
+                if failing in cmd:
+                    return subprocess.CompletedProcess(cmd, 128, b"", b"fatal: planted")
+                return real(cmd, *a, **k)
+            with self.subTest(failing), mock.patch.object(engine.subprocess, "run", run):
+                eng._tree_hash_memo = None
+                with self.assertRaises(procs.TreeHashError) as got:
+                    eng.tree_hash()
+                self.assertIn(failing, str(got.exception))
+        self.assertTrue(eng.tree_hash())
 
     def test_tree_hash_sees_two_same_size_edits_within_one_timestamp_tick(self):
         r = self.repo

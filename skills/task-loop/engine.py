@@ -2149,7 +2149,7 @@ class Engine:
             return []
         week2 = time.time() - FLAKE_DAYS * 86400  # a writer's word is not a fact for ever: it lapses unless reported again
         return [f for f in (data.get("flakes") if isinstance(data, dict) else None) or []
-                if isinstance(f, dict) and str(f.get("test") or "").strip() and (f.get("t") or time.time()) >= week2]
+                if isinstance(f, dict) and str(f.get("test") or "").strip() and (f.get("t") or 0) >= week2]
 
     def add_flakes(self, new):
         have = {" ".join(str(f["test"]).split()) for f in self.known_flakes()}
@@ -3898,13 +3898,13 @@ class Engine:
             return memo[1]
         with tempfile.TemporaryDirectory() as d:
             env = dict(tl.git_env(self.wt), GIT_INDEX_FILE=os.path.join(d, "index"))
-            for args in (["read-tree", "HEAD"], ["add", "-A"]):
-                subprocess.run(["git"] + args, cwd=self.wt, env=env, capture_output=True)
-            r = subprocess.run(["git", "write-tree"], cwd=self.wt, env=env, capture_output=True, text=True)
-            tree = r.stdout.strip()
-        if state and tree:
-            self._tree_hash_memo = (state, tree)
-        return tree
+            for args in (["read-tree", "HEAD"], ["add", "-A"], ["write-tree"]):
+                r = subprocess.run(["git"] + args, cwd=self.wt, env=env, capture_output=True, text=True)
+                if r.returncode != 0:
+                    raise procs.TreeHashError("git %s failed (%d): %s" % (args[0], r.returncode, (r.stderr or "").strip()[:300]))
+        if state:
+            self._tree_hash_memo = (state, r.stdout.strip())
+        return r.stdout.strip()
 
     def tree_state(self):
         """Everything that decides tree_hash, from one `git status`: HEAD, every path that differs from it or is untracked, and the
