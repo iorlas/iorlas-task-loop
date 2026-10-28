@@ -65,6 +65,9 @@ def make_handler(dash: Dash, port: int, addrs: list[str], page: Path, live_page:
             if path == "/api/look-shot":
                 got = dash.looks.look_shot(q.get("repo", ""), q.get("path", ""))
                 return (200, got[0], got[1]) if got else (404, b"not found", "text/plain")
+            if path == "/api/artifact":
+                got = dash.artifacts.file(q.get("bead", ""), q.get("name", ""))
+                return (200, got[0], got[1]) if got else (404, b"not found", "text/plain")
             if path == "/api/file":
                 data = dash.runs.run_file(q.get("run", ""), q.get("path", ""))
                 return (200, data, "text/plain; charset=utf-8") if data is not None else (404, b"not found", "text/plain")

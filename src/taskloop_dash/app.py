@@ -3,6 +3,7 @@ A test makes its own `Dash` over a temp config dir and fake ports."""
 
 from typing import Any
 
+from taskloop_dash.api.artifacts import Artifacts
 from taskloop_dash.api.asks import Asks
 from taskloop_dash.api.beads import BeadApi
 from taskloop_dash.api.graph import Graph
@@ -37,7 +38,8 @@ class Dash:
         self.looks = Looks(env, self.records, self.beads)
         self.roadmap = RoadmapApi(env, self.records, self.beads, self.graph, self.tasks, self.asks, self.looks, self.runlogs)
         self.runs = RunsApi(env, self.records, self.runlogs, self.events, self.opencode)
-        self.bead = BeadApi(env, self.records, self.beads, self.runlogs, self.tasks)
+        self.artifacts = Artifacts(env)
+        self.bead = BeadApi(env, self.records, self.beads, self.runlogs, self.tasks, self.artifacts)
         self.live = Live(env, self.records, self.lanes)
 
     def reflections(self, hours: object) -> dict[str, Any]:

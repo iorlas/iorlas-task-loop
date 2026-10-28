@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from taskloop_dash.api.artifacts import Artifacts
 from taskloop_dash.api.tasks import Tasks
 from taskloop_dash.env import Env
 from taskloop_dash.readers.beads import Beads, norm_bead
@@ -12,8 +13,9 @@ from taskloop_dash.views import timeline as tlv
 
 
 class BeadApi:
-    def __init__(self, env: Env, records: Records, beads: Beads, runlogs: RunLogs, tasks: Tasks) -> None:
-        self.env, self.records, self.beads, self.runlogs, self.tasks = env, records, beads, runlogs, tasks
+    def __init__(self, env: Env, records: Records, beads: Beads, runlogs: RunLogs, tasks: Tasks,
+                 artifacts: Artifacts) -> None:
+        self.env, self.records, self.beads, self.runlogs, self.tasks, self.artifacts = env, records, beads, runlogs, tasks, artifacts
 
     def bead_runs(self, bead: str, alive: bool = False) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         """Every engine run of the bead, oldest first: why it started, its blocks with outcome, arrow, time and tokens. -> (runs,
@@ -54,4 +56,5 @@ class BeadApi:
                 "description": b.get("description") or "", "notes": b.get("notes") or "",
                 "acceptance": b.get("acceptance_criteria") or "", "design": b.get("design") or "", "deps": deps,
                 "comments": [{"author": c.get("author"), "text": c.get("text"), "at": c.get("created_at")} for c in comments],
-                "runs": runs, "found": bool(b), "timeline": segments.bead_segments(tls, self.env.clock())}
+                "artifacts": self.artifacts.listing(bead), "runs": runs, "found": bool(b),
+                "timeline": segments.bead_segments(tls, self.env.clock())}

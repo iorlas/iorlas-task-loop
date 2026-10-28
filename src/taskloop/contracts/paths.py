@@ -59,6 +59,10 @@ class ConfigDir:
     def check_logs(self, run: RunId | str) -> Path:
         return self.run_dir(run) / "checks"
 
+    def artifacts(self, bead: BeadId | str) -> Path:
+        """The plain files a bead's runs left (screenshots, PDFs): one flat directory per bead, outside every worktree."""
+        return self.root / "artifacts" / str(bead)
+
     def check_cache(self, bead: BeadId | str) -> Path:
         return self.root / "check-cache" / ("%s.json" % bead)
 
