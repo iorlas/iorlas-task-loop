@@ -372,7 +372,6 @@ class Contracts(StagesTest):
 
     def test_a_lane_that_is_out_for_hours_pauses_with_its_reset_time_and_is_not_waited_for(self):
         # lifesim r0yc/rl4s: the dead lane's own reset time is hours away; delegate re-routes inside the call, so a stop is final
-        import time
         due = time.time() + 3 * 3600
         out = te.stop("rate_limited", say="lane_out: ZAI", lane="ZAI", at=due)
         rc, s = self.run_engine({"plan": [PLAN], "write": [out, WRITE], "review": [CLEAN]})
