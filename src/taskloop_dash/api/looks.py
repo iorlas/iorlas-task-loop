@@ -17,7 +17,6 @@ from taskloop_dash.readers.records import Records
 from taskloop_dash.views import gallery, names
 from taskloop_dash.views.gallery import LABEL, PICTURES
 
-REFS = ("HEAD", "origin/main", "main", "master")  # where a landed picture may be read when the checkout moved on
 NOTE_MAX = 2000
 Reply = tuple[int, dict[str, Any]]
 
@@ -79,7 +78,7 @@ class Looks:
     @staticmethod
     def picture(repo: str, rel: object, items: list[gallery.Item]) -> tuple[bytes, str] | None:
         """(bytes, content-type) of a picture an item names, or None. The path must be one a looks item lists (never a path of the
-        caller's choosing), stay inside the repo, and be a picture: disk first, then the base branch's copy."""
+        caller's choosing), stay inside the repo, and be a picture, read from disk."""
         rel = str(rel or "").replace("\\", "/")
         ext = os.path.splitext(rel)[1].lower()
         if ext not in PICTURES or not any(s["path"] == rel for i in items for s in i["shots"]):
@@ -92,15 +91,6 @@ class Looks:
                 data = Path(f).read_bytes()
             except OSError:
                 data = None
-        if data is None:
-            for ref in REFS:
-                try:
-                    r = subprocess.run(["git", "show", "%s:%s" % (ref, rel)], cwd=repo, capture_output=True, timeout=20)
-                except (subprocess.SubprocessError, OSError):
-                    return None
-                if r.returncode == 0:
-                    data = r.stdout
-                    break
         if not data or data.startswith(b"version https://git-lfs"):  # an LFS pointer is not a picture
             return None
         return data, PICTURES.get(ext) or mimetypes.guess_type(rel)[0] or "application/octet-stream"

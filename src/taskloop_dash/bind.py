@@ -4,16 +4,13 @@ import hmac
 import ipaddress
 import os
 import secrets
-import shutil
 import socket
-import subprocess
 from collections.abc import Callable
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
 CGNAT = ipaddress.ip_network("100.64.0.0/10")  # Tailscale's range
-TAILSCALE_APP = "/Applications/Tailscale.app"
 DEFAULT_PORT = 7878
 
 
@@ -60,45 +57,11 @@ def post_allowed(addr: object, authorization: str | None, secret: Callable[[], s
     return bool(got) and hmac.compare_digest(got, secret())
 
 
-def inet_addrs(listing: str) -> list[str]:
-    """The IPv4 addresses after 'inet ' in `ip -o addr` / `ifconfig` output."""
-    out = []
-    words = listing.split()
-    for i, w in enumerate(words[:-1]):
-        if w == "inet":
-            ip = words[i + 1].split("/")[0]
-            if ip.count(".") == 3 and all(p.isdigit() for p in ip.split(".")):
-                out.append(ip)
-    return out
-
-
-def tailscale_ip() -> str | None:
-    exe = shutil.which("tailscale") or (TAILSCALE_APP + "/Contents/MacOS/Tailscale" if os.path.exists(TAILSCALE_APP) else None)
-    if exe:
-        try:
-            r = subprocess.run([exe, "ip", "-4"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=3)
-            ip = r.stdout.strip().splitlines()[0] if r.returncode == 0 and r.stdout.strip() else ""
-            if ip:
-                return ip
-        except (subprocess.SubprocessError, OSError, IndexError):
-            pass
-    for cmd in (["ip", "-4", "-o", "addr"], ["ifconfig"]):
-        try:
-            out = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=3).stdout
-        except (OSError, subprocess.SubprocessError):
-            continue
-        for ip in inet_addrs(out):
-            if ipaddress.ip_address(ip) in CGNAT:
-                return ip
-    return None
-
-
 def bind_addrs() -> list[str]:
     env = os.environ.get("TASK_LOOP_DASH_BIND")
     if env:
         return [x.strip() for x in env.split(",") if x.strip()]
-    ts = tailscale_ip()
-    return ["127.0.0.1"] + ([ts] if ts else [])
+    return ["127.0.0.1"]  # the launcher (`tl dash`) names a Tailscale address with --bind; the server looks at no network tool
 
 
 def is_dev_checkout(here: Path | str) -> bool:
@@ -153,14 +116,6 @@ def bind_refusal(addrs: list[str], port: int, here: Path | str, home: Path | str
     return None
 
 
-def holder_pid(addr: str, port: int) -> str | None:
-    try:
-        r = subprocess.run(["lsof", "-nP", "-iTCP@%s:%d" % (addr, port), "-sTCP:LISTEN", "-t"], capture_output=True, text=True, timeout=5)
-        return (r.stdout.split() or [None])[0]
-    except (OSError, subprocess.SubprocessError):
-        return None
-
-
 def open_servers(addrs: list[str], port: int, handler: Any) -> list[ThreadingHTTPServer]:
     """Bind every address or none: a partial set would silently serve a subset."""
     servers: list[ThreadingHTTPServer] = []
@@ -172,8 +127,7 @@ def open_servers(addrs: list[str], port: int, handler: Any) -> list[ThreadingHTT
             p = servers[0].server_address[1] if servers else port
             for s in servers:
                 s.server_close()
-            pid = holder_pid(addr, p)
-            raise BindError("bind %s:%d failed: %s%s" % (addr, p, e, " (held by pid %s)" % pid if pid else "")) from e
+            raise BindError("bind %s:%d failed: %s" % (addr, p, e)) from e
     return servers
 
 

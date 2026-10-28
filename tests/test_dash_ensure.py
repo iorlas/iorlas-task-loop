@@ -176,20 +176,6 @@ class LoudBind(unittest.TestCase):
             bind.open_servers(["127.0.0.1", "203.0.113.9"], port, mock.Mock())
         self.assertIn("203.0.113.9:%d" % port, str(cm.exception))
 
-    @unittest.skipIf(os.name == "nt", "bind.holder_pid asks lsof, which Windows does not have")
-    def test_open_servers_names_the_holder_pid(self):
-        holder = socket.socket()
-        holder.bind(("127.0.0.1", 0))
-        holder.listen(1)
-        port = holder.getsockname()[1]
-        try:
-            with self.assertRaises(bind.BindError) as cm:
-                bind.open_servers(["127.0.0.1"], port, mock.Mock())
-        finally:
-            holder.close()
-        self.assertIn("127.0.0.1:%d" % port, str(cm.exception))
-        self.assertIn("pid %d" % os.getpid(), str(cm.exception))
-
     def test_open_servers_closes_earlier_sockets_on_failure(self):
         port = free_port()
         with self.assertRaises(bind.BindError):
@@ -230,8 +216,7 @@ class DevCheckout(unittest.TestCase):
             self.assertFalse(bind.is_dev_checkout(Path(d)))
 
     def test_dev_defaults_to_loopback_random_port(self):
-        with mock.patch.object(bind, "tailscale_ip", return_value="100.1.2.3"), \
-                mock.patch.dict(os.environ, {}, clear=False):
+        with mock.patch.dict(os.environ, {}, clear=False):
             os.environ.pop("TASK_LOOP_DASH_BIND", None)
             addrs, port = bind.plan(None, None, dev=True)
         self.assertEqual(addrs, ["127.0.0.1"])
@@ -243,11 +228,13 @@ class DevCheckout(unittest.TestCase):
         addrs, port = bind.plan(9999, None, dev=True)
         self.assertEqual((addrs, port), (["127.0.0.1"], 9999))
 
-    def test_installed_defaults_unchanged(self):
-        with mock.patch.object(bind, "tailscale_ip", return_value="100.1.2.3"):
-            os.environ.pop("TASK_LOOP_DASH_BIND", None)
-            addrs, port = bind.plan(None, None, dev=False)
-        self.assertEqual((addrs, port), (["127.0.0.1", "100.1.2.3"], 7878))
+    def test_the_server_alone_binds_loopback_on_7878_and_the_launcher_adds_tailscale(self):
+        import dash_server
+        os.environ.pop("TASK_LOOP_DASH_BIND", None)
+        self.assertEqual(bind.plan(None, None, dev=False), (["127.0.0.1"], 7878))  # the server runs no network tool
+        with mock.patch.object(dash_server, "tailscale_ip", return_value="100.1.2.3"):
+            self.assertEqual(dash_server.default_binds(), ["127.0.0.1", "100.1.2.3"])
+        self.assertEqual(dash_server.inet_addrs("2: eth0 inet 100.64.0.5/32 scope global\n inet6 fe80::1/64 inet bogus"), ["100.64.0.5"])
 
     def test_dev_server_process_listens_on_random_loopback_port(self):
         cfg = tempfile.mkdtemp()
