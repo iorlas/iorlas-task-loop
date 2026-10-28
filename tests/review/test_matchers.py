@@ -62,7 +62,11 @@ class BdDemandTable(Table):
             ("File the nine follow-up beads; the writer cannot run bd", "bd"), ("bd follow-ups unfiled", "bd"),
             ("verify the script on Windows", "os"), ("the stage goal is met", "met"), ("Nothing is missing", "met"),
             ("README table stale vs evidence", ""), ("crash file overwritten within the same second", ""),
-            ("the bd store adapter swallows an error", "")])
+            ("the bd store adapter swallows an error", ""),
+            # real unmet strings of the E7 samples (tl-ogf.1); yxbb.6 r3 and d5f.33 r6 ask for a bd action but are not routed: see the bead
+            ("Acceptance criterion 3 asks for a play run on Windows. The engine ran only on macOS, so the Windows run is not done. "
+             "The plan already lists it as a leftover.", "os"),
+            ("Godot side of 'both engines' is not done (not on main); tracked as a leftover.", "")])
 
 
 class WordingTable(Table):
