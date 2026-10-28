@@ -1,5 +1,5 @@
 """Test tags. `@contract`: one suite run against the real adapter and its fake (or golden output), so they cannot drift.
-`@domain`: logic over fakes, no process and no files. `select(suite, "contract")` keeps one kind."""
+`@domain`: logic over fakes, no process and no files. `@slow`: a real process. `select(suite, "contract")` keeps one kind."""
 import unittest
 from collections.abc import Iterator
 from typing import Any
@@ -14,6 +14,7 @@ def _tag(name: str) -> Any:
 
 contract = _tag("contract")
 domain = _tag("domain")
+slow = _tag("slow")  # starts a real process and waits on it; `select(suite, "slow")` keeps these
 
 
 def _tests(suite: unittest.TestSuite) -> Iterator[unittest.TestCase]:

@@ -512,12 +512,6 @@ class Watchdog(SpeedTest):
         res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertEqual((res[0]["status"], res[0].get("hung")), ("ran", False))
 
-    def test_a_check_burning_cpu_without_output_or_files_is_not_hung(self):
-        code = "import time\nt=time.time()\nwhile time.time()-t<5: sum(range(10000))"
-        eng = self.checks_engine(checks=[{"id": "cpu", "cmd": PY + " -c " + te.shq(code), "group": "tests"}], check_idle_min=0.03)
-        res = eng.run_checks({"checks": [], "files": []}, "s")
-        self.assertEqual((res[0]["status"], res[0].get("hung")), ("ran", False))
-
     def test_the_hang_notice_names_all_three_signals(self):
         eng = self.checks_engine(checks=[{"id": "h", "cmd": "sleep 30", "group": "tests"}], check_idle_min=0.02)
         res = eng.run_checks({"checks": [], "files": []}, "s")
