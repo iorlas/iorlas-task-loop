@@ -11,11 +11,12 @@ from support.logs import pairs, records
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from taskloop.contracts import log as rec  # noqa: E402
-from taskloop.stores.real import real_stores  # noqa: E402
-from taskloop.contracts.paths import ConfigDir  # noqa: E402
+import support.paths  # noqa: E402, F401
+
 from taskloop.adapters import ident  # noqa: E402
+from taskloop.contracts import log as rec  # noqa: E402
+from taskloop.contracts.paths import ConfigDir  # noqa: E402
+from taskloop.stores.real import real_stores  # noqa: E402
 
 engine = te.engine
 
@@ -38,7 +39,7 @@ class RunLog(te.EngineTest):
 
     def test_a_cached_check_writes_both_records(self):
         count = Path(self.tmp.name) / "count"
-        bump = PY + ' -c "open(%r, \'a\').write(\'1\')"' % str(count)
+        bump = PY + f' -c "open({str(count)!r}, \'a\').write(\'1\')"'
         eng = self.checks_engine(checks=[{"id": "bump", "cmd": bump, "group": "tests"}])
         st = {"checks": [], "files": []}
         eng.run_checks(st, "s")

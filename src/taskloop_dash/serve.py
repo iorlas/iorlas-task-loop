@@ -60,5 +60,5 @@ def main(env: Env, here: Path, argv: Sequence[str] | None = None, page: Path | N
     for s in servers[1:]:
         threading.Thread(target=s.serve_forever, daemon=True).start()
     threading.Thread(target=idle_watch, args=(dash, float(os.environ.get("TASK_LOOP_DASH_IDLE_H", "6"))), daemon=True).start()
-    print("task-loop dashboard %s on %s" % (env.version, ", ".join(bind.urls(addrs, port))), flush=True)
+    print("task-loop dashboard {} on {}".format(env.version, ", ".join(bind.urls(addrs, port))), flush=True)
     servers[0].serve_forever()

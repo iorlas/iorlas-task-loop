@@ -48,7 +48,7 @@ def parse_description(desc: object, look_bead: str) -> list[Item]:
             continue
         paths = [p for p in (picture_path(ln) for ln in sec.splitlines()) if p]
         if paths:
-            items.append(clean({"id": "%s#0" % bead, "bead": bead, "title": title,
+            items.append(clean({"id": f"{bead}#0", "bead": bead, "title": title,
                                 "shots": [{"path": p, "role": "after", "label": Path(p).stem} for p in paths]}, look_bead))
     return items
 

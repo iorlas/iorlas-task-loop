@@ -5,13 +5,14 @@ from pathlib import Path
 from typing import get_args, get_type_hints
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills" / "task-loop"))
-from taskloop.adapters import delegate as dl, delegate_wire  # noqa: E402
-from taskloop.domain.lanes import policy as lp  # noqa: E402
-from taskloop.contracts import codec, delegate  # noqa: E402
+import support.paths  # noqa: F401
 
-from contracts import samples as S  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills" / "task-loop"))
+from contracts import samples as S
+from taskloop.adapters import delegate as dl
+from taskloop.adapters import delegate_wire
+from taskloop.contracts import codec, delegate
+from taskloop.domain.lanes import policy as lp
 
 
 class Contract3(unittest.TestCase):
@@ -49,10 +50,12 @@ class Contract3(unittest.TestCase):
         self.assertEqual(argv[:3], ["py", "r", "run"])
         self.assertEqual(argv[argv.index("--timeout") + 1], "60")
         self.assertEqual(argv[argv.index("--idle") + 1], "30")
-        self.assertEqual(delegate.RunRequest(role="worker", brief_path="b", cwd="/w", schema_path="s").to_argv("py", "r").count("--timeout"), 0)
+        self.assertEqual(
+            delegate.RunRequest(role="worker", brief_path="b", cwd="/w", schema_path="s").to_argv("py", "r").count("--timeout"), 0
+        )
 
     def test_engine_only_is_one_flag_per_recipe_and_none_by_default(self):
-        base = dict(role="worker", brief_path="b", cwd="/w", schema_path="s")
+        base = {"role": "worker", "brief_path": "b", "cwd": "/w", "schema_path": "s"}
         argv = delegate.RunRequest(**base, engine_only=["check", "unity-tests"]).to_argv("py", "r")
         self.assertEqual([argv[i + 1] for i, x in enumerate(argv) if x == "--engine-only"], ["check", "unity-tests"])
         self.assertNotIn("--engine-only", delegate.RunRequest(**base).to_argv("py", "r"))

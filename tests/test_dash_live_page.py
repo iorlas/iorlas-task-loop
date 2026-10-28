@@ -8,9 +8,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests"))
-import support.paths  # noqa: E402,F401
-from taskloop_dash.api import live  # noqa: E402
+import support.paths  # noqa: E402, F401
 from test_dash_live import make_run, put  # noqa: E402
+
+from taskloop_dash.api import live  # noqa: E402
 
 PAGE = (ROOT / "src" / "taskloop_dash" / "static" / "live.html").read_text(encoding="utf-8")
 CSS = PAGE.split("<style>")[1].split("</style>")[0]

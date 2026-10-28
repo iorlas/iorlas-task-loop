@@ -3,45 +3,51 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from support.engine_case import BEAD, CLEAN, EngineTest, FALSE, HAS_F, PLAN, POSIX_CHECK, PY, WRITE, no_repo, pid_gone, pyc, sh, shq  # noqa: E402
-import os  # noqa: E402
-import shlex  # noqa: E402
-import signal  # noqa: E402
-import subprocess  # noqa: E402
-import time  # noqa: E402
-import contextlib  # noqa: E402
-from pathlib import Path  # noqa: E402
-from unittest import mock  # noqa: E402
-from taskloop.app.wire import slots as wslots  # noqa: E402
-from taskloop.domain.write.matchers import count_tests  # noqa: E402
-from taskloop.contracts import answers  # noqa: E402
-from taskloop.domain.review.matchers import Tools  # noqa: E402
-from support.briefs import brief_digest, linked_text  # noqa: E402
-from support.builders import cfg_with  # noqa: E402
-from taskloop.contracts.argv import checks_to_wire  # noqa: E402
-from taskloop.contracts.config import EngineConfig  # noqa: E402
-from taskloop.app.run import engine  # noqa: E402
-import outcome as oc  # noqa: E402
-from taskloop.app.run import entry  # noqa: E402
-from support.fakes import as_bead, must_bead  # noqa: E402
-from taskloop.contracts.enums import WaitWhat  # noqa: E402
-from support.waits import until  # noqa: E402
-from taskloop.domain.checks import lint  # noqa: E402
-from taskloop.domain.checks import matchers as check_matchers  # noqa: E402
-from taskloop.domain.checks.writer_split import WriterSplit  # noqa: E402
-from taskloop.app.checks import evidence as check_evidence  # noqa: E402
-from support.checks import res  # noqa: E402
-from taskloop.adapters import procs as sproc  # noqa: E402
-from taskloop.adapters.check_probe import PathProbe  # noqa: E402
-from taskloop.adapters import gitrepo  # noqa: E402
-from support.narrow import must  # noqa: E402
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, POSIX_CHECK, PY, WRITE, EngineTest, no_repo, pid_gone, pyc, sh, shq
+
+# isort: split
+import contextlib
+import os
+import shlex
+import signal
+import subprocess
+import time
+from pathlib import Path
+from unittest import mock
+
+import outcome as oc
+from support.briefs import brief_digest, linked_text
+from support.builders import cfg_with
+from support.checks import res
+from support.fakes import as_bead, must_bead
+from support.narrow import must
+from support.waits import until
+
+from taskloop.adapters import gitrepo
+from taskloop.adapters import procs as sproc
+from taskloop.adapters.check_probe import PathProbe
+from taskloop.app.checks import evidence as check_evidence
+from taskloop.app.run import (
+    engine,
+    entry,
+)
+from taskloop.app.wire import slots as wslots
+from taskloop.contracts import answers
+from taskloop.contracts.argv import checks_to_wire
+from taskloop.contracts.config import EngineConfig
+from taskloop.contracts.enums import WaitWhat
+from taskloop.domain.checks import lint
+from taskloop.domain.checks import matchers as check_matchers
+from taskloop.domain.checks.writer_split import WriterSplit
+from taskloop.domain.review.matchers import Tools
+from taskloop.domain.write.matchers import count_tests
 
 
 class EngineChecksTest(EngineTest):
     def test_repo_checks_on_an_equal_tree_and_base_are_reused(self):
         count = Path(self.tmp.name) / "count"
-        bump = PY + ' -c "open(%r, \'a\').write(\'1\')"' % str(count)
+        bump = PY + f' -c "open({str(count)!r}, \'a\').write(\'1\')"'
         eng = self.checks_engine(checks=[{"id": "bump", "cmd": bump, "group": "tests"}])
         st = {"checks": [], "files": []}
         first = eng.run_checks(st, "s")
@@ -57,11 +63,11 @@ class EngineChecksTest(EngineTest):
     def test_a_check_that_times_out_is_red_and_leaves_no_process(self):
         c = cfg_with(wslots.load_cfg(str(self.wt)), check_wall_min=0.03)  # under 2 s
         eng = engine.Engine("t-1", str(self.wt), c, store=self.store)
-        mark = "61.%d" % os.getpid()  # unique: a second suite running at once has its own sleep
-        res = eng.run_checks({"checks": ["bash -c 'sleep %s; true'" % mark], "files": []}, "s")
+        mark = f"61.{os.getpid()}"  # unique: a second suite running at once has its own sleep
+        res = eng.run_checks({"checks": [f"bash -c 'sleep {mark}; true'"], "files": []}, "s")
         self.assertEqual(res[0].exit, 124)
         self.assertIn("timed out", res[0].tail)
-        left = subprocess.run(["pgrep", "-f", "sleep " + mark], capture_output=True, text=True).stdout.strip()
+        left = subprocess.run(["pgrep", "-f", "sleep " + mark], capture_output=True, text=True, check=False).stdout.strip()
         self.assertEqual(left, "")
 
     def test_checks_run_without_the_launchers_claude_session(self):
@@ -90,14 +96,16 @@ class EngineChecksTest(EngineTest):
 
     def test_a_flaky_check_gets_its_retries(self):
         mark = Path(self.tmp.name) / "seen"
-        flaky = PY + ' -c "import os,sys; p=%r; first=not os.path.exists(p); open(p,\'w\').close(); sys.exit(1 if first else 0)"' % str(mark)
+        flaky = (
+            PY + f" -c \"import os,sys; p={str(mark)!r}; first=not os.path.exists(p); open(p,'w').close(); sys.exit(1 if first else 0)\""
+        )
         eng = self.checks_engine(checks=[{"id": "flaky", "cmd": flaky, "group": "tests", "retry": 1}])
         res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertEqual((res[0].exit, res[0].status, res[0].tries), (0, "passed", 2))
 
     def sleeping_check(self, secs, counter):
-        code = "import time,os; p=%r; k=(int(open(p).read()) if os.path.exists(p) else 0)+1; open(p,'w').write(str(k)); time.sleep(%r)" % (
-            str(counter), secs)
+        code = (f"import time,os; p={str(counter)!r}; k=(int(open(p).read()) if os.path.exists(p) else 0)+1; open(p,'w').write(str(k)); "
+                f"time.sleep({secs!r})")
         return PY + " -c " + shq(code)
 
     def test_a_timed_out_check_is_never_retried(self):
@@ -143,7 +151,7 @@ class EngineChecksTest(EngineTest):
         self.assertEqual((n.read_text(), [bool(c.reused) for c in res]), ("1", [False, True]))
 
     def test_a_slot_wait_in_a_check_is_read_and_capped_at_its_wall_time(self):
-        cmd, n = self.counting_check("unity-slot: x got slot 0 after 99999999s", ok_after=1)
+        cmd, _n = self.counting_check("unity-slot: x got slot 0 after 99999999s", ok_after=1)
         eng = self.checks_engine(checks=[{"id": "u", "cmd": cmd, "group": "tests"}])
         eng.run_checks({"checks": [], "files": []}, "s")
         self.assertTrue(0 < eng.waited < 60)
@@ -161,7 +169,7 @@ class EngineChecksTest(EngineTest):
     def test_a_compile_error_amid_library_or_asset_import_lines_is_retried_once(self):
         for ctx in ("Refreshing asset database", "Library/Bee/x.dll locked", "Temp/y missing"):
             self.assertEqual(check_matchers.failure_kind(ctx + "\nA.cs(1,1): error CS1002: ; expected"), "import", ctx)
-        cmd, n = self.counting_check("Library/x\nA.cs(1,1): error CS1002: ; expected")
+        cmd, _n = self.counting_check("Library/x\nA.cs(1,1): error CS1002: ; expected")
         eng = self.checks_engine(checks=[{"id": "imp", "cmd": cmd, "group": "tests", "retry": 0}])
         self.assertEqual(eng.run_checks({"checks": [], "files": []}, "s")[0].tries, 2)
 
@@ -198,7 +206,7 @@ class EngineChecksTest(EngineTest):
 
     def test_a_repo_check_marked_cache_false_always_reruns(self):
         count = Path(self.tmp.name) / "count"
-        bump = PY + ' -c "open(%r, \'a\').write(\'1\')"' % str(count)
+        bump = PY + f' -c "open({str(count)!r}, \'a\').write(\'1\')"'
         eng = self.checks_engine(checks=[{"id": "bump", "cmd": bump, "group": "tests", "cache": False}])
         eng.run_checks({"checks": [], "files": []}, "s")
         eng.run_checks({"checks": [], "files": []}, "s")
@@ -206,7 +214,7 @@ class EngineChecksTest(EngineTest):
 
     def test_a_failed_check_is_never_reused(self):
         count = Path(self.tmp.name) / "count"
-        fails = PY + ' -c "import sys; open(%r, \'a\').write(\'1\'); sys.exit(1)"' % str(count)
+        fails = PY + f' -c "import sys; open({str(count)!r}, \'a\').write(\'1\'); sys.exit(1)"'
         eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         st = {"checks": [fails], "files": []}
         eng.run_checks(st, "s")
@@ -267,7 +275,7 @@ class EngineChecksTest(EngineTest):
         rc, s = self.run_engine({"plan": [plan], "write": [WRITE], "review": [CLEAN]},
                                 raw={"checks": [{"id": "x", "cmd": cmd, "group": "static"}, {"id": "y", "cmd": "echo only-repo"}]})
         self.assertEqual(rc, 0, self.blocked)
-        w = next(p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker")
+        w = next(p for (c, p) in zip(s.calls, s.prompts, strict=False) if c[0] == "worker")
         may = w[w.index("The stage's checks"):w.index("A check that mentions")]
         self.assertEqual(may.count(cmd), 1)
         self.assertEqual(may.count(HAS_F), 1)
@@ -349,7 +357,7 @@ class EngineChecksTest(EngineTest):
         self.assertFalse(only("just display", {}))
 
     def test_a_brief_the_owner_changed_or_a_checkpoint_without_writer_seen_gets_the_full_prompt(self):
-        rc, s = self.two_writes(ctx_k=40)
+        _rc, _s = self.two_writes(ctx_k=40)
         args = (1, "g", "f.txt", "", "checks", "where", "fb", "")
         self.assertIn("The brief is unchanged", must(self.eng.hand.delta(*args)))
         (self.eng.run_dir / "brief.md").write_text("the owner answered: use X\n")  # an answer came in
@@ -392,9 +400,10 @@ class EngineChecksTest(EngineTest):
 
     @no_repo
     def test_linked_beads_are_at_most_ten_and_never_change_the_checkpoint_hash(self):
-        names = " ".join("t-%d" % k for k in range(20, 40))
+        names = " ".join(f"t-{k}" for k in range(20, 40))
         bead = dict(BEAD, description=names)
-        show = lambda b, cwd=None: {"id": b, "title": "T" + b, "status": "closed", "close_reason": "r"}
+        def show(b, cwd=None):
+            return {"id": b, "title": "T" + b, "status": "closed", "close_reason": "r"}
         out = linked_text("t-1", must_bead(bead), [], lambda b: as_bead(show(b)), lambda b: [])
         self.assertEqual(out.count("\n- t-"), 10)
         a = brief_digest(must_bead(bead), [], owner_only=True)

@@ -1,9 +1,9 @@
 """Checkpoints as a test reads and arranges them: through the engine's own stores, never by JSON shape."""
 from taskloop.adapters import ident
 from taskloop.contracts import codec
+from taskloop.contracts.checkpoint import Checkpoint, RunState
 from taskloop.contracts.paths import ConfigDir
 from taskloop.stores.real import real_stores
-from taskloop.contracts.checkpoint import Checkpoint, RunState
 
 
 def read_ck(e, bead=None):
@@ -13,7 +13,9 @@ def read_ck(e, bead=None):
 
 def put_ck(e, bead=None, head="", step="", run="r-0", **state):
     """A checkpoint as an earlier run left it: `state` fields go to the RunState."""
-    e.stores.checkpoints.of(bead or e.bead).write(Checkpoint(bead=bead or e.bead, run=run, t=0.0, head=head, step=step, state=RunState(**state)))
+    e.stores.checkpoints.of(bead or e.bead).write(
+        Checkpoint(bead=bead or e.bead, run=run, t=0.0, head=head, step=step, state=RunState(**state))
+    )
 
 
 def flat_ck(ck):
@@ -23,7 +25,13 @@ def flat_ck(ck):
     out = {k: v for k, v in codec.to_json(ck).items() if k != "state"}
     out.update(ck.state.dump())
     w = ck.state.writer
-    out.update(plan=ck.state.plan_data, brief=ck.state.brief_hash, writer=w.get("delegate") or "", writer_ctx=w.get("ctx"), writer_seen=w.get("seen"))
+    out.update(
+        plan=ck.state.plan_data,
+        brief=ck.state.brief_hash,
+        writer=w.get("delegate") or "",
+        writer_ctx=w.get("ctx"),
+        writer_seen=w.get("seen"),
+    )
     return out
 
 

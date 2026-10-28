@@ -9,10 +9,19 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+import support.paths  # noqa: E402, F401
+
 FEATURES = {
     "core": ["test_trace_records", "test_tl"],
-    "lanes": ["test_opencode", "test_write_idle", "test_worker_calls", "test_lane_policy", "test_call_state", "test_procs", "test_kill_tree"],
+    "lanes": [
+        "test_opencode",
+        "test_write_idle",
+        "test_worker_calls",
+        "test_lane_policy",
+        "test_call_state",
+        "test_procs",
+        "test_kill_tree",
+    ],
     "checks": ["test_checks_speed", "test_check_trim", "test_watchdog", "test_engine_units"],
     "plan": [],  # plus every test under tests/plan/
     "adapters": [],
@@ -45,7 +54,7 @@ def main(argv):
     elif argv[0] in FEATURES:
         s = suite(argv[0])
     else:
-        print("unknown feature %r; known: %s" % (argv[0], ", ".join(FEATURES)), file=sys.stderr)
+        print("unknown feature {!r}; known: {}".format(argv[0], ", ".join(FEATURES)), file=sys.stderr)
         return 2
     if not s.countTestCases():
         print("feature %r has no tests yet" % (argv[0] if argv else ""), file=sys.stderr)

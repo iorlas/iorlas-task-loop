@@ -4,18 +4,20 @@ import sys
 import tempfile
 import time
 import unittest
-import urllib.request
 from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+import support.paths  # noqa: E402, F401
 from support.askjson import ask_json  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
+
 from taskloop_dash.views import graph  # noqa: E402
 
-NOW = time.mktime((2026, 10, 23, 12, 0, 0, 0, 0, -1))  # local noon: 'today' counts from midnight, so a run just after 00:00 must not change the answers
+NOW = time.mktime(
+    (2026, 10, 23, 12, 0, 0, 0, 0, -1)
+)  # local noon: 'today' counts from midnight, so a run just after 00:00 must not change the answers
 
 
 def ts(ago=0):

@@ -1,7 +1,6 @@
 """tl-64i: log files held open. One handle per path per process, every line readable at once, closed at run end and on exec."""
 import json
 import os
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -10,14 +9,16 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills" / "task-loop"))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from taskloop.adapters import applog  # noqa: E402
-from taskloop.app.track import trail  # noqa: E402
-from taskloop.app.release import reexec  # noqa: E402
-from taskloop.app.run import engine  # noqa: E402
-from support.builders import cfg_with  # noqa: E402
-from taskloop.adapters import ident
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support.builders import cfg_with
 
+from taskloop.adapters import (
+    applog,
+    ident,
+)
+from taskloop.app.release import reexec
+from taskloop.app.run import engine
+from taskloop.app.track import trail
 
 warnings.filterwarnings("ignore", message=".*multi-threaded.*fork", category=DeprecationWarning)
 
@@ -33,7 +34,7 @@ class AppLogTest(unittest.TestCase):
         self.path.write_text("")
         with open(self.path, encoding="utf-8") as reader:  # opened first, like a dashboard tailing the file
             for i in range(50):
-                applog.append(self.path, json.dumps({"i": i, "text": "ü %d" % i}, ensure_ascii=False) + "\n")
+                applog.append(self.path, json.dumps({"i": i, "text": f"ü {i}"}, ensure_ascii=False) + "\n")
                 self.assertEqual(json.loads(reader.readline())["i"], i)
                 self.assertEqual(reader.readline(), "")
 
@@ -47,9 +48,9 @@ class AppLogTest(unittest.TestCase):
             return real_open(file, *a, **kw)
         with mock.patch("builtins.open", counting):
             for i in range(1000):
-                applog.append(self.path, "%d\n" % i)
+                applog.append(self.path, f"{i}\n")
                 if i % 100 == 0:
-                    applog.append(other, "%d\n" % i)
+                    applog.append(other, f"{i}\n")
         self.assertEqual(opened.count(str(self.path)), 1)
         self.assertEqual(opened.count(str(other)), 1)
         self.assertEqual((applog.open_count(self.path), applog.open_count(other)), (1, 1))
@@ -74,14 +75,14 @@ class AppLogTest(unittest.TestCase):
         applog.append(self.path, "x\n")
         self.assertFalse(os.get_inheritable(applog._open[str(self.path)][1].fileno()))
         for i in range(applog.MAX_OPEN + 5):
-            applog.append(Path(self.tmp.name) / ("f%d" % i), "x\n")
+            applog.append(Path(self.tmp.name) / (f"f{i}"), "x\n")
         self.assertLessEqual(applog.open_count(), applog.MAX_OPEN)
 
     @unittest.skipIf(os.name == "nt", "fork and exec fd semantics")
     def test_a_handle_does_not_survive_an_exec(self):
         applog.append(self.path, "x\n")
         fd = applog._open[str(self.path)][1].fileno()
-        code = "import os,sys\ntry:\n os.fstat(%d)\nexcept OSError:\n sys.exit(0)\nsys.exit(1)" % fd
+        code = f"import os,sys\ntry:\n os.fstat({fd})\nexcept OSError:\n sys.exit(0)\nsys.exit(1)"
         # a child started the way os.execv does: the fd table survives only for inheritable descriptors
         pid = os.fork()
         if pid == 0:
@@ -135,7 +136,7 @@ class WiringTest(unittest.TestCase):
         eng = engine.Engine("t-1", self.tmp.name, cfg_with())
         with mock.patch.object(engine, "say"):
             for i in range(1000):
-                eng.log.note("line %d" % i)
+                eng.log.note(f"line {i}")
             lines = eng.log_path.read_text(encoding="utf-8").splitlines()
         self.assertEqual([json.loads(x)["text"] for x in lines][-2:], ["line 998", "line 999"])
         self.assertEqual(len(lines), 1000)

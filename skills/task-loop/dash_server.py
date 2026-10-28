@@ -1,6 +1,7 @@
 """The dashboard server of this machine (one per user): is it up, is it current, start it detached, stop it; and `tl dash ...`."""
-import json
 import ipaddress
+import itertools
+import json
 import os
 import shutil
 import socket
@@ -29,7 +30,7 @@ def code_version() -> str:
 def inet_addrs(listing: str) -> list[str]:
     """The IPv4 addresses after 'inet ' in `ip -o addr` / `ifconfig` output."""
     words = listing.split()
-    ips = [after.split("/")[0] for word, after in zip(words, words[1:], strict=False) if word == "inet"]
+    ips = [after.split("/")[0] for word, after in itertools.pairwise(words) if word == "inet"]
     return [ip for ip in ips if ip.count(".") == 3 and all(p.isdigit() for p in ip.split("."))]
 
 
@@ -131,7 +132,7 @@ def log_tail(n: int = 5) -> str:
 
 def start_server(port: int, bind: str | None = None) -> tuple[dict[str, Any] | None, str]:
     """Start detached; wait until it answers. Returns (version dict or None, failure text)."""
-    log = open(config_dir() / "dash.log", "ab")  # noqa: SIM115 (the child keeps it)
+    log = open(config_dir() / "dash.log", "ab")  # noqa: SIM115  the detached child keeps it
     env = {k: val for k, val in os.environ.items() if not k.startswith(("CLAUDE_CODE_SESSION", "DELEGATE_", "CODEX_COMPANION"))}
     more = [env["PYTHONPATH"]] if env.get("PYTHONPATH") else []
     env["PYTHONPATH"] = os.pathsep.join([str(SRC), str(HERE), str(HERE / "_vendor"), *more])

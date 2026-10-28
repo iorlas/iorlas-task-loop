@@ -5,13 +5,14 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401
-from support.tiers import domain  # noqa: E402
-from taskloop.app.asks.raiser import Asking, build  # noqa: E402
-from taskloop.contracts.ask import AskAnswer, AskDetail, BudgetLine  # noqa: E402
-from taskloop.contracts.enums import AskClass  # noqa: E402
-from taskloop.domain.asks import specs, text  # noqa: E402
-from taskloop.domain.asks.lint import lint  # noqa: E402
+import support.paths  # noqa: F401
+from support.tiers import domain
+
+from taskloop.app.asks.raiser import Asking, build
+from taskloop.contracts.ask import AskAnswer, AskDetail, BudgetLine
+from taskloop.contracts.enums import AskClass
+from taskloop.domain.asks import specs, text
+from taskloop.domain.asks.lint import lint
 
 AT = Asking(bead="t-1", run="t-1-20261026-101010", brief_hash="h", repo="/r", title="T", now=10.0)
 LONG = "word " * 200
@@ -48,7 +49,11 @@ class SpecsTest(unittest.TestCase):
         self.check(specs.open_question('Is {"a": 1} ok?\nreally?', []))
 
     def test_options_come_from_the_worker_recommended_first_and_are_made_up_to_two(self) -> None:
-        given = [{"label": "B", "answer": "do b", "cost": "slow"}, {"label": "A", "answer": "do a", "recommended": True}, {"label": "", "answer": "x"}]
+        given = [
+            {"label": "B", "answer": "do b", "cost": "slow"},
+            {"label": "A", "answer": "do a", "recommended": True},
+            {"label": "", "answer": "x"},
+        ]
         sp = specs.open_question("Which?", given)
         self.assertEqual([(o.label, o.recommended, o.text) for o in sp.options], [("A", True, "do a"), ("B", False, "do b")])
         one = specs.open_question("Which?", [{"label": "Only", "answer": "do it"}])

@@ -1,37 +1,57 @@
 """Engine tests: the land, the push, the rebase and the conflict fix."""
+import signal as sig
 import sys
-from typing import Any, cast
 from pathlib import Path
+from typing import Any, ClassVar, cast
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from support.narrow import must  # noqa: E402
-from support.engine_case import CLEAN, ENGINE_BASH, EngineTest, FALSE, HAS_F, PLAN, POSIX_CHECK, PY, WRITE, _cells, finding, no_repo, pyc, review, sh, stop  # noqa: E402
-import json  # noqa: E402
-import os  # noqa: E402
-import shlex  # noqa: E402
-import signal  # noqa: E402
-import subprocess  # noqa: E402
-import time  # noqa: E402
-import unittest  # noqa: E402
-import contextlib  # noqa: E402
-from pathlib import Path  # noqa: E402
-from unittest import mock  # noqa: E402
-from taskloop.app.land.fixer import Fixer  # noqa: E402
-from taskloop.app.write.stage_loop import StageLoop  # noqa: E402
-from support.builders import cfg_with  # noqa: E402
-from taskloop.app.run.state import Checkpoints  # noqa: E402
-from taskloop.contracts.config import EngineConfig  # noqa: E402
-from taskloop.app.run import engine  # noqa: E402
-from taskloop.domain.plan.matchers import gate_only_criteria  # noqa: E402
-import outcome as oc  # noqa: E402
-from support.logs import records  # noqa: E402
-from taskloop.app.run.steps import Steps  # noqa: E402
-from support import fake_route  # noqa: E402
-from taskloop.domain.checks import lint  # noqa: E402
-from taskloop.app.checks import evidence as check_evidence  # noqa: E402
-from taskloop.adapters import gitrepo  # noqa: E402
-from taskloop.adapters import ident  # noqa: E402
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support.engine_case import (
+    CLEAN,
+    ENGINE_BASH,
+    FALSE,
+    HAS_F,
+    PLAN,
+    POSIX_CHECK,
+    PY,
+    WRITE,
+    EngineTest,
+    _cells,
+    finding,
+    no_repo,
+    pyc,
+    review,
+    sh,
+    stop,
+)
+
+# isort: split
+import contextlib
+import json
+import os
+import shlex
+import signal
+import subprocess
+import time
+import unittest
+from pathlib import Path
+from unittest import mock
+
+import outcome as oc
+from support import fake_route
+from support.builders import cfg_with
+from support.interrupts import Interrupter, Recovery
+from support.logs import records
+from support.narrow import must
+
+from taskloop.adapters import (
+    gitrepo,
+    ident,
+)
+from taskloop.app.run import engine
+from taskloop.contracts.config import EngineConfig
+from taskloop.domain.checks import lint
+from taskloop.domain.plan.matchers import gate_only_criteria
 
 
 class EngineLand1Test(EngineTest):
@@ -49,7 +69,7 @@ class EngineLand1Test(EngineTest):
         self.assertIn("<diff>\ndiff --git a/f.txt b/f.txt", rv)  # the stage's diff, inline (tl-bxk.10.18)
         for fact in ("exit 0", "wrote f", "evidence", "add f"):
             self.assertIn(fact, rv)
-        runs = [json.loads(l) for l in (ident.config_dir() / "traces.jsonl").read_text().splitlines()]
+        runs = [json.loads(ln) for ln in (ident.config_dir() / "traces.jsonl").read_text().splitlines()]
         self.assertEqual(len(runs), 1)
         r = runs[0]
         self.assertEqual((r["bead"], r["outcome"], r["coordinator_session"]), ("t-1", "landed", "sess1234-x"))
@@ -68,7 +88,7 @@ class EngineLand1Test(EngineTest):
         self.assertTrue(self.eng.git("symbolic-ref", "--short", "-q", "HEAD"))  # a landed bead leaves the slot on a branch
         want = json.loads((ident.PLUGIN_ROOT / ".claude-plugin" / "plugin.json").read_text())["version"]
         self.assertEqual(ident.plugin_version(), want)  # the log and trace record the plugin version
-        self.assertIn("task-loop %s" % want, self.eng.log_path.read_text())
+        self.assertIn(f"task-loop {want}", self.eng.log_path.read_text())
         self.assertEqual(r["version"], want)
 
     @unittest.skipIf(os.name == "nt", "the git shim is a shell script")
@@ -78,15 +98,15 @@ class EngineLand1Test(EngineTest):
         # then right. The reset's fetch failed the bead; the land's failed it as "fetch or rebase ... failed".
         bin_ = Path(self.tmp.name, "bin")
         bin_.mkdir()
-        real = subprocess.run(["which", "git"], capture_output=True, text=True).stdout.strip()
+        real = subprocess.run(["which", "git"], capture_output=True, text=True, check=False).stdout.strip()
         mark = Path(self.tmp.name, "fetches")
         (bin_ / "git").write_text(
-            '#!/bin/sh\ncase " $* " in *" fetch "*) echo x >> "%s"\n'
-            '  [ $(( $(wc -l < "%s") %% 2 )) -eq 1 ] && { echo "error: fetching ref refs/remotes/origin/main failed: '
-            'incorrect old value provided" >&2; exit 1; } ;;\nesac\nexec "%s" "$@"\n' % (mark, mark, real))
+            f'#!/bin/sh\ncase " $* " in *" fetch "*) echo x >> "{mark}"\n'
+            f'  [ $(( $(wc -l < "{mark}") % 2 )) -eq 1 ] && {{ echo "error: fetching ref refs/remotes/origin/main failed: '
+            f'incorrect old value provided" >&2; exit 1; }} ;;\nesac\nexec "{real}" "$@"\n')
         (bin_ / "git").chmod(0o755)
-        with mock.patch.dict(os.environ, {"PATH": "%s%s%s" % (bin_, os.pathsep, os.environ["PATH"])}):
-            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        with mock.patch.dict(os.environ, {"PATH": "{}{}{}".format(bin_, os.pathsep, os.environ["PATH"])}):
+            rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertGreaterEqual(len(mark.read_text().splitlines()), 4)  # reset and land: each lost once, then won
         self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
@@ -103,7 +123,11 @@ class EngineLand1Test(EngineTest):
     @POSIX_CHECK
     def test_a_gate_killed_by_a_signal_starts_no_fix_round_and_leaves_the_bead_open(self):
         # tl-y35: `gate: exit -15` (the parent stopped it) is the machine's outcome, not the code's
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, gate=pyc("import os,signal; os.kill(os.getpid(), signal.SIGTERM)"), max_fix_rounds=2)
+        rc, s = self.run_engine(
+            {"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
+            gate=pyc("import os,signal; os.kill(os.getpid(), signal.SIGTERM)"),
+            max_fix_rounds=2,
+        )
         self.assertNotEqual(rc, 0)
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])  # no fix round: no second worker call
         self.assertEqual((self.eng.fixes, self.blocked, self.closed), (0, [], []))
@@ -128,12 +152,18 @@ class EngineLand1Test(EngineTest):
         self.assertEqual(eng.waited, 2251)
         self.assertAlmostEqual(before - eng.budget.spent_min(), 2251 / 60, delta=0.5)  # real time moved by ms; no real sleep
         (start,), (end,) = records(eng, "wait_start"), records(eng, "wait_end")
-        self.assertEqual((start["holder"], start["id"], end["id"], end["secs"], end["in_budget"]), ("tl-266", end["id"], start["id"], 2251, False))
+        self.assertEqual(
+            (start["holder"], start["id"], end["id"], end["secs"], end["in_budget"]), ("tl-266", end["id"], start["id"], 2251, False)
+        )
 
     def test_the_gate_runs_once_at_land_and_tells_the_push_which_tree_it_gated(self):
         count, seen = Path(self.tmp.name) / "gates", Path(self.tmp.name) / "gated-tree"
-        gate = PY + ' -c "open(%r, \'a\').write(\'1\')"' % str(count)
-        land = PY + ' -c "import os; open(%r, \'w\').write(os.environ.get(\'TASK_LOOP_GATED_TREE\', \'\'))" && git push -q origin HEAD:main' % str(seen)
+        gate = PY + f' -c "open({str(count)!r}, \'a\').write(\'1\')"'
+        land = (
+            PY
+            + (f" -c \"import os; open({str(seen)!r}, 'w').write(os.environ.get('TASK_LOOP_GATED_TREE', ''))\" && git push -q origin "
+               f"HEAD:main")
+        )
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
                                 gate=gate, land=land)
         self.assertEqual(rc, 0)
@@ -145,7 +175,7 @@ class EngineLand1Test(EngineTest):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
                                 worker_rules="docs/agents/worker-rules.md", gate=PY + ' -c "pass"')
         self.assertEqual(rc, 0)
-        w = next(p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker")
+        w = next(p for (c, p) in zip(s.calls, s.prompts, strict=False) if c[0] == "worker")
         self.assertEqual(w.count("RULES-MARK"), 1)  # inlined once, by text
         self.assertNotIn("worker-rules.md", w)  # no path to read (tl-7y6.6.1)
         self.assertNotIn("Read ", w.split("<worker_rules>")[0].rsplit("Your stage", 1)[-1])
@@ -162,7 +192,7 @@ class EngineLand1Test(EngineTest):
         self.assertEqual(log, ["Add f (t-1)", "init"])
         self.assertEqual(gitrepo.git("show", "origin/main:g.txt", cwd=str(self.wt)), "from run 1")
 
-    UNITY = {"cmd": "just unity-check", "why": "it fails on uncommitted client/ changes"}
+    UNITY: ClassVar[Any] = {"cmd": "just unity-check", "why": "it fails on uncommitted client/ changes"}
 
     def test_a_check_running_a_gate_only_command_is_sent_back_to_the_planner_once(self):
         # lifesim-fld.27.9: a stage check ran `just unity-check`, red by design on the uncommitted tree: stuck, 68 min
@@ -176,7 +206,7 @@ class EngineLand1Test(EngineTest):
 
     def test_the_gate_command_is_always_gate_only(self):
         bad = dict(PLAN, cases=[{"criterion": "the repo is green", "check": "just  check"}])
-        rc, s = self.run_engine({"plan": [bad, bad]}, gate="just check")
+        _rc, s = self.run_engine({"plan": [bad, bad]}, gate="just check")
         self.assertEqual([c[0] for c in s.calls], ["planner", "planner"])
         self.assertIn("just check runs only in the gate at land", s.prompts[1])
         self.assertEqual(self.blocked, [])
@@ -185,7 +215,7 @@ class EngineLand1Test(EngineTest):
     def test_acceptance_that_is_only_the_gate_is_sent_back_naming_the_rule(self):
         # tl-7y6.7.15: the engine runs the gate at land; "just check green" as acceptance proves nothing the land does not
         gate = PY + ' -c "pass"'
-        crit = "`%s` passes (green)" % gate
+        crit = f"`{gate}` passes (green)"
         only = dict(PLAN, cases=[{"criterion": crit, "check": "", "class": "taste"}])
         good = dict(PLAN, cases=[{"criterion": "f.txt exists", "check": HAS_F}])
         rc, s = self.run_engine({"plan": [only, good], "write": [WRITE], "review": [CLEAN]}, gate=gate)
@@ -196,15 +226,23 @@ class EngineLand1Test(EngineTest):
 
     def test_acceptance_still_only_the_gate_after_one_rewrite_blocks(self):
         only = dict(PLAN, cases=[{"criterion": "Done when: just check is green", "check": HAS_F}])
-        rc, s = self.run_engine({"plan": [only, only]}, gate="just check")
+        _rc, s = self.run_engine({"plan": [only, only]}, gate="just check")
         self.assertEqual([c[0] for c in s.calls], ["planner", "planner"])
         self.assertEqual(self.blocked, [])
         self.assertIn("gate-only-acceptance", self.said())
 
     def test_gate_only_criteria_match_the_gate_alone_not_a_case_that_names_it_with_more(self):
         cfg = cfg_with(gate="just check", gate_only=["just unity-check"])
-        cases = lambda *cs: {"cases": [{"criterion": c, "check": ""} for c in cs]}  # noqa: E731
-        bad = ["just check", "`just  check` passes", "The gate (just check) is green.", "just unity-check exits 0", "Done when: just check green"]
+        def cases(*cs):
+            return {"cases": [{"criterion": c, "check": ""} for c in cs]}
+
+        bad = [
+            "just check",
+            "`just  check` passes",
+            "The gate (just check) is green.",
+            "just unity-check exits 0",
+            "Done when: just check green",
+        ]
         ok = ["f.txt exists", "just check-fmt passes", "the greeting shows after just check ran the migration", "just fmt is clean"]
         self.assertEqual(gate_only_criteria(cases(*bad, *ok), cfg), bad)
         self.assertEqual(gate_only_criteria(cases("just check passes"), cfg_with()), [])
@@ -219,7 +257,7 @@ class EngineLand1Test(EngineTest):
                                                  cfg_with()), [])
 
     def test_the_planner_gets_the_repo_rules_and_is_told_the_engine_owns_the_gate(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
+        _rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
                                 worker_rules="docs/agents/codex.md", gate="just check", max_fix_rounds=0)
         self.assertNotIn("codex.md", s.prompts[0])
         self.assertIn("never put `just check` in a stage", s.prompts[0])
@@ -243,9 +281,8 @@ class EngineLand1Test(EngineTest):
 
         pidfile = Path(self.tmp.name, "child.pid")
         eng = self.checks_engine()
-        with self.stoppable(), mock.patch.object(subprocess, "Popen", SignalledPopen):
-            with self.assertRaises(engine.Blocked) as cm:
-                eng.sh(shlex.split(self.spawn(pidfile)))
+        with self.stoppable(), mock.patch.object(subprocess, "Popen", SignalledPopen), self.assertRaises(engine.Blocked) as cm:
+            eng.sh(shlex.split(self.spawn(pidfile)))
         self.assertEqual(cm.exception.kind, oc.Kind.PAUSE_KILLED)
         self.assertDead(self.child_of(pidfile))
 
@@ -264,9 +301,13 @@ class EngineLand1Test(EngineTest):
     def test_a_stop_during_the_push_waits_for_it_and_the_bead_lands(self):
         # a stop between the push and cmd_land left a landed bead failed, and the loop reopened it
         with self.stoppable():
-            rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
-                                    land=pyc("import os,signal,subprocess,sys,time; os.kill(os.getppid(), signal.SIGTERM); time.sleep(0.3); "
-                                             "sys.exit(subprocess.call(['git', 'push', '-q', 'origin', 'HEAD:main']))"))
+            rc, _ = self.run_engine(
+                {"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
+                land=pyc(
+                    "import os,signal,subprocess,sys,time; os.kill(os.getppid(), signal.SIGTERM); time.sleep(0.3); "
+                    "sys.exit(subprocess.call(['git', 'push', '-q', 'origin', 'HEAD:main']))"
+                ),
+            )
         self.assertEqual(rc, 0)
         self.assertEqual(self.eng.result()["outcome"], "landed")
         self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
@@ -274,7 +315,6 @@ class EngineLand1Test(EngineTest):
         self.assertEqual(self.blocked, [])
 
     def test_a_stop_while_the_land_is_recorded_still_closes_it_landed(self):
-        import signal as sig
         def stop_at_the_land_record(*argv):
             if argv[:2] == ("provenance", "record") and "land" in argv:
                 os.kill(os.getpid(), sig.SIGTERM)
@@ -304,7 +344,7 @@ class EngineLand1Test(EngineTest):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [idle], "review": [CLEAN]})
         self.assertEqual(rc, 0)
         self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
-        self.assertEqual(gitrepo.git("rev-list", "--count", "origin/main", "^%s~1" % first, cwd=str(self.wt)), "1")
+        self.assertEqual(gitrepo.git("rev-list", "--count", "origin/main", f"^{first}~1", cwd=str(self.wt)), "1")
         subjects = gitrepo.git("log", "--format=%s", "origin/main", cwd=str(self.wt)).splitlines()
         self.assertEqual(sum("(t-1)" in x for x in subjects), 1)
         self.assertFalse(any(x.startswith("wip") for x in subjects))
@@ -356,8 +396,12 @@ class EngineLand1Test(EngineTest):
                 sh("git", "commit", "-qm", "theirs", cwd=other)
                 sh("git", "push", "-q", "origin", "HEAD:main", cwd=other)
             return real(this, role, *a, **kw)
-        denied = stop("secrets", "w1", family="openai",
-                      denied=[{"kind": "policy", "tool": "Bash", "path": "", "input": {"command": "rg -n --glob '!**/.env*' '^<<<<<<<' ."}}])
+        denied = stop(
+            "secrets",
+            "w1",
+            family="openai",
+            denied=[{"kind": "policy", "tool": "Bash", "path": "", "input": {"command": "rg -n --glob '!**/.env*' '^<<<<<<<' ."}}],
+        )
         with mock.patch.object(fake_route.Script, "reply", main_moves):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE, denied], "review": [CLEAN]})
         self.assertEqual(rc, 2)
@@ -389,7 +433,7 @@ class EngineLand1Test(EngineTest):
         self.assertEqual(rc, 0, self.blocked)
         fix = s.prompts[3]
         for i in range(18):
-            self.assertIn("error E%03d: gate no" % i, fix)
+            self.assertIn(f"error E{int(i):03d}: gate no", fix)
         self.assertRegex(fix, r"log: \S+gate\.r1\.log")
         self.assertIn("the engine re-runs them; fix from the output above", fix)
 
@@ -432,7 +476,7 @@ class EngineLand1Test(EngineTest):
 
     def count_check(self, name):
         log = Path(self.tmp.name, name + ".count")
-        return pyc("open(r'%s','a').write('x')" % log), log
+        return pyc(f"open(r'{log}','a').write('x')"), log
 
     def checks_records(self):
         recs = [json.loads(x) for x in self.eng.log_path.read_text().splitlines()]
@@ -444,7 +488,10 @@ class EngineLand1Test(EngineTest):
         unit, unit_log = self.count_check("unit")
         stage_check, stage_log = self.count_check("stage")
         plan = self.plan_with(HAS_F, stage_check)
-        repo = [{"id": "build", "cmd": build, "group": "static", "cache": False}, {"id": "unit", "cmd": unit, "group": "tests", "cache": False}]
+        repo = [
+            {"id": "build", "cmd": build, "group": "static", "cache": False},
+            {"id": "unit", "cmd": unit, "group": "tests", "cache": False},
+        ]
         rc, s = self.conflict_run({"plan": [plan], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]}, checks=repo)
         self.assertEqual(rc, 0, self.blocked)
         self.assertIn("conflict", s.prompts[3])
@@ -469,7 +516,7 @@ class EngineLand1Test(EngineTest):
                 Path(this.cwds[-1], "f.txt").write_text("<<<<<<< HEAD\nx\n=======\ny\n>>>>>>> t\n")
             return r
         with mock.patch.object(fake_route.Script, "reply", write_markers):
-            rc, s = self.conflict_run({"plan": [PLAN], "write": [WRITE, marked, WRITE], "review": [CLEAN, CLEAN, CLEAN]})
+            rc, _s = self.conflict_run({"plan": [PLAN], "write": [WRITE, marked, WRITE], "review": [CLEAN, CLEAN, CLEAN]})
         recs = [{i["id"]: i["status"] for i in r["run"]["results"]} for r in self.checks_records()]
         self.assertEqual(recs[1][engine.Engine.MARKERS], "failed")  # the marker check judged it, not a stage check
         self.assertEqual(rc, 0, self.blocked)
@@ -477,7 +524,7 @@ class EngineLand1Test(EngineTest):
     @ENGINE_BASH
     def test_a_red_gate_after_a_conflict_fix_still_gets_a_fix_round_and_the_gate_ran_once_on_the_result(self):
         flag = Path(self.tmp.name, "gate-ran")
-        gate = "%s -c \"import os,sys; g=r'%s'; r=os.path.exists(g); open(g,'a').write('x'); sys.exit(0 if r else 1)\"" % (PY, flag)
+        gate = f"{PY} -c \"import os,sys; g=r'{flag}'; r=os.path.exists(g); open(g,'a').write('x'); sys.exit(0 if r else 1)\""
         rc, s = self.conflict_run({"plan": [PLAN], "write": [WRITE] * 3, "review": [CLEAN] * 3}, gate=gate)
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual([c[0] for c in s.calls].count("worker"), 3)  # the stage, the conflict fix, the gate fix
@@ -508,7 +555,7 @@ class EngineLand1Test(EngineTest):
         counts = {key: Path(self.tmp.name, key) for key in ("changed", "same", "whole", "uncached", "stage", "case", "conservative")}
 
         def bump(key):
-            return PY + ' -c "open(%r, \'a\').write(\'1\')"' % str(counts[key])
+            return PY + f' -c "open({str(counts[key])!r}, \'a\').write(\'1\')"'
 
         checks = [{"id": key, "cmd": bump(key), "group": "tests", "inputs": [path], "inputs_only": True}
                   for key, path in (("changed", "a.txt"), ("same", "f.txt"))]
@@ -535,7 +582,7 @@ class EngineLand1Test(EngineTest):
         self.assertEqual(state["pushes"], 2 if failure in ("push", "network", "stop") else 1)
 
     def test_push_race_failure_fix_lands_after_the_lock_is_released(self):
-        rc, events, state = self.run_push_race(failure="checks_fixed")
+        rc, events, _state = self.run_push_race(failure="checks_fixed")
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(events.count("enter"), 2)
         self.assertEqual(events.count("exit"), 2)
@@ -573,146 +620,76 @@ class EngineLand1Test(EngineTest):
         self.assertEqual(gitrepo.git("ls-tree", "--name-only", "main", "f.txt", cwd=str(self.race_origin)), "")
 
     def push_race_interrupted_cell(self, interruption, role):
-        real_fix, real_stage = Fixer.fix, StageLoop.run
-        real_delegate = fake_route.Script.reply
-        real_sh, real_checks = engine.Engine.sh, engine.Engine.run_checks
-        real_brief = check_evidence.failure_brief
-        real_checkpoint, real_move = Checkpoints.save, Steps.move
         gate = PY + ' -c "pass"'
         with self.stoppable():
-            seen, recovery_checks, recovery_pushes = {}, [], []
-            closed_before = len(self.closed)
-
-            def interrupt_boundary(boundary):
-                if role == boundary and not seen.get("interrupted"):
-                    seen["interrupted"] = True
-                    signal.raise_signal(signal.SIGTERM)
-
-            def brief(bad, run_dir):
-                # Red results must replace the pre-check recovery barrier without a signal gap.
-                if any(c.cmd == "retry check" for c in bad):
-                    interrupt_boundary("failed_checks")
-                return real_brief(bad, run_dir)
-
-            def checkpoint(this, **at):
-                if at.get("step") == "land-verify-red":
-                    # SIGTERM must wait until the durable checkpoint has actually been written.
-                    interrupt_boundary("checkpoint")
-                return real_checkpoint(this, **at)
-
-            def move(this, to, cause, detail=""):
-                if to == "fix" and cause == "checks_red":
-                    # This used to interrupt before pending validation was saved at all.
-                    interrupt_boundary("transition")
-                return real_move(this, to, cause, detail)
-
-            def fix(this, kind, tail, resume=False):
-                ck = self.checkpoint()
-                self.assertEqual(ck["step"], "land-verify-red")
-                self.assertIn("retry check", ck["pending_land_validation"])
-                self.assertEqual(ck["feedback"], ck["pending_land_validation"])
-                seen["failure"] = ck["feedback"]
-                seen["in_fix"] = True
-                try:
-                    return real_fix(this, kind, tail, resume)
-                finally:
-                    seen["in_fix"] = False
-
-            def stage(this, plan, i, state=None):  # this: the StageLoop
-                if (state or {}).get("fix"):
-                    # fix() has initialized its checkpoint; the pending failure must still be there.
-                    ck = self.checkpoint()
-                    self.assertEqual(ck["step"], "land-verify-red")
-                    self.assertEqual(ck["feedback"], seen["failure"])
-                    seen["fix_initialized"] = True
-                return real_stage(this, plan, i, state)
-
-            def delegate(this, current_role, *a, **kw):
-                if seen.get("in_fix") and current_role == role:
-                    seen["interrupted"] = True
-                    if interruption == "SIGTERM":
-                        signal.raise_signal(signal.SIGTERM)
-                    raise engine.Blocked("paused: validation writer unavailable" if interruption == "pause"
-                                         else "needs a human: validation command denied",
-                                         kind=oc.Kind.PAUSE_LANE if interruption == "pause" else oc.Kind.FAULT_DENIED)
-                return real_delegate(this, current_role, *a, **kw)
-
-            with mock.patch.object(Fixer, "fix", fix), \
-                    mock.patch.object(StageLoop, "run", stage), \
-                    mock.patch.object(check_evidence, "failure_brief", brief), \
-                    mock.patch.object(Checkpoints, "save", checkpoint), \
-                    mock.patch.object(Steps, "move", move), \
-                    mock.patch.object(fake_route.Script, "reply", delegate):
+            cut, recovery, closed_before = Interrupter(self, interruption, role), Recovery(self), len(self.closed)
+            with cut.patched():
                 rc, events, race = self.run_push_race(failure="checks_fixed", max_rounds=1, max_check_tries=1)
-            self.assertEqual(rc, 2, self.blocked)
-            self.assertEqual(bool(seen.get("fix_initialized")), role in ("worker", "reviewer", "transition", "failed_checks"))  # a flag: the stop waits for a safe point
-            self.assertTrue(seen.get("interrupted"))
-            if role in ("worker", "reviewer", "transition", "failed_checks"):
-                self.assertEqual(events[-2:], ["exit", "fix:verify"])
-            else:
-                self.assertEqual(events[-1], "exit")
-                self.assertNotIn("fix:verify", events)
-            self.assertEqual(events.count("enter"), 1)
-            self.assertEqual(events.count("exit"), 1)
-            self.assertEqual(race["pushes"], 1)
-            self.assertFalse(self.eng.landed_sha)
-            self.assertEqual(len(self.closed), closed_before)
-            self.assertEqual(self.lands, [])
-
-            def checks(this, *a, **kw):
-                result = real_checks(this, *a, **kw)
-                recovery_checks.append(result)
-                return result
-
-            def command(this, cmd, *a, **kw):
-                if cmd == this.cfg.land:
-                    recovery_pushes.append(cmd)
-                    self.assertFalse(this.pending_land_validation)
-                    self.assertFalse(self.checkpoint()["pending_land_validation"])
-                return real_sh(this, cmd, *a, **kw)
-
+            self.assert_stopped(cut.seen, role, (rc, events, race), closed_before)
             env = {"XDG_CONFIG_HOME": race["config_home"], "APPDATA": race["config_home"]}
-            with mock.patch.dict(os.environ, env), mock.patch.object(engine.Engine, "run_checks", checks), \
-                    mock.patch.object(engine.Engine, "sh", command):
-                ck = self.checkpoint()
-                self.assertTrue(ck["closed"])
-                self.assertEqual(ck["step"], "land-verify-red")
-                if role not in ("worker", "reviewer"):
-                    self.assertIn("retry check", ck["pending_land_validation"])
-                    seen["failure"] = ck["pending_land_validation"]
-                self.assertEqual(ck["feedback"], seen["failure"])
-                self.assertEqual(ck["pending_land_validation"], seen["failure"])
-                red_plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[FALSE])]) if role != "reviewer" else PLAN
-                red_review = review(findings=[finding("high")]) if role == "reviewer" else CLEAN
-                with self.store.stub(comments=[{"author": "owner", "text": "Recover validation."}]):
-                    rc, script = self.run_engine({"plan": [red_plan], "write": [WRITE], "review": [red_review]},
-                                                 gate=gate, max_rounds=1, max_check_tries=1, max_replans=1)
-                self.assertEqual(rc, 2, self.blocked)
-                self.assertTrue(self.eng.resumed)
-                self.assertEqual([c[0] for c in script.calls], ["planner", "worker"] +
-                                 (["reviewer"] if role == "reviewer" else []))
-                self.assertEqual(len(recovery_checks), 1)
-                self.assertEqual(any(c.exit for c in recovery_checks[0]), role != "reviewer")
-                self.assertIn(seen["failure"], self.checkpoint()["pending_land_validation"])
-                self.assertEqual(self.checkpoint()["step"], "land-verify-red")
-                self.assertFalse(recovery_pushes)
-                self.assertFalse(self.eng.landed_sha)
-                self.assertEqual(len(self.closed), closed_before)
-                self.assertEqual(self.lands, [])
+            with mock.patch.dict(os.environ, env), recovery.patched():
+                self.recover_red(cut.seen, role, recovery, closed_before, gate)
+                self.recover_green(recovery, closed_before, gate)
 
-                with self.store.stub(comments=[{"author": "owner", "text": "Recover with passing checks and review."}]):
-                    rc, script = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
-                                                 gate=gate, max_rounds=1, max_check_tries=1, max_replans=2)
-                self.assertEqual(rc, 0, self.blocked)
-                self.assertEqual([c[0] for c in script.calls], ["planner", "worker", "reviewer"])
-                self.assertEqual(len(recovery_checks), 2)
-                self.assertTrue(all(c.exit == 0 for c in recovery_checks[-1]))
-                self.assertEqual(len(recovery_pushes), 1)
-                self.assertFalse(self.eng.pending_land_validation)
-                self.assertNoCheckpoint()
-                self.assertEqual(self.eng.result()["outcome"], "landed")
-                self.assertEqual(len(self.closed), closed_before + 1)
-                self.assertEqual(len(self.lands), 1)
+    def assert_stopped(self, seen, role, ran, closed_before):
+        rc, events, race = ran
+        self.assertEqual(rc, 2, self.blocked)
+        self.assertEqual(
+            bool(seen.get("fix_initialized")), role in ("worker", "reviewer", "transition", "failed_checks")
+        )  # a flag: the stop waits for a safe point
+        self.assertTrue(seen.get("interrupted"))
+        if role in ("worker", "reviewer", "transition", "failed_checks"):
+            self.assertEqual(events[-2:], ["exit", "fix:verify"])
+        else:
+            self.assertEqual(events[-1], "exit")
+            self.assertNotIn("fix:verify", events)
+        self.assertEqual(events.count("enter"), 1)
+        self.assertEqual(events.count("exit"), 1)
+        self.assertEqual(race["pushes"], 1)
+        self.assertFalse(self.eng.landed_sha)
+        self.assertEqual(len(self.closed), closed_before)
+        self.assertEqual(self.lands, [])
+
+    def recover_red(self, seen, role, recovery, closed_before, gate):
+        ck = self.checkpoint()
+        self.assertTrue(ck["closed"])
+        self.assertEqual(ck["step"], "land-verify-red")
+        if role not in ("worker", "reviewer"):
+            self.assertIn("retry check", ck["pending_land_validation"])
+            seen["failure"] = ck["pending_land_validation"]
+        self.assertEqual(ck["feedback"], seen["failure"])
+        self.assertEqual(ck["pending_land_validation"], seen["failure"])
+        red_plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[FALSE])]) if role != "reviewer" else PLAN
+        red_review = review(findings=[finding("high")]) if role == "reviewer" else CLEAN
+        with self.store.stub(comments=[{"author": "owner", "text": "Recover validation."}]):
+            rc, script = self.run_engine({"plan": [red_plan], "write": [WRITE], "review": [red_review]},
+                                         gate=gate, max_rounds=1, max_check_tries=1, max_replans=1)
+        self.assertEqual(rc, 2, self.blocked)
+        self.assertTrue(self.eng.resumed)
+        self.assertEqual([c[0] for c in script.calls], ["planner", "worker"] + (["reviewer"] if role == "reviewer" else []))
+        self.assertEqual(len(recovery.checks_run), 1)
+        self.assertEqual(any(c.exit for c in recovery.checks_run[0]), role != "reviewer")
+        self.assertIn(seen["failure"], self.checkpoint()["pending_land_validation"])
+        self.assertEqual(self.checkpoint()["step"], "land-verify-red")
+        self.assertFalse(recovery.pushes)
+        self.assertFalse(self.eng.landed_sha)
+        self.assertEqual(len(self.closed), closed_before)
+        self.assertEqual(self.lands, [])
+
+    def recover_green(self, recovery, closed_before, gate):
+        with self.store.stub(comments=[{"author": "owner", "text": "Recover with passing checks and review."}]):
+            rc, script = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
+                                         gate=gate, max_rounds=1, max_check_tries=1, max_replans=2)
+        self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[0] for c in script.calls], ["planner", "worker", "reviewer"])
+        self.assertEqual(len(recovery.checks_run), 2)
+        self.assertTrue(all(c.exit == 0 for c in recovery.checks_run[-1]))
+        self.assertEqual(len(recovery.pushes), 1)
+        self.assertFalse(self.eng.pending_land_validation)
+        self.assertNoCheckpoint()
+        self.assertEqual(self.eng.result()["outcome"], "landed")
+        self.assertEqual(len(self.closed), closed_before + 1)
+        self.assertEqual(len(self.lands), 1)
 
     def test_push_race_sigterm_during_retry_check_stops_child_and_keeps_barrier(self):
         with self.stoppable():
@@ -745,8 +722,8 @@ class EngineLand1Test(EngineTest):
                  "try:\n fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB); print('free')\n"
                  "except OSError: print('held')")
         with eng.lander.lock() as path:
-            held = subprocess.run([sys.executable, "-c", probe, str(path)], capture_output=True, text=True).stdout
-        free = subprocess.run([sys.executable, "-c", probe, str(path)], capture_output=True, text=True).stdout
+            held = subprocess.run([sys.executable, "-c", probe, str(path)], capture_output=True, text=True, check=False).stdout
+        free = subprocess.run([sys.executable, "-c", probe, str(path)], capture_output=True, text=True, check=False).stdout
         self.assertEqual((held.strip(), free.strip()), ("held", "free"))
 
 
@@ -755,7 +732,12 @@ _cells(EngineLand1Test, "push_race_failure_path_releases_land_lock", "push_race_
         ("stop", None), ("conflict", "fix:conflict")))
 
 
-_cells(EngineLand1Test, "push_race_exhausted_validation_fix_cannot_land", "push_race_exhausted_cell", (("checks_exhausted",), ("review_exhausted",)))
+_cells(
+    EngineLand1Test,
+    "push_race_exhausted_validation_fix_cannot_land",
+    "push_race_exhausted_cell",
+    (("checks_exhausted",), ("review_exhausted",)),
+)
 
 
 _cells(EngineLand1Test, "push_race_interrupted_validation_fix_resume_requires_acceptance", "push_race_interrupted_cell",

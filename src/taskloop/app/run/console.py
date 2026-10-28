@@ -41,7 +41,7 @@ def line(verbose: bool = True) -> Callable[[EngineLog], str | None]:
         text = rec.text if isinstance(rec, (StepStart, CmdStart, Note, Warn)) else None
         if text is None:
             return None
-        return "[%s] %s%s" % (time.strftime("%H:%M:%S", time.localtime(rec.t)), "⚠ " if isinstance(rec, Warn) else "", text)
+        return "[{}] {}{}".format(time.strftime("%H:%M:%S", time.localtime(rec.t)), "⚠ " if isinstance(rec, Warn) else "", text)
 
     return render
 

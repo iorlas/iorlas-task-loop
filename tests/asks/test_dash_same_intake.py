@@ -7,16 +7,17 @@ from argparse import Namespace
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401
-from asks.dash_ports import answering  # noqa: E402
-from asks.samples import MOCKS  # noqa: E402
-from support.narrow import must  # noqa: E402
-from support.dashes import make_dash  # noqa: E402
-from taskloop.adapters.fake_beads import FakeBeads  # noqa: E402
-from taskloop.cli import asks as cli_asks  # noqa: E402
-from taskloop.contracts.bead import Bead  # noqa: E402
-from taskloop.contracts.paths import ConfigDir  # noqa: E402
-from taskloop.contracts.stores import AskStore  # noqa: E402
+import support.paths  # noqa: F401
+from support.dashes import make_dash
+from support.narrow import must
+
+from asks.dash_ports import answering
+from asks.samples import MOCKS
+from taskloop.adapters.fake_beads import FakeBeads
+from taskloop.cli import asks as cli_asks
+from taskloop.contracts.bead import Bead
+from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.stores import AskStore
 
 ASK = dataclasses.replace(MOCKS["lifesim-22b3"], bead="b-1", id="b-1-1")
 

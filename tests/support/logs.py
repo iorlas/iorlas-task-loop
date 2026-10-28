@@ -12,7 +12,13 @@ def records(run, *kinds):
 
 def pairs(recs):
     """(start kinds without an end, end kinds without a start) by id: the pairs of the records that are not closed."""
-    ends = {"step_end": "step_start", "call_end": "call_start", "cmd_end": "cmd_start", "check_end": "check_start", "wait_end": "wait_start"}
+    ends = {
+        "step_end": "step_start",
+        "call_end": "call_start",
+        "cmd_end": "cmd_start",
+        "check_end": "check_start",
+        "wait_end": "wait_start",
+    }
     starts = {v: k for k, v in ends.items()}
     opened = {(r["kind"], r["id"]) for r in recs if r["kind"] in starts}
     closed = {(ends[r["kind"]], r["id"]) for r in recs if r["kind"] in ends}

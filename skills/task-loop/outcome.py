@@ -127,7 +127,7 @@ def fingerprint(kind, text):
     if kind in FINISH:
         return ""
     slug = re.sub(r"#[0-9a-f]{8}$", "", lifecycle.fingerprint(text))  # lifecycle hashes a long tail; a storm is the same head
-    return "%s %s" % (kind.name, slug or "unknown")
+    return "{} {}".format(kind.name, slug or "unknown")
 
 
 def make(kind, text=""):
@@ -142,7 +142,7 @@ def load(kind, fp="", detail="", v=1):
             raise ValueError(v)
         return RunOutcome(Kind(kind), fp, detail, v)
     except ValueError:
-        raw = "%s %s" % (kind, detail)
+        raw = f"{kind} {detail}"
         return RunOutcome(Kind.FAULT_ENGINE, fingerprint(Kind.FAULT_ENGINE, raw), raw)
 
 

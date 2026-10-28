@@ -4,7 +4,6 @@ import json
 import os
 import sys
 import time
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -75,7 +74,8 @@ def release(req: Request, repo: Path, market: Path, tool_root: Path, store: Bead
     if req.from_branch:
         clone.replay_branch(where, repo, req.from_branch)
     base = git(where, "rev-parse", "origin/main")
-    again: Callable[[], str] = lambda: bump_and_commit(tool_root, where, req)  # noqa: E731
+    def again() -> str:
+        return bump_and_commit(tool_root, where, req)
     version = push_main(where, req.message, again(), base, again)
     say(f"pushed {version}: {req.message}")
     publish.tag(where, "v" + version, "the plugin repo")

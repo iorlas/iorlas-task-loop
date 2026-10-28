@@ -127,7 +127,7 @@ class MemLockTable:
                     waiting(cur)
                 left = None if end is None else end - time.monotonic()
                 if left is not None and left <= 0:
-                    raise LockTimeout("%s-%s" % key, cur)
+                    raise LockTimeout("{}-{}".format(*key), cur)
                 self.cond.wait(0.05 if left is None else min(left, 0.05))
             rec = LockRecord(what=what, holder=holder, pid=self.pid, t=time.time())  # pyrefly: ignore[unexpected-keyword]
             self.held[key] = rec

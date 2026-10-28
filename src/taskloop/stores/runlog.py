@@ -39,8 +39,10 @@ class RunLog:
     def next_id(self, prefix: str) -> str:
         """A pair id for the file: the prefix and the next number."""
         self.ids += 1
-        return "%s%d" % (prefix, self.ids)
+        return f"{prefix}{int(self.ids)}"
 
     @staticmethod
     def plain(rec: EngineLog) -> str:
-        return "%s %s" % (rec.KIND, " ".join("%s=%s" % kv for kv in codec.to_json(rec).items() if kv[0] not in ("v", "kind", "t")))
+        return "{} {}".format(
+            rec.KIND, " ".join("{}={}".format(*kv) for kv in codec.to_json(rec).items() if kv[0] not in ("v", "kind", "t"))
+        )

@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401
-from contracts.test_rules import FILE_CAP, FUNC_CAP, VENDORED, code_lines  # noqa: E402
+import support.paths  # noqa: F401
+from contracts.test_rules import FILE_CAP, FUNC_CAP, VENDORED, code_lines
 
 PKG = Path(__file__).resolve().parents[2] / "src" / "taskloop" / "stores"
 FILES = sorted(PKG.glob("*.py"))
@@ -28,7 +28,7 @@ class StoreRules(unittest.TestCase):
             for node in ast.walk(tree):
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     n = len({i for i in code if node.lineno <= i <= (node.end_lineno or node.lineno)})
-                    self.assertLessEqual(n, FUNC_CAP, "%s.%s" % (f.name, node.name))
+                    self.assertLessEqual(n, FUNC_CAP, f"{f.name}.{node.name}")
 
     def test_imports(self):
         stdlib = set(sys.stdlib_module_names)
@@ -36,12 +36,17 @@ class StoreRules(unittest.TestCase):
             for node in ast.walk(tree):
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     for inner in ast.walk(node):
-                        self.assertNotIsInstance(inner, (ast.Import, ast.ImportFrom), "%s: import in %s" % (f.name, node.name))
+                        self.assertNotIsInstance(inner, (ast.Import, ast.ImportFrom), f"{f.name}: import in {node.name}")
                 names = ([a.name for a in node.names] if isinstance(node, ast.Import) else
                          [node.module or ""] if isinstance(node, ast.ImportFrom) else [])
                 for name in names:
                     top = name.split(".")[0]
-                    self.assertTrue(top in stdlib or top in VENDORED or name.startswith(("taskloop.contracts", "taskloop.stores", "taskloop.adapters.locks")), "%s: %s" % (f.name, name))
+                    self.assertTrue(
+                        top in stdlib
+                        or top in VENDORED
+                        or name.startswith(("taskloop.contracts", "taskloop.stores", "taskloop.adapters.locks")),
+                        f"{f.name}: {name}",
+                    )
                     self.assertNotIn(top, {"re", "subprocess", "socket"}, f.name)
 
     def test_only_the_real_implementations_touch_the_disk(self):
@@ -52,7 +57,7 @@ class StoreRules(unittest.TestCase):
                 if isinstance(node, ast.Call):
                     fn = node.func
                     name = fn.id if isinstance(fn, ast.Name) else fn.attr if isinstance(fn, ast.Attribute) else ""
-                    self.assertNotIn(name, {"open", "read_text", "write_text", "unlink", "mkdir"}, "%s calls %s" % (f.name, name))
+                    self.assertNotIn(name, {"open", "read_text", "write_text", "unlink", "mkdir"}, f"{f.name} calls {name}")
                 if isinstance(node, ast.Import):
                     self.assertFalse({"fcntl", "tempfile", "shutil"} & {a.name for a in node.names}, f.name)
 

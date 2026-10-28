@@ -5,8 +5,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401
-from taskloop.app.plan.prompt import REPLAN_CALLS, PlanPrompt  # noqa: E402
+import support.paths  # noqa: F401
+
+from taskloop.app.plan.prompt import REPLAN_CALLS, PlanPrompt
 
 
 def host(tree="abc"):

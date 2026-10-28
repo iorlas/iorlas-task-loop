@@ -1,62 +1,61 @@
-"""Engine tests, part 2: the small classes after EngineTest (failure brief, outcome, delegate launcher, stored briefs, confirms, validate). Split from test_engine."""
-import atexit
-import hashlib
+"""Engine tests, part 2: the small classes after EngineTest (failure brief, outcome, delegate launcher, stored briefs, confirms,
+validate). Split from test_engine."""
+
+import contextlib
 import io
-import functools
 import json
 import os
 import re
-import shlex
-import shutil
 import signal
-import subprocess
 import sys
 import tempfile
-import threading
 import time
 import unittest
-import contextlib
-from contextlib import contextmanager, redirect_stdout
+from contextlib import redirect_stdout
 from pathlib import Path
+from typing import Any, ClassVar
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from taskloop.adapters import applog  # noqa: E402
-from taskloop.app.wire import slots as wslots  # noqa: E402
-from support.checkpoints import put_ck, read_ck  # noqa: E402
+import support.paths  # noqa: E402, F401
+from support.checkpoints import read_ck  # noqa: E402
+
+from taskloop.adapters import delegate as dl  # noqa: E402
+from taskloop.adapters import procs as sproc  # noqa: E402
 from taskloop.app.plan.planner import Planner  # noqa: E402
+from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.contracts import answers  # noqa: E402
 from taskloop.contracts.schema import unstrict  # noqa: E402
-from taskloop.adapters import delegate as dl  # noqa: E402,F401
-from taskloop.adapters import procs as sproc  # noqa: E402
-from clock import FakeClock  # noqa: E402
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from support.briefs import brief_digest  # noqa: E402
-from support.builders import cfg_with, make_engine  # noqa: E402
-from taskloop.app.run import engine  # noqa: E402
-from taskloop.app.run import entry  # noqa: E402
-import seams  # noqa: E402
-from support.fakes import FakeBeadStore, as_bead, as_comment  # noqa: E402
-from support.logs import records  # noqa: E402
-from support.waits import until  # noqa: E402
-from support import fake_route  # noqa: E402
-from taskloop.domain.lanes import policy as lp  # noqa: E402
-from taskloop.domain.lanes.notes import FRESH_WRITER_TEXT  # noqa: E402,F401
-from taskloop.domain.lanes import netgate  # noqa: E402,F401
-from taskloop.domain.checks import lint  # noqa: E402,F401
-from taskloop.app.checks import evidence  # noqa: E402
-from support.checks import res  # noqa: E402
-from taskloop.contracts.checks import Durations  # noqa: E402
-from taskloop.domain.checks import durations  # noqa: E402
-from taskloop.domain.checks.writer_split import WriterSplit  # noqa: E402
-from taskloop.adapters import gitrepo  # noqa: E402
-from taskloop.adapters import ident  # noqa: E402
-from taskloop.adapters import delegate as lroute  # noqa: E402,F401
 from support import engine_case as T  # noqa: E402
+from support.briefs import brief_digest  # noqa: E402
+from support.builders import cfg_with  # noqa: E402
+from support.checks import res  # noqa: E402
 from support.engine_case import BRIEFS, CLEAN, PLAN, WRITE, finding, full, review, sh, shown, stop, stored_brief, verdict  # noqa: E402
+from support.fakes import as_bead, as_comment  # noqa: E402
+from support.logs import records  # noqa: E402
 from support.narrow import must  # noqa: E402
+
+from taskloop.adapters import delegate as lroute  # noqa: E402
+from taskloop.adapters import (  # noqa: E402
+    gitrepo,
+    ident,
+)
+from taskloop.app.checks import evidence  # noqa: E402
+from taskloop.app.run import (  # noqa: E402
+    engine,
+    entry,
+)
+from taskloop.contracts.checks import Durations  # noqa: E402
+from taskloop.domain.checks import (  # noqa: E402
+    durations,
+    lint,  # noqa: F401
+)
+from taskloop.domain.checks.writer_split import WriterSplit  # noqa: E402
+from taskloop.domain.lanes import netgate  # noqa: E402, F401
+from taskloop.domain.lanes.notes import FRESH_WRITER_TEXT  # noqa: E402
 
 
 class FailureBriefAndDurations(unittest.TestCase):
@@ -202,8 +201,16 @@ class Outcome(T.EngineTest):
             entry.main(a, self.store)  # pyrefly: ignore[missing-attribute]
         lines = out.getvalue().strip().splitlines()
         self.assertEqual(json.loads(lines[-1])["retry_after"], due)  # the loop reads the last line: still the outcome
-        self.assertTrue(any("PAUSED t-1: the lane is back at %s; rerun then: tl run-task t-1"
-                            % time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(due)) in ln for ln in lines), lines)
+        self.assertTrue(
+            any(
+                "PAUSED t-1: the lane is back at {}; rerun then: tl run-task t-1".format(
+                    time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(due))
+                )
+                in ln
+                for ln in lines
+            ),
+            lines,
+        )
 
     def test_a_pause_with_no_time_says_so(self):
         self.assertIn("no time", entry.pause_line({"outcome": "paused", "bead": "t-1", "retry_after": 0}))
@@ -212,7 +219,7 @@ class Outcome(T.EngineTest):
     def test_a_refused_claim_is_taken_and_keeps_exit_1(self):
         f = Path(self.tmp.name, "out.json")
         with mock.patch.object(entry, "reclaim", return_value=(False, "claimed by denis")):
-            rc, rec, last = self.main(f)
+            rc, rec, _last = self.main(f)
         self.assertEqual((rc, rec["outcome"]), (1, "taken"))
         self.assertIn("denis", rec["why"])
 
@@ -221,7 +228,7 @@ class DelegateLauncher(T.EngineTest):
 
     def test_same_family_review_is_recorded(self):
         same = full(CLEAN, "r", family="openai", flag="same_family")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [same]})
+        rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [same]})
         self.assertEqual(rc, 0)
         self.assertTrue(any(c[:2] == ("comments", "add") and "same family as the writer" in c[3] for c in self.bd_calls))
 
@@ -241,7 +248,7 @@ class DelegateLauncher(T.EngineTest):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_L, self.FRESH, self.FRESH],
                                      "review": [review(unmet=["more"]), review(unmet=["more"]), CLEAN]})
         self.assertEqual(rc, 0, self.blocked)  # no wait: the lane is out for an hour, past lane_wait_min
-        workers = [(c, p) for c, p in zip(s.calls, s.prompts) if c[0] == "worker"]
+        workers = [(c, p) for c, p in zip(s.calls, s.prompts, strict=False) if c[0] == "worker"]
         self.assertEqual([c[1] for c, _ in workers], [None, "ref-write", None, "w2"])  # Codex still out: resumed
         self.assertEqual([c[2] for c in s.calls if c[0] == "reviewer"], ["openai", "claude", "claude"])
         self.assertNotIn(FRESH_WRITER_TEXT, workers[1][1])
@@ -252,7 +259,7 @@ class DelegateLauncher(T.EngineTest):
     # tl-bxk.10.5 2026-10-21: after a real outage the Sonnet thread stayed the writer for every later round of
     # lifesim-fld.27.7, d5f.33, 1eg2 and d5f.54 while Codex was usable again
     BACK = full(WRITE, "w3", family="openai", lane="OPENAI_SUBSCRIPTION", model="gpt")
-    OUT_L = dict(OUT_LONG, lane="OPENAI_SUBSCRIPTION")
+    OUT_L: ClassVar[Any] = dict(OUT_LONG, lane="OPENAI_SUBSCRIPTION")
 
     def transitions(self):
         return [json.loads(ln) for ln in self.eng.log_path.read_text().splitlines() if '"transition"' in ln]
@@ -266,7 +273,7 @@ class DelegateLauncher(T.EngineTest):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_L, self.FRESH, self.BACK, WRITE],
                                      "review": [review(unmet=["more"])] * 3 + [CLEAN]}, max_rounds=5)
         self.assertEqual(rc, 0, self.blocked)
-        workers = [(c, p) for c, p in zip(s.calls, s.prompts) if c[0] == "worker"]
+        workers = [(c, p) for c, p in zip(s.calls, s.prompts, strict=False) if c[0] == "worker"]
         # round 3: Codex's lane is back, so delegate routes afresh; round 4 resumes Codex's new thread
         self.assertEqual([c[1] for c, _ in workers], [None, "ref-write", None, None, "w3"])
         self.assertIn(FRESH_WRITER_TEXT, workers[3][1])
@@ -313,9 +320,9 @@ class DelegateLauncher(T.EngineTest):
         self.assertEqual(s.calls[1], ("reviewer", None, "openai"))
 
     # contract 3: an answer that picked a lane says whether it is a fallback (and from which first lane, when it can)
-    SONNET_FB = dict(FRESH, rung=1, fallback=True, fallback_reason="ceiling", first_lane="OPENAI_SUBSCRIPTION")
-    CODEX_FIRST = dict(BACK, rung=0, fallback=False, fallback_reason=None)
-    no_checks = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[])])  # FRESH writes no f.txt
+    SONNET_FB: ClassVar[Any] = dict(FRESH, rung=1, fallback=True, fallback_reason="ceiling", first_lane="OPENAI_SUBSCRIPTION")
+    CODEX_FIRST: ClassVar[Any] = dict(BACK, rung=0, fallback=False, fallback_reason=None)
+    no_checks: ClassVar[Any] = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[])])  # FRESH writes no f.txt
 
     def test_the_answer_a_fallback_answer_is_retaken_fresh_once_its_first_lane_is_back(self):
         with self.lanes(OPENAI_SUBSCRIPTION=False):
@@ -352,7 +359,8 @@ class DelegateLauncher(T.EngineTest):
 
     def test_lane_status_reads_route_status_json(self):
         out = json.dumps({"v": 1, "lanes": {"OPENAI_SUBSCRIPTION": {"out": True}}})
-        ran = lambda text, rc=0: sproc.Ran(rc, text, "", 0.1, False)  # noqa: E731
+        def ran(text, rc=0):
+            return sproc.Ran(rc, text, "", 0.1, False)
         with mock.patch.object(sproc, "capture", return_value=ran(out + "\n")) as cap:
             self.assertEqual(lroute.lane_status("/r/route.py"), {"OPENAI_SUBSCRIPTION": {"out": True}})
         self.assertEqual(cap.call_args[0][0][1:], ["/r/route.py", "status", "--json"])
@@ -367,7 +375,7 @@ class DelegateLauncher(T.EngineTest):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_OWNER, self.FRESH],
                                  "review": [review(unmet=["more"]), CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
-        workers = [(c, p) for c, p in zip(s.calls, s.prompts) if c[0] == "worker"]
+        workers = [(c, p) for c, p in zip(s.calls, s.prompts, strict=False) if c[0] == "worker"]
         self.assertEqual([c[1] for c, _ in workers], [None, "ref-write", None])
         self.assertIn(FRESH_WRITER_TEXT, workers[2][1])
 
@@ -392,7 +400,7 @@ class DelegateLauncher(T.EngineTest):
         # delegate 0.29 owns what the worker is told about its sandbox, escalation and git (worker-run v2)
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
-        w = next(p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker")
+        w = next(p for (c, p) in zip(s.calls, s.prompts, strict=False) if c[0] == "worker")
         for gone in ("sandbox", "escalat", "permissions", "You have the host", "no commits", "no pushing"):
             self.assertNotIn(gone, w, gone)
         self.assertIn("Never run the gate", w)
@@ -427,7 +435,7 @@ class DelegateLauncher(T.EngineTest):
     # tl-bxk.10.22: the dashboard says which lane a run waits for and until when
     def test_a_wait_for_a_lane_records_the_lane_and_when_it_ends(self):
         out = stop("rate_limited", at=time.time() + 120, lane="OPENAI_SUBSCRIPTION")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [out, WRITE], "review": [CLEAN]})
+        rc, _s = self.run_engine({"plan": [PLAN], "write": [out, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         waits = records(self.eng, "wait_start")
         self.assertEqual([w["holder"] for w in waits], ["OPENAI_SUBSCRIPTION"])
@@ -435,7 +443,7 @@ class DelegateLauncher(T.EngineTest):
 
     def test_a_failure_after_work_still_fails(self):
         worked = stop("worker_failed", tokens={"in": 90000, "cached": 0, "out": 4000}, say="codex: turn failed")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [worked, worked]})
+        rc, _s = self.run_engine({"plan": [PLAN], "write": [worked, worked]})
         self.assertEqual(rc, 2)
         self.assertTrue(self.said().startswith("Engine failed:"), self.said())
 
@@ -483,7 +491,7 @@ class DelegateLauncher(T.EngineTest):
     def test_every_lane_out_with_a_time_pauses_until_it(self):
         due = time.time() + 3 * 3600
         none = stop("no_lane", at=due, say="every lane is out")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_OWNER, none],
+        rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_OWNER, none],
                                  "review": [review(unmet=["more"])]})
         self.assertEqual(rc, 2)
         self.assertEqual(self.blocked, [])
@@ -548,8 +556,10 @@ class DelegateLauncher(T.EngineTest):
         self.assertIn("claude plugin update iorlas-delegate", self.said())
 
 
-ENGINE_LINE = re.compile(r"^(?:- [^:\n]*: )?(?:(?:Lane|Verify|Resume|Look|Land|Plan|Review|Reflect|Ask|Evidence|Follow-up|Parked) \(engine|Blocked:"
-                         r"|Engine (?:paused|failed):)")
+ENGINE_LINE = re.compile(
+    r"^(?:- [^:\n]*: )?(?:(?:Lane|Verify|Resume|Look|Land|Plan|Review|Reflect|Ask|Evidence|Follow-up|Parked) \(engine|Blocked:"
+    r"|Engine (?:paused|failed):)"
+)
 
 
 class StoredBriefs(unittest.TestCase):
@@ -560,7 +570,7 @@ class StoredBriefs(unittest.TestCase):
     def test_the_sample_has_engine_lines_to_remove(self):
         names = sorted(p.stem for p in BRIEFS.glob("*.md"))
         self.assertGreaterEqual(len(names), 30)
-        self.assertGreater(sum(any(ENGINE_LINE.match(l) for l in (BRIEFS / (n + ".md")).read_text().splitlines()) for n in names), 20)
+        self.assertGreater(sum(any(ENGINE_LINE.match(ln) for ln in (BRIEFS / (n + ".md")).read_text().splitlines()) for n in names), 20)
         self.assertLessEqual(sum(p.stat().st_size for p in BRIEFS.glob("*.md")), 200 * 1024)
 
     def test_no_rebuilt_brief_contains_an_engine_prefixed_line_and_none_is_larger(self):
@@ -568,7 +578,7 @@ class StoredBriefs(unittest.TestCase):
             notes, comments = stored_brief(p.stem)
             bead = {"id": "x", "title": "t", "notes": notes}
             out = brief_digest(must(as_bead(bead)), [as_comment({"author": a, "text": t}) for a, t in comments])
-            bad = [l for l in out.splitlines() if ENGINE_LINE.match(l)]
+            bad = [ln for ln in out.splitlines() if ENGINE_LINE.match(ln)]
             self.assertEqual(bad, [], p.name)
             old = p.read_text(encoding="utf-8")
             self.assertLessEqual(len(out), len(old) + 200, p.name)  # the sections rebuilt are never larger than as stored
@@ -576,7 +586,8 @@ class StoredBriefs(unittest.TestCase):
 
 class Validate(unittest.TestCase):
     def test_schema_subset(self):
-        ok = lambda node, data: answers.check(node, False, data)  # noqa: E731
+        def ok(node, data):
+            return answers.check(node, False, data)
         self.assertEqual(ok("review", review(findings=[finding("high")])), [])
         self.assertTrue(ok("review", review(findings=[dict(finding("high"), severity="maybe")])))
         self.assertTrue(ok("review", {"findings": []}))
@@ -598,7 +609,7 @@ class Validate(unittest.TestCase):
                 walk(sch.get("items") or {}, path + "[]")
         for node in answers.NODES:
             for visual in (False, True):
-                walk(answers.sent_schema(node, visual), "%s%s" % (node, " (visual)" if visual else ""))
+                walk(answers.sent_schema(node, visual), "{}{}".format(node, " (visual)" if visual else ""))
 
     def test_a_strict_answer_with_null_optionals_validates_against_the_contract(self):
         s = answers.schema_for("review")

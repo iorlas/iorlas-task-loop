@@ -3,11 +3,10 @@
 `route` answers `resolve(delegate_cfg)` (adapters.delegate.Resolved or Refusal) and `runner(log_path, idle, wall, live, on_worker)` (the
 process seam of `adapters.delegate.call`: `idle` is the silence limits (warn, stop, cap, on_warn) of a write, or None); the default looks
 the real function up at call time. The bd seam is `store` (taskloop.contracts.ports.Beads), made by `beadtools.bd_store()`."""
-from taskloop.adapters import beadtools
-from taskloop.adapters import ident
-from taskloop.app.release import pins
 from taskloop.adapters import delegate as dg
+from taskloop.adapters import ident
 from taskloop.adapters.runner import Silence, StreamRunner
+from taskloop.app.release import pins
 
 
 def resolve_delegate(configured=""):

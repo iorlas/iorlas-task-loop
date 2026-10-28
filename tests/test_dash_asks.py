@@ -9,20 +9,21 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401
-from support.narrow import must  # noqa: E402
-from asks.samples import MOCKS  # noqa: E402
-from support.dashes import make_dash  # noqa: E402
-from asks.dash_ports import answering  # noqa: E402
-from taskloop.adapters.bd import BdRun, BdStore  # noqa: E402
-from taskloop.adapters.fake_beads import FakeBeads  # noqa: E402
-from taskloop.contracts import codec  # noqa: E402
-from taskloop.contracts.bead import BdError, Bead  # noqa: E402
-from taskloop.contracts.ports import BdFailure  # noqa: E402
-from taskloop.contracts.ask import Ask  # noqa: E402
-from taskloop.contracts.enums import AskStatus  # noqa: E402
-from taskloop.contracts.stores import ORPHAN  # noqa: E402
-from taskloop_dash.env import Ports  # noqa: E402
+import support.paths  # noqa: F401
+from asks.dash_ports import answering
+from asks.samples import MOCKS
+from support.dashes import make_dash
+from support.narrow import must
+
+from taskloop.adapters.bd import BdRun, BdStore
+from taskloop.adapters.fake_beads import FakeBeads
+from taskloop.contracts import codec
+from taskloop.contracts.ask import Ask
+from taskloop.contracts.bead import BdError, Bead
+from taskloop.contracts.enums import AskStatus
+from taskloop.contracts.ports import BdFailure
+from taskloop.contracts.stores import ORPHAN
+from taskloop_dash.env import Ports
 
 ASK = dataclasses.replace(MOCKS["lifesim-22b3"], bead="b-1", id="b-1-1")
 
@@ -114,11 +115,11 @@ class AskFailures(unittest.TestCase):
         return Store()
 
     def ask(self, bead="x-1", n=1, **over):
-        rec = dataclasses.replace(ASK, bead=bead, id="%s-%d" % (bead, n), repo=str(self.d), t=time.time(), parks_at=time.time() + 9e4)
-        (self.dir / ("%s.json" % bead)).write_text(json.dumps({**codec.to_json(rec), **over}))
+        rec = dataclasses.replace(ASK, bead=bead, id=f"{bead}-{n:d}", repo=str(self.d), t=time.time(), parks_at=time.time() + 9e4)
+        (self.dir / f"{bead}.json").write_text(json.dumps({**codec.to_json(rec), **over}))
 
     def read(self, bead="x-1"):
-        return json.loads((self.dir / ("%s.json" % bead)).read_text())
+        return json.loads((self.dir / f"{bead}.json").read_text())
 
     def test_a_bd_failure_after_the_answer_keeps_the_answer_like_tl_answer_does(self):
         for kind in ("not_found", "other"):

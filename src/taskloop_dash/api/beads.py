@@ -42,12 +42,12 @@ class BeadApi:
 
         def load() -> tuple[dict[str, Any], list[dict[str, Any]]]:
             return self.beads.show(path, bead) or {}, self.beads.comments(path, bead)
-        b, comments = self.env.ttl.get("bead:%s:%s" % (path, bead), 15, load)
+        b, comments = self.env.ttl.get(f"bead:{path}:{bead}", 15, load)
         try:
             alive = any(t["id"] == bead and t.get("state") == "running" for t in self.tasks.api_tasks()["tasks"])
         except Exception:
             alive = False
-        runs, tls = self.env.ttl.get("beadruns:%s:%s:%d" % (path, bead, alive), 5 if alive else 15, lambda: self.bead_runs(bead, alive))
+        runs, tls = self.env.ttl.get(f"beadruns:{path}:{bead}:{int(alive)}", 5 if alive else 15, lambda: self.bead_runs(bead, alive))
         deps = [{k: d.get(k) for k in ("id", "title", "status", "type")} for d in (b.get("dependencies") or [])]
         return {"id": bead, "title": b.get("title") or "", "status": b.get("status"), "priority": b.get("priority"),
                 "labels": b.get("labels") or [], "assignee": b.get("assignee"), "created_at": b.get("created_at"),

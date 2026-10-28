@@ -6,10 +6,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
-import support.paths  # noqa: E402,F401
-from taskloop.domain.lanes import policy as lp  # noqa: E402
+import support.paths  # noqa: E402, F401
+
+# isort: split
 import outcome as oc  # noqa: E402
 from support.narrow import must, only  # noqa: E402
+
+from taskloop.domain.lanes import policy as lp  # noqa: E402
 
 NOW = 1_000_000.0
 
@@ -50,7 +53,9 @@ class Exhaustive(unittest.TestCase):
 
     def test_no_action_asks_the_owner_and_no_yield_is_a_fault(self):
         for scope, perm, retry in lp.LEGAL:
-            a = lp.decide(stop(scope, perm, retry, retry_at=NOW + 9999), ctx(attempt=5, polls=5, crashes=5, waited_net_s=9999, denied_retried=True))
+            a = lp.decide(
+                stop(scope, perm, retry, retry_at=NOW + 9999), ctx(attempt=5, polls=5, crashes=5, waited_net_s=9999, denied_retried=True)
+            )
             if isinstance(a, lp.Yield):
                 self.assertIn(kind_of(a), oc.PAUSES)
             if isinstance(a, (lp.Yield, lp.Fail)):

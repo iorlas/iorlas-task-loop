@@ -14,22 +14,32 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from support import tlbd  # noqa: E402
+import support.paths  # noqa: E402, F401
+
+# isort: split
+import contextlib  # noqa: E402
+
+import loop_env  # noqa: E402
 import tl  # noqa: E402
-import dash_server  # noqa: E402
-from taskloop.app.slots import engine_lock  # noqa: E402
-from taskloop.adapters import gitrepo  # noqa: E402
-from taskloop.adapters import ident  # noqa: E402
-from taskloop.adapters import pidcheck  # noqa: E402
+from contracts import samples as S  # noqa: E402
+from support import (  # noqa: E402
+    looptest,
+    tlbd,
+)
+from support.narrow import must  # noqa: E402
+
+from taskloop.adapters import delegate as lroute  # noqa: E402
+from taskloop.adapters import (  # noqa: E402
+    gitrepo,
+    ident,
+    pidcheck,
+)
 from taskloop.app.release import pins  # noqa: E402
+from taskloop.app.slots import engine_lock  # noqa: E402
 from taskloop.app.track import trail  # noqa: E402
 from taskloop.app.wire import asks as wasks  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
-from contracts import samples as S  # noqa: E402
 from taskloop.contracts import codec  # noqa: E402
-from support.narrow import must  # noqa: E402
-
 
 CTX = tl.Ctx(tl.HERE, trail.now, [])
 SH_FAKE = unittest.skipIf(os.name == "nt", "the bd fake is a #!/bin/sh script, which Windows cannot execute")
@@ -57,10 +67,8 @@ class Base(unittest.TestCase):
             os.chmod(path, stat.S_IWRITE)
             fn(path)
         shutil.rmtree(self.tmp.name, onerror=force)
-        try:
+        with contextlib.suppress(OSError):
             self.tmp.cleanup()
-        except OSError:
-            pass
 
 
 class Identity(Base):
@@ -85,7 +93,7 @@ class Records(Base):
         trail.event("claim", "x-1", repo=str(self.home), worktree="/w")
         trail.event("close", "x-1", repo=str(self.home))
         lines = (ident.config_dir() / "events.jsonl").read_text().splitlines()
-        self.assertEqual([json.loads(l)["kind"] for l in lines], ["claim", "close"])
+        self.assertEqual([json.loads(ln)["kind"] for ln in lines], ["claim", "close"])
         self.assertEqual(json.loads(lines[0])["session"], "abcdef12-3456")
         self.assertIn(str(self.home), json.loads((ident.config_dir() / "repos.json").read_text()))
 
@@ -93,8 +101,8 @@ class Records(Base):
     def test_processes_registering_at_once_neither_crash_nor_lose_a_repo(self):
         # race test (tl-bxk.11.1): every process wrote repos.tmp; the second os.replace found it gone and the event
         # (a claim's, a slot take's) raised. Each writer now has its own tmp file, under a lock, so none is lost.
-        code = ("import sys; sys.path.insert(0, %r); import tl; from taskloop.app.track import trail\n"
-                "for i in range(15): trail.register_repo('/r/%%s-%%d' %% (sys.argv[1], i))" % str(ROOT / "skills" / "task-loop"))
+        code = ("import sys; sys.path.insert(0, {!r}); import tl; from taskloop.app.track import trail\n"
+                "for i in range(15): trail.register_repo('/r/%s-%d' % (sys.argv[1], i))".format(str(ROOT / "skills" / "task-loop")))
         ps = [subprocess.Popen([sys.executable, "-c", code, str(n)], stderr=subprocess.PIPE, text=True) for n in range(10)]
         errs = [p.communicate(timeout=60)[1] for p in ps]
         self.assertEqual([p.returncode for p in ps], [0] * 10, errs)
@@ -107,7 +115,7 @@ class Records(Base):
         new = json.dumps({"t": trail.now(), "kind": "new"})
         f.write_text((old + "\n") * 120000 + new + "\n")
         trail.prune_events()
-        self.assertEqual([json.loads(l)["kind"] for l in f.read_text().splitlines()], ["new"])
+        self.assertEqual([json.loads(ln)["kind"] for ln in f.read_text().splitlines()], ["new"])
 
 
 class RegisterCLI(Base):
@@ -120,7 +128,7 @@ class RegisterCLI(Base):
 
     def cli(self, *args, cwd=None):
         return subprocess.run([sys.executable, str(ROOT / "skills" / "task-loop" / "tl.py"), *args],
-                              cwd=cwd or self.home, capture_output=True, text=True)
+                              cwd=cwd or self.home, capture_output=True, text=True, check=False)
 
     def assert_registered(self, result):
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -206,12 +214,14 @@ class UsageCLI(Base):
         d = self.home / ".claude/plugins/cache/iorlas-marketplace/iorlas-delegate/0.15.0/skills/delegate"
         d.mkdir(parents=True)
         (d / "route.py").write_text(
-            "import json,sys\nopen(%r,'w').write(json.dumps(sys.argv[1:]))\n"
-            "print(json.dumps({'lanes': {'CLAUDE_SUBSCRIPTION': {'five': 6.0, 'week': 4.0, 'out': False}}}))\n"
-            % str(self.home / "argv.json"))
+            "import json,sys\nopen({!r},'w').write(json.dumps(sys.argv[1:]))\n"
+            "print(json.dumps({{'lanes': {{'CLAUDE_SUBSCRIPTION': {{'five': 6.0, 'week': 4.0, 'out': False}}}}}}))\n".format(
+                str(self.home / "argv.json")
+            )
+        )
         env = dict(os.environ, HOME=str(self.home), USERPROFILE=str(self.home))
         r = subprocess.run([sys.executable, str(ROOT / "skills" / "task-loop" / "tl.py"), "usage", "[]"],
-                           capture_output=True, text=True, env=env)
+                           capture_output=True, text=True, env=env, check=False)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("5h 6.0%, week 4.0%", r.stdout)
         self.assertEqual(json.loads((self.home / "argv.json").read_text()), ["status", "--claude-usage", "[]", "--json"])
@@ -228,7 +238,7 @@ class TraceCLI(Base):
         (cfg / "traces.jsonl").write_text(json.dumps(run) + "\n" + json.dumps(other) + "\n")
         env = dict(os.environ, HOME=str(self.home), XDG_CONFIG_HOME=str(self.home / "cfg"))
         r = subprocess.run([sys.executable, str(ROOT / "skills" / "task-loop" / "tl.py"), "trace", "b-1"],
-                           capture_output=True, text=True, env=env)
+                           capture_output=True, text=True, env=env, check=False)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("b-1-20261019-010000  b-1  landed  10 min", r.stdout)
         self.assertIn("thr-9", r.stdout)
@@ -308,7 +318,14 @@ class SlotReset(Base):
         self.assertEqual(gitrepo.git("show", wip[0] + ":new.txt", cwd=str(self.slot)), "new")
 
     def test_setup_runs_only_when_inputs_change(self):
-        cfg = {"slots": {"count": 1, "setup": [sys.executable, "-c", "open('setup.log', 'a').write('run\\n')"], "setup_inputs": ["a.txt"], "keep": ["setup.log"]}}
+        cfg = {
+            "slots": {
+                "count": 1,
+                "setup": [sys.executable, "-c", "open('setup.log', 'a').write('run\\n')"],
+                "setup_inputs": ["a.txt"],
+                "keep": ["setup.log"],
+            }
+        }
         (self.repo / ".task-loop.json").write_text(json.dumps(cfg))
         (self.slot / ".gitignore").write_text("ignored/\nsetup.log\n")
         sh("git", "add", "-A", cwd=self.slot)
@@ -345,7 +362,7 @@ class PinAndRollback(Base):
         f = self.claude / "plugins" / "installed_plugins.json"
         recs = json.loads(f.read_text()) if f.exists() else {"version": 2, "plugins": {}}
         d = self.claude / "plugins" / "cache" / "iorlas-marketplace" / plugin / v
-        recs["plugins"]["%s@iorlas-marketplace" % plugin] = [{"scope": "user", "installPath": str(d), "version": v}]
+        recs["plugins"][f"{plugin}@iorlas-marketplace"] = [{"scope": "user", "installPath": str(d), "version": v}]
         f.write_text(json.dumps(recs))
 
     def pin(self, *args):
@@ -392,23 +409,24 @@ class PinAndRollback(Base):
         self.assertEqual(self.pinned()["task-loop"], "0.1.0")
 
     def test_find_route_follows_the_pin_then_the_installed_entry_not_the_newest_directory(self):
-        from taskloop.adapters import delegate as lroute
         self.record("iorlas-delegate", "0.5.0")  # the plugin manager installed 0.5.0; 0.6.0 is only a directory
-        route = lambda: lroute.find_route("", pins.pinned_dir("delegate"), ident.claude_dir() / "plugins" / "cache",
-                                          lroute.installed_dir(ident.claude_dir()))
+        def route():
+            return lroute.find_route("", pins.pinned_dir("delegate"), ident.claude_dir() / "plugins" / "cache",
+                                                  lroute.installed_dir(ident.claude_dir()))
         self.assertIn("/iorlas-delegate/0.5.0/", must(route()))
         self.assertEqual(self.pin("0.1.0", "--delegate", "0.6.0")[0], 0)
         self.assertIn("/iorlas-delegate/0.6.0/", must(route()))
 
     def test_the_drill_pin_decides_what_loop_and_find_route_pick_then_clear_returns_to_the_newest(self):
-        import loop_env
-        from taskloop.adapters import delegate as lroute
-        route = lambda: lroute.find_route("", pins.pinned_dir("delegate"), ident.claude_dir() / "plugins" / "cache")
+
+        def route():
+            return lroute.find_route("", pins.pinned_dir("delegate"), ident.claude_dir() / "plugins" / "cache")
         self.assertIn("0.6.0", must(route()))  # no pin: the newest
         self.assertEqual(self.pin("0.1.0", "--delegate", "0.5.0")[0], 0)
         self.assertIn("/iorlas-delegate/0.5.0/", must(route()))
         root = self.claude / "plugins/cache/iorlas-marketplace/iorlas-task-loop/0.2.0"
-        target = lambda **kw: loop_env.installs(loop_env.cfgdir(), here=root / "skills" / "task-loop").target(**kw)
+        def target(**kw):
+            return loop_env.installs(loop_env.cfgdir(), here=root / "skills" / "task-loop").target(**kw)
         self.assertEqual(target(), ("0.1.0", root.parent / "0.1.0"))  # older than the running one: still the pin
         self.assertEqual(target(skip=["0.1.0"]), None)
         self.assertEqual(self.pin("--clear")[0], 0)
@@ -417,10 +435,10 @@ class PinAndRollback(Base):
         # the CLI end to end, in a fresh process with only the scratch dirs in its environment
         env = dict(os.environ, HOME=str(self.home))
         cli = [sys.executable, str(ROOT / "skills" / "task-loop" / "tl.py"), "pin"]
-        r = subprocess.run(cli + ["0.2.0", "--delegate", "0.5.0"], env=env, capture_output=True, text=True)
+        r = subprocess.run([*cli, "0.2.0", "--delegate", "0.5.0"], env=env, capture_output=True, text=True, check=False)
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("/iorlas-delegate/0.5.0/", must(route()))
-        r = subprocess.run(cli + ["0.4.0"], env=env, capture_output=True, text=True)
+        r = subprocess.run([*cli, "0.4.0"], env=env, capture_output=True, text=True, check=False)
         self.assertEqual(r.returncode, 2)
         self.assertEqual(self.pinned()["task-loop"], "0.2.0")
 
@@ -448,7 +466,6 @@ class CutoverCheck(Base):
         self.assertEqual((rc, out.split()[0]), (0, "CLEAR:"))
 
     def test_a_live_loop_and_a_live_run_exit_1_and_are_listed_a_dead_one_is_not(self):
-        from support import looptest
         child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
         self.addCleanup(child.kill)
         self.addCleanup(child.wait)
@@ -457,8 +474,8 @@ class CutoverCheck(Base):
                                               "by": "engine", "started": time.time()})
         rc, out = self.check()
         self.assertEqual(rc, 1, out)
-        self.assertIn("LIVE loop pid %d on %s running x-9" % (child.pid, self.repo), out)
-        self.assertIn("LIVE run in %s: engine pid %d runs x-7" % (self.repo, child.pid), out)
+        self.assertIn(f"LIVE loop pid {child.pid} on {self.repo} running x-9", out)
+        self.assertIn(f"LIVE run in {self.repo}: engine pid {child.pid} runs x-7", out)
         rc, out = self.check("--json")
         self.assertEqual((rc, sorted(x["kind"] for x in json.loads(out)["live"])), (1, ["loop", "run"]))
         child.kill()
@@ -474,7 +491,7 @@ def ask_file(asks, bead, **over):
     """A current-version ask record on disk, the way the engine files one."""
     base = codec.to_json(S.ASK)
     rec = {**base, "id": bead + "-1", "bead": bead, "status": "open", "answer": None, "answered": None, "consumed": None, **over}
-    (asks / ("%s.json" % bead)).write_text(json.dumps(rec))
+    (asks / (f"{bead}.json")).write_text(json.dumps(rec))
 
 
 class AskCli(unittest.TestCase):
@@ -482,10 +499,10 @@ class AskCli(unittest.TestCase):
 
     @SH_FAKE
     def test_list_answer_and_withdraw(self):
-        with tempfile.TemporaryDirectory() as d:
-            d = Path(d)
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
             (d / "bin").mkdir()
-            (d / "bin" / "bd").write_text("#!/bin/sh\necho \"$*\" >> %s\n" % (d / "bd.log"))
+            (d / "bin" / "bd").write_text("#!/bin/sh\necho \"$*\" >> {}\n".format(d / "bd.log"))
             (d / "bin" / "bd").chmod(0o755)
             asks = d / "task-loop" / "asks"
             asks.mkdir(parents=True)
@@ -493,7 +510,8 @@ class AskCli(unittest.TestCase):
                 ask_file(asks, bead, parks_at=9e12, repo=str(d), title="T " + bead)
             env = {"XDG_CONFIG_HOME": str(d), "APPDATA": str(d), "HOME": str(d), "USERPROFILE": str(d),
                    "PATH": str(d / "bin") + os.pathsep + os.environ["PATH"]}
-            ns = lambda **k: type("A", (), dict(dict(op="list", bead=None, text=[], json=False), **k))()
+            def ns(**k):
+                return type("A", (), dict({"op": "list", "bead": None, "text": [], "json": False}, **k))()
             with mock.patch.dict(os.environ, env):
                 out = io.StringIO()
                 with mock.patch("sys.stdout", out):
@@ -515,10 +533,10 @@ class ParkStaleAsks(unittest.TestCase):
 
     @SH_FAKE
     def test_parks_only_late_unanswered_open_asks(self):
-        with tempfile.TemporaryDirectory() as d:
-            d = Path(d)
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
             (d / "bin").mkdir()
-            (d / "bin" / "bd").write_text("#!/bin/sh\necho \"$*\" >> %s\n" % (d / "bd.log"))
+            (d / "bin" / "bd").write_text("#!/bin/sh\necho \"$*\" >> {}\n".format(d / "bd.log"))
             (d / "bin" / "bd").chmod(0o755)
             asks = d / "task-loop" / "asks"
             asks.mkdir(parents=True)
@@ -532,7 +550,8 @@ class ParkStaleAsks(unittest.TestCase):
             with mock.patch.dict(os.environ, env):
                 self.assertEqual(wasks.sweep("park", every=0), ["late"])
                 self.assertEqual(wasks.sweep("park", every=600), [])  # throttled
-            status = lambda b: json.loads((asks / ("%s.json" % b)).read_text())["status"]
+            def status(b):
+                return json.loads((asks / (f"{b}.json")).read_text())["status"]
             self.assertEqual([status(b) for b in ("late", "fresh", "done", "closed")], ["parked", "open", "answered", "closed"])
             log = (d / "bd.log").read_text()
             self.assertIn("comments add late Parked (engine): ask late-1 got no answer in 3 days", log)

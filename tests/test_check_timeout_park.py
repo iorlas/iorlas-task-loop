@@ -4,10 +4,11 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from taskloop.app.checks import evidence  # noqa: E402
-from support.checks import res  # noqa: E402
-from taskloop.contracts.checks import CheckResult  # noqa: E402
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support.checks import res
+
+from taskloop.app.checks import evidence
+from taskloop.contracts.checks import CheckResult
 
 
 def result(**kw) -> CheckResult:

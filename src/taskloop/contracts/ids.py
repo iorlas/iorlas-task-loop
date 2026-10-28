@@ -12,7 +12,7 @@ _BEAD_CHARS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ012
 def parse_bead_id(text: str) -> BeadId:
     """A bead id: starts with a letter or digit, then letters, digits, `_`, `.`, `-`."""
     if not text or not text[0].isascii() or not text[0].isalnum() or not set(text) <= _BEAD_CHARS:
-        raise ValueError("not a bead id: %r" % (text,))
+        raise ValueError(f"not a bead id: {text!r}")
     return BeadId(text)
 
 
@@ -29,11 +29,11 @@ class RunId:
     def parse(cls, text: str) -> "RunId":
         parts = text.rsplit("-", 2)
         if len(parts) != 3:
-            raise ValueError("not a run id: %r" % (text,))
+            raise ValueError(f"not a run id: {text!r}")
         try:
-            started = datetime.datetime.strptime("%s-%s" % (parts[1], parts[2]), STAMP)
+            started = datetime.datetime.strptime(f"{parts[1]}-{parts[2]}", STAMP)
         except ValueError:
-            raise ValueError("not a run id: %r" % (text,)) from None
+            raise ValueError(f"not a run id: {text!r}") from None
         return cls(parse_bead_id(parts[0]), started)
 
     from_wire = parse
@@ -42,10 +42,10 @@ class RunId:
         return str(self)
 
     def __str__(self) -> str:
-        return "%s-%s" % (self.bead, self.started.strftime(STAMP))
+        return f"{self.bead}-{self.started.strftime(STAMP)}"
 
     def __repr__(self) -> str:
-        return "RunId(%s)" % self
+        return f"RunId({self})"
 
     def __eq__(self, other: object) -> bool:
         return isinstance(other, RunId) and (self.bead, self.started) == (other.bead, other.started)
@@ -63,7 +63,7 @@ class Version(tuple[int, ...]):
     def parse(cls, text: str) -> "Version":
         parts = text.split(".")
         if not text or not all(p.isascii() and p.isdigit() for p in parts):
-            raise ValueError("not a version: %r" % (text,))
+            raise ValueError(f"not a version: {text!r}")
         return cls(int(p) for p in parts)
 
     from_wire = parse

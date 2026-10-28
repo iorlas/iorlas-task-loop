@@ -4,12 +4,11 @@ Every seam has a default that is a fake (store, router, clock); `git=` and `cfg=
 the wall clock; the engine still writes its own files under the test's XDG_CONFIG_HOME."""
 import shlex
 
+from support.fakes import FakeBeadStore, FakeClock, FakeRouter
 from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.codec import from_json, to_json
 from taskloop.contracts.config import EngineConfig
-
-from support.fakes import FakeBeadStore, FakeClock, FakeRouter
 
 
 def make_engine(wt, bead="t-1", cfg=None, script=None, attrs=None, **seams):
@@ -35,7 +34,9 @@ def argv_cfg(cfg):
         if isinstance(out.get(k), str):
             out[k] = shlex.split(out[k])
     if "checks" in out:
-        out["checks"] = [dict(x, argv=shlex.split(x.pop("cmd"))) if isinstance(x, dict) and "cmd" in x else x for x in map(dict, out["checks"])]
+        out["checks"] = [
+            dict(x, argv=shlex.split(x.pop("cmd"))) if isinstance(x, dict) and "cmd" in x else x for x in map(dict, out["checks"])
+        ]
     if "gate_only" in out:
         out["gate_only"] = [{"argv": shlex.split(x)} if isinstance(x, str) else dict(x, argv=shlex.split(x.pop("cmd"))) if "cmd" in x else x
                             for x in (y if isinstance(y, str) else dict(y) for y in out["gate_only"])]

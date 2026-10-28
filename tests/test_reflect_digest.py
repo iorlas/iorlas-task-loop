@@ -10,9 +10,13 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from support import tlbd  # noqa: E402
-import reflect_digest as rd  # noqa: E402
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
+
+# isort: split
+import reflect_digest as rd
+from support import tlbd
+from support.dashes import Ports, make_dash
+
 from taskloop.adapters import ident
 
 NOW = 1_800_000_000.0
@@ -54,7 +58,7 @@ class Base(unittest.TestCase):
             if self.fail_create:
                 return Res("", 1)
             self.n += 1
-            return Res(json.dumps({"id": "tl-new%d" % self.n}))
+            return Res(json.dumps({"id": f"tl-new{int(self.n)}"}))
         if args[0] == "list":
             return Res(json.dumps(self.open_rows))
         if args[0] == "show":
@@ -68,7 +72,7 @@ class Base(unittest.TestCase):
         return [c for c in self.calls if c[0][0] == "comments"]
 
     def trace(self, run, bad, repo="lifesim", bead="b1", t=NOW - 3600, url=True):  # the engine writes the origin's URL
-        rec = {"run": run, "bead": bead, "repo_url": ("git@github.com:me/%s.git" % repo) if url else self.repos[repo], "ended": t,
+        rec = {"run": run, "bead": bead, "repo_url": (f"git@github.com:me/{repo}.git") if url else self.repos[repo], "ended": t,
                "reflection": {"went_well": [], "wasted": [], "change": [], "went_badly": [
                    {"what": w, "cause": c, "session": "s-" + run, "evidence": e} for w, c, e in bad]}}
         with open(self.traces, "a") as f:
@@ -119,9 +123,9 @@ class Clusters(Base):
         self.assertEqual(rd.items(NOW - 86400, NOW), [])
 
     def test_the_owner_repo_follows_the_cause(self):
-        for cause, want in (("engine", "iorlas-task-loop"), ("prompt", "iorlas-task-loop"), ("delegate", "iorlas-delegate"),
+        for cause, _want in (("engine", "iorlas-task-loop"), ("prompt", "iorlas-task-loop"), ("delegate", "iorlas-delegate"),
                             ("repo_profile", "lifesim"), ("sandbox", "lifesim")):
-            self.trace("r-" + cause, [("x %s thing" % cause, cause, "e")])
+            self.trace("r-" + cause, [(f"x {cause} thing", cause, "e")])
         owners = {c["cause"]: Path(rd.owner_repo(c) or "").name for c in rd.cluster(rd.items(NOW - 86400, NOW))}
         self.assertEqual(owners, {"engine": "iorlas-task-loop", "prompt": "iorlas-task-loop", "delegate": "iorlas-delegate",
                                   "repo_profile": "lifesim", "sandbox": "lifesim"})
@@ -243,7 +247,6 @@ if __name__ == "__main__":
 
 class Api(Base):
     def test_the_dashboard_api_returns_the_view(self):
-        from support.dashes import Ports, make_dash
         server = make_dash(ports=Ports(reflections=rd.view))
         self.trace("r1", [("writer reran the whole test suite after every edit", "prompt", "9")], t=time.time() - 60)
         self.trace("r2", [("writer reran the whole test suite after every edit again", "prompt", "7")], bead="b2", t=time.time() - 30)

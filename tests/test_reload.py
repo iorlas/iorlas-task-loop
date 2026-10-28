@@ -7,9 +7,7 @@ import json
 import os
 import re
 import shutil
-import subprocess
 import sys
-import tempfile
 import time
 import unittest
 from pathlib import Path
@@ -21,30 +19,41 @@ ENGINE = ROOT / "src" / "taskloop" / "app" / "run" / "engine.py"
 DELEGATION = ROOT / "src" / "taskloop" / "app" / "run" / "delegation.py"
 sys.path.insert(0, str(SRC))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from support.checkpoints import put_ck, read_ck  # noqa: E402
+import support.paths  # noqa: E402, F401
+from support.checkpoints import read_ck  # noqa: E402
+
 sys.path.insert(0, str(ROOT / "tests"))
-from taskloop.app.release import reexec  # noqa: E402
-from taskloop.app.run import engine  # noqa: E402
-from taskloop.app.run import entry  # noqa: E402
-from support.builders import cfg_with  # noqa: E402
-import seams  # noqa: E402
-from taskloop_dash.views import graph  # noqa: E402
 import loop_env  # noqa: E402
-from support import looptest  # noqa: E402
-from taskloop.app.loop.run import BeadRun, Where  # noqa: E402
-from taskloop.adapters.fake_beads import FakeBeads  # noqa: E402
-from taskloop_dash.views import roadmap  # noqa: E402
+import seams  # noqa: E402
 from support import engine_case as te  # noqa: E402
-import tl  # noqa: E402
-from taskloop.app.release import catalog  # noqa: E402
-from taskloop.adapters import gitrepo  # noqa: E402
-from taskloop.adapters import ident  # noqa: E402
-from taskloop.app.wire import slots as wslots  # noqa: E402
+from support import (  # noqa: E402
+    fake_route,
+    looptest,
+)
+from support.builders import cfg_with  # noqa: E402
 from support.fakes import as_bead  # noqa: E402
-from taskloop.adapters import delegate as dl  # noqa: E402
-from support import fake_route  # noqa: E402
 from support.narrow import must  # noqa: E402
+
+from taskloop.adapters import delegate as dl  # noqa: E402
+from taskloop.adapters import (  # noqa: E402
+    gitrepo,
+    ident,
+)
+from taskloop.adapters.fake_beads import FakeBeads  # noqa: E402
+from taskloop.app.loop.run import BeadRun, Where  # noqa: E402
+from taskloop.app.release import (  # noqa: E402
+    catalog,
+    reexec,
+)
+from taskloop.app.run import (  # noqa: E402
+    engine,
+    entry,
+)
+from taskloop.app.wire import slots as wslots  # noqa: E402
+from taskloop_dash.views import (  # noqa: E402
+    graph,
+    roadmap,
+)
 
 PLAN_DEF = "    def plan(self, again: bool = False) -> dict[str, Any]:\n"
 BREAK_PLAN = (PLAN_DEF, PLAN_DEF + "        raise RuntimeError('planted: cannot plan')\n", "src/taskloop/app/plan/planner.py")
@@ -53,7 +62,7 @@ BREAK_PLAN = (PLAN_DEF, PLAN_DEF + "        raise RuntimeError('planted: cannot 
 class Reload(te.EngineTest):
     # the engine fixture of test_engine (a repo with an origin, bd and the landing faked), without its tests
 
-    def setUp(self):  # noqa: F811
+    def setUp(self):
         te.EngineTest.setUp(self)
         self.cache = Path(self.tmp.name, "cache")
         here = self.install("0.1.0", fake=True)
@@ -150,7 +159,10 @@ class Reload(te.EngineTest):
         self.assertEqual([c[0] for c in script.calls], ["planner", "worker", "reviewer"])  # land and close have not run yet
         self.assertEqual(self.closed, [])
         # the new image: same environment, the TL_REEXEC hand-over, the same checkpoint and log
-        with mock.patch.dict(os.environ, {"TL_REEXEC": json.dumps(ex["env"])}), mock.patch.object(ident, "plugin_version", return_value="0.2.0"):
+        with (
+            mock.patch.dict(os.environ, {"TL_REEXEC": json.dumps(ex["env"])}),
+            mock.patch.object(ident, "plugin_version", return_value="0.2.0"),
+        ):
             eng2 = self.engine_for(script)
             self.assertEqual(eng2.log_path, eng.log_path)  # same run id, same log and run dir
             self.assertEqual(eng2.run_dir, eng.run_dir)
@@ -162,8 +174,10 @@ class Reload(te.EngineTest):
         self.assertFalse(reexec.reexec_path("t-1").exists())  # a run that ended is no crash after an exec
         logs = [json.loads(x) for x in eng.log_path.read_text().splitlines()]
         self.assertEqual(len([x for x in logs if x["kind"] == "run_start"]), 1)  # one run record for the one run
-        self.assertTrue([x["text"] for x in logs if x["kind"] == "note" and x["text"].startswith("task-loop 0.")][-1].startswith("task-loop 0.2.0 took"))
-        self.assertTrue(any("took over run %s from 0.1.0" % run in x.get("text", "") for x in logs))
+        self.assertTrue(
+            [x["text"] for x in logs if x["kind"] == "note" and x["text"].startswith("task-loop 0.")][-1].startswith("task-loop 0.2.0 took")
+        )
+        self.assertTrue(any(f"took over run {run} from 0.1.0" in x.get("text", "") for x in logs))
         self.assertEqual([x["step"] for x in logs if x["kind"] == "reload"], ["land"])  # the move is a record of its own
         self.assertEqual(eng2.stats["writes"], eng.stats["writes"])  # the counters went across
 
@@ -229,8 +243,18 @@ class Reload(te.EngineTest):
                     Path(self.cmd[self.cmd.index("--outcome-file") + 1]).write_text(json.dumps({"outcome": "landed"}))
                     return 0
                 reexec.reexec_path("t-1").parent.mkdir(parents=True, exist_ok=True)
-                reexec.reexec_path("t-1").write_text(json.dumps({"run": "t-1-20261026-120000", "bead": "t-1", "from": "0.1.0", "to": "0.2.0",
-                                                                  "from_dir": str(old), "t": time.time()}))
+                reexec.reexec_path("t-1").write_text(
+                    json.dumps(
+                        {
+                            "run": "t-1-20261026-120000",
+                            "bead": "t-1",
+                            "from": "0.1.0",
+                            "to": "0.2.0",
+                            "from_dir": str(old),
+                            "t": time.time(),
+                        }
+                    )
+                )
                 return 1  # import error of the new image: no outcome, the note is still there
 
         spawned_env = []
@@ -267,46 +291,59 @@ class Reload(te.EngineTest):
     # -- point 2: delegate is resolved per call, never held
     def test_delegate_route_is_resolved_again_each_call(self):
         c = wslots.load_cfg(str(self.wt))
-        with mock.patch.object(dl, "resolve", side_effect=[self.res("/a/route.py"), self.res("/b/route.py"), self.res("/b/route.py")]) as fr:
+        with mock.patch.object(
+            dl, "resolve", side_effect=[self.res("/a/route.py"), self.res("/b/route.py"), self.res("/b/route.py")]
+        ) as fr:
             eng = engine.Engine("t-1", str(self.wt), c, store=self.store)
             self.assertEqual(eng.delegation.route(), "/b/route.py")
             self.assertEqual(eng.delegation.route(), "/b/route.py")
             self.assertEqual(fr.call_count, 3)
 
+    @staticmethod
+    def stored_resolves(f, tree):
+        """The places in `f` where a dl.resolve() result outlives the call it was made for."""
+        bad = []
+        parents = {ch: n for n in ast.walk(tree) for ch in ast.iter_child_nodes(n)}
+
+        def inside(n):
+            while n in parents:
+                n = parents[n]
+                if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    return n.name
+            return None
+        for n in ast.walk(tree):
+            if not (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "resolve"
+                    and isinstance(n.func.value, ast.Name) and n.func.value.id == "dl"):
+                continue
+            where = inside(n)
+            if where not in ("__init__", "route", None) and f.name in ("engine.py", "delegation.py"):
+                bad.append(f"{f.name}: dl.resolve called in {where}")
+            stmt = parents.get(n)
+            while stmt is not None and not isinstance(stmt, (ast.Assign, ast.AnnAssign, ast.FunctionDef, ast.Module)):
+                stmt = parents.get(stmt)
+            for t in stmt.targets if isinstance(stmt, ast.Assign) else ():
+                if isinstance(t, ast.Attribute) and not (
+                    f.name in ("engine.py", "delegation.py") and t.attr == "route" and where in ("__init__", "route")
+                ):
+                    bad.append(f"{f.name}:{n.lineno} stores dl.resolve() in .{t.attr}")
+                if isinstance(t, ast.Name) and where is None:
+                    bad.append(f"{f.name}:{n.lineno} keeps dl.resolve() in module global {t.id}")
+        return bad
+
     def test_the_engine_and_lanes_never_store_a_resolved_route_or_a_delegate_module_across_calls(self):
         bad = []
         for f in [ENGINE, DELEGATION, *sorted((SRC / "lanes").glob("*.py"))]:
             tree = ast.parse(f.read_text(encoding="utf-8"))
-            parents = {}
+            bad += self.stored_resolves(f, tree)
             for n in ast.walk(tree):
-                for ch in ast.iter_child_nodes(n):
-                    parents[ch] = n
-
-            def inside(n):
-                while n in parents:
-                    n = parents[n]
-                    if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                        return n.name
-                return None
-            for n in ast.walk(tree):
-                if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "resolve" \
-                        and isinstance(n.func.value, ast.Name) and n.func.value.id == "dl":
-                    where = inside(n)
-                    if where not in ("__init__", "route", None) and f.name in ("engine.py", "delegation.py"):
-                        bad.append("%s: dl.resolve called in %s" % (f.name, where))
-                    stmt = parents.get(n)
-                    while stmt is not None and not isinstance(stmt, (ast.Assign, ast.AnnAssign, ast.FunctionDef, ast.Module)):
-                        stmt = parents.get(stmt)
-                    if isinstance(stmt, ast.Assign):
-                        for t in stmt.targets:
-                            if isinstance(t, ast.Attribute) and not (f.name in ("engine.py", "delegation.py") and t.attr == "route" and where in ("__init__", "route")):
-                                bad.append("%s:%d stores dl.resolve() in .%s" % (f.name, n.lineno, t.attr))
-                            if isinstance(t, ast.Name) and where is None:
-                                bad.append("%s:%d keeps dl.resolve() in module global %s" % (f.name, n.lineno, t.id))
                 if isinstance(n, ast.Assign) and f.name == "engine.py":  # no delegate module object held: self.x = <module>
                     v = n.value
-                    if isinstance(v, ast.Call) and getattr(v.func, "attr", "") in ("import_module", "spec_from_file_location", "module_from_spec"):
-                        bad.append("%s:%d holds an imported delegate module" % (f.name, n.lineno))
+                    if isinstance(v, ast.Call) and getattr(v.func, "attr", "") in (
+                        "import_module",
+                        "spec_from_file_location",
+                        "module_from_spec",
+                    ):
+                        bad.append(f"{f.name}:{n.lineno} holds an imported delegate module")
         self.assertEqual(bad, [])
 
     # -- point 3: re-exec is the only reload path
@@ -317,7 +354,7 @@ class Reload(te.EngineTest):
                 continue
             for k, line in enumerate(f.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
                 if re.search(r"importlib\.reload|\breload\(", line):
-                    hits.append("%s:%d" % (f.relative_to(SRC), k))
+                    hits.append(f"{f.relative_to(SRC)}:{k}")
         self.assertEqual(hits, [])
 
     # -- point 4: loop state and dashboard lane
@@ -339,9 +376,20 @@ class Reload(te.EngineTest):
         self.assertEqual(roadmap.lag("0.23.40", ["0.23.40", "0.23.41", "0.23.42", "0.9.0"]), 2)
         self.assertEqual(roadmap.lag("0.23.42", ["0.23.40", "0.23.42"]), 0)
         self.assertEqual(roadmap.lag("", ["0.23.42"]), 0)
-        lanes, _ = roadmap.lanes_of(["s1"], {"t-1": "s1"}, [{"pid": 1, "slot": "s1", "bead": "t-1", "since": 1, "started": 1, "version": "0.23.42"}])
+        lanes, _ = roadmap.lanes_of(
+            ["s1"], {"t-1": "s1"}, [{"pid": 1, "slot": "s1", "bead": "t-1", "since": 1, "started": 1, "version": "0.23.42"}]
+        )
         lanes[0]["engine"] = "0.23.40"
-        b = {"id": "t-1", "title": "t", "status": "in_progress", "labels": ["auto"], "issue_type": "task", "priority": 2, "dependencies": [], "parent": None}
+        b = {
+            "id": "t-1",
+            "title": "t",
+            "status": "in_progress",
+            "labels": ["auto"],
+            "issue_type": "task",
+            "priority": 2,
+            "dependencies": [],
+            "parent": None,
+        }
         g = graph.build([b], {"pick_label": "auto", "skip_labels": []}, set(), {"t-1"}, (), now=time.time())
         out = roadmap.build(g, lanes, [], [], [], {}, now=time.time(), installed=["0.23.40", "0.23.41", "0.23.42"])
         self.assertEqual((out["lanes"][0]["engine"], out["lanes"][0]["lags"]), ("0.23.40", 2))

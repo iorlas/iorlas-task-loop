@@ -4,12 +4,13 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401
-from plan.brief_cases import CASES, beads  # noqa: E402
-from taskloop.app.asks import intake  # noqa: E402
-from taskloop.app.plan.briefs import ENGINE_LABELS  # noqa: E402
-from taskloop.domain.plan import brief as bf  # noqa: E402
-from taskloop.domain.prompts.plan import PLAN_BRIEF_KB, PLAN_PROMPT  # noqa: E402
+import support.paths  # noqa: F401
+
+from plan.brief_cases import CASES, beads
+from taskloop.app.asks import intake
+from taskloop.app.plan.briefs import ENGINE_LABELS
+from taskloop.domain.plan import brief as bf
+from taskloop.domain.prompts.plan import PLAN_BRIEF_KB, PLAN_PROMPT
 
 GOLDEN = Path(__file__).resolve().parents[1] / "fixtures" / "brief_golden"
 
@@ -33,7 +34,7 @@ class Golden(unittest.TestCase):
                 raw = brief.text.encode()
                 self.assertEqual(brief.sections[0].start, 0)
                 self.assertEqual(brief.sections[-1].end, len(raw))
-                for a, b in zip(brief.sections, brief.sections[1:]):
+                for a, b in zip(brief.sections, brief.sections[1:], strict=False):
                     self.assertEqual(a.end, b.start)
                 self.assertEqual(sum(brief.sizes().values()), len(raw))
 
@@ -42,7 +43,7 @@ class Golden(unittest.TestCase):
         self.assertEqual(list(sizes)[:3], ["title", "meta", "description"])
         self.assertIn("comments", sizes)
         raw = render("full").text.encode()
-        comments = [s for s in render("full").sections if s.name == "comments"][0]
+        comments = next(s for s in render("full").sections if s.name == "comments")
         self.assertTrue(raw[comments.start:comments.end].decode().startswith("\n## Comments\n- denis"))
 
     def test_linked_beads_join_as_a_section_of_their_own(self):

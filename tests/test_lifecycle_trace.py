@@ -4,27 +4,26 @@ the structured timing records the lifecycle report reads (gate, vendor error, ki
 import _thread
 import json
 import os
-import sys
 import signal
+import sys
 import threading
 import time
 import unittest
 from unittest import mock
 
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from taskloop.app.plan.planner import Planner
-from taskloop.app.wire import slots as wslots
-from taskloop.adapters import delegate as dl
 from support import fake_route
 from support.engine_case import CLEAN, PLAN, PY, WRITE, stop
 
-from taskloop.app.run import engine
-from taskloop.domain.report import matchers as lifecycle
+from taskloop.adapters import delegate as dl
 from taskloop.adapters import ident
+from taskloop.app.plan.planner import Planner
+from taskloop.app.run import engine
+from taskloop.app.wire import slots as wslots
+from taskloop.domain.report import matchers as lifecycle
 
 ROOT = te.ROOT
-from support.builders import make_engine  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
 
 DASH = make_dash()
@@ -298,9 +297,8 @@ class TraceTelemetry(te.EngineTest):
             def reply(this, *a, **kw):
                 this.stop = {"alive": [4242], "why": "timeout 1 min"}
                 raise dl.Stopped("timeout 1 min")
-        with te.delegate_stack(Survivor({})):
-            with self.assertRaises(engine.Blocked):
-                eng.ai("plan", "title", "prompt")
+        with te.delegate_stack(Survivor({})), self.assertRaises(engine.Blocked):
+            eng.ai("plan", "title", "prompt")
         kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
                  if json.loads(line)["kind"] == "kill"]
         self.assertTrue(kills)
@@ -316,9 +314,8 @@ class TraceTelemetry(te.EngineTest):
                 raise KeyboardInterrupt()
 
         eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), verbose=False, store=self.store)
-        with te.delegate_stack(Interrupted({})):
-            with self.assertRaises(KeyboardInterrupt):
-                eng.ai("plan", "title", "prompt")
+        with te.delegate_stack(Interrupted({})), self.assertRaises(KeyboardInterrupt):
+            eng.ai("plan", "title", "prompt")
         kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
                  if json.loads(line)["kind"] == "kill"]
         self.assertTrue(kills)

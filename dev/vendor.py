@@ -6,7 +6,8 @@
     python3 dev/vendor.py check [--shelf DIR]                   recompute every vendored tree hash; exit 1 on drift
 
 NAME is the shelf directory or the import name (process-lock or process_lock); the vendored directory uses the import name.
-Packages today: git_porcelain, atomic_io, jsonl_log, process_lock, stream_proc, child_env. src/ imports them by absolute name; the process edge
+Packages today: git_porcelain, atomic_io, jsonl_log, process_lock, stream_proc, child_env. src/ imports them by absolute name; the
+process edge
 (vendored.py, tests/support/paths.py) puts _vendor on sys.path.
 
 dev/vendor.json is a list of {name, shelf_tag, shelf_commit, tree_hash}. `sync` reads the files with `git archive` from the
@@ -75,7 +76,7 @@ def git(shelf, *args, text=True):
 
 def tag_files(shelf, name, tag):
     """{relative path: bytes} of packages/NAME/src/NAME/ at the tag, read with git archive."""
-    prefix = "packages/%s/src/%s/" % (name.replace("_", "-"), name)  # shelf dir git-porcelain, import name git_porcelain
+    prefix = "packages/{}/src/{}/".format(name.replace("_", "-"), name)  # shelf dir git-porcelain, import name git_porcelain
     raw = git(shelf, "archive", tag, prefix.rstrip("/"), text=False)
     out = {}
     with tarfile.open(fileobj=io.BytesIO(raw)) as tar:
@@ -85,7 +86,7 @@ def tag_files(shelf, name, tag):
                 assert member is not None, m.name
                 out[m.name[len(prefix):]] = member.read()
     if not out:
-        raise SystemExit("vendor: no files at %s:%s" % (tag, prefix))
+        raise SystemExit(f"vendor: no files at {tag}:{prefix}")
     return out
 
 
@@ -103,7 +104,7 @@ def sync(name, tag, shelf):
     old = next((e for e in entries if e["name"] == name), None)
     tag = tag or (old or {}).get("shelf_tag")
     if not tag:
-        raise SystemExit("vendor: no recorded tag for %s; pass --tag" % name)
+        raise SystemExit(f"vendor: no recorded tag for {name}; pass --tag")
     commit = git(shelf, "rev-parse", tag + "^{commit}").strip()
     files = tag_files(shelf, name, tag)
     dest = VENDOR_DIR / name
@@ -117,7 +118,7 @@ def sync(name, tag, shelf):
         target.write_bytes(data)
     entry = {"name": name, "shelf_tag": tag, "shelf_commit": commit, "tree_hash": tree_hash(files)}
     save([e for e in entries if e["name"] != name] + [entry])
-    print("vendor: %s synced from %s (%s) tree_hash %s" % (name, tag, commit[:12], entry["tree_hash"][:12]))
+    print("vendor: {} synced from {} ({}) tree_hash {}".format(name, tag, commit[:12], entry["tree_hash"][:12]))
     return 0
 
 
@@ -127,15 +128,15 @@ def problems(shelf=None):
     for e in load():
         path = VENDOR_DIR / e["name"]
         if not path.is_dir():
-            out.append("%s: %s is missing" % (e["name"], path))
+            out.append("{}: {} is missing".format(e["name"], path))
             continue
         got = tree_hash(dir_files(path))
         if got != e["tree_hash"]:
-            out.append("%s: vendored tree hash %s != recorded %s" % (e["name"], got[:12], e["tree_hash"][:12]))
+            out.append("{}: vendored tree hash {} != recorded {}".format(e["name"], got[:12], e["tree_hash"][:12]))
         if shelf:
             want = tree_hash(tag_files(shelf, e["name"], e["shelf_tag"]))
             if want != e["tree_hash"]:
-                out.append("%s: tag %s content hash %s != recorded %s" % (e["name"], e["shelf_tag"], want[:12], e["tree_hash"][:12]))
+                out.append("{}: tag {} content hash {} != recorded {}".format(e["name"], e["shelf_tag"], want[:12], e["tree_hash"][:12]))
     return out
 
 
@@ -158,7 +159,11 @@ def main(argv=None):
     for line in bad:
         print("vendor: DRIFT " + line, file=sys.stderr)
     if not bad:
-        print("vendor: ok (%d package%s%s)" % (len(load()), "" if len(load()) == 1 else "s", ", checked against the shelf tag" if shelf else ""))
+        print(
+            "vendor: ok ({:d} package{}{})".format(
+                len(load()), "" if len(load()) == 1 else "s", ", checked against the shelf tag" if shelf else ""
+            )
+        )
     return 1 if bad else 0
 
 

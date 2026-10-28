@@ -2,21 +2,29 @@
 
 `FakeBeadStore` is the Beads port with a call record: a test sets what a bead looks like with `put`/`note` (bd's JSON or a Bead) and
 reads what the engine did from `calls` (each write as the argv bd would get, in order)."""
+import support.paths  # noqa: F401
+
+# isort: split
 from contextlib import contextmanager
 from pathlib import Path
 
-import support.paths  # noqa: E402,F401
-from taskloop.adapters import delegate as dl
+from clock import FakeClock  # noqa: F401  (re-exported: one place for a test to import its fakes from)
+from seams import FixedRoute
+
+from support import fake_route
+from support.narrow import must
 from taskloop.adapters import bd
+from taskloop.adapters import delegate as dl
 from taskloop.contracts.bead import Bead, Comment
 from taskloop.contracts.ports import BdFailure, BeadQuery
-from clock import FakeClock  # noqa: F401  (re-exported: one place for a test to import its fakes from)
-
-from seams import FixedRoute
-from support import fake_route
-from support.narrow import must  # noqa: E402
 
 _NO = object()
+
+
+def _returning(value):
+    return lambda *a, **k: value
+
+
 BEAD = {"id": "t-1", "title": "Add f", "metadata": {}, "acceptance_criteria": "f.txt exists"}  # a bead as bd prints it
 
 
@@ -33,7 +41,11 @@ def as_bead(x, default_id="t-1"):
 
 
 def as_comment(c):
-    return c if isinstance(c, Comment) else Comment(author=c.get("author") or "", text=c.get("text") or "", created_at=c.get("created_at") or "")
+    return (
+        c
+        if isinstance(c, Comment)
+        else Comment(author=c.get("author") or "", text=c.get("text") or "", created_at=c.get("created_at") or "")
+    )
 
 
 class FakeBeadStore:
@@ -60,13 +72,14 @@ class FakeBeadStore:
     @contextmanager
     def stub(self, show=_NO, comments=_NO, show_fn=None, comments_fn=None, bd_fn=None, find_fn=None):
         """For the length of a `with`: every `show` answers `show` (a bead, bd's JSON, or None), every `comments` answers `comments`
-        (or the `*_fn(bead)`), `find` answers `find_fn(query)` (beads or bd's JSON), and each write answers `bd_fn(*argv)` (a process-like result: returncode, stdout, stderr)."""
+        (or the `*_fn(bead)`), `find` answers `find_fn(query)` (beads or bd's JSON), and each write answers `bd_fn(*argv)` (a
+        process-like result: returncode, stdout, stderr)."""
         before = dict(self.fns)
         for name, val, fn in (("show", show, show_fn), ("comments", comments, comments_fn), ("bd", _NO, bd_fn), ("find", _NO, find_fn)):
             if fn is not None:
                 self.fns[name] = fn
             elif val is not _NO:
-                self.fns[name] = (lambda v: lambda *a, **k: v)(val)
+                self.fns[name] = _returning(val)
         try:
             yield self
         finally:
@@ -88,11 +101,16 @@ class FakeBeadStore:
     def find(self, query: BeadQuery) -> list[Bead]:
         if "find" in self.fns:
             return [b for b in map(as_bead, self.fns["find"](query)) if b]
-        return [b for b in self.beads.values() if (b.status != "closed" or query.include_closed) and (not query.status or b.status == query.status)
-                and (not query.label or query.label in b.labels)]
+        return [
+            b
+            for b in self.beads.values()
+            if (b.status != "closed" or query.include_closed)
+            and (not query.status or b.status == query.status)
+            and (not query.label or query.label in b.labels)
+        ]
 
     def ready(self, label=""):
-        return [b for b in self.find(BeadQuery(status="open", label=label))]
+        return list(self.find(BeadQuery(status="open", label=label)))
 
     def run(self, argv, failing=False):
         """Record a write; -> the process-like answer it got (a refusal raises BdFailure unless `failing`: claim/unclaim answer False)."""
@@ -100,7 +118,10 @@ class FakeBeadStore:
         if "bd" in self.fns:
             r = self.fns["bd"](*argv)
             rc = r.returncode if isinstance(getattr(r, "returncode", 0), int) else 0
-            out, err = (r.stdout if isinstance(getattr(r, "stdout", ""), str) else ""), (r.stderr if isinstance(getattr(r, "stderr", ""), str) else "")
+            out, err = (
+                (r.stdout if isinstance(getattr(r, "stdout", ""), str) else ""),
+                (r.stderr if isinstance(getattr(r, "stderr", ""), str) else ""),
+            )
         else:
             rc, err = self.fail.pop(0) if self.fail else (0, "")
             out = ""
@@ -109,7 +130,7 @@ class FakeBeadStore:
         return rc, out
 
     def create(self, new):
-        rc, out = self.run(bd.create_argv(new))
+        _rc, out = self.run(bd.create_argv(new))
         made = bd._loads(out) if out else None
         return str(made.get("id")) if isinstance(made, dict) and made.get("id") else self.made
 

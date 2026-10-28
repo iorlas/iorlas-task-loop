@@ -1,28 +1,29 @@
 """tl-bxk.10.23: look and feel. A visual change saves screenshots; the agent judges them; the land keeps them in the repo
 and files an owner-look bead for the owner's later round."""
-import json
-from typing import Any, cast
 import sys
 import unittest
 from pathlib import Path
+from typing import Any, cast
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "task-loop"))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from support import fake_route  # noqa: E402
-from support.checkpoints import put_ck, read_ck  # noqa: E402
-from support.fakes import as_bead  # noqa: E402
-from taskloop.app.run.closer import Closer  # noqa: E402
-from taskloop.app.wire import slots as wslots  # noqa: E402
-from taskloop.contracts import answers  # noqa: E402
-from support.builders import make_engine  # noqa: E402
-from taskloop.contracts.config import VisualConfig  # noqa: E402
-from support import engine_case as T  # noqa: E402
-from support.engine_case import BEAD, CLEAN, PLAN, WRITE, engine, verdict  # noqa: E402
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support import engine_case as T
+from support import fake_route
+from support.builders import make_engine
+from support.checkpoints import read_ck
+from support.engine_case import BEAD, CLEAN, PLAN, WRITE, engine, verdict
+from support.fakes import as_bead
+
 from taskloop.adapters import gitrepo
 from taskloop.app.look import shots
 from taskloop.app.look.owner_look import OwnerLook
+from taskloop.app.run.closer import Closer
+from taskloop.app.wire import slots as wslots
+from taskloop.contracts import answers
+from taskloop.contracts.config import VisualConfig
+from taskloop_dash.views import graph
 
 VISUAL = {"include": ["*.txt"], "exclude": ["docs/**"]}
 LOOK_ASK = "Whether smiles-front.png matches the rung B ladder image. Only the owner can judge the look."
@@ -118,7 +119,7 @@ class LookTest(T.EngineTest):
     def test_a_look_item_with_no_screenshots_is_a_defect_not_an_ask(self):
         item = {"what": LOOK_ASK, "kind": "other"}
         w = dict(WRITE, logic_only="no screen differs")
-        rc, s = self.go({"plan": [PLAN], "write": [w, w], "review": [dict(CLEAN, unchecked=[item]), CLEAN],
+        _rc, s = self.go({"plan": [PLAN], "write": [w, w], "review": [dict(CLEAN, unchecked=[item]), CLEAN],
                          "verify": [{"items": [verdict(1, "open", why="nothing to look at")]}]}, visual_paths=VISUAL)
         self.assertIsNone(self.ask())
         self.assertIn("no screenshot to judge the look from", s.prompts[4])
@@ -126,7 +127,7 @@ class LookTest(T.EngineTest):
     def test_land_commits_the_screenshots_and_files_the_owner_look_bead(self):
         bead = dict(BEAD, parent="t-0")
         r = dict(CLEAN, look="The home screen shows the new button, matching the reference.")
-        rc, s = self.go({"plan": [PLAN], "write": [WRITE], "review": [r]}, first_shot=1, bead=bead,
+        rc, _s = self.go({"plan": [PLAN], "write": [WRITE], "review": [r]}, first_shot=1, bead=bead,
                         visual_paths=VISUAL, evidence_dir="design/look-reviews")
         self.assertEqual(rc, 0, self.blocked)
         shot = "design/look-reviews/t-1/home-screen.png"
@@ -179,7 +180,7 @@ class LookTest(T.EngineTest):
 
     def test_a_re_land_updates_the_owner_look_bead_instead_of_filing_again(self):
         bead = dict(BEAD, parent="t-0")
-        rc, s = self.go({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, first_shot=1, bead=bead,
+        rc, _s = self.go({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, first_shot=1, bead=bead,
                         visual_paths=VISUAL, evidence_dir="design/look-reviews")
         self.assertEqual(rc, 0, self.blocked)
         self.bd_calls.clear()
@@ -192,11 +193,10 @@ class LookTest(T.EngineTest):
         self.assertIn("second look", u[3])
 
     def test_the_look_survives_a_crash_after_the_land(self):
-        with mock.patch.object(Closer, "close"), mock.patch.object(OwnerLook, "file_owner_look",
-                                                                          side_effect=SystemExit):
-            with self.assertRaises(SystemExit):  # the process died after the push: no close, the checkpoint stays
-                self.go({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, look="matches")]}, first_shot=1,
-                        visual_paths=VISUAL, evidence_dir="design/look-reviews")
+        with (mock.patch.object(Closer, "close"), mock.patch.object(OwnerLook, "file_owner_look", side_effect=SystemExit),
+              self.assertRaises(SystemExit)):  # the process died after the push: no close, the checkpoint stays
+            self.go({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, look="matches")]}, first_shot=1,
+                    visual_paths=VISUAL, evidence_dir="design/look-reviews")
         self.assertEqual(self.creates(), [])
         saved = read_ck(self.eng).state
         self.assertEqual(saved.look_paths, ["design/look-reviews/t-1/home-screen.png"])
@@ -228,7 +228,7 @@ class LookTest(T.EngineTest):
         (d / "big.jpg").write_bytes(b"x" * (shots.MAX_SHOT_BYTES + 1))
         self.assertEqual(self.eng.pictures.shots(), ["a.png"])
         for i in range(25):
-            (d / ("m%02d.png" % i)).write_bytes(b"x")
+            (d / (f"m{int(i):02d}.png")).write_bytes(b"x")
         self.assertEqual(len(self.eng.pictures.shots()), shots.MAX_SHOTS)
 
     def test_no_lfs_means_no_copy(self):
@@ -241,7 +241,6 @@ class LookTest(T.EngineTest):
         self.assertTrue(self.eng.pictures.lfs_ok(["a.jpg"]))
 
     def test_the_dashboard_counts_owner_look_as_waits_on_you(self):
-        from taskloop_dash.views import graph
         self.assertIn("owner-look", graph.OWNER_LABELS)
 
 

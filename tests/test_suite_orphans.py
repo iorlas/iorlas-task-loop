@@ -9,12 +9,13 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 import stream_proc
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support.waits import until
+
 from taskloop.adapters import landlock, procs
 from taskloop.app.release import suite
 from taskloop.app.release.shell import Abort
-from support.waits import until
 
 ROOT = Path(__file__).resolve().parent.parent
 SLEEPER = """import os, time, unittest
@@ -90,7 +91,8 @@ class Orphans(unittest.TestCase):
 
     def test_a_shard_whose_launcher_died_without_a_word_exits_on_its_own(self):
         starter = ("import os, subprocess, sys, time\n"
-                   "p = subprocess.Popen([sys.executable, sys.argv[1], 'ids', sys.argv[2], '--root', sys.argv[3], '--parent', str(os.getpid())],"
+                   "p = subprocess.Popen([sys.executable, sys.argv[1], 'ids', sys.argv[2], '--root', sys.argv[3],"
+                   " '--parent', str(os.getpid())],"
                    " start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n"
                    "while not os.path.exists(os.environ['PIDFILE']): time.sleep(0.05)\n"  # the shard is inside its test
                    "os._exit(0)\n")  # no finally, no handler: the way a SIGKILLed launcher ends
@@ -151,9 +153,9 @@ class MemoryLimits(unittest.TestCase):
             info = Path(d) / "meminfo"
             info.write_text("MemAvailable:     1024 kB\n")
             with mock.patch.object(suite, "MEMINFO", info), mock.patch.object(suite, "suite_lock_path", return_value=Path(d) / "l.lock"), \
-                    mock.patch.object(suite, "run") as planned, mock.patch.dict(os.environ, {"TASK_LOOP_SUITE_WORKERS": "2"}):
-                with self.assertRaises(Abort):
-                    suite.host_suite(ROOT, ROOT)
+                    mock.patch.object(suite, "run") as planned, mock.patch.dict(os.environ, {"TASK_LOOP_SUITE_WORKERS": "2"}), \
+                    self.assertRaises(Abort):
+                suite.host_suite(ROOT, ROOT)
             planned.assert_not_called()
 
 

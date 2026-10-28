@@ -3,10 +3,10 @@ import io
 import json
 import os
 import shutil
-import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from contextlib import redirect_stdout
@@ -16,22 +16,30 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from support import eventlog, tlbd  # noqa: E402
+import support.paths  # noqa: E402, F401
+
+# isort: split
+import itertools  # noqa: E402
+
 import loop_env  # noqa: E402
-from support import looptest  # noqa: E402
+from support import (  # noqa: E402
+    eventlog,
+    looptest,
+)
+from test_loop import Base, LoopBase, bead, rec  # noqa: E402
+
+from taskloop.adapters import (  # noqa: E402
+    beadtools,
+    ident,
+)
 from taskloop.app.loop.core import Core  # noqa: E402
 from taskloop.app.loop.take import Taker  # noqa: E402
 from taskloop.app.loop.versions import Installs  # noqa: E402
+from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.contracts import codec  # noqa: E402
 from taskloop.contracts.config import LoopConfig  # noqa: E402
 from taskloop.contracts.loop import LoopCommand, LoopState  # noqa: E402
 from taskloop.domain.lanes import netgate  # noqa: E402
-import tl  # noqa: E402
-from taskloop.adapters import beadtools  # noqa: E402
-from taskloop.adapters import ident  # noqa: E402
-from test_loop import Base, LoopBase, bead, rec  # noqa: E402
-from taskloop.app.wire import slots as wslots  # noqa: E402
 
 
 class UpAt:
@@ -45,7 +53,7 @@ class UpAt:
         return self.clock.t >= self.t_up
 
 
-NET = dict(kind="pause_network", why="paused: network on write; resume when it is back")
+NET = {"kind": "pause_network", "why": "paused: network on write; resume when it is back"}
 
 
 class LoopNetwork(LoopBase):
@@ -71,7 +79,7 @@ class LoopNetwork(LoopBase):
         times = []
         t_up = self.clock.t0 + 150  # up between the 3rd and the 4th look
         probe = self.probe(UpAt(self.clock, t_up))
-        bd = self.beads({"x-1": [rec("paused", **NET), rec("landed", run="run-1")], "x-2": [rec("landed")]})
+        self.beads({"x-1": [rec("paused", **NET), rec("landed", run="run-1")], "x-2": [rec("landed")]})
         self.during.extend([lambda: times.append(self.clock.t)] * 2)
         self.assertEqual(self.run_loop(), 0)
         self.assertEqual([b for b, _ in self.started], ["x-1", "x-1", "x-2"])  # no other bead while the network is down
@@ -83,7 +91,7 @@ class LoopNetwork(LoopBase):
         self.assertEqual(self.kinds(), ["net_down", "net_up"])
         self.assertNotIn(LoopConfig().pause_retry, self.clock.naps)
         self.assertIn(60, self.clock.naps)
-        self.assertEqual([l["outcome"] for l in self.lines()], ["paused", "landed", "landed"])
+        self.assertEqual([ln["outcome"] for ln in self.lines()], ["paused", "landed", "landed"])
         self.assertEqual(self.lines()[1]["trace"], "run-1")
 
     def test_a_network_pause_keeps_the_label_the_budget_and_every_counter(self):
@@ -94,7 +102,9 @@ class LoopNetwork(LoopBase):
         self.assertEqual([b for b, _ in self.started], ["x-1"] * 5)
         self.assertFalse([n for n in self.clock.naps if n >= 3000])
         self.assertEqual(self.kinds(), ["net_down", "net_up"] * 4)
-        self.assertFalse([c for c in bd.calls if c[0] == "label" or {"--add-label", "--remove-label", "--set-labels"} & set(c)])  # none stripped or added
+        self.assertFalse(
+            [c for c in bd.calls if c[0] == "label" or {"--add-label", "--remove-label", "--set-labels"} & set(c)]
+        )  # none stripped or added
         self.assertEqual(looptest.rests(str(self.repo)), {})  # never rested, never a failed run
         self.assertEqual(bd.beads["x-1"]["status"], "closed")
 
@@ -114,7 +124,11 @@ class LoopNetwork(LoopBase):
         def nap(secs, until=0):
             polls.append(round(secs))
             self.clock.t += secs
-        with mock.patch.object(Core, "nap", staticmethod(nap)), mock.patch.object(Core, "stop_mode", side_effect=lambda: "after" if len(polls) >= 2 else ""):
+
+        with (
+            mock.patch.object(Core, "nap", staticmethod(nap)),
+            mock.patch.object(Core, "stop_mode", side_effect=lambda: "after" if len(polls) >= 2 else ""),
+        ):
             self.assertEqual(self.run_loop(), 0)
         self.assertEqual(polls, [60, 60])
         self.assertEqual(looptest.last_exit(str(self.repo))["reason"], "stop_request")
@@ -150,8 +164,8 @@ class LoopHealth(LoopBase):
         self.beads({"x-1": [rec("landed")]})
         out = self.status()
         self.assertEqual(out.count("RED:"), 1)
-        self.assertIn("%s has 1 ready bead(s) and no loop alive" % self.repo, out)
-        self.assertIn("tl loop --repo %s" % self.repo, out)
+        self.assertIn(f"{self.repo} has 1 ready bead(s) and no loop alive", out)
+        self.assertIn(f"tl loop --repo {self.repo}", out)
 
     def test_a_bead_parked_on_a_dropped_ask_shows_in_status(self):
         f = ident.config_dir() / "asks" / "x-1.json"
@@ -194,12 +208,12 @@ class LoopHealth(LoopBase):
     def test_the_loops_own_log_keeps_what_it_said_and_is_pruned_to_five(self):
         runs = looptest.files(str(self.repo)).runs()
         for i in range(8):
-            f = runs / ("loop-%d.log" % (100 + i))
+            f = runs / (f"loop-{int(100 + i)}.log")
             f.write_text("old")
             os.utime(f, (1000 + i, 1000 + i))
         self.beads({"x-1": [rec("landed")]})
         self.run_loop()
-        log = runs / ("loop-%d.log" % os.getpid())
+        log = runs / (f"loop-{os.getpid()}.log")
         self.assertIn("x-1 in s1", log.read_text())
         self.assertEqual(len(list(runs.glob("loop-*.log"))), LoopConfig().logs_kept)
         self.assertIn("loop-107.log", [f.name for f in runs.glob("loop-*.log")])  # the newest old ones stay
@@ -208,13 +222,15 @@ class LoopHealth(LoopBase):
     def test_the_beat_is_refreshed_while_a_bead_runs_at_most_once_a_minute(self):
         st_beats = []
         real = looptest.files(str(self.repo)).__class__.write
-        with mock.patch.object(type(looptest.files(str(self.repo))), "write", lambda f, st: st_beats.append(st.t if st.child else None) or real(f, st)):
+        with mock.patch.object(
+            type(looptest.files(str(self.repo))), "write", lambda f, st: st_beats.append(st.t if st.child else None) or real(f, st)
+        ):
             self.beads({"x-1": [rec("landed")]})
             self.hold["x-1"] = 100
             self.run_loop()
         refreshed = [b for b in st_beats if b]  # the writes while a child runs: the start, then a beat at most every minute
         self.assertGreaterEqual(len(refreshed), 3)
-        self.assertTrue(all(b2 - b1 >= LoopConfig().beat_every for b1, b2 in zip(refreshed[1:], refreshed[2:])))
+        self.assertTrue(all(b2 - b1 >= LoopConfig().beat_every for b1, b2 in itertools.pairwise(refreshed)))
 
 
 class StopRequests(LoopBase):
@@ -289,7 +305,6 @@ class StopRequests(LoopBase):
         self.assertFalse(looptest.command(self.repo_s).exists())
 
     def test_a_stop_waits_for_a_registration_in_progress_and_names_the_new_loop(self):
-        import threading
         self.old_loop()
         attempted, finished, errors = threading.Event(), threading.Event(), []
 
@@ -356,7 +371,7 @@ class LoopSelfUpdate(LoopBase):
         with self.assertRaises(Moved):
             self.run_loop("--max-beads", "5")
         self.assertEqual([b for b, _ in self.started], ["x-1"])  # never mid-bead: x-1 ran to its end on 0.1.0
-        self.assertEqual([l["outcome"] for l in self.lines()], ["landed"])
+        self.assertEqual([ln["outcome"] for ln in self.lines()], ["landed"])
         exe, argv, state, _ = self.execs[0]
         self.assertEqual(exe, sys.executable)
         self.assertEqual(argv[:2], [sys.executable, str(self.cache / "0.2.0" / "skills" / "task-loop" / "tl.py")])
@@ -578,7 +593,9 @@ class LandedOnBase(Base):
         sh("git", "checkout", "-q", "-b", "task/x-3", "origin/main")
         self.assertTrue(loop_env.landed_on_base(str(self.repo), beadtools.bd_store(str(self.repo)), str(wt), "x-1"))
         self.assertFalse(loop_env.landed_on_base(str(self.repo), beadtools.bd_store(str(self.repo)), str(wt), "x-2"))  # work not on main
-        self.assertFalse(loop_env.landed_on_base(str(self.repo), beadtools.bd_store(str(self.repo)), str(wt), "x-3"))  # no work: the tip is someone else's
+        self.assertFalse(
+            loop_env.landed_on_base(str(self.repo), beadtools.bd_store(str(self.repo)), str(wt), "x-3")
+        )  # no work: the tip is someone else's
         self.assertFalse(loop_env.landed_on_base(str(self.repo), beadtools.bd_store(str(self.repo)), str(wt), "x-9"))  # no branch
 
 
@@ -607,8 +624,7 @@ class LoopStopNow(Base):
         threads = []
 
         def spawn(cmd, log, extra):
-            p = real([sys.executable, str(script)] + cmd[2:], log, extra)
-            import threading
+            p = real([sys.executable, str(script), *cmd[2:]], log, extra)
             t = threading.Timer(1.0, lambda: loop_env.cmd_stop(mock.Mock(repo=str(self.repo), now=True)))
             t.start()
             threads.append(t)

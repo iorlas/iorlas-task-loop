@@ -34,7 +34,9 @@ def servable(rel: object) -> bool:
     parts = rel.replace("\\", "/").split("/")
     if ".." in parts:
         return False
-    return (len(parts) == 1 and Path(rel).stem == PLAN_STEM and Path(rel).suffix == ".json") or (len(parts) >= 2 and parts[0] == "checks" and all(parts))
+    return (len(parts) == 1 and Path(rel).stem == PLAN_STEM and Path(rel).suffix == ".json") or (
+        len(parts) >= 2 and parts[0] == "checks" and all(parts)
+    )
 
 
 class RunsApi:
@@ -55,9 +57,9 @@ class RunsApi:
         if not ref:
             return ""
         if family == "openai":
-            hits = glob.glob(str(self.env.codex_sessions / "*" / "*" / "*" / ("rollout-*%s.jsonl" % ref)))
+            hits = glob.glob(str(self.env.codex_sessions / "*" / "*" / "*" / (f"rollout-*{ref}.jsonl")))
         else:
-            hits = glob.glob(str(self.env.projects / "*" / ("%s.jsonl" % ref)))
+            hits = glob.glob(str(self.env.projects / "*" / (f"{ref}.jsonl")))
         return max(hits, key=os.path.getmtime) if hits else ""
 
     def transcript_for(self, s: dict[str, Any], fam: str) -> tuple[str, str, str]:
@@ -81,12 +83,12 @@ class RunsApi:
             return d
         s, b = d.get("session") or {}, d["block"]
         tr, adapter, tr_id = self.transcript_for(s, s.get("family") or b["who"]["family"])
-        d["events_id"] = "%s:%s@%s@%s" % (adapter, tr_id, (b["t0"] or 0) - 30, (b["t1"] or 0) + 30) if tr else ""
+        d["events_id"] = "{}:{}@{}@{}".format(adapter, tr_id, (b["t0"] or 0) - 30, (b["t1"] or 0) + 30) if tr else ""
         d["transcript"] = tr
         rdir = self.env.config.run_dir(run)
         for c in d["checks"]:
             rel = c.get("log") or ""
-            c["log_url"] = ("/api/file?run=%s&path=%s" % (run, rel)) if rel and (rdir / rel).is_file() else ""
+            c["log_url"] = (f"/api/file?run={run}&path={rel}") if rel and (rdir / rel).is_file() else ""
         return d
 
     def run_file(self, run: object, rel: object) -> bytes | None:

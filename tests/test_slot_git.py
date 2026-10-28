@@ -13,21 +13,29 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+import support.paths  # noqa: E402, F401
+
 sys.path.insert(0, str(ROOT / "tests"))
-from taskloop.app.run import engine  # noqa: E402
-from taskloop.app.wire import slots as wslots  # noqa: E402
-from support import engine_case as te  # noqa: E402
-from taskloop.adapters.gitenv import pinned_env  # noqa: E402
-from taskloop.adapters import gitrepo  # noqa: E402
-from support.fakes import FakeBeadStore  # noqa: E402
-from taskloop.app.wire import doctor  # noqa: E402
-from taskloop.adapters import delegate as dl, runner  # noqa: E402
 from support import dlcall, fake_route  # noqa: E402
+from support import engine_case as te  # noqa: E402
 from support.builders import make_engine  # noqa: E402
+from support.fakes import FakeBeadStore  # noqa: E402
 
+from taskloop.adapters import delegate as dl  # noqa: E402
+from taskloop.adapters import (  # noqa: E402
+    gitrepo,
+    runner,
+)
+from taskloop.adapters.gitenv import pinned_env  # noqa: E402
+from taskloop.app.run import engine  # noqa: E402
+from taskloop.app.wire import doctor  # noqa: E402
+from taskloop.app.wire import slots as wslots  # noqa: E402
 
-ENVSHOW = [sys.executable, "-c", "import os; print('[%s|%s|%s]' % tuple(os.environ.get(k, '') for k in ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE')))"]
+ENVSHOW = [
+    sys.executable,
+    "-c",
+    "import os; print('[%s|%s|%s]' % tuple(os.environ.get(k, '') for k in ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE')))",
+]
 ENVPAIR = [sys.executable, "-c", "import os; print('%s|%s' % (os.environ.get('GIT_DIR', ''), os.environ.get('GIT_WORK_TREE', '')))"]
 
 
@@ -127,10 +135,13 @@ class SlotGitTest(unittest.TestCase):
     @te.POSIX_CHECK
     def test_workers_and_checks_are_not_pinned_but_the_engines_own_git_is(self):
         route = Path(self.tmp.name) / "route.py"
-        route.write_text("import json, os, sys\nsys.path.insert(0, %r)\nimport fake_route\n"
-                         "env = [k for k in ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE') if k in os.environ]\n"
-                         "print(json.dumps(fake_route.answer(fake_route.contract(), None, 'r1', False, {'env': env})))\n"
-                         % str(ROOT / "tests" / "support"))
+        route.write_text(
+            "import json, os, sys\nsys.path.insert(0, {!r})\nimport fake_route\n"
+            "env = [k for k in ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE') if k in os.environ]\n"
+            "print(json.dumps(fake_route.answer(fake_route.contract(), None, 'r1', False, {{'env': env}})))\n".format(
+                str(ROOT / "tests" / "support")
+            )
+        )
         with mock.patch.dict(os.environ, {"GIT_DIR": "/x", "GIT_WORK_TREE": "/y", "GIT_INDEX_FILE": "/z"}):
             r = dlcall.call(dl.Resolved(route.parent, str(route), fake_route.CONTRACT, "explicit"), "worker", "p", {"type": "object"},
                             str(self.wt), runner.StreamRunner(Path(self.tmp.name) / "err.log", None, 30.0), timeout_s=30)

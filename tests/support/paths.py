@@ -2,8 +2,12 @@
 
 Every test module imports it, so a flat module can `from taskloop.contracts import ...` under any runner: the release shards,
 `python3 tests/test_x.py`, `python3 -m unittest tests.test_x`, `just test`."""
+import atexit
 import os
+import shutil
+import stat
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -19,11 +23,8 @@ if SRC not in os.environ.get("PYTHONPATH", "").split(os.pathsep):  # a child `py
 
 
 def _guard_bd() -> None:
-    """A `bd` first on PATH that fails loudly: no test reaches a real tracker (a test that needs bd's answers uses support.tlbd or a FakeBeadStore)."""
-    import atexit
-    import shutil
-    import stat
-    import tempfile
+    """A `bd` first on PATH that fails loudly: no test reaches a real tracker (a test that needs bd's answers uses support.tlbd or a
+    FakeBeadStore)."""
     d = Path(tempfile.mkdtemp(prefix="tl-nobd-"))
     atexit.register(shutil.rmtree, d, True)
     stub = d / "bd"

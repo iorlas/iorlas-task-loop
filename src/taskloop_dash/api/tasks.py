@@ -14,8 +14,19 @@ from taskloop_dash.views import names
 from taskloop_dash.views import timeline as tlv
 
 Row = dict[str, Any]
-TASK_STATES: Final = {"running": 0, "asks": 1, "paused": 2, "queued": 2, "blocked_by": 2, "waiting": 3, "stopped": 4, "failed": 4, "blocked": 4,
-               "landed": 5, "done": 5}
+TASK_STATES: Final = {
+    "running": 0,
+    "asks": 1,
+    "paused": 2,
+    "queued": 2,
+    "blocked_by": 2,
+    "waiting": 3,
+    "stopped": 4,
+    "failed": 4,
+    "blocked": 4,
+    "landed": 5,
+    "done": 5,
+}
 
 
 def slot_of(run: Row | None, span: Span | None, trace: Row | None) -> str:
@@ -38,14 +49,16 @@ def wait_label(recs: list[Any], now: float) -> str:
     if not isinstance(last, rec.WaitStart) or str(last.what) != "lane" or float(last.until or 0) <= now:
         return ""
     who = names.lane_name(last.holder or "", "")
-    return ("waiting for %s until %s" % (who, names.when(last.until))) if who else ""
+    return (f"waiting for {who} until {names.when(last.until)}") if who else ""
 
 
 class Tasks:
     def __init__(self, env: Env, records: Records, runlogs: RunLogs, asks: Asks, beads: Beads, lanes: Lanes) -> None:
         self.env, self.records, self.runlogs, self.asks, self.beads, self.lanes = env, records, runlogs, asks, beads, lanes
 
-    def state_of(self, bead: str, newest: str, recs: list[Any], run: Row, alive: bool, span: Span | None, trace: Row | None) -> tuple[Row | None, Row | None, str, str]:
+    def state_of(
+        self, bead: str, newest: str, recs: list[Any], run: Row, alive: bool, span: Span | None, trace: Row | None
+    ) -> tuple[Row | None, Row | None, str, str]:
         """(the open ask, the blocker, state, label): running; an open ask; an open `blocks` dependency; the last run's close reason."""
         ask = self.asks.open_ask(bead)
         end = run["end"]
@@ -57,7 +70,10 @@ class Tasks:
         elif ask:
             state, label = "asks", "waiting for your answer"
         elif blocked:
-            state, label = "blocked_by", "blocked by %s%s" % (blocked["id"], (" (%s)" % blocked["title"]) if blocked["title"] else "")
+            state, label = (
+                "blocked_by",
+                "blocked by {}{}".format(blocked["id"], (" ({})".format(blocked["title"])) if blocked["title"] else ""),
+            )
         elif state in ("asks", "waiting"):  # no ask is open: never say it waits for one
             if self.asks.ask_file(bead).get("status") == "answered":
                 state, label = "queued", "answered: waits for the next run"
@@ -65,7 +81,7 @@ class Tasks:
                 why = (end.get("why") or "").split("\n")[0].strip()
                 state, label = "stopped", "ask closed" + (": " + why[:120] if why else "")
         elif state == "paused":
-            label = "paused: %s%s" % (end.get("reason") or "no lane", (" until " + end["until"]) if end.get("until") else "")
+            label = "paused: {}{}".format(end.get("reason") or "no lane", (" until " + end["until"]) if end.get("until") else "")
         elif state == "stopped":
             label = "stopped"
         return ask, blocked, state, label
@@ -120,7 +136,7 @@ class Tasks:
             try:
                 rows.append(self.task_row(bead, paths, spans, tr))
             except Exception as e:  # one broken log must not hide the others
-                rows.append({"id": bead, "title": "", "state": "failed", "label": "unreadable log: %s" % e, "runs": len(paths),
+                rows.append({"id": bead, "title": "", "state": "failed", "label": f"unreadable log: {e}", "runs": len(paths),
                              "updated": 0, "slot": "", "repo": "", "ask": None})
         rows.sort(key=lambda r: (TASK_STATES.get(r["state"], 4), -(r.get("updated") or 0)))
         return {"version": self.env.version, "now": self.env.clock(), "host": socket.gethostname(), "tasks": rows,

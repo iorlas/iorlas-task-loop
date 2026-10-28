@@ -8,7 +8,8 @@ import time
 import unittest
 from pathlib import Path
 from unittest import mock
-from support.narrow import must  # noqa: E402
+
+from support.narrow import must
 
 ROOT = Path(__file__).resolve().parent.parent
 spec = importlib.util.spec_from_file_location("suite_docker", ROOT / "dev" / "suite-docker.py")
@@ -32,10 +33,10 @@ class SuiteDocker(unittest.TestCase):
         p = subprocess.Popen([sys.executable, str(ROOT / "dev" / "suite-docker.py"), "--repo", str(ROOT)], env=env,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.addCleanup(lambda: p.poll() is None and p.kill())
-        name = "tl-suite-%d-" % p.pid
+        name = f"tl-suite-{p.pid}-"
 
         def containers():
-            r = subprocess.run(["docker", "ps", "-q", "--filter", "name=" + name], capture_output=True, text=True)
+            r = subprocess.run(["docker", "ps", "-q", "--filter", "name=" + name], capture_output=True, text=True, check=False)
             return r.stdout.split()
         for _ in range(300):
             if containers():

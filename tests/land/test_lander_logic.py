@@ -5,10 +5,11 @@ from pathlib import Path
 from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401
-from support.fakegit import FakeGit  # noqa: E402
-from taskloop.app.land.lander import Lander  # noqa: E402
-from taskloop.domain.land.matchers import Push  # noqa: E402
+import support.paths  # noqa: F401
+from support.fakegit import FakeGit
+
+from taskloop.app.land.lander import Lander
+from taskloop.domain.land.matchers import Push
 
 
 class Stop(Exception):

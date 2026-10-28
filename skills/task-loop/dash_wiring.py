@@ -6,16 +6,17 @@ import shutil
 from collections.abc import Callable
 from typing import Any
 
+import reflect_digest
+
 from taskloop.adapters.bd import BdStore
 from taskloop.app.asks.intake import Intake
+from taskloop.app.release import catalog
 from taskloop.app.track.trail import now
 from taskloop.app.wire import asks as wire_asks
+from taskloop.app.wire import slots as wslots
 from taskloop.contracts.ask import Ask, AskAction
 from taskloop.domain.asks import text as asktext
 from taskloop_dash.env import Ports
-from taskloop.app.release import catalog
-from taskloop.app.wire import slots as wslots
-import reflect_digest
 
 
 def quiet(fn: Callable[..., Any], default: Any) -> Callable[..., Any]:
@@ -45,7 +46,7 @@ def ports() -> Ports:
     `tl ask` in a terminal uses the same."""
     return Ports(store=store, answer=answer, ask_text=asktext.markdown,
                  slot_beads=quiet(lambda repo: [dataclasses.asdict(b) for b in wslots.slot_beads(repo)], []),
-                 waiting_line=quiet(lambda repo: wslots.waiting_line(repo), []),
+                 waiting_line=quiet(wslots.waiting_line, []),
                  load_cfg=quiet(lambda repo: dataclasses.asdict(wslots.load_cfg(repo)), {"pick_label": "auto", "skip_labels": []}),
-                 reflections=quiet(lambda hours: reflect_digest.view(hours), {}),
+                 reflections=quiet(reflect_digest.view, {}),
                  installed_versions=quiet(lambda: sorted(catalog.cache_dirs("task-loop")), []))

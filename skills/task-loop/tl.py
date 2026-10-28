@@ -35,7 +35,7 @@
   tl.py rollback                                pin the previous task-loop version (the delegate stays as it is)
   tl.py cutover check [--json]                  live runs and loops on this machine; exit 1 if any (docs/cutover.md)
   tl.py status [--brief] [--json] [--repo DIR]  loop RUNNING or NOT RUNNING, asks, slots, versions, recent beads (<= 40 lines, 8 KB)
-  tl.py handoff write|show [--repo DIR]         the <= 4 KB handoff a compaction hands to the next session (hooks/hook.py writes and injects it)
+  tl.py handoff write|show [--repo DIR]         the <= 4 KB handoff a compaction hands to the next session (hooks/hook.py writes it)
 
 State: ~/.config/task-loop : repos.json, events.jsonl, sessions/, dash.*.
 """
@@ -51,15 +51,16 @@ from typing import Any, Final
 import vendored  # noqa: F401  (puts _vendor on sys.path)
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))  # taskloop: the typed records and adapters ship in the plugin dir
-import dash_server  # noqa: E402
+import dash_server
+
 from taskloop.adapters import beadtools, gitrepo, ident, landlock
 from taskloop.app.release import pins
 from taskloop.app.track import trail, verbs
 from taskloop.app.wire import asks as wire_asks
 from taskloop.app.wire import doctor
 from taskloop.app.wire import hook as hook_wire
-from taskloop.app.wire import slots as wslots
 from taskloop.app.wire import lanes as wire_lanes
+from taskloop.app.wire import slots as wslots
 from taskloop.app.wire import usage as wire_usage
 from taskloop.cli import asks as cli_asks
 from taskloop.cli import slots as slots_cli
@@ -171,6 +172,9 @@ def engine_parsers(sp):
     p.add_argument("--until", help="window end (default now)")
     p.add_argument("--dry-run", action="store_true", help="file nothing, write no state")
     p.add_argument("--json", action="store_true")
+
+
+def loop_parsers(sp):
     p = sp.add_parser("next", help="the bead the loop would take next and why (claims nothing)")
     p.add_argument("--repo")
     p.add_argument("--json", action="store_true")
@@ -219,6 +223,7 @@ def build_parser():
     sp = ap.add_subparsers(dest="cmd", required=True)
     owner_parsers(sp)
     engine_parsers(sp)
+    loop_parsers(sp)
     return ap
 
 
@@ -296,8 +301,8 @@ VERBS: Final[dict[str, Handler]] = {
     "selftest": lazy("selftest", "cmd_selftest"),
     "cutover": lazy("loop_env", "cmd_cutover"),
     "next": v_next, "loop": v_loop, "stop": v_stop,
-    "report": lazy("report", "cmd_report"),
-    "lost": lazy("report", "cmd_lost"),
+    "report": lazy("report_cli", "cmd_report"),
+    "lost": lazy("report_cli", "cmd_lost"),
 }
 
 

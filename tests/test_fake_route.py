@@ -7,25 +7,28 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from typing import Any
 from pathlib import Path
+from typing import Any
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / "skills" / "task-loop"
 sys.path.insert(0, str(SKILL))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401
-from taskloop.stores import call_state as cs  # noqa: E402
+import support.paths  # noqa: E402, F401
+
+# isort: split
 import clock  # noqa: E402
-from taskloop.adapters import delegate as dl  # noqa: E402
-from support import dlcall, fake_route  # noqa: E402
-from taskloop.adapters import delegate_wire  # noqa: E402
-from taskloop.domain.lanes import policy as lp  # noqa: E402
-from taskloop.domain.lanes import netgate  # noqa: E402
-from taskloop.app.loop.net import NetState  # noqa: E402
 import outcome as oc  # noqa: E402
+from support import dlcall, fake_route  # noqa: E402
 from support.narrow import must, only  # noqa: E402
+
+from taskloop.adapters import delegate as dl  # noqa: E402
+from taskloop.adapters import delegate_wire  # noqa: E402
+from taskloop.app.loop.net import NetState  # noqa: E402
+from taskloop.domain.lanes import netgate  # noqa: E402
+from taskloop.domain.lanes import policy as lp  # noqa: E402
+from taskloop.stores import call_state as cs  # noqa: E402
 
 DELEGATE = fake_route.delegate_dir()
 CONTRACT = dl.read_contract_file(DELEGATE / "skills" / "delegate" / "contract.json") or {}
@@ -52,7 +55,7 @@ class Fake(unittest.TestCase):
         cmd = list(cmd)
         cmd[1] = FAKE
         kw.update(env=self.env, capture_output=True, text=True)
-        return subprocess.run(cmd, **kw)
+        return subprocess.run(cmd, **kw, check=False)
 
     def req(self, **kw):
         return dlcall.request("worker", str(self.dir), task="t-1", parent="t-1", title="x", timeout_s=900, **kw)
@@ -67,7 +70,7 @@ class Fake(unittest.TestCase):
 
     def test_the_fake_speaks_the_handshake_and_the_net_probe(self):
         self.script_with(["done"], net=[False, True])
-        out = subprocess.run([sys.executable, FAKE, "contract", "--json"], capture_output=True, text=True, env=self.env).stdout
+        out = subprocess.run([sys.executable, FAKE, "contract", "--json"], capture_output=True, text=True, env=self.env, check=False).stdout
         self.assertEqual(sorted(json.loads(out)), ["contract", "reasons", "run_args"])
         self.assertEqual(json.loads(out)["contract"], 3)
         with mock.patch.dict(os.environ, self.env):
@@ -116,7 +119,7 @@ class Fake(unittest.TestCase):
         self.assertEqual(set(CONTRACT["retry_kinds"]), set(lp.RETRY_KINDS))
         for reason, r in CONTRACT["reasons"].items():  # adding a reason without a row fails here
             facts = (r["scope"], r["permanence"], r["retry"])
-            self.assertIn(facts, lp.TABLE, "reason %s has no lane_policy row for %s" % (reason, facts))
+            self.assertIn(facts, lp.TABLE, f"reason {reason} has no lane_policy row for {facts}")
 
     # --- synthesized stops, never a raise ---------------------------------------------------------------------------
 
@@ -128,7 +131,7 @@ class Fake(unittest.TestCase):
 
     def test_a_wrong_shape_is_a_contract_violation_and_a_call_the_engine_ended_is_a_timeout(self):
         for bad in ('{"v": 2, "status": "done"}', '{"contract": 2, "stop": null}', '{"contract": 3}', '{"contract": 3, "stop": 7}'):
-            r = self.call(runner=lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, bad, ""))
+            r = self.call(runner=lambda cmd, _bad=bad, **kw: subprocess.CompletedProcess(cmd, 0, _bad, ""))
             self.assertEqual(must(r.stop).reason, "contract_violation", bad)
             self.assertEqual((must(r.stop).scope, must(r.stop).permanence), ("machine", "needs_owner"))
 
@@ -148,11 +151,20 @@ class Fake(unittest.TestCase):
 
     def test_a_killed_stop_is_a_signal_and_sandbox_limit_denials_do_not_count(self):
         k = lp.stop_of(delegate_wire.result_of(fake_route.stop_answer("killed", "r1")))
-        self.assertEqual((must(k).scope, must(k).permanence, must(k).retry_kind, bool(must(k).signal)), ("machine", "transient", "none", True))
+        self.assertEqual(
+            (must(k).scope, must(k).permanence, must(k).retry_kind, bool(must(k).signal)), ("machine", "transient", "none", True)
+        )
         self.assertIsInstance(lp.decide(must(k), lp.Ctx(now=1.0)), lp.Yield)
         n = lp.stop_of(delegate_wire.result_of(fake_route.stop_answer("network", "r1", partial=True)))
-        self.assertEqual((must(n).reason, must(n).ref, must(n).resumable, must(n).partial, must(n).signal), ("network", "r1", True, True, 0))
-        j = {"denied": [{"kind": "sandbox_limit", "tool": "Bash", "input": {}}, {"kind": "policy", "tool": "Bash", "input": {"command": "ls"}}]}
+        self.assertEqual(
+            (must(n).reason, must(n).ref, must(n).resumable, must(n).partial, must(n).signal), ("network", "r1", True, True, 0)
+        )
+        j = {
+            "denied": [
+                {"kind": "sandbox_limit", "tool": "Bash", "input": {}},
+                {"kind": "policy", "tool": "Bash", "input": {"command": "ls"}},
+            ]
+        }
         self.assertEqual([d.kind for d in delegate_wire.denied_of(j["denied"])], ["policy"])
 
     def test_the_copy_of_the_contract_in_this_repo_is_delegates(self):
@@ -204,7 +216,7 @@ class Fake(unittest.TestCase):
         self.assertEqual(must(cs.reattach(cs.load_for(self.dir / "ck", "t-1", ("write", 1, 0, 1))))[0], "answer")
 
     def test_a_dropped_call_charges_no_counter_and_marks_no_lane(self):
-        r, st, actions, calls, clk = self.drive(["network", "done"], netgate.FakeProbe([False, True]))
+        r, _st, actions, _calls, _clk = self.drive(["network", "done"], netgate.FakeProbe([False, True]))
         a = actions[0]
         for charged in ("attempt", "crashes", "polls", "waited_lane_s"):
             self.assertNotEqual(a.charges, charged)
@@ -238,12 +250,16 @@ class Resolve(unittest.TestCase):
         with tempfile.TemporaryDirectory() as t:
             d = self.make(t, dl.CONTRACT)
             self.assertEqual(only(dl.Resolved, dl.resolve(path=str(d))).source, "explicit")
-            self.assertEqual(only(dl.Refusal, dl.resolve(pinned=Path(t) / "gone", installed=d)).kind, "pin_missing_dir")  # a pin never falls through
+            self.assertEqual(
+                only(dl.Refusal, dl.resolve(pinned=Path(t) / "gone", installed=d)).kind, "pin_missing_dir"
+            )  # a pin never falls through
             self.assertEqual(only(dl.Resolved, dl.resolve(pinned=d, installed=None)).source, "pinned")
             self.assertEqual(only(dl.Refusal, dl.resolve(pinned=Path(t), installed=None)).kind, "pin_unreadable")
             with mock.patch.object(dl, "installed_dir", return_value=None):
                 self.assertEqual(only(dl.Refusal, dl.resolve(pinned=None)).kind, "not_installed")
-            self.assertEqual(only(dl.Refusal, dl.resolve(path=str(self.make(Path(t) / "n", dl.CONTRACT + 1)))).kind, "skew_delegate_newer_no_match")
+            self.assertEqual(
+                only(dl.Refusal, dl.resolve(path=str(self.make(Path(t) / "n", dl.CONTRACT + 1)))).kind, "skew_delegate_newer_no_match"
+            )
             self.assertEqual(only(dl.Refusal, dl.resolve(path=str(self.make(Path(t) / "o", dl.CONTRACT - 1)))).kind, "skew_delegate_older")
 
     def test_installed_dir_reads_the_user_scope_record_not_a_glob(self):

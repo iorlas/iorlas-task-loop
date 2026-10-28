@@ -13,6 +13,7 @@ Stdlib only.
 """
 import argparse
 import ast
+import copy
 import subprocess
 import sys
 from typing import override
@@ -21,10 +22,10 @@ DEFS = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
 
 
 def git(*args):
-    r = subprocess.run(("git",) + args, stdout=subprocess.PIPE,
-                       stderr=subprocess.PIPE, universal_newlines=True)
+    r = subprocess.run(("git", *args), capture_output=True,
+                       text=True, check=False)
     if r.returncode:
-        raise SystemExit("git %s failed: %s" % (" ".join(args), r.stderr.strip()))
+        raise SystemExit("git {} failed: {}".format(" ".join(args), r.stderr.strip()))
     return r.stdout
 
 
@@ -34,9 +35,8 @@ def changed_py(base, head):
 
 
 def show(rev, path):
-    r = subprocess.run(["git", "show", "%s:%s" % (rev, path)],
-                       stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                       universal_newlines=True)
+    r = subprocess.run(["git", "show", f"{rev}:{path}"],
+                       capture_output=True, text=True, check=False)
     return r.stdout if r.returncode == 0 else ""
 
 
@@ -62,7 +62,7 @@ def collect(src, path):
     try:
         walk(ast.parse(src, path).body, "", True)
     except SyntaxError as e:
-        raise SystemExit("cannot parse %s: %s" % (path, e))
+        raise SystemExit(f"cannot parse {path}: {e}") from e
     return found, rest
 
 
@@ -87,22 +87,24 @@ class Renamer(ast.NodeTransformer):
 def dump(node):
     """ast.dump; a class is dumped as its shell, members are checked one by one."""
     if isinstance(node, ast.ClassDef):
-        import copy
         node = copy.copy(node)
         node.body = [n for n in node.body
-                     if not isinstance(n, DEFS + (ast.Import, ast.ImportFrom))]
+                     if not isinstance(n, (*DEFS, ast.Import, ast.ImportFrom))]
     return ast.dump(node)
 
 
 def renamed_dump(node, old, new):
-    import copy
     return dump(Renamer(old, new).visit(copy.deepcopy(node)))
 
 
-def check(base, head, rename=None, allow=()):
-    """Return (ok, lines). ok only if the change is a pure move."""
-    allow = set(allow)
-    old_defs, new_defs, lines, ok = {}, {}, [], True
+def _outer(keys, other):
+    return sorted(k for k in keys if k not in other and not any(
+        k[0] == r[0] and k[1].startswith(r[1] + ".") for r in keys if r not in other))
+
+
+def _collect_defs(base, head, allow, lines):
+    """(old_defs, new_defs, ok): every def of the changed files before and after; a changed top level is a FAIL unless allowed."""
+    old_defs, new_defs, ok = {}, {}, True
     for p in changed_py(base, head):
         od, orest = collect(show(base, p), p)
         nd, nrest = collect(show(head, p), p)
@@ -110,48 +112,62 @@ def check(base, head, rename=None, allow=()):
         new_defs.update(((p, q), n) for q, n in nd.items())
         if sorted(orest) != sorted(nrest):
             if p + ":<module>" in allow:
-                lines.append("allowed: %s:<module> top-level statements edited" % p)
+                lines.append(f"allowed: {p}:<module> top-level statements edited")
             else:
                 ok = False
-                lines.append("FAIL: %s:<module> top-level statements changed (not a move)" % p)
+                lines.append(f"FAIL: {p}:<module> top-level statements changed (not a move)")
+    return old_defs, new_defs, ok
+
+
+def _match_moves(old_defs, new_defs, rename, lines):
+    """(accounted, ok): each removed def that reappears identical (or renamed) elsewhere."""
     added = {}  # dump -> newly added defs
     for k, n in new_defs.items():
         if k not in old_defs:
             added.setdefault(dump(n), []).append(k)
-
-    def outer(keys, other):
-        return sorted(k for k in keys if k not in other and not any(
-            k[0] == r[0] and k[1].startswith(r[1] + ".") for r in keys if r not in other))
-
-    accounted = set()
-    for path, q in outer(old_defs, new_defs):
+    accounted, ok = set(), True
+    for path, q in _outer(old_defs, new_defs):
         node = old_defs[(path, q)]
         cands, how = added.get(dump(node), []), "identical"
         if not cands and rename:
-            cands, how = added.get(renamed_dump(node, *rename), []), "renamed %s->%s" % rename
+            cands, how = added.get(renamed_dump(node, *rename), []), "renamed {}->{}".format(*rename)
         cands = [c for c in cands if c[0] != path and c not in accounted]
         if cands:
             accounted.add(cands[0])
-            lines.append("moved: %s:%s -> %s:%s (%s)" % (path, q, cands[0][0], cands[0][1], how))
+            lines.append(f"moved: {path}:{q} -> {cands[0][0]}:{cands[0][1]} ({how})")
         else:
             ok = False
-            lines.append("FAIL: %s:%s removed with no identical destination" % (path, q))
-    for k in outer(new_defs, old_defs):
+            lines.append(f"FAIL: {path}:{q} removed with no identical destination")
+    return accounted, ok
+
+
+def _check_adds_and_edits(old_defs, new_defs, accounted, allow, lines):
+    ok = True
+    for k in _outer(new_defs, old_defs):
         if k in accounted:
             continue
-        if "%s:%s" % k in allow:
-            lines.append("allowed: %s:%s added" % k)
+        if "{}:{}".format(*k) in allow:
+            lines.append("allowed: {}:{} added".format(*k))
         else:
             ok = False
-            lines.append("FAIL: %s:%s added but not a moved definition" % k)
+            lines.append("FAIL: {}:{} added but not a moved definition".format(*k))
     for k in sorted(set(old_defs) & set(new_defs)):
         if dump(old_defs[k]) != dump(new_defs[k]):
-            if "%s:%s" % k in allow:
-                lines.append("allowed: %s:%s edited" % k)
+            if "{}:{}".format(*k) in allow:
+                lines.append("allowed: {}:{} edited".format(*k))
             else:
                 ok = False
-                lines.append("FAIL: %s:%s changed in place (not a move)" % k)
-    return ok, lines
+                lines.append("FAIL: {}:{} changed in place (not a move)".format(*k))
+    return ok
+
+
+def check(base, head, rename=None, allow=()):
+    """Return (ok, lines). ok only if the change is a pure move."""
+    allow, lines = set(allow), []
+    old_defs, new_defs, ok = _collect_defs(base, head, allow, lines)
+    accounted, moved_ok = _match_moves(old_defs, new_defs, rename, lines)
+    rest_ok = _check_adds_and_edits(old_defs, new_defs, accounted, allow, lines)
+    return ok and moved_ok and rest_ok, lines
 
 
 def main(argv=None):

@@ -1,6 +1,7 @@
 """A1 (tl-rules): the architecture rules as one stdlib test (88-target-architecture sections 3 and 6).
 
-What it enforces, over every .py under src/, skills/, dev/ and tests/ (src/<pkg>/_vendor/ is a leaf for the layer walk; EXEMPT_DIRS is skipped by the caps):
+What it enforces, over every .py under src/, skills/, dev/ and tests/ (src/<pkg>/_vendor/ is a leaf for the layer walk; EXEMPT_DIRS is
+skipped by the caps):
   caps      400 SLOC per file, 80 per function, 800 per test file; SLOC = non-blank, non-comment, non-docstring lines by tokenize.
             Every cap violation that exists today is listed by file name in tests/rules_ratchet.json ("oversize" / "oversize_functions").
             A listed entry may be removed or lowered, never added. Run `python3 tests/test_rules.py --measure` to see the current table.
@@ -13,6 +14,7 @@ What it enforces, over every .py under src/, skills/, dev/ and tests/ (src/<pkg>
 The older folder table for skills/task-loop (ALLOWED, formerly tests/test_layers.py) stays here.
 """
 import ast
+import importlib
 import io
 import json
 import os
@@ -32,7 +34,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(ROOT / "dev"))
 import vendor  # noqa: E402
-import vendored  # noqa: E402,F401
+import vendored  # noqa: E402
 from git_porcelain import GitUnavailable, Identity, RealRepo  # noqa: E402
 from git_porcelain.testing import FakeRepo, git, hermetic_env  # noqa: E402
 
@@ -144,7 +146,7 @@ def measure_tree(root):
         size, per_func = measure(path)
         if size > file_cap(rel):
             files[rel] = size
-        funcs.update({"%s::%s" % (rel, q): n for q, n in per_func.items() if n > FUNC_CAP})
+        funcs.update({f"{rel}::{q}": n for q, n in per_func.items() if n > FUNC_CAP})
     return {"files": files, "functions": funcs}
 
 
@@ -158,18 +160,19 @@ def ratchet_problems(actual, known, label, ceiling=lambda key: True):
     out = []
     for key, size in sorted(actual.items()):
         if key not in known:
-            out.append('%s over cap: %s = %d. Split it; do not add it to the table.' % (label, key, size))
+            out.append(f'{label} over cap: {key} = {int(size)}. Split it; do not add it to the table.')
         elif ceiling(key) and size > known[key]:
-            out.append("%s grew: %s = %d > recorded %d" % (label, key, size, known[key]))
+            out.append(f"{label} grew: {key} = {int(size)} > recorded {int(known[key])}")
     for key in sorted(set(known) - set(actual)):
-        out.append('%s now within its cap (or gone): delete "%s" from tests/rules_ratchet.json' % (label, key))
+        out.append(f'{label} now within its cap (or gone): delete "{key}" from tests/rules_ratchet.json')
     return out
 
 
 def cap_problems(root=ROOT, known=None):
     known = load_ratchet() if known is None else known
     actual = measure_tree(root)
-    not_test = lambda key: not key.startswith("tests/")  # noqa: E731
+    def not_test(key):
+        return not key.startswith("tests/")
     return (ratchet_problems(actual["files"], known["oversize"], "file", not_test)
             + ratchet_problems(actual["functions"], known["oversize_functions"], "function", not_test))
 
@@ -200,7 +203,7 @@ def imports_of(parts, tree):
                 module = tuple((node.module or "").split("."))
             yield module
             for alias in node.names:
-                yield module + (alias.name,)
+                yield (*module, alias.name)
 
 
 def layer_of(parts):
@@ -219,21 +222,21 @@ def edge_problems(rel, parts, targets):
     for target in set(targets):
         top = target[0]
         if top in FOREIGN_PKGS:
-            out.add("%s: imports %s (the two plugins never import each other)" % (rel, top))
+            out.add(f"{rel}: imports {top} (the two plugins never import each other)")
         elif top not in {parts[0], MAIN_PKG} | DASH_PKGS:
             continue
         elif parts[0] in DASH_PKGS:
             if top == MAIN_PKG and target[1:2] not in (("contracts",), ()):
-                out.add("%s: dash imports %s (only %s.contracts)" % (rel, ".".join(target[:2]), MAIN_PKG))
+                out.add("{}: dash imports {} (only {}.contracts)".format(rel, ".".join(target[:2]), MAIN_PKG))
             elif top in DASH_PKGS and top != parts[0]:
-                out.add("%s: dash imports another dash package" % rel)
+                out.add(f"{rel}: dash imports another dash package")
         elif top in DASH_PKGS:
-            out.add("%s: %s imports the dashboard %s" % (rel, here, top))
+            out.add(f"{rel}: {here} imports the dashboard {top}")
         elif len(target) > 1 and target[1] != "_vendor" and here in LAYER_EDGES and target[1] != here:
             if target[1] not in LAYER_EDGES:
-                out.add("%s: imports unknown layer %s" % (rel, ".".join(target[:2])))
+                out.add("{}: imports unknown layer {}".format(rel, ".".join(target[:2])))
             elif target[1] not in LAYER_EDGES[here]:
-                out.add("%s: %s -> %s is not an allowed layer edge" % (rel, here, target[1]))
+                out.add(f"{rel}: {here} -> {target[1]} is not an allowed layer edge")
     return sorted(out)
 
 
@@ -257,12 +260,12 @@ def cycle_in(edges):
 
     def visit(n, path):
         if state.get(n) == 1:
-            return path[path.index(n):] + [n]
+            return [*path[path.index(n):], n]
         if state.get(n) == 2:
             return None
         state[n] = 1
         for m in sorted(graph.get(n, ())):
-            found = visit(m, path + [n])
+            found = visit(m, [*path, n])
             if found:
                 return found
         state[n] = 2
@@ -285,7 +288,7 @@ def layer_problems(root):
             all_slice_edges.add((a, b))
             allowed = APP_EDGES.get(a, frozenset())
             if allowed != EVERY and b not in allowed:
-                out.append("%s: app slice %s -> %s is not an allowed edge" % (rel, a, b))
+                out.append(f"{rel}: app slice {a} -> {b} is not an allowed edge")
     cycle = cycle_in(all_slice_edges)
     return out + (["app slices form a cycle: " + " -> ".join(cycle)] if cycle else [])
 
@@ -309,7 +312,9 @@ def lazy_imports(tree):
 
 
 def is_final(annotation):
-    return any(isinstance(n, ast.Name) and n.id == "Final" or isinstance(n, ast.Attribute) and n.attr == "Final" for n in ast.walk(annotation))
+    return any(
+        (isinstance(n, ast.Name) and n.id == "Final") or (isinstance(n, ast.Attribute) and n.attr == "Final") for n in ast.walk(annotation)
+    )
 
 
 def mutable_value(value):
@@ -360,14 +365,14 @@ def placement_problems(root):
         text = path.read_text(encoding="utf-8")
         tree = ast.parse(text, str(path))
         if imports_re(tree) and not (layer == "adapters" or (layer == "domain" and parts[-1] == "matchers.py")):
-            out.append("%s: import re is allowed only in adapters/ and domain/**/matchers.py" % rel)
-        out += ["%s:%d: import inside a function body (a needed lazy import is a cycle)" % (rel, n) for n in lazy_imports(tree)]
+            out.append(f"{rel}: import re is allowed only in adapters/ and domain/**/matchers.py")
+        out += [f"{rel}:{n}: import inside a function body (a needed lazy import is a cycle)" for n in lazy_imports(tree)]
         if layer in MUTABLE_LAYERS:
-            out += ["%s:%d: mutable module global %s" % (rel, n, name) for name, n in mutable_globals(tree)]
+            out += [f"{rel}:{n}: mutable module global {name}" for name, n in mutable_globals(tree)]
         if parts[1:] != ("contracts", "paths.py"):
-            out += ["%s:%d: file name %r belongs in contracts/paths.py" % (rel, n, lit) for lit, n in file_literals(tree)
+            out += [f"{rel}:{n}: file name {lit!r} belongs in contracts/paths.py" for lit, n in file_literals(tree)
                     if any(p in lit for p in PATH_LITERALS)]
-        out += ["%s: names %r (the two plugins never name each other)" % (rel, n) for n in FOREIGN_NAMES if n in text]
+        out += [f"{rel}: names {n!r} (the two plugins never name each other)" for n in FOREIGN_NAMES if n in text]
     return out
 
 
@@ -378,8 +383,14 @@ def src_problems(root=ROOT):
 # -- no signal is sent outside stream-proc ------------------------------------------------------------------------------------------
 # Stopping a process (a worker, a check, the dashboard, a stopped run-task) is `stream_proc.stop_tree` (through adapters/procs.py:
 # `stop_tree`, `stop_pid`, `capture`); a liveness read is `stream_proc.alive`. Installing a handler (signal.signal) is not a send.
-SENDS = (r"\bos\.kill(pg)?\(", r"\bsignal\.(raise_signal|pthread_kill|alarm|setitimer)\(", r"\.send_signal\(", r"\.terminate\(\)", r"\.kill\(\)",
-         r"\bkillpg\(")
+SENDS = (
+    r"\bos\.kill(pg)?\(",
+    r"\bsignal\.(raise_signal|pthread_kill|alarm|setitimer)\(",
+    r"\.send_signal\(",
+    r"\.terminate\(\)",
+    r"\.kill\(\)",
+    r"\bkillpg\(",
+)
 SIGNAL_EXCEPTIONS: dict[str, str] = {}  # "path" -> why it still sends a signal itself; may only shrink
 
 
@@ -399,12 +410,12 @@ def signal_sends(root=ROOT):
 class Signals(unittest.TestCase):
     def test_no_signal_is_sent_outside_stream_proc(self):
         for rel in signal_sends():
-            self.assertIn(rel, SIGNAL_EXCEPTIONS, "%s sends a signal: go through stream_proc (stop_tree / run / alive)" % rel)
+            self.assertIn(rel, SIGNAL_EXCEPTIONS, f"{rel} sends a signal: go through stream_proc (stop_tree / run / alive)")
 
     def test_the_exception_table_only_shrinks(self):
         found = signal_sends()
         for rel in SIGNAL_EXCEPTIONS:
-            self.assertIn(rel, found, "%s no longer sends a signal: delete its line" % rel)
+            self.assertIn(rel, found, f"{rel} no longer sends a signal: delete its line")
 
     def test_every_child_of_the_engine_is_spawned_through_stream_proc(self):
         """The engine's SIGTERM handler raises, even inside Popen(): a child spawned bare is left owned by nobody."""
@@ -415,8 +426,11 @@ class Signals(unittest.TestCase):
 
     def test_the_dash_starts_no_process_and_reaches_bd_only_through_the_store_port(self):
         """tl-2ve: the dashboard only reads; bd comes in as `Ports.store` (the engine's BdStore, the one process site)."""
-        bad = [p.relative_to(ROOT).as_posix() for p in sorted((ROOT / "src" / "taskloop_dash").rglob("*.py"))
-               if re.search(r"\bsubprocess\b|\bPopen\b|\bos\.(system|exec\w*|spawn\w*)\(|\brun\(|\bports\.bd\b", p.read_text(encoding="utf-8"))]
+        bad = [
+            p.relative_to(ROOT).as_posix()
+            for p in sorted((ROOT / "src" / "taskloop_dash").rglob("*.py"))
+            if re.search(r"\bsubprocess\b|\bPopen\b|\bos\.(system|exec\w*|spawn\w*)\(|\brun\(|\bports\.bd\b", p.read_text(encoding="utf-8"))
+        ]
         self.assertEqual(bad, [])
 
     def test_the_rule_finds_a_send(self):
@@ -446,20 +460,34 @@ def shell_problems(root=ROOT):
             docs = {id(d.value) for d in docstring_nodes(tree)}
             for node in ast.walk(tree):
                 why = ""
-                if isinstance(node, ast.keyword) and node.arg == "shell" and isinstance(node.value, ast.Constant) and node.value.value is True:
+                if (
+                    isinstance(node, ast.keyword)
+                    and node.arg == "shell"
+                    and isinstance(node.value, ast.Constant)
+                    and node.value.value is True
+                ):
                     why = "shell=True"
                 elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and SPLITTER.search(node.name):
                     why = "a shell splitter: " + node.name
                 elif isinstance(node, (ast.Name, ast.Attribute)) and SPLITTER.search(getattr(node, "id", "") or getattr(node, "attr", "")):
                     why = "a shell splitter"
-                elif isinstance(node, (ast.List, ast.Tuple)) and len(node.elts) >= 2 and all(isinstance(e, ast.Constant) for e in node.elts[:2]):
+                elif (
+                    isinstance(node, (ast.List, ast.Tuple))
+                    and len(node.elts) >= 2
+                    and all(isinstance(e, ast.Constant) for e in node.elts[:2])
+                ):
                     first, second = (cast(ast.Constant, e).value for e in node.elts[:2])
                     if isinstance(first, str) and Path(first).name in SHELL_NAMES and second in SHELL_FLAGS | {"-n"}:
                         why = "a shell run with " + str(second)
-                elif isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in docs and SHELL_TEXT.search(node.value):
+                elif (
+                    isinstance(node, ast.Constant)
+                    and isinstance(node.value, str)
+                    and id(node) not in docs
+                    and SHELL_TEXT.search(node.value)
+                ):
                     why = "shell text: " + node.value[:40]
                 if why:
-                    found.append("%s:%d %s" % (rel.as_posix(), getattr(node, "lineno", 0), why))
+                    found.append("{}:{:d} {}".format(rel.as_posix(), int(getattr(node, "lineno", 0)), why))
     return found
 
 
@@ -524,7 +552,7 @@ def violations(skill=SKILL):
         for py in sorted((skill / src).rglob("*.py")):
             for top in sorted(set(imported_tops(ast.parse(py.read_text(encoding="utf-8"), str(py))))):
                 if top in ALL and top not in flat and top != src and top not in ALLOWED[src]:
-                    found.append("%s: %s/ imports %s/ (%s -> %s is not allowed)" % (py.relative_to(skill), src, top, src, top))
+                    found.append(f"{py.relative_to(skill)}: {src}/ imports {top}/ ({src} -> {top} is not allowed)")
     return found
 
 
@@ -551,15 +579,10 @@ class RealTree(unittest.TestCase):
         self.assertNotIn("baseline", tomllib.loads((ROOT / "pyrefly.toml").read_text(encoding="utf-8")))
         self.assertFalse((ROOT / "pyrefly-baseline.json").exists())
 
-    def test_the_ruff_ignores_may_only_shrink(self):
-        table = tomllib.loads((ROOT / "ruff.toml").read_text(encoding="utf-8"))["lint"]["per-file-ignores"]
-        known = load_ratchet()
-        files = {"%s::%s" % (g, c): 1 for g, codes in table.items() if "*" not in g for c in codes}
-        self.assertEqual(ratchet_problems(files, known["ruff_baseline"], "ruff baseline (file::rule)"), [])
-        for g, codes in table.items():
-            if "*" in g:
-                self.assertLessEqual(set(codes), set(known["ruff_groups"].get(g, [])), "ruff group %s gained a rule" % g)
-        self.assertLessEqual({g for g in table if "*" in g}, set(known["ruff_groups"]), "a new wildcard ruff ignore group")
+    def test_ruff_has_no_per_file_ignores_every_finding_is_fixed(self):
+        lint = tomllib.loads((ROOT / "ruff.toml").read_text(encoding="utf-8"))["lint"]
+        self.assertNotIn("per-file-ignores", lint)
+        self.assertEqual(sorted(lint["ignore"]), ["PLR0913", "PLR0917", "PLR2004"])
 
 
 # -- tests: planted trees --------------------------------------------------------------------------------------------------------------
@@ -612,18 +635,25 @@ class Planted(unittest.TestCase):
         self.assertEqual(cap_problems(root, {"oversize": {}, "oversize_functions": {"dev/f.py::f": 82}}), [])
 
     def test_layer_edges(self):
-        self.assertEqual(self.problems({"src/taskloop/app/run/x.py": "from taskloop.domain.plan import p\nfrom ...contracts import c\n"}), [])
+        self.assertEqual(
+            self.problems({"src/taskloop/app/run/x.py": "from taskloop.domain.plan import p\nfrom ...contracts import c\n"}), []
+        )
         self.only({"src/taskloop/domain/x.py": "from taskloop.adapters import git\n"}, "domain -> adapters")
         self.only({"src/taskloop/adapters/x.py": "import taskloop.app\n"}, "adapters -> app")
         self.only({"src/taskloop/cli/x.py": "from ..domain import y\n"}, "cli -> domain")
         self.only({"src/taskloop/contracts/x.py": "from taskloop import domain\n"}, "contracts -> domain")
 
     def test_vendor_is_a_leaf_any_layer_may_import(self):
-        files = {"src/taskloop/contracts/x.py": "from taskloop._vendor.atomic_io import w\n", "src/taskloop/_vendor/atomic_io/__init__.py": "import taskloop.app\n"}
+        files = {
+            "src/taskloop/contracts/x.py": "from taskloop._vendor.atomic_io import w\n",
+            "src/taskloop/_vendor/atomic_io/__init__.py": "import taskloop.app\n",
+        }
         self.assertEqual(self.problems(files), [])
 
     def test_dash_imports_contracts_only_and_main_never_imports_dash(self):
-        self.assertEqual(self.problems({"src/taskloop_dash/x.py": "from taskloop.contracts import c\nimport taskloop_dash.y\nfrom . import z\n"}), [])
+        self.assertEqual(
+            self.problems({"src/taskloop_dash/x.py": "from taskloop.contracts import c\nimport taskloop_dash.y\nfrom . import z\n"}), []
+        )
         self.only({"src/taskloop_dash/x.py": "from taskloop.domain import d\n"}, "only taskloop.contracts")
         self.only({"src/taskloop/app/x.py": "import taskloop_dash\n"}, "imports the dashboard")
 
@@ -631,13 +661,28 @@ class Planted(unittest.TestCase):
         self.only({"src/taskloop/app/x.py": "import delegate.cli\n"}, "never import each other")
 
     def test_app_slice_edges_and_cycles(self):
-        self.assertEqual(self.problems({"src/taskloop/app/land/a.py": "from taskloop.app.checks import c\n", "src/taskloop/app/run/b.py": "from taskloop.app import land\n"}), [])
+        self.assertEqual(
+            self.problems(
+                {
+                    "src/taskloop/app/land/a.py": "from taskloop.app.checks import c\n",
+                    "src/taskloop/app/run/b.py": "from taskloop.app import land\n",
+                }
+            ),
+            [],
+        )
         self.only({"src/taskloop/app/checks/a.py": "from taskloop.app.land import l\n"}, "checks -> land")
-        cyc = self.problems({"src/taskloop/app/run/a.py": "from taskloop.app import loop\n", "src/taskloop/app/loop/b.py": "from taskloop.app import run\n"})
+        cyc = self.problems(
+            {"src/taskloop/app/run/a.py": "from taskloop.app import loop\n", "src/taskloop/app/loop/b.py": "from taskloop.app import run\n"}
+        )
         self.assertTrue(any("cycle" in c for c in cyc), cyc)
 
     def test_regex_placement(self):
-        self.assertEqual(self.problems({"src/taskloop/adapters/a.py": "import re\n", "src/taskloop/domain/plan/matchers.py": "from re import compile\n"}), [])
+        self.assertEqual(
+            self.problems(
+                {"src/taskloop/adapters/a.py": "import re\n", "src/taskloop/domain/plan/matchers.py": "from re import compile\n"}
+            ),
+            [],
+        )
         self.only({"src/taskloop/app/a.py": "import re\n"}, "import re")
         self.only({"src/taskloop/domain/plan/rules.py": "import re as rx\n"}, "import re")
         self.only({"src/taskloop/contracts/a.py": "from re import sub\n"}, "import re")
@@ -657,9 +702,9 @@ class Planted(unittest.TestCase):
 
     def test_file_names_only_in_contracts_paths(self):
         lit = PATH_LITERALS[0]
-        self.assertEqual(self.problems({"src/taskloop/contracts/paths.py": "A = %r\n" % lit}), [])
-        self.only({"src/taskloop/app/a.py": "p = root / %r\n" % lit}, "contracts/paths.py")
-        self.assertEqual(self.problems({"src/taskloop/app/a.py": '"""Writes %s."""\n' % lit}), [])
+        self.assertEqual(self.problems({"src/taskloop/contracts/paths.py": f"A = {lit!r}\n"}), [])
+        self.only({"src/taskloop/app/a.py": f"p = root / {lit!r}\n"}, "contracts/paths.py")
+        self.assertEqual(self.problems({"src/taskloop/app/a.py": f'"""Writes {lit}."""\n'}), [])
 
 
 class FolderTable(unittest.TestCase):
@@ -694,19 +739,23 @@ class VendorGuard(unittest.TestCase):
 
     def test_manifest_lists_the_vendored_package(self):
         entries = vendor.load()
-        self.assertEqual([e["name"] for e in entries], sorted(p.name for p in vendor.VENDOR_DIR.iterdir() if p.is_dir() and p.name != "__pycache__"))
+        self.assertEqual(
+            [e["name"] for e in entries], sorted(p.name for p in vendor.VENDOR_DIR.iterdir() if p.is_dir() and p.name != "__pycache__")
+        )
         for e in entries:
             self.assertEqual(sorted(e), ["name", "shelf_commit", "shelf_tag", "tree_hash"])
 
     def test_every_vendored_package_imports_by_its_absolute_name(self):
-        import importlib
         names = [e["name"] for e in vendor.load()]
         self.assertEqual(names, ["atomic_io", "child_env", "git_porcelain", "jsonl_log", "process_lock", "stream_proc"])
         for name in names:
             with self.subTest(name):
                 mod = importlib.import_module(name)
                 self.assertEqual(Path(mod.__file__ or "").resolve().parent, (vendor.VENDOR_DIR / name).resolve())
-                self.assertEqual(vendor.tree_hash(vendor.dir_files(vendor.VENDOR_DIR / name)), next(e["tree_hash"] for e in vendor.load() if e["name"] == name))
+                self.assertEqual(
+                    vendor.tree_hash(vendor.dir_files(vendor.VENDOR_DIR / name)),
+                    next(e["tree_hash"] for e in vendor.load() if e["name"] == name),
+                )
 
     def test_an_edited_or_added_file_in_any_package_is_drift(self):
         for e in vendor.load():
@@ -725,7 +774,9 @@ class VendorGuard(unittest.TestCase):
         shelf = vendor.shelf_home()
         if not shelf:
             self.skipTest("no shelf checkout ($SHELF_HOME, ../shelf, ~/Workspaces/shelf)")
-        r = subprocess.run([sys.executable, str(ROOT / "dev" / "vendor.py"), "check", "--shelf", str(shelf)], capture_output=True, text=True)
+        r = subprocess.run(
+            [sys.executable, str(ROOT / "dev" / "vendor.py"), "check", "--shelf", str(shelf)], capture_output=True, text=True, check=False
+        )
         self.assertEqual(r.returncode, 0, r.stderr)
 
 

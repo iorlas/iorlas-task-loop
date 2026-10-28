@@ -7,12 +7,16 @@ from pathlib import Path
 from typing import Any, Literal
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401
-from taskloop.contracts import answers, codec, schema  # noqa: E402
+import support.paths  # noqa: F401
+
+from taskloop.contracts import answers, codec, schema
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tests"))
-import test_response_format as strict_test  # noqa: E402  (tl-7y6.4.2's validator)
+import test_response_format as strict_test  # noqa: E402
+
+from contracts import samples  # noqa: E402
+from taskloop.contracts import enums  # noqa: E402
 
 FIXTURES = ROOT / "tests" / "fixtures" / "schemas"  # the hand-written schemas the engine sent before E6, frozen
 VARIANTS = [(n, v) for n in answers.NODES for v in (False, True) if not v or n in answers.VISUAL]
@@ -76,7 +80,6 @@ class AnswerSchemas(unittest.TestCase):
 
 class Generator(unittest.TestCase):
     def test_scalars_enums_nullable_and_docs(self):
-        from taskloop.contracts import enums
 
         @codec.record
         class Probe:
@@ -114,7 +117,6 @@ class Generator(unittest.TestCase):
             schema.of(Bad)
 
     def test_every_top_level_record_has_a_schema_that_names_its_fields(self):
-        from contracts import samples
         for coll in (samples.LOG, samples.EVENTS, samples.LIVE, samples.OTHERS):
             for name, rec in coll.items():
                 with self.subTest(name):

@@ -7,15 +7,18 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401
-import suites  # noqa: E402
-from contracts import samples as S  # noqa: E402
-from support.tiers import domain  # noqa: E402
-from taskloop.contracts.ask import AskAnswer  # noqa: E402
-from taskloop.contracts.enums import AskStatus, LockWhat  # noqa: E402
-from taskloop.stores.memory import fake_stores  # noqa: E402
-from taskloop.stores.runlog import RunLog  # noqa: E402
-from support.narrow import must  # noqa: E402
+import support.paths  # noqa: F401
+
+# isort: split
+import suites
+from contracts import samples as S
+from support.narrow import must
+from support.tiers import domain
+
+from taskloop.contracts.ask import AskAnswer
+from taskloop.contracts.enums import AskStatus, LockWhat
+from taskloop.stores.memory import fake_stores
+from taskloop.stores.runlog import RunLog
 
 
 @domain

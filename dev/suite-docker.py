@@ -10,6 +10,7 @@ Image: --image, else $TASK_LOOP_SUITE_IMAGE, else task-loop-suite:<hash of the D
 When docker is not reachable: one warning line, then the suite on the host. Python 3, standard library only.
 """
 import argparse
+import contextlib
 import hashlib
 import os
 import signal
@@ -22,7 +23,8 @@ HERE = Path(__file__).resolve().parent
 sys.path.append(str(HERE.parent / "skills" / "task-loop" / "_vendor"))  # the vendored shelf packages (dev/vendor.py)
 import stream_proc  # noqa: E402
 
-DEFAULT_IMAGE = "task-loop-suite:" + hashlib.sha1((HERE / "Dockerfile.suite").read_bytes()).hexdigest()[:10]  # a new Dockerfile is a new image
+_DOCKERFILE_SHA = hashlib.sha1((HERE / "Dockerfile.suite").read_bytes()).hexdigest()[:10]
+DEFAULT_IMAGE = "task-loop-suite:" + _DOCKERFILE_SHA  # a new Dockerfile is a new image
 SUITE_WALL_S = 3 * 3600.0  # a hang guard for the whole host suite; each shard has its own, shorter, limit
 INSIDE = ("git clone -q /src.git /w && cd /w && git checkout -q \"$SHA\" && cat > /tmp/p"
           " && { [ ! -s /tmp/p ] || git apply /tmp/p; } && python3 dev/suite.py")
@@ -30,31 +32,32 @@ INSIDE = ("git clone -q /src.git /w && cd /w && git checkout -q \"$SHA\" && cat 
 
 def docker_ok():
     try:
-        return subprocess.run(["docker", "info"], capture_output=True, timeout=15).returncode == 0
+        return subprocess.run(["docker", "info"], capture_output=True, timeout=15, check=False).returncode == 0
     except (OSError, subprocess.SubprocessError):
         return False
 
 
 def ensure_image(image):
-    if subprocess.run(["docker", "image", "inspect", image], capture_output=True).returncode == 0:
+    if subprocess.run(["docker", "image", "inspect", image], capture_output=True, check=False).returncode == 0:
         return True
     if image != DEFAULT_IMAGE:
-        print("suite-docker: image %s not found" % image, file=sys.stderr)
+        print(f"suite-docker: image {image} not found", file=sys.stderr)
         return False
-    print("suite-docker: building %s" % image, flush=True)
+    print(f"suite-docker: building {image}", flush=True)
     return subprocess.run(["docker", "build", "-q", "-f", str(HERE / "Dockerfile.suite"), "-t", image, str(HERE)],
-                          stdout=subprocess.DEVNULL).returncode == 0
+                          stdout=subprocess.DEVNULL, check=False).returncode == 0
 
 
 def git(repo, *args):
-    return subprocess.run(["git", "-C", str(repo)] + list(args), capture_output=True, check=True).stdout
+    return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, check=True).stdout
 
 
 def host_suite(repo, why):
-    print("suite-docker: WARNING %s; running the suite on the host" % why, file=sys.stderr, flush=True)
+    print(f"suite-docker: WARNING {why}; running the suite on the host", file=sys.stderr, flush=True)
     old = signal.signal(signal.SIGTERM, lambda signum, _frame: sys.exit(128 + signum))  # unwinds into stream_proc.run, which stops the tree
     try:
-        res = stream_proc.run([sys.executable, str(HERE / "suite.py"), "--repo", str(repo)], on_stdout=lambda t: print(t, end="", flush=True),
+        res = stream_proc.run([sys.executable, str(HERE / "suite.py"), "--repo", str(repo)],
+                              on_stdout=lambda t: print(t, end="", flush=True),
                               on_stderr=lambda t: print(t, end="", file=sys.stderr, flush=True), timeout=SUITE_WALL_S)
     finally:
         signal.signal(signal.SIGTERM, old)
@@ -74,23 +77,21 @@ def main(argv=None):
     sha = git(repo, "rev-parse", "HEAD").decode().strip()
     common = Path(os.fsdecode(git(repo, "rev-parse", "--path-format=absolute", "--git-common-dir")).strip())
     patch = git(repo, "diff", "HEAD", "--binary")
-    name = "tl-suite-%d-%d" % (os.getpid(), time.time())
+    name = f"tl-suite-{os.getpid():d}-{int(time.time()):d}"
     inside = os.environ.get("TASK_LOOP_SUITE_INSIDE") or INSIDE  # the override is for the wrapper's own test
-    cmd = ["docker", "run", "--rm", "--init", "-i", "--name", name, "-w", "/", "-e", "SHA=" + sha, "-v", "%s:/src.git:ro" % common,
+    cmd = ["docker", "run", "--rm", "--init", "-i", "--name", name, "-w", "/", "-e", "SHA=" + sha, "-v", f"{common}:/src.git:ro",
            args.image, "sh", "-c", inside]
     p = subprocess.Popen(cmd, stdin=subprocess.PIPE)
 
     def stop(signum, _frame):
         # killing the `docker run` client leaves the container running in the VM: kill it by name
-        subprocess.run(["docker", "kill", name], capture_output=True)
+        subprocess.run(["docker", "kill", name], capture_output=True, check=False)
         stream_proc.stop_tree(p, grace=10.0)
         sys.exit(128 + signum)
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
-    try:
+    with contextlib.suppress(BrokenPipeError):
         p.communicate(patch)
-    except BrokenPipeError:
-        pass
     return p.wait()
 
 

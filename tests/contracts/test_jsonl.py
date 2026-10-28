@@ -8,13 +8,16 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401
-from contracts import samples as S  # noqa: E402
-from jsonl_log import Jsonl, cursor  # noqa: E402
-from taskloop.contracts import codec, paths, stores  # noqa: E402
-from taskloop.contracts.ask import Ask  # noqa: E402
-from taskloop.contracts.loop import LoopState  # noqa: E402
-from taskloop.contracts.snapshots import Pin  # noqa: E402
+import itertools
+
+import support.paths  # noqa: F401
+from jsonl_log import Jsonl, cursor
+
+from contracts import samples as S
+from taskloop.contracts import codec, paths, stores
+from taskloop.contracts.ask import Ask
+from taskloop.contracts.loop import LoopState
+from taskloop.contracts.snapshots import Pin
 
 
 class JsonlTest(unittest.TestCase):
@@ -36,7 +39,7 @@ class JsonlTest(unittest.TestCase):
         self.assertEqual(entries[0].start, 0)
         self.assertEqual(cursor, self.path.stat().st_size)
         self.assertEqual([e.data["i"] for e in entries], list(range(5)))
-        self.assertTrue(all(a.end == b.start for a, b in zip(entries, entries[1:])))  # contiguous, in bytes not characters
+        self.assertTrue(all(a.end == b.start for a, b in itertools.pairwise(entries)))  # contiguous, in bytes not characters
 
     def test_a_cursor_returns_only_what_came_after(self):
         for i in range(3):
@@ -78,7 +81,7 @@ class JsonlTest(unittest.TestCase):
         for i in range(5):
             self.j.append({"i": i})
         first, cursor = self.j.read_from(0, limit=2)
-        rest, end = self.j.read_from(cursor)
+        rest, _end = self.j.read_from(cursor)
         self.assertEqual(([e.data["i"] for e in first], [e.data["i"] for e in rest]), ([0, 1], [2, 3, 4]))
         self.assertEqual(first[-1].end, cursor)
 
@@ -180,9 +183,8 @@ class StoresTest(unittest.TestCase):
     def test_a_failed_write_leaves_no_temp_file_and_keeps_the_old_one(self):
         st = stores.PinStore(self.cfg)
         st.write(S.other(Pin))
-        with mock.patch.object(Path, "replace", side_effect=OSError("disk")):
-            with self.assertRaises(OSError):
-                st.write(S.other(Pin))
+        with mock.patch.object(Path, "replace", side_effect=OSError("disk")), self.assertRaises(OSError):
+            st.write(S.other(Pin))
         self.assertEqual(st.read(), S.other(Pin))
         self.assertEqual(list(st.path.parent.glob("*.tmp")), [])
 

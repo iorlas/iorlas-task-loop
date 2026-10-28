@@ -1,23 +1,27 @@
 """The Roadmap tab: lanes (stage rail, unlocks, last passes), the queue as a tree of what each bead unblocks, /api/roadmap."""
 
 import json
-from typing import Any
 import os
 import sys
 import tempfile
 import time
 import unittest
 from pathlib import Path
+from typing import Any
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from support.dashes import Env, Ports, make_dash  # noqa: E402
+import support.paths  # noqa: E402, F401
+from support.dashes import make_dash  # noqa: E402
+from support.logs import typed  # noqa: E402
+
 from taskloop_dash.readers import loops as dash_loops  # noqa: E402
 from taskloop_dash.views import graph, roadmap  # noqa: E402
 
-NOW = time.mktime((2026, 10, 23, 12, 0, 0, 0, 0, -1))  # local noon: 'today' counts from midnight, so a run just after 00:00 must not change the answers
+NOW = time.mktime(
+    (2026, 10, 23, 12, 0, 0, 0, 0, -1)
+)  # local noon: 'today' counts from midnight, so a run just after 00:00 must not change the answers
 CFG = {"pick_label": "auto", "skip_labels": []}
 
 
@@ -63,7 +67,7 @@ class Rail(unittest.TestCase):
 class Tree(unittest.TestCase):
     def test_fan_out_depth_and_needs(self):
         # root -> k1..k7 ; k1 -> leaf ; k2 also needs other (open)
-        beads = [bead("root"), bead("other")] + [bead("k%d" % i, blocks=["root"] + (["other"] if i == 2 else [])) for i in range(1, 8)]
+        beads = [bead("root"), bead("other")] + [bead(f"k{i}", blocks=["root"] + (["other"] if i == 2 else [])) for i in range(1, 8)]
         beads.append(bead("leaf", blocks=["k1"]))
         r = road(beads, ranked=[("root", "lowest id")])
         t = r["queue"][0]["tree"]
@@ -81,7 +85,7 @@ class Tree(unittest.TestCase):
         r = road(beads, ranked=[("a", "")])
 
         def ids(ks):
-            return [x for k in ks for x in [k["id"]] + ids(k["kids"])]
+            return [x for k in ks for x in [k["id"], *ids(k["kids"])]]
         shown = ids(r["queue"][0]["tree"])
         self.assertNotIn("done", shown)
         self.assertNotIn("ep", shown)
@@ -198,30 +202,30 @@ class Lanes(unittest.TestCase):
 
     def test_five_loops_three_slots_is_three_busy_lanes_and_two_waiting(self):
         lanes, waiting = roadmap.lanes_of(["s1", "s2", "s3"], {"b1": "s1", "b2": "s2", "b3": "s3"}, self.loops(), {4: "after", 5: "after"})
-        self.assertEqual([(l["slot"], l["bead"], l["version"]) for l in lanes],
+        self.assertEqual([(ln["slot"], ln["bead"], ln["version"]) for ln in lanes],
                          [("s1", "b1", "0.23.6"), ("s2", "b2", "0.23.11"), ("s3", "b3", "0.23.8")])
         self.assertEqual([w["pid"] for w in waiting], [1, 2])
         # the stop request names loops 4 and 5; loop 3 goes on
-        self.assertEqual([l["stopping"] for l in lanes], ["after", "", "after"])
+        self.assertEqual([ln["stopping"] for ln in lanes], ["after", "", "after"])
 
     def test_a_free_slot_is_a_lane_with_no_bead_and_no_loop(self):
         lanes, waiting = roadmap.lanes_of(["s1", "s2"], {"b1": "s1"}, [self.loops()[3]])
-        self.assertEqual([(l["slot"], l["bead"], l["loop"]) for l in lanes], [("s1", "b1", 4), ("s2", None, None)])
+        self.assertEqual([(ln["slot"], ln["bead"], ln["loop"]) for ln in lanes], [("s1", "b1", 4), ("s2", None, None)])
         self.assertEqual(waiting, [])
 
     def test_a_bead_run_without_a_named_slot_still_gets_one_lane_and_no_stop_file_means_no_stopping(self):
         lanes, _ = roadmap.lanes_of([], {}, [{"pid": 9, "slot": "", "bead": "bz", "since": 7, "started": 1, "version": ""}])
-        self.assertEqual([(l["slot"], l["bead"], l["stopping"]) for l in lanes], [("-", "bz", "")])
+        self.assertEqual([(ln["slot"], ln["bead"], ln["stopping"]) for ln in lanes], [("-", "bz", "")])
 
     def test_a_live_idle_loop_in_a_worktree_gets_a_lane_named_after_it_and_says_why(self):
         # shape of ~/.config/task-loop/loop/<repo>.<pid>.json of an idle worktree loop: worktree, no slot, no bead
         st = {"pid": 1789, "started": 1792811528.6, "worktree": "/w/repo/.worktrees/loop-2be89f88", "repo": "/w/repo",
               "version": "0.23.55"}
         lanes, waiting = roadmap.lanes_of([], {}, [dict(st, slot="", bead=None)])
-        self.assertEqual([(l["slot"], l["bead"], l["loop"]) for l in lanes], [("loop-2be89f88", None, 1789)])
+        self.assertEqual([(ln["slot"], ln["bead"], ln["loop"]) for ln in lanes], [("loop-2be89f88", None, 1789)])
         self.assertEqual(waiting, [])
         r = road([bead("b1")], lanes=lanes, skipped=[("b1", "busy area"), ("b2", "busy area"), ("b3", "needs facts")])
-        self.assertEqual(r["lanes"][0]["idle"], "idle: no ready auto bead (3 skipped: busy area ×2, needs facts)")
+        self.assertEqual(r["lanes"][0]["idle"], "idle: no ready auto bead (3 skipped: busy area \N{MULTIPLICATION SIGN}2, needs facts)")
         self.assertEqual(road([bead("b1")], lanes=lanes)["lanes"][0]["idle"], "idle: no ready auto bead")
         self.assertEqual(road([bead("b1")], lanes=lanes, ranked=[("b1", "")])["lanes"][0]["idle"], "")
         html = (ROOT / "src" / "taskloop_dash" / "static" / "index.html").read_text(encoding="utf-8")
@@ -229,22 +233,33 @@ class Lanes(unittest.TestCase):
 
     def test_targeted_stop_indicators(self):
         lanes, _ = roadmap.lanes_of(["s1", "s2", "s3"], {}, self.loops(), {3: "now", 4: "after"})
-        self.assertEqual([l["stopping"] for l in lanes], ["after", "now", ""])
+        self.assertEqual([ln["stopping"] for ln in lanes], ["after", "now", ""])
         lanes, _ = roadmap.lanes_of(["s2"], {}, [self.loops()[2]], {99: "after"})
         self.assertEqual(lanes[0]["stopping"], "")
 
     def test_build_carries_version_stopping_and_waiting(self):
         g = graph.build([bead("b1", status="in_progress")], CFG, set(), {"b1"}, (), now=NOW)
-        lanes, waiting = roadmap.lanes_of(["s1"], {"b1": "s1"}, [dict(self.loops()[3])], {self.loops()[3]["pid"]: "now"})
+        lanes, _waiting = roadmap.lanes_of(["s1"], {"b1": "s1"}, [dict(self.loops()[3])], {self.loops()[3]["pid"]: "now"})
         r = roadmap.build(g, lanes, [], [], [], {}, now=NOW, waiting=len(self.loops()[:2]))
         self.assertEqual((r["lanes"][0]["version"], r["lanes"][0]["stopping"], r["loops_waiting"]), ("0.23.6", "now", 2))
 
 
 class Verdict(unittest.TestCase):
     def test_one_line_on_churn_and_cost_empty_when_unremarkable(self):
-        r = {"writes": 4, "red_checks": 6, "replans": 1, "secs": 1000, "checks_secs": 580, "tokens_all": {"in": 2_000_000, "cached": 1_500_000, "out": 100_000}}
+        r = {
+            "writes": 4,
+            "red_checks": 6,
+            "replans": 1,
+            "secs": 1000,
+            "checks_secs": 580,
+            "tokens_all": {"in": 2_000_000, "cached": 1_500_000, "out": 100_000},
+        }
         v = roadmap.verdict(r, {"median_fresh": 100_000})
-        self.assertEqual(v, "write round 4 · checks failed 6× · planned 2× · 58% of its time in checks · 600k fresh tokens, 6.0× the median bead")
+        self.assertEqual(
+            v,
+            ("write round 4 · checks failed 6\N{MULTIPLICATION SIGN} · planned 2\N{MULTIPLICATION SIGN} · 58% of its time in checks · "
+             "600k fresh tokens, 6.0\N{MULTIPLICATION SIGN} the median bead"),
+        )
         self.assertEqual(roadmap.verdict({"secs": 100, "checks_secs": 10}, {"median_fresh": 100_000}), "")
 
     def test_briefs_cover_every_id_the_page_links(self):
@@ -272,7 +287,7 @@ class Api(unittest.TestCase):
             loops.mkdir(parents=True)
             mine, parent = os.getpid(), os.getppid()  # two processes that are alive
             for pid, slot, bead_ in ((mine, "s1", "a"), (parent, "s2", "b")):
-                (loops / ("%s.%d.json" % (key, pid))).write_text(json.dumps({"v": 2, "pid": pid, "started": 100, "slot": slot, "bead": bead_}))
+                (loops / (f"{key}.{pid}.json")).write_text(json.dumps({"v": 2, "pid": pid, "started": 100, "slot": slot, "bead": bead_}))
             f = loops / (key + ".command.json")
             for action, mode in (("stop_now", "now"), ("stop_after_current", "after")):
                 f.write_text(json.dumps({"v": 1, "action": action, "by": "tl", "t": 100, "targets": [mine]}))
@@ -293,12 +308,20 @@ class Api(unittest.TestCase):
             env = {"HOME": home, "XDG_CONFIG_HOME": str(cfg.parent), "APPDATA": str(cfg.parent)}
             with mock.patch.dict(os.environ, env):
                 dash = make_dash(home=home)
-                with mock.patch.object(dash.beads, "beads_of", lambda r: beads), \
-                        mock.patch.object(dash.tasks, "api_tasks", lambda: {"tasks": [{"id": "a", "state": "running", "repo": "demo", "slot": "s9",
-                                                                                      "stage": "writing", "since": 30}], "lanes": []}), \
-                        mock.patch.object(dash.graph, "loop_order", lambda r, b, c: ([("c", "lowest id")], [("b", "area x busy")])), \
-                        mock.patch.object(dash.roadmap, "loop_files", lambda r: ([], [], [])), \
-                        mock.patch.object(dash.records, "engine_logs", lambda retain=True: {}):
+                with (
+                    mock.patch.object(dash.beads, "beads_of", lambda r: beads),
+                    mock.patch.object(
+                        dash.tasks,
+                        "api_tasks",
+                        lambda: {
+                            "tasks": [{"id": "a", "state": "running", "repo": "demo", "slot": "s9", "stage": "writing", "since": 30}],
+                            "lanes": [],
+                        },
+                    ),
+                    mock.patch.object(dash.graph, "loop_order", lambda r, b, c: ([("c", "lowest id")], [("b", "area x busy")])),
+                    mock.patch.object(dash.roadmap, "loop_files", lambda r: ([], [], [])),
+                    mock.patch.object(dash.records, "engine_logs", lambda retain=True: {}),
+                ):
                     out = dash.roadmap.api_roadmap("demo")
                     self.assertEqual(out["repos"], ["demo"])
                     (lane,) = out["lanes"]  # a bead run by hand has a slot but no loop: it still gets a lane
@@ -322,14 +345,15 @@ class Api(unittest.TestCase):
                     {"bead": "s", "prio": 2, "since": 1, "ahead": -1, "skip": {"why": "area x busy", "kind": "area"}}]
             key = dash_loops.loop_key(repo)
             state = {"v": 2, "pid": os.getpid(), "started": 1, "t": 5, "queue": rows}
-            (loops / ("%s.%d.json" % (key, os.getpid()))).write_text(json.dumps(state))
-            (loops / ("%s.%d.json" % (key, 1))).write_text(json.dumps(dict(state, pid=1, v=1, queue=[])))  # another version: not a loop of this build
+            (loops / (f"{key}.{os.getpid()}.json")).write_text(json.dumps(state))
+            (loops / (f"{key}.{1:d}.json")).write_text(
+                json.dumps(dict(state, pid=1, v=1, queue=[]))
+            )  # another version: not a loop of this build
             ranked, skipped = dash.graph.loop_order(repo, [], {})
             self.assertEqual((ranked, skipped), ([("a", "priority P0 before P2"), ("b", "lowest id")], [("s", "area x busy")]))
             self.assertEqual(dash.graph.loop_queue(repo, [], {}), {"a", "b"})
 
     def test_the_engine_version_of_a_lane_is_the_last_reload_record_of_its_log(self):
-        from support.logs import typed
         with tempfile.TemporaryDirectory() as d:
             log = Path(d, "t-1-x.jsonl")
             log.write_text("\n".join(json.dumps(x) for x in (typed("reload", 1.0, old="", new="0.23.40", step="plan"),
@@ -346,8 +370,18 @@ class BeadApi(unittest.TestCase):
 
     def test_bead_panel_joins_bd_and_the_engine_runs(self):
         dash = self.dash
-        shown = [{"id": "a", "title": "T", "status": "open", "priority": 1, "labels": ["auto"], "description": "D", "acceptance_criteria": "AC",
-                  "dependencies": [{"id": "z", "title": "Z", "status": "closed", "type": "blocks"}]}]
+        shown = [
+            {
+                "id": "a",
+                "title": "T",
+                "status": "open",
+                "priority": 1,
+                "labels": ["auto"],
+                "description": "D",
+                "acceptance_criteria": "AC",
+                "dependencies": [{"id": "z", "title": "Z", "status": "closed", "type": "blocks"}],
+            }
+        ]
         comments = [{"author": "me", "text": "hello", "created_at": "2026-10-23T10:00:00Z"}]
         with mock.patch.object(dash.beads, "resolve_repo", lambda r, b="": "/repo"), \
                 mock.patch.object(dash.beads, "show", lambda repo, bead: shown[0]), \

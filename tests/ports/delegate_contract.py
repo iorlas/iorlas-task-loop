@@ -11,7 +11,7 @@ SCHEMA = {"type": "object", "properties": {"x": {"type": "integer"}}}
 
 
 def req(**kw: Any) -> RunRequest:
-    base: dict[str, Any] = dict(role="writer", brief_path="", schema_path="", cwd=".", task="b-1", title="t", parent="b-0")
+    base: dict[str, Any] = {"role": "writer", "brief_path": "", "schema_path": "", "cwd": ".", "task": "b-1", "title": "t", "parent": "b-0"}
     return RunRequest(**{**base, **kw})
 
 

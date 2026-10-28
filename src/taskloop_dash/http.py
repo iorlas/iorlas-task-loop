@@ -46,7 +46,27 @@ POSTS: Final[dict[str, Callable[[Dash, Any], Reply]]] = {
 }
 
 
-def make_handler(dash: Dash, port: int, addrs: list[str], page: Path, live_page: Path, secret: Callable[[], str], script: str) -> type[BaseHTTPRequestHandler]:
+def raw_route(dash: Dash, page: Path, live_page: Path, path: str, q: Query) -> tuple[int, bytes, str] | None:
+    """The routes that answer bytes, not JSON."""
+    if path == "/api/look-shot":
+        got = dash.looks.look_shot(q.get("repo", ""), q.get("path", ""))
+        return (200, got[0], got[1]) if got else (404, b"not found", "text/plain")
+    if path == "/api/artifact":
+        got = dash.artifacts.file(q.get("bead", ""), q.get("name", ""))
+        return (200, got[0], got[1]) if got else (404, b"not found", "text/plain")
+    if path == "/api/file":
+        data = dash.runs.run_file(q.get("run", ""), q.get("path", ""))
+        return (200, data, "text/plain; charset=utf-8") if data is not None else (404, b"not found", "text/plain")
+    if path == "/live":
+        return 200, live_page.read_bytes(), "text/html; charset=utf-8"
+    if path in ("/", "/index.html"):
+        return 200, page.read_bytes(), "text/html; charset=utf-8"
+    return None
+
+
+def make_handler(
+    dash: Dash, port: int, addrs: list[str], page: Path, live_page: Path, secret: Callable[[], str], script: str
+) -> type[BaseHTTPRequestHandler]:
     class H(BaseHTTPRequestHandler):
         @override
         def log_message(self, format: str, *args: Any) -> None:
@@ -61,21 +81,7 @@ def make_handler(dash: Dash, port: int, addrs: list[str], page: Path, live_page:
             self.wfile.write(body)
 
         def raw(self, path: str, q: Query) -> tuple[int, bytes, str] | None:
-            """The routes that answer bytes, not JSON."""
-            if path == "/api/look-shot":
-                got = dash.looks.look_shot(q.get("repo", ""), q.get("path", ""))
-                return (200, got[0], got[1]) if got else (404, b"not found", "text/plain")
-            if path == "/api/artifact":
-                got = dash.artifacts.file(q.get("bead", ""), q.get("name", ""))
-                return (200, got[0], got[1]) if got else (404, b"not found", "text/plain")
-            if path == "/api/file":
-                data = dash.runs.run_file(q.get("run", ""), q.get("path", ""))
-                return (200, data, "text/plain; charset=utf-8") if data is not None else (404, b"not found", "text/plain")
-            if path == "/live":
-                return 200, live_page.read_bytes(), "text/html; charset=utf-8"
-            if path in ("/", "/index.html"):
-                return 200, page.read_bytes(), "text/html; charset=utf-8"
-            return None
+            return raw_route(dash, page, live_page, path, q)
 
         def do_GET(self) -> None:
             u = urlparse(self.path)
@@ -90,7 +96,7 @@ def make_handler(dash: Dash, port: int, addrs: list[str], page: Path, live_page:
                     got = self.raw(u.path, q)
                     return self.send(*(got or (404, b"not found", "text/plain")))
             except Exception as e:  # a broken transcript must not take the page down
-                return self.send(500, json.dumps({"error": "%s: %s" % (type(e).__name__, e)}).encode(), "application/json")
+                return self.send(500, json.dumps({"error": f"{type(e).__name__}: {e}"}).encode(), "application/json")
             self.send(200, json.dumps(body, default=str).encode(), "application/json")
 
         def do_POST(self) -> None:

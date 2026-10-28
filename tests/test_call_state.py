@@ -8,12 +8,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
-import support.paths  # noqa: E402,F401
-from taskloop.adapters import delegate as dl  # noqa: E402
-from taskloop.stores import call_state as cs  # noqa: E402
-from taskloop.domain.lanes import netgate  # noqa: E402
-from taskloop.app.loop.net import NetState  # noqa: E402
+import support.paths  # noqa: E402, F401
 from support.narrow import must  # noqa: E402
+
+from taskloop.adapters import delegate as dl  # noqa: E402
+from taskloop.app.loop.net import NetState  # noqa: E402
+from taskloop.domain.lanes import netgate  # noqa: E402
+from taskloop.stores import call_state as cs  # noqa: E402
 
 KEY = ("write", 1, 0, 2)
 
@@ -32,7 +33,9 @@ class Calls(unittest.TestCase):
     def test_begin_writes_calling_before_the_call_and_load_reads_it_back(self):
         self.begin(prompt_sha="abc")
         st = cs.load_for(self.dir, "t-1", KEY)
-        self.assertEqual((must(st).phase, must(st).ref, must(st).key, must(st).lane, must(st).prompt_sha), ("calling", "", KEY, "OPENAI", "abc"))
+        self.assertEqual(
+            (must(st).phase, must(st).ref, must(st).key, must(st).lane, must(st).prompt_sha), ("calling", "", KEY, "OPENAI", "abc")
+        )
         self.assertEqual(list(self.dir.glob("*.tmp")), [])
 
     def test_the_first_ref_sticks_and_survives_a_reload(self):
@@ -124,7 +127,9 @@ class Gate(unittest.TestCase):
     def probe(self, body):
         d = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, d, True)
-        (d / "route.py").write_text("import sys, pathlib\npathlib.Path(__file__).with_name('argv').write_text(' '.join(sys.argv[1:]))\n" + body)
+        (d / "route.py").write_text(
+            "import sys, pathlib\npathlib.Path(__file__).with_name('argv').write_text(' '.join(sys.argv[1:]))\n" + body
+        )
         return dl.RouteProbe(str(d / "route.py"), ("a.com", "b.com")), d
 
     def test_route_probe_parses_the_last_line_and_reads_a_failure_as_unknown(self):

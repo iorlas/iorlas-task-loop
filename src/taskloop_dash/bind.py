@@ -1,5 +1,6 @@
 """Where the dash may listen and who may write: loopback and the Tailscale range, the dev-checkout rules, and the bind itself."""
 
+import contextlib
 import hmac
 import ipaddress
 import os
@@ -42,10 +43,8 @@ def token(state_dir: Path) -> str:
     state_dir.mkdir(parents=True, exist_ok=True)
     t = secrets.token_urlsafe(24)
     f.write_text(t)
-    try:
+    with contextlib.suppress(OSError):
         os.chmod(f, 0o600)
-    except OSError:
-        pass
     return t
 
 
@@ -108,9 +107,10 @@ def bind_refusal(addrs: list[str], port: int, here: Path | str, home: Path | str
     if not is_installed_copy(here, home) and os.environ.get("TASK_LOOP_DASH_DEV_PUBLIC") != "1":
         bad = [a for a in addrs if not is_loopback(a)]
         if bad or port == DEFAULT_PORT:
-            return ("refusing to bind %s: only the installed plugin copy (under ~/.claude/plugins/cache/) may serve "
-                    "a non-loopback address or port 7878; set TASK_LOOP_DASH_DEV_PUBLIC=1 to override"
-                    % (", ".join(bad) if bad else "port 7878"))
+            return (
+                "refusing to bind {}: only the installed plugin copy (under ~/.claude/plugins/cache/) may serve "
+                "a non-loopback address or port 7878; set TASK_LOOP_DASH_DEV_PUBLIC=1 to override"
+            ).format(", ".join(bad) if bad else "port 7878")
     if port == DEFAULT_PORT and not (Path(state) / "repos.json").is_file():
         return "refusing to start on port 7878: no repos.json in the state dir (run `tl register` first)"
     return None
@@ -127,11 +127,11 @@ def open_servers(addrs: list[str], port: int, handler: Any) -> list[ThreadingHTT
             p = servers[0].server_address[1] if servers else port
             for s in servers:
                 s.server_close()
-            raise BindError("bind %s:%d failed: %s" % (addr, p, e)) from e
+            raise BindError(f"bind {addr}:{int(p)} failed: {e}") from e
     return servers
 
 
 def urls(addrs: list[str], port: int) -> list[str]:
-    return ["http://%s:%d" % (socket.gethostname() if a == "0.0.0.0" else a, port) for a in addrs]
+    return ["http://{}:{:d}".format(socket.gethostname() if a == "0.0.0.0" else a, int(port)) for a in addrs]
 
 

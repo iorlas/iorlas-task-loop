@@ -1,15 +1,15 @@
 """The dash's lane cards and banner come from the StatusSnapshot `tl lanes` filed. The dash runs nothing: no delegate, no subprocess."""
 import json
-import tempfile
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+import support.paths  # noqa: E402, F401
 from support.dashes import make_dash  # noqa: E402
 from support.lanes import answer, file_status, lane  # noqa: E402
 
@@ -31,7 +31,7 @@ class Cockpit(unittest.TestCase):
     def test_full_fixture_fills_every_card_field(self):
         d = self.status(dict(FULL, ts=self.dash.env.clock()))
         self.assertEqual([r["name"] for r in d["lanes"]], ["CLAUDE_SUBSCRIPTION", "OPENAI_SUBSCRIPTION", "GROK_SUBSCRIPTION"])
-        for r, src in zip(d["lanes"], FULL["cockpit"]["lanes"]):
+        for r, src in zip(d["lanes"], FULL["cockpit"]["lanes"], strict=False):
             with self.subTest(lane=r["name"]):
                 self.assertEqual((r["model"], r["reason"], r["state"]), (src["model"], src["reason"], src["state"]))
                 self.assertEqual([(u["window"], u["used_pct"], u["resets_at"]) for u in r["usage"]],

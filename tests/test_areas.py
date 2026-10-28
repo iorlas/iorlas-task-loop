@@ -2,6 +2,7 @@
 The slot line (tl-bxk.11.5): waiters for a slot are served in arrival order; a dead waiter never blocks the line."""
 
 import dataclasses
+import datetime
 import io
 import json
 import os
@@ -16,32 +17,41 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # python3 -m unittest tests.test_areas, from the repo root
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from test_loop import bead, rec  # noqa: E402  (puts skills/task-loop on sys.path)
-from support import tlbd  # noqa: E402
-from support.fakes import FakeBeadStore  # noqa: E402
-from support import slots as sl  # noqa: E402
-from support.fakes import as_bead  # noqa: E402
-from taskloop.contracts.bead import BdError  # noqa: E402
-from taskloop.contracts.ports import BdFailure  # noqa: E402
-from taskloop.app.slots import marks  # noqa: E402
-from taskloop.app.slots.pool import Slot, SlotPool  # noqa: E402
-from taskloop.app.slots import line as slots_line  # noqa: E402
-from taskloop.app.track import verbs  # noqa: E402
-from test_slots import Slots  # noqa: E402
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from test_loop import bead, rec
 
-from taskloop.app.run import engine  # noqa: E402
-from taskloop.app.run import entry  # noqa: E402
-import loop_env  # noqa: E402
-from support import looptest  # noqa: E402
-from taskloop.app.loop.core import Core  # noqa: E402
-from taskloop.app.loop.queue import QueueRule  # noqa: E402
-from taskloop.contracts.config import LoopConfig  # noqa: E402
-from support.builders import cfg_with  # noqa: E402
-from taskloop.app.slots import engine_lock
+# isort: split
+import loop_env
+from support import (
+    looptest,
+    tlbd,
+)
+from support import slots as sl
+from support.builders import cfg_with
+from support.fakes import (
+    FakeBeadStore,
+    as_bead,
+)
+from support.narrow import must
+from test_slots import Slots
+
 from taskloop.adapters import ident
+from taskloop.app.loop.core import Core
+from taskloop.app.loop.queue import QueueRule
+from taskloop.app.run import (
+    entry,
+)
+from taskloop.app.slots import (
+    engine_lock,
+    marks,
+)
+from taskloop.app.slots import line as slots_line
+from taskloop.app.slots.pool import Slot, SlotPool
+from taskloop.app.track import verbs
 from taskloop.app.wire import slots as wslots
-from support.narrow import must  # noqa: E402
+from taskloop.contracts.bead import BdError
+from taskloop.contracts.config import LoopConfig
+from taskloop.contracts.ports import BdFailure
 
 HERE = Path(__file__).resolve().parents[1] / "skills" / "task-loop"
 AREAS_JSON = {"area_label_prefix": "lane:", "areas": {"core": ["e-core"], "build": ["build"]}}
@@ -100,7 +110,7 @@ class Areas(AreasBase):
         ids, skipped = self.order()
         self.assertEqual(ids, ["x-3", "x-4"])
         self.assertEqual(skipped, {"x-2": "area live busy: x-1 in s1"})
-        rc, out = self.cli("next", "--repo", str(self.repo))
+        _rc, out = self.cli("next", "--repo", str(self.repo))
         self.assertIn("NEXT x-3", out)
         self.assertIn("skip x-2: area live busy: x-1 in s1", out)
 
@@ -123,7 +133,7 @@ class Areas(AreasBase):
             with mock.patch.dict(os.environ, {"TASK_LOOP_ACTOR": "tl-loop0000"}):
                 self.run_loop("--max-beads", "1")
             return 0
-        rc, r, _ = self.run_task("x-1", slot="s1", engine_run=during)
+        rc, _r, _ = self.run_task("x-1", slot="s1", engine_run=during)
         self.assertEqual(rc, 0)
         self.assertEqual(seen["queue"], (["x-3"], {"x-2": "area live busy: x-1 in s1"}))
         self.assertEqual(self.started, [("x-3", "s2")])  # the other area's bead, never x-2 beside x-1
@@ -207,7 +217,7 @@ class Areas(AreasBase):
     def test_exclusive_area_refuses_a_hand_run_in_a_busy_area_and_gives_the_slot_back(self):
         bd = self.lanes({"x-1": [], "x-2": []}, {"x-1": "live", "x-2": "live"})
         self.running(bd, "x-1")
-        rc, r, out = self.run_task("x-2", slot="s2", flags={"exclusive_area": True})
+        rc, r, _out = self.run_task("x-2", slot="s2", flags={"exclusive_area": True})
         self.assertEqual((rc, r["outcome"]), (1, "taken"))
         self.assertIn("area live busy: x-1 in s1", r["why"])
         self.made.assert_not_called()
@@ -218,7 +228,7 @@ class Areas(AreasBase):
         bd = self.lanes({"x-1": [], "x-2": [], "x-3": []}, {"x-1": "live", "x-2": "shell"})
         self.running(bd, "x-1")
         for b in ("x-2", "x-3"):
-            rc, r, out = self.run_task(b, slot="s2", flags={"exclusive_area": True})
+            _rc, r, out = self.run_task(b, slot="s2", flags={"exclusive_area": True})
             self.assertEqual(r["outcome"], "landed", out)
             self.assertNotIn("area", out)
 
@@ -268,11 +278,20 @@ class Line(Slots):
 
     def test_a_waiter_behind_a_live_ticket_never_takes_a_free_slot_and_a_killed_waiter_does_not_block(self):
         self.beads({}, slots=1)
-        k = subprocess.Popen([sys.executable, "-c", "import sys, time; sys.path.insert(0, %r); import tl; from taskloop.adapters import ident; from taskloop.contracts.ids import loop_key; "
-                              "from taskloop.contracts import paths; from taskloop.stores.files import FileTickets; "
-                              "FileTickets(paths.ConfigDir(ident.config_dir())).take(loop_key(%r), 'first', 2, pid=__import__('os').getpid(), now=time.time()); "
-                              "print('in line', flush=True); time.sleep(60)"
-                              % (str(HERE), str(self.repo))], stdout=subprocess.PIPE, text=True)
+        k = subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                f"import sys, time; sys.path.insert(0, {str(HERE)!r}); import tl; from taskloop.adapters import ident; "
+                "from taskloop.contracts.ids import loop_key; "
+                "from taskloop.contracts import paths; from taskloop.stores.files import FileTickets; "
+                f"FileTickets(paths.ConfigDir(ident.config_dir())).take(loop_key({str(self.repo)!r}), 'first', 2, "
+                "pid=__import__('os').getpid(), now=time.time()); "
+                "print('in line', flush=True); time.sleep(60)",
+            ],
+            stdout=subprocess.PIPE,
+            text=True,
+        )
         self.kids.append(k)
         self.assertEqual(must(k.stdout).readline().strip(), "in line")
         tries = []
@@ -338,7 +357,9 @@ class Line(Slots):
         got = wslots.wait_slot(repo, self.cfg, "late p0", poll=(0.01, 0.01), stop=lambda: True, prio=0)
         self.assertEqual(must(got)[0], "s1")  # the P0 newcomer passes the P2 waiter that was there first
         wslots.release_slot(repo, "s1")
-        self.assertIsNone(wslots.wait_slot(repo, self.cfg, "late p3", poll=(0.01, 0.01), stop=lambda: True, prio=3))  # the P2 waiter is ahead
+        self.assertIsNone(
+            wslots.wait_slot(repo, self.cfg, "late p3", poll=(0.01, 0.01), stop=lambda: True, prio=3)
+        )  # the P2 waiter is ahead
         p0b = sl.take_ticket(repo, "p0 again", 0)
         self.assertIsNone(wslots.wait_slot(repo, self.cfg, "p2 behind p0", poll=(0.01, 0.01), stop=lambda: True, prio=2))  # a P0 is ahead
         for t in (p2, p0b):
@@ -357,7 +378,7 @@ class Line(Slots):
     def test_equal_priorities_keep_arrival_order_and_an_unreadable_priority_is_p2(self):
         repo = str(self.repo)
         ts = [sl.take_ticket(repo, "a", 1), sl.take_ticket(repo, "b", 1), sl.take_ticket(repo, "c")]
-        self.assertEqual([t.why for t in wslots.waiting_line(repo)], ["a", "b", "c"][:2] + ["c"])
+        self.assertEqual([t.why for t in wslots.waiting_line(repo)], [*["a", "b", "c"][:2], "c"])
         self.assertEqual((wslots.prio_of(tbead("x-1", 0)), wslots.prio_of(tbead("x-1", 1)), wslots.prio_of(None)), (0, 1, 2))
         for t in ts:
             sl.drop_ticket(repo, t)
@@ -374,7 +395,7 @@ class Line(Slots):
     def test_run_task_slot_any_without_wait_refuses_when_none_is_free(self):
         bd = self.beads({"x-1": []}, slots=1)
         bd.slots["sl-1"].update(status="in_progress", assignee="tl-other")
-        rc, r, out = self.run_task("x-1", slot="any")
+        rc, r, _out = self.run_task("x-1", slot="any")
         self.assertEqual((rc, r["outcome"]), (1, "taken"))
         self.assertIn("no free slot", r["why"])
         self.made.assert_not_called()
@@ -392,7 +413,7 @@ class Line(Slots):
         self.assertEqual((bd.slots["sl-1"]["status"], bd.slots["sl-1"]["assignee"]), ("open", ""))
 
     def test_the_loop_waits_in_the_line_too(self):
-        bd = self.beads({"x-1": [rec("landed")]}, slots=1)
+        self.beads({"x-1": [rec("landed")]}, slots=1)
         first = sl.take_ticket(str(self.repo), "a hand run waiting before the loop came")
         naps = []
 
@@ -437,8 +458,10 @@ class ReviewFixes(AreasBase):
         def taker(name):
             env = dataclasses.replace(wslots.slot_env(repo, None, cfg), actor=name)  # each thread is its own session
             won[name] = SlotPool(env).take_any(name, "", None)
-        with tlbd.bd_boundary(bd_pause), \
-                mock.patch.object(ident, "actor", side_effect=lambda: threading.current_thread().name):  # the fake tracker names the claimer so
+        with (
+            tlbd.bd_boundary(bd_pause),
+            mock.patch.object(ident, "actor", side_effect=lambda: threading.current_thread().name),
+        ):  # the fake tracker names the claimer so
             p2 = threading.Thread(target=taker, args=("P2",), name="P2")
             p2.start()
             self.assertTrue(paused.wait(60))
@@ -488,18 +511,19 @@ class ReviewFixes(AreasBase):
         self.beads({}, slots=1)
         repo = str(self.repo)
         d = sl.ticket_dir(repo)
-        (d / ("%06d.json" % 7)).write_text(json.dumps({"pid": os.getpid()}))  # no seq, no why: not a ticket
+        (d / (f"{7:06d}.json")).write_text(json.dumps({"pid": os.getpid()}))  # no seq, no why: not a ticket
         old, fresh = d / ".1.2.tmp", d / ".1.3.tmp"
         old.write_text("{")
         fresh.write_text("{")
         os.utime(old, (time.time() - 700, time.time() - 700))
         self.assertEqual(wslots.waiting_line(repo), [])
-        self.assertIsNotNone(wslots.wait_slot(repo, wslots.profile_slots(repo), "x", stop=lambda: True))  # nobody is ahead: the free slot is taken
+        self.assertIsNotNone(
+            wslots.wait_slot(repo, wslots.profile_slots(repo), "x", stop=lambda: True)
+        )  # nobody is ahead: the free slot is taken
         self.assertFalse(old.exists())
         self.assertTrue(fresh.exists())
 
     def test_a_long_area_wait_says_how_long_and_who_holds_it_and_until_still_ends_the_loop(self):
-        import datetime
         bd = self.lanes({"x-1": [], "x-2": []}, {"x-1": "live", "x-2": "live"})
         self.running(bd, "x-1")  # a hung but live holder
         until = (datetime.datetime.fromtimestamp(self.clock()) + datetime.timedelta(minutes=25)).strftime("%H:%M")
@@ -511,7 +535,7 @@ class ReviewFixes(AreasBase):
 
     @NO_FCNTL
     def test_two_exclusive_hand_runs_in_one_area_let_the_first_in_win(self):
-        bd = self.lanes({"x-1": [], "x-2": []}, {"x-1": "live", "x-2": "live"})
+        self.lanes({"x-1": [], "x-2": []}, {"x-1": "live", "x-2": "live"})
         outs, real, gate, done = {}, entry.take_area, threading.Barrier(2, timeout=60), threading.Barrier(2, timeout=60)
 
         def area(*a, **kw):  # both runs hold their slots before either decides, and neither lets go before both did
@@ -522,7 +546,7 @@ class ReviewFixes(AreasBase):
                 done.wait()
 
         def run(b, slot):
-            f = Path(self.home, "out-%s.json" % b)
+            f = Path(self.home, f"out-{b}.json")
             a = entry.Args(id=b, worktree=None, slot=slot, dry_run=False, fresh=False, quiet=True,
                             outcome_file=str(f), exclusive_area=True)
             entry.main(a)

@@ -33,11 +33,11 @@ def lane_banners(lanes: list[LaneStatus], now: float) -> dict[str, dict[str, Any
         who = names.lane_name(ln.id, ln.family) or ln.id.lower()
         until = ln.out_until
         if gone:
-            text = "%s logged out: run %s" % (who, LOGIN_CMD.get(who, "claude auth login"))
+            text = f"{who} logged out: run {LOGIN_CMD.get(who, 'claude auth login')}"
         else:
             past = until and until < now  # delegate still says out after its own end: say so, never a bare old time
-            text = "%s out%s" % (who, (" (its end, %s, has passed)" % names.when(until)) if past
-                                 else (" until " + names.when(until)) if until else "")
+            tail = f" (its end, {names.when(until)}, has passed)" if past else (" until " + names.when(until)) if until else ""
+            text = f"{who} out{tail}"
         out[ln.id] = {"until": until, "reason": "logged_out" if gone else ln.out_reason, "text": text}
     return out
 
@@ -80,4 +80,4 @@ class Lanes:
         return {"ok": not det, "out": sorted(det), "detail": det,
                 "needs_input": [{"what": n.what, "why": n.why, "how": n.how} for n in snap.needs_input],
                 "lanes": [card(ln) for ln in snap.lanes], "at": snap.at, "age_s": int(now - snap.at)} | (
-            {"hint": "delegate status is %d min old: run tl lanes" % ((now - snap.at) // 60)} if now - snap.at > STATUS_MAX_AGE else {})
+            {"hint": f"delegate status is {int((now - snap.at) // 60):d} min old: run tl lanes"} if now - snap.at > STATUS_MAX_AGE else {})

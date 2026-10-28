@@ -24,12 +24,12 @@ class DocContractVersions(unittest.TestCase):
     def test_the_named_worker_run_version_is_the_contract_delegate_answers_with(self):
         want = fake_route.handshake()["contract"]
         wrong = [(str(f.relative_to(ROOT)), m.group(0)) for f, t in texts() for m in NAMED.finditer(t) if int(m.group(1)) != want]
-        self.assertEqual(wrong, [], "docs naming a worker-run version other than contract %s" % want)
+        self.assertEqual(wrong, [], f"docs naming a worker-run version other than contract {want}")
 
     def test_the_contract_file_for_that_version_exists_and_no_other_is_left(self):
         want = fake_route.handshake()["contract"]
         have = sorted(p.name for p in (ROOT / "docs" / "contracts").glob("worker-run-v*.md"))
-        self.assertEqual(have, ["worker-run-v%s.md" % want])
+        self.assertEqual(have, [f"worker-run-v{want}.md"])
 
 
 if __name__ == "__main__":

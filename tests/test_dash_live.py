@@ -15,12 +15,20 @@ ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / "skills" / "task-loop"
 for sub in ("dash", "", "tests"):
     sys.path.insert(0, str(SKILL / sub) if sub != "tests" else str(ROOT / "tests"))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+import support.paths  # noqa: E402, F401
+from support import dlcall, fake_route  # noqa: E402
+from support.dashes import make_dash  # noqa: E402
 from support.logs import typed  # noqa: E402
-from taskloop_dash.api import live, overview  # noqa: E402
-from taskloop_dash.views import live_state  # noqa: E402
-from taskloop.adapters import runner as live_runner  # noqa: E402
 from support.narrow import must  # noqa: E402
+from test_dash import free_port  # noqa: E402
+
+from taskloop.adapters import delegate as dl  # noqa: E402
+from taskloop.adapters import runner as live_runner  # noqa: E402
+from taskloop.app.run import engine  # noqa: E402
+from taskloop.contracts.locks import Ticket  # noqa: E402
+from taskloop_dash.api import live, overview  # noqa: E402
+from taskloop_dash.env import Ports  # noqa: E402
+from taskloop_dash.views import live_state  # noqa: E402
 
 BEAD, STAMP = "tl-live.1", "20261026-100000"
 T = 1793000000.0
@@ -36,16 +44,21 @@ def put(path, rows, mode="a"):
 def make_run(root):
     """An engine log with a command and a write step, and the live file of its write call."""
     eng = os.path.join(root, "task-loop", "engine")
-    log = os.path.join(eng, "%s-%s.jsonl" % (BEAD, STAMP))
-    put(log, [typed("run_start", T, run="%s-%s" % (BEAD, STAMP), bead=BEAD, worktree=""),
+    log = os.path.join(eng, f"{BEAD}-{STAMP}.jsonl")
+    put(log, [typed("run_start", T, run=f"{BEAD}-{STAMP}", bead=BEAD, worktree=""),
               typed("cmd_start", T + 1, id="m1", text="git fetch -q origin"),
               typed("cmd_end", T + 3, id="m1", exit=0),
               typed("step_start", T + 4, id="n1", text="write: x", step="write"),
               typed("call_start", T + 5, id="c1", n=1, step="write", node="n1", role="worker")])
-    lf = os.path.join(eng, "%s-%s.live" % (BEAD, STAMP), "01-write.jsonl")
-    put(lf, [{"t": T + 6, "k": "start", "harness": "codex", "lane": "CODEX", "model": "gpt-x", "effort": "high", "role": "worker", "pid": 1},
-             {"t": T + 6.5, "k": "msg", "text": "between the start and the command"},
-             {"t": T + 7, "k": "cmd_start", "id": "1", "text": "pytest -q", "cwd": "/w"}])
+    lf = os.path.join(eng, f"{BEAD}-{STAMP}.live", "01-write.jsonl")
+    put(
+        lf,
+        [
+            {"t": T + 6, "k": "start", "harness": "codex", "lane": "CODEX", "model": "gpt-x", "effort": "high", "role": "worker", "pid": 1},
+            {"t": T + 6.5, "k": "msg", "text": "between the start and the command"},
+            {"t": T + 7, "k": "cmd_start", "id": "1", "text": "pytest -q", "cwd": "/w"},
+        ],
+    )
     return log, lf
 
 
@@ -69,7 +82,7 @@ class Feed(unittest.TestCase):
             self.assertEqual(live.page(run, live.decode(a["cursor"]))["events"], [])  # nothing new: nothing
             put(lf, [{"t": T + 9, "k": "cmd_end", "id": "1", "exit": 1, "out": "boom", "secs": 2.0}])
             with open(lf, "a") as f:
-                f.write('{"t": %s, "k": "msg", "te' % (T + 10))  # a half-written line waits
+                f.write(f'{{"t": {T + 10}, "k": "msg", "te')  # a half-written line waits
             run.refresh()
             b = live.page(run, live.decode(a["cursor"]))
             self.assertEqual([(e["k"], e["id"]) for e in b["events"]], [("cmd_end", "1")])
@@ -83,10 +96,18 @@ class Feed(unittest.TestCase):
 
     def test_every_engine_kind_passes_through(self):
         with tempfile.TemporaryDirectory() as d:
-            log, lf, run = self.run_of(d)
-            put(log, [typed("wait_start", T + 12, id="w1", what="lane", holder="DEEPSEEK_FREE"), typed("wait_end", T + 13, id="w1", secs=60),
-                      typed("vendor_error", T + 14, node="write", reason="hung"), typed("kill", T + 15, what="call", why="silent"),
-                      typed("lock", T + 16, what="land_lock", holder="tl-2"), typed("unlock", T + 17, what="land_lock", secs=1.0)])
+            log, _lf, run = self.run_of(d)
+            put(
+                log,
+                [
+                    typed("wait_start", T + 12, id="w1", what="lane", holder="DEEPSEEK_FREE"),
+                    typed("wait_end", T + 13, id="w1", secs=60),
+                    typed("vendor_error", T + 14, node="write", reason="hung"),
+                    typed("kill", T + 15, what="call", why="silent"),
+                    typed("lock", T + 16, what="land_lock", holder="tl-2"),
+                    typed("unlock", T + 17, what="land_lock", secs=1.0),
+                ],
+            )
             run.refresh()
             got = {e["k"]: e for e in live.page(run)["events"]}
             for k in ("wait_start", "wait_end", "vendor_error", "kill", "lock", "unlock"):
@@ -96,8 +117,8 @@ class Feed(unittest.TestCase):
     def test_before_pages_return_the_rest_exactly_once(self):
         with tempfile.TemporaryDirectory() as d:
             log, lf, run = self.run_of(d)
-            put(log, [typed("note", T + 20 + i, text="n%d" % i) for i in range(30)])
-            put(lf, [{"t": T + 20.5 + i, "k": "msg", "text": "m%d" % i} for i in range(30)])
+            put(log, [typed("note", T + 20 + i, text=f"n{i}") for i in range(30)])
+            put(lf, [{"t": T + 20.5 + i, "k": "msg", "text": f"m{i}"} for i in range(30)])
             run.refresh()
             everything = [e["seq"] for e in run.events()]
             seen, got = [], live.page(run, limit=25)
@@ -110,14 +131,14 @@ class Feed(unittest.TestCase):
 
     def test_a_run_without_worker_files(self):
         with tempfile.TemporaryDirectory() as d:
-            log, lf, run = self.run_of(d)
+            _log, lf, run = self.run_of(d)
             os.remove(lf)
             run.refresh()
             self.assertEqual({e["src"] for e in run.events()}, {"engine"})
 
     def test_long_poll_returns_when_a_file_grows_and_waits_when_none_does(self):
         with tempfile.TemporaryDirectory() as d:
-            log, lf, run = self.run_of(d)
+            _log, lf, run = self.run_of(d)
             self.assertTrue(live.poll(run, None))
             cur = live.page(run)["cursor"]
             t0 = time.monotonic()
@@ -137,7 +158,7 @@ class States(unittest.TestCase):
     def ev(self, *items):
         out = []
         for i, (src, k, t, kw) in enumerate(items):
-            out.append(dict(kw, src=src, k=k, t=T + t, seq="%s:%d" % (src, i)))
+            out.append(dict(kw, src=src, k=k, t=T + t, seq=f"{src}:{i}"))
         return out
 
     def st(self, items, now=100, alive=True, output_t=lambda e: None):
@@ -146,17 +167,19 @@ class States(unittest.TestCase):
     def test_each_state(self):
         base = [("engine", "step_start", 1, {"id": "n1", "step": "write", "text": "write"})]
         w = ("w", "start", 2, {"lane": "ZAI", "model": "glm"})
-        self.assertEqual(self.st(base + [("engine", "wait_start", 3, {"id": "w1", "what": "lane", "holder": "X"})])["what"], "wait")
-        chk = self.st(base + [("engine", "check_start", 3, {"id": "k1", "check": "unit", "cmd": "pytest", "round": 1, "log": "checks/a.log"})],
-                      output_t=lambda e: T + 50)
+        self.assertEqual(self.st([*base, ("engine", "wait_start", 3, {"id": "w1", "what": "lane", "holder": "X"})])["what"], "wait")
+        chk = self.st(
+            [*base, ("engine", "check_start", 3, {"id": "k1", "check": "unit", "cmd": "pytest", "round": 1, "log": "checks/a.log"})],
+            output_t=lambda e: T + 50,
+        )
         self.assertEqual((chk["what"], chk["last_output_t"]), ("check", T + 50))
-        self.assertEqual(self.st(base + [("engine", "gate_start", 3, {"cmd": "just check"})])["what"], "check")
-        self.assertEqual(self.st(base + [w, ("w", "cmd_start", 4, {"id": "1", "text": "pytest -q"})])["what"], "tool")
-        self.assertEqual(self.st(base + [w, ("w", "msg", 90, {"text": "hi"})], now=100)["what"], "thinking")
-        self.assertEqual(self.st(base + [w, ("w", "msg", 10, {"text": "hi"})], now=100)["what"], "silent")
-        self.assertEqual(self.st(base + [("engine", "kill", 5, {"what": "call", "why": "silent"})])["what"], "hung")
+        self.assertEqual(self.st([*base, ("engine", "gate_start", 3, {"cmd": "just check"})])["what"], "check")
+        self.assertEqual(self.st([*base, w, ("w", "cmd_start", 4, {"id": "1", "text": "pytest -q"})])["what"], "tool")
+        self.assertEqual(self.st([*base, w, ("w", "msg", 90, {"text": "hi"})], now=100)["what"], "thinking")
+        self.assertEqual(self.st([*base, w, ("w", "msg", 10, {"text": "hi"})], now=100)["what"], "silent")
+        self.assertEqual(self.st([*base, ("engine", "kill", 5, {"what": "call", "why": "silent"})])["what"], "hung")
         self.assertEqual(self.st(base)["what"], "engine")
-        self.assertEqual(self.st(base + [("engine", "close", 6, {"outcome": "landed"})])["what"], "ended")
+        self.assertEqual(self.st([*base, ("engine", "close", 6, {"outcome": "landed"})])["what"], "ended")
         self.assertEqual(self.st(base, alive=False)["what"], "ended")
 
     def test_a_closed_pair_is_not_open_and_pairs_match_by_src_and_id(self):
@@ -168,12 +191,19 @@ class States(unittest.TestCase):
 class Overview(unittest.TestCase):
     def test_three_rows_one_alive_one_paused_one_queued(self):
         with tempfile.TemporaryDirectory() as d:
-            log, lf = make_run(d)
+            log, _lf = make_run(d)
             eng = os.path.dirname(log)
-            other = os.path.join(eng, "tl-live.2-%s.jsonl" % STAMP)
-            put(other, [typed("run_start", T, run="tl-live.2-" + STAMP, bead="tl-live.2", worktree=""), typed("step_start", T + 1, id="n1", step="write"),
-                        typed("step_end", T + 5, id="n1", step="write", outcome="done"), typed("step_start", T + 6, id="n2", step="close", text="close"),
-                        typed("close", T + 6, outcome="blocked", why="paused: no lane for write until 09:02 (lane_out: OPENAI_SUBSCRIPTION)")])
+            other = os.path.join(eng, f"tl-live.2-{STAMP}.jsonl")
+            put(
+                other,
+                [
+                    typed("run_start", T, run="tl-live.2-" + STAMP, bead="tl-live.2", worktree=""),
+                    typed("step_start", T + 1, id="n1", step="write"),
+                    typed("step_end", T + 5, id="n1", step="write", outcome="done"),
+                    typed("step_start", T + 6, id="n2", step="close", text="close"),
+                    typed("close", T + 6, outcome="blocked", why="paused: no lane for write until 09:02 (lane_out: OPENAI_SUBSCRIPTION)"),
+                ],
+            )
             entries = []
             for bead, path, alive in ((BEAD, log, True), ("tl-live.2", other, False)):
                 run = live.LiveRun(path)
@@ -191,9 +221,7 @@ class Overview(unittest.TestCase):
 
 class SlotLine(unittest.TestCase):
     def test_the_overview_queue_rows_come_from_typed_tickets_first_in_line_first(self):
-        from taskloop.contracts.locks import Ticket
-        from support.dashes import make_dash
-        from taskloop_dash.env import Ports
+
         line = [Ticket(pid=1, why="run-task x-1", since=7.0, prio=0, seq=2), Ticket(pid=1, why="tl loop", since=5.0, prio=2, seq=1)]
         dash = make_dash(Ports(waiting_line=lambda repo: line))
         with mock.patch.object(dash.live.records, "repos", return_value=["/work/r"]):
@@ -207,8 +235,8 @@ class RunningFromTheLog(unittest.TestCase):
 
     def test_steps_and_no_end_record_is_running_with_no_process(self):
         with tempfile.TemporaryDirectory() as d:
-            log, lf = make_run(d)
-            put(log, [typed("run_start", T, run="%s-%s" % (BEAD, STAMP), bead=BEAD, worktree="/no/such/worktree")], mode="w")
+            log, _lf = make_run(d)
+            put(log, [typed("run_start", T, run=f"{BEAD}-{STAMP}", bead=BEAD, worktree="/no/such/worktree")], mode="w")
             put(log, [typed("step_start", T + 1, id="n1", step="write", text="write")])
             run = live.LiveRun(log)
             run.refresh()
@@ -216,7 +244,9 @@ class RunningFromTheLog(unittest.TestCase):
             self.assertTrue(run.is_alive(now, 1200))
             ans = live.answer(run, BEAD, "n", run.is_alive(now, 1200), now=now)
             self.assertTrue(ans["running"])
-            rows = overview.overview([{"bead": BEAD, "repo": "r", "title": "", "name": "n", "run": run, "alive": run.is_alive(now, 1200)}], [], [], now)["beads"]
+            rows = overview.overview(
+                [{"bead": BEAD, "repo": "r", "title": "", "name": "n", "run": run, "alive": run.is_alive(now, 1200)}], [], [], now
+            )["beads"]
             self.assertEqual([r["bead"] for r in rows], [BEAD])
             self.assertFalse(run.is_alive(now + 5000, 1200))  # the heartbeat lapsed
             put(log, [typed("close", T + 9, outcome="landed", why="")])
@@ -247,8 +277,7 @@ class CallSite(unittest.TestCase):
         self.assertTrue(live_runner.live_path("/e/x.jsonl", 12, "re view/2").endswith(".live/12-re-view-2.jsonl"))
 
     def test_the_call_sets_the_env(self):
-        from taskloop.adapters import delegate as dl
-        from support import dlcall, fake_route
+
         seen = []
 
         def runner(cmd, **kw):
@@ -261,10 +290,9 @@ class CallSite(unittest.TestCase):
         self.assertNotIn("DELEGATE_LIVE_FILE", must(seen[1]))
 
     def test_engine_numbers_its_calls(self):
-        from taskloop.app.run import engine
         with tempfile.TemporaryDirectory() as d:
             e = object.__new__(engine.Engine)
-            e.log_path, e.live_n = Path(d) / ("%s-%s.jsonl" % (BEAD, STAMP)), 0
+            e.log_path, e.live_n = Path(d) / (f"{BEAD}-{STAMP}.jsonl"), 0
             p1, p2 = e.live("plan"), e.live("write")
             self.assertTrue(p1.endswith(".live/01-plan.jsonl") and p2.endswith(".live/02-write.jsonl"))
             self.assertTrue(os.path.isdir(os.path.dirname(p1)))
@@ -274,15 +302,14 @@ class CallSite(unittest.TestCase):
 
 class Served(unittest.TestCase):
     def test_endpoint_and_page(self):
-        from test_dash import free_port
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
-            log, lf = make_run(d)
+            _log, lf = make_run(d)
             port = free_port()
             env = dict(os.environ, XDG_CONFIG_HOME=d, APPDATA=d, TASK_LOOP_DASH_BIND="127.0.0.1", HOME=d, USERPROFILE=d)
             p = subprocess.Popen([sys.executable, "-m", "taskloop_dash", "--port", str(port)], env=env,
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             try:
-                base = "http://127.0.0.1:%d" % port
+                base = f"http://127.0.0.1:{port}"
                 end = time.monotonic() + 90
                 while True:
                     try:
@@ -295,11 +322,14 @@ class Served(unittest.TestCase):
                 def get(u):
                     return json.loads(urllib.request.urlopen(base + u, timeout=60).read())
                 a = get("/api/live?bead=" + BEAD)
-                self.assertEqual((a["bead"], a["run"], a["step"], a["worker"]["lane"], a["worker"]["model"]), (BEAD, "%s-%s" % (BEAD, STAMP), "write", "CODEX", "gpt-x"))
+                self.assertEqual(
+                    (a["bead"], a["run"], a["step"], a["worker"]["lane"], a["worker"]["model"]),
+                    (BEAD, f"{BEAD}-{STAMP}", "write", "CODEX", "gpt-x"),
+                )
                 self.assertIn(a["state"]["what"], ("tool",))
                 self.assertEqual([e["t"] for e in a["events"]], sorted(e["t"] for e in a["events"]))
                 put(lf, [{"t": T + 20, "k": "tool_start", "id": "2", "text": "edit a.py"}])
-                b = get("/api/live?bead=%s&run=%s-%s&since=%s" % (BEAD, BEAD, STAMP, a["cursor"]))
+                b = get("/api/live?bead={}&run={}-{}&since={}".format(BEAD, BEAD, STAMP, a["cursor"]))
                 self.assertEqual([e["k"] for e in b["events"]], ["tool_start"])
                 self.assertEqual(get("/api/live/overview")["beads"][0]["bead"], BEAD)
                 self.assertEqual(a["newest"], a["run"])

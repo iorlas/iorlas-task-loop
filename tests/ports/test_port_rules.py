@@ -6,11 +6,11 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401
-from contracts.test_rules import VENDORED, code_lines  # noqa: E402
+import support.paths  # noqa: F401
+from contracts.test_rules import VENDORED, code_lines
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "taskloop"
-FILES = sorted((SRC / "adapters").glob("*.py")) + [SRC / "contracts" / "ports.py"]
+FILES = [*sorted((SRC / "adapters").glob("*.py")), SRC / "contracts" / "ports.py"]
 STDLIB = set(sys.stdlib_module_names)
 
 
@@ -26,7 +26,7 @@ class PortRules(unittest.TestCase):
             self.assertLessEqual(len(code), 400, f.name)
             for n in ast.walk(tree):
                 if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    self.assertLessEqual(len({i for i in code if n.lineno <= i <= (n.end_lineno or n.lineno)}), 80, "%s.%s" % (f.name, n.name))
+                    self.assertLessEqual(len({i for i in code if n.lineno <= i <= (n.end_lineno or n.lineno)}), 80, f"{f.name}.{n.name}")
 
     def test_imports(self) -> None:
         for f, _, tree in self.parsed():
@@ -37,7 +37,7 @@ class PortRules(unittest.TestCase):
                         [n.module or ""] if isinstance(n, ast.ImportFrom) else [])
                 for m in mods:
                     ok = m.split(".")[0] in STDLIB | VENDORED or m.startswith(("taskloop.contracts", "taskloop.adapters"))
-                    self.assertTrue(ok, "%s imports %s" % (f.name, m))
+                    self.assertTrue(ok, f"{f.name} imports {m}")
 
     def test_contracts_ports_import_contracts_only(self) -> None:
         for n in ast.walk(ast.parse((SRC / "contracts" / "ports.py").read_text(encoding="utf-8"))):

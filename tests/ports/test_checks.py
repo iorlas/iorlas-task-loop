@@ -3,23 +3,25 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any, ClassVar
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401
-from support.tags import contract, domain  # noqa: E402
-from taskloop.adapters.checks_argv import ArgvChecks  # noqa: E402
-from taskloop.adapters.fake_checks import FakeChecks, failed, hung, passed  # noqa: E402
-from taskloop.contracts.ports import Checks, CheckSpec  # noqa: E402
+import support.paths  # noqa: F401
+from support.tags import contract, domain
+
+from taskloop.adapters.checks_argv import ArgvChecks
+from taskloop.adapters.fake_checks import FakeChecks, failed, hung, passed
+from taskloop.contracts.ports import Checks, CheckSpec
 
 
 class ChecksContract:
     """A subclass gives `make()` and four commands: PASS prints "fine", FAIL prints "boom" and exits 3, HANG never ends,
     ENV prints $PROBE."""
 
-    PASS: list[str] = []
-    FAIL: list[str] = []
-    HANG: list[str] = []
-    ENV: list[str] = []
+    PASS: ClassVar[list[str]] = []
+    FAIL: ClassVar[list[str]] = []
+    HANG: ClassVar[list[str]] = []
+    ENV: ClassVar[list[str]] = []
 
     def make(self) -> Checks:
         raise NotImplementedError
@@ -59,10 +61,10 @@ class FakeChecksContract(ChecksContract, unittest.TestCase):
 
 @contract
 class ArgvChecksContract(ChecksContract, unittest.TestCase):
-    PASS = [sys.executable, "-c", "print('fine')"]
-    FAIL = [sys.executable, "-c", "import sys; print('boom'); sys.exit(3)"]
-    HANG = [sys.executable, "-c", "import time; time.sleep(60)"]
-    ENV = [sys.executable, "-c", "import os; print(os.environ['PROBE'])"]
+    PASS: ClassVar[Any] = [sys.executable, "-c", "print('fine')"]
+    FAIL: ClassVar[Any] = [sys.executable, "-c", "import sys; print('boom'); sys.exit(3)"]
+    HANG: ClassVar[Any] = [sys.executable, "-c", "import time; time.sleep(60)"]
+    ENV: ClassVar[Any] = [sys.executable, "-c", "import os; print(os.environ['PROBE'])"]
 
     def make(self) -> ArgvChecks:
         return ArgvChecks()

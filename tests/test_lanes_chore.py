@@ -7,11 +7,12 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401
-from taskloop.app.wire import lanes  # noqa: E402
-from taskloop.contracts.delegate_status import snapshot_of  # noqa: E402
-from taskloop.contracts.paths import ConfigDir  # noqa: E402
-from taskloop.contracts.stores import StatusStore  # noqa: E402
+import support.paths  # noqa: F401
+
+from taskloop.app.wire import lanes
+from taskloop.contracts.delegate_status import snapshot_of
+from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.stores import StatusStore
 
 REAL = json.loads((Path(__file__).resolve().parent / "fixtures" / "delegate_status_0.51.0_real.json").read_text())
 

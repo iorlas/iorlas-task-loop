@@ -1,5 +1,4 @@
 """A bead parked on an ask that was dropped at upgrade (a v1 or unreadable file) stays visible and is asked again."""
-import io
 import json
 import sys
 import tempfile
@@ -9,14 +8,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401
-from support.tiers import domain  # noqa: E402
-from taskloop.adapters.fake_beads import FakeBeads  # noqa: E402
-from taskloop.app.asks import sweeps  # noqa: E402
-from taskloop.cli import asks as cli  # noqa: E402
-from taskloop.contracts.bead import Bead  # noqa: E402
-from taskloop.contracts.paths import ConfigDir  # noqa: E402
-from taskloop.contracts.stores import HAD_PICK, ORPHAN, AskStore  # noqa: E402
+import support.paths  # noqa: F401
+from support.tiers import domain
+
+from taskloop.adapters.fake_beads import FakeBeads
+from taskloop.app.asks import sweeps
+from taskloop.cli import asks as cli
+from taskloop.contracts.bead import Bead
+from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.stores import HAD_PICK, ORPHAN, AskStore
 
 T = 1000.0
 
@@ -60,7 +60,9 @@ class OrphanTest(unittest.TestCase):
 
     def test_answer_rerun_reopens_it_and_a_closed_bead_drops_the_dead_file(self) -> None:
         out: list[str] = []
-        code = cli.run(Namespace(op="answer", bead="tl-7", text=[], rerun=True), self.asks, lambda repo: self.store, lambda: T, "denis", out.append)
+        code = cli.run(
+            Namespace(op="answer", bead="tl-7", text=[], rerun=True), self.asks, lambda repo: self.store, lambda: T, "denis", out.append
+        )
         self.assertEqual((code, self.store.beads["tl-7"].status), (0, "open"))
         self.store.beads["tl-7"] = Bead(id="tl-7", title="t", status="closed")
         sweeps.reopen(self.asks, self.store, "tl-7")

@@ -54,4 +54,4 @@ class FakeDelegate:
             for e in step.events:
                 on_event(e)
         res = step.result
-        return res if res.ref else dataclasses.replace(res, ref=req.resume or "fake-%d" % (n + 1))
+        return res if res.ref else dataclasses.replace(res, ref=req.resume or f"fake-{int(n + 1)}")

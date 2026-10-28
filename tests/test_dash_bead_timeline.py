@@ -1,6 +1,5 @@
 """One bead's whole time (tl-9h2): steps, checks, waits and idle as segments with totals; an open step ends now."""
 
-import json
 import sys
 import tempfile
 import unittest
@@ -8,8 +7,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+import itertools  # noqa: E402
+
+import support.paths  # noqa: E402, F401
 from support.logs import typed, write_log  # noqa: E402
+
 from taskloop_dash.views import segments, timeline  # noqa: E402
 
 T = 1_800_000_000.0
@@ -88,7 +90,7 @@ class Review(unittest.TestCase):
         b = run("b-2", 1000, 1100, [block("write", 1050, 1100)], waits=[("land_lock", 900, 150)])
         tl = segments.bead_segments([a, b], now=T + 2000)
         spans = [(s["t0"], s["t1"]) for s in tl["segments"]]
-        self.assertTrue(all(x[1] <= y[0] for x, y in zip(spans, spans[1:])), spans)
+        self.assertTrue(all(x[1] <= y[0] for x, y in itertools.pairwise(spans)), spans)
         self.assertEqual(sum(totals(tl)), 1100)  # every second of the 1100 is counted once
 
 
@@ -97,8 +99,14 @@ class FromLogs(unittest.TestCase):
         return write_log(Path(tempfile.mkdtemp(), "b-1-20261024-010101.jsonl"), recs)
 
     def test_wait_records_are_read_and_junk_is_skipped(self):
-        p = self.write([typed("wait_start", T - 90, id="w1", what="land_lock", holder="o"),
-                        typed("wait_end", T, id="w1", secs=90, in_budget=True), {"kind": "wait", "what": "x"}, {"v": 2, "kind": "wait_end"}])
+        p = self.write(
+            [
+                typed("wait_start", T - 90, id="w1", what="land_lock", holder="o"),
+                typed("wait_end", T, id="w1", secs=90, in_budget=True),
+                {"kind": "wait", "what": "x"},
+                {"v": 2, "kind": "wait_end"},
+            ]
+        )
         (w,) = timeline.waits_of(timeline.read(p))
         self.assertEqual((w["what"], w["secs"], w["holder"], w["in_budget"]), ("land_lock", 90, "o", True))
 
@@ -115,7 +123,7 @@ class FromLogs(unittest.TestCase):
         self.assertEqual([(s["kind"], s["what"]) for s in tl["segments"]], [("work", "review"), ("wait", "land_lock")])
         dead = timeline.run_timeline(p, alive=False, now=T + 400)  # the process died while waiting: it waited until its last record
         self.assertEqual(dead["waits"], [])
-        done = self.write(recs + [typed("wait_end", T + 90, id="w1", secs=39, in_budget=True)])
+        done = self.write([*recs, typed("wait_end", T + 90, id="w1", secs=39, in_budget=True)])
         self.assertEqual([w["secs"] for w in timeline.run_timeline(done)["waits"]], [39])
 
     def test_a_live_run_ends_now_not_at_its_last_record(self):

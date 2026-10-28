@@ -35,7 +35,7 @@ class OpenCode:
         if not os.path.isfile(path):
             return []
         try:
-            con = sqlite3.connect("file:%s?mode=ro" % quote(path), uri=True, timeout=1.0)
+            con = sqlite3.connect(f"file:{quote(path)}?mode=ro", uri=True, timeout=1.0)
             try:
                 return con.execute(sql, args).fetchall()
             finally:

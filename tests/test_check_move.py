@@ -22,9 +22,13 @@ class CheckMove(unittest.TestCase):
     def git(self, *a):
         env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
                    GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
-        return subprocess.run(("git", "-c", "commit.gpgsign=false") + a, cwd=self.d, env=env,
+        return subprocess.run(("git", "-c", "commit.gpgsign=false", *a), cwd=self.d, env=env,
                               check=True, stdout=subprocess.PIPE,
-                              universal_newlines=True).stdout.strip()
+                              text=True).stdout.strip()
+
+    def read(self, name):
+        with open(os.path.join(self.d, name)) as f:
+            return f.read()
 
     def write(self, name, text):
         with open(os.path.join(self.d, name), "w") as f:
@@ -36,9 +40,9 @@ class CheckMove(unittest.TestCase):
         return self.git("rev-parse", "HEAD")
 
     def run_tool(self, base, head, *extra):
-        r = subprocess.run([sys.executable, TOOL, base, head] + list(extra), cwd=self.d,
+        r = subprocess.run([sys.executable, TOOL, base, head, *extra], cwd=self.d,
                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                           universal_newlines=True)
+                           text=True, check=False)
         return r.returncode, r.stdout
 
     def base(self, func=FUNC):
@@ -102,7 +106,7 @@ class CheckMove(unittest.TestCase):
 
     def test_unaccounted_new_function_fails_then_allowed(self):
         b = self.base()
-        self.write("a.py", open(os.path.join(self.d, "a.py")).read() + "\ndef extra():\n    return 3\n")
+        self.write("a.py", self.read("a.py") + "\ndef extra():\n    return 3\n")
         h = self.commit("add")
         rc, out = self.run_tool(b, h)
         self.assertNotEqual(rc, 0)
@@ -112,7 +116,7 @@ class CheckMove(unittest.TestCase):
 
     def test_top_level_statement_change_fails(self):
         b = self.base()
-        self.write("a.py", open(os.path.join(self.d, "a.py")).read() + "\nLIMIT = 5\n")
+        self.write("a.py", self.read("a.py") + "\nLIMIT = 5\n")
         rc, out = self.run_tool(b, self.commit("const"))
         self.assertNotEqual(rc, 0)
         self.assertIn("a.py:<module>", out)
@@ -126,14 +130,14 @@ class CheckMove(unittest.TestCase):
     def test_real_trim_commit(self):
         # Runs against this repo's history; skipped if history is shallow.
         r = subprocess.run(["git", "log", "--diff-filter=A", "--format=%H", "--", "skills/task-loop/trim.py"],
-                           cwd=ROOT, stdout=subprocess.PIPE, universal_newlines=True)
+                           cwd=ROOT, stdout=subprocess.PIPE, text=True, check=False)
         sha = r.stdout.split()[-1] if r.stdout.split() else ""
         if not sha:
             self.skipTest("trim.py history unavailable")
 
         def run(*extra):
-            return subprocess.run([sys.executable, TOOL, sha + "~1", sha] + list(extra), cwd=ROOT,
-                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+            return subprocess.run([sys.executable, TOOL, sha + "~1", sha, *extra], cwd=ROOT,
+                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, check=False)
         r = run()
         self.assertNotEqual(r.returncode, 0, r.stdout)
         self.assertIn("engine.py:Engine.fix changed in place", r.stdout)

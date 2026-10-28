@@ -5,8 +5,8 @@ import sys
 import time
 
 from taskloop.adapters import ident
-from taskloop.app.wire import slots as wslots
 from taskloop.app.slots.pool import SlotPool
+from taskloop.app.wire import slots as wslots
 from taskloop.contracts import paths
 from taskloop.stores.files import FileTickets
 

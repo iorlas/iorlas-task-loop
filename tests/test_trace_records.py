@@ -1,26 +1,31 @@
 """The engine's machine-readable trace (step, call, transition, checks and run records of the typed EngineLog) and the dashboard
 timeline built from it: the contract between the engine and taskloop_dash (docs/design/dashboard.md, Timeline records)."""
 
+import io
 import json
+import os
 import sys
 import time
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
+from typing import Any, cast
 
-from support import engine_case as te
 import test_engine_units
-from support.engine_case import CLEAN, FALSE, HAS_F, PLAN, PY, WRITE, review, stop
+from support import engine_case as te
+from support.engine_case import CLEAN, FALSE, PLAN, PY, WRITE, review, stop
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+import support.paths  # noqa: E402, F401
 from support.dashes import make_dash  # noqa: E402
-from taskloop.contracts import log as rec  # noqa: E402
-from taskloop.app.wire import slots as wslots  # noqa: E402
-from taskloop_dash import jsonl  # noqa: E402
-from taskloop_dash.api import runs as runs_api  # noqa: E402
+
 from taskloop.adapters import ident  # noqa: E402
 from taskloop.app.track import verbs  # noqa: E402
+from taskloop.app.wire import slots as wslots  # noqa: E402
+from taskloop.contracts import log as rec  # noqa: E402
+from taskloop_dash import jsonl  # noqa: E402
+from taskloop_dash.api import runs as runs_api  # noqa: E402
 
 engine = te.engine
 DASH = make_dash()
@@ -192,7 +197,6 @@ class TraceRecords(te.EngineTest):
         self.assertEqual((run.started_because, run.prev_run), ("retry", first))
 
     def test_check_logs_of_runs_older_than_two_weeks_are_pruned_at_start(self):
-        import os
         old = ident.config_dir() / "runs" / "t-0-20261001-000000" / "checks"
         old.mkdir(parents=True)
         for name in ("00-a.r1.log", "00-a.log"):
@@ -208,8 +212,8 @@ class TraceRecords(te.EngineTest):
 
     def test_tl_trace_still_reads_the_new_trace(self):
         self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
-        out = te.io.StringIO()
-        with te.redirect_stdout(out):
+        out = io.StringIO()
+        with redirect_stdout(out):
             rc = verbs.trace("t-1", 0, False)
         self.assertEqual(rc, 0)
         self.assertIn("landed", out.getvalue())
@@ -233,7 +237,9 @@ class TraceRecords(te.EngineTest):
         blk = DASH.runlogs.block_detail(str(self.eng.log_path), run["blocks"][2]["node"])
         self.assertEqual([c["status"] for c in blk["checks"]], ["failed"])
         self.assertTrue(blk["checks"][0]["log"])
-        self.assertTrue((Path(getattr(self, "eng").run_dir) / blk["checks"][0]["log"]).is_file())  # found by CheckResult.log, not by a rebuilt file name  # noqa: B009
+        self.assertTrue(
+            (Path(cast(Any, self).eng.run_dir) / blk["checks"][0]["log"]).is_file()
+        )  # found by CheckResult.log, not by a rebuilt file name
         self.assertFalse(hasattr(runs_api, "safe_name"))
 
 

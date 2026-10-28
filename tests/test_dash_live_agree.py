@@ -1,17 +1,21 @@
 """Replay a run record by record: after each append, /api/live and /api/live/overview must tell the same story (Mac saw running=true
 with the bead missing from the overview for one poll)."""
 
+import json
 import os
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests"))
-import support.paths  # noqa: E402,F401
+import support.paths  # noqa: E402, F401
 from support.logs import typed  # noqa: E402
+
+from taskloop_dash.api import live  # noqa: E402
 from taskloop_dash.api.liveview import Live  # noqa: E402
 from taskloop_dash.env import Env  # noqa: E402
 from taskloop_dash.readers.records import Records  # noqa: E402
@@ -28,16 +32,15 @@ class Agree(unittest.TestCase):
             lanes.delegate_status.return_value = {"lanes": []}
             live = Live(env, Records(env), lanes)
             live.queue_rows = lambda: []
-            log = env.config.engine_log("%s-%s" % (BEAD, STAMP))
+            log = env.config.engine_log(f"{BEAD}-{STAMP}")
             os.makedirs(os.path.dirname(log), exist_ok=True)
-            recs = [typed("run_start", T, run="%s-%s" % (BEAD, STAMP), bead=BEAD, worktree=""),
+            recs = [typed("run_start", T, run=f"{BEAD}-{STAMP}", bead=BEAD, worktree=""),
                     typed("step_start", T + 1, id="n1", text="write", step="write"),
                     typed("cmd_start", T + 2, id="m1", text="pytest"),
                     typed("cmd_end", T + 3, id="m1", exit=0),
                     typed("close", T + 4, why="done")]
-            import json
             open(log, "w").close()  # the file exists before its first record
-            for i, r in enumerate([None] + recs):
+            for i, r in enumerate([None, *recs]):
                 if r is not None:
                     line = json.dumps(r) + "\n"
                     with open(log, "a", encoding="utf-8") as f:
@@ -55,7 +58,7 @@ class Agree(unittest.TestCase):
         if not a.get("found"):
             return self.assertEqual(listed, [], i)
         if a["running"]:
-            self.assertIn(BEAD, listed, "step %s: live running but the overview lacks the bead" % i)
+            self.assertIn(BEAD, listed, f"step {i}: live running but the overview lacks the bead")
             row = next(b for b in o["beads"] if b["bead"] == BEAD)
             self.assertEqual(row["state"], a["state"]["what"], i)
         else:
@@ -64,11 +67,9 @@ class Agree(unittest.TestCase):
 
 class Threaded(unittest.TestCase):
     def test_concurrent_readers_never_double_or_drop_an_event(self):
-        import json
-        import threading
-        from taskloop_dash.api import live
+
         with tempfile.TemporaryDirectory() as d:
-            log = os.path.join(d, "task-loop", "engine", "%s-%s.jsonl" % (BEAD, STAMP))
+            log = os.path.join(d, "task-loop", "engine", f"{BEAD}-{STAMP}.jsonl")
             os.makedirs(os.path.dirname(log))
             open(log, "w").close()
             run, stop = live.LiveRun(log), threading.Event()

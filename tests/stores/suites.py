@@ -7,16 +7,16 @@ import time
 import unittest
 from typing import Any, cast
 
-from rigs import dead_pid
 from contracts import samples as S
-from taskloop.contracts import codec, log as L
+from rigs import dead_pid
+from support.narrow import must
+
+from taskloop.contracts import codec
 from taskloop.contracts.ask import Ask, AskAnswer
 from taskloop.contracts.checkpoint import Checkpoint
-from taskloop.contracts.loop import LoopCommand, LoopState, Rest
-from taskloop.contracts.run import LoopLogLine
 from taskloop.contracts.enums import AskStatus, LockWhat
-from taskloop.contracts.locks import LockRecord, LockTimeout
-from support.narrow import must  # noqa: E402
+from taskloop.contracts.locks import LockTimeout
+from taskloop.contracts.loop import LoopCommand, LoopState, Rest
 
 CK = cast(Checkpoint, S.OTHERS["Checkpoint"])
 
@@ -201,9 +201,8 @@ class LockContract(Base):
         seen: list[Any] = []
         with self.s.locks.hold(self.W, "r", "first"):
             t0 = time.monotonic()
-            with self.assertRaises(LockTimeout) as cm:
-                with self.s.locks.hold(self.W, "r", "second", timeout=0.2, waiting=seen.append):
-                    self.fail("got a held lock")
+            with self.assertRaises(LockTimeout) as cm, self.s.locks.hold(self.W, "r", "second", timeout=0.2, waiting=seen.append):
+                self.fail("got a held lock")
             self.assertGreaterEqual(time.monotonic() - t0, 0.15)
         self.assertEqual(must(cm.exception.holder).holder, "first")
         self.assertEqual([h.holder for h in seen], ["first"])  # told once, before it waited
@@ -217,13 +216,12 @@ class LockContract(Base):
             with self.s.locks.hold(self.W, "r", "waiter", timeout=5):
                 got.append("waiter")
 
-        with self.assertRaises(RuntimeError):
-            with self.s.locks.hold(self.W, "r", "first"):
-                t = threading.Thread(target=waiter)
-                t.start()
-                time.sleep(0.1)
-                self.assertEqual(got, [])
-                raise RuntimeError("holder fails")
+        with self.assertRaises(RuntimeError), self.s.locks.hold(self.W, "r", "first"):
+            t = threading.Thread(target=waiter)
+            t.start()
+            time.sleep(0.1)
+            self.assertEqual(got, [])
+            raise RuntimeError("holder fails")
         t.join(5)
         self.assertEqual(got, ["waiter"])
 
@@ -247,9 +245,8 @@ class LockContract(Base):
     def test_a_lock_whose_recorded_holder_is_alive_is_not_broken(self) -> None:
         self.rig.plant_lock(self.W, "r", "other", os.getpid())
         self.assertEqual(self.s.locks.holder(self.W, "r").holder, "other")
-        with self.assertRaises(LockTimeout):
-            with self.s.locks.hold(self.W, "r", "me", timeout=0.3):
-                self.fail("took a live lock")
+        with self.assertRaises(LockTimeout), self.s.locks.hold(self.W, "r", "me", timeout=0.3):
+            self.fail("took a live lock")
 
 
 class TicketContract(Base):

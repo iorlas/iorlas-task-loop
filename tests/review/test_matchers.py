@@ -4,9 +4,10 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401
-from taskloop.domain.review import kinds  # noqa: E402
-from taskloop.domain.review.matchers import AcceptanceItems, BdDemand, CodeNames, EngineActions, GateProof, Tools, Wording, word_in  # noqa: E402
+import support.paths  # noqa: F401
+
+from taskloop.domain.review import kinds
+from taskloop.domain.review.matchers import AcceptanceItems, BdDemand, CodeNames, EngineActions, GateProof, Tools, Wording, word_in
 
 
 class Table(unittest.TestCase):
@@ -32,15 +33,26 @@ class CodeNamesTable(Table):
         self.rows(lambda t: any(CodeNames.is_code_file(x) for x in CodeNames.tokens(t)),
                   [("see src/a.py for it", True), ("the README.md table", True), ("a price quoted on https://x.com/page.html", False),
                    ("the owner decides", False)])
-        self.rows(lambda t: sorted(CodeNames.symbols(t)), [("StageLoop calls run_once", ["StageLoop", "run_once"]), ("plain words only", [])])
+        self.rows(
+            lambda t: sorted(CodeNames.symbols(t)), [("StageLoop calls run_once", ["StageLoop", "run_once"]), ("plain words only", [])]
+        )
 
 
 class EngineActionsTable(Table):
     def test_filing(self):
-        self.rows(EngineActions.files_beads, [
-            ("File beads for the table, chairs and sink", True), ("Follow-up beads for each object are to be filed", True),
-            ("The nine beads are not filed", True), ("Create a bead per object", True), ("file follow-up tasks", True),
-            ("The beads cover all nine objects", False), ("The config file lists the bead ids", False), ("Open the bead and read it", False)])
+        self.rows(
+            EngineActions.files_beads,
+            [
+                ("File beads for the table, chairs and sink", True),
+                ("Follow-up beads for each object are to be filed", True),
+                ("The nine beads are not filed", True),
+                ("Create a bead per object", True),
+                ("file follow-up tasks", True),
+                ("The beads cover all nine objects", False),
+                ("The config file lists the bead ids", False),
+                ("Open the bead and read it", False),
+            ],
+        )
 
     def test_lands_and_closes(self):
         self.rows(EngineActions.lands_or_closes, [("The gate runs at land", True), ("the engine closes the bead", True),
@@ -83,8 +95,16 @@ class WordingTable(Table):
 
 class GateProofTable(Table):
     def test_says_it_passes(self):
-        self.rows(GateProof.says_it_passes, [("unity-tests passes", True), ("`just check` is green", True), ("ruff passed but flaky", False),
-                                             ("a test for unity-tests", False), ("coverage of unity-tests runs", False)])
+        self.rows(
+            GateProof.says_it_passes,
+            [
+                ("unity-tests passes", True),
+                ("`just check` is green", True),
+                ("ruff passed but flaky", False),
+                ("a test for unity-tests", False),
+                ("coverage of unity-tests runs", False),
+            ],
+        )
 
     def test_only_doubts_the_run(self):
         self.rows(GateProof.only_doubts_the_run, [

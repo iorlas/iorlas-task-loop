@@ -3,32 +3,33 @@ network is back (no finished output rerun, no counter charged, no lane marked), 
 a network pause keeps its run id, cost and time budget, and a paused bead wakes when its role is usable, not at a clock."""
 
 import json
-import os
-import subprocess
 import sys
 import time
 import unittest
 from collections import Counter
 from pathlib import Path
+from typing import Any, ClassVar
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401
-from taskloop.stores import call_state as callstate  # noqa: E402
-from taskloop.adapters import delegate as dl  # noqa: E402
-from support import fake_route  # noqa: E402
-from support import tlbd  # noqa: E402
-from taskloop.app.loop.gate import GateRole  # noqa: E402
-from taskloop.contracts.config import LoopConfig  # noqa: E402
-from taskloop.domain.lanes import netgate  # noqa: E402
-import outcome as oc  # noqa: E402
-from support import engine_case as te  # noqa: E402
-import test_stages_visual  # noqa: E402
-from support.engine_case import BEAD, CLEAN, PLAN, WRITE, engine, stop, verdict  # noqa: E402
-from taskloop.adapters import gitrepo
-from taskloop.adapters import ident
+import support.paths  # noqa: F401
+
+# isort: split
+import outcome as oc
+import test_stages_visual
+from support import engine_case as te
+from support import (
+    tlbd,
+)
+from support.engine_case import CLEAN, PLAN, WRITE, stop, verdict
+
+from taskloop.adapters import gitrepo, ident
+from taskloop.app.loop.gate import GateRole
 from taskloop.app.release import reexec
+from taskloop.contracts.config import LoopConfig
+from taskloop.domain.lanes import netgate
+from taskloop.stores import call_state as callstate
 
 SAY = "codex: Reconnecting... waiting for network (Connection failed: error sending request)"
 REPLAY = te.ROOT / "tests" / "fixtures" / "replay" / "5ban16_plan_network_drop.jsonl"
@@ -89,7 +90,7 @@ class EveryStepResumes(NetBase):
     """Plan, write, review and verify: the drop is answered with the thread's ref; the engine waits for the probe, then goes on
     in that thread with the short delta. The other steps are asked once."""
 
-    BASE = {"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}
+    BASE: ClassVar[Any] = {"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}
 
     def drop_at(self, node, answers=None, probe=None, **cfg):
         answers = {k: list(v) for k, v in (answers or self.BASE).items()}
@@ -112,7 +113,7 @@ class EveryStepResumes(NetBase):
         self.drop_at("plan")
 
     def test_a_drop_in_the_write_resumes_the_writer_thread_and_the_work_is_kept(self):
-        s = self.drop_at("write")
+        self.drop_at("write")
         self.assertEqual(self.eng.writer["delegate"], "ref-write")  # the thread the engine now holds is the one the answer named
 
     def test_a_drop_in_the_review_resumes_the_reviewer_thread(self):
@@ -121,7 +122,7 @@ class EveryStepResumes(NetBase):
     def test_a_drop_in_the_verify_resumes_the_verifier_thread(self):
         gaps = te.EngineTest.GAPS
         answers = {"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, unchecked=gaps)],
-                   "verify": [{"items": [verdict(n, "settled", "a.cs:%d" % n) for n in (1, 2, 3)]}]}
+                   "verify": [{"items": [verdict(n, "settled", f"a.cs:{n}") for n in (1, 2, 3)]}]}
         self.drop_at("verify", answers)
 
     def test_a_drop_costs_no_attempt_whatever_the_number_of_drops(self):
@@ -135,7 +136,7 @@ class EveryStepResumes(NetBase):
     def test_a_probe_that_keeps_failing_calls_pauses_the_run_visibly_and_charges_nothing(self):
         # the probe says up and the calls say down, three times in five minutes: a proxy or DNS fault the probe cannot see
         answers = {"plan": [PLAN], "write": [drop("net-write")] * 4 + [WRITE], "review": [CLEAN]}
-        rc, s = self.run_engine(answers, probe=netgate.FakeProbe([True]))
+        rc, _s = self.run_engine(answers, probe=netgate.FakeProbe([True]))
         self.assertEqual(rc, 2)
         r = self.eng.result()
         self.assertEqual((r["outcome"], r["kind"]), ("paused", oc.Kind.PAUSE_NETWORK.value))
@@ -148,7 +149,7 @@ class Checks(NetBase):
 
     def test_a_network_pause_then_a_new_run_does_not_run_the_green_checks_again(self):
         count = Path(self.tmp.name) / "count"
-        bump = te.PY + ' -c "open(%r, \'a\').write(\'1\')"' % str(count)
+        bump = te.PY + f' -c "open({str(count)!r}, \'a\').write(\'1\')"'
         cfg = {"checks": [{"id": "bump", "cmd": bump, "group": "tests"}]}
         answers = {"plan": [PLAN], "write": [WRITE], "review": [drop("net-review")] * 40}
         rc, s = self.run_engine(answers, probe=netgate.FakeProbe([False]), **cfg)  # the network stays down: the run pauses
@@ -176,9 +177,9 @@ class Land(NetBase):
     def test_a_push_the_network_cut_resumes_after_the_probe_and_lands_once(self):
         count = Path(self.tmp.name, "pushes")
         land = self.push_script("cut_push.py",
-                                "import os, subprocess, sys\nm = %r\nn = int(open(m).read()) if os.path.exists(m) else 0\n"
-                                "open(m, 'w').write(str(n + 1))\nif n < 2:\n    sys.stderr.write(%r); sys.exit(1)\n"
-                                "sys.exit(subprocess.call(['git', 'push', 'origin', 'HEAD:main']))\n" % (str(count), self.CUT))
+                                f"import os, subprocess, sys\nm = {str(count)!r}\nn = int(open(m).read()) if os.path.exists(m) else 0\n"
+                                f"open(m, 'w').write(str(n + 1))\nif n < 2:\n    sys.stderr.write({self.CUT!r}); sys.exit(1)\n"
+                                "sys.exit(subprocess.call(['git', 'push', 'origin', 'HEAD:main']))\n")
         probe = Cycling(2)
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, probe=probe, land=land)
         self.assertEqual(rc, 0, self.blocked)
@@ -192,10 +193,10 @@ class Land(NetBase):
     def test_a_push_the_server_took_before_the_connection_dropped_is_not_pushed_again(self):
         count = Path(self.tmp.name, "pushes")
         land = self.push_script("took_push.py",
-                                "import os, subprocess, sys\nm = %r\nopen(m, 'a').write('1')\n"
+                                f"import os, subprocess, sys\nm = {str(count)!r}\nopen(m, 'a').write('1')\n"
                                 "subprocess.call(['git', 'push', 'origin', 'HEAD:main'])\n"
-                                "sys.stderr.write(%r); sys.exit(1)\n" % (str(count), self.CUT))
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, probe=Cycling(1), land=land)
+                                f"sys.stderr.write({self.CUT!r}); sys.exit(1)\n")
+        rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, probe=Cycling(1), land=land)
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(count.read_text(), "1")  # pushed once; the second look found it on the base
         self.assertTrue(self.closed and self.closed[0].startswith("merged"))
@@ -206,16 +207,16 @@ class Land(NetBase):
 
     def test_a_rerun_after_a_push_that_went_through_but_was_never_seen_closes_without_pushing(self):
         count = Path(self.tmp.name, "pushes")
-        pushed = self.push_script("odd_push.py", "import subprocess, sys\nopen(%r, 'a').write('1')\n"
+        pushed = self.push_script("odd_push.py", f"import subprocess, sys\nopen({str(count)!r}, 'a').write('1')\n"
                                   "subprocess.call(['git', 'push', 'origin', 'HEAD:main'])\n"
-                                  "sys.stderr.write('fatal: the hook lost its answer\\n'); sys.exit(1)\n" % str(count))
-        again = self.push_script("counted_push.py", "import subprocess, sys\nopen(%r, 'a').write('1')\n"
-                                 "sys.exit(subprocess.call(['git', 'push', 'origin', 'HEAD:main']))\n" % str(count))
+                                  "sys.stderr.write('fatal: the hook lost its answer\\n'); sys.exit(1)\n")
+        again = self.push_script("counted_push.py", f"import subprocess, sys\nopen({str(count)!r}, 'a').write('1')\n"
+                                 "sys.exit(subprocess.call(['git', 'push', 'origin', 'HEAD:main']))\n")
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, land=pushed)
         self.assertEqual(rc, 2)  # the run reported a failed land: the bead is open, the branch is kept
         self.assertEqual((count.read_text(), self.closed), ("1", []))
         self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")  # but it is on the base
-        rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]}, land=again)  # the next run
+        rc, _s = self.run_engine({"write": [WRITE], "review": [CLEAN]}, land=again)  # the next run
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(count.read_text(), "1")  # not pushed again
         self.assertTrue(self.closed and self.closed[0].startswith("merged"))

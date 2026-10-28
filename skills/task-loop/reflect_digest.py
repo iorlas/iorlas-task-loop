@@ -20,6 +20,8 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+import report
+
 from taskloop.adapters import beadtools, ident, landlock
 from taskloop.adapters import procs as sproc
 from taskloop.contracts.ports import BdFailure, BeadQuery, NewBead
@@ -30,8 +32,51 @@ FILE_SIMILAR = 0.1  # ... or this much when they also name the same file (a bare
 TITLE_SIMILAR = 0.5  # ... and an open bead's title the same as a cluster
 DAY = 86400
 OWNERS = {"engine": "iorlas-task-loop", "prompt": "iorlas-task-loop", "delegate": "iorlas-delegate"}
-STOP = set("the and for with that this from was were has had not but are its into then than when after before each have been "
-           "run runs session step bead one two still more over only also because while which they their there about".split())
+STOP = {
+    "the",
+    "and",
+    "for",
+    "with",
+    "that",
+    "this",
+    "from",
+    "was",
+    "were",
+    "has",
+    "had",
+    "not",
+    "but",
+    "are",
+    "its",
+    "into",
+    "then",
+    "than",
+    "when",
+    "after",
+    "before",
+    "each",
+    "have",
+    "been",
+    "run",
+    "runs",
+    "session",
+    "step",
+    "bead",
+    "one",
+    "two",
+    "still",
+    "more",
+    "over",
+    "only",
+    "also",
+    "because",
+    "while",
+    "which",
+    "they",
+    "their",
+    "there",
+    "about",
+}
 FILE = re.compile(r"[\w./-]+\.(?:py|md|cs|json|ya?ml|toml|html|js|ts|sh|cfg|txt)\b")
 
 
@@ -89,10 +134,21 @@ def items(since, until, traces=None) -> list[dict[str, Any]]:
         for b in refl.get("went_badly") or []:
             if not isinstance(b, dict) or not b.get("what"):
                 continue
-            text = "%s %s" % (b.get("what"), b.get("evidence") or "")
-            out.append({"cause": str(b.get("cause") or "other"), "what": str(b["what"]), "evidence": str(b.get("evidence") or ""),
-                        "session": str(b.get("session") or ""), "run": str(r.get("run") or ""), "bead": str(r.get("bead") or ""),
-                        "repo": str(r.get("repo_url") or ""), "t": t, "tokens": tokens(b["what"]), "files": {os.path.basename(f) for f in FILE.findall(text)}})
+            text = "{} {}".format(b.get("what"), b.get("evidence") or "")
+            out.append(
+                {
+                    "cause": str(b.get("cause") or "other"),
+                    "what": str(b["what"]),
+                    "evidence": str(b.get("evidence") or ""),
+                    "session": str(b.get("session") or ""),
+                    "run": str(r.get("run") or ""),
+                    "bead": str(r.get("bead") or ""),
+                    "repo": str(r.get("repo_url") or ""),
+                    "t": t,
+                    "tokens": tokens(b["what"]),
+                    "files": {os.path.basename(f) for f in FILE.findall(text)},
+                }
+            )
     return sorted(out, key=lambda i: i["t"])
 
 
@@ -202,22 +258,53 @@ def is_closed(bead, repo):
 def evidence_lines(c):
     out = []
     for i in c["items"][:8]:
-        out.append("- run %s (bead %s, session %s): %s%s" % (i["run"] or "?", i["bead"] or "?", i["session"] or "run", i["what"][:200],
+        out.append("- run {} (bead {}, session {}): {}{}".format(i["run"] or "?", i["bead"] or "?", i["session"] or "run", i["what"][:200],
                                                            " | evidence: " + i["evidence"][:200] if i["evidence"] else ""))
     return out
 
 
 def description(c, old=""):
-    where = (" Files named: %s." % ", ".join(c["files"])) if c["files"] else ""
-    return ("Recurring cause (%s) in %d runs, from the engine's run reflections (tl reflect digest).%s%s\n\nEvidence:\n%s\n\n"
-            "Runs: %s\nTrace: `tl trace <bead>` lists each run's worker sessions." % (
-                c["cause"], len(c["runs"]), where, (" Recurred after %s was closed." % old) if old else "",
-                "\n".join(evidence_lines(c)), ", ".join(c["runs"])))
+    where = (" Files named: {}.".format(", ".join(c["files"]))) if c["files"] else ""
+    return (
+        "Recurring cause ({}) in {:d} runs, from the engine's run reflections (tl reflect digest).{}{}\n\nEvidence:\n{}\n\n"
+        "Runs: {}\nTrace: `tl trace <bead>` lists each run's worker sessions."
+    ).format(
+        c["cause"],
+        len(c["runs"]),
+        where,
+        (f" Recurred after {old} was closed.") if old else "",
+        "\n".join(evidence_lines(c)),
+        ", ".join(c["runs"]),
+    )
 
 
 def acceptance(c):
-    return ("The cause no longer shows in new reflections: after the fix, the next 3 runs of comparable beads (e.g. %s) end with no "
-            "went_badly item of cause '%s' saying: %s" % (c["beads"][0] if c["beads"] else "the beads above", c["cause"], c["title"]))
+    return ("The cause no longer shows in new reflections: after the fix, the next 3 runs of comparable beads (e.g. {}) end with no "
+            "went_badly item of cause '{}' saying: {}".format(c["beads"][0] if c["beads"] else "the beads above", c["cause"], c["title"]))
+
+
+def _update_known(c: dict[str, Any], repo: str, bead: str, state: dict[str, Any], dry: bool, res: dict[str, Any]) -> dict[str, Any]:
+    """The cause already has a bead: comment on it the runs it has not been told of."""
+    entry: dict[str, Any] | None = next((e for e in state.get("filed", []) if e.get("bead") == bead and e.get("repo") == repo), None)
+    if entry is None:  # an open bead found by title: remember it, so its runs are commented once
+        entry = {"cause": c["cause"], "repo": repo, "bead": bead, "tokens": sorted(c["tokens"]), "files": c["files"], "runs": [],
+                 "at": time.time()}
+        if not dry:
+            state.setdefault("filed", []).append(entry)
+    new = [r_ for r_ in c["runs"] if r_ not in entry["runs"]]
+    res.update(bead=bead, action="skipped")
+    if new:
+        res["action"] = "commented"
+        if not dry:
+            beadtools.attempt(
+                beadtools.bd_store(repo).add_comment,
+                bead,
+                "Reflect digest: the cause recurred in {:d} more run(s): {}\n{}".format(
+                    len(new), ", ".join(new), "\n".join(evidence_lines(dict(c, items=[i for i in c["items"] if i["run"] in new])))
+                ),
+            )
+            entry["runs"] = sorted(set(entry["runs"]) | set(new))
+    return res
 
 
 def file_cluster(c: dict[str, Any], state: dict[str, Any], dry=False, repos=None):
@@ -234,27 +321,13 @@ def file_cluster(c: dict[str, Any], state: dict[str, Any], dry=False, repos=None
                 e["closed"] = True  # its successor takes the cause from here
         old, bead = bead, ""
     if bead:
-        entry: dict[str, Any] | None = next((e for e in state.get("filed", []) if e.get("bead") == bead and e.get("repo") == repo), None)
-        if entry is None:  # an open bead found by title: remember it, so its runs are commented once
-            entry = {"cause": c["cause"], "repo": repo, "bead": bead, "tokens": sorted(c["tokens"]), "files": c["files"], "runs": [],
-                     "at": time.time()}
-            if not dry:
-                state.setdefault("filed", []).append(entry)
-        new = [r_ for r_ in c["runs"] if r_ not in entry["runs"]]
-        res.update(bead=bead, action="skipped")
-        if new:
-            res["action"] = "commented"
-            if not dry:
-                beadtools.attempt(beadtools.bd_store(repo).add_comment, bead, "Reflect digest: the cause recurred in %d more run(s): %s\n%s" % (
-                    len(new), ", ".join(new), "\n".join(evidence_lines(dict(c, items=[i for i in c["items"] if i["run"] in new])))))
-                entry["runs"] = sorted(set(entry["runs"]) | set(new))
-        return res
-    title = "Reflect: %s: %s" % (c["cause"], c["title"])[:140]
+        return _update_known(c, repo, bead, state, dry, res)
+    title = "Reflect: {}: {}".format(c["cause"], c["title"])
     res["action"] = "filed"
     if dry:
         return res
     try:
-        new_id = beadtools.bd_store(repo).create(NewBead(title=title, priority=3, labels=["reflect", "cause-%s" % c["cause"]],
+        new_id = beadtools.bd_store(repo).create(NewBead(title=title, priority=3, labels=["reflect", "cause-{}".format(c["cause"])],
                                                   description=description(c, old), acceptance_criteria=acceptance(c)))
     except BdFailure:
         new_id = ""
@@ -273,7 +346,7 @@ def digest(since, until, dry=False, traces=None, repos=None):
     if dry:
         return _digest(since, until, True, traces, repos)
     try:
-        with landlock.os_lock(ident.config_dir() / "locks" / "reflect-digest-run.lock", "pid %d" % os.getpid(), timeout=120):
+        with landlock.os_lock(ident.config_dir() / "locks" / "reflect-digest-run.lock", f"pid {os.getpid()}", timeout=120):
             return _digest(since, until, False, traces, repos)
     except TimeoutError:
         return {"since": since, "until": until, "items": 0, "clusters": [], "actions": [], "busy": True}
@@ -320,7 +393,7 @@ def maybe_run(now=None):
     if not due(now) or not (ident.config_dir() / "traces.jsonl").is_file() or not registered():
         return ""  # nothing to read or nowhere to file
     try:
-        with landlock.os_lock(ident.config_dir() / "locks" / "reflect-digest.lock", "pid %d" % os.getpid()):
+        with landlock.os_lock(ident.config_dir() / "locks" / "reflect-digest.lock", f"pid {os.getpid()}"):
             if not due(now):
                 return ""
             pass
@@ -343,7 +416,6 @@ def cmd_reflect(a):
         m = re.fullmatch(r"(\d+)h", text.strip())
         if m:
             return now - int(m.group(1)) * 3600
-        import report
         return float(text) if re.match(r"^\d{9,}(\.\d+)?$", text.strip()) else report.parse_time(text, now)
     st = read_state()
     since = at(a.since, max(now - 3 * DAY, float(st.get("until") or 0) or now - DAY))  # since the last digest ended, 3 days at most
@@ -355,8 +427,15 @@ def cmd_reflect(a):
     if a.json:
         print(json.dumps(d, indent=1, default=str))
         return 0
-    print("%d bad items in %d causes, %d recurring%s" % (d["items"], len(d["clusters"]), len(d["actions"]), " (dry run)" if a.dry_run else ""))
+    print(
+        "{:d} bad items in {:d} causes, {:d} recurring{}".format(
+            int(d["items"]), len(d["clusters"]), len(d["actions"]), " (dry run)" if a.dry_run else ""
+        )
+    )
     for x in d["actions"]:
-        print("  %-9s [%s] %s -> %s %s (%d runs)" % (x["action"], x["cause"], x["title"][:60], Path(x["repo"]).name or "?",
-                                                      x["bead"] or "-", len(x["runs"])))
+        print(
+            "  {!s:<9} [{}] {} -> {} {} ({:d} runs)".format(
+                x["action"], x["cause"], x["title"][:60], Path(x["repo"]).name or "?", x["bead"] or "-", len(x["runs"])
+            )
+        )
     return 0

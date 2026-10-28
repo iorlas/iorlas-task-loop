@@ -16,7 +16,7 @@ class FakeBeads:
 
     def _get(self, bead: str) -> Bead:
         if bead not in self.beads:
-            raise BdFailure(BdError(kind="not_found", text="Issue %s not found" % bead))
+            raise BdFailure(BdError(kind="not_found", text=f"Issue {bead} not found"))
         return self.beads[bead]
 
     def _put(self, b: Bead, **changes: Any) -> None:
@@ -41,7 +41,7 @@ class FakeBeads:
     def create(self, new: NewBead) -> str:
         if self.refuse_create:
             raise BdFailure(self.refuse_create.pop(0))
-        bead = "%s-%d" % (self.prefix, len(self.beads) + 1)
+        bead = f"{self.prefix}-{len(self.beads) + 1}"
         self.beads[bead] = Bead(id=bead, title=new.title, status="open", issue_type=new.issue_type, priority=new.priority,
                                 labels=sorted(set(new.labels)), parent=new.parent, description=new.description,
                                 acceptance_criteria=new.acceptance_criteria, dependencies=[Dep(id=d) for d in new.deps])

@@ -10,7 +10,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+import support.paths  # noqa: E402, F401
+
 from taskloop.contracts import answers, schema  # noqa: E402
 
 PRE_FIX_UNCHECKED = ROOT / "tests" / "fixtures" / "schemas" / "pre_fix_unchecked.json"
@@ -30,15 +31,15 @@ def strict_errors(schema, path="$"):
     if "object" in types_of(schema):
         props = schema.get("properties", {})
         if schema.get("additionalProperties") is not False:
-            errs.append("%s: additionalProperties is not false" % path)
+            errs.append(f"{path}: additionalProperties is not false")
         for k in sorted(props):
             if k not in schema.get("required", []):
-                errs.append("%s.%s: a property not in required" % (path, k))
+                errs.append(f"{path}.{k}: a property not in required")
         for k in schema.get("required", []):
             if k not in props:
-                errs.append("%s.%s: required but not a property" % (path, k))
+                errs.append(f"{path}.{k}: required but not a property")
         for k in sorted(props):
-            errs += strict_errors(props[k], "%s.%s" % (path, k))
+            errs += strict_errors(props[k], f"{path}.{k}")
     if "array" in types_of(schema) and isinstance(schema.get("items"), dict):
         errs += strict_errors(schema["items"], path + "[]")
     return errs
@@ -55,10 +56,10 @@ def nullable_errors(contract, sent, path="$"):
             if k not in contract.get("required", []):
                 sp = sprops.get(k, {})
                 if "type" in props[k] and "null" not in types_of(sp):
-                    errs.append("%s.%s: optional but not nullable" % (path, k))
+                    errs.append(f"{path}.{k}: optional but not nullable")
                 if "enum" in props[k] and None not in sp.get("enum", []):
-                    errs.append("%s.%s: an optional enum that does not take null" % (path, k))
-            errs += nullable_errors(props[k], sprops.get(k, {}), "%s.%s" % (path, k))
+                    errs.append(f"{path}.{k}: an optional enum that does not take null")
+            errs += nullable_errors(props[k], sprops.get(k, {}), f"{path}.{k}")
     if "array" in types_of(contract) and isinstance(contract.get("items"), dict):
         errs += nullable_errors(contract["items"], sent.get("items") or {}, path + "[]")
     return errs
@@ -70,7 +71,7 @@ def variants():
     for node in sorted(answers.NODES):
         for visual in (False, True):
             if not visual or node in answers.VISUAL:
-                yield "%s%s" % (node, " (visual)" if visual else ""), answers.schema_for(node, visual)
+                yield "{}{}".format(node, " (visual)" if visual else ""), answers.schema_for(node, visual)
 
 
 class ResponseFormatContracts(unittest.TestCase):

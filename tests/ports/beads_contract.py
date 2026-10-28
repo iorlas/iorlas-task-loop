@@ -4,6 +4,7 @@ import unittest
 from typing import TYPE_CHECKING
 
 from support.tags import contract  # noqa: F401  (re-exported for the subclasses)
+
 from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, Beads, NewBead
 
 # A mixin: only a subclass that is also a TestCase runs; the checker sees the assert methods through this base.

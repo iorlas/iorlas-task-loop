@@ -2,12 +2,14 @@
 import sys
 import unittest
 from pathlib import Path
+from typing import Any, ClassVar
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401
-from taskloop.contracts import answers  # noqa: E402
-from taskloop.domain.plan.stored import role_view, stored  # noqa: E402
-from taskloop.domain.prompts.anchors import anchors_text, unanchored  # noqa: E402
+import support.paths  # noqa: F401
+
+from taskloop.contracts import answers
+from taskloop.domain.plan.stored import role_view, stored
+from taskloop.domain.prompts.anchors import anchors_text, unanchored
 
 ANCHOR = {"path": "src/a.py", "lines": "10-40", "symbol": "Thing.run", "why": "the loop to change"}
 STAGE = {"goal": "g", "files": ["src/a.py", "src/new.py"], "anchors": [ANCHOR], "read_first": ["docs/a.md"],
@@ -29,8 +31,16 @@ class Rendering(unittest.TestCase):
 
 
 class Contract(unittest.TestCase):
-    PLAN = {"summary": "s", "stages": [dict(STAGE, checks=[["true"]], hard=False)], "risks": [], "question": "", "options": [],
-            "decided": "", "cases": [], "leftovers": []}
+    PLAN: ClassVar[Any] = {
+        "summary": "s",
+        "stages": [dict(STAGE, checks=[["true"]], hard=False)],
+        "risks": [],
+        "question": "",
+        "options": [],
+        "decided": "",
+        "cases": [],
+        "leftovers": [],
+    }
 
     def test_the_plan_schema_carries_the_new_stage_fields(self):
         stage = answers.sent_schema("plan", False)["properties"]["stages"]["items"]
@@ -39,7 +49,10 @@ class Contract(unittest.TestCase):
 
     def test_a_plan_with_anchors_is_valid_and_one_without_them_still_is(self):
         self.assertEqual(answers.check("plan", False, self.PLAN), [])
-        bare = {**self.PLAN, "stages": [{k: v for k, v in self.PLAN["stages"][0].items() if k not in ("anchors", "read_first", "patterns")}]}
+        bare = {
+            **self.PLAN,
+            "stages": [{k: v for k, v in self.PLAN["stages"][0].items() if k not in ("anchors", "read_first", "patterns")}],
+        }
         self.assertEqual(answers.check("plan", False, bare), [])
 
     def test_a_writer_handoff_over_a_kilobyte_is_refused(self):

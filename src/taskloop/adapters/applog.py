@@ -48,7 +48,7 @@ def _handle(path: str | Path) -> BinaryIO:
             _drop(k)
         while len(_open) >= MAX_OPEN:
             _drop(next(iter(_open)))
-        f = open(key, "ab", buffering=0)  # noqa: SIM115 (held open on purpose)
+        f = open(key, "ab", buffering=0)  # noqa: SIM115  held open in _open across calls, closed by _drop
         os.set_inheritable(f.fileno(), False)
         ent = (pid, f)
     _open[key] = ent

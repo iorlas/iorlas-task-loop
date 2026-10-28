@@ -43,20 +43,97 @@ def _day(t: float) -> str:
     return time.strftime("%Y-%m-%d", time.localtime(t))
 
 
-def build(beads: Iterable[Bead], cfg: Bead, queued: Iterable[str], running: Iterable[str] = (), asks: Iterable[str] = (), now: float | None = None,
-          repo: str = "") -> Bead:
-    now = now or time.time()
-    running, asks, queued, pick = set(running), set(asks), set(queued), cfg.get("pick_label")
-    beads = [b for b in beads if "slot" not in (b.get("labels") or [])]  # a slot record is a lock, never work: it is in_progress for as long as it exists
-    by_id = {b["id"]: b for b in beads}
-    recent = {b["id"] for b in beads if b.get("status") == "closed" and now - parse(b.get("closed_at")) < DAY}
+def _closed_state(b: Bead) -> tuple[str, str] | None:
+    if b.get("status") == "closed":
+        return "done", "closed in the last 24 h"
+    if b.get("status") == "deferred":
+        return "deferred", "deferred"
+    if b.get("issue_type") == "epic":
+        return "epic", "epic"
+    return None
+
+
+def _held_state(b: Bead, running: set[str], asks: set[str]) -> tuple[str, str] | None:
+    if b["id"] in running:
+        return "running", "held by a slot now"
+    if b.get("status") == "in_progress":
+        return "stuck", "in_progress in bd, but no slot holds it: nothing runs it"
+    if b["id"] in asks:
+        return "waits", "an ask is open"
+    return None
+
+
+def _waiting_state(b: Bead, labels: set[str]) -> tuple[str, str] | None:
+    if labels & set(OWNER_LABELS):
+        return "waits", "label " + sorted(labels & set(OWNER_LABELS))[0]
+    if b.get("status") == "review":
+        return "waits", "in review"
+    return None
+
+
+def _blocked_state(b: Bead, by_id: dict[str, Bead]) -> tuple[str, str] | None:
+    open_by = [x for x in blockers(b) if (by_id.get(x) or {}).get("status", "closed") != "closed"]
+    if open_by or b.get("status") == "blocked":
+        return "blocked", ("blocked by " + ", ".join(open_by[:3])) if open_by else "marked blocked"
+    return None
+
+
+def _pick_state(i: str, labels: set[str], queued: set[str], pick: str | None) -> tuple[str, str]:
+    if i in queued:
+        return "queued", "the loop would pick it"
+    if pick and pick not in labels:
+        return "not_auto", f"no {pick} label: the loop never takes it"
+    return "not_auto", "the loop skips it"
+
+
+def _kept(beads: list[Bead], by_id: dict[str, Bead], recent: set[str]) -> set[str]:
     live = {b["id"] for b in beads if b.get("status") not in ("closed", "deferred")}
     # a deferred bead shows only where it holds something up or hangs under a shown epic
     keep = live | recent
     for b in beads:
-        if b.get("status") == "deferred":
-            if any(b["id"] in blockers(by_id[x]) for x in live if x in by_id):
-                keep.add(b["id"])
+        if b.get("status") == "deferred" and any(b["id"] in blockers(by_id[x]) for x in live if x in by_id):
+            keep.add(b["id"])
+    return keep
+
+
+def _parent_of(i: str, by_id: dict[str, Bead], epics: set[str]) -> str | None:
+    seen, p = {i}, by_id[i].get("parent")
+    while p and p not in seen:
+        if p in epics:
+            return p
+        seen.add(p)
+        p = (by_id.get(p) or {}).get("parent")
+    return None
+
+
+def _kids(nodes: list[Bead]) -> None:
+    """Each epic node gets {state: count} of the nodes under it; the others None."""
+    kids: dict[str, dict[str, int]] = {}
+    for n in nodes:
+        if n["epic"]:
+            c = kids.setdefault(n["epic"], {})
+            c[n["state"]] = c.get(n["state"], 0) + 1
+    for n in nodes:
+        n["kids"] = kids.get(n["id"], {}) if n["is_epic"] else None
+
+
+def build(
+    beads: Iterable[Bead],
+    cfg: Bead,
+    queued: Iterable[str],
+    running: Iterable[str] = (),
+    asks: Iterable[str] = (),
+    now: float | None = None,
+    repo: str = "",
+) -> Bead:
+    now = now or time.time()
+    running, asks, queued, pick = set(running), set(asks), set(queued), cfg.get("pick_label")
+    beads = [
+        b for b in beads if "slot" not in (b.get("labels") or [])
+    ]  # a slot record is a lock, never work: it is in_progress for as long as it exists
+    by_id = {b["id"]: b for b in beads}
+    recent = {b["id"] for b in beads if b.get("status") == "closed" and now - parse(b.get("closed_at")) < DAY}
+    keep = _kept(beads, by_id, recent)
     edges: dict[str, set[str]] = {}
     for t in keep:
         for s in blockers(by_id[t]):
@@ -68,56 +145,19 @@ def build(beads: Iterable[Bead], cfg: Bead, queued: Iterable[str], running: Iter
     counts = unblock_counts(open_edges, epics | recent)
 
     def state(b: Bead) -> tuple[str, str]:
-        i, labels = b["id"], set(b.get("labels") or [])
-        if b.get("status") == "closed":
-            return "done", "closed in the last 24 h"
-        if b.get("status") == "deferred":
-            return "deferred", "deferred"
-        if b.get("issue_type") == "epic":
-            return "epic", "epic"
-        if i in running:
-            return "running", "held by a slot now"
-        if b.get("status") == "in_progress":
-            return "stuck", "in_progress in bd, but no slot holds it: nothing runs it"
-        if i in asks:
-            return "waits", "an ask is open"
-        if labels & set(OWNER_LABELS):
-            return "waits", "label " + sorted(labels & set(OWNER_LABELS))[0]
-        if b.get("status") == "review":
-            return "waits", "in review"
-        open_by = [x for x in blockers(b) if (by_id.get(x) or {}).get("status", "closed") != "closed"]
-        if open_by or b.get("status") == "blocked":
-            return "blocked", ("blocked by " + ", ".join(open_by[:3])) if open_by else "marked blocked"
-        if i in queued:
-            return "queued", "the loop would pick it"
-        if pick and pick not in labels:
-            return "not_auto", "no %s label: the loop never takes it" % pick
-        return "not_auto", "the loop skips it"
-
-    def parent_of(i: str) -> str | None:
-        seen, p = {i}, by_id[i].get("parent")
-        while p and p not in seen:
-            if p in epics:
-                return p
-            seen.add(p)
-            p = (by_id.get(p) or {}).get("parent")
-        return None
+        labels = set(b.get("labels") or [])
+        return (_closed_state(b) or _held_state(b, running, asks) or _waiting_state(b, labels) or _blocked_state(b, by_id)
+                or _pick_state(b["id"], labels, queued, pick))
 
     nodes: list[Bead] = []
     for i in sorted(keep):
         b = by_id[i]
         st, why = state(b)
-        nodes.append({"id": i, "title": b.get("title") or "", "state": st, "why": why, "epic": parent_of(i),
+        nodes.append({"id": i, "title": b.get("title") or "", "state": st, "why": why, "epic": _parent_of(i, by_id, epics),
                       "is_epic": i in epics, "unblocks": 0 if st == "done" else counts.get(i, 0),
                       "priority": b.get("priority"), "labels": b.get("labels") or [], "status": b.get("status"),
                       "closed_at": b.get("closed_at") if st == "done" else None})
-    kids: dict[str, dict[str, int]] = {}
-    for n in nodes:
-        if n["epic"]:
-            c = kids.setdefault(n["epic"], {})
-            c[n["state"]] = c.get(n["state"], 0) + 1
-    for n in nodes:
-        n["kids"] = kids.get(n["id"], {}) if n["is_epic"] else None
+    _kids(nodes)
     flat = [{"source": s, "target": t} for s in sorted(edges) for t in sorted(edges[s])]
     done_today = sum(1 for i in recent if _day(parse(by_id[i].get("closed_at"))) == _day(now))
     sc = dict.fromkeys(STATES, 0)

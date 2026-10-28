@@ -1,9 +1,12 @@
 """`ask_json(bead, **over)`: a current-version ask record as the dict on disk (the quoted mock ask, re-pointed at `bead`)."""
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
+
+# isort: split
 import dataclasses
 from typing import Any
 
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from asks.samples import MOCKS
+
 from taskloop.contracts import codec
 
 

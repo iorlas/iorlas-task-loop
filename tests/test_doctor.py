@@ -1,23 +1,22 @@
 """Doctor and the engine inspect the same committed base, even from a stale worktree."""
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+import support.paths  # noqa: E402, F401
 from support import tlbd  # noqa: E402
-from taskloop.app.run import engine  # noqa: E402
-from taskloop.app.wire import slots as wslots  # noqa: E402
-import tl  # noqa: E402
-from taskloop.app.wire import doctor  # noqa: E402
+
 from taskloop.adapters import gitrepo  # noqa: E402
+from taskloop.app.wire import doctor  # noqa: E402
+from taskloop.app.wire import slots as wslots  # noqa: E402
 
 
 def shown(p):

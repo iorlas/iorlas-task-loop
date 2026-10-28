@@ -5,7 +5,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 
-from taskloop.contracts.config import ConfigError, RepoProfile, load  # noqa: E402
+from taskloop.contracts.config import ConfigError, RepoProfile, load
 
 
 class RepoProfileKeys(unittest.TestCase):

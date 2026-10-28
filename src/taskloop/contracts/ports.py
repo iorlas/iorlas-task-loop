@@ -72,7 +72,7 @@ class BdFailure(Exception):
     """bd refused or failed. `error.kind`: lint (missing sections), not_found, not_claimable, other."""
 
     def __init__(self, error: BdError) -> None:
-        super().__init__("%s: %s" % (error.kind, error.text))
+        super().__init__(f"{error.kind}: {error.text}")
         self.error = error
 
 

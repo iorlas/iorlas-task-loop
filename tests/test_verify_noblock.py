@@ -1,22 +1,22 @@
 """tl-bxk.10.28: a verify item never parks a bead unless it is a real owner decision. The fixtures are the five asks that
 parked lifesim on 2026-10-22 (~/.config/task-loop/asks/lifesim-*.json), each item with the kind the engine now routes by."""
-import json
-from typing import Any, cast
 import sys
 import threading
 import time
 import unittest
 from pathlib import Path
+from typing import Any, cast
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from taskloop.contracts import answers  # noqa: E402
-from taskloop.domain.prompts import common as cp  # noqa: E402
-from taskloop.domain.prompts import verify as vp  # noqa: E402
-from support import engine_case as T  # noqa: E402
-from support.engine_case import BEAD, CLEAN, PLAN, WRITE, engine, verdict  # noqa: E402
-from support.builders import make_engine  # noqa: E402
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support import engine_case as T
+from support.builders import make_engine
+from support.engine_case import BEAD, CLEAN, PLAN, WRITE, engine, verdict
+
+from taskloop.contracts import answers
+from taskloop.domain.prompts import common as cp
+from taskloop.domain.prompts import verify as vp
 
 # lifesim-yxbb.7 and lifesim-fld.25.16: the engine files follow-up beads after the land
 YXBB_7 = {"what": "Follow-up beads for table, chairs, sink, plates and second bed: the engine files them from the plan's "
@@ -39,7 +39,9 @@ FLD_25_19 = {"what": "Mesh sizes (73x91x16, 73x212x69) and the claim that only f
 SOURCE = "https://example.com/pack-page"
 LEFT = [{"title": "Table and chairs", "why": "the catalogue needs them"}]  # the plan's leftovers: the engine files them
 PLAN_LEFT = dict(PLAN, leftovers=LEFT)
-IQAD_BEAD = dict(BEAD, acceptance_criteria="f.txt exists; the energy decay holds across other seeds in a soak")  # IQAD is inside its done-when
+IQAD_BEAD = dict(
+    BEAD, acceptance_criteria="f.txt exists; the energy decay holds across other seeds in a soak"
+)  # IQAD is inside its done-when
 
 
 def open_as(*kinds, source=SOURCE):
@@ -51,7 +53,7 @@ def open_as(*kinds, source=SOURCE):
 class NoBlock(T.LandReviewBase):
 
     def go(self, items, verify=None, extra_reviews=(), bead=BEAD, writes=1, plan=PLAN_LEFT, **cfg):
-        answers = {"plan": [plan], "write": [WRITE] * writes, "review": [dict(CLEAN, unchecked=items)] + list(extra_reviews)}
+        answers = {"plan": [plan], "write": [WRITE] * writes, "review": [dict(CLEAN, unchecked=items), *extra_reviews]}
         if verify:
             answers["verify"] = verify
         with self.store.stub(show=bead):
@@ -111,9 +113,9 @@ class NoBlock(T.LandReviewBase):
             cast(Any, e).fixes += 1
             rounds.append(tail)
             return "stuck"  # the fix round did not pass its checks and review
-        with mock.patch.object(e, "ai", return_value=(open_as("checkable"), None)), mock.patch.object(e.fixer, "fix", side_effect=fix):
-            with self.assertRaises(engine.Blocked) as ctx:
-                e.verifier.run([IQAD])
+        with (mock.patch.object(e, "ai", return_value=(open_as("checkable"), None)), mock.patch.object(e.fixer, "fix", side_effect=fix),
+              self.assertRaises(engine.Blocked) as ctx):
+            e.verifier.run([IQAD])
         self.assertEqual(len(rounds), 2)  # one per round of the budget, then stuck
         self.assertIn("it needs the owner's hint", ctx.exception.why)
         self.assertEqual(e.unverified, [])
@@ -239,7 +241,11 @@ class NoBlock(T.LandReviewBase):
             "bead_parent": "t-0",
             "unverified": [{"what": "price of the pack", "kind": "external_fact", "why": ""}],
             })
-        shows = {"t-0": {"id": "t-0", "issue_type": "epic"}, existing["id"]: existing} if existing else {"t-0": {"id": "t-0", "issue_type": "epic"}}
+        shows = (
+            {"t-0": {"id": "t-0", "issue_type": "epic"}, existing["id"]: existing}
+            if existing
+            else {"t-0": {"id": "t-0", "issue_type": "epic"}}
+        )
         self.bd_calls.clear()
         with self.store.stub(find_fn=lambda q: [{"id": existing["id"]}] if existing else []), \
                 self.store.stub(show_fn=lambda i, **k: shows.get(i, {})):
@@ -275,7 +281,7 @@ class NoBlock(T.LandReviewBase):
             if a[0] == "create":
                 time.sleep(0.05)  # the window a race needs: list is done, create is not
                 with lock:
-                    store["t-9%d" % len(store)] = {"id": "t-9%d" % len(store), "parent": a[a.index("--parent") + 1], "status": "open",
+                    store[f"t-9{len(store)}"] = {"id": f"t-9{len(store)}", "parent": a[a.index("--parent") + 1], "status": "open",
                                                    "description": a[a.index("--description") + 1], "dependencies": []}
             elif a[0] == "update":
                 with lock:
@@ -287,10 +293,10 @@ class NoBlock(T.LandReviewBase):
                 return epic if i == "t-0" else dict(store.get(i, {}))
 
         def land(n):
-            eng = make_engine(self.wt, bead="t-%d" % n, store=self.store, attrs={
-                "bead_title": "Bead %d" % n,
+            eng = make_engine(self.wt, bead=f"t-{n}", store=self.store, attrs={
+                "bead_title": f"Bead {n}",
                 "bead_parent": "t-0",
-                "unverified": [{"what": "price %d" % n, "kind": "external_fact", "why": "", "source": SOURCE}],
+                "unverified": [{"what": f"price {n}", "kind": "external_fact", "why": "", "source": SOURCE}],
                 })
             eng.owner_look.file_owner_look()
 
@@ -305,8 +311,8 @@ class NoBlock(T.LandReviewBase):
         self.assertEqual(len(store), 1)  # exactly one review bead for the epic
         (row,) = store.values()
         for n in (1, 2, 3):
-            self.assertIn("## t-%d: Bead %d" % (n, n), row["description"])
-            self.assertIn("price %d" % n, row["description"])
+            self.assertIn(f"## t-{n}: Bead {n}", row["description"])
+            self.assertIn(f"price {n}", row["description"])
 
     def test_a_bead_with_no_epic_files_its_review_bead_under_itself(self):
         eng = make_engine(self.wt, store=self.store, attrs={

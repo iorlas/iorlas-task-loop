@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401
+import support.paths  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[1]
 VENDOR = ROOT / "skills" / "task-loop" / "_vendor"
@@ -24,7 +24,7 @@ class OneLockPrimitive(unittest.TestCase):
             for f in sorted((ROOT / top).rglob("*.py")):
                 if VENDOR in f.parents:
                     continue
-                found += ["%s:%d" % (f.relative_to(ROOT), n) for n in lock_calls(ast.parse(f.read_text(encoding="utf-8")))]
+                found += [f"{f.relative_to(ROOT)}:{n}" for n in lock_calls(ast.parse(f.read_text(encoding="utf-8")))]
         self.assertEqual(found, [])
 
     def test_the_scan_sees_a_planted_flock(self):

@@ -1,26 +1,31 @@
 """Split the suite across CI shards: python tests/shard.py run INDEX COUNT runs shard INDEX (1-based) of COUNT.
 
-Every test is in exactly one shard. Units (a class, or a chunk of a big one) are placed heaviest first on the lightest shard (weight: the sum of its tests' measured seconds in tests/durations.json), ties broken by name, so the split is stable for a given tree.
+Every test is in exactly one shard. Units (a class, or a chunk of a big one) are placed heaviest first on the lightest shard
+(weight: the sum of its tests' measured seconds in tests/durations.json), ties broken by name, so the split is stable for a given tree.
 `python tests/shard.py run INDEX COUNT` runs it. `python tests/shard.py --check COUNT` fails when a test would run in no shard or in two.
 
 The release gate (dev/release.py) uses the same split on one machine: `plan COUNT --root DIR` prints {"shards": [[id]], "serial": [id]},
-the tests named in SERIAL left out of the shards; `ids FILE --root DIR [--times F] [--parent PID] [--max-mb MB]` runs the ids listed in FILE (one per line) in this process.
+the tests named in SERIAL left out of the shards;
+`ids FILE --root DIR [--times F] [--parent PID] [--max-mb MB]` runs the ids listed in FILE (one per line) in this process.
 """
 import argparse
+import contextlib
+import ctypes
 import json
 import os
-import signal
+import resource
 import sys
 import time
 import unittest
-from typing import Any
 from pathlib import Path
+from typing import Any, ClassVar
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+
 DEFAULT_WEIGHT = 0.3  # seconds a test costs when tests/durations.json has no entry for it (a new test)
-DURATIONS = HERE / "durations.json"  # {test id: seconds}, measured by `python3 dev/suite.py --record`; a test not in it counts DEFAULT_WEIGHT
+DURATIONS = HERE / "durations.json"  # {test id: seconds}, measured by `python3 dev/suite.py --record`; absent counts DEFAULT_WEIGHT
 
 
 def load_durations(root=HERE):
@@ -40,7 +45,8 @@ def cost(test_id, durations):
 # runs them in ONE process after the parallel shards. (module, class or None for the whole module, reason); found by measurement and by
 # reading the code, not guessed: a module is listed only with the reason that makes it unsafe beside others.
 SERIAL = (
-    ("test_write_idle", None, "starts real worker process groups and asserts how long a writer stays idle against the wall clock; load moves the clock"),
+    ("test_write_idle", None,
+     "starts real worker process groups and asserts how long a writer stays idle against the wall clock; load moves the clock"),
 )
 
 
@@ -59,7 +65,7 @@ def tests(root=HERE):
             if isinstance(t, unittest.TestSuite):
                 walk(t)
             else:
-                by_class.setdefault("%s.%s" % (type(t).__module__, type(t).__name__), []).append(t.id())
+                by_class.setdefault(f"{type(t).__module__}.{type(t).__name__}", []).append(t.id())
     walk(suite)
     units = {}
     for cls, ids in by_class.items():
@@ -72,14 +78,14 @@ def tests(root=HERE):
                 chunks[j].append(t)
                 load[j] += cost(t, durations)
             for j, c in enumerate(chunks):
-                units["%s#%d" % (cls, j)] = sorted(c)
+                units[f"{cls}#{j:d}"] = sorted(c)
         else:
             units[cls] = ids
     return units
 
 
 def is_serial(test_id, serial=SERIAL):
-    module, cls, name = (test_id.split(".") + ["", ""])[:3]
+    module, cls, name = [*test_id.split("."), "", ""][:3]
     return any(m == module and c in (None, cls, cls + "." + name) for m, c, _ in serial)
 
 
@@ -105,7 +111,7 @@ def plan(count, root=HERE, serial=SERIAL):
 
 class Timed(unittest.TextTestResult):
     """A result that remembers how long each test took (seconds, by id)."""
-    times: dict[str, float] = {}
+    times: ClassVar[dict[str, float]] = {}
     t0 = 0.0
 
     def __init__(self, stream: Any, descriptions: bool, verbosity: int) -> None:
@@ -131,16 +137,14 @@ def parent_gone():
 
 def exit_with_parent(parent):
     """Leave this process once its parent `parent` (the launcher's pid) is gone: nobody reads this shard's result, and an orphan that
-    holds gigabytes helps no one. On Linux the kernel does it (PR_SET_PDEATHSIG, the one primitive made for this); everywhere the shard
-    also looks before each test. No watcher thread (with a second thread alive this suite's shards grew from ~150 MB to 2-3 GB) and no
-    timer signal (a test may own SIGALRM and the interval timer: test_engine_checks does). os._exit: no cleanup can hang on a dead parent."""
+    holds gigabytes helps no one. On Linux the kernel does it (PR_SET_PDEATHSIG, the one primitive made for this); everywhere the
+    shard also looks before each test. No watcher thread (with a second thread alive this suite's shards grew from ~150 MB to 2-3 GB) and no
+    timer signal (a test may own SIGALRM and the interval timer: test_engine_checks does). os._exit: no cleanup can hang on a dead
+    parent."""
     PARENT["pid"] = parent
     if sys.platform.startswith("linux"):
-        try:
-            import ctypes
+        with contextlib.suppress(OSError, AttributeError):
             ctypes.CDLL(None, use_errno=True).prctl(1, 9, 0, 0, 0)  # PR_SET_PDEATHSIG, SIGKILL
-        except (OSError, AttributeError):
-            pass
     if parent_gone():
         os._exit(3)
 
@@ -151,11 +155,10 @@ def cap_memory(megabytes):
     shard's address space peaks near 430 MB (resident ~250), so the release gate's 2048 MB budget leaves 5x."""
     limit = megabytes << 20
     try:
-        import resource
         soft, hard = resource.getrlimit(resource.RLIMIT_AS)
         if sys.platform.startswith("linux") and (soft == resource.RLIM_INFINITY or soft > limit):
             resource.setrlimit(resource.RLIMIT_AS, (limit if hard == resource.RLIM_INFINITY else min(limit, hard), hard))
-    except (ImportError, OSError, ValueError):
+    except (OSError, ValueError):
         pass
 
 
@@ -188,7 +191,7 @@ if __name__ == "__main__":
             cap_memory(a.max_mb)
         if a.parent:  # the release gate's pid: its death ends this shard (see exit_with_parent)
             exit_with_parent(a.parent)
-        ids = [l for l in Path(a.arg).read_text(encoding="utf-8").splitlines() if l.strip()]
+        ids = [ln for ln in Path(a.arg).read_text(encoding="utf-8").splitlines() if ln.strip()]
         sys.exit(0 if run_ids(ids, a.times).wasSuccessful() else 1)
     if cmd == "--check":
         count = int(sys.argv[2])
@@ -196,13 +199,13 @@ if __name__ == "__main__":
         every = [t for ids in tests().values() for t in ids]
         assert sorted(placed) == sorted(every) and len(placed) == len(set(placed)), "a test is in no shard or in two"
         files = {p.stem for p in HERE.glob("test_*.py")}
-        assert not files - {t.split(".")[0] for t in placed}, "no test from %s" % sorted(files - {t.split(".")[0] for t in placed})
-        print("ok: %d tests in %d shards (%s)" % (len(placed), count, ", ".join(str(len(s)) for s in split(count))))
+        assert not files - {t.split(".")[0] for t in placed}, f"no test from {sorted(files - {t.split('.')[0] for t in placed})}"
+        print(f"ok: {len(placed):d} tests in {count:d} shards ({', '.join(str(len(s)) for s in split(count))})")
         p = plan(count)
         assert sorted([t for s in p["shards"] for t in s] + p["serial"]) == sorted(placed), "the release plan loses or doubles a test"
         for m, c, why in SERIAL:
-            assert any(is_serial(t, ((m, c, why),)) for t in placed), "SERIAL names %s.%s, no such test" % (m, c)
-            assert why.strip(), "SERIAL %s has no reason" % m
+            assert any(is_serial(t, ((m, c, why),)) for t in placed), f"SERIAL names {m}.{c}, no such test"
+            assert why.strip(), f"SERIAL {m} has no reason"
     else:  # run INDEX COUNT
         ids = split(int(sys.argv[3]))[int(sys.argv[2]) - 1]
         res = unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromNames(ids))

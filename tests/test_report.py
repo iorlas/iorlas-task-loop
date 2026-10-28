@@ -16,14 +16,22 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from support import tlbd  # noqa: E402
-from support.fakes import FakeBeadStore, as_comment  # noqa: E402
-from support import looptest  # noqa: E402
+import support.paths  # noqa: E402, F401
+
+# isort: split
 import report  # noqa: E402
 import tl  # noqa: E402
-from taskloop.adapters import beadtools, gitrepo  # noqa: E402
-from taskloop.adapters import ident  # noqa: E402
+from support import (  # noqa: E402
+    looptest,
+    tlbd,
+)
+from support.fakes import FakeBeadStore, as_comment  # noqa: E402
+
+from taskloop.adapters import (  # noqa: E402
+    beadtools,
+    gitrepo,
+    ident,
+)
 
 T0 = datetime(2026, 10, 21, 6, 0).timestamp()  # the window's start in the fixtures: local 06:00
 MIN = 60.0
@@ -32,8 +40,8 @@ MIN = 60.0
 def git(repo, *args, t=None):
     env = dict(os.environ)
     if t is not None:
-        env["GIT_AUTHOR_DATE"] = env["GIT_COMMITTER_DATE"] = "@%d +0000" % int(t)
-    r = subprocess.run(["git", "-C", str(repo)] + list(args), check=True, capture_output=True, text=True, env=env)
+        env["GIT_AUTHOR_DATE"] = env["GIT_COMMITTER_DATE"] = f"@{int(t)} +0000"
+    r = subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True, text=True, env=env)
     return r.stdout.strip()
 
 
@@ -107,7 +115,7 @@ class LostWork(Base):
         return shas
 
     def lost(self, status, traces=(), since=None):
-        return report.lost_work(str(self.repo), since=since, base="main", status_of=lambda b: status.get(b),
+        return report.lost_work(str(self.repo), since=since, base="main", status_of=status.get,
                                 traces=list(traces))
 
     def by_class(self, rows):
@@ -194,7 +202,7 @@ class LostWork(Base):
 def trace(bead, outcome, start_min, end_min, why="", sha="", rounds=0, replans=0, sessions=(), worktree=None, run=None,
           stderr=None, kind=""):
     started, ended = T0 + start_min * MIN, T0 + end_min * MIN
-    stem = run or "%s-%s" % (bead, time.strftime("%Y%m%d-%H%M%S", time.localtime(started)))
+    stem = run or "{}-{}".format(bead, time.strftime("%Y%m%d-%H%M%S", time.localtime(started)))
     return {"v": 1, "run": stem, "bead": bead, "repo": "https://example.invalid/r.git", "worktree": worktree,
             "started": started, "ended": ended, "outcome": outcome, "why": why, "sha": sha,
             "stats": {"rounds": rounds, "replans": replans}, "log": str(ident.config_dir() / "engine" / (stem + ".jsonl")),
@@ -236,11 +244,11 @@ class Scorecard(Base):
         (ident.config_dir() / "engine" / (str(runs[-4]["run"]) + ".jsonl")).write_text(json.dumps(
             {"t": T0, "kind": "note", "text": "ask t-7-1 (verify) is answered: the bead changed since it was asked"}) + "\n")
         # a crash: an engine log with no close and no trace, long quiet
-        dead = ident.config_dir() / "engine" / ("t-8-%s.jsonl" % time.strftime("%Y%m%d-%H%M%S", time.localtime(T0 + 5 * MIN)))
+        dead = ident.config_dir() / "engine" / ("t-8-{}.jsonl".format(time.strftime("%Y%m%d-%H%M%S", time.localtime(T0 + 5 * MIN))))
         dead.write_text(json.dumps({"t": T0 + 5 * MIN, "kind": "cmd", "text": "git commit -q -m wip (t-8): failed"}) + "\n")
         os.utime(dead, (T0 + 6 * MIN, T0 + 6 * MIN))
         # a run that is still going: no trace yet, but alive
-        live = ident.config_dir() / "engine" / ("t-9-%s.jsonl" % time.strftime("%Y%m%d-%H%M%S", time.localtime(T0 + 100 * MIN)))
+        live = ident.config_dir() / "engine" / ("t-9-{}.jsonl".format(time.strftime("%Y%m%d-%H%M%S", time.localtime(T0 + 100 * MIN))))
         live.write_text(json.dumps({"t": T0 + 100 * MIN, "kind": "node", "text": "write"}) + "\n")
         # the loop's own record of a run-task that died before its engine wrote anything
         looptest.log(gitrepo.repo_root(str(self.repo))).parent.mkdir(parents=True, exist_ok=True)
@@ -269,7 +277,7 @@ class Scorecard(Base):
 
     def card(self, until=None):
         return report.scorecard(str(self.repo), T0, until or T0 + 200 * MIN, base="main",
-                                comments_of=lambda b: [as_comment(c) for c in self.comments.get(b, [])], status_of=lambda b: self.status.get(b),
+                                comments_of=lambda b: [as_comment(c) for c in self.comments.get(b, [])], status_of=self.status.get,
                                 alive=lambda bead: bead == "t-9", now=T0 + 200 * MIN)
 
     def test_the_six_counts(self):
@@ -322,7 +330,7 @@ class Scorecard(Base):
             self.assertIn("crashes 3", text)
             out = io.StringIO()
             with redirect_stdout(out):
-                tl.main(args + ["--json"])
+                tl.main([*args, "--json"])
             self.assertEqual(json.loads(out.getvalue())["landed"], 4)
             out = io.StringIO()
             with redirect_stdout(out):

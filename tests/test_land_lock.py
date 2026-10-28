@@ -12,7 +12,6 @@ PY = sys.executable
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from support.waits import until  # noqa: E402
 
-
 NO_FCNTL = unittest.skipIf(os.name == "nt", "the lock is fcntl; tl has none on Windows (documented no-op)")
 
 
@@ -25,13 +24,13 @@ class LandLockTests(unittest.TestCase):
         subprocess.run(["git", "init", "-q", self.repo], check=True)
 
     def run_ll(self, *args):
-        return subprocess.run([PY, str(TL), "land-lock", "--repo", self.repo] + list(args), env=self.env,
-                              capture_output=True, text=True, timeout=30)
+        return subprocess.run([PY, str(TL), "land-lock", "--repo", self.repo, *args], env=self.env,
+                              capture_output=True, text=True, timeout=30, check=False)
 
     def holder(self, secs, ready):
         self.release = Path(ready).with_name("release")  # the test touches it when the holder has served its purpose
-        code = ("import time,pathlib;pathlib.Path(%r).write_text('x');end=time.time()+%s\n"
-                "while time.time()<end and not pathlib.Path(%r).exists(): time.sleep(0.01)") % (str(ready), secs, str(self.release))
+        code = (f"import time,pathlib;pathlib.Path({str(ready)!r}).write_text('x');end=time.time()+{secs}\n"
+                f"while time.time()<end and not pathlib.Path({str(self.release)!r}).exists(): time.sleep(0.01)")
         p = subprocess.Popen([PY, str(TL), "land-lock", "--repo", self.repo, "--", PY, "-c", code], env=self.env,
                              stdout=subprocess.PIPE, text=True)
         self.addCleanup(p.wait)

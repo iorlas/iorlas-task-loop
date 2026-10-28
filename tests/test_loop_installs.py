@@ -10,20 +10,24 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from test_loop import LoopBase, rec  # noqa: E402
-import test_loop_more as more  # noqa: E402
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from test_loop import LoopBase, rec
 
-from taskloop.app.run import console  # noqa: E402
-from taskloop.app.run import engine  # noqa: E402
-from support import looptest  # noqa: E402
-import loop_env  # noqa: E402
-import tl  # noqa: E402
-from taskloop.adapters import ident  # noqa: E402
-from support import eventlog  # noqa: E402
-from taskloop.app.loop.loop import Loop  # noqa: E402
-from taskloop.contracts import codec  # noqa: E402
-from taskloop.contracts.loop import Carry, LoopState  # noqa: E402
+# isort: split
+import loop_env
+import test_loop_more as more
+from support import (
+    eventlog,
+    looptest,
+)
+
+from taskloop.adapters import ident
+from taskloop.app.loop.loop import Loop
+from taskloop.app.run import (
+    console,
+    )
+from taskloop.contracts import codec
+from taskloop.contracts.loop import Carry, LoopState
 
 
 class Moving(LoopBase):

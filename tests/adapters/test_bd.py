@@ -10,14 +10,15 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401
-from ports.beads_contract import BeadsContract  # noqa: E402
-from support.tags import contract, domain  # noqa: E402
-from taskloop.adapters import bd  # noqa: E402
-from taskloop.adapters.bd import BdRun, BdStore, create_argv, update_argv  # noqa: E402
-from taskloop.adapters.fake_beads import FakeBeads  # noqa: E402
-from taskloop.contracts.bead import BdError  # noqa: E402
-from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, NewBead  # noqa: E402
+import support.paths  # noqa: F401
+from ports.beads_contract import BeadsContract
+from support.tags import contract, domain
+
+from taskloop.adapters import bd
+from taskloop.adapters.bd import BdRun, BdStore, create_argv, update_argv
+from taskloop.adapters.fake_beads import FakeBeads
+from taskloop.contracts.bead import BdError
+from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, NewBead
 
 GOLD = Path(__file__).parent / "golden" / "bd_1_3_1"
 
@@ -50,11 +51,11 @@ class RealBdContract(BeadsContract, unittest.TestCase):
         cls.root = tempfile.mkdtemp(prefix="ports-bd-")
         subprocess.run(["git", "init", "-q"], cwd=cls.root, check=True)
         r = subprocess.run([exe, "init", "--quiet", "--prefix", "pt"], cwd=cls.root, capture_output=True, text=True,
-                           env=dict(os.environ, HOME=cls.root))
+                           env=dict(os.environ, HOME=cls.root), check=False)
         if r.returncode != 0:
             shutil.rmtree(cls.root, ignore_errors=True)
             cls.root = ""
-            cls.why_not = "bd init failed: %s" % r.stderr[-200:]
+            cls.why_not = f"bd init failed: {r.stderr[-200:]}"
 
     def setUp(self) -> None:
         if self.why_not:

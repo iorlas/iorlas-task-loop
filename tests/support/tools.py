@@ -12,7 +12,7 @@ from unittest import mock
 
 def _runs(path):
     try:
-        return subprocess.run([path, "--version"], capture_output=True, timeout=20, cwd="/").returncode == 0
+        return subprocess.run([path, "--version"], capture_output=True, timeout=20, cwd="/", check=False).returncode == 0
     except (OSError, subprocess.SubprocessError):
         return False
 
@@ -25,7 +25,7 @@ def _resolve(tool):
     candidates = []
     if shutil.which("mise"):
         try:
-            r = subprocess.run(["mise", "which", tool], capture_output=True, text=True, timeout=20, cwd="/")
+            r = subprocess.run(["mise", "which", tool], capture_output=True, text=True, timeout=20, cwd="/", check=False)
             candidates.append(r.stdout.strip())
         except (OSError, subprocess.SubprocessError):
             pass
@@ -47,7 +47,7 @@ def real(tool):
 def need(test, tool):
     """Skip the running test only when no real `tool` exists on this machine at all."""
     if not real(tool):
-        test.skipTest("no real `%s` binary on this machine" % tool)
+        test.skipTest(f"no real `{tool}` binary on this machine")
 
 
 def on_path(tool):

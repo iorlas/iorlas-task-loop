@@ -7,23 +7,49 @@ from types import SimpleNamespace
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401
-from taskloop.app.run.resume import KEEP_FOR_ACTIVE, LATE, Resume  # noqa: E402
-from taskloop.app.run.state import Checkpoints, StateAttrs, carries_state, state_names  # noqa: E402
+import support.paths  # noqa: F401
+
+from taskloop.app.run.resume import KEEP_FOR_ACTIVE, LATE, Resume
+from taskloop.app.run.state import Checkpoints, StateAttrs, carries_state, state_names
 from taskloop.contracts.checkpoint import Checkpoint, RunState
-from taskloop.contracts.review import Unfiled  # noqa: E402
-from taskloop.contracts.review import ReviewState  # noqa: E402
-from taskloop.stores.memory import fake_stores  # noqa: E402
+from taskloop.contracts.review import (
+    ReviewState,
+    Unfiled,
+)
+from taskloop.stores.memory import fake_stores
 
 ROOT = Path(__file__).resolve().parents[2]
 # a value that is not the default, for each field: the park test fails on a new field until it is listed here
 SAMPLE: dict[str, Any] = {
-    "plan_data": {"summary": "s", "stages": []}, "brief_hash": "b", "snap": {"title": "t"}, "planner_ref": "ref", "planned": 2, "replans": 1,
-    "fixes": 1, "extra": 1, "rebase_resets": 1, "plan_log": [{"mode": "plan"}], "done": ["g"], "accepted": [0], "accepted_new": ["f.txt"],
-    "denials": ["rm"], "writer": {"delegate": "w1", "ctx": 5, "seen": ["a"]}, "writer_family": "codex", "writer_fallback": True,
-    "fallback_lane": "L", "writer_said": "said", "look_paths": ["p.png"],
-    "look_notes": ["n"], "look_unjudged": {"i": "why"}, "look_done": 1, "look_prev": [{"item": "i"}], "rendered_names": {"a.png"},
-    "last_reqs": [{"method": "m"}], "render_stale": True, "handoff": {"rounds": [{"r": 1}], "seen_lows": ["l"]}, "stage_tree": "T",
+    "plan_data": {"summary": "s", "stages": []},
+    "brief_hash": "b",
+    "snap": {"title": "t"},
+    "planner_ref": "ref",
+    "planned": 2,
+    "replans": 1,
+    "fixes": 1,
+    "extra": 1,
+    "rebase_resets": 1,
+    "plan_log": [{"mode": "plan"}],
+    "done": ["g"],
+    "accepted": [0],
+    "accepted_new": ["f.txt"],
+    "denials": ["rm"],
+    "writer": {"delegate": "w1", "ctx": 5, "seen": ["a"]},
+    "writer_family": "codex",
+    "writer_fallback": True,
+    "fallback_lane": "L",
+    "writer_said": "said",
+    "look_paths": ["p.png"],
+    "look_notes": ["n"],
+    "look_unjudged": {"i": "why"},
+    "look_done": 1,
+    "look_prev": [{"item": "i"}],
+    "rendered_names": {"a.png"},
+    "last_reqs": [{"method": "m"}],
+    "render_stale": True,
+    "handoff": {"rounds": [{"r": 1}], "seen_lows": ["l"]},
+    "stage_tree": "T",
     "pending_land_validation": "red",
 }
 
@@ -100,7 +126,7 @@ class Park(unittest.TestCase):
         self.assertEqual((b.unverified, b.filed, b.unfiled), (a.unverified, a.filed, a.unfiled))  # the ReviewState folds them in
 
     def test_an_edit_from_outside_hands_back_only_what_every_resume_keeps(self):
-        a, b = self.parked()
+        _a, b = self.parked()
         Resume(b).restore(stored(b), late=False)
         for name in LATE:
             self.assertEqual(getattr(b, name), getattr(RunState(), name), name)

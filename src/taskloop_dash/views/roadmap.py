@@ -97,7 +97,7 @@ def tree(i: str, out: dict[str, list[str]], by_id: dict[str, Row], seen: tuple[s
     for t in sorted(kids, key=lambda t: (-by_id[t]["unblocks"], t))[:WIDE]:
         n = by_id[t]
         res.append({"id": t, "title": n["title"], "state": n["state"], "needs": max(0, len(n.get("blocked_by") or ()) - 1),
-                    "kids": tree(t, out, by_id, tuple(seen) + (i,), depth - 1) if depth > 1 else [], "more": 0})
+                    "kids": tree(t, out, by_id, (*tuple(seen), i), depth - 1) if depth > 1 else [], "more": 0})
     if len(kids) > WIDE and res:
         res[-1]["more"] = len(kids) - WIDE
     return res
@@ -110,7 +110,8 @@ def released(i: str, out: dict[str, list[str]], by_id: dict[str, Row]) -> list[R
 
 
 def idle_why(ranked: Sequence[Any], skipped: Sequence[tuple[str, str]]) -> str:
-    """Why a loop with no bead has nothing to take: '' when the queue has a bead (it is between picks), else the skipped list's top reasons."""
+    """Why a loop with no bead has nothing to take: '' when the queue has a bead (it is between picks), else the skipped list's top
+    reasons."""
     if ranked:
         return ""
     if not skipped:
@@ -118,13 +119,75 @@ def idle_why(ranked: Sequence[Any], skipped: Sequence[tuple[str, str]]) -> str:
     n: dict[str, int] = {}
     for _, why in skipped:
         n[why] = n.get(why, 0) + 1
-    top = ", ".join(w + (" ×%d" % c if c > 1 else "") for w, c in sorted(n.items(), key=lambda x: (-x[1], x[0]))[:2])
-    return "idle: no ready auto bead (%d skipped: %s)" % (len(skipped), top)
+    top = ", ".join(
+        w + (f" \N{MULTIPLICATION SIGN}{int(c)}" if c > 1 else "") for w, c in sorted(n.items(), key=lambda x: (-x[1], x[0]))[:2]
+    )
+    return f"idle: no ready auto bead ({len(skipped)} skipped: {top})"
 
 
-def build(graph_data: Row, lanes: Sequence[Row], ranked: Sequence[tuple[str, str]], skipped: Sequence[tuple[str, str]], history: Sequence[Row], trails: Row,
-          now: float | None = None, rows: Row | None = None, lane_records: Sequence[Row] = (), asks: Sequence[Row] = (), waiting: Any = 0,
-          looks: Sequence[Row] = (), closed: Sequence[Row] = (), installed: Sequence[str] = ()) -> Row:
+def _passes(history: Sequence[Row], by_id: dict[str, Row], out: dict[str, list[str]]) -> list[Row]:
+    """The loop-log rows that name a bead, as the page's passes."""
+    passes: list[Row] = []
+    for r in history:
+        if isinstance(r, dict) and r.get("bead") and r.get("outcome") in OUTCOMES:
+            passes.append(
+                {
+                    "id": r["bead"],
+                    "title": (by_id.get(r["bead"]) or {}).get("title", ""),
+                    "slot": r.get("slot") or "",
+                    "outcome": r["outcome"],
+                    "t": epoch(r.get("ts")),
+                    "minutes": r.get("minutes") or 0,
+                    "asked": bool(r.get("asked")),
+                    "run": r.get("trace") or "",
+                    "why": (r.get("why") or "")[:160],
+                    "released": released(r["bead"], out, by_id) if r["outcome"] == "landed" else [],
+                }
+            )
+    return passes
+
+
+def _lane(ln: Row, trails: Row, by_id: dict[str, Row], out: dict[str, list[str]], queue_view: tuple[Any, Any, Sequence[str]],
+          passes: list[Row]) -> Row:
+    ranked, skipped, installed = queue_view
+    b, tr = ln.get("bead"), trails.get(ln.get("bead") or "") or {}
+    node = by_id.get(b or "") or {}
+    return {
+        "slot": ln["slot"],
+        "bead": b,
+        "version": ln.get("version") or "",
+        "engine": ln.get("engine") or "",
+        "lags": lag(ln.get("engine") or ln.get("version") or "", installed),
+        "stopping": ln.get("stopping") or "",
+        "title": node.get("title") or tr.get("title") or "",
+        "since": ln.get("since"),
+        "run": tr.get("run") or 0,
+        "stage": tr.get("stage") or "",
+        "rail": rail(tr.get("blocks") or [], tr.get("run") or 0) if b else [],
+        "trail": tr.get("blocks") or [],
+        "unlocks": tree(b, out, by_id) if b else [],
+        "unblocks": node.get("unblocks", 0),
+        "idle": idle_why(ranked, skipped) if ln.get("loop") and not b else "",
+        "past": [p for p in passes if family(p["slot"]) == family(ln["slot"])][-PAST:],
+    }
+
+
+def build(
+    graph_data: Row,
+    lanes: Sequence[Row],
+    ranked: Sequence[tuple[str, str]],
+    skipped: Sequence[tuple[str, str]],
+    history: Sequence[Row],
+    trails: Row,
+    now: float | None = None,
+    rows: Row | None = None,
+    lane_records: Sequence[Row] = (),
+    asks: Sequence[Row] = (),
+    waiting: Any = 0,
+    looks: Sequence[Row] = (),
+    closed: Sequence[Row] = (),
+    installed: Sequence[str] = (),
+) -> Row:
     """graph_data: graph.build() output. lanes: [{slot, bead, since}] (bead None = an idle loop). ranked: [(id, reason)] in
     the order `tl next` takes them. skipped: [(id, why)]. history: loop-log rows, oldest first. trails: {bead: {run,
     stage, blocks: [{kind, label, status, text}]}}. closed: the repo's bd beads (the closed ones feed Done)."""
@@ -139,26 +202,8 @@ def build(graph_data: Row, lanes: Sequence[Row], ranked: Sequence[tuple[str, str
             blockers.setdefault(e["target"], []).append(e["source"])
     for i, n in by_id.items():
         n["blocked_by"] = blockers.get(i, [])
-    passes: list[Row] = []
-    for r in history:
-        if isinstance(r, dict) and r.get("bead") and r.get("outcome") in OUTCOMES:
-            t = epoch(r.get("ts"))
-            title = (by_id.get(r["bead"]) or {}).get("title", "")
-            passes.append({"id": r["bead"], "title": title, "slot": r.get("slot") or "", "outcome": r["outcome"], "t": t,
-                           "minutes": r.get("minutes") or 0, "asked": bool(r.get("asked")), "run": r.get("trace") or "", "why": (r.get("why") or "")[:160],
-                           "released": released(r["bead"], out, by_id) if r["outcome"] == "landed" else []})
-    lane_out: list[Row] = []
-    for ln in sorted(lanes, key=lambda x: x["slot"]):
-        b, tr = ln.get("bead"), trails.get(ln.get("bead") or "") or {}
-        node = by_id.get(b) or {}
-        lane_out.append({
-            "slot": ln["slot"], "bead": b, "version": ln.get("version") or "", "engine": ln.get("engine") or "",
-            "lags": lag(ln.get("engine") or ln.get("version") or "", installed), "stopping": ln.get("stopping") or "", "title": node.get("title") or tr.get("title") or "", "since": ln.get("since"),
-            "run": tr.get("run") or 0, "stage": tr.get("stage") or "",
-            "rail": rail(tr.get("blocks") or [], tr.get("run") or 0) if b else [],
-            "trail": tr.get("blocks") or [], "unlocks": tree(b, out, by_id) if b else [],
-            "unblocks": node.get("unblocks", 0), "idle": idle_why(ranked, skipped) if ln.get("loop") and not b else "",
-            "past": [p for p in passes if family(p["slot"]) == family(ln["slot"])][-PAST:]})
+    passes = _passes(history, by_id, out)
+    lane_out = [_lane(ln, trails, by_id, out, (ranked, skipped, installed), passes) for ln in sorted(lanes, key=lambda x: x["slot"])]
     queue: list[Row] = []
     for i, why in ranked:
         n = by_id.get(i) or {}
@@ -227,16 +272,16 @@ def verdict(r: Row, stats: Row) -> str:
     """One line on a running bead: its churn and what it has cost against the median bead; '' when it is unremarkable."""
     bits: list[str] = []
     if r.get("writes", 0) > 1:
-        bits.append("write round %d" % r["writes"])
+        bits.append("write round {:d}".format(int(r["writes"])))
     if r.get("red_checks"):
-        bits.append("checks failed %d×" % r["red_checks"])
+        bits.append("checks failed {:d}\N{MULTIPLICATION SIGN}".format(int(r["red_checks"])))
     if r.get("replans"):
-        bits.append("planned %d×" % (r["replans"] + 1))
+        bits.append("planned {:d}\N{MULTIPLICATION SIGN}".format(int(r["replans"] + 1)))
     if r.get("secs") and (r.get("checks_secs") or 0) / r["secs"] >= .4:
-        bits.append("%d%% of its time in checks" % round(100 * r["checks_secs"] / r["secs"]))
+        bits.append("{:d}% of its time in checks".format(round(100 * r["checks_secs"] / r["secs"])))
     f = signals.fresh(r)
     if f and stats.get("median_fresh"):
-        bits.append("%s fresh tokens, %.1f× the median bead" % (signals.human(f), f / stats["median_fresh"]))
+        bits.append("{} fresh tokens, {:.1f}\N{MULTIPLICATION SIGN} the median bead".format(signals.human(f), f / stats["median_fresh"]))
     return " · ".join(bits)
 
 
@@ -251,9 +296,12 @@ def lag(version: str, installed: Sequence[str]) -> int:
     return sum(1 for v in installed if mine and (theirs := vkey(v)) and theirs > mine)
 
 
-def lanes_of(slots: Sequence[str], running: dict[str, str], loops: Sequence[Row], stop: dict[Any, str] | None = None) -> tuple[list[Row], list[Row]]:
+def lanes_of(
+    slots: Sequence[str], running: dict[str, str], loops: Sequence[Row], stop: dict[Any, str] | None = None
+) -> tuple[list[Row], list[Row]]:
     """One lane per slot, never per loop. slots: this machine's slot names; running: {bead: slot} (a slot bead's held_bead, or
-    a live engine lock); loops: live loop states [{pid, slot, bead, since, started, version}]; stop: {pid: applicable mode}. -> (lanes, waiting): a lane {slot, bead, since, version, stopping, loop}, and loops without a slot
+    a live engine lock); loops: live loop states [{pid, slot, bead, since, started, version}]; stop: {pid: applicable mode}. -> (lanes,
+    waiting): a lane {slot, bead, since, version, stopping, loop}, and loops without a slot
     (they wait in line; they are a note on the queue, not a lane). A slot with no bead is free; a loop with a bead but no
     slot name (run in a worktree) gets a lane named after the worktree folder, or '-'; an idle loop in a worktree too."""
     def wt(lp: Row) -> str:
@@ -270,11 +318,19 @@ def lanes_of(slots: Sequence[str], running: dict[str, str], loops: Sequence[Row]
                       "version": (owner or {}).get("version") or "", "engine": (owner or {}).get("engine") or "",
                       "stopping": mode(owner) if owner else "",
                       "loop": (owner or {}).get("pid")})
-    placed = {l["loop"] for l in lanes if l["loop"]}
+    placed = {ln["loop"] for ln in lanes if ln["loop"]}
     for lp in loops:  # a loop on a bead whose slot nobody named
-        if lp.get("bead") and lp.get("pid") not in placed and lp["bead"] not in {l["bead"] for l in lanes}:
-            lanes.append({"slot": lp.get("slot") or wt(lp) or "-", "bead": lp["bead"], "since": lp.get("since"), "version": lp.get("version") or "",
-                          "stopping": mode(lp), "loop": lp.get("pid")})
+        if lp.get("bead") and lp.get("pid") not in placed and lp["bead"] not in {ln["bead"] for ln in lanes}:
+            lanes.append(
+                {
+                    "slot": lp.get("slot") or wt(lp) or "-",
+                    "bead": lp["bead"],
+                    "since": lp.get("since"),
+                    "version": lp.get("version") or "",
+                    "stopping": mode(lp),
+                    "loop": lp.get("pid"),
+                }
+            )
             placed.add(lp.get("pid"))
     for lp in loops:  # a live loop in a worktree with no slot and no bead: idle, but running
         if not lp.get("bead") and not lp.get("slot") and wt(lp) and lp.get("pid") not in placed:

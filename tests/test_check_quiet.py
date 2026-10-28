@@ -1,9 +1,9 @@
 """A check that waits is not a hung check: only its wall limit stops it. Real processes, a real process table (CPU flat while one
 sleeps), short limits. On 0.23.101 a silent sleeping check was stopped as hung after check_idle_min (this file failed there)."""
-import json
-import os
 import contextlib
 import io
+import json
+import os
 import subprocess
 import sys
 import threading
@@ -12,12 +12,13 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from support import engine_case as te  # noqa: E402
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support import engine_case as te
+from support.engine_case import pyc
+from test_checks_speed import SpeedTest
+
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts import config  # noqa: E402
-from support.engine_case import engine, pyc  # noqa: E402
-from test_checks_speed import SpeedTest  # noqa: E402
+from taskloop.contracts import config
 
 SLEEP_S = 5  # well past the 1.2 s the old watchdog allowed in this test
 
@@ -32,24 +33,24 @@ class Quiet(SpeedTest):
         return [r for r in rows if r["kind"] == kind]
 
     def test_a_silent_sleeping_check_past_the_old_idle_limit_is_not_stopped(self):
-        eng, res = self.run_one(pyc("import time; time.sleep(%d)" % SLEEP_S))
+        eng, res = self.run_one(pyc(f"import time; time.sleep({int(SLEEP_S)})"))
         self.assertEqual((res.status, res.exit), ("passed", 0))
         self.assertEqual(self.log(eng, "kill"), [])
 
     def test_a_busy_silent_check_passes(self):
-        eng, res = self.run_one(pyc("import time\nt=time.time()\nwhile time.time()-t < 3: sum(range(10000))"))
+        _eng, res = self.run_one(pyc("import time\nt=time.time()\nwhile time.time()-t < 3: sum(range(10000))"))
         self.assertEqual(res.status, "passed")
 
     def test_the_wall_limit_stops_a_silent_check_and_its_whole_tree(self):
-        mark = "73.%d" % os.getpid()
-        cmd = pyc("import subprocess; subprocess.call(['sleep', %r])" % mark)
+        mark = f"73.{os.getpid()}"
+        cmd = pyc(f"import subprocess; subprocess.call(['sleep', {mark!r}])")
         t = time.time()
         eng, res = self.run_one(cmd, retry=2, wall_min=0.05)  # 3 s
         self.assertLess(time.time() - t, 30)
         self.assertEqual((res.status, res.exit), ("failed", 124))
         self.assertEqual([k["why"] for k in self.log(eng, "kill")], ["timeout"])
         time.sleep(0.5)
-        self.assertEqual(subprocess.run(["pgrep", "-f", "sleep " + mark], capture_output=True, text=True).stdout.strip(), "")
+        self.assertEqual(subprocess.run(["pgrep", "-f", "sleep " + mark], capture_output=True, text=True, check=False).stdout.strip(), "")
 
     def test_a_wall_hit_check_leaves_one_start_and_end_with_wall_hit_and_a_quiet_one_does_not(self):
         eng, res = self.run_one(pyc("import time; time.sleep(30)"), wall_min=0.03)
@@ -61,8 +62,8 @@ class Quiet(SpeedTest):
         self.assertFalse(self.log(eng, "check_end")[-1]["wall_hit"])
 
     def test_the_stop_flag_ends_a_running_check_and_its_tree(self):
-        mark = "74.%d" % os.getpid()
-        eng = self.checks_engine(checks=[{"id": "q", "cmd": pyc("import subprocess; subprocess.call(['sleep', %r])" % mark),  # pyrefly: ignore[bad-argument-type]
+        mark = f"74.{os.getpid()}"
+        eng = self.checks_engine(checks=[{"id": "q", "cmd": pyc(f"import subprocess; subprocess.call(['sleep', {mark!r}])"),  # pyrefly: ignore[bad-argument-type]
                                           "group": "tests"}])
         timer = threading.Timer(1.0, eng.halt.set)
         timer.start()
@@ -73,7 +74,7 @@ class Quiet(SpeedTest):
         self.assertEqual((res.status, res.wall_hit), ("failed", False))
         self.assertEqual([k["why"] for k in self.log(eng, "kill")], ["stopped"])
         time.sleep(0.5)
-        self.assertEqual(subprocess.run(["pgrep", "-f", "sleep " + mark], capture_output=True, text=True).stdout.strip(), "")
+        self.assertEqual(subprocess.run(["pgrep", "-f", "sleep " + mark], capture_output=True, text=True, check=False).stdout.strip(), "")
 
 
 class RetiredKeys(unittest.TestCase):

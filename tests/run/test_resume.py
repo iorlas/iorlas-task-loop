@@ -5,18 +5,19 @@ from pathlib import Path
 from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401
-from taskloop.app.run.decide import Decision  # noqa: E402
-from taskloop.app.run.resume import Resume  # noqa: E402
-from taskloop.contracts.checkpoint import Checkpoint, RunState  # noqa: E402
+import support.paths  # noqa: F401
+
+from taskloop.app.run.decide import Decision
+from taskloop.app.run.resume import Resume
+from taskloop.contracts.checkpoint import Checkpoint, RunState
 
 PLAN = {"summary": "two stages", "stages": [{"goal": "a", "checks": []}, {"goal": "b", "checks": []}]}
 
 
 class Host:
     def __init__(self) -> None:
-        self.log = SimpleNamespace(note=lambda text: self.notes.append(text))
         self.notes: list[str] = []
+        self.log = SimpleNamespace(note=self.notes.append)
         self.plan_data, self.plan_summary, self.accepted, self.published = None, "", [], 0
 
     def publish_plan(self) -> None:

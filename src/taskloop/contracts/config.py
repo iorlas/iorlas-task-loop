@@ -242,7 +242,7 @@ def load(data: Any, say_to: TextIO | None = None) -> RepoProfile:
     try:
         profile = from_json(RepoProfile, data or {})
     except CodecError as e:
-        raise ConfigError("the repo profile: %s" % e) from None
+        raise ConfigError(f"the repo profile: {e}") from None
     cmds = [k.argv for k in profile.engine.checks] + [g.argv for g in profile.engine.gate_only] + [profile.engine.land]
     cmds += [c for c in (profile.engine.gate, profile.slots.setup) if c]
     bad = [shape_problem(c) for c in cmds]

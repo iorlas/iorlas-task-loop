@@ -15,12 +15,13 @@ real checkout when one is there). Python 3.8+, stdlib only.
 """
 
 import json
-import re
 import os
+import re
 import shlex
 import subprocess
 import sys
 from pathlib import Path
+from typing import ClassVar
 
 HERE = Path(__file__).resolve().parent
 VENDORED = HERE.parent / "fixtures" / "delegate3"
@@ -77,12 +78,34 @@ def as_argv(data):
 def answer(c, reason, ref="", resumed=False, data=None, text="ok", **kw):
     """One contract-3 answer. reason None = done. kw: resumable, partial, at, fix, signal go to the stop; the rest overrides a field."""
     stop_kw = {k: kw.pop(k) for k in ("resumable", "partial", "at", "fix", "signal") if k in kw}
-    base = {"contract": c["contract"], "data": data if kw.pop("raw", False) else as_argv(data), "text": text if reason is None else "", "say": "", "ref": ref, "lane": "FAKE",
-            "model": "fake-1", "effort": "e", "family": "openai", "flag": None, "fallback": False, "first_lane": "FAKE", "rung": 0,
-            "tokens": None, "cost": 0, "secs": 0.1, "run_id": "fake-run", "call_id": "fake-call", "transcript": None,
-            "transcript_info": None, "denied": [], "git_violation": [], "warnings": [],
-            "usage": {"tokens": None, "cost": 0, "secs": 0.1, "turns": 1, "context_k": None, "answer_bytes": 0, "ref": ref},
-            "stop": None, "resumed": resumed}
+    base = {
+        "contract": c["contract"],
+        "data": data if kw.pop("raw", False) else as_argv(data),
+        "text": text if reason is None else "",
+        "say": "",
+        "ref": ref,
+        "lane": "FAKE",
+        "model": "fake-1",
+        "effort": "e",
+        "family": "openai",
+        "flag": None,
+        "fallback": False,
+        "first_lane": "FAKE",
+        "rung": 0,
+        "tokens": None,
+        "cost": 0,
+        "secs": 0.1,
+        "run_id": "fake-run",
+        "call_id": "fake-call",
+        "transcript": None,
+        "transcript_info": None,
+        "denied": [],
+        "git_violation": [],
+        "warnings": [],
+        "usage": {"tokens": None, "cost": 0, "secs": 0.1, "turns": 1, "context_k": None, "answer_bytes": 0, "ref": ref},
+        "stop": None,
+        "resumed": resumed,
+    }
     if reason is not None:
         base["say"] = c["reasons"][reason]["wording"]
         base["stop"] = stop_of(c, reason, ref, **stop_kw)
@@ -131,9 +154,9 @@ def main(argv):
         n = counter(os.environ["FAKE_ROUTE_SCRIPT"])
         steps = script["steps"]
         resume = argv[argv.index("--resume") + 1] if "--resume" in argv else ""
-        print(json.dumps(step_answer(delegate, steps[min(n, len(steps) - 1)], resume or "fake-%d" % (n + 1), bool(resume))))
+        print(json.dumps(step_answer(delegate, steps[min(n, len(steps) - 1)], resume or f"fake-{int(n + 1)}", bool(resume))))
     else:
-        print("fake_route: no such command %s" % cmd, file=sys.stderr)
+        print(f"fake_route: no such command {cmd}", file=sys.stderr)
         return 2
     return 0
 
@@ -154,7 +177,9 @@ class Script:
     timeouts per call. A test wraps `reply(role, prompt, schema, cwd, resume, writer, timeout)` to change what a call does."""
     seen_plan = ""  # the plan.json a reviewer call read, when a test wraps reply to record it
 
-    items: list[str] = ["A1"]  # the acceptance ids of the last review prompt, kept across runs: a resumed call carries a short note
+    items: ClassVar[list[str]] = [
+        "A1"
+    ]  # the acceptance ids of the last review prompt, kept across runs: a resumed call carries a short note
 
     def __init__(self, answers, j_extra=None, delegate=None):
         self.answers, self.calls, self.prompts, self.cwds, self.timeouts = {k: list(v) for k, v in answers.items()}, [], [], [], []
@@ -168,7 +193,8 @@ class Script:
         return self.started
 
     def node_of(self, schema):
-        from taskloop.contracts import answers  # the engine sends each contract in strict form, a visual stage's with its look field too
+        # imported here: this file also runs as route.py in a child process, where src/ is not on sys.path (only in-process calls get here)
+        from taskloop.contracts import answers  # noqa: PLC0415
         return next(k for k in answers.NODES if schema in (answers.sent_schema(k), answers.sent_schema(k, True)))
 
     def __call__(self, cmd, **kw):
@@ -197,7 +223,7 @@ class Script:
         if isinstance(a, dict) and a.get("contract") is not None:
             return self.mapped(node, prompt, a)
         if node == "write":
-            Path(cwd, "f.txt").write_text("d%d\n" % len(self.calls))
+            Path(cwd, "f.txt").write_text(f"d{len(self.calls)}\n")
         j = answer(self.c, None, "ref-" + node, bool(resume), a, cost=0.5, secs=1, family="openai" if node == "write" else "claude",
                    lane="L", model="m", tokens={"in": 1000, "cached": 800, "out": 50},
                    context={"instructions": ["/repo/AGENTS.md"], "env_keys": ["PATH"]})

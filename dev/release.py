@@ -25,7 +25,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "skills" / "task-loop"))  # vendored.py: puts the vendored shelf packages on sys.path
 sys.path.insert(0, str(HERE.parent / "src"))
-import vendored  # noqa: E402,F401
+import vendored  # noqa: E402, F401
 
 from taskloop.app.release import flow  # noqa: E402
 

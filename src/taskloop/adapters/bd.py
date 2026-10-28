@@ -32,11 +32,11 @@ def subprocess_runner(argv: list[str], cwd: str | None, timeout: float | None = 
     """The one `bd` process call. A timeout is code 124."""
     try:
         r = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL,
-                           timeout=timeout)
+                           timeout=timeout, check=False)
     except OSError as e:
-        return BdRun(127, "", "bd: %s" % e)
+        return BdRun(127, "", f"bd: {e}")
     except subprocess.TimeoutExpired:
-        return BdRun(124, "", "bd: no answer in %ss" % timeout)
+        return BdRun(124, "", f"bd: no answer in {timeout}s")
     return BdRun(r.returncode, r.stdout, r.stderr)
 
 
@@ -54,14 +54,27 @@ def dep_of(d: dict[str, Any]) -> Dep:
 
 def bead_of(d: dict[str, Any]) -> Bead:
     prio, labels, deps, meta = d.get("priority"), d.get("labels"), d.get("dependencies"), d.get("metadata")
-    return Bead(id=str(d["id"]), title=_str(d, "title"), status=_str(d, "status"), issue_type=_str(d, "issue_type"),
-                priority=prio if isinstance(prio, int) else None, assignee=_str(d, "assignee"),
-                labels=sorted(x for x in labels if isinstance(x, str)) if isinstance(labels, list) else [],
-                parent=_str(d, "parent"), description=_str(d, "description"), design=_str(d, "design"),
-                acceptance_criteria=_str(d, "acceptance_criteria"), notes=_str(d, "notes"),
-                dependencies=[dep_of(x) for x in deps if isinstance(x, dict)] if isinstance(deps, list) else [],
-                metadata=dict(meta) if isinstance(meta, dict) else {}, lease_expires_at=_str(d, "lease_expires_at"), close_reason=_str(d, "close_reason"),
-                created_at=_str(d, "created_at"), closed_at=_str(d, "closed_at"), updated_at=_str(d, "updated_at"))
+    return Bead(
+        id=str(d["id"]),
+        title=_str(d, "title"),
+        status=_str(d, "status"),
+        issue_type=_str(d, "issue_type"),
+        priority=prio if isinstance(prio, int) else None,
+        assignee=_str(d, "assignee"),
+        labels=sorted(x for x in labels if isinstance(x, str)) if isinstance(labels, list) else [],
+        parent=_str(d, "parent"),
+        description=_str(d, "description"),
+        design=_str(d, "design"),
+        acceptance_criteria=_str(d, "acceptance_criteria"),
+        notes=_str(d, "notes"),
+        dependencies=[dep_of(x) for x in deps if isinstance(x, dict)] if isinstance(deps, list) else [],
+        metadata=dict(meta) if isinstance(meta, dict) else {},
+        lease_expires_at=_str(d, "lease_expires_at"),
+        close_reason=_str(d, "close_reason"),
+        created_at=_str(d, "created_at"),
+        closed_at=_str(d, "closed_at"),
+        updated_at=_str(d, "updated_at"),
+    )
 
 
 def beads_of(data: Any) -> list[Bead]:
@@ -86,7 +99,7 @@ def error_of(stderr: str, stdout: str) -> BdError:
     """Classify a failed bd call from its output (bd has no error codes: the words are all there is)."""
     said = _loads(stdout)
     asked = said.get("error") if isinstance(said, dict) else None
-    text = "%s\n%s" % (stderr, asked if isinstance(asked, str) else stdout)
+    text = f"{stderr}\n{asked if isinstance(asked, str) else stdout}"
     lint = LINT_MISSING.search(text)
     if lint:
         return BdError(kind="lint", missing_sections=[h.strip() for h in re.findall(r"##\s*([^,#\n]+)", lint.group(1))],
@@ -128,7 +141,7 @@ def update_argv(bead: str, patch: BeadPatch) -> list[str]:
     if patch.metadata is not None:
         a += ["--metadata", json.dumps(patch.metadata)]
     for k, v in patch.set_metadata.items():
-        a += ["--set-metadata", "%s=%s" % (k, v)]
+        a += ["--set-metadata", f"{k}={v}"]
     for k in patch.unset_metadata:
         a += ["--unset-metadata", k]
     return a

@@ -7,13 +7,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-import clock  # noqa: E402
-import loop_health as lh  # noqa: E402
-from taskloop.app.loop.health import loop_health  # noqa: E402
-import outcome as oc  # noqa: E402
-from outcome import Kind, POLICY  # noqa: E402
-from support.narrow import must  # noqa: E402
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
+
+# isort: split
+import clock
+import loop_health as lh
+import outcome as oc
+from outcome import POLICY, Kind
+from support.narrow import must
+
+from taskloop.app.loop.health import loop_health
 
 
 class Table(unittest.TestCase):
@@ -123,7 +126,6 @@ class Storm(unittest.TestCase):
             self.assertIsNone(lh.storm_trip([row("a", k, fp, 10.0)], "b", k, fp, 20.0), k)
 
     def test_the_record_is_written_once_and_expires(self):
-        import tempfile
         p = lh.storm_path(tempfile.mkdtemp(), "repo")
         trip = lh.StormTrip("fp", ("a", "b"), 100.0)
         self.assertTrue(lh.write_storm(p, trip, 100.0))
@@ -180,7 +182,7 @@ class Replay(unittest.TestCase):
         self.assertEqual((calls, len(banners)), (53, 1))
 
     def test_a_dirty_slot_wave_trips_on_the_second_bead_inside_the_window(self):
-        calls, banners, disps = replay("dirty_slot.jsonl")
+        _calls, banners, disps = replay("dirty_slot.jsonl")
         self.assertEqual(len(banners), 1)
         self.assertIn("lifesim-jva,lifesim-r0yc", banners[0])  # the first bead of the file is days earlier: outside the window
         self.assertTrue(all(d.bd == "open" and not d.ask for d in disps))

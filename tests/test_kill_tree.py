@@ -11,13 +11,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+import support.paths  # noqa: E402, F401
+
 from taskloop.adapters import procs  # noqa: E402
 
 SHIM = r"""
 import os, subprocess, sys, time
 out = sys.argv[1]
-kid = "import os,signal,sys,time\nif os.environ.get('IGNORE_TERM'): signal.signal(signal.SIGTERM, signal.SIG_IGN)\nopen(sys.argv[1],'w').write(str(os.getpid()))\ntime.sleep(300)\n"
+kid = (
+    "import os,signal,sys,time\nif os.environ.get('IGNORE_TERM'): signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+    "open(sys.argv[1],'w').write(str(os.getpid()))\ntime.sleep(300)\n"
+)
 subprocess.Popen([sys.executable, "-c", kid, out + ".same"])                           # same group as the shim
 subprocess.Popen([sys.executable, "-c", kid, out + ".setsid"], start_new_session=True)  # the native child, own session
 open(out + ".shim", "w").write(str(os.getpid()))
@@ -35,7 +39,7 @@ def read_pid(path, wait=15):
         except (OSError, ValueError):
             pass
         time.sleep(0.05)
-    raise AssertionError("no pid in %s" % path)
+    raise AssertionError(f"no pid in {path}")
 
 
 def alive(pid):
@@ -57,7 +61,7 @@ class KillTree(unittest.TestCase):
         out = os.path.join(self.tmp, "pid")
         p = subprocess.Popen([sys.executable, "-c", SHIM, out], start_new_session=True)
         self.started.append(p.pid)
-        pids = {k: read_pid("%s.%s" % (out, k)) for k in ("shim", "same", "setsid")}
+        pids = {k: read_pid(f"{out}.{k}") for k in ("shim", "same", "setsid")}
         self.started += list(pids.values())
         return p, pids
 

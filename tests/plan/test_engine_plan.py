@@ -3,28 +3,32 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from support.engine_case import BEAD, CAP_PARKS, CLEAN, EngineTest, FALSE, HAS_F, PLAN, PY, WRITE, review, sh, stop  # noqa: E402
-import json  # noqa: E402
-from pathlib import Path  # noqa: E402
-from unittest import mock  # noqa: E402
-from taskloop.domain.prompts.plan import REPLAN_CAP  # noqa: E402
-from taskloop.contracts import answers  # noqa: E402
-from taskloop.app.plan.planner import Planner  # noqa: E402
-from taskloop.domain.prompts import plan as pp  # noqa: E402
-from taskloop.domain.prompts import review as rp  # noqa: E402
-from taskloop.domain.prompts import write as wp  # noqa: E402
-from support.builders import cfg_with  # noqa: E402
-from taskloop.contracts.argv import checks_to_wire  # noqa: E402
-from taskloop.contracts.config import EngineConfig  # noqa: E402
-from taskloop.app.run import engine  # noqa: E402
-from taskloop.domain.prompts.common import RULES_MAX  # noqa: E402
-import outcome as oc  # noqa: E402
-from support.logs import records  # noqa: E402
-from support import fake_route  # noqa: E402
-from taskloop.domain.checks import lint  # noqa: E402
-from taskloop.domain.checks.names import log_var  # noqa: E402
-from taskloop.adapters import ident  # noqa: E402
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support.engine_case import BEAD, CAP_PARKS, CLEAN, FALSE, HAS_F, PLAN, PY, WRITE, EngineTest, review, sh, stop
+
+# isort: split
+import json
+from pathlib import Path
+from unittest import mock
+
+import outcome as oc
+from support import fake_route
+from support.builders import cfg_with
+from support.logs import records
+
+from taskloop.adapters import ident
+from taskloop.app.plan.planner import Planner
+from taskloop.app.run import engine
+from taskloop.contracts import answers
+from taskloop.contracts.argv import checks_to_wire
+from taskloop.contracts.config import EngineConfig
+from taskloop.domain.checks import lint
+from taskloop.domain.checks.names import log_var
+from taskloop.domain.prompts import plan as pp
+from taskloop.domain.prompts import review as rp
+from taskloop.domain.prompts import write as wp
+from taskloop.domain.prompts.common import RULES_MAX
+from taskloop.domain.prompts.plan import REPLAN_CAP
 
 
 class EnginePlanTest(EngineTest):
@@ -34,13 +38,13 @@ class EnginePlanTest(EngineTest):
                                  "review": [review(unmet=["a"]), CLEAN]}, max_rounds=1)
         self.assertEqual(rc, 0)
         run = str(self.eng.run_dir)
-        for role, p in zip([c[0] for c in s.calls], s.prompts):
+        for role, p in zip([c[0] for c in s.calls], s.prompts, strict=False):
             self.assertNotIn(run, p, role)
         self.assertIn("add f", s.prompts[0] + s.prompts[1])        # the plan, inline in the write
         self.assertIn("the review still sends it back", s.prompts[3])  # the replan's reason, inline
 
     def test_the_planner_puts_proof_files_under_evidence(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        _rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertIn(str(self.eng.evidence_dir), s.prompts[0])
         self.assertIn("screenshots", s.prompts[0])
 
@@ -53,7 +57,7 @@ class EnginePlanTest(EngineTest):
 
     def test_a_plan_with_just_unity_in_acceptance_is_sent_back_once(self):
         bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["just unity-tests"])])
-        rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]},
+        _rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]},
                                 checks=[{"id": "unity-tests", "cmd": PY + ' -c "pass"', "group": "tests"}])
         self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
         self.assertIn("runs `just unity-tests`", s.prompts[1])
@@ -102,14 +106,14 @@ class EnginePlanTest(EngineTest):
 
     def test_a_plan_still_reading_the_tracker_after_one_rewrite_fails(self):
         bad = dict(PLAN, cases=[{"criterion": "a follow-up exists", "check": "cat .beads/issues.jsonl"}])
-        rc, s = self.run_engine({"plan": [bad, bad]})
+        _rc, s = self.run_engine({"plan": [bad, bad]})
         self.assertEqual([c[0] for c in s.calls], ["planner", "planner"])
         self.assertEqual(self.blocked, [])
         self.assertIn("read the issue tracker", self.said())
 
     def test_follow_up_work_in_the_plan_is_filed_by_the_engine(self):
         lo = {"title": "Track hard-to-undo moves", "why": "the plan wants it filed"}
-        rc, s = self.run_engine({"plan": [dict(PLAN, leftovers=[lo])], "write": [WRITE], "review": [CLEAN]})
+        rc, _s = self.run_engine({"plan": [dict(PLAN, leftovers=[lo])], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
         self.assertEqual(sum(1 for c in self.bd_calls if c[:2] == ("create", lo["title"])), 1)
         self.assertIn("never reads the tracker", pp.PLAN_PROMPT)
@@ -222,7 +226,7 @@ class EnginePlanTest(EngineTest):
         seen, case = self.counter("case")
         plan = dict(PLAN, cases=[{"criterion": "f.txt exists", "check": case}])
         gate = PY + ' -c "import sys; sys.exit(1 if open(\'f.txt\').read().strip() == \'d2\' else 0)"'
-        rc, s = self.run_engine({"plan": [plan], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]}, gate=gate)
+        rc, _s = self.run_engine({"plan": [plan], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]}, gate=gate)
         self.assertEqual(rc, 0)
         self.assertEqual(seen.read_text(), "11")
 
@@ -233,7 +237,7 @@ class EnginePlanTest(EngineTest):
         self.assertEqual((a["kind"], a["class"], a["status"]), ("decision", "open_question", "open"))
         self.assertEqual(a["decision"], "Old format or new?")
         self.assertEqual(a["detail"]["text"], "Old format or new?")
-        self.assertTrue(any(c[:2] == ("comments", "add") and "%s (decision)" % a["id"] in c[3] for c in self.bd_calls))
+        self.assertTrue(any(c[:2] == ("comments", "add") and "{} (decision)".format(a["id"]) in c[3] for c in self.bd_calls))
 
     def test_a_used_up_replan_is_a_stuck_ask(self):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [review(unmet=["a"])]},
@@ -244,8 +248,13 @@ class EnginePlanTest(EngineTest):
     def test_a_decision_ask_carries_the_options_the_planner_gave(self):
         rc, _ = self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Build now or park?", options=self.CHOICES)]})
         self.assertEqual(rc, 2)
-        self.assertEqual([(o["label"], o["text"], o["cost"], o["recommended"], o["action"]) for o in self.ask()["options"]], [
-            ("Keep parked", "B: keep it parked", "none", True, "text"), ("Build it", "A: build the slice now", "about 4 stages", False, "text")])
+        self.assertEqual(
+            [(o["label"], o["text"], o["cost"], o["recommended"], o["action"]) for o in self.ask()["options"]],
+            [
+                ("Keep parked", "B: keep it parked", "none", True, "text"),
+                ("Build it", "A: build the slice now", "about 4 stages", False, "text"),
+            ],
+        )
 
     def test_the_decision_schemas_require_options(self):
         for node in ("plan", "write", "review"):
@@ -288,7 +297,7 @@ class EnginePlanTest(EngineTest):
         self.assertEqual(self.ask()["kind"], "ticket")
 
     def test_a_plan_of_more_than_three_stages_is_a_split_ticket(self):
-        four = dict(PLAN, stages=[dict(PLAN["stages"][0], goal="part %d" % k) for k in range(4)])
+        four = dict(PLAN, stages=[dict(PLAN["stages"][0], goal=f"part {k}") for k in range(4)])
         rc, s = self.run_engine({"plan": [four]})
         self.assertEqual(rc, 2)
         self.assertEqual([c[0] for c in s.calls], ["planner"])
@@ -412,7 +421,7 @@ class EnginePlanTest(EngineTest):
         self.assertEqual([e["mode"] for e in self.eng.plan_log], ["plan", "amend"])
 
     def test_the_stage_level_cap_is_the_replan_cap_ask_and_allow_one_more_works_on_it(self):
-        rc, s = self.run_engine({"plan": [PLAN, PLAN], "write": [WRITE, WRITE],
+        rc, _s = self.run_engine({"plan": [PLAN, PLAN], "write": [WRITE, WRITE],
                                  "review": [review(unmet=["x"]), review(unmet=["x"])]}, max_rounds=1, max_replans=1)
         self.assertEqual(rc, 2)
         a = self.ask()
@@ -420,7 +429,7 @@ class EnginePlanTest(EngineTest):
         self.assertIn("stage 1 stuck after 1 rounds", a["why"])
         self.assertIn("allow one more", self.card().lower())
         self.file_answer("rerun")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, max_rounds=1, max_replans=1)
+        rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, max_rounds=1, max_replans=1)
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(self.eng.extra, 1)
 
@@ -435,7 +444,9 @@ class EnginePlanTest(EngineTest):
 
     def test_the_plan_is_in_the_checkpoint_the_moment_the_planner_answers(self):
         # d5f.38: a SIGTERM after the planner answered lost a finished plan before the checkpoint
-        with mock.patch.object(Planner, "add_leftovers", side_effect=engine.Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)):
+        with mock.patch.object(
+            Planner, "add_leftovers", side_effect=engine.Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)
+        ):
             rc, _ = self.run_engine({"plan": [PLAN]})
         self.assertEqual(rc, 2)
         ck = self.checkpoint()
@@ -457,7 +468,7 @@ class EnginePlanTest(EngineTest):
 
     def test_the_decided_path_planner_call_counts_toward_the_cap(self):
         q = dict(PLAN, irreversible="push_shared", question="Which?", decided="the accepted requirement says A")
-        rc, s = self.run_engine({"plan": [q, PLAN], "write": [WRITE], "review": [CLEAN]})
+        rc, _s = self.run_engine({"plan": [q, PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(self.eng.planned, 2)
 
@@ -488,17 +499,17 @@ class EnginePlanTest(EngineTest):
         sh("git", "add", "-A", cwd=base)
         sh("git", "commit", "-qm", "rules", cwd=base)
         sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, worker_rules="docs/agents/codex.md")
+        _rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, worker_rules="docs/agents/codex.md")
         p = s.prompts[0]
         self.assertIn("RULES-MARK", p)
-        self.assertNotIn("Read %s" % (self.wt / "docs/agents/codex.md"), p)
+        self.assertNotIn("Read {}".format(self.wt / "docs/agents/codex.md"), p)
         self.assertIn("rg -n", p)
         self.assertIn("line ranges", p)
         self.assertIn("about 12 tool calls", p)
         self.assertNotIn("Read the code it names", p)
         self.assertLess(len(p.encode("utf-8")), 12 * 1024)
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, worker_rules="docs/agents/big.md")
-        self.assertNotIn("Read %s" % (self.wt / "docs/agents/big.md"), s.prompts[0])  # tl-7y6.6.1: a hard 3 KB cap, no path to read
+        _rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, worker_rules="docs/agents/big.md")
+        self.assertNotIn("Read {}".format(self.wt / "docs/agents/big.md"), s.prompts[0])  # tl-7y6.6.1: a hard 3 KB cap, no path to read
         self.assertIn("x" * RULES_MAX, s.prompts[0])
         self.assertNotIn("x" * (RULES_MAX + 1), s.prompts[0])
         self.assertLess(len(s.prompts[0].encode("utf-8")), 12 * 1024)

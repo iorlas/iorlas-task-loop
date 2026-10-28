@@ -10,20 +10,21 @@ from pathlib import Path
 from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401
-from taskloop.adapters.fake_beads import FakeBeads  # noqa: E402
-from taskloop.adapters.fake_slot_git import FakeSlotGit  # noqa: E402
-from taskloop.adapters.slot_git import classify  # noqa: E402
-from taskloop.app.slots.env import SlotEnv  # noqa: E402
-from taskloop.app.slots.lease import Lease  # noqa: E402
-from taskloop.app.slots.line import queue_rows, wait_slot  # noqa: E402
-from taskloop.app.slots.pool import SlotPool  # noqa: E402
-from taskloop.cli import slots as cli  # noqa: E402
-from taskloop.contracts import paths  # noqa: E402
-from taskloop.contracts.bead import Bead  # noqa: E402
-from taskloop.contracts.config import SlotsConfig  # noqa: E402
-from taskloop.contracts.slots import BranchPinned, Checkout, DirtyTree, IndexLocked, RefRace, SlotFail, SlotGitError  # noqa: E402
-from taskloop.stores.memory import MemTickets  # noqa: E402
+import support.paths  # noqa: F401
+
+from taskloop.adapters.fake_beads import FakeBeads
+from taskloop.adapters.fake_slot_git import FakeSlotGit
+from taskloop.adapters.slot_git import classify
+from taskloop.app.slots.env import SlotEnv
+from taskloop.app.slots.lease import Lease
+from taskloop.app.slots.line import queue_rows, wait_slot
+from taskloop.app.slots.pool import SlotPool
+from taskloop.cli import slots as cli
+from taskloop.contracts import paths
+from taskloop.contracts.bead import Bead
+from taskloop.contracts.config import SlotsConfig
+from taskloop.contracts.slots import BranchPinned, Checkout, DirtyTree, IndexLocked, RefRace, SlotFail, SlotGitError
+from taskloop.stores.memory import MemTickets
 
 ME = "tl-me"
 

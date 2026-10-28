@@ -1,4 +1,6 @@
-"""The owner's CLI verb surface: answer --verdict, hold --until (the loop takes 0 claims before T), override --waive/--defer/--drop with a quoted approval."""
+"""The owner's CLI verb surface: answer --verdict, hold --until (the loop takes 0 claims before T), override --waive/--defer/--drop
+with a quoted approval."""
+
 import argparse
 import sys
 import unittest
@@ -7,18 +9,19 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401
-from support.narrow import must  # noqa: E402
-from support.tiers import domain  # noqa: E402
-from taskloop.adapters.fake_beads import FakeBeads  # noqa: E402
-from taskloop.app.asks import intake, raiser  # noqa: E402
-from taskloop.app.loop.queue import QueueRule  # noqa: E402
-from taskloop.cli import asks as cli  # noqa: E402
-from taskloop.contracts.config import EngineConfig  # noqa: E402
-from taskloop.contracts.ports import NewBead  # noqa: E402
-from taskloop.domain import timespec  # noqa: E402
-from taskloop.domain.asks import specs  # noqa: E402
-from taskloop.stores.memory import fake_stores  # noqa: E402
+import support.paths  # noqa: F401
+from support.narrow import must
+from support.tiers import domain
+
+from taskloop.adapters.fake_beads import FakeBeads
+from taskloop.app.asks import intake, raiser
+from taskloop.app.loop.queue import QueueRule
+from taskloop.cli import asks as cli
+from taskloop.contracts.config import EngineConfig
+from taskloop.contracts.ports import NewBead
+from taskloop.domain import timespec
+from taskloop.domain.asks import specs
+from taskloop.stores.memory import fake_stores
 
 T = 1_000_000.0
 
@@ -35,7 +38,9 @@ class VerbSurface(unittest.TestCase):
         self.asks = fake_stores().asks
         self.store = FakeBeads()
         self.store.create(NewBead(title="x"))
-        raiser.raise_ask(self.asks, specs.missing_criteria(), raiser.Asking(bead="fk-1", run="r", brief_hash="h", repo="", title="T", now=T))
+        raiser.raise_ask(
+            self.asks, specs.missing_criteria(), raiser.Asking(bead="fk-1", run="r", brief_hash="h", repo="", title="T", now=T)
+        )
         self.out: list[str] = []
 
     def say(self, *argv: str) -> int:

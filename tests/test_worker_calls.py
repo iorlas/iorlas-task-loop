@@ -5,21 +5,21 @@ CallEnd. The policy's own tables are in test_lane_policy; the live file and the 
 import sys
 import time
 import unittest
-from types import SimpleNamespace
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "task-loop"))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from support import engine_case as te  # noqa: E402
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support import engine_case as te
+from support import fake_route
+from support.logs import records
 
-from taskloop.app.run import engine  # noqa: E402
+from taskloop.adapters.delegate import Stopped
+from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
-from support import fake_route  # noqa: E402
-from support.logs import records  # noqa: E402
-from taskloop.adapters.delegate import Stopped  # noqa: E402
-from taskloop.domain.lanes import retry  # noqa: E402
+from taskloop.domain.lanes import retry
 
 
 def napper(nap):
@@ -78,8 +78,10 @@ class Calls(te.EngineTest):
 
     def test_four_busy_answers_cost_at_most_three_sleeps(self):
         busy = te.stop("busy", "ref-write", say="state lock held")
-        script = fake_route.Script({"plan": [te.PLAN], "write": [te.WRITE, busy, busy, busy, busy, te.WRITE], "review": [te.review(unmet=["more"]), te.CLEAN]})
-        rc, nap = self.go(script)
+        script = fake_route.Script(
+            {"plan": [te.PLAN], "write": [te.WRITE, busy, busy, busy, busy, te.WRITE], "review": [te.review(unmet=["more"]), te.CLEAN]}
+        )
+        _rc, nap = self.go(script)
         self.assertLessEqual(nap.call_count, 3)
 
     def test_a_write_that_timed_out_gets_a_retry_decision_with_the_timeout_and_the_exit(self):

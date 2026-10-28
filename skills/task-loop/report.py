@@ -18,18 +18,18 @@ import json
 import os
 import re
 import statistics
-import subprocess
 import time
-from typing import Any
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any
 
+from taskloop.adapters import beadtools, gitrepo, ident
+from taskloop.adapters import procs as sproc
+from taskloop.adapters.gitenv import run_git
 from taskloop.app.asks import intake
-from taskloop.adapters import beadtools, gitrepo, ident, procs as sproc
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import paths
 from taskloop.contracts.ports import BdFailure
-from taskloop.adapters.gitenv import run_git
 
 M2 = {"beads": 10, "landed_no_ask": 7}  # at least; lost and crashes must be 0 (docs/roadmap.md)
 QUIET_MIN = 30  # an engine log with no close and no trace, untouched this long and with no live run-task: a crash
@@ -60,7 +60,7 @@ def parse_time(text, now=None, forward=False):
     try:
         d = datetime.fromisoformat(s[:-1] + "+00:00" if s.endswith("Z") else s)
     except ValueError:
-        raise ValueError("not a time: %r (use ISO, HH:MM or a duration like 12h)" % text)
+        raise ValueError(f"not a time: {text!r} (use ISO, HH:MM or a duration like 12h)") from None
     return d.timestamp()
 
 
@@ -140,6 +140,36 @@ def bead_status(bead, repo, store=None):
     return found.status if found else None
 
 
+def _lands(repo, bases, traces):
+    """bead -> times its land reached the base."""
+    lands = {}
+    for ln in git(repo, "log", "--format=%ct %s", *bases).splitlines():
+        t, _, subj = ln.partition(" ")
+        m = re.search(r"\(([^()\s]+)\)\s*$", subj)
+        if m and t.isdigit():
+            lands.setdefault(m.group(1), []).append(int(t))
+    for r in traces:
+        if r.get("outcome") == "landed" and r.get("sha") and any(
+                run_git(repo, "merge-base", "--is-ancestor", r["sha"], b,
+                           capture_output=True).returncode == 0 for b in bases):
+            lands.setdefault(r.get("bead"), []).append(r.get("ended") or 0)
+    return lands
+
+
+def _pending_class(bead, st, ct, traces):
+    """The class and why of a commit whose bead is not landed: from the bead's state `st` ('?' unknown, '' absent)."""
+    later = [r for r in traces if r.get("bead") == bead and (r.get("started") or 0) >= ct]
+    if st == "?":
+        return {"class": "unknown", "why": f"bd could not show {bead}: the tracker is unreachable"}
+    if st == "closed":
+        return {"class": "lost", "why": f"{bead} is closed and never landed this commit"}
+    if not st:
+        return {"class": "lost", "why": f"no bead {bead} in the tracker"}
+    if later:
+        return {"class": "reclaimed", "why": "run {} took it up".format(later[0].get("run"))}
+    return {"class": "pending", "why": f"{bead} is {st}: its next run continues the branch"}
+
+
 def lost_work(repo, since=None, base=None, status_of=None, traces=None):
     """Every commit on a task/<bead> or wip/* branch that is not on the base, classed:
     landed     its patch is on the base (git cherry), or a land of its bead came after it: a base commit titled
@@ -152,17 +182,7 @@ def lost_work(repo, since=None, base=None, status_of=None, traces=None):
     bases = bases_of(repo, base) or [base]
     status_of = status_of or (lambda b: bead_status(b, repo))
     traces = repo_traces(repo) if traces is None else traces
-    lands = {}  # bead -> times its land reached the base
-    for ln in git(repo, "log", "--format=%ct %s", *bases).splitlines():
-        t, _, subj = ln.partition(" ")
-        m = re.search(r"\(([^()\s]+)\)\s*$", subj)
-        if m and t.isdigit():
-            lands.setdefault(m.group(1), []).append(int(t))
-    for r in traces:
-        if r.get("outcome") == "landed" and r.get("sha") and any(
-                run_git(repo, "merge-base", "--is-ancestor", r["sha"], b,
-                           capture_output=True).returncode == 0 for b in bases):
-            lands.setdefault(r.get("bead"), []).append(r.get("ended") or 0)
+    lands = _lands(repo, bases, traces)
     rows, statuses = [], {}
     refs = git(repo, "for-each-ref", "--format=%(refname:short)", "refs/heads/task/", "refs/heads/wip/").splitlines()
     for ref in refs:
@@ -172,32 +192,21 @@ def lost_work(repo, since=None, base=None, status_of=None, traces=None):
             continue
         upstream = {ln[2:] for ln in git(repo, "cherry", bases[0], ref).splitlines() if ln.startswith("- ")}
         for ln in log.splitlines():
-            sha, ct, subj = (ln.split(" ", 2) + ["", ""])[:3]
+            sha, ct, subj = ([*ln.split(" ", 2), "", ""])[:3]
             ct = int(ct)
             if since is not None and ct < since:
                 continue
             row = {"branch": ref, "bead": bead, "sha": sha, "time": ct, "subject": subj}
             if sha in upstream:
-                row.update({"class": "landed", "why": "its patch is on %s" % bases[0]})
+                row.update({"class": "landed", "why": f"its patch is on {bases[0]}"})
             elif bead and any(t >= ct for t in lands.get(bead, [])):
-                row.update({"class": "landed", "why": "%s landed on %s after it" % (bead, bases[0])})
+                row.update({"class": "landed", "why": f"{bead} landed on {bases[0]} after it"})
             elif not bead:
-                row.update({"class": "lost", "why": "a dead session's work on %s: no bead, no run takes it" % ref})
+                row.update({"class": "lost", "why": f"a dead session's work on {ref}: no bead, no run takes it"})
             else:
                 if bead not in statuses:
                     statuses[bead] = status_of(bead)
-                st = statuses[bead]
-                later = [r for r in traces if r.get("bead") == bead and (r.get("started") or 0) >= ct]
-                if st == "?":
-                    row.update({"class": "unknown", "why": "bd could not show %s: the tracker is unreachable" % bead})
-                elif st == "closed":
-                    row.update({"class": "lost", "why": "%s is closed and never landed this commit" % bead})
-                elif not st:
-                    row.update({"class": "lost", "why": "no bead %s in the tracker" % bead})
-                elif later:
-                    row.update({"class": "reclaimed", "why": "run %s took it up" % later[0].get("run")})
-                else:
-                    row.update({"class": "pending", "why": "%s is %s: its next run continues the branch" % (bead, st)})
+                row.update(_pending_class(bead, statuses[bead], ct, traces))
             rows.append(row)
     return rows
 
@@ -219,7 +228,7 @@ def crashes(repo, since, until, traces, alive=None, now=None):
             continue
         if since <= t < until and r.get("outcome") == "failed" and not r.get("trace") and \
                 (r.get("why") or "").startswith("failed: no outcome from run-task"):
-            key = "loop:%s:%s" % (r.get("bead"), r.get("ts"))
+            key = "loop:{}:{}".format(r.get("bead"), r.get("ts"))
             out[key] = {"bead": r.get("bead"), "t": t, "run": None, "why": (r.get("why") or "")[:200]}
     traced = {r.get("run") for r in traces} | {Path(r["log"]).stem for r in traces if r.get("log")}
     prefixes = {prefix(r.get("bead")) for r in traces} | {prefix(r.get("bead")) for r in read_jsonl(log)}
@@ -241,7 +250,7 @@ def crashes(repo, since, until, traces, alive=None, now=None):
         if live or (live is None and quiet < QUIET_MIN):
             continue
         last = (recs[-1].get("text") or "") if recs else ""
-        out[f.stem] = {"bead": m.group(1), "t": t, "run": f.stem, "why": "the engine log ends with no close: %s" % last[:120]}
+        out[f.stem] = {"bead": m.group(1), "t": t, "run": f.stem, "why": f"the engine log ends with no close: {last[:120]}"}
     for r in traces:  # the engine caught it and closed (engine.py: Engine.run): an engine bug all the same
         if overlaps(r, since, until) and (r.get("why") or "").startswith("failed: engine error"):
             out[r.get("run")] = {"bead": r.get("bead"), "t": r.get("started") or 0, "run": r.get("run"),
@@ -286,29 +295,19 @@ def pctl(xs, p):
     return xs[int(k)]
 
 
-def scorecard(repo, since, until, base=None, comments_of=None, status_of=None, alive=None, now=None):
-    repo = gitrepo.repo_root(repo)  # the loop keys its log by this path
-    comments_of = comments_of or beadtools.bd_store(repo).comments
-    traces = repo_traces(repo)
-    runs = sorted([r for r in traces if overlaps(r, since, until)], key=lambda r: r.get("started") or 0)
-    crash = crashes(repo, since, until, traces, alive=alive, now=now)
-    beads = {}
-    for r in runs:
-        beads.setdefault(r["bead"], {"runs": [], "crashes": []})["runs"].append(r)
-    for c in crash:
-        beads.setdefault(c["bead"], {"runs": [], "crashes": []})["crashes"].append(c)
+def _bead_rows(beads, comments_of):
+    """(per-bead rows sorted by bead, the ask counts) of {bead: {runs, crashes}}."""
     rows, asks = [], {"count": 0, "beads": 0, "supervisor": 0, "owner": 0, "open": 0, "unknown": 0}
     for bead, b in beads.items():
         rs = b["runs"]
         n_ask = sum(1 for r in rs if r.get("outcome") == "blocked" and is_ask(r))
         if not n_ask and any(answered_asks(r) for r in rs):
             n_ask = 1  # it went on from an ask raised before the window
-        landed = any(r.get("outcome") in ("landed", "done") for r in rs)
         events = [(r.get("ended") or 0, r) for r in rs] + [(c["t"], {"outcome": "failed", "why": c["why"]})
                                                             for c in b["crashes"]]
         last = max(events, key=lambda e: e[0])[1]
         why = last.get("why") or ""
-        if landed:
+        if any(r.get("outcome") in ("landed", "done") for r in rs):
             state = "landed"
         elif last.get("outcome") == "blocked" and is_ask(last):
             state = "parked"
@@ -329,6 +328,11 @@ def scorecard(repo, since, until, base=None, comments_of=None, status_of=None, a
                      "replans": sum((r.get("stats") or {}).get("replans") or 0 for r in rs),
                      "why": why[:160] if state != "landed" else ""})
     rows.sort(key=lambda x: x["bead"])
+    return rows, asks
+
+
+def _tokens(runs):
+    """{lane|role: {name: {in, cached, out}}} over the sessions of the runs."""
     tokens = {"lane": {}, "role": {}}
     for r in runs:
         for s in r.get("sessions") or []:
@@ -341,6 +345,22 @@ def scorecard(repo, since, until, base=None, comments_of=None, status_of=None, a
                 d["in"] += input_tokens(tk)
                 d["cached"] += int(tk.get("cached") or 0)
                 d["out"] += int(tk.get("out") or 0)
+    return tokens
+
+
+def scorecard(repo, since, until, base=None, comments_of=None, status_of=None, alive=None, now=None):
+    repo = gitrepo.repo_root(repo)  # the loop keys its log by this path
+    comments_of = comments_of or beadtools.bd_store(repo).comments
+    traces = repo_traces(repo)
+    runs = sorted([r for r in traces if overlaps(r, since, until)], key=lambda r: r.get("started") or 0)
+    crash = crashes(repo, since, until, traces, alive=alive, now=now)
+    beads = {}
+    for r in runs:
+        beads.setdefault(r["bead"], {"runs": [], "crashes": []})["runs"].append(r)
+    for c in crash:
+        beads.setdefault(c["bead"], {"runs": [], "crashes": []})["crashes"].append(c)
+    rows, asks = _bead_rows(beads, comments_of)
+    tokens = _tokens(runs)
     lost = [x for x in lost_work(repo, since=since, base=base, status_of=status_of, traces=traces)
             if x["class"] in ("lost", "pending", "unknown")]
     mins = [x["minutes"] for x in rows if x["runs"]]
@@ -355,8 +375,8 @@ def scorecard(repo, since, until, base=None, comments_of=None, status_of=None, a
          "minutes": {"median": round(statistics.median(mins), 1) if mins else 0, "p90": pctl(mins, 90)},
          "rounds": sum(x["rounds"] for x in rows), "replans": sum(x["replans"] for x in rows),
          "tokens": tokens, "runs": len(runs), "per_bead": rows}
-    checks = {"beads": {"value": c["beads"], "want": ">=%d" % M2["beads"], "ok": c["beads"] >= M2["beads"]},
-              "landed_no_ask": {"value": c["landed_no_ask"], "want": ">=%d" % M2["landed_no_ask"],
+    checks = {"beads": {"value": c["beads"], "want": ">={:d}".format(int(M2["beads"])), "ok": c["beads"] >= M2["beads"]},
+              "landed_no_ask": {"value": c["landed_no_ask"], "want": ">={:d}".format(int(M2["landed_no_ask"])),
                                 "ok": c["landed_no_ask"] >= M2["landed_no_ask"]},
               "lost": {"value": c["lost"], "want": "0", "ok": c["lost"] == 0},
               "crashes": {"value": c["crashes"], "want": "0", "ok": c["crashes"] == 0}}
@@ -385,7 +405,8 @@ def input_tokens(tk):
 
 
 def planner_stats(since, until, prefixes=(), history=None, engine_dir=None) -> dict[str, Any]:
-    """Planner calls per bead from delegate's history (input: `in`, plus cached on rows from before delegate 0.22), split by the engine logs' plan nodes:
+    """Planner calls per bead from delegate's history (input: `in`, plus cached on rows from before delegate 0.22), split by the engine
+    logs' plan nodes:
     first plan, full plans again (a new thread from scratch), amends, check send-backs. Reads only."""
     history = Path(history or os.path.expanduser(HISTORY))
     engine_dir = Path(engine_dir or ident.config_dir() / "engine")
@@ -402,7 +423,7 @@ def planner_stats(since, until, prefixes=(), history=None, engine_dir=None) -> d
     rows = []
     for bead, ins in sorted(calls.items()):
         kinds = {"full": 0, "amend": 0, "back": 0}
-        for log in engine_dir.glob("%s-*.jsonl" % bead):
+        for log in engine_dir.glob(f"{bead}-*.jsonl"):
             if not (stem := STEM.match(log.stem)) or stem.group(1) != bead:
                 continue
             for rec in read_jsonl(log):
@@ -421,93 +442,39 @@ def planner_stats(since, until, prefixes=(), history=None, engine_dir=None) -> d
 
 
 def planner_line(p):
-    return ("planner: %d calls on %d beads: %d first plans, %d full plans again, %d amends, %d check send-backs, %d other; "
-            "input %.1fM, median %dk per call" % (
-                p["calls"], p["beads"], p["first"], p["again"], p["amend"], p["back"], p["other"],
-                p["input"] / 1e6, p["median_input"] // 1000))
+    return (
+        "planner: {:d} calls on {:d} beads: {:d} first plans, {:d} full plans again, {:d} amends, {:d} check send-backs, {:d} other; "
+        "input {:.1f}M, median {:d}k per call"
+    ).format(
+        int(p["calls"]),
+        int(p["beads"]),
+        int(p["first"]),
+        int(p["again"]),
+        int(p["amend"]),
+        int(p["back"]),
+        int(p["other"]),
+        p["input"] / 1e6,
+        int(p["median_input"] // 1000),
+    )
 
 
 def print_planner(p):
     print(planner_line(p))
-    print("  %-26s %5s %5s %5s %5s %5s %5s %9s" % ("bead", "calls", "first", "again", "amend", "back", "other", "input M"))
+    print(
+        "  {!s:<26} {!s:>5} {!s:>5} {!s:>5} {!s:>5} {!s:>5} {!s:>5} {!s:>9}".format(
+            "bead", "calls", "first", "again", "amend", "back", "other", "input M"
+        )
+    )
     for x in sorted(p["per_bead"], key=lambda x: -x["input"]):
-        print("  %-26s %5d %5d %5d %5d %5d %5d %9.2f" % (x["bead"], x["calls"], x["first"], x["again"], x["amend"],
-                                                        x["back"], x["other"], x["input"] / 1e6))
-
-
-# ---- CLI --------------------------------------------------------------------------------------------------------------
-
-def mtok(d):
-    return "%.1fM in (%.1fM cached), %dk out" % (d["in"] / 1e6, d["cached"] / 1e6, d["out"] // 1000)
-
-
-def print_card(c):
-    a = c["asks"]
-    print("tl report %s  %s -> %s  (runs overlapping the window: %d)" % (
-        Path(c["repo"]).name, stamp(c["since"]), stamp(c["until"]), c["runs"]))
-    print("  beads %d   landed %d   landed with no ask %d   parked %d   paused %d   failed %d" % (
-        c["beads"], c["landed"], c["landed_no_ask"], c["parked"], c["paused"], c["failed"]))
-    print("  asks %d on %d beads: owner %d, supervisor %d, open %d%s" % (
-        a["count"], a["beads"], a["owner"], a["supervisor"], a["open"],
-        ", unknown %d" % a["unknown"] if a["unknown"] else ""))
-    print("  crashes %d   lost %d   pending branches %d" % (c["crashes"], c["lost"], len(c["pending_list"])))
-    print("  minutes per bead: median %s, p90 %s   fix rounds %d   replans %d" % (
-        c["minutes"]["median"], c["minutes"]["p90"], c["rounds"], c["replans"]))
-    for key in ("lane", "role"):
-        for name, d in sorted(c["tokens"][key].items()):
-            print("  tokens %-5s %-9s %s" % (key, name, mtok(d)))
-    if c.get("planner") and c["planner"]["calls"]:
-        print("  " + planner_line(c["planner"]))
-    for x in c["crash_list"]:
-        print("  crash   %s %s  %s" % (stamp(x["t"])[11:], x["bead"], x["why"]))
-    for x in c["lost_list"]:
-        print("  lost    %s %s %s  %s" % (x["branch"], x["sha"][:8], x["subject"][:50], x["why"]))
-    for x in c["per_bead"]:
-        if x["state"] != "landed" or x["asks"]:
-            print("  %-7s %s%s%s" % (x["state"], x["bead"], "  asks: " + ",".join(x["answers"]) if x["asks"] else "",
-                                     "  " + x["why"][:100] if x["why"] else ""))
-    bad = ["%s %s (want %s)" % (k, v["value"], v["want"]) for k, v in c["m2"]["checks"].items() if not v["ok"]]
-    print("M2 %s%s" % ("PASS" if c["m2"]["pass"] else "FAIL", ": " + "; ".join(bad) if bad else ""))
-
-
-def window(a):
-    now = time.time()
-    since = parse_time(a.since, now) if getattr(a, "since", None) else now - 86400
-    until = parse_time(a.until, now, forward=True) if getattr(a, "until", None) else now
-    return since, until
-
-
-def cmd_report(a):
-    since, until = window(a)
-    if getattr(a, "planner", False):
-        pre = {x.strip() for x in (getattr(a, "prefix", "") or "").split(",") if x.strip()}
-        p = planner_stats(since, until, pre)
-        if a.json:
-            print(json.dumps(p, indent=1, ensure_ascii=False))
-        else:
-            print_planner(p)
-        return 0
-    repo = gitrepo.repo_root(a.repo)
-    c = scorecard(repo, since, until, base=default_base(repo), alive=run_alive)
-    c["planner"] = planner_stats(since, until, {prefix(x["bead"]) for x in c["per_bead"]})
-    if a.json:
-        print(json.dumps(c, indent=1, ensure_ascii=False))
-    else:
-        print_card(c)
-    return 0 if c["m2"]["pass"] else 1
-
-
-def cmd_lost(a):
-    repo = gitrepo.repo_root(a.repo)
-    since = parse_time(a.since) if a.since else None
-    rows = lost_work(repo, since=since, base=default_base(repo))
-    if a.json:
-        print(json.dumps(rows, indent=1, ensure_ascii=False))
-    else:
-        for x in rows:
-            if x["class"] != "landed":
-                print("%-9s %-28s %s %s  %s" % (x["class"], x["branch"], x["sha"][:8], stamp(x["time"]), x["why"]))
-        n = {k: sum(x["class"] == k for x in rows) for k in ("landed", "reclaimed", "pending", "unknown", "lost")}
-        print("%d lost, %d pending, %d unknown, %d reclaimed, %d landed (commits on task/* and wip/* not on the base)" % (
-            n["lost"], n["pending"], n["unknown"], n["reclaimed"], n["landed"]))
-    return 1 if any(x["class"] == "lost" for x in rows) else 0
+        print(
+            "  {!s:<26} {:5d} {:5d} {:5d} {:5d} {:5d} {:5d} {:9.2f}".format(
+                x["bead"],
+                int(x["calls"]),
+                int(x["first"]),
+                int(x["again"]),
+                int(x["amend"]),
+                int(x["back"]),
+                int(x["other"]),
+                x["input"] / 1e6,
+            )
+        )

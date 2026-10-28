@@ -1,4 +1,5 @@
 """One reader and one writer per file family. A missing, torn or stale (foreign `v`) file reads as absent."""
+import contextlib
 import dataclasses
 import json
 from pathlib import Path
@@ -77,10 +78,8 @@ class JsonlStore[T]:
     def _page(self, entries: list[Entry[dict[str, Any]]], cursor: int) -> Page[T]:
         items: list[Item[T]] = []
         for e in entries:
-            try:
+            with contextlib.suppress(CodecError):
                 items.append(Item(e.start, e.end, self._decode(e.data)))
-            except CodecError:
-                pass
         return Page(items, cursor, len(entries) - len(items))
 
 

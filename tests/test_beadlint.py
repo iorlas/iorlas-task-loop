@@ -5,10 +5,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from taskloop.domain.beads import matchers as beadlint  # noqa: E402
-from support.fakes import as_bead as _as_bead  # noqa: E402
-from support.narrow import must  # noqa: E402
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support.fakes import as_bead as _as_bead
+from support.narrow import must
+
+from taskloop.domain.beads import matchers as beadlint
 
 
 def as_bead(f):
@@ -32,7 +33,7 @@ class Detector(unittest.TestCase):
     def test_it_leaves_ordinary_text_alone(self):
         for text in ("Edit skills/task-loop/engine.py and docs/design/stages.md", "a case study of the loop", "study the code",
                      "see docs/design/12-notes.md", "run `just check` at 10:30-11:00", "https://example.com/a/~/b",
-                     "%s/skills/x.py" % ROOT, "tests/test_a-b.md"):
+                     f"{ROOT}/skills/x.py", "tests/test_a-b.md"):
             with self.subTest(text):
                 self.assertEqual(refs(description=text), [], text)
 

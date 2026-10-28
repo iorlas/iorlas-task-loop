@@ -3,11 +3,13 @@ import dataclasses
 import sys
 import unittest
 from pathlib import Path
+from typing import Any, ClassVar
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401
-from taskloop.app.run.decide import CONFIRMED, OUTSIDE, World, resume_decision  # noqa: E402
-from taskloop.contracts.checkpoint import Checkpoint, RunState  # noqa: E402
+import support.paths  # noqa: F401
+
+from taskloop.app.run.decide import CONFIRMED, OUTSIDE, World, resume_decision
+from taskloop.contracts.checkpoint import Checkpoint, RunState
 
 PLAN = {"summary": "s", "stages": [{"goal": "a", "checks": []}, {"goal": "b", "checks": []}]}
 
@@ -18,7 +20,9 @@ def ck(step="write", stage=1, head="h1", closed=False, **state) -> Checkpoint:
     st = RunState()
     for k, v in state.items():
         setattr(st, k, v)
-    return Checkpoint(bead="t-1", run="r", t=0.0, branch="task/t-1", head=head, closed=closed, step=step, stage=stage, rounds=2, n=3, state=st)
+    return Checkpoint(
+        bead="t-1", run="r", t=0.0, branch="task/t-1", head=head, closed=closed, step=step, stage=stage, rounds=2, n=3, state=st
+    )
 
 
 def world(**kw) -> World:
@@ -26,7 +30,7 @@ def world(**kw) -> World:
 
 
 class Table(unittest.TestCase):
-    CASES = [
+    CASES: ClassVar[Any] = [
         # name, checkpoint, world, kind, why
         ("no checkpoint", None, world(), "fresh", ""),
         ("--fresh", ck(), world(fresh=True), "fresh", ""),
@@ -40,15 +44,37 @@ class Table(unittest.TestCase):
         ("one wip commit above a closed run", ck(closed=True), world(head="h2", parent="h1", left_dirty=True), "amend", OUTSIDE),
         ("gate red at land", ck(step="gate-red", stage=2), world(), "replan", ""),
         ("retry validation red", ck(step="land-verify-red", stage=2), world(), "replan", ""),
-        ("bead changed", ck(), world(brief_hash="b2", brief_diff="description changed", brief_diff_quiet="description changed"), "amend", ""),
+        (
+            "bead changed",
+            ck(),
+            world(brief_hash="b2", brief_diff="description changed", brief_diff_quiet="description changed"),
+            "amend",
+            "",
+        ),
         ("comment alone", ck(), world(brief_hash="b2", brief_diff="new comment", brief_diff_quiet=""), "resume", ""),
         ("hash moved, nothing read", ck(), world(brief_hash="b2", brief_diff=""), "resume", ""),
-        ("answered, changed", ck(), world(answered=True, answer_given=True, answer_words="do x", brief_diff="d", brief_diff_quiet="d"), "amend", ""),
+        (
+            "answered, changed",
+            ck(),
+            world(answered=True, answer_given=True, answer_words="do x", brief_diff="d", brief_diff_quiet="d"),
+            "amend",
+            "",
+        ),
         ("answered: run again", ck(), world(answered=True, answer_given=True, brief_diff="d", brief_diff_quiet="d"), "resume", ""),
-        ("verify ask confirmed", ck(step="land", stage=2, brief_hash="b0"), world(answered=True, answer_given=True, answer_external_fact=True,
-                                                                                  answer_confirms=True), "land", CONFIRMED),
-        ("verify ask, more than a yes", ck(step="land", stage=2, brief_hash="b0"), world(answered=True, answer_given=True, answer_external_fact=True,
-                                                                                         answer_words="add a test"), "amend", ""),
+        (
+            "verify ask confirmed",
+            ck(step="land", stage=2, brief_hash="b0"),
+            world(answered=True, answer_given=True, answer_external_fact=True, answer_confirms=True),
+            "land",
+            CONFIRMED,
+        ),
+        (
+            "verify ask, more than a yes",
+            ck(step="land", stage=2, brief_hash="b0"),
+            world(answered=True, answer_given=True, answer_external_fact=True, answer_words="add a test"),
+            "amend",
+            "",
+        ),
         ("promised file gone", ck(), world(missing_stage=0), "resume", ""),
     ]
 

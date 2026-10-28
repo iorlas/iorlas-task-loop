@@ -10,8 +10,8 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-import vendored  # noqa: E402,F401
+import support.paths  # noqa: E402, F401
+import vendored  # noqa: E402, F401
 
 from taskloop.app.release import manifest  # noqa: E402
 from taskloop.app.wire import doctor  # noqa: E402

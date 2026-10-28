@@ -6,10 +6,11 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401
-from contracts import samples as S  # noqa: E402
-from taskloop.contracts.codec import CodecError, StaleRecord  # noqa: E402
-from taskloop.contracts.review import ReviewState  # noqa: E402
+import support.paths  # noqa: F401
+
+from contracts import samples as S
+from taskloop.contracts.codec import CodecError, StaleRecord
+from taskloop.contracts.review import ReviewState
 
 FIELDS = ["reviews", "rounds", "unchecked", "unverified", "verified", "filed", "unfiled"]
 

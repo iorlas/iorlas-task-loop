@@ -1,20 +1,40 @@
 """Engine tests: review, verify and the follow-ups."""
 import sys
 from pathlib import Path
+from typing import Any, ClassVar
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from support.engine_case import BEAD, CLEAN, EXIT_127, EngineTest, FALSE, PLAN, STILL_OPEN, WRITE, finding, review, sh, stop, verdict, without_shims  # noqa: E402
-import json  # noqa: E402
-import types  # noqa: E402
-import time  # noqa: E402
-from contextlib import contextmanager  # noqa: E402
-from unittest import mock  # noqa: E402
-from taskloop.app.wire import slots as wslots  # noqa: E402
-from taskloop.app.land.checkout import Checkout  # noqa: E402
-from taskloop.app.review.settles import Settles  # noqa: E402
-from support.builders import cfg_with  # noqa: E402
-from taskloop.app.run import engine  # noqa: E402
+import json
+import time
+import types
+from contextlib import contextmanager
+from unittest import mock
+
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support.engine_case import (
+    BEAD,
+    CLEAN,
+    EXIT_127,
+    FALSE,
+    PLAN,
+    STILL_OPEN,
+    WRITE,
+    EngineTest,
+    finding,
+    review,
+    sh,
+    stop,
+    verdict,
+    without_shims,
+)
+
+# isort: split
+from support.builders import cfg_with
+
+from taskloop.app.land.checkout import Checkout
+from taskloop.app.review.settles import Settles
+from taskloop.app.run import engine
+from taskloop.app.wire import slots as wslots
 
 
 class EngineReviewTest(EngineTest):
@@ -23,7 +43,7 @@ class EngineReviewTest(EngineTest):
                                  "review": [review(unmet=["cant-sit-still still carries example: true"]), CLEAN]})
         self.assertEqual(rc, 0)
         self.assertEqual([c[1] for c in s.calls if c[0] == "worker"], [None, "ref-write"])
-        self.assertIn("cant-sit-still still carries example: true", [p for (c, p) in zip(s.calls, s.prompts)
+        self.assertIn("cant-sit-still still carries example: true", [p for (c, p) in zip(s.calls, s.prompts, strict=False)
                                                                      if c[0] == "worker"][1])
 
     def test_red_checks_never_reach_review_and_end_the_round(self):
@@ -36,7 +56,7 @@ class EngineReviewTest(EngineTest):
         self.assertEqual((self.eng.stats["writes"], self.eng.stats["rounds"]), (4, 2))
 
     def test_low_findings_are_noted_and_do_not_send_back(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [review(findings=[finding("low")])]})
+        rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [review(findings=[finding("low")])]})
         self.assertEqual(rc, 0)
         self.assertTrue(any(c[:2] == ("comments", "add") and "a low fix" in c[3] for c in self.bd_calls))
 
@@ -50,7 +70,7 @@ class EngineReviewTest(EngineTest):
         two = dict(PLAN, stages=[PLAN["stages"][0], dict(PLAN["stages"][0], goal="add f again")])
         rc, s = self.run_engine({"plan": [two], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]})
         self.assertEqual(rc, 0)
-        reviews = [p for (c, p) in zip(s.calls, s.prompts) if c[0] == "reviewer"]
+        reviews = [p for (c, p) in zip(s.calls, s.prompts, strict=False) if c[0] == "reviewer"]
         self.assertNotIn("every requirement", reviews[0])
         self.assertIn("every requirement", reviews[1])
 
@@ -62,7 +82,7 @@ class EngineReviewTest(EngineTest):
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(self.blocked, [])
         self.assertIsNone(self.ask())
-        writes = [p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker"]
+        writes = [p for (c, p) in zip(s.calls, s.prompts, strict=False) if c[0] == "worker"]
         self.assertEqual(len(writes), 2)
         self.assertIn(self.R10, writes[1])
         self.assertIn("decided", s.prompts[2])
@@ -97,7 +117,7 @@ class EngineReviewTest(EngineTest):
     def test_a_verify_ask_is_a_decision_and_takes_the_bead_out_of_the_pick_queue(self):
         r = dict(CLEAN, unchecked=[{"what": "the cited spec link did not open", "kind": "link"}])
         with self.store.stub(show=dict(BEAD, labels=["auto"])):
-            rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r], "verify": [STILL_OPEN]},
+            _rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r], "verify": [STILL_OPEN]},
                                     pick_label="auto")
         self.assertEqual((self.ask()["kind"], self.ask()["class"]), ("decision", "external_fact"))
         self.assertIn(("label", "remove", "t-1", "auto"), self.bd_calls)
@@ -128,7 +148,7 @@ class EngineReviewTest(EngineTest):
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(["is not unchecked" in p for p in s.prompts[1:5]], [True, True, False, False])
 
-    RUFF = {"what": "nobody ran ruff on tools/*.py", "kind": "tooling"}
+    RUFF: ClassVar[Any] = {"what": "nobody ran ruff on tools/*.py", "kind": "tooling"}
 
     def no_ruff(self, name):
         return None if name == "ruff" else "/usr/bin/" + name
@@ -171,7 +191,7 @@ class EngineReviewTest(EngineTest):
         sh("git", "commit", "-qm", "justfile", cwd=self.wt)
         sh("git", "push", "-q", "origin", "HEAD:main", cwd=self.wt)
         with mock.patch.object(engine, "tool_on_path", side_effect=self.no_ruff), self.ruff_cannot_start():
-            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, unchecked=[self.RUFF])],
+            rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, unchecked=[self.RUFF])],
                                      "verify": [STILL_OPEN]})
         self.assertEqual(rc, 2)
         self.assertEqual((self.ask()["kind"], self.ask()["class"]), ("decision", "external_fact"))

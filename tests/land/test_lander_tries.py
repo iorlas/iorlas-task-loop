@@ -8,10 +8,11 @@ from types import SimpleNamespace
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401
-from support.fakegit import FakeGit  # noqa: E402
-from taskloop.app.land.lander import Land, Lander  # noqa: E402
-from taskloop.contracts import log as rec  # noqa: E402
+import support.paths  # noqa: F401
+from support.fakegit import FakeGit
+
+from taskloop.app.land.lander import Land, Lander
+from taskloop.contracts import log as rec
 
 REJECTED = (1, " ! [rejected]        HEAD -> main (fetch first)")
 PUSHED = (0, "")

@@ -1,4 +1,5 @@
 """dev/release.py against a fake remote: bare git repos in a temp dir, the claude and bd CLIs faked on PATH."""
+import hashlib
 import json
 import os
 import re
@@ -13,10 +14,13 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from taskloop.adapters.suiteout import failure_report  # noqa: E402
-from taskloop.app.release import manifest  # noqa: E402
-from support import waits  # noqa: E402
-from support.narrow import must  # noqa: E402
+import contextlib
+
+from support import waits
+from support.narrow import must
+
+from taskloop.adapters.suiteout import failure_report
+from taskloop.app.release import manifest
 
 ROOT = Path(__file__).resolve().parents[1]
 RELEASE = ROOT / "dev" / "release.py"
@@ -35,13 +39,15 @@ class Release(unittest.TestCase):
         h = self.home = Path(self.tmp.name)
         shim = h / "bin"
         shim.mkdir()
-        (shim / "bd").write_text('#!/bin/sh\necho "$@" >> "%s"\n' % (h / "bd.log"))
+        (shim / "bd").write_text('#!/bin/sh\necho "$@" >> "{}"\n'.format(h / "bd.log"))
         # claude: `plugin update` lays the new version's cache dir out as the real CLI does, unless FAKE_CLAUDE_FAIL is
         # "always" (the 0.23.0 fetch-pack error, exit 0, nothing installed) or "once" (the first update fails)
-        (shim / "claude").write_text(textwrap.dedent("""\
+        (shim / "claude").write_text(
+            textwrap.dedent("""\
             #!/bin/sh
             echo "$@" >> "%(log)s"
-            while [ -n "$FAKE_CLAUDE_GATE" ] && [ ! -e "$FAKE_CLAUDE_GATE" ]; do sleep 0.02; done  # a release holds the lock until the test opens the gate
+            # a release holds the lock until the test opens the gate
+            while [ -n "$FAKE_CLAUDE_GATE" ] && [ ! -e "$FAKE_CLAUDE_GATE" ]; do sleep 0.02; done
             if [ "$1 $2" = "plugin update" ]; then
               if [ "$FAKE_CLAUDE_FAIL" = always ] || { [ "$FAKE_CLAUDE_FAIL" = once ] && [ ! -e "%(flag)s" ]; }; then
                 touch "%(flag)s"; echo "fatal: fetch-pack: invalid index-pack output"; exit 0
@@ -54,13 +60,17 @@ class Release(unittest.TestCase):
             (d / "plugin.json").write_text("{}")
             PY
             fi
-            """) % {"log": h / "claude.log", "flag": h / "claude.failed", "market": h / "market" / MARKET})
+            """)
+            % {"log": h / "claude.log", "flag": h / "claude.failed", "market": h / "market" / MARKET}
+        )
         # just: `just check` exits FAKE_JUST_FAIL (default 0), printing a lint line
-        (shim / "just").write_text('#!/bin/sh\necho "$@" >> "%s"\necho "ruff: E501 somewhere"\nexit ${FAKE_JUST_FAIL:-0}\n' % (h / "just.log"))
+        (shim / "just").write_text(
+            '#!/bin/sh\necho "$@" >> "{}"\necho "ruff: E501 somewhere"\nexit ${{FAKE_JUST_FAIL:-0}}\n'.format(h / "just.log")
+        )
         for f in shim.iterdir():
             f.chmod(0o755)
         self.env = dict(os.environ, TASK_LOOP_SUITE_HOST="1", XDG_CONFIG_HOME=str(h / "cfg"), CLAUDE_CONFIG_DIR=str(h / "claude"),
-                        PATH="%s%s%s" % (shim, os.pathsep, os.environ["PATH"]),
+                        PATH="{}{}{}".format(shim, os.pathsep, os.environ["PATH"]),
                         GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
         for k in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
             self.env.pop(k, None)
@@ -89,13 +99,11 @@ class Release(unittest.TestCase):
             os.chmod(path, stat.S_IWRITE)
             fn(path)
         shutil.rmtree(self.tmp.name, onerror=force)
-        try:
+        with contextlib.suppress(OSError):
             self.tmp.cleanup()
-        except OSError:
-            pass
 
     def git(self, *a, cwd):
-        return subprocess.run(["git"] + list(a), cwd=cwd, env=self.env, check=True, capture_output=True,
+        return subprocess.run(["git", *a], cwd=cwd, env=self.env, check=True, capture_output=True,
                               text=True).stdout.strip()
 
     def write(self, path, text):
@@ -112,10 +120,10 @@ class Release(unittest.TestCase):
         self.git("push", "-q", "origin", "HEAD:main", cwd=wt)
 
     def cmd(self, *args):
-        return [sys.executable, str(RELEASE)] + list(args) + ["--repo", str(self.repo), "--marketplace", str(self.market)]
+        return [sys.executable, str(RELEASE), *args, "--repo", str(self.repo), "--marketplace", str(self.market)]
 
     def release(self, *args):
-        return subprocess.run(self.cmd(*args), env=self.env, capture_output=True, text=True, timeout=120)
+        return subprocess.run(self.cmd(*args), env=self.env, capture_output=True, text=True, timeout=120, check=False)
 
     def version(self, bare, path=PLUGIN):
         return json.loads(self.git("show", "main:" + path, cwd=bare))
@@ -270,9 +278,9 @@ class Release(unittest.TestCase):
                     from pathlib import Path
                     class Rebased(unittest.TestCase):
                         def test_both_changes_are_present(self):
-                            self.assertEqual(Path("z.txt").read_text(), %r)
-                            self.assertEqual(Path("other.txt").read_text(), %r)
-                ''' % (name + "\n", name + "\n")))
+                            self.assertEqual(Path("z.txt").read_text(), {!r})
+                            self.assertEqual(Path("other.txt").read_text(), {!r})
+                '''.format(name + "\n", name + "\n")))
                 self.commit(self.seed, "moved on")
                 r = self.release("z", "--from-branch", name)
                 self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
@@ -356,15 +364,15 @@ class Release(unittest.TestCase):
         ready, proceed = self.home / "ready", self.home / "proceed"
         snapshots = self.home / "snapshots"
         snapshots.mkdir()
-        self.write(self.seed / "tests" / "test_queue.py", textwrap.dedent('''
+        self.write(self.seed / "tests" / "test_queue.py", textwrap.dedent(f'''
             import json, subprocess, time, unittest
             from pathlib import Path
-            READY, PROCEED, SNAPSHOTS = Path(%r), Path(%r), Path(%r)
+            READY, PROCEED, SNAPSHOTS = Path({str(ready)!r}), Path({str(proceed)!r}), Path({str(snapshots)!r})
             class Queue(unittest.TestCase):
                 def test_snapshot(self):
-                    version = json.loads(Path(%r).read_text())["version"]
+                    version = json.loads(Path({PLUGIN!r}).read_text())["version"]
                     paths = subprocess.check_output(["git", "ls-files"], text=True).splitlines()
-                    snapshot = {p: Path(p).read_bytes().hex() for p in paths}
+                    snapshot = {{p: Path(p).read_bytes().hex() for p in paths}}
                     with (SNAPSHOTS / (version + ".jsonl")).open("a") as out:
                         out.write(json.dumps(snapshot) + "\\n")
                     if version == "0.1.1":
@@ -373,7 +381,7 @@ class Release(unittest.TestCase):
                         while not PROCEED.exists():
                             self.assertLess(time.monotonic(), deadline, "first suite was not released")
                             time.sleep(0.02)
-        ''' % (str(ready), str(proceed), str(snapshots), PLUGIN)))
+        '''))
         self.commit(self.seed, "suite records exactly what was tested")
         self.git("pull", "-q", "--ff-only", "origin", "main", cwd=self.repo)
         for name in ("first", "second"):
@@ -401,7 +409,7 @@ class Release(unittest.TestCase):
                                               stdout=second_out, stderr=subprocess.STDOUT))
                 wait_for(lambda: "waiting for the release lock" in outputs[1].read_text())
                 self.assertRegex(outputs[1].read_text(),
-                                 r"held by pid %d since \d{2}:\d{2}:\d{2}: first" % procs[0].pid)
+                                 rf"held by pid {procs[0].pid} since \d{{2}}:\d{{2}}:\d{{2}}: first")
                 self.assertIsNone(procs[1].poll())
                 self.assertEqual(self.version(self.origin)["version"], "0.1.0")
                 self.assertFalse((snapshots / "0.1.2.jsonl").exists())
@@ -461,9 +469,13 @@ class Release(unittest.TestCase):
         hook = self.home / "template" / "hooks" / "pre-push"  # the release clone is cloned from this template
         hook.parent.mkdir(parents=True)
         self.env["GIT_TEMPLATE_DIR"] = str(self.home / "template")
-        hook.write_text("#!/bin/sh\nunset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE\n[ -f '%s' ] && exit 0\ntouch '%s'\ncd '%s' && sed -i.bak 's/0.1.0/0.1.1/' %s "
-                        "&& rm %s.bak && git commit -qam '0.1.1: racer' && git push -q origin HEAD:main\n"
-                        % (self.home / "raced", self.home / "raced", self.seed, PLUGIN, PLUGIN))
+        hook.write_text(
+            "#!/bin/sh\nunset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE\n[ -f '{}' ] && exit 0\ntouch '{}'\ncd '{}' && sed -i.bak "
+            "'s/0.1.0/0.1.1/' {} "
+            "&& rm {}.bak && git commit -qam '0.1.1: racer' && git push -q origin HEAD:main\n".format(
+                self.home / "raced", self.home / "raced", self.seed, PLUGIN, PLUGIN
+            )
+        )
         hook.chmod(0o755)
         r = self.release("mine", "--from-branch", "task/race")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
@@ -542,12 +554,11 @@ class Release(unittest.TestCase):
         # race test (tl-bxk.11.1): loops land on the same origin; each lands when the land lock is free. A land during
         # the suite moved origin/main, the retry's suite saw another land, and the release aborted. The release now
         # pushes under the land lock: after the first suite no land gets in between its rebase, suite and push.
-        import hashlib
         lock = self.home / "cfg" / "task-loop" / "locks" / (
-            "land-%s.lock" % hashlib.sha1(str(self.origin).encode()).hexdigest()[:12])
+            f"land-{hashlib.sha1(str(self.origin).encode()).hexdigest()[:12]}.lock")
         self.write(self.seed / "tests" / "test_land.py", textwrap.dedent('''
             import fcntl, os, subprocess, time, unittest
-            LOCK, SIDE = %r, %r
+            LOCK, SIDE = {!r}, {!r}
 
             class Land(unittest.TestCase):
                 def test_a_loop_lands_meanwhile(self):  # what an engine does at land, the lock taken as it takes it
@@ -557,15 +568,15 @@ class Release(unittest.TestCase):
                             fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
                         except OSError:
                             return  # a land would wait here
-                        env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_DIR")}
+                        env = {{k: v for k, v in os.environ.items() if not k.startswith("GIT_DIR")}}
                         run = lambda *a: subprocess.run(a, cwd=SIDE, env=env, check=True, capture_output=True)
                         run("git", "pull", "-q", "--rebase", "origin", "main")
-                        name = "land-%%s.txt" %% time.time_ns()
+                        name = "land-%s.txt" % time.time_ns()
                         open(os.path.join(SIDE, name), "w").write("x")
                         run("git", "add", name)
-                        run("git", "commit", "-qm", "a bead (x-%%s)" %% name)
+                        run("git", "commit", "-qm", "a bead (x-%s)" % name)
                         run("git", "push", "-q", "origin", "HEAD:main")
-            ''' % (str(lock), str(self.home / "side"))))
+            '''.format(str(lock), str(self.home / "side"))))
         self.commit(self.seed, "a suite that sees a loop land")
         self.git("clone", "-q", str(self.origin), str(self.home / "side"), cwd=self.home)
         self.git("pull", "-q", "origin", "main", cwd=self.repo)

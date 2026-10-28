@@ -1,100 +1,67 @@
 """The engine tests' shared case: the fixtures, the helpers and the base class the per-feature test files build on."""
 import atexit
-import hashlib
-import io
-import functools
+import collections.abc
+import contextlib
 import dataclasses
-from typing import cast
+import functools
 import json
 import os
 import re
 import shlex
-import types
 import shutil
-import signal
 import subprocess
 import sys
 import tempfile
-import threading
 import time
+import types
 import unittest
-import collections.abc
-import contextlib
-from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 from unittest import mock
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from taskloop.adapters import halt as halting  # noqa: E402
-from taskloop.adapters import applog  # noqa: E402
-from taskloop.app.wire import slots as wslots  # noqa: E402
-from taskloop.domain.write.matchers import count_tests  # noqa: E402
-from taskloop.domain.plan.matchers import AcceptanceText  # noqa: E402
-from taskloop.contracts.answers import IRREVERSIBLE  # noqa: E402
-from taskloop.domain.prompts.plan import REPLAN_CAP  # noqa: E402
-from taskloop.app.plan.planner import Planner  # noqa: E402
-from taskloop.app.land.fixer import Fixer  # noqa: E402
-from taskloop.app.write.newfiles import NewFiles  # noqa: E402
-from taskloop.app.land.checkout import Checkout  # noqa: E402
-from taskloop.app.run.waits import Waits  # noqa: E402
-from taskloop.domain.look.matchers import writer_names  # noqa: E402
-from taskloop.app.land.lander import Lander  # noqa: E402
-from taskloop.app.review.settles import Settles  # noqa: E402
-from taskloop.domain.review.matchers import Tools  # noqa: E402
-from taskloop.app.write.stage_loop import StageLoop  # noqa: E402
-from taskloop.domain.prompts import plan as pp  # noqa: E402
-from taskloop.domain.prompts import review as rp  # noqa: E402
-from taskloop.domain.prompts import write as wp  # noqa: E402
-from taskloop.adapters import delegate as dl  # noqa: E402,F401
-from clock import FakeClock  # noqa: E402
-from support.briefs import bead_diff, bead_snapshot, brief_digest, linked_text  # noqa: E402
-from support.builders import argv_cfg, cfg_with, make_engine  # noqa: E402
-from support.checkpoints import flat_ck, stored_ck  # noqa: E402
-from taskloop.app.run.state import Checkpoints  # noqa: E402
-from taskloop.contracts.argv import checks_to_wire  # noqa: E402
-from taskloop.contracts.config import EngineConfig  # noqa: E402
-from taskloop.app.run import engine  # noqa: E402
-from taskloop.adapters import links  # noqa: E402
-from taskloop.app.slots.lease import Lease  # noqa: E402
-from taskloop.domain.prompts.common import RULES_MAX  # noqa: E402
-from taskloop.domain.lanes.matchers import read_only_command  # noqa: E402
-from taskloop.domain.plan.matchers import gate_only_criteria  # noqa: E402
-import outcome as oc  # noqa: E402
-from taskloop.app.run import entry  # noqa: E402
-from taskloop.app.asks import intake  # noqa: E402
-import seams  # noqa: E402
-from support.fakes import FakeBeadStore, as_bead, as_comment, must_bead  # noqa: E402
-from support.logs import records  # noqa: E402
-from taskloop.app.run.steps import Steps  # noqa: E402
-from contracts import samples as S  # noqa: E402
-from taskloop.contracts import codec  # noqa: E402
-from taskloop.contracts.ask import AskAnswer  # noqa: E402
-from taskloop.contracts.enums import WaitWhat  # noqa: E402
-from taskloop.contracts.paths import ConfigDir  # noqa: E402
-from taskloop.contracts.stores import AskStore  # noqa: E402
-from support.narrow import must  # noqa: E402
-from support.waits import until  # noqa: E402
-from support import fake_route  # noqa: E402
-from taskloop.domain.lanes import policy as lp  # noqa: E402,F401
-from taskloop.domain.lanes import netgate  # noqa: E402,F401
-from taskloop.domain.checks import lint  # noqa: E402,F401
-from taskloop.domain.checks.names import log_var  # noqa: E402
-from taskloop.domain.checks import retry  # noqa: E402
-from taskloop.domain.checks import matchers as check_matchers  # noqa: E402
-from taskloop.domain.checks.writer_split import WriterSplit  # noqa: E402
-from taskloop.contracts.checks import CheckRun  # noqa: E402
-from taskloop.app.checks import evidence as check_evidence  # noqa: E402
-from support.checks import res  # noqa: E402
-from taskloop.adapters import procs as sproc  # noqa: E402
-from taskloop.adapters.check_probe import PathProbe  # noqa: E402
-from taskloop.adapters import gitrepo  # noqa: E402
-from taskloop.adapters import ident  # noqa: E402
-from taskloop.adapters import context_size  # noqa: E402
-from taskloop.app.run import outcomes  # noqa: E402
-from taskloop.adapters import landlock  # noqa: E402
-from taskloop.adapters import delegate as lroute  # noqa: E402,F401
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
+
+# isort: split
+import outcome as oc
+import seams
+from contracts import samples as S
+
+from support import fake_route
+from support.builders import argv_cfg, cfg_with, make_engine
+from support.checkpoints import flat_ck, stored_ck
+from support.checks import res
+from support.fakes import FakeBeadStore
+from support.logs import records
+from support.narrow import must
+from support.push_race import PushRace
+from support.waits import until
+from taskloop.adapters import (
+    applog,
+    gitrepo,
+    ident,
+    )
+from taskloop.adapters import delegate as dl
+from taskloop.adapters import delegate as lroute  # noqa: F401
+from taskloop.adapters import halt as halting
+from taskloop.app.asks import intake
+from taskloop.app.run import (
+    engine,
+    entry,
+    )
+from taskloop.app.wire import slots as wslots
+from taskloop.app.write.newfiles import NewFiles
+from taskloop.contracts import codec
+from taskloop.contracts.ask import AskAnswer
+from taskloop.contracts.checks import CheckRun
+from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.stores import AskStore
+from taskloop.domain.checks import (
+    lint,  # noqa: F401
+    )
+from taskloop.domain.lanes import netgate  # noqa: F401
+from taskloop.domain.lanes import policy as lp  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -154,7 +121,7 @@ def shown(p):
     return Path(p).resolve().as_posix() if os.name == "nt" else str(p)
 
 
-PY = '"%s"' % sys.executable
+PY = f'"{sys.executable}"'
 
 
 def pyc(code, *args):
@@ -168,18 +135,53 @@ HAS_F = shlex.join([sys.executable, "-c", "import os,sys; sys.exit(0 if os.path.
 FALSE = shlex.join([sys.executable, "-c", "import sys; sys.exit(1)"])
 
 
-PLAN: dict[str, Any] = {"summary": "do it", "stages": [{"goal": "add f", "files": ["f.txt"], "checks": [HAS_F],
-                                        "hard": False, "anchors": [{"path": "f.txt", "lines": "1", "symbol": "", "why": "the file"}]}], "risks": [], "question": "", "options": [], "decided": "", "cases": [], "leftovers": []}
+PLAN: dict[str, Any] = {
+    "summary": "do it",
+    "stages": [
+        {
+            "goal": "add f",
+            "files": ["f.txt"],
+            "checks": [HAS_F],
+            "hard": False,
+            "anchors": [{"path": "f.txt", "lines": "1", "symbol": "", "why": "the file"}],
+        }
+    ],
+    "risks": [],
+    "question": "",
+    "options": [],
+    "decided": "",
+    "cases": [],
+    "leftovers": [],
+}
 
 
-WRITE = {"summary": "wrote f", "checks_run": [{"cmd": "test -f f.txt", "exit": 0}], "question": "", "options": [], "decided": "", "bad_checks": [],
-         "new_cases": [], "unchecked": [], "logic_only": ""}
+WRITE = {
+    "summary": "wrote f",
+    "checks_run": [{"cmd": "test -f f.txt", "exit": 0}],
+    "question": "",
+    "options": [],
+    "decided": "",
+    "bad_checks": [],
+    "new_cases": [],
+    "unchecked": [],
+    "logic_only": "",
+}
 
 
 ROUTE = "/h/.claude/plugins/cache/iorlas-marketplace/iorlas-delegate/%s/skills/delegate/route.py"
 
 
-CLEAN = {"findings": [], "unmet": [], "criteria": [], "question": "", "options": [], "decided": "", "leftovers": [], "unchecked": [], "look": ""}
+CLEAN = {
+    "findings": [],
+    "unmet": [],
+    "criteria": [],
+    "question": "",
+    "options": [],
+    "decided": "",
+    "leftovers": [],
+    "unchecked": [],
+    "look": "",
+}
 
 
 BEAD = {"id": "t-1", "title": "Add f", "metadata": {}, "acceptance_criteria": "f.txt exists"}
@@ -203,8 +205,8 @@ def stop(reason, ref="", **kw):
 
 def full(data, ref="w2", **kw):
     """A done answer with its lane facts spelled out (a test where the lane, the family or the fallback fields differ)."""
-    fields = dict(cost=0.5, secs=1, family="claude", lane="C", model="sonnet", effort="e",
-                  tokens={"in": 1000, "cached": 800, "out": 50}, context={"instructions": [], "env_keys": []})
+    fields = {"cost": 0.5, "secs": 1, "family": "claude", "lane": "C", "model": "sonnet", "effort": "e",
+                  "tokens": {"in": 1000, "cached": 800, "out": 50}, "context": {"instructions": [], "env_keys": []}}
     fields.update(kw)
     return fake_route.answer(fake_route.contract(), None, ref, False, data, **fields)
 
@@ -213,7 +215,7 @@ CAT_ENV = {"kind": "policy", "tool": "shell", "path": ".env", "input": {"command
 
 
 def finding(severity):
-    return {"file": "f.txt", "line": 1, "severity": severity, "fix": "a %s fix" % severity, "axis": "standards", "category": "logic",
+    return {"file": "f.txt", "line": 1, "severity": severity, "fix": f"a {severity} fix", "axis": "standards", "category": "logic",
             "scenario": "input x gives y" if severity == "high" else ""}
 
 
@@ -221,8 +223,11 @@ def delegate_stack(script, route="/fake/route.py"):
     """The engine's delegate for a test: `route` resolved on fake_route's contract 3, `script` as the process seam, no real sleep."""
     res = dl.Resolved(Path(route).parent, route, fake_route.CONTRACT, "explicit")
     stack = contextlib.ExitStack()
-    for p in (mock.patch.object(dl, "resolve", return_value=res), mock.patch.object(seams.DelegateRoute, "runner", lambda self, *a, **k: script),
-              mock.patch.object(time, "sleep")):
+    for p in (
+        mock.patch.object(dl, "resolve", return_value=res),
+        mock.patch.object(seams.DelegateRoute, "runner", lambda self, *a, **k: script),
+        mock.patch.object(time, "sleep"),
+    ):
         stack.enter_context(p)
     return stack
 
@@ -266,13 +271,13 @@ def no_repo(fn):
 
 def read_ask(bead="t-1") -> Any:
     """The bead's ask record as the dict on disk, or None."""
-    p = ident.config_dir() / "asks" / ("%s.json" % bead)
+    p = ident.config_dir() / "asks" / (f"{bead}.json")
     return json.loads(p.read_text()) if p.exists() else None
 
 
 def card_of(a):
     """All the text the owner reads on an ask record: the decision, what was tried, the options, and the details."""
-    opts = " ".join("%s %s" % (o["label"], o["consequence"]) for o in a["options"])
+    opts = " ".join("{} {}".format(o["label"], o["consequence"]) for o in a["options"])
     return " ".join([a["decision"], " ".join(a["tried"]), opts, a["detail"]["text"], a["why"]])
 
 
@@ -307,11 +312,19 @@ class EngineTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         home = Path(self.tmp.name)
-        self.env = mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(home / "cfg"), "APPDATA": str(home / "cfg"),
-                                                "CLAUDE_CODE_SESSION_ID": "sess1234-x", "GIT_AUTHOR_NAME": "t",
-                                                "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
-                                                "GIT_COMMITTER_EMAIL": "t@t",
-                                                "BEADS_DIR": str(home / "no-beads")})  # a bd that slips past the store finds nothing to write
+        self.env = mock.patch.dict(
+            os.environ,
+            {
+                "XDG_CONFIG_HOME": str(home / "cfg"),
+                "APPDATA": str(home / "cfg"),
+                "CLAUDE_CODE_SESSION_ID": "sess1234-x",
+                "GIT_AUTHOR_NAME": "t",
+                "GIT_AUTHOR_EMAIL": "t@t",
+                "GIT_COMMITTER_NAME": "t",
+                "GIT_COMMITTER_EMAIL": "t@t",
+                "BEADS_DIR": str(home / "no-beads"),
+            },
+        )  # a bd that slips past the store finds nothing to write
         self.env.start()
         self.wt = home / "wt"
         if not getattr(getattr(self, self._testMethodName), "no_repo", False):
@@ -319,8 +332,12 @@ class EngineTest(unittest.TestCase):
         self.store = FakeBeadStore()  # bd, show and comments of every engine this test builds (pass store=self.store)
         self.bd_calls = self.store.calls
         self.closed = Recorded(lambda: [c[3] for c in self.store.said("close")])  # the reasons the engine closed its bead with
-        self.blocked = Recorded(lambda: [c[3].removeprefix("Blocked: ") for c in self.store.said("comments", "add") if c[3].startswith("Blocked: ")])
-        self.lands = Recorded(lambda: [c for c in self.store.said("provenance", "record") if c[5] == "land"])  # the land records in bd's provenance
+        self.blocked = Recorded(
+            lambda: [c[3].removeprefix("Blocked: ") for c in self.store.said("comments", "add") if c[3].startswith("Blocked: ")]
+        )
+        self.lands = Recorded(
+            lambda: [c for c in self.store.said("provenance", "record") if c[5] == "land"]
+        )  # the land records in bd's provenance
 
     def commit_base_cfg(self, engine_cfg):
         base = Path(self.tmp.name, "base-cfg")
@@ -368,14 +385,14 @@ class EngineTest(unittest.TestCase):
     def checks_engine(self, attrs=None, **cfg):
         return make_engine(self.wt, cfg=cfg, store=self.store, attrs=attrs)
 
-    LOCK = ["Unable to create project: It looks like another Unity instance is running with this project open.",
+    LOCK: ClassVar[Any] = ["Unable to create project: It looks like another Unity instance is running with this project open.",
             "Multiple Unity instances: Temp/UnityLockfile in use", "another Unity instance has the project open"]
 
     def counting_check(self, line, ok_after=None):
         """A check that prints `line` and exits 1, counting its runs in a file; green from run ok_after on."""
-        n = Path(self.tmp.name) / ("runs-%s" % self._testMethodName)
-        code = ("import sys,os; p=%r; k=(int(open(p).read()) if os.path.exists(p) else 0)+1; open(p,'w').write(str(k)); "
-                "print(%r); sys.exit(0 if %r and k>=%r else 1)" % (str(n), line, ok_after is not None, ok_after))
+        n = Path(self.tmp.name) / (f"runs-{self._testMethodName}")
+        code = (f"import sys,os; p={str(n)!r}; k=(int(open(p).read()) if os.path.exists(p) else 0)+1; open(p,'w').write(str(k)); "
+                f"print({line!r}); sys.exit(0 if {ok_after is not None!r} and k>={ok_after!r} else 1)")
         return PY + " -c " + shq(code), n
 
     R10 = "R10: a general rule never names a single item"
@@ -389,8 +406,9 @@ class EngineTest(unittest.TestCase):
     def spawn(self, pidfile, term=False):
         """A check that starts a child sleeping 30 s and records its pid, then waits for it (term: after sending its parent, the
         engine, SIGTERM)."""
-        code = ("import os,signal,subprocess; c=subprocess.Popen(['sleep','30']); open(%r,'w').write(str(c.pid)); %s c.wait()"
-                % (str(pidfile), "os.kill(os.getppid(), signal.SIGTERM);" if term else ""))
+        code = "import os,signal,subprocess; c=subprocess.Popen(['sleep','30']); open({!r},'w').write(str(c.pid)); {} c.wait()".format(
+            str(pidfile), "os.kill(os.getppid(), signal.SIGTERM);" if term else ""
+        )
         return pyc(code)
 
     def child_of(self, pidfile, limit=5):
@@ -403,7 +421,7 @@ class EngineTest(unittest.TestCase):
     def assertDead(self, pid):
         if not until(lambda: pid_gone(pid), 3):
             os.kill(pid, 9)
-            self.fail("pid %d outlived the engine's stop" % pid)
+            self.fail(f"pid {pid} outlived the engine's stop")
 
     def stoppable(self):
         """The engine's own SIGTERM handler (run_main installs it), restored after the test."""
@@ -412,11 +430,21 @@ class EngineTest(unittest.TestCase):
 
         return halting.halt_on_sigterm()
 
-    ANCHORS = [{"path": "f.txt", "lines": "1", "symbol": "", "why": "the file"}]
+    ANCHORS: ClassVar[Any] = [{"path": "f.txt", "lines": "1", "symbol": "", "why": "the file"}]
 
-    TWO = {"summary": "two", "stages": [{"goal": "stage one", "files": ["f.txt"], "checks": [HAS_F], "hard": False, "anchors": ANCHORS},
-                                        {"goal": "stage two", "files": ["f.txt"], "checks": [HAS_F], "hard": False, "anchors": ANCHORS}],
-           "risks": [], "question": "", "options": [], "decided": "", "cases": [], "leftovers": []}
+    TWO: ClassVar[Any] = {
+        "summary": "two",
+        "stages": [
+            {"goal": "stage one", "files": ["f.txt"], "checks": [HAS_F], "hard": False, "anchors": ANCHORS},
+            {"goal": "stage two", "files": ["f.txt"], "checks": [HAS_F], "hard": False, "anchors": ANCHORS},
+        ],
+        "risks": [],
+        "question": "",
+        "options": [],
+        "decided": "",
+        "cases": [],
+        "leftovers": [],
+    }
 
     def stop_at(self, role, nth):
         """The nth call of a role is where the engine is stopped (SIGTERM raises Blocked in the main thread)."""
@@ -443,13 +471,16 @@ class EngineTest(unittest.TestCase):
             p = ident.config_dir() / "asks" / "t-1.json"
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(json.dumps(ask))
-        leases = [dict(BEAD, id="live-%d" % n, status="in_progress", assignee=who, lease_expires_at="2999-01-01T00:00:00Z") for n, who in enumerate(live)]
+        leases = [
+            dict(BEAD, id=f"live-{n}", status="in_progress", assignee=who, lease_expires_at="2999-01-01T00:00:00Z")
+            for n, who in enumerate(live)
+        ]
         with self.store.stub(show=dict(BEAD, **bead), comments=list(comments), find_fn=lambda q: leases):
             ok, why = entry.reclaim("t-1", str(self.wt), store=self.store)
         updates = [c for c in self.bd_calls if c[:1] == ("update",)]
         return ok, why, updates
 
-    BLOCKED = {"author": "tl-61ba34e7", "text": "Blocked: failed: write node produced no valid output",
+    BLOCKED: ClassVar[Any] = {"author": "tl-61ba34e7", "text": "Blocked: failed: write node produced no valid output",
                "created_at": "2026-10-20T21:11:48Z"}
 
     def plan_with(self, *checks):
@@ -474,125 +505,11 @@ class EngineTest(unittest.TestCase):
                                    j_extra={"write": [extra, extra]}, **cfg)
 
     def run_push_race(self, rejections=1, failure="", plan=PLAN, resume_failed_fix=False, **cfg):
-        """Advance a local remote immediately before each rejected push, under the real land lock."""
-        n = getattr(self, "race_runs", 0) + 1
-        self.race_runs = n
-        home = Path(self.tmp.name)
-        self.wt = home / ("race-%d" % n)
-        origin = self.race_origin = home / ("race-origin-%d.git" % n)
-        sh("git", "clone", "-q", "--bare", str(home / "o.git"), str(origin), cwd=home)
-        other = home / ("concurrent-%d" % n)
-        for checkout in (self.wt, other):
-            sh("git", "clone", "-q", str(origin), str(checkout), cwd=home)
-        events, held = [], []
-        state: dict[str, Any] = {"pushes": 0, "fetches": 0, "gates": 0, "results": []}
-        real_lock, real_sh, real_wait = Lander.lock, engine.Engine.sh, Waits.add
-        real_fetch, real_checks, real_fix = Checkout.fetch, engine.Engine.run_checks, Fixer.fix
-        gate = [sys.executable, "-c", "pass"]
-
-        @contextmanager
-        def lock(this):
-            with real_lock(this):
-                self.assertFalse(held)
-                held.append(True)
-                events.append("enter")
-                try:
-                    yield
-                finally:
-                    events.append("exit")
-                    held.pop()
-
-        def fetch(this, *a, **kw):
-            if held:
-                events.append("fetch")
-                state["fetches"] += 1
-                if failure == "fetch" and state["fetches"] == 2:
-                    return 1, "fetch failed"
-            return real_fetch(this, *a, **kw)
-
-        def checks(this, st, name, *a, **kw):
-            if name == "land retry":
-                self.assertTrue(held)
-                events.append("checks")
-                if failure == "checks_stop":
-                    state["pidfile"] = home / ("retry-child-%d.pid" % n)
-                    state["next_check"] = home / ("retry-next-%d" % n)
-                    st = dict(st, checks=[self.spawn(state["pidfile"], term=True),
-                                          "touch %s" % state["next_check"]])
-                if failure in ("checks", "checks_fixed", "checks_exhausted", "review_exhausted") and not state.get("check_failed"):
-                    state["check_failed"] = True
-                    return CheckRun(round=0, results=[res("retry check", 1, tail="red")])
-            result = real_checks(this, st, name, *a, **kw)
-            if failure == "checks_exhausted" and (name.startswith("fix ") or state.get("resuming")):
-                result = dataclasses.replace(result, results=[dataclasses.replace(c, status="failed", exit=1, tail="still red") for c in result])
-            if state.get("resuming"):
-                state.setdefault("resume_checks", []).append(result)
-            if name == "land retry":
-                state["results"].append(result)
-            return result
-
-        def command(this, cmd, *a, **kw):
-            if held and isinstance(cmd, list) and cmd[:3] == ["git", "rebase", "-q"]:
-                events.append("rebase")
-            if held and cmd == gate:
-                events.append("gate")
-                state["gates"] += 1
-                if failure == "gate" and state["gates"] == 2:
-                    return 1, "gate red"
-            if cmd == this.cfg.land:
-                self.assertTrue(held)
-                events.append("push")
-                state["pushes"] += 1
-                if state["pushes"] <= rejections:
-                    path = "f.txt" if failure == "conflict" else "a.txt"
-                    (other / path).write_text("concurrent %d\n" % state["pushes"])
-                    sh("git", "add", "-A", cwd=other)
-                    sh("git", "commit", "-qm", "concurrent", cwd=other)
-                    sh("git", "push", "-q", "origin", "HEAD:main", cwd=other)
-                elif failure in ("network", "push", "stop"):
-                    if failure == "stop":
-                        signal.raise_signal(signal.SIGTERM)
-                        return 1, "! [rejected] (fetch first)"
-                    return 1, "Connection reset" if failure == "network" else "hook failed"
-            return real_sh(this, cmd, *a, **kw)
-
-        def fix(this, kind, tail, resume=False):
-            self.assertFalse(held)
-            events.append("fix:" + kind)
-            if failure in ("checks_fixed", "checks_exhausted", "review_exhausted"):
-                state["fix_result"] = real_fix(this, kind, tail, resume)
-                return state["fix_result"]
-            raise engine.Blocked("test stops at fix: " + kind)
-
-        def wait(this, secs, what, wid=None):
-            if what != WaitWhat.NETWORK:
-                return real_wait(this, secs, what, wid)
-            self.assertFalse(held)
-            events.append("wait")
-            raise engine.Blocked("test stops at network wait")
-
-        config_home = str(home / ("race-cfg-%d" % n))
-        state["config_home"] = config_home
-        with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": config_home, "APPDATA": config_home}), \
-                mock.patch.object(Lander, "lock", lock), \
-                mock.patch.object(Checkout, "fetch", fetch), \
-                mock.patch.object(engine.Engine, "run_checks", checks), \
-                mock.patch.object(engine.Engine, "sh", command), \
-                mock.patch.object(Fixer, "fix", fix), \
-                mock.patch.object(Waits, "add", wait):
-            reviews = [CLEAN, review(findings=[finding("high")])] if failure == "review_exhausted" else [CLEAN] * 2
-            rc, _ = self.run_engine({"plan": [plan], "write": [WRITE] * 2, "review": reviews}, gate=gate, **cfg)
-            if resume_failed_fix:
-                state["first_rc"], state["first_blocked"] = rc, self.said()
-                state["checkpoint"] = self.checkpoint()
-                state["resuming"] = True
-                # An owner comment answers the stuck ask without discarding the checkpoint.
-                with self.store.stub(comments=[{"author": "owner", "text": "Run again."}]):
-                    rc, script = self.run_engine({"plan": [plan], "write": [WRITE], "review": [reviews[-1]]},
-                                                 gate=gate, **dict(cfg, max_replans=1))
-                state["resume_calls"] = [c[0] for c in script.calls]
-        self.assertFalse(held)
-        return rc, events, state
+        """Advance a local remote immediately before each rejected push, under the real land lock (support/push_race.py)."""
+        self.race_runs = getattr(self, "race_runs", 0) + 1
+        race = PushRace(self, self.race_runs, rejections, failure)
+        self.race_origin = race.origin
+        return race.run(plan, resume_failed_fix, cfg, CLEAN, WRITE, review(findings=[finding("high")]))
 
     def wait_records(self, eng):
         if not Path(eng.log_path).exists():
@@ -601,7 +518,7 @@ class EngineTest(unittest.TestCase):
 
     def counter(self, name):
         f = Path(self.tmp.name, name)
-        return f, PY + ' -c "open(%r, \'a\').write(\'1\')"' % str(f)
+        return f, PY + f' -c "open({str(f)!r}, \'a\').write(\'1\')"'
 
     def said(self):
         """The engine's own comments (Engine failed / Engine paused): where a machine fault or pause now says why."""
@@ -621,7 +538,7 @@ class EngineTest(unittest.TestCase):
         a = must(self.asks().get(bead))
         return self.asks().answer(bead, a.id, AskAnswer(action=action, text=text, t=time.time(), by="denis"))
 
-    CHOICES = [{"label": "Build it", "cost": "about 4 stages", "answer": "A: build the slice now", "recommended": False},
+    CHOICES: ClassVar[Any] = [{"label": "Build it", "cost": "about 4 stages", "answer": "A: build the slice now", "recommended": False},
                {"label": "Keep parked", "cost": "none", "answer": "B: keep it parked", "recommended": True},
                {"label": "", "cost": "x", "answer": "dropped: no label", "recommended": False}]
 
@@ -631,7 +548,7 @@ class EngineTest(unittest.TestCase):
         self.file_answer(action, text)
         return [{"author": "engine", "text": "Ask (engine) t-1-1 (decision): check the link"}]
 
-    GAPS = [{"what": "the hand-written .meta matches its siblings and its guid is unique", "kind": "tooling"},
+    GAPS: ClassVar[Any] = [{"what": "the hand-written .meta matches its siblings and its guid is unique", "kind": "tooling"},
             {"what": "Boot() calls the new Wire()", "kind": "requirement"},
             {"what": "the menu reads well on a phone", "kind": "requirement"}]
 
@@ -659,9 +576,12 @@ class EngineTest(unittest.TestCase):
     def engine_noise(self, name):
         """Notes lines and comments the engine wrote, from the stored brief of a run that was cap-parked (tests/fixtures/briefs)."""
         notes, comments = stored_brief(name)
-        last = [("tl-x", l) for l in re.findall(r"(?m)^(?:Blocked:|Reflect \(engine\)).*$", (BRIEFS / (name + ".md")).read_text(encoding="utf-8"))]
-        return [dict(author=a, text=t) for a, t in comments + last if intake.engine_written(t)] + [
-            dict(author="tl-x", text="Engine paused: paused: no lane for write until 10:00 (no_lane: Hold the task)")], notes
+        last = [
+            ("tl-x", ln)
+            for ln in re.findall(r"(?m)^(?:Blocked:|Reflect \(engine\)).*$", (BRIEFS / (name + ".md")).read_text(encoding="utf-8"))
+        ]
+        return [{"author": a, "text": t} for a, t in comments + last if intake.engine_written(t)] + [
+            {"author": "tl-x", "text": "Engine paused: paused: no lane for write until 10:00 (no_lane: Hold the task)"}], notes
 
 
 class StrayWriteScript(fake_route.Script):
@@ -681,14 +601,18 @@ class StrayWriteScript(fake_route.Script):
 BRIEFS = ROOT / "tests" / "fixtures" / "briefs"
 
 
-CAP_PARKS = ("lifesim-o67g-20261025-005827", "lifesim-yxbb.2-20261024-014147", "lifesim-d5f.40-20261025-071741")  # the runs of o67g 10-25 00:58, yxbb.2 10-24 01:41, d5f.40 10-25 07:18
+CAP_PARKS = (
+    "lifesim-o67g-20261025-005827",
+    "lifesim-yxbb.2-20261024-014147",
+    "lifesim-d5f.40-20261025-071741",
+)  # the runs of o67g 10-25 00:58, yxbb.2 10-24 01:41, d5f.40 10-25 07:18
 
 
 def stored_brief(name):
     """(notes, [(author, text)]) read back out of a stored brief.md: the sections the engine's own records leaked into."""
     text = (BRIEFS / (name + ".md")).read_text(encoding="utf-8")
     parts = re.split(r"(?m)^## ", text)
-    sec = {p.split("\n", 1)[0]: (p.split("\n", 1) + [""])[1] for p in parts[1:]}
+    sec = {p.split("\n", 1)[0]: ([*p.split("\n", 1), ""])[1] for p in parts[1:]}
     comments = []
     for line in (sec.get("Comments") or "").splitlines():
         m = re.match(r"- ([^:\n]+): (.*)$", line)
@@ -708,12 +632,12 @@ def _cells(owner, prefix, cell, cases):
     for args in cases:
         def run(self, args=args):
             getattr(self, cell)(*args)
-        run.__name__ = re.sub(r"\W+", "_", "test_%s_%s" % (prefix, "_".join(str(a).lower() for a in args)))
+        run.__name__ = re.sub(r"\W+", "_", "test_{}_{}".format(prefix, "_".join(str(a).lower() for a in args)))
         setattr(owner, run.__name__, run)
 
 
 class LandReviewBase(EngineTest):
-    STRAY = ["client/Assets/InitTestScene123.unity", "client/Assets/InitTestScene123.unity.meta"]
+    STRAY: ClassVar[Any] = ["client/Assets/InitTestScene123.unity", "client/Assets/InitTestScene123.unity.meta"]
 
     def engine_at_land(self, attrs=None, **cfg):
         plan = {"stages": [{"goal": "g", "files": ["f.txt", "docs/"], "checks": [], "hard": False}]}
@@ -735,7 +659,7 @@ class LandReviewBase(EngineTest):
     def landed(self):
         return sorted(gitrepo.git("show", "--name-only", "--format=", "origin/main", cwd=str(self.wt)).split())
 
-    CFG_CHECKS = [{"id": "unity-analyzers", "cmd": "just unity-analyzers", "group": "static"},
+    CFG_CHECKS: ClassVar[Any] = [{"id": "unity-analyzers", "cmd": "just unity-analyzers", "group": "static"},
                   {"id": "unity-tests", "cmd": "just unity-tests", "group": "tests"},
                   {"id": "unity-play-tests", "cmd": "just unity-play-tests", "group": "tests"}]
 
@@ -751,10 +675,12 @@ class LandReviewBase(EngineTest):
     SUITE = "tests/Sim.Properties/bin/Debug/net10.0/Sim.Properties --filter-class '*SleepSkipTests'"
 
     def engine_checks(self, **over):
-        rows = [res("just fmt-check", 0, id="fmt", group="static", secs=4, log="checks/00-fmt.r1.log"),
-                res("just unity-analyzers", None, id="unity-analyzers", group="static", why="no change under client/**"),
-                res("just unity-tests", None, id="unity-tests", why="no change under client/**, content/**"),
-                res(self.SUITE, 0, id=self.SUITE, group="acceptance", secs=3, log="checks/06-tests_Sim.Properties.r2.log", tail="succeeded: 4")]
+        rows = [
+            res("just fmt-check", 0, id="fmt", group="static", secs=4, log="checks/00-fmt.r1.log"),
+            res("just unity-analyzers", None, id="unity-analyzers", group="static", why="no change under client/**"),
+            res("just unity-tests", None, id="unity-tests", why="no change under client/**, content/**"),
+            res(self.SUITE, 0, id=self.SUITE, group="acceptance", secs=3, log="checks/06-tests_Sim.Properties.r2.log", tail="succeeded: 4"),
+        ]
         return [dataclasses.replace(r, **over.get(r.id, {})) for r in rows]
 
     def evidenced(self, checks=None, attrs=None):
@@ -766,4 +692,4 @@ class LandReviewBase(EngineTest):
         script = fake_route.Script({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         with mock.patch.object(NewFiles, "STAGE_DIFF_CAP", cap):
             self.assertEqual(self.run_with(script), 0)
-        return next(p for c, p in zip(script.calls, script.prompts) if c[0] == "reviewer")
+        return next(p for c, p in zip(script.calls, script.prompts, strict=False) if c[0] == "reviewer")

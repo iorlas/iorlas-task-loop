@@ -6,16 +6,17 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401
-from support.narrow import must  # noqa: E402
-from support.tiers import domain  # noqa: E402
-from taskloop.adapters.fake_beads import FakeBeads  # noqa: E402
-from taskloop.contracts.bead import Bead  # noqa: E402
-from taskloop.contracts.enums import AskStatus  # noqa: E402
-from taskloop.contracts.ports import NewBead  # noqa: E402
-from taskloop.app.asks import intake, raiser, sweeps  # noqa: E402
-from taskloop.domain.asks import specs  # noqa: E402
-from taskloop.stores.memory import fake_stores  # noqa: E402
+import support.paths  # noqa: F401
+from support.narrow import must
+from support.tiers import domain
+
+from taskloop.adapters.fake_beads import FakeBeads
+from taskloop.app.asks import intake, raiser, sweeps
+from taskloop.contracts.bead import Bead
+from taskloop.contracts.enums import AskStatus
+from taskloop.contracts.ports import NewBead
+from taskloop.domain.asks import specs
+from taskloop.stores.memory import fake_stores
 
 T = 1000.0
 
@@ -143,7 +144,9 @@ class IntakeTest(unittest.TestCase):
         self.verbs.hint("fk-1", " mind the cache ")
         self.verbs.hold("fk-1")
         self.verbs.override("fk-1", "replan-cap")
-        self.assertEqual(self.store.beads["fk-1"].metadata, {intake.HINT: "mind the cache", intake.HOLD: "denis", intake.OVERRIDE: "replan-cap"})
+        self.assertEqual(
+            self.store.beads["fk-1"].metadata, {intake.HINT: "mind the cache", intake.HOLD: "denis", intake.OVERRIDE: "replan-cap"}
+        )
         self.verbs.hold("fk-1", on=False)
         self.assertNotIn(intake.HOLD, self.store.beads["fk-1"].metadata)
         with self.assertRaises(ValueError):

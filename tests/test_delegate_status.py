@@ -8,7 +8,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+import support.paths  # noqa: E402, F401
+
 from taskloop.adapters import delegate as sdelegate  # noqa: E402
 from taskloop.adapters.ident import claude_dir  # noqa: E402
 from taskloop.contracts import codec  # noqa: E402
@@ -93,12 +94,13 @@ def installed_schema() -> dict:
     except (OSError, ValueError):
         schema = None
     if not isinstance(schema, dict):
-        raise unittest.SkipTest("the installed delegate (%s) carries no status_schema in contract.json (older than 0.52.0): upgrade it" % route)
+        raise unittest.SkipTest(
+            f"the installed delegate ({route}) carries no status_schema in contract.json (older than 0.52.0): upgrade it")
     return schema
 
 
 class Schema(unittest.TestCase):
-    """The installed delegate's own status_schema (delegate 0.52.0+, generated from its typed Status records) against our fixture and reader."""
+    """The installed delegate's own status_schema (delegate 0.52.0+, from its typed Status records) against our fixture and reader."""
 
     def test_the_real_fixture_has_exactly_the_keys_the_schema_names(self):
         self.assertEqual(key_errors(REAL, installed_schema()), [])
@@ -121,7 +123,8 @@ class Schema(unittest.TestCase):
 
     def test_the_installed_answer_has_exactly_the_keys_the_schema_names(self):
         schema = installed_schema()
-        r = subprocess.run([sys.executable, str(installed_route()), "status", "--json"], capture_output=True, text=True, timeout=60, check=False)
+        r = subprocess.run([sys.executable, str(installed_route()), "status", "--json"],
+                           capture_output=True, text=True, timeout=60, check=False)
         got = json.loads(r.stdout[r.stdout.index("{"):])
         self.assertEqual(key_errors(got, schema), [])
         snapshot_of(got)

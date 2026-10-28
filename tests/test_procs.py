@@ -11,6 +11,7 @@ from pathlib import Path
 from unittest import mock
 
 import support.paths  # noqa: F401
+
 from taskloop.adapters import procs
 
 POSIX = os.name != "nt"
@@ -33,8 +34,12 @@ class ChildEnv(unittest.TestCase):
 
     def test_a_worker_process_really_sees_it(self):
         with mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": "/home/u/.claude-alt", "CLAUDE_CODE_SESSION_ID": "s"}):
-            ran = procs.capture([sys.executable, "-c", "import os; print(os.environ.get('CLAUDE_CONFIG_DIR'), os.environ.get('CLAUDE_CODE_SESSION_ID'))"],
-                                None, procs.current_env(), 30)
+            ran = procs.capture(
+                [sys.executable, "-c", "import os; print(os.environ.get('CLAUDE_CONFIG_DIR'), os.environ.get('CLAUDE_CODE_SESSION_ID'))"],
+                None,
+                procs.current_env(),
+                30,
+            )
         self.assertEqual(ran.out.split(), ["/home/u/.claude-alt", "None"])
 
 

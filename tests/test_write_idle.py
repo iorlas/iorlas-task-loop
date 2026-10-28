@@ -15,17 +15,20 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "task-loop"))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from support import engine_case as te  # noqa: E402
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
-from taskloop.app.run import engine  # noqa: E402
+# isort: split
+import seams
+from support import engine_case as te
+from support import fake_route
+from support.narrow import must
+
+from taskloop.adapters import delegate as dg
+from taskloop.adapters import procs, runner
+from taskloop.adapters.delegate import Stopped
+from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
-import seams  # noqa: E402
-from support import fake_route  # noqa: E402
-from taskloop.adapters import delegate as dg, procs, runner  # noqa: E402
-from taskloop.adapters.delegate import Stopped  # noqa: E402
-from taskloop.contracts.delegate import DelegateResult  # noqa: E402
-from support.narrow import must  # noqa: E402
+from taskloop.contracts.delegate import DelegateResult
 
 POSIX = os.name != "nt"
 MIN = 60.0
@@ -194,11 +197,17 @@ class SurvivorBlocksTheRetry(te.EngineTest):
         idles = []
         script = fake_route.Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         c = wslots.load_cfg(str(self.wt))
-        with te.delegate_stack(script), mock.patch.object(
-                seams.DelegateRoute, "runner", lambda self, log, idle=None, wall=None, live="", on_worker=None: idles.append(idle) or script):
+        with (
+            te.delegate_stack(script),
+            mock.patch.object(
+                seams.DelegateRoute, "runner", lambda self, log, idle=None, wall=None, live="", on_worker=None: idles.append(idle) or script
+            ),
+        ):
             engine.Engine("t-1", str(self.wt), c, store=self.store).run()
-        seen = dict(zip([x[0] for x in script.calls], idles))  # one runner per call, in call order
-        self.assertEqual(tuple(seen["worker"][:3]), (15 * MIN, 25 * MIN + dg.BACKSTOP_S, 120 * MIN))  # delegate stops at 25 min (--idle), the engine 2 min after
+        seen = dict(zip([x[0] for x in script.calls], idles, strict=False))  # one runner per call, in call order
+        self.assertEqual(
+            tuple(seen["worker"][:3]), (15 * MIN, 25 * MIN + dg.BACKSTOP_S, 120 * MIN)
+        )  # delegate stops at 25 min (--idle), the engine 2 min after
         self.assertIsNone(seen["planner"])
         self.assertIsNone(seen["reviewer"])
 

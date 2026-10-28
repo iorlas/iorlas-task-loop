@@ -45,17 +45,22 @@ def _hint(h: Any) -> dict[str, Any]:
     if sup is not None:
         return _hint(sup)
     origin = get_origin(h)
-    args = get_args(h)
-    if origin is None:
-        if h in SCALARS:
-            return {"type": SCALARS[h]}
-        if hasattr(h, "to_wire"):  # RunId, Version: a string on the wire
-            return {"type": "string"}
-        if isinstance(h, type) and issubclass(h, enum.Enum):
-            return {"type": "string", "enum": [m.value for m in h]}
-        if isinstance(h, type) and dataclasses.is_dataclass(h):
-            return of(h)
-        raise TypeError("no JSON schema for %r" % (h,))
+    return _hint_plain(h) if origin is None else _hint_generic(h, origin, get_args(h))
+
+
+def _hint_plain(h: Any) -> dict[str, Any]:
+    if h in SCALARS:
+        return {"type": SCALARS[h]}
+    if hasattr(h, "to_wire"):  # RunId, Version: a string on the wire
+        return {"type": "string"}
+    if isinstance(h, type) and issubclass(h, enum.Enum):
+        return {"type": "string", "enum": [m.value for m in h]}
+    if isinstance(h, type) and dataclasses.is_dataclass(h):
+        return of(h)
+    raise TypeError(f"no JSON schema for {h!r}")
+
+
+def _hint_generic(h: Any, origin: Any, args: tuple[Any, ...]) -> dict[str, Any]:
     if origin is Union or origin is types.UnionType:
         return _nullable([_hint(a) for a in args if a is not type(None)], type(None) in args)
     if origin is Literal:
@@ -70,7 +75,7 @@ def _hint(h: Any) -> dict[str, Any]:
         return {"type": "array", "items": _hint(args[0])} if len(args) == 2 and args[1] is Ellipsis else {"type": "array"}
     if origin is dict:
         return {"type": "object", "additionalProperties": _hint(args[1])}
-    raise TypeError("no JSON schema for %r" % (h,))
+    raise TypeError(f"no JSON schema for {h!r}")
 
 
 def _nullable(members: list[dict[str, Any]], null: bool) -> dict[str, Any]:
@@ -80,7 +85,7 @@ def _nullable(members: list[dict[str, Any]], null: bool) -> dict[str, Any]:
     if null and isinstance(node.get("type"), str):
         node["type"] = [node["type"], "null"]
         if "enum" in node:
-            node["enum"] = list(node["enum"]) + [None]
+            node["enum"] = [*list(node["enum"]), None]
     return node
 
 
@@ -90,13 +95,13 @@ def strict(schema: dict[str, Any]) -> dict[str, Any]:
     sch = copy.deepcopy(schema)
     if sch.get("type") == "object":
         props = sch.get("properties", {})
-        for k, v in props.items():
-            v = props[k] = strict(v)
+        for k, prop in props.items():
+            v = props[k] = strict(prop)
             if k not in sch.get("required", []):
                 if isinstance(v.get("type"), str):
                     v["type"] = [v["type"], "null"]
                 if "enum" in v:
-                    v["enum"] = list(v["enum"]) + [None]
+                    v["enum"] = [*list(v["enum"]), None]
         sch["required"] = list(props)
     if sch.get("type") == "array" and isinstance(sch.get("items"), dict):
         sch["items"] = strict(sch["items"])

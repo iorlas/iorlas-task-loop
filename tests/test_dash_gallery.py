@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -12,8 +13,9 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from support.narrow import must  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
+from support.narrow import must  # noqa: E402
+
 from taskloop.adapters.fake_beads import FakeBeads  # noqa: E402
 from taskloop.contracts.bead import BdError, Bead  # noqa: E402
 from taskloop.contracts.ports import BdFailure  # noqa: E402
@@ -26,13 +28,22 @@ PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 16
 
 
 def shots(label="menu"):
-    return [{"path": "docs/evidence/tl-1/%s-before.png" % label, "role": "before", "label": label},
-            {"path": "docs/evidence/tl-1/%s.png" % label, "role": "after", "label": label}]
+    return [{"path": f"docs/evidence/tl-1/{label}-before.png", "role": "before", "label": label},
+            {"path": f"docs/evidence/tl-1/{label}.png", "role": "after", "label": label}]
 
 
 def looks(*statuses):
-    return [{"id": "tl-1#%d" % k, "bead": "tl-1", "title": "menu reads well %d" % k, "note": "judge: fine", "shots": shots("m%d" % k),
-             "status": s} for k, s in enumerate(statuses, 1)]
+    return [
+        {
+            "id": f"tl-1#{int(k)}",
+            "bead": "tl-1",
+            "title": f"menu reads well {int(k)}",
+            "note": "judge: fine",
+            "shots": shots(f"m{int(k)}"),
+            "status": s,
+        }
+        for k, s in enumerate(statuses, 1)
+    ]
 
 
 class FakeBd(FakeBeads):
@@ -90,7 +101,9 @@ class Items(unittest.TestCase):
         self.assertEqual([s["role"] for s in got[0]["shots"]], ["after", "after"])
 
     def test_junk_in_metadata_is_skipped(self):
-        got = gallery.items_of("b", {"metadata": {"looks": ["x", {"no": "id"}, {"id": "a#1", "shots": ["z", {"path": "p.png"}], "status": "weird"}]}})
+        got = gallery.items_of(
+            "b", {"metadata": {"looks": ["x", {"no": "id"}, {"id": "a#1", "shots": ["z", {"path": "p.png"}], "status": "weird"}]}}
+        )
         self.assertEqual([(i["id"], i["status"], len(i["shots"])) for i in got], [("a#1", "open", 1)])
 
 
@@ -200,7 +213,12 @@ class Answers(unittest.TestCase):
         self.assertEqual(self.ask(fake, "good", item="tl-1#9")[1]["code"], "item_missing")
         with using(fake):
             self.assertEqual(LOOKS.answer("/r", {"look_bead": "nope", "item": "x", "verdict": "good"})[0], 404)
-            for bad in ({"look_bead": "--db=x", "item": "a", "verdict": "good"}, {"look_bead": "tl-look", "item": "a", "verdict": "x"}, [], None):
+            for bad in (
+                {"look_bead": "--db=x", "item": "a", "verdict": "good"},
+                {"look_bead": "tl-look", "item": "a", "verdict": "x"},
+                [],
+                None,
+            ):
                 self.assertEqual(LOOKS.answer("/r", bad)[0], 400, bad)
         fake.beads["plain"] = Bead(id="plain", title="", status="open", labels=["auto"], metadata={"looks": looks("open")})
         with using(fake):  # not an owner-look bead: never touched
@@ -236,12 +254,17 @@ class Hardening(unittest.TestCase):
         self.assertEqual(fake.beads["tl-r-2"].status, "closed")
 
     def test_two_clicks_at_once_file_one_follow_up(self):
-        import threading
         fake = world("open")
         res = []
         with using(fake):
-            ts = [threading.Thread(target=lambda: res.append(LOOKS.answer("/r", {"look_bead": "tl-look", "item": "tl-1#1", "verdict": "redo", "note": "n"})[0]))
-                  for _ in range(4)]
+            ts = [
+                threading.Thread(
+                    target=lambda: res.append(
+                        LOOKS.answer("/r", {"look_bead": "tl-look", "item": "tl-1#1", "verdict": "redo", "note": "n"})[0]
+                    )
+                )
+                for _ in range(4)
+            ]
             [t.start() for t in ts]
             [t.join() for t in ts]
         self.assertEqual(sorted(res), [200, 409, 409, 409])
@@ -294,7 +317,9 @@ class Api(unittest.TestCase):
                 self.assertTrue(url.startswith("/api/look-shot?repo=demo&path=docs"), url)
                 self.assertEqual(dash.looks.look_shot("demo", "docs/evidence/tl-1/m1.png"), (PNG, "image/png"))
                 self.assertIsNone(dash.looks.look_shot("demo", "docs/evidence/tl-1/nope.png"))
-                self.assertEqual(dash.looks.answer_look({"repo": "demo", "look_bead": "tl-look", "item": "tl-1#1", "verdict": "good"})[0], 200)
+                self.assertEqual(
+                    dash.looks.answer_look({"repo": "demo", "look_bead": "tl-look", "item": "tl-1#1", "verdict": "good"})[0], 200
+                )
                 self.assertEqual(dash.looks.api_looks("demo")["summary"], {"open": 0, "good": 1, "redo": 0})
                 self.assertEqual(dash.looks.api_looks("")["repo"], "demo")  # a bare #looks means the first repo
                 self.assertEqual(dash.looks.answer_look({"repo": "nowhere"})[0], 404)

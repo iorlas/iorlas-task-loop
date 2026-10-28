@@ -86,7 +86,7 @@ def _unshell(s: str) -> str:
     for prefix in ("/bin/", ""):
         for sh in SHELLS:
             for flag in ("-lc ", "-c "):
-                lead = "%s%s %s" % (prefix, sh, flag)
+                lead = f"{prefix}{sh} {flag}"
                 if s.startswith(lead):
                     return s[len(lead) :]
     return s
@@ -222,7 +222,11 @@ class Events:
     def _opencode_part(d: Event, t: float, role: object) -> Event | None:
         typ = d.get("type")
         if typ == "text" and str(d.get("text") or "").strip() and not d.get("synthetic"):
-            return {"t": t, "kind": "msg" if role == "assistant" else "user", "text": d["text"].strip()[: 6000 if role == "assistant" else 4000]}
+            return {
+                "t": t,
+                "kind": "msg" if role == "assistant" else "user",
+                "text": d["text"].strip()[: 6000 if role == "assistant" else 4000],
+            }
         if typ != "tool":
             return None
         st = d.get("state") if isinstance(d.get("state"), dict) else {}
@@ -328,11 +332,17 @@ class Events:
                 out.append({"t": r.t, "kind": "cmd", "text": r.text, "tool": "sh", "state": "ok"})
             elif isinstance(r, rec.CmdEnd) and out and out[-1]["kind"] == "cmd":
                 out[-1]["state"] = "ok" if r.exit == 0 else "fail"
-                out[-1]["detail"] = "exit %d%s" % (r.exit, (": " + r.out) if r.out else "")
+                out[-1]["detail"] = "exit {:d}{}".format(r.exit, (": " + r.out) if r.out else "")
             elif isinstance(r, (rec.Note, rec.Warn)):
                 out.append({"t": r.t, "kind": r.KIND, "text": r.text})
             elif isinstance(r, rec.StepStart):
                 out.append({"t": r.t, "kind": "node", "text": r.text})
             elif isinstance(r, rec.CallEnd):
-                out.append({"t": r.t, "kind": "session", "text": "%s %s  ($%.2f, %ss)" % (r.family or "?", r.ref or "(no session)", r.cost, r.secs)})
+                out.append(
+                    {
+                        "t": r.t,
+                        "kind": "session",
+                        "text": "{} {}  (${:.2f}, {}s)".format(r.family or "?", r.ref or "(no session)", r.cost, r.secs),
+                    }
+                )
         return out

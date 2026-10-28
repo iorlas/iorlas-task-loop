@@ -1,47 +1,44 @@
 """tl-bxk.13: stage handoffs (docs/design/stages.md). Reuses test_engine's harness without re-running its tests."""
-import subprocess
-import os
 import json
-import shutil
+import os
+import subprocess
 import sys
 import time
 import unittest
-from typing import Any
 from dataclasses import replace
 from pathlib import Path
-from unittest import mock
+from typing import Any, ClassVar, cast
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "task-loop"))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from support import fake_route  # noqa: E402
-from support.checkpoints import put_ck, read_ck  # noqa: E402
-from support import tlbd, tools  # noqa: E402
-from support.fakes import FakeBeadStore, as_bead, must_bead  # noqa: E402
-from taskloop.app.write.handoff import HANDOFF_CAP  # noqa: E402
-from taskloop.app.wire import slots as wslots  # noqa: E402
-from taskloop.domain.plan.matchers import AcceptanceText  # noqa: E402
-from taskloop.contracts.answers import IRREVERSIBLE  # noqa: E402
-from taskloop.domain.prompts.plan import REPLAN_CAP  # noqa: E402
-from taskloop.contracts.config import EngineConfig  # noqa: E402
-from support.builders import cfg_with, make_engine  # noqa: E402
-from support.checks import res  # noqa: E402
-from taskloop.adapters.check_probe import PathProbe  # noqa: E402
-from taskloop.contracts.argv import argv_of  # noqa: E402
-from taskloop.app.checks import evidence as check_evidence  # noqa: E402
-from support import engine_case as te  # noqa: E402
-from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint  # noqa: E402,F401
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support import engine_case as te
+from support import (
+    tools,
+)
+from support.builders import make_engine
+from support.checkpoints import put_ck, read_ck
+from support.checks import res
+from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint
+from support.fakes import as_bead, must_bead
+from support.narrow import must
+
+from taskloop.adapters import ident, pidcheck
+from taskloop.adapters import procs as sproc
+from taskloop.adapters.check_probe import PathProbe
+from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.slots import engine_lock
-from taskloop.adapters import ident
-from taskloop.adapters import pidcheck
-from support.narrow import must  # noqa: E402
-
-
+from taskloop.app.wire import slots as wslots
+from taskloop.app.write.handoff import HANDOFF_CAP
+from taskloop.contracts.answers import IRREVERSIBLE
+from taskloop.contracts.argv import argv_of
+from taskloop.contracts.config import EngineConfig
+from taskloop.domain.plan.matchers import AcceptanceText
 
 
 class StagesTest(te.EngineTest):
     def probe(self):
-        return PathProbe(getattr(self, "wt"), te.sproc.current_env())  # noqa: B009
+        return PathProbe(cast(Any, self).wt, sproc.current_env())
 
     wt: Path
 
@@ -62,7 +59,7 @@ class EmptyPlan(StagesTest):
         self.assertEqual(self.blocked, [])
 
     def test_an_empty_plan_with_nothing_to_file_still_fails(self):
-        rc, s = self.run_engine({"plan": [dict(PLAN, stages=[]), dict(PLAN, stages=[])]})  # sent back once (tl-wjj), still empty
+        rc, _s = self.run_engine({"plan": [dict(PLAN, stages=[]), dict(PLAN, stages=[])]})  # sent back once (tl-wjj), still empty
         self.assertNotEqual(rc, 0)
         self.assertEqual(self.blocked, [])
         self.assertIn("no stages", te.EngineTest.said(self))
@@ -74,7 +71,7 @@ class EmptyPlan(StagesTest):
         te.sh("git", "commit", "-qm", "wip", cwd=self.wt)
         te.sh("git", "checkout", "-q", "-", cwd=self.wt)
         plan = dict(PLAN, stages=[], leftovers=[{"title": "File the table bead", "why": "x"}])
-        rc, s = self.run_engine({"plan": [plan]})
+        rc, _s = self.run_engine({"plan": [plan]})
         self.assertNotEqual(rc, 0)
         self.assertEqual(self.blocked, [])
         self.assertIn("no stages", te.EngineTest.said(self))
@@ -82,7 +79,8 @@ class EmptyPlan(StagesTest):
 
     @te.no_repo
     def test_done_when_counts_as_acceptance_criteria(self):
-        has = lambda b: AcceptanceText.present(must_bead(b))
+        def has(b):
+            return AcceptanceText.present(must_bead(b))
         self.assertFalse(has({"description": "Done when? tbd"}))
         self.assertTrue(has({"description": "Goal.\n\n## Done when\n- x works\n"}))
         self.assertTrue(has({"description": "Goal.\n\nDone when: x works"}))
@@ -103,7 +101,9 @@ class BadChecks(StagesTest):
         c = res("grep -qE 'name=\"GameLogTests\"[^>]*result=\"Passed\"' client/Logs/unity-tests.xml", id="x")
         why = check_evidence.flagged_why
         self.assertEqual(why(c, [{"cmd": c.cmd, "why": "a"}]), "a")
-        self.assertEqual(why(c, [{"cmd": "grep   -qE 'name=\"GameLogTests\"[^>]*result=\"Passed\"'\nclient/Logs/unity-tests.xml", "why": "b"}]), "b")
+        self.assertEqual(
+            why(c, [{"cmd": 'grep   -qE \'name="GameLogTests"[^>]*result="Passed"\'\nclient/Logs/unity-tests.xml', "why": "b"}]), "b"
+        )
         self.assertEqual(why(c, [{"cmd": "grep -qE 'name=\"GameLogTests\"...unity-tests.xml", "why": "c"}]), "c")
         self.assertEqual(why(c, [{"cmd": "`" + c.cmd + "`", "why": "d"}]), "d")
         self.assertEqual(why(replace(c, id="unity-tests"), [{"cmd": "unity-tests", "why": "e"}]), "e")
@@ -117,14 +117,14 @@ class BadChecks(StagesTest):
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[self.LONG])])
         cmd = plan["stages"][0]["checks"][0]
         flag = dict(WRITE, bad_checks=[{"cmd": cmd[:25] + "..." + cmd[-12:], "why": "cannot pass"}])
-        rc, s = self.run_engine({"plan": [plan, PLAN], "write": [flag, WRITE], "review": [CLEAN]})
+        _rc, s = self.run_engine({"plan": [plan, PLAN], "write": [flag, WRITE], "review": [CLEAN]})
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "planner", "worker", "reviewer"])
 
 
 class Deferred(StagesTest):
     """13.1: the reviewer is told what the plan set aside; 'file beads' is an engine step; an owner item with a bead lands."""
 
-    LEFT = [{"title": "File the table and chair beads", "why": "the sheet lists them; the engine files them"}]
+    LEFT: ClassVar[Any] = [{"title": "File the table and chair beads", "why": "the sheet lists them; the engine files them"}]
 
     def eng_(self, **attrs):
         return make_engine(self.wt, store=self.store, attrs=attrs)
@@ -138,7 +138,7 @@ class Deferred(StagesTest):
         self.assertIn("Never list one as unmet", review)
 
     def test_no_set_aside_section_without_leftovers(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        _rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertNotIn("Already set aside", s.prompts[2])
 
     def test_filing_beads_in_any_wording_is_an_engine_step_when_there_are_leftovers(self):
@@ -222,7 +222,7 @@ class Handoff(StagesTest):
     def test_the_amend_planner_sees_what_the_rounds_did(self):
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[FALSE])])
         flag = dict(WRITE, summary="tried the rename", bad_checks=[{"cmd": FALSE, "why": "it exits 1 whatever the code does"}])
-        rc, s = self.run_engine({"plan": [plan, PLAN], "write": [flag, WRITE], "review": [CLEAN]})
+        _rc, s = self.run_engine({"plan": [plan, PLAN], "write": [flag, WRITE], "review": [CLEAN]})
         amend = s.prompts[2]
         self.assertIn("<rounds>", amend)
         self.assertIn("tried the rename", amend)
@@ -234,7 +234,7 @@ class Handoff(StagesTest):
         first = dict(CLEAN, findings=[te.finding("high"), dict(te.finding("low"), fix="rename the helper")])
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE], "review": [first, CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
-        reviews = [p for p, c in zip(s.prompts, s.calls) if c[0] == "reviewer"]
+        reviews = [p for p, c in zip(s.prompts, s.calls, strict=False) if c[0] == "reviewer"]
         self.assertNotIn("already noted", reviews[0])
         self.assertIn("already noted", reviews[1])
         self.assertIn("rename the helper", reviews[1])
@@ -248,7 +248,7 @@ class Handoff(StagesTest):
         self.assertIn("round 8", text)
         self.assertNotIn("round 1,", text)
 
-    TWO = dict(PLAN, stages=[PLAN["stages"][0], dict(PLAN["stages"][0], goal="add g")])
+    TWO: ClassVar[Any] = dict(PLAN, stages=[PLAN["stages"][0], dict(PLAN["stages"][0], goal="add g")])
 
     def boundary(self, ctx_k, **cfg):
         path = Path(self.tmp.name, "session.jsonl")
@@ -262,17 +262,17 @@ class Handoff(StagesTest):
     def test_a_writer_session_over_100k_starts_the_next_stage_fresh(self):
         rc, s = self.boundary(120)  # under the 150k a claude session may grow to inside a stage
         self.assertEqual(rc, 0, self.blocked)
-        writes = [(p, c) for p, c in zip(s.prompts, s.calls) if c[0] == "worker"]
+        writes = [(p, c) for p, c in zip(s.prompts, s.calls, strict=False) if c[0] == "worker"]
         self.assertIsNone(writes[1][1][1])
         self.assertIn("fresh session for the next one", writes[1][0])
         self.assertIn("add f", writes[1][0])  # the accepted stage's goal
 
     def test_a_smaller_session_goes_on_and_the_limit_is_the_repos_to_set(self):
-        rc, s = self.boundary(90)
+        _rc, s = self.boundary(90)
         self.assertEqual([c[1] for c in s.calls if c[0] == "worker"][1], "ref-write")
-        rc, s = self.boundary(120, write_fresh_above_k=0)  # 0 is never, for the stage boundary too
+        _rc, s = self.boundary(120, write_fresh_above_k=0)  # 0 is never, for the stage boundary too
         self.assertEqual([c[1] for c in s.calls if c[0] == "worker"][1], "ref-write")
-        rc, s = self.boundary(120, write_fresh_stage_k=0)
+        _rc, s = self.boundary(120, write_fresh_stage_k=0)
         self.assertEqual([c[1] for c in s.calls if c[0] == "worker"][1], "ref-write")
 
 
@@ -282,7 +282,7 @@ class Anchors(StagesTest):
     def test_an_unanchored_existing_file_sends_the_plan_back_once_and_the_anchor_reaches_the_writer(self):
         bare = dict(PLAN, stages=[dict(PLAN["stages"][0], files=["a.txt"])])  # a.txt is tracked in the fixture repo
         good = dict(bare, stages=[dict(bare["stages"][0], anchors=[{"path": "a.txt", "lines": "1-3", "symbol": "top", "why": "the file"}])])
-        rc, s = self.run_engine({"plan": [bare, good], "write": [WRITE, WRITE], "review": [CLEAN]})
+        _rc, s = self.run_engine({"plan": [bare, good], "write": [WRITE, WRITE], "review": [CLEAN]})
         self.assertEqual([c[0] for c in s.calls][:3], ["planner", "planner", "worker"])  # sent back once, then written
         self.assertIn("name no anchor", s.prompts[1])
         self.assertIn("- a.txt:1-3 top -- the file", s.prompts[2])
@@ -354,10 +354,10 @@ class SharedNotes(StagesTest):
         te.sh("git", "commit", "-qm", "earlier work", cwd=self.wt)
         te.sh("git", "checkout", "-q", "-", cwd=self.wt)
         self.commit_base_cfg({"gate": ""})  # main moves on
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertIn("rebased the task branch onto the latest origin/main", self.eng.log_path.read_text())
-        out = subprocess.run(["git", "log", "--format=%s", "origin/main"], cwd=self.wt, capture_output=True, text=True).stdout
+        out = subprocess.run(["git", "log", "--format=%s", "origin/main"], cwd=self.wt, capture_output=True, text=True, check=False).stdout
         self.assertIn("engine config", out)
         self.assertIn("Add f (t-1)", out)
 
@@ -385,8 +385,8 @@ class Fdyo(StagesTest):
 
     def test_a_check_red_two_rounds_running_tells_the_writer_it_may_flag_it(self):
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[FALSE])])
-        rc, s = self.run_engine({"plan": [plan], "write": [WRITE, WRITE, WRITE], "review": [CLEAN]}, max_check_tries=3)
-        writes = [p for p, c in zip(s.prompts, s.calls) if c[0] == "worker"]
+        _rc, s = self.run_engine({"plan": [plan], "write": [WRITE, WRITE, WRITE], "review": [CLEAN]}, max_check_tries=3)
+        writes = [p for p, c in zip(s.prompts, s.calls, strict=False) if c[0] == "worker"]
         self.assertNotIn("failed in the last round too", writes[1])  # red for the first time
         self.assertIn("failed in the last round too", writes[2])
         self.assertIn("list it in bad_checks", writes[2])
@@ -407,7 +407,7 @@ class Fdyo(StagesTest):
         for ok in ("python3 -I -m unittest discover -s tools/tests -p 'test_x.py'", "python3 -m unittest tools.tests.test_x",
                    "python3 -I -m json.tool f.json", "python3 -I -c 'import tools.x'"):
             self.assertEqual(lint.dry_check(dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[ok])]), self.probe()), [], ok)
-        rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]})
+        _rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
         self.assertIn("python -I removes the working directory", s.prompts[1])
 
@@ -429,34 +429,36 @@ class Fdyo(StagesTest):
     def test_a_stage_whose_acceptance_check_was_red_runs_acceptance_first_the_next_round(self):
         flaky = te.EngineTest.RED_ONCE
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[flaky])])
-        rc, s = self.run_engine({"plan": [plan], "write": [WRITE, WRITE], "review": [CLEAN]},
+        rc, _s = self.run_engine({"plan": [plan], "write": [WRITE, WRITE], "review": [CLEAN]},
                                 checks=[{"id": "slow", "cmd": self.PASS, "group": "tests"}])
         self.assertEqual(rc, 0, self.blocked)
-        rounds = [json.loads(l) for l in self.eng.log_path.read_text().splitlines() if '"kind": "checks"' in l]
+        rounds = [json.loads(ln) for ln in self.eng.log_path.read_text().splitlines() if '"kind": "checks"' in ln]
         self.assertEqual([[i["group"] for i in r["run"]["results"]] for r in rounds], [["tests", "acceptance"], ["acceptance", "tests"]])
 
     def test_acceptance_first_is_used_once_then_the_normal_order_returns(self):
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[FALSE])])
-        rc, s = self.run_engine({"plan": [plan], "write": [WRITE] * 4, "review": [CLEAN]}, max_check_tries=4, max_same_red=0,
+        _rc, _s = self.run_engine({"plan": [plan], "write": [WRITE] * 4, "review": [CLEAN]}, max_check_tries=4, max_same_red=0,
                                 checks=[{"id": "slow", "cmd": self.PASS, "group": "tests"}])
-        rounds = [json.loads(l) for l in self.eng.log_path.read_text().splitlines() if '"kind": "checks"' in l]
+        rounds = [json.loads(ln) for ln in self.eng.log_path.read_text().splitlines() if '"kind": "checks"' in ln]
         self.assertEqual([r["run"]["results"][0]["group"] for r in rounds], ["tests", "acceptance", "tests", "acceptance"])
 
     def test_a_repo_check_red_twice_is_not_offered_to_bad_checks(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE] * 3, "review": [CLEAN]}, max_check_tries=3,
+        _rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE] * 3, "review": [CLEAN]}, max_check_tries=3,
                                 checks=[{"id": "repo-red", "cmd": FALSE, "group": "tests"}])
-        writes = [p for p, c in zip(s.prompts, s.calls) if c[0] == "worker"]
+        writes = [p for p, c in zip(s.prompts, s.calls, strict=False) if c[0] == "worker"]
         self.assertTrue(len(writes) >= 3)
         self.assertNotIn("failed in the last round too", writes[2])
 
     def test_a_wall_hit_parks_at_once_with_no_second_write_and_no_retry(self):
         t = time.time()
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE, WRITE], "review": [CLEAN]},
-                                checks=[{"id": "slow", "cmd": te.pyc("import time; time.sleep(60)"), "group": "tests", "wall_min": 0.05, "retry": 2}])
+        rc, s = self.run_engine(
+            {"plan": [PLAN], "write": [WRITE, WRITE, WRITE], "review": [CLEAN]},
+            checks=[{"id": "slow", "cmd": te.pyc("import time; time.sleep(60)"), "group": "tests", "wall_min": 0.05, "retry": 2}],
+        )
         self.assertLess(time.time() - t, 45)
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker"])  # one write, no fix task, no review
         self.assertNotEqual(rc, 0)
-        eng = getattr(self, "eng")  # noqa: B009
+        eng = cast(Any, self).eng
         res = eng.result()
         self.assertEqual(res["outcome"], "parked")
         self.assertIn("check slow timed out after 0.05 min (wall_min=0.05)", res["why"])
@@ -517,16 +519,24 @@ class Executable(StagesTest):
 
     def test_the_plan_with_a_sentence_goes_back_once(self):
         bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["Confirm that f exists", HAS_F])])
-        rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]})
+        _rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
         self.assertIn("`Confirm` is not an executable here", s.prompts[1])
 
     PATH1 = ".task/t-1/evidence/sleeper-on-bed.txt"
 
     def two_stage(self):
-        return dict(PLAN, stages=[
-            dict(PLAN["stages"][0], goal="stage one", checks=[te.pyc("open(__import__('sys').argv[1], 'w').write('ok')", self.PATH1), HAS_F]),
-            dict(PLAN["stages"][0], goal="stage two", checks=['test -s %s' % self.PATH1])])
+        return dict(
+            PLAN,
+            stages=[
+                dict(
+                    PLAN["stages"][0],
+                    goal="stage one",
+                    checks=[te.pyc("open(__import__('sys').argv[1], 'w').write('ok')", self.PATH1), HAS_F],
+                ),
+                dict(PLAN["stages"][0], goal="stage two", checks=[f"test -s {self.PATH1}"]),
+            ],
+        )
 
     def test_a_file_an_accepted_stage_promised_and_a_later_check_reads(self):
         e = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
@@ -557,7 +567,7 @@ class Executable(StagesTest):
         e.checkpoints.save(stage=1, rounds=0, n=0, feedback="", step="write")
         again = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         again.tree.reset(as_bead(BEAD))
-        plan, i, state = again.resume.point()
+        _plan, i, state = again.resume.point()
         self.assertEqual((i, state, again.accepted, again.done), (0, None, [], []))
         self.assertIn("a file stage 1 promised is missing", again.log_path.read_text())
         Path(self.wt, self.PATH1).parent.mkdir(parents=True, exist_ok=True)
@@ -571,10 +581,10 @@ class Ledger(StagesTest):
     eng: Any
     """tl-bxk.13.16.1: the plan says how each criterion is proved; review and verify go by it, not by the wording of an item."""
 
-    LEFT = [{"title": "Import the chosen prefabs and add object rows", "why": "next bead"}]
-    FILE = {"criterion": "Record the plan's follow-up issues about stale layer prose and bead wording", "check": "",
+    LEFT: ClassVar[Any] = [{"title": "Import the chosen prefabs and add object rows", "why": "next bead"}]
+    FILE: ClassVar[Any] = {"criterion": "Record the plan's follow-up issues about stale layer prose and bead wording", "check": "",
             "proved_by": "engine_step", "via": "file_beads"}
-    DEFER = {"criterion": "A follow-up bead imports the chosen prefabs and adds object rows", "check": "",
+    DEFER: ClassVar[Any] = {"criterion": "A follow-up bead imports the chosen prefabs and adds object rows", "check": "",
              "proved_by": "leftover", "via": "Import the chosen prefabs and add object rows"}
 
     def plan(self, **kw):
@@ -582,7 +592,7 @@ class Ledger(StagesTest):
                     leftovers=self.LEFT, **kw)
 
     def test_the_review_is_told_what_the_engine_does_and_what_is_deferred(self):
-        rc, s = self.run_engine({"plan": [self.plan()], "write": [WRITE], "review": [CLEAN]})
+        _rc, s = self.run_engine({"plan": [self.plan()], "write": [WRITE], "review": [CLEAN]})
         review = s.prompts[2]
         self.assertIn("The engine does these itself", review)
         self.assertIn("Record the plan's follow-up issues", review)
@@ -613,13 +623,19 @@ class Ledger(StagesTest):
         self.assertEqual(e.unverified, [])
 
     def test_an_unrelated_unmet_item_still_sends_the_stage_back(self):
-        rc, s = self.run_engine({"plan": [self.plan()], "write": [WRITE, WRITE],
+        _rc, s = self.run_engine({"plan": [self.plan()], "write": [WRITE, WRITE],
                                  "review": [review_with(["The settings page does not save the volume"]), CLEAN]})
         self.assertEqual([c[0] for c in s.calls].count("worker"), 2)
 
     def test_unchecked_items_in_the_ledger_never_reach_the_verifier_or_the_writer(self):
-        items = [{"what": "Record the plan's follow-up issues about stale layer prose and bead wording", "kind": "checkable", "source": ""},
-                 {"what": "The follow-up bead for importing the chosen prefabs and adding object rows exists", "kind": "checkable", "source": ""}]
+        items = [
+            {"what": "Record the plan's follow-up issues about stale layer prose and bead wording", "kind": "checkable", "source": ""},
+            {
+                "what": "The follow-up bead for importing the chosen prefabs and adding object rows exists",
+                "kind": "checkable",
+                "source": "",
+            },
+        ]
         rc, s = self.run_engine({"plan": [self.plan()], "write": [WRITE], "review": [dict(CLEAN, unchecked=items)]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])  # no verify call, no fix round
@@ -634,14 +650,14 @@ class Ledger(StagesTest):
 
     def test_a_deferred_case_the_plan_forgot_to_list_is_listed(self):
         plan = dict(PLAN, cases=[self.DEFER], leftovers=[])
-        rc, s = self.run_engine({"plan": [plan], "write": [WRITE], "review": [CLEAN]})
+        rc, _s = self.run_engine({"plan": [plan], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual([lo["title"] for lo in self.eng.plan_data["leftovers"]], ["Import the chosen prefabs and add object rows"])
         self.assertIn("Import the chosen prefabs and add object rows", self.created())
 
     def test_a_case_with_nothing_to_prove_it_goes_back_to_the_planner(self):
         bad = dict(PLAN, cases=[{"criterion": "the rows exist", "check": ""}])
-        rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]})
+        _rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
         self.assertIn("case `the rows exist` has no check", s.prompts[1])
         self.assertEqual(lint.ledger_problems(self.plan()), [])
@@ -659,7 +675,7 @@ def review_with(unmet):
 class Inputs(StagesTest):
     """tl-bxk.13.16.3: inputs the criteria need that were not found are the owner's to decide in minute 4."""
 
-    WIN = {"what": "a Windows PC to run the play test on", "kind": "platform", "path": ""}
+    WIN: ClassVar[Any] = {"what": "a Windows PC to run the play test on", "kind": "platform", "path": ""}
 
     def test_a_missing_input_no_case_defers_is_an_assumption_not_an_ask(self):
         """tl-ntp: tl-7y6.6.15 stopped on study files no worktree can read; now the plan goes on and records it."""
@@ -680,7 +696,7 @@ class Inputs(StagesTest):
     def test_a_plan_question_about_missing_inputs_proceeds_to_write_with_an_assumption(self):
         q = dict(PLAN, question="84-self-hosting.md is outside the worktree: which draft do I follow?",
                  options=[{"label": "Wait", "cost": "slow", "answer": "wait", "recommended": True}])
-        rc, s = self.run_engine({"plan": [q], "write": [WRITE], "review": [CLEAN]})
+        rc, _s = self.run_engine({"plan": [q], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertIsNone(self.ask())
         plan = json.loads((self.eng.run_dir / "plan.json").read_text())
@@ -711,33 +727,35 @@ class Inputs(StagesTest):
         case = {"criterion": "The play test passes on the Windows PC", "check": "", "proved_by": "leftover",
                 "via": "Run the play test on a Windows PC"}
         plan = dict(PLAN, unresolved=[self.WIN], cases=[case], leftovers=[{"title": "Run the play test on a Windows PC", "why": "no PC"}])
-        rc, s = self.run_engine({"plan": [plan], "write": [WRITE], "review": [CLEAN]})
+        rc, _s = self.run_engine({"plan": [plan], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertIn("inputs not found, their criteria deferred", self.eng.log_path.read_text())
 
     def test_a_file_that_is_there_after_all_is_dropped(self):
         plan = dict(PLAN, unresolved=[{"what": "the notes file", "kind": "file", "path": "a.txt"}])
-        rc, s = self.run_engine({"plan": [plan], "write": [WRITE], "review": [CLEAN]})
+        rc, _s = self.run_engine({"plan": [plan], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
 
     def test_after_the_owner_answered_the_engine_does_not_ask_again(self):
         ask = dict(WRITE, question="Which format?")
         self.run_engine({"plan": [PLAN], "write": [ask]})
         with self.store.stub(comments=[{"author": "denis", "text": "Use the new format."}]):
-            rc, s = self.run_engine({"plan": [dict(PLAN, unresolved=[self.WIN])], "write": [WRITE], "review": [CLEAN]})
+            rc, _s = self.run_engine({"plan": [dict(PLAN, unresolved=[self.WIN])], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
 
     def test_planner_notes_reach_the_planner_as_text_or_a_repo_file(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, planner_notes="No Windows PC. Godot left main on 2026-10-12.")
+        _rc, s = self.run_engine(
+            {"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, planner_notes="No Windows PC. Godot left main on 2026-10-12."
+        )
         self.assertIn("Facts about this factory and project", s.prompts[0])
         self.assertIn("No Windows PC. Godot left main", s.prompts[0])
         (self.wt / "notes.md").write_text("The factory is a Mac only.\n")
         te.sh("git", "add", "-A", cwd=self.wt)
         te.sh("git", "commit", "-qm", "notes", cwd=self.wt)
         te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=self.wt)
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, planner_notes="@notes.md")
+        _rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, planner_notes="@notes.md")
         self.assertIn("The factory is a Mac only.", s.prompts[0])
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        _rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertNotIn("Facts about this factory", s.prompts[0])
 
 

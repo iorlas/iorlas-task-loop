@@ -3,9 +3,10 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401
-from taskloop.adapters.bd import bead_of  # noqa: E402
-from taskloop.contracts.bead import Bead, Comment  # noqa: E402
+import support.paths  # noqa: F401
+
+from taskloop.adapters.bd import bead_of
+from taskloop.contracts.bead import Bead, Comment
 
 FULL = {"id": "t-1", "title": "Add f", "issue_type": "feature", "priority": 1, "labels": ["tl-pick", "ui", "needs-owner-check"],
         "description": "Add the file f.\nSecond line.", "acceptance_criteria": "f.txt exists\n- and is tracked",

@@ -3,16 +3,18 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from support.engine_case import CLEAN, LandReviewBase, PLAN, StrayWriteScript, WRITE, verdict  # noqa: E402
-import dataclasses  # noqa: E402
-from typing import cast  # noqa: E402
-from pathlib import Path  # noqa: E402
-from unittest import mock  # noqa: E402
-from taskloop.domain.look.matchers import writer_names  # noqa: E402
-from taskloop.app.run import engine  # noqa: E402
-from taskloop.contracts.checks import CheckRun  # noqa: E402
-from support.checks import res  # noqa: E402
+import dataclasses
+from pathlib import Path
+from typing import cast
+from unittest import mock
+
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support.checks import res
+from support.engine_case import CLEAN, PLAN, WRITE, LandReviewBase, StrayWriteScript, verdict
+
+from taskloop.app.run import engine
+from taskloop.contracts.checks import CheckRun
+from taskloop.domain.look.matchers import writer_names
 
 
 class LandReview(LandReviewBase):
@@ -29,7 +31,7 @@ class LandReview(LandReviewBase):
         e = self.engine_at_land({"writer_said": "I also added g.txt for the fixture",
                                  "accepted_new": [self.STRAY[0]]})  # the .meta follows its file
         e.checkout.stage_all()
-        self.assertEqual(self.staged(), sorted(["g.txt"] + self.STRAY))
+        self.assertEqual(self.staged(), sorted(["g.txt", *self.STRAY]))
 
     def test_writer_said_matches_the_path_or_basename_on_word_boundaries(self):
         e = self.engine_at_land({"writer_said": "added tools/g.txt, and `h.cfg`. Not ab.md or c.txt.bak"})
@@ -42,9 +44,12 @@ class LandReview(LandReviewBase):
 
     def test_a_replanned_first_stage_starts_from_the_current_tree_not_the_task_base(self):
         e = self.engine_at_land({"stage_tree": "old", "amended": True})
-        with mock.patch.object(e.checkout, "tree_hash", return_value="T"), mock.patch.object(e.checkpoints, "save", side_effect=RuntimeError("stop")):
-            with self.assertRaises(RuntimeError):
-                e.stage_loop.run({"stages": [{"goal": "g", "files": [], "checks": [], "hard": False}]}, 0)
+        with (
+            mock.patch.object(e.checkout, "tree_hash", return_value="T"),
+            mock.patch.object(e.checkpoints, "save", side_effect=RuntimeError("stop")),
+            self.assertRaises(RuntimeError),
+        ):
+            e.stage_loop.run({"stages": [{"goal": "g", "files": [], "checks": [], "hard": False}]}, 0)
         self.assertEqual(e.stage_tree, "T")
 
     def test_untracked_ignore_globs_are_never_staged_nor_listed_even_when_a_stage_lists_the_folder(self):
@@ -53,12 +58,12 @@ class LandReview(LandReviewBase):
         e.checkout.stage_all()
         self.assertEqual(self.staged(), ["docs/keep.md"])
         kinds = e.newfiles.new_by_kind()
-        self.assertEqual((kinds["unexplained"], sorted(kinds["ignored"])), ([], sorted(["docs/junk.tmp"] + self.STRAY)))
+        self.assertEqual((kinds["unexplained"], sorted(kinds["ignored"])), ([], sorted(["docs/junk.tmp", *self.STRAY])))
 
     def test_a_stray_scene_is_listed_for_the_review_and_left_out_of_the_land(self):
         script = StrayWriteScript({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, reject_files=[self.STRAY[0]])]})
         self.assertEqual(self.run_with(script), 0)
-        brief = next(p for c, p in zip(script.calls, script.prompts) if c[0] == "reviewer")
+        brief = next(p for c, p in zip(script.calls, script.prompts, strict=False) if c[0] == "reviewer")
         self.assertIn("Unexplained new files", brief)
         for p in self.STRAY:
             self.assertIn("- " + p, brief)
@@ -68,7 +73,7 @@ class LandReview(LandReviewBase):
     def test_a_stray_the_review_does_not_decide_is_a_finding_never_a_silent_drop(self):
         script = StrayWriteScript({"plan": [PLAN], "write": [WRITE, WRITE], "review": [CLEAN, dict(CLEAN, reject_files=[self.STRAY[0]])]})
         self.assertEqual(self.run_with(script), 0)
-        writes = [p for c, p in zip(script.calls, script.prompts) if c[0] == "worker"]
+        writes = [p for c, p in zip(script.calls, script.prompts, strict=False) if c[0] == "worker"]
         self.assertIn("decide: unexplained new file " + self.STRAY[0], writes[1])
 
     def test_the_gate_runs_without_the_stray_which_is_kept_in_evidence_and_traced(self):
@@ -76,14 +81,14 @@ class LandReview(LandReviewBase):
         (self.wt / "bin.dat").write_bytes(b"\0\1\2")
         e = self.engine_at_land()
         self.assertEqual(e.newfiles.new_file_view("bin.dat"), "binary, 3 bytes")
-        (self.wt / "long.txt").write_text("".join("l%d\n" % i for i in range(100)))
+        (self.wt / "long.txt").write_text("".join(f"l{i}\n" for i in range(100)))
         v = e.newfiles.new_file_view("long.txt")
         self.assertIn("l79", v)
         self.assertNotIn("l80\n", v)
         self.assertIn("20 more lines", v)
         e.comment = mock.Mock()
         moved = e.newfiles.quarantine_strays()
-        self.assertEqual(sorted(moved), sorted(self.STRAY + ["bin.dat", "long.txt"]))
+        self.assertEqual(sorted(moved), sorted([*self.STRAY, "bin.dat", "long.txt"]))
         for p in self.STRAY:
             self.assertFalse((self.wt / p).exists())
             self.assertTrue((e.evidence_dir / "strays" / p).is_file())
@@ -102,7 +107,7 @@ class LandReview(LandReviewBase):
         script = StrayWriteScript({"plan": [PLAN], "write": [WRITE],
                                    "review": [dict(CLEAN, accept_files=[self.STRAY[0], "no/such"])]})
         self.assertEqual(self.run_with(script), 0)
-        self.assertEqual(self.landed(), sorted(["f.txt"] + self.STRAY))
+        self.assertEqual(self.landed(), sorted(["f.txt", *self.STRAY]))
 
     def test_items_whose_proof_is_the_gate_or_a_stage_check_are_settled_and_never_asked(self):
         # lifesim-5ban.1, 10-22 05:32: blocked on 'could not check: unity-analyzers/unity-tests/unity-play-tests'
@@ -130,8 +135,11 @@ class LandReview(LandReviewBase):
         asks = ["An editor left open makes just unity-tests at the land gate exit 0 as SKIPPED (a false green)",
                 "A real Unity rebuild through `just unity-check` ... only the fake-UNITY path is tested",
                 "Diff coverage: ... must be covered by tests, or just coverage fails"]
-        cfg = self.CFG_CHECKS + [{"id": "coverage", "cmd": "just coverage", "group": "tests"},
-                                 {"id": "unity-check", "cmd": "just unity-check", "group": "tests"}]
+        cfg = [
+            *self.CFG_CHECKS,
+            {"id": "coverage", "cmd": "just coverage", "group": "tests"},
+            {"id": "unity-check", "cmd": "just unity-check", "group": "tests"},
+        ]
         e = self.verifier(checks=cfg, gate="just check")
         with mock.patch.object(e, "ai", return_value=({"items": [verdict(i + 1, "open", why="x") for i in range(3)]}, None)):
             left = e.verifier.run([{"what": a, "kind": "tooling"} for a in asks])
@@ -221,7 +229,7 @@ class LandReview(LandReviewBase):
                 "unit tests for the new function were never run" + cannot,
                 "unity-tests and unity-*: no saved log" + cannot, "the Sim.Properties suite passed" + cannot]
         for what in asks:
-            e = self.evidenced(self.engine_checks() + [res("pytest tests/unit", 0, id="test", secs=1, log="checks/x.log")])
+            e = self.evidenced([*self.engine_checks(), res("pytest tests/unit", 0, id="test", secs=1, log="checks/x.log")])
             with mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="x")]}, None)) as ai:
                 self.assertEqual(len(e.verifier.run([{"what": what, "kind": "tooling"}])), 1, what)
             self.assertEqual(ai.call_count, 1, what)
@@ -240,7 +248,7 @@ class LandReview(LandReviewBase):
             self.assertEqual(ai.call_count, 1, how)
 
     def test_the_brief_lists_at_most_30_checks_of_300_characters(self):
-        e = self.evidenced([res("x" * 900, 0, id="c%d" % i, secs=1, log="checks/l.log") for i in range(40)])
+        e = self.evidenced([res("x" * 900, 0, id=f"c{i}", secs=1, log="checks/l.log") for i in range(40)])
         text = e.settles.evidence_text()
         rows = [ln for ln in text.splitlines() if ln.startswith("- ")]
         self.assertEqual(len(rows), 31)

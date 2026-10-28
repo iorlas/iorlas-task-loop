@@ -3,28 +3,32 @@ are read from their node, session and end records: the fixture is six real runs 
 lifesim-d5f.58 (2026-10-21), trimmed."""
 
 import contextlib
-import subprocess
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import time
 import unittest
+import urllib.request
 from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+import support.paths  # noqa: E402, F401
+
 sys.path.insert(0, str(ROOT / "tests"))
-from support.narrow import must  # noqa: E402
 from support.askjson import ask_json  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
-from taskloop_dash import tails as tails_mod  # noqa: E402
-from taskloop_dash.readers import events as events_mod  # noqa: E402
 from support.logs import typed, write_log  # noqa: E402
+from support.narrow import must  # noqa: E402
+from test_dash import free_port  # noqa: E402
+
+from taskloop_dash import tails as tails_mod  # noqa: E402
 from taskloop_dash.cache import FileCache  # noqa: E402
+from taskloop_dash.readers import events as events_mod  # noqa: E402
 from taskloop_dash.views import arrows, names, timeline  # noqa: E402
 
 DASH = make_dash()
@@ -35,7 +39,7 @@ RUNS = ["072411", "074926", "090321", "093704", "103215", "105946"]
 
 
 def log(stamp):
-    return str(FIXTURE / "engine" / ("%s-20261021-%s.jsonl" % (BEAD, stamp)))
+    return str(FIXTURE / "engine" / (f"{BEAD}-20261021-{stamp}.jsonl"))
 
 
 def kinds(run):
@@ -169,7 +173,9 @@ class Api(unittest.TestCase):
 
     def test_an_open_ask_is_waiting_on_you(self):
         (self.cfg / "asks").mkdir()
-        (self.cfg / "asks" / (BEAD + ".json")).write_text(json.dumps(ask_json(BEAD, 3, status="open", t=time.time(), title="Front approach")))
+        (self.cfg / "asks" / (BEAD + ".json")).write_text(
+            json.dumps(ask_json(BEAD, 3, status="open", t=time.time(), title="Front approach"))
+        )
         t = self.task()
         self.assertEqual((t["state"], t["label"]), ("asks", "waiting for your answer"))
         self.assertEqual(t["ask"]["id"], BEAD + "-3")
@@ -179,7 +185,7 @@ class Api(unittest.TestCase):
         (self.cfg / "asks").mkdir()
         (self.cfg / "asks" / (BEAD + ".json")).write_text(json.dumps(ask_json(BEAD, 2, status="answered")))
         for s in RUNS[5:]:
-            os.unlink(str(self.cfg / "engine" / ("%s-20261021-%s.jsonl" % (BEAD, s))))
+            os.unlink(str(self.cfg / "engine" / (f"{BEAD}-20261021-{s}.jsonl")))
         t = self.task()
         self.assertEqual((t["state"], t["label"]), ("queued", "answered: waits for the next run"))
 
@@ -187,7 +193,7 @@ class Api(unittest.TestCase):
         """The bead's last run ended asking (run 5); its ask file says ask_status; bd says it is blocked by a design
         bead in blocker_status (lifesim-s28t, 2026-10-21)."""
         for s in RUNS[5:]:
-            os.unlink(str(self.cfg / "engine" / ("%s-20261021-%s.jsonl" % (BEAD, s))))
+            os.unlink(str(self.cfg / "engine" / (f"{BEAD}-20261021-{s}.jsonl")))
         (self.cfg / "asks").mkdir()
         (self.cfg / "asks" / (BEAD + ".json")).write_text(json.dumps(ask_json(
             BEAD, 1, status=ask_status, t=time.time(), repo="/r/lifesim", title="Front approach")))
@@ -222,7 +228,7 @@ class Api(unittest.TestCase):
 
     def test_no_ask_is_ever_waited_for_when_none_is_open(self):
         for s in RUNS[5:]:
-            os.unlink(str(self.cfg / "engine" / ("%s-20261021-%s.jsonl" % (BEAD, s))))
+            os.unlink(str(self.cfg / "engine" / (f"{BEAD}-20261021-{s}.jsonl")))
         t = self.task()  # no ask file at all
         self.assertNotIn("waiting", t["label"])
         self.assertNotIn("answer", t["label"])
@@ -244,7 +250,7 @@ class Api(unittest.TestCase):
 
     def test_a_paused_run_says_which_lane_is_out_and_until_when(self):
         for s in RUNS[2:]:
-            os.unlink(str(self.cfg / "engine" / ("%s-20261021-%s.jsonl" % (BEAD, s))))
+            os.unlink(str(self.cfg / "engine" / (f"{BEAD}-20261021-{s}.jsonl")))
         t = self.task()
         self.assertEqual((t["state"], t["label"]), ("paused", "paused: Codex out until 09:02"))
 
@@ -321,8 +327,8 @@ class Api(unittest.TestCase):
         ref = "01a15cb6-4820-73e0-be53-4cef9422cb4b"
         day = self.codex / "2026" / "10" / "21"
         day.mkdir(parents=True)
-        (day / ("rollout-2026-10-21T07-26-%s.jsonl" % ref)).write_text("")
-        run = "%s-20261021-072411" % BEAD
+        (day / (f"rollout-2026-10-21T07-26-{ref}.jsonl")).write_text("")
+        run = f"{BEAD}-20261021-072411"
         blocks = timeline.run_timeline(log("072411"))["blocks"]
         d = self.dash.runs.api_block(run, blocks[3]["node"], 0)
         self.assertTrue(d["events_id"].startswith("codex-exec:" + str(day)))
@@ -339,9 +345,9 @@ class Api(unittest.TestCase):
                                "payload": {"type": "message", "role": "assistant", "content": [{"text": text}]}}) + "\n"
         p.write_text(msg("2026-10-21T07:00:00Z", "round 1") + msg("2026-10-21T08:00:00Z", "round 2"))
         t = tails_mod.parse_ts("2026-10-21T07:30:00Z")
-        evs = self.dash.runs.run_events("codex-exec:%s@%s@%s" % (p, t, must(t) + 3600))
+        evs = self.dash.runs.run_events(f"codex-exec:{p}@{t}@{must(t) + 3600}")
         self.assertEqual([e["text"] for e in evs], ["round 2"])
-        self.assertEqual(len(self.dash.runs.run_events("codex-exec:%s" % p)), 2)
+        self.assertEqual(len(self.dash.runs.run_events(f"codex-exec:{p}")), 2)
 
     def test_a_codex_exec_call_shows_its_shell_commands(self):
         src = 'text(await tools.exec_command({cmd:"cat a.md; rg -n \\"x\\" src",max_output_tokens:6000}));\n' \
@@ -350,7 +356,7 @@ class Api(unittest.TestCase):
         self.assertEqual(events_mod.exec_cmds("ls"), [])
 
     def test_a_check_log_is_served_from_its_run_and_nothing_outside_it(self):
-        run = "%s-20261021-072411" % BEAD
+        run = f"{BEAD}-20261021-072411"
         (self.cfg / "runs" / run / "checks").mkdir(parents=True)
         (self.cfg / "runs" / run / "checks" / "00-fmt.log").write_bytes(b"all formatted\n")
         self.assertEqual(self.dash.runs.run_file(run, "checks/00-fmt.log"), b"all formatted\n")
@@ -366,7 +372,7 @@ class Api(unittest.TestCase):
         self.assertIsNone(self.dash.runs.run_file(run, "checks/../brief.md"))
 
     def test_a_symlink_in_checks_that_leaves_the_run_folder_is_refused(self):
-        run = "%s-20261021-072411" % BEAD
+        run = f"{BEAD}-20261021-072411"
         (self.cfg / "runs" / run / "checks").mkdir(parents=True)
         secret = Path(self.tmp.name) / "secret.txt"
         secret.write_text("token")
@@ -383,7 +389,7 @@ class Api(unittest.TestCase):
         self.assertEqual(timeline.read(str(p), cache), [])
         self.assertNotIn(str(p), cache.items)
         for i in range(50):
-            q = Path(self.tmp.name) / ("y-%d.jsonl" % i)
+            q = Path(self.tmp.name) / (f"y-{i}.jsonl")
             q.write_text("{}\n")
             timeline.read(str(q), cache)
         self.assertLessEqual(len(cache.items), 30)
@@ -464,9 +470,7 @@ class LiveTaskView(unittest.TestCase):
     """The real server process over the fixture: the task view's endpoints and both pages answer."""
 
     def test_endpoints(self):
-        import subprocess
-        import urllib.request
-        from test_dash import free_port
+
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
             shutil.copytree(str(FIXTURE), os.path.join(d, "task-loop"))
             port = free_port()
@@ -474,7 +478,7 @@ class LiveTaskView(unittest.TestCase):
             p = subprocess.Popen([sys.executable, "-m", "taskloop_dash",
                                   "--port", str(port)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             try:
-                base = "http://127.0.0.1:%d" % port
+                base = f"http://127.0.0.1:{port}"
                 end = time.monotonic() + 90  # generous: a loaded machine starts a server slowly; a poll, never a fixed wait
                 while True:
                     try:
@@ -493,7 +497,7 @@ class LiveTaskView(unittest.TestCase):
                 tl_ = get("/api/task-timeline?id=" + BEAD)
                 self.assertEqual(len(tl_["runs"]), 6)
                 run = tl_["runs"][0]
-                blk = get("/api/block?run=%s&node=%s&k=0" % (run["run"], run["blocks"][2]["node"]))
+                blk = get("/api/block?run={}&node={}&k=0".format(run["run"], run["blocks"][2]["node"]))
                 self.assertEqual(len(blk["checks"]), 8)
                 page = raw("/").read()
                 self.assertIn(b"task-loop", page)
@@ -515,15 +519,42 @@ class WorkerCalls(unittest.TestCase):
 
     def test_a_block_lists_its_calls_with_lane_model_secs_tokens_and_ref(self):
         T = 1_800_000_000.0
-        recs = [typed("run_start", T, run="c-1-20261024-010101", bead="c-1", worktree=""),
-                typed("step_start", T + 1, id="n1", step="write", text="write", stage=1, stages=1, write=1),
-                typed("call_start", T + 2, id="c1", n=1, step="write", node="n1", role="worker"),
-                typed("call_end", T + 9, id="c1", status="stopped", reason="lane_out", ref="ses_1", lane="ZAI", model="glm", effort="high", secs=7,
-                      tokens={"in": 5, "cached": 1, "out": 2}, family="xai", transcript="opencode:ses_1", exit=-15),
-                typed("call_start", T + 10, id="c2", n=2, step="write", node="n1", role="worker", resume=True),
-                typed("call_end", T + 20, id="c2", status="done", ref="ses_2", lane="OPENAI_SUBSCRIPTION", model="gpt", effort="high", secs=10,
-                      tokens={"in": 9, "cached": 0, "out": 4}, family="openai"),
-                typed("step_end", T + 21, id="n1", step="write", outcome="done", secs=20)]
+        recs = [
+            typed("run_start", T, run="c-1-20261024-010101", bead="c-1", worktree=""),
+            typed("step_start", T + 1, id="n1", step="write", text="write", stage=1, stages=1, write=1),
+            typed("call_start", T + 2, id="c1", n=1, step="write", node="n1", role="worker"),
+            typed(
+                "call_end",
+                T + 9,
+                id="c1",
+                status="stopped",
+                reason="lane_out",
+                ref="ses_1",
+                lane="ZAI",
+                model="glm",
+                effort="high",
+                secs=7,
+                tokens={"in": 5, "cached": 1, "out": 2},
+                family="xai",
+                transcript="opencode:ses_1",
+                exit=-15,
+            ),
+            typed("call_start", T + 10, id="c2", n=2, step="write", node="n1", role="worker", resume=True),
+            typed(
+                "call_end",
+                T + 20,
+                id="c2",
+                status="done",
+                ref="ses_2",
+                lane="OPENAI_SUBSCRIPTION",
+                model="gpt",
+                effort="high",
+                secs=10,
+                tokens={"in": 9, "cached": 0, "out": 4},
+                family="openai",
+            ),
+            typed("step_end", T + 21, id="n1", step="write", outcome="done", secs=20),
+        ]
         with tempfile.TemporaryDirectory() as d:
             p = write_log(Path(d, "c-1-20261024-010101.jsonl"), recs)
             first, second = DASH.runlogs.block_detail(p, 1, 0), DASH.runlogs.block_detail(p, 1, 1)

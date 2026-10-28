@@ -68,7 +68,7 @@ def external_fact(items: Sequence[str]) -> AskSpec:
     first = clip(items[0], 60) if items else "this"
     more = f" and {len(items) - 1} more" if len(items) > 1 else ""
     return AskSpec(AskClass.EXTERNAL_FACT, f"Can this land without checking: {first}{more}?",
-                   bullets(["The workers could not check it, and no command here can", *list(items)]),
+                   bullets(["The workers could not check it, and no command here can", *items]),
                    [AskOption(label="Right, land it", consequence="The bead lands as it is; the unchecked items are noted on it.",
                               action="confirm", text="right", recommended=True),
                     AskOption(label="Wrong: say what", consequence="The engine plans a fix from your words and keeps the accepted stages.",
@@ -79,7 +79,7 @@ def external_fact(items: Sequence[str]) -> AskSpec:
 def unproven(items: Sequence[str], fix_rounds: int) -> AskSpec:
     first = clip(items[0], 60) if items else "a claim"
     return AskSpec(AskClass.UNPROVEN, f"How can the engine prove {first}?",
-                   bullets([f"{fix_rounds} fix rounds did not prove it", *list(items)]),
+                   bullets([f"{fix_rounds} fix rounds did not prove it", *items]),
                    [AskOption(label="Say how to prove it", consequence="The engine plans the proof you describe, then lands.",
                               action="text", edit=True, recommended=True, cost="One more run"), SPLIT],
                    AskDetail(text="; ".join(items)[:RAW_CAP]))

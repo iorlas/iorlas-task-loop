@@ -8,10 +8,11 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from taskloop.app.release import suite  # noqa: E402
-from taskloop.app.release.cache import SuiteCache  # noqa: E402
-from taskloop.app.release.shell import Abort  # noqa: E402
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
+
+from taskloop.app.release import suite
+from taskloop.app.release.cache import SuiteCache
+from taskloop.app.release.shell import Abort
 
 
 class Verify(unittest.TestCase):

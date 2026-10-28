@@ -1,21 +1,25 @@
 """The codec: every record round-trips, a golden JSON locks each kind's wire shape, and bad data is refused by name."""
 import dataclasses
 import enum
+import importlib
 import json
 import os
+import pkgutil
 import sys
 import unittest
 from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401
-from contracts import samples as S  # noqa: E402
-from taskloop.contracts import codec, delegate, events, ids, log, trace  # noqa: E402
-from taskloop.contracts.codec import CodecError, StaleRecord  # noqa: E402
-from taskloop.contracts.ask import Ask  # noqa: E402
-from taskloop.contracts.loop import LoopCommand  # noqa: E402
-from taskloop.contracts.run import LoopLogLine  # noqa: E402
+import support.paths  # noqa: F401
+
+import taskloop.contracts as pkg
+from contracts import samples as S
+from taskloop.contracts import codec, delegate, enums, events, ids, log, trace
+from taskloop.contracts.ask import Ask
+from taskloop.contracts.codec import CodecError, StaleRecord
+from taskloop.contracts.loop import LoopCommand
+from taskloop.contracts.run import LoopLogLine
 
 GOLDEN = Path(__file__).resolve().parent / "golden"
 FAMILIES = {"engine_log": (S.LOG, log.ENGINE_LOG), "events": (S.EVENTS, events.EVENT), "live_events": (S.LIVE, delegate.LIVE_EVENT)}
@@ -40,7 +44,7 @@ def golden_check(test: unittest.TestCase, name: str, produced: str) -> None:
     if os.environ.get("UPDATE_GOLDEN"):
         path.parent.mkdir(exist_ok=True)
         path.write_text(produced, encoding="utf-8")
-    test.assertEqual(produced, path.read_text(encoding="utf-8"), "%s differs; UPDATE_GOLDEN=1 rewrites it" % name)
+    test.assertEqual(produced, path.read_text(encoding="utf-8"), f"{name} differs; UPDATE_GOLDEN=1 rewrites it")
 
 
 class RoundTrip(unittest.TestCase):
@@ -58,19 +62,25 @@ class RoundTrip(unittest.TestCase):
         for coll in (S.LOG, S.EVENTS, S.LIVE, S.OTHERS):
             for rec in coll.values():
                 reachable(rec, found)
-        import importlib
-        import pkgutil
-        import taskloop.contracts as pkg
+
         bases = {"LogRec", "EventRec", "LiveRec"}
         missing = []
         for m in pkgutil.iter_modules(pkg.__path__):
-            if m.name in ("codec", "jsonl", "stores", "schema", "paths", "ports", "answers"):  # plumbing, not records (ports: call arguments, never written; answers: the workers' replies, tests/contracts/test_schema.py)
+            if (
+                m.name in ("codec", "jsonl", "stores", "schema", "paths", "ports", "answers")
+            # plumbing, not records (ports: call arguments, never written; answers: the workers' replies, tests/contracts/test_schema.py)
+            ):
                 continue
             mod = importlib.import_module("taskloop.contracts." + m.name)
             for n, c in vars(mod).items():
-                if isinstance(c, type) and dataclasses.is_dataclass(c) and c.__module__ == mod.__name__ and n not in bases:
-                    if c not in found:
-                        missing.append("%s.%s" % (m.name, n))
+                if (
+                    isinstance(c, type)
+                    and dataclasses.is_dataclass(c)
+                    and c.__module__ == mod.__name__
+                    and n not in bases
+                    and c not in found
+                ):
+                    missing.append(f"{m.name}.{n}")
         self.assertEqual(missing, [], "add a sample for each record in tests/contracts/samples.py")
 
     def test_union_tables_cover_every_member(self):
@@ -81,7 +91,7 @@ class RoundTrip(unittest.TestCase):
     def test_a_union_member_decodes_by_its_kind(self):
         for name, (coll, table) in FAMILIES.items():
             for kind, rec in coll.items():
-                with self.subTest("%s/%s" % (name, kind)):
+                with self.subTest(f"{name}/{kind}"):
                     self.assertIs(type(codec.from_tagged(table, codec.to_json(rec))), type(rec))
 
 
@@ -98,7 +108,7 @@ class Golden(unittest.TestCase):
     def test_a_golden_line_decodes_to_its_sample(self):
         for name, (coll, table) in FAMILIES.items():
             lines = (GOLDEN / (name + ".jsonl")).read_text(encoding="utf-8").splitlines()
-            for line, rec in zip(lines, coll.values()):
+            for line, rec in zip(lines, coll.values(), strict=False):
                 self.assertEqual(codec.from_tagged(table, json.loads(line)), rec)
 
 
@@ -127,9 +137,8 @@ class Refusals(unittest.TestCase):
 
     def test_types_are_not_coerced(self):
         for key, bad in (("minutes", "3"), ("rounds", 2.5), ("rounds", True), ("asked", 1), ("bead", 7), ("outcome", "nope")):
-            with self.subTest(key):
-                with self.assertRaises(CodecError):
-                    codec.from_json(type(S.OUTCOME), self.wire(**{key: bad}))
+            with self.subTest(key), self.assertRaises(CodecError):
+                codec.from_json(type(S.OUTCOME), self.wire(**{key: bad}))
 
     def test_an_int_is_a_float_but_a_float_is_not_an_int(self):
         self.assertEqual(codec.from_json(type(S.OUTCOME), self.wire(minutes=3)).minutes, 3.0)
@@ -200,9 +209,8 @@ class Ids(unittest.TestCase):
 
     def test_a_bad_run_id_or_bead_id(self):
         for text in ("nodate", "x-2026-10", "-20261018-215800", "a-20261318-215800", "a b-20261018-215800"):
-            with self.subTest(text):
-                with self.assertRaises(ValueError):
-                    ids.RunId.parse(text)
+            with self.subTest(text), self.assertRaises(ValueError):
+                ids.RunId.parse(text)
         for text in ("", "-a", ".a", "a b", "é"):
             with self.assertRaises(ValueError):
                 ids.parse_bead_id(text)
@@ -220,7 +228,6 @@ class Ids(unittest.TestCase):
         self.assertEqual((len(k), k, ids.repo_key("/r/.git")), (12, k, k))
 
     def test_enum_members_are_their_wire_strings(self):
-        from taskloop.contracts import enums
         for e in vars(enums).values():
             if isinstance(e, type) and issubclass(e, enum.StrEnum) and e is not enum.StrEnum:
                 self.assertTrue(all(str(m) == m.value for m in e), e)

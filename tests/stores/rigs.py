@@ -9,14 +9,15 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401
-from taskloop.contracts import codec, paths  # noqa: E402
-from taskloop.contracts.enums import LockWhat  # noqa: E402
-from taskloop.contracts.locks import LockRecord  # noqa: E402
-from taskloop.contracts.stores import JsonStore  # noqa: E402
-from taskloop.stores.bundle import Stores  # noqa: E402
-from taskloop.stores.memory import MemDoc, MemLockTable, MemLog, fake_stores  # noqa: E402
-from taskloop.stores.real import real_stores  # noqa: E402
+import support.paths  # noqa: F401
+
+from taskloop.contracts import codec, paths
+from taskloop.contracts.enums import LockWhat
+from taskloop.contracts.locks import LockRecord
+from taskloop.contracts.stores import JsonStore
+from taskloop.stores.bundle import Stores
+from taskloop.stores.memory import MemDoc, MemLockTable, MemLog, fake_stores
+from taskloop.stores.real import real_stores
 
 HOLDER = """
 import json, sys, time

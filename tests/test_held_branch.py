@@ -8,26 +8,28 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from contextlib import redirect_stdout, redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from taskloop.app.run import engine  # noqa: E402
-from taskloop.app.run import entry  # noqa: E402
-import loop_env  # noqa: E402
-from support import looptest  # noqa: E402
-from taskloop.app.loop import verdict as vd  # noqa: E402
-from taskloop.app.loop.take import Taker  # noqa: E402
-from taskloop.contracts.config import SlotsConfig  # noqa: E402
+import support.paths  # noqa: E402, F401
 import test_loop as tlp  # noqa: E402
 import tl  # noqa: E402
-from taskloop.app.slots import engine_lock  # noqa: E402
+from support import (  # noqa: E402
+    looptest,
+    tlbd,
+)
+
 from taskloop.adapters import pidcheck  # noqa: E402
-from support import tlbd  # noqa: E402
+from taskloop.app.loop import verdict as vd  # noqa: E402
+from taskloop.app.loop.take import Taker  # noqa: E402
+from taskloop.app.run import (  # noqa: E402
+    entry,
+)
+from taskloop.app.slots import engine_lock  # noqa: E402
 
 
 def sh(*a, cwd):
@@ -94,7 +96,7 @@ class HeldBranch(unittest.TestCase):
         self.assertEqual((self.old / "work.txt").read_text(), "edited, not committed\n")
         self.assertEqual((self.old / "new.txt").read_text(), "untracked\n")
         self.assertEqual(sh("git", "rev-parse", "HEAD", cwd=self.old), self.tip)
-        self.assertEqual(subprocess.run(["git", "symbolic-ref", "-q", "HEAD"], cwd=str(self.old)).returncode, 1)
+        self.assertEqual(subprocess.run(["git", "symbolic-ref", "-q", "HEAD"], cwd=str(self.old), check=False).returncode, 1)
 
     def test_a_worktree_with_a_live_lock_keeps_the_branch_and_the_answer_is_taken(self):
         k = tlp.subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
@@ -120,8 +122,10 @@ class PreEngineFailure(tlp.LoopBase):
         def prepare(taker, slot, bead_id):
             calls.append(bead_id)
             if len(calls) <= 2:  # git's own refusal (a branch held by a worktree): not the slot's breakage
-                return vd.pre_engine("tl slot reset s1 for %s did not give a clean tree: fatal: 'task/%s' is already used by worktree at '/w'"
-                                     % (bead_id, bead_id))
+                return vd.pre_engine(
+                    f"tl slot reset s1 for {bead_id} did not give a clean tree: fatal: 'task/{bead_id}' is already used by worktree at '/w'"
+                )
+
         with mock.patch.object(Taker, "prepare", prepare):
             self.assertEqual(self.run_loop(), 0)  # two beads failed before their engines: no "2 failures in a row"
         self.assertNotIn("STOPPED", self.out)

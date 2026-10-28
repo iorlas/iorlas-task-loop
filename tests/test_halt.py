@@ -11,13 +11,15 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-import outcome as oc  # noqa: E402
-from support import engine_case as te  # noqa: E402
-from taskloop.adapters import delegate, gitrepo, runner  # noqa: E402
-from taskloop.adapters import halt as halting  # noqa: E402
-from support.engine_case import CLEAN, PLAN, WRITE, engine, pyc  # noqa: E402
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
+# isort: split
+import outcome as oc
+from support import engine_case as te
+from support.engine_case import CLEAN, PLAN, WRITE, engine
+
+from taskloop.adapters import delegate, gitrepo, runner
+from taskloop.adapters import halt as halting
 
 WAIT = 120  # the longest a helper waits for a started process on a loaded runner (it ends the moment the process is there)
 
@@ -68,7 +70,7 @@ class Halt(te.EngineTest):
                                          r.outer.set()), daemon=True).start()
         t = time.time()
         with self.assertRaises(delegate.Stopped):
-            r(["python3", "-c", "import os,time; open(%r,'w').write(str(os.getpid())); time.sleep(30)" % str(pidfile)])
+            r(["python3", "-c", f"import os,time; open({str(pidfile)!r},'w').write(str(os.getpid())); time.sleep(30)"])
         self.assertLess(time.time() - t, 20)
         self.assertEqual(r.obs["why"], "interrupted")
         te.until(lambda: te.pid_gone(int(pidfile.read_text())), 3)

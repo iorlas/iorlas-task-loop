@@ -38,7 +38,9 @@ class Live:
         """From the typed log alone (no pid probe): running until the close record, stale when nothing was written for STALE_RUN."""
         return lr.is_alive(self.env.clock(), STALE_RUN)
 
-    def api_live(self, bead: str, run: str = "", since: str = "", before: str = "", wait: str | float = "0", limit: str | int = "300") -> dict[str, Any]:
+    def api_live(
+        self, bead: str, run: str = "", since: str = "", before: str = "", wait: str | float = "0", limit: str | int = "300"
+    ) -> dict[str, Any]:
         """A bead's newest run (or the named one): its page of events, merged by time, with the state line. Without `since` the newest
         events and a `before` cursor; with it only what is new, held up to `wait` seconds."""
         self.env.touch()

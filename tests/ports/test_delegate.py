@@ -8,14 +8,15 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401
-from ports.delegate_contract import SCHEMA, DelegateContract, req  # noqa: E402
-from support.tags import contract, domain  # noqa: E402
-from taskloop.adapters import delegate_wire  # noqa: E402
-from taskloop.adapters.delegate_wire import answer_status  # noqa: E402
-from taskloop.adapters.delegate_route import RouteDelegate  # noqa: E402
-from taskloop.adapters.fake_delegate import FakeDelegate, Step, done, stopped  # noqa: E402
-from taskloop.contracts import codec  # noqa: E402
+import support.paths  # noqa: F401
+from support.tags import contract, domain
+
+from ports.delegate_contract import SCHEMA, DelegateContract, req
+from taskloop.adapters import delegate_wire
+from taskloop.adapters.delegate_route import RouteDelegate
+from taskloop.adapters.delegate_wire import answer_status
+from taskloop.adapters.fake_delegate import FakeDelegate, Step, done, stopped
+from taskloop.contracts import codec
 
 STUB = str(Path(__file__).parent / "stub_route.py")
 

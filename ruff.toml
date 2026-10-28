@@ -12,66 +12,9 @@ ignore = [
     "PLR0917",  # positional-argument count, same reason as PLR0913
 ]
 
+# No per-file ignores, none for tests, skills or dev either: tests/test_rules.py fails if one comes back. A genuine boundary gets one
+# `# noqa: RULE  reason` on its own line (E402 after a sys.path edit, F401 for an import kept for its side effect, PLC0415, SIM115).
+
 [lint.mccabe]
 max-complexity = 12
 
-# The old flat files and their tests predate these rules and are deleted slice by slice (88 D11). Each list is the rule set that fires
-# in those files today, measured at A1; a rule may be removed from a list when its last hit is fixed, never added.
-# src/** has no relaxation: it is held to the full set from its first commit.
-
-[lint.per-file-ignores]
-"skills/**" = ["RUF100", "B007", "B034", "B904", "B905", "C408", "C416", "C420", "C901", "E501", "E731", "E741", "F401", "F402", "F841", "I001", "PLC0415", "PLR0911", "PLR0912", "PLR0915", "PLW0108", "PLW1510", "PLW2901", "RUF001", "RUF005", "RUF007", "RUF012", "RUF017", "RUF059", "SIM102", "SIM105", "SIM114", "SIM115", "SIM905", "UP017", "UP031", "UP034", "UP041"]
-"dev/**" = ["B904", "C901", "E501", "PLC0415", "PLR0124", "PLR0911", "PLR0912", "PLR0915", "PLW1510", "RUF005", "SIM105", "SIM108", "SIM115", "UP021", "UP022", "UP031"]
-"tests/**" = ["B007", "B023", "B905", "C408", "C416", "C420", "C901", "E501", "E731", "E741", "F401", "F841", "I001", "PLC0415", "PLC3002", "PLR0912", "PLR0915", "PLW0108", "PLW0603", "PLW1510", "PLW2901", "RUF001", "RUF005", "RUF007", "RUF012", "RUF015", "RUF021", "RUF059", "RUF100", "SIM105", "SIM115", "SIM117", "UP017", "UP021", "UP022", "UP031", "UP034"]
-
-# Ruff baseline: the findings that exist today, one entry per file and rule, measured on 0.17.2. tests/test_rules.py holds this
-# table to tests/rules_ratchet.json ("ruff_baseline"): an entry may be deleted when its last hit is fixed, never added.
-# Ruff takes the union of every matching glob, so these sit beside the groups above.
-"dev/race.py" = ["B007"]
-"skills/task-loop/tl.py" = ["UP036"]
-"src/taskloop/adapters/bd.py" = ["E501", "PLW1510", "UP031"]
-"src/taskloop/adapters/delegate_route.py" = ["SIM105", "UP031"]
-"src/taskloop/adapters/delegate_wire.py" = ["UP031"]
-"src/taskloop/adapters/fake_beads.py" = ["UP031"]
-"src/taskloop/adapters/fake_delegate.py" = ["UP031"]
-"src/taskloop/adapters/proc.py" = ["SIM105"]
-"src/taskloop/app/run/budget.py" = ["E501", "UP031"]
-"src/taskloop/app/run/calls.py" = ["UP031"]
-"src/taskloop/app/run/checklog.py" = ["E501"]
-"src/taskloop/app/run/console.py" = ["UP031"]
-"src/taskloop/app/run/context.py" = ["E501"]
-"src/taskloop/app/run/steps.py" = ["UP031"]
-"src/taskloop/app/run/trace.py" = ["C416", "E501"]
-"src/taskloop/contracts/codec.py" = ["B905", "C901", "PLR0911", "PLR0912", "UP031"]
-"src/taskloop/contracts/config.py" = ["UP031"]
-"src/taskloop/contracts/ids.py" = ["UP031"]
-"src/taskloop/contracts/paths.py" = ["UP031"]
-"src/taskloop/contracts/ports.py" = ["UP031"]
-"src/taskloop/contracts/schema.py" = ["C901", "PLR0911", "PLR0912", "PLW2901", "RUF005", "UP031"]
-"src/taskloop/contracts/stores.py" = ["SIM105"]
-"src/taskloop/stores/api.py" = ["UP031"]
-"src/taskloop/stores/books.py" = ["SIM118"]
-"src/taskloop/stores/files.py" = ["UP031"]
-"src/taskloop/stores/memory.py" = ["UP031"]
-"src/taskloop/stores/runlog.py" = ["UP031"]
-"src/taskloop_dash/api/asks.py" = ["E501", "PLW2901", "RUF005", "UP031"]
-"src/taskloop_dash/api/beads.py" = ["UP031"]
-"src/taskloop_dash/api/lanes.py" = ["PLW1510", "UP031"]
-"src/taskloop_dash/api/liveview.py" = ["E501"]
-"src/taskloop_dash/api/looks.py" = ["C901", "E501", "PLR0911", "PLR0912", "PLW1510", "UP031"]
-"src/taskloop_dash/api/roadmap.py" = ["E501", "UP031"]
-"src/taskloop_dash/api/runs.py" = ["E501", "UP031"]
-"src/taskloop_dash/api/tasks.py" = ["E501", "UP031"]
-"src/taskloop_dash/bind.py" = ["PLW1510", "SIM105", "UP031"]
-"src/taskloop_dash/http.py" = ["C901", "E501", "UP031"]
-"src/taskloop_dash/readers/beads.py" = ["UP031"]
-"src/taskloop_dash/readers/events.py" = ["E501", "UP031"]
-"src/taskloop_dash/readers/opencode.py" = ["UP031"]
-"src/taskloop_dash/readers/runlogs.py" = ["E501"]
-"src/taskloop_dash/serve.py" = ["UP031"]
-"src/taskloop_dash/views/gallery.py" = ["UP031"]
-"src/taskloop_dash/views/graph.py" = ["C901", "E501", "PLR0911", "SIM102", "UP031"]
-"src/taskloop_dash/views/roadmap.py" = ["E501", "E741", "RUF001", "RUF005", "UP031"]
-"src/taskloop_dash/views/signals.py" = ["E501", "E741", "RUF001", "UP031"]
-"tests/contracts/__init__.py" = ["UP036"]
-"tests/contracts/test_codec.py" = ["SIM102"]

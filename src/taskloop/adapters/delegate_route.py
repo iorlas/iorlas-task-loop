@@ -1,4 +1,5 @@
 """`Delegate` over `route.py run`: temp files for the brief and schema, the live file tailed while the child runs."""
+import contextlib
 import dataclasses
 import json
 import os
@@ -32,10 +33,8 @@ class LiveTail:
         for e in entries:
             if self.sink is None or "k" not in e.data:
                 continue
-            try:
+            with contextlib.suppress(codec.CodecError):
                 self.sink(live_event(e.data))
-            except codec.CodecError:
-                pass
 
 
 class RouteDelegate:
@@ -71,5 +70,5 @@ class RouteDelegate:
             answer = None
         if not isinstance(answer, dict):
             return delegate_wire.synth("crash", "machine", "needs_owner",
-                                       "route.py exit %d, no answer object: %s" % (ran.exit, (ran.out or ran.err)[-1500:]), req.resume)
+                                       f"route.py exit {ran.exit}, no answer object: {(ran.out or ran.err)[-1500:]}", req.resume)
         return delegate_wire.result_of(answer)

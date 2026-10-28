@@ -3,18 +3,22 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from support.engine_case import CLEAN, EngineTest, HAS_F, PLAN, POSIX_CHECK, STILL_OPEN, WRITE, pyc, verdict  # noqa: E402
-import json  # noqa: E402
-import os  # noqa: E402
-import threading  # noqa: E402
-from pathlib import Path  # noqa: E402
-from unittest import mock  # noqa: E402
-from support.logs import records  # noqa: E402
-from support.waits import until  # noqa: E402
-from taskloop.adapters import gitrepo  # noqa: E402
-from taskloop.adapters import ident  # noqa: E402
-from taskloop.adapters import landlock  # noqa: E402
+import json
+import os
+import threading
+from pathlib import Path
+from unittest import mock
+
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support.engine_case import CLEAN, HAS_F, PLAN, POSIX_CHECK, STILL_OPEN, WRITE, EngineTest, pyc, verdict
+from support.logs import records
+from support.waits import until
+
+from taskloop.adapters import (
+    gitrepo,
+    ident,
+    landlock,
+)
 
 
 class EngineLand2Test(EngineTest):
@@ -40,7 +44,9 @@ class EngineLand2Test(EngineTest):
             pass
         t.join()
         (start,), (w,) = records(eng, "wait_start"), records(eng, "wait_end")
-        self.assertEqual((start["what"], start["holder"], start["id"] == w["id"], w["in_budget"]), ("land_lock", "other-bead", True, False))  # tl-y35
+        self.assertEqual(
+            (start["what"], start["holder"], start["id"] == w["id"], w["in_budget"]), ("land_lock", "other-bead", True, False)
+        )  # tl-y35
         kinds = [r["kind"] for r in records(eng)]
         self.assertLess(kinds.index("step_end"), kinds.index("wait_start"))  # the open step ended before the wait began
         self.assertLess(kinds.index("wait_end"), kinds.index("lock"))
@@ -65,17 +71,17 @@ class EngineLand2Test(EngineTest):
     def test_the_gate_named_as_unchecked_lands_without_an_ask(self):
         # lifesim-5ban.3: 'the full gate and diff coverage, reserved for the engine' stopped the land; the gate runs there
         gate = pyc("pass")
-        r = dict(CLEAN, unchecked=[{"what": "the full `%s` gate and diff coverage" % gate, "kind": "requirement"}])
+        r = dict(CLEAN, unchecked=[{"what": f"the full `{gate}` gate and diff coverage", "kind": "requirement"}])
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r]}, gate=gate)
         self.assertEqual(rc, 0, self.blocked)
         self.assertIsNone(self.ask())
-        self.assertIn("runs the gate (`%s`) once, at land" % gate, s.prompts[2])
+        self.assertIn(f"runs the gate (`{gate}`) once, at land", s.prompts[2])
         self.assertIn("never an unchecked item", s.prompts[2])
         self.assertIn("write no case for it", s.prompts[0])
 
     def test_a_repo_check_that_passed_this_round_named_as_unchecked_lands_without_an_ask(self):
         unit = pyc("print(1)")
-        r = dict(CLEAN, unchecked=[{"what": "%s on the whole tree" % unit, "kind": "case"}])
+        r = dict(CLEAN, unchecked=[{"what": f"{unit} on the whole tree", "kind": "case"}])
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r]},
                                 checks=[{"id": "unit", "cmd": unit, "group": "tests"}])
         self.assertEqual(rc, 0, self.blocked)
@@ -84,7 +90,10 @@ class EngineLand2Test(EngineTest):
     @POSIX_CHECK
     def test_a_case_named_as_unchecked_once_the_last_stage_ran_every_case_lands_without_an_ask(self):
         # lifesim-gfr.31.1: 'there is no nographics.out in evidence yet' reached the owner after the case writing it passed
-        plan = dict(PLAN, cases=[{"criterion": "f.txt exists", "check": pyc("import os,sys; sys.exit(0 if os.path.exists('f.txt') else 1)", "case")}])
+        plan = dict(
+            PLAN,
+            cases=[{"criterion": "f.txt exists", "check": pyc("import os,sys; sys.exit(0 if os.path.exists('f.txt') else 1)", "case")}],
+        )
         r = dict(CLEAN, unchecked=[{"what": "I could not run the case 'f.txt exists': there is no evidence.out yet",
                                     "kind": "case"}])
         rc, s = self.run_engine({"plan": [plan], "write": [WRITE], "review": [r]})
@@ -102,7 +111,7 @@ class EngineLand2Test(EngineTest):
         self.assertEqual((self.ask()["kind"], self.ask()["class"]), ("decision", "external_fact"))
 
     def test_a_stage_check_that_passed_named_as_unchecked_lands_without_an_ask(self):
-        r = dict(CLEAN, unchecked=[{"what": "`%s` on the final tree" % HAS_F, "kind": "requirement"}])
+        r = dict(CLEAN, unchecked=[{"what": f"`{HAS_F}` on the final tree", "kind": "requirement"}])
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertIsNone(self.ask())
@@ -204,7 +213,7 @@ class EngineLand2Test(EngineTest):
 
     def test_close_reason_says_what_landed_and_a_refused_close_is_a_warning(self):
         with self.store.stub(bd_fn=lambda *argv: mock.Mock(returncode=1 if argv[0] == "close" else 0, stdout="", stderr="refused")):
-            rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+            _rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertIn("to main: do it", self.closed[0])
         self.assertGreater(len(self.closed[0]), 40)
         log = Path(sorted((Path(os.environ["XDG_CONFIG_HOME"]) / "task-loop" / "engine").glob("t-1-*.jsonl"))[-1])

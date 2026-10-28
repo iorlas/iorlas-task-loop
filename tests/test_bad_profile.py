@@ -1,5 +1,4 @@
 """One repo's bad .task-loop.json is a RED row for that repo (file and key named); doctor and the other repos go on."""
-import argparse
 import contextlib
 import io
 import json
@@ -13,10 +12,11 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401
-from taskloop.app.wire import doctor  # noqa: E402
+import support.paths  # noqa: F401
+
 from taskloop.adapters import ident
-from taskloop.app.doctor import profiles  # noqa: E402
+from taskloop.app.doctor import profiles
+from taskloop.app.wire import doctor
 
 ROOT = Path(__file__).resolve().parents[1]
 GIT_ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.invalid", "GIT_COMMITTER_NAME": "t",

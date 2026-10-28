@@ -7,10 +7,11 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from test_loop import LoopBase, rec  # noqa: E402  (puts skills/task-loop on sys.path)
-from taskloop.app.asks import intake  # noqa: E402
-from taskloop.app.loop.core import Core  # noqa: E402
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from test_loop import LoopBase, rec
+
+from taskloop.app.asks import intake
+from taskloop.app.loop.core import Core
 
 HOUR = 3600
 

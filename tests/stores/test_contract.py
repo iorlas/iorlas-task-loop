@@ -1,7 +1,6 @@
 """The store contract: every suite runs on the file-backed stores and on the in-memory ones. Real-FS only here: temp dirs, real
 processes for the races (atomic replace, concurrent append, lock exclusion across processes)."""
 import json
-from typing import Any, cast
 import os
 import signal
 import subprocess
@@ -9,15 +8,21 @@ import sys
 import threading
 import unittest
 from pathlib import Path
+from typing import Any, cast
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401
-import suites  # noqa: E402
-from rigs import FakeRig, RealRig  # noqa: E402
-from support.tiers import contract  # noqa: E402
-import jsonl_log as jsonl  # noqa: E402
-from taskloop.contracts.enums import LockWhat  # noqa: E402
+import support.paths  # noqa: F401
+
+# isort: split
+import jsonl_log as jsonl
+import suites
+from contracts import samples as S
+from rigs import FakeRig, RealRig
+from support.tiers import contract
+
+from taskloop.contracts.enums import LockWhat
+from taskloop.contracts.loop import Rest
 
 WORKER = str(Path(__file__).resolve().parent / "races_worker.py")
 SUITES = [suites.DocContract, suites.AskContract, suites.CheckpointContract, suites.LogContract, suites.LockContract,
@@ -25,7 +30,7 @@ SUITES = [suites.DocContract, suites.AskContract, suites.CheckpointContract, sui
 
 
 def _make(base: type, name: str, rig: type) -> type:
-    return contract(type("%s%s" % (name, base.__name__), (base,), {"make_rig": lambda self: rig()}))
+    return contract(type(f"{name}{base.__name__}", (base,), {"make_rig": lambda self: rig()}))
 
 
 for _base in SUITES:
@@ -46,18 +51,18 @@ class RealRaces(unittest.TestCase):
 
     def test_many_processes_appending_never_interleave_a_line(self) -> None:
         path = self.cfg.root / "x.jsonl"
-        procs = [self.spawn("append", str(path), "60", "p%d" % i) for i in range(6)]
+        procs = [self.spawn("append", str(path), "60", f"p{i}") for i in range(6)]
         self.assertEqual([p.wait(60) for p in procs], [0] * 6)
         entries, cursor = jsonl.Jsonl(path).read_from(0)
         self.assertEqual(len(entries), 360)
         self.assertEqual(cursor, path.stat().st_size)
         for i in range(6):
-            self.assertEqual([e.data["i"] for e in entries if e.data["who"] == "p%d" % i], list(range(60)))  # each writer's order holds
+            self.assertEqual([e.data["i"] for e in entries if e.data["who"] == f"p{i}"], list(range(60)))  # each writer's order holds
         self.assertEqual(len({e.start for e in entries}), 360)
 
     def test_a_reader_following_a_cursor_while_processes_append_sees_each_line_once(self) -> None:
         path = self.cfg.root / "y.jsonl"
-        procs = [self.spawn("append", str(path), "80", "p%d" % i) for i in range(3)]
+        procs = [self.spawn("append", str(path), "80", f"p{i}") for i in range(3)]
         seen, cursor = [], 0
         while any(p.poll() is None for p in procs):
             entries, cursor = jsonl.Jsonl(path).read_from(cursor)
@@ -68,8 +73,7 @@ class RealRaces(unittest.TestCase):
         self.assertEqual(len(set(seen)), 240)
 
     def test_a_reader_never_sees_half_a_document_while_writers_replace_it(self) -> None:
-        from contracts import samples as S
-        from taskloop.contracts.loop import Rest
+
         doc = self.rig.stores.loop_rest("k")
         doc.write(S.other(Rest))
         stop = threading.Event()
@@ -79,7 +83,7 @@ class RealRaces(unittest.TestCase):
             n = 0
             while not stop.is_set():
                 n += 1
-                doc.write(Rest(beads={"b-%d" % i: float(n) for i in range(n % 40)}))
+                doc.write(Rest(beads={f"b-{i}": float(n) for i in range(n % 40)}))
 
         w = threading.Thread(target=write)
         w.start()
@@ -102,9 +106,8 @@ class RealRaces(unittest.TestCase):
     def test_a_killed_holder_frees_its_lock_at_once(self) -> None:
         self.rig.plant_lock(LockWhat.AREA, "a", "victim", os.getpid())
         holder = self.rig.procs[-1]
-        with self.assertRaises(TimeoutError):
-            with self.rig.stores.locks.hold(LockWhat.AREA, "a", "me", timeout=0.2):
-                self.fail("took a held lock")
+        with self.assertRaises(TimeoutError), self.rig.stores.locks.hold(LockWhat.AREA, "a", "me", timeout=0.2):
+            self.fail("took a held lock")
         os.kill(holder.pid, signal.SIGKILL)  # a pid this test started
         holder.wait()
         with self.rig.stores.locks.hold(LockWhat.AREA, "a", "me", timeout=2) as rec:

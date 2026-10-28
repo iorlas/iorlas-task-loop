@@ -11,11 +11,13 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from taskloop.app.run import engine  # noqa: E402
-from taskloop.app.run.delegation import Delegation  # noqa: E402
+import support.paths  # noqa: E402, F401
+
+# isort: split
 import seams  # noqa: E402
 from support.builders import cfg_with  # noqa: E402
+
+from taskloop.app.run.delegation import Delegation  # noqa: E402
 
 C3 = {"contract": 3, "reasons": {}}
 OLD = {"contract": 2, "reasons": {}}

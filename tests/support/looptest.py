@@ -8,15 +8,16 @@ from pathlib import Path
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills" / "task-loop"))
-import loop_env  # noqa: E402
-import tl  # noqa: E402
+import loop_env
+
+from taskloop.app.loop.queue import rank_ready
 from taskloop.app.wire import slots as wslots
-from taskloop.app.loop.queue import rank_ready  # noqa: E402
-from taskloop.contracts.loop import LoopState  # noqa: E402
+from taskloop.contracts.loop import LoopState
 
 
 def fake_install(cache, ver, tl_py="import sys\n", missing=(), loop_py=""):
-    """A version tree in the plugin cache: the core files of an install (loop_env.py holds `loop_py`), an empty engine module, a plugin.json."""
+    """A version tree in the plugin cache: the core files of an install (loop_env.py holds `loop_py`), an empty engine module, a
+    plugin.json."""
     d = Path(cache) / ver / "skills" / "task-loop"
     d.mkdir(parents=True)
     (d.parents[1] / ".claude-plugin").mkdir()
@@ -49,7 +50,7 @@ def log(repo):
 
 
 def state_path(repo, pid):
-    return loop_env.cfgdir().loop_state("%s.%d" % (wslots.repo_key(repo), pid))
+    return loop_env.cfgdir().loop_state(f"{wslots.repo_key(repo)}.{pid}")
 
 
 def write_state(repo, pid=None, **fields):

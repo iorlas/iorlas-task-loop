@@ -41,7 +41,7 @@ def why_code(kind: str, outcome: str) -> WhyCode | None:
 
 
 def _known(cls: type, row: Mapping[str, Any]) -> dict[str, Any]:
-    names = {f for f in cls.__dataclass_fields__}
+    names = set(cls.__dataclass_fields__)
     return {k: v for k, v in row.items() if k in names and v is not None}
 
 

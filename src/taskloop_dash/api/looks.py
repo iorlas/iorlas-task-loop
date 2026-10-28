@@ -59,7 +59,7 @@ class Looks:
         items = sorted(items, key=lambda i: (order[i["status"]], -(i["answered"] or 0)))
         for i in items:
             for sh in i["shots"]:
-                sh["url"] = "/api/look-shot?repo=%s&path=%s" % (quote(basename(path)), quote(sh["path"]))
+                sh["url"] = "/api/look-shot?repo={}&path={}".format(quote(basename(path)), quote(sh["path"]))
         return {"repo": basename(path), "items": items, "summary": gallery.summary(items), "repos": repos}
 
     def look_shot(self, repo: str, rel: str) -> tuple[bytes, str] | None:
@@ -116,14 +116,14 @@ class Looks:
         try:
             return self._apply(repo, look_bead, item_id, verdict, note, now)
         except OSError as err:
-            return 502, {"code": "no_bd", "error": "The dashboard cannot run bd (%s). Nothing was changed." % err}
+            return 502, {"code": "no_bd", "error": f"The dashboard cannot run bd ({err}). Nothing was changed."}
         except BdFailure as err:
-            return 502, {"code": "bd", "error": "bd did not answer (%s)." % why_of(err)}
+            return 502, {"code": "bd", "error": f"bd did not answer ({why_of(err)})."}
 
     def _apply(self, repo: str, look_bead: str, item_id: str, verdict: str, note: str, now: float) -> Reply:
         shown = self.beads.show(repo, look_bead)
         if not shown or LABEL not in (shown.get("labels") or []):
-            return 404, {"code": "bead_missing", "error": "The look bead %s no longer exists." % look_bead}
+            return 404, {"code": "bead_missing", "error": f"The look bead {look_bead} no longer exists."}
         e = next((x for x in gallery.stored(look_bead, shown) if x.get("id") == item_id), None)
         if e is None:
             return 404, {"code": "item_missing", "error": "That item is gone. Reload the page."}
@@ -131,12 +131,17 @@ class Looks:
         if verdict == "undo" and state == "open":
             return 200, {"ok": True, "status": "open"}
         if verdict != "undo" and state != "open":
-            return 409, {"code": "answered", "error": "Already answered (%s). Take that back first." % state, "status": state}
+            return 409, {"code": "answered", "error": f"Already answered ({state}). Take that back first.", "status": state}
         made = ""
         if verdict == "redo":  # before the fresh read below: the engine may have written `looks` meanwhile
             ok, made = self.file_redo(repo, look_bead, e, note)
             if not ok:
-                return 502, {"code": "bd", "error": "bd refused the follow-up bead: %s" % made}
+                return 502, {"code": "bd", "error": f"bd refused the follow-up bead: {made}"}
+        return self._record(repo, (look_bead, item_id, verdict, note, now), shown, made)
+
+    def _record(self, repo: str, answer: tuple[str, str, str, str, float], shown: dict[str, Any], made: str) -> Reply:
+        """Write the answer into the item (read again: the engine may have changed `looks`), then close or reopen the look bead."""
+        look_bead, item_id, verdict, note, now = answer
         shown = self.beads.show(repo, look_bead) or shown
         items = gallery.stored(look_bead, shown)
         e = next((x for x in items if x.get("id") == item_id), None)
@@ -153,7 +158,7 @@ class Looks:
         ok, why = self.save(repo, look_bead, shown, items)
         if not ok:
             self.drop(repo, made)
-            return 502, {"code": "bd", "error": "bd refused the answer: %s" % why}
+            return 502, {"code": "bd", "error": f"bd refused the answer: {why}"}
         if verdict == "undo":
             self.drop(repo, old_redo, "the owner took the redo back")
         waiting = sum(1 for x in items if x.get("status") not in ("good", "redo"))
@@ -180,13 +185,20 @@ class Looks:
 
     def file_redo(self, repo: str, look_bead: str, e: dict[str, Any], note: str) -> tuple[bool, str]:
         """The follow-up bead of a redo: the owner's note and the pictures, related to the bead the look came from."""
-        pics = "\n".join("- %s (%s)" % (s["path"], s.get("role") or "after") for s in e.get("shots") or [])
-        desc = "The owner looked at \"%s\" (%s) and asked for a change.\n\nWhat to change:\n%s\n\nPictures:\n%s\n" % (
-            e.get("title") or e.get("id"), e.get("bead") or look_bead, note, pics or "(none)")
+        pics = "\n".join("- {} ({})".format(s["path"], s.get("role") or "after") for s in e.get("shots") or [])
+        desc = 'The owner looked at "{}" ({}) and asked for a change.\n\nWhat to change:\n{}\n\nPictures:\n{}\n'.format(
+            e.get("title") or e.get("id"), e.get("bead") or look_bead, note, pics or "(none)"
+        )
         store = self.env.ports.store(repo)
         try:
-            made = store.create(NewBead(title="Redo look: " + (e.get("title") or e.get("id") or look_bead)[:90], priority=2, description=desc,
-                                        deps=["related:" + (e.get("bead") or look_bead)]))
+            made = store.create(
+                NewBead(
+                    title="Redo look: " + (e.get("title") or e.get("id") or look_bead)[:90],
+                    priority=2,
+                    description=desc,
+                    deps=["related:" + (e.get("bead") or look_bead)],
+                )
+            )
         except BdFailure as err:
             return False, why_of(err)
         with contextlib.suppress(BdFailure):  # the bead and its description already carry the note

@@ -1,13 +1,13 @@
 """The Roadmap's signal strip: each rule fires on the shape it was made for and stays quiet on ordinary data."""
 
 import sys
-import time
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+import support.paths  # noqa: E402, F401
+
 from taskloop_dash.views import signals  # noqa: E402
 
 NOW = 1_800_000_000.0
@@ -36,7 +36,11 @@ def build(rows=(), passes=(), lanes=(), asks=(), summary=None):
 class Quiet(unittest.TestCase):
     def test_ordinary_data_fires_nothing_but_good_news(self):
         rows = [row(str(i), fresh=100_000 + i * 1000) for i in range(10)]
-        passes = [pas("a", "landed", minutes=20), pas("b", "parked", why="needs a human: spike"), pas("c", "parked", why="needs a human: x")]
+        passes = [
+            pas("a", "landed", minutes=20),
+            pas("b", "parked", why="needs a human: spike"),
+            pas("c", "parked", why="needs a human: x"),
+        ]
         self.assertEqual(kinds(build(rows, passes)), ["good"])
 
 
@@ -72,7 +76,7 @@ class ParkCluster(unittest.TestCase):
         self.assertNotIn("{", x["line"])
 
     def test_different_causes_or_old_parks_do_not_cluster(self):
-        mixed = [pas(str(i), why="needs a human: reason %s" % "abcdef"[i]) for i in range(5)]
+        mixed = [pas(str(i), why="needs a human: reason {}".format("abcdef"[i])) for i in range(5)]
         self.assertNotIn("park_cluster", kinds(build(passes=mixed)))
         old = [pas(str(i), why=self.WHY, ago=20 * H) for i in range(6)]
         self.assertNotIn("park_cluster", kinds(build(passes=old)))
@@ -90,7 +94,7 @@ class Churn(unittest.TestCase):
         rows = [row("a", red_checks=6, blocks=22, secs=1000, checks_secs=600), row("b", red_checks=1)]
         (x,) = [s for s in build(rows)["signals"] if s["kind"] == "churn"]
         self.assertEqual((x["look"], x["sev"]), (["r-a"], "amber"))
-        self.assertIn("checks failed 6×", x["line"])
+        self.assertIn("checks failed 6\N{MULTIPLICATION SIGN}", x["line"])
         self.assertIn("60% of its time in checks", x["line"])
 
     def test_landed_or_stale_beads_and_plain_step_counts_below_the_bar_are_quiet(self):
@@ -108,8 +112,8 @@ class Rounds(unittest.TestCase):
         s = build([row("a", sendbacks=2), row("b", red_checks=2, longest_check=660), row("c", big_turn=12_300_000)])
         by = {x["kind"]: x for x in s["signals"] if x["kind"] in ("churn", "big_turn")}
         self.assertEqual(sorted(x["look"][0] for x in s["signals"] if x["kind"] == "churn"), ["r-a", "r-b"])
-        self.assertIn("review sent it back 2×", [x for x in s["signals"] if x["look"] == ["r-a"]][0]["line"])
-        self.assertIn("up to 11m", [x for x in s["signals"] if x["look"] == ["r-b"]][0]["line"])
+        self.assertIn("review sent it back 2\N{MULTIPLICATION SIGN}", next(x for x in s["signals"] if x["look"] == ["r-a"])["line"])
+        self.assertIn("up to 11m", next(x for x in s["signals"] if x["look"] == ["r-b"])["line"])
         self.assertIn("12.3M", by["big_turn"]["title"])
 
     def test_one_slow_check_round_alone_is_quiet(self):
@@ -136,7 +140,8 @@ class Asks(unittest.TestCase):
         return {"bead": "r-" + i, "kind": kind, "t": NOW - age, "parks_at": NOW - age + parks_in, "status": "open"}
 
     def test_fresh_asks_are_info_old_amber_very_old_or_parking_red(self):
-        sev = lambda asks: [s["sev"] for s in build(asks=asks)["signals"] if s["kind"] == "asks"]
+        def sev(asks):
+            return [s["sev"] for s in build(asks=asks)["signals"] if s["kind"] == "asks"]
         self.assertEqual(sev([self.ask("a", H)]), ["info"])
         self.assertEqual(sev([self.ask("a", 13 * H)]), ["amber"])
         self.assertEqual(sev([self.ask("a", 25 * H)]), ["red"])
@@ -158,7 +163,9 @@ class OthersAndGood(unittest.TestCase):
         (x,) = [t for t in s["signals"] if t["kind"] == "near_miss"]
         self.assertEqual((x["look"], x["sev"]), (["r-a"], "info"))
         self.assertIn("182/180 min", x["line"])
-        tricky = pas("c", why="over budget: $0.00 of $15, 90 of 100 min wall, 182 of 180 min", ago=H)  # the first match wins, in both places
+        tricky = pas(
+            "c", why="over budget: $0.00 of $15, 90 of 100 min wall, 182 of 180 min", ago=H
+        )  # the first match wins, in both places
         (y,) = [t for t in build(passes=[tricky])["signals"] if t["kind"] == "near_miss"]
         self.assertIn("90/100 min", y["line"])
         self.assertEqual([t["sev"] for t in s["signals"] if t["kind"] == "stuck"], ["red"])

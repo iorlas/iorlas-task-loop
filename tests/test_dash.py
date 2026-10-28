@@ -1,8 +1,7 @@
 import dataclasses
 import json
 import os
-import glob
-import shutil
+import re
 import socket
 import subprocess
 import sys
@@ -16,16 +15,17 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+import support.paths  # noqa: E402, F401
 from asks.samples import MOCKS  # noqa: E402
 from support import tools  # noqa: E402
-from taskloop.contracts import codec  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
-from taskloop_dash import bind as bind_mod, tails as tails_mod  # noqa: E402
-from taskloop_dash.api import lanes as lanes_mod  # noqa: E402
 from support.lanes import answer, file_status, lane, lane_statuses  # noqa: E402
 from support.narrow import must  # noqa: E402
 
+from taskloop.contracts import codec  # noqa: E402
+from taskloop_dash import bind as bind_mod  # noqa: E402
+from taskloop_dash import tails as tails_mod  # noqa: E402
+from taskloop_dash.api import lanes as lanes_mod  # noqa: E402
 
 SH_FAKE = unittest.skipIf(os.name == "nt", "the bd fake is a #!/bin/sh script, which Windows cannot execute")
 
@@ -147,7 +147,7 @@ class Contract(unittest.TestCase):
         (lanes / "fresh.json").write_text(json.dumps({"v": 1, "producer": "x", "at": time.time(),
                                                       "lanes": [{"name": "A", "usage": [{"window": "5h", "used_pct": 3}]}]}))
         (lanes / "stale.json").write_text(json.dumps({"v": 1, "producer": "y", "at": 0, "lanes": [{"name": "B"}]}))
-        self.assertEqual([l["name"] for l in self.dash.lanes.contract_lanes()], ["A"])
+        self.assertEqual([ln["name"] for ln in self.dash.lanes.contract_lanes()], ["A"])
 
 
 def free_port():
@@ -169,7 +169,7 @@ class Live(unittest.TestCase):
             p = subprocess.Popen([sys.executable, "-m", "taskloop_dash",
                                   "--port", str(port)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             try:
-                base = "http://127.0.0.1:%d" % port
+                base = f"http://127.0.0.1:{port}"
                 for _ in range(50):
                     try:
                         v = json.loads(urllib.request.urlopen(base + "/api/version", timeout=1).read())
@@ -224,12 +224,12 @@ class Asks(unittest.TestCase):
 
     @SH_FAKE
     def test_answer_needs_the_token_and_reaches_the_ask_once(self):
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory() as tmp:
             port = free_port()
-            d = Path(d)
+            d = Path(tmp)
             bin_ = d / "bin"
             bin_.mkdir()
-            (bin_ / "bd").write_text("#!/bin/sh\necho \"$*\" >> %s\n" % (d / "bd.log"))
+            (bin_ / "bd").write_text("#!/bin/sh\necho \"$*\" >> {}\n".format(d / "bd.log"))
             (bin_ / "bd").chmod(0o755)
             asks = d / "task-loop" / "asks"
             asks.mkdir(parents=True)
@@ -242,7 +242,7 @@ class Asks(unittest.TestCase):
             p = subprocess.Popen([sys.executable, "-m", "taskloop_dash", "--ports", "dash_wiring:ports",  # the launcher's bd, the fake one
                                   "--port", str(port)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             try:
-                base = "http://127.0.0.1:%d" % port
+                base = f"http://127.0.0.1:{port}"
                 for _ in range(50):
                     try:
                         urllib.request.urlopen(base + "/api/version", timeout=1)
@@ -279,14 +279,14 @@ class Markdown(unittest.TestCase):
     """The page's md(): bullets, tables, bold and code render; HTML in ask text never does."""
 
     def run_md(self, text):
-        import re
         tools.need(self, "node")
         node = tools.real("node")
         page = (ROOT / "src" / "taskloop_dash" / "static" / "index.html").read_text(encoding="utf-8")
         src = must(re.search(r"/\*md\*/(.*?)/\*end md\*/", page, re.S)).group(1)
-        esc = "const esc=s=>String(s==null?'':s).replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));"
+        esc = ("const "
+               "esc=s=>String(s==null?'':s).replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));")
         r = subprocess.run([must(node), "-e", esc + src + "\nprocess.stdout.write(md(JSON.parse(process.argv[1])))", json.dumps(text)],
-                           capture_output=True, text=True, timeout=20)
+                           capture_output=True, text=True, timeout=20, check=False)
         self.assertEqual(r.returncode, 0, r.stderr)
         return r.stdout
 
@@ -356,7 +356,9 @@ class LaneBanner(unittest.TestCase):
 
     def test_delegate_status_carries_the_text(self):
         self.dash = make_dash()
-        file_status(self.dash, answer({"CLAUDE_SUBSCRIPTION": self.lane(out=True, notes=["claude is logged out: run `claude auth login`"])}))
+        file_status(
+            self.dash, answer({"CLAUDE_SUBSCRIPTION": self.lane(out=True, notes=["claude is logged out: run `claude auth login`"])})
+        )
         d = self.dash.lanes.delegate_status()
         self.assertFalse(d["ok"])
         self.assertEqual(d["detail"]["CLAUDE_SUBSCRIPTION"]["text"], "Claude logged out: run claude auth login")

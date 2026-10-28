@@ -7,13 +7,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+import support.paths  # noqa: E402, F401
+
 sys.path.insert(0, str(ROOT / "tests"))
-from taskloop.app.run import engine  # noqa: E402
 from support import engine_case as te  # noqa: E402
-from taskloop.domain.checks import trim  # noqa: E402
-from taskloop.app.checks import evidence  # noqa: E402
 from support.checks import res  # noqa: E402
+
+from taskloop.app.checks import evidence  # noqa: E402
+from taskloop.domain.checks import trim  # noqa: E402
 
 FIX = Path(__file__).parent / "fixtures" / "checklogs"
 
@@ -42,18 +43,18 @@ class TrimFixtures(unittest.TestCase):
                 self.assertLessEqual(len(out.encode()), trim.CAP, name)
                 self.assertIn(LOGPATH, out)  # the full log is one path away
                 for line in must:
-                    self.assertIn(line, out, "%s lost: %s" % (name, line))
+                    self.assertIn(line, out, f"{name} lost: {line}")
 
     def test_too_many_failures_for_the_cap_keep_the_first_ones_and_say_what_was_left_out(self):
-        text = "\n".join("FAILED tests/t.py::test_case_%03d - assert %d == 0" % (i, i) for i in range(300))
+        text = "\n".join(f"FAILED tests/t.py::test_case_{int(i):03d} - assert {i} == 0" for i in range(300))
         out = trim.trim_log(text, log=LOGPATH)
         self.assertLessEqual(len(out.encode()), trim.CAP)
         self.assertIn("more failing lines left out", out)
         self.assertIn("test_case_000", out)  # the first failures come first
 
     def test_the_tail_is_kept_and_noise_in_the_middle_is_not(self):
-        text = "\n".join(["boring line %d" % i for i in range(500)] + ["FAILED test_x - assert 1 == 2"] +
-                         ["tail line %d" % i for i in range(60)])
+        text = "\n".join([f"boring line {i}" for i in range(500)] + ["FAILED test_x - assert 1 == 2"] +
+                         [f"tail line {i}" for i in range(60)])
         out = trim.trim_log(text, log=LOGPATH)
         self.assertIn("tail line 59", out)
         self.assertIn("FAILED test_x", out)
@@ -61,14 +62,14 @@ class TrimFixtures(unittest.TestCase):
         self.assertLessEqual(len(out.encode()), trim.CAP)
 
     def test_a_giant_line_and_a_small_cap_still_fit(self):
-        text = "FAIL: test_a\n" + "x" * 100000 + "\nAssertionError: boom\n" + "\n".join("l%d" % i for i in range(300))
+        text = "FAIL: test_a\n" + "x" * 100000 + "\nAssertionError: boom\n" + "\n".join(f"l{i}" for i in range(300))
         out = trim.trim_log(text, log=LOGPATH, cap=1024)
         self.assertLessEqual(len(out.encode()), 1024)
         self.assertIn("FAIL: test_a", out)
         self.assertIn("AssertionError: boom", out)
 
     def test_zero_errors_is_no_failure_line(self):
-        text = "\n".join(["    0 Error(s)", "Failed: 0"] * 5 + ["line %d" % i for i in range(100)] + ["done"])
+        text = "\n".join(["    0 Error(s)", "Failed: 0"] * 5 + [f"line {i}" for i in range(100)] + ["done"])
         out = trim.trim_log(text, cap=600)
         self.assertNotIn("0 Error(s)", out)
 
@@ -127,11 +128,11 @@ class RedCheckPrompt(te.EngineTest):
             "print('AssertionError: 10.04 != 10.05')\n"
             "for i in range(80): print('teardown %d' % i)\n"
             "sys.exit(0 if open('f.txt').read().strip() == 'd3' else 1)\n")
-        check = te.PY + ' "%s"' % script
+        check = te.PY + f' "{script}"'
         plan = dict(te.PLAN, stages=[dict(te.PLAN["stages"][0], checks=[check])])
         rc, s = self.run_engine({"plan": [plan], "write": [te.WRITE, te.WRITE], "review": [te.CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
-        writes = [p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker"]
+        writes = [p for (c, p) in zip(s.calls, s.prompts, strict=False) if c[0] == "worker"]
         self.assertEqual(len(writes), 2)
         second = writes[1]
         self.assertIn("These checks fail", second)

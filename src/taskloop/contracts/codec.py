@@ -21,7 +21,7 @@ class StaleRecord(CodecError):
     """The data carries another `v` than the class: the record is treated as absent, never migrated."""
 
     def __init__(self, name: str, found: object, want: int) -> None:
-        super().__init__("%s: v=%r, this code reads v=%d" % (name, found, want))
+        super().__init__(f"{name}: v={found!r}, this code reads v={int(want)}")
         self.found = found
         self.want = want
 
@@ -75,10 +75,9 @@ def _enc(v: Any) -> Any:
         return v.value
     if hasattr(v, "to_wire"):
         return v.to_wire()
-    if isinstance(v, (list, tuple)):
-        return [_enc(x) for x in v]
-    if isinstance(v, (set, frozenset)):
-        return sorted(_enc(x) for x in v)
+    if isinstance(v, (list, tuple, set, frozenset)):
+        items = [_enc(x) for x in v]
+        return sorted(items) if isinstance(v, (set, frozenset)) else items
     if isinstance(v, dict):
         return {str(k): _enc(x) for k, x in v.items()}
     return v
@@ -87,7 +86,7 @@ def _enc(v: Any) -> Any:
 def from_json[T](cls: type[T], data: Any) -> T:
     """The record of class `cls` from a dict; StaleRecord when its `v` is not the class's."""
     if not isinstance(data, dict):
-        raise CodecError("%s: expected an object, got %s" % (cls.__name__, type(data).__name__))
+        raise CodecError(f"{cls.__name__}: expected an object, got {type(data).__name__}")
     want = getattr(cls, "V", None)
     if want is not None and data.get("v") != want:
         raise StaleRecord(cls.__name__, data.get("v"), want)
@@ -105,11 +104,11 @@ def table_of(*classes: type) -> dict[str, type]:
 def from_tagged(table: dict[str, type], data: Any) -> Any:
     """The union member `data["kind"]` names. An unknown kind is a CodecError."""
     if not isinstance(data, dict):
-        raise CodecError("expected an object, got %s" % type(data).__name__)
+        raise CodecError(f"expected an object, got {type(data).__name__}")
     kind = data.get("kind")
     cls = table.get(kind) if isinstance(kind, str) else None
     if cls is None:
-        raise CodecError("unknown kind %r" % (kind,))
+        raise CodecError(f"unknown kind {kind!r}")
     return from_json(cls, data)
 
 
@@ -117,18 +116,18 @@ def _load(cls: type, data: dict[str, Any], path: str, skip: set[str]) -> Any:
     kind = getattr(cls, "KIND", None)
     if kind is not None:
         if data.get("kind") != kind:
-            raise CodecError("%s: kind %r, expected %r" % (path, data.get("kind"), kind))
+            raise CodecError("{}: kind {!r}, expected {!r}".format(path, data.get("kind"), kind))
         skip = skip | {"kind"}
     plans = plan(cls)
     extra = set(data) - skip - {p.wire for p in plans}
     if extra:
-        raise CodecError("%s: unknown key %s" % (path, ", ".join(sorted(extra))))
+        raise CodecError("{}: unknown key {}".format(path, ", ".join(sorted(extra))))
     kwargs = {}
     for p in plans:
         if p.wire in data:
-            kwargs[p.attr] = _dec(p.hint, data[p.wire], "%s.%s" % (path, p.wire))
+            kwargs[p.attr] = _dec(p.hint, data[p.wire], f"{path}.{p.wire}")
         elif p.required:
-            raise CodecError("%s.%s: missing" % (path, p.wire))
+            raise CodecError(f"{path}.{p.wire}: missing")
     return cls(**kwargs)
 
 
@@ -138,7 +137,7 @@ def _dec(h: Any, v: Any, path: str) -> Any:
     if h is None or h is type(None):
         if v is None:
             return None
-        raise CodecError("%s: expected null" % path)
+        raise CodecError(f"{path}: expected null")
     sup = getattr(h, "__supertype__", None)
     if sup is not None:
         return _dec(sup, v, path)
@@ -150,59 +149,67 @@ def _dec(h: Any, v: Any, path: str) -> Any:
 
 def _dec_plain(h: Any, v: Any, path: str) -> Any:
     if not isinstance(h, type):
-        raise CodecError("%s: unsupported type %r" % (path, h))
+        raise CodecError(f"{path}: unsupported type {h!r}")
     if dataclasses.is_dataclass(h):
         if not isinstance(v, dict):
-            raise CodecError("%s: expected an object" % path)
+            raise CodecError(f"{path}: expected an object")
         return _load(h, v, path, set())
     if issubclass(h, enum.Enum):
         try:
             return h(v)
         except ValueError:
-            raise CodecError("%s: %r is not a %s" % (path, v, h.__name__)) from None
+            raise CodecError(f"{path}: {v!r} is not a {h.__name__}") from None
     if hasattr(h, "from_wire"):
         try:
             return h.from_wire(v)
         except (ValueError, TypeError) as e:
-            raise CodecError("%s: %s" % (path, e)) from None
+            raise CodecError(f"{path}: {e}") from None
     if h is float and isinstance(v, (int, float)) and not isinstance(v, bool):
         return float(v)
     if h is int and isinstance(v, bool):
-        raise CodecError("%s: expected int, got bool" % path)
+        raise CodecError(f"{path}: expected int, got bool")
     if h in (str, int, float, bool) and type(v) is h:
         return v
-    raise CodecError("%s: expected %s, got %s" % (path, h.__name__, type(v).__name__))
+    raise CodecError(f"{path}: expected {h.__name__}, got {type(v).__name__}")
+
+
+def _dec_union(args: tuple[Any, ...], v: Any, path: str) -> Any:
+    if v is None and type(None) in args:
+        return None
+    errs = []
+    for a in args:
+        if a is type(None):
+            continue
+        try:
+            return _dec(a, v, path)
+        except CodecError as e:
+            errs.append(str(e))
+    raise CodecError("{}: matches no member of the union ({})".format(path, "; ".join(errs)))
+
+
+def _dec_seq(origin: Any, args: tuple[Any, ...], v: Any, path: str) -> Any:
+    if not isinstance(v, list):
+        raise CodecError(f"{path}: expected an array")
+    if origin is tuple and not (len(args) == 2 and args[1] is Ellipsis):
+        if len(v) != len(args):
+            raise CodecError(f"{path}: expected {len(args)} items")
+        return tuple(_dec(a, x, f"{path}[{i}]") for i, (a, x) in enumerate(zip(args, v, strict=False)))
+    items = [_dec(args[0], x, f"{path}[{i}]") for i, x in enumerate(v)]
+    return items if origin is list else tuple(items) if origin is tuple else origin(items)
 
 
 def _dec_generic(h: Any, origin: Any, v: Any, path: str) -> Any:
     args = get_args(h)
     if origin is Union or origin is types.UnionType:
-        if v is None and type(None) in args:
-            return None
-        errs = []
-        for a in args:
-            if a is type(None):
-                continue
-            try:
-                return _dec(a, v, path)
-            except CodecError as e:
-                errs.append(str(e))
-        raise CodecError("%s: matches no member of the union (%s)" % (path, "; ".join(errs)))
+        return _dec_union(args, v, path)
     if origin is Literal:
         if any(a == v and type(a) is type(v) for a in args):
             return v
-        raise CodecError("%s: %r is not one of %s" % (path, v, list(args)))
+        raise CodecError(f"{path}: {v!r} is not one of {list(args)}")
     if origin in (list, set, frozenset, tuple):
-        if not isinstance(v, list):
-            raise CodecError("%s: expected an array" % path)
-        if origin is tuple and not (len(args) == 2 and args[1] is Ellipsis):
-            if len(v) != len(args):
-                raise CodecError("%s: expected %d items" % (path, len(args)))
-            return tuple(_dec(a, x, "%s[%d]" % (path, i)) for i, (a, x) in enumerate(zip(args, v)))
-        items = [_dec(args[0], x, "%s[%d]" % (path, i)) for i, x in enumerate(v)]
-        return items if origin is list else tuple(items) if origin is tuple else origin(items)
+        return _dec_seq(origin, args, v, path)
     if origin is dict:
         if not isinstance(v, dict):
-            raise CodecError("%s: expected an object" % path)
-        return {k: _dec(args[1], x, "%s.%s" % (path, k)) for k, x in v.items()}
-    raise CodecError("%s: unsupported type %r" % (path, h))
+            raise CodecError(f"{path}: expected an object")
+        return {k: _dec(args[1], x, f"{path}.{k}") for k, x in v.items()}
+    raise CodecError(f"{path}: unsupported type {h!r}")

@@ -18,10 +18,10 @@ class ConfigDir:
         self.root = Path(root) if root is not None else default_root()
 
     def engine_log(self, run: RunId | str) -> Path:
-        return self.root / "engine" / ("%s.jsonl" % run)
+        return self.root / "engine" / (f"{run}.jsonl")
 
     def live_dir(self, run: RunId | str) -> Path:
-        return self.root / "engine" / ("%s.live" % run)
+        return self.root / "engine" / (f"{run}.live")
 
     def events(self) -> Path:
         return self.root / "events.jsonl"
@@ -30,7 +30,7 @@ class ConfigDir:
         return self.root / "traces.jsonl"
 
     def ask(self, bead: BeadId | str) -> Path:
-        return self.root / "asks" / ("%s.json" % bead)
+        return self.root / "asks" / (f"{bead}.json")
 
     def asks_dir(self) -> Path:
         return self.root / "asks"
@@ -47,14 +47,14 @@ class ConfigDir:
         return self.root / "asks" / ("." + sweep)
 
     def checkpoint(self, bead: BeadId | str) -> Path:
-        return self.root / "checkpoints" / ("%s.json" % bead)
+        return self.root / "checkpoints" / (f"{bead}.json")
 
     def run_dir(self, run: RunId | str) -> Path:
         return self.root / "runs" / str(run)
 
     def check_run(self, run: RunId | str, rnd: int | None = None) -> Path:
         """The CheckRun of a round of the run; no round: the latest."""
-        return self.run_dir(run) / ("engine-checks.json" if rnd is None else "engine-checks.r%d.json" % rnd)
+        return self.run_dir(run) / ("engine-checks.json" if rnd is None else f"engine-checks.r{int(rnd)}.json")
 
     def check_logs(self, run: RunId | str) -> Path:
         return self.run_dir(run) / "checks"
@@ -64,50 +64,50 @@ class ConfigDir:
         return self.root / "artifacts" / str(bead)
 
     def check_cache(self, bead: BeadId | str) -> Path:
-        return self.root / "check-cache" / ("%s.json" % bead)
+        return self.root / "check-cache" / (f"{bead}.json")
 
     def check_durations(self, repo_key: str) -> Path:
-        return self.root / "check-durations" / ("%s.json" % repo_key)
+        return self.root / "check-durations" / (f"{repo_key}.json")
 
     def loop_state(self, repo_key: str) -> Path:
-        return self.root / "loop" / ("%s.json" % repo_key)
+        return self.root / "loop" / (f"{repo_key}.json")
 
     def loop_command(self, repo_key: str) -> Path:
-        return self.root / "loop" / ("%s.command.json" % repo_key)
+        return self.root / "loop" / (f"{repo_key}.command.json")
 
     def loop_log(self, repo_key: str) -> Path:
-        return self.root / "loop" / ("%s.jsonl" % repo_key)
+        return self.root / "loop" / (f"{repo_key}.jsonl")
 
     def loop_runs(self, repo_key: str) -> Path:
         """The loop's own folder of the repo: run logs, outcome files, loop-<pid>.log, exits.jsonl, died-<pid>.json."""
         return self.root / "loop" / repo_key
 
     def loop_rest(self, repo_key: str) -> Path:
-        return self.root / "loop" / ("%s-rest.json" % repo_key)
+        return self.root / "loop" / (f"{repo_key}-rest.json")
 
     def ticket(self, repo_key: str, seq: int) -> Path:
-        return self.root / "slots" / repo_key / ("%06d.json" % seq)
+        return self.root / "slots" / repo_key / (f"{int(seq):06d}.json")
 
     def ticket_counter(self, repo_key: str) -> Path:
         return self.root / "slots" / repo_key / "seq"
 
     def slot_setup_mark(self, key: str) -> Path:
-        return self.root / "slots" / ("%s.setup" % key)
+        return self.root / "slots" / (f"{key}.setup")
 
     def lock_record(self, what: str, ident: str) -> Path:
-        return self.root / "locks" / ("%s-%s.lock" % (what, ident))
+        return self.root / "locks" / (f"{what}-{ident}.lock")
 
     def snapshot(self, repo_key: str, name: str) -> Path:
-        return self.root / "snapshots" / ("%s.%s.json" % (repo_key, name))
+        return self.root / "snapshots" / (f"{repo_key}.{name}.json")
 
     def session(self, session_id: str) -> Path:
-        return self.root / "sessions" / ("%s.json" % session_id)
+        return self.root / "sessions" / (f"{session_id}.json")
 
     def repos(self) -> Path:
         return self.root / "repos.json"
 
     def shared(self, repo_key: str) -> Path:
-        return self.root / "shared" / ("%s.json" % repo_key)
+        return self.root / "shared" / (f"{repo_key}.json")
 
     def pin(self) -> Path:
         return self.root / "pinned.json"
@@ -122,7 +122,7 @@ class ConfigDir:
         return self.root / "reflect-view.json"
 
     def handoff(self, repo_key: str) -> Path:
-        return self.root / "handoff" / ("%s.md" % repo_key)
+        return self.root / "handoff" / (f"{repo_key}.md")
 
     def dash_state(self) -> Path:
         return self.root / "dash.json"

@@ -27,7 +27,9 @@ def lapsed(b: dict[str, Any], now_utc: str) -> bool:
 
 
 class RoadmapApi:
-    def __init__(self, env: Env, records: Records, beads: Beads, graph: Graph, tasks: Tasks, asks: Asks, looks: Looks, runlogs: RunLogs) -> None:
+    def __init__(
+        self, env: Env, records: Records, beads: Beads, graph: Graph, tasks: Tasks, asks: Asks, looks: Looks, runlogs: RunLogs
+    ) -> None:
         self.env, self.records, self.beads, self.graph, self.tasks = env, records, beads, graph, tasks
         self.asks, self.looks, self.runlogs = asks, looks, runlogs
 

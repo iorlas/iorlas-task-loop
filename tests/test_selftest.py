@@ -15,11 +15,12 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "skills" / "task-loop"
 sys.path.insert(0, str(SRC))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+import support.paths  # noqa: E402, F401
+
+# isort: split
 import loop_env  # noqa: E402
 import selftest  # noqa: E402
-import tl  # noqa: E402
-from taskloop.app.wire import slots as wslots  # noqa: E402
+
 from taskloop.adapters.fake_beads import FakeBeads  # noqa: E402
 from taskloop.app.loop.loop import Loop, LoopArgs  # noqa: E402
 
@@ -70,10 +71,17 @@ class SelfTest(unittest.TestCase):
 
     def the_loop(self):
         env = loop_env.build(str(self.home), store=FakeBeads(), here=self.here)
-        return Loop(env, loop_env.files_of(str(self.home)), loop_env.installs(env.cfgdir, here=self.here), LoopArgs(argv=["loop", "--repo", str(self.home)]))
+        return Loop(
+            env,
+            loop_env.files_of(str(self.home)),
+            loop_env.installs(env.cfgdir, here=self.here),
+            LoopArgs(argv=["loop", "--repo", str(self.home)]),
+        )
 
     def test_the_scenario_through_engine_run_passes(self):
-        r = subprocess.run([sys.executable, str(SRC / "tl.py"), "selftest"], capture_output=True, text=True, timeout=300, cwd=self.home)
+        r = subprocess.run(
+            [sys.executable, str(SRC / "tl.py"), "selftest"], capture_output=True, text=True, timeout=300, cwd=self.home, check=False
+        )
         self.assertEqual(r.returncode, 0, r.stdout[-800:] + r.stderr[-800:])
         self.assertIn("selftest ok", r.stdout)
         print("selftest duration (metric only):", r.stdout.strip().splitlines()[-1])
@@ -91,7 +99,7 @@ class SelfTest(unittest.TestCase):
         t = time.monotonic()
         with mock.patch.object(subprocess, "Popen", Counting):
             why = selftest.selftest()
-        print("selftest in-process: %d processes, %.1f s (metric only)" % (len(spawned), time.monotonic() - t))
+        print(f"selftest in-process: {len(spawned)} processes, {time.monotonic() - t:.1f} s (metric only)")
         self.assertIsNone(why)
         self.assertGreater(len(spawned), 50)  # the counter sees the engine's git work: a zero would mean it counts nothing
         self.assertLess(len(spawned), 250, [x if isinstance(x, str) else " ".join(map(str, x[:3])) for x in spawned[-10:]])
@@ -103,11 +111,27 @@ class SelfTest(unittest.TestCase):
 
     def test_an_install_that_imports_but_cannot_plan_is_refused_and_recorded(self):
         d = self.cache / "0.2.0"
-        self.install("0.2.0", plant=("    def plan(self, again: bool = False) -> dict[str, Any]:\n", "    def plan(self, again: bool = False) -> dict[str, Any]:\n"
-                                                                            "        raise RuntimeError('planted: cannot plan')\n",
-                                                                            "src/taskloop/app/plan/planner.py"))
-        r = subprocess.run([sys.executable, "-I", "-c", "import sys; sys.path.insert(0, sys.argv[1]); sys.path.insert(0, sys.argv[2]); "
-                            "import tl, loop_env; import taskloop.app.run.engine", str(d / "skills" / "task-loop"), str(d / "src")], capture_output=True)
+        self.install(
+            "0.2.0",
+            plant=(
+                "    def plan(self, again: bool = False) -> dict[str, Any]:\n",
+                "    def plan(self, again: bool = False) -> dict[str, Any]:\n        raise RuntimeError('planted: cannot plan')\n",
+                "src/taskloop/app/plan/planner.py",
+            ),
+        )
+        r = subprocess.run(
+            [
+                sys.executable,
+                "-I",
+                "-c",
+                "import sys; sys.path.insert(0, sys.argv[1]); sys.path.insert(0, sys.argv[2]); "
+                "import tl, loop_env; import taskloop.app.run.engine",
+                str(d / "skills" / "task-loop"),
+                str(d / "src"),
+            ],
+            capture_output=True,
+            check=False,
+        )
         self.assertEqual(r.returncode, 0)  # it imports fine
         lp, out = self.the_loop(), []
         with mock.patch.object(Loop, "say", side_effect=out.append):

@@ -5,8 +5,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from taskloop.app.loop.loop import Loop  # noqa: E402
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
+
+from taskloop.app.loop.loop import Loop
 
 REPO = "/w/repo"
 SESSION = "tl-eaa4b1f2"

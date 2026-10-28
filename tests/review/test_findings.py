@@ -5,11 +5,13 @@ import json
 import sys
 import unittest
 from pathlib import Path
+from typing import Any, ClassVar
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401
-from taskloop.domain.review import findings as fnd  # noqa: E402
-from taskloop.domain.review.ledger import Ledger  # noqa: E402
+import support.paths  # noqa: F401
+
+from taskloop.domain.review import findings as fnd
+from taskloop.domain.review.ledger import Ledger
 
 SENDBACKS = json.loads((Path(__file__).resolve().parents[1] / "fixtures" / "sendbacks.json").read_text(encoding="utf-8"))
 
@@ -31,7 +33,7 @@ class Blocking(unittest.TestCase):
 
 
 class SpecAxis(unittest.TestCase):
-    ITEMS = [("A1", "f.txt exists"), ("A2", "the log says done")]
+    ITEMS: ClassVar[Any] = [("A1", "f.txt exists"), ("A2", "the log says done")]
 
     def test_every_item_mapped_gives_no_finding(self):
         crit = [{"item": "A1", "status": "met", "evidence": "check"}, {"item": "A2", "status": "engine", "evidence": ""}]
@@ -77,7 +79,15 @@ class Routing(unittest.TestCase):
         self.assertEqual(([f["fix"] for f in r.findings], len(r.files)), (["handle None"], 1))
 
     def test_an_item_the_plan_defers_is_dropped(self):
-        plan = {"cases": [{"criterion": "tests for the parser edge cases", "proved_by": "leftover", "via": "follow-up bead for parser edge case tests"}]}
+        plan = {
+            "cases": [
+                {
+                    "criterion": "tests for the parser edge cases",
+                    "proved_by": "leftover",
+                    "via": "follow-up bead for parser edge case tests",
+                }
+            ]
+        }
         self.assertEqual(self.route(["Add tests for the parser edge cases"], plan=plan).unmet, [])
 
 

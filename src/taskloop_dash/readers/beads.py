@@ -47,7 +47,7 @@ class Beads:
         if hit and clock() - hit[0] < SETTLE:
             return hit[1][1]
         beads: list[Bead] = hit[1][1] if hit else []
-        disk = env.config.root / "cache" / ("beads-%s.json" % hashlib.sha1(repo.encode("utf-8")).hexdigest()[:12])
+        disk = env.config.root / "cache" / ("beads-{}.json".format(hashlib.sha1(repo.encode("utf-8")).hexdigest()[:12]))
         if not hit:  # a fresh process (tl ask list): what another process listed lately is good enough
             try:
                 c = json.loads(disk.read_text(encoding="utf-8"))
@@ -72,7 +72,7 @@ class Beads:
     def _share(self, disk: Path, m: float, beads: list[Bead]) -> None:
         try:
             disk.parent.mkdir(parents=True, exist_ok=True)
-            tmp = disk.with_name("%s.%d.%d.tmp" % (disk.name, os.getpid(), threading.get_ident()))
+            tmp = disk.with_name(f"{disk.name}.{os.getpid()}.{threading.get_ident()}.tmp")
             tmp.write_text(json.dumps({"t": self.env.clock(), "m": m, "beads": beads}), encoding="utf-8")
             os.replace(str(tmp), str(disk))
         except OSError:

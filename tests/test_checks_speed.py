@@ -6,25 +6,28 @@ import subprocess
 import sys
 import time
 import unittest
-from unittest import mock
-from typing import Any
 from dataclasses import replace
 from pathlib import Path
+from typing import Any, ClassVar, cast
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from support import engine_case as te  # noqa: E402
-from support.engine_case import PY, engine, pyc  # noqa: E402,F401
-from taskloop.domain.checks import lint, inputs, durations  # noqa: E402
-from taskloop.domain.checks.order import CheckOrder  # noqa: E402
-from taskloop.contracts.argv import text_of  # noqa: E402
-from taskloop.domain.checks.names import norm  # noqa: E402
-from taskloop.adapters import check_files  # noqa: E402
-from taskloop.adapters import gitrepo  # noqa: E402
-from taskloop.app.wire import doctor  # noqa: E402
-from taskloop.app.checks.cache import InputKeys  # noqa: E402
-from taskloop.contracts.checks import Check, Durations  # noqa: E402
-from support.builders import cfg_with  # noqa: E402
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support import engine_case as te
+from support.builders import cfg_with
+from support.engine_case import PY, engine, pyc  # noqa: F401
+
+from taskloop.adapters import (
+    check_files,
+    gitrepo,
+)
+from taskloop.app.checks.cache import InputKeys
+from taskloop.app.wire import doctor
+from taskloop.contracts.argv import text_of
+from taskloop.contracts.checks import Check, Durations
+from taskloop.domain.checks import durations, inputs, lint
+from taskloop.domain.checks.names import norm
+from taskloop.domain.checks.order import CheckOrder
 
 
 def ignored_paths(wt, globs, exclude=()):
@@ -39,14 +42,14 @@ class SpeedTest(te.EngineTest):
 
     def bump(self, name="count"):
         n = Path(self.tmp.name) / name
-        return pyc("open(%r, 'a').write('1')" % str(n)), n
+        return pyc(f"open({str(n)!r}, 'a').write('1')"), n
 
     def notes(self, eng):
-        return [json.loads(l).get("text", "") for l in eng.log_path.read_text().splitlines() if '"kind": "note"' in l]
+        return [json.loads(ln).get("text", "") for ln in eng.log_path.read_text().splitlines() if '"kind": "note"' in ln]
 
 
 class InputCache(SpeedTest):
-    ST = {"checks": [], "files": []}
+    ST: ClassVar[Any] = {"checks": [], "files": []}
 
     @property
     def eng_tree(self):
@@ -130,8 +133,12 @@ class InputCache(SpeedTest):
             t_ = {p[:-3] for p in tracked if inputs.inputs_hash({p: tracked[p]}, [g.replace("X", "cs")])}
             i_ = {p[:-4] for p in ignored_paths(str(self.wt), [g.replace("X", "gen")])}
             self.assertEqual(t_, i_, g)
-        self.assertEqual({p[:-4] for p in ignored_paths(str(self.wt), ["client/*/*.gen"])}, {"client/App/a", "client/Core/c", "client/Other/d"})
-        self.assertEqual({p[:-4] for p in ignored_paths(str(self.wt), ["client/{App,Core}/**"])}, {"client/App/a", "client/App/sub/b", "client/Core/c"})
+        self.assertEqual(
+            {p[:-4] for p in ignored_paths(str(self.wt), ["client/*/*.gen"])}, {"client/App/a", "client/Core/c", "client/Other/d"}
+        )
+        self.assertEqual(
+            {p[:-4] for p in ignored_paths(str(self.wt), ["client/{App,Core}/**"])}, {"client/App/a", "client/App/sub/b", "client/Core/c"}
+        )
 
     def test_the_ignored_walk_is_cut_to_the_globs_folders_and_the_excluded_ones(self):
         seen = []
@@ -214,7 +221,8 @@ class InputCache(SpeedTest):
 class CheapFirst(SpeedTest):
     def slow_then_fast(self):
         mark = Path(self.tmp.name) / "order"
-        step = lambda name, tail="": pyc("open(%r, 'a').write('%s '); %s" % (str(mark), name, tail))  # noqa: E731
+        def step(name, tail=""):
+            return pyc(f"open({str(mark)!r}, 'a').write('{name} '); {tail}")
         return mark, step("slow"), step("quick")
 
     def seed(self, eng, cmd, secs):
@@ -223,7 +231,7 @@ class CheapFirst(SpeedTest):
 
     def test_the_cheaper_check_runs_first_and_a_red_stops_the_round(self):
         mark, slow, _ = self.slow_then_fast()
-        quick_red = pyc("import sys; open(%r, 'a').write('quick '); sys.exit(1)" % str(mark))
+        quick_red = pyc(f"import sys; open({str(mark)!r}, 'a').write('quick '); sys.exit(1)")
         eng = self.checks_engine(checks=[{"id": "slow", "cmd": slow, "group": "tests"},
                                          {"id": "quick", "cmd": quick_red, "group": "tests"}])
         self.seed(eng, slow, 400)
@@ -234,8 +242,8 @@ class CheapFirst(SpeedTest):
         self.assertEqual(mark.read_text(), "quick ")
 
     def test_cheap_checks_all_run_before_the_stop_and_only_green_runs_are_recorded(self):
-        mark, slow, quick = self.slow_then_fast()
-        red = FALSE_P = te.FALSE
+        _mark, slow, quick = self.slow_then_fast()
+        red = te.FALSE
         eng = self.checks_engine(checks=[{"id": "a", "cmd": red, "group": "tests"}, {"id": "b", "cmd": quick, "group": "tests"},
                                          {"id": "c", "cmd": slow, "group": "tests"}])
         self.seed(eng, slow, 400)
@@ -246,7 +254,7 @@ class CheapFirst(SpeedTest):
         self.assertIn(norm(quick), hist)
 
     def test_unknown_commands_count_as_cheap_and_durations_are_recorded(self):
-        mark, slow, quick = self.slow_then_fast()
+        _mark, slow, quick = self.slow_then_fast()
         eng = self.checks_engine(checks=[{"id": "known", "cmd": slow, "group": "tests"},
                                          {"id": "new", "cmd": quick, "group": "tests"}])
         self.seed(eng, slow, 90)
@@ -273,20 +281,24 @@ class CheapFirst(SpeedTest):
 class Duplicates(SpeedTest):
     def sh_counter(self, code=0):
         n = Path(self.tmp.name) / "unity-runs"
-        return pyc("import sys; open(%r, 'a').write('1'); print('Passed: 12'); sys.exit(%d)" % (str(n), code)), n
+        return pyc(f"import sys; open({str(n)!r}, 'a').write('1'); print('Passed: 12'); sys.exit({int(code)})"), n
 
     def test_a_plan_check_that_is_the_repo_checks_argv_takes_its_result(self):
         cmd, n = self.sh_counter()
         eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests"}])
         res = eng.run_checks({"checks": [cmd], "files": []}, "s")
         self.assertEqual(n.read_text(), "1")
-        self.assertEqual([(c.id == "unity-tests", c.status, bool(c.reused)) for c in res], [(True, "passed", False), (False, "passed", True)])
+        self.assertEqual(
+            [(c.id == "unity-tests", c.status, bool(c.reused)) for c in res], [(True, "passed", False), (False, "passed", True)]
+        )
 
     def test_another_argv_around_the_same_recipe_runs_as_written(self):
         cmd, n = self.sh_counter()
         eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests", "cache": False}])
         res = eng.run_checks({"checks": ["env FOO=1 " + cmd], "files": []}, "s")
-        self.assertEqual((n.read_text(), [c.status for c in res]), ("11", ["passed", "passed"]))  # the repo check, then the wrapper's own run
+        self.assertEqual(
+            (n.read_text(), [c.status for c in res]), ("11", ["passed", "passed"])
+        )  # the repo check, then the wrapper's own run
 
     def test_a_red_recipe_ends_the_round_before_its_copy(self):
         red, n = self.sh_counter(1)
@@ -302,24 +314,24 @@ class Duplicates(SpeedTest):
 
     def gate_run(self, **kw):
         count, seen = Path(self.tmp.name) / "gates", Path(self.tmp.name) / "passed"
-        gate = pyc("import os; open(%r, 'a').write(os.environ.get('TL_CHECKS_GREEN', '-') + '|')" % str(count))
-        land = pyc("import os,subprocess,sys; open(%r, 'w').write(os.environ.get('TL_GATE_PASSED', '')); "
-                   "sys.exit(subprocess.call(['git', 'push', '-q', 'origin', 'HEAD:main']))" % str(seen))
+        gate = pyc(f"import os; open({str(count)!r}, 'a').write(os.environ.get('TL_CHECKS_GREEN', '-') + '|')")
+        land = pyc(f"import os,subprocess,sys; open({str(seen)!r}, 'w').write(os.environ.get('TL_GATE_PASSED', '')); "
+                   "sys.exit(subprocess.call(['git', 'push', '-q', 'origin', 'HEAD:main']))")
         rc, _ = self.run_engine({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]}, gate=gate, land=land, **kw)
         return rc, count, seen
 
     def test_the_push_is_told_the_gated_tree_as_a_plain_git_tree_hash(self):
-        rc, count, seen = self.gate_run()
+        rc, _count, seen = self.gate_run()
         self.assertEqual(rc, 0)
         self.assertEqual(seen.read_text(), gitrepo.git("rev-parse", "HEAD^{tree}", cwd=str(self.wt)))
 
     def test_the_gate_is_told_which_repo_checks_are_green(self):
-        rc, count, seen = self.gate_run(checks=[{"id": "ut", "cmd": pyc("pass"), "group": "tests", "inputs": ["f.txt"]}])
+        rc, count, _seen = self.gate_run(checks=[{"id": "ut", "cmd": pyc("pass"), "group": "tests", "inputs": ["f.txt"]}])
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(count.read_text(), "ut|")
 
     def test_a_gate_green_on_this_tree_is_not_run_again(self):
-        rc, count, seen = self.gate_run()
+        rc, _count, _seen = self.gate_run()
         self.assertEqual(rc, 0)
         eng = self.eng
         eng.lander.gate.remember("abc")
@@ -331,17 +343,29 @@ class Schedule(SpeedTest):
     """tl-7y6.7.11 / .7 / .16 (R09): one launch per command, Unity last, the ban on Unity in acceptance."""
     # yxbb.3-20261025-005743 engine-checks.r1.json, from ~/.config/task-loop/runs (read-only): the repo checks of lifesim's
     # .task-loop.json (wall_min 30 on the two test checks) and the round's items with the seconds they took.
-    REPO = [{"id": "fmt", "cmd": "just fmt-check-changed", "group": "static"}, {"id": "text", "cmd": "just text", "group": "static"},
-            {"id": "unity-analyzers", "cmd": "just unity-analyzers", "group": "static"},
-            {"id": "unity-tests", "cmd": "just unity-tests", "group": "tests", "wall_min": 30},
-            {"id": "unity-play-tests", "cmd": "just unity-play-tests", "group": "tests", "wall_min": 30}]
+    REPO: ClassVar[Any] = [
+        {"id": "fmt", "cmd": "just fmt-check-changed", "group": "static"},
+        {"id": "text", "cmd": "just text", "group": "static"},
+        {"id": "unity-analyzers", "cmd": "just unity-analyzers", "group": "static"},
+        {"id": "unity-tests", "cmd": "just unity-tests", "group": "tests", "wall_min": 30},
+        {"id": "unity-play-tests", "cmd": "just unity-play-tests", "group": "tests", "wall_min": 30},
+    ]
     GREP = shlex.join(["python3", "tools/assert_log.py", "TL_CHECK_RC_UNITY_PLAY_TESTS", "TL_CHECK_LOG_UNITY_PLAY_TESTS",
                        "total=[1-9][0-9]* passed=[1-9][0-9]* failed=0 skipped=0"])
-    R1 = {"just fmt-check-changed": 2, "just text": 0, "just worker-plan": 0, "python3 tools/select_tests.py --phase coordinator": 0,
-          "env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tools.tests.test_select_tests": 0,
-          "dotnet csharpier check ./client/Assets/Tests/PlayMode/ShareableLoopTests.cs": 1, "just text theme-check client-layers": 1,
-          "just unity-analyzers": 104, "just unity-tests": 190, "just unity-play-tests": 571, GREP: 0}
-    ACCEPTANCE_R1 = ["just worker-plan", "python3 tools/select_tests.py --phase coordinator",
+    R1: ClassVar[Any] = {
+        "just fmt-check-changed": 2,
+        "just text": 0,
+        "just worker-plan": 0,
+        "python3 tools/select_tests.py --phase coordinator": 0,
+        "env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tools.tests.test_select_tests": 0,
+        "dotnet csharpier check ./client/Assets/Tests/PlayMode/ShareableLoopTests.cs": 1,
+        "just text theme-check client-layers": 1,
+        "just unity-analyzers": 104,
+        "just unity-tests": 190,
+        "just unity-play-tests": 571,
+        GREP: 0,
+    }
+    ACCEPTANCE_R1: ClassVar[Any] = ["just worker-plan", "python3 tools/select_tests.py --phase coordinator",
                      "env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tools.tests.test_select_tests",
                      "dotnet csharpier check ./client/Assets/Tests/PlayMode/ShareableLoopTests.cs", "just text theme-check client-layers",
                      "just unity-analyzers", "just unity-tests", "just unity-play-tests", GREP,
@@ -360,10 +384,10 @@ class Schedule(SpeedTest):
             launched.append(cmd)
             eng.wall_hit = False
             if save:
-                Path(save).write_text("ran %s\n" % cmd)
+                Path(save).write_text(f"ran {cmd}\n")
             return (1 if cmd in red else 0), "passed"
         real = eng.sh
-        setattr(eng, "sh", fake)  # noqa: B010
+        cast(Any, eng).sh = fake
         res = eng.run_checks({"checks": accept, "files": []}, "s")
         return res, launched, {i: secs.get(c.cmd, 0) if c.log else 0 for i, c in enumerate(res)}
 
@@ -376,18 +400,18 @@ class Schedule(SpeedTest):
 
     def sh_counter(self, code=0):
         n = Path(self.tmp.name) / "unity-runs"
-        return PY + ' -c "import sys; open(%r, \'a\').write(\'1\'); print(\'Passed: 12\'); sys.exit(%d)"' % (str(n), code), n
+        return PY + f' -c "import sys; open({str(n)!r}, \'a\').write(\'1\'); print(\'Passed: 12\'); sys.exit({int(code)})"', n
 
     def test_a_first_run_that_timed_out_under_a_shorter_limit_is_not_reused_by_a_longer_one(self):
         n = Path(self.tmp.name) / "slow-runs"
-        slow = pyc("import time; open(%r, 'a').write('1'); time.sleep(3)" % str(n))
+        slow = pyc(f"import time; open({str(n)!r}, 'a').write('1'); time.sleep(3)")
         eng = self.checks_engine(checks=[{"id": "short", "cmd": slow, "group": "tests", "wall_min": 0.02, "cache": False},
                                          {"id": "long", "cmd": slow, "group": "tests", "wall_min": 1, "cache": False}])
         res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertEqual(([c.exit for c in res], n.read_text()), ([124, 0], "11"))
 
     def test_replay_yxbb3_r1_the_acceptance_copies_of_the_unity_checks_add_nothing(self):
-        res, launched, secs = self.replay(self.REPO, self.ACCEPTANCE_R1, self.R1)
+        res, launched, _secs = self.replay(self.REPO, self.ACCEPTANCE_R1, self.R1)
         for c in ("just unity-analyzers", "just unity-tests", "just unity-play-tests"):
             self.assertEqual(launched.count(c), 1, c)  # r1 launched unity-tests and unity-play-tests twice
         copies = [r for r in res if r.group == "acceptance" and r.cmd.startswith("just unity-")]
@@ -398,7 +422,7 @@ class Schedule(SpeedTest):
 
     def test_acceptance_that_reads_no_check_log_is_judged_before_the_unity_group(self):
         repo = [{"id": "unity-tests", "cmd": "just unity-tests", "group": "tests"}, {"id": "fmt", "cmd": "just fmt", "group": "static"}]
-        res, launched, _ = self.replay(repo, ["just cheap-accept", "test -r TL_CHECK_LOG_UNITY_TESTS"], {})
+        _res, launched, _ = self.replay(repo, ["just cheap-accept", "test -r TL_CHECK_LOG_UNITY_TESTS"], {})
         self.assertEqual(launched, ["just fmt", "just cheap-accept", "just unity-tests", "test -r TL_CHECK_LOG_UNITY_TESTS"])
 
     def test_a_red_acceptance_check_stops_the_round_before_unity_with_the_reason(self):
@@ -436,12 +460,13 @@ class Schedule(SpeedTest):
 
 class WallLimit(SpeedTest):
     def alive(self, mark):
-        return subprocess.run(["pgrep", "-f", "sleep " + mark], capture_output=True, text=True).stdout.strip()
+        return subprocess.run(["pgrep", "-f", "sleep " + mark], capture_output=True, text=True, check=False).stdout.strip()
 
     @te.POSIX_CHECK
     def test_a_timeout_keeps_the_output_and_kills_a_setsid_descendant(self):
-        mark = "72.%d" % os.getpid()
-        code = "import os,subprocess,sys,time\nprint('before', flush=True)\nsubprocess.Popen(['sleep','%s'], start_new_session=True)\ntime.sleep(30)" % mark
+        mark = f"72.{os.getpid()}"
+        code = (f"import os,subprocess,sys,time\nprint('before', flush=True)\nsubprocess.Popen(['sleep','{mark}'], "
+                f"start_new_session=True)\ntime.sleep(30)")
         eng = self.checks_engine(checks=[{"id": "t", "cmd": PY + " -c " + te.shq(code), "group": "tests", "wall_min": 0.05}])
         res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertEqual(res[0].exit, 124)

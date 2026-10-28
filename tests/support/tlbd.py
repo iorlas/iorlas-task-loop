@@ -1,4 +1,5 @@
-"""The one place a test replaces the bd that task-loop code opens: the process boundary of `BdStore` (adapters/bd.py), whoever made the store.
+"""The one place a test replaces the bd that task-loop code opens: the process boundary of `BdStore` (adapters/bd.py), whoever made the
+store.
 
 Give it an argv-level function `fn(*argv, cwd=None)` -> a `done(...)` (a stateful tracker, a racing spy, a failure): the real adapter
 parses its answers, so the tests also cover the parsing. A typed store (`FakeBeadStore`) is not patched in: a test hands it to the
@@ -28,7 +29,8 @@ def argv_store(fn, cwd=None):
 
 @contextmanager
 def bd_boundary(fn=None, result=None):
-    """Every bd call in the process runs `fn` (or answers `result`, a `done(...)`) for the length of a `with`. -> the mock (`.calls`: the argv-level calls)."""
+    """Every bd call in the process runs `fn` (or answers `result`, a `done(...)`) for the length of a `with`. -> the mock (`.calls`:
+    the argv-level calls)."""
     fn = fn or (lambda *a, **k: result or done())
     calls = []
 

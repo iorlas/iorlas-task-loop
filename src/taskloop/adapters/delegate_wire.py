@@ -158,11 +158,11 @@ def _dict(v: Any) -> dict[str, Any] | None:
 
 def result_of(j: Any) -> DelegateResult:
     if not isinstance(j, dict) or j.get("contract") != CONTRACT or "stop" not in j:
-        return synth("contract_violation", "machine", "needs_owner", "an answer that is not delegate contract 3: %.300r" % (j,))
+        return synth("contract_violation", "machine", "needs_owner", f"an answer that is not delegate contract 3: {j!r:.300}")
     try:
         stop = stop_of(j["stop"])
     except ValueError as e:
-        return synth("contract_violation", "machine", "needs_owner", "%s: %.300r" % (e, j["stop"]), str(j.get("ref") or ""))
+        return synth("contract_violation", "machine", "needs_owner", "{}: {!r:.300}".format(e, j["stop"]), str(j.get("ref") or ""))
     warnings = j.get("warnings")
     return DelegateResult(
         stop=stop, data=_dict(j.get("data")), text=str(j.get("text") or ""), ref=_opt(j, "ref"),

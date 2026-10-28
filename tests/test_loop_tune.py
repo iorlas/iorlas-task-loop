@@ -7,13 +7,15 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from test_loop import LoopBase, rec  # noqa: E402
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from test_loop import LoopBase, rec
 
-import loop_env  # noqa: E402
-from support import looptest  # noqa: E402
-from taskloop.app.slots.pool import SlotPool  # noqa: E402
-from taskloop.contracts.config import LoopConfig  # noqa: E402
+# isort: split
+import loop_env
+from support import looptest
+
+from taskloop.app.slots.pool import SlotPool
+from taskloop.contracts.config import LoopConfig
 
 
 class Tune(LoopBase):

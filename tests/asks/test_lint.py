@@ -6,11 +6,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from asks import samples  # noqa: E402
-import support.paths  # noqa: E402,F401
-from support.tiers import domain  # noqa: E402
-from taskloop.contracts.enums import AskClass, AskKind  # noqa: E402
-from taskloop.domain.asks.lint import INFRA, KIND_OF, lint  # noqa: E402
+import support.paths  # noqa: F401
+from support.tiers import domain
+
+from asks import samples
+from taskloop.contracts.enums import AskClass, AskKind
+from taskloop.domain.asks.lint import INFRA, KIND_OF, lint
 
 GOOD = samples.MOCKS["lifesim-22b3"]
 

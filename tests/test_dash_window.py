@@ -5,26 +5,26 @@ import json
 import sys
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+import support.paths  # noqa: E402, F401
 from support.dashes import make_dash  # noqa: E402
 
-T0 = datetime(2026, 10, 24, 0, 0, 0, tzinfo=timezone.utc).timestamp()
+T0 = datetime(2026, 10, 24, 0, 0, 0, tzinfo=UTC).timestamp()
 
 
 def iso(t):
-    return datetime.fromtimestamp(t, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.fromtimestamp(t, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def line(n):
     """One assistant text per second, padded so the file is big: 'msg n' says which."""
     return json.dumps({"type": "assistant", "timestamp": iso(T0 + n),
-                       "message": {"content": [{"type": "text", "text": "msg %d %s" % (n, "x" * 300)}]}})
+                       "message": {"content": [{"type": "text", "text": "msg {:d} {}".format(int(n), "x" * 300)}]}})
 
 
 class Window(unittest.TestCase):

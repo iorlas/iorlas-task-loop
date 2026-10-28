@@ -5,6 +5,7 @@ fingerprint on STORM_BEADS distinct beads inside the window trips it. One `storm
 banner is printed; the beads stay open and no per-bead ask is raised. Python 3.8+, stdlib only.
 """
 
+import contextlib
 import hashlib
 import json
 import os
@@ -42,7 +43,7 @@ def storm_trip(history, bead, kind, fingerprint, now, knobs=oc.KNOBS):
 
 
 def banner(trip):
-    return "STOPPED: storm %s on %s (the beads stay open; look at their logs, then `tl storm clear`)" % (
+    return "STOPPED: storm {} on {} (the beads stay open; look at their logs, then `tl storm clear`)".format(
         trip.fingerprint, ",".join(trip.beads))
 
 
@@ -86,7 +87,7 @@ def write_storm(path, trip, now, text=""):
         return False
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".%d.tmp" % os.getpid())
+    tmp = path.with_name(path.name + f".{os.getpid()}.tmp")
     tmp.write_text(json.dumps({"fingerprint": trip.fingerprint, "beads": list(trip.beads), "t": trip.t, "text": text[:400]}),
                    encoding="utf-8")
     os.replace(tmp, path)
@@ -94,7 +95,5 @@ def write_storm(path, trip, now, text=""):
 
 
 def clear_storm(path):
-    try:
+    with contextlib.suppress(OSError):
         Path(path).unlink()
-    except OSError:
-        pass

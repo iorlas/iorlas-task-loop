@@ -29,7 +29,7 @@ PROBLEMS: Final = {
 
 
 def next_step(a: AskRecord) -> str:
-    return "The bead %s runs again from your answer on the next pass of the loop for %s." % (a.bead, basename(a.repo) or "its repo")
+    return f"The bead {a.bead} runs again from your answer on the next pass of the loop for {basename(a.repo) or 'its repo'}."
 
 
 class Asks:
@@ -56,7 +56,8 @@ class Asks:
         if a is None or a.consumed is not None or a.status.value not in ("open", "parked"):
             return None
         v = self.view(a)
-        return {k: v.get(k) for k in ("id", "kind", "question", "detail", "t", "title", "answer", "repo", "parks_at", "options", "tried")} | {"unblocks": None}
+        keys = ("id", "kind", "question", "detail", "t", "title", "answer", "repo", "parks_at", "options", "tried")
+        return {k: v.get(k) for k in keys} | {"unblocks": None}
 
     def unblocks_by_bead(self, repo: str) -> dict[str, Any] | None:
         """bead id -> how many open beads wait on it (directly or through others), from bd list (cached by beads_of)."""
@@ -75,7 +76,8 @@ class Asks:
                 if s in by_id and s != t and by_id[s].get("status") != "closed":
                     edges.setdefault(s, set()).add(t)
         epics = {i for i, b in by_id.items() if b.get("issue_type") == "epic"}
-        return {"counts": graph.unblock_counts(edges, epics), "known": set(by_id), "open": {i for i, b in by_id.items() if b.get("status") != "closed"}}
+        return {"counts": graph.unblock_counts(edges, epics), "known": set(by_id),
+                "open": {i for i, b in by_id.items() if b.get("status") != "closed"}}
 
     def inbox(self) -> list[Ask]:
         """The asks waiting for the owner or for the next run, most unblocking first. An ask whose bead is gone or closed is never shown."""

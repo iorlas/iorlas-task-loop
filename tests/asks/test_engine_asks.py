@@ -3,18 +3,21 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from support.engine_case import BEAD, CAT_ENV, CLEAN, EngineTest, PLAN, WRITE, ask_rec, review, stop, verdict  # noqa: E402
-import json  # noqa: E402
-import subprocess  # noqa: E402
-from pathlib import Path  # noqa: E402
-from unittest import mock  # noqa: E402
-from taskloop.app.land.checkout import Checkout  # noqa: E402
-from taskloop.adapters import links  # noqa: E402
-from taskloop.domain.checks import retry  # noqa: E402
-from support.checks import res  # noqa: E402
-from taskloop.adapters import gitrepo  # noqa: E402
-from taskloop.adapters import ident  # noqa: E402
+import json
+import subprocess
+from pathlib import Path
+from unittest import mock
+
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support.engine_case import BEAD, CAT_ENV, CLEAN, PLAN, WRITE, EngineTest, ask_rec, review, stop, verdict
+
+from taskloop.adapters import (
+    gitrepo,
+    ident,
+    links,
+)
+from taskloop.app.land.checkout import Checkout
+from taskloop.domain.checks import retry
 
 
 class EngineAsksTest(EngineTest):
@@ -45,14 +48,14 @@ class EngineAsksTest(EngineTest):
         rc, s = self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Undo or change R10?",
                                                                 decided=self.R10), WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
-        writes = [p for (c, p) in zip(s.calls, s.prompts) if c[0] == "worker"]
+        writes = [p for (c, p) in zip(s.calls, s.prompts, strict=False) if c[0] == "worker"]
         self.assertEqual(len(writes), 2)
         self.assertIn(self.R10, writes[1])
         self.assertIn("decided", writes[0])
 
     def test_a_writer_that_keeps_asking_what_a_requirement_decides_uses_up_its_rounds(self):
         ask = dict(WRITE, question="Undo or change R10?", decided=self.R10)
-        rc, s = self.run_engine({"plan": [PLAN, PLAN], "write": [ask] * 6}, max_rounds=2, max_replans=1)
+        rc, _s = self.run_engine({"plan": [PLAN, PLAN], "write": [ask] * 6}, max_rounds=2, max_replans=1)
         self.assertEqual(rc, 2)
         self.assertNotIn("owner decision needed", self.blocked[0])
 
@@ -150,12 +153,14 @@ class EngineAsksTest(EngineTest):
         self.assertIn(self.MARK, first)
         self.assertNotIn(self.MARK, again)
         self.assertIn("These checks fail", again)
-        self.assertIn("The brief is unchanged; it is in %s; re-read it if unsure" % (Path(self.wt) / ".task" / "t-1" / "brief.md"), again)
+        self.assertIn(
+            "The brief is unchanged; it is in {}; re-read it if unsure".format(Path(self.wt) / ".task" / "t-1" / "brief.md"), again
+        )
         self.assertIn(self.MARK, (Path(self.wt) / ".task" / "t-1" / "brief.md").read_text())
         self.assertLess(len(again), len(first) - 800)
 
     def test_a_fresh_round_holds_the_whole_brief(self):
-        rc, s = self.two_writes(ctx_k=40)
+        _rc, s = self.two_writes(ctx_k=40)
         self.assertEqual(s.calls[1][1], None)
         self.assertIn(self.MARK, s.prompts[1])
         self.assertIn("<plan>", s.prompts[1])
@@ -173,7 +178,7 @@ class EngineAsksTest(EngineTest):
         self.assertEqual(b["prompt_chars"], len(again))
 
     def test_a_session_under_the_threshold_is_resumed_and_the_trace_has_its_size(self):
-        rc, s = self.two_writes(ctx_k=149)
+        _rc, s = self.two_writes(ctx_k=149)
         self.assertEqual(s.calls[2][1], "ref-write")
         a, b = self.eng.write_rounds
         self.assertEqual((b["resumed"], b["context_k"], b["fresh"]), ("yes", 149, ""))
@@ -193,7 +198,9 @@ class EngineAsksTest(EngineTest):
 
     def test_a_decision_ask_takes_the_bead_out_of_the_pick_queue(self):
         with self.store.stub(show=dict(BEAD, labels=["auto", "lane:sim"])):
-            rc, _ = self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Build dreams now or park?")]}, pick_label="auto")
+            rc, _ = self.run_engine(
+                {"plan": [dict(PLAN, irreversible="push_shared", question="Build dreams now or park?")]}, pick_label="auto"
+            )
         self.assertEqual(rc, 2)
         self.assertIn(("label", "remove", "t-1", "auto"), self.bd_calls)
         self.assertIn(("label", "add", "t-1", "needs-info"), self.bd_calls)
@@ -204,7 +211,7 @@ class EngineAsksTest(EngineTest):
         with self.store.stub(show=dict(BEAD, labels=["auto"])):
             self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Build dreams now or park?")]}, pick_label="auto")
         with self.store.stub(show=dict(BEAD, labels=["needs-info"])):
-            rc, s = self.run_engine({}, pick_label="auto")
+            _rc, s = self.run_engine({}, pick_label="auto")
         self.assertEqual(s.calls, [])
         self.assertEqual(self.ask()["status"], "open")
 
@@ -239,7 +246,7 @@ class EngineAsksTest(EngineTest):
         self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
         a = self.ask()
         a["status"] = "parked"
-        (ident.config_dir() / "asks" / ("%s.json" % a["bead"])).write_text(json.dumps(a))
+        (ident.config_dir() / "asks" / ("{}.json".format(a["bead"]))).write_text(json.dumps(a))
         rc, s = self.run_engine({})
         self.assertEqual((rc, s.calls), (2, []))
         self.assertEqual(self.ask()["status"], "parked")
@@ -277,7 +284,8 @@ class EngineAsksTest(EngineTest):
         self.assertFalse(self.closed)
 
     def test_a_task_with_an_unopened_link_is_sent_back_then_asks_when_the_writer_cannot_fix_it(self):
-        fake = lambda url: (False, "HTTP 403")
+        def fake(url):
+            return (False, "HTTP 403")
         with mock.patch.object(links, "check", fake), mock.patch.object(Checkout, "task_diff", return_value=self.RESEARCH_DIFF):
             rc, s = self.run_engine({"plan": [PLAN] * 3, "write": [WRITE] * 8, "review": [CLEAN] * 8},
                                     max_rounds=2, max_replans=0)
@@ -330,7 +338,7 @@ class EngineAsksTest(EngineTest):
     def test_the_third_amend_is_an_owner_ask_and_an_answer_allows_one_more(self):
         self.stopped_run()                                              # plan 1
         for k in (2, 3):                                                # amend 1, amend 2 (across runs)
-            self.stopped_run(bead=dict(BEAD, description="v%d" % k))
+            self.stopped_run(bead=dict(BEAD, description=f"v{k}"))
         self.assertEqual(self.checkpoint()["planned"], 3)
         with self.store.stub(show=dict(BEAD, description="v4")):
             rc, s = self.run_engine({})

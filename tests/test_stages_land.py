@@ -1,35 +1,39 @@
 """Stage tests, part 3: the stale tree, slot hygiene, dead lanes, contracts and follow-ups. Split from test_stages."""
-import subprocess
 import json
-import shutil
+import os
+import subprocess
 import sys
 import time
 import unittest
 from pathlib import Path
+from typing import Any, ClassVar
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "task-loop"))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from taskloop.domain.land.matchers import _TRANSIENT as TRANSIENT_PUSH  # noqa: E402
-from support import fake_route  # noqa: E402
-from support.checkpoints import put_ck, read_ck  # noqa: E402
-from support import tlbd  # noqa: E402
-from support.fakes import FakeBeadStore, as_bead  # noqa: E402
-from taskloop.adapters import bd, bdcreate  # noqa: E402
-from taskloop.app.wire import slots as wslots  # noqa: E402
-from support.builders import make_engine  # noqa: E402
-from taskloop.domain.checks import matchers  # noqa: E402
-from taskloop.domain.checks.cmd import matchers as sh_matchers  # noqa: E402
-from support import engine_case as te  # noqa: E402
-from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint  # noqa: E402,F401
-from taskloop.app.run import entry  # noqa: E402
-from taskloop.app.run import running as wrunning  # noqa: E402
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support import engine_case as te
+from support import (
+    fake_route,
+    tlbd,
+)
+from support.checkpoints import put_ck, read_ck
+from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint  # noqa: F401
+from support.fakes import as_bead
+from test_stages import StagesTest
 
-
-from test_stages import StagesTest  # noqa: E402
-from taskloop.adapters import ident  # noqa: E402
-from taskloop.app.wire import asks as wasks  # noqa: E402
+from taskloop.adapters import (
+    bd,
+    bdcreate,
+    ident,
+)
+from taskloop.app.run import entry
+from taskloop.app.run import running as wrunning
+from taskloop.app.wire import asks as wasks
+from taskloop.app.wire import slots as wslots
+from taskloop.domain.checks import matchers
+from taskloop.domain.checks.cmd import matchers as sh_matchers
+from taskloop.domain.land.matchers import _TRANSIENT as TRANSIENT_PUSH
 
 
 class StaleTree(StagesTest):
@@ -84,7 +88,7 @@ class StaleTree(StagesTest):
         self.stopped_run()
         te.sh("git", "checkout", "-q", "task/t-1", cwd=self.wt)
         self.junk_and_moving_main()
-        rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
+        rc, _s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertIn("rebased the task branch onto the latest origin/main", self.eng.log_path.read_text())
         self.assertTrue(Path(self.wt, "justfile").exists() or "justfile" in self.eng.git("ls-tree", "-r", "--name-only", "HEAD"))
@@ -98,7 +102,7 @@ class StaleTree(StagesTest):
         te.sh("git", "checkout", "-q", "-", cwd=self.wt)
         self.junk_and_moving_main()
         te.sh("git", "checkout", "-q", "task/t-1", cwd=self.wt)
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertIn("rebased the task branch onto the latest origin/main", self.eng.log_path.read_text())
 
@@ -110,7 +114,7 @@ class StaleTree(StagesTest):
         self.assertEqual(e.rebase.onto_base(), "")
 
     def test_the_writer_is_told_the_check_variables_exist_only_inside_the_engines_checks(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        _rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         writer = s.prompts[1]
         self.assertIn("exist only while the engine runs the checks, never in your session", writer)
         self.assertIn("do not call it a blocker", writer)
@@ -122,16 +126,24 @@ class StaleTree(StagesTest):
         te.sh("git", "commit", "-qm", "wip", cwd=self.wt)
         te.sh("git", "checkout", "-q", "-", cwd=self.wt)
         self.main_moves("a.txt")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertIn("resume_conflict", self.eng.log_path.read_text())
 
     def test_a_configured_check_the_tree_lacks_is_the_engines_error_not_a_writers_amend(self):
-        miss = [{"id": "fmt", "cmd": te.PY + " -c \"import sys; sys.stderr.write('error: Justfile does not contain recipe `fmt-check-changed`.'); sys.exit(1)\"",
-                 "group": "static"}]
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE]}, checks=miss)
+        miss = [
+            {
+                "id": "fmt",
+                "cmd": te.PY
+                + " -c \"import sys; sys.stderr.write('error: Justfile does not contain recipe `fmt-check-changed`.'); sys.exit(1)\"",
+                "group": "static",
+            }
+        ]
+        _rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE]}, checks=miss)
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker"])  # no second write: nothing was sent back to the writer
-        self.assertTrue(self.eng.why.startswith("failed: infrastructure: the configured check `fmt` needs something this tree lacks"), self.eng.why)
+        self.assertTrue(
+            self.eng.why.startswith("failed: infrastructure: the configured check `fmt` needs something this tree lacks"), self.eng.why
+        )
 
     @te.no_repo
     def test_words_in_the_middle_of_a_long_output_are_not_a_stale_tree(self):
@@ -160,13 +172,13 @@ class StaleTree(StagesTest):
         self.assertTrue(matchers.stale_tree("This checkout has no fmt-check-changed; rebase onto main"))
         self.assertFalse(matchers.stale_tree("2 tests failed: FooTests.Bar"))
         plain = [{"id": "unit", "cmd": FALSE, "group": "tests"}]
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE, WRITE]}, checks=plain, max_check_tries=2)
+        _rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE, WRITE]}, checks=plain, max_check_tries=2)
         self.assertNotIn("infrastructure", self.eng.why)
 
     def test_a_plan_check_that_prints_the_same_words_is_the_writers_not_the_engines(self):
         words = te.PY + " -c \"import sys; sys.stderr.write('Justfile does not contain recipe x'); sys.exit(1)\""
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[words])])
-        rc, s = self.run_engine({"plan": [plan], "write": [WRITE, WRITE, WRITE]}, max_check_tries=2)
+        _rc, _s = self.run_engine({"plan": [plan], "write": [WRITE, WRITE, WRITE]}, max_check_tries=2)
         self.assertNotIn("infrastructure", self.eng.why)
 
 
@@ -198,7 +210,7 @@ class SlotHygiene(StagesTest):
         self.assertIn("?? client/", e.git("status", "--porcelain"))  # git alone calls it dirty: the old tree has no such rule
         Path(self.wt, "client/keep.log").write_text("real\n")  # negated by the base: real work
         Path(self.wt, "client/src.cs").write_text("real\n")
-        self.assertEqual(sorted(l[3:] for l in e.checkout.dirty_status().splitlines()), ["client/keep.log", "client/src.cs"])
+        self.assertEqual(sorted(ln[3:] for ln in e.checkout.dirty_status().splitlines()), ["client/keep.log", "client/src.cs"])
 
     def test_the_users_own_global_excludes_still_apply(self):
         self.put_ignore_on_main("client/log.txt\n")
@@ -212,7 +224,7 @@ class SlotHygiene(StagesTest):
         self.assertEqual(e.checkout.dirty_status(), "")
 
     def test_files_the_base_does_not_ignore_keep_a_parked_slot_where_it_is(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which format?")]})
+        rc, _s = self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which format?")]})
         self.assertEqual(rc, 2)
         # the bead's branch is checked out again by the next run; a stray untracked file the commit left out blocks the detach
         e = self.eng
@@ -227,27 +239,27 @@ class SlotHygiene(StagesTest):
         (self.wt / "client").mkdir()
         (self.wt / "client" / "log.txt").write_text("unity\n")
         (self.wt / "client" / "log-previous.txt").write_text("unity\n")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertNotIn("another branch", self.eng.why)
 
     def test_real_work_of_another_branch_still_stops_the_run(self):
         te.sh("git", "checkout", "-qb", "task/old-bead", cwd=self.wt)
         (self.wt / "keep.py").write_text("work\n")
-        rc, s = self.run_engine({"plan": [PLAN]})
+        rc, _s = self.run_engine({"plan": [PLAN]})
         self.assertNotEqual(rc, 0)
         self.assertIn("uncommitted work of another branch", self.eng.why)
 
     def test_a_parked_bead_leaves_the_slot_at_the_detached_base(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which format?")]})
+        rc, _s = self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which format?")]})
         self.assertEqual(rc, 2)
-        head = subprocess.run(["git", "symbolic-ref", "-q", "HEAD"], cwd=self.wt, capture_output=True, text=True)
+        head = subprocess.run(["git", "symbolic-ref", "-q", "HEAD"], cwd=self.wt, capture_output=True, text=True, check=False)
         self.assertNotEqual(head.returncode, 0)  # detached
         self.assertEqual(self.eng.git("rev-parse", "HEAD"), self.eng.git("rev-parse", "origin/main"))
         self.assertTrue(self.eng.git("rev-parse", "--verify", "-q", "refs/heads/task/t-1"))  # the branch keeps the bead's work
 
     def test_a_parked_bead_with_work_commits_it_to_its_branch_first(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which format?")]})
+        rc, _s = self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which format?")]})
         self.assertEqual(rc, 2)
         log = self.eng.git("log", "--format=%s", "task/t-1")
         self.assertIn("wip (t-1)", log)  # f.txt was written by the writer: kept on the bead's branch
@@ -265,7 +277,7 @@ class SlotHygiene(StagesTest):
                     (Path(cwd) / "client" / "log.txt").write_text("unity\n")
                 return super().reply(role, prompt, schema, cwd, *a, **kw)
         with mock.patch.object(fake_route, "Script", Writer):
-            rc, s = self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which format?")]})
+            rc, _s = self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which format?")]})
         self.assertEqual(rc, 2)
         branch_files = self.eng.git("ls-tree", "-r", "--name-only", "task/t-1").splitlines()
         self.assertIn("tests/edit_content.feature", branch_files)  # not lost: it is on the bead's branch
@@ -282,7 +294,7 @@ class DeadLane(StagesTest):
         return [te.stop("vendor_blip", family="xai", lane=lane, say="opencode failed before any work: spending limit")] * n
 
     def test_a_retry_from_a_failing_family_routes_the_next_try_past_it(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": self.blips(4) + [CLEAN]})
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [*self.blips(4), CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         reviews = [c for c in s.calls if c[0] == "reviewer"]
         self.assertEqual(len(reviews), 5)  # three polls of the lane, then the route is asked again
@@ -290,7 +302,7 @@ class DeadLane(StagesTest):
         self.assertNotEqual(reviews[0][2], "xai")
 
     def test_the_writers_own_family_after_a_dead_lane_is_flagged_same_family(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": self.blips(4) + [CLEAN]},
+        rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [*self.blips(4), CLEAN]},
                                 j_extra={"review": [{"family": "openai"}]})  # the route landed on openai, the writer's family
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(self.eng.last_flag, "same_family")
@@ -298,7 +310,7 @@ class DeadLane(StagesTest):
 
     def test_a_same_family_step_with_delegates_warning_is_logged_traced_and_commented_never_paused(self):
         extra = {"review": [{"flag": "same_family", "warning": "only the Codex lane is up: the review is the writer's own model"}]}
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, j_extra=extra)
+        rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, j_extra=extra)
         self.assertEqual(rc, 0, self.blocked)
         note = "the review step ran on the writer's own model family: only the Codex lane is up"
         self.assertIn(note, self.eng.log_path.read_text())
@@ -307,17 +319,17 @@ class DeadLane(StagesTest):
         self.assertIn(note, comments[0])
         last = json.loads((ident.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
         self.assertEqual(last["lane_notes"], [note + last["lane_notes"][0][len(note):]])
-        self.assertIn("only the Codex lane is up", [s_["warning"] for s_ in last["sessions"] if s_["node"] == "review"][0])
+        self.assertIn("only the Codex lane is up", next(s_["warning"] for s_ in last["sessions"] if s_["node"] == "review"))
         self.assertTrue(self.closed)  # it landed
 
     def test_one_family_failing_twice_is_not_switched_back_and_forth(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": self.blips(5, "GROK") + [CLEAN]})
+        _rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [*self.blips(5, "GROK"), CLEAN]})
         reviews = [c for c in s.calls if c[0] == "reviewer"]
         self.assertEqual([c[2] for c in reviews][4:], ["xai", "xai"])  # rebound once, kept
 
     def test_a_busy_lane_is_waited_for_as_before(self):
         busy = te.stop("busy", family="openai", lane="OPENAI_SUBSCRIPTION", say="no free slot")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [busy, CLEAN]})
+        _rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [busy, CLEAN]})
         reviews = [c for c in s.calls if c[0] == "reviewer"]
         self.assertEqual(reviews[1][2], reviews[0][2])
 
@@ -325,10 +337,13 @@ class DeadLane(StagesTest):
 class Contracts(StagesTest):
     """tl-bxk.13.16: infrastructure is retried with a rest, never asked; the version is recorded."""
 
-    FLAKY = ("import os, subprocess, sys\nm = %r\nn = int(open(m).read()) if os.path.exists(m) else 0\n"
-             "open(m, 'w').write(str(n + 1))\n"
-             "if n < %d:\n    sys.stderr.write('error: RPC failed; curl 56 Send failure: Broken pipe\\nfatal: the remote end hung up unexpectedly\\n'); sys.exit(1)\n"
-             "sys.exit(subprocess.call(['git', 'push', 'origin', 'HEAD:main']))\n")
+    FLAKY = (
+        "import os, subprocess, sys\nm = %r\nn = int(open(m).read()) if os.path.exists(m) else 0\n"
+        "open(m, 'w').write(str(n + 1))\n"
+        "if n < %d:\n    sys.stderr.write('error: RPC failed; curl 56 Send failure: Broken pipe\\nfatal: the remote end hung up "
+        "unexpectedly\\n'); sys.exit(1)\n"
+        "sys.exit(subprocess.call(['git', 'push', 'origin', 'HEAD:main']))\n"
+    )
 
     def land_with(self, fails):
         script = Path(self.tmp.name, "flaky_push.py")
@@ -336,7 +351,7 @@ class Contracts(StagesTest):
         return te.PY + " " + str(script).replace("\\", "/")
 
     def test_a_network_failure_on_the_push_is_retried_with_a_rest_and_lands(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, land=self.land_with(2))
+        rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, land=self.land_with(2))
         self.assertEqual(rc, 0, self.blocked)
         text = self.eng.log_path.read_text()
         self.assertEqual(text.count("the push failed with a network error"), 2)
@@ -344,7 +359,7 @@ class Contracts(StagesTest):
         self.assertTrue(self.closed and self.closed[0].startswith("merged"))
 
     def test_a_push_that_keeps_failing_pauses_the_bead_and_asks_nobody(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, land=self.land_with(99))
+        rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, land=self.land_with(99))
         self.assertNotEqual(rc, 0)
         self.assertTrue(self.eng.why.startswith("paused: the land push failed 3 times"), self.eng.why)
         self.assertFalse(self.eng.asked)
@@ -369,8 +384,6 @@ class Contracts(StagesTest):
         self.assertIn("delegate crashed", self.eng.log_path.read_text())
 
     def test_the_wip_commit_skips_the_pre_commit_hook_and_a_failed_one_is_loud(self):
-        import os
-        import subprocess
         self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         eng = self.eng
         hook = Path(eng.git("rev-parse", "--path-format=absolute", "--git-common-dir")) / "hooks" / "pre-commit"
@@ -395,19 +408,28 @@ class Contracts(StagesTest):
         self.assertEqual(rc, 2)
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker"])
         self.assertAlmostEqual(self.eng.retry_after, due, delta=1)
-        self.assertTrue(any(c[:3] == ("comments", "add", "t-1") and c[3].startswith("Engine paused:") and "paused: no lane for write until" in c[3]
-                            for c in self.bd_calls))
+        self.assertTrue(
+            any(
+                c[:3] == ("comments", "add", "t-1") and c[3].startswith("Engine paused:") and "paused: no lane for write until" in c[3]
+                for c in self.bd_calls
+            )
+        )
 
     def test_a_lane_that_is_out_with_no_reset_time_pauses_at_once(self):
         out = te.stop("rate_limited", say="lane_out: ZAI", lane="ZAI")
         rc, s = self.run_engine({"plan": [PLAN], "write": [out], "review": [CLEAN]})
         self.assertEqual(rc, 2)
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker"])
-        self.assertTrue(any(c[:3] == ("comments", "add", "t-1") and c[3].startswith("Engine paused:") and "paused: no lane for write" in c[3] for c in self.bd_calls))
+        self.assertTrue(
+            any(
+                c[:3] == ("comments", "add", "t-1") and c[3].startswith("Engine paused:") and "paused: no lane for write" in c[3]
+                for c in self.bd_calls
+            )
+        )
 
     def test_a_delegate_that_keeps_crashing_pauses_the_bead_and_asks_nobody(self):
         crash = fake_route.NO_ANSWER
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [crash, crash, crash]})
+        rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [crash, crash, crash]})
         self.assertNotEqual(rc, 0)
         self.assertTrue(self.eng.why.startswith("failed: delegate crashed 3 times on the review step"), self.eng.why)
         self.assertFalse(self.eng.asked)  # a machine fault: the bead stays open, labelled engine-fault, nobody is asked
@@ -428,7 +450,7 @@ class Contracts(StagesTest):
         ask = dict(WRITE, question="Which format?")
         self.run_engine({"plan": [PLAN], "write": [ask]})
         self.file_answer("text", "Use the new format, then run again.")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        _rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(s.calls[0][0], "planner")
 
     def test_asks_of_closed_or_missing_beads_are_closed_and_others_left(self):
@@ -438,8 +460,10 @@ class Contracts(StagesTest):
         (other / ".beads").mkdir(parents=True)
         (Path(self.wt) / ".beads").mkdir(exist_ok=True)
         for bead in ("b-open", "b-closed", "b-gone", "b-hidden"):
-            (asks / ("%s.json" % bead)).write_text(json.dumps(te.ask_rec(id=bead + "-1", bead=bead, repo=str(self.wt))))
-        (asks / "b-flaky.json").write_text(json.dumps(te.ask_rec(id="f-1", bead="b-flaky", repo=str(other))))  # its tracker fails: the ask stays
+            (asks / (f"{bead}.json")).write_text(json.dumps(te.ask_rec(id=bead + "-1", bead=bead, repo=str(self.wt))))
+        (asks / "b-flaky.json").write_text(
+            json.dumps(te.ask_rec(id="f-1", bead="b-flaky", repo=str(other)))
+        )  # its tracker fails: the ask stays
         (asks / "b-norepo.json").write_text(json.dumps(te.ask_rec(id="n-1", bead="b-norepo", repo="")))
         (asks / "b-answered.json").write_text(json.dumps(te.ask_rec(id="x", bead="b-answered", status="answered")))
         calls = []
@@ -450,16 +474,34 @@ class Contracts(StagesTest):
                 return mock.Mock(returncode=1, stdout="", stderr="dolt: database not found")
             if a[0] == "show":  # absent from the list: only a bead bd really does not know is gone (a gate or wisp is hidden from lists)
                 return (mock.Mock(returncode=0, stdout=json.dumps([{"id": "b-hidden", "status": "open"}]), stderr="") if a[1] == "b-hidden"
-                        else mock.Mock(returncode=1, stdout="", stderr="Error: no issue found matching %s" % a[1]))
-            return mock.Mock(returncode=0, stderr="", stdout=json.dumps([{"id": "b-open", "status": "open"}, {"id": "b-closed", "status": "closed"}]))
+                        else mock.Mock(returncode=1, stdout="", stderr=f"Error: no issue found matching {a[1]}"))
+            return mock.Mock(
+                returncode=0, stderr="", stdout=json.dumps([{"id": "b-open", "status": "open"}, {"id": "b-closed", "status": "closed"}])
+            )
+
         with tlbd.bd_boundary(fake_bd):
             closed = wasks.sweep("close", every=0)
             self.assertEqual(sorted(closed), ["b-closed", "b-gone"])
             self.assertEqual(wasks.sweep("close"), [])  # throttled
-        self.assertEqual([c[0][0] for c in calls].count("list"), 2)  # one list per repo, not one read per ask (a show only for an absent id)
-        state = {b: json.loads((asks / ("%s.json" % b)).read_text())["status"] for b in ("b-open", "b-closed", "b-gone", "b-hidden", "b-flaky", "b-answered", "b-norepo")}
-        self.assertEqual(state, {"b-hidden": "open", "b-open": "open", "b-closed": "closed", "b-gone": "closed", "b-flaky": "open", "b-answered": "answered",
-                                 "b-norepo": "open"})  # no repo recorded: which tracker to ask is unknown, the ask stays
+        self.assertEqual(
+            [c[0][0] for c in calls].count("list"), 2
+        )  # one list per repo, not one read per ask (a show only for an absent id)
+        state = {
+            b: json.loads((asks / (f"{b}.json")).read_text())["status"]
+            for b in ("b-open", "b-closed", "b-gone", "b-hidden", "b-flaky", "b-answered", "b-norepo")
+        }
+        self.assertEqual(
+            state,
+            {
+                "b-hidden": "open",
+                "b-open": "open",
+                "b-closed": "closed",
+                "b-gone": "closed",
+                "b-flaky": "open",
+                "b-answered": "answered",
+                "b-norepo": "open",
+            },
+        )  # no repo recorded: which tracker to ask is unknown, the ask stays
 
 
 class PlanTimeout(StagesTest):
@@ -495,7 +537,7 @@ class PlanTimeout(StagesTest):
 
     def test_a_plan_inside_the_limit_is_not_sent_back(self):
         ok = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[HAS_F, "echo play --timeout_ms 600000"])])
-        rc, s = self.run_engine({"plan": [ok], "write": [WRITE], "review": [CLEAN]}, check_wall_min=30)
+        _rc, s = self.run_engine({"plan": [ok], "write": [WRITE], "review": [CLEAN]}, check_wall_min=30)
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])
 
 
@@ -503,15 +545,20 @@ class ClaimPerBead(StagesTest):
     """tl-kwo: a claim is live when an engine runs that bead, not because the claiming actor's loop is alive."""
 
     def reclaim_when(self, bead, slots, running, hand_live=False):
-        import loop_env
         with self.store.stub(show=bead), mock.patch.object(wslots, "slot_beads", return_value=[as_bead(x) for x in slots]), \
                 mock.patch.object(wslots, "live_actors", return_value={"tl-2be89f88"} if hand_live or slots else set()), \
                 mock.patch.object(wrunning, "running", return_value=running), self.store.stub(comments=[]), \
                 self.store.stub(bd_fn=lambda *a, **k: mock.Mock(returncode=0)):
             return entry.reclaim("o67g", str(self.wt), store=self.store)
 
-    BEAD = {"id": "o67g", "status": "open", "assignee": "tl-2be89f88", "lease_expires_at": "2999-01-01T00:00:00Z", "dependencies": []}
-    SLOT = {"id": "sl-5", "status": "in_progress", "assignee": "tl-2be89f88", "lease_expires_at": "2999-01-01T00:00:00Z",
+    BEAD: ClassVar[Any] = {
+        "id": "o67g",
+        "status": "open",
+        "assignee": "tl-2be89f88",
+        "lease_expires_at": "2999-01-01T00:00:00Z",
+        "dependencies": [],
+    }
+    SLOT: ClassVar[Any] = {"id": "sl-5", "status": "in_progress", "assignee": "tl-2be89f88", "lease_expires_at": "2999-01-01T00:00:00Z",
             "metadata": {"held_bead": "fld.27.12"}, "title": "slot h s5"}
 
     def test_a_bead_the_loop_left_for_another_is_takeable(self):
@@ -526,7 +573,7 @@ class ClaimPerBead(StagesTest):
 
     def test_the_loop_running_this_very_bead_keeps_its_claim(self):
         slot = dict(self.SLOT, metadata={"held_bead": "o67g"})
-        ok, why = self.reclaim_when(self.BEAD, [slot], {})  # the slot says it, the engine is just starting
+        ok, _why = self.reclaim_when(self.BEAD, [slot], {})  # the slot says it, the engine is just starting
         self.assertFalse(ok)
 
     def test_a_session_working_by_hand_keeps_its_claim(self):
@@ -535,32 +582,41 @@ class ClaimPerBead(StagesTest):
         self.assertIn("a live claim", why)
 
     def test_the_release_is_conditional_on_the_claim_just_read(self):
-        import loop_env
         calls = []
-        with self.store.stub(show=self.BEAD), mock.patch.object(wslots, "slot_beads", return_value=[as_bead(self.SLOT)]), \
-                mock.patch.object(wslots, "live_actors", return_value={"tl-2be89f88"}), mock.patch.object(wrunning, "running", return_value={}), \
-                self.store.stub(comments=[]), \
-                self.store.stub(bd_fn=lambda *a, **k: calls.append(a) or mock.Mock(returncode=0)):
+        with (
+            self.store.stub(show=self.BEAD),
+            mock.patch.object(wslots, "slot_beads", return_value=[as_bead(self.SLOT)]),
+            mock.patch.object(wslots, "live_actors", return_value={"tl-2be89f88"}),
+            mock.patch.object(wrunning, "running", return_value={}),
+            self.store.stub(comments=[]),
+            self.store.stub(bd_fn=lambda *a, **k: calls.append(a) or mock.Mock(returncode=0)),
+        ):
             ok, why = entry.reclaim("o67g", str(self.wt), store=self.store)
         self.assertTrue(ok, why)
         self.assertEqual(calls[-1], ("update", "o67g", "--if-assignee", "tl-2be89f88", "--assignee", ""))
 
     def test_a_claim_that_changed_hands_meanwhile_is_not_taken(self):
-        import loop_env
-        with self.store.stub(show=self.BEAD), mock.patch.object(wslots, "slot_beads", return_value=[as_bead(self.SLOT)]), \
-                mock.patch.object(wslots, "live_actors", return_value={"tl-2be89f88"}), mock.patch.object(wrunning, "running", return_value={}), \
-                self.store.stub(comments=[]), self.store.stub(bd_fn=lambda *a, **k: mock.Mock(returncode=1)):
+        with (
+            self.store.stub(show=self.BEAD),
+            mock.patch.object(wslots, "slot_beads", return_value=[as_bead(self.SLOT)]),
+            mock.patch.object(wslots, "live_actors", return_value={"tl-2be89f88"}),
+            mock.patch.object(wrunning, "running", return_value={}),
+            self.store.stub(comments=[]),
+            self.store.stub(bd_fn=lambda *a, **k: mock.Mock(returncode=1)),
+        ):
             ok, why = entry.reclaim("o67g", str(self.wt), store=self.store)
         self.assertFalse(ok)
         self.assertIn("changed hands", why)
 
     def test_a_loop_that_pauses_a_bead_clears_its_assignee(self):
         late = te.stop("no_lane", at=time.time() + 3600, family="openai", lane="OPENAI", say="no lane")
-        rc, s = self.run_engine({"plan": [late]})
+        _rc, _s = self.run_engine({"plan": [late]})
         self.assertTrue(self.eng.why.startswith("paused:"), self.eng.why)
         updates = [c for c in self.bd_calls if c[:2] == ("update", "t-1") and "--append-notes" not in c]
         self.assertTrue(updates and updates[-1][2:6] == ("--status", "open", "--assignee", ""), updates)
-        self.assertTrue([c for c in self.bd_calls if c[:3] == ("comments", "add", "t-1") and c[3].startswith("Engine paused:")], self.bd_calls)
+        self.assertTrue(
+            [c for c in self.bd_calls if c[:3] == ("comments", "add", "t-1") and c[3].startswith("Engine paused:")], self.bd_calls
+        )
 
 
 class FreshAside(StagesTest):
@@ -569,9 +625,9 @@ class FreshAside(StagesTest):
     def old_branch(self, commits=1):
         te.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
         for k in range(commits):
-            (self.wt / ("old%d.txt" % k)).write_text("earlier work\n")
+            (self.wt / (f"old{k}.txt")).write_text("earlier work\n")
             te.sh("git", "add", "-A", cwd=self.wt)
-            te.sh("git", "commit", "-qm", "wip %d" % k, cwd=self.wt)
+            te.sh("git", "commit", "-qm", f"wip {k}", cwd=self.wt)
         te.sh("git", "checkout", "-q", "-", cwd=self.wt)
 
     def branches(self):
@@ -579,7 +635,7 @@ class FreshAside(StagesTest):
 
     def test_fresh_keeps_the_old_branch_aside_and_starts_on_the_base(self):
         self.old_branch(2)
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, fresh=True)
+        rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, fresh=True)
         self.assertEqual(rc, 0, self.blocked)
         text = self.eng.log_path.read_text()
         self.assertIn("--fresh: the old branch task/t-1 is kept as task/t-1-stale-", text)
@@ -593,20 +649,20 @@ class FreshAside(StagesTest):
 
     def test_fresh_on_a_branch_with_no_work_of_its_own_just_starts_on_the_base(self):
         te.sh("git", "branch", "task/t-1", "HEAD", cwd=self.wt)
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, fresh=True)
+        rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, fresh=True)
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual([b for b in self.branches() if "-stale-" in b], [])
 
     def test_without_fresh_the_old_branch_is_used_as_before(self):
         self.old_branch(1)
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        _rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual([b for b in self.branches() if "-stale-" in b], [])
         self.assertIn("git checkout -q task/t-1", self.eng.log_path.read_text())
 
 
 class FollowUps(StagesTest):
     """tl-7y6.7.9: a follow-up is filed only when bd's create worked; lint sections are added once; a refused one is never 'filed'."""
-    LO = {"title": "Rename x", "why": "found in passing"}
+    LO: ClassVar[Any] = {"title": "Rename x", "why": "found in passing"}
     LINT = "missing required sections for task: ## Acceptance Criteria, ## Touches"
 
     def lint_bd(self, always=False):
@@ -662,14 +718,14 @@ class EngineOnlyFlags(StagesTest):
     def test_only_the_write_step_names_the_recipes_the_writer_must_not_run(self):
         checks = [{"id": "slow", "cmd": "just slow", "group": "tests", "writer": False},
                   {"id": "fmt", "cmd": "just fmt", "group": "static", "writer": True}]
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, checks=checks)
+        _rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, checks=checks)
         flags = {role: [a[i + 1] for i, x in enumerate(a) if x == "--engine-only"] for a in s.argvs for role in [a[3]]}
         self.assertEqual(flags.get("worker"), ["slow"])
         self.assertEqual([r for r, v in flags.items() if v and r != "worker"], [])
 
     def test_an_engine_only_just_recipe_of_a_plan_stage_is_named_too(self):
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[HAS_F, "just full-check"])])
-        rc, s = self.run_engine({"plan": [plan], "write": [WRITE, WRITE, WRITE], "review": [CLEAN]})
+        _rc, s = self.run_engine({"plan": [plan], "write": [WRITE, WRITE, WRITE], "review": [CLEAN]})
         flags = {role: [a[i + 1] for i, x in enumerate(a) if x == "--engine-only"] for a in s.argvs for role in [a[3]]}
         self.assertEqual(flags.get("worker"), ["full-check"])
         self.assertEqual([r for r, v in flags.items() if v and r != "worker"], [])

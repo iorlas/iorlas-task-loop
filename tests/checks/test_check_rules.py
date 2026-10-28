@@ -5,19 +5,20 @@ import sys
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from support import engine_case as te  # noqa: E402
-from support.engine_case import CLEAN, PLAN, PY, WRITE, engine, review  # noqa: E402
-from support.builders import cfg_with  # noqa: E402
-from taskloop.app.checks import evidence  # noqa: E402
-from taskloop.app.checks.attempts import Attempts  # noqa: E402
-from taskloop.contracts.checks import Check, CheckRun  # noqa: E402
-from taskloop.contracts.codec import from_json  # noqa: E402
-from taskloop.domain.checks import lint, retry  # noqa: E402
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support import engine_case as te
+from support.builders import cfg_with
+from support.engine_case import CLEAN, PLAN, PY, WRITE, review
+
+from taskloop.app.checks import evidence
+from taskloop.app.checks.attempts import Attempts
+from taskloop.contracts.checks import Check, CheckRun
+from taskloop.contracts.codec import from_json
+from taskloop.domain.checks import lint, retry
 
 ST = {"checks": [], "files": []}
 
@@ -60,7 +61,7 @@ class OneCheckRun(Base):
 
 
 class ProducerDidNotRun(Base):
-    REPO = [{"id": "unity-tests", "cmd": "just unity-tests", "group": "tests", "when": ["nothing/**"]}]
+    REPO: ClassVar[list[dict[str, Any]]] = [{"id": "unity-tests", "cmd": "just unity-tests", "group": "tests", "when": ["nothing/**"]}]
     READER = 'test -r "$TL_CHECK_LOG_UNITY_TESTS"'
 
     def test_a_consumer_of_a_skipped_producer_is_skipped_never_failed(self):
@@ -92,14 +93,17 @@ class ProducerDidNotRun(Base):
 
     def test_the_plan_lint_rejects_a_read_nothing_produces(self):
         cfg = cfg_with(checks=[{"id": "unity-tests", "cmd": "just unity-tests", "group": "tests", "when": ["client/**"]}])
-        own = lambda files, cmd: dict(PLAN, stages=[dict(PLAN["stages"][0], files=files, checks=[cmd])])
+
+        def own(files, cmd):
+            return dict(PLAN, stages=[dict(PLAN["stages"][0], files=files, checks=[cmd])])
+
         reader = 'grep -q ok "$TL_CHECK_LOG_UNITY_TESTS"'
         self.assertEqual(len(lint.producer_problems(own(["f.txt"], reader), cfg)), 1)
         self.assertEqual(lint.producer_problems(own(["client/a.cs"], reader), cfg), [])
         self.assertEqual(len(lint.producer_problems(own(["f.txt"], 'cat "$TL_CHECK_LOG_ABSENT"'), cfg)), 1)
         ev = ".task/t-1/evidence"
-        self.assertEqual(len(lint.evidence_problems(own(["f.txt"], "grep -q ok %s/out.log" % ev), ev)), 1)
-        self.assertEqual(lint.evidence_problems(own([ev + "/out.log"], "grep -q ok %s/out.log" % ev), ev), [])
+        self.assertEqual(len(lint.evidence_problems(own(["f.txt"], f"grep -q ok {ev}/out.log"), ev)), 1)
+        self.assertEqual(lint.evidence_problems(own([ev + "/out.log"], f"grep -q ok {ev}/out.log"), ev), [])
 
 
 class SameRed(Base):
@@ -117,25 +121,26 @@ class SameRed(Base):
 
     def test_reds_that_differ_do_not_stop_the_run(self):
         n = Path(self.tmp.name) / "k"
-        code = ("import os,sys; k=(int(open(%r).read()) if os.path.exists(%r) else 0)+1; open(%r,'w').write(str(k)); "
-                "print('red number', k); sys.exit(1)" % (str(n), str(n), str(n)))
+        code = (f"import os,sys; k=(int(open({str(n)!r}).read()) if os.path.exists({str(n)!r}) else 0)+1; "
+                f"open({str(n)!r},'w').write(str(k)); print('red number', k); sys.exit(1)")
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[PY + " -c " + te.shq(code)])])
-        rc, s = self.run_engine({"plan": [plan], "write": [WRITE] * 4}, max_check_tries=4, max_rounds=4, max_replans=0)
+        _rc, s = self.run_engine({"plan": [plan], "write": [WRITE] * 4}, max_check_tries=4, max_rounds=4, max_replans=0)
         self.assertGreaterEqual([c[0] for c in s.calls].count("worker"), 4)  # none of them stopped for a repeated red
         self.assertFalse([b for b in self.blocked if "same" in b])
 
 
 class Retries(Base):
     def host(self):
-        calls = []
-        h = SimpleNamespace(killed=False, wall_hit=False, bead="b-1", wt=Path(self.tmp.name), envs=[], warned=[], calls=calls,
-                            warn=lambda t: h.warned.append(t), waits=SimpleNamespace(note_slot_waits=lambda *a: None),
+        calls, warned = [], []
+        h = SimpleNamespace(killed=False, wall_hit=False, bead="b-1", wt=Path(self.tmp.name), envs=[], warned=warned, calls=calls,
+                            warn=warned.append, waits=SimpleNamespace(note_slot_waits=lambda *a: None),
                             sh=lambda cmd, **kw: (calls.append(cmd), h.envs.append(kw.get("env")), (1, "AssertionError: 1 != 2"))[2])
         return h
 
     def test_a_check_gets_the_artifact_directory_and_its_own_id(self):
         h = self.host()
-        Attempts(cast(Any, h), cast(Any, None), {}, lambda s: None).run(Check(id="shot", cmd="just shot", retry=0), Path(self.tmp.name) / "l.log", {"A": "1"})
+        attempts = Attempts(cast(Any, h), cast(Any, None), {}, lambda s: None)
+        attempts.run(Check(id="shot", cmd="just shot", retry=0), Path(self.tmp.name) / "l.log", {"A": "1"})
         art = Path(self.tmp.name) / ".task" / "b-1" / "artifacts"
         self.assertEqual(h.envs[0], {"A": "1", "TL_ARTIFACTS": str(art), "TL_ARTIFACT_STEP": "shot"})
         self.assertTrue(art.is_dir())
@@ -167,7 +172,7 @@ class BaseRed(Base):
         self.assertEqual(n.read_text(), "3")  # the base answer is remembered by its sha: only the tree ran again
 
     def test_a_red_the_task_made_is_the_writers(self):
-        mark = "wip-%d.txt" % id(self)
+        mark = f"wip-{id(self):d}.txt"
         eng = self.checks_engine(checks=[{"id": "clean", "cmd": "test ! -e " + mark, "group": "tests"}], base_red=True)
         (self.wt / mark).write_text("x\n")  # in the tree, not in the base
         run = eng.run_checks(ST, "s")
@@ -199,7 +204,7 @@ class WriterAndProjectLog(Base):
     def test_the_first_20_cs_errors_of_the_project_files_log_reach_the_writer(self):
         (self.wt / "client" / "Logs").mkdir(parents=True)
         (self.wt / "client" / "Logs" / "unity-project-files.log").write_text(
-            "Compiling\n" + "".join("A%d.cs(1,1): error CS%04d: broken %d\n" % (i, 1000 + i, i) for i in range(30)))
+            "Compiling\n" + "".join(f"A{i:d}.cs(1,1): error CS{1000 + i:04d}: broken {i:d}\n" for i in range(30)))
         cmd = PY + ' -c "import sys; print(\'project files could not be regenerated\'); sys.exit(1)"'
         eng = self.checks_engine(checks=[{"id": "unity-analyzers", "cmd": cmd, "group": "static"}])
         res = eng.run_checks(ST, "s").results[0]
@@ -218,14 +223,14 @@ class WriterAndProjectLog(Base):
 
 class ReplanKeepsCounters(Base):
     def test_a_replan_does_not_start_the_review_count_again(self):
-        rc, s = self.run_engine({"plan": [PLAN, PLAN], "write": [WRITE, WRITE], "review": [review(unmet=["x"]), review(unmet=["x"])]},
+        rc, _s = self.run_engine({"plan": [PLAN, PLAN], "write": [WRITE, WRITE], "review": [review(unmet=["x"]), review(unmet=["x"])]},
                                 max_rounds=1, max_replans=1, max_total_reviews=1)
         self.assertEqual(rc, 2)
         self.assertEqual(self.eng.stats["reviews"], 2)
         self.assertIn("2 reviews ran in this run", te.card_of(te.read_ask()))
 
     def test_the_minutes_a_run_spent_before_a_replan_stay_on_its_budget(self):
-        rc, s = self.run_engine({"plan": [PLAN, PLAN], "write": [WRITE, WRITE], "review": [review(unmet=["x"]), CLEAN]},
+        rc, _s = self.run_engine({"plan": [PLAN, PLAN], "write": [WRITE, WRITE], "review": [review(unmet=["x"]), CLEAN]},
                                 max_rounds=1, max_replans=1)
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(self.eng.stats["replans"], 1)

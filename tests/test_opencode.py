@@ -1,6 +1,7 @@
 """tl-bxk.10.32: the Grok lane (delegate family xai, OpenCode): login hint, transcript reader, context size, fresh-writer limit."""
+import contextlib
+import io
 import json
-from typing import cast
 import os
 import sqlite3
 import sys
@@ -9,25 +10,28 @@ import time
 import types
 import unittest
 from pathlib import Path
+from typing import cast
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from taskloop.app.write.handoff import Handoff  # noqa: E402
-from taskloop.stores.runlog import RunLog  # noqa: E402
-from taskloop.contracts.delegate import DelegateResult  # noqa: E402
-from taskloop.adapters import context_size  # noqa: E402
-from taskloop.app.run import engine  # noqa: E402
+import support.paths  # noqa: E402, F401
+from support.builders import cfg_with  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
 from support.lanes import lane_statuses  # noqa: E402
-from taskloop_dash.api import lanes as lanes_mod  # noqa: E402
-from support.builders import cfg_with  # noqa: E402
-from taskloop_dash.views import arrows, names  # noqa: E402
+
+from taskloop.adapters import (  # noqa: E402
+    context_size,
+    opencode,
+)
 from taskloop.app.run.calls import Calls  # noqa: E402
 from taskloop.app.track import verbs  # noqa: E402
-from taskloop.adapters import opencode  # noqa: E402
+from taskloop.app.write.handoff import Handoff  # noqa: E402
+from taskloop.contracts.delegate import DelegateResult  # noqa: E402
+from taskloop.stores.runlog import RunLog  # noqa: E402
+from taskloop_dash.api import lanes as lanes_mod  # noqa: E402
+from taskloop_dash.views import arrows, names  # noqa: E402
 
 SID = "ses_abc123"
 T = 1_790_000_000_000  # OpenCode stores milliseconds
@@ -41,20 +45,41 @@ def make_db(path):
         CREATE TABLE part (id text PRIMARY KEY, message_id text, session_id text, time_created integer, time_updated integer, data text);
     """)
     con.execute("INSERT INTO session VALUES (?,?,?,?,?)", (SID, "/w", "t", T, T + 9000))
-    tok = lambda i, o, r, w: {"role": "assistant", "tokens": {"input": i, "output": o, "reasoning": 0, "cache": {"read": r, "write": w}}}  # noqa: E731
+    def tok(i, o, r, w):
+        return {"role": "assistant", "tokens": {"input": i, "output": o, "reasoning": 0, "cache": {"read": r, "write": w}}}
     msgs = [("m1", T, {"role": "user", "time": {"created": T}}),
             ("m2", T + 1000, tok(5000, 10, 2000, 300)),
             ("m3", T + 5000, tok(9000, 20, 4000, 700)),
             ("m4", T + 9000, tok(0, 0, 0, 0))]
     for i, t, d in msgs:
         con.execute("INSERT INTO message VALUES (?,?,?,?,?)", (i, SID, t, t, json.dumps(d)))
-    parts = [("p1", "m1", T, {"type": "text", "text": "do the thing"}),
-             ("p2", "m2", T + 1100, {"type": "reasoning", "text": "hmm"}),
-             ("p3", "m2", T + 1200, {"type": "tool", "tool": "bash", "state": {
-                 "status": "completed", "input": {"command": "ls"}, "output": "a\nb", "time": {"start": T + 1200, "end": T + 3200}}}),
-             ("p4", "m3", T + 5100, {"type": "tool", "tool": "read", "state": {"status": "error", "input": {"filePath": "/x"}, "error": "nope"}}),
-             ("p5", "m3", T + 5200, {"type": "text", "text": "done"}),
-             ("p6", "m3", T + 5300, {"type": "tool", "tool": "bash", "state": {"status": "running", "input": {"command": "sleep 9"}}})]
+    parts = [
+        ("p1", "m1", T, {"type": "text", "text": "do the thing"}),
+        ("p2", "m2", T + 1100, {"type": "reasoning", "text": "hmm"}),
+        (
+            "p3",
+            "m2",
+            T + 1200,
+            {
+                "type": "tool",
+                "tool": "bash",
+                "state": {
+                    "status": "completed",
+                    "input": {"command": "ls"},
+                    "output": "a\nb",
+                    "time": {"start": T + 1200, "end": T + 3200},
+                },
+            },
+        ),
+        (
+            "p4",
+            "m3",
+            T + 5100,
+            {"type": "tool", "tool": "read", "state": {"status": "error", "input": {"filePath": "/x"}, "error": "nope"}},
+        ),
+        ("p5", "m3", T + 5200, {"type": "text", "text": "done"}),
+        ("p6", "m3", T + 5300, {"type": "tool", "tool": "bash", "state": {"status": "running", "input": {"command": "sleep 9"}}}),
+    ]
     for i, m, t, d in parts:
         con.execute("INSERT INTO part VALUES (?,?,?,?,?,?)", (i, m, SID, t, t, json.dumps(d)))
     con.commit()
@@ -141,13 +166,23 @@ class OpenCode(unittest.TestCase):
 
     # review fixes (7e5b07d)
     def test_api_block_for_xai_names_an_opencode_events_id(self):
-        d = {"session": {"family": "xai", "ref": SID, "transcript": ""}, "block": {"who": {"family": "xai"}, "t0": 100.0, "t1": 200.0}, "checks": []}
-        with mock.patch.object(self.dash.records, "run_path", return_value="/x"), mock.patch.object(self.dash.runlogs, "block_detail", return_value=d):
+        d = {
+            "session": {"family": "xai", "ref": SID, "transcript": ""},
+            "block": {"who": {"family": "xai"}, "t0": 100.0, "t1": 200.0},
+            "checks": [],
+        }
+        with (
+            mock.patch.object(self.dash.records, "run_path", return_value="/x"),
+            mock.patch.object(self.dash.runlogs, "block_detail", return_value=d),
+        ):
             out = self.dash.runs.api_block("r", "n", 0)
-        self.assertEqual(out["events_id"], "opencode:%s@70.0@230.0" % SID)
+        self.assertEqual(out["events_id"], f"opencode:{SID}@70.0@230.0")
         self.assertEqual(out["transcript"], "opencode:" + SID)
         d["session"]["ref"] = "ses_unknown"
-        with mock.patch.object(self.dash.records, "run_path", return_value="/x"), mock.patch.object(self.dash.runlogs, "block_detail", return_value=d):
+        with (
+            mock.patch.object(self.dash.records, "run_path", return_value="/x"),
+            mock.patch.object(self.dash.runlogs, "block_detail", return_value=d),
+        ):
             out = self.dash.runs.api_block("r", "n", 0)  # a busy or unreadable DB must not blank the block: the id stays, events are empty
         self.assertEqual(out["events_id"], "opencode:ses_unknown@70.0@230.0")
         self.assertEqual(self.dash.runs.run_events(out["events_id"]), [])
@@ -166,7 +201,9 @@ class OpenCode(unittest.TestCase):
             t0 = time.time()
             self.assertEqual(self.dash.events.opencode_events(SID), [])
             self.assertIsNone(opencode.opencode_context(SID))
-            self.assertLess(time.time() - t0, 120)  # hang guard only: a read that blocks on the lock never returns; the empty results above are the gate
+            self.assertLess(
+                time.time() - t0, 120
+            )  # hang guard only: a read that blocks on the lock never returns; the empty results above are the gate
         finally:
             con.execute("ROLLBACK")
             con.close()
@@ -174,8 +211,8 @@ class OpenCode(unittest.TestCase):
     def test_a_long_session_shows_its_newest_parts_and_a_window_is_cut_in_sql(self):
         con = sqlite3.connect(self.db)
         for i in range(5100):
-            con.execute("INSERT INTO part VALUES (?,?,?,?,?,?)", ("q%05d" % i, "m3", SID, T + 10000 + i, T + 10000 + i,
-                                                                  json.dumps({"type": "text", "text": "t%d" % i})))
+            con.execute("INSERT INTO part VALUES (?,?,?,?,?,?)", (f"q{int(i):05d}", "m3", SID, T + 10000 + i, T + 10000 + i,
+                                                                  json.dumps({"type": "text", "text": f"t{i}"})))
         con.commit()
         con.close()
         ev = self.dash.events.opencode_events(SID)
@@ -205,16 +242,20 @@ class OpenCode(unittest.TestCase):
         rec = {"v": 1, "bead": "b-1", "run": "r", "outcome": "landed", "sessions": [
             {"node": "write", "family": "xai", "ref": SID, "transcript": ""}]}
         Path(self.cfg, "task-loop", "traces.jsonl").write_text(json.dumps(rec) + "\n")
-        import contextlib
-        import io
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             rc = verbs.trace("b-1", 0, True)
         self.assertEqual(rc, 0)
         self.assertEqual(json.loads(buf.getvalue())[0]["sessions"][0]["transcript"], "")
         sessions = []
-        calls = Calls(cast(RunLog, types.SimpleNamespace(emit=lambda rec: 0)), lambda: None, sessions, {"tokens_in": 0, "tokens_cached": 0, "tokens_out": 0},
-                      opencode.opencode_id, lambda path: None)
+        calls = Calls(
+            cast(RunLog, types.SimpleNamespace(emit=lambda rec: 0)),
+            lambda: None,
+            sessions,
+            {"tokens_in": 0, "tokens_cached": 0, "tokens_out": 0},
+            opencode.opencode_id,
+            lambda path: None,
+        )
         r = DelegateResult(ref=SID, secs=1, cost=0, family="xai")
         calls.end("c1", "write", "writer", 1, r)
         self.assertEqual(sessions[0]["transcript"], "opencode:" + SID)  # no DB look

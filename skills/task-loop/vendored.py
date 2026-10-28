@@ -4,7 +4,8 @@
     from git_porcelain import RealRepo
     from atomic_io import atomic_write_json
 
-The vendored packages (dev/vendor.py) keep their absolute imports, so their top-level names (git_porcelain, atomic_io, jsonl_log, process_lock, stream_proc, child_env) must resolve.
+The vendored packages (dev/vendor.py) keep their absolute imports, so their top-level names (git_porcelain, atomic_io, jsonl_log,
+process_lock, stream_proc, child_env) must resolve.
 Nothing else adds a path for them. Stdlib only.
 """
 import sys

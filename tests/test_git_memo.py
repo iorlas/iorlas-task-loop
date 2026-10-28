@@ -11,8 +11,8 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
-from taskloop.app.run import engine  # noqa: E402
 from taskloop.adapters import gitrepo, slotcheck, treehash  # noqa: E402
+from taskloop.app.run import engine  # noqa: E402
 
 
 def sh(*a, cwd):
@@ -87,7 +87,7 @@ class GitMemoTest(unittest.TestCase):
         bad = slotcheck.tree_problem(r)
         assert bad
         self.assertTrue(bad[0].startswith("core.worktree is set (file:"), bad)
-        self.assertIn(" = %s)" % r.parent, bad[0])
+        self.assertIn(f" = {r.parent})", bad[0])
         sh("git", "config", "--unset", "core.worktree", cwd=r)
         self.assertIsNone(slotcheck.tree_problem(r))
 
@@ -115,8 +115,8 @@ class GitMemoTest(unittest.TestCase):
         (self.repo / "f.txt").write_text("2\n")
         real = subprocess.run
         for failing in ("read-tree", "add", "write-tree"):
-            def run(cmd, *a, **k):
-                if failing in cmd:
+            def run(cmd, *a, _failing=failing, **k):
+                if _failing in cmd:
                     return subprocess.CompletedProcess(cmd, 128, b"", b"fatal: planted")
                 return real(cmd, *a, **k)
             with self.subTest(failing), mock.patch.object(subprocess, "run", run):

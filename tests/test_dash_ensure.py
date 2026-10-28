@@ -1,6 +1,5 @@
 """tl-bxk.12.4: dash ensure replaces stale servers, binds fail loudly, dev checkouts stay on loopback."""
 import gc
-import json
 import os
 import socket
 import subprocess
@@ -13,12 +12,19 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from taskloop_dash import bind  # noqa: E402
+import support.paths  # noqa: E402, F401
+
+# isort: split
 import dash_server  # noqa: E402
 from support.narrow import must  # noqa: E402
 
+from taskloop_dash import bind  # noqa: E402
+
 SERVER = ROOT / "src" / "taskloop_dash" / "__main__.py"
+
+
+def _const(value):
+    return lambda *a: value
 
 
 def free_port():
@@ -31,7 +37,7 @@ def free_port():
 
 def live(script, version="v1", binds=("127.0.0.1",), pid=4242):
     return {"version": version, "pid": pid, "script": str(script), "binds": list(binds),
-            "urls": ["http://%s:7878" % b for b in binds], "started": 1.0}
+            "urls": [f"http://{b}:7878" for b in binds], "started": 1.0}
 
 
 class StaleReason(unittest.TestCase):
@@ -82,12 +88,13 @@ class EnsureFlow(unittest.TestCase):
         self.addCleanup(p.stop)
         for name, val in (("code_version", "v1"), ("expected_binds", ["127.0.0.1", "100.1.2.3"]),
                           ("is_dev_checkout", False)):
-            q = mock.patch.object(dash_server, name, (lambda v=val: (lambda *a: v))() if name != "is_dev_checkout" else (lambda: val))
+            q = mock.patch.object(dash_server, name, (lambda v=val: v) if name == "is_dev_checkout" else _const(val))
             q.start()
             self.addCleanup(q.stop)
 
     def tearDown(self):
-        gc.collect()  # dash_server.run leaves dash.log open; the mocked Popen keeps it alive in a cycle, and Windows will not delete an open file
+        # dash_server.run leaves dash.log open; the mocked Popen keeps it alive in a cycle, and Windows will not delete an open file
+        gc.collect()
         self.tmp.cleanup()
 
     def run_ensure(self, pings):
@@ -161,7 +168,8 @@ class EnsureFlow(unittest.TestCase):
 
 # HTTPServer.server_bind asks socket.getfqdn(host), a reverse DNS lookup; on a CI runner it can stall for tens of seconds.
 # These tests are about which bind fails, not about naming, so the lookup is cut out of them (in the child via -c).
-NO_FQDN = "import runpy, socket, sys; socket.getfqdn = lambda name='': name; sys.argv = sys.argv[1:]; runpy.run_path(sys.argv[0], run_name='__main__')"
+NO_FQDN = ("import runpy, socket, sys; socket.getfqdn = lambda name='': name; sys.argv = sys.argv[1:]; runpy.run_path(sys.argv[0], "
+           "run_name='__main__')")
 
 
 class LoudBind(unittest.TestCase):
@@ -174,7 +182,7 @@ class LoudBind(unittest.TestCase):
         port = free_port()
         with self.assertRaises(bind.BindError) as cm:
             bind.open_servers(["127.0.0.1", "203.0.113.9"], port, mock.Mock())
-        self.assertIn("203.0.113.9:%d" % port, str(cm.exception))
+        self.assertIn(f"203.0.113.9:{port}", str(cm.exception))
 
     def test_open_servers_closes_earlier_sockets_on_failure(self):
         port = free_port()
@@ -186,11 +194,16 @@ class LoudBind(unittest.TestCase):
 
     def test_process_exits_nonzero_and_serves_nothing(self):
         port = free_port()
-        r = subprocess.run([sys.executable, "-c", NO_FQDN, str(SERVER), "--port", str(port), "--bind", "127.0.0.1,203.0.113.9"],
-                           capture_output=True, text=True, timeout=30,
-                           env={**os.environ, "TASK_LOOP_DASH_DEV_PUBLIC": "1", "XDG_CONFIG_HOME": tempfile.mkdtemp(), "APPDATA": tempfile.mkdtemp()})
+        r = subprocess.run(
+            [sys.executable, "-c", NO_FQDN, str(SERVER), "--port", str(port), "--bind", "127.0.0.1,203.0.113.9"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env={**os.environ, "TASK_LOOP_DASH_DEV_PUBLIC": "1", "XDG_CONFIG_HOME": tempfile.mkdtemp(), "APPDATA": tempfile.mkdtemp()},
+            check=False,
+        )
         self.assertNotEqual(r.returncode, 0)
-        self.assertIn("203.0.113.9:%d" % port, r.stderr)
+        self.assertIn(f"203.0.113.9:{port}", r.stderr)
         s = socket.socket()
         self.assertNotEqual(s.connect_ex(("127.0.0.1", port)), 0)
         s.close()
@@ -229,7 +242,6 @@ class DevCheckout(unittest.TestCase):
         self.assertEqual((addrs, port), (["127.0.0.1"], 9999))
 
     def test_the_server_alone_binds_loopback_on_7878_and_the_launcher_adds_tailscale(self):
-        import dash_server
         os.environ.pop("TASK_LOOP_DASH_BIND", None)
         self.assertEqual(bind.plan(None, None, dev=False), (["127.0.0.1"], 7878))  # the server runs no network tool
         with mock.patch.object(dash_server, "tailscale_ip", return_value="100.1.2.3"):

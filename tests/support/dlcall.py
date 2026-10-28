@@ -1,7 +1,8 @@
 """One delegate call for a test: `call(resolved, role, brief, schema, cwd, runner=, **request)` -> `Got`, the answer with the facts
 a test asserts on (the typed result, its wire object, the policy's Stop)."""
-import support.paths  # noqa: F401
 from typing import Any
+
+import support.paths  # noqa: F401
 from taskloop.adapters import delegate as dl
 from taskloop.contracts.delegate import RunRequest
 from taskloop.domain.lanes import policy as lp

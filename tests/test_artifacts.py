@@ -7,10 +7,16 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from support.dashes import make_dash  # noqa: E402
-from support.narrow import must  # noqa: E402
-from taskloop.app.run import artifacts  # noqa: E402
+import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support.dashes import make_dash
+from support.narrow import must
+
+from taskloop.app.run import artifacts
+from taskloop.app.run.steps import Steps
+from taskloop.contracts import log
+from taskloop.stores.memory import fake_stores
+from taskloop.stores.runlog import RunLog
+from taskloop_dash.views import nodes
 
 
 class Ingest(unittest.TestCase):
@@ -48,10 +54,6 @@ class AtStepEnd(unittest.TestCase):
     """The engine ingests as a step ends: one Artifacts record under that step, only for files new since the last step, no model call."""
 
     def test_a_step_that_left_files_logs_one_record_before_its_end_and_a_later_step_logs_only_new_ones(self):
-        from taskloop.contracts import log
-        from taskloop.stores.memory import fake_stores
-        from taskloop.stores.runlog import RunLog
-        from taskloop.app.run.steps import Steps
         with tempfile.TemporaryDirectory() as d:
             src, dest = Path(d, "src"), Path(d, "dest")
             src.mkdir()
@@ -73,8 +75,6 @@ class AtStepEnd(unittest.TestCase):
 
 class OnTheTimeline(unittest.TestCase):
     def test_the_record_is_a_line_of_its_step_in_the_existing_style(self):
-        from taskloop.contracts import log
-        from taskloop_dash.views import nodes
         got = nodes.line_of(log.Artifacts(t=3.0, id="n1", step="write", bead="tl-1", names=["a.png", "b.pdf"]), 7)
         self.assertEqual(got, {"t": 3.0, "kind": "note", "text": "artifacts: a.png, b.pdf", "_i": 7})
 

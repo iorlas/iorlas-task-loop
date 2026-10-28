@@ -1,5 +1,6 @@
 """`tl selftest`: one bead through Engine.run (plan, write, review, land) with a scripted lane in a temp repo and a temp config
 dir, on this install's code. A newer install must pass it before a loop moves to it."""
+import dataclasses
 import json
 import os
 import shlex
@@ -7,24 +8,35 @@ import subprocess
 import sys
 import tempfile
 import time
+import traceback
 from pathlib import Path
 from unittest import mock
 
-import dataclasses
 import seams
-from taskloop.app.run.engine import Engine
-from taskloop.contracts.bead import Bead
-from taskloop.app.wire import slots as wslots
+
 from taskloop.adapters import delegate as dg
 from taskloop.adapters.fake_beads import FakeBeads
 from taskloop.adapters.runner import Seam
+from taskloop.app.run.engine import Engine
+from taskloop.app.wire import slots as wslots
+from taskloop.contracts.bead import Bead
 
 CHECK = [sys.executable, "-c", "import os,sys; sys.exit(0 if os.path.exists('f.txt') else 1)"]  # an argv list, as the plan schema wants
 PLAN = {"summary": "do it", "stages": [{"goal": "add f", "files": ["f.txt"], "checks": [CHECK], "hard": False}],
         "risks": [], "question": "", "options": [], "decided": "", "cases": [], "leftovers": []}
 WRITE = {"summary": "wrote f", "checks_run": [{"cmd": shlex.join(CHECK), "exit": 0}], "question": "", "options": [], "decided": "",
          "bad_checks": [], "new_cases": [], "unchecked": [], "logic_only": ""}
-REVIEW = {"findings": [], "unmet": [], "criteria": [], "question": "", "options": [], "decided": "", "leftovers": [], "unchecked": [], "look": ""}
+REVIEW = {
+    "findings": [],
+    "unmet": [],
+    "criteria": [],
+    "question": "",
+    "options": [],
+    "decided": "",
+    "leftovers": [],
+    "unchecked": [],
+    "look": "",
+}
 
 
 def lane(cmd, **kw):
@@ -61,14 +73,14 @@ def git_repo(home, wt):
     """A bare origin and a clone of it with one commit on main; None, or what git said."""
     steps = [(home, ["init", "-q", "--bare", "-b", "main", str(home / "o.git")]), (home, ["clone", "-q", str(home / "o.git"), str(wt)])]
     for cwd, cmd in steps:
-        r = subprocess.run(["git"] + cmd, cwd=cwd, capture_output=True, text=True, check=False)
+        r = subprocess.run(["git", *cmd], cwd=cwd, capture_output=True, text=True, check=False)
         if r.returncode:
-            return "git %s: %s" % (cmd[0], r.stderr.strip()[-200:])
+            return f"git {cmd[0]}: {r.stderr.strip()[-200:]}"
     (wt / "a.txt").write_text("a\n", encoding="utf-8")
     for cmd in (["add", "-A"], ["commit", "-qm", "init"], ["push", "-q", "origin", "HEAD:main"]):
-        r = subprocess.run(["git"] + cmd, cwd=wt, capture_output=True, text=True, check=False)
+        r = subprocess.run(["git", *cmd], cwd=wt, capture_output=True, text=True, check=False)
         if r.returncode:
-            return "git %s: %s" % (cmd[0], r.stderr.strip()[-200:])
+            return f"git {cmd[0]}: {r.stderr.strip()[-200:]}"
     return None
 
 
@@ -103,7 +115,7 @@ def selftest():
                 return why
             rc, bead = run_engine(home, home / "wt")
     if rc != 0 or bead.status != "closed":
-        return "the engine ended %s with the bead %s instead of closed" % (rc, bead.status)
+        return f"the engine ended {rc} with the bead {bead.status} instead of closed"
     return None
 
 
@@ -112,11 +124,10 @@ def cmd_selftest(a):
     try:
         why = selftest()
     except Exception as e:  # any raise is a failure; the traceback tail says where
-        import traceback
-        why = "%s: %s\n%s" % (type(e).__name__, e, "".join(traceback.format_exc().splitlines(True)[-6:]))
+        why = "{}: {}\n{}".format(type(e).__name__, e, "".join(traceback.format_exc().splitlines(True)[-6:]))
     secs = time.monotonic() - started
     if why:
-        print("selftest FAILED in %.1f s: %s" % (secs, why), file=sys.stderr)
+        print(f"selftest FAILED in {secs:.1f} s: {why}", file=sys.stderr)
         return 1
-    print("selftest ok in %.1f s" % secs)
+    print(f"selftest ok in {secs:.1f} s")
     return 0

@@ -16,8 +16,9 @@ ROOT = Path(__file__).resolve().parents[1]
 HOOK = ROOT / "hooks" / "hook.py"
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+import support.paths  # noqa: E402, F401
 import tl  # noqa: E402
+
 from taskloop.domain.brief import HANDOFF_BYTES, RULES, STATUS_BYTES, STATUS_LINES, AskLine, Brief, LoopLine, handoff_text, status_lines  # noqa: E402
 from taskloop.hook import pretool, session  # noqa: E402
 
@@ -103,7 +104,10 @@ class Sessions(unittest.TestCase):
         wt = self.home / "wt"
         subprocess.run(["git", "-C", str(self.repo), "worktree", "add", "-q", "-b", "b", str(wt)], check=True, capture_output=True)
         session.precompact(self.event(cwd=str(wt)), self.root)
-        self.assertIn("loop NOT RUNNING", json.loads(session.start(self.event(source="compact"), self.root))["hookSpecificOutput"]["additionalContext"])
+        self.assertIn(
+            "loop NOT RUNNING",
+            json.loads(session.start(self.event(source="compact"), self.root))["hookSpecificOutput"]["additionalContext"],
+        )
 
     def test_tl_status_and_handoff_read_the_stores(self):
         out = io.StringIO()
@@ -166,7 +170,7 @@ class Speed(unittest.TestCase):
         for _ in range(3):
             began = time.monotonic()
             r = subprocess.run([sys.executable, str(HOOK), event], input=json.dumps(payload), capture_output=True, text=True, env=self.env,
-                               cwd=self.tmp.name, timeout=30)
+                               cwd=self.tmp.name, timeout=30, check=False)
             runs.append(time.monotonic() - began)
             self.assertEqual(r.returncode, 0, r.stderr)
         return min(runs), r.stdout
@@ -185,13 +189,15 @@ class Speed(unittest.TestCase):
                 self.assertLess(secs, BUDGET)
 
     def test_pretool_imports_no_store_adapter_or_app_module(self):
-        code = ("import sys; sys.path.insert(0, %r); from taskloop.hook import main, pretool; pretool.main('{}'); "
-                "print([m for m in sys.modules if m.startswith(('taskloop.app', 'taskloop.adapters', 'taskloop.stores'))])") % str(ROOT / "src")
+        code = (
+            "import sys; sys.path.insert(0, {!r}); from taskloop.hook import main, pretool; pretool.main('{{}}'); "
+            "print([m for m in sys.modules if m.startswith(('taskloop.app', 'taskloop.adapters', 'taskloop.stores'))])"
+        ).format(str(ROOT / "src"))
         r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
         self.assertEqual(r.stdout.strip(), "[]")
 
     def test_an_unknown_event_is_an_error_not_a_silent_pass(self):
-        r = subprocess.run([sys.executable, str(HOOK), "nonsense"], input="{}", capture_output=True, text=True, env=self.env)
+        r = subprocess.run([sys.executable, str(HOOK), "nonsense"], input="{}", capture_output=True, text=True, env=self.env, check=False)
         self.assertEqual(r.returncode, 2)
 
 

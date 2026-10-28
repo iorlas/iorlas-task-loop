@@ -2,13 +2,13 @@
 last stage, and the round rules of the prompt."""
 import sys
 import unittest
-from typing import Any
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401
-from support import engine_case as T  # noqa: E402
-from support.engine_case import BEAD, CLEAN, PLAN, WRITE, finding, review  # noqa: E402
+import support.paths  # noqa: F401
+from support import engine_case as T
+from support.engine_case import BEAD, CLEAN, PLAN, WRITE, finding, review
 
 
 class ReviewRound(unittest.TestCase):
@@ -55,7 +55,7 @@ class ReviewRound(unittest.TestCase):
         self.assertIn("A2", s.prompts[3])
 
     def test_the_prompt_states_the_host_and_the_round_rules(self):
-        rc, s = self.go([review(findings=[finding("high")]), CLEAN])
+        _rc, s = self.go([review(findings=[finding("high")]), CLEAN])
         first, second = s.prompts[2], s.prompts[4]
         for text in (first, second):
             self.assertIn("The host is macOS", text)

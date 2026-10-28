@@ -28,4 +28,6 @@ class RunLogs:
     def run_facts(recs: list[Any]) -> tuple[dict[str, str] | None, bool]:
         """(the run's start as {worktree, slot} or None, whether a close record is among the last 40)."""
         start = next((r for r in recs if isinstance(r, rec.RunStart)), None)
-        return ({"worktree": start.worktree, "slot": start.slot or ""} if start else None), any(isinstance(r, rec.Close) for r in recs[-40:])
+        return ({"worktree": start.worktree, "slot": start.slot or ""} if start else None), any(
+            isinstance(r, rec.Close) for r in recs[-40:]
+        )

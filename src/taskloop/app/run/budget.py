@@ -48,6 +48,6 @@ class Budget:
     def over(self) -> list[str]:
         """What is past its cap, one phrase each ('181 of 180 min', '$16.00 of $15'); empty while inside."""
         mins, limit, usd = self.spent_min(), self.limit_min(), self.cfg.budget_usd
-        return (["%d of %g min" % (mins, limit)] if mins > limit else []) + (
-            ["$%.2f of $%s" % (self.spent, usd)] if self.spent > float(usd) else []
+        return ([f"{int(mins)} of {limit:g} min"] if mins > limit else []) + (
+            [f"${self.spent:.2f} of ${usd}"] if self.spent > float(usd) else []
         )
