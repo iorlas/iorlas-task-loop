@@ -48,6 +48,8 @@ class Release(unittest.TestCase):
             PY
             fi
             """) % {"log": h / "claude.log", "flag": h / "claude.failed", "market": h / "market" / MARKET})
+        # just: `just check` exits FAKE_JUST_FAIL (default 0), printing a lint line
+        (shim / "just").write_text('#!/bin/sh\necho "$@" >> "%s"\necho "ruff: E501 somewhere"\nexit ${FAKE_JUST_FAIL:-0}\n' % (h / "just.log"))
         for f in shim.iterdir():
             f.chmod(0o755)
         self.env = dict(os.environ, TASK_LOOP_SUITE_HOST="1", XDG_CONFIG_HOME=str(h / "cfg"), CLAUDE_CONFIG_DIR=str(h / "claude"),
@@ -140,6 +142,28 @@ class Release(unittest.TestCase):
         self.assertIn("dirty", r.stderr)
         self.assertEqual(self.version(self.origin)["version"], "0.1.0")
         self.assertEqual(self.log("claude"), [])
+
+    def test_a_red_gate_aborts_before_the_suite_with_the_output_tail_and_a_green_one_runs_just_check(self):
+        self.write(self.seed / "justfile", "check:\n    true\n")
+        self.commit(self.seed, "gate")
+        self.git("pull", "-q", cwd=self.repo)
+        self.env["FAKE_JUST_FAIL"] = "1"
+        r = self.release("fix")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("gate is red", r.stderr)
+        self.assertIn("ruff: E501 somewhere", r.stderr)
+        self.assertEqual(self.version(self.origin)["version"], "0.1.0")
+        self.assertEqual(self.git("status", "--porcelain", cwd=self.repo), "")
+        self.env["FAKE_JUST_FAIL"] = "0"
+        r = self.release("fix")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.version(self.origin)["version"], "0.1.1")
+        self.assertEqual(self.log("just"), ["check", "check"])
+
+    def test_a_repo_without_a_justfile_skips_the_gate(self):
+        r = self.release("fix")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.log("just"), [])
 
     def test_a_red_suite_aborts_and_leaves_main_where_it_was(self):
         start = self.git("rev-parse", "HEAD", cwd=self.repo)

@@ -8,7 +8,8 @@ Takes an OS lock (~/.config/task-loop/locks/release-*.lock): a second release wa
 Then, in the repo's main checkout (on main, clean, or refused): fetch, fast-forward to origin/main, rebase B's commits
 onto origin/main when given, leaving B and its worktrees unchanged (refusing if B omits unpublished main commits),
 bump the patch version of origin/main's
-.claude-plugin/plugin.json (--minor: the minor), run the full suite (red aborts and puts main back), commit only
+.claude-plugin/plugin.json (--minor: the minor), run the repo's gate (`just check`: ruff, pyrefly, the rules test; skipped only when the repo has no justfile) and the full
+suite (red in either aborts with the output tail and puts main back), commit only
 plugin.json as "<version>: <message>", push under the land lock, so no loop lands in between. When origin/main moved
 since the bump (a land during the suite) it drops the bump, rebases, takes the next version and runs the suite again
 first, still under the lock; a push refused all the same gets one more such round. Then close the bead, bump the plugin's entry in the marketplace
@@ -268,10 +269,29 @@ def container_suite(repo):
     raise Abort("the suite is red; nothing released:\n%s\nfull output: %s" % (failure_report(out) or "\n".join(lines[-40:]), log), log, tests)
 
 
+def gate(repo):
+    """The repo's own gate before the suite: `just check` (ruff, pyrefly, the structural rules test), whenever the repo has a justfile.
+    Red raises Abort with the output tail. `just` comes from PATH, else through mise; the config paths mise must trust are exported."""
+    if not (Path(repo) / "justfile").is_file():  # a bare repo (the tests' fakes) has no gate of its own
+        return
+    cmd = ["just", "check"] if shutil.which("just") else ["mise", "exec", "--", "just", "check"]
+    home = os.path.expanduser("~")
+    env = dict(os.environ, MISE_TRUSTED_CONFIG_PATHS=os.pathsep.join([home + "/.config/mise", home + "/Workspaces"]))
+    say("running the gate: " + " ".join(cmd))
+    try:
+        r = subprocess.run(cmd, cwd=str(repo), env=env, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    except OSError as e:
+        raise Abort("the gate is red; nothing released:\ncould not run %s: %s" % (" ".join(cmd), e))
+    if r.returncode:
+        raise Abort("the gate is red; nothing released (`just check` exit %d):\n%s" % (r.returncode, (r.stdout + r.stderr).strip()[-3000:]))
+    say("gate green")
+
+
 def bump_and_commit(repo, message, minor):
     version = next_version(repo, minor)
     f = Path(repo) / PLUGIN
     f.write_text(set_version(f.read_text(encoding="utf-8"), version), encoding="utf-8")
+    gate(repo)
     container_suite(repo)
     git(repo, "add", PLUGIN)
     git(repo, "commit", "-q", "-m", "%s: %s%s" % (version, message, TRAILER))
