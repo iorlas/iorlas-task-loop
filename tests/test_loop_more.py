@@ -145,6 +145,13 @@ class LoopHealth(LoopBase):
         self.assertIn("%s has 1 ready bead(s) and no loop alive" % self.repo, out)
         self.assertIn("tl loop --repo %s" % self.repo, out)
 
+    def test_a_bead_parked_on_a_dropped_ask_shows_in_status(self):
+        f = tl.config_dir() / "asks" / "x-1.json"
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps({"v": 1, "id": "x-1-2", "bead": "x-1", "status": "open"}))
+        self.assertIn("x-1  ", self.status())
+        self.assertIn("its ask was dropped at upgrade", self.status())
+
     def test_a_live_loop_or_a_recent_beat_or_nothing_ready_is_no_warning(self):
         self.beads({"x-1": [rec("landed")]})
         loop.write_state(str(self.repo), pid=os.getpid(), started=self.clock.t)  # this process is alive

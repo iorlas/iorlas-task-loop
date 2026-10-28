@@ -2404,6 +2404,18 @@ class EngineTest(unittest.TestCase):
         a = must(self.asks().get(bead))
         return self.asks().answer(bead, a.id, AskAnswer(action=action, text=text, t=time.time(), by="denis"))
 
+    def test_a_bead_parked_on_a_dropped_v1_ask_asks_again_with_a_v2_ask(self):
+        p = tl.config_dir() / "asks" / "t-1.json"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps({"v": 1, "id": "t-1-4", "bead": "t-1", "status": "open", "kind": "verify", "question": "old?"}))
+        self.assertEqual(self.asks().orphans(), ["t-1"])
+        rc, s = self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
+        self.assertEqual(rc, 2)
+        self.assertEqual([c[0] for c in s.calls], ["planner"])  # one planner step, not a second asking of the dropped one
+        a = self.ask()
+        self.assertEqual((a["v"], a["id"], a["status"]), (2, "t-1-1", "open"))
+        self.assertEqual(self.asks().orphans(), [])
+
     def test_a_planner_question_is_a_decision_ask_on_the_bead(self):
         rc, _ = self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
         self.assertEqual(rc, 2)

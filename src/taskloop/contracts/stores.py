@@ -2,7 +2,7 @@
 import dataclasses
 import json
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Final, Protocol
 
 from atomic_io import atomic_write_json
 from jsonl_log import Entry, Jsonl
@@ -17,6 +17,7 @@ from taskloop.contracts.snapshots import DashState, Pin, ReleaseResult, ReposInd
 from taskloop.contracts.trace import RunTrace
 
 LIVE = (AskStatus.OPEN, AskStatus.PARKED)
+ORPHAN: Final = "parked; its ask was dropped at upgrade; `tl answer --rerun` or reopen to re-ask"
 
 
 class JsonStore[T]:
@@ -141,6 +142,16 @@ class AskStore:
     def all(self) -> list[Ask]:
         names = self.docs.keys()
         return [a for a in (self.docs.of(k).read() for k in names) if a is not None]
+
+    def orphans(self) -> list[str]:
+        """Beads whose ask file exists but cannot be read (an old or unknown version, or torn): their ask was dropped, and the bead may
+        still be parked on it."""
+        names = self.docs.keys()
+        return [k for k in names if self.docs.of(k).read() is None]
+
+    def drop(self, bead: BeadId | str) -> None:
+        """Delete the bead's ask file, whatever it holds (an unreadable one is the only caller's case)."""
+        self.docs.of(str(bead)).delete()
 
     def live(self) -> list[Ask]:
         """Asks still waiting for an owner (open or parked), oldest first."""

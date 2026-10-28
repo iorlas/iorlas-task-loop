@@ -1150,16 +1150,15 @@ def ask_sweep(which, every=600):
         return []
 
 
-def sweep_asks(say=print):
+def sweep_asks(say=print, cfg=None):
     """The loop's pass over asks: close the stale, park the unanswered, and shout about an answer no run used for 30 minutes (an engine
     fault, not the owner's). The three are throttled by marker files, so any caller may call it as often as it likes."""
     ask_sweep("close")
     ask_sweep("park")
-    marker = ConfigDir(config_dir()).ask_marker("unused")
-    if ask_sweeps.due(marker, 600, now()):
-        ask_sweeps.touch(marker)
-        for k in ask_sweeps.unused_answers(ask_store(), now()):
-            say("RED: " + ask_sweeps.fault_line(k, now()))
+    if cfg:
+        ask_sweeps.reask_orphans(ask_store(), bd_store(), ConfigDir(config_dir()).ask_marker("orphans"), now(),
+                                 cfg.pick_label or "", cfg.needs_info_label or "", say)
+    ask_sweeps.shout(ask_store(), ConfigDir(config_dir()).ask_marker("unused"), now(), say)
 
 
 def cmd_reflect(a):

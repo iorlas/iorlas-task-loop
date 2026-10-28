@@ -10,7 +10,7 @@ from typing import Any, Final
 from taskloop.contracts import codec
 from taskloop.contracts.ask import Ask as AskRecord
 from taskloop.contracts.ask import AskAnswer
-from taskloop.contracts.stores import AskStore
+from taskloop.contracts.stores import ORPHAN, AskStore
 from taskloop_dash.api.lanes import Lanes
 from taskloop_dash.env import Env
 from taskloop_dash.readers.beads import Beads, basename
@@ -114,7 +114,13 @@ class Asks:
             v["quick"] = bool(a.options) and a.kind.value != "decision"
             out.append(v)
         out.sort(key=lambda a: (a["parked"], a["answered_here"], -a["unblocks"], not a["quick"], -a["age_s"]))
-        return out
+        return out + [self.orphan_row(b) for b in self.store.orphans()]
+
+    def orphan_row(self, bead: str) -> Ask:
+        """A bead parked on an ask that was dropped at upgrade: one line, nothing to answer here (`tl answer --rerun` re-asks)."""
+        return {"id": f"{bead}-0", "bead": bead, "kind": "stuck", "question": ORPHAN, "detail": "", "t": 0, "title": "", "answer": None,
+                "repo": "", "parks_at": None, "options": [], "age_s": 0, "parked": True, "answered_here": False, "unblocks": 0,
+                "quick": False, "orphan": True}
 
     def asks(self) -> dict[str, Any]:
         return {"asks": self.inbox(), "delegate": self.lanes.delegate_status()}

@@ -31,7 +31,7 @@ def action_of(a: Namespace, ask: Ask | None) -> tuple[AskAction, str]:
     return "text", words
 
 
-def listing(asks: list[Ask], out: Out, as_json: bool) -> None:
+def listing(asks: list[Ask], out: Out, as_json: bool, orphans: list[str]) -> None:
     if as_json:
         out(json.dumps([codec.to_json(x) for x in asks], indent=1))
         return
@@ -41,7 +41,9 @@ def listing(asks: list[Ask], out: Out, as_json: bool) -> None:
         for n, o in enumerate(k.options, 1):
             out(f"    {n}. {'* ' if o.recommended else ''}{o.label}: {o.consequence}")
         out(f"    (tl answer {k.bead} --option N | words)")
-    if not asks:
+    for line in orphans:
+        out(line)
+    if not asks and not orphans:
         out("nothing waits on you")
 
 
@@ -54,7 +56,10 @@ def age(asks: AskStore, now: float, out: Out) -> int:
     faults = sweeps.unused_answers(asks, now)
     for k in faults:
         out(sweeps.fault_line(k, now))
-    if not pending:
+    lost = sweeps.orphan_lines(asks)
+    for line in lost:
+        out(line)
+    if not pending and not lost:
         out("no ask waits")
     return 1 if faults else 0
 
@@ -63,7 +68,7 @@ def run(a: Namespace, asks: AskStore, store_at: Callable[[str], Beads], now: Cal
     """One verb. `store_at(repo)` is the tracker of the ask's repo ('' = here)."""
     op = a.op
     if op == "list":
-        listing(asks.pending(), out, bool(getattr(a, "json", False)))
+        listing(asks.pending(), out, bool(getattr(a, "json", False)), sweeps.orphan_lines(asks))
         return 0
     if op == "age":
         return age(asks, now(), out)

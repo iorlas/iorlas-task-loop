@@ -6,8 +6,8 @@ from pathlib import Path
 
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.enums import AskStatus
-from taskloop.contracts.ports import BdFailure, BeadQuery, Beads
-from taskloop.contracts.stores import AskStore
+from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, Beads
+from taskloop.contracts.stores import ORPHAN, AskStore
 
 UNUSED_ANSWER_S = 30 * 60
 EVERY_S = 600
@@ -84,10 +84,57 @@ def park_stale(asks: AskStore, store_at: StoreAt, marker: Path, now: float, ever
     return done
 
 
+def orphan_lines(asks: AskStore) -> list[str]:
+    """One line per bead whose ask file cannot be read any more: such a bead would otherwise be parked and invisible."""
+    return [f"{bead:<22} {ORPHAN}" for bead in asks.orphans()]
+
+
+def reopen(asks: AskStore, store: Beads, bead: str, pick: str = "", info: str = "") -> bool:
+    """Make a bead parked on a dropped ask re-askable: open again (and back in the pick queue when the labels are known), so the next run
+    goes on from its checkpoint and raises a fresh ask. The dead file stays until that ask replaces it. -> whether it was reopened."""
+    try:
+        shown = store.show(bead)
+        if shown is None:
+            return False  # another repo's bead, or gone: this tracker cannot say
+        if shown.status == "closed":
+            asks.drop(bead)
+            return False
+        if shown.status != "blocked":
+            return False
+        store.update(bead, BeadPatch(status="open"))
+        if pick:
+            store.add_label(bead, pick)
+        if info and info in shown.labels:
+            store.remove_label(bead, info)
+    except BdFailure:
+        return False
+    return True
+
+
+def reask_orphans(asks: AskStore, store: Beads, marker: Path, now: float, pick: str = "", info: str = "",
+                  say: Callable[[str], None] = print, every: float = EVERY_S) -> list[str]:
+    """The sweep over dropped asks: every blocked bead of this tracker that was parked on one is reopened. -> the beads reopened."""
+    if not due(marker, every, now):
+        return []
+    done = [b for b in asks.orphans() if reopen(asks, store, b, pick, info)]
+    for b in done:
+        say(f"{b}: parked on an ask that was dropped at upgrade; reopened to ask again")
+    touch(marker)
+    return done
+
+
 def unused_answers(asks: AskStore, now: float, after_s: float = UNUSED_ANSWER_S) -> list[Ask]:
     """Answers filed and not used by any run for `after_s`: the loop is not picking the bead up (the engine's fault, not the owner's)."""
     return [a for a in asks.all() if a.status == AskStatus.ANSWERED and a.consumed is None and a.answered is not None
             and now - a.answered > after_s]
+
+
+def shout(asks: AskStore, marker: Path, now: float, say: Callable[[str], None], every: float = EVERY_S) -> None:
+    """Say a RED line for each answer no run used for half an hour (throttled by the marker)."""
+    if due(marker, every, now):
+        touch(marker)
+        for k in unused_answers(asks, now):
+            say("RED: " + fault_line(k, now))
 
 
 def fault_line(ask: Ask, now: float) -> str:

@@ -19,6 +19,7 @@ from support.dashes import make_dash  # noqa: E402
 from taskloop.contracts import codec  # noqa: E402
 from taskloop.contracts.ask import Ask  # noqa: E402
 from taskloop.contracts.enums import AskStatus  # noqa: E402
+from taskloop.contracts.stores import ORPHAN  # noqa: E402
 from taskloop_dash.env import Ports  # noqa: E402
 
 ASK = dataclasses.replace(MOCKS["lifesim-22b3"], bead="b-1", id="b-1-1")
@@ -48,10 +49,15 @@ class DashAsks(unittest.TestCase):
         self.assertEqual((row["id"], row["question"], len(row["options"])), ("b-1-1", ASK.decision, 3))
         self.assertEqual(row["options"][0]["then"], ASK.options[0].consequence)
 
+    def test_a_dropped_ask_is_listed_as_one_typed_line_for_its_bead(self):
+        self.put(v=1)
+        (row,) = self.dash.asks.inbox()
+        self.assertEqual((row["bead"], row["question"], row["orphan"], row["options"]), ("b-1", ORPHAN, True, []))
+
     def test_an_old_or_unknown_version_is_absent(self):
         for v in (1, 9):
             self.put(v=v)
-            self.assertEqual((self.dash.asks.inbox(), self.dash.asks.ask_file("b-1")), ([], {}))
+            self.assertEqual((self.dash.asks.ask_file("b-1"), self.dash.asks.open_ask("b-1")), ({}, None))  # absent, but listed as dropped
 
     def test_a_typed_option_lands_as_an_ask_answer_and_the_first_wins(self):
         self.put()

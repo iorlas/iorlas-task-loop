@@ -923,7 +923,7 @@ def passes(repo, a, started, st=None, store=None):
                              "started": started}):
             continue
         reclaim(repo, store)
-        tl.sweep_asks(say)  # asks of closed beads closed, unanswered ones parked, answers no run used flagged (all throttled)
+        tl.sweep_asks(say, engine.load_cfg(repo))  # asks of closed beads closed, unanswered ones parked, answers no run used flagged (all throttled)
         try:
             import reflect_digest
             reflect_digest.maybe_run()  # the run reflections into beads, once a day (tl-bl5)
@@ -1168,7 +1168,7 @@ def cmd_status(a):
             print("  log %s" % st["log"])
     if not loops:
         print("no loop running on %s" % repo)
-    for line in health_lines(repo, loops):
+    for line in health_lines(repo, loops) + tl.ask_sweeps.orphan_lines(tl.ask_store()):
         print(line)
     try:
         refused = json.loads((tl.config_dir() / "bad-versions.json").read_text(encoding="utf-8"))

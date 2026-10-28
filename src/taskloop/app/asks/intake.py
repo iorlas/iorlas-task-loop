@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Final
 
+from taskloop.app.asks import sweeps
 from taskloop.contracts.ask import Ask, AskAction, AskAnswer
 from taskloop.contracts.ports import BdFailure, BeadPatch, Beads
 from taskloop.contracts.stores import AskStore
@@ -66,6 +67,9 @@ class Intake:
         """File the answer on the bead's ask, open the bead for the loop. -> (the ask, "" or why it cannot be answered)."""
         ask = self.asks.get(bead)
         if ask is None:
+            # a bead parked on an ask that was dropped at upgrade: "rerun" is how the owner has it asked again
+            if action == "rerun" and bead in self.asks.orphans() and sweeps.reopen(self.asks, self.store, bead):
+                return None, ""
             return None, "gone"
         given = AskAnswer(action=action, text=text.strip(), t=self.now(), by=self.by)
         done, why = (self.asks.amend if amend else self.asks.answer)(bead, ask.id, given)
