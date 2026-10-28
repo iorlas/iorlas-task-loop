@@ -704,7 +704,7 @@ def slot_env(repo, store=None, cfg=None):
         take_lock=lambda: os_lock(config_dir() / "locks" / ("slot-take-%s.lock" % repo_key(repo)), "pid %d" % os.getpid()),
         busy=engine_busy, drop_engine_lock=drop_engine_lock, event=event, say=print,
         warn=lambda m: print(m, file=sys.stderr), pid=os.getpid(),
-        run_setup=lambda cmd, d: subprocess.run(cmd, shell=True, cwd=d).returncode,
+        run_setup=lambda argv, d: subprocess.run(argv, cwd=d, check=False).returncode,
         exclude_local=lambda r: exclude_local(r, ".slots/", ".task/"), now=now)
 
 

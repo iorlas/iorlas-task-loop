@@ -46,7 +46,7 @@ from taskloop.adapters import delegate as dg
 from taskloop.adapters import procs as sproc
 from taskloop.adapters.runner import live_path
 from taskloop.adapters import activity
-from taskloop.adapters.check_probe import ShellProbe
+from taskloop.adapters.check_probe import PathProbe
 from taskloop.app.asks import intake, raiser
 from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.checks.evidence import compact
@@ -58,6 +58,7 @@ from taskloop.app.run.context import RunContext
 from taskloop.app.run.worker_call import Ops, WorkerCall
 from taskloop.app.slots.lease import Lease
 from taskloop.contracts import log as rec
+from taskloop.contracts.argv import FORM, argv_of, checks_to_text, checks_to_wire, text_of
 from taskloop.contracts.ask import BudgetLine
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.checks import CheckFaultKind, CheckResult, CheckRun
@@ -71,7 +72,7 @@ from taskloop.contracts.stores import AskStore, JsonlStore
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.asks import text as asktext
 from taskloop.domain.lanes import policy as lp
-from taskloop.domain.lanes.matchers import read_only_command, split_top
+from taskloop.domain.lanes.matchers import read_only_command
 from taskloop.domain.lanes.says import stop_say, stop_why
 from taskloop.domain.checks import lint, matchers, trim
 from taskloop.domain.checks import names as check_names
@@ -92,6 +93,7 @@ PROVED_BY = ("check", "stage", "leftover", "engine_step")  # tl-bxk.13.16.1: how
 HANDOFF_CAP = 1500  # characters of round history one prompt carries (tl-bxk.13.6)
 S_STR = {"type": "string"}
 S_STRS = {"type": "array", "items": S_STR}
+S_ARGV = {"type": "array", "items": S_STR, "description": "argv: " + FORM}  # a check: the program and its arguments, never a shell string
 OPTIONS = {"type": "array", "items": {"type": "object", "additionalProperties": False,
                                       "required": ["label", "cost", "answer", "recommended"],
                                       "properties": {"label": S_STR, "cost": S_STR, "answer": S_STR,
@@ -162,10 +164,6 @@ TRACKER_TEXT = ("\n\nYour plan was sent back: these checks read the issue tracke
                 "no writer can run and no code change can satisfy:\n%s\nRewrite them to prove the code and the tree only. "
                 "Follow-up work the task wants filed goes in leftovers: the engine files it.")
 
-REPEAT_TEXT = ("\n\nYour plan was sent back: these slow commands run in more than one check, or repeat a check the engine already "
-               "runs, and each run takes minutes:\n%s\nRun each once. A check that needs its result reads the file the first "
-               "one saved, or `$TL_CHECK_LOG_<ID>` for a repo check, instead of running the command again.")
-
 EMPTY_PLAN_TEXT = ("\n\nYour plan was sent back: it has no stages, no question and no leftovers, so there is nothing to do and nothing to "
                    "ask. A plan has at least one stage (goal, files, checks). If the work is already done in the tree, plan the "
                    "stage that checks it. If only follow-up work is left, list it in leftovers. If the task cannot be done without "
@@ -208,7 +206,7 @@ def unused_tool(what, root, cfg):
     tools = tools_named(what)
     if not tools:
         return ""
-    engine_text = " ".join([cfg.gate or ""] + [str(c) for c in cfg.checks])
+    engine_text = " ".join([cfg.gate_text] + [str(c) for c in cfg.checks])
     said = []
     for t in tools:
         r = tl.run_git(root, "grep", "-w", "-I", "-l", "-F", t, capture_output=True, text=True, encoding="utf-8",
@@ -301,10 +299,10 @@ SCHEMAS = {
                  "summary": S_STR, "decided": S_STR,
                  "stages": {"type": "array", "items": {
                      "type": "object", "additionalProperties": False, "required": ["goal", "files", "checks", "hard"],
-                     "properties": {"goal": S_STR, "files": S_STRS, "checks": S_STRS, "hard": {"type": "boolean"}}}},
+                     "properties": {"goal": S_STR, "files": S_STRS, "checks": {"type": "array", "items": S_ARGV}, "hard": {"type": "boolean"}}}},
                  "risks": {"type": "array", "items": {"type": "object", "additionalProperties": False,
                                                       "required": ["what", "check"],
-                                                      "properties": {"what": S_STR, "check": S_STR}}},
+                                                      "properties": {"what": S_STR, "check": S_ARGV}}},
                  "question": S_STR, "options": OPTIONS,
                  "irreversible": {"type": "string", "enum": [""] + list(IRREVERSIBLE)},  # optional (tl-ntp): what the question's step cannot undo
                  "unresolved": {"type": "array", "items": {  # optional (tl-bxk.13.16.3): inputs the criteria need that were not found
@@ -312,7 +310,7 @@ SCHEMAS = {
                      "properties": {"what": S_STR, "kind": {"type": "string", "enum": list(INPUT_KINDS)}, "path": S_STR}}},
                  "cases": {"type": "array", "items": {"type": "object", "additionalProperties": False,
                                                       "required": ["criterion", "check"],
-                                                      "properties": {"criterion": S_STR, "check": S_STR,
+                                                      "properties": {"criterion": S_STR, "check": S_ARGV,
                                                                      "class": {"type": "string", "enum": list(looks.CLASSES)},
                                                                      "proved_by": {"type": "string", "enum": list(PROVED_BY)},
                                                                      "via": S_STR}}},
@@ -335,7 +333,7 @@ SCHEMAS = {
                                                 "source": S_STR}}},
                              "new_cases": {"type": "array", "items": {
                                  "type": "object", "additionalProperties": False, "required": ["criterion", "check", "why"],
-                                 "properties": {"criterion": S_STR, "check": S_STR, "why": S_STR}}},
+                                 "properties": {"criterion": S_STR, "check": S_ARGV, "why": S_STR}}},
                              "bad_checks": {"type": "array", "items": {
                                  "type": "object", "additionalProperties": False, "required": ["cmd", "why"],
                                  "properties": {"cmd": S_STR, "why": S_STR}}},
@@ -429,7 +427,7 @@ def validate(data, schema, path="$"):
         if not isinstance(data, int) or isinstance(data, bool):
             return ["%s: expected integer" % path]
     elif ok and not isinstance(data, ok):
-        return ["%s: expected %s" % (path, t)]
+        return ["%s: expected %s%s" % (path, t, (" (%s)" % schema["description"]) if schema.get("description") else "")]
     errs = []
     if "enum" in schema and data not in schema["enum"]:
         errs.append("%s: %r not in %s" % (path, data, schema["enum"]))
@@ -875,7 +873,7 @@ class Engine:
 
     def publish_plan(self):
         if self.plan_data:
-            (self.run_dir / "plan.json").write_text(json.dumps(self.plan_data, indent=1))
+            (self.run_dir / "plan.json").write_text(json.dumps(checks_to_wire(self.plan_data), indent=1))
 
     def blocked_for(self, why, kind, stop=None):
         """The Blocked a worker call ends its step with: `kind` is an outcome.Kind name; `stop` the stop that decided it."""
@@ -1064,6 +1062,7 @@ class Engine:
         """One AI node, then the tree check: a worker that wrote core.worktree is caught before review or land."""
         out = self.worker.run(node, title, prompt, *a, **kw)
         self.assert_tree(kw.get("step") or node, "after")
+        checks_to_text(out[0])
         return out
 
     plan_data = None  # the plan as accepted; an unsandboxed worker reads it from the run dir
@@ -1076,6 +1075,7 @@ class Engine:
 
     def after_call(self, c, res):
         """A node's answer was taken: its detail lines, then what was odd about it."""
+        checks_to_text(res.data)  # from here on a check is its one-line text
         self.detail(details(c.node, res.data))
         self.anomalies(c.node, res, c.tries)
 
@@ -1105,19 +1105,17 @@ class Engine:
             raise Blocked("failed: %s. %s" % (why, bad[1]), kind=oc.Kind.FAULT_SLOT)
 
     def sh(self, cmd, timeout=3600, check=False, save=None, env=None, pin=False, idle=0, cwd=None):
-        """A command: a string goes through bash with -e and pipefail (checks, profile commands), so a red command in a
-        `;` list or a pipe fails it (lifesim-gfr.31.1: `just unity-check > log; ! grep ...` passed with unity-check
-        red); `! cmd` and `cmd || true` still pass. A list runs as is (no quoting rules). pin=True: an engine git command, run
-        with GIT_DIR/GIT_WORK_TREE of the slot; checks and gates run unpinned (they may run git on other repos)."""
+        """A command: an argv list, exec'd as given (no shell, no quoting rules; a string is a programming error). pin=True: an
+        engine git command, run with GIT_DIR/GIT_WORK_TREE of the slot; checks and gates run unpinned (they may run git on other repos)."""
+        if isinstance(cmd, str):
+            raise TypeError("a command is an argv list, never a string: %r" % cmd[:80])
         cid = self.log.next_id("m")
         cwd = cwd or self.wt  # a check on the untouched base runs in its own checkout
-        self.log.emit(rec.CmdStart(id=cid, text=cmd if isinstance(cmd, str) else " ".join(cmd), cwd=str(cwd)))
+        self.log.emit(rec.CmdStart(id=cid, text=text_of(cmd), cwd=str(cwd)))
         # Its own process group, so a timeout stops the whole tree (dotnet build nodes, Unity) and not just the shell;
         # the worker env, so a check never inherits this launcher's Claude session.
-        bash = shutil.which("bash") if isinstance(cmd, str) else None  # plans write bash
-        run = [bash, "-e", "-o", "pipefail", "-c", cmd] if bash else cmd
         started = time.time()
-        p, hold = sproc.popen_held(run, shell=isinstance(run, str), cwd=cwd,  # tl-10s: see TermHold
+        p, hold = sproc.popen_held(list(cmd), cwd=cwd,  # tl-10s: see TermHold
                                    env=dict(sproc.current_env(), **(tl.pinned_env(self.wt) if pin else {}), **(env or {})),
                                    stdin=subprocess.DEVNULL,
                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
@@ -1146,6 +1144,9 @@ class Engine:
                                    started_t=started, last_event_t=self.last_event_t if idle else None, kill_t=self.kill_t, observed_t=self.kill_t))
             self.log.emit(rec.CmdEnd(id=cid, exit=-1, secs=round(time.time() - started, 1)))
             raise
+        finally:
+            if getattr(p, "stdout", None):  # the pump thread reads the descriptor, never closes it (ResourceWarning: unclosed file)
+                p.stdout.close()
         text = out.decode("utf-8", "replace")
         if self.killed:  # only a stop the engine performed; a command that exits 124 by itself is not a kill
             self.log.emit(rec.Kill(what="check" if idle else "command", why=self.kill_why, secs=round(self.kill_t - started), exit=rc,
@@ -1156,7 +1157,7 @@ class Engine:
         tail = "\n".join(text.strip().splitlines()[-15:])
         self.log.emit(rec.CmdEnd(id=cid, exit=rc, secs=round(time.time() - started, 1), out=tail[-600:] if rc else ""))
         if check and rc:
-            raise Blocked("failed: `%s` exit %d\n%s" % (cmd, rc, tail), kind=oc.Kind.FAULT_INFRA)
+            raise Blocked("failed: `%s` exit %d\n%s" % (text_of(cmd), rc, tail), kind=oc.Kind.FAULT_INFRA)
         return rc, tail
 
     def _freeze_check(self, why, idle=None, now=None):
@@ -1190,7 +1191,10 @@ class Engine:
 
         def pump():
             while True:
-                b = os.read(p.stdout.fileno(), 65536)
+                try:
+                    b = os.read(p.stdout.fileno(), 65536)
+                except (OSError, ValueError):  # closed under it: the command was stopped
+                    return
                 if not b:
                     return
                 chunks.append(b)
@@ -1513,7 +1517,7 @@ class Engine:
         on verify asks for the gate; lifesim-gfr.31.1 on 'there is no nographics.out in evidence yet' after the case
         that writes it passed."""
         ran = [c.cmd for c in checks if c.exit == 0]
-        names = [" ".join(x.split()).lower() for x in [self.cfg.gate] + ran if x.strip()]
+        names = [" ".join(x.split()).lower() for x in [self.cfg.gate_text] + ran if x.strip()]
         cases = self.case_checks()
         cases_ran = bool(cases) and all(c in ran for c in cases)
         out = []
@@ -1610,7 +1614,7 @@ class Engine:
         return text
 
     def plan_text(self):
-        return json.dumps(getattr(self, "plan_data", None) or {}, indent=1)
+        return json.dumps(checks_to_wire(getattr(self, "plan_data", None) or {}), indent=1)
 
     def seen_now(self):
         """What a writer session holds of the task once it has answered: the brief's and the plan's hash."""
@@ -2357,13 +2361,13 @@ class Engine:
         return out
 
     GATE_RUNNER = re.compile(r"^(?:just|make|npm run|npm|yarn|pnpm run|pnpm|cargo|task|poe|tox|nox)\s+")
-    LINT_DEFAULT = {"ruff": "ruff check .", "flake8": "flake8", "shellcheck": None}
+    LINT_DEFAULT = {"ruff": "ruff check .", "flake8": "flake8", "shellcheck": None}  # plain words: argv_of splits them
     SAFE_CMD = re.compile(r"[\w./=:,@+*~ -]+")
 
     def gate_names(self):
         """Names a verify item can use for a check the engine runs by itself (the gate, a configured check, a plan stage
         check or case): its id, its command, and the command without its runner (`just unity-tests` -> unity-tests)."""
-        cmds = [self.cfg.gate or ""] + [c.cmd for c in self.cfg.checks] + [
+        cmds = [self.cfg.gate_text] + [c.cmd for c in self.cfg.checks] + [
             c for st in (getattr(self, "plan_data", None) or {}).get("stages") or [] for c in st["checks"]] + self.case_checks()
         names = [c.id for c in self.cfg.checks]
         for c in cmds:
@@ -2408,7 +2412,7 @@ class Engine:
             if not cmd:
                 left.append(u)
                 continue
-            rc, tail = self.sh(cmd, timeout=600)
+            rc, tail = self.sh(argv_of(cmd), timeout=600)
             if rc in (126, 127):  # the tool cannot start here: nothing was proven, the verifier and the owner still judge it
                 left.append(u)
                 continue
@@ -2515,12 +2519,12 @@ class Engine:
         tree = self.tree_hash()
         return (tl.git("diff", "--stat", self.base_sha(), tree, cwd=self.wt) if tree else "") or "(no files changed)"
 
-    _probe: ShellProbe | None = None
+    _probe: PathProbe | None = None
 
     def shell_probe(self):
-        """What the plan lint may ask of this tree: bash, just, the files (one per engine, so its answers are remembered)."""
+        """What the plan lint may ask of this tree: PATH, just, the files (one per engine, so its answers are remembered)."""
         if self._probe is None:
-            self._probe = ShellProbe(self.wt, sproc.current_env())
+            self._probe = PathProbe(self.wt, sproc.current_env())
         return self._probe
 
     def ask_plan(self, prompt, step, title, mode="plan"):
@@ -2531,7 +2535,6 @@ class Engine:
             self.plan_data = json.loads(json.dumps(data))
             self.save_checkpoint(stage=0, rounds=0, n=0, feedback="", step="write")
         bad, gated, dry = lint.tracker_checks(data), lint.gate_only_checks(data, self.cfg), lint.dry_check(data, self.shell_probe())
-        rep = self.repeated_slow(data)
         only = gate_only_criteria(data, self.cfg)
         led = (lint.ledger_problems(data) + lint.own_timeout_problems(data, self.cfg.check_timeout_min) + lint.unity_problems(data, self.cfg)
                + lint.producer_problems(data, self.cfg) + lint.evidence_problems(data, str(self.evidence_dir)))
@@ -2541,18 +2544,14 @@ class Engine:
         # to the planner once. With leftovers it is the finished-work plan (tl-bxk.13.2); with the owner's verify answer it may be empty.
         empty = (not data["stages"] and not data["question"].strip() and not data.get("leftovers") and not self.leftovers
                  and not self.verify_answer)
-        if bad or gated or dry or rep or empty or only:  # asked once to rewrite them, like an invalid answer; not a counted re-plan
+        if bad or gated or dry or empty or only:  # asked once to rewrite them, like an invalid answer; not a counted re-plan
             why = ""
             if empty:
                 self.warn("the plan has no stages, no question and nothing to file, sent back")
                 why += EMPTY_PLAN_TEXT
-            if rep:
-                self.warn("the plan's checks run a slow command more than once, sent back: %s" % "; ".join(r[0] for r in rep)[:300])
-                why += REPEAT_TEXT % "\n".join("- `%s` in %s" % (part, "; ".join("`%s`" % c[:80] for c in cs) if cs else "a repo check (%s)" % rid)
-                                               for part, cs, rid in rep)
             if only:
                 self.warn("the plan's acceptance is only the gate, sent back (%s): %s" % (GATE_ONLY_ACCEPTANCE, "; ".join(only)[:300]))
-                why += GATE_ONLY_ACCEPTANCE_TEXT % (GATE_ONLY_ACCEPTANCE, self.cfg.gate or "the gate", "\n".join("- %s" % c for c in only))
+                why += GATE_ONLY_ACCEPTANCE_TEXT % (GATE_ONLY_ACCEPTANCE, self.cfg.gate_text or "the gate", "\n".join("- %s" % c for c in only))
             if bad:
                 self.warn("the plan's checks read the issue tracker, sent back: %s" % "; ".join(bad)[:300])
                 why += TRACKER_TEXT % "\n".join("- `%s`" % c for c in bad)
@@ -2563,15 +2562,15 @@ class Engine:
             if dry:
                 self.warn("the plan's checks cannot run, sent back: %s" % "; ".join(dry)[:300])
                 why += DRY_CHECK_TEXT % "\n".join("- " + e for e in dry)
-            self.steps.outcome("sent back", "its checks read the tracker, run gate-only commands, repeat a slow command or cannot run" if not empty
+            self.steps.outcome("sent back", "its checks read the tracker, run gate-only commands or cannot run" if not empty
                             else "it has no stages")
             self.steps.move(step, "plan_sent_back", "plan %s" % "; ".join(
                 (["has no stages"] if empty else []) + (["checks read the issue tracker"] if bad else []) +
                 (["acceptance is only the gate (%s)" % GATE_ONLY_ACCEPTANCE] if only else []) +
                 (["checks run gate-only commands"] if gated else []) +
-                (["checks repeat a slow command"] if rep else []) + (["checks cannot run"] if dry else [])))
+                (["checks cannot run"] if dry else [])))
             ref = self.planner_ref
-            back = (why.lstrip() + "\n\nYour plan, to correct (same output schema):\n" + json.dumps(data, indent=1)) if ref else prompt + why
+            back = (why.lstrip() + "\n\nYour plan, to correct (same output schema):\n" + json.dumps(checks_to_wire(data), indent=1)) if ref else prompt + why
             data, _ = self.ai("plan", "rewrite checks", back, step=step, mode="checks_back", resume_ref=ref or None, at=(self.planned, 1, 0))
             bad, gated = lint.tracker_checks(data), lint.gate_only_checks(data, self.cfg)
             only = gate_only_criteria(data, self.cfg)
@@ -2584,42 +2583,12 @@ class Engine:
             if gated:
                 raise Blocked("failed: the plan's checks still run gate-only commands after one rewrite: %s"
                               % "; ".join("%s (%s)" % g for g in gated)[:400], kind=oc.Kind.FAULT_PLAN)
-            for r in self.repeated_slow(data):  # a heuristic like dry_check: the send-back was the remedy, no second one
-                self.warn("the plan's checks still run `%s` more than once after one rewrite" % r[0][:200])
             dry = lint.dry_check(data, self.shell_probe())
             if dry:  # a heuristic: the writer's bad_checks flag decides from here, no second send-back
                 self.warn("the plan's checks may still not run after one rewrite: %s" % "; ".join(dry)[:300])
         for c, i in lint.rerun_checks(data, self.cfg):  # still runs as written: a send-back costs a re-plan
-            self.warn("`%s` re-runs %s; use $%s" % (c[:100], i, check_names.log_var(i)))
+            self.warn("`%s` re-runs %s; the engine reuses the result of the same command, a different one runs again" % (c[:100], i))
         return data
-
-    SLOW_RUNNER = re.compile(r"^(?:dotnet|pytest|python3? -m (?:pytest|unittest)|cargo|go test|npm (?:run )?test|yarn test)\b")
-    REDIRECT = re.compile(r"\s+(?:\d?>>?\s*\S+|&>\s*\S+)")
-
-    def repeated_slow(self, plan):
-        """tl-bxk.13.4: [(command, [plan checks running it], repo check id or "")]: a slow command (a runner such as `just x`,
-        `dotnet test`, that the repo's history or its name says takes long) that two plan checks run, or that a repo check
-        already runs, redirects aside. lifesim-fld.10: `just unity-tests` three times a round, 99 min in two rounds; the exact
-        repeat is reused (tl-bxk.10.27), a repeat wrapped in `mkdir && cmd > a.out && grep` is not."""
-        secs, out = self.checker.seconds(), {}
-        repo = {norm_cmd(k.cmd): k.id for k in self.cfg.checks}
-        stages = plan.get("stages") or []
-        extra = [x["check"] for k in ("risks", "cases") for x in plan.get(k) or []]  # they run with the last stage
-        blocks = [list(st["checks"]) + (extra if k == len(stages) - 1 else []) for k, st in enumerate(stages)] or [extra]
-        for block in blocks:  # a stage's checks run together; another stage's run in another round
-            found = {}
-            for c in dict.fromkeys(block):
-                parts = split_top(c)
-                for part in dict.fromkeys(norm_cmd(self.REDIRECT.sub("", p)) for p, _ in (parts or [(c, "")]) if p.strip()):
-                    if not (self.GATE_RUNNER.match(part) or self.SLOW_RUNNER.match(part)):
-                        continue
-                    if matchers.looks_slow(part) or secs.get(part, 0) > float(self.cfg.writer_check_max_s):
-                        found.setdefault(part, []).append(c)
-            for part, cs in found.items():
-                if (len(set(cs)) >= 2 or part in repo) and any(norm_cmd(c) != part for c in cs):
-                    out.setdefault(part, [])
-                    out[part] += [c for c in cs if c not in out[part]]
-        return [(part, cs, repo.get(part, "")) for part, cs in out.items()]
 
     def cap_blocked(self, detail=""):
         """The re-plan cap's ask: the planner ran `planned` times. An answer that allows one more (action rerun) gives one."""
@@ -2690,7 +2659,7 @@ class Engine:
             extra = ("\n\nAn earlier plan exists for this task. Return the plan with the smallest change that covers what "
                      "follows; keep accepted stages and their checks unless the change touches them; do not re-explore code "
                      "the old plan already names. Same output schema as a plan.\n<old_plan>\n%s\n</old_plan>\n"
-                     "What changed:\n<change>\n%s\n</change>" % (json.dumps(old, indent=1), (self.amend_text or why).strip()))
+                     "What changed:\n<change>\n%s\n</change>" % (json.dumps(checks_to_wire(old), indent=1), (self.amend_text or why).strip()))
         elif again:
             extra = "\n\nThe previous plan did not work. What failed:\n<failed>\n%s\n</failed>\nPlan again." % why
         self.old_plan, self.amend_text, self.amend_why = None, "", ""
@@ -2720,9 +2689,9 @@ class Engine:
         rules.append("Checks run on the uncommitted working tree after each write. The engine runs the gate%s once, on "
                      "the rebased tree at land: never put %s in a stage's checks, and a criterion that names it is proven "
                      "by that land gate: write no case for it." % (
-                         (" (`%s`)" % self.cfg.gate) if self.cfg.gate else "",
-                         ("`%s`" % self.cfg.gate) if self.cfg.gate else "it"))
-        extra_gated = [(c, why) for c, why in lint.gate_only(self.cfg) if c != " ".join(self.cfg.gate.split())]
+                         (" (`%s`)" % self.cfg.gate_text) if self.cfg.gate else "",
+                         ("`%s`" % self.cfg.gate_text) if self.cfg.gate else "it"))
+        extra_gated = [(c, why) for c, why in lint.gate_only(self.cfg) if c != self.cfg.gate_text]
         if extra_gated:
             rules.append("These run only in the gate at land too, never in a check: " + "; ".join(
                 "`%s`%s" % (c, " (%s)" % why if why else "") for c, why in extra_gated) + ".")
@@ -2792,7 +2761,7 @@ class Engine:
                 self.log.note("the planner finds the work done and leaves only follow-up beads to file: closing")
                 self.plan_leftovers(data)
                 self.plan_summary = data["summary"]
-                (self.run_dir / "plan.json").write_text(json.dumps(data, indent=1))
+                (self.run_dir / "plan.json").write_text(json.dumps(checks_to_wire(data), indent=1))
                 return data
             raise Blocked("failed: the plan has no stages", kind=oc.Kind.FAULT_PLAN)
         big = int(self.cfg.max_stages)
@@ -2808,7 +2777,7 @@ class Engine:
         lines += ["Risk: %s → %s" % (r["what"], r["check"]) for r in data["risks"]]
         lines += [ASSUMPTION + a["text"] for a in data.get("assumptions") or []]
         self.comment("\n".join(lines))
-        (self.run_dir / "plan.json").write_text(json.dumps(data, indent=1))
+        (self.run_dir / "plan.json").write_text(json.dumps(checks_to_wire(data), indent=1))
         self.export_brief()
         self.save_checkpoint(stage=0, rounds=0, n=0, feedback="", step="write")
         return data
@@ -3017,7 +2986,7 @@ class Engine:
                 self.amend_text += "\nAccepted stages (their work is in the tree): " + ("; ".join(self.done) or "none")
                 return None, 0, None
         self.plan_data, self.plan_summary, self.accepted = ck["plan"], ck["plan"]["summary"], list(ck["accepted"])
-        (self.run_dir / "plan.json").write_text(json.dumps(ck["plan"], indent=1))
+        (self.run_dir / "plan.json").write_text(json.dumps(checks_to_wire(ck["plan"]), indent=1))
         stages = ck["plan"]["stages"]
         again = self.promised_missing(ck["plan"], len(stages) if (ck["step"] == "land" or ck["stage"] >= len(stages)) else ck["stage"])
         if again is not None:
@@ -3039,7 +3008,7 @@ class Engine:
 
     def promised_missing(self, plan, upto):
         """tl-bxk.13.16.2: the index of the earliest accepted stage (before `upto`) that mentions an evidence file which is gone
-        now while a check still to run reads it, or None. A check that writes the file itself (`> path`, tee) does not need it."""
+        now while a check still to run names it, or None."""
         ev = re.compile(r"\.task/%s/evidence/[^\s\"'<>|;&)]+" % re.escape(self.bead))
         stages = plan.get("stages") or []
         pending = [c for st in stages[upto:] for c in st["checks"]] + [
@@ -3047,7 +3016,7 @@ class Engine:
         need = set()
         for c in pending:
             for p in ev.findall(c):
-                if not Path(self.wt, p).exists() and not re.search(r"(?:>>?|tee(?: -a)?)\s*[\"']?%s" % re.escape(p), c):
+                if not Path(self.wt, p).exists():
                     need.add(p)
         early = [k for k, st in enumerate(stages[:upto]) if any(p in c for c in st["checks"] for p in need)]
         return min(early) if early else None
@@ -3093,7 +3062,7 @@ class Engine:
             prompt = write_prompt(
                 self.rules_text(), brief=self.brief_text(), plan=self.plan_text(), n=i + 1, goal=st["goal"],
                 files=", ".join(st["files"]), checks=stage_checks,
-                feedback=feedback, evidence=self.evidence_dir, where=where_text, gate=(" (`%s`)" % self.cfg.gate) if self.cfg.gate else "") + tail
+                feedback=feedback, evidence=self.evidence_dir, where=where_text, gate=(" (`%s`)" % self.cfg.gate_text) if self.cfg.gate else "") + tail
             if fresh:
                 prompt += self.stages_done_text() if boundary else self.done_so_far()
             dtail = ""  # what a resumed writer still needs that its first prompt did not say for this stage
@@ -3215,7 +3184,7 @@ class Engine:
             review, _ = self.ai("review", name, review_prompt(
                 brief=self.brief_text(), plan=self.plan_text(), n=i + 1, goal=st["goal"],
                 work=self.stage_work(kinds["unexplained"], kinds["ignored"]), checks=compact(checks), summary=w["summary"], evidence=self.evidence_dir,
-                gate=(" (`%s`)" % self.cfg.gate) if self.cfg.gate else "",
+                gate=(" (`%s`)" % self.cfg.gate_text) if self.cfg.gate else "",
                 added=self.stats["tests_added"], removed=self.stats["tests_removed"],
                 fix=fix, last=last, fix_scope=state["scope"] if fix else "") +
                 ("\n" + self.where("review") if self.where("review") else "") + self.cases_text() +
@@ -3512,9 +3481,9 @@ class Engine:
                         self.gate_log = self.run_dir / ("gate.r%d.log" % (self.fixes + 1))
                         gtree = self.git("rev-parse", "HEAD^{tree}")
                         gate_t, gate_skipped = time.time(), False
-                        self.log.emit(rec.GateStart(cmd=self.cfg.gate, log=str(self.gate_log), tree=gtree))
+                        self.log.emit(rec.GateStart(cmd=self.cfg.gate_text, log=str(self.gate_log), tree=gtree))
                         if self.gate_green(gtree):  # the gate already passed on exactly this tree (a push rejected, a re-land)
-                            self.log.note("gate skipped: `%s` already passed on tree %s" % (self.cfg.gate[:80], gtree[:12]))
+                            self.log.note("gate skipped: `%s` already passed on tree %s" % (self.cfg.gate_text[:80], gtree[:12]))
                             rc, tail, gate_skipped = 0, "", True
                         else:
                             green = self.green_checks(gtree)  # repo checks green on this tree's inputs: the gate may skip their part
@@ -3594,11 +3563,11 @@ class Engine:
             got = json.loads(self.gate_file().read_text())
         except (OSError, ValueError):
             return False
-        return bool(tree) and got.get("tree") == tree and got.get("cmd") == norm_cmd(self.cfg.gate or "")
+        return bool(tree) and got.get("tree") == tree and got.get("cmd") == self.cfg.gate_text
 
     def gate_record(self, tree):
         try:
-            self.gate_file().write_text(json.dumps({"tree": tree, "cmd": norm_cmd(self.cfg.gate or "")}))
+            self.gate_file().write_text(json.dumps({"tree": tree, "cmd": self.cfg.gate_text}))
         except OSError:
             pass
 
@@ -3616,7 +3585,8 @@ class Engine:
            "verify": ("fix what the check before land found wrong",
                       "\nAll stages were accepted; then a check before land found these wrong. Fix exactly this, without "
                       "undoing what the stages built:\n%s\n")}
-    MARKERS = "! git grep -n -I -E '^(<<<<<<<|>>>>>>>)( |$)' -- ."
+    MARKERS_ARGV = ["python3", str(Path(__file__).with_name("markers.py"))]  # exit 1 and the lines when a conflict marker is in the tree
+    MARKERS = text_of(MARKERS_ARGV)
 
     def fix(self, kind, tail, resume=False):
         """One fix round at land: write → checks (a conflict fix: markers and build only; else every stage's checks, again) → a review of the fix only. A gate fix is
@@ -3645,15 +3615,15 @@ class Engine:
         st = {"goal": "Fix: " + goal, "files": [], "checks": checks, "hard": False}
         d = self.stage({"stages": [st]}, 0, {
             "fix": True, "conflict_fix": skip, "name": "fix %d/%d" % (self.fixes, limit), "fix_n": self.fixes, "fix_of": limit,
-            "failed": [self.cfg.gate or "rebase"] if kind == "gate" else None,
+            "failed": [self.cfg.gate_text or "rebase"] if kind == "gate" else None,
             "feedback": text % tail if kind == "verify" else text % (
-                (" (`%s`)" % self.cfg.gate) if kind == "gate" and self.cfg.gate else "",
-                check_evidence.failure_brief([CheckResult.failed_run(self.cfg.gate or "rebase", tail, log=str(getattr(self, "gate_log", "") or ""))],
+                (" (`%s`)" % self.cfg.gate_text) if kind == "gate" and self.cfg.gate else "",
+                check_evidence.failure_brief([CheckResult.failed_run(self.cfg.gate_text or "rebase", tail, log=str(getattr(self, "gate_log", "") or ""))],
                                              self.run_dir)
                 if kind == "gate" else check_evidence.compact([CheckResult.failed_run("rebase", tail)])),
             "scope": "the fix only: it must %s without breaking what the accepted stages built" % goal})
         if kind == "conflict":
-            if self.sh(self.MARKERS, pin=True)[0]:
+            if self.sh(self.MARKERS_ARGV, pin=True)[0]:
                 return self.fix("conflict", "conflict markers are still in the tree after the fix", resume=resume)
             self.stage_all(check=True)
             rc, out = self.sh(["git", "-c", "core.editor=true", "rebase", "--continue"], pin=True)
@@ -4762,15 +4732,16 @@ each stage has its files and its checks. Budget: about 12 tool calls. Then plan.
 
 - Split the work into stages, each one coherent piece that its checks can judge (often one stage is enough).
 - For each stage: goal, the files it changes, the exact commands that prove it (tests, linters), and hard=true only
-  when it is risky or subtle. Every check is a shell command that exits 0 when it proves the goal and non-zero when it
-  does not: the engine reads only the exit code. "Expect empty" is `test -z "$(...)"` or `! grep ...`, never a bare
-  grep; a count is `test "$(... | wc -l)" -eq 25`, never a comment saying what to expect. A check runs under
-  `bash -e -o pipefail`: a red command before a `;` or inside a pipe fails it; `cmd || true` for one whose exit does
-  not matter. Grep a command's output from a file (`cmd > f 2>&1 && grep -q x f`), not a pipe: `grep -q` ends the
-  pipe early and the command dies of SIGPIPE (exit 141).
+  when it is risky or subtle. Every check is an argv list: the program and its arguments as separate strings, for example
+  ["python3", "-m", "unittest", "tests.test_x"] or ["just", "check"]. The engine execs it as given, with no shell: no `&&`,
+  `;`, pipe, redirect, `$(...)`, `$VAR`, glob or quote means anything in it, and a string where the list belongs is sent back. It
+  exits 0 when it proves the goal and non-zero when it does not: the engine reads only the exit code. A proof that needs a
+  pipeline, a redirect, a loop or a count ("expect empty", `grep ... | wc -l`) goes into a recipe the repo has or you add (a just
+  target or a script, listed in the stage's files), and the check calls it: ["just", "name"].
 - To assert on what a repo check printed, do not run its command again in a plan check: the engine exports the log of
-  each repo check that ran before yours as `$TL_CHECK_LOG_<ID>` (its id upper-cased, other characters `_`; its exit code is
-  `$TL_CHECK_RC_<ID>`). Example: `grep -q 'Passed: 12' "$TL_CHECK_LOG_UNITY_TESTS"`.
+  each repo check that ran before yours as the environment variable `TL_CHECK_LOG_<ID>` (its id upper-cased, other characters
+  `_`; its exit code is `TL_CHECK_RC_<ID>`). A script reads it from its environment; pass the variable's name as an argument so the
+  engine runs your check after that repo check: ["python3", "tools/assert_log.py", "TL_CHECK_LOG_UNITY_TESTS", "Passed: 12"].
 - The engine sets every time limit and runs checks one at a time; never write timeouts, "run alone" or similar notes
   into a check.
 - cases: the acceptance cases. At least one per acceptance criterion of the task, each with the criterion it proves

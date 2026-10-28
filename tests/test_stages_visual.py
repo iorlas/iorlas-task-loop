@@ -31,7 +31,7 @@ class VisualWork(StagesTest):
             "name = sys.argv[2] if len(sys.argv) > 2 else 'screen'\n"
             "(out / (name + '.png')).write_bytes(b'\\x89PNG fake ' + name.encode())\n")
     TABLE = {"v": 1, "methods": [{"method": "ScreenShots", "summary": "the main screen", "timeout_min": 1,
-                                  "cmd": te.PY + " tools/shot.py {out}{args}", "args": [{"name": "name", "flag": "", "pattern": "[a-z-]+"}]}]}
+                                  "argv": [sys.executable, "tools/shot.py", "{out}", "{args}"], "args": [{"name": "name", "flag": "", "pattern": "[a-z-]+"}]}]}
     VIS = {"include": ["f.txt"]}
 
     def setUp(self):
@@ -185,7 +185,7 @@ class VisualWork(StagesTest):
         self.assertNotIn("look", [k for k in self.eng.run_dir.glob("look-*.json")])
 
     def test_the_table_is_read_from_the_base_branch_not_the_working_copy(self):
-        (self.wt / "shots.json").write_text(json.dumps({"v": 1, "methods": [{"method": "Evil", "cmd": "touch pwned"}]}))
+        (self.wt / "shots.json").write_text(json.dumps({"v": 1, "methods": [{"method": "Evil", "argv": ["touch", "pwned"]}]}))
         e = engine.Engine("t-1", str(self.wt), cfg_with(engine.load_cfg(str(self.wt)), shot_table="shots.json"), store=self.store)
         self.assertEqual(list(e.shot_methods()), ["ScreenShots"])
 
@@ -235,7 +235,8 @@ class VisualWork(StagesTest):
 
     @te.POSIX_CHECK
     def test_a_failed_shot_command_is_a_defect_even_if_it_left_a_picture(self):
-        self.TABLE["methods"][0]["cmd"] = te.PY + " tools/shot.py {out}{args}; exit 3"
+        self.TABLE["methods"][0]["argv"] = [sys.executable, "-c", "import sys, runpy; sys.argv = ['shot.py'] + sys.argv[1:]; "
+                                            "runpy.run_path('tools/shot.py', run_name='__main__'); sys.exit(3)", "{out}", "{args}"]
         try:
             base = Path(self.tmp.name, "base-files")
             (base / "shots.json").write_text(json.dumps(self.TABLE))
@@ -244,7 +245,7 @@ class VisualWork(StagesTest):
             te.sh("git", "pull", "-q", "origin", "main", cwd=self.wt)
             rc, s = self.go({"plan": [PLAN], "write": [self.write(), self.write()], "review": [CLEAN]})
         finally:
-            self.TABLE["methods"][0]["cmd"] = te.PY + " tools/shot.py {out}{args}"
+            self.TABLE["methods"][0]["argv"] = [sys.executable, "tools/shot.py", "{out}", "{args}"]
         self.assertEqual(self.roles(s)[:3], ["planner", "worker", "worker"])  # no judge call: the render failed
         self.assertIn("failed (exit 3)", s.prompts[2])
 

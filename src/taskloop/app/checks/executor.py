@@ -13,7 +13,7 @@ from taskloop.app.checks.checklog import CheckLog
 from taskloop.app.checks.host import CheckFault, CheckHost
 from taskloop.contracts.checks import Check, CheckFaultKind, CheckResult, Durations
 from taskloop.domain.checks.durations import CHEAP_S, expected_secs
-from taskloop.domain.checks.matchers import canon, cs_error_lines, output_signature, safe_name, stale_tree
+from taskloop.domain.checks.matchers import cs_error_lines, output_signature, safe_name, stale_tree
 from taskloop.domain.checks.names import log_var, norm, rc_var
 from taskloop.domain.checks.plan import CheckPlan, Step
 
@@ -61,7 +61,7 @@ class CheckExecutor:
             if skipped.why.endswith(FAILED_FIRST):
                 st.red_skipped.add(n)
             return skipped, None
-        again = self._reused(step, st)
+        again = self._reused(c, st)
         if again:
             st.red = c.group if again.exit != 0 else st.red
             return again, None
@@ -75,7 +75,7 @@ class CheckExecutor:
         else:
             cid = self.checklog.start(c, st.n, "checks/" + name)
             res, where = self._launch(step, st, name, ikey, nocache), str(self.logs / name)
-        st.ran[(canon(c.cmd), str(self.host.wt))] = (res, c.timeout_min)
+        st.ran[(norm(c.cmd), str(self.host.wt))] = (res, c.timeout_min)
         self._publish(c, res, where, st)
         if res.exit != 0 and not res.base_red:
             st.red = c.group
@@ -113,15 +113,11 @@ class CheckExecutor:
                 return res.id if res else "?"
         return ""
 
-    def _reused(self, step: Step, st: Round) -> CheckResult | None:
+    def _reused(self, c: Check, st: Round) -> CheckResult | None:
         """Each distinct command runs once per block, whatever limit its copy carries; the limit matters only when the first run
-        timed out under a shorter one. A green wrapper that reads a repo check's log runs its own part instead (it writes the
-        file the rest of the plan reads); a red one is not launched again."""
-        c = step.check
-        before = st.ran.get((canon(c.cmd), str(self.host.wt)))
+        timed out under a shorter one."""
+        before = st.ran.get((norm(c.cmd), str(self.host.wt)))
         if before is None or (before[0].exit == 124 and before[1] < c.timeout_min):
-            return None
-        if before[0].exit == 0 and step.reads and norm(c.cmd) != canon(c.cmd):
             return None
         self.host.log.note(f"`{c.cmd[:120]}` already ran in this block: its result is reused")
         return dataclasses.replace(before[0], id=c.id, cmd=c.cmd, group=c.group, cached=False, reused=True, log="")
@@ -142,14 +138,9 @@ class CheckExecutor:
             st.env[log_var(c.id)], st.env[rc_var(c.id)] = log_abs, str(res.exit)
 
     def _launch(self, step: Step, st: Round, name: str, ikey: str, nocache: bool) -> CheckResult:
-        c, host = step.check, self.host
-        cmd = c.cmd
-        reads = [st.by_step[r].id for r in step.reads]
-        if step.reads and all(st.env.get(rc_var(i)) == "0" for i in reads):
-            cmd = step.cmd
-            host.log.note("`{}` reuses the log of {}: only its own part runs".format(c.cmd[:100], ", ".join(f"`{i}`" for i in reads)))
+        c = step.check
         t0 = time.time()
-        out = self.attempts.run(c, cmd, self.logs / name, st.env)
+        out = self.attempts.run(c, self.logs / name, st.env)
         self._fault(c, out, st)
         res = self._result(c, out, name, round(time.time() - t0))
         if out.rc == 0:  # only a green run says what the check costs: a red one stops early

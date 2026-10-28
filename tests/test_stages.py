@@ -17,7 +17,8 @@ import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from taskloop.contracts.config import EngineConfig  # noqa: E402
 from support.builders import cfg_with, make_engine  # noqa: E402
 from support.checks import res  # noqa: E402
-from taskloop.adapters.check_probe import ShellProbe  # noqa: E402
+from taskloop.adapters.check_probe import PathProbe  # noqa: E402
+from taskloop.contracts.argv import argv_of  # noqa: E402
 from taskloop.app.checks import evidence as check_evidence  # noqa: E402
 import test_engine as te  # noqa: E402
 from test_engine import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint, tl  # noqa: E402,F401
@@ -28,7 +29,7 @@ _REAL_CMD_BLOCK = tl.cmd_block  # te's harness patches it per test; this is the 
 
 class StagesTest(unittest.TestCase):
     def probe(self):
-        return ShellProbe(getattr(self, "wt"), te.sproc.current_env())  # noqa: B009
+        return PathProbe(getattr(self, "wt"), te.sproc.current_env())  # noqa: B009
 
     setUp = te.EngineTest.setUp
     tearDown = te.EngineTest.tearDown
@@ -90,7 +91,7 @@ class EmptyPlan(StagesTest):
 class BadChecks(StagesTest):
     """13.3: the writer names a broken check loosely; the engine still finds it."""
 
-    LONG = FALSE + " ; echo padding-so-the-check-is-long-enough-to-shorten"
+    LONG = FALSE + " padding-so-the-check-is-long-enough-to-shorten"
 
     @te.no_repo
     def test_flagged_why_matches_loose_names(self):
@@ -273,34 +274,6 @@ class Handoff(StagesTest):
 class RepeatedChecks(StagesTest):
     """13.4: a slow command wrapped in two checks, or around a repo check, goes back to the planner once."""
 
-    def wrap(self, out):
-        return "mkdir -p ev && just unity-tests > ev/%s.out 2>&1 && grep -q Passed ev/%s.out" % (out, out)
-
-    def test_repeats_are_found_through_redirects_and_wrappers(self):
-        e = engine.Engine("t-1", str(self.wt), cfg_with(engine.load_cfg(str(self.wt)), checks=[
-            {"id": "tests", "cmd": "just fast-tests", "group": "tests"}]), store=self.store)
-        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[self.wrap("a"), self.wrap("b"), "just fast-tests", "just lint"])],
-                    cases=[{"criterion": "c", "check": self.wrap("c")}])
-        got = {part: len(cs) for part, cs, rid in e.repeated_slow(plan)}
-        self.assertEqual(got, {"just unity-tests": 3})
-        self.assertEqual(e.repeated_slow(dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["just unity-tests", "just unity-tests"])])), [])
-        two = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[self.wrap("a")]), dict(PLAN["stages"][0], checks=[self.wrap("b")])])
-        self.assertEqual(e.repeated_slow(two), [])  # two stages' checks run in two rounds
-        wrapped = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["mkdir -p ev && just fast-tests > ev/o 2>&1"])])
-        self.assertEqual([(p, rid) for p, cs, rid in e.repeated_slow(wrapped)], [])  # not slow by name or history
-        e.cfg = cfg_with(e.cfg, checks=[{"id": "tests", "cmd": "just unity-tests", "group": "tests"}])
-        one = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[self.wrap("a")])])
-        self.assertEqual([(p, rid) for p, cs, rid in e.repeated_slow(one)], [("just unity-tests", "tests")])
-
-    def test_the_plan_is_sent_back_once(self):
-        bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[self.wrap("a"), self.wrap("b")])])
-        rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
-        self.assertIn("slow commands run in more than one check", s.prompts[1])
-        self.assertIn("just unity-tests", s.prompts[1])
-
-
 class SharedNotes(StagesTest):
     """13.8: the tasks of a repo share what is running, what landed and which tests are flaky."""
 
@@ -468,26 +441,25 @@ class Fdyo(StagesTest):
 class Executable(StagesTest):
     """tl-bxk.13.16.2: a plan check must be able to start; an accepted stage's promised files must exist on resume."""
 
-    @te.NO_BASH
     def test_a_sentence_is_not_a_command(self):
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["After building the current player: python3 tools/x.py", HAS_F])])
         errs = lint.dry_check(plan, self.probe())
         self.assertEqual(len(errs), 1)
-        self.assertIn("`After` is not a command here", errs[0])
+        self.assertIn("`After` is not an executable here", errs[0])
+
+    def problems(self, cmd, probe=None, **kw):
+        return lint.command_problems(argv_of(cmd), probe or self.probe(), **kw)
 
     def test_real_commands_pass_the_word_check(self):
-        for ok in ("grep -q x a.txt && test -f a.txt", "! grep -q zzz a.txt", "FOO=1 bash -c 'echo hi' | wc -l",
-                   "echo hi > out.txt 2>&1 && test -s out.txt", "for f in a b; do echo $f; done", "(cd . && ls)",
-                   "git status --short", "python3 -c 'a;b'", te.PY + " -c 'pass'"):
-            self.assertEqual(lint.command_problems(ok, self.probe()), [], ok)
+        for ok in ("grep -q x a.txt", "env FOO=1 git status", "git status --short", "python3 -c 'a;b'", te.PY + " -c 'pass'"):
+            self.assertEqual(self.problems(ok), [], ok)
 
-    @te.NO_BASH
     def test_a_just_recipe_must_exist_in_the_tree(self):
         tools.need(self, "just")
         self.enterContext(tools.on_path("just"))
         (self.wt / "justfile").write_text("fmt-check:\n\techo ok\n")
-        self.assertEqual(lint.command_problems("just fmt-check && echo done", self.probe()), [])
-        bad = lint.command_problems("just fmt-check && just unity-play-tests", self.probe())
+        self.assertEqual(self.problems("just fmt-check"), [])
+        bad = self.problems("just unity-play-tests")
         self.assertEqual(len(bad), 1)
         self.assertIn("no recipe unity-play-tests", bad[0])
         self.assertIn("fmt-check", bad[0])
@@ -496,24 +468,20 @@ class Executable(StagesTest):
         probe = self.probe()
         for tool in ("make", "npm"):  # tools a dev machine has; this test is about the grammar, not about what is installed
             probe.words[tool] = (True, time.time())
-        for ok in ("command -v git >/dev/null", "env -i PATH=$PATH git --version", "f () { echo hi; }; f",
-                   "cat <<EOF2 > x.txt\nhello\nEOF2\ntest -s x.txt", "cd sub && ./x.sh", "make && ./build/x", "npm ci && node_modules/.bin/jest",
-                   "~/bin/foo", ".venv/bin/python -c pass", "source env.sh && git status", "time git status"):
-            self.assertEqual(lint.command_problems(ok, probe), [], ok)
+        for ok in ("env -i PATH=x git --version", "make", "node_modules/.bin/jest", "~/bin/foo", ".venv/bin/python -c pass"):
+            self.assertEqual(self.problems(ok, probe), [], ok)
 
-    @te.NO_BASH
     def test_just_aliases_private_recipes_options_and_a_recipe_a_stage_adds(self):
         tools.need(self, "just")
         self.enterContext(tools.on_path("just"))
         (self.wt / "justfile").write_text("alias ci := check\ncheck:\n\techo ok\n_private:\n\techo p\n")
         for ok in ("just ci", "just _private", "just --justfile justfile check", "just --set v x check", "just -d . check", "just check"):
-            self.assertEqual(lint.command_problems(ok, self.probe()), [], ok)
-        self.assertEqual(len(lint.command_problems("just nope", self.probe())), 1)
-        self.assertEqual(lint.command_problems("just newrecipe", self.probe(), made=["justfile"]), [])  # a stage adds it
+            self.assertEqual(self.problems(ok), [], ok)
+        self.assertEqual(len(self.problems("just nope")), 1)
+        self.assertEqual(self.problems("just newrecipe", made=["justfile"]), [])  # a stage adds it
         (self.wt / "justfile").write_text("newrecipe:\n\techo n\n")  # a rebase changes the file: seen at once
-        self.assertEqual(lint.command_problems("just newrecipe", self.probe()), [])
+        self.assertEqual(self.problems("just newrecipe"), [])
 
-    @te.NO_BASH
     def test_a_missing_script_is_found_unless_a_stage_makes_it(self):
         check = "./tools/probe.sh --all"
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[check])])
@@ -521,18 +489,17 @@ class Executable(StagesTest):
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], files=["tools/probe.sh"], checks=[check])])
         self.assertEqual([e for e in lint.dry_check(plan, self.probe()) if "not a file" in e], [])
 
-    @te.NO_BASH
     def test_the_plan_with_a_sentence_goes_back_once(self):
         bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["Confirm that f exists", HAS_F])])
         rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
-        self.assertIn("`Confirm` is not a command here", s.prompts[1])
+        self.assertIn("`Confirm` is not an executable here", s.prompts[1])
 
     PATH1 = ".task/t-1/evidence/sleeper-on-bed.txt"
 
     def two_stage(self):
         return dict(PLAN, stages=[
-            dict(PLAN["stages"][0], goal="stage one", checks=["echo ok > %s" % self.PATH1, HAS_F]),
+            dict(PLAN["stages"][0], goal="stage one", checks=[te.pyc("open(__import__('sys').argv[1], 'w').write('ok')", self.PATH1), HAS_F]),
             dict(PLAN["stages"][0], goal="stage two", checks=['test -s %s' % self.PATH1])])
 
     def test_a_file_an_accepted_stage_promised_and_a_later_check_reads(self):
@@ -543,8 +510,6 @@ class Executable(StagesTest):
         Path(self.wt, self.PATH1).write_text("ok\n")
         self.assertIsNone(e.promised_missing(plan, 1))
         Path(self.wt, self.PATH1).unlink()
-        own = dict(plan, stages=[plan["stages"][0], dict(plan["stages"][1], checks=["echo ok > %s && test -s %s" % (self.PATH1, self.PATH1)])])
-        self.assertIsNone(e.promised_missing(own, 1))  # the later check writes it itself
         self.assertIsNone(e.promised_missing(plan, 0))  # nothing accepted yet
 
     def test_a_replanned_runs_goals_survive_the_stage_that_runs_again(self):

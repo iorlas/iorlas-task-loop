@@ -29,7 +29,8 @@ import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from taskloop.adapters import delegate as dl  # noqa: E402,F401
 from clock import FakeClock  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from support.builders import cfg_with, make_engine  # noqa: E402
+from support.builders import argv_cfg, cfg_with, make_engine  # noqa: E402
+from taskloop.contracts.argv import checks_to_wire  # noqa: E402
 from taskloop.contracts.config import EngineConfig  # noqa: E402
 import engine  # noqa: E402
 import seams  # noqa: E402
@@ -56,7 +57,7 @@ from taskloop.contracts.checks import CheckRun  # noqa: E402
 from taskloop.app.checks import evidence as check_evidence  # noqa: E402
 from support.checks import res  # noqa: E402
 from taskloop.adapters import procs as sproc  # noqa: E402
-from taskloop.adapters.check_probe import ShellProbe  # noqa: E402
+from taskloop.adapters.check_probe import PathProbe  # noqa: E402
 import tl  # noqa: E402
 from taskloop.adapters import delegate as lroute  # noqa: E402,F401
 
@@ -89,7 +90,6 @@ def without_shims(fn):
 
 
 EXIT_127 = unittest.skipIf(os.name == "nt", "the engine reads a missing tool as bash's exit 127; cmd.exe reports it as exit 1")
-NO_BASH = unittest.skipIf(os.name == "nt", "lint.command_problems judges nothing on Windows (no bash there, by design)")
 SH_FAKE = unittest.skipIf(os.name == "nt", "the bd fake is a #!/bin/sh script, which Windows cannot execute")
 NO_FCNTL = unittest.skipIf(os.name == "nt", "the lock is fcntl; tl has none on Windows (documented no-op)")
 
@@ -105,8 +105,15 @@ def shown(p):
 
 
 PY = '"%s"' % sys.executable
-HAS_F = PY + ' -c "import os,sys; sys.exit(0 if os.path.exists(\'f.txt\') else 1)"'
-FALSE = PY + ' -c "import sys; sys.exit(1)"'
+
+
+def pyc(code, *args):
+    """A check as its one-line text: this interpreter running `code`, then the arguments."""
+    return shlex.join([sys.executable, "-c", code, *args])
+
+
+HAS_F = shlex.join([sys.executable, "-c", "import os,sys; sys.exit(0 if os.path.exists('f.txt') else 1)"])
+FALSE = shlex.join([sys.executable, "-c", "import sys; sys.exit(1)"])
 PLAN = {"summary": "do it", "stages": [{"goal": "add f", "files": ["f.txt"], "checks": [HAS_F],
                                         "hard": False}], "risks": [], "question": "", "options": [], "decided": "", "cases": [], "leftovers": []}
 WRITE = {"summary": "wrote f", "checks_run": [{"cmd": "test -f f.txt", "exit": 0}], "question": "", "options": [], "decided": "", "bad_checks": [],
@@ -242,7 +249,7 @@ class EngineTest(unittest.TestCase):
         if not base.exists():
             sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(base), cwd=self.tmp.name)
         sh("git", "pull", "-q", "origin", "main", cwd=base)
-        (base / ".task-loop.json").write_text(json.dumps({"engine": engine_cfg}))
+        (base / ".task-loop.json").write_text(json.dumps({"engine": argv_cfg(engine_cfg)}))
         sh("git", "add", "-A", cwd=base)
         sh("git", "commit", "-qm", "engine config", "--allow-empty", cwd=base)
         sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
@@ -485,33 +492,18 @@ class EngineTest(unittest.TestCase):
         self.assertEqual([bool(c.reused) for c in res], [False, True, True])
         self.assertEqual(n.read_text(), "1")
 
-    @POSIX_CHECK
     def test_a_configured_checks_log_and_exit_reach_the_checks_after_it(self):
         cmd, n = self.counting_check("Passed: 12", ok_after=1)
         eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests"}])
-        res = eng.run_checks({"checks": ["grep -q 'Passed: 12' \"$TL_CHECK_LOG_UNITY_TESTS\" && test \"$TL_CHECK_RC_UNITY_TESTS\" = 0"],
-                              "files": []}, "s")
-        self.assertEqual([c.exit for c in res], [0, 0])
+        read = pyc("import os,sys; log=os.environ[sys.argv[1]]; sys.exit(0 if 'Passed: 12' in open(log).read() "
+                   "and os.environ[sys.argv[2]] == '0' else 1)", "TL_CHECK_LOG_UNITY_TESTS", "TL_CHECK_RC_UNITY_TESTS")
+        res = eng.run_checks({"checks": [read], "files": []}, "s")
+        self.assertEqual([c.exit for c in res], [0, 0])  # the plan check ran after the repo check and read its log
         self.assertEqual(n.read_text(), "1")
-
-    @POSIX_CHECK
-    def test_the_commands_the_review_found_unsafe_run_as_written(self):
-        (self.wt / "client").mkdir()
-        cmd, n = self.counting_check("PASSED", ok_after=1)
-        eng = self.checks_engine(checks=[{"id": "t", "cmd": cmd, "group": "tests", "cache": False}])
-        marks = []
-        for wrap in ("cd client && %s > f 2>&1 && grep -q PASSED f",
-                     "export X=1; %s > f 2>&1; grep -q PASSED f",
-                     "git clean -fdq client && %s > f && grep -q PASSED f",
-                     "%s > f; grep -q PASSED f"):
-            n.write_text("1")
-            res = eng.run_checks({"checks": [wrap % cmd], "files": []}, "s")
-            marks.append((res[1].exit, n.read_text()))
-        self.assertEqual(marks, [(0, "3")] * 4)  # 1 + the configured check + the wrapper, which ran itself
 
     def test_a_plan_check_that_re_runs_a_configured_check_is_found(self):
         cfg = cfg_with(checks=[{"id": "unity-tests", "cmd": "just unity-tests", "group": "tests"}])
-        plan = dict(PLAN, risks=[{"what": "x", "check": "mkdir -p x && just unity-tests > x/f && grep -q a x/f"},
+        plan = dict(PLAN, risks=[{"what": "x", "check": "env CI=1 just unity-tests"},
                                  {"what": "y", "check": "just unity-tests-extra"}])
         self.assertEqual([i for _, i in lint.rerun_checks(plan, cfg)], ["unity-tests"])
         self.assertEqual(log_var("unity-tests"), "TL_CHECK_LOG_UNITY_TESTS")
@@ -673,7 +665,7 @@ class EngineTest(unittest.TestCase):
     @POSIX_CHECK
     def test_a_gate_killed_by_a_signal_starts_no_fix_round_and_leaves_the_bead_open(self):
         # tl-y35: `gate: exit -15` (the parent stopped it) is the machine's outcome, not the code's
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, gate="kill -TERM $$", max_fix_rounds=2)
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, gate=pyc("import os,signal; os.kill(os.getpid(), signal.SIGTERM)"), max_fix_rounds=2)
         self.assertNotEqual(rc, 0)
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])  # no fix round: no second worker call
         self.assertEqual((self.eng.fixes, self.blocked, self.closed), (0, [], []))
@@ -710,25 +702,10 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(count.read_text(), "1")
         self.assertEqual(seen.read_text(), tl.git("rev-parse", "HEAD^{tree}", cwd=str(self.wt)))
 
-    @POSIX_CHECK
-    def test_a_stage_check_that_deletes_first_or_quotes_the_command_runs_it(self):
-        count = Path(self.tmp.name) / "count"
-        bump = PY + ' -c "open(%r, \'a\').write(\'1\')"' % str(count)
-        eng = self.checks_engine(checks=[{"id": "ut", "cmd": bump, "group": "tests", "cache": False}])
-        st = {"checks": ["rm -f nothing.xml; " + bump, "echo '" + bump.replace("'", "") + " && x'"], "files": []}
-        eng.run_checks(st, "s")
-        self.assertEqual(count.read_text(), "11")  # the repo check, then the one after rm; the quoted text is no command
-
-    def test_a_red_part_after_the_reused_check_still_fails(self):
-        eng = self.checks_engine(checks=[{"id": "ut", "cmd": PY + ' -c "pass"', "group": "tests"}])
-        res = eng.run_checks({"checks": [PY + ' -c "pass" && ' + FALSE], "files": []}, "s")
-        self.assertEqual(res[-1].exit, 1)
-
-    @POSIX_CHECK
     def test_a_stage_check_always_reruns_it_can_read_state_outside_the_tree(self):
         state = Path(self.tmp.name) / "editor-open"  # a running editor, a log, a bead comment: git cannot see them
         eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
-        st = {"checks": ['! test -e %s' % state], "files": []}
+        st = {"checks": [pyc("import os,sys; sys.exit(1 if os.path.exists(sys.argv[1]) else 0)", str(state))], "files": []}
         self.assertEqual(eng.run_checks(st, "s")[0].exit, 0)
         state.write_text("x")
         again = eng.run_checks(st, "s")
@@ -753,20 +730,19 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(count.read_text(), "11")
         self.assertFalse(again[0].cached)
 
-    @POSIX_CHECK
-    def test_checks_run_in_bash(self):
+    def test_checks_run_without_a_shell(self):
         eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
-        res = eng.run_checks({"checks": ['diff <(echo a) <(echo a)'], "files": []}, "s")
+        res = eng.run_checks({"checks": [shlex.join(["echo", "$HOME", "&&", "x;", "(y)"])], "files": []}, "s")
         self.assertEqual(res[0].exit, 0, res[0].tail)
+        self.assertIn("$HOME && x; (y)", res[0].tail)  # no expansion, no operator: every word reached the program as written
 
-    @POSIX_CHECK
-    def test_a_failing_command_in_a_check_fails_it_wherever_it_sits(self):
-        # lifesim-gfr.31.1: `just unity-check > log; ! grep 'error CS' log` passed with unity-check red: `;` dropped it
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
-        cases = {FALSE + "; true": 1, FALSE + " | cat": 1, "! " + FALSE: 0, FALSE + " || true": 0,
-                 "if " + FALSE + "; then exit 3; fi": 0, "true; true": 0}
-        res = eng.run_checks({"checks": list(cases), "files": []}, "s")
-        self.assertEqual({c.cmd: c.exit != 0 for c in res}, {k: v != 0 for k, v in cases.items()})
+    def test_a_check_that_is_not_an_argv_list_is_refused_with_the_allowed_form(self):
+        bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["test -f f.txt && echo ok"])])
+        errs = engine.validate(bad, engine.SCHEMAS["plan"])
+        self.assertEqual(len(errs), 1)
+        self.assertIn("$.stages[0].checks[0]: expected array", errs[0])
+        self.assertIn('["just", "name"]', errs[0])
+        self.assertEqual(engine.validate(checks_to_wire(PLAN), engine.SCHEMAS["plan"]), [])
 
     def test_a_stop_during_a_check_stops_the_check_and_everything_it_started(self):
         if os.name == "nt":
@@ -782,7 +758,7 @@ class EngineTest(unittest.TestCase):
             raise engine.Blocked("failed: stopped (SIGTERM)", kind=engine.oc.Kind.PAUSE_KILLED)
         with mock.patch.object(subprocess.Popen, "communicate", stopped):
             with self.assertRaises(engine.Blocked):
-                eng.sh("sleep 30 & echo $! > child.pid; wait")
+                eng.sh(shlex.split(self.spawn(pidfile)))
         child = int(pidfile.read_text())
         if not until(lambda: pid_gone(child), 2.5):
             os.killpg(started[0], 9)
@@ -829,7 +805,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(w.count("RULES-MARK"), 1)  # inlined once, by text
         self.assertNotIn("worker-rules.md", w)  # no path to read (tl-7y6.6.1)
         self.assertNotIn("Read ", w.split("<worker_rules>")[0].rsplit("Your stage", 1)[-1])
-        self.assertIn('-c "pass"`) or the issue tracker (bd)', w)
+        self.assertIn('-c pass`) or the issue tracker (bd)', w)
 
     def test_wip_from_an_earlier_run_lands_as_one_titled_commit(self):
         sh("git", "checkout", "-q", "-b", "task/t-1", cwd=self.wt)
@@ -874,7 +850,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "planner", "worker", "reviewer"])
         self.assertIn("exits 1 whatever the code does", (self.eng.run_dir / "replan.md").read_text())
 
-    BEAD_CHECK = "bd list --label lane:live --json | jq -e 'any(.title | test(\"hard[-_ ]to[-_ ]undo\"))'"
+    BEAD_CHECK = "bd list --label lane:live --json"
 
     def test_a_check_that_reads_the_tracker_is_sent_back_to_the_planner_once(self):
         # lifesim-fld.26.12: a stage check ran `bd list` for a follow-up bead; writers cannot run bd, so no code passed it
@@ -887,7 +863,7 @@ class EngineTest(unittest.TestCase):
         self.assertIn("leftovers", s.prompts[1])
 
     def test_a_plan_still_reading_the_tracker_after_one_rewrite_fails(self):
-        bad = dict(PLAN, cases=[{"criterion": "a follow-up exists", "check": "test -n \"$(cat .beads/issues.jsonl)\""}])
+        bad = dict(PLAN, cases=[{"criterion": "a follow-up exists", "check": "cat .beads/issues.jsonl"}])
         rc, s = self.run_engine({"plan": [bad, bad]})
         self.assertEqual([c[0] for c in s.calls], ["planner", "planner"])
         self.assertEqual(self.blocked, [])
@@ -895,16 +871,16 @@ class EngineTest(unittest.TestCase):
 
     @no_repo
     def test_tracker_checks_are_told_apart_from_code_that_mentions_bd(self):
-        self.assertEqual(lint.tracker_checks(dict(PLAN, risks=[{"what": "x", "check": "cd sub && bd show t-1"}])),
-                         ["cd sub && bd show t-1"])
-        for ok in (HAS_F, "! grep -rn 'bd list' src", "pytest tests/test_bd.py", "test -f abd"):
+        self.assertEqual(lint.tracker_checks(dict(PLAN, risks=[{"what": "x", "check": "env X=1 bd show t-1"}])),
+                         ["env X=1 bd show t-1"])
+        for ok in (HAS_F, "grep -rn 'bd list' src", "pytest tests/test_bd.py", "test -f abd"):
             self.assertEqual(lint.tracker_checks(dict(PLAN, risks=[{"what": "x", "check": ok}])), [], ok)
 
     UNITY = {"cmd": "just unity-check", "why": "it fails on uncommitted client/ changes"}
 
     def test_a_check_running_a_gate_only_command_is_sent_back_to_the_planner_once(self):
         # lifesim-fld.27.9: a stage check ran `just unity-check`, red by design on the uncommitted tree: stuck, 68 min
-        bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[HAS_F, "just fmt && just unity-check"])])
+        bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[HAS_F, "env CI=1 just unity-check"])])
         rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]}, gate_only=[self.UNITY])
         self.assertEqual(rc, 0)
         self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
@@ -949,7 +925,7 @@ class EngineTest(unittest.TestCase):
 
     def test_a_write_prompt_names_each_check_command_once_in_its_may_run_lists(self):
         # tl-7y6.6.12: the stage's checks and the where() text both listed "You may run these"
-        cmd = PY + ' -c "print(1)"'
+        cmd = pyc("print(1)")
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[cmd, HAS_F])])
         rc, s = self.run_engine({"plan": [plan], "write": [WRITE], "review": [CLEAN]},
                                 raw={"checks": [{"id": "x", "cmd": cmd, "group": "static"}, {"id": "y", "cmd": "echo only-repo"}]})
@@ -962,7 +938,7 @@ class EngineTest(unittest.TestCase):
 
     def test_gate_only_checks_match_a_command_not_a_longer_name_or_an_argument(self):
         cfg = cfg_with(gate="just check", gate_only=["just unity-check", self.UNITY])
-        bad = ["just check", "cd x && just unity-check --fast", "true; just check | tail"]
+        bad = ["just check", "env CI=1 just unity-check --fast", "nice just check"]
         ok = [HAS_F, "just check-fmt", "just unity-checks", "grep 'just check' AGENTS.md", "just fmt"]
         got = lint.gate_only_checks(dict(PLAN, risks=[{"what": "x", "check": c} for c in bad + ok]), cfg)
         self.assertEqual([c for c, _ in got], bad)
@@ -1173,7 +1149,12 @@ class EngineTest(unittest.TestCase):
         self.assertTrue(any(t.startswith("{") for t in said))
 
     # -- what live runs found: real process trees, real signals, reruns on a branch that already has the work
-    SPAWN ="sleep 30 & echo $! > %s; "
+    def spawn(self, pidfile, term=False):
+        """A check that starts a child sleeping 30 s and records its pid, then waits for it (term: after sending its parent, the
+        engine, SIGTERM)."""
+        code = ("import os,signal,subprocess; c=subprocess.Popen(['sleep','30']); open(%r,'w').write(str(c.pid)); %s c.wait()"
+                % (str(pidfile), "os.kill(os.getppid(), signal.SIGTERM);" if term else ""))
+        return pyc(code)
 
     def child_of(self, pidfile):
         if until(lambda: pidfile.exists() and pidfile.read_text().strip(), 5):
@@ -1208,7 +1189,7 @@ class EngineTest(unittest.TestCase):
         pidfile = Path(self.tmp.name, "child.pid")
         eng = self.checks_engine(check_timeout_min=0.03)
         t = time.time()
-        res = eng.run_checks({"checks": [self.SPAWN % pidfile + "wait"], "files": []}, "s")
+        res = eng.run_checks({"checks": [self.spawn(pidfile)], "files": []}, "s")
         self.assertLess(time.time() - t, 15, "the engine waited for the check's child to end by itself")
         self.assertEqual(res[0].exit, 124)
         self.assertIn("timed out after 0.03 min", res[0].tail)
@@ -1229,7 +1210,7 @@ class EngineTest(unittest.TestCase):
 
     def test_sigterm_during_a_stage_check_stops_its_tree_and_still_closes(self):
         pidfile = Path(self.tmp.name, "child.pid")
-        check = self.SPAWN % pidfile + "kill -TERM $PPID; wait"
+        check = self.spawn(pidfile, term=True)
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[check])])
         with self.stoppable():
             rc, _ = self.run_engine({"plan": [plan], "write": [WRITE], "review": [CLEAN]})
@@ -1252,7 +1233,7 @@ class EngineTest(unittest.TestCase):
         eng = self.checks_engine()
         with self.stoppable(), mock.patch.object(subprocess, "Popen", SignalledPopen):
             with self.assertRaises(engine.Blocked) as cm:
-                eng.sh(self.SPAWN % pidfile + "wait")
+                eng.sh(shlex.split(self.spawn(pidfile)))
         self.assertEqual(cm.exception.kind, engine.oc.Kind.PAUSE_KILLED)
         self.assertDead(self.child_of(pidfile))
 
@@ -1260,7 +1241,7 @@ class EngineTest(unittest.TestCase):
         pidfile = Path(self.tmp.name, "child.pid")
         with self.stoppable():
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
-                                    gate=self.SPAWN % pidfile + "kill -TERM $PPID; wait")
+                                    gate=self.spawn(pidfile, term=True))
         self.assertEqual(rc, 2)
         self.assertIn("stopped (SIGTERM)", self.said())
         self.assertDead(self.child_of(pidfile))
@@ -1272,7 +1253,8 @@ class EngineTest(unittest.TestCase):
         # a stop between the push and cmd_land left a landed bead failed, and the loop reopened it
         with self.stoppable():
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
-                                    land="kill -TERM $PPID; sleep 0.3; git push -q origin HEAD:main")
+                                    land=pyc("import os,signal,subprocess,sys,time; os.kill(os.getppid(), signal.SIGTERM); time.sleep(0.3); "
+                                             "sys.exit(subprocess.call(['git', 'push', '-q', 'origin', 'HEAD:main']))"))
         self.assertEqual(rc, 0)
         self.assertEqual(self.eng.result()["outcome"], "landed")
         self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
@@ -1289,7 +1271,8 @@ class EngineTest(unittest.TestCase):
     def test_a_stop_during_a_rejected_push_stops_after_it(self):
         with self.stoppable():
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
-                                    land="kill -TERM $PPID; sleep 0.3; echo '! [rejected] (fetch first)' >&2; exit 1")
+                                    land=pyc("import os,signal,sys,time; os.kill(os.getppid(), signal.SIGTERM); time.sleep(0.3); "
+                                             "print('! [rejected] (fetch first)', file=sys.stderr); sys.exit(1)"))
         self.assertEqual(rc, 2)
         self.assertIn("stopped (SIGTERM)", self.said())
 
@@ -1635,8 +1618,8 @@ class EngineTest(unittest.TestCase):
         self.assertGreater(len(fix[fix.index("These checks fail"):]), 500)
 
     def test_a_slow_check_is_the_engines_and_a_fast_failed_check_is_the_writers_to_rerun(self):
-        slow = PY + ' -c "pass" unity-tests'
-        fast = PY + ' -c "import sys; sys.exit(1 if open(\'f.txt\').read().strip() == \'d2\' else 0)" fast-one'
+        slow = pyc("pass", "unity-tests")
+        fast = pyc("import sys; sys.exit(1 if open('f.txt').read().strip() == 'd2' else 0)", "fast-one")
         rc, s = self.run_engine({"plan": [self.plan_with(slow, fast)], "write": [WRITE, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         first, again = s.prompts[1], s.prompts[2]
@@ -1845,7 +1828,7 @@ class EngineTest(unittest.TestCase):
 
     def count_check(self, name):
         log = Path(self.tmp.name, name + ".count")
-        return "%s -c \"open(r'%s','a').write('x')\"" % (PY, log), log
+        return pyc("open(r'%s','a').write('x')" % log), log
 
     def checks_records(self):
         recs = [json.loads(x) for x in self.eng.log_path.read_text().splitlines()]
@@ -1919,7 +1902,7 @@ class EngineTest(unittest.TestCase):
         state = {"pushes": 0, "fetches": 0, "gates": 0, "results": []}
         real_lock, real_sh, real_wait = engine.Engine.land_lock, engine.Engine.sh, engine.Engine.add_wait
         real_fetch, real_checks, real_fix = engine.Engine.fetch, engine.Engine.run_checks, engine.Engine.fix
-        gate = PY + ' -c "pass"'
+        gate = [sys.executable, "-c", "pass"]
 
         @contextmanager
         def lock(this):
@@ -1948,7 +1931,7 @@ class EngineTest(unittest.TestCase):
                 if failure == "checks_stop":
                     state["pidfile"] = home / ("retry-child-%d.pid" % n)
                     state["next_check"] = home / ("retry-next-%d" % n)
-                    st = dict(st, checks=[self.SPAWN % state["pidfile"] + "kill -TERM $PPID; wait",
+                    st = dict(st, checks=[self.spawn(state["pidfile"], term=True),
                                           "touch %s" % state["next_check"]])
                 if failure in ("checks", "checks_fixed", "checks_exhausted", "review_exhausted") and not state.get("check_failed"):
                     state["check_failed"] = True
@@ -2558,10 +2541,10 @@ class EngineTest(unittest.TestCase):
             self.assertIn("options: with a question, 2-4 answers", {"plan": engine.PLAN_PROMPT, "write": engine.WRITE_PROMPT,
                                                                      "review": engine.REVIEW_PROMPT}[node])
         ok = {"label": "A", "cost": "c", "answer": "a", "recommended": True}
-        self.assertEqual(engine.validate(dict(PLAN, options=[ok]), engine.SCHEMAS["plan"]), [])
-        bare = {k: v for k, v in PLAN.items() if k != "options"}
+        self.assertEqual(engine.validate(checks_to_wire(dict(PLAN, options=[ok])), engine.SCHEMAS["plan"]), [])
+        bare = {k: v for k, v in checks_to_wire(PLAN).items() if k != "options"}
         self.assertEqual(engine.validate(bare, engine.SCHEMAS["plan"]), ["$.options: missing"])
-        self.assertEqual(engine.validate(dict(PLAN, options=[{"label": "A"}]), engine.SCHEMAS["plan"]),
+        self.assertEqual(engine.validate(checks_to_wire(dict(PLAN, options=[{"label": "A"}])), engine.SCHEMAS["plan"]),
                          ["$.options[0].cost: missing", "$.options[0].answer: missing", "$.options[0].recommended: missing"])
 
     def test_a_verify_ask_offers_right_and_a_wrong_that_opens_the_box(self):
@@ -2594,7 +2577,7 @@ class EngineTest(unittest.TestCase):
 
     def test_the_gate_named_as_unchecked_lands_without_an_ask(self):
         # lifesim-5ban.3: 'the full gate and diff coverage, reserved for the engine' stopped the land; the gate runs there
-        gate = PY + ' -c "pass"'
+        gate = pyc("pass")
         r = dict(CLEAN, unchecked=[{"what": "the full `%s` gate and diff coverage" % gate, "kind": "requirement"}])
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r]}, gate=gate)
         self.assertEqual(rc, 0, self.blocked)
@@ -2604,7 +2587,7 @@ class EngineTest(unittest.TestCase):
         self.assertIn("write no case for it", s.prompts[0])
 
     def test_a_repo_check_that_passed_this_round_named_as_unchecked_lands_without_an_ask(self):
-        unit = PY + ' -c "print(1)"'
+        unit = pyc("print(1)")
         r = dict(CLEAN, unchecked=[{"what": "%s on the whole tree" % unit, "kind": "case"}])
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r]},
                                 checks=[{"id": "unit", "cmd": unit, "group": "tests"}])
@@ -2614,7 +2597,7 @@ class EngineTest(unittest.TestCase):
     @POSIX_CHECK
     def test_a_case_named_as_unchecked_once_the_last_stage_ran_every_case_lands_without_an_ask(self):
         # lifesim-gfr.31.1: 'there is no nographics.out in evidence yet' reached the owner after the case writing it passed
-        plan = dict(PLAN, cases=[{"criterion": "f.txt exists", "check": HAS_F + " > /dev/null"}])
+        plan = dict(PLAN, cases=[{"criterion": "f.txt exists", "check": pyc("import os,sys; sys.exit(0 if os.path.exists('f.txt') else 1)", "case")}])
         r = dict(CLEAN, unchecked=[{"what": "I could not run the case 'f.txt exists': there is no evidence.out yet",
                                     "kind": "case"}])
         rc, s = self.run_engine({"plan": [plan], "write": [WRITE], "review": [r]})
@@ -2623,7 +2606,7 @@ class EngineTest(unittest.TestCase):
         self.assertIn("unchecked item dropped", self.eng.log_path.read_text())
         self.assertIn("one at a time", s.prompts[2])
         self.assertIn("a case is never an unchecked item", s.prompts[2])
-        self.assertIn("bash -e -o pipefail", s.prompts[0])
+        self.assertIn("Every check is an argv list", s.prompts[0])
 
     def test_a_case_item_with_no_case_in_the_plan_still_stops_the_land(self):
         r = dict(CLEAN, unchecked=[{"what": "the filter that selects nothing", "kind": "case"}])
@@ -2752,13 +2735,13 @@ class EngineTest(unittest.TestCase):
         real_sh = engine.Engine.sh
 
         def run(eng, cmd, *args, **kwargs):
-            if cmd == "ruff check .":
+            if cmd == ["ruff", "check", "."]:
                 return 127, "ruff: command not found"
             return real_sh(eng, cmd, *args, **kwargs)
 
         with mock.patch.object(engine.Engine, "sh", autospec=True, side_effect=run) as run_:
             yield
-        run_.assert_any_call(self.eng, "ruff check .", timeout=600)
+        run_.assert_any_call(self.eng, ["ruff", "check", "."], timeout=600)
 
     def test_an_unchecked_item_for_a_tool_the_repo_does_not_use_is_dropped_with_the_evidence(self):
         with mock.patch.object(engine, "tool_on_path", side_effect=self.no_ruff):
@@ -3018,9 +3001,9 @@ class EngineTest(unittest.TestCase):
         self.assertIn("unity open client", self.said())
 
     def test_a_refused_read_only_command_gets_one_retry_on_a_fresh_thread_with_a_note(self):
-        """tl-bxk.10.21 (lifesim-6dq0): a guard refused a head+rg chain, no answer: one retry, told what was refused."""
+        """tl-bxk.10.21 (lifesim-6dq0): a guard refused an rg read, no answer: one retry, told what was refused."""
         refused = full(None, "w1", family="openai", text="",
-                       denied=[{"kind": "policy", "tool": "shell", "path": "", "input": {"command": "/bin/zsh -lc \"head -n 20 a.txt | rg -n 'x' b\""}}])
+                       denied=[{"kind": "policy", "tool": "shell", "path": "", "input": {"command": "/bin/zsh -lc \"rg -n 'x' b\""}}])
         rc, s = self.run_engine({"plan": [PLAN], "write": [refused, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         workers = [c for c in s.calls if c[0] == "worker"]
@@ -3051,14 +3034,14 @@ class EngineTest(unittest.TestCase):
 
     @no_repo
     def test_read_only_commands_are_told_from_the_rest(self):
-        for c in ("rg -n foo src", "head -n 5 a | rg x", "git log --oneline -5", "git diff main...HEAD -- a", "find . -name '*.cs' | head",
+        for c in ("rg -n foo src", "git log --oneline -5", "git diff main...HEAD -- a", "find . -name '*.cs'",
                   "sed -n '1,5p' f", "git branch", "rg -o x f", "sort -u f", "sort -n -r f", "rg -n --glob '!**/.env*' '^<<<<<<<' .",
-                  "/bin/zsh -lc \"head -n 20 a.txt && rg -n 'x' b\""):
+                  "/bin/zsh -lc \"rg -n 'x' b\""):
             self.assertTrue(engine.read_only_command(c), c)
         for c in ("ls\nrm x", "ls & rm x", "sort -o f x", "sort --output=f x", "git diff --output=f", "git log --output=f", "rg --pre sh x",
                   "git grep -O sh x", "git diff --ext-diff", "sed -n '1w out' f", "sed -n '1e cmd' f", "sh -c 'rm x' ls", "git -c core.pager=sh log",
                   "rm -rf x", "cat > f", "git commit -m x", "git branch -D x", "find . -delete", "find . -exec rm {} ;", "sed -i s/a/b/ f",
-                  "curl x", "rg x | xargs rm", "cat $(ls)", "head -n 5 a; rm b", "git checkout x", "cat <<EOF", "echo `id`", "", None):
+                  "curl x", "rg x | xargs rm", "head -n 5 a | rg x", "head a && rg x", "ls || rm x", "cat $(ls)", "head -n 5 a; rm b", "git checkout x", "cat <<EOF", "echo `id`", "", None):
             self.assertFalse(engine.read_only_command(c), c)
 
     RESEARCH_DIFF = ("diff --git a/notes/hair.md b/notes/hair.md\n--- a/notes/hair.md\n+++ b/notes/hair.md\n@@ -0,0 +1,3 @@\n"
@@ -3524,31 +3507,34 @@ class EngineTest(unittest.TestCase):
         self.assertIsNone(self.checkpoint())
 
     def test_checks_that_cannot_run_go_back_to_the_same_planner_thread_once_and_do_not_count(self):
-        bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["if [ -f f.txt ]; then echo ok", "cat <(echo x)"])])
+        bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["no-such-program-x f.txt", "echo a && echo b"])])
         rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
         self.assertIsNone(s.calls[0][1])
         self.assertEqual(s.calls[1][1], "ref-plan")  # --resume of the planner thread
-        self.assertIn("bash -n", s.prompts[1])
-        self.assertIn("process substitution", s.prompts[1])
+        self.assertIn("is not an executable here", s.prompts[1])
+        self.assertIn("literal argument in an argv, not a shell operator", s.prompts[1])
+        self.assertIn('["just", "name"]', s.prompts[1])
         self.assertIn("plan_sent_back", [r["cause"] for r in records(self.eng, "transition")])
         self.assertEqual(self.eng.planned, 1)
         self.assertLess(len(s.prompts[1]), 3000)
 
-    def test_dry_check_reads_syntax_process_substitution_and_missing_files(self):
+    def test_dry_check_reads_the_argv_not_a_shell_string(self):
         def plan(*checks, files=("new.txt",)):
             return dict(PLAN, stages=[dict(PLAN["stages"][0], checks=list(checks), files=list(files))])
-        wt = ShellProbe(self.wt, sproc.current_env())
+        wt = PathProbe(self.wt, sproc.current_env())
         self.assertEqual(lint.dry_check(plan("test -f a.txt", "test -f new.txt", "grep -q '<(' a.txt", HAS_F), wt), [])
-        self.assertEqual(lint.dry_check(plan("cd sub && cat nope.txt", "echo hi > out.log; test -f out.log"), wt), [])
-        self.assertEqual(lint.dry_check(plan("test -f $HOME/x", "cat dir/*.txt"), wt), [])
-        self.assertEqual(lint.dry_check(plan("python3 -m pytest -q tests", "bash -c 'true'", "python3 -c 'pass'"), wt), [])
+        self.assertEqual(lint.dry_check(plan("test -f $HOME/x", "cat dir/*.txt"), wt), [])  # no shell: a plain word, not judged as a path
+        self.assertEqual(lint.dry_check(plan("python3 -m pytest -q tests", "python3 -c pass"), wt), [])
         self.assertTrue(lint.dry_check(plan("python3 tests/nope.py"), wt))
         self.assertTrue(lint.dry_check(plan("test -f missing.txt"), wt)[0].count("missing.txt"))
-        self.assertIn("bash -n", lint.dry_check(plan("echo $(date"), wt)[0])
-        self.assertIn("process substitution", lint.dry_check(plan("diff <(ls) <(ls)"), wt)[0])
-        if os.name != "nt":  # lint.dry_check compares os.path.normpath'd stage files ("src\\new.txt") with the check's "src/new.txt"
+        self.assertIn("is not an executable here", lint.dry_check(plan("After building the player: python3 x.py"), wt)[0])
+        for operator in ("&&", "||", "|", ";", ">", "2>&1"):
+            self.assertIn("literal argument in an argv", lint.dry_check(plan(shlex.join(["echo", "a", operator, "b"])), wt)[0], operator)
+        self.assertIn("string command again", lint.dry_check(plan(shlex.join(["bash", "-c", "true"])), wt)[0])
+        self.assertIn("string command again", lint.dry_check(plan(shlex.join(["/bin/sh", "-lc", "true"])), wt)[0])
+        if os.name != "nt":  # lint.dry_check compares os.path.normpath'd stage files with the check's "src/new.txt"
             self.assertEqual(lint.dry_check(plan("test -f src/new.txt", files=("src/",)), wt), [])
 
     def test_the_planner_is_told_to_read_less_and_inlines_short_worker_rules(self):
@@ -3860,7 +3846,7 @@ class LandReview(EngineTest):
         with mock.patch.object(engine, "tool_on_path", return_value="/bin/ruff"), \
                 mock.patch.object(e, "sh", return_value=(0, "")) as sh_, mock.patch.object(e, "ai") as ai:
             self.assertEqual(e.self_verify([item]), [])
-        self.assertEqual(sh_.call_args[0][0], "ruff check tools")
+        self.assertEqual(sh_.call_args[0][0], ["ruff", "check", "tools"])
         ai.assert_not_called()
         self.assertEqual(e.verified[0]["verdict"], "settled")
         self.assertIn("exit 0", e.verified[0]["evidence"])
@@ -3874,7 +3860,7 @@ class LandReview(EngineTest):
                     mock.patch.object(e, "sh", return_value=(rc, "E501 line too long")) as sh_, \
                     mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="x")]}, None)) as ai:
                 left = e.self_verify([item])
-            self.assertEqual(sh_.call_args[0][0], "ruff check .")
+            self.assertEqual(sh_.call_args[0][0], ["ruff", "check", "."])
             self.assertEqual(len(left), 1)
             if rc == 1:
                 ai.assert_not_called()

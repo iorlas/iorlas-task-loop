@@ -38,14 +38,14 @@ class Unchecked:
 class Stage:
     goal: str
     files: list[str]
-    checks: list[str]
+    checks: list[list[str]]
     hard: bool
 
 
 @record
 class Risk:
     what: str
-    check: str
+    check: list[str]
 
 
 @record
@@ -58,7 +58,7 @@ class Unresolved:
 @record
 class Case:
     criterion: str
-    check: str
+    check: list[str]
     class_: Literal["test", "look-objective", "taste"] = field(default="test", metadata={"name": "class"})
     proved_by: Literal["check", "stage", "leftover", "engine_step"] = "check"
     via: str = ""
@@ -100,7 +100,7 @@ class Flake:
 @record
 class NewCase:
     criterion: str
-    check: str
+    check: list[str]
     why: str
 
 

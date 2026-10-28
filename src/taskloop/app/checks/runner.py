@@ -1,5 +1,4 @@
 """Checker: one round of checks, from the plan to the CheckRun every reader shares."""
-import os
 import time
 from collections.abc import Callable, Sequence
 from typing import Any
@@ -42,7 +41,7 @@ class Checker:
         env = host.git_env()
         history_doc = host.stores.durations.of(check_files.repo_key(str(host.wt), env))
         history = history_doc.read() or Durations()
-        plan = CheckPlan.build(items_of(host.cfg, stage_checks), history, lambda p: os.path.exists(os.path.join(host.wt, p)), groups,
+        plan = CheckPlan.build(items_of(host.cfg, stage_checks), history, groups,
                                acceptance_first, conflict_fix, markers)
         tree, base = host.tree_hash(), host.git("rev-parse", host.cfg.base)
         cache = CheckCache(host.stores.check_cache.of(host.bead), f"{tree} {base}")

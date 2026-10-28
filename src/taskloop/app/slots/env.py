@@ -33,7 +33,7 @@ class SlotEnv:
     busy: Callable[[str], str]  # what runs in a worktree ("" when nothing does)
     drop_engine_lock: Callable[[str], None]
     event: Callable[..., Any]
-    run_setup: Callable[[str, str], int]  # (command, worktree) -> exit code
+    run_setup: Callable[[list[str], str], int]  # (argv, worktree) -> exit code
     exclude_local: Callable[[str], None]
     say: Callable[[str], None] = print
     warn: Callable[[str], None] = print

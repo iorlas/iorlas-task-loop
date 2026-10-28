@@ -748,8 +748,16 @@
  },
  "RepoProfile": {
   "engine": {
-   "gate": "just check",
-   "land": "git push origin HEAD:main",
+   "gate": [
+    "just",
+    "check"
+   ],
+   "land": [
+    "git",
+    "push",
+    "origin",
+    "HEAD:main"
+   ],
    "base": "origin/main",
    "check_links": true,
    "pick_label": "auto",
@@ -758,9 +766,16 @@
    "epic_order": [],
    "epic_only": false,
    "gate_only": [
-    "a",
     {
-     "cmd": "b",
+     "argv": [
+      "a"
+     ],
+     "why": ""
+    },
+    {
+     "argv": [
+      "b"
+     ],
      "why": "c"
     }
    ],
@@ -774,7 +789,10 @@
    "checks": [
     {
      "id": "fmt",
-     "cmd": "just fmt",
+     "argv": [
+      "just",
+      "fmt"
+     ],
      "group": "static",
      "when": [
       "x/**"
@@ -833,7 +851,10 @@
    "count": 2,
    "dir": ".slots",
    "base": "origin/main",
-   "setup": "just setup",
+   "setup": [
+    "just",
+    "setup"
+   ],
    "setup_inputs": [],
    "keep": []
   },

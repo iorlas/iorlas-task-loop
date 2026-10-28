@@ -270,7 +270,7 @@ class TraceTelemetry(unittest.TestCase):
     @unittest.skipIf(os.name == "nt", "the engine stops a process group; sleep and bash are POSIX")
     def test_a_timed_out_command_leaves_a_kill_record(self):
         eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False, store=self.store)
-        rc, _ = eng.sh("sleep 5", timeout=0.05)
+        rc, _ = eng.sh(["sleep", "5"], timeout=0.05)
         self.assertEqual(rc, 124)
         kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
                  if json.loads(line)["kind"] == "kill"]
@@ -282,7 +282,7 @@ class TraceTelemetry(unittest.TestCase):
 
     def test_a_command_that_exits_124_by_itself_is_not_a_kill(self):
         eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False, store=self.store)
-        rc, _ = eng.sh(PY + ' -c "import sys; sys.exit(124)"', timeout=10)
+        rc, _ = eng.sh([sys.executable, "-c", "import sys; sys.exit(124)"], timeout=10)
         self.assertEqual(rc, 124)
         kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
                  if json.loads(line)["kind"] == "kill"]
@@ -302,7 +302,7 @@ class TraceTelemetry(unittest.TestCase):
         with mock.patch.object(engine.subprocess, "Popen", return_value=FakeProc()), \
                 mock.patch.object(engine.sproc, "stop_tree") as kill:
             with self.assertRaises(KeyboardInterrupt):
-                eng.sh("fake", timeout=5)
+                eng.sh(["fake"], timeout=5)
         self.assertTrue(kill.called)
         kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
                  if json.loads(line)["kind"] == "kill"]
@@ -379,7 +379,7 @@ class TraceTelemetry(unittest.TestCase):
         with mock.patch.object(engine.subprocess, "Popen", return_value=p), \
                 mock.patch.object(engine.sproc, "stop_tree", side_effect=stop), \
                 mock.patch.object(engine.activity, "activity", side_effect=slow_activity):
-            rc, _ = eng.sh("fake-check", timeout=10, idle=0.5)
+            rc, _ = eng.sh(["fake-check"], timeout=10, idle=0.5)
         self.assertEqual(rc, 124)
         kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
                  if json.loads(line)["kind"] == "kill"]
@@ -401,7 +401,7 @@ class TraceTelemetry(unittest.TestCase):
         with mock.patch.object(engine.subprocess, "Popen", return_value=p), \
                 mock.patch.object(engine.sproc, "stop_tree", side_effect=stop), \
                 mock.patch.object(engine.activity, "activity", return_value=False):
-            rc, tail = eng.sh("fake-check", timeout=0.4, idle=10)
+            rc, tail = eng.sh(["fake-check"], timeout=0.4, idle=10)
         self.assertEqual(rc, 124)
         self.assertIn("shutdown output after timeout", tail)
         kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
@@ -427,7 +427,7 @@ class TraceTelemetry(unittest.TestCase):
                 mock.patch.object(engine.sproc, "stop_tree", side_effect=stop), \
                 mock.patch.object(engine.activity, "activity", side_effect=KeyboardInterrupt):
             with self.assertRaises(KeyboardInterrupt):
-                eng.sh("fake-check", timeout=10, idle=10)
+                eng.sh(["fake-check"], timeout=10, idle=10)
         self.assertTrue(p.shutdown_sent)
         kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
                  if json.loads(line)["kind"] == "kill"]

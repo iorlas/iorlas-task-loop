@@ -16,6 +16,7 @@ real checkout when one is there). Python 3.8+, stdlib only.
 
 import json
 import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -57,10 +58,25 @@ def stop_of(c, reason, ref="", resumable=None, partial=False, at=None, fix=None,
     return stop
 
 
+def as_argv(data):
+    """A scripted planner or writer answers each check the way the schema asks, as an argv list. A test script writes the command as
+    one string; this splits it (shlex, no shell) in a copy, so a plan reads like the command it runs. A list stays as it is."""
+    if not isinstance(data, dict) or not ({"stages", "cases", "risks", "new_cases"} & set(data)):
+        return data
+    out = json.loads(json.dumps(data))
+    for st in out.get("stages") or []:
+        st["checks"] = [shlex.split(c) if isinstance(c, str) else c for c in st.get("checks") or []]
+    for k in ("risks", "cases", "new_cases"):
+        for x in out.get(k) or []:
+            if isinstance(x.get("check"), str):
+                x["check"] = shlex.split(x["check"])
+    return out
+
+
 def answer(c, reason, ref="", resumed=False, data=None, text="ok", **kw):
     """One contract-3 answer. reason None = done. kw: resumable, partial, at, fix, signal go to the stop; the rest overrides a field."""
     stop_kw = {k: kw.pop(k) for k in ("resumable", "partial", "at", "fix", "signal") if k in kw}
-    base = {"contract": c["contract"], "data": data, "text": text if reason is None else "", "say": "", "ref": ref, "lane": "FAKE",
+    base = {"contract": c["contract"], "data": data if kw.pop("raw", False) else as_argv(data), "text": text if reason is None else "", "say": "", "ref": ref, "lane": "FAKE",
             "model": "fake-1", "effort": "e", "family": "openai", "flag": None, "fallback": False, "first_lane": "FAKE", "rung": 0,
             "tokens": None, "cost": 0, "secs": 0.1, "run_id": "fake-run", "call_id": "fake-call", "transcript": None,
             "transcript_info": None, "denied": [], "git_violation": [], "warnings": [],

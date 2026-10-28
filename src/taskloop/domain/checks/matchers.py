@@ -1,10 +1,6 @@
 """Every regular expression the checks need over text: globs, command text, a check's output. The one place in domain/checks
 that imports `re` (rule: import re only in domain/**/matchers.py)."""
 import re
-from collections.abc import Callable
-
-from taskloop.domain.checks.names import norm
-from taskloop.domain.checks.shellsplit import quoted_at, split_top
 
 # -- globs: ** crosses folders, * and ? stay in one, {a,b} is either --------------------------------------------------
 
@@ -47,12 +43,6 @@ def literal_prefix(g: str) -> str:
 
 # -- command text -------------------------------------------------------------------------------------------------------
 UNITY = re.compile(r"(?i)unity")  # the Unity group: repo checks that name Unity in their id or command (slot queue, minutes each)
-SETUP = re.compile(r"^\s*mkdir(?:\s+-p)?\s+\S+\s*$")  # a wrapper's setup that changes nothing the command reads
-TAIL_REDIRECT = re.compile(r"""\s*(?:\d*>>?\s*[^\s|&;<>]+|&>>?\s*[^\s|&;<>]+|\d*>&\d|\|\s*tee(?:\s+-a)?\s+[^\s|&;<>]+)\s*$""")
-REDIRECTS = re.compile(r"""^(?:\s*(?:\d*>>?\s*[^\s|&;<>]+|\d*>&\d|&>>?\s*[^\s|&;<>]+|\|\s*tee(?:\s+-a)?\s+[^\s|&;<>]+))*\s*$""")
-TARGET = re.compile(r"""(?:\d*>>?|&>>?)\s*([^\s|&;<>]+)|\|\s*tee(?:\s+-a)?\s+([^\s|&;<>]+)""")
-SETUP_WORDS = ("mkdir", "echo", "printf", "export", "true", "test", "[", ":")  # no cd: another directory is another command
-READ_WORDS = ("grep", "egrep", "fgrep", "test", "[", "wc", "tail", "head", "cat")  # an extra part that only reads
 ENV_REF = re.compile(r"TL_CHECK_(?:LOG|RC)_(\w+)")
 CONFLICT_BUILD = re.compile(r"(?i)(?<![a-z])(build|compile)(?![a-z])")  # a repo check a conflict fix still runs
 SLOW_CMD = re.compile(r"(?i)(?<![a-z])(unity|play|test[-_]all|check|build|dotnet)")
@@ -74,87 +64,6 @@ def looks_slow(cmd: str) -> bool:
 def env_refs(cmd: str) -> list[str]:
     """The mangled ids of the checks whose log or exit code the command reads, once each."""
     return list(dict.fromkeys(ENV_REF.findall(cmd)))
-
-
-def canon(cmd: str) -> str:
-    """What a command is a fact about: whitespace normalised, `mkdir -p dir &&` setup and trailing output redirections
-    stripped when exactly one command is left (`mkdir -p e && just unity-tests > e/log` -> `just unity-tests`). An env prefix,
-    arguments, a `!` or any other part stay: they change the run. Anything not split by `&&` alone is left as written."""
-    segs = split_top(str(cmd))
-    if not segs or any(sep not in ("&&", "") for _, sep in segs):
-        return norm(cmd)
-    keep = [seg for seg, _ in segs if seg.strip() and not SETUP.match(seg)]
-    if len(keep) != 1:
-        return norm(cmd)
-    one = keep[0]
-    while True:
-        new = TAIL_REDIRECT.sub("", one)
-        if new == one:
-            return norm(one)
-        one = new
-
-
-def mentions_cmd(outer: str, inner: str) -> bool:
-    """True when `inner` (a whole command) appears in `outer` on word boundaries, whitespace-insensitive."""
-    words = str(inner).split()
-    return bool(words) and bool(re.search(r"(?<![\w-])" + r"\s+".join(map(re.escape, words)) + r"(?![\w-])", str(outer)))
-
-
-def contains_cmd(outer: str, inner: str, unquoted: bool = False) -> bool:
-    """True when `inner` (a whole command) appears in `outer` on word boundaries, whitespace-insensitive. unquoted: a
-    match inside quotes (`echo 'just unity-tests'`) is text, not a command, and does not count."""
-    words = str(inner).split()
-    if not words or norm(outer) == norm(inner):
-        return False
-    for m in re.finditer(r"(?<![\w-])" + r"\s+".join(map(re.escape, words)) + r"(?![\w-])", str(outer)):
-        if not unquoted or not quoted_at(str(outer), m.start()):
-            return True
-    return False
-
-
-def _reads_only(seg: str, targets: set[str], exists: Callable[[str], bool]) -> bool:
-    """A segment after the command that only reads what the command wrote (grep/test/wc/tail/head/cat)."""
-    toks = seg.split()
-    if not toks or toks[0] not in READ_WORDS or "$(" in seg or "`" in seg or "<" in seg or ">" in seg:
-        return False
-    for word in toks[1:]:
-        t = word.strip("'\"")
-        if t in targets or t.startswith("-") or not t:
-            continue
-        if t.startswith(("/", "./", "../", "~")) or exists(t):
-            return False
-    return True
-
-
-def reuse_log(outer: str, inner: str, log_var: str, exists: Callable[[str], bool]) -> str | None:
-    """`outer` with the segment that is exactly `inner` replaced by `cat "$log_var"` (same output redirections), or None.
-    Only when: the segments are joined by `&&` alone (no `;`, newline, `||`, `&`); exactly one segment is the command, with
-    nothing before it (no env prefix, `!`, args) and nothing after it but output redirections; the segments before it are
-    setup (mkdir, echo...) and the ones after it only read: grep/test/wc/tail/head/cat with no substitution, whose file
-    operands are the command's redirect targets (a path that `exists` and is not a target refuses)."""
-    segs = split_top(outer)
-    if not segs or any(sep not in ("&&", "") for _, sep in segs):
-        return None
-    pat = re.compile(r"^(\s*)" + r"\s+".join(map(re.escape, str(inner).split())) + r"(?![\w-])(.*)$", re.S)
-    hits, out, targets = 0, "", set()
-    for seg, sep in segs:
-        m = pat.match(seg)
-        if m:
-            if hits or not REDIRECTS.match(m.group(2)):
-                return None
-            hits += 1
-            targets |= {a or b for a, b in TARGET.findall(m.group(2))}
-            out += f'{m.group(1)}cat "${log_var}"{m.group(2)}{sep}'
-            continue
-        elif contains_cmd(seg, inner, unquoted=True):
-            return None
-        elif not hits:
-            if (seg.split() or ["true"])[0] not in SETUP_WORDS:
-                return None
-        elif not _reads_only(seg, targets, exists):
-            return None
-        out += seg + sep
-    return out if hits else None
 
 
 # -- a check's output ---------------------------------------------------------------------------------------------------

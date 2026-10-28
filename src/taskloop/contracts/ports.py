@@ -1,11 +1,12 @@
 """The three seams the engine reaches the world through: delegate, bd, and the workflow's checks.
 
 A port is a Protocol plus the typed requests and results that cross it. Adapters implement it against the real thing
-(`route.py`, `bd`, a shell); fakes implement it in memory, so a test needs no process, no files and no bash."""
+(`route.py`, `bd`, an exec); fakes implement it in memory, so a test needs no process, no files and no bash."""
 from collections.abc import Callable
 from dataclasses import field
 from typing import Any, Protocol
 
+from taskloop.contracts.argv import text_of
 from taskloop.contracts.bead import BdError, Bead, Comment
 from taskloop.contracts.codec import record
 from taskloop.contracts.delegate import DelegateResult, LiveEvent, RunRequest
@@ -98,10 +99,14 @@ class Beads(Protocol):
 
 @record
 class CheckSpec:
-    cmd: str
+    argv: list[str]
     cwd: str
     timeout_s: float = 3600.0
     env: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def cmd(self) -> str:
+        return text_of(self.argv)
 
 
 @record
@@ -119,14 +124,8 @@ class CheckResult:
 class TreeProbe(Protocol):
     """What the plan-check lint may ask of the tree and the machine a check will run on."""
 
-    def judges(self) -> bool:
-        """False when there is no bash to ask: then nothing about a command is claimed."""
-        ...
-    def syntax_error(self, cmd: str) -> str:
-        """The first line of `bash -n`'s complaint about the command, '' when it parses (or cannot be asked)."""
-        ...
     def has_command(self, word: str) -> bool:
-        """True when the word is a builtin, a function or on PATH."""
+        """True when the word resolves to an executable on the tree's PATH (shutil.which)."""
         ...
     def recipes(self) -> set[str] | None:
         """The recipe and alias names of the tree's justfile, None when there is no just or no justfile."""
@@ -139,5 +138,5 @@ class TreeProbe(Protocol):
 
 class Checks(Protocol):
     def run(self, spec: CheckSpec) -> CheckResult:
-        """Run one workflow command (bash semantics: `-e`, pipefail). Exit 124 and `timed_out` when the time ran out."""
+        """Run one command (an argv, no shell). Exit 124 and `timed_out` when the time ran out."""
         ...

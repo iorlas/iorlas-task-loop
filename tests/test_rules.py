@@ -25,6 +25,7 @@ import tokenize
 import tomllib
 import unittest
 from pathlib import Path
+from typing import cast
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -416,6 +417,59 @@ class Signals(unittest.TestCase):
             (Path(d) / "src" / "bad.py").write_text("import os\nos.killpg(1, 9)\n")
             (Path(d) / "src" / "ok.py").write_text("import signal\nsignal.signal(signal.SIGTERM, print)\n# os.kill(1, 9)\n")
             self.assertEqual(list(signal_sends(d)), ["src/bad.py"])
+
+
+# -- no shell on a check ---------------------------------------------------------------------------------------------------------------
+SHELL_NAMES = frozenset({"sh", "bash", "zsh", "dash"})
+SHELL_FLAGS = frozenset({"-c", "-lc", "-ic", "-cl", "-ec", "-ce"})
+SPLITTER = re.compile(r"split_top|shell_?split|split_shell|shell_?words", re.I)
+SHELL_TEXT = re.compile(r"\b(?:ba|z|da)?sh\s+-[a-z]*c\b|\bbash\s+-n\b")
+
+
+def shell_problems(root=ROOT):
+    """Where a check could reach a shell again: shell=True, a shell named with -c in an argv or a text, `bash -n`, a shell splitter."""
+    found = []
+    for base in ("src", "skills"):
+        for path in sorted((Path(root) / base).rglob("*.py")):
+            rel = path.relative_to(root)
+            if SKIP_DIRS & set(rel.parts) or rel.as_posix().startswith(tuple(d + "/" for d in EXEMPT_DIRS)):
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            docs = {id(d.value) for d in docstring_nodes(tree)}
+            for node in ast.walk(tree):
+                why = ""
+                if isinstance(node, ast.keyword) and node.arg == "shell" and isinstance(node.value, ast.Constant) and node.value.value is True:
+                    why = "shell=True"
+                elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and SPLITTER.search(node.name):
+                    why = "a shell splitter: " + node.name
+                elif isinstance(node, (ast.Name, ast.Attribute)) and SPLITTER.search(getattr(node, "id", "") or getattr(node, "attr", "")):
+                    why = "a shell splitter"
+                elif isinstance(node, (ast.List, ast.Tuple)) and len(node.elts) >= 2 and all(isinstance(e, ast.Constant) for e in node.elts[:2]):
+                    first, second = (cast(ast.Constant, e).value for e in node.elts[:2])
+                    if isinstance(first, str) and Path(first).name in SHELL_NAMES and second in SHELL_FLAGS | {"-n"}:
+                        why = "a shell run with " + str(second)
+                elif isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in docs and SHELL_TEXT.search(node.value):
+                    why = "shell text: " + node.value[:40]
+                if why:
+                    found.append("%s:%d %s" % (rel.as_posix(), getattr(node, "lineno", 0), why))
+    return found
+
+
+class NoShell(unittest.TestCase):
+    def test_no_check_text_goes_through_a_shell_and_no_shell_splitter_is_left(self):
+        self.assertEqual(shell_problems(), [], "a check is an argv list: no shell=True, bash -c / -n, or split_top-style splitter")
+
+    def test_the_rule_finds_each_way_back_to_a_shell(self):
+        bad = ("import subprocess\nsubprocess.run('x', shell=True)\nsubprocess.run(['bash', '-c', 'x'])\nrun('bash -n f')\n"
+               "def split_top(t): pass\nshell_split(t)\n")
+        ok = "import shlex, subprocess\nsubprocess.run(['git', 'status'])\nshlex.split('a b')\nFLAGS = ('-c', '-lc')\nx = ['sh']\n"
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "src").mkdir()
+            (Path(d) / "src" / "bad.py").write_text(bad)
+            (Path(d) / "src" / "ok.py").write_text(ok)
+            got = shell_problems(d)
+        self.assertEqual(sorted({g.split(":")[0] for g in got}), ["src/bad.py"])
+        self.assertEqual(len(got), 5, got)
 
 
 # -- the older folder table --------------------------------------------------------------------------

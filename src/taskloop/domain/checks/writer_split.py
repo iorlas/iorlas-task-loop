@@ -1,11 +1,11 @@
 """WriterSplit: which checks the writer may run itself and which are the engine's alone. Pure."""
 from collections.abc import Mapping, Sequence
 
+from taskloop.contracts.argv import argv_of
 from taskloop.contracts.checks import Check
 from taskloop.contracts.config import EngineConfig
-from taskloop.domain.checks.matchers import canon, looks_slow
+from taskloop.domain.checks.matchers import looks_slow
 from taskloop.domain.checks.names import norm
-from taskloop.domain.checks.shell import matchers as sh
 from taskloop.domain.checks.specs import repo_check
 
 
@@ -19,11 +19,11 @@ class WriterSplit:
         self.repo = [repo_check(k, cfg) for k in cfg.checks]
 
     def _spec(self, cmd: str) -> Check | None:
-        want = canon(cmd)
-        return next((k for k in self.repo if canon(k.cmd) == want), None)
+        want = norm(cmd)
+        return next((k for k in self.repo if norm(k.cmd) == want), None)
 
     def engine_only(self, cmd: str) -> bool:
-        if cmd == self.cfg.gate:
+        if cmd == self.cfg.gate_text:
             return True
         spec = self._spec(cmd)
         if spec is not None and spec.writer is not None:
@@ -36,8 +36,8 @@ class WriterSplit:
         """The bare `just` recipe names of the configured checks (and the gate) a writer must not run: delegate's guard blocks them
         (`route.py run --engine-only`). Only a check that is exactly `just <recipe>` has a recipe name."""
         out: list[str] = []
-        for cmd in [self.cfg.gate, *(k.cmd for k in self.repo)]:
-            toks = sh.shell_tokens(cmd) if cmd else []
+        for cmd in [self.cfg.gate_text, *(k.cmd for k in self.repo)]:
+            toks = argv_of(cmd) if cmd else []
             if len(toks) == 2 and toks[0] == "just" and toks[1] not in out and self.engine_only(cmd):
                 out.append(toks[1])
         return out

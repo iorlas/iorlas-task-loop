@@ -46,7 +46,7 @@ class DoctorSource(unittest.TestCase):
 
     @staticmethod
     def config(name, inputs="missing/**", **extra):
-        return {"engine": dict(checks=[{"id": name, "cmd": "unused", "inputs": [inputs]}], **extra)}
+        return {"engine": dict(checks=[{"id": name, "argv": ["unused"], "inputs": [inputs]}], **extra)}
 
     @staticmethod
     def write_cfg(repo, data):
@@ -139,8 +139,8 @@ class DoctorSource(unittest.TestCase):
         (self.wt / "old.txt").unlink()
         (self.wt / "new.txt").write_text("new\n")
         cfg = {"engine": {"checks": [
-            {"id": "added", "cmd": "x", "inputs": ["new.txt"]},
-            {"id": "removed", "cmd": "x", "inputs": ["old.txt"]}]}}
+            {"id": "added", "argv": ["x"], "inputs": ["new.txt"]},
+            {"id": "removed", "argv": ["x"], "inputs": ["old.txt"]}]}}
         commit = self.advance_base(cfg)
         # Both the stale main index and worker index now disagree with the base tree.
         (self.wt / "new.txt").unlink()

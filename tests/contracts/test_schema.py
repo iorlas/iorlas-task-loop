@@ -65,7 +65,7 @@ class AnswerSchemas(unittest.TestCase):
                 "unchecked": []}
         got = codec.from_json(answers.WriteAnswer, base)
         self.assertEqual((got.shots, got.flakes), ([], []))
-        self.assertEqual(codec.from_json(answers.Case, {"criterion": "c", "check": "k", "class": "taste"}).class_, "taste")
+        self.assertEqual(codec.from_json(answers.Case, {"criterion": "c", "check": ["k"], "class": "taste"}).class_, "taste")
 
 
 class Generator(unittest.TestCase):

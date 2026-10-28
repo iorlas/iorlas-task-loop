@@ -1,5 +1,5 @@
 """What the checks need of the engine that runs them, and the two ways a round stops the run."""
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Protocol
 
@@ -51,9 +51,9 @@ class CheckHost(Protocol):
     hung: bool  # the last sh() was stopped as hung
     killed: bool  # the last sh() was stopped by the engine
 
-    def sh(self, cmd: str, timeout: float = ..., check: bool = ..., save: Path | None = ..., env: Mapping[str, str] | None = ...,
+    def sh(self, cmd: Sequence[str], timeout: float = ..., check: bool = ..., save: Path | None = ..., env: Mapping[str, str] | None = ...,
            pin: bool = ..., idle: float = ..., cwd: Path | None = ...) -> tuple[int, str]:
-        """Run a shell command: (exit code, the last lines of its output). The whole output goes to `save`."""
+        """Run a command, an argv with no shell: (exit code, the last lines of its output). The whole output goes to `save`."""
         ...
 
     def tree_hash(self) -> str: ...

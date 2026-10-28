@@ -7,6 +7,7 @@ from pathlib import Path
 from taskloop.adapters import check_files
 from taskloop.app.checks.base import BaseCheck
 from taskloop.app.checks.host import CheckHost
+from taskloop.contracts.argv import argv_of
 from taskloop.contracts.checks import Check
 from taskloop.contracts.enums import WaitWhat
 from taskloop.domain.checks import matchers, retry
@@ -28,13 +29,13 @@ class Attempts:
                  sleep: Callable[[float], None] = time.sleep) -> None:
         self.host, self.base, self.last_red, self.sleep = host, base, last_red, sleep
 
-    def run(self, c: Check, cmd: str, log: Path, env: Mapping[str, str]) -> Outcome:
+    def run(self, c: Check, log: Path, env: Mapping[str, str]) -> Outcome:
         """Run the check; a red one again when that can change the answer: only when the first two failures differ, never for a hang,
         a timeout or a compile error."""
         tries, prior = 0, ""
         while True:
             tries += 1
-            rc, tail, seen, took, hung = self._once(c, cmd, log, env)
+            rc, tail, seen, took, hung = self._once(c, log, env)
             out = Outcome(rc, tail, seen, tries, hung, took)
             if rc == 0 or hung or rc == 124:
                 self._say_stop(c, out)
@@ -42,16 +43,16 @@ class Attempts:
             sig = matchers.output_signature(seen)
             kind = matchers.failure_kind(seen)
             if kind == "lock":
-                return self._wait_lock(c, cmd, log, env, out)
-            if tries == 1 and c.repo and self.base.red(c, cmd, took):
+                return self._wait_lock(c, log, env, out)
+            if tries == 1 and c.repo and self.base.red(c, took):
                 return Outcome(rc, tail, seen, tries, hung, took, base_red=True)
             if not self._again(c, out, tries, sig, prior):
                 return out
             prior = sig
 
-    def _once(self, c: Check, cmd: str, log: Path, env: Mapping[str, str]) -> tuple[int, str, str, float, bool]:
+    def _once(self, c: Check, log: Path, env: Mapping[str, str]) -> tuple[int, str, str, float, bool]:
         t0 = time.time()
-        rc, tail = self.host.sh(cmd, timeout=c.timeout_min * 60, save=log, env=env, idle=c.idle_s)
+        rc, tail = self.host.sh(argv_of(c.cmd), timeout=c.timeout_min * 60, save=log, env=env, idle=c.idle_s)
         hung = self.host.hung
         seen = self._read(log, tail)
         took = time.time() - t0
@@ -88,7 +89,7 @@ class Attempts:
         self.host.warn(f"`{c.id}` failed (exit {out.rc}), retrying: it is marked flaky")
         return True
 
-    def _wait_lock(self, c: Check, cmd: str, log: Path, env: Mapping[str, str], out: Outcome) -> Outcome:
+    def _wait_lock(self, c: Check, log: Path, env: Mapping[str, str], out: Outcome) -> Outcome:
         """An editor or project lock: wait, then rerun, 15/30/60 s up to 5 min in all."""
         rc, tail, seen = out.rc, out.tail, out.seen
         started = time.time() - out.secs
@@ -97,7 +98,7 @@ class Attempts:
             wid = self.host.wait_start(WaitWhat.EDITOR_LOCK)
             self.sleep(wait)
             self.host.add_wait(wait, WaitWhat.EDITOR_LOCK, wid)
-            rc, tail = self.host.sh(cmd, timeout=c.timeout_min * 60, save=log, env=env)
+            rc, tail = self.host.sh(argv_of(c.cmd), timeout=c.timeout_min * 60, save=log, env=env)
             seen = self._read(log, tail)
             self.host.note_slot_waits(seen, time.time() - started)
             if rc == 0 or matchers.failure_kind(seen) != "lock":

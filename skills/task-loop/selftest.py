@@ -2,6 +2,7 @@
 dir, on this install's code. A newer install must pass it before a loop moves to it."""
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -16,11 +17,10 @@ from taskloop.adapters import delegate as dg
 from taskloop.adapters.fake_beads import FakeBeads
 from taskloop.adapters.runner import Seam
 
-PY = '"%s"' % sys.executable
-CHECK = PY + " -c \"import os,sys; sys.exit(0 if os.path.exists('f.txt') else 1)\""
+CHECK = [sys.executable, "-c", "import os,sys; sys.exit(0 if os.path.exists('f.txt') else 1)"]  # an argv list, as the plan schema wants
 PLAN = {"summary": "do it", "stages": [{"goal": "add f", "files": ["f.txt"], "checks": [CHECK], "hard": False}],
         "risks": [], "question": "", "options": [], "decided": "", "cases": [], "leftovers": []}
-WRITE = {"summary": "wrote f", "checks_run": [{"cmd": CHECK, "exit": 0}], "question": "", "options": [], "decided": "",
+WRITE = {"summary": "wrote f", "checks_run": [{"cmd": shlex.join(CHECK), "exit": 0}], "question": "", "options": [], "decided": "",
          "bad_checks": [], "new_cases": [], "unchecked": [], "logic_only": ""}
 REVIEW = {"findings": [], "unmet": [], "question": "", "options": [], "decided": "", "leftovers": [], "unchecked": [], "look": ""}
 

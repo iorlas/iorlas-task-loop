@@ -12,16 +12,18 @@ engine runs):
     {"v": 1, "methods": [
       {"method": "CreatorShots",
        "summary": "named creator categories",                     # one line for the writer's prompt
-       "cmd": "Unity -batchmode -projectPath client -executeMethod Lifesim.Editor.CreatorShots.Run{args} -logFile client/Logs/creator-shots.log",
+       "argv": ["Unity", "-batchmode", "-projectPath", "client", "-executeMethod", "Lifesim.Editor.CreatorShots.Run", "{args}",
+                "-logFile", "client/Logs/creator-shots.log"],           # a program and its arguments: no shell
        "args": [{"name": "shots", "flag": "-shots", "pattern": "[\\\\w=,:-]+", "required": false,
                  "about": "body=body,face=face"}],      # flag "" = a positional argument
-       "out": "client/Logs/shots",                                # where the pictures land; {out} in cmd = a folder the engine gives
+       "out": "client/Logs/shots",                                # where the pictures land; {out} in argv = a folder the engine gives
        "files": "*.png",                                          # which of them (fnmatch), default *.png
        "timeout_min": 15}]}
 
-`{args}` becomes ` <flag> <quoted value>` for each argument the writer gave (a name the table does not list, or a value that
-does not match the argument's pattern, is refused). `{out}` becomes a quoted folder the engine creates. A method with
-neither placeholder writes to `out` and the engine copies what is new there.
+The word `{args}` becomes `<flag>`, `<value>` (two argv words; one for a positional argument) for each argument the writer gave (a
+name the table does not list, or a value that does not match the argument's pattern, is refused). `{out}` inside a word becomes the
+folder the engine creates. A method with neither placeholder writes to `out` and the engine copies what is new there; arguments
+go at the end when there is no `{args}` word.
 """
 
 import fnmatch
@@ -29,7 +31,6 @@ import glob
 import json
 import os
 import re
-import shlex
 import shutil
 import subprocess
 from pathlib import Path
@@ -50,8 +51,9 @@ def parse_table(text):
         return {}, "shot table has no methods"
     out = {}
     for r in rows:
-        if not isinstance(r, dict) or not str(r.get("method") or "").strip() or not str(r.get("cmd") or "").strip():
-            return {}, "shot table: every method needs a name and a cmd"
+        if not isinstance(r, dict) or not str(r.get("method") or "").strip() or not isinstance(r.get("argv"), list) or not r["argv"] \
+                or not all(isinstance(x, str) for x in r["argv"]):
+            return {}, "shot table: every method needs a name and an argv list (a program and its arguments, no shell string)"
         try:
             timeout = float(r.get("timeout_min") or 15)
         except (TypeError, ValueError):
@@ -68,15 +70,10 @@ def parse_table(text):
             args.append({"name": str(a["name"]), "flag": str(a["flag"]), "pattern": pat,
                          "required": bool(a.get("required")), "about": str(a.get("about") or "")})
         out[str(r["method"]).strip()] = {
-            "method": str(r["method"]).strip(), "summary": str(r.get("summary") or "").strip(), "cmd": str(r["cmd"]),
+            "method": str(r["method"]).strip(), "summary": str(r.get("summary") or "").strip(), "argv": list(r["argv"]),
             "args": args, "out": str(r.get("out") or "").strip("/"), "files": str(r.get("files") or "*.png"),
             "timeout_min": timeout}
     return out, ""
-
-
-def quote(value):
-    """A value as one shell word: POSIX single quotes."""
-    return shlex.quote(str(value))
 
 
 def short(summary, n=150):
@@ -97,11 +94,11 @@ def table_text(methods, cap=1800):
 
 
 def build(methods, req, out_dir):
-    """(command, method entry, error) for a writer's request {method, args: [{name, value}], names}. The command is built only
-    from the table's cmd with its declared arguments filled in; nothing else of the request reaches a shell."""
+    """(argv, method entry, error) for a writer's request {method, args: [{name, value}], names}. The argv is built only
+    from the table's argv with its declared arguments filled in; no shell runs it."""
     m = methods.get(str(req.get("method") or "").strip())
     if not m:
-        return "", None, "no shot method %r in the project's table (it has: %s)" % (req.get("method"), ", ".join(methods) or "none")
+        return [], None, "no shot method %r in the project's table (it has: %s)" % (req.get("method"), ", ".join(methods) or "none")
     given, parts = {}, []
     for a in req.get("args") or []:
         if isinstance(a, dict) and a.get("name"):
@@ -109,21 +106,20 @@ def build(methods, req, out_dir):
     known = {a["name"]: a for a in m["args"]}
     for name in given:
         if name not in known:
-            return "", m, "shot method %s takes no argument %r (it takes: %s)" % (m["method"], name, ", ".join(known) or "none")
+            return [], m, "shot method %s takes no argument %r (it takes: %s)" % (m["method"], name, ", ".join(known) or "none")
     for a in m["args"]:
         v = given.get(a["name"], "")
         if not v.strip():
             if a["required"]:
-                return "", m, "shot method %s needs the argument %s" % (m["method"], a["name"])
+                return [], m, "shot method %s needs the argument %s" % (m["method"], a["name"])
             continue
         if v.startswith("-") or not re.fullmatch(a["pattern"], v):
-            return "", m, "argument %s of %s does not match %s: %r" % (a["name"], m["method"], a["pattern"], v[:80])
-        parts.append(("%s %s" % (a["flag"], quote(v))) if a["flag"] else quote(v))
-    cmd = m["cmd"]
-    cmd = cmd.replace("{args}", (" " + " ".join(parts)) if parts else "") if "{args}" in cmd else (
-        cmd + ((" " + " ".join(parts)) if parts else ""))
-    cmd = cmd.replace("{out}", quote(str(out_dir)))
-    return cmd, m, ""
+            return [], m, "argument %s of %s does not match %s: %r" % (a["name"], m["method"], a["pattern"], v[:80])
+        parts += [a["flag"], v] if a["flag"] else [v]
+    argv = []
+    for w in m["argv"]:
+        argv += parts if w == "{args}" else [w.replace("{out}", str(out_dir))]
+    return (argv if "{args}" in m["argv"] else argv + parts), m, ""
 
 
 def snapshot(m, wt):
@@ -139,7 +135,7 @@ def snapshot(m, wt):
 
 
 def collect(m, wt, out_dir, before=None):
-    """The pictures a method made: files matching its `files` in the folder the engine gave it (when cmd has {out}), or new or
+    """The pictures a method made: files matching its `files` in the folder the engine gave it (when argv has {out}), or new or
     changed since `before` (snapshot) in its `out` folder (repo-relative). Never a symlink. Sorted."""
     before = before or {}
     found = []

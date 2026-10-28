@@ -16,7 +16,7 @@ import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from taskloop.adapters import bd  # noqa: E402
 from support.builders import make_engine  # noqa: E402
 from taskloop.domain.checks import matchers  # noqa: E402
-from taskloop.domain.checks.shell import matchers as sh_matchers  # noqa: E402
+from taskloop.domain.checks.cmd import matchers as sh_matchers  # noqa: E402
 import test_engine as te  # noqa: E402
 from test_engine import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint, tl  # noqa: E402,F401
 
@@ -473,14 +473,14 @@ class PlanTimeout(StagesTest):
         self.assertEqual(len(lint.own_timeout_problems(cases, 60)), 1)  # cases are checks too
 
     def test_the_plan_goes_back_to_the_planner_once_with_the_reason(self):
-        bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[HAS_F + " ; true --timeout_ms 2400000"])])
+        bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[HAS_F, "echo play --timeout_ms 2400000"])])
         rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]}, check_timeout_min=30)
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
         self.assertIn("above the engine's check limit of 30 min", s.prompts[1])
 
     def test_a_plan_inside_the_limit_is_not_sent_back(self):
-        ok = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[HAS_F + " ; true --timeout_ms 600000"])])
+        ok = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[HAS_F, "echo play --timeout_ms 600000"])])
         rc, s = self.run_engine({"plan": [ok], "write": [WRITE], "review": [CLEAN]}, check_timeout_min=30)
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])
 

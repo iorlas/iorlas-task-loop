@@ -50,7 +50,7 @@ reused task after task; each is a bead labelled `slot`, so holding one is a bd c
 Without slots, each loop session makes one worktree at start and reuses it.
 
 ```json
-{"slots": {"count": 3, "setup": "just agent-setup", "setup_inputs": ["mise.toml"], "keep": [".task/"]}}
+{"slots": {"count": 3, "setup": ["just", "agent-setup"], "setup_inputs": ["mise.toml"], "keep": [".task/"]}}
 ```
 
 ## Dashboard

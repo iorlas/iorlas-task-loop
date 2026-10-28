@@ -84,11 +84,11 @@ Rendering is the engine's job. Judging taste is the owner's job. The writer writ
 ```
 {"v": 1, "methods": [
   {"method": "CreatorShots", "summary": "named creator categories",
-   "cmd": "Unity -batchmode ... -executeMethod Lifesim.Editor.CreatorShots.Run{args} -logFile client/Logs/creator-shots.log",
+   "argv": ["Unity", "-batchmode", "-executeMethod", "Lifesim.Editor.CreatorShots.Run", "{args}", "-logFile", "client/Logs/creator-shots.log"],
    "args": [{"name": "shots", "flag": "-shots", "pattern": "[\\w=,:-]+", "required": false, "about": "body=body,face=face"}],
    "out": "client/Logs/shots", "files": "*.png", "timeout_min": 15}]}
 ```
-`{args}` becomes ` <flag> <quoted value>` per declared argument (flag `""` = positional); `{out}` a quoted folder the engine
-creates. A method with neither writes to `out` and the engine copies what is new there. Nothing a writer says reaches a
-shell except values matching an argument's pattern. Config: `shot_table`, `look_rounds` (2), `look_max_px` (1280).
+The `{args}` word becomes `<flag>`, `<value>` per declared argument (flag `""` = positional: the value alone); `{out}` inside a word
+is the folder the engine creates. A method with neither writes to `out` and the engine copies what is new there. The table's
+`argv` is exec'd as given, no shell: nothing a writer says reaches a program except values matching an argument's pattern. Config: `shot_table`, `look_rounds` (2), `look_max_px` (1280).
 Without `shot_table` a visual stage works the old way.

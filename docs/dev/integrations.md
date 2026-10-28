@@ -18,6 +18,14 @@ returns an error for that request; parsers skip lines they cannot read).
 | OpenCode sessions, SQLite `~/.local/share/opencode/opencode.db` (`OPENCODE_DB` overrides), tables `session`, `message`, `part` only (never the credential tables); delegate's family `xai`, kind `opencode` | OpenCode | `tl.opencode_*`, `opencode_events` (ADAPTERS `opencode`), `tl.transcript_of("xai", ses_...)` -> `opencode:ses_...`, `context_tokens` | Grok lane runs; read only, short timeout, a missing DB or unknown id is empty |
 | `bd list --json`, `bd show --json`, `bd update --claim`, `bd heartbeat`, `bd reclaim`, `bd unclaim`, `bd provenance record` | beads (bd 1.3+) | `beads_of`, `tl.py` | the tree, claims, slots, provenance (provenance failures only warn) |
 
+## Commands the repo profile and the plan carry
+
+Every command task-loop runs for a repo (`gate`, `land`, `gate_only`, `slots.setup`, a profile check, a plan check, a shot-table
+method) is an argv list: a program and its arguments, run by `subprocess` with no shell. A string there is refused (the profile
+load and the plan lint say so in one line). A pipeline, redirect or loop belongs in a repo recipe, called `["just", "name"]`.
+Inside the engine the canonical text of a check is `shlex.join(argv)` (check identity, logs, the dashboard); `shlex.split`
+turns it back. Nothing in task-loop parses shell syntax.
+
 ## Delegate
 
 task-loop requires delegate for the engine (decided 2026-10-18: everyone installs both; power users never call

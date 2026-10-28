@@ -316,7 +316,7 @@ class SlotReset(Base):
         self.assertEqual(tl.git("show", wip[0] + ":new.txt", cwd=str(self.slot)), "new")
 
     def test_setup_runs_only_when_inputs_change(self):
-        cfg = {"slots": {"count": 1, "setup": "echo run >> setup.log", "setup_inputs": ["a.txt"], "keep": ["setup.log"]}}
+        cfg = {"slots": {"count": 1, "setup": [sys.executable, "-c", "open('setup.log', 'a').write('run\\n')"], "setup_inputs": ["a.txt"], "keep": ["setup.log"]}}
         (self.repo / ".task-loop.json").write_text(json.dumps(cfg))
         (self.slot / ".gitignore").write_text("ignored/\nsetup.log\n")
         sh("git", "add", "-A", cwd=self.slot)

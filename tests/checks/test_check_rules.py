@@ -99,7 +99,6 @@ class ProducerDidNotRun(Base):
         self.assertEqual(len(lint.producer_problems(own(["f.txt"], 'cat "$TL_CHECK_LOG_ABSENT"'), cfg)), 1)
         ev = ".task/t-1/evidence"
         self.assertEqual(len(lint.evidence_problems(own(["f.txt"], "grep -q ok %s/out.log" % ev), ev)), 1)
-        self.assertEqual(lint.evidence_problems(own(["f.txt"], "echo ok > %s/out.log && grep -q ok %s/out.log" % (ev, ev)), ev), [])
         self.assertEqual(lint.evidence_problems(own([ev + "/out.log"], "grep -q ok %s/out.log" % ev), ev), [])
 
 
@@ -140,7 +139,7 @@ class Retries(Base):
         sig = "AssertionError: 1 != 2"
         clock = iter(range(0, 100000, int(retry.SLOW_S) + 60))  # every reading of the clock is 21 minutes on
         with mock.patch("taskloop.app.checks.attempts.time.time", side_effect=lambda: next(clock)):
-            out = Attempts(cast(Any, h), cast(Any, None), {"slow": (sig, 1300.0)}, lambda s: None).run(c, c.cmd, Path(self.tmp.name) / "l.log", {})
+            out = Attempts(cast(Any, h), cast(Any, None), {"slow": (sig, 1300.0)}, lambda s: None).run(c, Path(self.tmp.name) / "l.log", {})
         self.assertEqual((out.tries, len(h.calls)), (1, 1))
         self.assertTrue(any("not run again" in w for w in h.warned))
 

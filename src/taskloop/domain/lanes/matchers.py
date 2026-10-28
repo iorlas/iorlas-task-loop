@@ -1,5 +1,5 @@
-"""Which shell commands only read (a refused read gets one retry), and a command's top-level parts (what a check may reuse).
-Prose-free text matchers over command lines: the one place in the lane rules that uses `re`."""
+"""Which worker commands only read (a refused read gets one retry). A command with any shell operator is not judged, so no
+shell grammar is parsed here: shlex words and a per-program table. The one place in the lane rules that uses `re`."""
 
 import re
 import shlex
@@ -90,11 +90,7 @@ def _rg_reads(w: list[str]) -> bool:
 PART_CHECKS: Final = {"git": _git_reads, "find": _find_reads, "sed": _sed_reads, "sort": _sort_reads, "rg": _rg_reads}
 
 
-def _part_reads(part: str) -> bool:
-    try:
-        w = shlex.split(part)
-    except ValueError:
-        return False
+def _argv_reads(w: list[str]) -> bool:
     if not w:
         return False
     head = Path(w[0]).name
@@ -102,63 +98,21 @@ def _part_reads(part: str) -> bool:
     return check(w) if check else head in READ_ONLY_WORDS
 
 
-def _writes_or_hides(cmd: str) -> bool:
-    """A redirection, a background job, a substitution or a newline: it writes, runs in the background or hides what it runs."""
-    if "\n" in cmd or "\r" in cmd:
-        return True
-    bare = re.sub(r"'[^']*'|\"[^\"]*\"", "''", cmd).replace("2>&1", "").replace("2>/dev/null", "").replace(">/dev/null", "")
-    return bool(re.search(r"[<>]|\|\|", bare) or re.search(r"(?<!&)&(?!&)", bare) or re.search(r"`|\$\(|\$\{", cmd))
-
-
 def read_only_command(cmd: object) -> bool:
-    """True when every part of a shell command only reads (head, cat, rg, grep, git log/diff/show, ls, find without -exec or
-    -delete, a pipe or && chain of those): no redirection, no substitution, no heredoc, no newline or single &, no flag that
-    writes or runs a program (sort -o, --output, rg --pre, git --ext-diff, a sed script beyond printing). Unsure is False
-    (tl-bxk.10.21)."""
+    """True when a worker's shell command is one simple read-only program call (head, cat, rg, grep, git log/diff/show, ls, find
+    without -exec or -delete): no pipe, `&&`, `;`, redirection, substitution, heredoc or background `&` (each is an operator word
+    to shlex, and the command is refused), no flag that writes or runs a program (sort -o, --output, rg --pre, git --ext-diff, a
+    sed script beyond printing). The payload of `/bin/zsh -lc "..."` is judged alone. Unsure is False (tl-bxk.10.21)."""
     if not isinstance(cmd, str) or not cmd.strip():
         return False
+    lex = shlex.shlex(cmd, posix=True, punctuation_chars=True)
+    lex.whitespace_split = False
     try:
-        words = shlex.split(cmd)
+        words = list(lex)
     except ValueError:
         return False
     if len(words) >= 3 and Path(words[0]).name in ("zsh", "bash", "sh") and words[1] in ("-c", "-lc", "-ic", "-l", "-cl"):
         return len(words) == 3 and read_only_command(words[2])  # the payload of `/bin/zsh -lc "..."`, and nothing after it
-    if _writes_or_hides(cmd) or split_top(cmd) is None:
+    if any(re.fullmatch(r"[;&|<>()]+", x) for x in words) or any(c in cmd for c in ("`", "$(", "${", "\n", "\r")):
         return False
-    return all(_part_reads(part) for part in re.split(r"\s*(?:\|\||\||&&|;)\s*", cmd))
-
-
-def split_top(cmd: str) -> list[tuple[str, str]] | None:
-    """A shell command's top-level parts and the `&&` or `;` after each, or None when quoting or nesting makes it
-    unclear (then nothing is reused)."""
-    parts: list[str] = []
-    sep: list[str] = []
-    cur, depth, q, i = "", 0, "", 0
-    while i < len(cmd):
-        ch = cmd[i]
-        if q:
-            if ch == "\\" and q == '"' and i + 1 < len(cmd):
-                cur += cmd[i : i + 2]
-                i += 2
-                continue
-            if ch == q:
-                q = ""
-        elif ch in "'\"":
-            q = ch
-        elif ch == "`":
-            return None
-        elif ch in "({":
-            depth += 1
-        elif ch in ")}":
-            depth -= 1
-        elif depth == 0 and (cmd.startswith("&&", i) or ch == ";"):
-            parts.append(cur)
-            sep.append("&&" if ch == "&" else ";")
-            cur, i = "", i + (2 if ch == "&" else 1)
-            continue
-        cur += ch
-        i += 1
-    if q or depth:
-        return None
-    parts.append(cur)
-    return list(zip(parts, [*sep, ""], strict=False))
+    return _argv_reads(words)

@@ -23,6 +23,10 @@ from support import dlcall, fake_route  # noqa: E402
 from support.builders import make_engine  # noqa: E402
 
 
+ENVSHOW = [sys.executable, "-c", "import os; print('[%s|%s|%s]' % tuple(os.environ.get(k, '') for k in ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE')))"]
+ENVPAIR = [sys.executable, "-c", "import os; print('%s|%s' % (os.environ.get('GIT_DIR', ''), os.environ.get('GIT_WORK_TREE', '')))"]
+
+
 def sh(*a, cwd):
     return subprocess.run(list(a), cwd=str(cwd), check=True, capture_output=True, text=True).stdout.strip()
 
@@ -127,10 +131,10 @@ class SlotGitTest(unittest.TestCase):
             r = dlcall.call(dl.Resolved(route.parent, str(route), fake_route.CONTRACT, "explicit"), "worker", "p", {"type": "object"},
                             str(self.wt), runner.StreamRunner(Path(self.tmp.name) / "err.log", None, 30.0), timeout_s=30)
             eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
-            rc, tail = eng.sh('echo "[$GIT_DIR|$GIT_WORK_TREE|$GIT_INDEX_FILE]"')
+            rc, tail = eng.sh(ENVSHOW)
             self.assertEqual(r.data["env"], [])
             self.assertEqual((rc, tail), (0, "[||]"))
-            rc, tail = eng.sh('echo "$GIT_DIR|$GIT_WORK_TREE"', pin=True)
+            rc, tail = eng.sh(ENVPAIR, pin=True)
         gitdir = os.path.realpath(str(self.repo / ".git" / "worktrees" / "s1"))
         d, w = tail.split("|")
         self.assertEqual((os.path.realpath(d), os.path.realpath(w)), (gitdir, str(self.wt)))
@@ -145,8 +149,10 @@ class SlotGitTest(unittest.TestCase):
         sh("git", "commit", "-qm", "o", cwd=other)
         sha = sh("git", "rev-parse", "HEAD", cwd=other)
         eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
-        rc, tail = eng.sh("git -C '%s' rev-parse HEAD && git -C '%s' cat-file -e %s && echo ok" % (other, other, sha))
-        self.assertEqual((rc, tail), (0, sha + "\nok"))
+        rc, tail = eng.sh(["git", "-C", str(other), "rev-parse", "HEAD"])
+        self.assertEqual((rc, tail), (0, sha))
+        rc, tail = eng.sh(["git", "-C", str(other), "cat-file", "-e", sha])
+        self.assertEqual(rc, 0)
 
     def test_a_worker_that_redirects_git_is_caught_after_its_node(self):
         decoy = self.decoy

@@ -29,7 +29,7 @@ writer reads first). The profile gives:
 
 | key | what |
 |---|---|
-| setup | the command a fresh worktree runs once |
+| setup | the argv list a fresh worktree runs once (no shell) |
 | pick | the `bd ready` filter: labels, lanes, what to exclude |
 | gate | the command that must be green, and whether the pre-push hook runs it |
 | land | the branch to land on and any rule about how (default: `git push origin HEAD:main`) |
@@ -42,13 +42,18 @@ writer reads first). The profile gives:
 
 ```json
 {"slots": {"count": 3, "dir": ".slots", "base": "origin/main",
-           "setup": "just agent-setup", "setup_inputs": ["mise.toml", "client/Packages/manifest.json"],
+           "setup": ["just", "agent-setup"], "setup_inputs": ["mise.toml", "client/Packages/manifest.json"],
            "keep": [".task/"]},
- "engine": {"gate": "just check", "worker_rules": "docs/agents/codex.md",
-            "checks": [{"id": "fmt", "cmd": "just fmt-check", "group": "static"},
-                       {"id": "unity-tests", "cmd": "just unity-tests", "group": "tests", "when": ["client/**", "content/**"],
+ "engine": {"gate": ["just", "check"], "worker_rules": "docs/agents/codex.md",
+            "checks": [{"id": "fmt", "argv": ["just", "fmt-check"], "group": "static"},
+                       {"id": "unity-tests", "argv": ["just", "unity-tests"], "group": "tests", "when": ["client/**", "content/**"],
                         "retry": 1}]}}
 ```
+
+Every command in the profile (`gate`, `land`, `gate_only[].argv`, `checks[].argv`, `slots.setup`) is an **argv list**: the program and
+its arguments as separate strings, exec'd as given, no shell. A string where a list belongs, or the old `cmd` key, is refused
+with a one-line error naming the allowed form: a pipeline, redirect or loop goes into a repo recipe (a just target or a script)
+that the argv calls, `["just", "name"]`.
 
 `engine.host: true` or `engine.host_beads: [ids]` says the work needs the
 host: the writer runs Unity and tests itself, on this machine. Only the `.task-loop.json` committed on the base branch
@@ -110,10 +115,10 @@ titles, so a replan in a later run that names one again files no second bead. A 
 risk or case is sent back to the planner once naming them; a second such plan fails the run.
 
 A check never runs a gate-only command either: the gate (`engine.gate`) always, and each command prefix in
-`engine.gate_only` (`"just unity-check"` or `{"cmd": "just unity-check", "why": "fails on uncommitted client/"}`),
+`engine.gate_only` (`{"argv": ["just", "unity-check"], "why": "fails on uncommitted client/"}`),
 for commands red by design on the uncommitted tree a writer leaves (lifesim-fld.27.9: 68 min stuck on
-`just unity-check`). The planner is told the list; a plan with one as a command (at the start, or after `&&`, `;`,
-`|`, `then`...; `just check-fmt` is another command) is sent back once with `<cmd> runs only in the gate at land:
+`just unity-check`). The planner is told the list; a plan with one as a command (its argv starts with the prefix, wrappers like `env` aside;
+`["just", "check-fmt"]` is another command) is sent back once with `<cmd> runs only in the gate at land:
 <why>`, and a second such plan fails the run.
 
 Dashboard Asks tab: open asks, most urgent first, each answerable in place. An answer is a typed record (`answer` on the ask file:
@@ -184,15 +189,16 @@ Reflect comment's `self-verified=` count, so the owner can audit what nobody ask
 lifesim-d5f.46, lifesim-fld.26.15, lifesim-gfr.31.1 each waited hours on an ask settled by reading in a minute).
 
 Checks run one at a time, cheapest first: by the median of earlier runs of the same command (a small per-repo history in `~/.config/task-loop/check-durations/`; a command never run, or under 5 s, counts as free; ties go static → tests → acceptance, or static → acceptance → tests after a round red only in acceptance; a check reading `$TL_CHECK_LOG_<ID>` stays after `<ID>`). A red group skips the groups after it; any red also skips every expensive check (expected 5 s or more), after the cheap ones have run to the end. Only green runs enter the history.
-Every string command (checks, gate, land) runs under `bash -e -o pipefail`: a red command before a `;` or inside a pipe
-fails it; `! cmd` and `cmd || true` still pass. The planner is told to grep a file, not `cmd | grep -q` (an early
-exit kills `cmd` with SIGPIPE, exit 141). `when` runs a
+Every command (checks, gate, land, setup) is an argv list exec'd as given: no shell runs it, so there is no `&&`, pipe, redirect,
+`$VAR` or `bash -c` in a check. The plan schema takes `checks` as lists of strings; the plan lint sends back a string check (and a
+list that carries a shell operator word or a shell run on a command string) with a one-line message naming the allowed form, and the
+dry-run checks that the program resolves on PATH (or is a file of the tree). `when` runs a
 check only when the task changed a matching path; `retry` reruns a known flaky one, but never a check that timed out (exit 124: the engine's limit or the command's own; the log says "no retry: timed out after N min"). `timeout_min` sets one check's time limit in place of `engine.check_timeout_min` (60). A repo check that passed on the
-same tree and base is reused; mark one `"cache": false` when it reads state git cannot see. Stage checks always run. A repo check that ran in this block exports its log and exit code to the checks after it as `TL_CHECK_LOG_<ID>` and `TL_CHECK_RC_<ID>` (id upper-cased, other characters `_`); a plan check asserts with `grep -q 'Passed: 12' "$TL_CHECK_LOG_UNITY_TESTS"` and never re-runs the command (a plan check containing a repo check's command is logged "re-runs <id>" and still runs as written). Within one checks block each distinct command (whitespace stripped, same directory and time limit) runs once; a repeat gets the first result. Time spent waiting for a shared resource (a Unity slot, read from `unity-slot: ... got slot N after Ns` in a check's output and capped at that run's wall time; a lane wait; an editor-lock wait) is not counted in `budget_min`; the over-budget ask gives wall and waited minutes. `engine.budget_min_by_label` (`{"unity": 300}`) gives a bead with that label that larger budget. The gate runs once, on the rebased
+same tree and base is reused; mark one `"cache": false` when it reads state git cannot see. Stage checks always run. A repo check that ran in this block exports its log and exit code to the checks after it as `TL_CHECK_LOG_<ID>` and `TL_CHECK_RC_<ID>` (id upper-cased, other characters `_`); a plan check asserts through a script that reads the variable from its environment (`["python3", "tools/assert_log.py", "TL_CHECK_LOG_UNITY_TESTS", "Passed: 12"]`; the variable's name in the argv orders the check after that repo check) and never re-runs the command (a plan check containing a repo check's argv is logged "re-runs <id>" and still runs as written). Within one checks block each distinct command (whitespace stripped, same directory and time limit) runs once; a repeat gets the first result. Time spent waiting for a shared resource (a Unity slot, read from `unity-slot: ... got slot N after Ns` in a check's output and capped at that run's wall time; a lane wait; an editor-lock wait) is not counted in `budget_min`; the over-budget ask gives wall and waited minutes. `engine.budget_min_by_label` (`{"unity": 300}`) gives a bead with that label that larger budget. The gate runs once, on the rebased
 tree at land, and the push gets `TASK_LOOP_GATED_TREE` (the tree it passed) so a pre-push hook can skip a second run.
 
 **Check inputs (per-check cache).** A repo check may list `inputs`, globs over repo paths (`*` and `?` stay in one folder, `**` crosses folders, `{a,b}` is either; the same rules for tracked and gitignored files; `when` still uses shell-style matching, where `*` crosses `/`):
-`"checks": [{"id": "unity-tests", "cmd": "just unity-tests", "group": "tests", "inputs": ["client/**", "content/**", "src/**"]}]`.
+`"checks": [{"id": "unity-tests", "argv": ["just", "unity-tests"], "group": "tests", "inputs": ["client/**", "content/**", "src/**"]}]`.
 A green result is then remembered by the key: command, the check's `env`, the hash of the tracked files matching `inputs`, the
 contents of gitignored files matching them (read directly; keep the globs off build output such as `Library/`, which changes on
 every run), the justfile, lockfiles (`*.lock`, `packages-lock.json`, `Directory.Packages.props`...) and `.task-loop.json`, and the
@@ -218,10 +224,7 @@ over the whole run, replans included.
 **Who runs a check.** A repo check is the writer's to run when its longest green run took at most `engine.writer_check_max_s`, or says
 `"writer": true` (`false`: never) or its own `"writer_check_max_s"`; the gate always is the engine's. `"tail_log"` names a log of the tree
 whose first 20 `error CS` lines join a red's output when it shows none (the analyzers default to `client/Logs/unity-project-files.log`).
-**Duplicates.** A stage check whose `&&` segment is exactly a repo check's command (no args, env prefix, `||`, `!`, `;` or subshell),
-optionally redirected (`> f`, `| tee f`), after setup only (`mkdir`, `echo`...) and followed only by readers (`grep`, `test`, `wc`, `tail`,
-`head`, `cat`) of that redirect target, reads the repo check's log instead of running it again, when the repo check ran green (or is cached
-with its log kept). Anything else runs as written, and the repo check always runs too. At land the gate is skipped when it already passed on the same tree; the gate gets
+**Duplicates.** A stage check whose argv is exactly a repo check's argv is that check: it takes the repo check's result (the repo check runs first) instead of running again. Anything else runs as written, and the repo check always runs too. At land the gate is skipped when it already passed on the same tree; the gate gets
 `TL_CHECKS_GREEN=<id>,<id>` (repo checks green at their inputs), which a gate script may honour to skip those parts. The push gets
 `TL_GATE_PASSED=<tree>` (plain `git rev-parse HEAD^{tree}` of the commit pushed, set only when the gate passed on it; also
 `TASK_LOOP_GATED_TREE`, same value): a pre-push hook compares it with its own tree and skips the gate run when equal.

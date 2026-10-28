@@ -1,7 +1,8 @@
 """RepoProfile: the repo's .task-loop.json as typed records . An unknown key is an error, not a silent no-op."""
-from dataclasses import field
+from dataclasses import field, fields
 from typing import Any, Literal
 
+from taskloop.contracts.argv import FORM, shape_problem, text_of
 from taskloop.contracts.codec import CodecError, from_json, record
 
 FRESH_ABOVE_K = {"claude": 150, "codex": 100, "xai": 100}
@@ -16,8 +17,12 @@ class ConfigError(ValueError):
 class GateOnly:
     """A command no plan check may run: only the gate at land."""
 
-    cmd: str
+    argv: list[str]
     why: str = ""
+
+    @property
+    def cmd(self) -> str:
+        return text_of(self.argv)
 
 
 @record
@@ -31,7 +36,7 @@ class VisualConfig:
 @record
 class CheckSpec:
     id: str
-    cmd: str
+    argv: list[str]
     group: Literal["static", "tests", "acceptance"] = "tests"
     when: list[str] = field(default_factory=list)
     retry: int = 0
@@ -46,13 +51,18 @@ class CheckSpec:
     writer_check_max_s: float | None = None  # this check's own cut for "too slow for the writer" (else engine.writer_check_max_s)
     tail_log: str = ""  # a log of the tree whose first compile errors join this check's red output when it shows none
 
+    @property
+    def cmd(self) -> str:
+        """The check as one line of text: its id in logs, caches and prompts."""
+        return text_of(self.argv)
+
 
 @record
 class SlotsConfig:
     count: int = 0
     dir: str = ".slots"
     base: str = "origin/main"
-    setup: str = ""
+    setup: list[str] = field(default_factory=list)  # argv
     setup_inputs: list[str] = field(default_factory=list)
     keep: list[str] = field(default_factory=list)
 
@@ -89,8 +99,8 @@ class LoopConfig:
 class EngineConfig:
     """The `engine` block; every key has the default the engine uses today."""
 
-    gate: str = ""
-    land: str = "git push origin HEAD:main"
+    gate: list[str] = field(default_factory=list)  # argv; empty: no gate
+    land: list[str] = field(default_factory=lambda: ["git", "push", "origin", "HEAD:main"])
     base: str = "origin/main"
     check_links: bool = True
     pick_label: str = ""
@@ -98,7 +108,7 @@ class EngineConfig:
     skip_labels: list[str] = field(default_factory=list)
     epic_order: list[str] = field(default_factory=list)
     epic_only: bool = False
-    gate_only: list[str | GateOnly] = field(default_factory=list)
+    gate_only: list[GateOnly] = field(default_factory=list)
     reflect: bool = True
     planner_notes: str = ""
     shot_table: str = ""
@@ -139,6 +149,11 @@ class EngineConfig:
     look_max_px: int = 1280
     brief_kb: float = 5
 
+    @property
+    def gate_text(self) -> str:
+        """The gate as one line of text ('' when there is none)."""
+        return text_of(self.gate) if self.gate else ""
+
 
 @record
 class RepoProfile:
@@ -149,9 +164,33 @@ class RepoProfile:
     loop: LoopConfig = field(default_factory=LoopConfig)
 
 
+def _string_commands(data: Any) -> list[str]:
+    """Where the profile still has a command as a string: every command is an argv list."""
+    root = data if isinstance(data, dict) else {}
+    eng_name, slots_name = (f.name for f in fields(RepoProfile)[:2])  # the first two fields: engine, slots
+    eng, slots = root.get(eng_name), root.get(slots_name)
+    eng, slots = (eng if isinstance(eng, dict) else {}), (slots if isinstance(slots, dict) else {})
+    found = [f"{eng_name}.{k}" for k in ("gate", "land") if isinstance(eng.get(k), str)]
+    found += [f"{eng_name}.checks[{n}].cmd" for n, c in enumerate(eng.get("checks") or []) if isinstance(c, dict) and "cmd" in c]
+    found += [f"{eng_name}.gate_only[{n}]" for n, c in enumerate(eng.get("gate_only") or [])
+              if isinstance(c, str) or (isinstance(c, dict) and "cmd" in c)]
+    if isinstance(slots.get("setup"), str):
+        found.append(f"{slots_name}.setup")
+    return found
+
+
 def load(data: Any) -> RepoProfile:
     """The repo's .task-loop.json (parsed) as a RepoProfile; ConfigError names the offending key."""
+    old = _string_commands(data)
+    if old:
+        raise ConfigError(f"the repo profile: {', '.join(old)} is a string command: {FORM}")
     try:
-        return from_json(RepoProfile, data or {})
+        profile = from_json(RepoProfile, data or {})
     except CodecError as e:
         raise ConfigError("the repo profile: %s" % e) from None
+    cmds = [k.argv for k in profile.engine.checks] + [g.argv for g in profile.engine.gate_only] + [profile.engine.land]
+    cmds += [c for c in (profile.engine.gate, profile.slots.setup) if c]
+    bad = [shape_problem(c) for c in cmds]
+    if any(bad):
+        raise ConfigError("the repo profile: " + next(b for b in bad if b))
+    return profile

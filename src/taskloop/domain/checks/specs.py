@@ -1,8 +1,17 @@
 """The checks of a round as Check records: the repo's (engine.checks) and the plan's (a stage's commands and cases)."""
 from collections.abc import Sequence
 
+from taskloop.contracts.argv import argv_of, text_of
 from taskloop.contracts.checks import Check
 from taskloop.contracts.config import CheckSpec, EngineConfig
+
+
+def spelled(cmd: str) -> str:
+    """The command in its one spelling (the argv joined), so two spellings of one argv are one check."""
+    try:
+        return text_of(argv_of(cmd))
+    except ValueError:
+        return cmd
 
 
 def repo_check(k: CheckSpec, cfg: EngineConfig) -> Check:
@@ -19,5 +28,5 @@ def items_of(cfg: EngineConfig, stage_checks: Sequence[str]) -> list[Check]:
     """The repo's checks, then the plan's: a plan's check is its command, always run (it can read what git cannot see)."""
     idle = float(cfg.check_idle_min or 0) * 60
     plan = [Check(id=c, cmd=c, group="acceptance", timeout_min=float(cfg.check_timeout_min), idle_s=idle, cache=False)
-            for c in stage_checks]
+            for c in map(spelled, stage_checks)]
     return [repo_check(k, cfg) for k in cfg.checks] + plan

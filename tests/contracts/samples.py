@@ -34,9 +34,9 @@ OUTCOME = run.RunOutcome(outcome=Outcome.BLOCKED, bead="tl-1", run=str(RUN), why
                          rounds=2, tests_added=4, asked=True, retry_after=None, cost=0.25)
 LOCK = locks.EngineLock(pid=1789, bead="tl-1", started=T, by="tl-abc", pid_start=T - 5, slot="s1", slot_bead="slot-1",
                         route=(10, T), workers=[(11, T), (12, T + 1)])
-CMD = {"gate": "just check", "pick_label": "auto", "gate_only": ["a", config.GateOnly(cmd="b", why="c")],
+CMD = {"gate": ["just", "check"], "pick_label": "auto", "gate_only": [config.GateOnly(argv=["a"]), config.GateOnly(argv=["b"], why="c")],
        "visual_paths": config.VisualConfig(include=["a/**"]), "write_fresh_above_k": 150.0, "max_rounds": 4,
-       "checks": [config.CheckSpec(id="fmt", cmd="just fmt", group="static", when=["x/**"], inputs="a/**")]}
+       "checks": [config.CheckSpec(id="fmt", argv=["just", "fmt"], group="static", when=["x/**"], inputs="a/**")]}
 
 
 CHECK_RUN = checks.CheckRun(round=1, tree="deadbeef", hits=1, misses=1, results=[
@@ -168,7 +168,7 @@ OTHERS = {
     "DashState": snapshots.DashState(pid=9, port=7878, bind="127.0.0.1", token="tok", version="0.23.56", started=T, pid_start=T,
                                      idle_until=None),
     "SlotSetupMarker": snapshots.SlotSetupMarker(cmd_hash="ab12", t=T),
-    "RepoProfile": config.RepoProfile(engine=config.EngineConfig(**CMD), slots=config.SlotsConfig(count=2, setup="just setup")),
+    "RepoProfile": config.RepoProfile(engine=config.EngineConfig(**CMD), slots=config.SlotsConfig(count=2, setup=["just", "setup"])),
     "RunRequest": delegate.RunRequest(role="worker", brief_path="/b.md", cwd="/w", schema_path="/s.json", parent="p", task="t", title="T",
                                       resume="ses", authored_by="openai", call_id="c1", timeout_s=2820, idle_s=900, live_file="/l.live"),
     "DelegateResult": delegate.DelegateResult(
