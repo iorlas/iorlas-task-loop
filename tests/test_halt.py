@@ -19,19 +19,10 @@ from taskloop.adapters import halt as halting  # noqa: E402
 from support.engine_case import CLEAN, PLAN, WRITE, engine, pyc  # noqa: E402
 
 
-class Halt(unittest.TestCase):
+class Halt(te.EngineTest):
     wt: Path
     tmp: Any
     eng: Any
-    setUp: Any = te.EngineTest.setUp
-    tearDown: Any = te.EngineTest.tearDown
-    fake_bd: Any = te.EngineTest.fake_bd
-    run_engine: Any = te.EngineTest.run_engine
-    checks_engine: Any = te.EngineTest.checks_engine
-    spawn: Any = te.EngineTest.spawn
-    child_of: Any = te.EngineTest.child_of
-    assertDead: Any = te.EngineTest.assertDead
-    said: Any = te.EngineTest.said
 
     def test_sigterm_during_a_real_sleeping_check_ends_the_check_and_its_tree_and_the_run_closes_cleanly(self):
         pidfile = Path(self.tmp.name, "child.pid")

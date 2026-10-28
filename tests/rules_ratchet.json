@@ -6,7 +6,7 @@
   "tests/land/test_engine_land_1.py::EngineLand1Test.push_race_interrupted_cell": 125,
   "tests/support/engine_case.py::EngineTest.run_push_race": 111
  },
- "pyrefly_baseline_errors": 1173,
+ "pyrefly_baseline_errors": 414,
  "pyrefly_baseline_src": {
   "src/taskloop_dash/api/beads.py": 2,
   "src/taskloop_dash/api/live.py": 6,

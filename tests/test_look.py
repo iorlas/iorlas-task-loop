@@ -39,10 +39,7 @@ class Shooting(fake_route.Script):
         return super().reply(role, prompt, schema, cwd, *a, **kw)
 
 
-class LookTest(unittest.TestCase):
-    setUp, tearDown, commit_base_cfg, fake_bd, run_engine = (
-        T.EngineTest.setUp, T.EngineTest.tearDown, T.EngineTest.commit_base_cfg, T.EngineTest.fake_bd,
-        T.EngineTest.run_engine)
+class LookTest(T.EngineTest):
 
     def go(self, answers, first_shot=0, bead=BEAD, **cfg):
         script = type("S", (Shooting,), {"first_shot": first_shot})
@@ -84,7 +81,6 @@ class LookTest(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertEqual(self.ask()["kind"], "decision")
 
-    ask = T.EngineTest.ask
 
     def test_no_screenshot_and_no_reason_is_a_warning_never_a_send_back(self):
         rc, s = self.go({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN)]}, first_shot=2, visual_paths=VISUAL)

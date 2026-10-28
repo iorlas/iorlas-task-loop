@@ -20,11 +20,7 @@ from taskloop.adapters import ident  # noqa: E402
 engine = te.engine
 
 
-class RunLog(unittest.TestCase):
-    setUp, tearDown, fake_bd, run_engine = (te.EngineTest.setUp, te.EngineTest.tearDown, te.EngineTest.fake_bd,
-                                            te.EngineTest.run_engine)
-    commit_base_cfg = te.EngineTest.commit_base_cfg
-    checks_engine = te.EngineTest.checks_engine
+class RunLog(te.EngineTest):
 
     def test_engine_has_no_untyped_log_call(self):
         self.assertEqual((ROOT / "src" / "taskloop" / "app" / "run" / "engine.py").read_text().count("self.log("), 0)

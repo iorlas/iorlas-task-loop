@@ -38,17 +38,10 @@ from taskloop.adapters import pidcheck
 
 
 
-class StagesTest(unittest.TestCase):
+class StagesTest(te.EngineTest):
     def probe(self):
         return PathProbe(getattr(self, "wt"), te.sproc.current_env())  # noqa: B009
 
-    setUp = te.EngineTest.setUp
-    tearDown = te.EngineTest.tearDown
-    fake_bd = te.EngineTest.fake_bd
-    commit_base_cfg = te.EngineTest.commit_base_cfg
-    run_engine = te.EngineTest.run_engine
-    checks_engine = te.EngineTest.checks_engine
-    asks, file_answer, card = (te.EngineTest.asks, te.EngineTest.file_answer, te.EngineTest.card)
     wt: Path
 
     def created(self):

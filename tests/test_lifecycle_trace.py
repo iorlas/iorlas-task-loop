@@ -121,10 +121,7 @@ class Fingerprint(unittest.TestCase):
         self.assertEqual(lifecycle.normalize_started_because("  ANSWER ", ""), "answer")
 
 
-class TraceTelemetry(unittest.TestCase):
-    setUp, tearDown, fake_bd, run_engine = (te.EngineTest.setUp, te.EngineTest.tearDown, te.EngineTest.fake_bd,
-                                            te.EngineTest.run_engine)
-    commit_base_cfg = te.EngineTest.commit_base_cfg
+class TraceTelemetry(te.EngineTest):
 
     def traces(self):
         path = ident.config_dir() / "traces.jsonl"

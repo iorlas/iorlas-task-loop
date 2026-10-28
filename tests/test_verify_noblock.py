@@ -47,10 +47,7 @@ def open_as(*kinds, source=SOURCE):
                       for n, k in enumerate(kinds, 1)]}
 
 
-class NoBlock(unittest.TestCase):
-    setUp, tearDown, commit_base_cfg, fake_bd, run_engine, ask = (
-        T.EngineTest.setUp, T.EngineTest.tearDown, T.EngineTest.commit_base_cfg, T.EngineTest.fake_bd,
-        T.EngineTest.run_engine, T.EngineTest.ask)
+class NoBlock(T.EngineTest):
 
     def go(self, items, verify=None, extra_reviews=(), bead=BEAD, writes=1, plan=PLAN_LEFT, **cfg):
         answers = {"plan": [plan], "write": [WRITE] * writes, "review": [dict(CLEAN, unchecked=items)] + list(extra_reviews)}

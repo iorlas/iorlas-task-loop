@@ -115,13 +115,8 @@ class BriefPaths(unittest.TestCase):
         self.assertEqual((self.run_dir / "checks" / "nunit_fail.log").read_text(), before)
 
 
-class RedCheckPrompt(te.EngineTest.__mro__[1]):
+class RedCheckPrompt(te.EngineTest):
     """The writer's prompt after a red check carries the trimmed form, not the log."""
-    setUp = te.EngineTest.setUp
-    tearDown = te.EngineTest.tearDown
-    commit_base_cfg = te.EngineTest.commit_base_cfg
-    fake_bd = te.EngineTest.fake_bd
-    run_engine = te.EngineTest.run_engine
 
     def test_the_second_write_sees_failure_lines_and_the_log_path_not_the_whole_log(self):
         script = Path(self.tmp.name, "noisy_check.py")

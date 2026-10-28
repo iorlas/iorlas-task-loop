@@ -49,11 +49,8 @@ PLAN_DEF = "    def plan(self, again: bool = False) -> dict[str, Any]:\n"
 BREAK_PLAN = (PLAN_DEF, PLAN_DEF + "        raise RuntimeError('planted: cannot plan')\n", "src/taskloop/app/plan/planner.py")
 
 
-class Reload(unittest.TestCase):
+class Reload(te.EngineTest):
     # the engine fixture of test_engine (a repo with an origin, bd and the landing faked), without its tests
-    setUp = te.EngineTest.setUp
-    tearDown = te.EngineTest.tearDown
-    fake_bd = te.EngineTest.fake_bd
 
     def setUp(self):  # noqa: F811
         te.EngineTest.setUp(self)

@@ -35,8 +35,6 @@ from taskloop.app.wire import asks as wasks  # noqa: E402
 class StaleTree(StagesTest):
     """tl-fsj: the tree a check runs on must have what the base's config names."""
 
-    stop_at = te.EngineTest.stop_at
-    stopped_run = te.EngineTest.stopped_run
 
     def main_moves(self, name="moved.txt"):
         base = Path(self.tmp.name, "base-moves")
@@ -504,7 +502,7 @@ class PlanTimeout(StagesTest):
 class ClaimPerBead(StagesTest):
     """tl-kwo: a claim is live when an engine runs that bead, not because the claiming actor's loop is alive."""
 
-    def reclaim(self, bead, slots, running, hand_live=False):
+    def reclaim_when(self, bead, slots, running, hand_live=False):
         import loop_env
         with self.store.stub(show=bead), mock.patch.object(wslots, "slot_beads", return_value=[as_bead(x) for x in slots]), \
                 mock.patch.object(wslots, "live_actors", return_value={"tl-2be89f88"} if hand_live or slots else set()), \
@@ -517,22 +515,22 @@ class ClaimPerBead(StagesTest):
             "metadata": {"held_bead": "fld.27.12"}, "title": "slot h s5"}
 
     def test_a_bead_the_loop_left_for_another_is_takeable(self):
-        ok, why = self.reclaim(self.BEAD, [self.SLOT], {"fld.27.12": "s5"})
+        ok, why = self.reclaim_when(self.BEAD, [self.SLOT], {"fld.27.12": "s5"})
         self.assertTrue(ok, why)
         self.assertIn("released tl-2be89f88", why)
 
     def test_an_engine_running_the_bead_is_a_live_claim(self):
-        ok, why = self.reclaim(self.BEAD, [self.SLOT], {"fld.27.12": "s5", "o67g": "s2"})
+        ok, why = self.reclaim_when(self.BEAD, [self.SLOT], {"fld.27.12": "s5", "o67g": "s2"})
         self.assertFalse(ok)
         self.assertIn("a live claim", why)
 
     def test_the_loop_running_this_very_bead_keeps_its_claim(self):
         slot = dict(self.SLOT, metadata={"held_bead": "o67g"})
-        ok, why = self.reclaim(self.BEAD, [slot], {})  # the slot says it, the engine is just starting
+        ok, why = self.reclaim_when(self.BEAD, [slot], {})  # the slot says it, the engine is just starting
         self.assertFalse(ok)
 
     def test_a_session_working_by_hand_keeps_its_claim(self):
-        ok, why = self.reclaim(self.BEAD, [], {}, hand_live=True)
+        ok, why = self.reclaim_when(self.BEAD, [], {}, hand_live=True)
         self.assertFalse(ok)
         self.assertIn("a live claim", why)
 

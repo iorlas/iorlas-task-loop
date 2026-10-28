@@ -32,16 +32,10 @@ def ignored_paths(wt, globs, exclude=()):
     return inputs.matching(listed, globs, exclude)
 
 
-class SpeedTest(unittest.TestCase):
+class SpeedTest(te.EngineTest):
     wt: Path
     tmp: Any
 
-    setUp = te.EngineTest.setUp
-    tearDown = te.EngineTest.tearDown
-    fake_bd = te.EngineTest.fake_bd
-    commit_base_cfg = te.EngineTest.commit_base_cfg
-    run_engine = te.EngineTest.run_engine
-    checks_engine = te.EngineTest.checks_engine
 
     def bump(self, name="count"):
         n = Path(self.tmp.name) / name
@@ -277,31 +271,31 @@ class CheapFirst(SpeedTest):
 
 
 class Duplicates(SpeedTest):
-    def counter(self, code=0):
+    def sh_counter(self, code=0):
         n = Path(self.tmp.name) / "unity-runs"
         return pyc("import sys; open(%r, 'a').write('1'); print('Passed: 12'); sys.exit(%d)" % (str(n), code)), n
 
     def test_a_plan_check_that_is_the_repo_checks_argv_takes_its_result(self):
-        cmd, n = self.counter()
+        cmd, n = self.sh_counter()
         eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests"}])
         res = eng.run_checks({"checks": [cmd], "files": []}, "s")
         self.assertEqual(n.read_text(), "1")
         self.assertEqual([(c.id == "unity-tests", c.status, bool(c.reused)) for c in res], [(True, "passed", False), (False, "passed", True)])
 
     def test_another_argv_around_the_same_recipe_runs_as_written(self):
-        cmd, n = self.counter()
+        cmd, n = self.sh_counter()
         eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests", "cache": False}])
         res = eng.run_checks({"checks": ["env FOO=1 " + cmd], "files": []}, "s")
         self.assertEqual((n.read_text(), [c.status for c in res]), ("11", ["passed", "passed"]))  # the repo check, then the wrapper's own run
 
     def test_a_red_recipe_ends_the_round_before_its_copy(self):
-        red, n = self.counter(1)
+        red, n = self.sh_counter(1)
         eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": red, "group": "tests"}])
         res = eng.run_checks({"checks": [red], "files": []}, "s")
         self.assertEqual(([c.status for c in res], n.read_text()), (["failed", "skipped"], "1"))
 
     def test_equal_argv_lists_are_one_command_whatever_the_spelling(self):
-        cmd, n = self.counter()
+        cmd, n = self.sh_counter()
         eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests"}])
         res = eng.run_checks({"checks": [cmd.replace(" -c ", "   -c ")], "files": []}, "s")
         self.assertEqual((n.read_text(), [bool(c.reused) for c in res]), ("1", [False, True]))
@@ -374,13 +368,13 @@ class Schedule(SpeedTest):
         return res, launched, {i: secs.get(c.cmd, 0) if c.log else 0 for i, c in enumerate(res)}
 
     def test_a_plan_copy_with_a_longer_limit_than_the_repo_check_is_one_launch(self):
-        cmd, n = self.counter()
+        cmd, n = self.sh_counter()
         eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests", "wall_min": 30, "cache": False}])
         res = eng.run_checks({"checks": [cmd], "files": []}, "s")  # the plan's copy gets check_wall_min, 60
         self.assertEqual(eng.cfg.check_wall_min, 60)
         self.assertEqual((n.read_text(), [bool(c.reused) for c in res]), ("1", [False, True]))
 
-    def counter(self, code=0):
+    def sh_counter(self, code=0):
         n = Path(self.tmp.name) / "unity-runs"
         return PY + ' -c "import sys; open(%r, \'a\').write(\'1\'); print(\'Passed: 12\'); sys.exit(%d)"' % (str(n), code), n
 

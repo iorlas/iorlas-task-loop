@@ -139,9 +139,8 @@ class FailureBriefAndDurations(unittest.TestCase):
         self.assertEqual([split.engine_only(c) for c in ("just unity-analyzers", "just slow", "just fmt")], [False, False, True])
 
 
-class Outcome(unittest.TestCase):
+class Outcome(T.EngineTest):
     """What run-task tells the loop (tl loop): landed, parked, paused, failed or taken, as one JSON record."""
-    setUp, tearDown, fake_bd, run_engine, said = T.EngineTest.setUp, T.EngineTest.tearDown, T.EngineTest.fake_bd, T.EngineTest.run_engine, T.EngineTest.said
 
     def test_an_owner_ask_is_parked(self):
         self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
@@ -217,8 +216,7 @@ class Outcome(unittest.TestCase):
         self.assertIn("denis", rec["why"])
 
 
-class DelegateLauncher(unittest.TestCase):
-    setUp, tearDown, fake_bd, run_engine, said = T.EngineTest.setUp, T.EngineTest.tearDown, T.EngineTest.fake_bd, T.EngineTest.run_engine, T.EngineTest.said
+class DelegateLauncher(T.EngineTest):
 
     def test_same_family_review_is_recorded(self):
         same = full(CLEAN, "r", family="openai", flag="same_family")

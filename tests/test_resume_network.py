@@ -61,10 +61,7 @@ class Flapping:
         return self.calls % 2 == 0
 
 
-class NetBase(unittest.TestCase):
-    setUp, tearDown, commit_base_cfg, fake_bd, run_engine, said, ask, checks_engine = (
-        te.EngineTest.setUp, te.EngineTest.tearDown, te.EngineTest.commit_base_cfg, te.EngineTest.fake_bd,
-        te.EngineTest.run_engine, te.EngineTest.said, te.EngineTest.ask, te.EngineTest.checks_engine)
+class NetBase(te.EngineTest):
 
     def log(self, eng=None):
         return [json.loads(x) for x in (eng or self.eng).log_path.read_text().splitlines()]
@@ -378,7 +375,6 @@ class ResumeLook(test_stages_visual.VisualWork):
     def log(self):
         return [json.loads(x) for x in self.eng.log_path.read_text().splitlines()]
 
-    ask = te.EngineTest.ask
 
 
 for _name in dir(test_stages_visual.VisualWork):  # the visual fixture only: not every test of its class again

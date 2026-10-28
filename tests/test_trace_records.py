@@ -45,10 +45,7 @@ def calls(eng):
     return [(starts[r.id], r) for r in records(eng, rec.CallEnd)]
 
 
-class TraceRecords(unittest.TestCase):
-    setUp, tearDown, fake_bd, run_engine = (te.EngineTest.setUp, te.EngineTest.tearDown, te.EngineTest.fake_bd,
-                                            te.EngineTest.run_engine)
-    commit_base_cfg = te.EngineTest.commit_base_cfg
+class TraceRecords(te.EngineTest):
 
     def steps(self):
         return [(num(r.id), r.step) for r in records(self.eng, rec.StepStart)]
