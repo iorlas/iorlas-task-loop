@@ -16,7 +16,7 @@ from support import fake_route
 from test_engine import CLEAN, PLAN, PY, WRITE, stop
 
 import engine
-import lifecycle
+from taskloop.domain.report import matchers as lifecycle
 import tl
 
 ROOT = te.ROOT

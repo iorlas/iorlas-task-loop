@@ -32,10 +32,10 @@ from functools import cached_property
 from pathlib import Path
 
 from core import enginelock, fmt
-import applog
-import lifecycle
-import links
-import looks
+from taskloop.adapters import applog
+from taskloop.domain.report import matchers as lifecycle
+from taskloop.adapters import links
+from taskloop.adapters import looks
 import loop_health
 import outcome as oc
 import seams
@@ -3774,7 +3774,7 @@ class Engine:
             out_dir = base / "raw" / ("%d-%s" % (k, re.sub(r"\W+", "_", str(req.get("method") or "?"))))
             out_dir.mkdir(parents=True, exist_ok=True)
             cmd, m, err = looks.build(methods, req, out_dir)
-            if err:
+            if err or m is None:
                 errs.append(err)
                 continue
             before = looks.snapshot(m, self.wt)

@@ -3,10 +3,12 @@
 tl-7y6.6.15 stopped after 4 minutes because it cited sections of a study under ~/Documents/Drop. The detector is
 conservative: it reports only references that cannot be read from a worktree, never a plain word like "study".
 Escape for a false positive: the label `facts-inline`, or a line `facts-inline` (optionally `facts-inline: why`) in the text.
-Standard library only; pure functions.
+Pure functions.
 """
 
 import re
+
+from taskloop.contracts.bead import Bead
 
 ESCAPE_LABEL = "facts-inline"
 REASON = "needs inlined facts"
@@ -24,19 +26,20 @@ PATTERNS = (
 ESCAPE_LINE = re.compile(r"^\s*facts-inline\b", re.I | re.M)
 
 
-def outside_root(path, root):
+def outside_root(path: str, root: str) -> bool:
     """True for an absolute path that is not under the repo root."""
     return bool(root) and path.startswith("/") and not (path == root or path.startswith(root.rstrip("/") + "/"))
 
 
-def refs(bead, root=""):
+def refs(bead: Bead, root: str = "") -> list[tuple[str, str]]:
     """[(kind, text)] this bead's text cites outside the repo; empty when the bead is self-contained or escaped."""
     if ESCAPE_LABEL in bead.labels:
         return []
-    text = "\n".join(getattr(bead, f) for f in FIELDS)
+    text = "\n".join(str(getattr(bead, f, "") or "") for f in FIELDS)
     if ESCAPE_LINE.search(text):
         return []
-    out, seen = [], set()
+    out: list[tuple[str, str]] = []
+    seen: set[str] = set()
     for kind, rx in PATTERNS:
         for m in rx.finditer(text):
             hit = m.group(0).rstrip(".,;:")
@@ -48,7 +51,7 @@ def refs(bead, root=""):
     return out
 
 
-def why(bead, root=""):
+def why(bead: Bead, root: str = "") -> str:
     """The pick-step skip reason, or "" for a bead that is fine."""
     r = refs(bead, root)
-    return "%s (%s: %s)" % (REASON, r[0][0], r[0][1][:80]) + (" +%d more" % (len(r) - 1) if len(r) > 1 else "") if r else ""
+    return f"{REASON} ({r[0][0]}: {r[0][1][:80]})" + (f" +{len(r) - 1} more" if len(r) > 1 else "") if r else ""

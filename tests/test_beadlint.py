@@ -6,8 +6,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-import beadlint  # noqa: E402
-from support.fakes import as_bead  # noqa: E402
+from taskloop.domain.beads import matchers as beadlint  # noqa: E402
+from support.fakes import as_bead as _as_bead  # noqa: E402
+from support.narrow import must  # noqa: E402
+
+
+def as_bead(f):
+    return must(_as_bead(f))
 
 ROOT = "/Users/me/Workspaces/proj"
 

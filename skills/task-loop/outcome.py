@@ -13,7 +13,7 @@ import enum
 import re
 from dataclasses import dataclass
 
-import lifecycle
+from taskloop.domain.report import matchers as lifecycle
 
 
 class Kind(enum.Enum):

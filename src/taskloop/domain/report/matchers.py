@@ -5,7 +5,7 @@ with different bead ids, session refs, paths, commit shas, durations or quoted p
 while two different causes must not. It is derived from the run's `why` only, never from the run name or the clock, so it can be recomputed
 from a trace row years later.
 
-Pure: Python 3.8+, standard library only. engine.py imports this module; it must not import engine.
+Pure; the regexes live here because nothing else in domain may import `re`.
 """
 
 import hashlib
@@ -33,7 +33,7 @@ SPACE = re.compile(r"\s+")
 EDGE = " :;,.-|/"
 
 
-def normalize_started_because(value, prev_run=""):
+def normalize_started_because(value: object, prev_run: object = "") -> str:
     """One of STARTED_BECAUSE: an older or damaged value becomes retry (a run came before) or first."""
     v = str(value or "").strip().lower()
     if v in STARTED_BECAUSE:
@@ -41,14 +41,14 @@ def normalize_started_because(value, prev_run=""):
     return "retry" if str(prev_run or "").strip() else "first"
 
 
-def _bead_token(token):
+def _bead_token(token: str) -> bool:
     """True when token is an id, not a descriptive hyphenated word."""
     if any(ch.isdigit() for ch in token):
         return True
     return re.split(r"[.-]", token)[0].lower() in BEAD_PREFIXES
 
 
-def fingerprint(why):
+def fingerprint(why: object) -> str:
     """A stable, readable slug for a failure reason ("" when there is no text)."""
     text = str(why or "")
     if not text.strip():
@@ -74,8 +74,9 @@ def fingerprint(why):
     return text
 
 
-def run_fingerprint(outcome, why):
+def run_fingerprint(outcome: object, why: object) -> str:
     """A trace row's fingerprint: "" for a landed/done run, else the normalised cause (never empty)."""
     if str(outcome or "") in ("landed", "done"):
         return ""
     return fingerprint(why) or "unknown"
+

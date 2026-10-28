@@ -1,7 +1,7 @@
 """Visual work (tl-bxk.13.15, docs/design/visual-work.md): the project's shot table, the commands the engine builds from a
 writer's shot request, downscaling, the look judge's prompt and the comparison that stops a repeated defect.
 
-Pure helpers, no engine state: engine.py runs the commands. Python 3.8+, standard library only.
+Helpers with no engine state: engine.py runs the commands.
 
 The rule: the engine renders, a look judge judges, the owner decides taste. A writer never renders: it names shot methods
 from the project's table and the engine runs them.
@@ -27,104 +27,113 @@ go at the end when there is no `{args}` word.
 """
 
 import fnmatch
-import glob
 import json
-import os
 import re
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Any
+
+Method = dict[str, Any]
+Methods = dict[str, Method]
 
 DEFAULT_ARG = r"[\w.=,:@/+][\w.=,:@/+-]{0,199}"   # no space, quote or shell character, and no leading dash (never an option)
 MAX_REQUESTS = 6                        # shot requests one write may make
 CLASSES = ("test", "look-objective", "taste")
 
 
-def parse_table(text):
+def parse_row(r: object) -> tuple[Method | None, str]:
+    """(the method entry, error) of one row of the shot table."""
+    if not isinstance(r, dict) or not str(r.get("method") or "").strip() or not isinstance(r.get("argv"), list) or not r["argv"] \
+            or not all(isinstance(x, str) for x in r["argv"]):
+        return None, "shot table: every method needs a name and an argv list (a program and its arguments, no shell string)"
+    try:
+        timeout = float(r.get("timeout_min") or 15)
+    except (TypeError, ValueError):
+        return None, f"shot table: method {r['method']} has a timeout_min that is not a number"
+    args: list[Method] = []
+    for a in r.get("args") or []:
+        if not isinstance(a, dict) or not a.get("name") or "flag" not in a:  # flag "" = a positional argument
+            return None, f"shot table: method {r['method']} has an argument without a name and a flag (flag \"\" is positional)"
+        pat = str(a.get("pattern") or DEFAULT_ARG)
+        try:
+            re.compile(pat)
+        except re.error as e:
+            return None, f"shot table: argument {a['name']} of {r['method']} has a bad pattern: {e}"
+        args.append({"name": str(a["name"]), "flag": str(a["flag"]), "pattern": pat,
+                     "required": bool(a.get("required")), "about": str(a.get("about") or "")})
+    return {"method": str(r["method"]).strip(), "summary": str(r.get("summary") or "").strip(), "argv": list(r["argv"]),
+            "args": args, "out": str(r.get("out") or "").strip("/"), "files": str(r.get("files") or "*.png"), "timeout_min": timeout}, ""
+
+
+def parse_table(text: str) -> tuple[Methods, str]:
     """({method name: entry}, error): the table's methods, or an error text naming what is wrong. An empty table is an error."""
     try:
         data = json.loads(text)
     except ValueError as e:
-        return {}, "shot table is not JSON: %s" % e
+        return {}, f"shot table is not JSON: {e}"
     rows = data.get("methods") if isinstance(data, dict) else None
     if not isinstance(rows, list) or not rows:
         return {}, "shot table has no methods"
-    out = {}
+    out: Methods = {}
     for r in rows:
-        if not isinstance(r, dict) or not str(r.get("method") or "").strip() or not isinstance(r.get("argv"), list) or not r["argv"] \
-                or not all(isinstance(x, str) for x in r["argv"]):
-            return {}, "shot table: every method needs a name and an argv list (a program and its arguments, no shell string)"
-        try:
-            timeout = float(r.get("timeout_min") or 15)
-        except (TypeError, ValueError):
-            return {}, "shot table: method %s has a timeout_min that is not a number" % r["method"]
-        args = []
-        for a in r.get("args") or []:
-            if not isinstance(a, dict) or not a.get("name") or "flag" not in a:  # flag "" = a positional argument
-                return {}, "shot table: method %s has an argument without a name and a flag (flag \"\" is positional)" % r["method"]
-            pat = str(a.get("pattern") or DEFAULT_ARG)
-            try:
-                re.compile(pat)
-            except re.error as e:
-                return {}, "shot table: argument %s of %s has a bad pattern: %s" % (a["name"], r["method"], e)
-            args.append({"name": str(a["name"]), "flag": str(a["flag"]), "pattern": pat,
-                         "required": bool(a.get("required")), "about": str(a.get("about") or "")})
-        out[str(r["method"]).strip()] = {
-            "method": str(r["method"]).strip(), "summary": str(r.get("summary") or "").strip(), "argv": list(r["argv"]),
-            "args": args, "out": str(r.get("out") or "").strip("/"), "files": str(r.get("files") or "*.png"),
-            "timeout_min": timeout}
+        entry, err = parse_row(r)
+        if entry is None:
+            return {}, err
+        out[entry["method"]] = entry
     return out, ""
 
 
-def short(summary, n=150):
+def short(summary: object, n: int = 150) -> str:
     """What a method covers, in the first sentence of its summary, at most n characters."""
-    first = re.split(r"(?<=\.)\s", " ".join(str(summary).split()), 1)[0]
+    first = re.split(r"(?<=\.)\s", " ".join(str(summary).split()), maxsplit=1)[0]
     return first if len(first) <= n else first[:n - 3].rstrip() + "..."
 
 
-def table_text(methods, cap=1800):
+def table_text(methods: Methods, cap: int = 1800) -> str:
     """The menu of shot methods: each method, what it covers (a short line), the arguments it takes."""
     lines = []
     for m in methods.values():
-        args = "; ".join("%s%s%s" % (a["name"], " (required)" if a["required"] else "", (" e.g. " + short(a["about"], 70)) if a["about"] else "")
-                         for a in m["args"])
-        lines.append("- %s: %s%s" % (m["method"], short(m["summary"]) or "(no summary)", (" [args: %s]" % args) if args else ""))
+        args = "; ".join("{}{}{}".format(a["name"], " (required)" if a["required"] else "",
+                                         (" e.g. " + short(a["about"], 70)) if a["about"] else "") for a in m["args"])
+        lines.append("- {}: {}{}".format(m["method"], short(m["summary"]) or "(no summary)", (f" [args: {args}]") if args else ""))
     text = "\n".join(lines)
     return text if len(text) <= cap else text[:cap - 3] + "..."
 
 
-def build(methods, req, out_dir):
+def build(methods: Methods, req: dict[str, Any], out_dir: str | Path) -> tuple[list[str], Method | None, str]:
     """(argv, method entry, error) for a writer's request {method, args: [{name, value}], names}. The argv is built only
     from the table's argv with its declared arguments filled in; no shell runs it."""
     m = methods.get(str(req.get("method") or "").strip())
     if not m:
-        return [], None, "no shot method %r in the project's table (it has: %s)" % (req.get("method"), ", ".join(methods) or "none")
-    given, parts = {}, []
+        return [], None, "no shot method {!r} in the project's table (it has: {})".format(req.get("method"), ", ".join(methods) or "none")
+    given: dict[str, str] = {}
+    parts: list[str] = []
     for a in req.get("args") or []:
         if isinstance(a, dict) and a.get("name"):
             given[str(a["name"])] = str(a.get("value") if a.get("value") is not None else "")
     known = {a["name"]: a for a in m["args"]}
     for name in given:
         if name not in known:
-            return [], m, "shot method %s takes no argument %r (it takes: %s)" % (m["method"], name, ", ".join(known) or "none")
+            return [], m, "shot method {} takes no argument {!r} (it takes: {})".format(m["method"], name, ", ".join(known) or "none")
     for a in m["args"]:
         v = given.get(a["name"], "")
         if not v.strip():
             if a["required"]:
-                return [], m, "shot method %s needs the argument %s" % (m["method"], a["name"])
+                return [], m, "shot method {} needs the argument {}".format(m["method"], a["name"])
             continue
         if v.startswith("-") or not re.fullmatch(a["pattern"], v):
-            return [], m, "argument %s of %s does not match %s: %r" % (a["name"], m["method"], a["pattern"], v[:80])
+            return [], m, "argument {} of {} does not match {}: {!r}".format(a["name"], m["method"], a["pattern"], v[:80])
         parts += [a["flag"], v] if a["flag"] else [v]
-    argv = []
+    argv: list[str] = []
     for w in m["argv"]:
         argv += parts if w == "{args}" else [w.replace("{out}", str(out_dir))]
     return (argv if "{args}" in m["argv"] else argv + parts), m, ""
 
 
-def snapshot(m, wt):
+def snapshot(m: Method, wt: str | Path) -> dict[Path, tuple[float, int]]:
     """{path: (mtime, size)} of the method's own `out` folder before it runs: only what changes after is its picture."""
-    snap = {}
+    snap: dict[Path, tuple[float, int]] = {}
     folder = Path(wt) / m["out"] if m["out"] else None
     if folder and folder.is_dir():
         for f in folder.rglob("*"):
@@ -134,11 +143,11 @@ def snapshot(m, wt):
     return snap
 
 
-def collect(m, wt, out_dir, before=None):
+def collect(m: Method, wt: str | Path, out_dir: str | Path, before: dict[Path, tuple[float, int]] | None = None) -> list[Path]:
     """The pictures a method made: files matching its `files` in the folder the engine gave it (when argv has {out}), or new or
     changed since `before` (snapshot) in its `out` folder (repo-relative). Never a symlink. Sorted."""
     before = before or {}
-    found = []
+    found: list[Path] = []
     for folder, own in ((Path(out_dir), True), (Path(wt) / m["out"] if m["out"] else None, False)):
         if not folder or not folder.is_dir():
             continue
@@ -151,7 +160,7 @@ def collect(m, wt, out_dir, before=None):
     return list(dict.fromkeys(found))
 
 
-def downscale(src, dst, px):
+def downscale(src: str | Path, dst: str | Path, px: float) -> str:
     """Copy `src` to `dst`, no side longer than `px` when a tool is there to shrink it (sips on macOS, ImageMagick); else a plain
     copy. Returns "" on success or why it was a plain copy."""
     Path(dst).parent.mkdir(parents=True, exist_ok=True)
@@ -160,10 +169,10 @@ def downscale(src, dst, px):
         cmd = [tool, "-Z", str(int(px)), str(src), "--out", str(dst)]
     else:
         tool = shutil.which("magick") or shutil.which("convert")
-        cmd = [tool, str(src), "-resize", "%dx%d>" % (int(px), int(px)), str(dst)] if tool else None
+        cmd = [tool, str(src), "-resize", f"{int(px)}x{int(px)}>", str(dst)] if tool else None
     if cmd:
         try:
-            r = subprocess.run(cmd, capture_output=True, timeout=120)
+            r = subprocess.run(cmd, capture_output=True, timeout=120, check=False)
             if r.returncode == 0 and Path(dst).is_file():
                 return ""
         except (OSError, subprocess.SubprocessError):
@@ -172,12 +181,12 @@ def downscale(src, dst, px):
     return "not downscaled (no sips or ImageMagick, or it failed)"
 
 
-def words(text):
-    return {w for w in re.findall(r"[^\W_]{3,}", str(text).lower())}
+def words(text: object) -> set[str]:
+    return set(re.findall(r"[^\W_]{3,}", str(text).lower()))
 
 
-def same_defect(a, b):
-    """True when two defect descriptions say about the same thing: the same words, or (3+ words each) 60% of the smaller set in the other."""
+def same_defect(a: object, b: object) -> bool:
+    """True when two defect descriptions say about the same thing: the same words, or (3+ words each) 60% of the smaller set in it."""
     x, y = words(a), words(b)
     if not x or not y:
         return False
@@ -186,22 +195,22 @@ def same_defect(a, b):
     return min(len(x), len(y)) >= 3 and len(x & y) >= 0.6 * min(len(x), len(y))
 
 
-def judge_prompt(items, shots, refs, befores, summary=""):
+def judge_prompt(items: list[str], shots: list[str], refs: list[str], befores: list[tuple[str, str]], summary: str = "") -> str:
     """The look judge's brief: it has no repo and no task, only the pictures, what must hold, and what the screen should
     look like. Paths are relative to its folder."""
     out = ["You judge how a screen looks from pictures. You have no other context; do not look for any. Do not edit files. "
            "Open every picture below."]
-    out.append("\nPictures to judge (rendered by the engine just now):\n" + "".join("- %s\n" % s for s in shots))
+    out.append("\nPictures to judge (rendered by the engine just now):\n" + "".join(f"- {s}\n" for s in shots))
     if befores:
-        out.append("\nThe same screens before this change:\n" + "".join("- %s (before) <- %s\n" % (b, a) for a, b in befores))
+        out.append("\nThe same screens before this change:\n" + "".join(f"- {b} (before) <- {a}\n" for a, b in befores))
     if refs:
-        out.append("\nWhat it should look like (reference images or descriptions):\n" + "".join("- %s\n" % r for r in refs))
+        out.append("\nWhat it should look like (reference images or descriptions):\n" + "".join(f"- {r}\n" for r in refs))
     out.append("\nAlways check, for every picture: the screen is there and shows what it should; nothing is clipped, cut off or "
                "overlapping; no error text, magenta or missing texture, empty frame or placeholder; the state asked for is "
-               "visible." + ("\nThe change in one line: %s" % summary if summary else ""))
+               "visible." + (f"\nThe change in one line: {summary}" if summary else ""))
     if items:
         out.append("\nAlso judge each of these (answer one finding per item, the item's text in `item`):\n" +
-                   "".join("- %s\n" % i for i in items))
+                   "".join(f"- {i}\n" for i in items))
     out.append("\nAnswer findings: per item (and \"general\" for the checks above): verdict pass, or defect with where (which picture, "
                "which part of it) and why in plain words. Judge only what you can see; a matter of taste is never a defect "
                "(give it as pass and say what you saw in why). summary: one paragraph of what you saw.")

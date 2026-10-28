@@ -40,7 +40,6 @@ State: ~/.config/task-loop : repos.json, events.jsonl, sessions/, dash.*.
 
 import argparse
 import contextlib
-import glob
 import hashlib
 import json
 import os
@@ -56,14 +55,13 @@ import urllib.request
 from pathlib import Path
 from urllib.parse import quote
 
-import applog
+
 
 import vendored  # noqa: F401  (puts _vendor on sys.path)
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))  # taskloop: the typed records and adapters ship in the plugin dir
-from taskloop.adapters import locks
-from taskloop.adapters import delegate as sdelegate
-from taskloop.adapters import procs as sproc
+from taskloop.adapters import applog, locks
+from taskloop.adapters import delegate as sdelegate, procs as sproc
 from taskloop.adapters.bd import BdStore
 from taskloop.adapters.gitenv import git_env, pinned_env, run_git  # noqa: F401  (tl.run_git and tl.pinned_env are the callers' names)
 from taskloop.adapters.slot_git import RealSlotGit
@@ -78,9 +76,10 @@ from taskloop.contracts.locks import LockTimeout
 from taskloop.contracts.slots import SlotFail
 from taskloop.stores.files import FileTickets
 from taskloop.app.asks import sweeps as ask_sweeps
+from taskloop.app.doctor import profiles
 from taskloop.cli import asks as cli_asks
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, NewBead
+from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery
 from taskloop.contracts.stores import AskStore
 from taskloop_dash import bind as dash_bind
 from taskloop_dash.cli import dash as dash_cli
@@ -1182,7 +1181,7 @@ def doctor_warnings(repo, source=None):
 
 def bead_lint_warnings(repo, store=None):
     """tl-f52: one line per open bead whose text cites material outside the repo (beadlint). [] when bd cannot be read."""
-    import beadlint
+    from taskloop.domain.beads import matchers as beadlint
     try:
         beads = (store or bd_store(repo)).find(BeadQuery(status="open"))
     except (SystemExit, OSError, BdFailure):
@@ -1201,6 +1200,8 @@ def bead_lint_warnings(repo, store=None):
 def cmd_doctor(a):
     import engine
     repo = git("rev-parse", "--show-toplevel") or os.getcwd()
+    if profiles.report(repo, config_dir() / "repos.json"):  # a bad profile is a red row of its repo, not a traceback
+        return 1
     source = engine.cfg_source(repo)
     _, base, commit = source
     print("config: .task-loop.json from base %s at commit %s" % (base, commit) if commit else

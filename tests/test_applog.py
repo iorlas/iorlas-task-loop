@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills" / "task-loop"))
-import applog  # noqa: E402
+from taskloop.adapters import applog  # noqa: E402
 import engine  # noqa: E402
 from support.builders import cfg_with  # noqa: E402
 import tl  # noqa: E402

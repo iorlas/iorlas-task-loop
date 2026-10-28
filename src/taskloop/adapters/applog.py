@@ -9,19 +9,21 @@ the file sees the line when `append` returns, and two processes appending to one
   exec closes them anyway.
 - A path whose file was removed or replaced is opened afresh (one stat per append).
 - At most MAX_OPEN handles are kept; the least recently used goes first.
-Python 3.8+, stdlib only; imports nothing of the plugin.
 """
 import atexit
+import contextlib
 import os
 import threading
+from pathlib import Path
+from typing import BinaryIO
 
 MAX_OPEN = 16
 
 _lock = threading.RLock()
-_open = {}  # str(path) -> (pid, file object), least recently used first
+_open: dict[str, tuple[int, BinaryIO]] = {}  # str(path) -> (pid, file object), least recently used first
 
 
-def _same(f, path):
+def _same(f: BinaryIO, path: str) -> bool:
     try:
         a, b = os.fstat(f.fileno()), os.stat(path)
     except (OSError, ValueError):
@@ -29,34 +31,31 @@ def _same(f, path):
     return (a.st_ino, a.st_dev) == (b.st_ino, b.st_dev)
 
 
-def _handle(path):
+def _drop(key: str) -> None:
+    with contextlib.suppress(OSError):
+        _open.pop(key)[1].close()
+
+
+def _handle(path: str | Path) -> BinaryIO:
     key, pid = str(path), os.getpid()
     ent = _open.pop(key, None)
     if ent is not None and (ent[0] != pid or not _same(ent[1], key)):
-        try:
+        with contextlib.suppress(OSError):
             ent[1].close()  # an inherited fd closes only this process's copy
-        except OSError:
-            pass
         ent = None
     if ent is None:
         for k in [k for k, v in _open.items() if v[0] != pid]:  # inherited from the parent across a fork
-            try:
-                _open.pop(k)[1].close()
-            except OSError:
-                pass
+            _drop(k)
         while len(_open) >= MAX_OPEN:
-            try:
-                _open.pop(next(iter(_open)))[1].close()
-            except OSError:
-                pass
-        f = open(key, "ab", buffering=0)
+            _drop(next(iter(_open)))
+        f = open(key, "ab", buffering=0)  # noqa: SIM115 (held open on purpose)
         os.set_inheritable(f.fileno(), False)
         ent = (pid, f)
     _open[key] = ent
     return ent[1]
 
 
-def append(path, text):
+def append(path: str | Path, text: str) -> None:
     """Write `text` (one or more whole lines) to `path` through the held handle. Raises OSError like open() would."""
     data = text.encode("utf-8", "surrogateescape")
     with _lock:
@@ -68,23 +67,21 @@ def append(path, text):
             raise
 
 
-def close(path):
+def close(path: str | Path) -> None:
     with _lock:
         ent = _open.pop(str(path), None)
         if ent is not None and ent[0] == os.getpid():
-            try:
+            with contextlib.suppress(OSError):
                 ent[1].close()
-            except OSError:
-                pass
 
 
-def close_all():
+def close_all() -> None:
     with _lock:
         for key in list(_open):
             close(key)
 
 
-def open_count(path=None):
+def open_count(path: str | Path | None = None) -> int:
     """Handles held by this process: for `path` 0 or 1, without it all."""
     with _lock:
         pid = os.getpid()

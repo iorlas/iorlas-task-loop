@@ -11,8 +11,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-import applog
-import beadlint
+from taskloop.adapters import applog
+from taskloop.domain.beads import matchers as beadlint
 import engine
 import loop_health as lh
 import seams
@@ -20,6 +20,7 @@ import tl
 from taskloop.adapters import delegate as dg
 from taskloop.adapters import procs as sproc
 from taskloop.adapters.locks import hold_path
+from taskloop.app.doctor import profiles
 from taskloop.app.loop.env import LoopEnv, ReloadNote, Storm
 from taskloop.app.loop.files import LoopFiles
 from taskloop.app.loop.loop import parse_handover
@@ -232,9 +233,14 @@ def cmd_stop(a):
 
 def cmd_loop(a):
     repo = tl.repo_root(a.repo)
+    if profiles.red_row(repo):
+        print(profiles.red_row(repo))
+        return 1
     env = build(repo)
     files = files_of(repo)
     if a.op == "status":
+        for row in profiles.red_rows(profiles.registered(tl.config_dir() / "repos.json"), but=repo):
+            print(row)  # another repo's bad profile: its red row here, nothing else changes
         return cli.cmd_status(env, files, installs(env.cfgdir, lambda: env.profile().loop), a)
     START_CWD[0] = os.getcwd()
     os.chdir(repo)  # every tl helper and bd call works on the current directory's repo
