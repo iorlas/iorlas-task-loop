@@ -56,9 +56,11 @@ class NoBlock(unittest.TestCase):
         with self.store.stub(show=bead):
             return self.run_engine(answers, **cfg)
 
+    engine_at_land, verifier = T.LandReview.engine_at_land, T.LandReview.verifier
+
     def unit(self):
         """An engine at land with the verifier's plumbing stubbed (no model, no tree)."""
-        return T.LandReview.verifier(self, {"changed_paths": lambda: [], "diff_text": lambda: ""})
+        return self.verifier({"changed_paths": lambda: [], "diff_text": lambda: ""})
 
     def comments(self):
         return [c[3] for c in self.bd_calls if c[:2] == ("comments", "add")]
