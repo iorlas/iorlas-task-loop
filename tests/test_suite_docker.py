@@ -18,7 +18,7 @@ must(must(spec).loader).exec_module(sd)
 
 class SuiteDocker(unittest.TestCase):
     def test_no_docker_falls_back_to_the_host_suite_with_one_warning(self):
-        with mock.patch.object(sd, "docker_ok", return_value=False), mock.patch.object(sd.subprocess, "run") as run, \
+        with mock.patch.object(sd, "docker_ok", return_value=False), mock.patch.object(sd.stream_proc, "run") as run, \
                 mock.patch("sys.stderr") as err:
             run.return_value.returncode = 3
             self.assertEqual(sd.main(["--repo", "x"]), 3)

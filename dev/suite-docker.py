@@ -23,6 +23,7 @@ sys.path.append(str(HERE.parent / "skills" / "task-loop" / "_vendor"))  # the ve
 import stream_proc  # noqa: E402
 
 DEFAULT_IMAGE = "task-loop-suite:" + hashlib.sha1((HERE / "Dockerfile.suite").read_bytes()).hexdigest()[:10]  # a new Dockerfile is a new image
+SUITE_WALL_S = 3 * 3600.0  # a hang guard for the whole host suite; each shard has its own, shorter, limit
 INSIDE = ("git clone -q /src.git /w && cd /w && git checkout -q \"$SHA\" && cat > /tmp/p"
           " && { [ ! -s /tmp/p ] || git apply /tmp/p; } && python3 dev/suite.py")
 
@@ -51,7 +52,13 @@ def git(repo, *args):
 
 def host_suite(repo, why):
     print("suite-docker: WARNING %s; running the suite on the host" % why, file=sys.stderr, flush=True)
-    return subprocess.run([sys.executable, str(HERE / "suite.py"), "--repo", str(repo)]).returncode
+    old = signal.signal(signal.SIGTERM, lambda signum, _frame: sys.exit(128 + signum))  # unwinds into stream_proc.run, which stops the tree
+    try:
+        res = stream_proc.run([sys.executable, str(HERE / "suite.py"), "--repo", str(repo)], on_stdout=lambda t: print(t, end="", flush=True),
+                              on_stderr=lambda t: print(t, end="", file=sys.stderr, flush=True), timeout=SUITE_WALL_S)
+    finally:
+        signal.signal(signal.SIGTERM, old)
+    return res.returncode if res.returncode is not None else 1
 
 
 def main(argv=None):

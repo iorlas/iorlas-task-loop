@@ -168,12 +168,17 @@ class Merge(unittest.TestCase):
 
 
 class Workers(unittest.TestCase):
-    def test_default_is_the_cpu_count_less_two_and_at_least_two(self):
+    def test_default_is_the_smaller_of_cpus_and_ram_over_the_per_shard_budget_never_below_one(self):
+        gb = 1024
+        for cpus, mem, want in ((8, 30 * gb, 8), (8, 6 * gb, 3), (14, 64 * gb, 14), (8, 100, 1), (1, 30 * gb, 1), (4, None, 4), (None, 8 * gb, 1)):
+            self.assertEqual(runner.host_workers(cpus or 1, mem), want, (cpus, mem))
         env = {k: v for k, v in os.environ.items() if k != "TASK_LOOP_SUITE_WORKERS"}
-        with mock.patch.dict(os.environ, env, clear=True):
-            for cpus, want in ((2, 2), (4, 2), (8, 6), (14, 12), (None, 2)):
-                with mock.patch.object(os, "cpu_count", return_value=cpus):
-                    self.assertEqual(runner.workers(), want)
+        with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(runner, "available_mb", return_value=5 * gb):
+            with mock.patch.object(os, "cpu_count", return_value=8):
+                self.assertEqual(runner.workers(), 2)
+
+    def test_available_ram_is_read_from_the_host(self):
+        self.assertGreater(runner.available_mb() or 1, 0)
 
     def test_the_environment_overrides_it(self):
         with mock.patch.dict(os.environ, {"TASK_LOOP_SUITE_WORKERS": "3"}):

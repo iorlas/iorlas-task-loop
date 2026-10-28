@@ -5,11 +5,13 @@ count times WEIGHT, the measured seconds per test of its module), ties broken by
 `python tests/shard.py run INDEX COUNT` runs it. `python tests/shard.py --check COUNT` fails when a test would run in no shard or in two.
 
 The release gate (dev/release.py) uses the same split on one machine: `plan COUNT --root DIR` prints {"shards": [[id]], "serial": [id]},
-the tests named in SERIAL left out of the shards; `ids FILE --root DIR` runs the ids listed in FILE (one per line) in this process.
+the tests named in SERIAL left out of the shards; `ids FILE --root DIR [--times F] [--parent PID]` runs the ids listed in FILE (one per line) in this process.
 """
 import argparse
 import json
+import os
 import sys
+import threading
 import time
 import unittest
 from typing import Any
@@ -122,6 +124,31 @@ class Timed(unittest.TextTestResult):
         self.times[test.id()] = time.monotonic() - self.t0
 
 
+def exit_with_parent(parent, every=1.0):
+    """Leave this process once its parent `parent` (the launcher's pid) is gone: nobody reads this shard's result, and an orphan that
+    holds gigabytes helps no one. (An EOF on a pipe from the launcher would say the same, but stream-proc's run gives a child /dev/null
+    for stdin.) os._exit: no cleanup can hang on a dead parent."""
+    def watch():
+        while os.getppid() == parent:
+            time.sleep(every)
+        os._exit(3)
+    threading.Thread(target=watch, daemon=True, name="parent-watch").start()
+
+
+MAX_AS = 4 << 30  # a shard's address space: a healthy one peaks near 250 MB resident; a runaway gets MemoryError, not the host
+
+
+def cap_memory(limit=MAX_AS):
+    """Linux only (macOS does not enforce RLIMIT_AS): cap this process and its children, never raising an existing lower cap."""
+    try:
+        import resource
+        soft, hard = resource.getrlimit(resource.RLIMIT_AS)
+        if sys.platform.startswith("linux") and (soft == resource.RLIM_INFINITY or soft > limit):
+            resource.setrlimit(resource.RLIMIT_AS, (limit if hard == resource.RLIM_INFINITY else min(limit, hard), hard))
+    except (ImportError, OSError, ValueError):
+        pass
+
+
 def run_ids(ids, times=None):
     class Result(Timed):
         pass
@@ -140,11 +167,16 @@ if __name__ == "__main__":
         ap.add_argument("arg")
         ap.add_argument("--root", default=str(HERE))
         ap.add_argument("--times")
+        ap.add_argument("--parent", type=int, default=0, help="exit when this pid is no longer this process's parent")
         a = ap.parse_args()
         sys.path.insert(0, a.root)
         if cmd == "plan":
             print(json.dumps(plan(int(a.arg), Path(a.root))))
             sys.exit(0)
+        if cmd == "ids":
+            cap_memory()
+        if a.parent:  # the release gate's pid: its death ends this shard (see exit_with_parent)
+            exit_with_parent(a.parent)
         ids = [l for l in Path(a.arg).read_text(encoding="utf-8").splitlines() if l.strip()]
         sys.exit(0 if run_ids(ids, a.times).wasSuccessful() else 1)
     if cmd == "--check":

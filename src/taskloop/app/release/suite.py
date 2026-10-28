@@ -4,20 +4,27 @@ import contextlib
 import json
 import os
 import shutil
+import signal
 import sys
 import tempfile
+import threading
 import time
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ALL_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
+from types import FrameType
 
-from taskloop.adapters import procs
+import stream_proc
+
+from taskloop.adapters import landlock, procs
 from taskloop.adapters.ident import config_dir
 from taskloop.adapters.suiteout import Shard, failing_tests, failure_report, merge_outputs, ran_seconds
 from taskloop.app.release.cache import SuiteCache
 from taskloop.app.release.shell import Abort, git, run, say
 
-LONG = 3 * 3600.0  # a hang guard for a whole gate or suite run
+LONG = 3 * 3600.0  # a hang guard for a whole gate run
+SHARD_WALL_S = 1200.0  # one shard's wall limit (the longest recorded shard is ~2.5 min at 3 workers: 8x); then its tree is stopped
+SHARD_BUDGET_MB = 2048  # the RAM one shard may count on (a healthy shard peaks near 250 MB; the rest is the tests' own children)
 
 
 def save_output(out: str) -> Path:
@@ -35,10 +42,33 @@ def red(out: str, lines: list[str]) -> Abort:
                  log, failing_tests(out))
 
 
+def available_mb() -> int | None:
+    """RAM that can be used now, MB: MemAvailable on Linux, else the free pages sysconf reports (macOS: physical pages)."""
+    try:
+        for line in Path("/proc/meminfo").read_text(encoding="utf-8").splitlines():
+            if line.startswith("MemAvailable:"):
+                return int(line.split()[1]) // 1024
+    except (OSError, ValueError, IndexError):
+        pass
+    try:
+        page = os.sysconf("SC_PAGE_SIZE")
+        pages = next((os.sysconf(k) for k in ("SC_AVPHYS_PAGES", "SC_PHYS_PAGES") if k in os.sysconf_names), 0)
+        return pages * page // (1024 * 1024) or None
+    except (OSError, ValueError):
+        return None
+
+
+def host_workers(cpus: int | None = None, mem_mb: int | None = None) -> int:
+    """What this host can run at once: min(cpu count, available RAM / SHARD_BUDGET_MB), never below 1 (unreadable RAM counts as enough)."""
+    cpu = cpus if cpus is not None else (os.cpu_count() or 1)
+    mem = mem_mb if mem_mb is not None else available_mb()
+    return max(1, min(cpu, cpu if mem is None else mem // SHARD_BUDGET_MB))
+
+
 def workers() -> int:
-    """How many shards the suite runs in at once: TASK_LOOP_SUITE_WORKERS, else max(2, cpu count - 2)."""
+    """How many shards the suite runs in at once: TASK_LOOP_SUITE_WORKERS, else host_workers()."""
     n = os.environ.get("TASK_LOOP_SUITE_WORKERS")
-    return max(1, int(n)) if n and n.isdigit() else max(2, (os.cpu_count() or 1) - 2)
+    return max(1, int(n)) if n and n.isdigit() else host_workers()
 
 
 def isolated_env(home: Path) -> dict[str, str]:
@@ -64,10 +94,64 @@ def durations(work: Path) -> dict[str, float]:
     return times
 
 
+def suite_lock_path() -> Path:
+    """One full suite per host: every host_suite run (a release's, dev/suite.py's, the container wrapper's fallback) takes this lock."""
+    return config_dir() / "locks" / "suite-host.lock"
+
+
+def run_shard(argv: list[str], cwd: str, env: dict[str, str], name: str, stop: threading.Event) -> Shard:
+    """One shard through stream-proc: a session of its own, a wall limit, its whole tree stopped on the limit, on `stop`, or when this
+    thread is unwound. A shard that outlived its limit is red, with what it printed."""
+    out: list[str] = []
+    res = stream_proc.run(argv, cwd=cwd, env=env, on_stdout=out.append, on_stderr=out.append, timeout=SHARD_WALL_S, stop=stop, grace=5.0)
+    text = "".join(out)
+    if res.timed_out:
+        text += f"\n{name}: stopped after {res.secs:.0f}s ({res.timed_out}; limit {SHARD_WALL_S:.0f}s); its process tree was killed\n"
+        return Shard(name, 124, text)
+    return Shard(name, res.returncode if res.returncode is not None else 128 + (res.signal or 0), text)
+
+
+def run_shards(shard: list[str], root: str, repo: Path, work: Path, todo: list[tuple[str, list[str]]]) -> list[Shard]:
+    """`todo` shards at once, each in its own HOME; whatever ends this stops every shard tree first."""
+    stop = threading.Event()
+    watch = ["--parent", str(os.getpid())] if "--parent" in Path(shard[-1]).read_text(encoding="utf-8") else []
+
+    def go(name: str, ids: list[str]) -> Shard:
+        f = work / (name + ".ids")
+        f.write_text("\n".join(ids) + "\n", encoding="utf-8")
+        argv = [*shard, "ids", str(f), "--root", root, "--times", str(work / (name + ".times")), *watch]
+        return run_shard(argv, str(repo), isolated_env(work / name), name, stop)
+
+    def term(signum: int, _frame: FrameType | None) -> None:
+        stop.set()
+        raise SystemExit(128 + signum)
+    main = threading.current_thread() is threading.main_thread()
+    old = signal.signal(signal.SIGTERM, term) if main else None
+    try:
+        with ThreadPoolExecutor(max_workers=max(1, len(todo))) as pool:
+            try:
+                futures = [pool.submit(go, n, i) for n, i in todo]
+                while wait(futures, timeout=0.5, return_when=ALL_COMPLETED).not_done:  # a poll, so an interrupt lands at once
+                    pass
+                return [f.result() for f in futures]
+            finally:
+                stop.set()  # normal end too: a shard still running here is a stray
+    finally:
+        if old is not None:
+            signal.signal(signal.SIGTERM, old)
+
+
 def host_suite(tool_root: Path, repo: Path, record: bool = False) -> None:
     """The suite as N parallel shards, each its own process with its own HOME, then the tests of tests/shard.py SERIAL in one process.
-    `tool_root` holds the tests/shard.py that plans and runs them; `repo` is the tree under test. record=True also writes every test's
-    seconds to tests/durations.json (what the splitter balances on) when the run is green."""
+    Holds the host-wide suite lock: a second full suite waits and says who holds it. `tool_root` holds the tests/shard.py that plans and
+    runs them; `repo` is the tree under test. record=True also writes every test's seconds to tests/durations.json (what the splitter
+    balances on) when the run is green."""
+    holder = f"pid {os.getpid()} since {time.strftime('%H:%M:%S')}: suite of {repo}"
+    with landlock.os_lock(suite_lock_path(), holder, lambda who: say(f"waiting for the suite lock (held by {who})")):
+        _host_suite(tool_root, repo, record)
+
+
+def _host_suite(tool_root: Path, repo: Path, record: bool) -> None:
     n = workers()
     say(f"running the full suite in {n} shards, then the serial group")
     own = repo / "tests" / "shard.py"  # the tree under test runs with its own support code, not the installed checkout's
@@ -81,19 +165,11 @@ def host_suite(tool_root: Path, repo: Path, record: bool = False) -> None:
         raise red("could not plan the shards\n" + out, out.splitlines()) from None
     work = Path(tempfile.mkdtemp(prefix="tl-suite-"))
     began = time.monotonic()
-
-    def go(name: str, ids: list[str]) -> Shard:
-        f = work / (name + ".ids")
-        f.write_text("\n".join(ids) + "\n", encoding="utf-8")
-        ran = procs.capture([*shard, "ids", str(f), "--root", root, "--times", str(work / (name + ".times"))], str(repo),
-                            isolated_env(work / name), LONG)
-        return Shard(name, ran.exit, ran.out + ran.err)
     try:
         todo = [(f"shard{i}", ids) for i, ids in enumerate(plan["shards"], 1) if ids]
-        with ThreadPoolExecutor(max_workers=max(1, len(todo))) as pool:
-            parts = list(pool.map(go, [n for n, _ in todo], [i for _, i in todo]))
+        parts = run_shards(shard, root, repo, work, todo)
         if plan["serial"]:
-            parts.append(go("serial", plan["serial"]))
+            parts += run_shards(shard, root, repo, work, [("serial", plan["serial"])])
         times = durations(work) if record else {}
     finally:
         shutil.rmtree(work, ignore_errors=True)
