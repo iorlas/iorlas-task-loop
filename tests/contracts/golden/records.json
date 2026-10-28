@@ -703,50 +703,6 @@
   "branch": "task/x-1",
   "main": false
  },
- "TasksSnapshot": {
-  "v": 1,
-  "t": 1793050200.5,
-  "repo": "/r",
-  "beads": [
-   {
-    "bead": "tl-1",
-    "title": "T",
-    "status": "in_progress",
-    "labels": [
-     "auto"
-    ],
-    "parent": "tl-0",
-    "slot": "s1",
-    "worktree": "/w",
-    "lock": {
-     "pid": 1789,
-     "bead": "tl-1",
-     "started": 1793050200.5,
-     "by": "tl-abc",
-     "pid_start": 1793050195.5,
-     "slot": "s1",
-     "slot_bead": "slot-1",
-     "route": [
-      10,
-      1793050200.5
-     ],
-     "workers": [
-      [
-       11,
-       1793050200.5
-      ],
-      [
-       12,
-       1793050201.5
-      ]
-     ]
-    },
-    "run": "tl-7y6.3.1-20261027-002239",
-    "ask": "tl-1-1",
-    "blocker": ""
-   }
-  ]
- },
  "WindowStatus": {
   "name": "weekly",
   "used_pct": 9.0,
@@ -1162,7 +1118,10 @@
    "k": 1
   },
   "lease_expires_at": "2026-10-27T00:00:00Z",
-  "close_reason": ""
+  "close_reason": "",
+  "created_at": "",
+  "closed_at": "",
+  "updated_at": ""
  },
  "Comment": {
   "author": "a",

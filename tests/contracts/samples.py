@@ -58,6 +58,7 @@ LOG = {
     "run_start": _log(log.RunStart, run=str(RUN), bead="tl-1", worktree="/w", slot="s1", prev_run="p", started_because="retry", ask="a"),
     "step_start": _log(log.StepStart, id="n4", step="write", text="write: stage 2/2", stage=2, stages=2, round=1, write=1, fix=0),
     "step_end": _log(log.StepEnd, id="n4", step="write", outcome="done", detail="", secs=231.0),
+    "artifacts": _log(log.Artifacts, id="n4", step="write", bead="tl-1", names=["menu.png", "report.pdf"]),
     "call_start": _log(log.CallStart, id="c3", n=3, step="write", node="n4", role="worker", resume=True),
     "call_end": _log(log.CallEnd, id="c3", status="done", reason=None, ref="ses", lane="L", model="m", effort="high", secs=229.0,
                      tokens=TOK, cost=0.0, family="openai", flag="same_family", transcript="/t.jsonl", exit=-15),
@@ -164,9 +165,6 @@ OTHERS = {
     "LockRecord": locks.LockRecord(what=LockWhat.LAND, holder="tl-1", pid=5, t=T),
     "Hold": slots.Hold(by="tl-1", since="2026-10-28T03:00:00", why="screenshots", until=T),
     "Checkout": slots.Checkout(path="/r/.slots/s1", branch="task/x-1", main=False),
-    "TasksSnapshot": snapshots.TasksSnapshot(t=T, repo="/r", beads=[snapshots.TaskRow(
-        bead="tl-1", title="T", status="in_progress", labels=["auto"], parent="tl-0", slot="s1", worktree="/w", lock=LOCK,
-        run=str(RUN), ask="tl-1-1", blocker="")]),
     "WindowStatus": snapshots.WindowStatus(name="weekly", used_pct=9.0, resets_at=T + 600),
     "LaneStatus": snapshots.LaneStatus(
         id="OPENAI_SUBSCRIPTION", label="ChatGPT / Codex", family="openai", kind="subscription", model="gpt-6.1-sol medium",

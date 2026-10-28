@@ -1,16 +1,16 @@
 """The gallery's endpoints: every look item of a repo with its pictures, and the owner's answers. "good" settles an item; "redo" with a
 note files a follow-up bead that carries the note and the pictures; every answer can be taken back (the only writes the gallery
-makes, all through bd)."""
+makes, all through the typed bd port)."""
 
-import json
+import contextlib
 import mimetypes
 import os
-import subprocess
 import threading
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+from taskloop.contracts.ports import BdFailure, BeadPatch, NewBead
 from taskloop_dash.env import Env
 from taskloop_dash.readers.beads import Beads, basename
 from taskloop_dash.readers.records import Records
@@ -21,17 +21,8 @@ NOTE_MAX = 2000
 Reply = tuple[int, dict[str, Any]]
 
 
-def bd_json(bd: Any, repo: str, *args: str) -> Any:
-    try:
-        r = bd(repo, *args)
-        out = json.loads(r.stdout) if r.returncode == 0 else None
-    except (subprocess.SubprocessError, ValueError, OSError):
-        return None
-    return out[0] if isinstance(out, list) and out and args[0] == "show" else out
-
-
-def last_line(r: "subprocess.CompletedProcess[str]", empty: str = "") -> str:
-    return ((r.stderr or r.stdout or "").strip().splitlines() or [empty])[-1][:200]
+def why_of(err: BdFailure) -> str:
+    return (err.error.text.strip().splitlines() or ["no output"])[-1][:200]
 
 
 class Looks:
@@ -45,7 +36,7 @@ class Looks:
         for b in beads or []:
             if LABEL not in (b.get("labels") or []):
                 continue
-            shown = bd_json(self.env.ports.bd, repo, "show", b["id"]) or {}
+            shown = self.beads.show(repo, b["id"]) or {}
             filed = gallery.epoch(b.get("created_at") or shown.get("created_at"))
             out += [dict(i, filed=filed) for i in gallery.items_of(b["id"], dict(shown, title=shown.get("title") or b.get("title")))]
         return out
@@ -126,11 +117,11 @@ class Looks:
             return self._apply(repo, look_bead, item_id, verdict, note, now)
         except OSError as err:
             return 502, {"code": "no_bd", "error": "The dashboard cannot run bd (%s). Nothing was changed." % err}
-        except subprocess.SubprocessError as err:
-            return 502, {"code": "bd", "error": "bd did not answer (%s)." % type(err).__name__}
+        except BdFailure as err:
+            return 502, {"code": "bd", "error": "bd did not answer (%s)." % why_of(err)}
 
     def _apply(self, repo: str, look_bead: str, item_id: str, verdict: str, note: str, now: float) -> Reply:
-        shown = bd_json(self.env.ports.bd, repo, "show", look_bead)
+        shown = self.beads.show(repo, look_bead)
         if not shown or LABEL not in (shown.get("labels") or []):
             return 404, {"code": "bead_missing", "error": "The look bead %s no longer exists." % look_bead}
         e = next((x for x in gallery.stored(look_bead, shown) if x.get("id") == item_id), None)
@@ -146,7 +137,7 @@ class Looks:
             ok, made = self.file_redo(repo, look_bead, e, note)
             if not ok:
                 return 502, {"code": "bd", "error": "bd refused the follow-up bead: %s" % made}
-        shown = bd_json(self.env.ports.bd, repo, "show", look_bead) or shown
+        shown = self.beads.show(repo, look_bead) or shown
         items = gallery.stored(look_bead, shown)
         e = next((x for x in items if x.get("id") == item_id), None)
         if e is None:
@@ -167,39 +158,37 @@ class Looks:
             self.drop(repo, old_redo, "the owner took the redo back")
         waiting = sum(1 for x in items if x.get("status") not in ("good", "redo"))
         if verdict == "undo" and shown.get("status") == "closed":
-            self.env.ports.bd(repo, "update", look_bead, "--status", "open")
+            self.env.ports.store(repo).update(look_bead, BeadPatch(status="open"))
         elif verdict != "undo" and not waiting:
-            self.env.ports.bd(repo, "close", look_bead, "--reason", "the owner answered every look")
+            self.env.ports.store(repo).close(look_bead, "the owner answered every look")
         return 200, {"ok": True, "status": e["status"], "redo_bead": e.get("redo_bead") or "", "open": waiting}
 
     def save(self, repo: str, look_bead: str, shown: dict[str, Any], items_meta: list[dict[str, Any]]) -> tuple[bool, str]:
         meta = dict(shown.get("metadata") or {})
         meta["looks"] = items_meta
-        r = self.env.ports.bd(repo, "update", look_bead, "--metadata", json.dumps(meta))
-        return r.returncode == 0, last_line(r)
+        try:
+            self.env.ports.store(repo).update(look_bead, BeadPatch(metadata=meta))
+        except BdFailure as err:
+            return False, why_of(err)
+        return True, ""
 
     def drop(self, repo: str, bead: str, why: str = "the answer could not be saved") -> None:
         """Close a follow-up bead that no answer points at (a failed save, an undone redo)."""
         if bead and names.is_bead_id(bead):
-            self.env.ports.bd(repo, "close", bead, "--reason", why)
+            with contextlib.suppress(BdFailure):
+                self.env.ports.store(repo).close(bead, why)
 
     def file_redo(self, repo: str, look_bead: str, e: dict[str, Any], note: str) -> tuple[bool, str]:
         """The follow-up bead of a redo: the owner's note and the pictures, related to the bead the look came from."""
         pics = "\n".join("- %s (%s)" % (s["path"], s.get("role") or "after") for s in e.get("shots") or [])
         desc = "The owner looked at \"%s\" (%s) and asked for a change.\n\nWhat to change:\n%s\n\nPictures:\n%s\n" % (
             e.get("title") or e.get("id"), e.get("bead") or look_bead, note, pics or "(none)")
-        args = ["create", "Redo look: " + (e.get("title") or e.get("id") or look_bead)[:90], "--type", "task", "--priority", "2",
-                "--description", desc, "--deps", "related:" + (e.get("bead") or look_bead)]
-        r = self.env.ports.bd(repo, *args)
-        if r.returncode != 0:
-            return False, last_line(r, "no output")
+        store = self.env.ports.store(repo)
         try:
-            out = json.loads(r.stdout or "{}")
-            out = out[0] if isinstance(out, list) and out else out
-            made = str(out.get("id") or "")
-        except (ValueError, AttributeError):
-            made = ""
-        if not made:
-            return False, "bd's answer had no id"
-        self.env.ports.bd(repo, "update", made, "--metadata", json.dumps({"looks": {"from": e.get("id"), "shots": e.get("shots") or [], "note": note}}))
+            made = store.create(NewBead(title="Redo look: " + (e.get("title") or e.get("id") or look_bead)[:90], priority=2, description=desc,
+                                        deps=["related:" + (e.get("bead") or look_bead)]))
+        except BdFailure as err:
+            return False, why_of(err)
+        with contextlib.suppress(BdFailure):  # the bead and its description already carry the note
+            store.update(made, BeadPatch(metadata={"looks": {"from": e.get("id"), "shots": e.get("shots") or [], "note": note}}))
         return True, made

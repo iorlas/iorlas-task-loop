@@ -41,6 +41,9 @@ class Bead:
     metadata: dict[str, Any] = field(default_factory=dict)  # free-form: held_by, held_bead, branch, slot, looks, ...
     lease_expires_at: str = ""
     close_reason: str = ""
+    created_at: str = ""
+    closed_at: str = ""
+    updated_at: str = ""
 
 
 @record

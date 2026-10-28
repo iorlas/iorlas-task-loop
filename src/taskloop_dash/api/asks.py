@@ -2,7 +2,6 @@
 AskAnswer filed on the ask through the AskStore (first answer wins), a withdrawal a status. Only the current ask version is read; an old
 or unknown one is absent. The text of a card comes from the record's fields (the launcher's `ask_text` port renders it)."""
 
-import subprocess
 import threading
 from pathlib import Path
 from typing import Any, Final
@@ -10,6 +9,7 @@ from typing import Any, Final
 from taskloop.contracts import codec
 from taskloop.contracts.ask import Ask as AskRecord
 from taskloop.contracts.ask import AskAnswer
+from taskloop.contracts.ports import BdFailure, BeadPatch
 from taskloop.contracts.stores import ORPHAN, AskStore
 from taskloop_dash.api.lanes import Lanes
 from taskloop_dash.env import Env
@@ -29,9 +29,9 @@ PROBLEMS: Final = {
 }
 
 
-def bd_failed(a: AskRecord, r: "subprocess.CompletedProcess[str]") -> Reply:
-    out = ((r.stderr or "") + (r.stdout or "")).strip()
-    if "no issue found" in out or "not found" in out.lower():
+def bd_failed(a: AskRecord, err: BdFailure) -> Reply:
+    out = err.error.text.strip()
+    if err.error.kind == "not_found":
         return 404, {"code": "bead_missing", "error": "The bead %s no longer exists in %s. The ask is out of date: dismiss it."
                      % (a.bead, basename(a.repo) or "its repo")}
     return 502, {"code": "bd", "error": "bd refused the update: %s" % (out.splitlines()[-1][:200] if out else "no output")}
@@ -174,10 +174,12 @@ class Asks:
     def open_bead(self, a: AskRecord) -> Reply | None:
         """Open the bead for the loop. -> None when done, else the reply that says what went wrong."""
         try:
-            r = self.env.ports.bd(a.repo or None, "update", a.bead, "--status", "open")
+            self.env.ports.store(a.repo).update(a.bead, BeadPatch(status="open"))
         except OSError as e:
             return 502, {"code": "no_bd", "error": f"The answer is saved, but the dashboard cannot run bd to open the bead ({e.strerror})."}
-        return bd_failed(a, r) if r.returncode else None
+        except BdFailure as e:
+            return bd_failed(a, e)
+        return None
 
     def withdraw(self, body: object) -> Reply:
         """The owner dismisses an ask that no longer applies; the bead is not touched."""

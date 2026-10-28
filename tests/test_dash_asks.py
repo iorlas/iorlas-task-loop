@@ -1,11 +1,8 @@
 """The dash reads and answers the current ask version only; its answers land as AskAnswer records."""
 import dataclasses
 import json
-import shutil
-import subprocess
 import sys
 import tempfile
-import types
 import time
 import unittest
 from pathlib import Path
@@ -16,7 +13,11 @@ import support.paths  # noqa: E402,F401
 from support.narrow import must  # noqa: E402
 from asks.samples import MOCKS  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
+from taskloop.adapters.bd import BdRun, BdStore  # noqa: E402
+from taskloop.adapters.fake_beads import FakeBeads  # noqa: E402
 from taskloop.contracts import codec  # noqa: E402
+from taskloop.contracts.bead import BdError, Bead  # noqa: E402
+from taskloop.contracts.ports import BdFailure  # noqa: E402
 from taskloop.contracts.ask import Ask  # noqa: E402
 from taskloop.contracts.enums import AskStatus  # noqa: E402
 from taskloop.contracts.stores import ORPHAN  # noqa: E402
@@ -25,15 +26,17 @@ from taskloop_dash.env import Ports  # noqa: E402
 ASK = dataclasses.replace(MOCKS["lifesim-22b3"], bead="b-1", id="b-1-1")
 
 
-def fake_bd(repo, *args, timeout=30):
-    return types.SimpleNamespace(returncode=0, stdout="[]", stderr="")
+def fake_store(repo):
+    store = FakeBeads()
+    store.beads["b-1"] = Bead(id="b-1", title="", status="blocked")
+    return store
 
 
 class DashAsks(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.dash = make_dash(Ports(bd=fake_bd), config=self.tmp.name)
+        self.dash = make_dash(Ports(store=fake_store), config=self.tmp.name)
         self.path = self.dash.env.config.ask("b-1")
         self.path.parent.mkdir(parents=True)
 
@@ -94,14 +97,20 @@ class AskFailures(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.d = Path(self.tmp.name)
         self.calls = []
-        self.bd_says = types.SimpleNamespace(returncode=0, stdout="[]", stderr="")
-        self.dash = make_dash(Ports(bd=self.bd), config=self.tmp.name)
+        self.bd_says = None  # the BdError the next write fails with
+        self.dash = make_dash(Ports(store=self.store), config=self.tmp.name)
         self.dir = self.dash.env.config.ask("x").parent
         self.dir.mkdir(parents=True)
 
-    def bd(self, repo, *args, timeout=30):
-        self.calls.append(args)
-        return self.bd_says
+    def store(self, repo):
+        outer = self
+
+        class Store(FakeBeads):
+            def update(self, bead, patch):
+                outer.calls.append((bead, patch))
+                if outer.bd_says:
+                    raise BdFailure(outer.bd_says)
+        return Store()
 
     def ask(self, bead="x-1", n=1, **over):
         rec = dataclasses.replace(ASK, bead=bead, id="%s-%d" % (bead, n), repo=str(self.d), t=time.time(), parks_at=time.time() + 9e4)
@@ -111,7 +120,7 @@ class AskFailures(unittest.TestCase):
         return json.loads((self.dir / ("%s.json" % bead)).read_text())
 
     def test_a_bead_bd_does_not_know_says_the_ask_is_out_of_date(self):
-        self.bd_says = types.SimpleNamespace(returncode=1, stdout="", stderr='Error: resolving demo: no issue found matching "demo"')
+        self.bd_says = BdError(kind="not_found", text='Error: resolving demo: no issue found matching "demo"')
         self.ask("demo")
         code, out = self.dash.asks.answer({"ask": "demo-1", "text": "b"})
         self.assertEqual((code, out["code"]), (404, "bead_missing"))
@@ -119,7 +128,7 @@ class AskFailures(unittest.TestCase):
         self.assertIn("dismiss", out["error"])
 
     def test_any_other_bd_failure_keeps_its_last_line(self):
-        self.bd_says = types.SimpleNamespace(returncode=1, stdout="", stderr="boom: disk full")
+        self.bd_says = BdError(kind="other", text="boom: disk full")
         self.ask()
         code, out = self.dash.asks.answer({"ask": "x-1-1", "text": "b"})
         self.assertEqual((code, out["code"]), (502, "bd"))
@@ -128,7 +137,7 @@ class AskFailures(unittest.TestCase):
 
     def test_no_bd_on_the_path_is_an_error_message_not_a_dropped_connection(self):
         self.ask()
-        with mock.patch.object(self.dash.env.ports, "bd", side_effect=FileNotFoundError(2, "No such file or directory")):
+        with mock.patch.object(self.dash.env.ports, "store", side_effect=FileNotFoundError(2, "No such file or directory")):
             code, out = self.dash.asks.answer({"ask": "x-1-1", "text": "b"})
         self.assertEqual((code, out["code"]), (502, "no_bd"))
 
@@ -181,14 +190,16 @@ class AskFailures(unittest.TestCase):
     def test_a_second_process_reuses_the_bead_list_of_the_last_30_seconds(self):
         """tl-u08: tl ask list is a fresh process every time; bd list takes seconds under load, so it is read once per 30 s."""
         (self.d / ".beads").mkdir()
-        dash = make_dash(config=self.tmp.name)  # the default bd port: a real subprocess call
-        out = mock.Mock(returncode=0, stdout=json.dumps([{"id": "a", "status": "open"}]), stderr="")
-        with mock.patch.object(subprocess, "run", return_value=out) as run, mock.patch.object(shutil, "which", return_value="/bin/bd"):
-            dash.env.ttl.clear()
-            self.assertEqual(dash.beads.beads_of(str(self.d)), [{"id": "a", "status": "open"}])
+        runs = []
+
+        def run(argv, where):
+            runs.append(argv)
+            return BdRun(0, json.dumps([{"id": "a", "status": "open"}]), "")
+        dash = make_dash(Ports(store=lambda repo: BdStore("tl-dash", repo, exe="bd", run=run)), config=self.tmp.name)
+        for _ in range(2):
             dash.env.ttl.clear()  # a new process: nothing in memory
-            self.assertEqual(dash.beads.beads_of(str(self.d)), [{"id": "a", "status": "open"}])
-        self.assertEqual(run.call_count, 1)
+            self.assertEqual([b["id"] for b in dash.beads.beads_of(str(self.d))], ["a"])
+        self.assertEqual(len(runs), 1)
 
     def test_amend_replaces_an_unused_answer_and_a_used_one_is_final(self):
         self.ask()

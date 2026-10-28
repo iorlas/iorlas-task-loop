@@ -29,12 +29,14 @@ Runner = Callable[[list[str], str | None], BdRun]
 
 
 def subprocess_runner(argv: list[str], cwd: str | None, timeout: float | None = None) -> BdRun:
-    """The one `bd` process call. A timeout raises subprocess.TimeoutExpired (a caller that cannot wait catches SubprocessError)."""
+    """The one `bd` process call. A timeout is code 124."""
     try:
         r = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL,
                            timeout=timeout)
     except OSError as e:
         return BdRun(127, "", "bd: %s" % e)
+    except subprocess.TimeoutExpired:
+        return BdRun(124, "", "bd: no answer in %ss" % timeout)
     return BdRun(r.returncode, r.stdout, r.stderr)
 
 
@@ -58,17 +60,8 @@ def bead_of(d: dict[str, Any]) -> Bead:
                 parent=_str(d, "parent"), description=_str(d, "description"), design=_str(d, "design"),
                 acceptance_criteria=_str(d, "acceptance_criteria"), notes=_str(d, "notes"),
                 dependencies=[dep_of(x) for x in deps if isinstance(x, dict)] if isinstance(deps, list) else [],
-                metadata=dict(meta) if isinstance(meta, dict) else {}, lease_expires_at=_str(d, "lease_expires_at"), close_reason=_str(d, "close_reason"))
-
-
-def norm_bead(d: dict[str, Any]) -> dict[str, Any]:
-    """A bead as bd prints it, its dependencies in the one dict shape {id, type, title, status}. For the dashboard, which still
-    reads bd's JSON as dicts until it takes typed snapshots; everything else reads `bead_of`."""
-    deps = d.get("dependencies")
-    if not isinstance(deps, list):
-        return d
-    return dict(d, dependencies=[{"id": x.id, "type": x.type, "title": x.title, "status": x.status, "close_reason": x.close_reason}
-                                 for x in map(dep_of, (y for y in deps if isinstance(y, dict)))])
+                metadata=dict(meta) if isinstance(meta, dict) else {}, lease_expires_at=_str(d, "lease_expires_at"), close_reason=_str(d, "close_reason"),
+                created_at=_str(d, "created_at"), closed_at=_str(d, "closed_at"), updated_at=_str(d, "updated_at"))
 
 
 def beads_of(data: Any) -> list[Bead]:

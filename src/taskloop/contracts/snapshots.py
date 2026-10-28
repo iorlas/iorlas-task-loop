@@ -1,34 +1,8 @@
-"""Files other readers build their view from: the task snapshot, the indexes, pins and the release result."""
+"""Files other readers build their view from: the delegate status snapshot, the indexes, pins and the release result."""
 from dataclasses import field
 from typing import ClassVar
 
 from taskloop.contracts.codec import record
-from taskloop.contracts.locks import EngineLock
-
-
-@record
-class TaskRow:
-    bead: str
-    title: str
-    status: str
-    labels: list[str] = field(default_factory=list)
-    parent: str = ""
-    slot: str | None = None
-    worktree: str = ""
-    lock: EngineLock | None = None
-    run: str | None = None
-    ask: str | None = None
-    blocker: str = ""
-
-
-@record
-class TasksSnapshot:
-    """snapshots/<repo_key>.tasks.json: written by the loop each pass; the dashboard reads it instead of asking bd."""
-
-    V: ClassVar[int] = 1
-    t: float
-    repo: str
-    beads: list[TaskRow] = field(default_factory=list)
 
 
 @record

@@ -350,7 +350,8 @@ class BeadApi(unittest.TestCase):
                   "dependencies": [{"id": "z", "title": "Z", "status": "closed", "type": "blocks"}]}]
         comments = [{"author": "me", "text": "hello", "created_at": "2026-10-23T10:00:00Z"}]
         with mock.patch.object(dash.beads, "resolve_repo", lambda r, b="": "/repo"), \
-                mock.patch.object(dash.beads, "bd_json", lambda repo, *a: shown if a[0] == "show" else comments), \
+                mock.patch.object(dash.beads, "show", lambda repo, bead: shown[0]), \
+                mock.patch.object(dash.beads, "comments", lambda repo, bead: comments), \
                 mock.patch.object(dash.records, "engine_logs", lambda retain=True: {}):
             out = dash.bead.api_bead("demo", "a")
         self.assertEqual((out["title"], out["description"], out["acceptance"], out["found"]), ("T", "D", "AC", True))
@@ -359,7 +360,7 @@ class BeadApi(unittest.TestCase):
         self.assertEqual(out["runs"], [])
 
     def test_an_id_is_never_a_bd_option(self):
-        with mock.patch.object(self.dash.beads, "bd_json", side_effect=AssertionError("bd must not run")):
+        with mock.patch.object(self.dash.beads, "show", side_effect=AssertionError("bd must not run")):
             for bad in ("--db=/x", "-h", "", "a b", "../x"):
                 self.assertFalse(self.dash.bead.api_bead("demo", bad)["found"])
 

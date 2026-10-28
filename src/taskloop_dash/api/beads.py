@@ -5,7 +5,7 @@ from typing import Any
 from taskloop_dash.api.artifacts import Artifacts
 from taskloop_dash.api.tasks import Tasks
 from taskloop_dash.env import Env
-from taskloop_dash.readers.beads import Beads, norm_bead
+from taskloop_dash.readers.beads import Beads
 from taskloop_dash.readers.records import Records
 from taskloop_dash.readers.runlogs import RunLogs
 from taskloop_dash.views import bead_blocks, names, segments
@@ -41,9 +41,7 @@ class BeadApi:
         path = self.beads.resolve_repo(repo, bead)
 
         def load() -> tuple[dict[str, Any], list[dict[str, Any]]]:
-            shown = self.beads.bd_json(path, "show", bead)
-            b = norm_bead((shown[0] if isinstance(shown, list) and shown else shown) or {})
-            return b, self.beads.bd_json(path, "comments", bead) or []
+            return self.beads.show(path, bead) or {}, self.beads.comments(path, bead)
         b, comments = self.env.ttl.get("bead:%s:%s" % (path, bead), 15, load)
         try:
             alive = any(t["id"] == bead and t.get("state") == "running" for t in self.tasks.api_tasks()["tasks"])

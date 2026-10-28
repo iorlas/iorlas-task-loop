@@ -3,7 +3,6 @@ them, good / redo / undo through bd (faked in memory), the signal in the Roadmap
 
 import json
 import os
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -15,7 +14,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support.narrow import must  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
-from taskloop_dash.api import looks as looks_api  # noqa: E402
+from taskloop.adapters.fake_beads import FakeBeads  # noqa: E402
+from taskloop.contracts.bead import BdError, Bead  # noqa: E402
+from taskloop.contracts.ports import BdFailure  # noqa: E402
 from taskloop_dash.views import gallery, graph, roadmap, signals  # noqa: E402
 
 LOOKS = make_dash().looks
@@ -34,41 +35,45 @@ def looks(*statuses):
              "status": s} for k, s in enumerate(statuses, 1)]
 
 
-class FakeBd:
-    """The few bd commands the gallery runs, over a dict of beads."""
+class FakeBd(FakeBeads):
+    """The typed bd port in memory, with the writes the gallery makes recorded in `calls` and `refuse` naming writes that fail."""
 
     def __init__(self, beads):
-        self.beads, self.calls, self.n = beads, [], 0
+        super().__init__(prefix="tl-r")
+        self.beads = {k: Bead(**v) for k, v in beads.items()}
+        self.calls, self.refuse = [], set()
 
-    def __call__(self, repo, *args, timeout=30):
-        self.calls.append(args)
-        out, code = "", 0
-        if args[0] == "show":
-            b = self.beads.get(args[1])
-            out, code = (json.dumps([b]), 0) if b else ("", 1)
-        elif args[0] == "update" and "--metadata" in args:
-            self.beads[args[1]]["metadata"] = json.loads(args[args.index("--metadata") + 1])
-        elif args[0] == "update" and "--status" in args:
-            self.beads[args[1]]["status"] = args[args.index("--status") + 1]
-        elif args[0] == "close":
-            self.beads[args[1]]["status"] = "closed"
-        elif args[0] == "create":
-            self.n += 1
-            nid = "tl-r%d" % self.n
-            self.beads[nid] = {"id": nid, "title": args[1], "status": "open", "description": args[args.index("--description") + 1], "labels": []}
-            out = json.dumps({"id": nid})
-        return subprocess.CompletedProcess(args, code, out, "")
+    def _try(self, what, bead):
+        self.calls.append((what, bead))
+        if what in self.refuse:
+            raise BdFailure(BdError(kind="other", text="boom"))
+
+    def update(self, bead, patch):
+        self._try("update-meta" if patch.metadata is not None and bead == "tl-look" else "update", bead)
+        super().update(bead, patch)
+
+    def close(self, bead, reason):
+        self._try("close", bead)
+        super().close(bead, reason)
+
+    def create(self, new):
+        self._try("create", "")
+        return super().create(new)
 
 
 def world(*statuses, status="open"):
     return FakeBd({"tl-look": {"id": "tl-look", "title": "Look review", "status": status, "labels": [gallery.LABEL],
-                               "metadata": {"looks": looks(*statuses), "other": 1}, "description": ""}})
+                               "metadata": {"looks": looks(*statuses), "other": 1}}})
+
+
+def using(fake):
+    return mock.patch.object(LOOKS.env.ports, "store", lambda repo: fake)
 
 
 class Items(unittest.TestCase):
     def test_metadata_items(self):
         fake = world("open", "good")
-        with mock.patch.object(LOOKS.env.ports, "bd", fake):
+        with using(fake):
             items = LOOKS.collect("/r", [{"id": "tl-look", "labels": [gallery.LABEL], "created_at": "2026-10-23T10:00:00Z"},
                                            {"id": "x", "labels": ["auto"]}])
         self.assertEqual([i["status"] for i in items], ["open", "good"])
@@ -115,8 +120,7 @@ class Pictures(unittest.TestCase):
 
     def test_lfs_pointer_and_missing_file_are_not_pictures(self):
         (self.repo / "docs/evidence/tl-1/m1.png").write_bytes(b"version https://git-lfs.github.com/spec/v1\noid sha256:0\n")
-        with mock.patch.object(looks_api.subprocess, "run", side_effect=OSError):
-            self.assertIsNone(LOOKS.picture(str(self.repo), "docs/evidence/tl-1/m1.png", self.items))
+        self.assertIsNone(LOOKS.picture(str(self.repo), "docs/evidence/tl-1/m1.png", self.items))
 
     def test_a_non_picture_extension_is_refused(self):
         items = gallery.items_of("b", {"metadata": {"looks": [{"id": "a#1", "shots": [{"path": "docs/x.html"}]}]}})
@@ -125,37 +129,37 @@ class Pictures(unittest.TestCase):
 
 class Answers(unittest.TestCase):
     def ask(self, fake, verdict, item="tl-1#1", note=""):
-        with mock.patch.object(LOOKS.env.ports, "bd", fake):
+        with using(fake):
             return LOOKS.answer("/r", {"look_bead": "tl-look", "item": item, "verdict": verdict, "note": note}, now=NOW)
 
     def stored(self, fake):
-        return {e["id"]: e for e in fake.beads["tl-look"]["metadata"]["looks"]}
+        return {e["id"]: e for e in fake.beads["tl-look"].metadata["looks"]}
 
     def test_good_settles_the_item_and_keeps_the_other_metadata(self):
         fake = world("open", "open")
         code, out = self.ask(fake, "good")
         self.assertEqual((code, out["status"], out["open"]), (200, "good", 1))
         self.assertEqual(self.stored(fake)["tl-1#1"]["status"], "good")
-        self.assertEqual(fake.beads["tl-look"]["metadata"]["other"], 1)
-        self.assertEqual(fake.beads["tl-look"]["status"], "open")
+        self.assertEqual(fake.beads["tl-look"].metadata["other"], 1)
+        self.assertEqual(fake.beads["tl-look"].status, "open")
 
     def test_the_last_good_closes_the_look_bead(self):
         fake = world("good", "open")
         self.ask(fake, "good", item="tl-1#2")
-        self.assertEqual(fake.beads["tl-look"]["status"], "closed")
+        self.assertEqual(fake.beads["tl-look"].status, "closed")
 
     def test_redo_files_a_bead_with_the_note_and_the_pictures(self):
         fake = world("open")
         code, out = self.ask(fake, "redo", note="  the title is too small  ")
         self.assertEqual((code, out["status"]), (200, "redo"))
         made = fake.beads[out["redo_bead"]]
-        self.assertIn("the title is too small", made["description"])
-        self.assertIn("docs/evidence/tl-1/m1.png (after)", made["description"])
-        self.assertIn("docs/evidence/tl-1/m1-before.png (before)", made["description"])
-        self.assertTrue(any(c[0] == "create" and "related:tl-1" in c for c in fake.calls))
+        self.assertIn("the title is too small", made.description)
+        self.assertIn("docs/evidence/tl-1/m1.png (after)", made.description)
+        self.assertIn("docs/evidence/tl-1/m1-before.png (before)", made.description)
+        self.assertEqual([d.id for d in made.dependencies], ["related:tl-1"])
         e = self.stored(fake)["tl-1#1"]
         self.assertEqual((e["status"], e["redo_bead"], e["answer_note"]), ("redo", out["redo_bead"], "the title is too small"))
-        self.assertEqual(fake.beads["tl-look"]["status"], "closed")  # nothing waits any more
+        self.assertEqual(fake.beads["tl-look"].status, "closed")  # nothing waits any more
 
     def test_redo_needs_a_note(self):
         fake = world("open")
@@ -173,16 +177,16 @@ class Answers(unittest.TestCase):
     def test_undo_of_good_reopens_item_and_bead(self):
         fake = world("open")
         self.ask(fake, "good")
-        self.assertEqual(fake.beads["tl-look"]["status"], "closed")
+        self.assertEqual(fake.beads["tl-look"].status, "closed")
         code, out = self.ask(fake, "undo")
         self.assertEqual((code, out["status"]), (200, "open"))
-        self.assertEqual((self.stored(fake)["tl-1#1"]["status"], fake.beads["tl-look"]["status"]), ("open", "open"))
+        self.assertEqual((self.stored(fake)["tl-1#1"]["status"], fake.beads["tl-look"].status), ("open", "open"))
 
     def test_undo_of_redo_closes_the_follow_up(self):
         fake = world("open")
         _, out = self.ask(fake, "redo", note="n")
         self.ask(fake, "undo")
-        self.assertEqual(fake.beads[out["redo_bead"]]["status"], "closed")
+        self.assertEqual(fake.beads[out["redo_bead"]].status, "closed")
         e = self.stored(fake)["tl-1#1"]
         self.assertEqual((e["status"], e["redo_bead"]), ("open", ""))
 
@@ -194,30 +198,28 @@ class Answers(unittest.TestCase):
     def test_unknown_item_bead_and_bad_input(self):
         fake = world("open")
         self.assertEqual(self.ask(fake, "good", item="tl-1#9")[1]["code"], "item_missing")
-        with mock.patch.object(LOOKS.env.ports, "bd", fake):
+        with using(fake):
             self.assertEqual(LOOKS.answer("/r", {"look_bead": "nope", "item": "x", "verdict": "good"})[0], 404)
             for bad in ({"look_bead": "--db=x", "item": "a", "verdict": "good"}, {"look_bead": "tl-look", "item": "a", "verdict": "x"}, [], None):
                 self.assertEqual(LOOKS.answer("/r", bad)[0], 400, bad)
-        fake.beads["plain"] = {"id": "plain", "labels": ["auto"], "metadata": {"looks": looks("open")}}
-        with mock.patch.object(LOOKS.env.ports, "bd", fake):  # not an owner-look bead: never touched
+        fake.beads["plain"] = Bead(id="plain", title="", status="open", labels=["auto"], metadata={"looks": looks("open")})
+        with using(fake):  # not an owner-look bead: never touched
             self.assertEqual(LOOKS.answer("/r", {"look_bead": "plain", "item": "tl-1#1", "verdict": "good"})[0], 404)
 
     def test_an_old_description_bead_is_turned_into_metadata_by_the_first_answer(self):
         desc = "## tl-9: Settings\n- docs/e/tl-9/a.png\n"
-        fake = FakeBd({"tl-look": {"id": "tl-look", "status": "open", "labels": [gallery.LABEL], "description": desc}})
-        with mock.patch.object(LOOKS.env.ports, "bd", fake):
+        fake = FakeBd({"tl-look": {"id": "tl-look", "title": "", "status": "open", "labels": [gallery.LABEL], "description": desc}})
+        with using(fake):
             code, _ = LOOKS.answer("/r", {"look_bead": "tl-look", "item": "tl-9#0", "verdict": "good"}, now=NOW)
         self.assertEqual(code, 200)
-        self.assertEqual(fake.beads["tl-look"]["metadata"]["looks"][0]["status"], "good")
+        self.assertEqual(fake.beads["tl-look"].metadata["looks"][0]["status"], "good")
 
     def test_bd_failing_reports_and_changes_nothing_else(self):
         fake = world("open")
-        orig = fake.__call__
-        fake.__class__ = type("Bad", (FakeBd,), {"__call__": lambda s, repo, *a, timeout=30: subprocess.CompletedProcess(a, 1, "", "boom")
-                                                  if a[0] == "update" else orig(repo, *a)})
+        fake.refuse = {"update-meta"}
         code, out = self.ask(fake, "good")
         self.assertEqual((code, out["code"]), (502, "bd"))
-        self.assertEqual(fake.beads["tl-look"]["status"], "open")
+        self.assertEqual(fake.beads["tl-look"].status, "open")
 
 
 class Hardening(unittest.TestCase):
@@ -227,19 +229,17 @@ class Hardening(unittest.TestCase):
 
     def test_a_failed_save_closes_the_redo_bead_it_made(self):
         fake = world("open")
-        orig = fake.__call__
-        fake.__class__ = type("Bad", (FakeBd,), {"__call__": lambda s, repo, *a, timeout=30: subprocess.CompletedProcess(a, 1, "", "boom")
-                                                  if a[0] == "update" and "--metadata" in a and a[1] == "tl-look" else orig(repo, *a)})
-        with mock.patch.object(LOOKS.env.ports, "bd", fake):
+        fake.refuse = {"update-meta"}
+        with using(fake):
             code, _ = LOOKS.answer("/r", {"look_bead": "tl-look", "item": "tl-1#1", "verdict": "redo", "note": "n"}, now=NOW)
         self.assertEqual(code, 502)
-        self.assertEqual(fake.beads["tl-r1"]["status"], "closed")
+        self.assertEqual(fake.beads["tl-r-2"].status, "closed")
 
     def test_two_clicks_at_once_file_one_follow_up(self):
         import threading
         fake = world("open")
         res = []
-        with mock.patch.object(LOOKS.env.ports, "bd", fake):
+        with using(fake):
             ts = [threading.Thread(target=lambda: res.append(LOOKS.answer("/r", {"look_bead": "tl-look", "item": "tl-1#1", "verdict": "redo", "note": "n"})[0]))
                   for _ in range(4)]
             [t.start() for t in ts]
@@ -249,10 +249,10 @@ class Hardening(unittest.TestCase):
 
     def test_an_odd_redo_id_is_never_closed(self):
         fake = world("open")
-        fake.beads["tl-look"]["metadata"]["looks"][0].update(status="redo", redo_bead="--force")
-        with mock.patch.object(LOOKS.env.ports, "bd", fake):
+        fake.beads["tl-look"].metadata["looks"][0].update(status="redo", redo_bead="--force")
+        with using(fake):
             LOOKS.answer("/r", {"look_bead": "tl-look", "item": "tl-1#1", "verdict": "undo"})
-        self.assertFalse(any(c[0] == "close" and "--force" in c for c in fake.calls))
+        self.assertFalse(any(c == ("close", "--force") for c in fake.calls))
 
 
 class Signal(unittest.TestCase):
@@ -286,7 +286,7 @@ class Api(unittest.TestCase):
             env = {"HOME": home, "XDG_CONFIG_HOME": str(cfg.parent), "APPDATA": str(cfg.parent)}
             with mock.patch.dict(os.environ, env):
                 dash = make_dash(home=home)
-            with mock.patch.object(dash.env.ports, "bd", fake), \
+            with mock.patch.object(dash.env.ports, "store", lambda repo: fake), \
                     mock.patch.object(dash.beads, "beads_of", lambda r: [{"id": "tl-look", "labels": [gallery.LABEL]}]):
                 out = dash.looks.api_looks("demo")
                 self.assertEqual((out["repo"], out["summary"]["open"]), ("demo", 1))

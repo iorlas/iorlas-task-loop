@@ -413,6 +413,12 @@ class Signals(unittest.TestCase):
                 and re.search(r"\bsubprocess\.Popen\(", p.read_text(encoding="utf-8"))]
         self.assertEqual(bare, [], "spawn through taskloop.adapters.procs (popen_held / spawn / capture)")
 
+    def test_the_dash_starts_no_process_and_reaches_bd_only_through_the_store_port(self):
+        """tl-2ve: the dashboard only reads; bd comes in as `Ports.store` (the engine's BdStore, the one process site)."""
+        bad = [p.relative_to(ROOT).as_posix() for p in sorted((ROOT / "src" / "taskloop_dash").rglob("*.py"))
+               if re.search(r"\bsubprocess\b|\bPopen\b|\bos\.(system|exec\w*|spawn\w*)\(|\brun\(|\bports\.bd\b", p.read_text(encoding="utf-8"))]
+        self.assertEqual(bad, [])
+
     def test_the_rule_finds_a_send(self):
         with tempfile.TemporaryDirectory() as d:
             (Path(d) / "src").mkdir()

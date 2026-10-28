@@ -195,7 +195,7 @@ class SlotLine(unittest.TestCase):
         from support.dashes import make_dash
         from taskloop_dash.env import Ports
         line = [Ticket(pid=1, why="run-task x-1", since=7.0, prio=0, seq=2), Ticket(pid=1, why="tl loop", since=5.0, prio=2, seq=1)]
-        dash = make_dash(Ports(bd=lambda *a, **k: None, waiting_line=lambda repo: line))
+        dash = make_dash(Ports(waiting_line=lambda repo: line))
         with mock.patch.object(dash.live.records, "repos", return_value=["/work/r"]):
             rows = dash.live.queue_rows()
         self.assertEqual([(r["repo"], r["why"], r["prio"], r["since"], r["ahead"]) for r in rows],

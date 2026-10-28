@@ -1,13 +1,15 @@
 """bd, read only: a repo's beads (listed once, kept until bd's marker moves), one bead with its comments, and the repo a link means."""
 
+import dataclasses
 import hashlib
 import json
 import os
-import subprocess
 import threading
 from pathlib import Path
 from typing import Any
 
+from taskloop.contracts.bead import Bead as TypedBead
+from taskloop.contracts.ports import BdFailure, BeadQuery
 from taskloop_dash.env import Bead, Env
 from taskloop_dash.readers.records import Records
 
@@ -16,14 +18,11 @@ SETTLE = 5  # seconds a listing is kept whatever the marker says
 SHARED = 30  # seconds another process's listing on disk is good enough
 
 
-def norm_bead(b: object) -> Any:
-    """A bead as bd prints it, its dependencies in the one shape the dash reads: {id, type, title, status} (`bd list` prints
-    depends_on_id and type, `bd show` id and dependency_type)."""
-    if isinstance(b, dict) and isinstance(b.get("dependencies"), list):
-        deps = [{"id": d.get("id") or d.get("depends_on_id"), "type": d.get("dependency_type") or d.get("type"),
-                 "title": d.get("title"), "status": d.get("status")} for d in b["dependencies"] if isinstance(d, dict)]
-        return dict(b, dependencies=deps)
-    return b
+def row_of(b: TypedBead) -> dict[str, Any]:
+    """A typed bead as the dash's views read it: a dict, its dependencies as {id, type, title, status}."""
+    out = dataclasses.asdict(b)
+    out["dependencies"] = [{k: d.get(k) for k in ("id", "type", "title", "status")} for d in out["dependencies"]]
+    return out
 
 
 def basename(path: object) -> str:
@@ -66,9 +65,8 @@ class Beads:
 
     def _list(self, repo: str) -> list[Bead] | None:
         try:
-            r = self.env.ports.bd(repo, "list", "--all", "-n", "0")
-            return [norm_bead(b) for b in json.loads(r.stdout)] if r.returncode == 0 else None
-        except (subprocess.SubprocessError, ValueError, OSError):
+            return [row_of(b) for b in self.env.ports.store(repo).find(BeadQuery(include_closed=True))]
+        except (BdFailure, ValueError, OSError):
             return None
 
     def _share(self, disk: Path, m: float, beads: list[Bead]) -> None:
@@ -80,14 +78,19 @@ class Beads:
         except OSError:
             pass
 
-    def bd_json(self, repo: str, *args: str) -> Any:
-        if not repo:
-            return None
+    def show(self, repo: str, bead: str) -> dict[str, Any] | None:
+        """One bead as a row, None when bd does not know it or cannot answer."""
         try:
-            r = self.env.ports.bd(repo, *args, timeout=20)
-            return json.loads(r.stdout) if r.returncode == 0 else None
-        except (subprocess.SubprocessError, ValueError, OSError):
+            found = self.env.ports.store(repo).show(bead) if repo else None
+        except (BdFailure, ValueError, OSError):
             return None
+        return row_of(found) if found else None
+
+    def comments(self, repo: str, bead: str) -> list[dict[str, Any]]:
+        try:
+            return [dataclasses.asdict(c) for c in self.env.ports.store(repo).comments(bead)] if repo else []
+        except (BdFailure, ValueError, OSError):
+            return []
 
     def resolve_repo(self, repo: str, bead: str = "") -> str:
         """A link may name a repo by path or by folder name, or not at all: find the registered repo it means."""

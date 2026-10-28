@@ -3,7 +3,6 @@ the waiting line, a repo's config, the installed versions, the run reflections) 
 
 import dataclasses
 import shutil
-import types
 from collections.abc import Callable
 from typing import Any
 
@@ -25,20 +24,17 @@ def quiet(fn: Callable[..., Any], default: Any) -> Callable[..., Any]:
     return call
 
 
-def bd(repo: str | None, *args: str, timeout: int = 30) -> types.SimpleNamespace:
-    """The dashboard's bd: the engine's adapter (--actor, --json), one process site."""
+def store(repo: str) -> BdStore:
+    """The dashboard's bd: the engine's typed adapter (--actor, --json), the one process site."""
     if not shutil.which("bd"):
         raise OSError(2, "bd is not installed")
-    r = BdStore("tl-dash", repo, timeout=timeout).passthrough(list(args))
-    if r.code == 127:  # the adapter folds "bd cannot be run" into 127
-        raise OSError(2, "bd cannot be run")
-    return types.SimpleNamespace(returncode=r.code, stdout=r.out, stderr=r.err)
+    return BdStore("tl-dash", repo or None, timeout=30)
 
 
 def ports() -> Ports:
     """`python3 -m taskloop_dash --ports dash_wiring:ports`: the dashboard process builds its ports from the flat code on its path, and
     `tl ask` in a terminal uses the same."""
-    return Ports(bd=bd, ask_text=asktext.markdown,
+    return Ports(store=store, ask_text=asktext.markdown,
                  slot_beads=quiet(lambda repo: [dataclasses.asdict(b) for b in wslots.slot_beads(repo)], []),
                  waiting_line=quiet(lambda repo: wslots.waiting_line(repo), []),
                  load_cfg=quiet(lambda repo: dataclasses.asdict(wslots.load_cfg(repo)), {"pick_label": "auto", "skip_labels": []}),
