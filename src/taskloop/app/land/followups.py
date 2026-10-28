@@ -11,8 +11,8 @@ def named(los: Sequence[Mapping[str, str]]) -> str:
     return "; ".join(f"{lo['title']} ({lo['why'][:120]})" for lo in los)
 
 
-def file_follow_ups(e: Any) -> tuple[int, list[dict[str, str]]]:
-    """-> (how many were attempted, the ones bd refused). A kill after a create loses no key: the checkpoint follows each one."""
+def file_follow_ups(e: Any) -> list[dict[str, str]]:
+    """-> the ones bd refused. A kill after a create loses no key: the checkpoint follows each one."""
     todo = fu.batch(e.bead, e.leftovers, e.filed)
     tag = fu.label(e.bead, e.stats["rounds"])
     unfiled: list[dict[str, str]] = []
@@ -30,4 +30,4 @@ def file_follow_ups(e: Any) -> tuple[int, list[dict[str, str]]]:
         e.checkpoints.keep_filed(unfiled)
     if todo.over:
         e.comment(f"Follow-up (engine): not filed, the cap is {fu.FOLLOW_UP_CAP} per run; {len(todo.over)} more: {named(todo.over)}")
-    return len(todo.file), unfiled
+    return unfiled

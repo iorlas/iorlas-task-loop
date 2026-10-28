@@ -9,12 +9,14 @@ from types import SimpleNamespace
 from typing import Any
 
 from taskloop.app.asks import raiser
+from taskloop.app.land.followups import file_follow_ups
 from taskloop.contracts import log as rec
 from taskloop.contracts.answers import VERDICTS
 from taskloop.contracts.enums import Outcome
-from taskloop.contracts.ports import BeadPatch, NewBead
+from taskloop.contracts.ports import BeadPatch
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.land.matchers import without_prefix
+from taskloop.domain.review import followups as fu
 
 DONE = ("landed", "done")
 
@@ -87,7 +89,7 @@ class Closer:
         outcome = self.o.outcome_for(kind, why) if kind and kind not in oc.FINISH else outcome
         if e.disp and e.disp.escalated and spec is None:
             spec = askspecs.repeated_fault(oc.KNOBS["fault_retries"], why.splitlines()[0][:200])
-        new = list({lo["title"]: lo for lo in e.leftovers if lo["title"] not in e.filed}.values())  # a title once
+        new = fu.batch(e.bead, e.leftovers, e.filed).file  # one per typed key, at most the cap
         self.save_branch(outcome, why)
         counts = "; ".join(f"{k}={v}" for k, v in e.stats.items())
         stats = f"cost=${e.cost:.2f}; minutes={int((time.time() - e.t0) / 60)}; {counts}"
@@ -99,7 +101,7 @@ class Closer:
             e.log.note(why)
             return
         e.asked = bool(kind in oc.ASKS and spec and outcome not in DONE and e.raise_ask(spec, why, kind))
-        lost = self.follow_ups(outcome, new)
+        lost = self.follow_ups(outcome)
         self.reflect_comment(outcome, why, new, lost, stats)
         self.settle(outcome, why, sha, spec, kind, stats)
 
@@ -136,7 +138,7 @@ class Closer:
         if outcome == "failed":
             e.warn(f"task failed: {why.splitlines()[0][:200]}")
 
-    def follow_ups(self, outcome: str, new: list[dict[str, str]]) -> list[dict[str, str]]:
+    def follow_ups(self, outcome: str) -> list[dict[str, str]]:
         """Landed work leaves its notes: the ask closed, the unverified items and the unchecked look items said, evidence kept, and each
         follow-up filed as a bead (what bd refuses is kept in the checkpoint, none lost)."""
         e = self.e
@@ -153,19 +155,7 @@ class Closer:
         shots = e.keep_evidence()
         if shots:
             e.comment("Evidence (engine): " + ", ".join(str(p) for p in shots))
-        lost = []
-        for lo in new:
-            made, err = e.create_checked(NewBead(title=lo["title"], description=lo["why"], deps=["discovered-from:" + e.bead]))
-            if made:
-                e.filed.append(lo["title"])  # only a create that worked; the checkpoint follows at once (a kill loses no title)
-                e.checkpoints.keep_filed()
-            else:
-                lost.append(lo)
-                e.warn(f"follow-up not filed: {lo['title'][:80]}: {err[:200]}")
-        if lost:
-            what = "; ".join(f"{lo['title']} ({lo['why'][:120]})" for lo in lost)
-            e.comment(f"Follow-up (engine): bd refused {len(lost)} follow-up(s), none was filed: {what}")
-            e.checkpoints.keep_filed(lost)
+        lost = file_follow_ups(e)
         if outcome == "landed":
             e.file_owner_look()
         return lost
