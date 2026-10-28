@@ -39,6 +39,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "skills" / "task-loop"))
 sys.path.insert(0, str(HERE.parent / "src"))
+sys.path.append(str(HERE.parent / "skills" / "task-loop" / "_vendor"))  # the vendored shelf packages src imports by name
 from taskloop.adapters import (  # noqa: E402
     gitrepo,
     ident,
