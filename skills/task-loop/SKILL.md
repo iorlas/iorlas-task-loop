@@ -207,6 +207,14 @@ base sha. `"inputs_only": true` drops the last two groups, so only the globs cou
 `"exclude": ["client/Assets/Features/*/Generated/**", "client/Assets/Views/*/Generated/**", "client/Assets/Kit/UI/Fonts/**"]`.
 The ignored walk lists only under the globs' literal folders (`client/Assets/{App,Core}/**` walks `client/Assets/App/` and `.../Core/`), so a `Library/` the globs do not name is never read. An `inputs` glob that matches no tracked file switches the cache off for that check (logged `inputs glob X matches no tracked file; not cached`; `tl doctor` reports it). A hit is logged
 `cached: unity-tests, inputs unchanged since round N`. No `inputs`: the key stays the whole tree plus the base. Only a pass is remembered.
+**Selector** (`engine.selector`, off by default; `checks/selector.py`). A command that prints `{"checks": [ids], "hatch": str|null, "reason": str}`
+and reads `TL_SELECT_STAGE` (write | fix | land | gate), `TL_SELECT_BASE` and `TL_SELECT_SINCE` (a fix round: the tree of the last green round).
+Write and land rounds and the gate use diff-vs-base; a fix round uses diff-vs-since plus whatever was red. It selects repo checks only; a
+stage's own checks always run. A check it leaves out is stored `skipped: selector`, never passed. A hatch, a nonzero exit or unparseable
+output runs the full set (the last two add a warning). The gate gets `TL_CHECKS_SELECTED` (ids) when the selection is not escalated. Each round
+writes a `selector` record: stage, since, selected, skipped, hatch_reason, warning. `engine.selector_shadow: true` runs the full set as today
+and writes a `selector_shadow` record per round instead: the full, selected and would-skip ids and `missed`, the would-skip checks that failed.
+
 **Hang watchdog.** `engine.check_idle_min` (10; 0 = off; `idle_min` on one check overrides): a check is stopped as hung only when
 for that long all three are flat: its stdout/stderr, any file under the worktree (size, count, mtime; checked about every
 minute) and the CPU time of its process tree. The whole group is killed, descendants that called setsid too. It is reported as

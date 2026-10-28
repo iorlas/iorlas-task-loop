@@ -30,6 +30,7 @@ import uuid
 from pathlib import Path
 
 from checks import lint, trim
+from checks import selector as sel
 from checks import speed as cs
 from core import fmt, procs
 from lanes import call as lcall
@@ -79,6 +80,8 @@ DEFAULTS = {
     "delegate": "",                   # path to delegate's route.py; "" = the newest installed iorlas-delegate
     "lane_wait_min": 10,              # how long a step waits in its slot for a lane; longer: the run pauses (slot freed)
     "untracked_ignore": [],           # globs of untracked files never staged and never listed for the review (lifesim: client/Assets/InitTestScene*.unity*)
+    "selector": "",                   # tl-7y6.7.18: a command printing {checks:[ids], hatch, reason} for the stage (checks/selector.py); "" = every check runs
+    "selector_shadow": False,         # tl-7y6.7.21: run the selector next to the full run and record only the differences; the full set still runs
     "checks": [],                     # repo checks: [{id, cmd, group: static|tests|acceptance, when: [globs], retry, timeout_min}]
     "host": False,                    # the work needs the host (Unity, an editor): write steps get delegate's --host
                                       # a bead label `sandbox` turns it off for one bead
@@ -700,6 +703,7 @@ class Engine:
         # the machine-readable trace the dashboard draws (docs/design/dashboard.md, Timeline records)
         self.node_n, self.cur, self.last_node, self.moved_from, self.moved_to = 0, None, None, None, None
         self.check_round = 0
+        self.green_tree, self.red_ids = "", ()  # the tree of the last green checks round and the ids red in the last round (the selector's fix-round inputs)
         self.last_checks, self.checks_tree = None, ""  # the last engine check results and the tree they ran on (tl-bxk.10.25)
         self.prev_ck, self.ck_run, self.resumed, self.run_logged = "", "", False, False
         d = tl.config_dir() / "engine"
@@ -3449,7 +3453,8 @@ class Engine:
                 continue
             acc_first = acc_only and not acc_first  # once, then the normal order: a check may read what a tests-group check writes
             checks = self.run_checks(dict(st, checks=st["checks"] + (self.case_checks() if last else [])), name,
-                                     acceptance_first=acc_first, conflict_fix=state.get("conflict_fix"), round=rounds + 1, **where)
+                                     acceptance_first=acc_first, conflict_fix=state.get("conflict_fix"), round=rounds + 1,
+                                     kind="fix" if rounds or fix else "write", **where)
             (self.run_dir / "engine-checks.json").write_text(json.dumps(checks, indent=1))
             (self.run_dir / ("engine-checks.r%d.json" % self.check_round)).write_text(json.dumps(checks, indent=1))
             self.last_checks, self.checks_tree = checks, self.tree_hash()
@@ -3696,12 +3701,30 @@ class Engine:
         out = tl.git("diff", "--name-only", self.base_sha(), tree, cwd=self.wt) if tree else ""
         return [p for p in out.splitlines() if p]
 
-    def run_checks(self, st, name, acceptance_first=False, groups=None, conflict_fix=None, **meta):
-        out = self._run_checks(st, name, acceptance_first=acceptance_first, groups=groups, conflict_fix=conflict_fix, **meta)
+    def run_checks(self, st, name, acceptance_first=False, groups=None, conflict_fix=None, kind="write", **meta):
+        out = self._run_checks(st, name, acceptance_first=acceptance_first, groups=groups, conflict_fix=conflict_fix, kind=kind, **meta)
         self.assert_tree("checks", "after")
         return out
 
-    def _run_checks(self, st, name, acceptance_first=False, groups=None, conflict_fix=None, **meta):
+    def select_checks(self, kind, ids):
+        """engine.selector (tl-7y6.7.18) for one round: which of the repo check `ids` this stage needs, as a sel.Picked, or None
+        when no selector is set. kind: write | fix | land | gate. A fix round asks for the diff since the last green round's tree
+        and keeps what was red. The result is a run record (`selector`); a selector that fails or hatches means the full set."""
+        cmd = (self.cfg.get("selector") or "").strip()
+        if not cmd:
+            return None
+        fix = kind == "fix"
+        since = self.green_tree if fix else ""
+        got = sel.ask(cmd, kind, self.git("rev-parse", self.cfg["base"]), since, self.wt)
+        picked = sel.pick(ids, got, kind, since, forced=self.red_ids if fix else ())
+        if got.warning:
+            self.warn("selector: %s; the full set runs" % got.warning)
+        self.log("selector", "selector (%s): %d of %d%s" % (kind, len(picked.selected), len(ids), " - " + got.hatch if got.hatch else ""),
+                 node_id=(self.cur or {}).get("id"), round=self.check_round, shadow=bool(self.cfg.get("selector_shadow")),
+                 reason=got.reason, **picked.record())
+        return picked
+
+    def _run_checks(self, st, name, acceptance_first=False, groups=None, conflict_fix=None, kind="write", **meta):
         """One engine step, no AI: the repo's checks (engine.checks) and the stage's acceptance checks, grouped
         static → tests → acceptance; a red group skips the groups after it. A repo check with `when` runs only when the
         task changed a matching path; `retry` reruns a red one (known flaky). A repo check that passed on the same tree
@@ -3732,6 +3755,11 @@ class Engine:
             items = keep
         if groups:  # tl-bxk.13.15: only these groups (the cheap checks before a render)
             items = [c for c in items if c["group"] in groups]
+        picked = self.select_checks(kind, [c["id"] for c in items if c.get("repo")]) if conflict_fix is None else None
+        if picked and not self.cfg.get("selector_shadow"):  # shadow only records; the selector skips a repo check, never a stage's own
+            pre_skipped += [dict(cmd=c["cmd"], id=c["id"], group=c["group"], exit=None, status="skipped", why="selector", tail="")
+                            for c in items if c.get("repo") and c["id"] in picked.skipped]
+            items = [c for c in items if not (c.get("repo") and c["id"] in picked.skipped)]
         # Cheapest first, by the median of earlier runs of the same command (unknown = cheap), so a red verdict comes
         # before the slow Unity runs. A check reading $TL_CHECK_LOG_<X> stays after X. When the last round failed only in
         # acceptance, acceptance goes before tests at equal cost (tl-bxk.13.14: lifesim-fdyo reran 11 minutes of unity tests
@@ -3931,6 +3959,14 @@ class Engine:
                  changed=changed_now)
         bad = [c for c in out if c["status"] == "failed"]
         hung = [c for c in bad if c.get("hung")]
+        if conflict_fix is None and not groups:
+            self.red_ids = tuple(c["id"] for c in bad)
+            if not bad:
+                self.green_tree = tree
+        if picked and self.cfg.get("selector_shadow"):
+            diff = sel.shadow(self.bead, kind, picked, out)
+            self.log("selector_shadow", "selector shadow (%s): would skip %d, %d of them red" % (kind, len(diff.would_skip), len(diff.missed)),
+                     node_id=(self.cur or {}).get("id"), round=self.check_round, **diff.record())
         self.outcome_of("red" if bad else "green", "%d failed%s: %s" % (len(bad), " (%d hung: no output, file writes or CPU, stopped)" % len(hung) if hung else "",
                                                                        ", ".join(c["id"][:60] for c in bad))
                         if bad else "%d passed" % sum(1 for c in out if c["status"] == "ran"))
@@ -3999,7 +4035,7 @@ class Engine:
                                                  feedback="", step="land-verify-red")
                         if stop:
                             raise Blocked("failed: stopped (SIGTERM)")
-                        results = self.run_checks({"checks": checks, "files": []}, "land retry")
+                        results = self.run_checks({"checks": checks, "files": []}, "land retry", kind="land")
                         with self.stop_deferred() as stop:
                             bad = [c for c in results if c["status"] == "failed"]
                             if bad:
@@ -4021,8 +4057,16 @@ class Engine:
                             rc, tail, gate_skipped = 0, "", True
                         else:
                             green = self.green_checks(gtree)  # repo checks green on this tree's inputs: the gate may skip their part
+                            gpick = self.select_checks("gate", [str(c.get("id") or c["cmd"]) for c in self.cfg.get("checks") or []])
+                            genv = {"TL_CHECKS_GREEN": ",".join(green)} if green else {}
+                            if gpick and not self.cfg.get("selector_shadow") and not gpick.hatch_reason and not gpick.warning:
+                                genv["TL_CHECKS_SELECTED"] = ",".join(gpick.selected)  # the gate runs only these checks' part
                             rc, tail = self.sh(self.cfg["gate"], save=self.gate_log, timeout=float(self.cfg["gate_timeout_min"]) * 60,
-                                               env={"TL_CHECKS_GREEN": ",".join(green)} if green else None)
+                                               env=genv or None)
+                            if gpick and self.cfg.get("selector_shadow"):
+                                self.log("selector_shadow", "selector shadow (gate): would run %d of %d, gate exit %d" % (
+                                    len(gpick.selected), len(gpick.selected) + len(gpick.skipped), rc), node_id=(self.cur or {}).get("id"),
+                                    **sel.shadow(self.bead, "gate", gpick, [], gate_exit=rc).record())
                             if rc == 0:
                                 self.gate_record(gtree)
                         self.log("gate", "gate: %s" % ("skipped" if gate_skipped else "exit %d" % rc),
@@ -4890,7 +4934,7 @@ GHERKIN_TEST = re.compile(r"^\s*Scenario( Outline)?:")  # a use-case scenario (R
 
 WAIT_KINDS = {"a lane": "lane", "a Unity slot": "unity_slot", "an editor lock": "editor_lock", "a delegate crash": "delegate_crash",
               "the network": "network"}  # add_wait's wording -> the `wait` record's kind (the dashboard names them)
-QUIET_KINDS = ("end", "transition", "checks", "run", "wait", "wait_start", "gate", "vendor_error", "kill",
+QUIET_KINDS = ("end", "transition", "checks", "selector", "selector_shadow", "run", "wait", "wait_start", "gate", "vendor_error", "kill",
                "cache")  # trace records for the dashboard and the lifecycle report, never printed
 RUN_STEM = re.compile(r"^\d{8}-\d{6}$")  # <bead>-<YYYYMMDD-HHMMSS>: an engine log of that bead, not of a child bead
 

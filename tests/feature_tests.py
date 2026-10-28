@@ -12,7 +12,7 @@ sys.path.insert(0, str(HERE))
 FEATURES = {
     "core": ["test_trace_records", "test_tl"],
     "lanes": ["test_opencode", "test_write_idle"],
-    "checks": ["test_checks_speed", "test_check_trim"],
+    "checks": ["test_checks_speed", "test_check_trim", "test_selector"],
     "asks": ["test_renotify"],
     "plan": [],
     "slots": ["test_slots", "test_slot_git"],
