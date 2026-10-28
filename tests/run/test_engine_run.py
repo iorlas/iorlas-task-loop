@@ -69,7 +69,7 @@ class EngineRunTest(EngineTest):
         (td / "verify-9.json").write_text("{}")
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
-        self.assertEqual(sorted(p.name for p in td.iterdir()), ["brief.md", "evidence"])
+        self.assertEqual(sorted(p.name for p in td.iterdir()), ["artifacts", "brief.md", "evidence"])
         self.assertIn("Add f", (td / "brief.md").read_text())  # the copy a resumed writer is pointed to
         self.assertTrue((td / "evidence" / "seen-red.log").exists())
         run = self.eng.run_dir
