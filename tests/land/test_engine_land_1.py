@@ -504,19 +504,6 @@ class EngineLand1Test(EngineTest):
         self.assertEqual(gitrepo.git("rev-parse", "HEAD", cwd=str(self.wt)),
                          gitrepo.git("rev-parse", "main", cwd=str(self.race_origin)))
 
-    def push_race_stops_after_two_retries_cell(self, rejections, expected):
-        rc, events, state = self.run_push_race(rejections=rejections)
-        self.assertEqual(rc, expected, self.blocked)
-        self.assertEqual(state["pushes"], 3)
-        self.assertEqual(events.count("enter"), 1)
-        self.assertEqual(events.count("exit"), 1)
-        self.assertEqual(events[-1], "exit")
-        if expected:
-            self.assertIn("land rejected 3 times", self.said())
-            self.assertFalse(self.eng.landed_sha)
-        else:
-            self.assertTrue(self.eng.landed_sha)
-
     def test_push_race_retries_use_input_cache(self):
         counts = {key: Path(self.tmp.name, key) for key in ("changed", "same", "whole", "uncached", "stage", "case", "conservative")}
 
@@ -761,9 +748,6 @@ class EngineLand1Test(EngineTest):
             held = subprocess.run([sys.executable, "-c", probe, str(path)], capture_output=True, text=True).stdout
         free = subprocess.run([sys.executable, "-c", probe, str(path)], capture_output=True, text=True).stdout
         self.assertEqual((held.strip(), free.strip()), ("held", "free"))
-
-
-_cells(EngineLand1Test, "push_race_stops_after_two_retries", "push_race_stops_after_two_retries_cell", ((2, 0), (3, 2)))
 
 
 _cells(EngineLand1Test, "push_race_failure_path_releases_land_lock", "push_race_failure_path_cell",

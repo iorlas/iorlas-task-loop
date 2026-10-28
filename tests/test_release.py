@@ -138,7 +138,7 @@ class Release(unittest.TestCase):
                                   text=True)
         self.addCleanup(second.kill)
         seen = []
-        for line in second.stdout:  # the second says it waits; only then does the first go on
+        for line in must(second.stdout):  # the second says it waits; only then does the first go on
             seen.append(line)
             if "waiting for the release lock" in line:
                 break
