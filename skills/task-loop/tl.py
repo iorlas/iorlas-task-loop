@@ -58,12 +58,14 @@ from urllib.parse import quote
 
 import applog
 
-import fcntl
+import vendored  # noqa: F401  (puts _vendor on sys.path)
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))  # taskloop: the typed records and adapters ship in the plugin dir
+from taskloop.adapters import locks
 from taskloop.adapters.bd import BdStore
 from taskloop.contracts import config
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.locks import LockTimeout
 from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, NewBead
 from taskloop_dash import bind as dash_bind
 from taskloop_dash.cli import dash as dash_cli
@@ -79,43 +81,15 @@ RETAIN_DAYS = 7
 
 @contextlib.contextmanager
 def os_lock(path, holder, waiting=None, timeout=None):
-    """One holder at a time, across processes: an flock the OS drops when the process dies; a second taker waits in
-    line. The file names the holder; `waiting(text)` is called with it once, before blocking. With `timeout` (seconds) a
-    wait that long raises TimeoutError (the holder's name in it)."""
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    f = open(path, "a+")
+    """One holder at a time, across processes (the vendored ProcessLock; the OS drops it when the process dies); a second
+    taker waits. `waiting(text)` is called with the holder's name once, before blocking. With `timeout` (seconds) a wait that
+    long raises TimeoutError (the holder's name in it)."""
+    told = (lambda rec: waiting(rec.holder if rec else "?")) if waiting else None
     try:
-        try:
-            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError:
-            if waiting:
-                who = ""
-                for _ in range(20):  # the holder may be between its truncate and its write
-                    who = Path(path).read_text().strip()
-                    if who:
-                        break
-                    time.sleep(0.01)
-                waiting(who or "?")
-            if timeout is None:
-                fcntl.flock(f, fcntl.LOCK_EX)
-            else:
-                end = time.monotonic() + timeout
-                while True:
-                    try:
-                        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                        break
-                    except OSError:
-                        if time.monotonic() >= end:
-                            raise TimeoutError(Path(path).read_text().strip() or "?")
-                        time.sleep(0.05)
-        f.seek(0)
-        f.truncate()
-        f.write(holder)
-        f.flush()
-        yield path
-    finally:
-        fcntl.flock(f, fcntl.LOCK_UN)
-        f.close()
+        with locks.hold_path(path, holder, timeout=timeout, waiting=told):
+            yield path
+    except LockTimeout as e:
+        raise TimeoutError(e.holder.holder if e.holder else "?") from None
 
 
 def land_lock_path(url):

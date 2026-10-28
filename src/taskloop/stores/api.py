@@ -35,14 +35,6 @@ class Log[T](Protocol):
     def tail(self, n: int, before: int | None = None) -> Page[T]: ...
 
 
-class LockTimeout(TimeoutError):
-    """A wait for a lock ran out; `holder` is who had it (None when unreadable)."""
-
-    def __init__(self, what: str, holder: LockRecord | None) -> None:
-        super().__init__("%s held by %s" % (what, holder.holder if holder else "?"))
-        self.holder = holder
-
-
 class LockTable(Protocol):
     """Named locks, one holder at a time, across processes. The OS (or the fake) drops a lock when its process dies."""
 

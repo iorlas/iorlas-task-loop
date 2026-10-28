@@ -53,7 +53,7 @@ LAYER_EDGES = {
     "contracts": frozenset(),
     "domain": frozenset({"contracts"}),
     "adapters": frozenset({"contracts"}),
-    "stores": frozenset({"contracts"}),
+    "stores": frozenset({"contracts", "adapters"}),
     "app": frozenset({"contracts", "domain", "adapters", "stores"}),
     "cli": frozenset({"app", "contracts", "stores"}),
     "hook": frozenset({"app", "contracts", "stores"}),

@@ -17,11 +17,11 @@ from taskloop.contracts import codec, events, log
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.enums import LockWhat
-from taskloop.contracts.locks import LockRecord, Ticket, pid_alive
+from taskloop.contracts.locks import LockRecord, LockTimeout, Ticket, pid_alive
 from taskloop.contracts.loop import LoopCommand, LoopState, Rest
 from taskloop.contracts.stores import JsonlStore
 from taskloop.contracts.trace import RunTrace
-from taskloop.stores.api import Doc, DocSet, LockTimeout
+from taskloop.stores.api import Doc, DocSet
 from taskloop.stores.books import AskBook, CheckpointBook
 from taskloop.stores.bundle import Stores
 

@@ -1,10 +1,10 @@
 """The file-backed Stores of one process: everything under one ConfigDir."""
+from taskloop.adapters.locks import ProcessLockTable
 from taskloop.contracts import paths, stores
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.stores.books import AskBook, CheckpointBook
 from taskloop.stores.bundle import Stores
-from taskloop.stores.filelock import FileLockTable
 from taskloop.stores.files import FileDocSet, FileTickets
 
 
@@ -15,4 +15,4 @@ def real_stores(cfg: paths.ConfigDir) -> Stores:
         loop_state=lambda key: stores.LoopStateStore(cfg, key),
         loop_command=lambda key: stores.LoopCommandStore(cfg, key),
         loop_rest=lambda key: stores.RestStore(cfg, key),
-        locks=FileLockTable(cfg), tickets=FileTickets(cfg))
+        locks=ProcessLockTable(cfg), tickets=FileTickets(cfg))

@@ -1,5 +1,5 @@
 """A rig builds one kind of Stores (file-backed or in-memory) and the few things only a test may do to it: tear a log's tail,
-plant a lock held by a dead process, write a foreign document."""
+plant a lock held by another process, write a foreign document."""
 import json
 import subprocess
 import sys
@@ -25,7 +25,7 @@ import fcntl
 path, record, secs = sys.argv[1], sys.argv[2], float(sys.argv[3])
 f = open(path, "a+")
 fcntl.flock(f, fcntl.LOCK_EX)
-f.seek(0); f.truncate(); f.write(record); f.flush()
+Path(path + ".holder").write_text(record)
 print("held", flush=True)
 time.sleep(secs)
 """

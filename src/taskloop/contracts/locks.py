@@ -20,6 +20,14 @@ def pid_alive(pid: int) -> bool:
     return True
 
 
+class LockTimeout(TimeoutError):
+    """A wait for a lock ran out; `holder` is who had it (None when unreadable)."""
+
+    def __init__(self, what: str, holder: "LockRecord | None") -> None:
+        super().__init__("%s held by %s" % (what, holder.holder if holder else "?"))
+        self.holder = holder
+
+
 @record
 class EngineLock:
     """<worktree>/.task/engine.lock: the run-task process that owns the worktree, with the processes it started."""

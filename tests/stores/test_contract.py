@@ -108,9 +108,9 @@ class RealRaces(unittest.TestCase):
         with self.rig.stores.locks.hold(LockWhat.AREA, "a", "me", timeout=2) as rec:
             self.assertEqual(rec.holder, "me")
 
-    def test_the_lock_file_is_a_json_record_of_the_holder(self) -> None:
+    def test_the_holder_file_is_a_json_record_of_the_holder(self) -> None:
         with self.rig.stores.locks.hold(LockWhat.LAND, "r", "tl-1"):
-            data = json.loads(self.cfg.lock_record("land", "r").read_text())
+            data = json.loads(self.cfg.lock_record("land", "r").with_name("land-r.lock.holder").read_text())
         self.assertEqual((data["holder"], data["pid"], data["what"]), ("tl-1", os.getpid(), "land"))
 
 

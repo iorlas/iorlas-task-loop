@@ -7,7 +7,7 @@ sys.path.append(str(Path(__file__).resolve().parents[2] / "skills" / "task-loop"
 from taskloop.contracts import paths  # noqa: E402
 from taskloop.contracts.enums import LockWhat  # noqa: E402
 from jsonl_log import Jsonl  # noqa: E402
-from taskloop.stores.filelock import FileLockTable  # noqa: E402
+from taskloop.adapters.locks import ProcessLockTable  # noqa: E402
 
 
 def main(argv: list[str]) -> None:
@@ -16,7 +16,7 @@ def main(argv: list[str]) -> None:
         for i in range(int(argv[2])):
             j.append({"who": argv[3], "i": i, "pad": "é" * (i % 50 + 1) * 40})
     else:
-        table = FileLockTable(paths.ConfigDir(argv[1]))
+        table = ProcessLockTable(paths.ConfigDir(argv[1]))
         counter = Path(argv[2])
         for _ in range(int(argv[3])):
             with table.hold(LockWhat.LAND, "r", "worker", timeout=60):

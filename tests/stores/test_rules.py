@@ -11,7 +11,7 @@ from contracts.test_rules import FILE_CAP, FUNC_CAP, VENDORED, code_lines  # noq
 
 PKG = Path(__file__).resolve().parents[2] / "src" / "taskloop" / "stores"
 FILES = sorted(PKG.glob("*.py"))
-REAL = {"files.py", "filelock.py", "real.py"}
+REAL = {"files.py", "real.py"}
 
 
 class StoreRules(unittest.TestCase):
@@ -41,7 +41,7 @@ class StoreRules(unittest.TestCase):
                          [node.module or ""] if isinstance(node, ast.ImportFrom) else [])
                 for name in names:
                     top = name.split(".")[0]
-                    self.assertTrue(top in stdlib or top in VENDORED or name.startswith(("taskloop.contracts", "taskloop.stores")), "%s: %s" % (f.name, name))
+                    self.assertTrue(top in stdlib or top in VENDORED or name.startswith(("taskloop.contracts", "taskloop.stores", "taskloop.adapters.locks")), "%s: %s" % (f.name, name))
                     self.assertNotIn(top, {"re", "subprocess", "socket"}, f.name)
 
     def test_only_the_real_implementations_touch_the_disk(self):

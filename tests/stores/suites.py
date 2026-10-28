@@ -13,8 +13,7 @@ from taskloop.contracts import codec, log as L
 from taskloop.contracts.ask import Ask, AskAnswer
 from taskloop.contracts.checkpoint import Unfiled
 from taskloop.contracts.enums import AskStatus, LockWhat
-from taskloop.contracts.locks import LockRecord
-from taskloop.stores.api import LockTimeout
+from taskloop.contracts.locks import LockRecord, LockTimeout
 
 CK = S.OTHERS["Checkpoint"]
 
@@ -223,12 +222,6 @@ class LockContract(Base):
         [t.start() for t in ts]
         [t.join(30) for t in ts]
         self.assertEqual((worst[0], hits[0]), (1, 20))
-
-    def test_a_lock_whose_recorded_holder_is_dead_is_broken(self) -> None:
-        self.rig.plant_lock(self.W, "r", "ghost", dead_pid())
-        with self.s.locks.hold(self.W, "r", "me", timeout=3) as rec:
-            self.assertEqual(rec.holder, "me")
-            self.assertEqual(self.s.locks.holder(self.W, "r").holder, "me")
 
     def test_a_lock_whose_recorded_holder_is_alive_is_not_broken(self) -> None:
         self.rig.plant_lock(self.W, "r", "other", os.getpid())
