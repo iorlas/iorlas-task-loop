@@ -1,11 +1,10 @@
-"""tl-bxk.10.20: the write timeout follows the worker's activity, not the wall clock, and a stopped call's worker is
-proven dead before any retry (lifesim-fld.27.10, -ae6v and -fld.6 each lost 47 min of live work to the 45 min cap, and
-fld.27.10's Claude worker kept writing under the Codex retry)."""
+"""tl-bxk.10.20: the write timeout follows the worker's activity, not the wall clock, and a stopped call's worker is gone before any
+retry (lifesim-fld.27.10, -ae6v and -fld.6 each lost 47 min of live work to the 45 min cap). The engine's runner is stream-proc's
+`run` with a watcher: delegate gets `--timeout` and `--idle`, the `Silence` here is the backstop, and the worker's pids come from
+the live file's first line (WorkerStarted) and from the answer's `worker.end`, never from ps or a stderr line."""
 
 import json
 import os
-import signal
-import subprocess
 import sys
 import tempfile
 import textwrap
@@ -15,320 +14,195 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "task-loop"))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import test_engine as te  # noqa: E402
 
-import delegate_link as dl  # noqa: E402
 import engine  # noqa: E402
 import seams  # noqa: E402
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "task-loop"))
 from support import fake_route  # noqa: E402
-import tl  # noqa: E402
-from core import procs  # noqa: E402,F401
-from lanes import call as lcall  # noqa: E402,F401
-from lanes import route as lroute  # noqa: E402,F401
+from taskloop.adapters import delegate as dg, procs, runner  # noqa: E402
+from taskloop.adapters.delegate import Stopped  # noqa: E402
+from taskloop.contracts.delegate import DelegateResult  # noqa: E402
 
 POSIX = os.name != "nt"
 MIN = 60.0
 
-# route.py stand-in: starts a worker in its own group, names it with a run_id like delegate 0.31.1+, then waits.
-# argv: dir mode. The worker ends itself when <dir>/done appears; mode "stubborn" ignores SIGTERM.
+# route.py stand-in: starts a worker in its own session, writes WorkerStarted as the first line of the live file like delegate, then
+# waits for <cwd>/done. Mode "stubborn": the worker ignores SIGTERM. Mode "chatty": the live file keeps moving until CHAT_UNTIL.
 ROUTE = textwrap.dedent('''
-    import os, signal, subprocess, sys, time
+    import json, os, subprocess, sys, time
     d, mode = sys.argv[sys.argv.index("--cwd") + 1], os.environ.get("FAKE_MODE", "")
     body = "import os, signal, time\\n" + ("signal.signal(signal.SIGTERM, signal.SIG_IGN)\\n" if mode == "stubborn" else "") + \\
            "while not os.path.exists(%r): time.sleep(0.02)\\n" % os.path.join(d, "done")
     w = subprocess.Popen([sys.executable, "-c", body], start_new_session=True)
     open(os.path.join(d, "w.pid"), "w").write(str(w.pid))
-    sys.stderr.write("delegate: worker pid=%d pgid=%d run_id=run1\\n" % (w.pid, w.pid))
-    sys.stderr.flush()
-    def bye(*_):
-        sys.exit(143)  # route.py dies and leaves the worker to the engine's group kill
-    signal.signal(signal.SIGTERM, bye)
+    live = os.environ.get("DELEGATE_LIVE_FILE")
+    if live:
+        os.makedirs(os.path.dirname(live), exist_ok=True)
+        with open(live, "a") as f:
+            f.write(json.dumps({"v": 1, "pid": w.pid, "pgid": w.pid, "run_id": "run1"}) + "\\n")
+            f.flush()
+            while mode == "chatty" and time.time() < float(os.environ["CHAT_UNTIL"]):
+                f.write(json.dumps({"t": time.time(), "k": "msg", "text": "still here"}) + "\\n")
+                f.flush()
+                time.sleep(0.1)
+            if mode == "chatty":
+                open(os.path.join(d, "done"), "w").close()
     w.wait()
-    print(\'{"v": 2, "status": "done", "data": {}, "ref": "r"}\')
+    print(json.dumps({"contract": 3, "data": {}, "ref": "r"}))
 ''')
 
 
-class Clock:
-    """A fake clock: every look at it is `step` seconds later."""
+class SilenceRules(unittest.TestCase):
+    def setUp(self):
+        self.t, self.warns = [1000.0], []
+        self.w = runner.Silence(15 * MIN, 25 * MIN, 120 * MIN, on_warn=self.warns.append, clock=lambda: self.t[0])
+        self.w.begin()
 
-    def __init__(self, step=MIN):
-        self.now, self.step = 1000.0, step
+    def test_process_output_counts_as_activity(self):
+        self.t[0] += 24 * MIN
+        self.assertEqual(self.w.check(None), "")
+        self.w.touch()
+        self.t[0] += 24 * MIN
+        self.assertEqual(self.w.check(None), "")  # 48 min in all, 24 since the output
 
-    def __call__(self):
-        self.now += self.step
-        return self.now
+    def test_a_live_file_that_moves_counts_as_activity(self):
+        self.t[0] += 40 * MIN
+        self.assertEqual(self.w.check(self.t[0] - 60), "")
+
+    def test_a_worker_gone_quiet_warns_at_15_min_and_is_stopped_at_25(self):
+        self.t[0] += 16 * MIN
+        self.assertEqual(self.w.check(None), "")
+        self.assertEqual(self.warns, ["write: no worker output for 16 min"])
+        self.t[0] += 10 * MIN
+        self.assertIn("no worker output for 26 min", self.w.check(None))
+
+    def test_a_warning_is_given_once_per_quiet_stretch(self):
+        self.t[0] += 16 * MIN
+        self.w.check(None)
+        self.t[0] += 3 * MIN
+        self.w.check(None)
+        self.assertEqual(len(self.warns), 1)
+        self.w.touch()
+        self.t[0] += 16 * MIN
+        self.w.check(None)
+        self.assertEqual(len(self.warns), 2)
+
+    def test_the_hard_cap_stops_a_worker_that_never_goes_quiet(self):
+        self.t[0] += 121 * MIN
+        self.assertEqual(self.w.check(self.t[0]), "hard cap 120 min")
 
 
 @unittest.skipUnless(POSIX, "process groups")
-class WriteFollowsTheWorker(unittest.TestCase):
+class StreamRunnerCall(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.d = Path(self.tmp.name)
         (self.d / "route.py").write_text(ROUTE)
-        (self.d / "session.jsonl").write_text("{}\n")
-        runs = self.d / "cfg" / "agent-runs" / "runs"
-        runs.mkdir(parents=True)
-        (runs / "run1.json").write_text(json.dumps({"id": "run1", "transcript": str(self.d / "session.jsonl")}))
-        for p in (mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(self.d / "cfg"), "APPDATA": str(self.d / "cfg")}),
-                  mock.patch.object(lcall, "POLL", 0.02), mock.patch.object(procs, "STOP_GRACE", 1),
-                  mock.patch.object(procs, "PROOF_TERM", 0.5), mock.patch.object(procs, "PROOF_KILL", 1),
-                  mock.patch.object(procs, "REAP_WAIT", 0.5), mock.patch.object(procs, "EXIT_WAIT", 0.5)):
+        self.live = str(self.d / "x.live" / "01-write.jsonl")
+        for p in (mock.patch.object(runner, "POLL_S", 0.05), mock.patch.object(runner, "WATCH_S", 0.05)):
             p.start()
             self.addCleanup(p.stop)
-        self.clock, self.warns = Clock(), []
+        self.addCleanup(self.cleanup_worker)
 
-    def tearDown(self):
+    def cleanup_worker(self):
         f = self.d / "w.pid"
         if f.exists() and f.read_text():
-            with __import__("contextlib").suppress(OSError):
-                os.killpg(int(f.read_text()), 9)
-            self.gone(int(f.read_text()))  # no writer left in the folder when it goes
+            procs.stop_pid(int(f.read_text()), grace=0.2)
         self.tmp.cleanup()
 
-    def worker(self):
+    def run_route(self, mode="", silence=None, wall=60.0, on_worker=None, **env):
+        r = runner.StreamRunner(self.d / "err.log", silence, wall, self.live, on_worker, grace=0.5)
+        cmd = [sys.executable, str(self.d / "route.py"), "--cwd", str(self.d)]
+        return r, lambda: r(cmd, cwd=str(self.d), env=dict(os.environ, FAKE_MODE=mode, DELEGATE_LIVE_FILE=self.live, **env), timeout=wall)
+
+    def worker_pid(self):
         return int((self.d / "w.pid").read_text())
 
-    def gone(self, pid):
-        end = time.monotonic() + 60
-        while time.monotonic() < end:
-            if not tl.proc_alive(pid):
-                return True
-            time.sleep(0.05)
-        return False
+    def test_the_worker_is_read_from_the_live_files_first_line(self):
+        seen = []
+        r, go = self.run_route("chatty", on_worker=seen.append, CHAT_UNTIL=str(time.time() + 0.6))
+        go()
+        self.assertEqual((r.worker.pid, r.worker.run_id), (self.worker_pid(), "run1"))
+        self.assertEqual(seen, [r.worker])
 
-    def call(self, mtime, mode="", wall=47 * MIN, **kw):
-        idle = lcall.Idle(15 * MIN, 25 * MIN, 120 * MIN, on_warn=self.warns.append, clock=self.clock, mtime=mtime)
-        cmd = [sys.executable, str(self.d / "route.py"), "--cwd", str(self.d)]
-        stop = {}
-        with mock.patch.dict(os.environ, {"FAKE_MODE": mode}):
-            res, _ = procs.run_proc(cmd, str(self.d), wall, self.d / "err.log", idle=idle, stop=stop, **kw)
-        return res, stop
+    def test_a_live_file_that_keeps_moving_keeps_the_call_alive_past_the_silence_limit(self):
+        sil = runner.Silence(0.3, 0.6, 30.0)
+        r, go = self.run_route("chatty", silence=sil, CHAT_UNTIL=str(time.time() + 1.6))
+        done = go()
+        self.assertEqual(done.returncode, 0)
+        self.assertEqual(r.stop, {})
 
-    def test_a_worker_that_keeps_writing_past_the_old_45_min_cap_is_not_stopped(self):
-        def mtime(path):  # the session file moves at every look; after 50 fake minutes the worker ends
-            if self.clock.now > 1000 + 50 * MIN:
-                (self.d / "done").write_text("")
-            return self.clock.now
+    def test_a_silent_worker_is_stopped_with_everything_it_started(self):
+        sil = runner.Silence(0.2, 0.5, 30.0)
+        r, go = self.run_route("stubborn", silence=sil)
+        with self.assertRaises(Stopped) as got:
+            go()
+        self.assertIn("no worker output", got.exception.why)
+        self.assertEqual(r.stop["alive"], [])
+        self.assertFalse(procs.alive(self.worker_pid()))  # it ignored SIGTERM and is gone: stream-proc proved it
+        self.assertIsNotNone(r.obs["kill_t"])
+        self.assertEqual(r.worker.run_id, "run1")
 
-        res, stop = self.call(mtime)
-        self.assertIsNotNone(res)
-        self.assertEqual(res[0], 0)
-        self.assertEqual(stop, {})
-        self.assertGreater(self.clock.now, 1000 + 47 * MIN)  # it outlived today's wall-clock limit
-        self.assertEqual(self.warns, [])
-
-    def test_a_worker_gone_quiet_warns_at_15_min_and_is_stopped_at_25(self):
-        res, stop = self.call(lambda path: 1000.0)  # the session file never moves again
-        self.assertIsNone(res)
-        self.assertEqual(self.warns, ["write: no worker output for 15 min"])
-        self.assertIn("no worker output for 25 min", stop["why"])
-        self.assertEqual(stop["alive"], [])
-        self.assertTrue(self.gone(self.worker()))
-        # stopped near the 25 min of silence, far from the 45 min node limit; the fake clock also advances while the stop waits for
-        # the process group (more under load), so the bound is not 30 min to the second
-        self.assertLess(self.clock.now, 1000 + 40 * MIN)
-
-    def test_the_hard_cap_stops_a_worker_that_never_goes_quiet(self):
-        res, stop = self.call(lambda path: self.clock.now)
-        self.assertIsNone(res)
-        self.assertIn("hard cap 120 min", stop["why"])
-        self.assertTrue(self.gone(self.worker()))
-
-    def test_a_session_that_cannot_be_found_falls_back_to_the_wall_clock_limit(self):
-        (self.d / "cfg" / "agent-runs" / "runs" / "run1.json").unlink()
-        res, stop = self.call(lambda path: self.clock.now, wall=47 * MIN)
-        self.assertIsNone(res)
-        self.assertEqual(self.warns, [])
-        self.assertIn("timeout 47 min", stop["why"])
-        self.assertGreaterEqual(self.clock.now, 1000 + 47 * MIN)
-        self.assertLess(self.clock.now, 1000 + 49 * MIN)
-
-    def test_a_worker_that_ignores_sigterm_is_killed_and_proven_dead(self):
-        res, stop = self.call(lambda path: 1000.0, mode="stubborn")
-        self.assertIsNone(res)
-        self.assertEqual(stop["alive"], [])
-        self.assertTrue(self.gone(self.worker()))
-
-    def test_a_worker_that_survives_every_signal_is_reported_alive(self):
-        with mock.patch.object(procs, "send_group", return_value=False), mock.patch.object(procs, "send_pid", return_value=False), \
-                mock.patch.object(procs, "signal_child", return_value=False):
-            res, stop = self.call(lambda path: 1000.0, mode="stubborn")
-        self.assertIsNone(res)
-        self.assertEqual(stop["alive"], [self.worker()])
-        self.assertTrue(tl.proc_alive(self.worker()))
-
-    def test_a_call_hands_the_survivors_to_the_engine(self):
-        route = self.d / "route.py"
-        idle = lcall.Idle(15 * MIN, 25 * MIN, 120 * MIN, clock=self.clock, mtime=lambda p: 1000.0)
-        runner = dl.ProcRunner(self.d / "err.log", idle=idle, wall=47 * MIN)
-        with mock.patch.object(procs, "send_group", return_value=False), mock.patch.object(procs, "send_pid", return_value=False), \
-                mock.patch.object(procs, "signal_child", return_value=False), mock.patch.dict(os.environ, {"FAKE_MODE": "stubborn"}):
-            r = dl.call(dl.Resolved(self.d, str(route), fake_route.CONTRACT, "explicit"),
-                        dl.CallRequest("worker", "x", {"type": "object"}, str(self.d), timeout_s=47 * MIN - 120), runner=runner)
-        self.assertEqual(runner.stop["alive"], [self.worker()])
-        self.assertEqual(r.stop.reason, "timeout")  # the engine ended the call: the bead's own transient failure
-        self.assertIn("25 min", r.say)
-
-
-SESSION_ROUTE = textwrap.dedent('''
-    import subprocess, sys, time
-    d = sys.argv[1]
-    # claude's run_in_background shells (Unity, servers) sit in a session and group of their own, under the worker
-    worker = "import subprocess, sys, time\\nc = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'], start_new_session=True)\\n" \\
-             "open(sys.argv[1], 'w').write(str(c.pid))\\ntime.sleep(60)\\n"
-    w = subprocess.Popen([sys.executable, "-c", worker, d + "/child.pid"], start_new_session=True)
-    open(d + "/w.pid", "w").write(str(w.pid))
-    time.sleep(60)
-''')
-
-
-@unittest.skipUnless(POSIX, "process groups")
-class ChildInItsOwnSession(unittest.TestCase):
-    def test_a_child_in_its_own_session_under_the_worker_is_dead_after_the_stop(self):
-        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
-            Path(d, "route.py").write_text(SESSION_ROUTE)
-            p = subprocess.Popen([sys.executable, str(Path(d, "route.py")), d], start_new_session=True)
-            self.addCleanup(p.wait)
-            end = time.monotonic() + 60
-            while not (Path(d, "child.pid").exists() and Path(d, "child.pid").read_text()):
-                self.assertLess(time.monotonic(), end, "the worker never named its child")
-                time.sleep(0.05)
-            w, c = int(Path(d, "w.pid").read_text()), int(Path(d, "child.pid").read_text())
-            self.assertNotEqual(os.getpgid(c), os.getpgid(w))
-            worker = {"pid": w, "pgid": w, "start": tl.proc_start(w)}
-            try:
-                with mock.patch.object(procs, "STOP_GRACE", 1), mock.patch.object(procs, "PROOF_TERM", 1), \
-                        mock.patch.object(procs, "PROOF_KILL", 2):
-                    alive = procs.stop_and_prove(p, None, worker)
-                self.assertEqual(alive, [])
-                end = time.monotonic() + 30
-                while tl.proc_alive(c) and time.monotonic() < end:
-                    time.sleep(0.05)
-                self.assertFalse(tl.proc_alive(c))
-            finally:
-                for pid in (c, w):
-                    with __import__("contextlib").suppress(OSError):
-                        os.kill(pid, 9)
-
-
-class IdleRules(unittest.TestCase):
-    def watch(self, mtime, **kw):
-        self.warns, self.t = [], [0.0]
-        w = lcall.Idle(15 * MIN, 25 * MIN, 120 * MIN, on_warn=self.warns.append, clock=lambda: self.t[0], mtime=mtime,
-                        session=lambda run_id: "/s.jsonl", **kw)
-        w.begin()
-        return w
-
-    def test_process_output_counts_as_activity(self):
-        w = self.watch(lambda p: 0.0)
-        for at in (10, 20, 30, 40):  # a line every 10 min: never 25 min quiet
-            self.t[0] = at * MIN
-            w.touch()
-            self.assertEqual(w.check({"run_id": "r"}, 47 * MIN), "")
-        self.assertEqual(self.warns, [])
-
-    def test_a_warning_is_given_once_per_quiet_stretch(self):
-        w = self.watch(lambda p: 0.0)
-        for at in (16, 17, 18):
-            self.t[0] = at * MIN
-            self.assertEqual(w.check({"run_id": "r"}, 47 * MIN), "")
-        self.assertEqual(len(self.warns), 1)
-        self.t[0] = 25 * MIN
-        self.assertIn("25 min", w.check({"run_id": "r"}, 47 * MIN))
-
-    def test_a_session_file_that_was_seen_and_is_lost_is_not_instant_idleness(self):
-        seen = [30 * MIN]
-        w = self.watch(lambda p: seen[0])
-        self.t[0] = 31 * MIN
-        self.assertEqual(w.check({"run_id": "r"}, 47 * MIN), "")
-        seen[0] = None  # the file is gone; the worker was active at 30 min
-        for at in (48, 54):
-            self.t[0] = at * MIN
-            self.assertEqual(w.check({"run_id": "r"}, 47 * MIN), "", at)  # past the wall limit, inside 25 min of the last sign
-        self.t[0] = 56 * MIN
-        self.assertIn("timeout", w.check({"run_id": "r"}, 47 * MIN))
-
-    def test_without_a_run_id_the_wall_clock_decides(self):
-        w = self.watch(lambda p: 0.0)
-        self.t[0] = 46 * MIN
-        self.assertEqual(w.check({}, 47 * MIN), "")  # 46 quiet minutes, but nothing to watch: today's limit only
-        self.t[0] = 47 * MIN
-        self.assertIn("timeout 47 min", w.check({}, 47 * MIN))
-        self.assertEqual(self.warns, [])
-
-
-@unittest.skipIf(os.name == "nt", "POSIX process groups (os.getpgrp); procs.own_ids needs it")
-class ProveDead(unittest.TestCase):
-    TABLE = {888: (1, 900, "x")}  # a stranger in group 900
-
-    def lingering(self, table, worker):
-        alive = lambda pid, start="": pid in table and (not start or table[pid][2] == start)  # noqa: E731
-        with mock.patch.object(tl, "proc_table", return_value=table), mock.patch.object(tl, "proc_alive", side_effect=alive):
-            return procs.lingering([], worker)
-
-    def test_a_reused_group_id_with_another_leader_is_not_ours_to_signal(self):
-        worker = {"pid": 777, "pgid": 900, "start": "old"}
-        self.assertEqual(self.lingering(self.TABLE, worker), [])  # the worker is gone
-        self.assertEqual(self.lingering({**self.TABLE, 777: (1, 900, "new")}, worker), [])  # its pid reused
-
-    def test_the_group_of_a_live_leader_is_ours(self):
-        worker = {"pid": 777, "pgid": 900, "start": "old"}
-        self.assertEqual(self.lingering({**self.TABLE, 777: (1, 900, "old")}, worker), [(777, "old"), (888, "x")])
-
-    def test_it_never_signals_the_engine_its_group_or_its_parent(self):
-        table = {os.getpid(): (os.getppid(), os.getpgrp(), "a"), os.getppid(): (1, os.getpgid(os.getppid()), "b"),
-                 777: (1, 777, "c")}
-        worker = {"pid": 777, "pgid": os.getpgrp(), "start": "c"}  # a route.py that names our own group as its worker
-        sent = []
-        with mock.patch.object(tl, "proc_table", return_value=table), mock.patch.object(tl, "proc_alive", return_value=True), \
-                mock.patch.object(engine.os, "kill", side_effect=lambda p, s: sent.append(p)), \
-                mock.patch.object(engine.os, "killpg", side_effect=lambda g, s: sent.append(("g", g))), \
-                mock.patch.object(engine.os, "getpgid", side_effect=lambda p: table[p][1]), \
-                mock.patch.object(procs, "PROOF_TERM", 0.05), mock.patch.object(procs, "PROOF_KILL", 0.05):
-            alive = procs.prove_dead([], worker)
-        self.assertEqual(alive, [777])  # still "alive" in this fake world
-        self.assertIn(777, sent)
-        self.assertNotIn(os.getpid(), sent)
-        self.assertNotIn(os.getppid(), sent)
-        self.assertNotIn(("g", os.getpgrp()), sent)
+    def test_the_wall_limit_stops_the_call_through_stream_proc(self):
+        r, go = self.run_route("", wall=0.8)
+        with self.assertRaises(Stopped):
+            go()
+        self.assertEqual(r.stop["kind"], "wall")
+        self.assertFalse(procs.alive(self.worker_pid()))
 
 
 class SurvivorBlocksTheRetry(te.EngineTest):
-    def test_a_write_whose_worker_outlived_the_stop_fails_the_node_and_is_not_retried(self):
+    def blocked_write(self, stop_alive=None, worker=None):
         class Script(fake_route.Script):
             def reply(self, role, *a, **kw):
                 if role != "worker":
                     return super().reply(role, *a, **kw)
                 self.calls.append((role, None, None))
-                self.stop = {"alive": [4242], "why": "timeout (no worker output for 25 min)"}
-                raise dl.Stopped("timeout (no worker output for 25 min)")
+                if stop_alive:
+                    self.stop = {"alive": stop_alive, "why": "timeout (no worker output for 25 min)"}
+                    raise Stopped("timeout (no worker output for 25 min)")
+                return fake_route.answer(self.c, "worker_failed", "r1", worker=worker, exit_code=-15)
 
         script = Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         c = engine.load_cfg(str(self.wt))
         with te.delegate_stack(script):
             self.eng = engine.Engine("t-1", str(self.wt), c, store=self.store)
             rc = self.eng.run()
+        return rc, script
+
+    def test_a_write_whose_worker_outlived_the_stop_fails_the_node_and_is_not_retried(self):
+        rc, script = self.blocked_write(stop_alive=[4242])
         self.assertEqual(rc, 2)
         self.assertEqual([x[0] for x in script.calls].count("worker"), 1)  # no second attempt into the same worktree
         self.assertIn("4242", self.eng.why)
         self.assertIn("still alive", self.eng.why)
 
+    def test_worker_survived_in_the_answer_blocks_the_bead_with_the_pids(self):
+        worker = {"end": "worker_survived", "stopped": True, "term_sent": True, "kill_sent": True, "waited_s": 9.0,
+                  "survivors": [{"pid": 31337, "start": "5"}, {"pid": 31338, "start": "6"}], "pid": 31337, "pgid": 31337, "start": "5"}
+        rc, script = self.blocked_write(worker=worker)
+        self.assertEqual(rc, 2)
+        self.assertEqual([x[0] for x in script.calls].count("worker"), 1)
+        for pid in ("31337", "31338"):
+            self.assertIn(pid, self.eng.why)
+
     def test_the_write_node_gets_the_idle_limits_from_the_config_and_other_nodes_do_not(self):
         idles = []
         script = fake_route.Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         c = engine.load_cfg(str(self.wt))
-        with te.delegate_stack(script), mock.patch.object(seams.DelegateRoute, "runner", lambda self, log, idle=None, wall=None: idles.append(idle) or script):
+        with te.delegate_stack(script), mock.patch.object(
+                seams.DelegateRoute, "runner", lambda self, log, idle=None, wall=None, live="", on_worker=None: idles.append(idle) or script):
             engine.Engine("t-1", str(self.wt), c, store=self.store).run()
         seen = dict(zip([x[0] for x in script.calls], idles))  # one runner per call, in call order
-        self.assertEqual((seen["worker"].warn, seen["worker"].stop, seen["worker"].cap), (15 * MIN, 25 * MIN, 120 * MIN))
+        self.assertEqual(tuple(seen["worker"][:3]), (15 * MIN, 25 * MIN + dg.BACKSTOP_S, 120 * MIN))  # delegate stops at 25 min (--idle), the engine 2 min after
         self.assertIsNone(seen["planner"])
         self.assertIsNone(seen["reviewer"])
 
     def test_a_write_under_the_idle_rules_gets_no_close_to_the_limit_warning(self):
         eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
-        r = dl.CallResult(te.CLEAN, secs=40 * 60)
+        r = DelegateResult(data=te.CLEAN, secs=40 * 60)
         eng.anomalies("write", r, 1)
         eng.anomalies("review", r, 1)
         warned = [json.loads(x)["text"] for x in Path(eng.log_path).read_text().splitlines() if '"warn"' in x]

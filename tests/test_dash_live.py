@@ -19,7 +19,7 @@ import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support.logs import typed  # noqa: E402
 from taskloop_dash.api import live, overview  # noqa: E402
 from taskloop_dash.views import live_state  # noqa: E402
-from lanes import call  # noqa: E402
+from taskloop.adapters import runner as live_runner  # noqa: E402
 
 BEAD, STAMP = "tl-live.1", "20261026-100000"
 T = 1793000000.0
@@ -44,7 +44,7 @@ def make_run(root):
     lf = os.path.join(eng, "%s-%s.live" % (BEAD, STAMP), "01-write.jsonl")
     put(lf, [{"t": T + 6, "k": "start", "harness": "codex", "lane": "CODEX", "model": "gpt-x", "effort": "high", "role": "worker", "pid": 1},
              {"t": T + 6.5, "k": "msg", "text": "between the start and the command"},
-             {"t": T + 7, "k": "cmd", "id": "1", "text": "pytest -q", "cwd": "/w"}])
+             {"t": T + 7, "k": "cmd_start", "id": "1", "text": "pytest -q", "cwd": "/w"}])
     return log, lf
 
 
@@ -64,7 +64,7 @@ class Feed(unittest.TestCase):
             self.assertEqual(len({e["seq"] for e in a["events"]}), len(a["events"]))
             pairs = {(e["src"], e["k"], e.get("id")) for e in a["events"]}
             self.assertIn(("engine", "cmd_end", "m1"), pairs)
-            self.assertIn(("01-write", "cmd", "1"), pairs)
+            self.assertIn(("01-write", "cmd_start", "1"), pairs)
             self.assertEqual(live.page(run, live.decode(a["cursor"]))["events"], [])  # nothing new: nothing
             put(lf, [{"t": T + 9, "k": "cmd_end", "id": "1", "exit": 1, "out": "boom", "secs": 2.0}])
             with open(lf, "a") as f:
@@ -122,11 +122,11 @@ class Feed(unittest.TestCase):
             self.assertEqual(live.poll(run, live.decode(cur), wait=2)["events"], [])
             self.assertGreaterEqual(time.monotonic() - t0, 2)
             threading = __import__("threading")
-            threading.Timer(0.5, put, (lf, [{"t": T + 30, "k": "tool", "id": "9", "text": "edit"}])).start()
+            threading.Timer(0.5, put, (lf, [{"t": T + 30, "k": "tool_start", "id": "9", "text": "edit"}])).start()
             t0 = time.monotonic()
             got = live.poll(run, live.decode(cur), wait=2)
             self.assertLess(time.monotonic() - t0, 2.5)
-            self.assertEqual([e["k"] for e in got["events"]], ["tool"])
+            self.assertEqual([e["k"] for e in got["events"]], ["tool_start"])
 
 
 class States(unittest.TestCase):
@@ -149,7 +149,7 @@ class States(unittest.TestCase):
                       output_t=lambda e: T + 50)
         self.assertEqual((chk["what"], chk["last_output_t"]), ("check", T + 50))
         self.assertEqual(self.st(base + [("engine", "gate_start", 3, {"cmd": "just check"})])["what"], "check")
-        self.assertEqual(self.st(base + [w, ("w", "cmd", 4, {"id": "1", "text": "pytest -q"})])["what"], "tool")
+        self.assertEqual(self.st(base + [w, ("w", "cmd_start", 4, {"id": "1", "text": "pytest -q"})])["what"], "tool")
         self.assertEqual(self.st(base + [w, ("w", "msg", 90, {"text": "hi"})], now=100)["what"], "thinking")
         self.assertEqual(self.st(base + [w, ("w", "msg", 10, {"text": "hi"})], now=100)["what"], "silent")
         self.assertEqual(self.st(base + [("engine", "kill", 5, {"what": "call", "why": "silent"})])["what"], "hung")
@@ -158,9 +158,9 @@ class States(unittest.TestCase):
         self.assertEqual(self.st(base, alive=False)["what"], "ended")
 
     def test_a_closed_pair_is_not_open_and_pairs_match_by_src_and_id(self):
-        items = [("engine", "cmd_start", 1, {"id": "a"}), ("w", "cmd", 2, {"id": "a"}), ("engine", "cmd_end", 3, {"id": "a"})]
+        items = [("engine", "cmd_start", 1, {"id": "a"}), ("w", "cmd_start", 2, {"id": "a"}), ("engine", "cmd_end", 3, {"id": "a"})]
         opened = live_state.open_pairs(self.ev(*items))
-        self.assertEqual([(s, k) for s, k, _ in opened], [("w", "cmd")])
+        self.assertEqual([(s, k) for s, k, _ in opened], [("w", "cmd_start")])
 
 
 class Overview(unittest.TestCase):
@@ -240,35 +240,34 @@ class Page(unittest.TestCase):
 
 class CallSite(unittest.TestCase):
     def test_file_name(self):
-        p = call.live_file("/e/tl-1-20261026-100000.jsonl", 3, "write")
+        p = live_runner.live_path("/e/tl-1-20261026-100000.jsonl", 3, "write")
         self.assertEqual(p, "/e/tl-1-20261026-100000.live/03-write.jsonl")
-        self.assertTrue(call.live_file("/e/x.jsonl", 12, "re view/2").endswith(".live/12-re-view-2.jsonl"))
+        self.assertTrue(live_runner.live_path("/e/x.jsonl", 12, "re view/2").endswith(".live/12-re-view-2.jsonl"))
 
     def test_the_call_sets_the_env(self):
-        import delegate_link as dl
-        from support import fake_route
+        from taskloop.adapters import delegate as dl
+        from support import dlcall, fake_route
         seen = []
 
         def runner(cmd, **kw):
             seen.append(kw.get("env"))
             return subprocess.CompletedProcess(cmd, 0, "", "")
         res = dl.Resolved(Path("/fake"), "/fake/route.py", fake_route.CONTRACT, "explicit")
-        dl.call(res, dl.CallRequest("worker", "p", {}, ".", live="/x/y.live/01-write.jsonl"), runner=runner)
+        dlcall.call(res, "worker", "p", {}, ".", runner, live_file="/x/y.live/01-write.jsonl")
         self.assertEqual(seen[0]["DELEGATE_LIVE_FILE"], "/x/y.live/01-write.jsonl")
-        dl.call(res, dl.CallRequest("worker", "p", {}, "."), runner=runner)
-        self.assertIsNone(seen[1])
+        dlcall.call(res, "worker", "p", {}, ".", runner, env={})
+        self.assertNotIn("DELEGATE_LIVE_FILE", seen[1])
 
     def test_engine_numbers_its_calls(self):
         import engine
         with tempfile.TemporaryDirectory() as d:
             e = object.__new__(engine.Engine)
-            e.log_path = Path(d) / ("%s-%s.jsonl" % (BEAD, STAMP))
+            e.log_path, e.live_n = Path(d) / ("%s-%s.jsonl" % (BEAD, STAMP)), 0
             p1, p2 = e.live("plan"), e.live("write")
             self.assertTrue(p1.endswith(".live/01-plan.jsonl") and p2.endswith(".live/02-write.jsonl"))
             self.assertTrue(os.path.isdir(os.path.dirname(p1)))
-            with open(engine.__file__, encoding="utf-8") as f:
-                src = f.read()
-            self.assertEqual(src.count("live=self.live("), 2)  # both delegate call sites pass it
+            src = (Path(engine.__file__).parents[2] / "src/taskloop/app/run/worker_call.py").read_text(encoding="utf-8")
+            self.assertEqual(src.count("e.live("), 1)  # the one delegate call site passes it
 
 
 class Served(unittest.TestCase):
@@ -297,9 +296,9 @@ class Served(unittest.TestCase):
                 self.assertEqual((a["bead"], a["run"], a["step"], a["worker"]["lane"], a["worker"]["model"]), (BEAD, "%s-%s" % (BEAD, STAMP), "write", "CODEX", "gpt-x"))
                 self.assertIn(a["state"]["what"], ("tool",))
                 self.assertEqual([e["t"] for e in a["events"]], sorted(e["t"] for e in a["events"]))
-                put(lf, [{"t": T + 20, "k": "tool", "id": "2", "text": "edit a.py"}])
+                put(lf, [{"t": T + 20, "k": "tool_start", "id": "2", "text": "edit a.py"}])
                 b = get("/api/live?bead=%s&run=%s-%s&since=%s" % (BEAD, BEAD, STAMP, a["cursor"]))
-                self.assertEqual([e["k"] for e in b["events"]], ["tool"])
+                self.assertEqual([e["k"] for e in b["events"]], ["tool_start"])
                 self.assertEqual(get("/api/live/overview")["beads"][0]["bead"], BEAD)
                 self.assertEqual(a["newest"], a["run"])
                 self.assertFalse(get("/api/live?bead=nope.1")["found"])

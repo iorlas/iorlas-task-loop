@@ -62,6 +62,8 @@ import vendored  # noqa: F401  (puts _vendor on sys.path)
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))  # taskloop: the typed records and adapters ship in the plugin dir
 from taskloop.adapters import locks
+from taskloop.adapters import delegate as sdelegate
+from taskloop.adapters import procs as sproc
 from taskloop.adapters.bd import BdStore
 from taskloop.adapters.gitenv import git_env, pinned_env, run_git  # noqa: F401  (tl.run_git and tl.pinned_env are the callers' names)
 from taskloop.adapters.slot_git import RealSlotGit
@@ -420,7 +422,7 @@ def cmd_land_lock(a):
         got.append(sig)
         for c in child:
             if c.poll() is None:
-                c.send_signal(sig)
+                sproc.stop_tree(c)  # the child's tree, through stream-proc
         if not child:
             raise SystemExit(128 + sig)
 
@@ -428,10 +430,12 @@ def cmd_land_lock(a):
     try:
         with os_lock(path, holder, lambda who: print("waiting for the land lock (held by %s)" % who, flush=True), secs):
             try:
-                child.append(subprocess.Popen(cmd))
+                p, hold = sproc.popen_held(cmd)
             except OSError as e:
                 print("land-lock: cannot run %s: %s" % (cmd[0], e), file=sys.stderr)
                 return 127
+            child.append(p)
+            hold.replay()
             rc = child[0].wait()
             return 128 + got[0] if got and rc < 0 else rc
     except TimeoutError as e:
@@ -607,11 +611,8 @@ def session_alive():
     if not pid:
         return True
     try:
-        os.kill(int(pid), 0)
-        return True
-    except PermissionError:
-        return True
-    except (OSError, ValueError):
+        return sproc.alive(int(pid))
+    except ValueError:
         return False
 
 
@@ -885,72 +886,20 @@ def engine_busy(wt, handoff=False):
     return ""
 
 
-# ---- processes: alive, start time, zombies (POSIX via ps, LC_ALL=C so the start time reads the same everywhere) ------
-
-def ps(*args):
-    try:
-        r = subprocess.run(["ps"] + list(args), capture_output=True, text=True, timeout=10,
-                           env=dict(os.environ, LC_ALL="C", LANG="C"))
-    except (OSError, subprocess.SubprocessError):
-        return None
-    return r.stdout
-
+# ---- processes: alive and start token, through stream-proc (/proc where there is one; no ps) ------------------------
 
 def proc_start(pid):
-    """The process's start time as text, "" when unknown ."""
-    if not pid:
-        return ""
-    out = ps("-o", "lstart=", "-p", str(int(pid)))
-    if out is None:  # no ps (a slim container): Linux's /proc has it
-        try:
-            return Path("/proc/%d/stat" % int(pid)).read_text().rsplit(")", 1)[1].split()[19]
-        except (OSError, IndexError, ValueError):
-            return ""
-    return " ".join(out.split())
-
-
-def zombie(pid):
-    out = ps("-o", "stat=", "-p", str(int(pid)))
-    if out is None:
-        try:
-            return Path("/proc/%d/stat" % int(pid)).read_text().rsplit(")", 1)[1].split()[0] == "Z"
-        except (OSError, IndexError, ValueError):
-            return False
-    return out.strip().startswith("Z")
+    """The process's start token as text, "" when unknown."""
+    return (sproc.proc_start(int(pid)) or "") if pid else ""
 
 
 def proc_alive(pid, start=""):
     """The process `pid` lives, is no zombie, and (when `start` is known) is the one that started then."""
-    if not pid_alive(pid) or zombie(pid):
-        return False
-    if start:
-        now_start = proc_start(pid)
-        if now_start and now_start != start:
-            return False
-    return True
-
-
-def proc_table():
-    """{pid: (ppid, pgid, start)} of every process (POSIX), {} when ps is missing."""
-    out = ps("-A", "-o", "pid=,ppid=,pgid=,lstart=")
-    table = {}
-    for ln in (out or "").splitlines():
-        f = ln.split()
-        if len(f) > 3 and all(x.isdigit() for x in f[:3]):
-            table[int(f[0])] = (int(f[1]), int(f[2]), " ".join(f[3:]))
-    return table
+    return bool(pid) and sproc.alive(int(pid), start or None)
 
 
 def pid_alive(pid):
-    if not pid:
-        return False
-    try:
-        os.kill(int(pid), 0)
-        return True
-    except PermissionError:
-        return True
-    except (OSError, ValueError):
-        return False
+    return bool(pid) and sproc.alive(int(pid))
 
 
 # ---- one worktree per loop session (slots off) --------------------------------------------------------------------
@@ -1090,10 +1039,7 @@ def stop_server(v=None, port=None):
         return
     if pid in (os.getpid(), os.getppid()) or pid <= 1:  # a server that names this very process is a test's, not ours to stop
         return
-    try:
-        os.kill(pid, signal.SIGTERM)
-    except OSError:
-        pass
+    sproc.stop_pid(pid)
     for _ in range(20):
         if not ping(port):
             return
@@ -1114,9 +1060,10 @@ def start_server(port, bind=None):
            if not k.startswith(("CLAUDE_CODE_SESSION", "DELEGATE_", "CODEX_COMPANION"))}
     kw = {"stdin": subprocess.DEVNULL, "stdout": log, "stderr": log, "env": env, "cwd": str(config_dir()), "close_fds": True}
     kw["start_new_session"] = True
-    kw["env"]["PYTHONPATH"] = os.pathsep.join([str(DASH.parents[1]), str(HERE)] + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else []))
+    kw["env"]["PYTHONPATH"] = os.pathsep.join([str(DASH.parents[1]), str(HERE), str(HERE / "_vendor")]
+                                             + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else []))
     cmd = [sys.executable, "-m", "taskloop_dash", "--ports", "tl:dash_ports", "--port", str(port)] + (["--bind", bind] if bind else [])
-    proc = subprocess.Popen(cmd, **kw)
+    proc = sproc.spawn(cmd, **kw)
     for _ in range(40):
         if proc.poll() not in (None, 0):
             return None, "dashboard exited %s: %s" % (proc.poll(), log_tail() or "see " + str(config_dir() / "dash.log"))
@@ -1239,8 +1186,8 @@ def cmd_hook(a):
     try:  # a dashboard left running by an older plugin version restarts on this code (it ran 0.5.3 for days)
         v = ping()
         if v and v.get("version") != code_version():
-            subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "dash", "ensure"], stdin=subprocess.DEVNULL,
-                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+            sproc.spawn([sys.executable, str(Path(__file__).resolve()), "dash", "ensure"], stdin=subprocess.DEVNULL,
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception:
         pass
     return 0
@@ -1591,19 +1538,17 @@ def main(argv=None):
         import engine
         return engine.main(a)
     if a.cmd == "usage":
-        from lanes import route as lroute
-        route = lroute.find_route()
+        route = sdelegate.find_route("", pinned_dir("delegate"), claude_dir() / "plugins" / "cache")
         if not route:
             print("no delegate installed: nothing to feed")
             return 0
-        r = subprocess.run([sys.executable, route, "status", "--claude-usage", a.windows, "--json"], capture_output=True,
-                           text=True, encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL)
+        r = sproc.capture([sys.executable, route, "status", "--claude-usage", a.windows, "--json"], None, None, 60.0)
         try:
-            lane = json.loads(r.stdout)["lanes"]["CLAUDE_SUBSCRIPTION"]
+            lane = json.loads(r.out)["lanes"]["CLAUDE_SUBSCRIPTION"]
             print("fed %s: Claude subscription 5h %s%%, week %s%%%s" % (route, lane.get("five"), lane.get("week"),
                                                                       ", OUT" if lane.get("out") else ""))
         except (ValueError, KeyError, TypeError):
-            print("delegate did not take the reading (exit %d): %s" % (r.returncode, (r.stderr or r.stdout)[-400:]))
+            print("delegate did not take the reading (exit %d): %s" % (r.exit, (r.err or r.out)[-400:]))
             return 1
         return 0
     if a.cmd == "selftest":

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from checks import speed
 from core.fmt import clip
-from core.procs import child_env
+from taskloop.adapters.procs import current_env as child_env
 
 # a check that runs bd or reads the beads files proves the tracker, not the code: no writer can satisfy it (writers cannot
 # run bd), so it burns every round (lifesim-fld.26.12, lifesim-fld.27.9: 3 rounds, 2 replans, 89 min, stuck)

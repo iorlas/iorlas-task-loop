@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-import delegate_link as dl  # noqa: E402
+from taskloop.contracts.delegate import DelegateResult  # noqa: E402
 import engine  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
 from taskloop_dash.api import lanes as lanes_mod  # noqa: E402
@@ -22,7 +22,6 @@ from support.builders import cfg_with  # noqa: E402
 from taskloop_dash.views import arrows, names  # noqa: E402
 from taskloop.app.run.calls import Calls  # noqa: E402
 import tl  # noqa: E402
-from lanes import call as lcall  # noqa: E402,F401
 
 SID = "ses_abc123"
 T = 1_790_000_000_000  # OpenCode stores milliseconds
@@ -124,11 +123,6 @@ class OpenCode(unittest.TestCase):
         self.assertEqual(engine.context_tokens(SID), 13700)
         self.assertIsNone(engine.context_tokens("opencode:ses_nope"))
 
-    def test_agent_run_session_and_mtime_follow_an_opencode_id(self):
-        (self.runs / "r1.json").write_text(json.dumps({"v": 1, "id": "r1", "kind": "opencode", "transcript": SID}))
-        self.assertEqual(lcall.agent_run_session("r1"), "opencode:" + SID)
-        self.assertAlmostEqual(lcall.file_mtime("opencode:" + SID), 1_790_000_009.0)
-
     # fresh-writer limit
     def test_xai_has_its_own_fresh_writer_limit(self):
         eng = types.SimpleNamespace(cfg=cfg_with())
@@ -152,23 +146,12 @@ class OpenCode(unittest.TestCase):
         self.assertEqual(out["events_id"], "opencode:ses_unknown@70.0@230.0")
         self.assertEqual(self.dash.runs.run_events(out["events_id"]), [])
 
-    def test_watchdog_reads_an_opencode_path_by_part_updates_and_survives_a_locked_db(self):
+    def test_the_newest_part_update_is_the_sessions_last_sign_of_life(self):
         con = sqlite3.connect(self.db)
         con.execute("INSERT INTO part VALUES ('p9','m3',?,?,?,'{}')", (SID, T + 9000, T + 99000))
         con.commit()
         con.close()
         self.assertAlmostEqual(tl.opencode_updated(SID), 1_790_000_099.0)  # a part newer than every message
-        t = [1_790_000_100.0]
-        w = lcall.Idle(900, 1500, 7200, clock=lambda: t[0], session=lambda r: "opencode:" + SID)
-        w.begin()
-        w.t0 = t[0] - 60
-        self.assertEqual(w.check({"run_id": "r"}, 2820), "")
-        t[0] += 600
-        self.assertEqual(w.check({"run_id": "r"}, 2820), "")
-        with mock.patch.dict(os.environ, {"OPENCODE_DB": os.path.join(self.tmp.name, "gone.db")}):  # unreadable now: last time kept
-            self.assertAlmostEqual(lcall.file_mtime("opencode:" + SID), 1_790_000_099.0)
-            t[0] += 300
-            self.assertEqual(w.check({"run_id": "r"}, 2820), "")
 
     def test_a_locked_db_reads_as_empty(self):
         con = sqlite3.connect(self.db, isolation_level=None)
@@ -226,7 +209,7 @@ class OpenCode(unittest.TestCase):
         sessions = []
         calls = Calls(types.SimpleNamespace(emit=lambda rec: 0), lambda: None, sessions, {"tokens_in": 0, "tokens_cached": 0, "tokens_out": 0},
                       tl.opencode_id, lambda path: None)
-        r = dl.CallResult(ref=SID, secs=1, cost=0, family="xai", raw={"ref": SID, "transcript": ""})
+        r = DelegateResult(ref=SID, secs=1, cost=0, family="xai")
         calls.end("c1", "write", "writer", 1, r)
         self.assertEqual(sessions[0]["transcript"], "opencode:" + SID)  # no DB look
 

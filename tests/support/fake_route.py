@@ -141,14 +141,18 @@ class Script:
         self.j_extra = {k: list(v) for k, v in (j_extra or {}).items()}  # per node, per call: fields the answer gains
         self.c = contract(delegate)
         self.nodes = []
-        self.stop, self.obs, self.secs = {}, {}, 0.0
+        self.stop, self.obs, self.secs, self.worker = {}, {}, 0.0, None
+        self.started = None  # a test sets the LiveStart the call reports
+
+    def live_start(self):
+        return self.started
 
     def node_of(self, schema):
         import engine  # the engine sends each contract in strict form, a visual stage's with its look field too
         return next(k for k in engine.SCHEMAS if schema in (engine.strict(engine.schema_for(k)), engine.strict(engine.schema_for(k, True))))
 
     def __call__(self, cmd, **kw):
-        self.stop, self.obs, self.secs = {}, {}, 0.0
+        self.stop, self.obs, self.secs, self.worker = {}, {}, 0.0, None
         schema = json.loads(Path(opt(cmd, "--schema")).read_text(encoding="utf-8"))
         j = self.reply(cmd[3], Path(opt(cmd, "--brief")).read_text(encoding="utf-8"), schema, opt(cmd, "--cwd"), opt(cmd, "--resume"),
                        opt(cmd, "--authored-by"), kw.get("timeout"))

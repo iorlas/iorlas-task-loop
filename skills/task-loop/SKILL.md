@@ -57,7 +57,7 @@ the gate. The labels `host` / `no-sandbox` alone grant nothing (a ⚠ says so); 
 Workers go through delegate's contract 3 (`docs/contracts/worker-run-v3.md`; the contract itself is delegate's `contract.json`): the
 engine resolves delegate before any step and blocks the task when it speaks another contract. Delegate, not the engine,
 tells each worker what its sandbox allows and the git and credential rules; the engine's briefs say only what the step is for.
-A stopped answer carries `stop{reason, scope, permanence, retry}`, and `lane_policy.decide` (a pure function of those facts)
+A stopped answer carries `stop{reason, scope, permanence, retry}`, and `taskloop.domain.lanes.policy.decide` (a pure function of those facts)
 is the whole policy: wait, retry, a new thread, reroute, pause, or fail. The engine matches no error text. A network
 stop never counts as a lane failure or toward any retry, replan, ask or storm cap and never opens a breaker: every step
 (plan, write, review, verify, look, checks, land) waits for the network on the same ref, with a short resume prompt, and

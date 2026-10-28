@@ -14,12 +14,13 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import call_state as callstate  # noqa: E402
-import delegate_link as dl  # noqa: E402
+import support.paths  # noqa: E402,F401
+from taskloop.stores import call_state as callstate  # noqa: E402
+from taskloop.adapters import delegate as dl  # noqa: E402
 from support import fake_route  # noqa: E402
 from support import tlbd  # noqa: E402
 import loop  # noqa: E402
-import netgate  # noqa: E402
+from taskloop.domain.lanes import netgate  # noqa: E402
 import outcome as oc  # noqa: E402
 import test_engine as te  # noqa: E402
 import test_stages_visual  # noqa: E402

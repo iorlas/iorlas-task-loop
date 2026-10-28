@@ -8,9 +8,14 @@ from typing import Any, ClassVar, Literal
 from taskloop.contracts.codec import record, table_of
 from taskloop.contracts.trace import Tokens
 
+REASON_TIMEOUT = "timeout"  # the wire id of a worker that did not finish within --timeout
+REASON_OVERRUN = "overrun"  # made by the engine: a reviewer call used its budget
+
 
 @record
 class RunRequest:
+    """One `route.py run`. The engine's limits travel as flags (`timeout_s`, `idle_s`): delegate stops the worker's tree at them."""
+
     role: str
     brief_path: str
     cwd: str
@@ -21,21 +26,24 @@ class RunRequest:
     title: str = ""
     resume: str = ""
     authored_by: str = ""
-    host: bool = False
     call_id: str = ""
-    readable_outside: list[str] = field(default_factory=list)
+    timeout_s: int = 0
+    idle_s: int = 0
+    live_file: str = ""  # DELEGATE_LIVE_FILE: where delegate appends the worker's live events
 
     def to_argv(self, python: str, route: str) -> list[str]:
         out = [python, route, "run", self.role, "--brief", self.brief_path, "--cwd", self.cwd, "--schema", self.schema_path]
         if self.unattended:
             out.append("--unattended")
         out += ["--parent", self.parent, "--task", self.task, "--title", self.title[:120]]
-        for flag, value in (("--resume", self.resume), ("--authored-by", self.authored_by), ("--call-id", self.call_id)):
+        for flag, value in (("--resume", self.resume), ("--authored-by", self.authored_by), ("--call-id", self.call_id),
+                            ("--timeout", self.timeout_s), ("--idle", self.idle_s)):
             if value:
-                out += [flag, value]
-        if self.host:
-            out.append("--host")
+                out += [flag, str(value)]
         return out
+
+    def env(self) -> dict[str, str]:
+        return {"DELEGATE_LIVE_FILE": self.live_file} if self.live_file else {}
 
 
 @record
@@ -107,6 +115,28 @@ class TranscriptInfo:
 
 
 @record
+class Survivor:
+    pid: int
+    start: str | None = None
+
+
+@record
+class WorkerEnd:
+    """How the worker's life ended (worker-run v1 `worker`): the delegate stopped its whole tree before it answered. `worker_survived`
+    names pids that outlived SIGTERM and SIGKILL; pid, pgid and start name the process it launched."""
+
+    end: Literal["ok", "error", "timeout", "worker_survived"] = "ok"
+    stopped: bool = False
+    term_sent: bool = False
+    kill_sent: bool = False
+    waited_s: float = 0.0
+    survivors: list[Survivor] = field(default_factory=list)
+    pid: int | None = None
+    pgid: int | None = None
+    start: str | None = None
+
+
+@record
 class DelegateResult:
     """The answer of `route.py run` (delegate contract 3): `stop` is None for a done call or the agent-tool handoff
     (`agent_model` set); no status, next, reason or retry_after."""
@@ -134,7 +164,13 @@ class DelegateResult:
     git_violation: list[str] = field(default_factory=list)
     usage: Usage | None = None
     context: dict[str, Any] | None = None
-    worker: dict[str, Any] | None = None
+    worker: WorkerEnd | None = None
+    exit_code: int | None = None  # the worker's exit status (negative: killed by that signal)
+    first_error: str = ""
+    fallback: bool | None = None
+    first_lane: str | None = None
+    warning: str = ""
+    ask_kind: str = ""
     warnings: list[str] = field(default_factory=list)
     agent_model: str | None = None
 
@@ -159,16 +195,16 @@ class LiveRec:
 class LiveStart(LiveRec):
     KIND: ClassVar[str] = "start"
     harness: str
-    lane: str
-    model: str
-    effort: str
-    role: str
     pid: int
+    lane: str = ""
+    model: str = ""
+    effort: str = ""
+    role: str = ""
 
 
 @record
-class LiveCmd(LiveRec):
-    KIND: ClassVar[str] = "cmd"
+class LiveCmdStart(LiveRec):
+    KIND: ClassVar[str] = "cmd_start"
     id: str
     text: str
     cwd: str = ""
@@ -179,14 +215,14 @@ class LiveCmd(LiveRec):
 class LiveCmdEnd(LiveRec):
     KIND: ClassVar[str] = "cmd_end"
     id: str
-    exit: int | None = None
+    exit: int | None = None  # null: the harness did not say
     secs: float = 0.0
     out: str = ""
 
 
 @record
-class LiveTool(LiveRec):
-    KIND: ClassVar[str] = "tool"
+class LiveToolStart(LiveRec):
+    KIND: ClassVar[str] = "tool_start"
     id: str
     text: str
     prov: bool = False
@@ -229,8 +265,8 @@ class LiveStall(LiveRec):
 @record
 class LiveRetry(LiveRec):
     KIND: ClassVar[str] = "retry"
-    n: int
-    of: int
+    n: int = 0
+    of: int = 0
     why: str = ""
 
 
@@ -248,7 +284,7 @@ class LiveRaw(LiveRec):
     type: str
 
 
-LiveEvent = (LiveStart | LiveCmd | LiveCmdEnd | LiveTool | LiveToolEnd | LiveMsg | LiveThink | LiveTokens | LiveStall | LiveRetry
+LiveEvent = (LiveStart | LiveCmdStart | LiveCmdEnd | LiveToolStart | LiveToolEnd | LiveMsg | LiveThink | LiveTokens | LiveStall | LiveRetry
              | LiveEnd | LiveRaw)
-LIVE_EVENT = table_of(LiveStart, LiveCmd, LiveCmdEnd, LiveTool, LiveToolEnd, LiveMsg, LiveThink, LiveTokens, LiveStall, LiveRetry,
+LIVE_EVENT = table_of(LiveStart, LiveCmdStart, LiveCmdEnd, LiveToolStart, LiveToolEnd, LiveMsg, LiveThink, LiveTokens, LiveStall, LiveRetry,
                       LiveEnd, LiveRaw)

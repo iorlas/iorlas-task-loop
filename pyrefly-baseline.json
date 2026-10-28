@@ -225,6 +225,20 @@
       "severity": "error"
     },
     {
+      "column": 30,
+      "path": "skills/task-loop/_vendor/process_lock/__init__.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `dict[str, dict[str, object] | str | None]` is not assignable to parameter `record` with type `dict[str, object]` in function `_try`",
+      "severity": "error"
+    },
+    {
+      "column": 46,
+      "path": "skills/task-loop/_vendor/stream_proc/hold.py",
+      "name": "bad-return",
+      "concise_description": "Function declared to return `tuple[Popen[bytes], TermHold]`, but one or more paths are missing an explicit `return`",
+      "severity": "error"
+    },
+    {
       "column": 50,
       "path": "skills/task-loop/applog.py",
       "name": "unsupported-operation",
@@ -253,27 +267,6 @@
       "severity": "error"
     },
     {
-      "column": 13,
-      "path": "skills/task-loop/core/procs.py",
-      "name": "not-callable",
-      "concise_description": "Expected a callable, got `None`",
-      "severity": "error"
-    },
-    {
-      "column": 24,
-      "path": "skills/task-loop/core/procs.py",
-      "name": "not-iterable",
-      "concise_description": "Type `None` is not iterable",
-      "severity": "error"
-    },
-    {
-      "column": 24,
-      "path": "skills/task-loop/core/procs.py",
-      "name": "not-iterable",
-      "concise_description": "Type `None` is not iterable",
-      "severity": "error"
-    },
-    {
       "column": 36,
       "path": "skills/task-loop/engine.py",
       "name": "bad-argument-type",
@@ -298,35 +291,7 @@
       "column": 36,
       "path": "skills/task-loop/engine.py",
       "name": "bad-assignment",
-      "concise_description": "`dict[Unknown, Unknown] | Unknown` is not assignable to attribute `contract` with type `None`",
-      "severity": "error"
-    },
-    {
-      "column": 31,
-      "path": "skills/task-loop/engine.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `scope`",
-      "severity": "error"
-    },
-    {
-      "column": 60,
-      "path": "skills/task-loop/engine.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `reason`",
-      "severity": "error"
-    },
-    {
-      "column": 70,
-      "path": "skills/task-loop/engine.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `reason`",
-      "severity": "error"
-    },
-    {
-      "column": 28,
-      "path": "skills/task-loop/engine.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `resumable`",
+      "concise_description": "`dict[str, Any] | Unknown` is not assignable to attribute `contract` with type `None`",
       "severity": "error"
     },
     {
@@ -337,24 +302,10 @@
       "severity": "error"
     },
     {
-      "column": 19,
+      "column": 27,
       "path": "skills/task-loop/engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`+` is not supported between `Literal[b'']` and `str`",
-      "severity": "error"
-    },
-    {
-      "column": 13,
-      "path": "skills/task-loop/engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`+=` is not supported between `str` and `bytes`",
-      "severity": "error"
-    },
-    {
-      "column": 16,
-      "path": "skills/task-loop/engine.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `str` has no attribute `decode`",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `None` is not assignable to parameter `resolved` with type `Resolved` in function `taskloop.adapters.delegate.call`",
       "severity": "error"
     },
     {
@@ -365,31 +316,10 @@
       "severity": "error"
     },
     {
-      "column": 18,
-      "path": "skills/task-loop/engine.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `object`",
-      "severity": "error"
-    },
-    {
-      "column": 22,
-      "path": "skills/task-loop/engine.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `object`",
-      "severity": "error"
-    },
-    {
-      "column": 45,
-      "path": "skills/task-loop/engine.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `object`",
-      "severity": "error"
-    },
-    {
-      "column": 78,
+      "column": 16,
       "path": "skills/task-loop/engine.py",
       "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `get`",
+      "concise_description": "Object of class `Engine` has no attribute `last_flag`",
       "severity": "error"
     },
     {
@@ -397,20 +327,6 @@
       "path": "skills/task-loop/engine.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `NoneType` has no attribute `include`",
-      "severity": "error"
-    },
-    {
-      "column": 13,
-      "path": "skills/task-loop/engine.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `object`",
-      "severity": "error"
-    },
-    {
-      "column": 19,
-      "path": "skills/task-loop/engine.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `object`",
       "severity": "error"
     },
     {
@@ -435,230 +351,6 @@
       "severity": "error"
     },
     {
-      "column": 40,
-      "path": "skills/task-loop/engine.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `object`",
-      "severity": "error"
-    },
-    {
-      "column": 29,
-      "path": "skills/task-loop/engine.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `get`",
-      "severity": "error"
-    },
-    {
-      "column": 33,
-      "path": "skills/task-loop/engine.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `object`",
-      "severity": "error"
-    },
-    {
-      "column": 31,
-      "path": "skills/task-loop/engine.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `get`",
-      "severity": "error"
-    },
-    {
-      "column": 16,
-      "path": "skills/task-loop/engine.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `object`",
-      "severity": "error"
-    },
-    {
-      "column": 42,
-      "path": "skills/task-loop/engine.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `object`",
-      "severity": "error"
-    },
-    {
-      "column": 96,
-      "path": "skills/task-loop/engine.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `object`",
-      "severity": "error"
-    },
-    {
-      "column": 101,
-      "path": "skills/task-loop/engine.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `object`",
-      "severity": "error"
-    },
-    {
-      "column": 103,
-      "path": "skills/task-loop/engine.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `object`",
-      "severity": "error"
-    },
-    {
-      "column": 44,
-      "path": "skills/task-loop/engine.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `object`",
-      "severity": "error"
-    },
-    {
-      "column": 59,
-      "path": "skills/task-loop/engine.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `object`",
-      "severity": "error"
-    },
-    {
-      "column": 16,
-      "path": "skills/task-loop/engine.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `object`",
-      "severity": "error"
-    },
-    {
-      "column": 44,
-      "path": "skills/task-loop/engine.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `object`",
-      "severity": "error"
-    },
-    {
-      "column": 56,
-      "path": "skills/task-loop/engine.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `object`",
-      "severity": "error"
-    },
-    {
-      "column": 71,
-      "path": "skills/task-loop/engine.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `get`",
-      "severity": "error"
-    },
-    {
-      "column": 78,
-      "path": "skills/task-loop/engine.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `get`",
-      "severity": "error"
-    },
-    {
-      "column": 30,
-      "path": "skills/task-loop/engine.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `get`",
-      "severity": "error"
-    },
-    {
-      "column": 44,
-      "path": "skills/task-loop/engine.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `object`",
-      "severity": "error"
-    },
-    {
-      "column": 37,
-      "path": "skills/task-loop/engine.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `object`",
-      "severity": "error"
-    },
-    {
-      "column": 20,
-      "path": "skills/task-loop/engine.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `object`",
-      "severity": "error"
-    },
-    {
-      "column": 48,
-      "path": "skills/task-loop/engine.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `object`",
-      "severity": "error"
-    },
-    {
-      "column": 60,
-      "path": "skills/task-loop/engine.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `object`",
-      "severity": "error"
-    },
-    {
-      "column": 76,
-      "path": "skills/task-loop/engine.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `get`",
-      "severity": "error"
-    },
-    {
-      "column": 38,
-      "path": "skills/task-loop/engine.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `object`",
-      "severity": "error"
-    },
-    {
-      "column": 60,
-      "path": "skills/task-loop/engine.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `object`",
-      "severity": "error"
-    },
-    {
-      "column": 86,
-      "path": "skills/task-loop/engine.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `get`",
-      "severity": "error"
-    },
-    {
-      "column": 115,
-      "path": "skills/task-loop/engine.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `get`",
-      "severity": "error"
-    },
-    {
-      "column": 37,
-      "path": "skills/task-loop/engine.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `get`",
-      "severity": "error"
-    },
-    {
-      "column": 66,
-      "path": "skills/task-loop/engine.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `get`",
-      "severity": "error"
-    },
-    {
-      "column": 38,
-      "path": "skills/task-loop/engine.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `get`",
-      "severity": "error"
-    },
-    {
-      "column": 68,
-      "path": "skills/task-loop/engine.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `get`",
-      "severity": "error"
-    },
-    {
-      "column": 28,
-      "path": "skills/task-loop/engine.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `get`",
-      "severity": "error"
-    },
-    {
       "column": 13,
       "path": "skills/task-loop/engine.py",
       "name": "bad-assignment",
@@ -666,52 +358,31 @@
       "severity": "error"
     },
     {
-      "column": 89,
-      "path": "skills/task-loop/engine.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `object`",
-      "severity": "error"
-    },
-    {
-      "column": 65,
-      "path": "skills/task-loop/engine.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `object`",
-      "severity": "error"
-    },
-    {
-      "column": 65,
-      "path": "skills/task-loop/engine.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `object`",
-      "severity": "error"
-    },
-    {
-      "column": 111,
-      "path": "skills/task-loop/engine.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `object`",
-      "severity": "error"
-    },
-    {
-      "column": 46,
+      "column": 20,
       "path": "skills/task-loop/engine.py",
       "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `get`",
+      "concise_description": "Object of class `Engine` has no attribute `last_flag`",
       "severity": "error"
     },
     {
-      "column": 49,
+      "column": 16,
       "path": "skills/task-loop/engine.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `object`",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `list` has no attribute `strip`",
       "severity": "error"
     },
     {
-      "column": 57,
+      "column": 47,
       "path": "skills/task-loop/engine.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `object`",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `list` has no attribute `strip`",
+      "severity": "error"
+    },
+    {
+      "column": 18,
+      "path": "skills/task-loop/engine.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `list` has no attribute `strip`",
       "severity": "error"
     },
     {
@@ -974,17 +645,10 @@
       "severity": "error"
     },
     {
-      "column": 28,
+      "column": 74,
       "path": "skills/task-loop/engine.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `object`",
-      "severity": "error"
-    },
-    {
-      "column": 79,
-      "path": "skills/task-loop/engine.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `object`",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `Engine` has no attribute `last_flag`",
       "severity": "error"
     },
     {
@@ -1016,7 +680,7 @@
       "severity": "error"
     },
     {
-      "column": 22,
+      "column": 27,
       "path": "skills/task-loop/engine.py",
       "name": "bad-assignment",
       "concise_description": "`EngineLock` is not assignable to attribute `LOCK` with type `None`",
@@ -1044,17 +708,10 @@
       "severity": "error"
     },
     {
-      "column": 27,
-      "path": "skills/task-loop/lanes/call.py",
-      "name": "bad-assignment",
-      "concise_description": "`float | Unknown` is not assignable to attribute `warned` with type `None`",
-      "severity": "error"
-    },
-    {
       "column": 25,
       "path": "skills/task-loop/loop.py",
       "name": "bad-assignment",
-      "concise_description": "`tuple[float | Unknown, dict[Unknown, Unknown]]` is not assignable to attribute `seen` with type `tuple[None, dict[Unknown, Unknown]]`",
+      "concise_description": "`tuple[float | Unknown, dict[str, Any] | dict[Unknown, Unknown]]` is not assignable to attribute `seen` with type `tuple[None, dict[Unknown, Unknown]]`",
       "severity": "error"
     },
     {
@@ -1076,6 +733,13 @@
       "path": "skills/task-loop/loop.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `NoneType` has no attribute `items`",
+      "severity": "error"
+    },
+    {
+      "column": 25,
+      "path": "skills/task-loop/loop.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `None` is not assignable to parameter `probe` with type `NetProbe` in function `taskloop.domain.lanes.netgate.NetState.poll`",
       "severity": "error"
     },
     {
@@ -1146,20 +810,6 @@
       "path": "skills/task-loop/loop.py",
       "name": "unsupported-operation",
       "concise_description": "`Literal[True]` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 25,
-      "path": "skills/task-loop/netgate.py",
-      "name": "bad-assignment",
-      "concise_description": "`None` is not assignable to `float`",
-      "severity": "error"
-    },
-    {
-      "column": 9,
-      "path": "skills/task-loop/netgate.py",
-      "name": "bad-assignment",
-      "concise_description": "`None` is not assignable to attribute `down_since` with type `float`",
       "severity": "error"
     },
     {
@@ -1363,132 +1013,6 @@
       "path": "skills/task-loop/tl.py",
       "name": "no-matching-overload",
       "concise_description": "No matching overload found for function `max` called with arguments: (dict[str, Path], key=(name: Unknown) -> tuple[int, ...] | None, default=Literal[''])",
-      "severity": "error"
-    },
-    {
-      "column": 56,
-      "path": "src/taskloop/app/run/calls.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `bool | dict[str, Any] | float | int | list[Any] | str | Any | None` is not assignable to parameter with type `str`",
-      "severity": "error"
-    },
-    {
-      "column": 65,
-      "path": "src/taskloop/app/run/calls.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `bool | dict[str, Any] | float | int | list[Any] | str | Any | None` is not assignable to parameter with type `str`",
-      "severity": "error"
-    },
-    {
-      "column": 39,
-      "path": "src/taskloop/app/run/calls.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `bool | dict[str, Any] | float | int | list[Any] | str | Any | None` is not assignable to parameter with type `str`",
-      "severity": "error"
-    },
-    {
-      "column": 46,
-      "path": "src/taskloop/app/run/calls.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of type `Literal[True] | dict[str, Any] | float | int | list[Any] | str | Any` has no attribute `get`",
-      "severity": "error"
-    },
-    {
-      "column": 46,
-      "path": "src/taskloop/app/run/calls.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `bool | dict[str, Any] | float | int | list[Any] | str | Any | None` is not assignable to parameter `status` with type `str` in function `taskloop.contracts.log.CallEnd.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 68,
-      "path": "src/taskloop/app/run/calls.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `bool | dict[str, Any] | float | int | list[Any] | str | Any | None` is not assignable to parameter `reason` with type `str | None` in function `taskloop.contracts.log.CallEnd.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 87,
-      "path": "src/taskloop/app/run/calls.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Literal[True] | dict[str, Any] | float | int | list[Any] | str | Any` is not assignable to parameter `ref` with type `str` in function `taskloop.contracts.log.CallEnd.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 110,
-      "path": "src/taskloop/app/run/calls.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Literal[True] | dict[str, Any] | float | int | list[Any] | str | Any` is not assignable to parameter `lane` with type `str` in function `taskloop.contracts.log.CallEnd.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 37,
-      "path": "src/taskloop/app/run/calls.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Literal[True] | dict[str, Any] | float | int | list[Any] | str | Any` is not assignable to parameter `model` with type `str` in function `taskloop.contracts.log.CallEnd.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 64,
-      "path": "src/taskloop/app/run/calls.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `bool | dict[str, Any] | float | int | list[Any] | str | Any | None` is not assignable to parameter `effort` with type `str` in function `taskloop.contracts.log.CallEnd.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 90,
-      "path": "src/taskloop/app/run/calls.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `bool | dict[str, Any] | float | int | list[Any] | str | Any | None` is not assignable to parameter `x` with type `Buffer | SupportsFloat | SupportsIndex | str` in function `float.__new__`",
-      "severity": "error"
-    },
-    {
-      "column": 115,
-      "path": "src/taskloop/app/run/calls.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `bool | dict[str, Any] | float | int | list[Any] | str | Any | None` is not assignable to parameter `x` with type `Buffer | SupportsFloat | SupportsIndex | str` in function `float.__new__`",
-      "severity": "error"
-    },
-    {
-      "column": 53,
-      "path": "src/taskloop/app/run/calls.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of type `Literal[True] | dict[str, Any] | float | int | list[Any] | str | Any` has no attribute `get`",
-      "severity": "error"
-    },
-    {
-      "column": 84,
-      "path": "src/taskloop/app/run/calls.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of type `Literal[True] | dict[str, Any] | float | int | list[Any] | str | Any` has no attribute `get`",
-      "severity": "error"
-    },
-    {
-      "column": 116,
-      "path": "src/taskloop/app/run/calls.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of type `Literal[True] | dict[str, Any] | float | int | list[Any] | str | Any` has no attribute `get`",
-      "severity": "error"
-    },
-    {
-      "column": 38,
-      "path": "src/taskloop/app/run/calls.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Literal[True] | dict[str, Any] | float | int | list[Any] | str | Any` is not assignable to parameter `family` with type `str` in function `taskloop.contracts.log.CallEnd.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 64,
-      "path": "src/taskloop/app/run/calls.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `bool | dict[str, Any] | float | int | list[Any] | str | Any | None` is not assignable to parameter `flag` with type `str | None` in function `taskloop.contracts.log.CallEnd.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 88,
-      "path": "src/taskloop/app/run/calls.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `bool | dict[str, Any] | float | int | list[Any] | str | Any | None` is not assignable to parameter `transcript` with type `str` in function `taskloop.contracts.log.CallEnd.__init__`",
       "severity": "error"
     },
     {
@@ -2031,59 +1555,10 @@
       "severity": "error"
     },
     {
-      "column": 27,
-      "path": "tests/contracts/test_delegate_wire.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `scope`",
-      "severity": "error"
-    },
-    {
-      "column": 37,
-      "path": "tests/contracts/test_delegate_wire.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `permanence`",
-      "severity": "error"
-    },
-    {
-      "column": 52,
-      "path": "tests/contracts/test_delegate_wire.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `retry_kind`",
-      "severity": "error"
-    },
-    {
       "column": 67,
       "path": "tests/contracts/test_delegate_wire.py",
       "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `retry_at`",
-      "severity": "error"
-    },
-    {
-      "column": 80,
-      "path": "tests/contracts/test_delegate_wire.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `reason`",
-      "severity": "error"
-    },
-    {
-      "column": 91,
-      "path": "tests/contracts/test_delegate_wire.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `resumable`",
-      "severity": "error"
-    },
-    {
-      "column": 105,
-      "path": "tests/contracts/test_delegate_wire.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `partial`",
-      "severity": "error"
-    },
-    {
-      "column": 117,
-      "path": "tests/contracts/test_delegate_wire.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `ref`",
+      "concise_description": "Object of type `Ask | BadVersions | BdError | Bead | Checkpoint | Comment | DashState | DelegateResult | EngineLock | LockRecord | LoopCommand | LoopLogLine | LoopState | Pin | Reexec | ReleaseResult | RepoProfile | ReposIndex | Rest | RunOutcome | RunRequest | RunTrace | SessionIndex | SharedNotes | SlotSetupMarker | TasksSnapshot | Ticket | WorkerStarted` has no attribute `worker`",
       "severity": "error"
     },
     {
@@ -4838,10 +4313,38 @@
       "severity": "error"
     },
     {
+      "column": 43,
+      "path": "tests/support/dlcall.py",
+      "name": "bad-argument-type",
+      "concise_description": "Unpacked keyword argument `str` is not assignable to parameter `unattended` with type `bool` in function `taskloop.contracts.delegate.RunRequest.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 43,
+      "path": "tests/support/dlcall.py",
+      "name": "bad-argument-type",
+      "concise_description": "Unpacked keyword argument `str` is not assignable to parameter `timeout_s` with type `int` in function `taskloop.contracts.delegate.RunRequest.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 43,
+      "path": "tests/support/dlcall.py",
+      "name": "bad-argument-type",
+      "concise_description": "Unpacked keyword argument `str` is not assignable to parameter `idle_s` with type `int` in function `taskloop.contracts.delegate.RunRequest.__init__`",
+      "severity": "error"
+    },
+    {
       "column": 20,
       "path": "tests/support/fakes.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `NoneType` has no attribute `id`",
+      "severity": "error"
+    },
+    {
+      "column": 9,
+      "path": "tests/support/fakes.py",
+      "name": "bad-override",
+      "concise_description": "Class member `FakeRouter.runner` overrides parent class `FixedRoute` in an inconsistent manner",
       "severity": "error"
     },
     {
@@ -5041,24 +4544,10 @@
       "severity": "error"
     },
     {
-      "column": 34,
-      "path": "tests/test_call_state.py",
-      "name": "bad-index",
-      "concise_description": "Index 2 out of range for tuple with 2 elements",
-      "severity": "error"
-    },
-    {
       "column": 41,
       "path": "tests/test_call_state.py",
       "name": "unsupported-operation",
       "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 46,
-      "path": "tests/test_call_state.py",
-      "name": "bad-index",
-      "concise_description": "Index 2 out of range for tuple with 2 elements",
       "severity": "error"
     },
     {
@@ -5920,6 +5409,13 @@
       "path": "tests/test_dash_live.py",
       "name": "unsupported-operation",
       "concise_description": "`None` is not subscriptable",
+      "severity": "error"
+    },
+    {
+      "column": 48,
+      "path": "tests/test_dash_live.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `Unknown | None` is not assignable to parameter `container` with type `Container | Iterable[Any]` in function `unittest.case.TestCase.assertNotIn`",
       "severity": "error"
     },
     {
@@ -7683,21 +7179,14 @@
       "column": 53,
       "path": "tests/test_fake_route.py",
       "name": "bad-argument-type",
-      "concise_description": "Argument `dict[Unknown, Unknown] | None` is not assignable to parameter `contract` with type `dict[Unknown, Unknown]` in function `delegate_link.Resolved.__init__`",
+      "concise_description": "Argument `dict[str, Any] | None` is not assignable to parameter `contract` with type `dict[str, Any]` in function `taskloop.adapters.delegate.Resolved.__init__`",
       "severity": "error"
     },
     {
       "column": 30,
       "path": "tests/test_fake_route.py",
       "name": "no-matching-overload",
-      "concise_description": "No matching overload found for function `subprocess.run` called with arguments: (list[Unknown], **dict[str, dict[str, str]])",
-      "severity": "error"
-    },
-    {
-      "column": 78,
-      "path": "tests/test_fake_route.py",
-      "name": "no-matching-overload",
-      "concise_description": "No matching overload found for function `subprocess.run` called with arguments: (Unknown, **dict[str, dict[str, str]])",
+      "concise_description": "No matching overload found for function `subprocess.run` called with arguments: (list[Unknown], **dict[str, bool | dict[str, str]])",
       "severity": "error"
     },
     {
@@ -7711,28 +7200,35 @@
       "column": 30,
       "path": "tests/test_fake_route.py",
       "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `reason`",
+      "concise_description": "Object of class `NoneType` has no attribute `reason`",
       "severity": "error"
     },
     {
       "column": 31,
       "path": "tests/test_fake_route.py",
       "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `scope`",
+      "concise_description": "Object of class `NoneType` has no attribute `scope`",
       "severity": "error"
     },
     {
       "column": 45,
       "path": "tests/test_fake_route.py",
       "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `permanence`",
+      "concise_description": "Object of class `NoneType` has no attribute `permanence`",
       "severity": "error"
     },
     {
       "column": 64,
       "path": "tests/test_fake_route.py",
       "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `retry_kind`",
+      "concise_description": "Object of class `NoneType` has no attribute `retry_kind`",
+      "severity": "error"
+    },
+    {
+      "column": 27,
+      "path": "tests/test_fake_route.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `Stop | None` is not assignable to parameter `stop` with type `Stop` in function `taskloop.domain.lanes.policy.decide`",
       "severity": "error"
     },
     {
@@ -7781,91 +7277,161 @@
       "column": 37,
       "path": "tests/test_fake_route.py",
       "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `reason`",
+      "concise_description": "Object of class `NoneType` has no attribute `reason`",
       "severity": "error"
     },
     {
       "column": 27,
       "path": "tests/test_fake_route.py",
       "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `scope`",
+      "concise_description": "Object of class `NoneType` has no attribute `scope`",
       "severity": "error"
     },
     {
       "column": 41,
       "path": "tests/test_fake_route.py",
       "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `permanence`",
+      "concise_description": "Object of class `NoneType` has no attribute `permanence`",
       "severity": "error"
     },
     {
       "column": 60,
       "path": "tests/test_fake_route.py",
       "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `retry_kind`",
+      "concise_description": "Object of class `NoneType` has no attribute `retry_kind`",
       "severity": "error"
     },
     {
       "column": 26,
       "path": "tests/test_fake_route.py",
       "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `ref`",
+      "concise_description": "Object of class `NoneType` has no attribute `ref`",
       "severity": "error"
     },
     {
-      "column": 41,
+      "column": 30,
       "path": "tests/test_fake_route.py",
       "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `reason`",
+      "concise_description": "Object of class `NoneType` has no attribute `reason`",
       "severity": "error"
     },
     {
       "column": 31,
       "path": "tests/test_fake_route.py",
       "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `scope`",
+      "concise_description": "Object of class `NoneType` has no attribute `scope`",
       "severity": "error"
     },
     {
       "column": 45,
       "path": "tests/test_fake_route.py",
       "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `permanence`",
+      "concise_description": "Object of class `NoneType` has no attribute `permanence`",
       "severity": "error"
     },
     {
       "column": 27,
       "path": "tests/test_fake_route.py",
       "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `reason`",
+      "concise_description": "Object of class `NoneType` has no attribute `reason`",
       "severity": "error"
     },
     {
       "column": 42,
       "path": "tests/test_fake_route.py",
       "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `scope`",
+      "concise_description": "Object of class `NoneType` has no attribute `scope`",
       "severity": "error"
     },
     {
       "column": 56,
       "path": "tests/test_fake_route.py",
       "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `ref`",
+      "concise_description": "Object of class `NoneType` has no attribute `ref`",
       "severity": "error"
     },
     {
       "column": 26,
       "path": "tests/test_fake_route.py",
       "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `reason`",
+      "concise_description": "Object of class `NoneType` has no attribute `reason`",
       "severity": "error"
     },
     {
       "column": 26,
       "path": "tests/test_fake_route.py",
       "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `reason`",
+      "concise_description": "Object of class `NoneType` has no attribute `reason`",
+      "severity": "error"
+    },
+    {
+      "column": 27,
+      "path": "tests/test_fake_route.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `NoneType` has no attribute `scope`",
+      "severity": "error"
+    },
+    {
+      "column": 36,
+      "path": "tests/test_fake_route.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `NoneType` has no attribute `permanence`",
+      "severity": "error"
+    },
+    {
+      "column": 50,
+      "path": "tests/test_fake_route.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `NoneType` has no attribute `retry_kind`",
+      "severity": "error"
+    },
+    {
+      "column": 69,
+      "path": "tests/test_fake_route.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `NoneType` has no attribute `signal`",
+      "severity": "error"
+    },
+    {
+      "column": 41,
+      "path": "tests/test_fake_route.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `Stop | None` is not assignable to parameter `stop` with type `Stop` in function `taskloop.domain.lanes.policy.decide`",
+      "severity": "error"
+    },
+    {
+      "column": 27,
+      "path": "tests/test_fake_route.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `NoneType` has no attribute `reason`",
+      "severity": "error"
+    },
+    {
+      "column": 37,
+      "path": "tests/test_fake_route.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `NoneType` has no attribute `ref`",
+      "severity": "error"
+    },
+    {
+      "column": 44,
+      "path": "tests/test_fake_route.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `NoneType` has no attribute `resumable`",
+      "severity": "error"
+    },
+    {
+      "column": 57,
+      "path": "tests/test_fake_route.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `NoneType` has no attribute `partial`",
+      "severity": "error"
+    },
+    {
+      "column": 68,
+      "path": "tests/test_fake_route.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `NoneType` has no attribute `signal`",
       "severity": "error"
     },
     {
@@ -7932,6 +7498,13 @@
       "severity": "error"
     },
     {
+      "column": 52,
+      "path": "tests/test_fake_route.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `Literal['']` is not assignable to parameter `pinned` with type `Path | None` in function `taskloop.adapters.delegate.resolve`",
+      "severity": "error"
+    },
+    {
       "column": 30,
       "path": "tests/test_fake_route.py",
       "name": "missing-attribute",
@@ -7957,6 +7530,90 @@
       "path": "tests/test_lane_policy.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `NoneType` has no attribute `split`",
+      "severity": "error"
+    },
+    {
+      "column": 36,
+      "path": "tests/test_lane_policy.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of type `Fail | NewThread | Reroute | Retry | Wait | WaitNet | Yield` has no attribute `resume`",
+      "severity": "error"
+    },
+    {
+      "column": 46,
+      "path": "tests/test_lane_policy.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of type `Fail | NewThread | Reroute | Retry | Wait | WaitNet | Yield` has no attribute `max_s`",
+      "severity": "error"
+    },
+    {
+      "column": 26,
+      "path": "tests/test_lane_policy.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of type `Fail | NewThread | Reroute | Retry | Wait | WaitNet | Yield` has no attribute `resume`",
+      "severity": "error"
+    },
+    {
+      "column": 26,
+      "path": "tests/test_lane_policy.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of type `Fail | NewThread | Reroute | Retry | Wait | WaitNet | Yield` has no attribute `max_s`",
+      "severity": "error"
+    },
+    {
+      "column": 39,
+      "path": "tests/test_lane_policy.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of type `Fail | NewThread | Reroute | Retry | Wait | WaitNet | Yield` has no attribute `banner`",
+      "severity": "error"
+    },
+    {
+      "column": 49,
+      "path": "tests/test_lane_policy.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of type `Fail | NewThread | Reroute | Retry | Wait | WaitNet | Yield` has no attribute `retry_after`",
+      "severity": "error"
+    },
+    {
+      "column": 26,
+      "path": "tests/test_lane_policy.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of type `Fail | NewThread | Reroute | Retry | Wait | WaitNet | Yield` has no attribute `retry_after`",
+      "severity": "error"
+    },
+    {
+      "column": 26,
+      "path": "tests/test_lane_policy.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of type `Fail | NewThread | Reroute | Retry | Wait | WaitNet | Yield` has no attribute `retry_after`",
+      "severity": "error"
+    },
+    {
+      "column": 43,
+      "path": "tests/test_lane_policy.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of type `Fail | NewThread | Reroute | Retry | Wait | WaitNet | Yield` has no attribute `fix`",
+      "severity": "error"
+    },
+    {
+      "column": 36,
+      "path": "tests/test_lane_policy.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of type `Fail | NewThread | Reroute | Retry | Wait | WaitNet | Yield` has no attribute `until`",
+      "severity": "error"
+    },
+    {
+      "column": 36,
+      "path": "tests/test_lane_policy.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of type `Fail | NewThread | Reroute | Retry | Wait | WaitNet | Yield` has no attribute `resume`",
+      "severity": "error"
+    },
+    {
+      "column": 41,
+      "path": "tests/test_lane_policy.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of type `Fail | NewThread | Reroute | Retry | Wait | WaitNet | Yield` has no attribute `retry_after`",
       "severity": "error"
     },
     {
@@ -8258,34 +7915,6 @@
       "path": "tests/test_lifecycle_trace.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `TraceTelemetry` has no attribute `store`",
-      "severity": "error"
-    },
-    {
-      "column": 15,
-      "path": "tests/test_lifecycle_trace.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `TraceTelemetry` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 74,
-      "path": "tests/test_lifecycle_trace.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `TraceTelemetry` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 15,
-      "path": "tests/test_lifecycle_trace.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `TraceTelemetry` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 74,
-      "path": "tests/test_lifecycle_trace.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `TraceTelemetry` has no attribute `wt`",
       "severity": "error"
     },
     {
@@ -8667,17 +8296,17 @@
       "severity": "error"
     },
     {
+      "column": 26,
+      "path": "tests/test_loop.py",
+      "name": "bad-assignment",
+      "concise_description": "`Literal[-15]` is not assignable to attribute `returncode` with type `None`",
+      "severity": "error"
+    },
+    {
       "column": 84,
       "path": "tests/test_loop.py",
       "name": "bad-assignment",
       "concise_description": "`float` is not assignable to dict value type `bool`",
-      "severity": "error"
-    },
-    {
-      "column": 31,
-      "path": "tests/test_opencode.py",
-      "name": "no-matching-overload",
-      "concise_description": "No matching overload found for function `unittest.case.TestCase.assertAlmostEqual` called with arguments: (float | Unknown | None, float)",
       "severity": "error"
     },
     {
@@ -8709,13 +8338,6 @@
       "severity": "error"
     },
     {
-      "column": 35,
-      "path": "tests/test_opencode.py",
-      "name": "no-matching-overload",
-      "concise_description": "No matching overload found for function `unittest.case.TestCase.assertAlmostEqual` called with arguments: (float | Unknown | None, float)",
-      "severity": "error"
-    },
-    {
       "column": 23,
       "path": "tests/test_opencode.py",
       "name": "bad-argument-type",
@@ -8727,6 +8349,27 @@
       "path": "tests/test_outcome.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `NoneType` has no attribute `beads`",
+      "severity": "error"
+    },
+    {
+      "column": 17,
+      "path": "tests/test_procs.py",
+      "name": "not-callable",
+      "concise_description": "Expected a callable, got `Handlers`",
+      "severity": "error"
+    },
+    {
+      "column": 17,
+      "path": "tests/test_procs.py",
+      "name": "not-callable",
+      "concise_description": "Expected a callable, got `int`",
+      "severity": "error"
+    },
+    {
+      "column": 17,
+      "path": "tests/test_procs.py",
+      "name": "not-callable",
+      "concise_description": "Expected a callable, got `None`",
       "severity": "error"
     },
     {
@@ -9668,10 +9311,38 @@
       "severity": "error"
     },
     {
+      "column": 24,
+      "path": "tests/test_slot_git.py",
+      "name": "missing-argument",
+      "concise_description": "Missing argument `brief` in function `taskloop.adapters.delegate.call`",
+      "severity": "error"
+    },
+    {
+      "column": 24,
+      "path": "tests/test_slot_git.py",
+      "name": "missing-argument",
+      "concise_description": "Missing argument `schema` in function `taskloop.adapters.delegate.call`",
+      "severity": "error"
+    },
+    {
+      "column": 25,
+      "path": "tests/test_slot_git.py",
+      "name": "missing-attribute",
+      "concise_description": "No attribute `CallRequest` in module `taskloop.adapters.delegate`",
+      "severity": "error"
+    },
+    {
+      "column": 32,
+      "path": "tests/test_slot_git.py",
+      "name": "missing-attribute",
+      "concise_description": "No attribute `ProcRunner` in module `taskloop.adapters.delegate`",
+      "severity": "error"
+    },
+    {
       "column": 30,
       "path": "tests/test_slot_git.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `object`",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `Answer` has no attribute `data`",
       "severity": "error"
     },
     {
@@ -13409,7 +13080,7 @@
       "column": 16,
       "path": "tests/test_stages_visual.py",
       "name": "bad-assignment",
-      "concise_description": "`(cmd: Unknown, **kw: Unknown) -> tuple[Literal[1], Literal['refused']] | tuple[int | Unknown, Unknown]` is not assignable to attribute `sh` with type `(cmd: Unknown, timeout: int | Unknown = 3600, check: bool | Unknown = False, save: Unknown | None = None, env: Unknown | None = None, pin: bool | Unknown = False, idle: int | Unknown = 0) -> tuple[int | Unknown, Unknown]`",
+      "concise_description": "`(cmd: Unknown, **kw: Unknown) -> tuple[Literal[1], Literal['refused']] | tuple[int | Unknown, str]` is not assignable to attribute `sh` with type `(cmd: Unknown, timeout: int | Unknown = 3600, check: bool | Unknown = False, save: Unknown | None = None, env: Unknown | None = None, pin: bool | Unknown = False, idle: int | Unknown = 0) -> tuple[int | Unknown, str]`",
       "severity": "error"
     },
     {
@@ -13672,31 +13343,52 @@
       "severity": "error"
     },
     {
+      "column": 42,
+      "path": "tests/test_tl.py",
+      "name": "missing-argument",
+      "concise_description": "Missing argument `path` in function `taskloop.adapters.delegate.find_route`",
+      "severity": "error"
+    },
+    {
+      "column": 42,
+      "path": "tests/test_tl.py",
+      "name": "missing-argument",
+      "concise_description": "Missing argument `pinned` in function `taskloop.adapters.delegate.find_route`",
+      "severity": "error"
+    },
+    {
+      "column": 42,
+      "path": "tests/test_tl.py",
+      "name": "missing-argument",
+      "concise_description": "Missing argument `cache` in function `taskloop.adapters.delegate.find_route`",
+      "severity": "error"
+    },
+    {
       "column": 32,
       "path": "tests/test_tl.py",
       "name": "bad-argument-type",
-      "concise_description": "Argument `str | Unknown | None` is not assignable to parameter `container` with type `Container | Iterable[Any]` in function `unittest.case.TestCase.assertIn`",
+      "concise_description": "Argument `str | None` is not assignable to parameter `container` with type `Container | Iterable[Any]` in function `unittest.case.TestCase.assertIn`",
       "severity": "error"
     },
     {
       "column": 50,
       "path": "tests/test_tl.py",
       "name": "bad-argument-type",
-      "concise_description": "Argument `str | Unknown | None` is not assignable to parameter `container` with type `Container | Iterable[Any]` in function `unittest.case.TestCase.assertIn`",
+      "concise_description": "Argument `str | None` is not assignable to parameter `container` with type `Container | Iterable[Any]` in function `unittest.case.TestCase.assertIn`",
       "severity": "error"
     },
     {
       "column": 32,
       "path": "tests/test_tl.py",
       "name": "bad-argument-type",
-      "concise_description": "Argument `str | Unknown | None` is not assignable to parameter `container` with type `Container | Iterable[Any]` in function `unittest.case.TestCase.assertIn`",
+      "concise_description": "Argument `str | None` is not assignable to parameter `container` with type `Container | Iterable[Any]` in function `unittest.case.TestCase.assertIn`",
       "severity": "error"
     },
     {
       "column": 50,
       "path": "tests/test_tl.py",
       "name": "bad-argument-type",
-      "concise_description": "Argument `str | Unknown | None` is not assignable to parameter `container` with type `Container | Iterable[Any]` in function `unittest.case.TestCase.assertIn`",
+      "concise_description": "Argument `str | None` is not assignable to parameter `container` with type `Container | Iterable[Any]` in function `unittest.case.TestCase.assertIn`",
       "severity": "error"
     },
     {
@@ -14428,31 +14120,24 @@
       "severity": "error"
     },
     {
-      "column": 26,
+      "column": 27,
       "path": "tests/test_write_idle.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `NoneType` has no attribute `pid`",
       "severity": "error"
     },
     {
-      "column": 98,
+      "column": 41,
       "path": "tests/test_write_idle.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `float` is not assignable to parameter `timeout_s` with type `int` in function `delegate_link.CallRequest.__init__`",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `NoneType` has no attribute `run_id`",
       "severity": "error"
     },
     {
       "column": 26,
       "path": "tests/test_write_idle.py",
       "name": "missing-attribute",
-      "concise_description": "Object of class `object` has no attribute `reason`",
-      "severity": "error"
-    },
-    {
-      "column": 9,
-      "path": "tests/test_write_idle.py",
-      "name": "unsupported-operation",
-      "concise_description": "Cannot set item in `list[float]`",
+      "concise_description": "Object of class `NoneType` has no attribute `run_id`",
       "severity": "error"
     }
   ]

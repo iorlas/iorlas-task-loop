@@ -4,7 +4,7 @@ from typing import Any
 
 from taskloop.adapters.delegate_wire import answer_next, answer_status
 from taskloop.adapters.fake_delegate import done, stopped
-from taskloop.contracts.delegate import LiveCmd, LiveEnd, LiveMsg, RunRequest
+from taskloop.contracts.delegate import LiveCmdStart, LiveEnd, LiveMsg, RunRequest
 from taskloop.contracts.ports import Delegate
 
 SCHEMA = {"type": "object", "properties": {"x": {"type": "integer"}}}
@@ -55,7 +55,7 @@ class DelegateContract:
         self.assertEqual((answer_status(got), answer_next(got)), ("failed", "owner"))  # type: ignore[attr-defined]
 
     def test_live_events_arrive_in_order_before_the_result(self) -> None:
-        events = (LiveCmd(t=1.0, id="c1", text="ls"), LiveMsg(t=2.0, text="hi"), LiveEnd(t=3.0, status="done", secs=2.0))
+        events = (LiveCmdStart(t=1.0, id="c1", text="ls"), LiveMsg(t=2.0, text="hi"), LiveEnd(t=3.0, status="done", secs=2.0))
         seen: list[Any] = []
         self.make(done(None, "ok", *events, ref="r")).run(req(), "b", SCHEMA, seen.append)
         self.assertEqual(seen, list(events))  # type: ignore[attr-defined]

@@ -26,8 +26,8 @@ from pathlib import Path
 import engine
 import loop
 import tl
+from taskloop.adapters import procs as sproc
 from taskloop.contracts.ports import BdFailure
-from lanes import route as lroute
 
 M2 = {"beads": 10, "landed_no_ask": 7}  # at least; lost and crashes must be 0 (docs/roadmap.md)
 QUIET_MIN = 30  # an engine log with no close and no trace, untouched this long and with no live run-task: a crash
@@ -117,11 +117,11 @@ def repo_traces(repo):
 
 
 def run_alive(bead):
-    """A run-task of this bead is a live process (POSIX ps); None when that cannot be told."""
-    out = tl.ps("-A", "-o", "command=")
-    if out is None:
+    """A run-task of this bead is a live process (from /proc); None when that cannot be told."""
+    rows = sproc.table()
+    if rows is None:
         return None
-    return any("run-task" in ln and bead in ln.split() for ln in out.splitlines())
+    return any("run-task" in p.cmd and bead in p.cmd.split() for p in rows.values())
 
 
 def prefix(bead):

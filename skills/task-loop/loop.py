@@ -26,15 +26,17 @@ from pathlib import Path
 
 import applog
 import beadlint
-import delegate_link as dl
 import engine
 import seams
 import loop_health
-import netgate
 import outcome as oc
 import tl
+from taskloop.adapters import delegate as dg
+from taskloop.adapters import procs as sproc
+from taskloop.adapters.runner import Seam
 from taskloop.app.slots.lease import Lease
 from taskloop.contracts.ports import BeadPatch, BeadQuery
+from taskloop.domain.lanes import netgate
 
 POLL = 2               # seconds between looks at a running child (stop file, slot heartbeat)
 HEARTBEAT = 60         # the slot bead's lease is kept alive this often while a bead runs
@@ -388,7 +390,7 @@ class GateRole:
         t = self.now()
         if self.seen[0] is None or t - self.seen[0] >= GATE_CACHE_S:
             route = self.route_fn()
-            self.seen = (t, dl.role_status(route) if route else {})
+            self.seen = (t, dg.role_status(route) if route else {})
         return self.seen[1]
 
     def usable(self, role):
@@ -439,11 +441,13 @@ def open_log(repo):
 
 # ---- one bead -------------------------------------------------------------------------------------------------------
 
+STOP_GRACE_S = 300.0  # a stopped run-task is given this long to run its close step before stream-proc ends it
+
+
 def spawn(cmd, log):
-    """run-task as a child in its own process group: Ctrl-C to the loop reaches it only as the loop's SIGTERM."""
-    kw = {"stdin": subprocess.DEVNULL, "stdout": log, "stderr": subprocess.STDOUT}
-    kw["start_new_session"] = True
-    return subprocess.Popen(cmd, **kw)
+    """run-task as a child in its own process group: Ctrl-C to the loop reaches it only as the loop's SIGTERM.
+    -> (the child, the TermHold of its spawn): the caller calls hold.replay() first inside the try that stops the child."""
+    return sproc.popen_held(cmd, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
 
 
 def prepare(repo, slot, bead_id):
@@ -479,12 +483,13 @@ def run_bead(repo, b, slot, wt, slot_bead, started, code=None):
     t0 = clock()
     os.environ["TASK_LOOP_SLOT_BEAD"] = slot_bead or ""  # the engine heartbeats it too (see Lease)
     with open(log_path, "ab") as log:  # append: a rerun of the same stem never cuts a log another reader follows
-        p = spawn(cmd, log)
+        p, hold = spawn(cmd, log)
         write_state(repo, pid=os.getpid(), started=started, bead=b.id, slot=slot, since=t0, child=p.pid,
                     run_log=str(log_path), worktree=None if slot else wt)
         say("%s in %s (log %s)" % (b.id, slot or wt, log_path))
         stopped = False
         try:
+            hold.replay()
             while True:
                 try:
                     rc = p.wait(timeout=POLL)
@@ -493,12 +498,11 @@ def run_bead(repo, b, slot, wt, slot_bead, started, code=None):
                     pass
                 touch_beat(repo)
                 if not stopped and stop_mode(repo) == "now":
-                    say("stop now: SIGTERM to %s (its close step still runs)" % b.id)
-                    p.terminate()  # SIGTERM on POSIX, which the engine traps; TerminateProcess on Windows
+                    say("stop now: stopping %s (SIGTERM through stream-proc; its close step still runs)" % b.id)
+                    sproc.stop_in_thread(p, STOP_GRACE_S)
                     stopped = True
         except BaseException:  # the loop itself broke: the run ends (its close step runs) before the slot is freed
-            p.terminate()
-            p.wait()
+            sproc.stop_tree(p, grace=STOP_GRACE_S)
             raise
     try:
         r = json.loads(out.read_text(encoding="utf-8"))
@@ -853,14 +857,14 @@ def storm_banner(rec, repo):
 
 def delegate_route(repo):
     """The route.py of the delegate this repo's engine would use (its `delegate` config, the pin, the install), or None."""
-    res = dl.resolve(engine.load_cfg(str(repo)).delegate)
-    return res.route if isinstance(res, dl.Resolved) else None
+    res = seams.resolve_delegate(engine.load_cfg(str(repo)).delegate)
+    return res.route if isinstance(res, dg.Resolved) else None
 
 
 def make_probe(repo):
     """delegate's `route.py net` as a NetProbe, or None when no delegate is installed (the old PAUSE_RETRY rest then)."""
     route = delegate_route(repo)
-    return netgate.RouteProbe(route) if route else None
+    return dg.RouteProbe(route) if route else None
 
 
 def worktree_name(repo):
@@ -1246,16 +1250,14 @@ def selftest():
         else:
             data, node = review, "review"
         tokens = {"in": 1, "cached": 0, "out": 1}
-        j = {"contract": dl.CONTRACT, "data": data, "text": "ok", "say": "", "ref": "ref-" + node, "lane": "L", "model": "m", "effort": "e",
+        j = {"contract": dg.CONTRACT, "data": data, "text": "ok", "say": "", "ref": "ref-" + node, "lane": "L", "model": "m", "effort": "e",
              "family": "openai" if node == "write" else "claude", "flag": None, "fallback": False, "first_lane": "L", "rung": 0,
              "tokens": tokens, "cost": 0.0, "secs": 1, "run_id": "selftest", "call_id": "selftest", "denied": [], "git_violation": [],
              "warnings": [], "usage": {"tokens": tokens, "cost": 0.0, "secs": 1, "turns": 1, "ref": "ref-" + node}, "stop": None,
              "resumed": False}
         return subprocess.CompletedProcess(cmd, 0, json.dumps(j), "")
 
-    class Runner:  # the engine's process seam for the fake lane
-        stop, obs, secs = {}, {}, 0.0
-
+    class Runner(Seam):  # the engine's process seam for the fake lane
         def __call__(self, cmd, **kw):
             self.stop, self.obs = {}, {}
             return lane(cmd, **kw)
@@ -1277,9 +1279,9 @@ def selftest():
                 if r.returncode:
                     return "git %s: %s" % (cmd[0], r.stderr.strip()[-200:])
             cfg = engine.load_cfg(str(wt))
-            res = dl.resolve(cfg.delegate)  # the configured delegate's own contract when there is one; else a bare one
-            contract = res.contract if isinstance(res, dl.Resolved) else {"contract": dl.CONTRACT, "reasons": {}, "run_args": []}
-            resolved = dl.Resolved(Path("/selftest"), "/selftest/route.py", contract, "explicit")
+            res = seams.resolve_delegate(cfg.delegate)  # the configured delegate's own contract when there is one; else a bare one
+            contract = res.contract if isinstance(res, dg.Resolved) else {"contract": dg.CONTRACT, "reasons": {}, "run_args": []}
+            resolved = dg.Resolved(Path("/selftest"), "/selftest/route.py", contract, "explicit")
             store = FakeBeads()
             store.beads["t-1"] = bead
             with mock.patch.object(tl, "cmd_close", side_effect=lambda a: closed.append(a.reason) or 0), \

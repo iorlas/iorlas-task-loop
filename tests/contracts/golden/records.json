@@ -649,6 +649,7 @@
    "max_fix_rounds": 2,
    "max_stages": 3,
    "node_timeout_min": 45,
+   "review_budget_min": 10,
    "write_idle_warn_min": 15,
    "write_idle_stop_min": 25,
    "write_cap_min": 120,
@@ -681,11 +682,10 @@
   "title": "T",
   "resume": "ses",
   "authored_by": "openai",
-  "host": true,
   "call_id": "c1",
-  "readable_outside": [
-   "/x"
-  ]
+  "timeout_s": 2820,
+  "idle_s": 900,
+  "live_file": "/l.live"
  },
  "DelegateResult": {
   "contract": 3,
@@ -769,8 +769,27 @@
    "env_keys": []
   },
   "worker": {
-   "end": "ok"
+   "end": "worker_survived",
+   "stopped": true,
+   "term_sent": true,
+   "kill_sent": true,
+   "waited_s": 7.5,
+   "survivors": [
+    {
+     "pid": 42,
+     "start": "123"
+    }
+   ],
+   "pid": 41,
+   "pgid": 41,
+   "start": "120"
   },
+  "exit_code": -15,
+  "first_error": "429 rate limited",
+  "fallback": false,
+  "first_lane": "L",
+  "warning": "",
+  "ask_kind": "",
   "warnings": [
    "w"
   ],

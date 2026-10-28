@@ -1,23 +1,16 @@
 """Lock records: who holds the engine, a slot ticket, a named lock. Liveness is a pid probe, nothing more."""
-import os
 from dataclasses import field
 from typing import ClassVar
+
+import stream_proc
 
 from taskloop.contracts.codec import record
 from taskloop.contracts.enums import LockWhat
 
 
 def pid_alive(pid: int) -> bool:
-    """True when a process with this pid exists (signal 0). A pid reused by another process is not detected here."""
-    if pid <= 0:
-        return False
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
+    """True when a process with this pid exists and is no zombie (stream-proc). A pid reused by another process is not detected here."""
+    return pid > 0 and stream_proc.alive(pid)
 
 
 class LockTimeout(TimeoutError):

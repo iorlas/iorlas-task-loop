@@ -33,6 +33,7 @@ def session_of(end: rec.CallEnd, start: rec.CallStart | None, index: int) -> dic
         "family": end.family,
         "flag": end.flag,
         "transcript": end.transcript,
+        "exit": end.exit,
         "tokens": {"in": tk.in_, "cached": tk.cached, "out": tk.out},
         "_i": index,
     }

@@ -70,7 +70,7 @@ function tickAll(){const n=nowS();document.querySelectorAll('.tick').forEach(e=>
 // ---- the terminal: append-only; an event makes a row or patches the row it pairs with (src + kind + id) ----------------------
 class Term{
   constructor(root){this.root=root;this.rows=new Map();this.seen=new Set();this.sec=null;this.secs=new Map();this.open=new Set()}
-  pairKey(e){const b=e.k.replace(/_(start|end)$/,'');return e.src+'|'+(b==='end'?'start':b==='cmd'?'cmd':b)+'|'+(e.id||e.what||'')}
+  pairKey(e){const b=e.k.replace(/_(start|end)$/,'');return e.src+'|'+(b==='end'?'start':b)+'|'+(e.id||e.what||'')}
   body(){return this.sec?this.sec.body:this.root}
   put(key,node,into){this.rows.set(key,node);(into||this.body()).appendChild(node);return node}
   apply(list){for(const e of list){if(this.seen.has(e.seq))continue;this.seen.add(e.seq);this.one(e)}}
@@ -82,10 +82,10 @@ class Term{
     if(k==='call_start'){const n=el('div','row note','call '+e.n+' · '+(e.role||'')+' ');n.appendChild(tickEl(e.t));return this.put(this.pairKey(e),n)}
     if(k==='call_end'){const n=this.rows.get(src+'|call|'+e.id)||this.put(src+'|call|'+e.id,el('div','row note'));n.textContent='';
       const tk=e.tokens||{};n.className='row '+(e.status==='done'?'note':'bad');
-      n.textContent=[e.lane,e.model,e.effort].filter(Boolean).join(' / ')+' · '+e.status+(e.reason?' ('+e.reason+')':'')+' · '+dur(e.secs||0)+(tk.in!=null?' · '+Math.round((tk.in||0)/1000)+'k in / '+Math.round((tk.out||0)/1000)+'k out':'')+(e.ref?' · '+e.ref:'');return}
-    if(k==='cmd_start'||k==='cmd'||k==='check_start'||k==='gate_start')return this.cmd(e);
+      n.textContent=[e.lane,e.model,e.effort].filter(Boolean).join(' / ')+' · '+e.status+(e.reason?' ('+e.reason+')':'')+(e.exit!=null?' · exit '+e.exit:'')+' · '+dur(e.secs||0)+(tk.in!=null?' · '+Math.round((tk.in||0)/1000)+'k in / '+Math.round((tk.out||0)/1000)+'k out':'')+(e.ref?' · '+e.ref:'');return}
+    if(k==='cmd_start'||k==='check_start'||k==='gate_start')return this.cmd(e);
     if(k==='cmd_end'||k==='check_end'||k==='gate_end')return this.cmdEnd(e);
-    if(k==='tool'){const n=el('div','row tool',e.text+' ');n.appendChild(tickEl(e.t));return this.put(this.pairKey(e),n)}
+    if(k==='tool_start'){const n=el('div','row tool',e.text+' ');n.appendChild(tickEl(e.t));return this.put(this.pairKey(e),n)}
     if(k==='tool_end'){const n=this.rows.get(src+'|tool|'+e.id);if(n){const t=n.querySelector('.tick');t.dataset.t1=e.t;if(e.text)n.firstChild.textContent=e.text+' '}return}
     if(k==='wait_start'){const n=el('div','row warn','waiting for '+String(e.what).replace(/_/g,' ')+(e.holder?' · held by '+e.holder:'')+' ');n.appendChild(tickEl(e.t));return this.put(this.pairKey(e),n)}
     if(k==='wait_end'){const n=this.rows.get(src+'|wait|'+e.id);if(n)n.querySelector('.tick').dataset.t1=e.t;return}

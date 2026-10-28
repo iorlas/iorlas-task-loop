@@ -18,6 +18,7 @@ import tempfile
 from pathlib import Path
 
 import tl
+from taskloop.adapters import procs as sproc
 
 CHEAP_S = 5.0  # a median under this counts as free: sub-second noise never reorders a round
 KEEP_RUNS = 9  # durations kept per command
@@ -407,35 +408,18 @@ def reuse_log(outer, inner, log_var, wt=None):
 
 # --- activity of a running check ------------------------------------------------------------------------------------
 
-def parse_cpu(text):
-    """Seconds from ps's [[dd-]hh:]mm:ss[.ff]."""
-    days, rest = (text.split("-", 1) if "-" in text else ("0", text))
-    secs = 0.0
-    for part in rest.split(":"):
-        secs = secs * 60 + float(part)
-    return secs + float(days) * 86400
-
-
 def tree_cpu(root_pid):
-    """{pid: cpu seconds} for the process tree under root_pid and every member of its group; {} when ps is missing."""
-    out = tl.ps("-A", "-o", "pid=,ppid=,pgid=,time=")
-    rows = {}
-    for ln in (out or "").splitlines():
-        f = ln.split()
-        if len(f) == 4 and all(x.isdigit() for x in f[:3]):
-            try:
-                rows[int(f[0])] = (int(f[1]), int(f[2]), parse_cpu(f[3]))
-            except ValueError:
-                pass
+    """{pid: cpu seconds} for the process tree under root_pid and every member of its group; {} where the kernel lists no processes."""
+    rows = {p.pid: p for p in (sproc.table() or {}).values()}
     mine, todo = {root_pid}, [root_pid]
     while todo:
         cur = todo.pop()
-        for k, (ppid, _, _) in rows.items():
-            if ppid == cur and k not in mine:
+        for k, p in rows.items():
+            if p.ppid == cur and k not in mine:
                 mine.add(k)
                 todo.append(k)
-    mine |= {k for k, (_, g, _) in rows.items() if g == root_pid}
-    return {k: rows[k][2] for k in mine if k in rows}
+    mine |= {k for k, p in rows.items() if p.pgid == root_pid}
+    return {k: rows[k].cpu_s for k in mine if k in rows}
 
 
 def files_signature(wt):

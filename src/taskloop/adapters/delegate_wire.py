@@ -3,7 +3,18 @@ that breaks the shape becomes a synthesized stop, never an exception. A status w
 here and nowhere else (`answer_status`, `answer_next`): contract 3 removed them from the wire and from `DelegateResult`."""
 from typing import Any
 
-from taskloop.contracts.delegate import DelegateResult, Denial, Retry, StopFacts, TranscriptInfo, Usage, UsageTokens
+from taskloop.contracts.delegate import (
+    REASON_TIMEOUT,
+    DelegateResult,
+    Denial,
+    Retry,
+    StopFacts,
+    Survivor,
+    TranscriptInfo,
+    Usage,
+    UsageTokens,
+    WorkerEnd,
+)
 from taskloop.contracts.trace import Tokens
 
 CONTRACT = 3
@@ -32,7 +43,7 @@ def answer_next(res: DelegateResult) -> str | None:
 def status_of(stop: StopFacts | None) -> str:
     if stop is None:
         return "done"
-    if stop.reason == "timeout":
+    if stop.reason == REASON_TIMEOUT:
         return "timeout"
     if stop.reason in _FAILED:
         return "failed"
@@ -129,6 +140,18 @@ def _opt(j: dict[str, Any], key: str) -> str | None:
     return v if isinstance(v, str) and v else None
 
 
+def worker_of(raw: Any) -> WorkerEnd | None:
+    """`worker` of the answer: how delegate ended the worker's life. A survivor is a pid that outlived SIGTERM and SIGKILL."""
+    if not isinstance(raw, dict):
+        return None
+    ends = ("ok", "error", "timeout", "worker_survived")
+    return WorkerEnd(end=_pick(raw.get("end"), ends, "ok"), stopped=bool(raw.get("stopped")),  # type: ignore[arg-type]
+                     term_sent=bool(raw.get("term_sent")), kill_sent=bool(raw.get("kill_sent")), waited_s=_num(raw.get("waited_s")),
+                     survivors=[Survivor(pid=s["pid"], start=_opt(s, "start")) for s in raw.get("survivors") or []
+                                if isinstance(s, dict) and isinstance(s.get("pid"), int)],
+                     pid=_oint(raw.get("pid")), pgid=_oint(raw.get("pgid")), start=_opt(raw, "start"))
+
+
 def _dict(v: Any) -> dict[str, Any] | None:
     return v if isinstance(v, dict) else None
 
@@ -148,5 +171,7 @@ def result_of(j: Any) -> DelegateResult:
         run_id=_opt(j, "run_id"), call_id=_opt(j, "call_id"), transcript=_opt(j, "transcript"),
         transcript_info=transcript_info_of(j.get("transcript_info")), transcript_status=_opt(j, "transcript_status"),
         say=str(j.get("say") or ""), git_violation=[str(x) for x in j.get("git_violation") or []], usage=usage_of(j.get("usage")),
-        context=_dict(j.get("context")), worker=_dict(j.get("worker")),
+        context=_dict(j.get("context")), worker=worker_of(j.get("worker")), exit_code=_oint(j.get("exit_code")),
+        first_error=str(j.get("first_error") or ""), fallback=j.get("fallback") if isinstance(j.get("fallback"), bool) else None,
+        first_lane=_opt(j, "first_lane"), warning=str(j.get("warning") or ""), ask_kind=str(j.get("ask_kind") or ""),
         warnings=[str(x) for x in warnings] if isinstance(warnings, list) else [], agent_model=_opt(j, "agent_model"))

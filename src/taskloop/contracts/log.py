@@ -76,6 +76,7 @@ class CallEnd(LogRec):
     family: str = ""
     flag: str | None = None
     transcript: str = ""
+    exit: int | None = None  # the worker's exit code (delegate's answer `exit_code`; negative: ended by that signal)
 
 
 @record
@@ -227,6 +228,33 @@ class Kill(LogRec):
 
 
 @record
+class Overrun(LogRec):
+    """A call that used its wall-time budget (the reviewer's) and was stopped through delegate; the loop goes on with the next rung."""
+
+    KIND: ClassVar[str] = "overrun"
+    stage: str
+    budget_s: float
+    elapsed_s: float
+    lane: str = ""
+
+
+@record
+class RetryDecision(LogRec):
+    """What the RetryPlan decided about a stopped call, with the facts it decided on."""
+
+    KIND: ClassVar[str] = "retry_decision"
+    step: str
+    plan: str  # the RetryPlan row (worker_failed, lane_poll, crash, ...) or "" for a decision no row governs
+    action: str  # retry | wait | new_thread | reroute | pause | ask | fault
+    attempt: int = 0
+    reason: str = ""
+    timeout_s: float | None = None
+    exit: int | None = None
+    lane: str = ""
+    evidence: str = ""
+
+
+@record
 class Transition(LogRec):
     KIND: ClassVar[str] = "transition"
     from_id: str = field(metadata={"name": "from"})
@@ -265,9 +293,11 @@ class Close(LogRec):
 
 
 EngineLog = (RunStart | StepStart | StepEnd | CallStart | CallEnd | CmdStart | CmdEnd | CheckStart | CheckEnd | GateStart | GateEnd
-             | WaitStart | WaitEnd | Lock | Unlock | VendorError | Kill | Transition | Reload | Checks | Warn | Note | Close)
+             | WaitStart | WaitEnd | Lock | Unlock | VendorError | Kill | Overrun | RetryDecision | Transition | Reload | Checks | Warn
+             | Note | Close)
 ENGINE_LOG = table_of(RunStart, StepStart, StepEnd, CallStart, CallEnd, CmdStart, CmdEnd, CheckStart, CheckEnd, GateStart,
-                      GateEnd, WaitStart, WaitEnd, Lock, Unlock, VendorError, Kill, Transition, Reload, Checks, Warn, Note, Close)
+                      GateEnd, WaitStart, WaitEnd, Lock, Unlock, VendorError, Kill, Overrun, RetryDecision, Transition, Reload, Checks,
+                      Warn, Note, Close)
 
 
 def decode(data: object) -> EngineLog:

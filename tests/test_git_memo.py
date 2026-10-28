@@ -12,7 +12,6 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 import engine  # noqa: E402
-from core import procs  # noqa: E402
 import tl  # noqa: E402
 
 
@@ -120,7 +119,7 @@ class GitMemoTest(unittest.TestCase):
                 return real(cmd, *a, **k)
             with self.subTest(failing), mock.patch.object(engine.subprocess, "run", run):
                 eng._tree_hash_memo = None
-                with self.assertRaises(procs.TreeHashError) as got:
+                with self.assertRaises(engine.TreeHashError) as got:
                     eng.tree_hash()
                 self.assertIn(failing, str(got.exception))
         self.assertTrue(eng.tree_hash())

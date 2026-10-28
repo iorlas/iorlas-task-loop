@@ -1,5 +1,5 @@
-"""tl-7y6.2.17: kill_tree stops the whole tree of a fake worker shim: a child in the shim's group and a child that
-called setsid. Only PIDs this test starts are signalled; no pattern kills, no real codex."""
+"""tl-7y6.2.17: stream-proc's stop_tree stops the whole tree of a fake worker shim: a child in the shim's group and a child that
+called setsid. Only PIDs this test starts are stopped; no pattern kills, no real codex. No signal is sent from here: a stop is stop_tree."""
 import os
 import subprocess
 import sys
@@ -12,8 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from core import procs  # noqa: E402
-import tl  # noqa: E402
+from taskloop.adapters import procs  # noqa: E402
 
 SHIM = r"""
 import os, subprocess, sys, time
@@ -40,13 +39,9 @@ def read_pid(path, wait=15):
 
 
 def alive(pid):
-    """Running, not a zombie: a killed grandchild is reparented and reaped by init, but give a zombie no credit."""
-    try:
-        os.kill(pid, 0)
-    except OSError:
-        return False
-    r = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True)
-    return bool(r.stdout.strip()) and not r.stdout.strip().startswith("Z")
+    """Running, not a zombie: a stopped grandchild is reparented and reaped by init, but give a zombie no credit."""
+    state = procs.proc_start(pid)
+    return state is not None and procs.alive(pid, state)
 
 
 class KillTree(unittest.TestCase):
@@ -56,10 +51,7 @@ class KillTree(unittest.TestCase):
 
     def tearDown(self):  # only PIDs this test started
         for pid in self.started:
-            try:
-                os.kill(pid, 9)
-            except OSError:
-                pass
+            procs.stop_pid(pid, grace=0.2)
 
     def run_shim(self):
         out = os.path.join(self.tmp, "pid")
@@ -73,7 +65,7 @@ class KillTree(unittest.TestCase):
         p, pids = self.run_shim()
         self.assertEqual(os.getpgid(pids["same"]), p.pid)
         self.assertNotEqual(os.getpgid(pids["setsid"]), p.pid)
-        procs.kill_tree(p)
+        self.assertEqual(procs.stop_tree(p, grace=2.0), ())
         deadline = time.time() + 60
         while time.time() < deadline and (alive(pids["same"]) or alive(pids["setsid"])):
             time.sleep(0.1)
@@ -86,7 +78,7 @@ class KillTree(unittest.TestCase):
             p, pids = self.run_shim()
         finally:
             del os.environ["IGNORE_TERM"]
-        procs.kill_tree(p)
+        self.assertEqual(procs.stop_tree(p, grace=2.0), ())
         deadline = time.time() + 60
         while time.time() < deadline and (alive(pids["same"]) or alive(pids["setsid"])):
             time.sleep(0.1)

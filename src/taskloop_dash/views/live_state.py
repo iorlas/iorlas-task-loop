@@ -15,7 +15,7 @@ ENGINE_ENDS: Final = {
     "wait_end": "wait_start",
     "unlock": "lock",
 }
-WORKER_ENDS: Final = {"cmd_end": "cmd", "tool_end": "tool", "end": "start"}
+WORKER_ENDS: Final = {"cmd_end": "cmd_start", "tool_end": "tool_start", "end": "start"}
 Open = dict[tuple[str, str, str], dict]
 
 
@@ -103,7 +103,7 @@ def rule_check(c: Ctx) -> dict | None:
 
 
 def rule_tool(c: Ctx) -> dict | None:
-    e = c.last("cmd", "tool", engine=False)
+    e = c.last("cmd_start", "tool_start", engine=False)
     return state("tool", e["t"], e.get("text", "")) if e else None
 
 

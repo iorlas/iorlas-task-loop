@@ -30,7 +30,7 @@ from taskloop_dash.views import roadmap  # noqa: E402
 import test_engine as te  # noqa: E402
 import tl  # noqa: E402
 from support.fakes import as_bead  # noqa: E402
-import delegate_link as dl  # noqa: E402
+from taskloop.adapters import delegate as dl  # noqa: E402
 from support import fake_route  # noqa: E402
 
 BREAK_PLAN = ("    def plan(self, again=False):\n", "    def plan(self, again=False):\n        raise RuntimeError('planted: cannot plan')\n")
@@ -225,7 +225,7 @@ class Reload(unittest.TestCase):
             spawned.append(cmd)
             if len(spawned) == 2:
                 spawned_env.append(json.loads(os.environ["TL_REEXEC"]))
-            return Child(cmd)
+            return Child(cmd), mock.Mock()
         (old / "tl.py").write_text("")
         self.install("0.2.0")
         repo = str(self.wt)

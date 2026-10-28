@@ -24,7 +24,6 @@ import json
 import os
 import random
 import shutil
-import signal
 import subprocess
 import sys
 import tempfile
@@ -39,6 +38,7 @@ TL = ROOT / "skills" / "task-loop" / "tl.py"
 RELEASE = ROOT / "dev" / "release.py"
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(ROOT / "tests"))
+import stream_proc  # noqa: E402
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import tl  # noqa: E402
 import vendored  # noqa: E402,F401
@@ -221,23 +221,9 @@ class Race(unittest.TestCase):
         self.notes["hold"] = (held, released)
 
     def kill_all(self):
-        for _, p in self.procs:
+        for _, p in self.procs:  # each child leads a session of its own: stream-proc ends its whole tree (setsid'd run-tasks included)
             if p.poll() is None:
-                try:
-                    os.killpg(p.pid, signal.SIGKILL)
-                except OSError:
-                    pass
-        try:  # run-task children run in sessions of their own: found by the temp dir in their command line
-            out = subprocess.run(["ps", "-A", "-o", "pid=,args="], capture_output=True, text=True).stdout
-        except OSError:
-            out = ""
-        for ln in out.splitlines():
-            pid, _, cmd = ln.strip().partition(" ")
-            if str(self.h) in cmd and pid.isdigit() and int(pid) != os.getpid():
-                try:
-                    os.kill(int(pid), signal.SIGKILL)
-                except OSError:
-                    pass
+                stream_proc.stop_tree(p, grace=1.0)
 
     def dump(self):
         parts = ["RACE_SEED=%s" % self.seed]

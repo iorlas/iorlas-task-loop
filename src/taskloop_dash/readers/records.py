@@ -6,6 +6,8 @@ import json
 import os
 from typing import Any
 
+import stream_proc
+
 from taskloop.contracts.paths import RepoDirs
 from taskloop_dash.env import RETAIN, STALE_RUN, Env
 from taskloop_dash.tails import read_dict
@@ -16,9 +18,8 @@ Span = dict[str, Any]
 
 def pid_alive(pid: object) -> bool:
     try:
-        os.kill(int(str(pid)), 0)
-        return True
-    except (OSError, TypeError, ValueError):
+        return stream_proc.alive(int(str(pid)))
+    except (TypeError, ValueError):
         return False
 
 

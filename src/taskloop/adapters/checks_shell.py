@@ -4,7 +4,7 @@ import os
 import shutil
 from collections.abc import Sequence
 
-from taskloop.adapters.proc import run_group
+from taskloop.adapters.procs import capture as run_group
 from taskloop.contracts.ports import CheckResult, CheckSpec
 
 TIMEOUT_NOTE = "\n(timed out after %g min: everything the check started was stopped)"

@@ -18,8 +18,8 @@ sys.path.insert(0, str(ROOT / "tests"))
 import engine  # noqa: E402
 import test_engine as te  # noqa: E402
 import tl  # noqa: E402
-import delegate_link as dl  # noqa: E402
-from support import fake_route  # noqa: E402
+from taskloop.adapters import delegate as dl, runner  # noqa: E402
+from support import dlcall, fake_route  # noqa: E402
 from support.builders import make_engine  # noqa: E402
 
 
@@ -124,9 +124,8 @@ class SlotGitTest(unittest.TestCase):
                          "print(json.dumps(fake_route.answer(fake_route.contract(), None, 'r1', False, {'env': env})))\n"
                          % str(ROOT / "tests" / "support"))
         with mock.patch.dict(os.environ, {"GIT_DIR": "/x", "GIT_WORK_TREE": "/y", "GIT_INDEX_FILE": "/z"}):
-            r = dl.call(dl.Resolved(route.parent, str(route), fake_route.CONTRACT, "explicit"),
-                        dl.CallRequest("worker", "p", {"type": "object"}, str(self.wt), timeout_s=30),
-                        runner=dl.ProcRunner(Path(self.tmp.name) / "err.log"))
+            r = dlcall.call(dl.Resolved(route.parent, str(route), fake_route.CONTRACT, "explicit"), "worker", "p", {"type": "object"},
+                            str(self.wt), runner.StreamRunner(Path(self.tmp.name) / "err.log", None, 30.0), timeout_s=30)
             eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
             rc, tail = eng.sh('echo "[$GIT_DIR|$GIT_WORK_TREE|$GIT_INDEX_FILE]"')
             self.assertEqual(r.data["env"], [])

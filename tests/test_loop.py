@@ -19,7 +19,7 @@ import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support import tlbd  # noqa: E402
 from support.waits import until  # noqa: E402
 import loop  # noqa: E402
-import netgate  # noqa: E402
+from taskloop.domain.lanes import netgate  # noqa: E402
 import tl  # noqa: E402
 
 
@@ -324,7 +324,7 @@ class FakeChild:
         return self.returncode
 
     def terminate(self):
-        self.terminated = True
+        self.terminated, self.returncode = True, -15
 
 
 class LoopBase(Base):
@@ -337,8 +337,9 @@ class LoopBase(Base):
         self.script, self.hold, self.started, self.during = {}, {}, [], []
         for p in (mock.patch.object(loop, "clock", self.clock), mock.patch.object(loop, "nap", self.clock.nap),
                   mock.patch.object(loop, "delegate_route", return_value="/fake/route.py"),
-                  mock.patch.object(loop.dl, "role_status", side_effect=lambda route: self.roles()),
-                  mock.patch.object(loop, "spawn", side_effect=lambda cmd, log: FakeChild(self, cmd)),
+                  mock.patch.object(loop.dg, "role_status", side_effect=lambda route: self.roles()),
+                  mock.patch.object(loop, "spawn", side_effect=lambda cmd, log: (FakeChild(self, cmd), mock.Mock())),
+                  mock.patch.object(loop.sproc, "stop_tree", side_effect=lambda p, **kw: p.terminate() or ()),
                   mock.patch.object(loop, "prepare", return_value=(0, ""))):
             p.start()
             self.addCleanup(p.stop)

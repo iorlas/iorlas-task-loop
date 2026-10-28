@@ -59,7 +59,7 @@ class RouteHarness:
 @contract
 class RouteDelegateContract(RouteHarness, DelegateContract, unittest.TestCase):
     def make(self, *steps: Step) -> RouteDelegate:
-        self.write(answer=answer_of(steps[0]), live=[codec.to_json(e) for e in steps[0].events])
+        self.write(answer=answer_of(steps[0]), live=[wire_line(e) for e in steps[0].events])
         self.steps = steps
         return self.route()
 
@@ -120,10 +120,17 @@ class RouteDelegateFailures(RouteHarness, unittest.TestCase):
                          (10, 90, None, 5))
 
     def test_an_unknown_live_line_is_passed_over(self) -> None:
-        self.write(answer=answer_of(done(ref="r")), live=[{"v": 1, "kind": "from_the_future", "t": 1.0}])
+        self.write(answer=answer_of(done(ref="r")), live=[{"k": "from_the_future", "t": 1.0}])
         seen: list[Any] = []
         self.assertEqual(answer_status(self.route().run(req(), "b", SCHEMA, seen.append)), "done")
         self.assertEqual(seen, [])
+
+
+def wire_line(event: Any) -> dict[str, Any]:
+    """One live-file line as delegate writes it: `k` names the kind, and there is no `v`."""
+    j = codec.to_json(event)
+    j.pop("v", None)
+    return {"k": j.pop("kind"), **j}
 
 
 @domain

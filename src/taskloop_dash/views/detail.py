@@ -17,6 +17,7 @@ CALL_KEYS = (
     "reason",
     "ref",
     "transcript",
+    "exit",
     "resume",
     "attempt",
     "flag",

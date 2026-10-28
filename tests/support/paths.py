@@ -14,5 +14,5 @@ VENDOR = str(ROOT / "skills" / "task-loop" / "_vendor")  # the vendored shelf pa
 if VENDOR not in sys.path:
     sys.path.append(VENDOR)
 
-if SRC not in os.environ.get("PYTHONPATH", "").split(os.pathsep):  # a child `python3 -m taskloop_dash` finds the package
-    os.environ["PYTHONPATH"] = os.pathsep.join(filter(None, [SRC, os.environ.get("PYTHONPATH")]))
+if SRC not in os.environ.get("PYTHONPATH", "").split(os.pathsep):  # a child `python3 -m taskloop_dash` finds the package and the shelf
+    os.environ["PYTHONPATH"] = os.pathsep.join(filter(None, [SRC, VENDOR, os.environ.get("PYTHONPATH")]))

@@ -1,4 +1,4 @@
-"""The typed delegate answer (contract 3) agrees with the engine's reader (delegate_link) and the policy tables (lane_policy)."""
+"""The typed delegate answer (contract 3) agrees with the adapter that reads it and the policy tables (lane policy)."""
 import sys
 import unittest
 from pathlib import Path
@@ -7,8 +7,8 @@ from typing import get_args, get_type_hints
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402,F401
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills" / "task-loop"))
-import delegate_link as dl  # noqa: E402
-import lane_policy as lp  # noqa: E402
+from taskloop.adapters import delegate as dl, delegate_wire  # noqa: E402
+from taskloop.domain.lanes import policy as lp  # noqa: E402
 from taskloop.contracts import codec, delegate  # noqa: E402
 
 from contracts import samples as S  # noqa: E402
@@ -28,28 +28,28 @@ class Contract3(unittest.TestCase):
         fields = set(get_type_hints(delegate.DelegateResult))
         self.assertFalse(fields & {"status", "next", "reason", "retry_after", "v"})
 
-    def test_the_sample_answer_is_read_by_delegate_link_into_the_same_stop(self):
+    def test_the_sample_answer_is_read_by_the_adapter_into_the_same_result(self):
         wire = codec.to_json(S.OTHERS["DelegateResult"])
         self.assertNotIn("v", wire)
         self.assertEqual(codec.from_json(delegate.DelegateResult, wire), S.OTHERS["DelegateResult"])
-        r = dl.answer_of({}, wire)
+        r = delegate_wire.result_of(wire)
         st, facts = r.stop, S.OTHERS["DelegateResult"].stop
-        self.assertEqual((st.scope, st.permanence, st.retry_kind, st.retry_at, st.reason, st.resumable, st.partial, st.ref),
-                         (facts.scope, facts.permanence, facts.retry.kind, facts.retry.at, facts.reason, facts.resumable, facts.partial, facts.ref))
+        self.assertEqual(st, facts)
+        self.assertEqual((r.worker, r.exit_code, r.first_error), (S.OTHERS["DelegateResult"].worker, -15, "429 rate limited"))
 
     def test_a_done_answer_has_a_null_stop(self):
         wire = {**codec.to_json(S.OTHERS["DelegateResult"]), "stop": None}
-        self.assertIsNone(dl.answer_of({}, wire).stop)
+        self.assertIsNone(delegate_wire.result_of(wire).stop)
         self.assertIsNone(codec.from_json(delegate.DelegateResult, wire).stop)
 
-    def test_the_run_argv_carries_the_flags_delegate_link_builds(self):
-        class Req:
-            role, cwd, parent, task, title, timeout_s, resume, authored_by, call_id = "worker", "/w", "p", "t", "T", 0, "", "", ""
-        req = S.OTHERS["RunRequest"]
-        ours = delegate.RunRequest(role="worker", brief_path="b", cwd="/w", schema_path="s", parent="p", task="t", title="T").to_argv("py", "r")
-        theirs = dl.argv_of(type("R", (), {"route": "r"})(), Req, "b", "s")
-        self.assertEqual([x for x in ours if x != "py"], [x for x in theirs if x != sys.executable])
-        self.assertIsNotNone(req)
+    def test_the_run_argv_is_built_by_the_request_alone(self):
+        req = delegate.RunRequest(role="worker", brief_path="b", cwd="/w", schema_path="s", parent="p", task="t", title="T",
+                                  timeout_s=60, idle_s=30)
+        argv = req.to_argv("py", "r")
+        self.assertEqual(argv[:3], ["py", "r", "run"])
+        self.assertEqual(argv[argv.index("--timeout") + 1], "60")
+        self.assertEqual(argv[argv.index("--idle") + 1], "30")
+        self.assertEqual(delegate.RunRequest(role="worker", brief_path="b", cwd="/w", schema_path="s").to_argv("py", "r").count("--timeout"), 0)
 
 
 if __name__ == "__main__":

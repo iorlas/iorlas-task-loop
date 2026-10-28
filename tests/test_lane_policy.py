@@ -6,7 +6,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
-import lane_policy as lp  # noqa: E402
+import support.paths  # noqa: E402,F401
+from taskloop.domain.lanes import policy as lp  # noqa: E402
 import outcome as oc  # noqa: E402
 
 NOW = 1_000_000.0
@@ -20,8 +21,12 @@ def ctx(**kw):
     return lp.Ctx(now=NOW, **kw)
 
 
+def out(action):
+    return oc.make(oc.Kind[action.kind], action.say)
+
+
 def kind_of(action):
-    return action.outcome.kind
+    return oc.Kind[action.kind]
 
 
 class Exhaustive(unittest.TestCase):
@@ -46,24 +51,27 @@ class Exhaustive(unittest.TestCase):
         for scope, perm, retry in lp.LEGAL:
             a = lp.decide(stop(scope, perm, retry, retry_at=NOW + 9999), ctx(attempt=5, polls=5, crashes=5, waited_net_s=9999, denied_retried=True))
             if isinstance(a, lp.Yield):
-                self.assertIn(a.outcome.kind, oc.PAUSES)
+                self.assertIn(kind_of(a), oc.PAUSES)
             if isinstance(a, (lp.Yield, lp.Fail)):
-                self.assertFalse(a.outcome.rule.makes_ask, (scope, perm, retry))
+                self.assertFalse(out(a).rule.makes_ask, (scope, perm, retry))
 
     def test_the_reason_is_wording_only(self):
         for scope, perm, retry in lp.LEGAL:
             a = lp.decide(stop(scope, perm, retry, reason="network"), ctx())
             b = lp.decide(stop(scope, perm, retry, reason="anything_new"), ctx())
             self.assertEqual(type(a), type(b), (scope, perm, retry))
-        src = (ROOT / "skills" / "task-loop" / "lane_policy.py").read_text(encoding="utf-8")
-        uses = [n.lineno for n in ast.walk(ast.parse(src)) if isinstance(n, ast.Attribute) and n.attr == "reason"]
-        self.assertEqual(len(uses), 1, "only _say reads stop.reason (wording)")
+        src = (ROOT / "src" / "taskloop" / "domain" / "lanes" / "policy.py").read_text(encoding="utf-8")
+        tree = ast.parse(src)
+        reads = {f.name for f in ast.walk(tree) if isinstance(f, ast.FunctionDef)
+                 for n in ast.walk(f) if isinstance(n, ast.Attribute) and n.attr == "reason"}
+        self.assertEqual(reads, {"_say", "stop_of"}, "only _say (wording) and stop_of (the facts) read a reason")
 
     def test_the_module_is_pure(self):
-        tree = ast.parse((ROOT / "skills" / "task-loop" / "lane_policy.py").read_text(encoding="utf-8"))
+        tree = ast.parse((ROOT / "src" / "taskloop" / "domain" / "lanes" / "policy.py").read_text(encoding="utf-8"))
         tops = {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
         tops |= {n.module.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}
-        self.assertEqual(tops, {"dataclasses", "outcome"})
+        self.assertLessEqual(tops, {"dataclasses", "typing", "taskloop", "__future__", "collections"})
+        self.assertNotIn("outcome", tops)
 
 
 class Network(unittest.TestCase):
@@ -101,7 +109,7 @@ class Incidents(unittest.TestCase):
     def test_logged_out_twice_pauses_the_lane_with_the_login_fix_and_no_ask(self):
         for _ in range(2):
             a = lp.decide(stop("lane", "needs_owner", "none", reason="logged_out", fix="claude /login", lane="CLAUDE"), ctx())
-            self.assertEqual((kind_of(a), a.fix, a.outcome.rule.makes_ask), (oc.Kind.PAUSE_LANE, "claude /login", False))
+            self.assertEqual((kind_of(a), a.fix, out(a).rule.makes_ask), (oc.Kind.PAUSE_LANE, "claude /login", False))
 
     def test_exit_15_is_a_kill_pause_never_a_fail_or_an_ask(self):
         for facts in (("machine", "transient", "none"), ("machine", "needs_owner", "none"), ("machine", "transient", "poll")):
@@ -132,12 +140,12 @@ class Incidents(unittest.TestCase):
 
     def test_spending_limit_pauses_the_lane_and_does_not_ask(self):
         a = lp.decide(stop("lane", "needs_owner", "none", reason="credit_exhausted"), ctx())
-        self.assertEqual((kind_of(a), a.outcome.rule.makes_ask), (oc.Kind.PAUSE_LANE, False))
+        self.assertEqual((kind_of(a), out(a).rule.makes_ask), (oc.Kind.PAUSE_LANE, False))
 
     def test_bad_request_is_a_fault_with_no_ask(self):
         a = lp.decide(stop("caller", "needs_owner", "none", reason="bad_request"), ctx())
-        self.assertEqual((type(a), kind_of(a), a.outcome.rule.makes_ask), (lp.Fail, oc.Kind.FAULT_BAD_REQUEST, False))
-        self.assertTrue(a.outcome.fingerprint.startswith("FAULT_BAD_REQUEST"))
+        self.assertEqual((type(a), kind_of(a), out(a).rule.makes_ask), (lp.Fail, oc.Kind.FAULT_BAD_REQUEST, False))
+        self.assertTrue(out(a).fingerprint.startswith("FAULT_BAD_REQUEST"))
 
     def test_hung_reroutes_away_from_the_model_then_pauses(self):
         s = stop("model", "transient", "none", model="grok-4", lane="GROK")
@@ -147,19 +155,20 @@ class Incidents(unittest.TestCase):
 
     def test_secrets_get_one_apply_patch_thread_then_a_fault(self):
         s = stop("bead", "needs_owner", "none", reason="secrets")
-        self.assertEqual(lp.decide(s, ctx()), lp.NewThread("apply_patch", "denied_retried"))
-        a = lp.decide(s, ctx(denied_retried=True))
-        self.assertEqual((type(a), kind_of(a)), (lp.Fail, oc.Kind.FAULT_DENIED))
+        self.assertEqual(lp.decide(s, ctx(secret_fp=True)), lp.NewThread("apply_patch", "denied_retried", "denied_secret"))
+        for c in (ctx(secret_fp=True, denied_retried=True), ctx()):  # a second denial, and a real secret path, are faults
+            a = lp.decide(s, c)
+            self.assertEqual((type(a), kind_of(a)), (lp.Fail, oc.Kind.FAULT_DENIED))
 
     def test_a_failed_worker_is_tried_once_more_resumed_when_it_can_be(self):
-        self.assertEqual(lp.decide(stop("bead", resumable=True, ref="r"), ctx()), lp.Retry(NOW, "r"))
-        self.assertEqual(lp.decide(stop("bead"), ctx()), lp.NewThread())
+        self.assertEqual(lp.decide(stop("bead", resumable=True, ref="r"), ctx()), lp.Retry(NOW, "r", "attempt", "worker_failed"))
+        self.assertEqual(lp.decide(stop("bead"), ctx()), lp.NewThread("", "attempt", "worker_failed"))
         self.assertEqual(kind_of(lp.decide(stop("bead"), ctx(attempt=1))), oc.Kind.FAULT_INFRA)
 
     def test_a_delegate_crash_rests_then_retries_fresh_then_is_a_fault(self):
         s = stop("machine", "transient", "none")
-        self.assertEqual(lp.decide(s, ctx()), lp.Retry(NOW + 30, "", "crashes"))
-        self.assertEqual(lp.decide(s, ctx(crashes=1)), lp.Retry(NOW + 120, "", "crashes"))
+        self.assertEqual(lp.decide(s, ctx()), lp.Retry(NOW + 30, "", "crashes", "crash"))
+        self.assertEqual(lp.decide(s, ctx(crashes=1)), lp.Retry(NOW + 120, "", "crashes", "crash"))
         self.assertEqual(kind_of(lp.decide(s, ctx(crashes=2))), oc.Kind.FAULT_CRASHED)
 
     def test_no_lane_and_setup_pause_the_lane(self):

@@ -16,6 +16,7 @@ import ast
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -371,13 +372,58 @@ def src_problems(root=ROOT):
     return layer_problems(root) + placement_problems(root)
 
 
+# -- no signal is sent outside stream-proc ------------------------------------------------------------------------------------------
+# Stopping a process (a worker, a check, the dashboard, a stopped run-task) is `stream_proc.stop_tree` (through adapters/procs.py:
+# `stop_tree`, `stop_pid`, `capture`); a liveness read is `stream_proc.alive`. Installing a handler (signal.signal) is not a send.
+SENDS = (r"\bos\.kill(pg)?\(", r"\bsignal\.(raise_signal|pthread_kill|alarm|setitimer)\(", r"\.send_signal\(", r"\.terminate\(\)", r"\.kill\(\)",
+         r"\bkillpg\(")
+SIGNAL_EXCEPTIONS: dict[str, str] = {}  # "path" -> why it still sends a signal itself; may only shrink
+
+
+def signal_sends(root=ROOT):
+    found = {}
+    for base in ("src", "skills", "dev"):
+        for path in sorted((Path(root) / base).rglob("*.py")):
+            rel = path.relative_to(root).as_posix()
+            if rel.startswith(tuple(d + "/" for d in EXEMPT_DIRS)) or SKIP_DIRS & set(path.relative_to(root).parts):
+                continue
+            lines = [ln for ln in path.read_text(encoding="utf-8").splitlines() if not ln.lstrip().startswith("#")]
+            if any(re.search(pat, ln) for ln in lines for pat in SENDS):
+                found[rel] = True
+    return found
+
+
+class Signals(unittest.TestCase):
+    def test_no_signal_is_sent_outside_stream_proc(self):
+        for rel in signal_sends():
+            self.assertIn(rel, SIGNAL_EXCEPTIONS, "%s sends a signal: go through stream_proc (stop_tree / run / alive)" % rel)
+
+    def test_the_exception_table_only_shrinks(self):
+        found = signal_sends()
+        for rel in SIGNAL_EXCEPTIONS:
+            self.assertIn(rel, found, "%s no longer sends a signal: delete its line" % rel)
+
+    def test_every_child_of_the_engine_is_spawned_through_stream_proc(self):
+        """The engine's SIGTERM handler raises, even inside Popen(): a child spawned bare is left owned by nobody."""
+        bare = [p.relative_to(ROOT).as_posix() for base in ("src", "skills") for p in sorted((ROOT / base).rglob("*.py"))
+                if not p.relative_to(ROOT).as_posix().startswith(tuple(d + "/" for d in EXEMPT_DIRS))
+                and re.search(r"\bsubprocess\.Popen\(", p.read_text(encoding="utf-8"))]
+        self.assertEqual(bare, [], "spawn through taskloop.adapters.procs (popen_held / spawn / capture)")
+
+    def test_the_rule_finds_a_send(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "src").mkdir()
+            (Path(d) / "src" / "bad.py").write_text("import os\nos.killpg(1, 9)\n")
+            (Path(d) / "src" / "ok.py").write_text("import signal\nsignal.signal(signal.SIGTERM, print)\n# os.kill(1, 9)\n")
+            self.assertEqual(list(signal_sends(d)), ["src/bad.py"])
+
+
 # -- the older folder table --------------------------------------------------------------------------
 SKILL = ROOT / "skills" / "task-loop"
-FOLDERS = ("core", "lanes", "checks", "asks", "plan", "slots", "review", "loop", "release", "land", "look", "write", "dash")
+FOLDERS = ("core", "checks", "asks", "plan", "slots", "review", "loop", "release", "land", "look", "write", "dash")
 ALL = frozenset(FOLDERS)
 ALLOWED = {
     "core": frozenset(),
-    "lanes": frozenset({"core"}),
     "checks": frozenset({"core"}),
     "asks": frozenset({"core"}),
     "plan": frozenset({"core"}),

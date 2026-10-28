@@ -518,7 +518,7 @@ class WorkerCalls(unittest.TestCase):
                 typed("step_start", T + 1, id="n1", step="write", text="write", stage=1, stages=1, write=1),
                 typed("call_start", T + 2, id="c1", n=1, step="write", node="n1", role="worker"),
                 typed("call_end", T + 9, id="c1", status="stopped", reason="lane_out", ref="ses_1", lane="ZAI", model="glm", effort="high", secs=7,
-                      tokens={"in": 5, "cached": 1, "out": 2}, family="xai", transcript="opencode:ses_1"),
+                      tokens={"in": 5, "cached": 1, "out": 2}, family="xai", transcript="opencode:ses_1", exit=-15),
                 typed("call_start", T + 10, id="c2", n=2, step="write", node="n1", role="worker", resume=True),
                 typed("call_end", T + 20, id="c2", status="done", ref="ses_2", lane="OPENAI_SUBSCRIPTION", model="gpt", effort="high", secs=10,
                       tokens={"in": 9, "cached": 0, "out": 4}, family="openai"),
@@ -531,6 +531,7 @@ class WorkerCalls(unittest.TestCase):
         self.assertEqual(first["calls"][0]["tokens"], {"in": 5, "cached": 1, "out": 2})
         self.assertEqual(first["calls"][0]["transcript"], "opencode:ses_1")
         self.assertTrue(first["calls"][1]["resume"])
+        self.assertEqual([c["exit"] for c in first["calls"]], [-15, None])  # the worker call that ended by SIGTERM shows its exit
         self.assertEqual((first["session"]["lane"], second["session"]["lane"]), ("ZAI", "OPENAI_SUBSCRIPTION"))
 
 

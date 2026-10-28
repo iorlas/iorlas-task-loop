@@ -23,10 +23,10 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 import applog  # noqa: E402
-import delegate_link as dl  # noqa: E402,F401
+import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from taskloop.adapters import delegate as dl  # noqa: E402,F401
 from clock import FakeClock  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support.builders import cfg_with, make_engine  # noqa: E402
 from taskloop.contracts.config import EngineConfig  # noqa: E402
 import engine  # noqa: E402
@@ -43,13 +43,11 @@ from taskloop.contracts.stores import AskStore  # noqa: E402
 from support.narrow import must  # noqa: E402
 from support.waits import until  # noqa: E402
 from support import fake_route  # noqa: E402
-import lane_policy as lp  # noqa: E402,F401
-import netgate  # noqa: E402,F401
+from taskloop.domain.lanes import policy as lp  # noqa: E402,F401
+from taskloop.domain.lanes import netgate  # noqa: E402,F401
 from checks import lint  # noqa: E402,F401
-from core import procs  # noqa: E402,F401
 import tl  # noqa: E402
-from lanes import call as lcall  # noqa: E402,F401
-from lanes import route as lroute  # noqa: E402,F401
+from taskloop.adapters import delegate as lroute  # noqa: E402,F401
 
 
 def pid_gone(pid):
@@ -131,7 +129,7 @@ def full(data, ref="w2", **kw):
     return fake_route.answer(fake_route.contract(), None, ref, False, data, **fields)
 
 
-CAT_ENV = {"kind": "policy", "tool": "shell", "path": ".env", "input": "cat .env"}
+CAT_ENV = {"kind": "policy", "tool": "shell", "path": ".env", "input": {"command": "cat .env"}}
 
 
 def finding(severity):
@@ -1472,7 +1470,7 @@ class EngineTest(unittest.TestCase):
                 sh("git", "push", "-q", "origin", "HEAD:main", cwd=other)
             return real(this, role, *a, **kw)
         denied = stop("secrets", "w1", family="openai",
-                      denied=[{"kind": "policy", "tool": "Bash", "path": "", "input": "rg -n --glob '!**/.env*' '^<<<<<<<' ."}])
+                      denied=[{"kind": "policy", "tool": "Bash", "path": "", "input": {"command": "rg -n --glob '!**/.env*' '^<<<<<<<' ."}}])
         with mock.patch.object(fake_route.Script, "reply", main_moves):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE, denied], "review": [CLEAN]})
         self.assertEqual(rc, 2)
@@ -2985,14 +2983,14 @@ class EngineTest(unittest.TestCase):
         made.assert_not_called()
 
     def test_a_denied_command_with_a_valid_answer_is_a_warning_in_the_trace(self):
-        ok = full(WRITE, "w1", denied=[{"kind": "policy", "tool": "Bash", "path": "", "input": "curl -X POST https://x"}])
+        ok = full(WRITE, "w1", denied=[{"kind": "policy", "tool": "Bash", "path": "", "input": {"command": "curl -X POST https://x"}}])
         rc, s = self.run_engine({"plan": [PLAN], "write": [ok, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)  # (a raw answer writes no f.txt: the stage's check sends it to a second write)
         self.assertIn("write was denied `curl -X POST https://x`", self.eng.log_path.read_text())
         self.assertEqual(self.eng.sessions[1]["denied"], ok["denied"])
 
     def test_a_denied_command_with_no_valid_answer_needs_a_human_at_once(self):
-        stuck = full(None, "w1", text="I could not run it", denied=[{"kind": "policy", "tool": "Bash", "path": "", "input": "unity open client"}])
+        stuck = full(None, "w1", text="I could not run it", denied=[{"kind": "policy", "tool": "Bash", "path": "", "input": {"command": "unity open client"}}])
         rc, s = self.run_engine({"plan": [PLAN], "write": [stuck, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 2)
         self.assertEqual([c[0] for c in s.calls].count("worker"), 1)
@@ -3004,7 +3002,7 @@ class EngineTest(unittest.TestCase):
     def test_a_refused_read_only_command_gets_one_retry_on_a_fresh_thread_with_a_note(self):
         """tl-bxk.10.21 (lifesim-6dq0): a guard refused a head+rg chain, no answer: one retry, told what was refused."""
         refused = full(None, "w1", family="openai", text="",
-                       denied=[{"kind": "policy", "tool": "shell", "path": "", "input": "/bin/zsh -lc \"head -n 20 a.txt | rg -n 'x' b\""}])
+                       denied=[{"kind": "policy", "tool": "shell", "path": "", "input": {"command": "/bin/zsh -lc \"head -n 20 a.txt | rg -n 'x' b\""}}])
         rc, s = self.run_engine({"plan": [PLAN], "write": [refused, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         workers = [c for c in s.calls if c[0] == "worker"]
@@ -3014,7 +3012,7 @@ class EngineTest(unittest.TestCase):
         self.assertIn("denied_retry", log)
 
     def test_a_second_refusal_after_the_retry_leaves_the_bead_open_with_a_fault(self):
-        refused = full(None, "w1", family="openai", text="", denied=[{"kind": "policy", "tool": "Bash", "path": "", "input": "rg -n foo src"}])
+        refused = full(None, "w1", family="openai", text="", denied=[{"kind": "policy", "tool": "Bash", "path": "", "input": {"command": "rg -n foo src"}}])
         rc, s = self.run_engine({"plan": [PLAN], "write": [refused, full(None, "w2", family="openai", text="", denied=refused["denied"]), WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 2)
         self.assertEqual([c[0] for c in s.calls].count("worker"), 2)
@@ -3022,9 +3020,9 @@ class EngineTest(unittest.TestCase):
         self.assertIn("needs a human", self.said())
 
     def test_a_refused_command_that_writes_or_a_secrets_stop_is_not_retried(self):
-        for denied, reason in (([{"tool": "Bash", "input": "rm -rf build"}], ""), ([{"tool": "shell", "input": "cat > f"}], ""),
-                               ([{"tool": "shell", "input": "rg -n x ."}], "secrets"),
-                               ([{"tool": "Bash", "input": "rg -n x ."}, {"tool": "Bash", "input": "curl x"}], "")):
+        for denied, reason in (([{"tool": "Bash", "input": {"command": "rm -rf build"}}], ""), ([{"tool": "shell", "input": {"command": "cat > f"}}], ""),
+                               ([{"tool": "shell", "input": {"command": "rg -n x ."}}], "secrets"),
+                               ([{"tool": "Bash", "input": {"command": "rg -n x ."}}, {"tool": "Bash", "input": {"command": "curl x"}}], "")):
             denied = [dict(x, kind="policy", path="") for x in denied]
             stuck = stop("secrets", "w1", denied=denied) if reason else full(None, "w1", text="no", denied=denied)
             for f in (tl.config_dir() / "asks" / "t-1.json", tl.config_dir() / "checkpoints" / "t-1.json"):
@@ -3112,8 +3110,8 @@ class EngineTest(unittest.TestCase):
                       " ".join(str(c) for c in self.bd_calls))
 
     def test_a_second_denied_write_in_a_bead_needs_a_human_with_every_denied_command(self):
-        first = full(WRITE, "w1", denied=[{"kind": "policy", "tool": "Bash", "path": "", "input": "git checkout x && pick"}])
-        second = full(WRITE, "w2", family="openai", denied=[{"kind": "policy", "tool": "shell", "path": "", "input": "git restore x; pick"}])
+        first = full(WRITE, "w1", denied=[{"kind": "policy", "tool": "Bash", "path": "", "input": {"command": "git checkout x && pick"}}])
+        second = full(WRITE, "w2", family="openai", denied=[{"kind": "policy", "tool": "shell", "path": "", "input": {"command": "git restore x; pick"}}])
         rc, s = self.run_engine({"plan": [PLAN], "write": [first, second, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 2)
         self.assertEqual([c[0] for c in s.calls].count("worker"), 2)
@@ -3122,10 +3120,10 @@ class EngineTest(unittest.TestCase):
             self.assertIn(cmd, self.said())
 
     def test_denied_writes_count_across_runs_of_a_bead(self):
-        first = full(WRITE, "w1", denied=[{"kind": "policy", "tool": "Bash", "path": "", "input": "curl -X POST x"}])
+        first = full(WRITE, "w1", denied=[{"kind": "policy", "tool": "Bash", "path": "", "input": {"command": "curl -X POST x"}}])
         with self.stop_at("worker", 2):
             self.run_engine({"plan": [PLAN], "write": [first]})
-        again = full(WRITE, "w1", denied=[{"kind": "policy", "tool": "Bash", "path": "", "input": "curl --data @f x"}])
+        again = full(WRITE, "w1", denied=[{"kind": "policy", "tool": "Bash", "path": "", "input": {"command": "curl --data @f x"}}])
         rc, _ = self.run_engine({"write": [again, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 2)
         self.assertIn("curl -X POST x", self.said())
@@ -3276,15 +3274,6 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(script.calls, [])
         self.assertIn("contract 3", self.said())
         self.assertIn("update", self.said())
-
-    @no_repo
-    def test_child_env_drops_session_identity(self):
-        with mock.patch.dict(os.environ, {"ANTHROPIC_BASE_URL": "x", "CLAUDE_CODE_SESSION_ID": "s"}):
-            env = procs.child_env()
-        self.assertNotIn("ANTHROPIC_BASE_URL", env)
-        self.assertNotIn("CLAUDE_CODE_SESSION_ID", env)
-        self.assertEqual(env["DELEGATE_DEPTH"], "1")
-
 
     # -- tl-bxk.10.13: amend, never plan again from scratch; cap; validate; checkpoint first
     def stopped_run(self, bead=BEAD, plan=PLAN, answers=None):

@@ -19,6 +19,9 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+sys.path.append(str(HERE.parent / "skills" / "task-loop" / "_vendor"))  # the vendored shelf packages (dev/vendor.py)
+import stream_proc  # noqa: E402
+
 DEFAULT_IMAGE = "task-loop-suite:" + hashlib.sha1((HERE / "Dockerfile.suite").read_bytes()).hexdigest()[:10]  # a new Dockerfile is a new image
 INSIDE = ("git clone -q /src.git /w && cd /w && git checkout -q \"$SHA\" && cat > /tmp/p"
           " && { [ ! -s /tmp/p ] || git apply /tmp/p; } && python3 dev/suite.py")
@@ -73,11 +76,7 @@ def main(argv=None):
     def stop(signum, _frame):
         # killing the `docker run` client leaves the container running in the VM: kill it by name
         subprocess.run(["docker", "kill", name], capture_output=True)
-        p.terminate()
-        try:
-            p.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            p.kill()
+        stream_proc.stop_tree(p, grace=10.0)
         sys.exit(128 + signum)
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)

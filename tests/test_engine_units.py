@@ -23,10 +23,11 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 import applog  # noqa: E402
-import delegate_link as dl  # noqa: E402,F401
+import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from taskloop.adapters import delegate as dl  # noqa: E402,F401
+from taskloop.adapters import procs as sproc  # noqa: E402
 from clock import FakeClock  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support.builders import cfg_with, make_engine  # noqa: E402
 import engine  # noqa: E402
 import seams  # noqa: E402
@@ -34,13 +35,12 @@ from support.fakes import FakeBeadStore, as_bead, as_comment  # noqa: E402
 from support.logs import records  # noqa: E402
 from support.waits import until  # noqa: E402
 from support import fake_route  # noqa: E402
-import lane_policy as lp  # noqa: E402,F401
-import netgate  # noqa: E402,F401
+from taskloop.domain.lanes import policy as lp  # noqa: E402
+from taskloop.domain.lanes.notes import FRESH_WRITER_TEXT  # noqa: E402,F401
+from taskloop.domain.lanes import netgate  # noqa: E402,F401
 from checks import lint  # noqa: E402,F401
-from core import procs  # noqa: E402,F401
 import tl  # noqa: E402
-from lanes import call as lcall  # noqa: E402,F401
-from lanes import route as lroute  # noqa: E402,F401
+from taskloop.adapters import delegate as lroute  # noqa: E402,F401
 import test_engine as T  # noqa: E402
 from test_engine import BRIEFS, CLEAN, PLAN, WRITE, finding, full, review, sh, shown, stop, stored_brief, verdict  # noqa: E402
 
@@ -230,9 +230,9 @@ class DelegateLauncher(unittest.TestCase):
         workers = [(c, p) for c, p in zip(s.calls, s.prompts) if c[0] == "worker"]
         self.assertEqual([c[1] for c, _ in workers], [None, "ref-write", None, "w2"])  # Codex still out: resumed
         self.assertEqual([c[2] for c in s.calls if c[0] == "reviewer"], ["openai", "claude", "claude"])
-        self.assertNotIn(engine.FRESH_WRITER_TEXT, workers[1][1])
-        self.assertIn(engine.FRESH_WRITER_TEXT, workers[2][1])
-        self.assertNotIn(engine.FRESH_WRITER_TEXT, workers[3][1])
+        self.assertNotIn(FRESH_WRITER_TEXT, workers[1][1])
+        self.assertIn(FRESH_WRITER_TEXT, workers[2][1])
+        self.assertNotIn(FRESH_WRITER_TEXT, workers[3][1])
         self.assertIn("lane_out", self.eng.log_path.read_text())
 
     # tl-bxk.10.5 2026-10-21: after a real outage the Sonnet thread stayed the writer for every later round of
@@ -255,8 +255,8 @@ class DelegateLauncher(unittest.TestCase):
         workers = [(c, p) for c, p in zip(s.calls, s.prompts) if c[0] == "worker"]
         # round 3: Codex's lane is back, so delegate routes afresh; round 4 resumes Codex's new thread
         self.assertEqual([c[1] for c, _ in workers], [None, "ref-write", None, None, "w3"])
-        self.assertIn(engine.FRESH_WRITER_TEXT, workers[3][1])
-        self.assertNotIn(engine.FRESH_WRITER_TEXT, workers[4][1])
+        self.assertIn(FRESH_WRITER_TEXT, workers[3][1])
+        self.assertNotIn(FRESH_WRITER_TEXT, workers[4][1])
         self.assertEqual([c[2] for c in s.calls if c[0] == "reviewer"], ["openai", "claude", "openai", "openai"])
         self.assertTrue(any(t["cause"] == "fallback_retake" and t["to"] == "write" for t in self.transitions()))
 
@@ -295,7 +295,7 @@ class DelegateLauncher(unittest.TestCase):
             rc, s = self.run_engine({"write": [self.BACK], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(s.calls[0][:2], ("worker", None))
-        self.assertIn(engine.FRESH_WRITER_TEXT, s.prompts[0])
+        self.assertIn(FRESH_WRITER_TEXT, s.prompts[0])
         self.assertEqual(s.calls[1], ("reviewer", None, "openai"))
 
     # contract 3: an answer that picked a lane says whether it is a fallback (and from which first lane, when it can)
@@ -338,10 +338,11 @@ class DelegateLauncher(unittest.TestCase):
 
     def test_lane_status_reads_route_status_json(self):
         out = json.dumps({"v": 1, "lanes": {"OPENAI_SUBSCRIPTION": {"out": True}}})
-        with mock.patch.object(engine.subprocess, "run", return_value=mock.Mock(returncode=0, stdout=out + "\n")) as run:
+        ran = lambda text, rc=0: sproc.Ran(rc, text, "", 0.1, False)  # noqa: E731
+        with mock.patch.object(sproc, "capture", return_value=ran(out + "\n")) as cap:
             self.assertEqual(lroute.lane_status("/r/route.py"), {"OPENAI_SUBSCRIPTION": {"out": True}})
-        self.assertEqual(run.call_args[0][0][1:], ["/r/route.py", "status", "--json"])
-        with mock.patch.object(engine.subprocess, "run", side_effect=OSError("gone")):
+        self.assertEqual(cap.call_args[0][0][1:], ["/r/route.py", "status", "--json"])
+        with mock.patch.object(sproc, "capture", return_value=ran("", 1)):
             self.assertEqual(lroute.lane_status("/r/route.py"), {})
 
     # lifesim-5ar.6 2026-10-21: the resumed writer's lane_out came with no retry_after, so next was owner, and the bead
@@ -354,7 +355,7 @@ class DelegateLauncher(unittest.TestCase):
         self.assertEqual(rc, 0, self.blocked)
         workers = [(c, p) for c, p in zip(s.calls, s.prompts) if c[0] == "worker"]
         self.assertEqual([c[1] for c, _ in workers], [None, "ref-write", None])
-        self.assertIn(engine.FRESH_WRITER_TEXT, workers[2][1])
+        self.assertIn(FRESH_WRITER_TEXT, workers[2][1])
 
     def test_a_new_thread_whose_lane_is_out_with_no_time_pauses_without_an_ask(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_OWNER, self.OUT_OWNER],

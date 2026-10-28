@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support import tlbd  # noqa: E402
 import loop  # noqa: E402
-import netgate  # noqa: E402
+from taskloop.domain.lanes import netgate  # noqa: E402
 import tl  # noqa: E402
 from test_loop import Base, LoopBase, bead, rec  # noqa: E402
 

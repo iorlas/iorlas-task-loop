@@ -20,6 +20,7 @@ from collections import Counter
 from pathlib import Path
 
 import tl
+from taskloop.adapters import procs as sproc
 from taskloop.contracts.ports import BdFailure, BeadQuery, NewBead
 
 MIN_RUNS = 2
@@ -322,9 +323,8 @@ def maybe_run(now=None):
             if not due(now):
                 return ""
             pass
-        subprocess.Popen([sys.executable, str(Path(__file__).resolve().with_name("tl.py")), "reflect", "digest"],
-                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                         start_new_session=True)
+        sproc.spawn([sys.executable, str(Path(__file__).resolve().with_name("tl.py")), "reflect", "digest"],
+                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         st = read_state()
         st["tried"] = now or time.time()
         write_state(st)

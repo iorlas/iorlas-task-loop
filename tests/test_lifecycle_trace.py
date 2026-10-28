@@ -10,7 +10,8 @@ import unittest
 from unittest import mock
 
 import test_engine as te
-import delegate_link as dl
+import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from taskloop.adapters import delegate as dl
 from support import fake_route
 from test_engine import CLEAN, PLAN, PY, WRITE, stop
 
@@ -19,7 +20,6 @@ import lifecycle
 import tl
 
 ROOT = te.ROOT
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support.builders import make_engine  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
 
@@ -299,7 +299,7 @@ class TraceTelemetry(unittest.TestCase):
 
         eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False, store=self.store)
         with mock.patch.object(engine.subprocess, "Popen", return_value=FakeProc()), \
-                mock.patch.object(engine.procs, "kill_tree") as kill:
+                mock.patch.object(engine.sproc, "stop_tree") as kill:
             with self.assertRaises(KeyboardInterrupt):
                 eng.sh("fake", timeout=5)
         self.assertTrue(kill.called)
@@ -376,7 +376,7 @@ class TraceTelemetry(unittest.TestCase):
             proc.stop("shutdown after slow scan\n")
 
         with mock.patch.object(engine.subprocess, "Popen", return_value=p), \
-                mock.patch.object(engine.procs, "kill_tree", side_effect=stop), \
+                mock.patch.object(engine.sproc, "stop_tree", side_effect=stop), \
                 mock.patch.object(engine.cs, "activity", side_effect=slow_activity):
             rc, _ = eng.sh("fake-check", timeout=10, idle=0.5)
         self.assertEqual(rc, 124)
@@ -398,7 +398,7 @@ class TraceTelemetry(unittest.TestCase):
             proc.stop("shutdown output after timeout\n")
 
         with mock.patch.object(engine.subprocess, "Popen", return_value=p), \
-                mock.patch.object(engine.procs, "kill_tree", side_effect=stop), \
+                mock.patch.object(engine.sproc, "stop_tree", side_effect=stop), \
                 mock.patch.object(engine.cs, "activity", return_value=False):
             rc, tail = eng.sh("fake-check", timeout=0.4, idle=10)
         self.assertEqual(rc, 124)
@@ -423,7 +423,7 @@ class TraceTelemetry(unittest.TestCase):
             proc.stop("shutdown output after interrupt\n")
 
         with mock.patch.object(engine.subprocess, "Popen", return_value=p), \
-                mock.patch.object(engine.procs, "kill_tree", side_effect=stop), \
+                mock.patch.object(engine.sproc, "stop_tree", side_effect=stop), \
                 mock.patch.object(engine.cs, "activity", side_effect=KeyboardInterrupt):
             with self.assertRaises(KeyboardInterrupt):
                 eng.sh("fake-check", timeout=10, idle=10)
@@ -448,45 +448,12 @@ class TraceTelemetry(unittest.TestCase):
                 raise dl.Stopped("timeout 1 min")
         with te.delegate_stack(Survivor({})):
             with self.assertRaises(engine.Blocked):
-                eng._ai("plan", "title", "prompt")
+                eng.ai("plan", "title", "prompt")
         kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
                  if json.loads(line)["kind"] == "kill"]
         self.assertTrue(kills)
         self.assertEqual(kills[-1]["alive"], [4242])
         self.assertEqual(kills[-1]["why"], "timeout 1 min")
-
-    def test_run_proc_reports_observed_error_and_kill_boundaries(self):
-        log = self.wt / "observed.log"
-        code = "import sys,time; sys.stderr.write('error: boom\\n'); sys.stderr.flush(); time.sleep(10)"
-        stop, obs = {}, {}
-        res, _ = engine.procs.run_proc([sys.executable, "-c", code], str(self.wt), 0.4, log, stop=stop, obs=obs)
-        self.assertIsNone(res)
-        self.assertIsNotNone(obs["first_error_t"])
-        self.assertIsNotNone(obs["last_event_t"])
-        self.assertIsNotNone(obs["kill_t"])
-        self.assertGreaterEqual(obs["kill_t"] - obs["first_error_t"], 0.2)
-        self.assertGreaterEqual(obs["ended_t"], obs["kill_t"])
-        self.assertEqual(stop["why"], obs["why"])
-
-    def test_shutdown_output_after_a_timeout_does_not_move_observed_boundaries(self):
-        log = self.wt / "shutdown.log"
-        code = (
-            "import signal,sys,time\n"
-            "def bye(*_):\n"
-            "    sys.stderr.write('shutdown error: late\\n'); sys.stderr.flush(); sys.exit(0)\n"
-            "signal.signal(signal.SIGTERM, bye)\n"
-            "sys.stderr.write('error: boom\\n'); sys.stderr.flush()\n"
-            "time.sleep(10)\n"
-        )
-        stop, obs = {}, {}
-        res, _ = engine.procs.run_proc([sys.executable, "-c", code], str(self.wt), 0.4, log, stop=stop, obs=obs)
-        self.assertIsNone(res)
-        self.assertIn("shutdown error: late", log.read_text())
-        self.assertIsNotNone(obs["first_error_t"])
-        self.assertIsNotNone(obs["last_event_t"])
-        self.assertIsNotNone(obs["kill_t"])
-        self.assertLessEqual(obs["first_error_t"], obs["kill_t"])
-        self.assertLessEqual(obs["last_event_t"], obs["kill_t"])
 
     def test_a_delegate_interruption_leaves_a_kill_record(self):
         class Interrupted(fake_route.Script):  # ctrl-C while the worker ran: the runner kept what it saw
@@ -499,7 +466,7 @@ class TraceTelemetry(unittest.TestCase):
         eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False, store=self.store)
         with te.delegate_stack(Interrupted({})):
             with self.assertRaises(KeyboardInterrupt):
-                eng._ai("plan", "title", "prompt")
+                eng.ai("plan", "title", "prompt")
         kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
                  if json.loads(line)["kind"] == "kill"]
         self.assertTrue(kills)

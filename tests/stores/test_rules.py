@@ -11,7 +11,7 @@ from contracts.test_rules import FILE_CAP, FUNC_CAP, VENDORED, code_lines  # noq
 
 PKG = Path(__file__).resolve().parents[2] / "src" / "taskloop" / "stores"
 FILES = sorted(PKG.glob("*.py"))
-REAL = {"files.py", "real.py"}
+REAL = {"files.py", "real.py", "call_state.py"}
 
 
 class StoreRules(unittest.TestCase):

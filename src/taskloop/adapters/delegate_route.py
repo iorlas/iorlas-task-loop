@@ -11,12 +11,12 @@ from typing import Any
 from jsonl_log import Jsonl
 
 from taskloop.adapters import delegate_wire
-from taskloop.adapters.proc import run_group
+from taskloop.adapters.procs import capture as run_group
+from taskloop.adapters.runner import live_event
 from taskloop.contracts import codec
-from taskloop.contracts.delegate import LIVE_EVENT, DelegateResult, RunRequest
+from taskloop.contracts.delegate import DelegateResult, RunRequest
 from taskloop.contracts.ports import EventSink
 
-LIVE_ENV = "DELEGATE_LIVE_FILE"
 BACKSTOP_S = 120.0  # the default grace past `timeout_s` before the engine stops route.py itself
 
 
@@ -30,10 +30,10 @@ class LiveTail:
     def drain(self) -> None:
         entries, self.cursor = self.file.read_from(self.cursor)
         for e in entries:
-            if self.sink is None or "kind" not in e.data:
+            if self.sink is None or "k" not in e.data:
                 continue
             try:
-                self.sink(codec.from_tagged(LIVE_EVENT, e.data))
+                self.sink(live_event(e.data))
             except codec.CodecError:
                 pass
 
@@ -59,9 +59,9 @@ class RouteDelegate:
             brief_path, schema_path, live = Path(d, "brief.md"), Path(d, "schema.json"), Path(d, "live.jsonl")
             brief_path.write_text(brief, encoding="utf-8")
             schema_path.write_text(json.dumps(schema), encoding="utf-8")
-            call = dataclasses.replace(req, brief_path=str(brief_path), schema_path=str(schema_path))
+            call = dataclasses.replace(req, brief_path=str(brief_path), schema_path=str(schema_path), live_file=str(live))
             tail = LiveTail(live, on_event)
-            ran = run_group(call.to_argv(self.python, self.route), req.cwd or None, self._env({LIVE_ENV: str(live)}),
+            ran = run_group(call.to_argv(self.python, self.route), req.cwd or None, self._env(call.env()),
                             self.timeout_s + self.backstop_s, tail.drain)
         if ran.timed_out:
             return delegate_wire.synth("timeout", "bead", "transient", "the engine stopped route.py at its backstop", req.resume)

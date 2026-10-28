@@ -13,7 +13,7 @@ import support.paths  # noqa: E402,F401
 PKG = Path(__file__).resolve().parents[2] / "src" / "taskloop" / "contracts"
 FILES = sorted(PKG.glob("*.py"))
 FILE_CAP, FUNC_CAP = 400, 80
-VENDORED = {"atomic_io", "jsonl_log", "process_lock"}  # the shelf packages under skills/task-loop/_vendor that src may import
+VENDORED = {"atomic_io", "child_env", "jsonl_log", "process_lock", "stream_proc"}  # the shelf packages under skills/task-loop/_vendor that src may import
 FORBIDDEN = {"re", "subprocess", "socket", "urllib", "http", "threading", "multiprocessing"}
 OUR_NAMES = {"engine", "asks", "checkpoints", "runs", "loop", "slots", "locks", "snapshots", "sessions", "shared", "releases"}
 

@@ -1,6 +1,6 @@
 """CallState (the vendor call on disk) and the network gate (tl-7y6.2.13): checkpoints survive, finished output is never discarded."""
 import json
-import subprocess
+import shutil
 import sys
 import tempfile
 import unittest
@@ -8,8 +8,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
-import call_state as cs  # noqa: E402
-import netgate  # noqa: E402
+import support.paths  # noqa: E402,F401
+from taskloop.adapters import delegate as dl  # noqa: E402
+from taskloop.stores import call_state as cs  # noqa: E402
+from taskloop.domain.lanes import netgate  # noqa: E402
 
 KEY = ("write", 1, 0, 2)
 
@@ -117,27 +119,22 @@ class Gate(unittest.TestCase):
         self.assertIsNone(s.poll(p, 0.0))
         self.assertEqual(s.poll(p, 60.0), "up")
 
-    def test_route_probe_parses_the_last_line_and_reads_a_failure_as_unknown(self):
-        def run_with(out, rc=0):
-            return lambda cmd, **kw: subprocess.CompletedProcess(cmd, rc, out, "")
-        self.assertIs(netgate.RouteProbe("r.py", run=run_with('noise\n{"v": 1, "up": true}\n')).up(), True)
-        self.assertIs(netgate.RouteProbe("r.py", run=run_with('{"v": 1, "up": false}')).up(), False)
-        self.assertIsNone(netgate.RouteProbe("r.py", run=run_with("")).up())
-        self.assertIsNone(netgate.RouteProbe("r.py", run=run_with("Traceback")).up())
+    def probe(self, body):
+        d = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, d, True)
+        (d / "route.py").write_text("import sys, pathlib\npathlib.Path(__file__).with_name('argv').write_text(' '.join(sys.argv[1:]))\n" + body)
+        return dl.RouteProbe(str(d / "route.py"), ("a.com", "b.com")), d
 
-        def boom(cmd, **kw):
-            raise subprocess.TimeoutExpired(cmd, 20)
-        self.assertIsNone(netgate.RouteProbe("r.py", run=boom).up())
+    def test_route_probe_parses_the_last_line_and_reads_a_failure_as_unknown(self):
+        for body, want in (("print('noise')\nprint('{\"v\": 1, \"up\": true}')", True), ("print('{\"v\": 1, \"up\": false}')", False),
+                           ("", None), ("raise SystemExit('Traceback')", None)):
+            probe, _ = self.probe(body)
+            self.assertIs(probe.up(), want, body)
 
     def test_route_probe_asks_route_py_net_with_the_hosts(self):
-        seen = []
-
-        def run(cmd, **kw):
-            seen.append((cmd, kw["timeout"]))
-            return subprocess.CompletedProcess(cmd, 0, '{"up": true}', "")
-        netgate.RouteProbe("/d/route.py", ("a.com", "b.com"), run=run).up()
-        self.assertEqual(seen[0][0][1:], ["/d/route.py", "net", "--host", "a.com", "--host", "b.com"])
-        self.assertEqual(seen[0][1], netgate.PROBE_TIMEOUT)
+        probe, d = self.probe("print('{\"up\": true}')")
+        probe.up()
+        self.assertEqual((d / "argv").read_text(), "net --host a.com --host b.com")
 
 
 if __name__ == "__main__":

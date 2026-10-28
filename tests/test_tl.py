@@ -401,8 +401,8 @@ class PinAndRollback(Base):
 
     def test_the_drill_pin_decides_what_loop_and_find_route_pick_then_clear_returns_to_the_newest(self):
         import loop
-        from lanes import route as lroute
-        route = lambda: lroute.find_route()
+        from taskloop.adapters import delegate as lroute
+        route = lambda: lroute.find_route("", tl.pinned_dir("delegate"), tl.claude_dir() / "plugins" / "cache")
         self.assertIn("0.6.0", route())  # no pin: the newest
         self.assertEqual(self.pin("0.1.0", "--delegate", "0.5.0")[0], 0)
         self.assertIn("/iorlas-delegate/0.5.0/", route())

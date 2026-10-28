@@ -17,6 +17,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # python3 -m unittest tests.test_slots, from the repo root
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support import slots as sl  # noqa: E402
@@ -29,7 +30,6 @@ import tl  # noqa: E402
 from support.fakes import as_bead  # noqa: E402
 from taskloop.app.slots import marks  # noqa: E402
 from taskloop.contracts.config import SlotsConfig  # noqa: E402
-from core import procs  # noqa: E402,F401
 
 POSIX = os.name != "nt"
 REAL_PREPARE = loop.prepare  # LoopBase stubs it
@@ -314,10 +314,10 @@ class StaleLocks(Slots):
         z = subprocess.Popen([sys.executable, "-c", "pass"])
         try:
             for _ in range(100):
-                if tl.zombie(z.pid):
+                if not tl.pid_alive(z.pid):
                     break
                 time.sleep(0.05)
-            self.assertTrue(tl.zombie(z.pid))
+            self.assertFalse(tl.pid_alive(z.pid))  # exited and not yet reaped: stream-proc reads it as gone
             f = tl.engine_lock_path(self.slot("s1"))
             f.parent.mkdir(parents=True)
             f.write_text(json.dumps({"pid": z.pid, "bead": "x-0"}))
@@ -479,198 +479,14 @@ class HoldRaces(Slots):
 
 
 @unittest.skipUnless(POSIX, "process groups")
-class TreeKillAndPidReuse(unittest.TestCase):
-    def test_only_processes_still_the_same_in_both_looks_are_killed(self):
-        route = 700
-        before = {route: (1, route, "t0"), 500: (route, 500, "A"), 600: (500, 600, "B"), 650: (route, 650, "C")}
-        after = {500: (1, 500, "A"), 600: (1, 600, "OTHER"), 650: (1, 999, "C")}  # 600 reused, 650 another group
-        looks = [before, after]
-        p = mock.Mock(pid=route, returncode=0)
-        p.wait.side_effect = [subprocess.TimeoutExpired("r", 1), 0]
-        kills = []
-        with mock.patch.object(tl, "proc_table", side_effect=lambda: looks.pop(0)), \
-                mock.patch.object(engine.os, "killpg", side_effect=lambda g, s: kills.append(("pg", g, s))), \
-                mock.patch.object(engine.os, "kill", side_effect=lambda q, s: kills.append(("p", q, s))), \
-                mock.patch.object(tl, "proc_alive", return_value=False):
-            procs.stop_tree(p)
-        self.assertIn(("pg", route, signal.SIGTERM), kills)
-        hit = {k[1] for k in kills if k[2] == 9}
-        self.assertIn(500, hit)
-        self.assertNotIn(600, hit)
-        self.assertFalse({650, 999} & hit)
-        self.assertNotIn(route, hit)  # reaped: its group id may be someone else's now
-
-
-ROUTE = textwrap.dedent('''
-    import os, signal, subprocess, sys, time
-    w = subprocess.Popen([sys.executable, "-c", "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(60)"],
-                         start_new_session=True)
-    open(sys.argv[1], "w").write(str(w.pid))
-    if len(sys.argv) > 3:  # delegate 0.31.1+: the worker named on stderr
-        sys.stderr.write("delegate: worker pid=%d pgid=%d run_id=r1\\n" % (w.pid, w.pid))
-        sys.stderr.flush()
-    def bye(*_):
-        if sys.argv[2] == "kills":
-            os.killpg(w.pid, 9)
-            sys.exit(143)
-    signal.signal(signal.SIGTERM, bye)
-    while True:
-        time.sleep(0.1)
-''')
-
-
-@unittest.skipUnless(POSIX, "process groups")
-class StoppedEngineKillsItsWorker(unittest.TestCase):
-    """delegate's route.py runs the worker in its own process group: a SIGKILL to route.py's group orphaned the 5ar.7
-    writer, which kept editing the slot after its engine stopped (2026-10-21)."""
-
-    def setUp(self):
-        import tempfile
-        self.tmp = tempfile.TemporaryDirectory()
-        self.d = Path(self.tmp.name)
-        (self.d / "route.py").write_text(ROUTE)
-
-    def tearDown(self):
-        self.tmp.cleanup()
-
-    def worker_pid(self):
-        f = self.d / "w.pid"
-        for _ in range(100):
-            if f.exists() and f.read_text():
-                return int(f.read_text())
-            time.sleep(0.05)
-        self.fail("no worker")
-
-    def gone(self, pid):
-        for _ in range(60):
-            if not tl.pid_alive(pid) or zombie(pid):
-                return True
-            time.sleep(0.05)
-        return False
-
-    def stop_during(self, mode, how, names=False):
-        cmd = [sys.executable, str(self.d / "route.py"), str(self.d / "w.pid"), mode] + (["names"] if names else [])
-        log = self.d / "err.log"
-        if how == "timeout":
-            with mock.patch.object(procs, "STOP_GRACE", 1):
-                res, _ = procs.run_proc(cmd, str(self.d), 1.5, log)
-            self.assertIsNone(res)
-            return
-        old = signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(engine.Blocked("failed: stopped (SIGTERM)")))
-        done = __import__("threading").Event()
-
-        def stop_once_the_worker_runs():  # under a loaded machine route.py can take over a second to start it
-            f = self.d / "w.pid"
-            for _ in range(400):
-                if done.is_set() or (f.exists() and f.read_text()):
-                    break
-                time.sleep(0.05)
-            if not done.wait(0.3):
-                os.kill(os.getpid(), signal.SIGTERM)
-        t = __import__("threading").Timer(0, stop_once_the_worker_runs)
-        t.start()
-        try:
-            with mock.patch.object(procs, "STOP_GRACE", 1), self.assertRaises(engine.Blocked):
-                procs.run_proc(cmd, str(self.d), 60, log)
-        finally:
-            done.set()
-            t.join()
-            signal.signal(signal.SIGTERM, old)
-
-    def test_a_stop_lets_route_py_end_its_worker(self):
-        self.stop_during("kills", "sigterm")
-        self.assertTrue(self.gone(self.worker_pid()))
-
-    def test_a_route_py_that_ignores_the_stop_still_loses_its_worker(self):
-        self.stop_during("ignores", "sigterm")
-        self.assertTrue(self.gone(self.worker_pid()))
-
-    def test_a_named_worker_goes_with_route_py(self):
-        self.stop_during("kills", "sigterm", names=True)
-        self.assertTrue(self.gone(self.worker_pid()))
-        self.assertIn("delegate: worker pid=", (self.d / "err.log").read_text())
-
-    def test_a_named_worker_of_a_route_py_that_ignores_the_stop_is_killed_by_its_group(self):
-        self.stop_during("ignores", "sigterm", names=True)
-        self.assertTrue(self.gone(self.worker_pid()))
-
-    def test_a_node_timeout_kills_the_worker_too(self):
-        self.stop_during("ignores", "timeout")
-        self.assertTrue(self.gone(self.worker_pid()))
-
-
-def zombie(pid):
-    r = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True)
-    return r.stdout.strip().startswith("Z")
-
-
-if __name__ == "__main__":
-    unittest.main()
-
-
-@unittest.skipUnless(POSIX, "process groups")
-class KillTreeGroupTest(unittest.TestCase):
-    def test_kill_tree_kills_a_check_and_the_runner_survives(self):
-        p = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], start_new_session=True)
-        self.assertNotEqual(os.getpgid(p.pid), os.getpgrp())
-        procs.kill_tree(p)
-        self.assertIsNotNone(p.returncode)
-
-    def test_kill_tree_refuses_a_child_in_our_own_group(self):
-        p = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])  # no new session: our group
-        try:
-            self.assertEqual(os.getpgid(p.pid), os.getpgrp())
-            with mock.patch.object(engine.os, "killpg") as kp, self.assertRaises(RuntimeError):
-                procs.kill_tree(p)
-            kp.assert_not_called()
-        finally:
-            p.kill()
-            p.wait()
-
-
-@unittest.skipUnless(POSIX, "process groups")
 class NeverSignalOneself(unittest.TestCase):
     """A recorded or parsed pid or group id is a claim: no stop, reap or kill path may act on it when it is ours."""
 
-    def test_send_group_refuses_our_group_and_our_parents(self):
-        for gid in (os.getpgrp(), os.getpid(), os.getppid(), 0, 1):
-            with mock.patch.object(engine.os, "killpg") as kp, self.assertRaises(RuntimeError):
-                procs.send_group(gid, signal.SIGTERM)
-            kp.assert_not_called()
-
-    def test_send_pid_refuses_ourselves_and_our_parent(self):
-        for pid in (os.getpid(), os.getppid(), 0, 1):
-            with mock.patch.object(engine.os, "kill") as k, self.assertRaises(RuntimeError):
-                procs.send_pid(pid, signal.SIGTERM)
-            k.assert_not_called()
-
-    def test_a_named_worker_must_still_be_that_process_in_that_group(self):
-        w = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], start_new_session=True)
-        try:
-            with mock.patch.object(engine.os, "killpg") as kp:
-                self.assertFalse(procs.send_group(w.pid, 9, pid=w.pid, start="not when it started"))  # pid reused
-                self.assertFalse(procs.send_group(os.getpgid(w.pid), 9, pid=os.getpid(), start=""))   # not in that group
-                kp.assert_not_called()
-            self.assertTrue(procs.send_group(w.pid, 9, pid=w.pid, start=tl.proc_start(w.pid)))
-        finally:
-            w.kill()
-            w.wait()
-
-    def test_stop_named_with_a_worker_naming_our_own_group_leaves_the_runner_alone(self):
-        p = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], start_new_session=True)
-        w = {"pid": os.getpid(), "pgid": os.getpgrp(), "start": tl.proc_start(os.getpid())}
-        try:
-            with mock.patch.object(procs, "STOP_GRACE", 1):
-                procs.stop_named(p, None, w)  # a route.py that names the runner as its worker
-        finally:
-            p.kill()
-            p.wait()
-
     def test_stop_server_never_stops_the_calling_process(self):
         v = {"version": "1", "pid": os.getpid(), "urls": [], "started": 0}
-        with mock.patch.object(tl.os, "kill") as k, mock.patch.object(tl, "ping", return_value=None):
+        with mock.patch.object(tl.sproc, "stop_pid") as stop, mock.patch.object(tl, "ping", return_value=None):
             tl.stop_server(v)
-        k.assert_not_called()
+        stop.assert_not_called()
 
     def test_run_main_leaves_no_sigterm_handler_behind(self):
         before = signal.getsignal(signal.SIGTERM)

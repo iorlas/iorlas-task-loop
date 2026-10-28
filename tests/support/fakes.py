@@ -5,7 +5,8 @@ reads what the engine did from `calls` (each write as the argv bd would get, in 
 from contextlib import contextmanager
 from pathlib import Path
 
-import delegate_link as dl
+import support.paths  # noqa: E402,F401
+from taskloop.adapters import delegate as dl
 from taskloop.adapters import bd
 from taskloop.contracts.bead import Bead, Comment
 from taskloop.contracts.ports import BdFailure, BeadQuery
@@ -149,6 +150,6 @@ class FakeRouter(FixedRoute):
         super().__init__(resolved, script)
         self.runners = []  # (idle, wall) per runner handed out
 
-    def runner(self, log_path, idle=None, wall=None):
+    def runner(self, log_path, idle=None, wall=None, live="", on_worker=None):
         self.runners.append((idle, wall))
         return self.process
