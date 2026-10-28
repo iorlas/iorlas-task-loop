@@ -201,7 +201,7 @@ class RegisterCLI(Base):
 
 class UsageCLI(Base):
     def test_usage_feeds_the_installed_delegate(self):
-        d = self.home / ".claude/plugins/cache/m/iorlas-delegate/0.15.0/skills/delegate"
+        d = self.home / ".claude/plugins/cache/iorlas-marketplace/iorlas-delegate/0.15.0/skills/delegate"
         d.mkdir(parents=True)
         (d / "route.py").write_text(
             "import json,sys\nopen(%r,'w').write(json.dumps(sys.argv[1:]))\n"

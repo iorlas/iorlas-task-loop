@@ -346,6 +346,7 @@ container); the session that starts it only watches it.
   (exit 2); a landing ends the run, parks and pauses never count. `taken` (another live session holds it) → the next
   bead, that one again in 15 minutes. A bead a gone run left assigned (a pause keeps the bead open and assigned) is
   released first, as run-task does.
+- **Brief:** `tl status --brief [--json]`: first line says loop RUNNING or NOT RUNNING and when it last did anything, then asks, slots, versions and the last beads, at most 40 lines. `tl handoff show` prints the handoff a compaction hands on (the plugin's hooks write and inject it).
 - **Watch:** `tl loop status [--last N]`: per live loop its pid, the bead running now, its slot and since when, then one line per
   finished bead (outcome, minutes, rounds, tests added, ask, trace id). Each live loop also writes its `LoopState`
   (`<repo>-<hash>.<pid>.json`) every pass, with the queue it ranked and why each skipped bead was skipped; the dashboard's

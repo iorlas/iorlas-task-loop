@@ -255,6 +255,10 @@ def repo_of(a: Any) -> str:
     return a.repo or hook_wire.main_checkout(str(Path.cwd()))
 
 
+def v_doctor(a: Any, c: Ctx) -> int:
+    return doctor.run(c.here.parents[1])
+
+
 def v_status(a: Any, c: Ctx) -> int:
     return status.run_status(repo_of(a), c.here.parents[1], c.now(), a.json)
 
@@ -277,7 +281,7 @@ VERBS: Final[dict[str, Handler]] = {
     "dash": of_args(dash_server.run, "op"),
     "pin": of_args(pins.run_pin, "version", "delegate", "clear"),
     "rollback": of_args(pins.run_rollback),
-    "doctor": of_args(doctor.run),
+    "doctor": v_doctor,
     "slot": v_slot,
     "ask": v_ask, "answer": v_ask, "hint": v_ask, "hold": v_ask, "override": v_ask,
     "reflect": lazy("reflect_digest", "cmd_reflect"),

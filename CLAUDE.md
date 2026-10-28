@@ -86,5 +86,5 @@ agent-runs), its one reader, and how delegate connects (worker-run v1, agent-run
   Only the contract is shared: never read delegate's files or call anything but `route.py run` and `status`.
 - Never touch a transcript or another tool's state: the dashboard reads, `tl.py` writes only `~/.config/task-loop` and bd.
 - Release only through `python3 dev/release.py "message" [--bead ID --reason R] [--from-branch B]`: it takes the
-  release lock, bumps `.claude-plugin/plugin.json` from origin/main and the iorlas-marketplace entry, runs the suite,
+  release lock, works in its own persistent clone (`<config>/release/`; the main checkout is never touched), bumps `.claude-plugin/plugin.json` from origin/main and the iorlas-marketplace entry, runs the suite,
   pushes and installs. Never bump a version by hand.

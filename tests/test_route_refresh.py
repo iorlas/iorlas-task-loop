@@ -40,7 +40,7 @@ class RouteRefresh(unittest.TestCase):
 
     def install(self, v, contract=C3, record=True):
         """A delegate version in the cache; `record` makes it the one installed_plugins.json names (the installed one)."""
-        root = Path(self.home.name, ".claude/plugins/cache/m/iorlas-delegate", v)
+        root = Path(self.home.name, ".claude/plugins/cache/iorlas-marketplace/iorlas-delegate", v)
         p = root / "skills/delegate"
         p.mkdir(parents=True, exist_ok=True)
         (p / "route.py").write_text("")

@@ -11,9 +11,10 @@ from pathlib import Path
 from taskloop.adapters import beadtools, gitrepo, landlock
 from taskloop.adapters.ident import config_dir
 from taskloop.adapters.versionfile import NoVersion, set_version
-from taskloop.app.release import clone, publish, suite
+from taskloop.app.release import clone, manifest, publish, suite
 from taskloop.app.release.push import push_main, release_lock_path
 from taskloop.app.release.shell import Abort, git, say
+from taskloop.contracts.ids import MARKETPLACE
 from taskloop.contracts.ports import BdFailure, Beads
 
 
@@ -49,7 +50,8 @@ def bump_and_commit(tool_root: Path, where: Path, req: Request) -> str:
         f.write_text(set_version(f.read_text(encoding="utf-8"), version), encoding="utf-8")
     except NoVersion as e:
         raise Abort(str(e)) from None
-    git(where, "add", publish.PLUGIN)
+    manifest.write(where, git(where, "ls-files").splitlines())  # after the bump: it lists plugin.json as it ships
+    git(where, "add", publish.PLUGIN, manifest.NAME)
     git(where, "commit", "-q", "-m", f"{version}: {req.message}{publish.TRAILER}")
     suite.verify(tool_root, where)
     return version
@@ -114,7 +116,7 @@ def main(argv: list[str] | None, tool_root: Path, doc: str = "") -> int:
     ap.add_argument("--from-branch", default="", help="replay this branch's commits on origin/main in the release clone")
     ap.add_argument("--minor", action="store_true", help="bump the minor version, not the patch")
     ap.add_argument("--repo", default=gitrepo.repo_root(str(tool_root)), help="the main checkout (default: this repo's)")
-    ap.add_argument("--marketplace", default=str(Path.home() / "Workspaces" / publish.MARKETPLACE))
+    ap.add_argument("--marketplace", default=str(Path.home() / "Workspaces" / MARKETPLACE))
     a = ap.parse_args(argv)
     req = Request(a.message, a.bead, a.reason, a.from_branch, a.minor)
     repo, market = Path(gitrepo.repo_root(a.repo)), Path(a.marketplace)

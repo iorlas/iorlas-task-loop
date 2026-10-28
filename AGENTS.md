@@ -13,6 +13,21 @@ This project uses **bd** (beads) for issue tracking. Run `bd prime` for full wor
 > source of truth; don't `bd import` during normal operation; don't
 > reach for third-party Dolt hosting before trying the default).
 
+## Ownership
+
+`tl doctor` fails when this section is missing from the installed plugin's AGENTS.md.
+
+| what | who may write it | never |
+|---|---|---|
+| the main checkout of a repo | the person; `dev/release.py` never touches it | an agent's hand edit, a release |
+| a plugin cache dir (`~/.claude/plugins/cache/...`) | `claude plugin update`, driven by `dev/release.py` | any edit, by anyone: a flipped byte shows in `tl doctor` against MANIFEST.sha256 |
+| the release clone (`<config>/release/`) | `dev/release.py` | anything else |
+| `pinned.json` | `tl pin` and `tl rollback`, the owner's override | the loop, an engine, an agent |
+| ports (slots, worktrees, the dashboard server) | `tl slot`, `tl worktree`, `tl dash` | killing a process by name: no `pkill`/`killall`, only a PID you confirmed is yours |
+| a bead's state | `tl` (the actor) | prose in a comment; only typed verbs act |
+
+Work in a worktree. Fork a session only for read-only work of 4 hours or less; otherwise start a fresh one with a written brief.
+
 ## Quick Reference
 
 ```bash

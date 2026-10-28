@@ -8,6 +8,7 @@ from taskloop.adapters.beadtools import bd_store
 from taskloop.adapters.gitrepo import git as real_git
 from taskloop.adapters.ident import config_dir
 from taskloop.app.doctor import profiles
+from taskloop.app.release import catalog, manifest
 from taskloop.app.wire.slots import Git, cfg_source
 from taskloop.contracts.config import RepoProfile
 from taskloop.contracts.paths import ConfigDir
@@ -57,7 +58,27 @@ def bead_lint_warnings(repo: str, store: Beads | None = None) -> list[str]:
     return out
 
 
-def run() -> int:
+OWNERSHIP = "## Ownership"
+
+
+def install_problems(plugin_root: Path) -> list[str]:
+    """What is wrong with the plugin install this tl runs from and the one Claude Code records as installed: a file that differs from
+    MANIFEST.sha256 (named), an AGENTS.md without its ownership section. A source checkout has no manifest and is checked for none."""
+    out: list[str] = []
+    try:
+        agents = (plugin_root / "AGENTS.md").read_text(encoding="utf-8")
+    except OSError:
+        agents = ""
+    if OWNERSHIP not in agents.splitlines():
+        out.append(f"{plugin_root / 'AGENTS.md'} has no '{OWNERSHIP}' section (who may write the checkout, the cache, the ports)")
+    version = catalog.installed_version("task-loop")
+    installed = catalog.cache_dirs("task-loop").get(version)
+    if installed:
+        out += [f"installed task-loop {version}: {p}" for p in manifest.verify(installed)]
+    return out
+
+
+def run(plugin_root: Path) -> int:
     repo = real_git("rev-parse", "--show-toplevel") or os.getcwd()
     if profiles.report(repo, ConfigDir(config_dir()).repos()):  # a bad profile is a red row of its repo, not a traceback
         return 1
@@ -69,9 +90,12 @@ def run() -> int:
     print(f"contracts: {Path(contracts.__file__).resolve().parent}")
     for w in warns:
         print("WARN " + w)
-    if not warns:
+    fails = install_problems(plugin_root)
+    for p in fails:
+        print("FAIL " + p)
+    if not warns and not fails:
         print("ok: no setup problems found in " + repo)
-    return 0
+    return 1 if fails else 0
 
 
 

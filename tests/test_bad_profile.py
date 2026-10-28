@@ -18,6 +18,7 @@ from taskloop.app.wire import doctor  # noqa: E402
 from taskloop.adapters import ident
 from taskloop.app.doctor import profiles  # noqa: E402
 
+ROOT = Path(__file__).resolve().parents[1]
 GIT_ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.invalid", "GIT_COMMITTER_NAME": "t",
            "GIT_COMMITTER_EMAIL": "t@example.invalid", "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
 
@@ -27,7 +28,7 @@ class BadProfile(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name).resolve()
-        patch = mock.patch.dict(os.environ, dict(GIT_ENV, XDG_CONFIG_HOME=str(root / "cfg")))
+        patch = mock.patch.dict(os.environ, dict(GIT_ENV, XDG_CONFIG_HOME=str(root / "cfg"), CLAUDE_CONFIG_DIR=str(root / "claude")))
         patch.start()
         self.addCleanup(patch.stop)
         self.good, self.bad = root / "good", root / "bad"
@@ -40,13 +41,13 @@ class BadProfile(unittest.TestCase):
         cfg.mkdir(parents=True)
         (cfg / "repos.json").write_text(json.dumps({str(self.good): {}, str(self.bad): {}}))
 
-    def doctor(self, repo: Path) -> tuple[int, str]:
+    def doctor(self, repo: Path, plugin_root: Path = ROOT) -> tuple[int, str]:
         out = io.StringIO()
         old = os.getcwd()
         os.chdir(repo)
         try:
             with contextlib.redirect_stdout(out):
-                rc = doctor.run()
+                rc = doctor.run(plugin_root)
         finally:
             os.chdir(old)
         return rc, out.getvalue()
@@ -63,6 +64,14 @@ class BadProfile(unittest.TestCase):
         self.assertEqual(rc, 0, text)
         self.assertIn(f"RED {self.bad}", text)
         self.assertNotIn("Traceback", text)
+
+    def test_doctor_fails_with_a_FAIL_line_when_the_plugin_has_no_ownership_section(self) -> None:
+        bare = self.good.parent / "plugin"
+        bare.mkdir()
+        (bare / "AGENTS.md").write_text("# no section\n")
+        rc, text = self.doctor(self.good, bare)
+        self.assertEqual(rc, 1)
+        self.assertRegex(text, r"(?m)^FAIL .*Ownership")
 
     def test_doctor_in_the_bad_repo_is_a_row_and_exit_1_not_a_traceback(self) -> None:
         rc, text = self.doctor(self.bad)

@@ -5,11 +5,11 @@ from pathlib import Path
 from taskloop.adapters.ident import claude_dir
 from taskloop.adapters.versionfile import NoVersion, entry_offset, set_version
 from taskloop.app.release.shell import REAL, Abort, Shell
+from taskloop.contracts.ids import MARKETPLACE
 
 PLUGIN = ".claude-plugin/plugin.json"
 MARKET = ".claude-plugin/marketplace.json"
 NAME = "iorlas-task-loop"
-MARKETPLACE = "iorlas-marketplace"
 TRAILER = "\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 

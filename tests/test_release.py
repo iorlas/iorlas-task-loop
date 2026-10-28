@@ -14,6 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from taskloop.adapters.suiteout import failure_report  # noqa: E402
+from taskloop.app.release import manifest  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 RELEASE = ROOT / "dev" / "release.py"
@@ -414,6 +415,17 @@ class Release(unittest.TestCase):
         self.assertEqual(self.version(self.origin)["version"], "0.1.2")
         self.assertEqual(self.market_versions()["iorlas-task-loop"], "0.1.2")
         self.assertEqual(self.git("status", "--porcelain", cwd=self.repo), "")
+
+    def test_a_release_commits_a_manifest_that_matches_exactly_what_it_pushed(self):
+        r = self.release("with manifest")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        out = self.home / "shipped"
+        self.git("clone", "-q", str(self.origin), str(out), cwd=self.home)
+        self.assertEqual(manifest.verify(out), [])
+        listed = {line.split("  ", 1)[1] for line in (out / manifest.NAME).read_text().splitlines()}
+        self.assertEqual(listed, {PLUGIN, ".gitignore", "tests/test_ok.py"})
+        (out / "tests" / "test_ok.py").write_text("changed")
+        self.assertEqual(manifest.verify(out), ["tests/test_ok.py differs from MANIFEST.sha256"])
 
     def test_minor_bumps_the_minor_and_resets_the_patch(self):
         r = self.release("new feature", "--minor")

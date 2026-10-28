@@ -75,6 +75,9 @@ class Version(tuple[int, ...]):
         return ".".join(str(n) for n in self)
 
 
+MARKETPLACE = "iorlas-marketplace"  # the only marketplace a plugin cache dir may come from
+
+
 def repo_key(common_dir: str) -> str:
     """The 12-hex key of a repository: sha1 of its git common dir."""
     return hashlib.sha1(common_dir.encode("utf-8")).hexdigest()[:12]

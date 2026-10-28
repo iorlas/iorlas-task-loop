@@ -19,6 +19,7 @@ from typing import Any
 
 from taskloop.adapters import delegate_wire, procs
 from taskloop.contracts.delegate import REASON_TIMEOUT, DelegateResult, RunRequest
+from taskloop.contracts.ids import MARKETPLACE
 
 CONTRACT = delegate_wire.CONTRACT  # the contract number this engine speaks
 NODE_MARGIN_S = 180  # --timeout passed = the node's limit minus this
@@ -112,7 +113,7 @@ def resolve(path: str = "", pinned: Path | None = None, installed: Path | None =
 
 def find_route(path: str, pinned: Path | None, cache: Path, installed: Path | None = None) -> str | None:
     """delegate's route.py: `path` when given, else the pinned dir's (None when that dir is gone: a pin never falls back), else the
-    install installed_plugins.json records (`installed`), else the newest under `cache` (<claude>/plugins/cache)."""
+    install installed_plugins.json records (`installed`), else the newest under `cache` (<claude>/plugins/cache) of our marketplace only."""
     if path:
         return path if os.path.exists(path) else None
     if pinned:
@@ -121,7 +122,7 @@ def find_route(path: str, pinned: Path | None, cache: Path, installed: Path | No
     if installed and (installed / "skills" / "delegate" / "route.py").is_file():
         return str(installed / "skills" / "delegate" / "route.py")
     found = []
-    for p in cache.glob("*/iorlas-delegate/*/skills/delegate/route.py"):
+    for p in cache.glob(f"{MARKETPLACE}/iorlas-delegate/*/skills/delegate/route.py"):
         found.append((tuple(int(x) for x in p.parents[2].name.split(".") if x.isdigit())[:3], str(p)))
     return max(found)[1] if found else None
 
