@@ -29,6 +29,11 @@ import engine  # noqa: E402  (test_loop put skills/task-loop on sys.path)
 import loop_env  # noqa: E402
 from taskloop.app.loop.take import Taker  # noqa: E402
 import tl  # noqa: E402
+from taskloop.app.slots import engine_lock
+from taskloop.adapters import ident
+from taskloop.adapters import pidcheck
+import dash_server  # noqa: E402
+from taskloop.app.wire import slots as wslots
 from support.fakes import as_bead  # noqa: E402
 from taskloop.app.slots import marks  # noqa: E402
 from taskloop.contracts.config import SlotsConfig  # noqa: E402
@@ -42,6 +47,13 @@ NO_FCNTL = unittest.skipIf(os.name == "nt", "the lock is fcntl; tl has none on W
 
 def sleeper():
     return subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+
+
+class ExplodingGit:
+    """The slot's git port when the code under test must not touch the slot."""
+
+    def __getattr__(self, name):
+        raise AssertionError("git ran in a live slot: " + name)
 
 
 class Slots(LoopBase):
@@ -63,7 +75,7 @@ class Slots(LoopBase):
     def live_lock(self, n, bead="x-9"):
         k = sleeper()
         self.kids.append(k)
-        f = tl.engine_lock_path(self.slot(n))
+        f = engine_lock.engine_lock_path(self.slot(n))
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text(json.dumps({"pid": k.pid, "bead": bead, "started": time.time()}))
         return k
@@ -72,7 +84,7 @@ class Slots(LoopBase):
         out = io.StringIO()
         with redirect_stdout(out):
             try:
-                rc = tl.main(list(args))
+                rc = self.main(list(args))
             except SystemExit as e:
                 rc = e.code
         return rc, out.getvalue()
@@ -89,7 +101,7 @@ class Slots(LoopBase):
         made.return_value.log_path = Path(self.home, "e.jsonl")
         out = io.StringIO()
         with mock.patch.dict(os.environ, env), mock.patch.object(engine, "reclaim", return_value=(True, "")), \
-                mock.patch.object(tl, "cmd_claim", return_value=0), mock.patch.object(engine, "Engine", made), \
+                mock.patch.object(engine, "Engine", made), \
                 mock.patch.object(signal, "signal"), redirect_stdout(out):
             rc = engine.main(a)
         self.made = made
@@ -116,9 +128,9 @@ class RunTaskTakesItsSlot(Slots):
         seen = {}
 
         def during():  # the loop starts while the hand run is mid-bead (2026-10-21 18:17)
-            bd.beads["x-1"].update(status="in_progress", assignee=tl.actor())  # run-task's claim (stubbed here)
+            bd.beads["x-1"].update(status="in_progress", assignee=ident.actor())  # run-task's claim (stubbed here)
             seen["slot"] = dict(bd.slots["sl-1"])
-            seen["lock"] = tl.engine_lock_path(self.slot("s1")).exists()
+            seen["lock"] = engine_lock.engine_lock_path(self.slot("s1")).exists()
             seen["env"] = os.environ.get("TASK_LOOP_SLOT_BEAD")
             seen["list"] = self.cli("slot", "list")[1]
             with mock.patch.dict(os.environ, {"TASK_LOOP_ACTOR": "tl-loop0000"}):
@@ -126,14 +138,14 @@ class RunTaskTakesItsSlot(Slots):
             return 0
         rc, r, _ = self.run_task("x-1", slot="s1", worktree=self.slot("s1"), engine_run=during)
         self.assertEqual(rc, 0)
-        self.assertEqual((seen["slot"]["status"], seen["slot"]["assignee"]), ("in_progress", tl.actor()))
+        self.assertEqual((seen["slot"]["status"], seen["slot"]["assignee"]), ("in_progress", ident.actor()))
         self.assertTrue(seen["lock"])
         self.assertEqual(seen["env"], "sl-1")  # the engine heartbeats it
         self.assertIn("run-task x-1", seen["list"])
         self.assertEqual(self.started, [("x-2", "s2")])
         # released at the end, the lock gone
         self.assertEqual((bd.slots["sl-1"]["status"], bd.slots["sl-1"]["assignee"]), ("open", ""))
-        self.assertFalse(tl.engine_lock_path(self.slot("s1")).exists())
+        self.assertFalse(engine_lock.engine_lock_path(self.slot("s1")).exists())
 
     def test_slot_alone_runs_in_the_slots_worktree(self):
         self.beads({"x-1": []})
@@ -174,11 +186,11 @@ class RunTaskTakesItsSlot(Slots):
         self.assertNotEqual(rc, 0)
         self.assertEqual(json.loads(f.read_text())["outcome"], "failed")
         self.assertEqual(bd.slots["sl-1"]["status"], "open")
-        self.assertFalse(tl.engine_lock_path(self.slot("s1")).exists())
+        self.assertFalse(engine_lock.engine_lock_path(self.slot("s1")).exists())
 
     def test_a_run_the_loop_started_does_not_take_or_release_the_slot_again(self):
         bd = self.beads({"x-1": []})
-        bd.slots["sl-1"].update(status="in_progress", assignee=tl.actor())
+        bd.slots["sl-1"].update(status="in_progress", assignee=ident.actor())
         self.run_task("x-1", slot="s1", TASK_LOOP_SLOT_BEAD="sl-1")
         self.assertEqual(bd.slots["sl-1"]["status"], "in_progress")
         self.assertNotIn(("unclaim", "sl-1"), bd.calls)
@@ -191,7 +203,7 @@ class RunTaskTakesItsSlot(Slots):
         self.assertEqual(r["outcome"], "taken")
         self.assertIn("pid %d" % k.pid, r["why"])
         self.made.assert_not_called()
-        self.assertTrue(tl.engine_lock_path(self.slot("s1")).exists())  # never removes another run's lock
+        self.assertTrue(engine_lock.engine_lock_path(self.slot("s1")).exists())  # never removes another run's lock
 
     def test_a_dead_engines_lock_is_no_obstacle(self):
         self.beads({"x-1": []})
@@ -214,24 +226,22 @@ class LiveEngineBackstop(Slots):
         self.beads({"x-1": [rec("landed")]})
         k = sleeper()
         self.kids.append(k)
-        f = tl.engine_lock_path(self.slot("s1"))
+        f = engine_lock.engine_lock_path(self.slot("s1"))
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text(json.dumps({"pid": 0, "bead": "x-0", "workers": [k.pid]}))
-        self.assertIn(str(k.pid), tl.engine_busy(self.slot("s1")))
+        self.assertIn(str(k.pid), engine_lock.engine_busy(self.slot("s1")))
         self.run_loop("--max-beads", "1")
         self.assertEqual(self.started, [("x-1", "s2")])
 
     def test_slot_reset_never_touches_a_slot_with_a_live_engine(self):
         self.beads({"x-1": []})
         self.live_lock("s1")
-        with mock.patch.object(tl, "git", side_effect=AssertionError("git ran in a live slot")):
-            rc, out = self.cli("slot", "reset", "s1", "--bead", "x-1")
+        rc, out = self.cli("slot", "reset", "s1", "--bead", "x-1")
         self.assertEqual(rc, 4)
         self.assertIn("BUSY", out)
-        senv = loop_env.build(str(self.repo)).slot_env()  # the profile read is git too: read it before the patch
+        senv = dataclasses.replace(loop_env.build(str(self.repo)).slot_env(), git=ExplodingGit())  # pyrefly: ignore[bad-argument-type]  # any git in the live slot fails the test
         env = dataclasses.replace(loop_env.build(str(self.repo)), slot_env=lambda: senv)
-        with mock.patch.object(tl, "git", side_effect=AssertionError("git ran in a live slot")), \
-                redirect_stdout(io.StringIO()):
+        with redirect_stdout(io.StringIO()):
             self.assertIsNotNone(REAL_PREPARE(Taker(env, mock.Mock(), mock.Mock(), mock.Mock(), mock.Mock(), {}), "s1", "x-1"))
 
     def test_slot_list_shows_the_live_engine(self):
@@ -246,30 +256,28 @@ class LiveEngineBackstop(Slots):
 class Hold(Slots):
     def test_a_hold_is_skipped_by_the_loop_shown_in_list_and_expires(self):
         bd = self.beads({"x-1": [rec("landed")], "x-2": [rec("landed")]})
-        t = [time.time()]
-        with mock.patch.object(tl, "now", lambda: t[0]):
-            rc, out = self.cli("slot", "hold", "s1", "--why", "screenshots for the owner", "--for", "30")
-            self.assertEqual(rc, 0, out)
-            bd.slots["sl-1"].update(status="open", assignee="")  # a lapsed lease does not end a hold
-            listing = self.cli("slot", "list")[1]
-            self.assertIn("screenshots for the owner", listing)
-            self.assertIn(tl.actor(), [ln for ln in listing.splitlines() if ln.startswith("s1")][0])
-            self.run_loop("--max-beads", "1")
-            self.assertEqual(self.started, [("x-1", "s2")])
-            t[0] += 31 * 60  # expired
-            self.run_loop("--max-beads", "1")
+        self.clock.t = time.time()  # hold deadlines are real epoch seconds
+        rc, out = self.cli("slot", "hold", "s1", "--why", "screenshots for the owner", "--for", "30")
+        self.assertEqual(rc, 0, out)
+        bd.slots["sl-1"].update(status="open", assignee="")  # a lapsed lease does not end a hold
+        listing = self.cli("slot", "list")[1]
+        self.assertIn("screenshots for the owner", listing)
+        self.assertIn(ident.actor(), [ln for ln in listing.splitlines() if ln.startswith("s1")][0])
+        self.run_loop("--max-beads", "1")
+        self.assertEqual(self.started, [("x-1", "s2")])
+        self.clock.t += 31 * 60  # expired
+        self.run_loop("--max-beads", "1")
         self.assertEqual(self.started[-1], ("x-2", "s1"))
 
     def test_hold_default_is_an_hour_and_renewing_extends_it(self):
         bd = self.beads({})
-        t = [1_800_000_000.0]
-        with mock.patch.object(tl, "now", lambda: t[0]):
-            self.cli("slot", "hold", "s1", "--why", "a person")
-            until = float(bd.slots["sl-1"]["metadata"]["hold_until"])
-            self.assertAlmostEqual(until - t[0], 3600, delta=1)
-            t[0] += 1800
-            self.assertEqual(self.cli("slot", "hold", "s1", "--why", "a person")[0], 0)
-            self.assertAlmostEqual(float(bd.slots["sl-1"]["metadata"]["hold_until"]) - t[0], 3600, delta=1)
+
+        self.cli("slot", "hold", "s1", "--why", "a person")
+        until = float(bd.slots["sl-1"]["metadata"]["hold_until"])  # pyrefly: ignore[bad-index]
+        self.assertAlmostEqual(until - self.clock.t, 3600, delta=1)
+        self.clock.t += 1800
+        self.assertEqual(self.cli("slot", "hold", "s1", "--why", "a person")[0], 0)
+        self.assertAlmostEqual(float(bd.slots["sl-1"]["metadata"]["hold_until"]) - self.clock.t, 3600, delta=1)  # pyrefly: ignore[bad-index]
 
     def test_release_ends_a_hold(self):
         bd = self.beads({"x-1": [rec("landed")]})
@@ -305,27 +313,27 @@ class StaleLocks(Slots):
     def test_a_reused_pid_with_another_start_time_is_dead(self):
         k = sleeper()
         self.kids.append(k)
-        f = tl.engine_lock_path(self.slot("s1"))
+        f = engine_lock.engine_lock_path(self.slot("s1"))
         f.parent.mkdir(parents=True)
         f.write_text(json.dumps({"pid": k.pid, "start": "Mon Jan  1 00:00:00 2001", "bead": "x-0"}))
-        self.assertEqual(tl.engine_busy(self.slot("s1")), "")
-        f.write_text(json.dumps({"pid": k.pid, "start": tl.proc_start(k.pid), "bead": "x-0"}))
-        self.assertIn("pid %d" % k.pid, tl.engine_busy(self.slot("s1")))
+        self.assertEqual(engine_lock.engine_busy(self.slot("s1")), "")
+        f.write_text(json.dumps({"pid": k.pid, "start": pidcheck.proc_start(k.pid), "bead": "x-0"}))
+        self.assertIn("pid %d" % k.pid, engine_lock.engine_busy(self.slot("s1")))
         f.write_text(json.dumps({"pid": 0, "workers": [[k.pid, "Mon Jan  1 00:00:00 2001"]]}))
-        self.assertEqual(tl.engine_busy(self.slot("s1")), "")
+        self.assertEqual(engine_lock.engine_busy(self.slot("s1")), "")
 
     def test_a_zombie_is_dead(self):
         z = subprocess.Popen([sys.executable, "-c", "pass"])
         try:
             for _ in range(100):
-                if not tl.pid_alive(z.pid):
+                if not pidcheck.pid_alive(z.pid):
                     break
                 time.sleep(0.05)
-            self.assertFalse(tl.pid_alive(z.pid))  # exited and not yet reaped: stream-proc reads it as gone
-            f = tl.engine_lock_path(self.slot("s1"))
+            self.assertFalse(pidcheck.pid_alive(z.pid))  # exited and not yet reaped: stream-proc reads it as gone
+            f = engine_lock.engine_lock_path(self.slot("s1"))
             f.parent.mkdir(parents=True)
             f.write_text(json.dumps({"pid": z.pid, "bead": "x-0"}))
-            self.assertEqual(tl.engine_busy(self.slot("s1")), "")
+            self.assertEqual(engine_lock.engine_busy(self.slot("s1")), "")
         finally:
             z.wait()
 
@@ -334,15 +342,15 @@ class StaleLocks(Slots):
         k = self.live_lock("s1")
         rc, out = self.cli("slot", "reset", "s1")
         self.assertEqual(rc, 4)
-        self.assertIn(str(tl.engine_lock_path(self.slot("s1"))), out)
+        self.assertIn(str(engine_lock.engine_lock_path(self.slot("s1"))), out)
         self.assertIn(str(k.pid), out)
         rc, out = self.cli("slot", "reset", "s1", "--force")
         self.assertNotEqual(rc, 4)
         self.assertIn("FORCED", out)
-        self.assertFalse(tl.engine_lock_path(self.slot("s1")).exists())
+        self.assertFalse(engine_lock.engine_lock_path(self.slot("s1")).exists())
         self.live_lock("s2")
         self.assertEqual(self.cli("slot", "release", "s2", "--force")[0], 0)
-        self.assertFalse(tl.engine_lock_path(self.slot("s2")).exists())
+        self.assertFalse(engine_lock.engine_lock_path(self.slot("s2")).exists())
 
 
 class SameActor(Slots):
@@ -350,12 +358,12 @@ class SameActor(Slots):
 
     def test_a_held_slot_bead_is_refused_to_its_own_actor_unless_it_is_the_runs_own_slot_bead(self):
         bd = self.beads({"x-1": []})
-        bd.slots["sl-1"].update(status="in_progress", assignee=tl.actor(),
-                                metadata={"held_by": tl.actor(), "held_since": "2026-10-21T18:17:00",
+        bd.slots["sl-1"].update(status="in_progress", assignee=ident.actor(),
+                                metadata={"held_by": ident.actor(), "held_since": "2026-10-21T18:17:00",
                                           "held_why": "tl loop"})
         rc, r, _ = self.run_task("x-1", slot="s1")
         self.assertEqual(r["outcome"], "taken")
-        self.assertIn("slot s1 held by %s since 2026-10-21T18:17:00 (tl loop)" % tl.actor(), r["why"])
+        self.assertIn("slot s1 held by %s since 2026-10-21T18:17:00 (tl loop)" % ident.actor(), r["why"])
         rc, r, _ = self.run_task("x-1", slot="s1", TASK_LOOP_SLOT_BEAD="sl-2")  # another slot's bead: no pass
         self.assertEqual(r["outcome"], "taken")
         rc, r, _ = self.run_task("x-1", slot="s1", TASK_LOOP_SLOT_BEAD="sl-1")
@@ -379,12 +387,12 @@ class SameActor(Slots):
         seen = {}
 
         def reset(taker, slot, bead_id):
-            seen["lock"] = tl.read_engine_lock(self.slot(slot))
+            seen["lock"] = engine_lock.read_engine_lock(self.slot(slot))
             hand = os.getpid() + 1  # another process of this very session (same actor)
             with mock.patch.dict(os.environ, {"TASK_LOOP_SLOT_BEAD": ""}), mock.patch.object(os, "getpid", return_value=hand):
                 bd.slots["sl-1"]["status"] = "open"  # even were its bead open
                 rc, r, _ = self.run_task("x-2", worktree=self.slot(slot))
-                bd.slots["sl-1"].update(status="in_progress", assignee=tl.actor())
+                bd.slots["sl-1"].update(status="in_progress", assignee=ident.actor())
             seen["hand"] = r
         with mock.patch.object(Taker, "prepare", reset):
             self.run_loop("--max-beads", "1")
@@ -392,16 +400,16 @@ class SameActor(Slots):
                          ("loop", os.getpid(), "sl-1"))
         self.assertEqual(seen["hand"]["outcome"], "taken")
         self.assertIn("loop pid %d" % os.getpid(), seen["hand"]["why"])
-        self.assertFalse(tl.engine_lock_path(self.slot("s1")).exists())
+        self.assertFalse(engine_lock.engine_lock_path(self.slot("s1")).exists())
 
     def test_the_loops_child_takes_over_its_lock_and_nobody_else_does(self):
-        tl.write_engine_lock(self.slot("s1"), {"pid": os.getppid(), "start": tl.proc_start(os.getppid()), "by": "loop",
+        engine_lock.write_engine_lock(self.slot("s1"), {"pid": os.getppid(), "start": pidcheck.proc_start(os.getppid()), "by": "loop",
                                                "slot_bead": "sl-1"})
         with mock.patch.dict(os.environ, {"TASK_LOOP_SLOT_BEAD": "sl-1"}):
-            self.assertEqual(tl.engine_busy(self.slot("s1"), handoff=True), "")
-            self.assertTrue(tl.engine_busy(self.slot("s1")))
+            self.assertEqual(engine_lock.engine_busy(self.slot("s1"), handoff=True), "")
+            self.assertTrue(engine_lock.engine_busy(self.slot("s1")))
         with mock.patch.dict(os.environ, {"TASK_LOOP_SLOT_BEAD": "sl-2"}):
-            self.assertTrue(tl.engine_busy(self.slot("s1"), handoff=True))
+            self.assertTrue(engine_lock.engine_busy(self.slot("s1"), handoff=True))
 
 
 class HoldRaces(Slots):
@@ -415,13 +423,12 @@ class HoldRaces(Slots):
 
     def test_an_expired_hold_gives_the_slot_bead_back(self):
         bd = self.beads({"x-1": [rec("landed")]})
-        t = [time.time()]
-        with mock.patch.object(tl, "now", lambda: t[0]):
-            with mock.patch.dict(os.environ, {"TASK_LOOP_ACTOR": "tl-denis000"}):
-                self.cli("slot", "hold", "s1", "--why", "a person", "--for", "10")
-            self.assertEqual((bd.slots["sl-1"]["status"], bd.slots["sl-1"]["assignee"]), ("in_progress", "tl-denis000"))
-            t[0] += 11 * 60
-            self.run_loop("--max-beads", "1")
+        self.clock.t = time.time()  # hold deadlines are real epoch seconds
+        with mock.patch.dict(os.environ, {"TASK_LOOP_ACTOR": "tl-denis000"}):
+            self.cli("slot", "hold", "s1", "--why", "a person", "--for", "10")
+        self.assertEqual((bd.slots["sl-1"]["status"], bd.slots["sl-1"]["assignee"]), ("in_progress", "tl-denis000"))
+        self.clock.t += 11 * 60
+        self.run_loop("--max-beads", "1")
         self.assertEqual(self.started, [("x-1", "s1")])
 
     def test_releasing_a_slot_claimed_by_another_actor_frees_the_claim_too(self):
@@ -429,9 +436,9 @@ class HoldRaces(Slots):
         bd = self.beads({})
         self.assertTrue(sl.take_slot(str(self.repo), SlotsConfig()))
         bd.slots["sl-1"].update(status="in_progress", assignee="tl-551cf8ee")
-        tl.release_slot(str(self.repo), "s1")
+        wslots.release_slot(str(self.repo), "s1")
         self.assertEqual(bd.slots["sl-1"]["assignee"], "tl-551cf8ee")  # without --force another actor's claim is left alone
-        tl.release_slot(str(self.repo), "s1", force=True)
+        wslots.release_slot(str(self.repo), "s1", force=True)
         self.assertEqual((bd.slots["sl-1"]["status"], bd.slots["sl-1"]["assignee"]), ("open", ""))
 
     def test_an_expired_hold_frees_the_claim_of_the_loop_that_held_the_slot(self):
@@ -464,7 +471,7 @@ class HoldRaces(Slots):
                 racing.th = th
             return r
         with tlbd.bd_boundary(racing):
-            tl.release_slot(str(self.repo), "s1")
+            wslots.release_slot(str(self.repo), "s1")
         racing.th.join(10)
         self.assertEqual(holds, [0])
         self.assertEqual(bd.slots["sl-1"]["assignee"], "tl-denis000")
@@ -487,8 +494,8 @@ class NeverSignalOneself(unittest.TestCase):
 
     def test_stop_server_never_stops_the_calling_process(self):
         v = {"version": "1", "pid": os.getpid(), "urls": [], "started": 0}
-        with mock.patch.object(tl.sproc, "stop_pid") as stop, mock.patch.object(tl, "ping", return_value=None):
-            tl.stop_server(v)
+        with mock.patch.object(dash_server.procs, "stop_pid") as stop:
+            dash_server.stop_server(v)
         stop.assert_not_called()
 
     def test_run_main_leaves_no_sigterm_handler_behind(self):

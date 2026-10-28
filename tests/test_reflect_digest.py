@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support import tlbd  # noqa: E402
 import reflect_digest as rd  # noqa: E402
-import tl  # noqa: E402
+from taskloop.adapters import ident
 
 NOW = 1_800_000_000.0
 
@@ -30,14 +30,14 @@ class Base(unittest.TestCase):
         self.env = mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(self.root / "cfg"), "APPDATA": str(self.root / "cfg"),
                                                 "HOME": str(self.root)})
         self.env.start()
-        tl.config_dir().mkdir(parents=True, exist_ok=True)
+        ident.config_dir().mkdir(parents=True, exist_ok=True)
         self.repos = {}
         for n in ("iorlas-task-loop", "iorlas-delegate", "lifesim"):
             d = self.root / n
             (d / ".beads").mkdir(parents=True)
             self.repos[n] = str(d)
-        (tl.config_dir() / "repos.json").write_text(json.dumps(list(self.repos.values())))
-        self.traces = tl.config_dir() / "traces.jsonl"
+        (ident.config_dir() / "repos.json").write_text(json.dumps(list(self.repos.values())))
+        self.traces = ident.config_dir() / "traces.jsonl"
         self.calls, self.open_rows, self.status, self.fail_create = [], [], {}, False
         self.n = 0
         self.patch = tlbd.bd_boundary(self.bd)

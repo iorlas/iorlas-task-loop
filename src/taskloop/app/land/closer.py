@@ -151,7 +151,7 @@ class Closer:
                 e.comment("Land (engine): " + e.unverified_text())
             look = [u for u in e.unchecked if u["kind"] == "other" and not e.is_look(u)]
             if look:
-                self.o.tl.attempt(e.store.add_label, e.bead, "needs-owner-check")
+                self.o.attempt(e.store.add_label, e.bead, "needs-owner-check")
                 e.comment("Look (engine): landed, but nobody checked: " + "; ".join(u["what"] for u in look))
         shots = e.keep_evidence()
         if shots:
@@ -173,17 +173,17 @@ class Closer:
 
     def settle(self, outcome: str, why: str, sha: str, spec: Any, kind: Any, stats: str) -> None:
         """The bead's status: closed (landed or done), left open (a machine fault or a pause) or blocked on the owner."""
-        e, oc, tl = self.e, self.o.oc, self.o.tl
+        e, oc, track = self.e, self.o.oc, self.o.track
         summary = e.plan_summary[:300]
         if outcome == "landed":
             base = e.cfg.base.split("/")[-1]
-            rc = tl.cmd_close(self.o.Args(id=e.bead, reason=f"merged {sha[:12]} to {base}: {summary or 'the task stages passed'}; {stats}"))
+            rc = track.close(e.bead, f"merged {sha[:12]} to {base}: {summary or 'the task stages passed'}; {stats}", e.store)
         elif outcome == "done":
-            rc = tl.cmd_close(self.o.Args(id=e.bead, reason="done with nothing to land: " + (summary or stats)))
+            rc = track.close(e.bead, "done with nothing to land: " + (summary or stats), e.store)
         elif kind and oc.POLICY[kind].bd == "open":  # a machine fault or pause: the bead stays open, unassigned
             rc = self.leave_open(kind, why)
         else:
-            rc = tl.cmd_block(self.o.Args(id=e.bead, why=why + (("\n\nQuestion: " + spec.decision) if spec else "")))
+            rc = track.block(e.bead, why + (("\n\nQuestion: " + spec.decision) if spec else ""), e.store)
         if rc:  # a repo's bd rules can refuse (e.g. a minimum reason length): say so, never report a clean close
             e.warn(f"bd refused to {'block' if outcome not in DONE else 'close'} {e.bead} (exit {rc}): close it by hand")
 
@@ -192,9 +192,9 @@ class Closer:
         fault = kind.name.startswith("FAULT_")
         if not fault:
             e.warn(why)
-        rc = 0 if self.o.tl.attempt(e.store.update, e.bead, BeadPatch(status="open", assignee="")) else 1  # (tl-kwo: it lets go)
+        rc = 0 if self.o.attempt(e.store.update, e.bead, BeadPatch(status="open", assignee="")) else 1  # (tl-kwo: it lets go)
         if oc.POLICY[kind].label:
-            self.o.tl.attempt(e.store.add_label, e.bead, oc.POLICY[kind].label)
+            self.o.attempt(e.store.add_label, e.bead, oc.POLICY[kind].label)
         if e.disp.comment:  # a comment, never Notes (tl-7y6.6.2); one per (bead, kind, fingerprint) per hour
             e.comment("Engine {}: {}".format("failed" if fault else "paused", without_prefix(why)[:400]))
         return rc

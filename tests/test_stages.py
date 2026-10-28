@@ -11,12 +11,13 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "task-loop"))
+import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support import fake_route  # noqa: E402
 from support.checkpoints import put_ck, read_ck  # noqa: E402
 from support import tlbd, tools  # noqa: E402
 from support.fakes import FakeBeadStore, as_bead, must_bead  # noqa: E402
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from taskloop.app.write.handoff import HANDOFF_CAP  # noqa: E402
+from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.domain.plan.matchers import AcceptanceText  # noqa: E402
 from taskloop.contracts.answers import IRREVERSIBLE  # noqa: E402
 from taskloop.domain.prompts.plan import REPLAN_CAP  # noqa: E402
@@ -27,10 +28,12 @@ from taskloop.adapters.check_probe import PathProbe  # noqa: E402
 from taskloop.contracts.argv import argv_of  # noqa: E402
 from taskloop.app.checks import evidence as check_evidence  # noqa: E402
 import test_engine as te  # noqa: E402
-from test_engine import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint, tl  # noqa: E402,F401
+from test_engine import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint  # noqa: E402,F401
+from taskloop.app.slots import engine_lock
+from taskloop.adapters import ident
+from taskloop.adapters import pidcheck
 
 
-_REAL_CMD_BLOCK = tl.cmd_block  # te's harness patches it per test; this is the real one
 
 
 class StagesTest(unittest.TestCase):
@@ -188,7 +191,7 @@ class Scope(StagesTest):
         self.assertIn("Sit To Stand", e.leftovers[0]["title"])
 
     def test_with_no_acceptance_text_nothing_moves(self):
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
+        e = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         item = {"what": "Sit To Stand was not probed", "kind": "checkable"}
         self.assertEqual(e.out_of_scope([item]), [item])
         self.assertEqual(e.leftovers, [])
@@ -241,7 +244,7 @@ class Handoff(StagesTest):
         self.assertIn("rename the helper", reviews[1])
 
     def test_the_rounds_text_keeps_the_newest_within_its_cap(self):
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
+        e = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         for k in range(8):
             e.hand.note_round("stage 1/1", k + 1, "review", "w" * 300, ["x" * 200])
         text = e.hand.rounds_text()
@@ -339,13 +342,13 @@ class SharedNotes(StagesTest):
     def test_a_task_running_in_another_worktree_is_listed_with_its_files(self):
         other = Path(self.tmp.name, "wt2")
         te.sh("git", "worktree", "add", "-q", "--detach", str(other), cwd=self.wt)
-        tl.write_engine_lock(str(other), {"pid": engine.os.getpid(), "start": tl.proc_start(engine.os.getpid()), "bead": "t-2"})
+        engine_lock.write_engine_lock(str(other), {"pid": engine.os.getpid(), "start": pidcheck.proc_start(engine.os.getpid()), "bead": "t-2"})
         put_ck(self.eng_(), "t-2", plan_data={"summary": "tune the soak", "stages": [
             {"goal": "g", "files": ["SoakTests.cs", "justfile"], "checks": [], "hard": False}]})
         got = self.eng_().siblings()
         self.assertEqual(got, [("t-2", "tune the soak", ["SoakTests.cs", "justfile"])])
         self.assertIn("t-2: tune the soak [files: SoakTests.cs, justfile]", self.eng_().shared_text())
-        tl.write_engine_lock(str(other), {"pid": 99999999, "start": "", "bead": "t-2"})  # dead
+        engine_lock.write_engine_lock(str(other), {"pid": 99999999, "start": "", "bead": "t-2"})  # dead
         self.assertEqual(self.eng_().siblings(), [])
 
     def test_a_branch_behind_the_base_is_rebased_before_it_is_planned(self):
@@ -530,7 +533,7 @@ class Executable(StagesTest):
             dict(PLAN["stages"][0], goal="stage two", checks=['test -s %s' % self.PATH1])])
 
     def test_a_file_an_accepted_stage_promised_and_a_later_check_reads(self):
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
+        e = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         plan = self.two_stage()
         self.assertEqual(e.promised_missing(plan, 1), 0)  # stage 1 is accepted, the file is gone, stage 2 reads it
         Path(self.wt, self.PATH1).parent.mkdir(parents=True, exist_ok=True)
@@ -540,30 +543,30 @@ class Executable(StagesTest):
         self.assertIsNone(e.promised_missing(plan, 0))  # nothing accepted yet
 
     def test_a_replanned_runs_goals_survive_the_stage_that_runs_again(self):
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
+        e = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         e.tree.reset(as_bead(BEAD))
         e.plan_data = self.two_stage()
         e.done, e.accepted = ["an earlier plan's goal", "stage one"], [0]
         e.checkpoints.save(stage=1, rounds=0, n=0, feedback="", step="write")
-        again = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
+        again = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         again.tree.reset(as_bead(BEAD))
         again.resume.point()
         self.assertEqual(again.done, ["an earlier plan's goal"])
 
     def test_a_resume_runs_the_stage_again_when_its_file_is_gone(self):
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
+        e = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         e.tree.reset(as_bead(BEAD))
         e.plan_data = self.two_stage()
         e.done, e.accepted = ["stage one"], [0]
         e.checkpoints.save(stage=1, rounds=0, n=0, feedback="", step="write")
-        again = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
+        again = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         again.tree.reset(as_bead(BEAD))
         plan, i, state = again.resume.point()
         self.assertEqual((i, state, again.accepted, again.done), (0, None, [], []))
         self.assertIn("a file stage 1 promised is missing", again.log_path.read_text())
         Path(self.wt, self.PATH1).parent.mkdir(parents=True, exist_ok=True)
         Path(self.wt, self.PATH1).write_text("ok\n")
-        third = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
+        third = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         third.tree.reset(as_bead(BEAD))
         self.assertEqual(third.resume.point()[1], 1)  # the file is there: stage 2 goes on
 
@@ -675,7 +678,7 @@ class Inputs(StagesTest):
         self.assertIn("Windows PC", s.prompts[1])  # the writer reads the plan, assumptions included
 
     def ask(self):
-        p = tl.config_dir() / "asks" / "t-1.json"
+        p = ident.config_dir() / "asks" / "t-1.json"
         return json.loads(p.read_text()) if p.exists() else None
 
     def test_a_plan_question_about_missing_inputs_proceeds_to_write_with_an_assumption(self):

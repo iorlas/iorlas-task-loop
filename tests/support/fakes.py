@@ -84,9 +84,9 @@ class FakeBeadStore:
             return [as_comment(c) for c in self.fns["comments"](bead)]
         return list(self.notes.get(bead, []))
 
-    def find(self, query):
+    def find(self, query: BeadQuery) -> list[Bead]:
         if "find" in self.fns:
-            return [as_bead(b) for b in self.fns["find"](query)]
+            return [b for b in map(as_bead, self.fns["find"](query)) if b]
         return [b for b in self.beads.values() if (b.status != "closed" or query.include_closed) and (not query.status or b.status == query.status)
                 and (not query.label or query.label in b.labels)]
 

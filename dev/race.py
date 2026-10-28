@@ -42,11 +42,15 @@ sys.path.append(str(ROOT / "skills" / "task-loop" / "_vendor"))  # before the sh
 sys.path.append(str(ROOT / "src"))
 import stream_proc  # noqa: E402
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-import tl  # noqa: E402
 import vendored  # noqa: E402,F401
 from process_lock import LockHeldError, ProcessLock  # noqa: E402
 
-from taskloop.app.slots import marks  # noqa: E402
+from taskloop.adapters import ident  # noqa: E402
+from taskloop.app.slots import (  # noqa: E402
+    engine_lock,
+    marks,
+)
+from taskloop.app.wire import slots as wslots  # noqa: E402
 
 PY = sys.executable
 BEADS = ["w-%d" % i for i in range(1, 7)]
@@ -128,7 +132,7 @@ class Race(unittest.TestCase):
         sh("git", "push", "-q", "origin", "HEAD:main", cwd=r, env=env)
         sh("git", "branch", "-q", "--set-upstream-to", "origin/main", cwd=r, env=env)
         sh("git", "config", "core.hooksPath", str(h / "hooks"), cwd=r, env=env)
-        tl.exclude_local(str(r), ".slots/", ".task/")
+        wslots.exclude_local(str(r), ".slots/", ".task/")
         for s in SLOTS:
             sh("git", "worktree", "add", "-q", "--detach", str(r / ".slots" / s), "origin/main", cwd=r, env=env)
         beads = {b: {"id": b, "title": "bead " + b, "status": "open", "priority": 2, "issue_type": "task",
@@ -141,7 +145,7 @@ class Race(unittest.TestCase):
         beads["ep-b"] = {"id": "ep-b", "title": "epic b", "status": "open", "priority": 2, "issue_type": "epic",
                          "labels": []}
         for i, s in enumerate(SLOTS, 1):
-            beads["sl-%d" % i] = {"id": "sl-%d" % i, "title": "slot %s %s" % (tl.HOST, s), "status": "open",
+            beads["sl-%d" % i] = {"id": "sl-%d" % i, "title": "slot %s %s" % (ident.hostname(), s), "status": "open",
                                   "priority": 4, "issue_type": "chore", "labels": ["slot"], "assignee": ""}
         (h / "bd" / "store.json").write_text(json.dumps({"beads": beads}))
         mo, self.market = h / "m.git", h / "market"
@@ -356,7 +360,7 @@ class Race(unittest.TestCase):
             sb = beads["sl-%d" % i]
             self.assertEqual((sb["status"], sb.get("assignee") or ""), ("open", ""), sb)
             self.assertFalse(set(sb.get("metadata") or {}) & set(marks.HELD_KEYS), sb)
-            self.assertFalse(tl.engine_lock_path(str(self.repo / ".slots" / s)).exists(), s)
+            self.assertFalse(engine_lock.engine_lock_path(str(self.repo / ".slots" / s)).exists(), s)
         cfg = self.h / "cfg" / "task-loop"
         for lock in (cfg / "locks").glob("*.lock"):
             try:

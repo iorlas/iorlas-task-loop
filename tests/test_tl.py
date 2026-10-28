@@ -17,6 +17,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support import tlbd  # noqa: E402
 import tl  # noqa: E402
+import dash_server  # noqa: E402
+from taskloop.app.slots import engine_lock  # noqa: E402
+from taskloop.adapters import gitrepo  # noqa: E402
+from taskloop.adapters import ident  # noqa: E402
+from taskloop.adapters import pidcheck  # noqa: E402
+from taskloop.app.release import pins  # noqa: E402
+from taskloop.app.track import trail  # noqa: E402
+from taskloop.app.wire import asks as wasks  # noqa: E402
+from taskloop.app.wire import slots as wslots  # noqa: E402
 from contracts import samples as S  # noqa: E402
 from taskloop.contracts import codec  # noqa: E402
 
@@ -54,67 +63,67 @@ class Base(unittest.TestCase):
 
 class Identity(Base):
     def test_actor_is_per_session(self):
-        self.assertEqual(tl.actor(), "tl-abcdef12")
+        self.assertEqual(ident.actor(), "tl-abcdef12")
 
     def test_actor_without_session_id_is_still_per_process(self):
         os.environ.pop("CLAUDE_CODE_SESSION_ID")
         os.environ["CLAUDE_PID"] = "4242"
-        self.assertTrue(tl.actor().endswith("-4242"))
+        self.assertTrue(ident.actor().endswith("-4242"))
 
     def test_actor_override(self):
         os.environ["TASK_LOOP_ACTOR"] = "me"
-        self.assertEqual(tl.actor(), "me")
+        self.assertEqual(ident.actor(), "me")
 
     def test_config_dir_is_created(self):
-        self.assertTrue(tl.config_dir().is_dir())
+        self.assertTrue(ident.config_dir().is_dir())
 
 
 class Records(Base):
     def test_event_appends_and_registers_repo(self):
-        tl.event("claim", "x-1", repo=str(self.home), worktree="/w")
-        tl.event("close", "x-1", repo=str(self.home))
-        lines = (tl.config_dir() / "events.jsonl").read_text().splitlines()
+        trail.event("claim", "x-1", repo=str(self.home), worktree="/w")
+        trail.event("close", "x-1", repo=str(self.home))
+        lines = (ident.config_dir() / "events.jsonl").read_text().splitlines()
         self.assertEqual([json.loads(l)["kind"] for l in lines], ["claim", "close"])
         self.assertEqual(json.loads(lines[0])["session"], "abcdef12-3456")
-        self.assertIn(str(self.home), json.loads((tl.config_dir() / "repos.json").read_text()))
+        self.assertIn(str(self.home), json.loads((ident.config_dir() / "repos.json").read_text()))
 
     @unittest.skipIf(os.name == "nt", "the registry lock is fcntl")
     def test_processes_registering_at_once_neither_crash_nor_lose_a_repo(self):
         # race test (tl-bxk.11.1): every process wrote repos.tmp; the second os.replace found it gone and the event
         # (a claim's, a slot take's) raised. Each writer now has its own tmp file, under a lock, so none is lost.
-        code = ("import sys; sys.path.insert(0, %r); import tl\n"
-                "for i in range(15): tl.register_repo('/r/%%s-%%d' %% (sys.argv[1], i))" % str(ROOT / "skills" / "task-loop"))
+        code = ("import sys; sys.path.insert(0, %r); import tl; from taskloop.app.track import trail\n"
+                "for i in range(15): trail.register_repo('/r/%%s-%%d' %% (sys.argv[1], i))" % str(ROOT / "skills" / "task-loop"))
         ps = [subprocess.Popen([sys.executable, "-c", code, str(n)], stderr=subprocess.PIPE, text=True) for n in range(10)]
         errs = [p.communicate(timeout=60)[1] for p in ps]
         self.assertEqual([p.returncode for p in ps], [0] * 10, errs)
-        repos = json.loads((tl.config_dir() / "repos.json").read_text())
+        repos = json.loads((ident.config_dir() / "repos.json").read_text())
         self.assertEqual(len(repos), 150)
 
     def test_prune_keeps_recent(self):
-        f = tl.config_dir() / "events.jsonl"
+        f = ident.config_dir() / "events.jsonl"
         old = json.dumps({"t": 0, "kind": "old"})
-        new = json.dumps({"t": tl.now(), "kind": "new"})
+        new = json.dumps({"t": trail.now(), "kind": "new"})
         f.write_text((old + "\n") * 120000 + new + "\n")
-        tl.prune_events()
+        trail.prune_events()
         self.assertEqual([json.loads(l)["kind"] for l in f.read_text().splitlines()], ["new"])
 
     def test_hook_indexes_session(self):
         # never the real dashboard: an installed one of another version on :7878 was restarted from this tree, with the
         # test's empty config dir, and the owner's dashboard showed no tasks (2026-10-21)
         with mock.patch("sys.stdin", io.StringIO(json.dumps({"session_id": "s1", "transcript_path": "/t.jsonl"}))), \
-                mock.patch.object(tl, "ping", return_value=None), mock.patch.object(tl.subprocess, "Popen") as po:
+                mock.patch.object(dash_server, "ping", return_value=None), mock.patch.object(dash_server.procs, "spawn") as po:
             self.assertEqual(tl.main(["hook", "session-start"]), 0)
         po.assert_not_called()
-        d = json.loads((tl.config_dir() / "sessions" / "s1.json").read_text())
+        d = json.loads((ident.config_dir() / "sessions" / "s1.json").read_text())
         self.assertEqual(d["transcript"], "/t.jsonl")
 
     def test_hook_never_fails(self):
-        with mock.patch("sys.stdin", io.StringIO("not json")), mock.patch.object(tl, "ping", return_value=None):
+        with mock.patch("sys.stdin", io.StringIO("not json")), mock.patch.object(dash_server, "ping", return_value=None):
             self.assertEqual(tl.main(["hook", "session-start"]), 0)
 
     def test_hook_restarts_an_older_dashboard_without_touching_the_real_one(self):
-        with mock.patch("sys.stdin", io.StringIO("{}")), mock.patch.object(tl, "ping", return_value={"version": "0"}), \
-                mock.patch.object(tl.subprocess, "Popen") as po:
+        with mock.patch("sys.stdin", io.StringIO("{}")), mock.patch.object(dash_server, "ping", return_value={"version": "0"}), \
+                mock.patch.object(dash_server.procs, "spawn") as po:
             self.assertEqual(tl.main(["hook", "session-start"]), 0)
         self.assertIn("ensure", po.call_args[0][0])
 
@@ -279,7 +288,7 @@ class SlotReset(Base):
         sh("git", "add", "junk.tmp", cwd=self.slot)
         sh("git", "commit", "-qm", "junk", cwd=self.slot)  # committed work on a detached head is not our concern
         self.assertEqual(self.reset("t-1"), 0)
-        self.assertEqual(tl.git("symbolic-ref", "--short", "HEAD", cwd=str(self.slot)), "task/t-1")
+        self.assertEqual(gitrepo.git("symbolic-ref", "--short", "HEAD", cwd=str(self.slot)), "task/t-1")
         self.assertTrue((self.slot / "ignored" / "big").exists())
 
     def test_dirty_slot_work_is_committed_not_wiped(self):
@@ -287,9 +296,9 @@ class SlotReset(Base):
         (self.slot / "a.txt").write_text("changed by a dead session\n")
         (self.slot / "new.txt").write_text("new\n")
         self.assertEqual(self.reset("t-1"), 0)
-        self.assertEqual(tl.git("status", "--porcelain", cwd=str(self.slot)), "")
-        self.assertEqual(tl.git("show", "task/t-0:new.txt", cwd=str(self.slot)), "new")
-        self.assertEqual(tl.git("show", "task/t-0:a.txt", cwd=str(self.slot)), "changed by a dead session")
+        self.assertEqual(gitrepo.git("status", "--porcelain", cwd=str(self.slot)), "")
+        self.assertEqual(gitrepo.git("show", "task/t-0:new.txt", cwd=str(self.slot)), "new")
+        self.assertEqual(gitrepo.git("show", "task/t-0:a.txt", cwd=str(self.slot)), "changed by a dead session")
 
     def test_reset_for_a_bead_keeps_its_existing_branch(self):
         sh("git", "checkout", "-q", "-b", "task/t-1", cwd=self.slot)
@@ -298,22 +307,22 @@ class SlotReset(Base):
         sh("git", "commit", "-qm", "wip (t-1): blocked", cwd=self.slot)
         sh("git", "checkout", "-q", "--detach", "origin/main", cwd=self.slot)
         self.assertEqual(self.reset("t-1"), 0)
-        self.assertEqual(tl.git("symbolic-ref", "--short", "HEAD", cwd=str(self.slot)), "task/t-1")
+        self.assertEqual(gitrepo.git("symbolic-ref", "--short", "HEAD", cwd=str(self.slot)), "task/t-1")
         self.assertEqual((self.slot / "work.txt").read_text(), "reviewed work\n")
 
     def test_loop_folders_are_excluded_from_git_add(self):
-        tl.exclude_local(str(self.repo), ".slots/", ".task/")
-        tl.exclude_local(str(self.repo), ".slots/")
+        wslots.exclude_local(str(self.repo), ".slots/", ".task/")
+        wslots.exclude_local(str(self.repo), ".slots/")
         exclude = (self.repo / ".git" / "info" / "exclude").read_text()
         self.assertEqual(exclude.split().count(".slots/"), 1)
-        self.assertNotIn(".slots", tl.git("status", "--porcelain", "--untracked-files=all", cwd=str(self.repo)))
+        self.assertNotIn(".slots", gitrepo.git("status", "--porcelain", "--untracked-files=all", cwd=str(self.repo)))
 
     def test_detached_dirty_work_goes_to_wip_branch(self):
         (self.slot / "new.txt").write_text("new\n")
         self.assertEqual(self.reset("t-2"), 0)
-        wip = [b for b in tl.git("branch", "--list", "wip/*", cwd=str(self.slot)).split() if b.startswith("wip/")]
+        wip = [b for b in gitrepo.git("branch", "--list", "wip/*", cwd=str(self.slot)).split() if b.startswith("wip/")]
         self.assertEqual(len(wip), 1)
-        self.assertEqual(tl.git("show", wip[0] + ":new.txt", cwd=str(self.slot)), "new")
+        self.assertEqual(gitrepo.git("show", wip[0] + ":new.txt", cwd=str(self.slot)), "new")
 
     def test_setup_runs_only_when_inputs_change(self):
         cfg = {"slots": {"count": 1, "setup": [sys.executable, "-c", "open('setup.log', 'a').write('run\\n')"], "setup_inputs": ["a.txt"], "keep": ["setup.log"]}}
@@ -363,7 +372,7 @@ class PinAndRollback(Base):
         return rc, out.getvalue(), err.getvalue()
 
     def pinned(self):
-        return json.loads((tl.config_dir() / "pinned.json").read_text())
+        return json.loads((ident.config_dir() / "pinned.json").read_text())
 
     def test_pin_writes_both_versions_and_clear_removes_the_file(self):
         rc, out, _ = self.pin("0.2.0", "--delegate", "0.5.0")
@@ -373,7 +382,7 @@ class PinAndRollback(Base):
         self.assertEqual(self.pin("--delegate", "0.6.0")[0], 0)  # one side only: the other stays
         self.assertEqual((self.pinned()["task-loop"], self.pinned()["delegate"]), ("0.2.0", "0.6.0"))
         self.assertEqual(self.pin("--clear")[0], 0)
-        self.assertFalse((tl.config_dir() / "pinned.json").exists())
+        self.assertFalse((ident.config_dir() / "pinned.json").exists())
         self.assertEqual(self.pin("--clear")[0], 0)  # clearing nothing is fine
 
     def test_a_pin_to_a_missing_cache_dir_is_refused_and_writes_nothing(self):
@@ -382,7 +391,7 @@ class PinAndRollback(Base):
         self.assertIn("0.3.0 is not installed", err)
         self.assertIn("0.1.0, 0.2.0, 0.10.0", err)
         self.assertEqual(self.pin("0.2.0", "--delegate", "9.9.9")[0], 2)
-        self.assertFalse((tl.config_dir() / "pinned.json").exists())  # not even the valid half
+        self.assertFalse((ident.config_dir() / "pinned.json").exists())  # not even the valid half
         shutil.rmtree(self.claude / "plugins/cache/iorlas-marketplace/iorlas-task-loop/0.1.0/skills")  # half-copied
         self.assertEqual(self.pin("0.1.0")[0], 2)
 
@@ -401,13 +410,11 @@ class PinAndRollback(Base):
 
     def test_find_route_and_the_dash_delegate_follow_the_pin_then_the_installed_entry_not_the_newest_directory(self):
         import dash_wiring
-        import engine
-        import reflect_digest
         from taskloop.adapters import delegate as lroute
         self.record("iorlas-delegate", "0.5.0")  # the plugin manager installed 0.5.0; 0.6.0 is only a directory
-        route = lambda: lroute.find_route("", tl.pinned_dir("delegate"), tl.claude_dir() / "plugins" / "cache",
-                                          lroute.installed_dir(tl.claude_dir()))
-        dash = lambda: dash_wiring.make_ports(tl, engine, reflect_digest).delegate_route()
+        route = lambda: lroute.find_route("", pins.pinned_dir("delegate"), ident.claude_dir() / "plugins" / "cache",
+                                          lroute.installed_dir(ident.claude_dir()))
+        dash = lambda: dash_wiring.ports().delegate_route()
         self.assertIn("/iorlas-delegate/0.5.0/", route())
         self.assertIn("/iorlas-delegate/0.5.0/", dash())
         self.assertEqual(self.pin("0.1.0", "--delegate", "0.6.0")[0], 0)
@@ -417,17 +424,16 @@ class PinAndRollback(Base):
     def test_the_drill_pin_decides_what_loop_and_find_route_pick_then_clear_returns_to_the_newest(self):
         import loop_env
         from taskloop.adapters import delegate as lroute
-        route = lambda: lroute.find_route("", tl.pinned_dir("delegate"), tl.claude_dir() / "plugins" / "cache")
+        route = lambda: lroute.find_route("", pins.pinned_dir("delegate"), ident.claude_dir() / "plugins" / "cache")
         self.assertIn("0.6.0", route())  # no pin: the newest
         self.assertEqual(self.pin("0.1.0", "--delegate", "0.5.0")[0], 0)
         self.assertIn("/iorlas-delegate/0.5.0/", route())
         root = self.claude / "plugins/cache/iorlas-marketplace/iorlas-task-loop/0.2.0"
-        with mock.patch.object(tl, "HERE", root / "skills" / "task-loop"):
-            target = lambda **kw: loop_env.installs(loop_env.cfgdir()).target(**kw)
-            self.assertEqual(target(), ("0.1.0", root.parent / "0.1.0"))  # older than the running one: still the pin
-            self.assertEqual(target(skip=["0.1.0"]), None)
-            self.assertEqual(self.pin("--clear")[0], 0)
-            self.assertEqual(target(), ("0.10.0", root.parent / "0.10.0"))
+        target = lambda **kw: loop_env.installs(loop_env.cfgdir(), here=root / "skills" / "task-loop").target(**kw)
+        self.assertEqual(target(), ("0.1.0", root.parent / "0.1.0"))  # older than the running one: still the pin
+        self.assertEqual(target(skip=["0.1.0"]), None)
+        self.assertEqual(self.pin("--clear")[0], 0)
+        self.assertEqual(target(), ("0.10.0", root.parent / "0.10.0"))
         self.assertIn("0.6.0", route())
         # the CLI end to end, in a fresh process with only the scratch dirs in its environment
         env = dict(os.environ, HOME=str(self.home))
@@ -447,8 +453,8 @@ class CutoverCheck(Base):
         self.repo = self.home / "repo"
         self.repo.mkdir()
         sh("git", "init", "-q", cwd=self.repo)
-        tl.register_repo(str(self.repo))
-        p = mock.patch.object(tl, "slot_beads", return_value=[])
+        trail.register_repo(str(self.repo))
+        p = mock.patch.object(wslots, "slot_beads", return_value=[])
         p.start()
         self.addCleanup(p.stop)
 
@@ -468,7 +474,7 @@ class CutoverCheck(Base):
         self.addCleanup(child.kill)
         self.addCleanup(child.wait)
         looptest.write_state(str(self.repo), pid=child.pid, started=time.time(), t=time.time(), bead="x-9")
-        tl.write_engine_lock(str(self.repo), {"pid": child.pid, "start": tl.proc_start(child.pid), "bead": "x-7",
+        engine_lock.write_engine_lock(str(self.repo), {"pid": child.pid, "start": pidcheck.proc_start(child.pid), "bead": "x-7",
                                               "by": "engine", "started": time.time()})
         rc, out = self.check()
         self.assertEqual(rc, 1, out)
@@ -545,8 +551,8 @@ class ParkStaleAsks(unittest.TestCase):
             env = {"XDG_CONFIG_HOME": str(d), "APPDATA": str(d), "HOME": str(d), "USERPROFILE": str(d),
                    "PATH": str(d / "bin") + os.pathsep + os.environ["PATH"]}
             with mock.patch.dict(os.environ, env):
-                self.assertEqual(tl.ask_sweep("park", every=0), ["late"])
-                self.assertEqual(tl.ask_sweep("park", every=600), [])  # throttled
+                self.assertEqual(wasks.sweep("park", every=0), ["late"])
+                self.assertEqual(wasks.sweep("park", every=600), [])  # throttled
             status = lambda b: json.loads((asks / ("%s.json" % b)).read_text())["status"]
             self.assertEqual([status(b) for b in ("late", "fresh", "done", "closed")], ["parked", "open", "answered", "closed"])
             log = (d / "bd.log").read_text()

@@ -39,7 +39,11 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "skills" / "task-loop"))
 sys.path.insert(0, str(HERE.parent / "src"))
-import tl  # noqa: E402
+from taskloop.adapters import (  # noqa: E402
+    gitrepo,
+    ident,
+    landlock,
+)
 
 PLUGIN = ".claude-plugin/plugin.json"
 MARKET = ".claude-plugin/marketplace.json"
@@ -69,8 +73,8 @@ def git(cwd, *a, check=True):
 
 
 def fetch(cwd):
-    """A fetch into the repo, again while it loses a ref lock to a loop's fetch at the same moment (tl.fetch)."""
-    r = tl.fetch(str(cwd))
+    """A fetch into the repo, again while it loses a ref lock to a loop's fetch at the same moment (gitrepo.fetch)."""
+    r = gitrepo.fetch(str(cwd))
     if r.returncode:
         raise Abort("git fetch failed in %s:\n%s" % (cwd, r.stderr.strip()[-2000:]))
 
@@ -119,7 +123,7 @@ def failure_report(out):
 
 def save_output(out):
     """The full suite output, in the config dir: a file inside the checkout would make the tree dirty and block the release."""
-    d = tl.config_dir() / "releases"
+    d = ident.config_dir() / "releases"
     d.mkdir(parents=True, exist_ok=True)
     f = d / ("suite-%s-%d.log" % (datetime.datetime.now().strftime("%Y%m%d-%H%M%S"), os.getpid()))
     f.write_text(out, encoding="utf-8")
@@ -304,7 +308,7 @@ def push_main(repo, message, minor, version, base):
     can get in. A push refused all the same (one that skipped the lock) gets one more round. `base` is the origin/main the
     bump was built on: HEAD~1 is not, --from-branch puts the branch's commits between them."""
     url = git(repo, "remote", "get-url", "origin", check=False) or str(repo)
-    with tl.os_lock(tl.land_lock_path(url), "release: " + message,
+    with landlock.os_lock(landlock.land_lock_path(url), "release: " + message,
                     lambda who: say("waiting for the land lock (held by %s)" % who)):
         for _ in range(2):
             fetch(repo)
@@ -364,7 +368,7 @@ def tag(cwd, name, what):
 def install(repo, version):
     """Update the marketplace and the plugin, then check the new version's cache dir exists. A silent failure (0.23.0: a git
     fetch-pack error with exit 0) leaves the old version installed: run both commands once more, then fail loudly."""
-    cache = tl.claude_dir() / "plugins" / "cache" / MARKETPLACE / NAME / version
+    cache = ident.claude_dir() / "plugins" / "cache" / MARKETPLACE / NAME / version
     cmds = [["claude", "plugin", "marketplace", "update", MARKETPLACE], ["claude", "plugin", "update", "%s@%s" % (NAME, MARKETPLACE)]]
     failing, text = None, ""
     for attempt in (1, 2):
@@ -427,7 +431,7 @@ def release(a, repo, market):
 
 def record(result, a, repo):
     """releases/last.json: the latest release's result (a later success replaces a failure); and, when it failed, a comment on --bead."""
-    d = tl.config_dir() / "releases"
+    d = ident.config_dir() / "releases"
     d.mkdir(parents=True, exist_ok=True)
     result.update(branch=a.from_branch or "main", message=a.message, at=time.time())
     f = d / "last.json"
@@ -448,15 +452,15 @@ def main(argv=None):
     ap.add_argument("--reason", help="the close reason (default: the message)")
     ap.add_argument("--from-branch", help="rebase this branch onto origin/main in the release checkout under the release lock")
     ap.add_argument("--minor", action="store_true", help="bump the minor version, not the patch")
-    ap.add_argument("--repo", default=tl.repo_root(str(HERE)), help="the main checkout (default: this repo's)")
+    ap.add_argument("--repo", default=gitrepo.repo_root(str(HERE)), help="the main checkout (default: this repo's)")
     ap.add_argument("--marketplace", default=str(Path.home() / "Workspaces" / MARKETPLACE))
     a = ap.parse_args(argv)
-    repo, market = tl.repo_root(a.repo), a.marketplace
+    repo, market = gitrepo.repo_root(a.repo), a.marketplace
     url = git(repo, "remote", "get-url", "origin", check=False) or repo
-    path = tl.config_dir() / "locks" / ("release-%s.lock" % hashlib.sha1(url.encode()).hexdigest()[:12])
+    path = ident.config_dir() / "locks" / ("release-%s.lock" % hashlib.sha1(url.encode()).hexdigest()[:12])
     holder = "pid %d since %s: %s" % (os.getpid(), datetime.datetime.now().strftime("%H:%M:%S"), a.message)
     try:
-        with tl.os_lock(path, holder, lambda who: say("waiting for the release lock (held by %s)" % who)):
+        with landlock.os_lock(path, holder, lambda who: say("waiting for the release lock (held by %s)" % who)):
             version = release(a, repo, market)
         record({"ok": True, "version": version, "summary": "released " + version}, a, repo)
     except Abort as e:

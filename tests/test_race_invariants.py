@@ -31,6 +31,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import support.paths  # noqa: E402,F401
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # python3 -m unittest tests.test_race_invariants, from the repo root
 from taskloop.app.land.lander import Lander  # noqa: E402
 import test_loop  # noqa: E402  (puts skills/task-loop on sys.path)
@@ -40,6 +41,14 @@ import engine  # noqa: E402
 from support.builders import cfg_with  # noqa: E402
 import loop_env  # noqa: E402
 import tl  # noqa: E402
+from taskloop.adapters import beadtools
+from taskloop.app.slots import engine_lock
+from taskloop.adapters import ident
+from taskloop.adapters import landlock, pidcheck, gitrepo  # noqa: E402
+from taskloop.app.track import trail  # noqa: E402
+from taskloop.app.track import verbs  # noqa: E402
+from support.rebind import rebind  # noqa: E402
+from taskloop.app.wire import slots as wslots
 from support import slots as sl  # noqa: E402
 from support import tlbd  # noqa: E402
 from taskloop.adapters import slot_git  # noqa: E402
@@ -73,11 +82,11 @@ class SafeBd(test_loop.FakeBd):
         with self.mu:
             b = (self.beads.get(a[1]) or self.slots.get(a[1])) if len(a) > 1 else None
             was = (b or {}).get("status")
-            if a[0] == "update" and "--claim" in a and b and was == "in_progress" and b.get("assignee") == tl.actor():
+            if a[0] == "update" and "--claim" in a and b and was == "in_progress" and b.get("assignee") == ident.actor():
                 return mock.Mock(returncode=0, stdout="", stderr="")
             r = super().__call__(*a, cwd=cwd, check=check)
             if b and was != "in_progress" and b.get("status") == "in_progress":
-                self.won.append((a[1], tl.actor()))
+                self.won.append((a[1], ident.actor()))
             return r
 
 
@@ -93,26 +102,39 @@ class Invariants(test_loop.Base):
         self.live = {os.getpid()}  # the fake process table: a pid in it is alive
         self.actors = {}  # thread name -> actor name (default: the thread's name)
         self.out = io.StringIO()
-        for p in (mock.patch.object(tl, "now", side_effect=self.clock.now),
-                  mock.patch.object(tl, "actor", side_effect=lambda: self.actors.get(threading.current_thread().name,
-                                                                                    threading.current_thread().name)),
-                  mock.patch.object(tl, "proc_alive", side_effect=lambda pid, start="": int(pid) in self.live),
-                  mock.patch.object(tl, "proc_start", side_effect=lambda pid: "T%s" % pid),
-                  mock.patch.object(tl, "git", return_value=""),  # no git, no child process
-                  mock.patch.object(sys, "stdout", self.out)):
-            p.start()
-            self.addCleanup(p.stop)
+        rebind(self, trail.now, self.clock.now)
+        rebind(self, ident.actor, lambda: self.actors.get(threading.current_thread().name, threading.current_thread().name))
+        rebind(self, pidcheck.proc_alive, lambda pid, start="": int(pid) in self.live)
+        rebind(self, pidcheck.proc_start, lambda pid: "T%s" % pid)
+        rebind(self, gitrepo.git, lambda *a, **k: "")  # no git, no child process
+        p = mock.patch.object(sys, "stdout", self.out)
+        p.start()
+        self.addCleanup(p.stop)
         self.repo_s = str(self.repo)
-        self.lock_calls = []  # (thread name) of every tl.os_lock call
-        real = tl.os_lock
+        self.lock_calls = []  # (thread name) of every landlock.os_lock call
+        real = landlock.os_lock
 
         def watch(*a, **kw):
             self.lock_calls.append(threading.current_thread().name)
             return real(*a, **kw)
         self.real_os_lock = real
-        p = mock.patch.object(tl, "os_lock", side_effect=watch)
-        p.start()
-        self.addCleanup(p.stop)
+        rebind(self, landlock.os_lock, watch)
+
+    @contextlib.contextmanager
+    def watching(self, watch):
+        """Every lock taken in the process goes through `watch` for the length of a `with` (it ends in the lock held at setUp)."""
+        current = landlock.os_lock
+        for mod in list(sys.modules.values()):
+            for name, val in list(getattr(mod, "__dict__", {}).items()):
+                if val is current:
+                    setattr(mod, name, watch)
+        try:
+            yield
+        finally:
+            for mod in list(sys.modules.values()):
+                for name, val in list(getattr(mod, "__dict__", {}).items()):
+                    if val is watch:
+                        setattr(mod, name, current)
 
     # -- harness -----------------------------------------------------------------------------------------------------
 
@@ -120,7 +142,7 @@ class Invariants(test_loop.Base):
         (self.repo / ".task-loop.json").write_text(json.dumps({"slots": {"count": slots}, "engine": cfg or {}}))
         self.bd = SafeBd(beads, slots=slots)
         tlbd.install(self, self.bd)
-        self.cfg = tl.profile_slots(self.repo_s)
+        self.cfg = wslots.profile_slots(self.repo_s)
         return self.bd
 
     def together(self, fns):
@@ -145,7 +167,7 @@ class Invariants(test_loop.Base):
 
     def race(self, a_fn, b_fn, arrive=lambda a: claims(a)):
         """A and B together, B starting once A is inside. A is held at its first bd claim until B has reached the guarded step: B's
-        call of tl.os_lock or B's own claim (what `arrive` says of a bd call). {"A": .., "B": ..}."""
+        call of landlock.os_lock or B's own claim (what `arrive` says of a bd call). {"A": .., "B": ..}."""
         arrived, paused, a_in = threading.Event(), [], threading.Event()
         name = lambda: threading.current_thread().name  # noqa: E731
 
@@ -165,13 +187,13 @@ class Invariants(test_loop.Base):
             return self.real_os_lock(*a, **kw)
         self.bd.before = before
         try:
-            with mock.patch.object(tl, "os_lock", side_effect=watch_b):
+            with self.watching(watch_b):
                 return self.together({"A": a_fn, "B": lambda: (a_in.wait(GUARD), b_fn())[1]})  # B comes after A is inside
         finally:
             self.bd.before = lambda a: None
 
     def hold(self, name, minutes=30, why="shots"):
-        return tl.cmd_slot(Args(op="hold", name=name, why=why, for_min=minutes, n=None, bead=None, force=False))
+        return tl.cmd_slot(Args(op="hold", name=name, why=why, for_min=minutes, n=None, bead=None, force=False), self.clock.now)
 
     # -- 1: no bead claimed or run twice ---------------------------------------------------------------------------------
 
@@ -179,14 +201,14 @@ class Invariants(test_loop.Base):
         """Four sessions claim one bead at once: one wins and the rest are told TAKEN; a later claim by anyone is refused too.
         Red when: tl.py cmd_claim, `print("TAKEN")` of the refused claim is followed by `return 0` instead of `return 1`."""
         bd = self.tracker([test_loop.bead("w-1")])
-        res = self.together({n: (lambda: tl.cmd_claim(Args(id="w-1", worktree=self.repo_s, slot=None))) for n in "ABCD"})
+        res = self.together({n: (lambda: verbs.claim("w-1", self.repo_s, None)) for n in "ABCD"})
         self.assertEqual(sorted(res.values()), [0, 1, 1, 1], res)
         (who,) = [a for b, a in bd.won if b == "w-1"]
         self.assertEqual(bd.beads["w-1"]["assignee"], who)
         self.assertEqual(self.out.getvalue().count("CLAIMED w-1"), 1)
-        late = tl.cmd_claim(Args(id="w-1", worktree=self.repo_s, slot=None))  # the main thread, a fifth session
+        late = verbs.claim("w-1", self.repo_s, None)  # the main thread, a fifth session
         self.assertEqual((late, [a for b, a in bd.won if b == "w-1"]), (1, [who]))
-        self.assertEqual(tl.bd_store().ready(), [])  # nothing is left for a loop to pick and run again
+        self.assertEqual(beadtools.bd_store().ready(), [])  # nothing is left for a loop to pick and run again
 
     # -- 2: no slot used by two at once, a hold included -----------------------------------------------------------------
 
@@ -196,18 +218,18 @@ class Invariants(test_loop.Base):
         Red when: tl.py slot_lock body is `return contextlib.nullcontext()` (the slot lock does nothing)."""
         bd = self.tracker(slots=3)
         self.actors.update(A="tl-one", B="tl-one", MainThread="tl-main")
-        got = self.race(lambda: sl.take_slot(self.repo_s, self.cfg, "loop"), lambda: tl.take_named_slot(self.repo_s, "s1", self.cfg, "hand"))
+        got = self.race(lambda: sl.take_slot(self.repo_s, self.cfg, "loop"), lambda: wslots.take_named_slot(self.repo_s, "s1", self.cfg, "hand"))
         self.assertEqual(got["A"][0], "s1")
         self.assertIsNone(got["B"][0], got)  # refused: the slot is held
         self.assertIn("held by", got["B"][1])
-        got = self.race(lambda: self.hold("s2"), lambda: tl.take_named_slot(self.repo_s, "s2", self.cfg, "hand"))
+        got = self.race(lambda: self.hold("s2"), lambda: wslots.take_named_slot(self.repo_s, "s2", self.cfg, "hand"))
         self.assertEqual(got["A"], 0)
         self.assertIsNone(got["B"][0], got)
         self.assertIn("held by", got["B"][1])
         # the hold stays: no loop take, no hand run, no second hold gets it
         self.assertEqual(sl.take_slot(self.repo_s, self.cfg, "loop")[0], "s3")
         self.assertIsNone(sl.take_slot(self.repo_s, self.cfg, "loop"))  # s1 and s3 used, s2 held
-        self.assertIn("held by", tl.take_named_slot(self.repo_s, "s2", self.cfg, "hand")[1])
+        self.assertIn("held by", wslots.take_named_slot(self.repo_s, "s2", self.cfg, "hand")[1])
         self.actors["MainThread"] = "tl-other"
         self.assertEqual(self.hold("s1"), 1)  # a slot in use is never held
         self.assertEqual(self.hold("s2"), 1)  # another session's hold is not taken over
@@ -287,7 +309,7 @@ class Invariants(test_loop.Base):
 
             def run(self):
                 try:
-                    self.got = tl.wait_slot(test.repo_s, test.cfg, self.name, sleep=self.nap, prio=self.prio)
+                    self.got = wslots.wait_slot(test.repo_s, test.cfg, self.name, sleep=self.nap, prio=self.prio)
                 finally:
                     self.settled.set()
         test = self
@@ -295,9 +317,9 @@ class Invariants(test_loop.Base):
             waiters[name] = Waiter(name, prio)
             waiters[name].start()
             self.assertTrue(waiters[name].settled.wait(GUARD))  # it has its ticket and has looked once
-        line = [t.why for t in tl.waiting_line(self.repo_s)]
+        line = [t.why for t in wslots.waiting_line(self.repo_s)]
         self.assertEqual(line, ["W3", "W1", "W2"])
-        tl.release_slot(self.repo_s, "s1", force=True)  # the owner lets go
+        wslots.release_slot(self.repo_s, "s1", force=True)  # the owner lets go
         pending = ["W2", "W1", "W3"]  # woken against the line
         while pending:
             for n in pending:
@@ -307,7 +329,7 @@ class Invariants(test_loop.Base):
             (done,) = [n for n in pending if waiters[n].got]
             served.append(done)
             pending.remove(done)
-            tl.release_slot(self.repo_s, "s1", force=True)
+            wslots.release_slot(self.repo_s, "s1", force=True)
         for w in waiters.values():
             w.join(GUARD)
         self.assertEqual(served, ["W3", "W1", "W2"])
@@ -315,9 +337,9 @@ class Invariants(test_loop.Base):
         # a waiter whose process is gone is dropped by whoever reads the line, and blocks nobody
         d = sl.ticket_dir(self.repo_s)
         (d / "000099.json").write_text(json.dumps({"v": 1, "seq": 99, "prio": 0, "pid": sl.dead_pid(), "why": "dead", "since": 1}))
-        self.assertEqual(tl.waiting_line(self.repo_s), [])
+        self.assertEqual(wslots.waiting_line(self.repo_s), [])
         self.assertFalse((d / "000099.json").exists())
-        self.assertEqual(tl.wait_slot(self.repo_s, self.cfg, "late", stop=lambda: True)[0], "s1")
+        self.assertEqual(wslots.wait_slot(self.repo_s, self.cfg, "late", stop=lambda: True)[0], "s1")
         # tickets taken at once are all different and numbered in arrival order
         seqs = self.together({"T%d" % i: (lambda: sl.take_ticket(self.repo_s, "x").seq) for i in range(6)})
         self.assertEqual(sorted(seqs.values()), list(range(min(seqs.values()), min(seqs.values()) + 6)))
@@ -330,25 +352,25 @@ class Invariants(test_loop.Base):
         Red when: tl.py engine_busy, `lock = read_engine_lock(wt)` is `lock = {}` (every lock reads as no lock)."""
         bd = self.tracker(slots=2)
         self.live.add(OTHER_ENGINE)
-        s1, s2 = (tl.slot_dir(self.repo_s, n, self.cfg) for n in ("s1", "s2"))
-        tl.write_engine_lock(s1, {"pid": OTHER_ENGINE, "start": "T%d" % OTHER_ENGINE, "bead": "w-9", "started": self.clock.now()})
-        self.assertIn("pid %d runs w-9" % OTHER_ENGINE, tl.engine_busy(s1))
+        s1, s2 = (wslots.slot_dir(self.repo_s, n, self.cfg) for n in ("s1", "s2"))
+        engine_lock.write_engine_lock(s1, {"pid": OTHER_ENGINE, "start": "T%d" % OTHER_ENGINE, "bead": "w-9", "started": self.clock.now()})
+        self.assertIn("pid %d runs w-9" % OTHER_ENGINE, engine_lock.engine_busy(s1))
         self.assertEqual(bd.slots["sl-1"]["status"], "open")  # the slot bead says free
         self.assertEqual(sl.take_slot(self.repo_s, self.cfg, "loop")[0], "s2")  # a loop passes over s1
-        self.assertIn("busy", tl.take_named_slot(self.repo_s, "s1", self.cfg, "hand")[1])
+        self.assertIn("busy", wslots.take_named_slot(self.repo_s, "s1", self.cfg, "hand")[1])
         self.assertEqual(self.hold("s1"), 1)
         self.assertIn("BUSY", self.out.getvalue())
         with mock.patch.object(slot_git, "run_git", side_effect=AssertionError("git ran in a live slot")):
-            self.assertEqual(tl.main(["slot", "reset", "s1", "--bead", "w-1"]), 4)  # the reset stops before any git
-            self.assertEqual(tl.main(["slot", "release", "s1"]), 1)
+            self.assertEqual(self.main(["slot", "reset", "s1", "--bead", "w-1"]), 4)  # the reset stops before any git
+            self.assertEqual(self.main(["slot", "release", "s1"]), 1)
         listing = "task/w-9"
         listed = subprocess.CompletedProcess([], 0, "worktree %s\nHEAD abc\nbranch refs/heads/%s\n\nworktree %s\nHEAD abc\n" % (s1, listing, s2), "")
         with mock.patch.object(slot_git, "run_git", return_value=listed):  # any other git call would find the same text
             self.assertIn("runs w-9", reset.free_branch(sl.pool(self.repo_s, cfg=self.cfg).named("s2"), listing))  # its branch is not taken from it
-        self.assertEqual(tl.read_engine_lock(s1)["pid"], OTHER_ENGINE)  # and its lock is still there
+        self.assertEqual(engine_lock.read_engine_lock(s1)["pid"], OTHER_ENGINE)  # and its lock is still there
         self.live.discard(OTHER_ENGINE)  # the engine died: its lock is no obstacle
-        self.assertEqual(tl.engine_busy(s1), "")
-        self.assertEqual(tl.take_named_slot(self.repo_s, "s1", self.cfg, "hand")[1], "")
+        self.assertEqual(engine_lock.engine_busy(s1), "")
+        self.assertEqual(wslots.take_named_slot(self.repo_s, "s1", self.cfg, "hand")[1], "")
 
     # -- 6/7: lands and releases, on one lock, against one origin --------------------------------------------------------
 
@@ -421,7 +443,7 @@ class Invariants(test_loop.Base):
             return self.real_os_lock(*a, **kw)
         with mock.patch.object(release, "git", side_effect=git), mock.patch.object(release, "fetch", side_effect=fetch), \
                 mock.patch.object(release, "run", side_effect=run), mock.patch.object(release, "bump_and_commit", side_effect=bump), \
-                mock.patch.object(release, "say"), mock.patch.object(tl, "os_lock", side_effect=watch):
+                mock.patch.object(release, "say"), self.watching(watch):
             got = self.together({n: (lambda n=n: release.push_main(n, "race release", False, "0.1.1", "h0")) for n in "AB"})
         o.got = got
         return o
@@ -433,8 +455,8 @@ class Invariants(test_loop.Base):
         release.py push_main, `if head != base:` is `if False:` (a moved origin/main is not rebased onto)."""
         self.tracker()
         url = "file:///origin.git"
-        eng = lambda: types.SimpleNamespace(land_lock_path=lambda: tl.land_lock_path(url),  # noqa: E731 - Lander.lock with the parts it reads
-                                            locked=lambda what, path: tl.os_lock(path, "bead"))
+        eng = lambda: types.SimpleNamespace(land_lock_path=lambda: landlock.land_lock_path(url),  # noqa: E731 - Lander.lock with the parts it reads
+                                            locked=lambda what, path: landlock.os_lock(path, "bead"))
         mu, inside, most, entered, joined = threading.Lock(), [0], [0], [], threading.Event()
 
         def section(cm):
@@ -459,9 +481,9 @@ class Invariants(test_loop.Base):
             if len(calls) == 3:
                 joined.set()
             return self.real_os_lock(*a, **kw)
-        with mock.patch.object(tl, "os_lock", side_effect=watch):
+        with self.watching(watch):
             self.together({"X": section(Lander(eng()).lock()), "Y": section(Lander(eng()).lock()),
-                           "Z": section(tl.os_lock(tl.land_lock_path(url), "release: z"))})
+                           "Z": section(landlock.os_lock(landlock.land_lock_path(url), "release: z"))})
         self.assertEqual((most[0], sorted(entered)), (1, ["X", "Y", "Z"]))
         o = self.releases()
         self.assertEqual(o.most, 1)  # never two pushes inside the lock at once
@@ -489,8 +511,8 @@ class Invariants(test_loop.Base):
             self.assertFalse(set(b.get("metadata") or {}) & set(marks.HELD_KEYS), b)
         self.assertEqual(list(sl.ticket_dir(self.repo_s).glob("*.json")), [])
         for n in slots:
-            self.assertFalse(tl.engine_lock_path(tl.slot_dir(self.repo_s, n, self.cfg)).exists(), n)
-        for lock in (tl.config_dir() / "locks").glob("*.lock"):
+            self.assertFalse(engine_lock.engine_lock_path(wslots.slot_dir(self.repo_s, n, self.cfg)).exists(), n)
+        for lock in (ident.config_dir() / "locks").glob("*.lock"):
             with open(str(lock), "a+") as f:
                 fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)  # raises while a holder is left
 
@@ -506,39 +528,40 @@ class Invariants(test_loop.Base):
             def go():
                 got = sl.take_slot(repo, cfg, "tl loop", bead=bead)
                 if got:
-                    tl.loop_lock(got[1], got[0], got[2], bead=bead)
-                    tl.drop_engine_lock(got[1], os.getpid())
-                    tl.release_slot(repo, got[0], mine=True)
+                    engine_lock.loop_lock(got[1], got[0], got[2], bead=bead)
+                    engine_lock.drop_engine_lock(got[1], os.getpid())
+                    wslots.release_slot(repo, got[0], mine=True)
             return go
 
         def hand():
-            sb, why = tl.take_named_slot(repo, "s5", cfg, "hand run")
+            sb, why = wslots.take_named_slot(repo, "s5", cfg, "hand run")
             if sb:
-                tl.release_slot(repo, "s5", mine=True)
+                wslots.release_slot(repo, "s5", mine=True)
 
         def waiter():
-            got = tl.wait_slot(repo, cfg, "waiter", sleep=lambda d: None)  # slots are free soon: no wait to sleep through
-            tl.release_slot(repo, got[0], mine=True)
+            got = wslots.wait_slot(repo, cfg, "waiter", sleep=lambda d: None)  # slots are free soon: no wait to sleep through
+            assert got
+            wslots.release_slot(repo, got[0], mine=True)
 
         def holder():
             if self.hold("s4") == 0:
-                tl.cmd_slot(Args(op="release", name="s4", force=False))
+                tl.cmd_slot(Args(op="release", name="s4", force=False), self.clock.now)
         self.together({"L1": loop_run("w-1"), "L2": loop_run("w-2"), "H": hand, "W": waiter, "P": holder})
         self.nothing_held(names)
         # left behind by processes that died
         self.actors["MainThread"] = "tl-ghost"
         self.hold("s1", minutes=1)
         self.clock.advance(61)  # the hold has run out
-        d2 = tl.slot_dir(repo, "s2", cfg)
-        tl.write_engine_lock(d2, {"pid": 5252, "start": "T5252", "bead": "w-3", "started": 1})  # not in the process table
+        d2 = wslots.slot_dir(repo, "s2", cfg)
+        engine_lock.write_engine_lock(d2, {"pid": 5252, "start": "T5252", "bead": "w-3", "started": 1})  # not in the process table
         (sl.ticket_dir(repo) / "000077.json").write_text(json.dumps({"v": 1, "seq": 77, "prio": 0, "pid": sl.dead_pid(), "why": "dead", "since": 1}))
         self.actors["MainThread"] = "tl-main"
         for name in ("s1", "s2"):
-            sb = tl.take_named_slot(repo, name, cfg, "next")[0]
+            sb = wslots.take_named_slot(repo, name, cfg, "next")[0]
             self.assertTrue(sb, name)  # the expired hold and the dead engine's lock are no obstacle
-            tl.release_slot(repo, name, mine=True)
-        self.assertEqual(tl.waiting_line(repo), [])
-        tl.drop_engine_lock(d2, 5252)
+            wslots.release_slot(repo, name, mine=True)
+        self.assertEqual(wslots.waiting_line(repo), [])
+        engine_lock.drop_engine_lock(d2, 5252)
         self.nothing_held(names)
 
 

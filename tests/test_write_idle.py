@@ -19,6 +19,7 @@ import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import test_engine as te  # noqa: E402
 
 import engine  # noqa: E402
+from taskloop.app.wire import slots as wslots
 import seams  # noqa: E402
 from support import fake_route  # noqa: E402
 from taskloop.adapters import delegate as dg, procs, runner  # noqa: E402
@@ -166,7 +167,7 @@ class SurvivorBlocksTheRetry(te.EngineTest):
                 return fake_route.answer(self.c, "worker_failed", "r1", worker=worker, exit_code=-15)
 
         script = Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
-        c = engine.load_cfg(str(self.wt))
+        c = wslots.load_cfg(str(self.wt))
         with te.delegate_stack(script):
             self.eng = engine.Engine("t-1", str(self.wt), c, store=self.store)
             rc = self.eng.run()
@@ -191,7 +192,7 @@ class SurvivorBlocksTheRetry(te.EngineTest):
     def test_the_write_node_gets_the_idle_limits_from_the_config_and_other_nodes_do_not(self):
         idles = []
         script = fake_route.Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
-        c = engine.load_cfg(str(self.wt))
+        c = wslots.load_cfg(str(self.wt))
         with te.delegate_stack(script), mock.patch.object(
                 seams.DelegateRoute, "runner", lambda self, log, idle=None, wall=None, live="", on_worker=None: idles.append(idle) or script):
             engine.Engine("t-1", str(self.wt), c, store=self.store).run()
@@ -201,7 +202,7 @@ class SurvivorBlocksTheRetry(te.EngineTest):
         self.assertIsNone(seen["reviewer"])
 
     def test_a_write_under_the_idle_rules_gets_no_close_to_the_limit_warning(self):
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
+        eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         r = DelegateResult(data=te.CLEAN, secs=40 * 60)
         eng.anomalies("write", r, 1)
         eng.anomalies("review", r, 1)

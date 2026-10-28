@@ -1,19 +1,19 @@
-"""The engine lock: <worktree>/.task/engine.lock while run-task runs there (see tl.engine_busy), and the workers it started.
+"""The engine lock: <worktree>/.task/engine.lock while run-task runs there (see engine_lock.engine_busy), and the workers it started.
 O1 (slots, locks) replaces this with the Lease; until then it is the one writer of the file's `route` and `workers` lists."""
 import contextlib
 import os
 import time
 
 import stream_proc
-import tl
+from taskloop.app.slots import engine_lock
 
 class EngineLock:
-    """<worktree>/.task/engine.lock while run-task runs there (see tl.engine_busy). A worker that outlived its stop keeps
+    """<worktree>/.task/engine.lock while run-task runs there (see engine_lock.engine_busy). A worker that outlived its stop keeps
     the lock (pid 0) until it is gone."""
 
     def __init__(self, wt, bead, slot=""):
         self.wt = wt
-        self.path = tl.engine_lock_path(wt)
+        self.path = engine_lock.engine_lock_path(wt)
         self.data = {"pid": os.getpid(), "start": stream_proc.proc_start(os.getpid()), "bead": bead, "slot": slot or "",
                      "slot_bead": os.environ.get("TASK_LOOP_SLOT_BEAD", ""), "by": "run-task", "started": time.time(),
                      "route": None, "workers": []}
@@ -24,14 +24,14 @@ class EngineLock:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         handoff = True  # engine_busy lets it take over only its parent loop's lock for the same slot bead
         for _ in range(3):
-            busy = tl.engine_busy(self.wt, handoff=handoff)
+            busy = engine_lock.engine_busy(self.wt, handoff=handoff)
             if busy:
                 return busy
             try:  # created only if absent: two runs starting at once cannot both win
                 os.close(os.open(str(self.path), os.O_CREAT | os.O_EXCL | os.O_WRONLY))
             except FileExistsError:
                 with contextlib.suppress(OSError):  # a dead run's lock or the parent loop's (engine_busy said so)
-                    if not tl.engine_busy(self.wt, handoff=handoff):
+                    if not engine_lock.engine_busy(self.wt, handoff=handoff):
                         self.path.unlink()
                 continue
             self.write()
@@ -39,7 +39,7 @@ class EngineLock:
         return "another run took the engine lock at the same time"
 
     def write(self):
-        tl.write_engine_lock(self.wt, self.data)
+        engine_lock.write_engine_lock(self.wt, self.data)
 
     def note(self, route_pid=False, **kw):
         if route_pid is not False:

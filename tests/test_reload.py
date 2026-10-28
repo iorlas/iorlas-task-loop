@@ -33,6 +33,10 @@ from taskloop.adapters.fake_beads import FakeBeads  # noqa: E402
 from taskloop_dash.views import roadmap  # noqa: E402
 import test_engine as te  # noqa: E402
 import tl  # noqa: E402
+from taskloop.app.release import catalog  # noqa: E402
+from taskloop.adapters import gitrepo  # noqa: E402
+from taskloop.adapters import ident  # noqa: E402
+from taskloop.app.wire import slots as wslots  # noqa: E402
 from support.fakes import as_bead  # noqa: E402
 from taskloop.adapters import delegate as dl  # noqa: E402
 from support import fake_route  # noqa: E402
@@ -51,9 +55,10 @@ class Reload(unittest.TestCase):
         te.EngineTest.setUp(self)
         self.cache = Path(self.tmp.name, "cache")
         here = self.install("0.1.0", fake=True)
-        for p in (mock.patch.object(tl, "HERE", here), mock.patch.object(engine, "plugin_version", return_value="0.1.0")):
-            p.start()
-            self.addCleanup(p.stop)
+        self.here = here  # the install the engine under test runs from (loop_env.vet_newer / build take it)
+        p = mock.patch.object(engine, "plugin_version", return_value="0.1.0")
+        p.start()
+        self.addCleanup(p.stop)
         self.execs = []
         for p in (mock.patch.object(dl, "resolve", return_value=self.res("/fake/route.py")),  # no delegate in an isolated HOME
                   mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(Path(self.tmp.name, "claude"))})):
@@ -82,11 +87,11 @@ class Reload(unittest.TestCase):
         return d
 
     def events(self):
-        f = tl.config_dir() / "events.jsonl"
+        f = ident.config_dir() / "events.jsonl"
         return [json.loads(x) for x in f.read_text().splitlines()] if f.exists() else []
 
     def engine_for(self, script, **cfg):
-        c = engine.load_cfg(str(self.wt))
+        c = wslots.load_cfg(str(self.wt))
         c = cfg_with(c, **{"reflect": False, **cfg})
         eng = engine.Engine("t-1", str(self.wt), c, store=self.store)
         eng.argv = ["run-task", "t-1", "--worktree", str(self.wt), "--fresh", "--outcome-file", "/x/out.json"]
@@ -94,6 +99,7 @@ class Reload(unittest.TestCase):
         def fake_exec(argv):
             self.execs.append({"argv": argv, "env": json.loads(os.environ["TL_REEXEC"]), "marker": engine.read_reexec("t-1")})
         eng.exec_fn = fake_exec
+        eng.newer_fn = lambda: loop_env.vet_newer(self.here)  # pyrefly: ignore[bad-assignment]
         return eng
 
     def patches(self, script, during=None):
@@ -150,7 +156,7 @@ class Reload(unittest.TestCase):
             rc = self.run_with(eng2, script)
         self.assertEqual(rc, 0)
         self.assertTrue(self.closed and self.closed[0].startswith("merged "))
-        self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
+        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")  # pyrefly: ignore[missing-attribute]
         self.assertFalse(engine.reexec_path("t-1").exists())  # a run that ended is no crash after an exec
         logs = [json.loads(x) for x in eng.log_path.read_text().splitlines()]
         self.assertEqual(len([x for x in logs if x["kind"] == "run_start"]), 1)  # one run record for the one run
@@ -194,18 +200,18 @@ class Reload(unittest.TestCase):
         self.assertEqual((red[0]["version"], red[0]["running"], red[0]["who"]), ("0.2.0", "0.1.0", "engine"))
         self.assertIn("planted: cannot plan", red[0]["why"])
         self.assertEqual(len(tests), 1)  # the next boundaries read bad-versions.json instead of testing it again
-        self.assertEqual([e["version"] for e in json.loads((tl.config_dir() / "bad-versions.json").read_text())["entries"]], ["0.2.0"])
+        self.assertEqual([e["version"] for e in json.loads((ident.config_dir() / "bad-versions.json").read_text())["entries"]], ["0.2.0"])
         self.assertEqual([e for e in self.events() if e["kind"] == "reload"], [])
 
     def test_a_refused_version_is_tried_again_when_it_is_installed_again_and_a_newer_one_is_tried(self):
         self.install("0.2.0", plant=BREAK_PLAN)
-        self.assertEqual(loop_env.vet_newer()[:2], ("0.2.0", self.cache / "0.2.0"))
-        self.assertIsNone(loop_env.vet_newer())  # refused, key unchanged: not looked at
+        self.assertEqual(loop_env.vet_newer(self.here)[:2], ("0.2.0", self.cache / "0.2.0"))
+        self.assertIsNone(loop_env.vet_newer(self.here))  # refused, key unchanged: not looked at
         shutil.rmtree(self.cache / "0.2.0")
         self.install("0.2.0")  # the same number, re-released
-        self.assertIsNone(loop_env.vet_newer()[2])
+        self.assertIsNone(loop_env.vet_newer(self.here)[2])
         self.install("0.3.0")
-        self.assertEqual(loop_env.vet_newer()[0], "0.3.0")
+        self.assertEqual(loop_env.vet_newer(self.here)[0], "0.3.0")
 
     # -- the crash after an exec: the loop puts the run back on the version it came from, once
     def test_a_run_task_that_dies_right_after_the_exec_is_restarted_once_on_the_old_version(self):
@@ -237,8 +243,8 @@ class Reload(unittest.TestCase):
         repo = str(self.wt)
         said = []
         with mock.patch.object(loop_env, "spawn", side_effect=spawn), mock.patch.dict(os.environ, {}):
-            env = loop_env.build(repo, store=FakeBeads())
-            run = BeadRun(env, looptest.files(repo), loop_env.installs(env.cfgdir), lambda: env.profile().loop, lambda: "",
+            env = loop_env.build(repo, store=FakeBeads(), here=self.here)
+            run = BeadRun(env, looptest.files(repo), loop_env.installs(env.cfgdir, here=self.here), lambda: env.profile().loop, lambda: "",
                           lambda running: None, lambda: None, said.append)
             # the first child is the one that exec'd: its note appears while it runs
             t1 = as_bead({"id": "t-1"})
@@ -252,13 +258,13 @@ class Reload(unittest.TestCase):
         self.assertEqual(spawned_env[0]["run"], "t-1-20261026-120000")  # the fallback child got it
         fb = [e for e in self.events() if e["kind"] == "reload_fallback"]
         self.assertEqual([(e["old"], e["new"]) for e in fb], [("0.2.0", "0.1.0")])
-        self.assertIn("0.2.0", [e["version"] for e in json.loads((tl.config_dir() / "bad-versions.json").read_text())["entries"]])
+        self.assertIn("0.2.0", [e["version"] for e in json.loads((ident.config_dir() / "bad-versions.json").read_text())["entries"]])
         self.assertTrue(any("RED" in c for c in said))
         self.assertFalse(engine.reexec_path("t-1").exists())
 
     # -- point 2: delegate is resolved per call, never held
     def test_delegate_route_is_resolved_again_each_call(self):
-        c = engine.load_cfg(str(self.wt))
+        c = wslots.load_cfg(str(self.wt))
         with mock.patch.object(dl, "resolve", side_effect=[self.res("/a/route.py"), self.res("/b/route.py"), self.res("/b/route.py")]) as fr:
             eng = engine.Engine("t-1", str(self.wt), c, store=self.store)
             self.assertEqual(eng.delegate_route(), "/b/route.py")
@@ -315,19 +321,17 @@ class Reload(unittest.TestCase):
     # -- point 4: loop state and dashboard lane
     def test_loop_state_names_the_running_version_and_code_dir(self):
         repo = str(self.wt)
-        with mock.patch.object(loop_env, "spawn"), mock.patch.object(loop_env.engine, "cfg_source", side_effect=lambda r: (tl.load_profile({}), "", "")):
-            env = loop_env.build(repo, store=FakeBeads())
-        self.assertEqual((env.version, env.code_dir), ("0.1.0", str(tl.HERE)))
+        env = loop_env.build(repo, store=FakeBeads(), here=self.here)
+        self.assertEqual((env.version, env.code_dir), ("0.1.0", str(self.here)))
 
     def test_releases_behind_counts_installed_versions_above_it(self):
-        for v in ("0.2.0", "0.10.0"):
-            self.install(v, fake=True)
-            (self.cache / v / "skills" / "task-loop" / "tl.py").write_text("")
-        (self.cache / "0.1.0" / "skills" / "task-loop" / "tl.py").write_text("")
-        with mock.patch.object(tl, "cache_dirs", return_value={v: self.cache / v for v in ("0.1.0", "0.2.0", "0.10.0")}):
-            self.assertEqual(tl.releases_behind("0.1.0"), 2)
-            self.assertEqual(tl.releases_behind("0.2.0"), 1)
-            self.assertEqual(tl.releases_behind("0.10.0"), 0)
+        for v in ("0.1.0", "0.2.0", "0.10.0"):  # <claude dir>/plugins/cache/<marketplace>/<plugin>/<version>
+            main = Path(self.tmp.name, "claude", "plugins", "cache", "m", "iorlas-task-loop", v, "skills", "task-loop", "tl.py")
+            main.parent.mkdir(parents=True)
+            main.write_text("")
+        self.assertEqual(catalog.releases_behind("0.1.0"), 2)
+        self.assertEqual(catalog.releases_behind("0.2.0"), 1)
+        self.assertEqual(catalog.releases_behind("0.10.0"), 0)
 
     def test_the_dashboard_lane_shows_the_engine_version_and_how_many_releases_it_lags(self):
         self.assertEqual(roadmap.lag("0.23.40", ["0.23.40", "0.23.41", "0.23.42", "0.9.0"]), 2)

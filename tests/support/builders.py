@@ -5,6 +5,7 @@ the wall clock; the engine still writes its own files under the test's XDG_CONFI
 import shlex
 
 import engine
+from taskloop.app.wire import slots as wslots
 from taskloop.contracts.codec import from_json, to_json
 from taskloop.contracts.config import EngineConfig
 
@@ -15,7 +16,7 @@ def make_engine(wt, bead="t-1", cfg=None, script=None, attrs=None, **seams):
     """An engine on `wt`. `cfg` is merged over the checkout's loaded config. Seams not given are fakes: `store`, `route`, `clock`;
     `git` is the engine's own (the real repo) unless given. The fakes are on the engine as `.store`, `.router`, `.clock`.
     `attrs` sets engine state a test starts from (`{"plan_data": ..., "stage_tree": "old"}`) in place of `e.x = ...` lines."""
-    c = engine.load_cfg(str(wt))
+    c = wslots.load_cfg(str(wt))
     c = cfg_with(c, **(cfg or {}))
     seams.setdefault("store", FakeBeadStore())
     seams.setdefault("route", FakeRouter(script))

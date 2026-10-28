@@ -15,6 +15,7 @@ import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import test_engine as te  # noqa: E402
 
 import engine  # noqa: E402
+from taskloop.app.wire import slots as wslots
 from support import fake_route  # noqa: E402
 from support.logs import records  # noqa: E402
 from taskloop.adapters.delegate import Stopped  # noqa: E402
@@ -49,7 +50,7 @@ class RetryRows(unittest.TestCase):
 
 class Calls(te.EngineTest):
     def go(self, script):
-        c = engine.load_cfg(str(self.wt))
+        c = wslots.load_cfg(str(self.wt))
         nap = mock.Mock()
         with te.delegate_stack(script), mock.patch("taskloop.app.run.lane_acts.time", napper(nap)):
             self.eng = engine.Engine("t-1", str(self.wt), c, store=self.store)

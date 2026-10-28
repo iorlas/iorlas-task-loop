@@ -1,4 +1,4 @@
-"""The git answers the engine remembers (tl.git, engine.tree_problem, Engine.tree_hash) stay right when the repo changes under them.
+"""The git answers the engine remembers (gitrepo.git, engine.tree_problem, Engine.tree_hash) stay right when the repo changes under them.
 Real git in a temp repo; each case changes the repo behind the memo and asks again."""
 
 import os
@@ -12,7 +12,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 import engine  # noqa: E402
-import tl  # noqa: E402
+from taskloop.adapters import gitrepo  # noqa: E402
 
 
 def sh(*a, cwd):
@@ -43,36 +43,36 @@ class GitMemoTest(unittest.TestCase):
 
     def test_head_and_branch_follow_a_commit_and_a_checkout(self):
         r = self.repo
-        first = tl.git("rev-parse", "HEAD", cwd=r)
-        self.assertEqual(tl.git("symbolic-ref", "--short", "-q", "HEAD", cwd=r), "main")
-        self.assertEqual(self.calls(lambda: tl.git("rev-parse", "HEAD", cwd=r))[1], 0)
+        first = gitrepo.git("rev-parse", "HEAD", cwd=r)
+        self.assertEqual(gitrepo.git("symbolic-ref", "--short", "-q", "HEAD", cwd=r), "main")
+        self.assertEqual(self.calls(lambda: gitrepo.git("rev-parse", "HEAD", cwd=r))[1], 0)
         (r / "f.txt").write_text("2\n")
         sh("git", "commit", "-qam", "two", cwd=r)
-        self.assertNotEqual(tl.git("rev-parse", "HEAD", cwd=r), first)
+        self.assertNotEqual(gitrepo.git("rev-parse", "HEAD", cwd=r), first)
         sh("git", "checkout", "-qb", "other", cwd=r)
-        self.assertEqual(tl.git("symbolic-ref", "--short", "-q", "HEAD", cwd=r), "other")
+        self.assertEqual(gitrepo.git("symbolic-ref", "--short", "-q", "HEAD", cwd=r), "other")
         sh("git", "checkout", "-q", "--detach", cwd=r)
-        self.assertEqual(tl.git("symbolic-ref", "--short", "-q", "HEAD", cwd=r), "")
+        self.assertEqual(gitrepo.git("symbolic-ref", "--short", "-q", "HEAD", cwd=r), "")
 
     def test_a_missing_branch_is_found_once_it_exists_and_after_pack_refs(self):
         r = self.repo
-        self.assertEqual(tl.git("rev-parse", "--verify", "-q", "refs/heads/x", cwd=r), "")
+        self.assertEqual(gitrepo.git("rev-parse", "--verify", "-q", "refs/heads/x", cwd=r), "")
         sh("git", "branch", "x", cwd=r)
-        self.assertTrue(tl.git("rev-parse", "--verify", "-q", "refs/heads/x", cwd=r))
+        self.assertTrue(gitrepo.git("rev-parse", "--verify", "-q", "refs/heads/x", cwd=r))
         sh("git", "pack-refs", "--all", cwd=r)
-        self.assertTrue(tl.git("rev-parse", "--verify", "-q", "refs/heads/x", cwd=r))
+        self.assertTrue(gitrepo.git("rev-parse", "--verify", "-q", "refs/heads/x", cwd=r))
         sh("git", "branch", "-D", "x", cwd=r)
-        self.assertEqual(tl.git("rev-parse", "--verify", "-q", "refs/heads/x", cwd=r), "")
+        self.assertEqual(gitrepo.git("rev-parse", "--verify", "-q", "refs/heads/x", cwd=r), "")
 
     def test_merge_base_follows_the_branch_it_is_asked_about(self):
         r = self.repo
         sh("git", "branch", "base", cwd=r)
-        a = tl.git("merge-base", "base", "HEAD", cwd=r)
+        a = gitrepo.git("merge-base", "base", "HEAD", cwd=r)
         (r / "f.txt").write_text("2\n")
         sh("git", "commit", "-qam", "two", cwd=r)
-        self.assertEqual(tl.git("merge-base", "base", "HEAD", cwd=r), a)
+        self.assertEqual(gitrepo.git("merge-base", "base", "HEAD", cwd=r), a)
         sh("git", "branch", "-f", "base", "HEAD", cwd=r)
-        self.assertEqual(tl.git("merge-base", "base", "HEAD", cwd=r), tl.git("rev-parse", "HEAD", cwd=r))
+        self.assertEqual(gitrepo.git("merge-base", "base", "HEAD", cwd=r), gitrepo.git("rev-parse", "HEAD", cwd=r))
 
     def test_tree_problem_is_asked_again_when_the_config_changes(self):
         r = self.repo
@@ -105,7 +105,7 @@ class GitMemoTest(unittest.TestCase):
         (r / "new.txt").unlink()
         self.assertEqual(eng.tree_hash(), b)
         sh("git", "commit", "-qam", "three", cwd=r)
-        self.assertEqual(eng.tree_hash(), tl.git("rev-parse", "HEAD^{tree}", cwd=r))
+        self.assertEqual(eng.tree_hash(), gitrepo.git("rev-parse", "HEAD^{tree}", cwd=r))
 
     def test_tree_hash_raises_when_read_tree_or_add_fails_instead_of_hashing_the_wrong_tree(self):
         eng = engine.Engine.__new__(engine.Engine)
@@ -146,9 +146,9 @@ class GitMemoTest(unittest.TestCase):
         self.assertEqual(eng.tree_hash(), dirty)  # remembered
         sh("git", "commit", "-qam", "two", cwd=r)  # a worker commits: the tree is clean, HEAD moved
         committed = eng.tree_hash()
-        self.assertEqual(committed, tl.git("rev-parse", "HEAD^{tree}", cwd=r))
+        self.assertEqual(committed, gitrepo.git("rev-parse", "HEAD^{tree}", cwd=r))
         sh("git", "checkout", "-q", "-b", "other", "HEAD~1", cwd=r)  # a worker checks out older content
-        self.assertEqual(eng.tree_hash(), tl.git("rev-parse", "HEAD^{tree}", cwd=r))
+        self.assertEqual(eng.tree_hash(), gitrepo.git("rev-parse", "HEAD^{tree}", cwd=r))
         self.assertNotEqual(eng.tree_hash(), committed)
         sh("git", "checkout", "-q", "main", cwd=r)
         self.assertEqual(eng.tree_hash(), committed)

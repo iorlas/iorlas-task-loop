@@ -1,3 +1,4 @@
+import contextlib
 import io
 import json
 import os
@@ -21,6 +22,7 @@ from support.waits import until  # noqa: E402
 import loop_env  # noqa: E402
 from support import looptest  # noqa: E402
 from taskloop.app.loop.core import Core  # noqa: E402
+from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.app.loop.loop import parse_handover  # noqa: E402
 from taskloop.contracts import codec  # noqa: E402
 from taskloop.contracts.loop import Carry, LoopState  # noqa: E402
@@ -29,6 +31,9 @@ from taskloop.app.loop.take import Taker  # noqa: E402
 from taskloop.contracts.config import LoopConfig  # noqa: E402
 from taskloop.domain.lanes import netgate  # noqa: E402
 import tl  # noqa: E402
+from taskloop.adapters import gitrepo  # noqa: E402
+from taskloop.app.track import trail  # noqa: E402
+from taskloop.adapters import ident  # noqa: E402
 
 
 def bead(id, priority=2, parent=None, labels=(), type="task"):
@@ -46,7 +51,7 @@ class FakeBd:
     def __init__(self, beads=(), slots=0, parents=None):
         self.beads = {b["id"]: dict(b) for b in beads}
         self.parents = dict(parents or {})  # beads not in the ready list (epics): id -> parent
-        self.slots = {"sl-%d" % i: {"id": "sl-%d" % i, "title": "slot %s s%d" % (tl.HOST, i), "status": "open",
+        self.slots = {"sl-%d" % i: {"id": "sl-%d" % i, "title": "slot %s s%d" % (ident.hostname(), i), "status": "open",
                                     "assignee": ""} for i in range(1, slots + 1)}
         self.taken_by_other = set()  # claims another session wins
         self.calls = []
@@ -76,13 +81,13 @@ class FakeBd:
             out = json.dumps([b] if b else [{"id": a[1], "parent": self.parents.get(a[1])}])
         elif a[0] == "update" and "--claim" in a:
             b = self.beads.get(a[1]) or self.slots.get(a[1])
-            if a[1] in self.taken_by_other or b.get("status") != "open" or b.get("assignee") not in (None, "", tl.actor()):
+            if a[1] in self.taken_by_other or b.get("status") != "open" or b.get("assignee") not in (None, "", ident.actor()):
                 rc = 1  # bd 1.3: an open bead still assigned to another actor (a paused run's) refuses the claim
             else:
-                b.update(status="in_progress", assignee=tl.actor())
+                b.update(status="in_progress", assignee=ident.actor())
         elif a[0] == "unclaim":  # as bd: only the current assignee frees its own claim; --force frees another's
             b = self.beads.get(a[1]) or self.slots.get(a[1])
-            if "--force" in a or b.get("assignee") in (None, "", tl.actor()):
+            if "--force" in a or b.get("assignee") in (None, "", ident.actor()):
                 b.update(status="open", assignee="")
             else:
                 rc = 1
@@ -111,11 +116,24 @@ class Base(unittest.TestCase):
         self.addCleanup(self.env.stop)  # last: the patches a subclass starts restore their snapshot first
         os.environ.pop("TASK_LOOP_ACTOR", None)
         self.cwd = os.getcwd()
-        for p in (mock.patch.object(tl, "repo_root", return_value=str(self.repo)),
-                  mock.patch.object(tl, "event", return_value={}),
-                  mock.patch.object(tl, "provenance")):
-            p.start()
-            self.addCleanup(p.stop)
+        os.chdir(self.repo)  # the repo `tl` helpers see when no --repo is given
+
+    def main(self, argv, **kw):
+        """tl.main on this test's clock and install (`self.clock`, `self.here`, when the test has them)."""
+        clock = getattr(self, "clock", trail.now)
+        kw.setdefault("now", clock.now if hasattr(clock, "now") else clock)
+        kw.setdefault("here", getattr(self, "here", None) or tl.HERE)
+        return tl.main(argv, **kw)
+
+    @contextlib.contextmanager
+    def running_from(self, here):
+        """The loop runs from the install `here` for the length of a `with` (a newer version, after the move)."""
+        before = getattr(self, "here", None)
+        self.here = here
+        try:
+            yield
+        finally:
+            self.here = before
 
     def tearDown(self):
         os.chdir(self.cwd)
@@ -207,7 +225,7 @@ class Queue(Base):
         f = self.fake(bead("x-1"), bead("x-2"), bead("x-3", labels=["owner-taste"]))
         buf = io.StringIO()
         with redirect_stdout(buf):
-            self.assertEqual(tl.main(["next", "--repo", str(self.repo)]), 0)
+            self.assertEqual(self.main(["next", "--repo", str(self.repo)]), 0)
         out = buf.getvalue()
         self.assertIn("NEXT x-1", out)
         self.assertIn("lowest id", out)
@@ -219,13 +237,13 @@ class Queue(Base):
         self.fake(bead("x-1"))
         buf = io.StringIO()
         with redirect_stdout(buf):
-            tl.main(["next", "--repo", str(self.repo), "--json"])
+            self.main(["next", "--repo", str(self.repo), "--json"])
         d = json.loads(buf.getvalue())
         self.assertEqual(d["pick"]["id"], "x-1")
         self.fake()
         buf = io.StringIO()
         with redirect_stdout(buf):
-            self.assertEqual(tl.main(["next", "--repo", str(self.repo)]), 1)
+            self.assertEqual(self.main(["next", "--repo", str(self.repo)]), 1)
         self.assertIn("NONE", buf.getvalue())
 
 
@@ -257,7 +275,7 @@ class QueueRuleFromBase(Base):
         self.fake(bead("x-1", labels=["later"]), bead("x-2", labels=["owner-taste"]))
         buf = io.StringIO()
         with redirect_stdout(buf):
-            self.assertEqual(tl.main(["next", "--repo", str(self.repo)]), 0)
+            self.assertEqual(self.main(["next", "--repo", str(self.repo)]), 0)
         out = buf.getvalue()
         self.assertIn("NEXT x-2", out)
         self.assertIn("skip x-1: label later", out)
@@ -273,7 +291,7 @@ class QueueRuleFromBase(Base):
         self.push_rule({"engine": {"brief_kb": 7}})
         self.sh("git", "fetch", "-q", "origin", cwd=self.repo)
         (self.repo / ".task-loop.json").write_text(json.dumps({"engine": {"brief_kb": 99}}))
-        self.assertEqual(loop_env.engine.load_cfg(str(self.repo)).brief_kb, 7)
+        self.assertEqual(loop_env.wslots.load_cfg(str(self.repo)).brief_kb, 7)
 
     def test_no_remote_falls_back_to_the_working_tree(self):
         self.sh("git", "remote", "remove", "origin", cwd=self.repo)
@@ -344,7 +362,7 @@ class LoopBase(Base):
         self.clock = Clock()
         self.roles = lambda: {"worker": {"usable": True}}  # delegate's `status --json` roles{}: a test makes it a function of the clock
         self.script, self.hold, self.started, self.during = {}, {}, [], []
-        for p in (mock.patch.object(tl, "now", self.clock), mock.patch.object(Core, "nap", self.clock.nap),
+        for p in (mock.patch.object(Core, "nap", self.clock.nap),
                   mock.patch.object(loop_env, "delegate_route", return_value="/fake/route.py"),
                   mock.patch.object(loop_env.dg, "role_status", side_effect=lambda route: self.roles()),
                   mock.patch.object(loop_env, "spawn", side_effect=lambda cmd, log, extra: (FakeChild(self, cmd, extra), mock.Mock())),
@@ -363,7 +381,7 @@ class LoopBase(Base):
     def run_loop(self, *args):
         out = io.StringIO()
         with redirect_stdout(out):
-            rc = tl.main(["loop", "--repo", str(self.repo)] + list(args))
+            rc = self.main(["loop", "--repo", str(self.repo)] + list(args))
         self.out = out.getvalue()
         return rc
 
@@ -485,7 +503,7 @@ class Loop(LoopBase):
     def test_a_stop_now_that_lands_anyway_never_reopens_the_bead(self):
         bd = self.beads({"x-1": [], "x-2": [rec("landed")]})
         self.hold["x-1"] = 3
-        self.during.append(lambda: tl.main(["stop", "--repo", str(self.repo), "--now"]))
+        self.during.append(lambda: self.main(["stop", "--repo", str(self.repo), "--now"]))
         with mock.patch.object(loop_env, "landed_on_base", return_value=True):
             self.run_loop()
         self.assertNotIn(("update", "x-1", "--status", "open", "--assignee", ""), bd.calls)
@@ -536,7 +554,7 @@ class Loop(LoopBase):
     def test_a_live_storm_record_stops_a_loop_before_any_claim_with_one_line(self):
         from loop_health import StormTrip, write_storm, storm_path
         self.beads({"x-1": [rec("landed")]})
-        path = storm_path(tl.config_dir(), (tl.git('remote', 'get-url', 'origin', cwd=str(self.repo)) or str(self.repo)))
+        path = storm_path(ident.config_dir(), (gitrepo.git('remote', 'get-url', 'origin', cwd=str(self.repo)) or str(self.repo)))
         write_storm(path, StormTrip("FAULT_INFRA y", ("x-8", "x-9"), self.clock.t), self.clock.t)
         self.assertEqual(self.run_loop(), 2)
         self.assertEqual(self.started, [])
@@ -672,7 +690,7 @@ class Loop(LoopBase):
     def test_without_slots_the_loop_uses_its_worktree(self):
         (self.repo / ".task-loop.json").write_text(json.dumps({"engine": {}}))
         self.beads({"x-1": [rec("landed")]}, slots=0)
-        with mock.patch.object(tl, "start_worktree", return_value=str(self.home / "wt")):
+        with mock.patch.object(wslots, "start_worktree", return_value=str(self.home / "wt")):
             self.assertEqual(self.run_loop(), 0)
         self.assertEqual(self.started, [("x-1", None)])
 
@@ -683,7 +701,7 @@ class Loop(LoopBase):
 
     def test_stop_lets_the_current_bead_finish_then_ends(self):
         self.beads({"x-1": [rec("landed")], "x-2": [rec("landed")]})
-        self.during.append(lambda: tl.main(["stop", "--repo", str(self.repo)]))
+        self.during.append(lambda: self.main(["stop", "--repo", str(self.repo)]))
         self.assertEqual(self.run_loop(), 0)
         self.assertEqual([l["outcome"] for l in self.lines()], ["landed"])
         self.assertFalse(looptest.command(str(self.repo)).exists())
@@ -691,7 +709,7 @@ class Loop(LoopBase):
     def test_stop_now_ends_the_child_and_leaves_no_held_slot_or_claimed_bead(self):
         bd = self.beads({"x-1": [], "x-2": [rec("landed")]})
         self.hold["x-1"] = 3
-        self.during.append(lambda: tl.main(["stop", "--repo", str(self.repo), "--now"]))
+        self.during.append(lambda: self.main(["stop", "--repo", str(self.repo), "--now"]))
         self.assertEqual(self.run_loop(), 0)
         self.assertEqual(len(self.started), 1)
         self.assertEqual(bd.beads["x-1"]["status"], "open")
@@ -702,7 +720,7 @@ class Loop(LoopBase):
     def test_stop_with_no_loop_running_says_so(self):
         out = io.StringIO()
         with redirect_stdout(out):
-            self.assertEqual(tl.main(["stop", "--repo", str(self.repo)]), 1)
+            self.assertEqual(self.main(["stop", "--repo", str(self.repo)]), 1)
         self.assertIn("no loop", out.getvalue())
 
     def other_loop(self):
@@ -721,7 +739,7 @@ class Loop(LoopBase):
         self.assertEqual([s.pid for s in looptest.live(str(self.repo))], [k.pid])
         out = io.StringIO()
         with redirect_stdout(out):
-            self.assertEqual(tl.main(["loop", "status", "--repo", str(self.repo)]), 0)
+            self.assertEqual(self.main(["loop", "status", "--repo", str(self.repo)]), 0)
         self.assertIn("pid %d" % k.pid, out.getvalue())
         self.assertIn("x-9", out.getvalue())
 
@@ -735,13 +753,13 @@ class Loop(LoopBase):
 
             def spy(*a, _bd=bd, _claims=claims, **kw):
                 if a[:1] == ("update",) and "--claim" in a and a[1] == "x-1":
-                    _claims.append(tl.actor())
+                    _claims.append(ident.actor())
                 return _bd(*a, **kw)
             with tlbd.bd_boundary(spy):
                 self.run_loop()
             seen.append(claims[0])
             os.environ.pop("TASK_LOOP_ACTOR", None)
-        session_actor = tl.actor()
+        session_actor = ident.actor()
         self.assertNotEqual(seen[0], seen[1])
         self.assertNotIn(session_actor, seen)  # a hand run from the session claims as the session
         self.assertTrue(all(a.startswith(session_actor + "-") for a in seen), seen)  # still names its session
@@ -749,7 +767,7 @@ class Loop(LoopBase):
     def test_without_slots_each_loop_start_reuses_its_sessions_worktree(self):
         (self.repo / ".task-loop.json").write_text(json.dumps({"engine": {}}))
         names = []
-        with mock.patch.object(tl, "start_worktree", side_effect=lambda repo, name=None: names.append(name) or
+        with mock.patch.object(wslots, "start_worktree", side_effect=lambda repo, name=None: names.append(name) or
                                str(self.home / "wt")):
             for _ in range(2):
                 self.beads({"x-1": [rec("landed")]}, slots=0)
@@ -764,7 +782,7 @@ class Loop(LoopBase):
         k = self.other_loop()
         looptest.write_state(str(self.repo), pid=k.pid, started=self.clock.t, worktree=str(self.repo / ".worktrees" / "loop-abcdef12"))
         names = []
-        with mock.patch.object(tl, "start_worktree", side_effect=lambda repo, name=None: names.append(name) or
+        with mock.patch.object(wslots, "start_worktree", side_effect=lambda repo, name=None: names.append(name) or
                                str(self.home / "wt")):
             self.run_loop()
         self.assertNotEqual(names[0], "abcdef12")
@@ -775,17 +793,18 @@ class Loop(LoopBase):
         bd.beads["x-1"].update(status="in_progress", assignee="tl-other000-a1b2c3", lease_expires_at="2999-01-01T00:00:00Z")
         wt = self.repo / ".worktrees" / "loop-other000"
         wt.mkdir(parents=True)
-        with mock.patch.object(tl, "git", return_value=""), mock.patch.object(tl.subprocess, "run") as run, \
-                redirect_stdout(io.StringIO()):
-            tl.main(["worktree", "sunset"])
-        self.assertFalse([c for c in run.call_args_list if "remove" in c[0][0]])
+        out = io.StringIO()
+        with redirect_stdout(out):
+            self.main(["worktree", "sunset"])
+        self.assertNotIn("REMOVED", out.getvalue())
+        self.assertTrue(wt.is_dir())
 
     def test_a_stop_reaches_every_loop_and_a_loop_started_later_ignores_it(self):
         self.beads({"x-1": [rec("landed")]})
         k = self.other_loop()
         out = io.StringIO()
         with redirect_stdout(out):
-            self.assertEqual(tl.main(["stop", "--repo", str(self.repo)]), 0)
+            self.assertEqual(self.main(["stop", "--repo", str(self.repo)]), 0)
         self.assertIn(str(k.pid), out.getvalue())
         time.sleep(0.05)
         self.assertEqual(self.run_loop(), 0)  # started after the stop: runs
@@ -798,7 +817,7 @@ class Loop(LoopBase):
         looptest.write_state(str(self.repo), pid=os.getpid(), started=self.clock.t, bead="x-3", slot="s2", since=self.clock.t)
         out = io.StringIO()
         with redirect_stdout(out):
-            self.assertEqual(tl.main(["loop", "status", "--repo", str(self.repo)]), 0)
+            self.assertEqual(self.main(["loop", "status", "--repo", str(self.repo)]), 0)
         s = out.getvalue()
         self.assertIn("pid %d" % os.getpid(), s)
         self.assertIn("x-3", s)

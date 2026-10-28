@@ -14,7 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import test_engine as te  # noqa: E402
-import tl  # noqa: E402
+from taskloop.app.wire import slots as wslots
 from taskloop.contracts import config  # noqa: E402
 from test_engine import engine, pyc  # noqa: E402
 from test_checks_speed import SpeedTest  # noqa: E402
@@ -92,7 +92,7 @@ class RetiredKeys(unittest.TestCase):
         config._SAID.clear()
         with contextlib.redirect_stderr(err):
             for _ in range(2):
-                profile = tl.load_profile(json.loads(f.read_text()))
+                profile = wslots.load_profile(json.loads(f.read_text()))
         self.assertEqual((profile.engine.check_wall_min, profile.engine.checks[0].wall_min), (20, 90))
         lines = err.getvalue().splitlines()
         self.assertEqual(len(lines), 2, lines)  # one per key, not per load
@@ -114,7 +114,7 @@ class RetiredKeys(unittest.TestCase):
 
     def test_an_unknown_key_still_fails(self):
         with self.assertRaises(SystemExit):
-            tl.load_profile({"engine": {"check_idle_mins": 3}})
+            wslots.load_profile({"engine": {"check_idle_mins": 3}})
 
 
 if __name__ == "__main__":

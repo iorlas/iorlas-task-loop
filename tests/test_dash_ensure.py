@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from taskloop_dash import bind  # noqa: E402
-import tl  # noqa: E402
+import dash_server  # noqa: E402
 
 SERVER = ROOT / "src" / "taskloop_dash" / "__main__.py"
 
@@ -43,31 +43,31 @@ class StaleReason(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_current_server_is_not_stale(self):
-        self.assertIsNone(tl.stale_reason(live(self.script), "v1", ["127.0.0.1"]))
+        self.assertIsNone(dash_server.stale_reason(live(self.script), "v1", ["127.0.0.1"]))
 
     def test_deleted_script_is_stale(self):
         v = live(Path(self.tmp.name) / "gone" / "server.py")
-        self.assertIn("gone", tl.stale_reason(v, "v1", ["127.0.0.1"]))
+        self.assertIn("gone", dash_server.stale_reason(v, "v1", ["127.0.0.1"]))
 
     def test_version_differs_is_stale(self):
-        self.assertIn("version", tl.stale_reason(live(self.script, "v0"), "v1", ["127.0.0.1"]))
+        self.assertIn("version", dash_server.stale_reason(live(self.script, "v0"), "v1", ["127.0.0.1"]))
 
     def test_missing_address_is_stale(self):
-        r = tl.stale_reason(live(self.script), "v1", ["127.0.0.1", "100.1.2.3"])
+        r = dash_server.stale_reason(live(self.script), "v1", ["127.0.0.1", "100.1.2.3"])
         self.assertIn("100.1.2.3", r)
 
     def test_extra_address_is_fine(self):
-        self.assertIsNone(tl.stale_reason(live(self.script, binds=("127.0.0.1", "100.1.2.3")), "v1", ["127.0.0.1"]))
+        self.assertIsNone(dash_server.stale_reason(live(self.script, binds=("127.0.0.1", "100.1.2.3")), "v1", ["127.0.0.1"]))
 
     def test_old_server_without_script_or_binds_is_stale(self):
         v = live(self.script)
         del v["script"], v["binds"]
-        self.assertIsNotNone(tl.stale_reason(v, "v1", ["127.0.0.1"]))
+        self.assertIsNotNone(dash_server.stale_reason(v, "v1", ["127.0.0.1"]))
 
     def test_is_task_loop_server_shape(self):
-        self.assertTrue(tl.is_dash_server(live(self.script)))
-        self.assertFalse(tl.is_dash_server({"hello": 1}))
-        self.assertFalse(tl.is_dash_server(None))
+        self.assertTrue(dash_server.is_dash_server(live(self.script)))
+        self.assertFalse(dash_server.is_dash_server({"hello": 1}))
+        self.assertFalse(dash_server.is_dash_server(None))
 
 
 class EnsureFlow(unittest.TestCase):
@@ -81,23 +81,23 @@ class EnsureFlow(unittest.TestCase):
         self.addCleanup(p.stop)
         for name, val in (("code_version", "v1"), ("expected_binds", ["127.0.0.1", "100.1.2.3"]),
                           ("is_dev_checkout", False)):
-            q = mock.patch.object(tl, name, (lambda v=val: (lambda *a: v))() if name != "is_dev_checkout" else (lambda: val))
+            q = mock.patch.object(dash_server, name, (lambda v=val: (lambda *a: v))() if name != "is_dev_checkout" else (lambda: val))
             q.start()
             self.addCleanup(q.stop)
 
     def tearDown(self):
-        gc.collect()  # tl.cmd_dash leaves dash.log open; the mocked Popen keeps it alive in a cycle, and Windows will not delete an open file
+        gc.collect()  # dash_server.run leaves dash.log open; the mocked Popen keeps it alive in a cycle, and Windows will not delete an open file
         self.tmp.cleanup()
 
     def run_ensure(self, pings):
         stops, popens = [], []
         proc = mock.Mock()
         proc.poll.return_value = None
-        with mock.patch.object(tl, "ping", side_effect=pings), \
-                mock.patch.object(tl, "stop_server", side_effect=lambda v=None: stops.append(v)), \
-                mock.patch.object(tl.subprocess, "Popen", side_effect=lambda *a, **k: popens.append(a) or proc), \
-                mock.patch.object(tl.time, "sleep"):
-            rc = tl.cmd_dash(mock.Mock(op="ensure"))
+        with mock.patch.object(dash_server, "ping", side_effect=pings), \
+                mock.patch.object(dash_server, "stop_server", side_effect=lambda v=None: stops.append(v)), \
+                mock.patch.object(dash_server.procs, "spawn", side_effect=lambda *a, **k: popens.append(a) or proc), \
+                mock.patch.object(dash_server.time, "sleep"):
+            rc = dash_server.run("ensure")
         return rc, stops, popens
 
     def test_current_server_is_kept(self):
@@ -127,12 +127,12 @@ class EnsureFlow(unittest.TestCase):
         proc = mock.Mock()
         proc.poll.return_value = 2
         (Path(self.tmp.name) / "task-loop").mkdir(exist_ok=True)
-        with mock.patch.object(tl, "ping", return_value=None), \
-                mock.patch.object(tl.subprocess, "Popen", return_value=proc), \
-                mock.patch.object(tl, "log_tail", return_value="bind 100.1.2.3:7878 failed (held by pid 99)"), \
-                mock.patch.object(tl.time, "sleep"), \
+        with mock.patch.object(dash_server, "ping", return_value=None), \
+                mock.patch.object(dash_server.procs, "spawn", return_value=proc), \
+                mock.patch.object(dash_server, "log_tail", return_value="bind 100.1.2.3:7878 failed (held by pid 99)"), \
+                mock.patch.object(dash_server.time, "sleep"), \
                 mock.patch("builtins.print") as pr:
-            rc = tl.cmd_dash(mock.Mock(op="ensure"))
+            rc = dash_server.run("ensure")
         self.assertEqual(rc, 1)
         out = " ".join(str(c.args[0]) for c in pr.call_args_list)
         self.assertIn("100.1.2.3", out)
@@ -140,16 +140,16 @@ class EnsureFlow(unittest.TestCase):
 
     def test_dev_checkout_ensure_never_touches_the_installed_port(self):
         os.environ.pop("TASK_LOOP_DASH_PORT")
-        with mock.patch.object(tl, "is_dev_checkout", return_value=True), \
-                mock.patch.object(tl, "free_port", return_value=54321):
+        with mock.patch.object(dash_server, "is_dev_checkout", return_value=True), \
+                mock.patch.object(dash_server, "free_port", return_value=54321):
             ping = mock.Mock(return_value=live(self.script, binds=("127.0.0.1",)))
             stop = mock.Mock()
             proc = mock.Mock()
             proc.poll.return_value = None
-            with mock.patch.object(tl, "ping", ping), mock.patch.object(tl, "stop_server", stop), \
-                    mock.patch.object(tl.subprocess, "Popen", return_value=proc) as popen, \
-                    mock.patch.object(tl.time, "sleep"):
-                rc = tl.cmd_dash(mock.Mock(op="ensure"))
+            with mock.patch.object(dash_server, "ping", ping), mock.patch.object(dash_server, "stop_server", stop), \
+                    mock.patch.object(dash_server.procs, "spawn", return_value=proc) as popen, \
+                    mock.patch.object(dash_server.time, "sleep"):
+                rc = dash_server.run("ensure")
         self.assertEqual(rc, 0)
         stop.assert_not_called()
         cmd = popen.call_args.args[0]

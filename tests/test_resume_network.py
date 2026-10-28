@@ -25,7 +25,9 @@ from taskloop.domain.lanes import netgate  # noqa: E402
 import outcome as oc  # noqa: E402
 import test_engine as te  # noqa: E402
 import test_stages_visual  # noqa: E402
-from test_engine import BEAD, CLEAN, PLAN, WRITE, engine, stop, tl, verdict  # noqa: E402
+from test_engine import BEAD, CLEAN, PLAN, WRITE, engine, stop, verdict  # noqa: E402
+from taskloop.adapters import gitrepo
+from taskloop.adapters import ident
 
 SAY = "codex: Reconnecting... waiting for network (Connection failed: error sending request)"
 REPLAY = te.ROOT / "tests" / "fixtures" / "replay" / "5ban16_plan_network_drop.jsonl"
@@ -78,7 +80,7 @@ class NetBase(unittest.TestCase):
         self.assertEqual((eng.stats["replans"], eng.stats["rounds"]), (0, 0))
         self.assertEqual((self.blocked, self.ask()), ([], None))
         self.assertFalse([c for c in self.bd_calls if c[:2] == ("label", "add")], self.bd_calls)
-        self.assertFalse(list((tl.config_dir() / "storm").glob("*.json")) if (tl.config_dir() / "storm").is_dir() else [])
+        self.assertFalse(list((ident.config_dir() / "storm").glob("*.json")) if (ident.config_dir() / "storm").is_dir() else [])
 
     def thread_of(self, s, node):
         """(resume ref of each call of `node`, in order)."""
@@ -184,7 +186,7 @@ class Land(NetBase):
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(Counter(s.nodes), Counter({"plan": 1, "write": 1, "review": 1}))  # no step again for a failed push
         self.assertTrue(self.closed and self.closed[0].startswith("merged"))
-        self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
+        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
         self.assertGreaterEqual(probe.calls, 2)
         self.assertEqual(count.read_text(), "3")  # two cuts, then the push
         self.assert_no_charge()
@@ -199,7 +201,7 @@ class Land(NetBase):
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(count.read_text(), "1")  # pushed once; the second look found it on the base
         self.assertTrue(self.closed and self.closed[0].startswith("merged"))
-        subjects = tl.git("log", "--format=%s", "origin/main", cwd=str(self.wt)).splitlines()
+        subjects = gitrepo.git("log", "--format=%s", "origin/main", cwd=str(self.wt)).splitlines()  # pyrefly: ignore[missing-attribute]
         self.assertEqual(sum("(t-1)" in x for x in subjects), 1)  # one commit of the bead on the base
         self.assertIn("already", self.eng.log_path.read_text())
         self.assert_no_charge()
@@ -214,12 +216,12 @@ class Land(NetBase):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, land=pushed)
         self.assertEqual(rc, 2)  # the run reported a failed land: the bead is open, the branch is kept
         self.assertEqual((count.read_text(), self.closed), ("1", []))
-        self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")  # but it is on the base
+        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")  # but it is on the base
         rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]}, land=again)  # the next run
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(count.read_text(), "1")  # not pushed again
         self.assertTrue(self.closed and self.closed[0].startswith("merged"))
-        subjects = tl.git("log", "--format=%s", "origin/main", cwd=str(self.wt)).splitlines()
+        subjects = gitrepo.git("log", "--format=%s", "origin/main", cwd=str(self.wt)).splitlines()  # pyrefly: ignore[missing-attribute]
         self.assertEqual(sum("(t-1)" in x for x in subjects), 1)
 
 
@@ -252,7 +254,7 @@ class Pause(NetBase):
             self.assertLess(second.budget.spent_min(), 30)  # the two hours of pause are not charged to the time budget
         self.assertEqual(s.nodes, ["review"])
         self.assertEqual(s.calls[0][1], "net-review")
-        self.assertFalse((tl.config_dir() / "pauses" / "t-1.json").exists())  # taken once
+        self.assertFalse((ident.config_dir() / "pauses" / "t-1.json").exists())  # taken once
 
     def test_the_engine_comment_of_a_pause_does_not_make_the_next_run_plan_again(self):
         self.pause_in_review()

@@ -9,20 +9,22 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "task-loop"))
+import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support import fake_route  # noqa: E402
 from support.checkpoints import put_ck, read_ck  # noqa: E402
 from support.fakes import as_bead  # noqa: E402
 from support import tlbd  # noqa: E402
 from support.fakes import FakeBeadStore  # noqa: E402
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from taskloop.domain.prompts.plan import REPLAN_CAP  # noqa: E402
+from taskloop.app.wire import slots as wslots  # noqa: E402
+from taskloop.app.track import verbs  # noqa: E402
 from support.builders import cfg_with, make_engine  # noqa: E402
 import test_engine as te  # noqa: E402
-from test_engine import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint, tl  # noqa: E402,F401
+from test_engine import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint  # noqa: E402,F401
 
 
-_REAL_CMD_BLOCK = tl.cmd_block  # te's harness patches it per test; this is the real one
 from test_stages import StagesTest  # noqa: E402
+from taskloop.adapters import ident, gitrepo  # noqa: E402
 
 
 class VisualWork(StagesTest):
@@ -187,11 +189,11 @@ class VisualWork(StagesTest):
 
     def test_the_table_is_read_from_the_base_branch_not_the_working_copy(self):
         (self.wt / "shots.json").write_text(json.dumps({"v": 1, "methods": [{"method": "Evil", "argv": ["touch", "pwned"]}]}))
-        e = engine.Engine("t-1", str(self.wt), cfg_with(engine.load_cfg(str(self.wt)), shot_table="shots.json"), store=self.store)
+        e = engine.Engine("t-1", str(self.wt), cfg_with(wslots.load_cfg(str(self.wt)), shot_table="shots.json"), store=self.store)
         self.assertEqual(list(e.shot_methods()), ["ScreenShots"])
 
     def test_a_missing_table_is_warned_once_and_the_old_way_stands(self):
-        e = engine.Engine("t-1", str(self.wt), cfg_with(engine.load_cfg(str(self.wt)), shot_table="nowhere.json"), store=self.store)
+        e = engine.Engine("t-1", str(self.wt), cfg_with(wslots.load_cfg(str(self.wt)), shot_table="nowhere.json"), store=self.store)
         self.assertEqual(e.shot_methods(), {})
         self.assertEqual(e.shot_methods(), {})
 
@@ -273,7 +275,7 @@ class VisualWork(StagesTest):
         e.checkpoints.save(stage=0, rounds=0, n=1, feedback="", step="write")
         ck = read_ck(e).state
         self.assertEqual((ck.look_done, sorted(ck.rendered_names), ck.render_stale), (1, ["a.png"], True))
-        again = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
+        again = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         again.tree.reset(as_bead(BEAD))
         again.resume.point()
         self.assertEqual((again.look_done, again.rendered_names, again.render_stale), (1, {"a.png"}, True))
@@ -344,7 +346,7 @@ class ResumeCount(StagesTest):
     def test_an_edit_with_no_ask_still_counts(self):
         # who edited the bead is not known: a comment from a sibling agent must not lift the limit
         self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which format?")]}, max_replans=1)
-        path = tl.config_dir() / "asks" / "t-1.json"
+        path = ident.config_dir() / "asks" / "t-1.json"
         path.unlink()
         with self.store.stub(show=dict(BEAD, description="Also say hi.")):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, max_replans=1)
@@ -407,7 +409,7 @@ class ResumeCount(StagesTest):
         te.sh("git", "add", "-A", cwd=base)
         te.sh("git", "commit", "-qm", "main moves", cwd=base)
         te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
+        e = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         e.tree.reset(as_bead(BEAD))
         e.plan_data = dict(PLAN)
         e.checkpoints.save(stage=0, rounds=0, n=1, feedback="", step="write")
@@ -425,7 +427,7 @@ class ResumeCount(StagesTest):
         return mock.patch.object(fake_route.Script, "reply", call)
 
     def last_trace(self):
-        return json.loads((tl.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
+        return json.loads((ident.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
 
     def test_wip_commits_that_conflict_only_unsquashed_are_squashed_and_rebase_without_a_fix(self):
         self.wip_branch(["step 1", "step 2", "step 3", "main moved on"], "main moved on")
@@ -436,7 +438,7 @@ class ResumeCount(StagesTest):
         self.assertIn("squashed the branch's wip commits into one", text)
         self.assertNotIn("resume_conflict", text)
         self.assertFalse(self.last_trace()["salvaged"])
-        self.assertEqual(te.tl.git("show", "origin/main:a.txt", cwd=str(self.wt)), "main moved on")
+        self.assertEqual(gitrepo.git("show", "origin/main:a.txt", cwd=str(self.wt)), "main moved on")
         self.assertEqual(engine.subprocess.run(["git", "branch", "--list", "task/t-1-stale-*"], cwd=self.wt, capture_output=True, text=True).stdout, "")
 
     def test_a_real_resume_conflict_in_a_few_files_is_fixed_not_thrown_away(self):
@@ -449,7 +451,7 @@ class ResumeCount(StagesTest):
         text = self.eng.log_path.read_text()
         self.assertNotIn("resume_conflict", text)
         self.assertTrue(self.last_trace()["salvaged"])
-        self.assertEqual(te.tl.git("show", "origin/main:a.txt", cwd=str(self.wt)), "merged")
+        self.assertEqual(gitrepo.git("show", "origin/main:a.txt", cwd=str(self.wt)), "merged")
         self.assertEqual(self.eng.fixes, 0)  # the land's two fix rounds are its own
         self.assertEqual(engine.subprocess.run(["git", "branch", "--list", "task/t-1-stale-*"], cwd=self.wt, capture_output=True, text=True).stdout, "")
 
@@ -464,7 +466,7 @@ class ResumeCount(StagesTest):
         out = engine.subprocess.run(["git", "branch", "--list", "task/t-1-stale-*"], cwd=self.wt, capture_output=True, text=True).stdout
         self.assertIn("task/t-1-stale-", out)
         stale = out.split()[-1]
-        self.assertEqual(te.tl.git("show", stale + ":c0.txt", cwd=str(self.wt)), "mine 2")  # the work is kept whole
+        self.assertEqual(gitrepo.git("show", stale + ":c0.txt", cwd=str(self.wt)), "mine 2")  # the work is kept whole
 
     def test_exactly_ten_conflicted_files_are_still_fixed(self):
         files = ["c%d.txt" % n for n in range(10)]
@@ -490,7 +492,7 @@ class ResumeCount(StagesTest):
         self.assertFalse(self.last_trace()["salvaged"])
         out = engine.subprocess.run(["git", "branch", "--list", "task/t-1-stale-*"], cwd=self.wt, capture_output=True, text=True).stdout
         stale = out.split()[-1]
-        self.assertEqual(te.tl.git("show", stale + ":a.txt", cwd=str(self.wt)), "mine 2")  # the original work, not a half-fixed rebase
+        self.assertEqual(gitrepo.git("show", stale + ":a.txt", cwd=str(self.wt)), "mine 2")  # the original work, not a half-fixed rebase
         self.assertEqual(self.eng.fixes, 0)
 
     def test_a_branch_that_cannot_be_kept_aside_is_not_reset(self):
@@ -521,16 +523,11 @@ class ResumeCount(StagesTest):
 class Claims(StagesTest):
     """tl-159, tl-wjj, tl-05s."""
 
-    def setUp(self):
-        global real_cmd_block
-        real_cmd_block = _REAL_CMD_BLOCK
-        super().setUp()
-
     def test_a_parked_bead_whose_actor_is_live_elsewhere_can_be_taken_over(self):
         parked = {"id": "t-1", "status": "blocked", "assignee": "tl-2be89f88", "lease_expires_at": "2999-01-01T00:00:00Z", "dependencies": []}
         comments = [{"text": "Blocked: stuck: re-planned 3 times", "created_at": "1", "author": "engine"}]
         import loop_env
-        with self.store.stub(show=parked), mock.patch.object(tl, "live_actors", return_value={"tl-2be89f88"}), \
+        with self.store.stub(show=parked), mock.patch.object(wslots, "live_actors", return_value={"tl-2be89f88"}), \
                 self.store.stub(comments=comments), mock.patch.object(loop_env, "running", return_value={}):
             ok, why = engine.reclaim("t-1", str(self.wt), store=self.store)
         self.assertTrue(ok, why)
@@ -540,7 +537,7 @@ class Claims(StagesTest):
     def test_a_parked_bead_with_an_engine_still_on_it_is_a_live_claim(self):
         parked = {"id": "t-1", "status": "blocked", "assignee": "tl-2be89f88", "lease_expires_at": "", "dependencies": []}
         import loop_env
-        with self.store.stub(show=parked), mock.patch.object(tl, "live_actors", return_value=set()), \
+        with self.store.stub(show=parked), mock.patch.object(wslots, "live_actors", return_value=set()), \
                 mock.patch.object(loop_env, "running", return_value={"t-1": "s2"}):
             ok, why = engine.reclaim("t-1", str(self.wt), store=self.store)
         self.assertFalse(ok)
@@ -548,7 +545,7 @@ class Claims(StagesTest):
 
     def test_a_working_bead_of_a_live_actor_is_still_a_live_claim(self):
         busy = {"id": "t-1", "status": "in_progress", "assignee": "tl-2be89f88", "lease_expires_at": "", "dependencies": []}
-        with self.store.stub(show=busy), mock.patch.object(tl, "live_actors", return_value={"tl-2be89f88"}):
+        with self.store.stub(show=busy), mock.patch.object(wslots, "live_actors", return_value={"tl-2be89f88"}):
             ok, why = engine.reclaim("t-1", str(self.wt), store=self.store)
         self.assertFalse(ok)
         self.assertIn("a live claim", why)
@@ -558,9 +555,7 @@ class Claims(StagesTest):
         for holder, expect in (("tl-2be89f88", ("update", "t-1", "--status", "blocked", "--assignee", "")),
                                ("denis", ("update", "t-1", "--status", "blocked")), ("", ("update", "t-1", "--status", "blocked"))):
             store = FakeBeadStore().put({"id": "t-1", "assignee": holder})
-            with tlbd.bd_boundary(store=store), \
-                    mock.patch.object(tl, "event"), mock.patch.object(tl, "provenance"):
-                self.assertEqual(real_cmd_block(mock.Mock(id="t-1", why="stuck")), 0)
+            self.assertEqual(verbs.block("t-1", "stuck", store), 0)
             self.assertEqual(store.said("update")[0], expect, holder)  # a person's own claim stays theirs
 
     def test_a_plan_with_no_stages_goes_back_to_the_planner_once(self):
@@ -594,7 +589,7 @@ class Claims(StagesTest):
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer", "reviewer"])  # the reflection is the last call
         self.assertIn("Bead t-1: Add f", s.prompts[3])
         self.assertIn("session ref-write", s.prompts[3])  # the sessions to cite
-        last = json.loads((tl.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
+        last = json.loads((ident.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
         self.assertEqual(last["reflection"]["went_badly"][0]["cause"], "prompt")
         self.assertEqual(last["reflection"]["went_badly"][0]["session"], "ref-review")
         comment = [c[3] for c in self.bd_calls if c[:2] == ("comments", "add") and c[3].startswith("Reflect (engine)")][0]
@@ -606,7 +601,7 @@ class Claims(StagesTest):
         crash = fake_route.NO_ANSWER
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN], "reflect": [crash, crash, crash]}, reflect=True)
         self.assertEqual(rc, 0, self.blocked)
-        last = json.loads((tl.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
+        last = json.loads((ident.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
         self.assertEqual((last["outcome"], last["reflection"]), ("landed", None))
         self.assertTrue(self.closed and self.closed[0].startswith("merged"))
 

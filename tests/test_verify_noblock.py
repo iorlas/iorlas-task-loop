@@ -14,7 +14,7 @@ from taskloop.contracts import answers  # noqa: E402
 from taskloop.domain.prompts import common as cp  # noqa: E402
 from taskloop.domain.prompts import verify as vp  # noqa: E402
 import test_engine as T  # noqa: E402
-from test_engine import BEAD, CLEAN, PLAN, WRITE, engine, tl, verdict  # noqa: E402
+from test_engine import BEAD, CLEAN, PLAN, WRITE, engine, verdict  # noqa: E402
 from support.builders import make_engine  # noqa: E402
 
 # lifesim-yxbb.7 and lifesim-fld.25.16: the engine files follow-up beads after the land

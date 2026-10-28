@@ -2,15 +2,17 @@
 
 `route` answers `resolve(delegate_cfg)` (adapters.delegate.Resolved or Refusal) and `runner(log_path, idle, wall, live, on_worker)` (the
 process seam of `adapters.delegate.call`: `idle` is the silence limits (warn, stop, cap, on_warn) of a write, or None); the default looks
-the real function up at call time. The bd seam is `store` (taskloop.contracts.ports.Beads), made by `tl.bd_store()`."""
-import tl
+the real function up at call time. The bd seam is `store` (taskloop.contracts.ports.Beads), made by `beadtools.bd_store()`."""
+from taskloop.adapters import beadtools
+from taskloop.adapters import ident
+from taskloop.app.release import pins
 from taskloop.adapters import delegate as dg
 from taskloop.adapters.runner import Silence, StreamRunner
 
 
 def resolve_delegate(configured=""):
     """The delegate install for the next call: a configured path, then the pin, then the installed one."""
-    return dg.resolve(configured, tl.pinned_dir("delegate"), dg.installed_dir(tl.claude_dir()))
+    return dg.resolve(configured, pins.pinned_dir("delegate"), dg.installed_dir(ident.claude_dir()))
 
 
 class DelegateRoute:

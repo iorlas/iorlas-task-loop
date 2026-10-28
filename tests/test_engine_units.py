@@ -22,8 +22,9 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
-from taskloop.adapters import applog  # noqa: E402
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from taskloop.adapters import applog  # noqa: E402
+from taskloop.app.wire import slots as wslots  # noqa: E402
 from support.checkpoints import put_ck, read_ck  # noqa: E402
 from taskloop.app.plan.planner import Planner  # noqa: E402
 from taskloop.contracts import answers  # noqa: E402
@@ -49,7 +50,8 @@ from support.checks import res  # noqa: E402
 from taskloop.contracts.checks import Durations  # noqa: E402
 from taskloop.domain.checks import durations  # noqa: E402
 from taskloop.domain.checks.writer_split import WriterSplit  # noqa: E402
-import tl  # noqa: E402
+from taskloop.adapters import gitrepo  # noqa: E402
+from taskloop.adapters import ident  # noqa: E402
 from taskloop.adapters import delegate as lroute  # noqa: E402,F401
 import test_engine as T  # noqa: E402
 from test_engine import BRIEFS, CLEAN, PLAN, WRITE, finding, full, review, sh, shown, stop, stored_brief, verdict  # noqa: E402
@@ -170,9 +172,8 @@ class Outcome(unittest.TestCase):
                       quiet=True, outcome_file=str(outcome_file))
         Path(a.worktree).mkdir(exist_ok=True)
         out = io.StringIO()
-        with mock.patch.object(tl, "repo_root", return_value=str(self.wt)), redirect_stdout(out), \
-                mock.patch.object(signal, "signal"):
-            rc = engine.main(a)
+        with contextlib.chdir(self.wt), redirect_stdout(out), mock.patch.object(signal, "signal"):  # pyrefly: ignore[missing-attribute]
+            rc = engine.main(a, self.store)  # pyrefly: ignore[missing-attribute]
         last = json.loads(out.getvalue().strip().splitlines()[-1])
         return rc, json.loads(Path(outcome_file).read_text()), last
 
@@ -181,8 +182,7 @@ class Outcome(unittest.TestCase):
         made = mock.Mock()
         made.return_value.run.return_value = 0
         made.return_value.result.return_value = {"outcome": "landed", "bead": "t-1"}
-        with mock.patch.object(engine, "reclaim", return_value=(True, "")), \
-                mock.patch.object(tl, "cmd_claim", return_value=0), mock.patch.object(engine, "Engine", made):
+        with mock.patch.object(engine, "reclaim", return_value=(True, "")), mock.patch.object(engine, "Engine", made):
             rc, rec, last = self.main(f)
         self.assertEqual((rc, rec["outcome"], last["outcome"]), (0, "landed", "landed"))
 
@@ -196,10 +196,9 @@ class Outcome(unittest.TestCase):
                       quiet=True, outcome_file=None)
         Path(a.worktree).mkdir(exist_ok=True)
         out = io.StringIO()
-        with mock.patch.object(engine, "reclaim", return_value=(True, "")), mock.patch.object(tl, "cmd_claim", return_value=0), \
-                mock.patch.object(engine, "Engine", made), mock.patch.object(tl, "repo_root", return_value=str(self.wt)), \
-                redirect_stdout(out), mock.patch.object(signal, "signal"):
-            engine.main(a)
+        with mock.patch.object(engine, "reclaim", return_value=(True, "")), mock.patch.object(engine, "Engine", made), \
+                contextlib.chdir(self.wt), redirect_stdout(out), mock.patch.object(signal, "signal"):  # pyrefly: ignore[missing-attribute]
+            engine.main(a, self.store)  # pyrefly: ignore[missing-attribute]
         lines = out.getvalue().strip().splitlines()
         self.assertEqual(json.loads(lines[-1])["retry_after"], due)  # the loop reads the last line: still the outcome
         self.assertTrue(any("PAUSED t-1: the lane is back at %s; rerun then: tl run-task t-1"
@@ -457,7 +456,7 @@ class DelegateLauncher(unittest.TestCase):
         rc, s = self.run_engine({"plan": [PLAN], "write": [out, WRITE]})
         self.assertEqual(rc, 2)
         self.assertEqual([c[0] for c in s.calls].count("worker"), 1)
-        self.assertEqual((self.blocked, (tl.config_dir() / "asks" / "t-1.json").exists()), ([], False))
+        self.assertEqual((self.blocked, (ident.config_dir() / "asks" / "t-1.json").exists()), ([], False))
         self.assertTrue(any(c[:3] == ("comments", "add", "t-1") and any("run `claude auth login`" in x for x in c)
                             for c in self.bd_calls))
 
@@ -491,7 +490,7 @@ class DelegateLauncher(unittest.TestCase):
         self.assertAlmostEqual(self.eng.retry_after, due, delta=1)
 
     def test_close_with_an_empty_reason_still_closes(self):
-        c = engine.load_cfg(str(self.wt))
+        c = wslots.load_cfg(str(self.wt))
         eng = engine.Engine("t-1", str(self.wt), c, store=self.store)
         eng.closer.close("failed", "", "", "")
         self.assertTrue(self.blocked)
@@ -523,8 +522,8 @@ class DelegateLauncher(unittest.TestCase):
         sh("git", "worktree", "add", "-q", str(other), "task/t-1", cwd=self.wt)
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual(tl.git("show", "origin/main:g.txt", cwd=str(self.wt)), "from slot s2")
-        self.assertEqual(tl.git("symbolic-ref", "-q", "HEAD", cwd=str(other)), "")  # s2 let go of the branch
+        self.assertEqual(gitrepo.git("show", "origin/main:g.txt", cwd=str(self.wt)), "from slot s2")
+        self.assertEqual(gitrepo.git("symbolic-ref", "-q", "HEAD", cwd=str(other)), "")  # s2 let go of the branch
 
     def test_a_bead_branch_with_uncommitted_work_in_another_slot_is_never_taken(self):
         sh("git", "branch", "task/t-1", cwd=self.wt)
@@ -542,7 +541,7 @@ class DelegateLauncher(unittest.TestCase):
         self.assertIn("contract_violation", self.said())
 
     def test_no_delegate_blocks_with_the_install_command(self):
-        c = engine.load_cfg(str(self.wt))
+        c = wslots.load_cfg(str(self.wt))
         with mock.patch.object(dl, "resolve", return_value=dl.Refusal("not_installed")):
             rc = engine.Engine("t-1", str(self.wt), c, store=self.store).run()
         self.assertEqual(rc, 2)

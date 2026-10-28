@@ -1,6 +1,5 @@
 """The dashboard's ports, made from the flat engine code: the read-only facts the package taskloop_dash may not import (slot beads,
-the waiting line, a repo's config, the installed versions, the run reflections) and bd through the engine's adapter. tl.py passes
-its own modules in (`tl.dash_ports`), so this file imports none of them."""
+the waiting line, a repo's config, the installed versions, the run reflections) and bd through the engine's adapter."""
 
 import dataclasses
 import shutil
@@ -12,6 +11,11 @@ from taskloop.adapters import delegate as sdelegate
 from taskloop.adapters.bd import BdStore
 from taskloop.domain.asks import text as asktext
 from taskloop_dash.env import Ports
+from taskloop.app.release import catalog
+from taskloop.adapters import ident
+from taskloop.app.release import pins
+from taskloop.app.wire import slots as wslots
+import reflect_digest
 
 
 def quiet(fn: Callable[..., Any], default: Any) -> Callable[..., Any]:
@@ -34,12 +38,14 @@ def bd(repo: str | None, *args: str, timeout: int = 30) -> types.SimpleNamespace
     return types.SimpleNamespace(returncode=r.code, stdout=r.out, stderr=r.err)
 
 
-def make_ports(tl: Any, engine: Any, reflect_digest: Any) -> Ports:
+def ports() -> Ports:
+    """`python3 -m taskloop_dash --ports dash_wiring:ports`: the dashboard process builds its ports from the flat code on its path, and
+    `tl ask` in a terminal uses the same."""
     return Ports(bd=bd, ask_text=asktext.markdown,
-                 slot_beads=quiet(lambda repo: [dataclasses.asdict(b) for b in tl.slot_beads(repo)], []),
-                 waiting_line=quiet(lambda repo: tl.waiting_line(repo), []),
-                 load_cfg=quiet(lambda repo: dataclasses.asdict(engine.load_cfg(repo)), {"pick_label": "auto", "skip_labels": []}),
+                 slot_beads=quiet(lambda repo: [dataclasses.asdict(b) for b in wslots.slot_beads(repo)], []),
+                 waiting_line=quiet(lambda repo: wslots.waiting_line(repo), []),
+                 load_cfg=quiet(lambda repo: dataclasses.asdict(wslots.load_cfg(repo)), {"pick_label": "auto", "skip_labels": []}),
                  reflections=quiet(lambda hours: reflect_digest.view(hours), {}),
-                 installed_versions=quiet(lambda: sorted(tl.cache_dirs("task-loop")), []),
-                 delegate_route=quiet(lambda: sdelegate.find_route("", tl.pinned_dir("delegate"), tl.claude_dir() / "plugins" / "cache",
-                                                                   sdelegate.installed_dir(tl.claude_dir())) or "", ""))
+                 installed_versions=quiet(lambda: sorted(catalog.cache_dirs("task-loop")), []),
+                 delegate_route=quiet(lambda: sdelegate.find_route("", pins.pinned_dir("delegate"), ident.claude_dir() / "plugins" / "cache",
+                                                                   sdelegate.installed_dir(ident.claude_dir())) or "", ""))

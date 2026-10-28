@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from support import tlbd  # noqa: E402
+from support import eventlog, tlbd  # noqa: E402
 import loop_env  # noqa: E402
 from support import looptest  # noqa: E402
 from taskloop.app.loop.core import Core  # noqa: E402
@@ -28,7 +28,10 @@ from taskloop.contracts.config import LoopConfig  # noqa: E402
 from taskloop.contracts.loop import LoopCommand, LoopState  # noqa: E402
 from taskloop.domain.lanes import netgate  # noqa: E402
 import tl  # noqa: E402
+from taskloop.adapters import beadtools  # noqa: E402
+from taskloop.adapters import ident  # noqa: E402
 from test_loop import Base, LoopBase, bead, rec  # noqa: E402
+from taskloop.app.wire import slots as wslots  # noqa: E402
 
 
 class UpAt:
@@ -50,10 +53,10 @@ class LoopNetwork(LoopBase):
 
     def setUp(self):
         super().setUp()
-        self.events = []
-        for p in (mock.patch.object(tl, "event", side_effect=lambda kind, bead="", **kw: self.events.append((kind, bead)) or {}),):
-            p.start()
-            self.addCleanup(p.stop)
+
+    @property
+    def events(self):
+        return [(e["kind"], e["bead"]) for e in eventlog.read()]
 
     def probe(self, probe):
         p = mock.patch.object(loop_env, "make_probe", return_value=probe)
@@ -140,7 +143,7 @@ class LoopHealth(LoopBase):
     def status(self):
         out = io.StringIO()
         with redirect_stdout(out):
-            tl.main(["loop", "status", "--repo", str(self.repo)])
+            self.main(["loop", "status", "--repo", str(self.repo)])
         return out.getvalue()
 
     def test_ready_beads_with_no_loop_alive_and_no_recent_beat_is_one_red_line_naming_repo_and_command(self):
@@ -151,7 +154,7 @@ class LoopHealth(LoopBase):
         self.assertIn("tl loop --repo %s" % self.repo, out)
 
     def test_a_bead_parked_on_a_dropped_ask_shows_in_status(self):
-        f = tl.config_dir() / "asks" / "x-1.json"
+        f = ident.config_dir() / "asks" / "x-1.json"
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text(json.dumps({"v": 1, "id": "x-1-2", "bead": "x-1", "status": "open"}))
         self.assertIn("x-1  ", self.status())
@@ -228,7 +231,7 @@ class StopRequests(LoopBase):
 
     def stop(self, now=False):
         with redirect_stdout(io.StringIO()):
-            self.assertEqual(tl.main(["stop", "--repo", self.repo_s] + (["--now"] if now else [])), 0)
+            self.assertEqual(self.main(["stop", "--repo", self.repo_s] + (["--now"] if now else [])), 0)
         return self.files.command().read()
 
     def test_the_command_names_the_running_loops(self):
@@ -338,9 +341,10 @@ class LoopSelfUpdate(LoopBase):
             self.execs.append((exe, argv, os.environ.get("TL_LOOP_STATE"), os.getcwd()))
             raise Moved()
         for p in (mock.patch.object(os, "execv", side_effect=execv),
-                  mock.patch.dict(os.environ, {}), mock.patch.object(tl, "HERE", self.install("0.1.0"))):
+                  mock.patch.dict(os.environ, {})):
             p.start()
             self.addCleanup(p.stop)
+        self.here = self.install("0.1.0")
         os.environ.pop("TL_LOOP_STATE", None)
 
     def install(self, ver, tl_py="import sys\n", missing=(), loop_py=""):
@@ -365,7 +369,7 @@ class LoopSelfUpdate(LoopBase):
         self.install("0.10.0")  # 0.10 is newer than 0.9: numbers, not text
         self.install("0.9.0")
         with self.assertRaises(Moved), redirect_stdout(io.StringIO()) as out:
-            tl.main(["loop", "--repo", str(self.repo)])
+            self.main(["loop", "--repo", str(self.repo)])
         self.assertIn("loop: moving to 0.10.0 (was 0.1.0)", out.getvalue())
         self.assertIn("0.10.0", self.execs[0][1][1])
         self.assertEqual(self.started, [])  # the first look is before any bead
@@ -402,7 +406,7 @@ class LoopSelfUpdate(LoopBase):
         self.assertIn("plugin.json is missing", self.out)
 
     def pin(self, **v):
-        (tl.config_dir() / "pinned.json").write_text(json.dumps(v))
+        (ident.config_dir() / "pinned.json").write_text(json.dumps(v))
 
     def test_a_pin_beats_the_newest_install(self):
         self.beads({"x-1": [rec("landed")]})
@@ -442,12 +446,12 @@ class LoopSelfUpdate(LoopBase):
         self.install("0.2.0")
         with self.assertRaises(Moved):
             self.run_loop()
-        self.assertFalse((tl.config_dir() / "pinned.json").exists())
+        self.assertFalse((ident.config_dir() / "pinned.json").exists())
         self.pin(**{"task-loop": "0.1.0"})
-        before = (tl.config_dir() / "pinned.json").read_bytes()
+        before = (ident.config_dir() / "pinned.json").read_bytes()
         self.beads({"x-3": [rec("landed")]})
         self.run_loop()
-        self.assertEqual((tl.config_dir() / "pinned.json").read_bytes(), before)
+        self.assertEqual((ident.config_dir() / "pinned.json").read_bytes(), before)
         for f in (ROOT / "src" / "taskloop" / "app" / "loop").glob("*.py"):
             src = f.read_text(encoding="utf-8")
             self.assertNotIn("write_pin", src)
@@ -462,7 +466,7 @@ class LoopSelfUpdate(LoopBase):
             os.chdir(start)
             try:
                 with self.assertRaises(Moved), redirect_stdout(io.StringIO()):
-                    tl.main(["loop", "--repo", self.repo.name])
+                    self.main(["loop", "--repo", self.repo.name])
             finally:
                 os.chdir(old)
         self.assertEqual(os.path.realpath(self.execs[0][3]), os.path.realpath(start))
@@ -473,7 +477,7 @@ class LoopSelfUpdate(LoopBase):
         self.install("0.2.0")
 
         def slow_check(d):
-            self.assertEqual(tl.main(["stop", "--repo", str(self.repo)]), 0)
+            self.assertEqual(self.main(["stop", "--repo", str(self.repo)]), 0)
         with mock.patch.object(Installs, "complete", side_effect=slow_check):
             self.assertEqual(self.run_loop(), 0)
         self.assertEqual(self.execs, [])
@@ -482,11 +486,9 @@ class LoopSelfUpdate(LoopBase):
 
     def test_a_state_in_an_old_shape_is_dropped_with_one_reload_record_and_a_clean_pass(self):
         self.beads({"x-1": [rec("landed")], "x-2": [rec("landed")]})
-        events = []
         os.environ["TL_LOOP_STATE"] = json.dumps({"ran": "many", "fails": ["x-0"], "later": [1]})
-        with mock.patch.object(tl, "event", side_effect=lambda kind, bead="", **kw: events.append((kind, kw)) or {}):
-            self.assertEqual(self.run_loop(), 0)
-        reloads = [kw for kind, kw in events if kind == "reload"]
+        self.assertEqual(self.run_loop(), 0)
+        reloads = [e for e in eventlog.read() if e["kind"] == "reload"]
         self.assertEqual(len(reloads), 1)
         self.assertIn("handover state dropped", reloads[0]["why"])
         self.assertIn("a clean pass starts", self.out)
@@ -519,7 +521,7 @@ class LoopSelfUpdate(LoopBase):
         self.assertEqual(state["carry"]["fails"], ["x-1"])
         # the new process: same pid, the state in the environment, the new install as the running code
         os.environ["TL_LOOP_STATE"] = self.execs[0][2]
-        with mock.patch.object(tl, "HERE", self.cache / "0.2.0" / "skills" / "task-loop"):
+        with self.running_from(self.cache / "0.2.0" / "skills" / "task-loop"):
             self.assertEqual(self.run_loop(), 2)  # one more failure is the second in a row
         self.assertIn("STOPPED: 2 failures in a row (x-1, x-2)", self.out)
         self.assertEqual([b for b, _ in self.started], ["x-1", "x-2"])
@@ -532,7 +534,7 @@ class LoopSelfUpdate(LoopBase):
         with self.assertRaises(Moved):
             self.run_loop("--max-beads", "2")
         os.environ["TL_LOOP_STATE"] = self.execs[0][2]
-        with mock.patch.object(tl, "HERE", self.cache / "0.2.0" / "skills" / "task-loop"):
+        with self.running_from(self.cache / "0.2.0" / "skills" / "task-loop"):
             self.run_loop("--max-beads", "2")
         self.assertEqual([b for b, _ in self.started], ["x-1", "x-2"])
 
@@ -548,7 +550,7 @@ class LoopSelfUpdate(LoopBase):
         self.install("0.2.0")
         dev = self.cache / "checkout" / "skills" / "task-loop"
         dev.mkdir(parents=True)
-        with mock.patch.object(tl, "HERE", dev):
+        with self.running_from(dev):
             self.assertEqual(self.run_loop(), 0)
         self.assertEqual(self.execs, [])
 
@@ -574,10 +576,10 @@ class LandedOnBase(Base):
         sh("git", "checkout", "-q", "-b", "task/x-2", "origin/main")
         sh("git", "commit", "-q", "--allow-empty", "-m", "wip (x-2): failed")
         sh("git", "checkout", "-q", "-b", "task/x-3", "origin/main")
-        self.assertTrue(loop_env.landed_on_base(str(self.repo), tl.bd_store(str(self.repo)), str(wt), "x-1"))
-        self.assertFalse(loop_env.landed_on_base(str(self.repo), tl.bd_store(str(self.repo)), str(wt), "x-2"))  # work not on main
-        self.assertFalse(loop_env.landed_on_base(str(self.repo), tl.bd_store(str(self.repo)), str(wt), "x-3"))  # no work: the tip is someone else's
-        self.assertFalse(loop_env.landed_on_base(str(self.repo), tl.bd_store(str(self.repo)), str(wt), "x-9"))  # no branch
+        self.assertTrue(loop_env.landed_on_base(str(self.repo), beadtools.bd_store(str(self.repo)), str(wt), "x-1"))
+        self.assertFalse(loop_env.landed_on_base(str(self.repo), beadtools.bd_store(str(self.repo)), str(wt), "x-2"))  # work not on main
+        self.assertFalse(loop_env.landed_on_base(str(self.repo), beadtools.bd_store(str(self.repo)), str(wt), "x-3"))  # no work: the tip is someone else's
+        self.assertFalse(loop_env.landed_on_base(str(self.repo), beadtools.bd_store(str(self.repo)), str(wt), "x-9"))  # no branch
 
 
 @unittest.skipIf(os.name == "nt", "POSIX signals")
@@ -612,9 +614,9 @@ class LoopStopNow(Base):
             threads.append(t)
             return p
         with mock.patch.object(loop_env, "spawn", spawn), mock.patch.object(Taker, "prepare", return_value=None), \
-                mock.patch.object(tl, "start_worktree", return_value=str(self.home)), redirect_stdout(io.StringIO()):
+                mock.patch.object(wslots, "start_worktree", return_value=str(self.home)), redirect_stdout(io.StringIO()):
             t0 = time.time()
-            self.assertEqual(tl.main(["loop", "--repo", str(self.repo)]), 0)
+            self.assertEqual(self.main(["loop", "--repo", str(self.repo)]), 0)
         self.assertLess(time.time() - t0, 30)
         self.assertEqual(bd.beads["x-1"]["status"], "open")
         line = json.loads(looptest.log(str(self.repo)).read_text().splitlines()[0])

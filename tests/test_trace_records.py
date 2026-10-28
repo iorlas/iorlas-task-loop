@@ -16,10 +16,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support.dashes import make_dash  # noqa: E402
 from taskloop.contracts import log as rec  # noqa: E402
+from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop_dash import jsonl  # noqa: E402
 from taskloop_dash.api import runs as runs_api  # noqa: E402
+from taskloop.adapters import ident  # noqa: E402
+from taskloop.app.track import verbs  # noqa: E402
 
-engine, tl = te.engine, te.tl
+engine = te.engine
 DASH = make_dash()
 
 # red the first time it runs, green after: the fake writer writes d<call number> to f.txt (plan = call 1)
@@ -164,7 +167,7 @@ class TraceRecords(unittest.TestCase):
         with self.store.stub(comments=[{"author": "denis", "text": "Old format."}]):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
-        traces = [json.loads(x) for x in (tl.config_dir() / "traces.jsonl").read_text().splitlines()]
+        traces = [json.loads(x) for x in (ident.config_dir() / "traces.jsonl").read_text().splitlines()]
         self.assertEqual([(t["started_because"], t["prev_run"], t["ask"]) for t in traces],
                          [("first", "", ""), ("answer", first, "t-1-1")])
         run = records(self.eng, rec.RunStart)[-1]
@@ -185,7 +188,7 @@ class TraceRecords(unittest.TestCase):
     def test_a_rerun_without_a_checkpoint_is_a_retry(self):
         self.run_engine({"plan": [stop("worker_failed", say="boom")] * 2})
         first = self.eng.log_path.stem
-        self.assertFalse((tl.config_dir() / "checkpoints" / "t-1.json").exists())
+        self.assertFalse((ident.config_dir() / "checkpoints" / "t-1.json").exists())
         time.sleep(1.05)
         self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         run = records(self.eng, rec.RunStart)[-1]
@@ -193,15 +196,15 @@ class TraceRecords(unittest.TestCase):
 
     def test_check_logs_of_runs_older_than_two_weeks_are_pruned_at_start(self):
         import os
-        old = tl.config_dir() / "runs" / "t-0-20261001-000000" / "checks"
+        old = ident.config_dir() / "runs" / "t-0-20261001-000000" / "checks"
         old.mkdir(parents=True)
         for name in ("00-a.r1.log", "00-a.log"):
             (old / name).write_text("x")
             os.utime(str(old / name), (time.time() - 15 * 86400,) * 2)
-        new = tl.config_dir() / "runs" / "t-0-20261020-000000" / "checks"
+        new = ident.config_dir() / "runs" / "t-0-20261020-000000" / "checks"
         new.mkdir(parents=True)
         (new / "00-a.r1.log").write_text("x")
-        engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
+        engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         self.assertFalse((old / "00-a.r1.log").exists())
         self.assertTrue((old / "00-a.log").exists())  # an old run's single log is its only one: kept
         self.assertTrue((new / "00-a.r1.log").exists())
@@ -210,7 +213,7 @@ class TraceRecords(unittest.TestCase):
         self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         out = te.io.StringIO()
         with te.redirect_stdout(out):
-            rc = tl.cmd_trace(te.mock.Mock(id="t-1", last=0, json=False))
+            rc = verbs.trace("t-1", 0, False)
         self.assertEqual(rc, 0)
         self.assertIn("landed", out.getvalue())
 

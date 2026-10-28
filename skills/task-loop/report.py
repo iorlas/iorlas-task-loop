@@ -24,10 +24,11 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import engine
-import tl
-from taskloop.adapters import procs as sproc
+from taskloop.adapters import beadtools, gitrepo, ident, procs as sproc
+from taskloop.app.wire import slots as wslots
 from taskloop.contracts import paths
 from taskloop.contracts.ports import BdFailure
+from taskloop.adapters.gitenv import run_git
 
 M2 = {"beads": 10, "landed_no_ask": 7}  # at least; lost and crashes must be 0 (docs/roadmap.md)
 QUIET_MIN = 30  # an engine log with no close and no trace, untouched this long and with no live run-task: a crash
@@ -69,12 +70,11 @@ def stamp(t):
 # ---- inputs -----------------------------------------------------------------------------------------------------------
 
 def git(repo, *args):
-    r = tl.run_git(repo, *args, capture_output=True, text=True, encoding="utf-8", errors="replace")
-    return r.stdout.strip() if r.returncode == 0 else ""
+    return gitrepo.git(*args, cwd=repo)
 
 
 def default_base(repo):
-    return engine.load_cfg(repo).base
+    return wslots.load_cfg(repo).base
 
 
 def bases_of(repo, base):
@@ -108,7 +108,7 @@ def repo_traces(repo):
     root = str(Path(repo).resolve())
     url = git(repo, "remote", "get-url", "origin")
     out = []
-    for r in read_jsonl(tl.config_dir() / "traces.jsonl"):
+    for r in read_jsonl(ident.config_dir() / "traces.jsonl"):
         wt = r.get("worktree") or ""
         inside = bool(wt) and (str(Path(wt).resolve()) + os.sep).startswith(root + os.sep)
         if inside or (url and r.get("repo") == url):
@@ -133,7 +133,7 @@ def prefix(bead):
 def bead_status(bead, repo, store=None):
     """The bead's status, None when the tracker has no such bead, "?" when bd itself failed (no false lost work)."""
     try:
-        found = (store or tl.bd_store(repo)).show(bead)
+        found = (store or beadtools.bd_store(repo)).show(bead)
     except BdFailure:
         return "?"
     return found.status if found else None
@@ -159,7 +159,7 @@ def lost_work(repo, since=None, base=None, status_of=None, traces=None):
             lands.setdefault(m.group(1), []).append(int(t))
     for r in traces:
         if r.get("outcome") == "landed" and r.get("sha") and any(
-                tl.run_git(repo, "merge-base", "--is-ancestor", r["sha"], b,
+                run_git(repo, "merge-base", "--is-ancestor", r["sha"], b,
                            capture_output=True).returncode == 0 for b in bases):
             lands.setdefault(r.get("bead"), []).append(r.get("ended") or 0)
     rows, statuses = [], {}
@@ -210,7 +210,7 @@ def crashes(repo, since, until, traces, alive=None, now=None):
     alive = alive or run_alive
     now = time.time() if now is None else now
     out = {}
-    log = paths.ConfigDir(tl.config_dir()).loop_log(tl.repo_key(repo))
+    log = paths.ConfigDir(ident.config_dir()).loop_log(wslots.repo_key(repo))
     for r in read_jsonl(log):
         try:
             t = time.mktime(time.strptime(r.get("ts") or "", "%Y-%m-%dT%H:%M:%S"))
@@ -222,7 +222,7 @@ def crashes(repo, since, until, traces, alive=None, now=None):
             out[key] = {"bead": r.get("bead"), "t": t, "run": None, "why": (r.get("why") or "")[:200]}
     traced = {r.get("run") for r in traces} | {Path(r["log"]).stem for r in traces if r.get("log")}
     prefixes = {prefix(r.get("bead")) for r in traces} | {prefix(r.get("bead")) for r in read_jsonl(log)}
-    for f in sorted((tl.config_dir() / "engine").glob("*.jsonl")):
+    for f in sorted((ident.config_dir() / "engine").glob("*.jsonl")):
         m = STEM.match(f.stem)
         if not m or f.stem in traced or prefix(m.group(1)) not in prefixes:
             continue
@@ -287,8 +287,8 @@ def pctl(xs, p):
 
 
 def scorecard(repo, since, until, base=None, comments_of=None, status_of=None, alive=None, now=None):
-    repo = tl.repo_root(repo)  # the loop keys its log by this path
-    comments_of = comments_of or tl.bd_store(repo).comments
+    repo = gitrepo.repo_root(repo)  # the loop keys its log by this path
+    comments_of = comments_of or beadtools.bd_store(repo).comments
     traces = repo_traces(repo)
     runs = sorted([r for r in traces if overlaps(r, since, until)], key=lambda r: r.get("started") or 0)
     crash = crashes(repo, since, until, traces, alive=alive, now=now)
@@ -388,7 +388,7 @@ def planner_stats(since, until, prefixes=(), history=None, engine_dir=None):
     """Planner calls per bead from delegate's history (input: `in`, plus cached on rows from before delegate 0.22), split by the engine logs' plan nodes:
     first plan, full plans again (a new thread from scratch), amends, check send-backs. Reads only."""
     history = Path(history or os.path.expanduser(HISTORY))
-    engine_dir = Path(engine_dir or tl.config_dir() / "engine")
+    engine_dir = Path(engine_dir or ident.config_dir() / "engine")
     calls = {}
     for r in read_jsonl(history):
         t = r.get("ts") or 0
@@ -487,7 +487,7 @@ def cmd_report(a):
         else:
             print_planner(p)
         return 0
-    repo = tl.repo_root(a.repo)
+    repo = gitrepo.repo_root(a.repo)
     c = scorecard(repo, since, until, base=default_base(repo), alive=run_alive)
     c["planner"] = planner_stats(since, until, {prefix(x["bead"]) for x in c["per_bead"]})
     if a.json:
@@ -498,7 +498,7 @@ def cmd_report(a):
 
 
 def cmd_lost(a):
-    repo = tl.repo_root(a.repo)
+    repo = gitrepo.repo_root(a.repo)
     since = parse_time(a.since) if a.since else None
     rows = lost_work(repo, since=since, base=default_base(repo))
     if a.json:

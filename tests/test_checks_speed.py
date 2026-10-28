@@ -20,6 +20,8 @@ from taskloop.domain.checks.order import CheckOrder  # noqa: E402
 from taskloop.contracts.argv import text_of  # noqa: E402
 from taskloop.domain.checks.names import norm  # noqa: E402
 from taskloop.adapters import check_files  # noqa: E402
+from taskloop.adapters import gitrepo  # noqa: E402
+from taskloop.app.wire import doctor  # noqa: E402
 from taskloop.app.checks.cache import InputKeys  # noqa: E402
 from taskloop.contracts.checks import Check, Durations  # noqa: E402
 from support.builders import cfg_with  # noqa: E402
@@ -190,7 +192,7 @@ class InputCache(SpeedTest):
         te.sh("git", "add", ".task-loop.json", cwd=self.wt)
         te.sh("git", "commit", "-qm", "doctor config", cwd=self.wt)
         te.sh("git", "update-ref", "refs/remotes/origin/main", "HEAD", cwd=self.wt)
-        warns = engine.tl.doctor_warnings(str(self.wt))
+        warns = doctor.git_warnings(str(self.wt))
         self.assertEqual(len([w for w in warns if "matches no tracked file" in w]), 1)
         self.assertIn("client/{A,B}/**", " ".join(warns))
 
@@ -315,7 +317,7 @@ class Duplicates(SpeedTest):
     def test_the_push_is_told_the_gated_tree_as_a_plain_git_tree_hash(self):
         rc, count, seen = self.gate_run()
         self.assertEqual(rc, 0)
-        self.assertEqual(seen.read_text(), te.tl.git("rev-parse", "HEAD^{tree}", cwd=str(self.wt)))
+        self.assertEqual(seen.read_text(), gitrepo.git("rev-parse", "HEAD^{tree}", cwd=str(self.wt)))
 
     def test_the_gate_is_told_which_repo_checks_are_green(self):
         rc, count, seen = self.gate_run(checks=[{"id": "ut", "cmd": pyc("pass"), "group": "tests", "inputs": ["f.txt"]}])

@@ -4,14 +4,15 @@ import subprocess
 import sys
 import time
 
-import tl
+from taskloop.adapters import ident
+from taskloop.app.wire import slots as wslots
 from taskloop.app.slots.pool import SlotPool
 from taskloop.contracts import paths
 from taskloop.stores.files import FileTickets
 
 
 def pool(repo, store=None, cfg=None):
-    return SlotPool(tl.slot_env(str(repo), store, cfg))
+    return SlotPool(wslots.slot_env(str(repo), store, cfg))
 
 
 def take_slot(repo, cfg=None, why="tl loop", bead="", ticket=None, store=None):
@@ -26,19 +27,19 @@ def free_expired(repo):
 
 
 def tickets():
-    return FileTickets(paths.ConfigDir(tl.config_dir()))
+    return FileTickets(paths.ConfigDir(ident.config_dir()))
 
 
 def take_ticket(repo, why, prio=2):
-    return tickets().take(tl.repo_key(str(repo)), why, prio, pid=os.getpid(), now=time.time())
+    return tickets().take(wslots.repo_key(str(repo)), why, prio, pid=os.getpid(), now=time.time())
 
 
 def drop_ticket(repo, t):
-    tickets().drop(tl.repo_key(str(repo)), t.seq)
+    tickets().drop(wslots.repo_key(str(repo)), t.seq)
 
 
 def ticket_dir(repo):
-    d = tickets().cfg.ticket(tl.repo_key(str(repo)), 0).parent
+    d = tickets().cfg.ticket(wslots.repo_key(str(repo)), 0).parent
     d.mkdir(parents=True, exist_ok=True)
     return d
 

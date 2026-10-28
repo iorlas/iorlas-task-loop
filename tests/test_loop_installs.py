@@ -18,6 +18,8 @@ import engine  # noqa: E402
 from support import looptest  # noqa: E402
 import loop_env  # noqa: E402
 import tl  # noqa: E402
+from taskloop.adapters import ident  # noqa: E402
+from support import eventlog  # noqa: E402
 from taskloop.app.loop.loop import Loop  # noqa: E402
 from taskloop.contracts import codec  # noqa: E402
 from taskloop.contracts.loop import Carry, LoopState  # noqa: E402
@@ -39,22 +41,23 @@ class Moving(LoopBase):
             self.execs.append((exe, argv, os.environ.get("TL_LOOP_STATE"), os.getcwd()))
             raise more.Moved()
         for p in (mock.patch.object(os, "execv", side_effect=execv),
-                  mock.patch.dict(os.environ, {}), mock.patch.object(tl, "HERE", self.install("0.1.0"))):
+                  mock.patch.dict(os.environ, {})):
             p.start()
             self.addCleanup(p.stop)
+        self.here = self.install("0.1.0")
         os.environ.pop("TL_LOOP_STATE", None)
 
 
 class Entry(Moving):
     def installed(self, version):
         """installed_plugins.json (user scope) names `version` for task-loop."""
-        f = tl.claude_dir() / "plugins" / "installed_plugins.json"
+        f = ident.claude_dir() / "plugins" / "installed_plugins.json"
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text(json.dumps({"plugins": {"iorlas-task-loop@iorlas-marketplace": [
             {"scope": "user", "installPath": str(self.cache / version)}]}}))
 
     def target(self):
-        return loop_env.installs(loop_env.cfgdir()).target()
+        return loop_env.installs(loop_env.cfgdir(), here=self.here).target()
 
     def test_the_installed_entry_decides_not_the_highest_directory(self):
         self.install("0.2.0")
@@ -77,27 +80,23 @@ class Entry(Moving):
     def test_an_entry_whose_directory_is_gone_falls_through_with_one_warning_per_run_and_a_pin_never_does(self):
         self.install("0.3.0")
         self.installed("0.2.0")  # recorded, but its directory is not there
-        inst = loop_env.installs(loop_env.cfgdir())
+        inst = loop_env.installs(loop_env.cfgdir(), here=self.here)
         self.assertEqual(inst.target(), ("0.3.0", self.cache / "0.3.0"))
         self.assertEqual(inst.dangling, "0.2.0")
-        (tl.config_dir() / "pinned.json").write_text(json.dumps({"task-loop": "0.3.0"}))
+        (ident.config_dir() / "pinned.json").write_text(json.dumps({"task-loop": "0.3.0"}))
         inst.target()
         self.assertEqual(inst.dangling, "")  # a pin is strict: nothing fell through
-        os.unlink(tl.config_dir() / "pinned.json")
-        events = []
-        self.enterContext(mock.patch.object(tl, "event", side_effect=lambda kind, bead="", **kw: events.append(dict(kw, kind=kind)) or {}))
+        os.unlink(ident.config_dir() / "pinned.json")
         self.beads({"x-1": [rec("landed")], "x-2": [rec("landed")]})
         with self.assertRaises(more.Moved):
             self.run_loop()
-        self.assertEqual([e["version"] for e in events if e["kind"] == "install_missing"], ["0.2.0"])
+        self.assertEqual([e["version"] for e in eventlog.read() if e["kind"] == "install_missing"], ["0.2.0"])
 
     def test_the_missing_entry_warning_is_not_repeated_on_the_next_pass(self):
         self.installed("0.2.0")  # no such directory, and nothing higher to fall to
-        events = []
-        self.enterContext(mock.patch.object(tl, "event", side_effect=lambda kind, bead="", **kw: events.append(dict(kw, kind=kind)) or {}))
         self.beads({"x-1": [rec("landed")], "x-2": [rec("landed")]})
         self.assertEqual(self.run_loop(), 0)
-        self.assertEqual([e["version"] for e in events if e["kind"] == "install_missing"], ["0.2.0"])
+        self.assertEqual([e["version"] for e in eventlog.read() if e["kind"] == "install_missing"], ["0.2.0"])
 
     def test_with_no_entry_the_highest_directory_above_the_running_one_is_the_fallback(self):
         self.install("0.2.0")
@@ -108,7 +107,7 @@ class Entry(Moving):
         self.install("0.2.0")
         self.install("0.3.0")
         self.installed("0.3.0")
-        (tl.config_dir() / "pinned.json").write_text(json.dumps({"task-loop": "0.2.0"}))
+        (ident.config_dir() / "pinned.json").write_text(json.dumps({"task-loop": "0.2.0"}))
         self.assertEqual(self.target(), ("0.2.0", self.cache / "0.2.0"))
 
 
@@ -117,13 +116,10 @@ class Fallback(Moving):
 
     def setUp(self):
         super().setUp()
-        self.events, self.said = [], []
+        self.said = []
         self.enterContext(mock.patch.object(engine, "say", side_effect=self.said.append))
-        p = mock.patch.object(tl, "event", side_effect=lambda kind, bead="", **kw: self.events.append(dict(kw, kind=kind)) or {})
-        p.start()
-        self.addCleanup(p.stop)
         self.back = self.cache / "0.1.0"
-        self.enterContext(mock.patch.object(tl, "HERE", self.install("0.2.0")))  # this loop runs the new dir
+        self.here = self.install("0.2.0")  # this loop runs the new dir
         self.beads({"x-1": [rec("landed")]})
         carry = Carry(back=str(self.back), moved_at=self.clock.t - 5)
         st = LoopState(pid=1, started=1.0, t=1.0, repo=str(self.repo), version="0.1.0", code_dir=str(self.back), actor="tl-a", carry=carry)
@@ -138,10 +134,10 @@ class Fallback(Moving):
         self.assertEqual(self.execs[0][1][1], str(self.back / "skills" / "task-loop" / "tl.py"))
         self.assertTrue(json.loads(self.execs[0][2])["carry"]["fallback"])
         self.assertTrue([x for x in self.said if "RED: task-loop 0.2.0 broke" in x and "back to 0.1.0" in x], self.said)
-        events = [e for e in self.events if e["kind"] == "reload_fallback"]
+        events = [e for e in eventlog.read() if e["kind"] == "reload_fallback"]
         self.assertEqual((len(events), events[0]["old"], events[0]["new"]), (1, "0.2.0", "0.1.0"))
         self.assertIn("logic broken", events[0]["why"])
-        bad = json.loads((tl.config_dir() / "bad-versions.json").read_text())["entries"]
+        bad = json.loads((ident.config_dir() / "bad-versions.json").read_text())["entries"]
         self.assertEqual([e["version"] for e in bad], ["0.2.0"])
 
     def test_a_loop_that_already_went_back_is_not_sent_again(self):

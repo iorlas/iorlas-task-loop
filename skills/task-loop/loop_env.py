@@ -4,6 +4,7 @@
 import contextlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -11,12 +12,17 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from taskloop.adapters import applog
+from taskloop.adapters import applog, beadtools, gitrepo, ident, pidcheck
 from taskloop.domain.beads import matchers as beadlint
 import engine
 import loop_health as lh
 import seams
-import tl
+from taskloop.app.release import catalog
+from taskloop.app.slots import engine_lock
+from taskloop.app.release import pins
+from taskloop.app.track import trail
+from taskloop.app.wire import asks as wasks
+from taskloop.app.wire import slots as wslots
 from taskloop.adapters import delegate as dg
 from taskloop.adapters import procs as sproc
 from taskloop.adapters.locks import hold_path
@@ -31,44 +37,48 @@ from taskloop.contracts import paths
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import RepoProfile
 from taskloop.contracts.enums import LockWhat
+from taskloop.adapters.gitenv import run_git
+from taskloop.app.track import verbs
+from taskloop.app.asks import sweeps as ask_sweeps
 
 STOP_GRACE_S = 300.0  # a stopped run-task is given this long to run its close step before stream-proc ends it
+HERE = Path(__file__).resolve().parent  # the install this code runs from; tl.main takes it as a parameter for a test
 START_CWD = [""]  # the directory the loop was started in: where its argv's relative paths point
 
 
 def cfgdir():
-    return paths.ConfigDir(tl.config_dir())
+    return paths.ConfigDir(ident.config_dir())
 
 
 def running(repo, store=None):
     """{bead: where} of the beads running now: a slot bead held for one (held_bead), or a live engine lock naming one, in a slot
     or any worktree of the repo."""
-    out, slots = {}, tl.slot_beads(repo, store)
+    out, slots = {}, wslots.slot_beads(repo, store)
     stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     for b in slots:
         bid = b.metadata.get("held_bead")
         if bid and b.status == "in_progress" and not (b.lease_expires_at and b.lease_expires_at < stamp):
             out[bid] = b.title.split()[-1]
-    for wt in tl.worktrees(repo, slots):
-        lock = tl.read_engine_lock(wt)
-        if lock.get("bead") and lock.get("pid") and tl.proc_alive(lock["pid"], lock.get("start") or ""):
+    for wt in wslots.worktrees(repo, slots):
+        lock = engine_lock.read_engine_lock(wt)
+        if lock.get("bead") and lock.get("pid") and pidcheck.proc_alive(lock["pid"], lock.get("start") or ""):
             out.setdefault(lock["bead"], lock.get("slot") or Path(wt).name)
     return out
 
 
 def area_lock(repo):
-    return hold_path(cfgdir().lock_record(LockWhat.AREA.value, tl.repo_key(repo)), "pid %d" % os.getpid(), what=LockWhat.AREA)
+    return hold_path(cfgdir().lock_record(LockWhat.AREA.value, wslots.repo_key(repo)), "pid %d" % os.getpid(), what=LockWhat.AREA)
 
 
 def area_busy(repo, cfg, bead, store=None):
     """(area, "area A busy: B in S") for a bead whose area runs elsewhere, (area, "") when it is free, ("", "") for none (run-task's
     check before it takes the engine lock)."""
-    store = store or tl.bd_store(repo)
+    store = store or beadtools.bd_store(repo)
     return area_busy_text(QueueRule(store, cfg, running(repo, store), lambda b: "", engine.say), bead)
 
 
-def files_of(repo):
-    return LoopFiles(cfgdir(), tl.repo_key(repo), tl.pid_alive, tl.now)
+def files_of(repo, now=trail.now):
+    return LoopFiles(cfgdir(), wslots.repo_key(repo), pidcheck.pid_alive, now)
 
 
 def live_loops(repo):
@@ -77,7 +87,7 @@ def live_loops(repo):
 
 def delegate_route(repo):
     """The route.py of the delegate this repo's engine would use (its `delegate` config, the pin, the install), or None."""
-    res = seams.resolve_delegate(engine.load_cfg(str(repo)).delegate)
+    res = seams.resolve_delegate(wslots.load_cfg(str(repo)).delegate)
     return res.route if isinstance(res, dg.Resolved) else None
 
 
@@ -93,10 +103,10 @@ def make_probe(repo):
     return dg.RouteProbe(route) if route else None
 
 
-def storm(repo):
-    rid = tl.git("remote", "get-url", "origin", cwd=repo) or str(repo)
-    path = lh.storm_path(tl.config_dir(), rid)
-    rec = lh.read_storm(path, tl.now())
+def storm(repo, now=trail.now):
+    rid = gitrepo.git("remote", "get-url", "origin", cwd=repo) or str(repo)
+    path = lh.storm_path(ident.config_dir(), rid)
+    rec = lh.read_storm(path, now())
     if not rec:
         return None
     banner = ("STOPPED: storm %s on %s; the beads stay open (look at their logs). Record %s expires %d min after it was written; "
@@ -109,13 +119,13 @@ def landed_on_base(repo, store, wt, bead_id):
     """True when the bead's land commit (titled `... (<id>)`) is the tip of its branch and already on the base."""
     if not os.path.isdir(wt):
         return False
-    base = engine.load_cfg(repo).base
-    branch = getattr(tl.peek(store, bead_id), "metadata", {}).get("branch") or "task/" + bead_id
-    tl.fetch(wt)
-    tip = tl.git("rev-parse", "--verify", "-q", "refs/heads/" + branch, cwd=wt)
-    if not tip or not tl.git("log", "-1", "--format=%s", tip, cwd=wt).endswith("(%s)" % bead_id):
+    base = wslots.load_cfg(repo).base
+    branch = getattr(beadtools.peek(store, bead_id), "metadata", {}).get("branch") or "task/" + bead_id
+    gitrepo.fetch(wt)
+    tip = gitrepo.git("rev-parse", "--verify", "-q", "refs/heads/" + branch, cwd=wt)
+    if not tip or not gitrepo.git("log", "-1", "--format=%s", tip, cwd=wt).endswith("(%s)" % bead_id):
         return False
-    return tl.run_git(wt, "merge-base", "--is-ancestor", tip, base, capture_output=True).returncode == 0
+    return run_git(wt, "merge-base", "--is-ancestor", tip, base, capture_output=True).returncode == 0
 
 
 def reload_note(bead):
@@ -128,11 +138,11 @@ def reload_note(bead):
 
 
 def fetch(repo):
-    tl.fetch(repo)
+    gitrepo.fetch(repo)
 
 
 def chores(repo):
-    tl.sweep_asks(engine.say, engine.load_cfg(repo))  # asks of closed beads closed, unanswered ones parked, answers no run used flagged
+    wasks.sweep_asks(engine.say, wslots.load_cfg(repo))  # asks of closed beads closed, unanswered ones parked, answers no run used flagged
     try:
         import reflect_digest
         reflect_digest.maybe_run()  # the run reflections into beads, once a day (tl-bl5)
@@ -140,11 +150,11 @@ def chores(repo):
         engine.say("loop: reflect digest: %s" % e)
 
 
-def claim(repo, bead, wt, slot):
-    ok, why = engine.reclaim(bead, repo)  # a paused run leaves its bead open and still assigned: released here when that run is gone
+def claim(repo, store, bead, wt, slot, now=trail.now):
+    ok, why = engine.reclaim(bead, repo, store, now())  # a paused run leaves its bead open and still assigned: released here when that run is gone
     if not ok:
         return False, why
-    return tl.cmd_claim(engine.Args(id=bead, worktree=wt, slot=slot)) == 0, "claimed by another session"
+    return verbs.claim(bead, wt, slot, store=store) == 0, "claimed by another session"
 
 
 def spawn(cmd, log, extra):
@@ -180,77 +190,105 @@ def exec_into(repo, d, argv, handover):
 
 def loop_lock(wt, slot, slot_bead, bead):
     if os.path.isdir(wt):
-        tl.loop_lock(wt, slot, slot_bead, bead=bead)
+        engine_lock.loop_lock(wt, slot, slot_bead, bead=bead)
 
 
-def build(repo, store=None, session_actor=""):
+def build(repo, store=None, session_actor="", here=HERE, now=trail.now):
     """The LoopEnv of `repo` on this install."""
-    store = store or tl.bd_store(repo)
+    store = store or beadtools.bd_store(repo)
     cfg = cfgdir()
 
     def profile() -> RepoProfile:
-        return engine.cfg_source(repo)[0]
+        return wslots.cfg_source(repo)[0]
 
     return LoopEnv(
-        repo=repo, repo_key=tl.repo_key(repo), cfgdir=cfg, store=store, slot_env=lambda: tl.slot_env(repo, store, profile().slots),
+        repo=repo, repo_key=wslots.repo_key(repo), cfgdir=cfg, store=store, slot_env=lambda: wslots.slot_env(repo, store, profile().slots, now),
         profile=profile, fetch=lambda: fetch(repo), lint=lambda b: beadlint.why(b, str(repo)), running=lambda: running(repo, store),
         area_lock=lambda: area_lock(repo),
         wt_lock=lambda key: hold_path(cfg.lock_record(LockWhat.WORKTREE.value, key), "pid %d" % os.getpid(), what=LockWhat.WORKTREE),
-        start_worktree=lambda name: tl.start_worktree(repo, name), claim=lambda b, wt, slot: claim(repo, b, wt, slot),
-        loop_lock=loop_lock, drop_engine_lock=lambda d: tl.drop_engine_lock(d, os.getpid()), spawn=spawn,
+        start_worktree=lambda name: wslots.start_worktree(repo, name), claim=lambda b, wt, slot: claim(repo, store, b, wt, slot, now),
+        loop_lock=loop_lock, drop_engine_lock=lambda d: engine_lock.drop_engine_lock(d, os.getpid()), spawn=spawn,
         stop_now=stop_now, stop_tree=stop_tree,
-        run_task_argv=lambda bead, wt, slot, out, code: [sys.executable, str((code or tl.HERE) / "tl.py"), "run-task", bead, "--worktree", wt,
+        run_task_argv=lambda bead, wt, slot, out, code: [sys.executable, str((code or here) / "tl.py"), "run-task", bead, "--worktree", wt,
                                                          "--outcome-file", out] + (["--slot", slot] if slot else []),
-        landed_on_base=lambda wt, bead: landed_on_base(repo, store, wt, bead), reload_note=reload_note, chores=lambda: chores(repo), ask_lines=lambda: tl.ask_sweeps.orphan_lines(tl.ask_store()),
-        storm=lambda: storm(repo), probe=lambda: make_probe(repo), roles=lambda: roles(repo), has_delegate=lambda: bool(delegate_route(repo)),
-        event=tl.event, pid_alive=tl.pid_alive, behind=tl.releases_behind, version=tl.HERE.parents[1].name, code_dir=str(tl.HERE),
-        session_actor=session_actor, actor=tl.actor, exec_into=lambda d, argv, handover: exec_into(repo, d, argv, handover),
-        take_handover=lambda: os.environ.pop("TL_LOOP_STATE", ""), say=engine.say, now=tl.now, pid=os.getpid())
+        landed_on_base=lambda wt, bead: landed_on_base(repo, store, wt, bead), reload_note=reload_note, chores=lambda: chores(repo), ask_lines=lambda: ask_sweeps.orphan_lines(wasks.store()),
+        storm=lambda: storm(repo, now), probe=lambda: make_probe(repo), roles=lambda: roles(repo), has_delegate=lambda: bool(delegate_route(repo)),
+        event=trail.event, pid_alive=pidcheck.pid_alive, behind=catalog.releases_behind, version=here.parents[1].name, code_dir=str(here),
+        session_actor=session_actor, actor=ident.actor, exec_into=lambda d, argv, handover: exec_into(repo, d, argv, handover),
+        take_handover=lambda: os.environ.pop("TL_LOOP_STATE", ""), say=engine.say, now=now, pid=os.getpid())
 
 
-def installs(cfg, tune=None):
+def installs(cfg, tune=None, here=HERE, now=trail.now):
     """The installs of task-loop on this machine; `tune` gives the loop constants (the repo's `loop` block), else the defaults."""
     kw = {"tune": tune} if tune else {}
-    return Installs(cfg, tl.HERE.parents[1], lambda: tl.installed_version("task-loop"), lambda: tl.read_pin().get("task-loop") or "",
-                    now=tl.now, **kw)
+    return Installs(cfg, here.parents[1], lambda: catalog.installed_version("task-loop"), lambda: pins.read_pin().get("task-loop") or "",
+                    now=now, **kw)
 
 
-def vet_newer():
+def vet_newer(here=HERE):
     """(version, dir, why) of the install the loop would move to (why: None when usable), or None: engine's step-boundary look."""
-    t = installs(cfgdir()).vet()
+    t = installs(cfgdir(), here=here).vet()
     return (t.version, t.dir, t.why) if t else None
 
 
-def cmd_next(a):
-    repo = tl.repo_root(a.repo)
-    return cli.cmd_next(build(repo), a)
+def cmd_next(a, here=HERE, now=trail.now):
+    repo = gitrepo.repo_root(a.repo)
+    return cli.cmd_next(build(repo, here=here, now=now), a)
 
 
-def cmd_stop(a):
-    repo = tl.repo_root(a.repo)
-    return cli.cmd_stop(build(repo), files_of(repo), a)
+def cmd_stop(a, here=HERE, now=trail.now):
+    repo = gitrepo.repo_root(a.repo)
+    return cli.cmd_stop(build(repo, here=here, now=now), files_of(repo, now), a)
 
 
-def cmd_loop(a):
-    repo = tl.repo_root(a.repo)
+def cmd_loop(a, here=HERE, now=trail.now):
+    repo = gitrepo.repo_root(a.repo)
     if profiles.red_row(repo):
         print(profiles.red_row(repo))
         return 1
-    env = build(repo)
-    files = files_of(repo)
+    env = build(repo, here=here, now=now)
+    files = files_of(repo, now)
     if a.op == "status":
-        for row in profiles.red_rows(profiles.registered(tl.config_dir() / "repos.json"), but=repo):
+        for row in profiles.red_rows(profiles.registered(ident.config_dir() / "repos.json"), but=repo):
             print(row)  # another repo's bad profile: its red row here, nothing else changes
-        return cli.cmd_status(env, files, installs(env.cfgdir, lambda: env.profile().loop), a)
+        return cli.cmd_status(env, files, installs(env.cfgdir, lambda: env.profile().loop, here, now), a)
     START_CWD[0] = os.getcwd()
     os.chdir(repo)  # every tl helper and bd call works on the current directory's repo
     inherited, _ = parse_handover(os.environ.get("TL_LOOP_STATE", ""))  # set when this process is the same loop, exec'd into a newer install
-    if not tl.session_id():  # without a Claude session the actor would be per folder: two loops would share it
+    if not ident.session_id():  # without a Claude session the actor would be per folder: two loops would share it
         os.environ["TASK_LOOP_SESSION"] = "loop-" + uuid.uuid4().hex[:12]
     # an actor of its own, never the session's: bd lets an actor re-claim its own bead, so two loops (or a loop and a hand run)
     # started from one session would both win one claim. run-task re-claims as this actor (one for both).
     os.environ.pop("TASK_LOOP_ACTOR", None)
-    session = tl.actor()
+    session = ident.actor()
     os.environ["TASK_LOOP_ACTOR"] = (inherited.actor if inherited else "") or "%s-%s" % (session, uuid.uuid4().hex[:6])
-    env = build(repo, session_actor=session)
-    return cli.cmd_loop(env, files, installs(env.cfgdir, lambda: env.profile().loop), a)
+    env = build(repo, session_actor=session, here=here, now=now)
+    return cli.cmd_loop(env, files, installs(env.cfgdir, lambda: env.profile().loop, here, now), a)
+
+
+def live_work():
+    """What runs on this machine: ("loop"|"run", text) for every live loop and every busy engine lock of the registered repos."""
+    try:
+        repos = [r for r in json.loads(paths.ConfigDir(ident.config_dir()).repos().read_text(encoding="utf-8")) if os.path.isdir(r)]
+    except (OSError, ValueError):
+        repos = []
+    out = []
+    for r in repos:
+        for st in live_loops(r):
+            out.append(("loop", "loop pid %s on %s%s" % (st.pid, r, (" running " + st.bead) if st.bead else "")))
+        for wt in [r] + wslots.worktrees(r, slots=None if shutil.which("bd") else []):  # slot dirs need bd
+            busy = engine_lock.engine_busy(wt)
+            if busy:
+                out.append(("run", "run in %s: %s" % (wt, busy)))
+    return out
+
+
+def cmd_cutover(a):
+    live = live_work()
+    if a.json:
+        print(json.dumps({"live": [{"kind": k, "what": w} for k, w in live]}))
+    elif live:
+        print("\n".join("LIVE %s" % w for _, w in live))
+    else:
+        print("CLEAR: no live loop or run")
+    return 1 if live else 0

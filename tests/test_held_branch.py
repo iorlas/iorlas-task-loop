@@ -24,6 +24,9 @@ from taskloop.app.loop.take import Taker  # noqa: E402
 from taskloop.contracts.config import SlotsConfig  # noqa: E402
 import test_loop as tlp  # noqa: E402
 import tl  # noqa: E402
+from taskloop.app.slots import engine_lock  # noqa: E402
+from taskloop.adapters import pidcheck  # noqa: E402
+from support import tlbd  # noqa: E402
 
 
 def sh(*a, cwd):
@@ -56,13 +59,11 @@ class HeldBranch(unittest.TestCase):
         sh("git", "add", "-A", cwd=self.old)
         sh("git", "commit", "-qm", "unlanded work", cwd=self.old)
         self.tip = sh("git", "rev-parse", "HEAD", cwd=self.old)
-        for p in (mock.patch.object(tl, "repo_root", return_value=str(self.repo)),
-                  mock.patch.object(tl, "event", return_value={}),
-                  mock.patch.object(tl, "profile_slots", return_value=SlotsConfig(count=1, base="origin/main")),
-                  mock.patch.object(tl, "slot_dir", return_value=str(self.slot)),
-                  mock.patch.object(tl, "slot_bead", return_value={})):
-            p.start()
-            self.addCleanup(p.stop)
+        (self.repo / ".task-loop.json").write_text(json.dumps({"slots": {"count": 1, "base": "origin/main"}}))
+        tlbd.install(self, lambda *a, **k: tlbd.done("[]"))  # no slot beads in this tracker
+        before = os.getcwd()
+        os.chdir(self.repo)  # the repo `tl slot` acts on
+        self.addCleanup(os.chdir, before)
 
     def reset(self):
         a = engine.Args(op="reset", name="s1", bead="x-1", n=None, force=False)
@@ -98,7 +99,7 @@ class HeldBranch(unittest.TestCase):
         k = tlp.subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
         self.addCleanup(k.wait)
         self.addCleanup(k.kill)
-        tl.write_engine_lock(str(self.old), {"pid": k.pid, "start": tl.proc_start(k.pid), "bead": "x-1", "started": 1})
+        engine_lock.write_engine_lock(str(self.old), {"pid": k.pid, "start": pidcheck.proc_start(k.pid), "bead": "x-1", "started": 1})
         rc, out, why = self.reset()
         self.assertEqual(rc, 5, out)
         self.assertIn("TAKEN", out)
@@ -106,7 +107,7 @@ class HeldBranch(unittest.TestCase):
         self.assertEqual(sh("git", "symbolic-ref", "--short", "HEAD", cwd=self.old), "task/x-1")
 
     def test_a_dead_lock_does_not_hold_the_branch(self):
-        tl.write_engine_lock(str(self.old), {"pid": 2 ** 22 + 7, "bead": "x-1", "started": 1})
+        engine_lock.write_engine_lock(str(self.old), {"pid": 2 ** 22 + 7, "bead": "x-1", "started": 1})
         self.assertEqual(self.reset()[0], 0)
 
 

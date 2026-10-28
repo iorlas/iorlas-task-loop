@@ -17,15 +17,15 @@ from taskloop.contracts.locks import LockRecord, LockTimeout
 
 @contextlib.contextmanager
 def os_lock(path: Path | str, holder: str, waiting: Callable[[str], None] | None = None,
-            timeout: float | None = None) -> Iterator[Path | str]:
+            timeout: float | None = None, check: Callable[[], None] | None = None) -> Iterator[Path | str]:
     """One holder at a time, across processes (the vendored ProcessLock; the OS drops it when the process dies); a second taker waits.
     `waiting(text)` is called with the holder's name once, before blocking. With `timeout` (seconds) a wait that long raises TimeoutError
-    (the holder's name in it)."""
+    (the holder's name in it). `check()` runs every round of the wait and raises to end it."""
     def told(rec: LockRecord | None) -> None:
         if waiting:
             waiting(rec.holder if rec else "?")
     try:
-        with locks.hold_path(path, holder, timeout=timeout, waiting=told if waiting else None):
+        with locks.hold_path(path, holder, timeout=timeout, waiting=told if waiting else None, check=check):
             yield path
     except LockTimeout as e:
         raise TimeoutError(e.holder.holder if e.holder else "?") from None

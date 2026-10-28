@@ -10,10 +10,12 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills" / "task-loop"))
+import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from taskloop.adapters import applog  # noqa: E402
+from taskloop.app.track import trail  # noqa: E402
 import engine  # noqa: E402
 from support.builders import cfg_with  # noqa: E402
-import tl  # noqa: E402
+from taskloop.adapters import ident
 
 
 warnings.filterwarnings("ignore", message=".*multi-threaded.*fork", category=DeprecationWarning)
@@ -116,22 +118,21 @@ class WiringTest(unittest.TestCase):
         self.addCleanup(env.stop)
 
     def test_tl_event_keeps_one_handle_for_events_jsonl_and_flushes_each_line(self):
-        path = tl.config_dir() / "events.jsonl"
+        path = ident.config_dir() / "events.jsonl"
         path.parent.mkdir(parents=True, exist_ok=True)
-        with mock.patch.object(tl, "register_repo"):
-            tl.event("a", "b-1")
-            with open(path, encoding="utf-8") as reader:
-                self.assertEqual(json.loads(reader.readline())["kind"], "a")
-                for i in range(100):
-                    tl.event("n", "b-1", i=i)
-                    self.assertEqual(json.loads(reader.readline())["i"], i)
-            lines = path.read_text(encoding="utf-8").splitlines()
+        trail.event("a", "b-1")
+        with open(path, encoding="utf-8") as reader:
+            self.assertEqual(json.loads(reader.readline())["kind"], "a")
+            for i in range(100):
+                trail.event("n", "b-1", i=i)
+                self.assertEqual(json.loads(reader.readline())["i"], i)
+        lines = path.read_text(encoding="utf-8").splitlines()
         self.assertEqual(len(lines), 101)
         self.assertEqual(applog.open_count(path), 1)
 
     def test_engine_log_is_one_typed_line_per_record_readable_at_once(self):
         eng = engine.Engine("t-1", self.tmp.name, cfg_with())
-        with mock.patch.object(engine, "say"), mock.patch.object(tl, "event"):
+        with mock.patch.object(engine, "say"):
             for i in range(1000):
                 eng.log.note("line %d" % i)
             lines = eng.log_path.read_text(encoding="utf-8").splitlines()

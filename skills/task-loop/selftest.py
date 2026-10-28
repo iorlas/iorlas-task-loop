@@ -12,7 +12,7 @@ from unittest import mock
 
 import engine
 import seams
-import tl
+from taskloop.app.wire import slots as wslots
 from taskloop.adapters import delegate as dg
 from taskloop.adapters.fake_beads import FakeBeads
 from taskloop.adapters.runner import Seam
@@ -71,23 +71,21 @@ def git_repo(home, wt):
 
 
 def run_engine(home, wt):
-    """(exit code, closes, blocks) of one bead run through the engine on the scripted lane."""
-    cfg = engine.load_cfg(str(wt))
+    """(exit code, the bead as the fake bd holds it) after one bead ran through the engine on the scripted lane."""
+    cfg = wslots.load_cfg(str(wt))
     res = seams.resolve_delegate(cfg.delegate)  # the configured delegate's own contract when there is one; else a bare one
     contract = res.contract if isinstance(res, dg.Resolved) else {"contract": dg.CONTRACT, "reasons": {}, "run_args": []}
     resolved = dg.Resolved(Path("/selftest"), "/selftest/route.py", contract, "explicit")
-    store, closed, blocked = FakeBeads(), [], []
+    store = FakeBeads()
     store.beads["t-1"] = engine.Bead(id="t-1", title="Add f", status="open", acceptance_criteria="f.txt exists")
-    with mock.patch.object(tl, "cmd_close", side_effect=lambda a: closed.append(a.reason) or 0), \
-            mock.patch.object(tl, "cmd_block", side_effect=lambda a: blocked.append(a.why) or 0), \
-            mock.patch.object(tl, "cmd_land", return_value=0), mock.patch.object(engine.time, "sleep"):
-        cfg = engine.dataclasses.replace(cfg, reflect=False)
-        os.chdir(wt)  # the engine reads cwd
-        try:
+    cfg = engine.dataclasses.replace(cfg, reflect=False)
+    os.chdir(wt)  # the engine reads cwd
+    try:
+        with mock.patch.object(engine.time, "sleep"):
             rc = engine.Engine("t-1", str(wt), cfg, route=seams.FixedRoute(resolved, Runner()), store=store).run()
-        finally:
-            os.chdir(home.parent)  # out of the directory that is removed next
-    return rc, closed, blocked
+    finally:
+        os.chdir(home.parent)  # out of the directory that is removed next
+    return rc, store.beads["t-1"]
 
 
 def selftest():
@@ -101,9 +99,9 @@ def selftest():
             why = git_repo(home, home / "wt")
             if why:
                 return why
-            rc, closed, blocked = run_engine(home, home / "wt")
-    if rc != 0 or not closed:
-        return "the engine ended %s without closing the bead%s" % (rc, (" (blocked: %s)" % blocked[0][:200]) if blocked else "")
+            rc, bead = run_engine(home, home / "wt")
+    if rc != 0 or bead.status != "closed":
+        return "the engine ended %s with the bead %s instead of closed" % (rc, bead.status)
     return None
 
 

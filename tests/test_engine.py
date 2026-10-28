@@ -17,6 +17,7 @@ import tempfile
 import threading
 import time
 import unittest
+import collections.abc
 import contextlib
 from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
@@ -25,9 +26,10 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
-from taskloop.adapters import applog  # noqa: E402
 from taskloop.adapters import halt as halting  # noqa: E402
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from taskloop.adapters import applog  # noqa: E402
+from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.domain.write.matchers import count_tests  # noqa: E402
 from taskloop.domain.plan.matchers import AcceptanceText  # noqa: E402
 from taskloop.contracts.answers import IRREVERSIBLE  # noqa: E402
@@ -77,7 +79,9 @@ from taskloop.app.checks import evidence as check_evidence  # noqa: E402
 from support.checks import res  # noqa: E402
 from taskloop.adapters import procs as sproc  # noqa: E402
 from taskloop.adapters.check_probe import PathProbe  # noqa: E402
-import tl  # noqa: E402
+from taskloop.adapters import gitrepo  # noqa: E402
+from taskloop.adapters import ident  # noqa: E402
+from taskloop.adapters import landlock  # noqa: E402
 from taskloop.adapters import delegate as lroute  # noqa: E402,F401
 
 
@@ -223,7 +227,7 @@ def no_repo(fn):
 
 def read_ask(bead="t-1") -> Any:
     """The bead's ask record as the dict on disk, or None."""
-    p = tl.config_dir() / "asks" / ("%s.json" % bead)
+    p = ident.config_dir() / "asks" / ("%s.json" % bead)
     return json.loads(p.read_text()) if p.exists() else None
 
 
@@ -237,6 +241,27 @@ def ask_rec(**over):
     """A current-version ask record as a dict, open and unanswered, with fields overridden."""
     base = codec.to_json(S.ASK)
     return {**base, "status": "open", "answer": None, "answered": None, "consumed": None, **over}
+
+
+class Recorded(collections.abc.Sequence):
+    """What the engine did to its bead, read off the fake bd's recorded writes each time it is looked at (a list that follows the store)."""
+
+    def __init__(self, read):
+        self.read = read
+
+    def __getitem__(self, i):
+        return self.read()[i]
+
+    def __len__(self):
+        return len(self.read())
+
+    def __eq__(self, other):
+        return self.read() == list(other)
+
+    __hash__ = None  # type: ignore[assignment]
+
+    def __repr__(self):
+        return repr(self.read())
 
 
 class EngineTest(unittest.TestCase):
@@ -254,15 +279,9 @@ class EngineTest(unittest.TestCase):
             copy_origin_and_clone(home)
         self.store = FakeBeadStore()  # bd, show and comments of every engine this test builds (pass store=self.store)
         self.bd_calls = self.store.calls
-        self.closed, self.blocked = [], []
-        patches = [
-            mock.patch.object(tl, "cmd_close", side_effect=lambda a: self.closed.append(a.reason) or 0),
-            mock.patch.object(tl, "cmd_block", side_effect=lambda a: self.blocked.append(a.why) or 0),
-            mock.patch.object(tl, "cmd_land", return_value=0),
-        ]
-        for p in patches:
-            p.start()
-            self.addCleanup(p.stop)
+        self.closed = Recorded(lambda: [c[3] for c in self.store.said("close")])  # the reasons the engine closed its bead with
+        self.blocked = Recorded(lambda: [c[3].removeprefix("Blocked: ") for c in self.store.said("comments", "add") if c[3].startswith("Blocked: ")])
+        self.lands = Recorded(lambda: [c for c in self.store.said("provenance", "record") if c[5] == "land"])  # the land records in bd's provenance
 
     def commit_base_cfg(self, engine_cfg):
         base = Path(self.tmp.name, "base-cfg")
@@ -297,7 +316,7 @@ class EngineTest(unittest.TestCase):
     def run_engine(self, answers, route="/fake/route.py", raw=None, j_extra=None, bead="t-1", probe=None, **cfg):
         """`raw` puts keys in the loaded config without committing them. probe: the network probe (netgate.FakeProbe)."""
         script = fake_route.Script(answers, j_extra)
-        c = engine.load_cfg(str(self.wt))
+        c = wslots.load_cfg(str(self.wt))
         fresh = cfg.pop("fresh", False)
         c = cfg_with(c, **{"reflect": False, **cfg, **(raw or {})})  # the reflection is one more call; its own tests switch it on
         with delegate_stack(script, route):
@@ -312,7 +331,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])
         self.assertTrue(self.closed and self.closed[0].startswith("merged "))
-        self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
+        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
         self.assertTrue(any(c[:2] == ("comments", "add") and "Reflect (engine)" in c[3] for c in self.bd_calls))
         # the facets of this one run, each of which used to be a run of its own
         self.assertIn(("reviewer", None, "openai"), s.calls)  # every green stage gets a cross-family review
@@ -321,7 +340,7 @@ class EngineTest(unittest.TestCase):
         self.assertIn("<diff>\ndiff --git a/f.txt b/f.txt", rv)  # the stage's diff, inline (tl-bxk.10.18)
         for fact in ("exit 0", "wrote f", "evidence", "add f"):
             self.assertIn(fact, rv)
-        runs = [json.loads(l) for l in (tl.config_dir() / "traces.jsonl").read_text().splitlines()]
+        runs = [json.loads(l) for l in (ident.config_dir() / "traces.jsonl").read_text().splitlines()]
         self.assertEqual(len(runs), 1)
         r = runs[0]
         self.assertEqual((r["bead"], r["outcome"], r["coordinator_session"]), ("t-1", "landed", "sess1234-x"))
@@ -361,7 +380,7 @@ class EngineTest(unittest.TestCase):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertGreaterEqual(len(mark.read_text().splitlines()), 4)  # reset and land: each lost once, then won
-        self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
+        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
 
     def test_no_prompt_points_outside_the_worktree_the_brief_plan_and_replan_are_inline(self):
         # delegate 0.23 keeps Claude's file tools in the worktree: a path to the run dir is a file no step can read
@@ -429,7 +448,7 @@ class EngineTest(unittest.TestCase):
 
     @POSIX_CHECK
     def test_a_check_that_times_out_is_red_and_leaves_no_process(self):
-        c = cfg_with(engine.load_cfg(str(self.wt)), check_wall_min=0.03)  # under 2 s
+        c = cfg_with(wslots.load_cfg(str(self.wt)), check_wall_min=0.03)  # under 2 s
         eng = engine.Engine("t-1", str(self.wt), c, store=self.store)
         mark = "61.%d" % os.getpid()  # unique: a second suite running at once has its own sleep
         res = eng.run_checks({"checks": ["bash -c 'sleep %s; true'" % mark], "files": []}, "s")
@@ -439,7 +458,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(left, "")
 
     def test_checks_run_without_the_launchers_claude_session(self):
-        c = engine.load_cfg(str(self.wt))
+        c = wslots.load_cfg(str(self.wt))
         eng = engine.Engine("t-1", str(self.wt), c, store=self.store)
         with mock.patch.dict(os.environ, {"CLAUDE_CODE_ENTRYPOINT": "cli"}):
             res = eng.run_checks({"checks": [PY + ' -c "import os,sys; sys.exit(1 if os.environ.get(\'CLAUDE_CODE_ENTRYPOINT\') else 0)"'],
@@ -704,9 +723,9 @@ class EngineTest(unittest.TestCase):
             waiting("tl-266")
             eng.clock.advance(2251)
             yield path
-        with mock.patch.object(tl, "os_lock", held_by_another):
-            with eng.locked("land_lock", Path(self.tmp.name) / "land.lock"):
-                pass
+        eng.os_lock = held_by_another
+        with eng.locked("land_lock", Path(self.tmp.name) / "land.lock"):
+            pass
         self.assertEqual(eng.waited, 2251)
         self.assertAlmostEqual(before - eng.budget.spent_min(), 2251 / 60, delta=0.5)  # real time moved by ms; no real sleep
         (start,), (end,) = records(eng, "wait_start"), records(eng, "wait_end")
@@ -720,11 +739,11 @@ class EngineTest(unittest.TestCase):
                                 gate=gate, land=land)
         self.assertEqual(rc, 0)
         self.assertEqual(count.read_text(), "1")
-        self.assertEqual(seen.read_text(), tl.git("rev-parse", "HEAD^{tree}", cwd=str(self.wt)))
+        self.assertEqual(seen.read_text(), gitrepo.git("rev-parse", "HEAD^{tree}", cwd=str(self.wt)))
 
     def test_a_stage_check_always_reruns_it_can_read_state_outside_the_tree(self):
         state = Path(self.tmp.name) / "editor-open"  # a running editor, a log, a bead comment: git cannot see them
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
+        eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         st = {"checks": [pyc("import os,sys; sys.exit(1 if os.path.exists(sys.argv[1]) else 0)", str(state))], "files": []}
         self.assertEqual(eng.run_checks(st, "s")[0].exit, 0)
         state.write_text("x")
@@ -743,7 +762,7 @@ class EngineTest(unittest.TestCase):
     def test_a_failed_check_is_never_reused(self):
         count = Path(self.tmp.name) / "count"
         fails = PY + ' -c "import sys; open(%r, \'a\').write(\'1\'); sys.exit(1)"' % str(count)
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
+        eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         st = {"checks": [fails], "files": []}
         eng.run_checks(st, "s")
         again = eng.run_checks(st, "s")
@@ -751,7 +770,7 @@ class EngineTest(unittest.TestCase):
         self.assertFalse(again[0].cached)
 
     def test_checks_run_without_a_shell(self):
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
+        eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         res = eng.run_checks({"checks": [shlex.join(["echo", "$HOME", "&&", "x;", "(y)"])], "files": []}, "s")
         self.assertEqual(res[0].exit, 0, res[0].tail)
         self.assertIn("$HOME && x; (y)", res[0].tail)  # no expansion, no operator: every word reached the program as written
@@ -767,7 +786,7 @@ class EngineTest(unittest.TestCase):
     def test_a_stop_during_a_check_stops_the_check_and_everything_it_started(self):
         if os.name == "nt":
             self.skipTest("POSIX process groups")
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
+        eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         pidfile = Path(self.wt, "child.pid")
 
         def stopped(*_):  # what the run's SIGTERM handler does, from the same thread, once the check has started its child
@@ -834,9 +853,9 @@ class EngineTest(unittest.TestCase):
         sh("git", "commit", "-qm", "wip (t-1): blocked", cwd=self.wt)
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
-        log = tl.git("log", "--format=%s", "origin/main", cwd=str(self.wt)).splitlines()
+        log = gitrepo.git("log", "--format=%s", "origin/main", cwd=str(self.wt)).splitlines()
         self.assertEqual(log, ["Add f (t-1)", "init"])
-        self.assertEqual(tl.git("show", "origin/main:g.txt", cwd=str(self.wt)), "from run 1")
+        self.assertEqual(gitrepo.git("show", "origin/main:g.txt", cwd=str(self.wt)), "from run 1")
 
     def test_review_sends_an_unmet_requirement_back_to_the_same_writer(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE],
@@ -1076,7 +1095,7 @@ class EngineTest(unittest.TestCase):
             self.assertEqual(rc, 2, q)
             self.assertEqual(self.ask()["kind"], "decision")
             self.assertEqual([c[0] for c in s.calls], ["planner"])
-            (tl.config_dir() / "asks" / "t-1.json").unlink()
+            (ident.config_dir() / "asks" / "t-1.json").unlink()
 
     def asks_the_owner(self, q):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [review(question=q)]})
@@ -1093,8 +1112,8 @@ class EngineTest(unittest.TestCase):
     def test_blocked_work_is_committed_on_the_task_branch(self):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [review(question="A or B?")]})
         self.assertEqual(rc, 2)
-        self.assertEqual(tl.git("status", "--porcelain", cwd=str(self.wt)), "")
-        self.assertIn("wip (t-1)", tl.git("log", "-1", "--format=%s", "task/t-1", cwd=str(self.wt)))
+        self.assertEqual(gitrepo.git("status", "--porcelain", cwd=str(self.wt)), "")
+        self.assertIn("wip (t-1)", gitrepo.git("log", "-1", "--format=%s", "task/t-1", cwd=str(self.wt)))
 
     def test_sigterm_still_closes(self):
         import signal as sig
@@ -1118,7 +1137,7 @@ class EngineTest(unittest.TestCase):
                                                  side_effect=lambda *a: os.kill(os.getpid(), sig.SIGTERM)):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
-        runs = [json.loads(l) for l in (tl.config_dir() / "traces.jsonl").read_text().splitlines()]
+        runs = [json.loads(l) for l in (ident.config_dir() / "traces.jsonl").read_text().splitlines()]
         self.assertEqual([r["outcome"] for r in runs], ["landed"])
 
     def test_a_stop_before_the_engine_ran_still_closes_with_a_trace(self):
@@ -1126,7 +1145,7 @@ class EngineTest(unittest.TestCase):
             rc, s = self.run_engine({"plan": [PLAN]})
         self.assertEqual((rc, s.calls), (2, []))
         self.assertIn("stopped (SIGTERM)", self.said())
-        runs = [json.loads(l) for l in (tl.config_dir() / "traces.jsonl").read_text().splitlines()]
+        runs = [json.loads(l) for l in (ident.config_dir() / "traces.jsonl").read_text().splitlines()]
         self.assertEqual(runs[-1]["why"], "failed: stopped (SIGTERM)")
 
     def run_bead_stopped_in(self, where):
@@ -1136,10 +1155,10 @@ class EngineTest(unittest.TestCase):
             self.skipTest("POSIX signal")
         said = []
 
-        def claim(*a, **k):
-            if where == "claim":
+        def claim(*argv):
+            if where == "claim" and argv[:1] == ("update",) and "--claim" in argv:
                 os.kill(os.getpid(), sig.SIGTERM)
-            return 0
+            return mock.Mock(returncode=0, stdout="", stderr="")
 
         def say(text):
             said.append(text)
@@ -1152,8 +1171,8 @@ class EngineTest(unittest.TestCase):
         made.return_value.stop_pending = False
         with self.stoppable(), mock.patch.object(engine, "Engine", made), \
                 mock.patch.object(engine, "reclaim", return_value=(True, "")), \
-                mock.patch.object(tl, "cmd_claim", side_effect=claim), mock.patch.object(engine, "say", side_effect=say):
-            rc = engine.run_bead(a, str(self.wt), {}, str(self.wt))
+                self.store.stub(bd_fn=claim), mock.patch.object(engine, "say", side_effect=say):
+            rc = engine.run_bead(a, str(self.wt), {}, str(self.wt), self.store)
         return rc, made, said
 
     def test_a_stop_during_the_claim_waits_and_the_engine_closes_it(self):
@@ -1227,7 +1246,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertIn("stopped (SIGTERM)", self.said())
         self.assertDead(self.child_of(pidfile))
-        self.assertIn("wip (t-1)", tl.git("log", "-1", "--format=%s", "task/t-1", cwd=str(self.wt)))
+        self.assertIn("wip (t-1)", gitrepo.git("log", "-1", "--format=%s", "task/t-1", cwd=str(self.wt)))
 
     def test_sigterm_landing_inside_popen_still_stops_the_new_child(self):
         # tl-10s: the stop arrived before Popen() returned (a loaded machine runs the check ahead of the engine), the handler's
@@ -1256,8 +1275,8 @@ class EngineTest(unittest.TestCase):
         self.assertIn("stopped (SIGTERM)", self.said())
         self.assertDead(self.child_of(pidfile))
         self.assertEqual(self.closed, [])
-        self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "")
-        self.assertEqual(tl.git("status", "--porcelain", cwd=str(self.wt)), "")
+        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "")
+        self.assertEqual(gitrepo.git("status", "--porcelain", cwd=str(self.wt)), "")
 
     def test_a_stop_during_the_push_waits_for_it_and_the_bead_lands(self):
         # a stop between the push and cmd_land left a landed bead failed, and the loop reopened it
@@ -1267,13 +1286,17 @@ class EngineTest(unittest.TestCase):
                                              "sys.exit(subprocess.call(['git', 'push', '-q', 'origin', 'HEAD:main']))"))
         self.assertEqual(rc, 0)
         self.assertEqual(self.eng.result()["outcome"], "landed")
-        self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
+        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
         self.assertTrue(self.closed and self.closed[0].startswith("merged "))
         self.assertEqual(self.blocked, [])
 
     def test_a_stop_while_the_land_is_recorded_still_closes_it_landed(self):
         import signal as sig
-        with self.stoppable(), mock.patch.object(tl, "cmd_land", side_effect=lambda a: os.kill(os.getpid(), sig.SIGTERM)):
+        def stop_at_the_land_record(*argv):
+            if argv[:2] == ("provenance", "record") and "land" in argv:
+                os.kill(os.getpid(), sig.SIGTERM)
+            return mock.Mock(returncode=0, stdout="", stderr="")
+        with self.stoppable(), self.store.stub(bd_fn=stop_at_the_land_record):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual((rc, self.eng.result()["outcome"]), (0, "landed"))
         self.assertEqual(self.blocked, [])
@@ -1296,16 +1319,16 @@ class EngineTest(unittest.TestCase):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, gate=FALSE, max_fix_rounds=0)
         self.assertEqual(rc, 2)
         self.assertIn("gate red", self.blocked[0])
-        first = tl.git("rev-parse", "task/t-1", cwd=str(self.wt))
-        self.assertEqual(tl.git("show", "task/t-1:f.txt", cwd=str(self.wt)), "d2")
+        first = gitrepo.git("rev-parse", "task/t-1", cwd=str(self.wt))
+        self.assertEqual(gitrepo.git("show", "task/t-1:f.txt", cwd=str(self.wt)), "d2")
         idle = dict(WRITE, summary="re-proved, no change")
         with mock.patch.object(fake_route.Script, "reply", self.no_write(fake_route.Script.reply)), \
                 self.store.stub(comments=[{"author": "denis", "text": "Rerun it."}]):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [idle], "review": [CLEAN]})
         self.assertEqual(rc, 0)
-        self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
-        self.assertEqual(tl.git("rev-list", "--count", "origin/main", "^%s~1" % first, cwd=str(self.wt)), "1")
-        subjects = tl.git("log", "--format=%s", "origin/main", cwd=str(self.wt)).splitlines()
+        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
+        self.assertEqual(gitrepo.git("rev-list", "--count", "origin/main", "^%s~1" % first, cwd=str(self.wt)), "1")
+        subjects = gitrepo.git("log", "--format=%s", "origin/main", cwd=str(self.wt)).splitlines()
         self.assertEqual(sum("(t-1)" in x for x in subjects), 1)
         self.assertFalse(any(x.startswith("wip") for x in subjects))
 
@@ -1364,7 +1387,7 @@ class EngineTest(unittest.TestCase):
         rc, s = self.run_engine({})
         self.assertEqual(rc, 0)
         self.assertEqual(s.calls, [])
-        self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
+        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
 
     def test_a_red_gate_replans_with_its_output_and_keeps_the_accepted_stages(self):
         red = PY + ' -c "import sys; print(\'RS0016 ContentPack ctor\'); sys.exit(1)"'
@@ -1425,7 +1448,7 @@ class EngineTest(unittest.TestCase):
         assert ck is not None
         sh("git", "checkout", "-q", "task/t-1", cwd=self.wt)  # (a parked slot is left detached at the base: back on the bead's branch)
         sh("git", "reset", "-q", "--soft", "HEAD~1", cwd=self.wt)
-        self.eng.stores.checkpoints.of("t-1").write(dataclasses.replace(ck, closed=False, head=tl.git("rev-parse", "HEAD", cwd=str(self.wt))))
+        self.eng.stores.checkpoints.of("t-1").write(dataclasses.replace(ck, closed=False, head=gitrepo.git("rev-parse", "HEAD", cwd=str(self.wt))))
         rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
         self.assertEqual([c[0] for c in s.calls], ["worker", "reviewer"])
@@ -1486,7 +1509,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertIsNone(self.ask())  # tl-7y6.2.2: the refusal is a machine fault; the checkpoint is what resumes the run
         ck = self.checkpoint()
-        self.assertEqual((ck["step"], ck["branch"]), ("land", tl.git("symbolic-ref", "--short", "HEAD", cwd=str(self.wt))))
+        self.assertEqual((ck["step"], ck["branch"]), ("land", gitrepo.git("symbolic-ref", "--short", "HEAD", cwd=str(self.wt))))
         rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual([c[0] for c in s.calls], ["worker", "reviewer"])  # the fix round again, no plan
@@ -1498,10 +1521,11 @@ class EngineTest(unittest.TestCase):
 
     def reclaim(self, bead, comments=(), ask=None, live=()):
         if ask:
-            p = tl.config_dir() / "asks" / "t-1.json"
+            p = ident.config_dir() / "asks" / "t-1.json"
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(json.dumps(ask))
-        with self.store.stub(show=dict(BEAD, **bead), comments=list(comments)), mock.patch.object(tl, "live_actors", return_value=set(live)):
+        leases = [dict(BEAD, id="live-%d" % n, status="in_progress", assignee=who, lease_expires_at="2999-01-01T00:00:00Z") for n, who in enumerate(live)]
+        with self.store.stub(show=dict(BEAD, **bead), comments=list(comments), find_fn=lambda q: leases):
             ok, why = engine.reclaim("t-1", str(self.wt), store=self.store)
         updates = [c for c in self.bd_calls if c[:1] == ("update",)]
         return ok, why, updates
@@ -1526,7 +1550,7 @@ class EngineTest(unittest.TestCase):
 
     def test_a_live_claim_says_another_run_of_the_bead_holds_it_and_where_its_log_is(self):
         # lifesim-gfr.31.1: a restarted session relaunched the bead; TAKEN read like a stale claim of its own session
-        logs = tl.config_dir() / "engine"
+        logs = ident.config_dir() / "engine"
         logs.mkdir(parents=True, exist_ok=True)
         (logs / "t-1-20261021-063408.jsonl").write_text("")
         ok, why, _ = self.reclaim({"status": "in_progress", "assignee": "tl-61ba34e7"}, live=["tl-61ba34e7"])
@@ -1606,8 +1630,8 @@ class EngineTest(unittest.TestCase):
         fix = s.prompts[3]
         self.assertIn("gate saw d2", fix)
         self.assertIn("fix", s.prompts[4].lower())
-        self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d4")
-        subjects = tl.git("log", "--format=%s", "origin/main", cwd=str(self.wt)).splitlines()
+        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d4")
+        subjects = gitrepo.git("log", "--format=%s", "origin/main", cwd=str(self.wt)).splitlines()
         self.assertEqual(sum("(t-1)" in x for x in subjects), 1)
 
     ERRORS = PY + ' -c "import sys; [print(\'src/F.cs(%d,1): error CS%04d: analyzer says no\' % (i % 18, i % 18)) for i in range(36)]; ' \
@@ -1814,9 +1838,9 @@ class EngineTest(unittest.TestCase):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertIn("conflict", s.prompts[3])
-        log = tl.git("log", "--format=%s", "origin/main", cwd=str(self.wt)).splitlines()
+        log = gitrepo.git("log", "--format=%s", "origin/main", cwd=str(self.wt)).splitlines()
         self.assertEqual(log[:2], ["Add f (t-1)", "theirs"])
-        self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d4")
+        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d4")
 
     # -- tl-7y6.2.18: a conflict fix runs the marker check and the build, not every stage's checks
     def conflict_run(self, answers, **cfg):
@@ -1861,7 +1885,7 @@ class EngineTest(unittest.TestCase):
         for skipped in ("unit", HAS_F, stage_check):
             self.assertEqual((fix[skipped]["status"], fix[skipped]["why"]), ("skipped", "conflict_fix"), skipped)
         self.assertEqual((len(build_log.read_text()), len(unit_log.read_text()), len(stage_log.read_text())), (2, 1, 1))
-        self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d4")
+        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d4")
 
     @ENGINE_BASH
     def test_a_conflict_fix_leaving_markers_is_not_accepted_the_marker_check_still_runs(self):
@@ -2025,10 +2049,10 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(state["pushes"], 2)
         self.assertEqual(self.eng.result()["outcome"], "landed")
         self.assertTrue(self.closed[0].startswith("merged "))
-        self.assertEqual(tl.git("show", "origin/main:a.txt", cwd=str(self.wt)), "concurrent 1")
-        self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
-        self.assertEqual(tl.git("rev-parse", "HEAD", cwd=str(self.wt)),
-                         tl.git("rev-parse", "main", cwd=str(self.race_origin)))
+        self.assertEqual(gitrepo.git("show", "origin/main:a.txt", cwd=str(self.wt)), "concurrent 1")
+        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
+        self.assertEqual(gitrepo.git("rev-parse", "HEAD", cwd=str(self.wt)),
+                         gitrepo.git("rev-parse", "main", cwd=str(self.race_origin)))
 
     def push_race_stops_after_two_retries_cell(self, rejections, expected):
         rc, events, state = self.run_push_race(rejections=rejections)
@@ -2079,38 +2103,37 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(events.count("enter"), 2)
         self.assertEqual(events.count("exit"), 2)
         self.assertEqual(events[events.index("fix:verify") - 1], "exit")
-        self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d4")
+        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d4")
         self.assertEqual(self.eng.result()["outcome"], "landed")
 
     def push_race_exhausted_cell(self, failure):
-        with mock.patch.object(tl, "cmd_land") as land:
-            rc, events, state = self.run_push_race(failure=failure, resume_failed_fix=True,
-                                                  max_rounds=1, max_check_tries=1)
-            self.assertEqual(state["fix_result"], "replan")
-            self.assertEqual(state["first_rc"], 2)
-            self.assertEqual(rc, 2, self.blocked)
-            self.assertIn("validation fix did not pass", state["first_blocked"])
-            self.assertEqual(state["checkpoint"]["step"], "land-verify-red")
-            self.assertTrue(state["checkpoint"]["closed"])
-            self.assertIn("still red" if failure == "checks_exhausted" else "a high fix",
-                          state["checkpoint"]["feedback"])
-            self.assertTrue(self.eng.resumed)
-            self.assertEqual(state["resume_calls"], ["planner", "worker"] +
-                             (["reviewer"] if failure == "review_exhausted" else []))
-            self.assertEqual(len(state["resume_checks"]), 1)
-            self.assertEqual(any(c.status == "failed" for c in state["resume_checks"][0]),
-                             failure == "checks_exhausted")
-            self.assertEqual(state["pushes"], 1)  # only the initial, rejected push
-            self.assertEqual(state["gates"], 1)  # a green gate cannot accept the failed fix
-            self.assertEqual(events.count("enter"), 1)
-            self.assertEqual(events.count("exit"), 1)
-            self.assertEqual(events[-2:], ["exit", "fix:verify"])
-            self.assertFalse(self.eng.landed_sha)
-            self.assertNotEqual(self.eng.result()["outcome"], "landed")
-            self.assertFalse(self.closed)
-            land.assert_not_called()
-            self.assertEqual(tl.git("show", "main:a.txt", cwd=str(self.race_origin)), "concurrent 1")
-            self.assertEqual(tl.git("ls-tree", "--name-only", "main", "f.txt", cwd=str(self.race_origin)), "")
+        rc, events, state = self.run_push_race(failure=failure, resume_failed_fix=True,
+                                              max_rounds=1, max_check_tries=1)
+        self.assertEqual(state["fix_result"], "replan")
+        self.assertEqual(state["first_rc"], 2)
+        self.assertEqual(rc, 2, self.blocked)
+        self.assertIn("validation fix did not pass", state["first_blocked"])
+        self.assertEqual(state["checkpoint"]["step"], "land-verify-red")
+        self.assertTrue(state["checkpoint"]["closed"])
+        self.assertIn("still red" if failure == "checks_exhausted" else "a high fix",
+                      state["checkpoint"]["feedback"])
+        self.assertTrue(self.eng.resumed)
+        self.assertEqual(state["resume_calls"], ["planner", "worker"] +
+                         (["reviewer"] if failure == "review_exhausted" else []))
+        self.assertEqual(len(state["resume_checks"]), 1)
+        self.assertEqual(any(c.status == "failed" for c in state["resume_checks"][0]),
+                         failure == "checks_exhausted")
+        self.assertEqual(state["pushes"], 1)  # only the initial, rejected push
+        self.assertEqual(state["gates"], 1)  # a green gate cannot accept the failed fix
+        self.assertEqual(events.count("enter"), 1)
+        self.assertEqual(events.count("exit"), 1)
+        self.assertEqual(events[-2:], ["exit", "fix:verify"])
+        self.assertFalse(self.eng.landed_sha)
+        self.assertNotEqual(self.eng.result()["outcome"], "landed")
+        self.assertFalse(self.closed)
+        self.assertEqual(self.lands, [])
+        self.assertEqual(gitrepo.git("show", "main:a.txt", cwd=str(self.race_origin)), "concurrent 1")
+        self.assertEqual(gitrepo.git("ls-tree", "--name-only", "main", "f.txt", cwd=str(self.race_origin)), "")
 
     def push_race_interrupted_cell(self, interruption, role):
         real_fix, real_stage = Fixer.fix, StageLoop.run
@@ -2119,7 +2142,7 @@ class EngineTest(unittest.TestCase):
         real_brief = check_evidence.failure_brief
         real_checkpoint, real_move = Checkpoints.save, Steps.move
         gate = PY + ' -c "pass"'
-        with self.stoppable(), mock.patch.object(tl, "cmd_land") as land:
+        with self.stoppable():
             seen, recovery_checks, recovery_pushes = {}, [], []
             closed_before = len(self.closed)
 
@@ -2197,7 +2220,7 @@ class EngineTest(unittest.TestCase):
             self.assertEqual(race["pushes"], 1)
             self.assertFalse(self.eng.landed_sha)
             self.assertEqual(len(self.closed), closed_before)
-            land.assert_not_called()
+            self.assertEqual(self.lands, [])
 
             def checks(this, *a, **kw):
                 result = real_checks(this, *a, **kw)
@@ -2238,7 +2261,7 @@ class EngineTest(unittest.TestCase):
                 self.assertFalse(recovery_pushes)
                 self.assertFalse(self.eng.landed_sha)
                 self.assertEqual(len(self.closed), closed_before)
-                land.assert_not_called()
+                self.assertEqual(self.lands, [])
 
                 with self.store.stub(comments=[{"author": "owner", "text": "Recover with passing checks and review."}]):
                     rc, script = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
@@ -2252,10 +2275,10 @@ class EngineTest(unittest.TestCase):
                 self.assertIsNone(self.checkpoint())
                 self.assertEqual(self.eng.result()["outcome"], "landed")
                 self.assertEqual(len(self.closed), closed_before + 1)
-                land.assert_called_once()
+                self.assertEqual(len(self.lands), 1)
 
     def test_push_race_sigterm_during_retry_check_stops_child_and_keeps_barrier(self):
-        with self.stoppable(), mock.patch.object(tl, "cmd_land") as land:
+        with self.stoppable():
             rc, events, race = self.run_push_race(failure="checks_stop", check_wall_min=0.03)
         self.assertEqual(rc, 2, self.blocked)
         self.assertIn("stopped (SIGTERM)", self.said())
@@ -2267,7 +2290,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(race["pushes"], 1)
         self.assertFalse(self.closed)
         self.assertFalse(self.eng.landed_sha)
-        land.assert_not_called()
+        self.assertEqual(self.lands, [])
 
         env = {"XDG_CONFIG_HOME": race["config_home"], "APPDATA": race["config_home"]}
         with mock.patch.dict(os.environ, env):
@@ -2305,12 +2328,12 @@ class EngineTest(unittest.TestCase):
         if os.name == "nt":
             self.skipTest("POSIX flock")
         eng = self.checks_engine()
-        path = tl.land_lock_path(eng.git("remote", "get-url", "origin") or str(eng.wt))
+        path = landlock.land_lock_path(eng.git("remote", "get-url", "origin") or str(eng.wt))
         eng.steps.begin("review", "review")
         got, go = [], threading.Event()
 
         def holder():
-            with tl.os_lock(path, "other-bead"):
+            with landlock.os_lock(path, "other-bead"):
                 got.append(1)
                 go.wait(60)
         t = threading.Thread(target=holder)
@@ -2407,7 +2430,7 @@ class EngineTest(unittest.TestCase):
         return card_of(self.ask())
 
     def asks(self):
-        return AskStore.at(ConfigDir(tl.config_dir()))
+        return AskStore.at(ConfigDir(ident.config_dir()))
 
     def file_answer(self, action, text="", bead="t-1"):
         """The owner answers the bead's ask the way the dashboard and `tl answer` do: an AskAnswer record, never a comment."""
@@ -2415,7 +2438,7 @@ class EngineTest(unittest.TestCase):
         return self.asks().answer(bead, a.id, AskAnswer(action=action, text=text, t=time.time(), by="denis"))
 
     def test_a_bead_parked_on_a_dropped_v1_ask_asks_again_with_a_v2_ask(self):
-        p = tl.config_dir() / "asks" / "t-1.json"
+        p = ident.config_dir() / "asks" / "t-1.json"
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps({"v": 1, "id": "t-1-4", "bead": "t-1", "status": "open", "kind": "verify", "question": "old?"}))
         self.assertEqual(self.asks().orphans(), ["t-1"])
@@ -2508,7 +2531,7 @@ class EngineTest(unittest.TestCase):
         self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
         a = self.ask()
         a["status"] = "parked"
-        (tl.config_dir() / "asks" / ("%s.json" % a["bead"])).write_text(json.dumps(a))
+        (ident.config_dir() / "asks" / ("%s.json" % a["bead"])).write_text(json.dumps(a))
         rc, s = self.run_engine({})
         self.assertEqual((rc, s.calls), (2, []))
         self.assertEqual(self.ask()["status"], "parked")
@@ -2584,7 +2607,7 @@ class EngineTest(unittest.TestCase):
         a = self.ask()
         self.assertEqual(a["class"], "external_fact")
         self.assertIn("the cited spec link did not open", a["detail"]["text"])
-        self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "")
+        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "")
 
     def test_the_gate_named_as_unchecked_lands_without_an_ask(self):
         # lifesim-5ban.3: 'the full gate and diff coverage, reserved for the engine' stopped the land; the gate runs there
@@ -2642,7 +2665,7 @@ class EngineTest(unittest.TestCase):
             rc, s = self.run_engine({})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(s.calls, [])
-        self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
+        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
 
     def test_a_verify_answer_with_a_yes_and_evidence_goes_straight_to_land(self):
         text = "Right. The log shows the link opens and returns the spec."
@@ -2675,7 +2698,7 @@ class EngineTest(unittest.TestCase):
             rc, s = self.run_engine({"plan": [dict(PLAN, stages=[], summary="nothing left")]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual([c[0] for c in s.calls], ["planner"])
-        self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
+        self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
         self.assertEqual(self.eng.plan_summary, "do it")  # the commit is titled after the work, not the empty plan
 
     def test_a_verify_answer_on_the_dashboard_lands_it(self):
@@ -2802,7 +2825,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(Tools.named("`mypy` was not run; nobody checked with eslint"), ["mypy", "eslint"])
 
     def test_prose_that_happens_to_name_a_tool_still_goes_to_the_verifier(self):
-        cfg = engine.load_cfg(str(self.wt))
+        cfg = wslots.load_cfg(str(self.wt))
         with mock.patch.object(engine, "tool_on_path", return_value=None):
             for what in ("the biome transition fades in", "no black screen between lots"):
                 self.assertEqual(self.unused(what, cfg), "", what)
@@ -2814,10 +2837,10 @@ class EngineTest(unittest.TestCase):
         sh("git", "add", "-A", cwd=self.wt)
         sh("git", "commit", "-qm", "tools", cwd=self.wt)
         with mock.patch.object(engine, "tool_on_path", return_value=None):
-            self.assertEqual(self.unused("nobody ran csharpier on src/", engine.load_cfg(str(self.wt))), "")
+            self.assertEqual(self.unused("nobody ran csharpier on src/", wslots.load_cfg(str(self.wt))), "")
 
     def test_only_the_unused_tool_item_is_dropped_the_rest_go_to_the_verifier(self):
-        cfg = engine.load_cfg(str(self.wt))
+        cfg = wslots.load_cfg(str(self.wt))
         with mock.patch.object(engine, "tool_on_path", side_effect=self.no_ruff):
             self.assertIn("not a check here", self.unused(self.RUFF["what"], cfg, self.no_ruff))
             self.assertEqual(self.unused(self.GAPS[1]["what"], cfg, self.no_ruff), "")
@@ -2845,7 +2868,7 @@ class EngineTest(unittest.TestCase):
         self.assertIn("settled", verify)
         reflect = next(c for c in said if c.startswith("Reflect (engine)"))
         self.assertIn("self-verified=3 settled, 0 wrong, 0 open", reflect)
-        trace = json.loads((tl.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
+        trace = json.loads((ident.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
         self.assertEqual([v["verdict"] for v in trace["verified"]], ["settled"] * 3)
         self.assertEqual(trace["verified"][1]["evidence"], "Boot.cs:14 `Wire();`")
         self.assertEqual(trace["verified"][1]["what"], "Boot() calls the new Wire()")
@@ -2953,7 +2976,7 @@ class EngineTest(unittest.TestCase):
         self.assertIn("part 3", self.card())
 
     def test_close_reason_says_what_landed_and_a_refused_close_is_a_warning(self):
-        with mock.patch.object(tl, "cmd_close", side_effect=lambda a: self.closed.append(a.reason) or 1):
+        with self.store.stub(bd_fn=lambda *argv: mock.Mock(returncode=1 if argv[0] == "close" else 0, stdout="", stderr="refused")):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertIn("to main: do it", self.closed[0])
         self.assertGreater(len(self.closed[0]), 40)
@@ -2991,9 +3014,8 @@ class EngineTest(unittest.TestCase):
 
     def test_run_task_refuses_the_main_checkout(self):
         a = mock.Mock(id="t-1", worktree=str(self.wt), slot=None, dry_run=True, fresh=False, quiet=True, outcome_file=None)
-        with mock.patch.object(tl, "repo_root", return_value=str(self.wt)), \
-                mock.patch.object(engine, "Engine") as made:
-            rc = engine.main(a)
+        with mock.patch.object(engine, "Engine") as made, contextlib.chdir(self.wt):
+            rc = engine.main(a, self.store)
         self.assertEqual(rc, 1)
         made.assert_not_called()
 
@@ -3040,7 +3062,7 @@ class EngineTest(unittest.TestCase):
                                ([{"tool": "Bash", "input": {"command": "rg -n x ."}}, {"tool": "Bash", "input": {"command": "curl x"}}], "")):
             denied = [dict(x, kind="policy", path="") for x in denied]
             stuck = stop("secrets", "w1", denied=denied) if reason else full(None, "w1", text="no", denied=denied)
-            for f in (tl.config_dir() / "asks" / "t-1.json", tl.config_dir() / "checkpoints" / "t-1.json"):
+            for f in (ident.config_dir() / "asks" / "t-1.json", ident.config_dir() / "checkpoints" / "t-1.json"):
                 f.unlink() if f.exists() else None  # each case starts as a new bead: an open ask would make the run wait
             # a secrets stop gets the one new thread told to use apply_patch (lane_policy), then the fault; the rest is not retried
             rc, s = self.run_engine({"plan": [PLAN], "write": [stuck, stuck if reason else WRITE], "review": [CLEAN]})
@@ -3228,7 +3250,7 @@ class EngineTest(unittest.TestCase):
         self.run_engine({"plan": [PLAN], "write": [self.bad_request()]}, bead="t-3")
         self.assertEqual(self.eng.result()["storm"], "")  # the record is live: no second banner
         self.assertEqual((self.blocked, self.ask()), ([], None))
-        self.assertEqual(len(list((tl.config_dir() / "storm").glob("*.json"))), 1)
+        self.assertEqual(len(list((ident.config_dir() / "storm").glob("*.json"))), 1)
 
     def test_the_third_identical_fault_on_one_bead_raises_exactly_one_ask(self):
         for n in range(2):
@@ -3276,11 +3298,11 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(self.eng.sessions[1]["reason"], "rate_limited")
         self.assertEqual(self.eng.sessions[-1]["context"]["instructions"], ["/repo/AGENTS.md"])
-        trace = [json.loads(l) for l in (tl.config_dir() / "traces.jsonl").read_text().splitlines()][-1]
+        trace = [json.loads(l) for l in (ident.config_dir() / "traces.jsonl").read_text().splitlines()][-1]
         self.assertEqual(trace["lanes"], {})
 
     def test_a_delegate_of_another_contract_blocks_before_any_step(self):
-        c = engine.load_cfg(str(self.wt))
+        c = wslots.load_cfg(str(self.wt))
         refusal = dl.Refusal("skew_delegate_older", "delegate speaks contract 2")
         script = fake_route.Script({})
         with mock.patch.object(dl, "resolve", return_value=refusal), mock.patch.object(seams.DelegateRoute, "runner", lambda self, *a, **k: script):
@@ -3474,8 +3496,7 @@ class EngineTest(unittest.TestCase):
         self.assertIn("stage 1 stuck after 1 rounds", a["why"])
         self.assertIn("allow one more", self.card().lower())
         self.file_answer("rerun")
-        if True:
-            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, max_rounds=1, max_replans=1)
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, max_rounds=1, max_replans=1)
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(self.eng.extra, 1)
 
@@ -3692,7 +3713,7 @@ class LandReview(EngineTest):
         return make_engine(self.wt, cfg=cfg, store=self.store, attrs=dict({"plan_data": plan}, **(attrs or {})))
 
     def staged(self):
-        return sorted(tl.git("diff", "--cached", "--name-only", cwd=str(self.wt)).split())
+        return sorted(gitrepo.git("diff", "--cached", "--name-only", cwd=str(self.wt)).split())
 
     def make_files(self, *names):
         for n in names:
@@ -3701,11 +3722,11 @@ class LandReview(EngineTest):
 
     def run_with(self, script):
         with delegate_stack(script, "/r.py"):
-            self.eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
+            self.eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
             return self.eng.run()
 
     def landed(self):
-        return sorted(tl.git("show", "--name-only", "--format=", "origin/main", cwd=str(self.wt)).split())
+        return sorted(gitrepo.git("show", "--name-only", "--format=", "origin/main", cwd=str(self.wt)).split())
 
     def test_stage_all_stages_tracked_changes_and_the_files_a_stage_lists_but_not_a_stray(self):
         self.make_files("f.txt", "docs/a/b.md", "docs/a/b.md.meta", *self.STRAY)

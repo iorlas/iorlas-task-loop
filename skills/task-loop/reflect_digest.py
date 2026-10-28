@@ -19,7 +19,7 @@ import time
 from collections import Counter
 from pathlib import Path
 
-import tl
+from taskloop.adapters import beadtools, ident, landlock
 from taskloop.adapters import procs as sproc
 from taskloop.contracts.ports import BdFailure, BeadQuery, NewBead
 
@@ -35,7 +35,7 @@ FILE = re.compile(r"[\w./-]+\.(?:py|md|cs|json|ya?ml|toml|html|js|ts|sh|cfg|txt)
 
 
 def state_path():
-    return tl.config_dir() / "reflect-digest.json"
+    return ident.config_dir() / "reflect-digest.json"
 
 
 def read_state():
@@ -64,7 +64,7 @@ def jaccard(a, b):
 
 def items(since, until, traces=None):
     """The went_badly items of the reflected runs ended in the window, oldest first."""
-    path = traces or tl.config_dir() / "traces.jsonl"
+    path = traces or ident.config_dir() / "traces.jsonl"
     out = []
     try:
         lines = Path(path).read_text(encoding="utf-8", errors="replace").splitlines()
@@ -131,7 +131,7 @@ def recurring(clusters):
 
 def registered():
     try:
-        d = json.loads((tl.config_dir() / "repos.json").read_text(encoding="utf-8"))
+        d = json.loads((ident.config_dir() / "repos.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return []
     return [p for p in (d if isinstance(d, list) else list(d)) if isinstance(p, str) and (Path(p) / ".beads").is_dir()]
@@ -183,7 +183,7 @@ def known_bead(c, repo, state):
         if e.get("cause") == c["cause"] and e.get("repo") == repo and same_cause(e, c):
             return e["bead"], "filed"
     try:
-        rows = tl.bd_store(repo).find(BeadQuery())  # the default filter leaves out closed beads only
+        rows = beadtools.bd_store(repo).find(BeadQuery())  # the default filter leaves out closed beads only
     except BdFailure:
         rows = []
     ct = tokens(c["title"])
@@ -194,7 +194,7 @@ def known_bead(c, repo, state):
 
 
 def is_closed(bead, repo):
-    row = tl.peek(tl.bd_store(repo), bead)
+    row = beadtools.peek(beadtools.bd_store(repo), bead)
     return row is not None and row.status == "closed"
 
 
@@ -244,7 +244,7 @@ def file_cluster(c, state, dry=False, repos=None):
         if new:
             res["action"] = "commented"
             if not dry:
-                tl.attempt(tl.bd_store(repo).add_comment, bead, "Reflect digest: the cause recurred in %d more run(s): %s\n%s" % (
+                beadtools.attempt(beadtools.bd_store(repo).add_comment, bead, "Reflect digest: the cause recurred in %d more run(s): %s\n%s" % (
                     len(new), ", ".join(new), "\n".join(evidence_lines(dict(c, items=[i for i in c["items"] if i["run"] in new])))))
                 entry["runs"] = sorted(set(entry["runs"]) | set(new))
         return res
@@ -253,7 +253,7 @@ def file_cluster(c, state, dry=False, repos=None):
     if dry:
         return res
     try:
-        new_id = tl.bd_store(repo).create(NewBead(title=title, priority=3, labels=["reflect", "cause-%s" % c["cause"]],
+        new_id = beadtools.bd_store(repo).create(NewBead(title=title, priority=3, labels=["reflect", "cause-%s" % c["cause"]],
                                                   description=description(c, old), acceptance_criteria=acceptance(c)))
     except BdFailure:
         new_id = ""
@@ -272,7 +272,7 @@ def digest(since, until, dry=False, traces=None, repos=None):
     if dry:
         return _digest(since, until, True, traces, repos)
     try:
-        with tl.os_lock(tl.config_dir() / "locks" / "reflect-digest-run.lock", "pid %d" % os.getpid(), timeout=120):
+        with landlock.os_lock(ident.config_dir() / "locks" / "reflect-digest-run.lock", "pid %d" % os.getpid(), timeout=120):
             return _digest(since, until, False, traces, repos)
     except TimeoutError:
         return {"since": since, "until": until, "items": 0, "clusters": [], "actions": [], "busy": True}
@@ -316,10 +316,10 @@ def due(now=None):
 def maybe_run(now=None):
     """The loop's call: once a day a detached `tl reflect digest` (it asks bd about every open bead of the target repos: a loop
     pass never waits for it). -> 'started' or ''."""
-    if not due(now) or not (tl.config_dir() / "traces.jsonl").is_file() or not registered():
+    if not due(now) or not (ident.config_dir() / "traces.jsonl").is_file() or not registered():
         return ""  # nothing to read or nowhere to file
     try:
-        with tl.os_lock(tl.config_dir() / "locks" / "reflect-digest.lock", "pid %d" % os.getpid()):
+        with landlock.os_lock(ident.config_dir() / "locks" / "reflect-digest.lock", "pid %d" % os.getpid()):
             if not due(now):
                 return ""
             pass

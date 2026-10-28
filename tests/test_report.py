@@ -22,6 +22,8 @@ from support.fakes import FakeBeadStore, as_comment  # noqa: E402
 from support import looptest  # noqa: E402
 import report  # noqa: E402
 import tl  # noqa: E402
+from taskloop.adapters import beadtools, gitrepo  # noqa: E402
+from taskloop.adapters import ident  # noqa: E402
 
 T0 = datetime(2026, 10, 21, 6, 0).timestamp()  # the window's start in the fixtures: local 06:00
 MIN = 60.0
@@ -195,7 +197,7 @@ def trace(bead, outcome, start_min, end_min, why="", sha="", rounds=0, replans=0
     stem = run or "%s-%s" % (bead, time.strftime("%Y%m%d-%H%M%S", time.localtime(started)))
     return {"v": 1, "run": stem, "bead": bead, "repo": "https://example.invalid/r.git", "worktree": worktree,
             "started": started, "ended": ended, "outcome": outcome, "why": why, "sha": sha,
-            "stats": {"rounds": rounds, "replans": replans}, "log": str(tl.config_dir() / "engine" / (stem + ".jsonl")),
+            "stats": {"rounds": rounds, "replans": replans}, "log": str(ident.config_dir() / "engine" / (stem + ".jsonl")),
             "sessions": list(sessions), "stderr": stderr, "kind": kind}
 
 
@@ -207,7 +209,7 @@ class Scorecard(Base):
     def setUp(self):
         super().setUp()
         self.wt = str(self.repo / ".slots" / "s1")
-        (tl.config_dir() / "engine").mkdir(parents=True, exist_ok=True)
+        (ident.config_dir() / "engine").mkdir(parents=True, exist_ok=True)
         w = self.wt
         runs = [
             trace("t-0", "landed", -200, -150, sha="x", worktree=w),  # before the window: not counted
@@ -225,24 +227,24 @@ class Scorecard(Base):
             trace("t-12", "failed", 110, 112, why="failed: engine error KeyError: 'x'", worktree=w),  # a caught crash
             trace("o-1", "landed", 10, 20, sha="z", worktree="/elsewhere/repo"),  # another repo
         ]
-        with open(tl.config_dir() / "traces.jsonl", "w") as f:
+        with open(ident.config_dir() / "traces.jsonl", "w") as f:
             for r in runs:
                 f.write(json.dumps(r) + "\n")
         # route.py's stderr carries a worker's test traceback: no engine crash
         (self.home / "t-1.stderr").write_text("Traceback (most recent call last):\n  File x\nAssertionError\n")
         # t-7's landing run resumed after an answer given before the window: it landed with an ask
-        (tl.config_dir() / "engine" / (runs[-4]["run"] + ".jsonl")).write_text(json.dumps(
+        (ident.config_dir() / "engine" / (str(runs[-4]["run"]) + ".jsonl")).write_text(json.dumps(
             {"t": T0, "kind": "note", "text": "ask t-7-1 (verify) is answered: the bead changed since it was asked"}) + "\n")
         # a crash: an engine log with no close and no trace, long quiet
-        dead = tl.config_dir() / "engine" / ("t-8-%s.jsonl" % time.strftime("%Y%m%d-%H%M%S", time.localtime(T0 + 5 * MIN)))
+        dead = ident.config_dir() / "engine" / ("t-8-%s.jsonl" % time.strftime("%Y%m%d-%H%M%S", time.localtime(T0 + 5 * MIN)))
         dead.write_text(json.dumps({"t": T0 + 5 * MIN, "kind": "cmd", "text": "git commit -q -m wip (t-8): failed"}) + "\n")
         os.utime(dead, (T0 + 6 * MIN, T0 + 6 * MIN))
         # a run that is still going: no trace yet, but alive
-        live = tl.config_dir() / "engine" / ("t-9-%s.jsonl" % time.strftime("%Y%m%d-%H%M%S", time.localtime(T0 + 100 * MIN)))
+        live = ident.config_dir() / "engine" / ("t-9-%s.jsonl" % time.strftime("%Y%m%d-%H%M%S", time.localtime(T0 + 100 * MIN)))
         live.write_text(json.dumps({"t": T0 + 100 * MIN, "kind": "node", "text": "write"}) + "\n")
         # the loop's own record of a run-task that died before its engine wrote anything
-        looptest.log(tl.repo_root(str(self.repo))).parent.mkdir(parents=True, exist_ok=True)
-        with open(looptest.log(tl.repo_root(str(self.repo))), "w") as f:  # the loop keys it so
+        looptest.log(gitrepo.repo_root(str(self.repo))).parent.mkdir(parents=True, exist_ok=True)
+        with open(looptest.log(gitrepo.repo_root(str(self.repo))), "w") as f:  # the loop keys it so
             f.write(json.dumps({"ts": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(T0 + 95 * MIN)), "bead": "t-10",
                                 "slot": "s1", "outcome": "failed", "minutes": 0.1, "trace": None,
                                 "why": "failed: no outcome from run-task (exit 1); see x.log"}) + "\n")
@@ -308,7 +310,7 @@ class Scorecard(Base):
         args = ["report", "--repo", str(self.repo), "--since", "2026-10-21T06:00", "--until", "2026-10-21T09:20"]
         store = FakeBeadStore()
         store.notes = {b: [as_comment(x) for x in c] for b, c in self.comments.items()}
-        with mock.patch.object(report, "default_base", return_value="main"), tlbd.bd_boundary(store=store), \
+        with mock.patch.object(report, "default_base", return_value="main"), mock.patch.object(beadtools, "bd_store", return_value=store), \
                 mock.patch.object(report, "bead_status", lambda b, repo: self.status.get(b)), \
                 mock.patch.object(report, "run_alive", lambda bead: bead == "t-9"):
             out = io.StringIO()
@@ -339,7 +341,7 @@ class PlannerReport(unittest.TestCase):
                                                 "APPDATA": str(home / "cfg")})
         self.env.start()
         self.hist = home / "history.jsonl"
-        self.eng = tl.config_dir() / "engine"
+        self.eng = ident.config_dir() / "engine"
         self.eng.mkdir(parents=True)
         t = T0
         rows = [("planner", "x-1", 1000, 9000), ("planner", "x-1", 500, 4500), ("planner", "x-1", 200, 800),

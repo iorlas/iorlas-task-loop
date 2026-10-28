@@ -9,21 +9,23 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "task-loop"))
+import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support import fake_route  # noqa: E402
 from support.checkpoints import put_ck, read_ck  # noqa: E402
 from support import tlbd  # noqa: E402
 from support.fakes import FakeBeadStore, as_bead  # noqa: E402
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from taskloop.adapters import bd  # noqa: E402
+from taskloop.app.wire import slots as wslots  # noqa: E402
 from support.builders import make_engine  # noqa: E402
 from taskloop.domain.checks import matchers  # noqa: E402
 from taskloop.domain.checks.cmd import matchers as sh_matchers  # noqa: E402
 import test_engine as te  # noqa: E402
-from test_engine import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint, tl  # noqa: E402,F401
+from test_engine import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint  # noqa: E402,F401
 
 
-_REAL_CMD_BLOCK = tl.cmd_block  # te's harness patches it per test; this is the real one
 from test_stages import StagesTest  # noqa: E402
+from taskloop.adapters import ident  # noqa: E402
+from taskloop.app.wire import asks as wasks  # noqa: E402
 
 
 class StaleTree(StagesTest):
@@ -100,7 +102,7 @@ class StaleTree(StagesTest):
 
     def test_a_tracked_change_in_the_slot_still_stops_the_rebase(self):
         te.sh("git", "checkout", "-q", "-b", "task/t-1", cwd=self.wt)
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
+        e = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         self.junk_and_moving_main()
         (self.wt / "a.txt").write_text("edited and not committed\n")
         self.assertEqual(e.rebase.onto_base(), "")
@@ -140,7 +142,7 @@ class StaleTree(StagesTest):
         (self.wt / "g.txt").write_text("work\n")
         te.sh("git", "add", "-A", cwd=self.wt)
         te.sh("git", "commit", "-qm", "work", cwd=self.wt)
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
+        e = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         before = e.git("rev-parse", "HEAD")
         (self.wt / "g.txt").write_text("more work\n")
         te.sh("git", "commit", "-qam", "wip (t-1): blocked", cwd=self.wt)  # what reset() does with a dirty tree
@@ -189,7 +191,7 @@ class SlotHygiene(StagesTest):
         for f in ("client/log.txt", "client/Logs.log", "client/deep/x.log"):
             Path(self.wt, f).parent.mkdir(parents=True, exist_ok=True)
             Path(self.wt, f).write_text("noise\n")
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
+        e = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         self.assertEqual(e.dirty_status(), "")
         self.assertIn("?? client/", e.git("status", "--porcelain"))  # git alone calls it dirty: the old tree has no such rule
         Path(self.wt, "client/keep.log").write_text("real\n")  # negated by the base: real work
@@ -204,7 +206,7 @@ class SlotHygiene(StagesTest):
         (self.wt / "notes.swp").write_text("editor\n")
         (self.wt / "client").mkdir()
         (self.wt / "client" / "log.txt").write_text("unity\n")
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
+        e = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         self.assertEqual(e.dirty_status(), "")
 
     def test_files_the_base_does_not_ignore_keep_a_parked_slot_where_it_is(self):
@@ -301,7 +303,7 @@ class DeadLane(StagesTest):
         comments = [c[3] for c in self.bd_calls if c[:2] == ("comments", "add") and c[3].startswith("Lane (engine)")]
         self.assertEqual(len(comments), 1)
         self.assertIn(note, comments[0])
-        last = json.loads((tl.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
+        last = json.loads((ident.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
         self.assertEqual(last["lane_notes"], [note + last["lane_notes"][0][len(note):]])
         self.assertIn("only the Codex lane is up", [s_["warning"] for s_ in last["sessions"] if s_["node"] == "review"][0])
         self.assertTrue(self.closed)  # it landed
@@ -428,7 +430,7 @@ class Contracts(StagesTest):
         self.assertEqual(s.calls[0][0], "planner")
 
     def test_asks_of_closed_or_missing_beads_are_closed_and_others_left(self):
-        asks = tl.config_dir() / "asks"
+        asks = ident.config_dir() / "asks"
         asks.mkdir(exist_ok=True)
         other = Path(self.tmp.name) / "other-repo"
         (other / ".beads").mkdir(parents=True)
@@ -449,9 +451,9 @@ class Contracts(StagesTest):
                         else mock.Mock(returncode=1, stdout="", stderr="Error: no issue found matching %s" % a[1]))
             return mock.Mock(returncode=0, stderr="", stdout=json.dumps([{"id": "b-open", "status": "open"}, {"id": "b-closed", "status": "closed"}]))
         with tlbd.bd_boundary(fake_bd):
-            closed = tl.ask_sweep("close", every=0)
+            closed = wasks.sweep("close", every=0)
             self.assertEqual(sorted(closed), ["b-closed", "b-gone"])
-            self.assertEqual(tl.ask_sweep("close"), [])  # throttled
+            self.assertEqual(wasks.sweep("close"), [])  # throttled
         self.assertEqual([c[0][0] for c in calls].count("list"), 2)  # one list per repo, not one read per ask (a show only for an absent id)
         state = {b: json.loads((asks / ("%s.json" % b)).read_text())["status"] for b in ("b-open", "b-closed", "b-gone", "b-hidden", "b-flaky", "b-answered", "b-norepo")}
         self.assertEqual(state, {"b-hidden": "open", "b-open": "open", "b-closed": "closed", "b-gone": "closed", "b-flaky": "open", "b-answered": "answered",
@@ -500,8 +502,8 @@ class ClaimPerBead(StagesTest):
 
     def reclaim(self, bead, slots, running, hand_live=False):
         import loop_env
-        with self.store.stub(show=bead), mock.patch.object(tl, "slot_beads", return_value=[as_bead(x) for x in slots]), \
-                mock.patch.object(tl, "live_actors", return_value={"tl-2be89f88"} if hand_live or slots else set()), \
+        with self.store.stub(show=bead), mock.patch.object(wslots, "slot_beads", return_value=[as_bead(x) for x in slots]), \
+                mock.patch.object(wslots, "live_actors", return_value={"tl-2be89f88"} if hand_live or slots else set()), \
                 mock.patch.object(loop_env, "running", return_value=running), self.store.stub(comments=[]), \
                 self.store.stub(bd_fn=lambda *a, **k: mock.Mock(returncode=0)):
             return engine.reclaim("o67g", str(self.wt), store=self.store)
@@ -533,8 +535,8 @@ class ClaimPerBead(StagesTest):
     def test_the_release_is_conditional_on_the_claim_just_read(self):
         import loop_env
         calls = []
-        with self.store.stub(show=self.BEAD), mock.patch.object(tl, "slot_beads", return_value=[as_bead(self.SLOT)]), \
-                mock.patch.object(tl, "live_actors", return_value={"tl-2be89f88"}), mock.patch.object(loop_env, "running", return_value={}), \
+        with self.store.stub(show=self.BEAD), mock.patch.object(wslots, "slot_beads", return_value=[as_bead(self.SLOT)]), \
+                mock.patch.object(wslots, "live_actors", return_value={"tl-2be89f88"}), mock.patch.object(loop_env, "running", return_value={}), \
                 self.store.stub(comments=[]), \
                 self.store.stub(bd_fn=lambda *a, **k: calls.append(a) or mock.Mock(returncode=0)):
             ok, why = engine.reclaim("o67g", str(self.wt), store=self.store)
@@ -543,8 +545,8 @@ class ClaimPerBead(StagesTest):
 
     def test_a_claim_that_changed_hands_meanwhile_is_not_taken(self):
         import loop_env
-        with self.store.stub(show=self.BEAD), mock.patch.object(tl, "slot_beads", return_value=[as_bead(self.SLOT)]), \
-                mock.patch.object(tl, "live_actors", return_value={"tl-2be89f88"}), mock.patch.object(loop_env, "running", return_value={}), \
+        with self.store.stub(show=self.BEAD), mock.patch.object(wslots, "slot_beads", return_value=[as_bead(self.SLOT)]), \
+                mock.patch.object(wslots, "live_actors", return_value={"tl-2be89f88"}), mock.patch.object(loop_env, "running", return_value={}), \
                 self.store.stub(comments=[]), self.store.stub(bd_fn=lambda *a, **k: mock.Mock(returncode=1)):
             ok, why = engine.reclaim("o67g", str(self.wt), store=self.store)
         self.assertFalse(ok)

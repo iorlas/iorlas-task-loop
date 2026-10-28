@@ -14,7 +14,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support import tlbd  # noqa: E402
 import engine  # noqa: E402
+from taskloop.app.wire import slots as wslots  # noqa: E402
 import tl  # noqa: E402
+from taskloop.app.wire import doctor  # noqa: E402
+from taskloop.adapters import gitrepo  # noqa: E402
 
 
 def shown(p):
@@ -84,7 +87,7 @@ class DoctorSource(unittest.TestCase):
         self.assertIn("base origin/main at commit " + commit, out)
         self.assertIn("stale", (self.repo / ".task-loop.json").read_text())
         self.assertNotEqual(self.git("rev-parse", "HEAD"), commit)
-        self.assertEqual(engine.load_cfg(str(self.wt)).checks[0].id, "new-base")
+        self.assertEqual(wslots.load_cfg(str(self.wt)).checks[0].id, "new-base")
         self.assertIn("check new-base:", self.doctor(self.repo))
 
     def test_worktree_and_nested_directory_use_base(self):
@@ -104,7 +107,7 @@ class DoctorSource(unittest.TestCase):
         self.assertIn("base release at commit " + commit, out)
         self.assertIn("check custom:", out)
         self.assertNotIn("check stale:", out)
-        self.assertEqual(engine.load_cfg(str(self.wt)).checks[0].id, "custom")
+        self.assertEqual(wslots.load_cfg(str(self.wt)).checks[0].id, "custom")
 
     def test_reports_exact_commit_with_warnings(self):
         commit = self.advance_base(self.config("bad-glob"))
@@ -163,7 +166,7 @@ class DoctorSource(unittest.TestCase):
         self.assertIn("working tree " + shown(self.wt), out)
         self.assertIn("base missing-base unresolved; no commit read", out)
         self.assertIn("ok:", out)
-        self.assertEqual(engine.load_cfg(str(self.wt)).checks[0].id, "fallback")
+        self.assertEqual(wslots.load_cfg(str(self.wt)).checks[0].id, "fallback")
 
     def test_default_unresolved_base_falls_back(self):
         self.git("update-ref", "-d", "refs/remotes/origin/main")
@@ -188,11 +191,11 @@ class DoctorSource(unittest.TestCase):
                 self.assertIn("base origin/main at commit " + commit, out)
                 self.assertIn("ok:", out)
                 self.assertNotIn("WARN", out)
-                self.assertEqual(engine.load_cfg(str(self.wt)).checks, [])
+                self.assertEqual(wslots.load_cfg(str(self.wt)).checks, [])
 
     def test_config_and_paths_use_one_resolved_commit(self):
         commit = self.advance_base(self.config("good", "old.txt"))
-        real_git = tl.git
+        real_git = gitrepo.git
         calls = []
 
         def moving_ref(*args, **kwargs):
@@ -202,9 +205,8 @@ class DoctorSource(unittest.TestCase):
                 self.git("update-ref", "refs/remotes/origin/main", "main")
             return result
 
-        with mock.patch.object(tl, "git", side_effect=moving_ref):
-            source = engine.cfg_source(str(self.wt))
-            self.assertEqual(tl.doctor_warnings(str(self.wt), source), [])
+        source = wslots.cfg_source(str(self.wt), moving_ref)
+        self.assertEqual(doctor.git_warnings(str(self.wt), source, moving_ref), [])
         self.assertEqual(source[2], commit)
         self.assertIn(("show", commit + ":.task-loop.json"), calls)
         self.assertIn(("ls-tree", "-r", "--name-only", "-z", commit), calls)
@@ -225,6 +227,6 @@ class DoctorBeads(unittest.TestCase):
                  {"id": "x-4", "acceptance_criteria": "matches 79-test-impact-and-land-gate.md"},
                  {"id": "x-5", "issue_type": "epic", "description": "study 49"}]
         with tlbd.bd_boundary(result=tlbd.done(json.dumps(beads))):
-            out = tl.bead_lint_warnings("/work/repo")
+            out = doctor.bead_lint_warnings("/work/repo")
         self.assertEqual([w.split(":")[0] for w in out], ["bead x-1", "bead x-4"])
         self.assertTrue(all("needs inlined facts" in w for w in out))

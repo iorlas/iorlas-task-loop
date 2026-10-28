@@ -13,13 +13,14 @@ from unittest import mock
 import test_engine as te
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from taskloop.app.plan.planner import Planner
+from taskloop.app.wire import slots as wslots
 from taskloop.adapters import delegate as dl
 from support import fake_route
 from test_engine import CLEAN, PLAN, PY, WRITE, stop
 
 import engine
 from taskloop.domain.report import matchers as lifecycle
-import tl
+from taskloop.adapters import ident
 
 ROOT = te.ROOT
 from support.builders import make_engine  # noqa: E402
@@ -126,7 +127,7 @@ class TraceTelemetry(unittest.TestCase):
     commit_base_cfg = te.EngineTest.commit_base_cfg
 
     def traces(self):
-        path = tl.config_dir() / "traces.jsonl"
+        path = ident.config_dir() / "traces.jsonl"
         return [json.loads(line) for line in path.read_text().splitlines()]
 
     def records(self, kind):
@@ -243,7 +244,7 @@ class TraceTelemetry(unittest.TestCase):
 
     @unittest.skipIf(os.name == "nt", "the engine stops a process group; sleep and bash are POSIX")
     def test_a_timed_out_command_leaves_a_kill_record(self):
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False, store=self.store)
+        eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), verbose=False, store=self.store)
         rc, _ = eng.sh(["sleep", "5"], timeout=0.05)
         self.assertEqual(rc, 124)
         kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
@@ -255,7 +256,7 @@ class TraceTelemetry(unittest.TestCase):
         self.assertIn("started_t", kills[-1])
 
     def test_a_command_that_exits_124_by_itself_is_not_a_kill(self):
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False, store=self.store)
+        eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), verbose=False, store=self.store)
         rc, _ = eng.sh([sys.executable, "-c", "import sys; sys.exit(124)"], timeout=10)
         self.assertEqual(rc, 124)
         kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
@@ -264,7 +265,7 @@ class TraceTelemetry(unittest.TestCase):
 
     @unittest.skipIf(os.name == "nt", "the engine stops a process group; sleep is POSIX")
     def test_an_interrupted_command_leaves_a_kill_record_and_its_tree_is_stopped(self):
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False, store=self.store)
+        eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), verbose=False, store=self.store)
         timer = threading.Timer(0.5, _thread.interrupt_main)
         timer.start()
         self.addCleanup(timer.cancel)
@@ -277,7 +278,7 @@ class TraceTelemetry(unittest.TestCase):
         self.assertIn("observed_t", kills[-1])
 
     def test_a_stopped_delegate_worker_that_survives_still_leaves_a_kill_record(self):
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False, store=self.store)
+        eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), verbose=False, store=self.store)
 
         class Survivor(fake_route.Script):  # the engine ended the call, and the worker outlived every signal
             def reply(this, *a, **kw):
@@ -300,7 +301,7 @@ class TraceTelemetry(unittest.TestCase):
                                 kill_t=101.5, why="interrupted", alive=[4242])
                 raise KeyboardInterrupt()
 
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False, store=self.store)
+        eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), verbose=False, store=self.store)
         with te.delegate_stack(Interrupted({})):
             with self.assertRaises(KeyboardInterrupt):
                 eng.ai("plan", "title", "prompt")

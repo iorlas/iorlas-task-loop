@@ -8,16 +8,18 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "task-loop"))
+import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support import fake_route  # noqa: E402
 from support.checkpoints import put_ck, read_ck  # noqa: E402
 from support.fakes import as_bead  # noqa: E402
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from taskloop.app.land.closer import Closer  # noqa: E402
+from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.contracts import answers  # noqa: E402
 from support.builders import make_engine  # noqa: E402
 from taskloop.contracts.config import VisualConfig  # noqa: E402
 import test_engine as T  # noqa: E402
-from test_engine import BEAD, CLEAN, PLAN, WRITE, engine, tl, verdict  # noqa: E402
+from test_engine import BEAD, CLEAN, PLAN, WRITE, engine, verdict  # noqa: E402
+from taskloop.adapters import gitrepo
 
 VISUAL = {"include": ["*.txt"], "exclude": ["docs/**"]}
 LOOK_ASK = "Whether smiles-front.png matches the rung B ladder image. Only the owner can judge the look."
@@ -129,7 +131,7 @@ class LookTest(unittest.TestCase):
                         visual_paths=VISUAL, evidence_dir="design/look-reviews")
         self.assertEqual(rc, 0, self.blocked)
         shot = "design/look-reviews/t-1/home-screen.png"
-        self.assertEqual(tl.git("show", "origin/main:" + shot, cwd=str(self.wt)), "PNG fake")
+        self.assertEqual(gitrepo.git("show", "origin/main:" + shot, cwd=str(self.wt)), "PNG fake")  # pyrefly: ignore[missing-attribute]
         (c,) = self.creates()
         self.assertEqual(c[1], "Look review: Add f")
         self.assertEqual(c[c.index("--labels") + 1], "owner-look")
@@ -219,7 +221,7 @@ class LookTest(unittest.TestCase):
             self.assertEqual(self.eng.look_epic(), "t-3")
 
     def test_shots_are_images_capped_and_sized(self):
-        self.eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
+        self.eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         d = self.eng.evidence_dir
         d.mkdir(parents=True, exist_ok=True)
         (d / "a.png").write_bytes(b"x")
@@ -231,7 +233,7 @@ class LookTest(unittest.TestCase):
         self.assertEqual(len(self.eng.shots()), engine.MAX_SHOTS)
 
     def test_no_lfs_means_no_copy(self):
-        self.eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
+        self.eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         Path(self.wt, ".gitattributes").write_text("*.png filter=lfs diff=lfs merge=lfs -text\n")
         with mock.patch.object(self.eng, "sh", return_value=(1, "")):
             self.assertFalse(self.eng.lfs_ok(["a.png"]))

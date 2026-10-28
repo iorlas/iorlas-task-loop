@@ -16,8 +16,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 sys.path.insert(0, str(ROOT / "tests"))
 import engine  # noqa: E402
+from taskloop.app.wire import slots as wslots  # noqa: E402
 import test_engine as te  # noqa: E402
-import tl  # noqa: E402
+from taskloop.adapters.gitenv import pinned_env  # noqa: E402
+from support.fakes import FakeBeadStore  # noqa: E402
+from taskloop.app.wire import doctor  # noqa: E402
 from taskloop.adapters import delegate as dl, runner  # noqa: E402
 from support import dlcall, fake_route  # noqa: E402
 from support.builders import make_engine  # noqa: E402
@@ -68,12 +71,12 @@ class SlotGitTest(unittest.TestCase):
     def test_the_slot_stops_before_its_first_step_when_the_shared_config_redirects_git(self):
         self.plant_decoy()
         before = self.decoy_state()
-        closed, blocked = [], []
         script = fake_route.Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
-        with mock.patch.object(tl, "cmd_close", side_effect=lambda a: closed.append(a.reason) or 0), \
-                mock.patch.object(tl, "cmd_block", side_effect=lambda a: blocked.append(a.why) or 0):
-            eng = make_engine(self.wt, script=script)
-            rc = eng.run()
+        store = FakeBeadStore()
+        eng = make_engine(self.wt, script=script, store=store)
+        rc = eng.run()
+        closed = [c[3] for c in store.said("close")]
+        blocked = [c[3] for c in store.said("comments", "add") if c[3].startswith("Blocked: ")]
         self.assertEqual(rc, 2)
         self.assertTrue(eng.why.startswith("failed: tree: core.worktree is set"), eng.why)
         self.assertEqual(script.calls, [])  # no worker, reviewer or planner ever ran
@@ -91,18 +94,18 @@ class SlotGitTest(unittest.TestCase):
 
     def test_core_bare_true_stops_the_run_too(self):
         sh("git", "config", "core.bare", "true", cwd=self.repo)
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)))
         with self.assertRaises(engine.Blocked) as cm:
             eng.assert_tree("write")
         self.assertIn("core.bare", cm.exception.why)
 
     def test_a_clean_slot_passes_the_tree_assert(self):
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)))
         eng.assert_tree("plan")
 
     def test_pinned_git_stays_in_the_slot_whatever_the_shared_config_says(self):
         self.plant_decoy()
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)))
         self.assertEqual(os.path.realpath(eng.git("rev-parse", "--show-toplevel")), str(self.wt))
         (self.wt / "f.txt").write_text("f\n")
         eng.writer_said = "added f.txt"  # an untracked file is staged only when the writer names it (tl-bxk.10.24)
@@ -112,7 +115,7 @@ class SlotGitTest(unittest.TestCase):
         self.assertEqual(staged, "f.txt")  # only the slot's own path; nothing from the decoy
 
     def test_stage_all_takes_only_the_slots_status_paths_deletions_and_untracked_included(self):
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)))
         (self.wt / "a.txt").unlink()
         (self.wt / "new file.txt").write_text("n\n")
         eng.writer_said = "added new file.txt"
@@ -130,7 +133,7 @@ class SlotGitTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {"GIT_DIR": "/x", "GIT_WORK_TREE": "/y", "GIT_INDEX_FILE": "/z"}):
             r = dlcall.call(dl.Resolved(route.parent, str(route), fake_route.CONTRACT, "explicit"), "worker", "p", {"type": "object"},
                             str(self.wt), runner.StreamRunner(Path(self.tmp.name) / "err.log", None, 30.0), timeout_s=30)
-            eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+            eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)))
             rc, tail = eng.sh(ENVSHOW)
             self.assertEqual(r.data["env"], [])
             self.assertEqual((rc, tail), (0, "[||]"))
@@ -138,7 +141,7 @@ class SlotGitTest(unittest.TestCase):
         gitdir = os.path.realpath(str(self.repo / ".git" / "worktrees" / "s1"))
         d, w = tail.split("|")
         self.assertEqual((os.path.realpath(d), os.path.realpath(w)), (gitdir, str(self.wt)))
-        self.assertEqual(tl.pinned_env(self.repo)["GIT_DIR"], str(self.repo / ".git"))
+        self.assertEqual(pinned_env(self.repo)["GIT_DIR"], str(self.repo / ".git"))
 
     @te.POSIX_CHECK
     def test_a_check_runs_git_on_another_repo(self):
@@ -148,7 +151,7 @@ class SlotGitTest(unittest.TestCase):
         sh("git", "add", "-A", cwd=other)
         sh("git", "commit", "-qm", "o", cwd=other)
         sha = sh("git", "rev-parse", "HEAD", cwd=other)
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)))
         rc, tail = eng.sh(["git", "-C", str(other), "rev-parse", "HEAD"])
         self.assertEqual((rc, tail), (0, sha))
         rc, tail = eng.sh(["git", "-C", str(other), "cat-file", "-e", sha])
@@ -166,12 +169,10 @@ class SlotGitTest(unittest.TestCase):
 
         script = Planting({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         before = self.decoy_state()
-        landed = []
-        with mock.patch.object(tl, "cmd_close", side_effect=lambda a: landed.append(1) or 0), \
-                mock.patch.object(tl, "cmd_land", side_effect=lambda a: landed.append(1) or 0), \
-                mock.patch.object(tl, "cmd_block", return_value=0):
-            eng = make_engine(self.wt, script=script)
-            rc = eng.run()
+        store = FakeBeadStore()
+        eng = make_engine(self.wt, script=script, store=store)
+        rc = eng.run()
+        landed = store.said("close") + store.said("provenance", "record")  # neither a close nor a land record
         self.assertEqual(rc, 2)
         self.assertIn("after write", eng.why)
         self.assertTrue(eng.why.startswith("failed: tree: core.worktree is set"), eng.why)
@@ -191,9 +192,9 @@ class SlotGitTest(unittest.TestCase):
         self.assertTrue(engine.same_dir(link / "nope", self.wt / "nope"))
 
     def test_doctor_warns_when_worktree_config_is_off(self):
-        self.assertTrue(any("extensions.worktreeConfig" in w for w in tl.doctor_warnings(str(self.repo))))
+        self.assertTrue(any("extensions.worktreeConfig" in w for w in doctor.git_warnings(str(self.repo))))
         sh("git", "config", "extensions.worktreeConfig", "true", cwd=self.repo)
-        self.assertEqual(tl.doctor_warnings(str(self.repo)), [])
+        self.assertEqual(doctor.git_warnings(str(self.repo)), [])
 
 
 if __name__ == "__main__":

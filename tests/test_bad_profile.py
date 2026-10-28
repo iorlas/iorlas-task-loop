@@ -14,7 +14,8 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401
-import tl  # noqa: E402
+from taskloop.app.wire import doctor  # noqa: E402
+from taskloop.adapters import ident
 from taskloop.app.doctor import profiles  # noqa: E402
 
 GIT_ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.invalid", "GIT_COMMITTER_NAME": "t",
@@ -45,7 +46,7 @@ class BadProfile(unittest.TestCase):
         os.chdir(repo)
         try:
             with contextlib.redirect_stdout(out):
-                rc = tl.cmd_doctor(argparse.Namespace())
+                rc = doctor.run()
         finally:
             os.chdir(old)
         return rc, out.getvalue()
@@ -69,7 +70,7 @@ class BadProfile(unittest.TestCase):
         self.assertEqual(sum(1 for ln in text.splitlines() if ln.startswith("RED ")), 1)
 
     def test_walking_the_registered_repos_skips_the_one_asked_from(self) -> None:
-        rows = profiles.red_rows(profiles.registered(tl.config_dir() / "repos.json"), but=str(self.good))
+        rows = profiles.red_rows(profiles.registered(ident.config_dir() / "repos.json"), but=str(self.good))
         self.assertEqual(len(rows), 1)
         self.assertEqual(profiles.red_rows([str(self.bad)], but=str(self.bad)), [])
 

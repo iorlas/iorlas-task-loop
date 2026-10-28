@@ -15,8 +15,9 @@ import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from taskloop.contracts import log as rec  # noqa: E402
 from taskloop.stores.real import real_stores  # noqa: E402
 from taskloop.contracts.paths import ConfigDir  # noqa: E402
+from taskloop.adapters import ident  # noqa: E402
 
-engine, tl = te.engine, te.tl
+engine = te.engine
 
 
 class RunLog(unittest.TestCase):
@@ -60,7 +61,7 @@ class RunLog(unittest.TestCase):
     def test_the_trace_decodes_through_the_contracts(self):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
-        stores = real_stores(ConfigDir(tl.config_dir()))
+        stores = real_stores(ConfigDir(ident.config_dir()))
         got = stores.traces.read_from().items
         self.assertEqual([str(t.rec.run) for t in got], [self.eng.log_path.stem])
 

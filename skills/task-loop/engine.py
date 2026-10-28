@@ -33,16 +33,17 @@ from pathlib import Path
 from typing import Any
 
 from core import enginelock, fmt
-from taskloop.adapters import applog
+from taskloop.adapters import applog, beadtools, gitrepo, ident, landlock, links, looks, opencode, pidcheck
 from taskloop.adapters import halt as halting
 from taskloop.domain.report import matchers as lifecycle
-from taskloop.adapters import links
-from taskloop.adapters import looks
 import loop_health
 from types import SimpleNamespace
 import outcome as oc
 import seams
-import tl
+from taskloop.app.slots import engine_lock
+from taskloop.app.track import trail, verbs
+from taskloop.adapters.gitenv import git_env, pinned_env, run_git
+from taskloop.app.wire import slots as wslots
 import vendored  # noqa: F401
 import stream_proc
 from clock import SystemClock
@@ -172,7 +173,7 @@ RUN_SLOT = {"owned": ""}  # the slot this process took itself (run_in, run_any_s
 
 
 def reexec_path(bead):
-    return tl.config_dir() / "reexec" / ("%s.json" % bead)
+    return ident.config_dir() / "reexec" / ("%s.json" % bead)
 
 
 def read_reexec(bead):
@@ -190,7 +191,7 @@ def drop_reexec(bead):
 
 
 def net_pause_path(bead):
-    return tl.config_dir() / "pauses" / ("%s.json" % bead)
+    return ident.config_dir() / "pauses" / ("%s.json" % bead)
 
 
 def take_net_pause(bead):
@@ -205,7 +206,7 @@ def take_net_pause(bead):
         p.unlink()
     if not isinstance(rec, dict) or not isinstance(rec.get("run"), str) or time.time() - float(rec.get("t") or 0) > NET_PAUSE_ADOPT_S:
         return {}
-    return rec if (tl.config_dir() / "runs" / rec["run"] / "pause.json").is_file() else {}
+    return rec if (ident.config_dir() / "runs" / rec["run"] / "pause.json").is_file() else {}
 
 
 def take_reexec_env():
@@ -271,7 +272,7 @@ _TREE_MEMO = {}   # (slot, what the config files and environment are now) -> tre
 def tree_problem(wt):
     """(what is wrong, the owner's fix) when git at `wt`, read as ambient config has it, is not that checkout; else None.
     Two git calls, none while the config files are as they were: a run asks eleven times."""
-    key = tl.config_key(wt)
+    key = gitrepo.config_key(wt)
     if key and key in _TREE_MEMO:
         return _TREE_MEMO[key]
     out = _tree_problem(wt)
@@ -367,10 +368,10 @@ class Engine(StateAttrs):
 
     def __init__(self, bead, wt, cfg, dry_run=False, verbose=True, store=None, route=seams.DelegateRoute(), clock=None, git=None,
                  stores=None, fresh=False):
-        self.bead, self.wt, self.cfg, self.dry, self.verbose, self.store, self.router, self.repo = bead, wt, cfg, dry_run, verbose, store or tl.bd_store(), route, git
+        self.bead, self.wt, self.cfg, self.dry, self.verbose, self.store, self.router, self.repo = bead, wt, cfg, dry_run, verbose, store or beadtools.bd_store(), route, git
         self.stats = {"writes": 0, "rounds": 0, "reviews": 0, "replans": 0, "nodes": 0, "tests_added": 0, "tests_removed": 0,
                       "tokens_in": 0, "tokens_cached": 0, "tokens_out": 0}
-        self.session, self.fresh = tl.session_id(), fresh
+        self.session, self.fresh = ident.session_id(), fresh
         self.leftovers = []
         self.bead_parent = ""  # tl-bxk.10.23
         self.look_filed, self.filed, self.unfiled = False, [], []  # unfiled: follow-ups bd refused (the ReviewState keeps both)
@@ -414,7 +415,7 @@ class Engine(StateAttrs):
         self.landed_sha = ""  # set the moment the push goes through: whatever stops the run after it, the bead landed
         self.last_run = None  # the CheckRun of the last stage round: the engine's evidence for the verifier (tl-bxk.10.25)
         self.prev_ck, self.ck_run, self.resumed, self.run_logged = "", "", False, False
-        d = tl.config_dir() / "engine"
+        d = ident.config_dir() / "engine"
         d.mkdir(exist_ok=True)
         self.reexec = take_reexec_env()  # this run-task came from an exec into a newer install, or a fallback to the older
         if self.reexec.get("bead") != bead:
@@ -425,26 +426,26 @@ class Engine(StateAttrs):
             t0, n = time.time(), 0
             while True:
                 stem = "%s-%s" % (bead, time.strftime("%Y%m%d-%H%M%S", time.localtime(t0 + n)))
-                if not ((d / (stem + ".jsonl")).exists() or (tl.config_dir() / "runs" / stem).exists()):
+                if not ((d / (stem + ".jsonl")).exists() or (ident.config_dir() / "runs" / stem).exists()):
                     break
                 n += 1
         self.log_path = d / (stem + ".jsonl")
         self.err_path = d / (stem + ".stderr")
-        self.exec_fn, self.newer_fn, self.argv, self.moved = None, None, None, False  # a test's exec, newer-install lookup and run-task argv
+        self.exec_fn, self.newer_fn, self.argv, self.moved, self.os_lock = None, None, None, False, landlock.os_lock  # a test's exec, newer-install lookup, run-task argv, the cross-process lock
         # Engine files (brief, plan, node answers, check results) live outside the worktree, where no worker can write
         # them; in lifesim-vbo a writer's sandbox runs kept in .task/ were read as engine results by four planners.
-        self.run_dir = tl.config_dir() / "runs" / self.log_path.stem
+        self.run_dir = ident.config_dir() / "runs" / self.log_path.stem
         self.run_dir.mkdir(parents=True, exist_ok=True)
-        prune_check_rounds(tl.config_dir() / "runs")
+        prune_check_rounds(ident.config_dir() / "runs")
         self.task_dir = Path(wt) / ".task" / bead  # the writer's: only evidence/ lives here
         self.task_dir.mkdir(parents=True, exist_ok=True)
         self.brief_file = self.task_dir / "brief.md"  # the brief as the writer can re-read it: the engine's copy stays in run_dir
         self.evidence_dir = self.task_dir / "evidence"  # the writer's proof of what the engine cannot rerun
         self.evidence_dir.mkdir(exist_ok=True)
-        self.stores = stores or real_stores(ConfigDir(tl.config_dir()))
+        self.stores = stores or real_stores(ConfigDir(ident.config_dir()))
         self.ctx = RunContext.open(bead, cfg, Path(wt), stem, self.run_dir, self.stores, store, route, self.clock, self.sessions, self.stats,
-                                   tl.opencode_id, context_tokens, say, verbose, dry_run, lambda: time.time(), self.assert_tree,
-                                   lambda text: tl.event("stage", bead, text=text))
+                                   opencode.opencode_id, context_tokens, say, verbose, dry_run, lambda: time.time(), self.assert_tree,
+                                   lambda text: trail.event("stage", bead, text=text))
         c: Any = self.ctx
         self.log, self.steps, self.budget, self.calls, self.checklog = c.log, c.steps, c.budget, c.calls, c.checklog
         self.checker = Checker(self, lambda secs: self.halt_point(wait=secs))
@@ -505,7 +506,7 @@ class Engine(StateAttrs):
         here = plugin_version() or Path(__file__).resolve().parents[2].name
         if why:
             self.warn("not moving to task-loop %s at %s: %s; staying on %s" % (ver, step, why, here))
-            tl.event("reload_refused", self.bead, who="engine", version=ver, why=why[:300], running=here, step=step,
+            trail.event("reload_refused", self.bead, who="engine", version=ver, why=why[:300], running=here, step=step,
                      run=self.log_path.stem)
             return
         self.switch(step, ver, d, here)
@@ -528,7 +529,7 @@ class Engine(StateAttrs):
         except OSError as e:
             self.warn("not moving to task-loop %s: could not write the hand-over: %s" % (ver, e))
             return
-        tl.event("reload", self.bead, who="engine", old=here, new=ver, step=step, run=run, code_dir=str(d))
+        trail.event("reload", self.bead, who="engine", old=here, new=ver, step=step, run=run, code_dir=str(d))
         self.log.note("moving to task-loop %s (was %s) at %s; run %s goes on from its checkpoint" % (ver, here, step, run))
         self.log.emit(rec.Reload(old=here, new=ver, step=step))
         os.environ["TL_REEXEC"] = json.dumps({"run": run, "bead": self.bead, "from": here, "owned": RUN_SLOT["owned"]})
@@ -566,7 +567,7 @@ class Engine(StateAttrs):
         return self.probe or dg.RouteProbe(self.route)
 
     def call_dir(self):
-        return tl.config_dir() / "checkpoints"
+        return ident.config_dir() / "checkpoints"
 
     def publish_plan(self):
         if self.plan_data:
@@ -582,13 +583,13 @@ class Engine(StateAttrs):
     FixFailed = FixFailed
 
     def git_in(self, path, *a):
-        return tl.git(*a, cwd=path)
+        return gitrepo.git(*a, cwd=path)
 
     def record_land(self, sha):
-        tl.cmd_land(Args(id=self.bead, sha=sha, worktree=self.wt))
+        verbs.land(self.bead, sha, self.wt, self.store)
 
     def land_lock_path(self):
-        return tl.land_lock_path(self.git("remote", "get-url", "origin") or str(self.wt))
+        return landlock.land_lock_path(self.git("remote", "get-url", "origin") or str(self.wt))
 
     @cached_property
     def tree(self):
@@ -608,9 +609,9 @@ class Engine(StateAttrs):
 
     @cached_property
     def closer(self):
-        return Closer(self, SimpleNamespace(oc=oc, loop_health=loop_health, tl=tl, say=say, outcome_for=outcome_for, node_outcome=node_outcome,
-                                            close_move=close_move, reflection_text=reflection_text, why_code=runtrace.why_code, Args=Args,
-                                            config_dir=tl.config_dir()))
+        return Closer(self, SimpleNamespace(oc=oc, loop_health=loop_health, track=verbs, attempt=beadtools.attempt, say=say, outcome_for=outcome_for, node_outcome=node_outcome,
+                                            close_move=close_move, reflection_text=reflection_text, why_code=runtrace.why_code,
+                                            config_dir=ident.config_dir()))
 
     def lock_worker(self, started):
         """The worker delegate launched (the live file's first line) goes into the engine lock, so a SIGKILLed engine leaves it findable."""
@@ -748,7 +749,7 @@ class Engine(StateAttrs):
 
     @contextlib.contextmanager
     def locked(self, what, path, holder=None):
-        """tl.os_lock with a wait recorded as its own segment (tl-9h2): the open step ends before the wait starts (it was
+        """landlock.os_lock with a wait recorded as its own segment (tl-9h2): the open step ends before the wait starts (it was
         booked to the step before), and the wait's records name the lock, who held it and how long it took. The lock is a record
         of its own while held. tl-y35: the wait is a wait for a shared resource like any other: it is added to `waited`, so
         budget_min does not count it. Timed on self.clock."""
@@ -760,7 +761,7 @@ class Engine(StateAttrs):
             t_req[0] = self.clock.now()  # the wait starts when the step before it has ended
             wid.append(self.wait_start(WaitWhat(what), w))  # a wait still going (or cut off) shows up
             self.log.note("waiting for the %s (held by %s)" % (what.replace("_", " "), w))
-        with tl.os_lock(path, holder or self.bead, waiting, check=self.halt_point):
+        with self.os_lock(path, holder or self.bead, waiting, check=self.halt_point):
             if who:
                 secs = max(0.0, self.clock.now() - t_req[0])
                 self.waited += secs
@@ -901,7 +902,7 @@ class Engine(StateAttrs):
         started, chunks = time.time(), []
         self.killed = self.wall_hit = False
         try:
-            res = stream_proc.run(list(cmd), cwd=cwd, env=dict(sproc.current_env(), **(tl.pinned_env(self.wt) if pin else {}), **(env or {})),
+            res = stream_proc.run(list(cmd), cwd=cwd, env=dict(sproc.current_env(), **(pinned_env(self.wt) if pin else {}), **(env or {})),
                                   on_stdout=chunks.append, on_stderr=chunks.append, timeout=timeout, stop=self.halt)
         except BaseException:  # stopped (stream-proc stopped the tree first): never leave a check (just check, Unity) running
             self.killed, now = True, time.time()
@@ -927,7 +928,7 @@ class Engine(StateAttrs):
 
     def slot_status(self):
         """(tracked paths changed, untracked paths, git's result) from the slot's own `git status`."""
-        st = tl.run_git(self.wt, "status", "--porcelain", "-z", "--untracked-files=all", capture_output=True)
+        st = run_git(self.wt, "status", "--porcelain", "-z", "--untracked-files=all", capture_output=True)
         parts, paths, new = st.stdout.decode("utf-8", "surrogateescape").split("\0"), [], []
         k = 0
         while k < len(parts):
@@ -1023,12 +1024,12 @@ class Engine(StateAttrs):
         if not tree:
             return "The work: `git diff %s` and new files." % base
         skip = ["--", "."] + [":(exclude,literal)" + p for p in unexplained + ignored]
-        diff = tl.git("diff", base, tree, *skip, cwd=self.wt)
+        diff = gitrepo.git("diff", base, tree, *skip, cwd=self.wt)
         if len(diff) <= self.STAGE_DIFF_CAP:
             return ("The work of this stage (the diff from where the stage started to now; earlier stages are in the tree "
                     "but not in this diff):\n<diff>\n%s</diff>" % (diff if diff.endswith("\n") or not diff else diff + "\n")
                     if diff else "The work of this stage: no file changed.")
-        stat = tl.git("diff", "--stat", base, tree, *skip, cwd=self.wt)
+        stat = gitrepo.git("diff", "--stat", base, tree, *skip, cwd=self.wt)
         return ("The work of this stage is too big to inline (%d chars; the cap is %d). Its changed files:\n%s\nRead only "
                 "the changed files plus the plan; do not diff the whole task." % (len(diff), self.STAGE_DIFF_CAP, stat))
 
@@ -1045,7 +1046,7 @@ class Engine(StateAttrs):
             paths += [p for p in new if self.new_file_kind(p) == "meant"]
         rc = st.returncode
         if rc == 0 and paths:
-            r = tl.run_git(self.wt, "--literal-pathspecs", "add", "-A", "--pathspec-from-file=-", "--pathspec-file-nul",
+            r = run_git(self.wt, "--literal-pathspecs", "add", "-A", "--pathspec-from-file=-", "--pathspec-file-nul",
                            input="\0".join(paths).encode("utf-8", "surrogateescape"), capture_output=True)
             rc = r.returncode
             st = r
@@ -1054,10 +1055,10 @@ class Engine(StateAttrs):
         return rc
 
     def fetch(self, check=False):
-        """git fetch, again while it loses a ref lock to another process's fetch into this repo (tl.REF_RACE)."""
+        """git fetch, again while it loses a ref lock to another process's fetch into this repo (gitrepo.REF_RACE)."""
         for i in range(5):
             rc, tail = self.sh(["git", "fetch", "-q", "origin"], pin=True)
-            if rc == 0 or not tl.REF_RACE.search(tail):
+            if rc == 0 or not gitrepo.REF_RACE.search(tail):
                 break
             time.sleep(0.1 * (i + 1))
         if check and rc:
@@ -1066,14 +1067,14 @@ class Engine(StateAttrs):
 
     def git_env(self):
         """The environment for a git command on this checkout (pinned to it)."""
-        return tl.git_env(self.wt)
+        return git_env(self.wt)
 
     def base_sha(self):
         """Where the task's work starts: an earlier run's commits on the task branch count as the task's diff."""
         return self.git("merge-base", self.cfg.base, "HEAD") or self.cfg.base
 
     def git(self, *a):
-        return tl.git(*a, cwd=self.wt)
+        return gitrepo.git(*a, cwd=self.wt)
 
     def branch_now(self):
         """The branch HEAD is on; "" when detached."""
@@ -1229,12 +1230,12 @@ class Engine(StateAttrs):
 
     def comment(self, text):
         if not self.dry:
-            tl.attempt(self.store.add_comment, self.bead, text)
+            beadtools.attempt(self.store.add_comment, self.bead, text)
 
     # -- tl-bxk.13.8: notes shared by the tasks of one repo (docs/design/stages.md section 6)
     def shared_path(self):
         common = self.git("rev-parse", "--path-format=absolute", "--git-common-dir") or str(self.wt)
-        return tl.config_dir() / "shared" / ("%s.json" % hashlib.sha1(common.encode("utf-8")).hexdigest()[:12])
+        return ident.config_dir() / "shared" / ("%s.json" % hashlib.sha1(common.encode("utf-8")).hexdigest()[:12])
 
     def known_flakes(self):
         """[{test, note, bead}]: tests known to fail without cause. A writer reports one (flakes); the owner may edit the file."""
@@ -1275,8 +1276,8 @@ class Engine(StateAttrs):
             wt = line[len("worktree "):]
             if same_dir(wt, self.wt):
                 continue
-            lock = tl.read_engine_lock(wt)
-            if not lock.get("bead") or lock["bead"] == self.bead or not tl.proc_alive(lock.get("pid"), lock.get("start") or ""):
+            lock = engine_lock.read_engine_lock(wt)
+            if not lock.get("bead") or lock["bead"] == self.bead or not pidcheck.proc_alive(lock.get("pid"), lock.get("start") or ""):
                 continue
             ck = self.stores.checkpoints.of(lock["bead"]).read()
             plan = (ck.state.plan_data if ck else None) or {}
@@ -1323,7 +1324,7 @@ class Engine(StateAttrs):
         try:
             if self.stop_pending or self.halt.is_set():  # stopped during the claim (run_bead) or before the engine ran
                 raise Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)
-            bead = tl.peek(self.store, self.bead)
+            bead = beadtools.peek(self.store, self.bead)
             if not bead:
                 raise Blocked("failed: bead %s not found" % self.bead, kind=oc.Kind.FAULT_INFRA)
             self.bead_title, self.bead_parent = bead.title, bead.parent
@@ -1440,7 +1441,7 @@ class Engine(StateAttrs):
 
     def diff_text(self):
         tree = self.tree_hash()
-        return (tl.git("diff", self.base_sha(), tree, cwd=self.wt) if tree else "") or ""
+        return (gitrepo.git("diff", self.base_sha(), tree, cwd=self.wt) if tree else "") or ""
 
     # -- review and verify (src/taskloop/app/review): the engine lends its state, the components do the work
     def self_verify(self, gaps):
@@ -1582,7 +1583,7 @@ class Engine(StateAttrs):
         if state and memo and memo[0] == state:
             return memo[1]
         with tempfile.TemporaryDirectory() as d:
-            env = dict(tl.git_env(self.wt), GIT_INDEX_FILE=os.path.join(d, "index"))
+            env = dict(git_env(self.wt), GIT_INDEX_FILE=os.path.join(d, "index"))
             for args in (["read-tree", "HEAD"], ["add", "-A"], ["write-tree"]):
                 r = subprocess.run(["git"] + args, cwd=self.wt, env=env, capture_output=True, text=True)
                 if r.returncode != 0:
@@ -1596,7 +1597,7 @@ class Engine(StateAttrs):
         size, mtime, ctime, mode, inode and (small files) content hash of each of those files (status alone says 'modified' before and after a second edit). None when git
         cannot say; a run of tree_hash is then never skipped."""
         r = subprocess.run(["git", "--no-optional-locks", "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all"],
-                           cwd=self.wt, env=tl.git_env(self.wt), capture_output=True)
+                           cwd=self.wt, env=git_env(self.wt), capture_output=True)
         if r.returncode != 0:
             return None
         recs = r.stdout.split(b"\0")
@@ -1631,12 +1632,12 @@ class Engine(StateAttrs):
     def task_diff(self):
         """The task's diff against where it started, untracked files included."""
         tree = self.tree_hash()
-        return tl.git("diff", self.base_sha(), tree, cwd=self.wt) if tree else self.git("diff", self.base_sha())
+        return gitrepo.git("diff", self.base_sha(), tree, cwd=self.wt) if tree else self.git("diff", self.base_sha())
 
     def changed_paths(self):
         """Paths the task changed since it started, untracked files included."""
         tree = self.tree_hash()
-        out = tl.git("diff", "--name-only", self.base_sha(), tree, cwd=self.wt) if tree else ""
+        out = gitrepo.git("diff", "--name-only", self.base_sha(), tree, cwd=self.wt) if tree else ""
         return [p for p in out.splitlines() if p]
 
     def stoppable_checks(self, *a, **kw):  # run_checks, then a stop (it ended a check, which reports itself failed) ends the run here
@@ -2019,7 +2020,7 @@ class Engine(StateAttrs):
         cur, seen = self.bead_parent, set()
         while cur and cur not in seen and len(seen) < 10:
             seen.add(cur)
-            d = tl.peek(self.store, cur)
+            d = beadtools.peek(self.store, cur)
             if d and d.issue_type == "epic":
                 return cur
             cur = d.parent if d else ""
@@ -2034,7 +2035,7 @@ class Engine(StateAttrs):
             return "", ""
         epic, by_epic = self.look_epic() or self.bead, ("", "")
         for row in rows:
-            d = tl.peek(self.store, row.id) or row
+            d = beadtools.peek(self.store, row.id) or row
             if any(x.id == self.bead for x in d.dependencies):
                 return row.id, d.description
             if epic and not by_epic[0] and d.parent == epic and d.status != "closed":
@@ -2065,7 +2066,7 @@ class Engine(StateAttrs):
     def review_lock(self):
         """One filer at a time per (repo, epic), across slots and sessions."""
         key = "%s|%s" % (self.git("remote", "get-url", "origin") or str(self.wt), self.look_epic() or self.bead)
-        with self.locked("review_lock", tl.config_dir() / "locks" / ("review-%s.lock" % hashlib.sha1(key.encode()).hexdigest()[:12])):
+        with self.locked("review_lock", ident.config_dir() / "locks" / ("review-%s.lock" % hashlib.sha1(key.encode()).hexdigest()[:12])):
             yield
 
     def create_checked(self, new):
@@ -2090,7 +2091,7 @@ class Engine(StateAttrs):
         made, err = have, ""
         if have:
             kept = [x for x in re.split(r"\n\n(?=## )", old.strip()) if x and not x.startswith(head.split(":")[0] + ":")]
-            if not tl.attempt(self.store.update, have, BeadPatch(description="\n\n".join(kept + [section]))):
+            if not beadtools.attempt(self.store.update, have, BeadPatch(description="\n\n".join(kept + [section]))):
                 err = "bd refused the update"
         else:
             made, err = self.create_checked(NewBead(
@@ -2120,12 +2121,12 @@ class Engine(StateAttrs):
             shots.append({"path": p, "role": "after", "label": Path(p).stem})
         mine = [{"id": "%s#%d" % (self.bead, k), "bead": self.bead, "title": t, "note": " ".join(self.look_notes)[:600],
                  "shots": shots, "status": "open"} for k, t in enumerate(self.cases_of("taste"), 1)]
-        shown = tl.peek(self.store, bead_id)
+        shown = beadtools.peek(self.store, bead_id)
         meta = dict(shown.metadata) if shown else {}
         old = meta.get("looks") if isinstance(meta.get("looks"), list) else []
         answered = {e.get("id"): e for e in old if isinstance(e, dict) and e.get("bead") == self.bead and e.get("status") in ("good", "redo")}
         meta["looks"] = [e for e in old if isinstance(e, dict) and e.get("bead") != self.bead] + [answered.get(e["id"], e) for e in mine]
-        if not tl.attempt(self.store.update, bead_id, BeadPatch(metadata=meta)):
+        if not beadtools.attempt(self.store.update, bead_id, BeadPatch(metadata=meta)):
             self.warn("owner-look bead %s: looks metadata failed" % bead_id)
 
     def unverified_text(self):
@@ -2257,8 +2258,8 @@ def context_tokens(path, tail=1 << 20):
     """-> the input tokens (cache included) of the last turn in a worker's transcript, or None: Claude's last assistant message
     usage, Codex's last token_count, OpenCode's last assistant message tokens (`opencode:ses_...`, read from its DB). The
     answer's own `tokens` add up every turn of the call, so they say nothing of the size."""
-    if tl.opencode_id(path):
-        return tl.opencode_context(tl.opencode_id(path))
+    if opencode.opencode_id(path):
+        return opencode.opencode_context(opencode.opencode_id(path))
     try:
         with open(path, "rb") as f:
             f.seek(0, 2)
@@ -2352,25 +2353,11 @@ MAX_REBASE_RESETS = 2   # per bead, across runs (tl-19i)
 
 # ---- entry ----------------------------------------------------------------------------------------------------------
 
-def cfg_source(repo):
-    """(the RepoProfile, the base hint, the pinned commit: empty for a local fallback). A bad .task-loop.json exits loudly."""
-    base = tl.load_profile(tl.profile(repo)).engine.base
-    data, commit = tl.profile_source(repo, base)
-    return tl.load_profile(data), base, commit
-
-
-def load_cfg(repo):
-    """The `engine` block of the repo's .task-loop.json as committed on the base branch (tl.profile), defaults for what it leaves out.
-    The base is itself a key: the working tree names it, then the base's copy is read. A caller fetches first (the loop's queue
-    does; run-task reads the last fetch, and resets onto the base anyway)."""
-    return cfg_source(repo)[0].engine
-
-
 def busy_elsewhere(repo, actor, bead_id, store=None):
     """True when `actor` holds a slot (it is a loop) that a run of ANOTHER bead holds now: then its claim on `bead_id` is a claim
     it left, not one it works on."""
     now_t = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    for sb in tl.slot_beads(repo, store):
+    for sb in wslots.slot_beads(repo, store):
         if sb.assignee == actor and sb.status == "in_progress" and (sb.lease_expires_at or now_t) >= now_t:
             held = sb.metadata.get("held_bead")
             if held and held != bead_id:
@@ -2378,16 +2365,16 @@ def busy_elsewhere(repo, actor, bead_id, store=None):
     return False
 
 
-def reclaim(bead_id, repo, store=None):
+def reclaim(bead_id, repo, store=None, at=None):
     """(ok, why): run-task takes back what the engine itself left, never what a person holds. A claim by a tl- actor
     whose lease ran out is released (a restarted Claude session gets a new actor name). A bead the engine blocked is
     reopened for a plain retry, or when a comment after the block answers the open ask; it stays blocked when a person
     commented after the block with no ask open (they may have parked it), while an ask waits unanswered, or while
     another bead blocks it."""
-    store = store or tl.bd_store(repo)
-    b = tl.peek(store, bead_id) or Bead(id=bead_id, title="", status="")
-    who, me = b.assignee, tl.actor()
-    if intake.held(b.metadata, time.time()):
+    store = store or beadtools.bd_store(repo)
+    b = beadtools.peek(store, bead_id) or Bead(id=bead_id, title="", status="")
+    who, me = b.assignee, ident.actor()
+    if intake.held(b.metadata, at or time.time()):
         return False, "held by the owner (%s): `tl hold %s --release` lets it go" % (b.metadata[intake.HOLD], bead_id)
     release = False
     if who and who != me:
@@ -2400,9 +2387,9 @@ def reclaim(bead_id, repo, store=None):
             # a loop has left (parked, or the loop went on to another) is live only if an engine is running it now.
             live = bead_id in loop_env.running(repo, store)
         else:  # a session working by hand: its lease and heartbeat are the only sign
-            live = who in tl.live_actors(repo, store) or b.lease_expires_at >= time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            live = who in wslots.live_actors(repo, store) or b.lease_expires_at >= time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         if live:
-            logs = sorted((tl.config_dir() / "engine").glob("%s-*.jsonl" % bead_id))
+            logs = sorted((ident.config_dir() / "engine").glob("%s-*.jsonl" % bead_id))
             return False, "another run of %s is still running as %s (a live claim)%s" % (
                 bead_id, who, "; its engine log: %s" % logs[-1] if logs else "")
         release = True
@@ -2416,7 +2403,7 @@ def reclaim(bead_id, repo, store=None):
         if not blocks:
             return False, "blocked by a person, not by the engine"
         after = [c for c in cs if c.created_at > blocks[-1].created_at and not engine_written(c.text)]
-        ask = AskStore.at(ConfigDir(tl.config_dir())).get(bead_id)
+        ask = AskStore.at(ConfigDir(ident.config_dir())).get(bead_id)
         asking = ask is not None and ask.consumed is None and ask.status in (AskStatus.OPEN, AskStatus.PARKED, AskStatus.ANSWERED)
         if ask is not None and asking and ask.answer is not None:  # tl-gy4: an answer filed on the ask (dashboard, tl ask answer) is an answer
             after, asking = [], False  # whether or not a comment followed the block; the run's check_ask consumes it
@@ -2472,9 +2459,9 @@ def report(a, rec):
     say(line)
 
 
-def main(a):
+def main(a, store=None):
     try:
-        rc = run_main(a)
+        rc = run_main(a, store)
     except Blocked as b:  # a stop (SIGTERM) before the engine ran: the slot and the lock are already given back
         rc = {"v": 1, "outcome": "failed", "bead": a.id, "why": b.why, "kind": b.kind.value if b.kind else ""}
     if isinstance(rc, dict):  # stopped before the engine ran: nothing in the bead changed
@@ -2483,24 +2470,24 @@ def main(a):
     return rc
 
 
-def run_main(a):
+def run_main(a, store=None):
     with halting.halt_on_sigterm():
-        return run_main_stoppable(a)
+        return run_main_stoppable(a, store)
 
 
-def run_main_stoppable(a):
+def run_main_stoppable(a, store=None):
     for f in (sys.stdout, sys.stderr):
         append_output(f)
-    if not os.environ.get("TASK_LOOP_SESSION") and not tl.session_id():
+    if not os.environ.get("TASK_LOOP_SESSION") and not ident.session_id():
         os.environ["TASK_LOOP_SESSION"] = "engine-" + uuid.uuid4().hex[:12]
-    repo = tl.repo_root()
-    cfg = load_cfg(repo)
+    repo = gitrepo.repo_root()
+    cfg = wslots.load_cfg(repo)
     if a.slot == "any":
-        return run_any_slot(a, repo, cfg)
-    return run_in(a, repo, cfg)
+        return run_any_slot(a, repo, cfg, store)
+    return run_in(a, repo, cfg, store)
 
 
-def run_any_slot(a, repo, cfg):
+def run_any_slot(a, repo, cfg, store=None):
     """--slot any: the next free slot, taken in the repo's slot line (first come, first served; --wait: wait in it),
     run there as `--slot NAME`, given back at the end."""
     if a.dry_run:
@@ -2513,8 +2500,8 @@ def run_any_slot(a, repo, cfg):
             say("no free slot%s; waiting in line" % (" (%d ahead)" % ahead if ahead else ""))
             told.append(1)
     halt = halting.RUN_HALT["ev"] or threading.Event()
-    got = tl.wait_slot(repo, tl.profile_slots(repo), "run-task " + a.id, stop=lambda: not wait or halt.is_set(), sleep=halt.wait,
-                       on_wait=waiting, prio=tl.bead_priority(repo, a.id))
+    got = wslots.wait_slot(repo, wslots.profile_slots(repo), "run-task " + a.id, stop=lambda: not wait or halt.is_set(), sleep=halt.wait,
+                           on_wait=waiting, prio=wslots.bead_priority(repo, a.id, store), store=store)
     if not got and halt.is_set():
         raise Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)  # run_bead's caller reports it; no slot was taken
     if not got:
@@ -2525,33 +2512,33 @@ def run_any_slot(a, repo, cfg):
     os.environ["TASK_LOOP_SLOT_BEAD"] = sb  # run_in sees the slot as taken; the engine heartbeats it
     RUN_SLOT["owned"] = a.slot  # a re-exec hands the slot on (TL_REEXEC) and its next run-task gives it back
     try:
-        return run_in(a, repo, cfg)
+        return run_in(a, repo, cfg, store)
     finally:
         old = signal.signal(signal.SIGTERM, signal.SIG_IGN) if hasattr(signal, "SIGTERM") and \
             threading.current_thread() is threading.main_thread() else None
         try:
             os.environ.pop("TASK_LOOP_SLOT_BEAD", None)
-            tl.release_slot(repo, a.slot, bead=a.id, mine=True)
+            wslots.release_slot(repo, a.slot, bead=a.id, mine=True, store=store)
         finally:
             if old is not None:
                 signal.signal(signal.SIGTERM, old)
 
 
-def take_area(a, repo, cfg, lock, sb=""):
+def take_area(a, repo, cfg, lock, sb="", store=None):
     """The engine lock, with the area check before it under the area lock (loop_env.area_lock): "" when this run holds the
     worktree, else why not. A bead whose area runs elsewhere: a warning, or refused with --exclusive-area."""
     import loop_env  # the queue rule; imports engine itself
 
     def mark():  # the slot says which bead runs in it (held_bead makes its area busy): only once the area is decided
         if sb:
-            tl.attempt(tl.bd_store(repo).update, sb, BeadPatch(set_metadata={"held_bead": a.id}))
+            beadtools.attempt((store or beadtools.bd_store(repo)).update, sb, BeadPatch(set_metadata={"held_bead": a.id}))
     if not loop_env.has_areas(cfg):
         why = lock.take()
         if not why:
             mark()
         return why
     with loop_env.area_lock(repo):
-        area, busy = loop_env.area_busy(repo, cfg, tl.peek(tl.bd_store(repo), a.id) or Bead(id=a.id, title="", status=""))
+        area, busy = loop_env.area_busy(repo, cfg, beadtools.peek(store or beadtools.bd_store(repo), a.id) or Bead(id=a.id, title="", status=""))
         if busy and getattr(a, "exclusive_area", False):
             return busy + " (--exclusive-area)"
         if busy:
@@ -2570,10 +2557,10 @@ def _handed_slot(slot):
         return False
 
 
-def run_in(a, repo, cfg):
+def run_in(a, repo, cfg, store=None):
     wt = a.worktree
     if not wt and a.slot:  # the slot is the worktree
-        wt = tl.slot_dir(repo, a.slot, tl.profile_slots(repo))
+        wt = wslots.slot_dir(repo, a.slot, wslots.profile_slots(repo))
     if not wt:
         r = subprocess.run([sys.executable, str(Path(__file__).with_name("tl.py")), "worktree", "start"],
                            capture_output=True, text=True, encoding="utf-8", errors="replace")
@@ -2587,31 +2574,31 @@ def run_in(a, repo, cfg):
               file=sys.stderr)
         return {"v": 1, "outcome": "failed", "bead": a.id, "why": "failed: %s is the main checkout" % wt}
     if a.dry_run:
-        return run_bead(a, repo, cfg, wt)
+        return run_bead(a, repo, cfg, wt, store)
     took = ""
     try:
         # a hand run takes its slot's bead as the loop does (a --worktree that is a slot too); one the loop started has
         # it already: TASK_LOOP_SLOT_BEAD names that very slot's bead
-        slot = a.slot or tl.slot_of(repo, wt)
-        sb = getattr(tl.slot_bead(repo, slot), "id", "") if slot else ""
+        slot = a.slot or wslots.slot_of(repo, wt, store)
+        sb = getattr(wslots.slot_bead(repo, slot, store), "id", "") if slot else ""
         if slot and sb and os.environ.get("TASK_LOOP_SLOT_BEAD") == sb and _handed_slot(slot):
             took = sb  # exec'd by the run-task that took this slot: it is still ours, and this process gives it back
             RUN_SLOT["owned"] = slot
         elif slot and not (sb and os.environ.get("TASK_LOOP_SLOT_BEAD") == sb):
-            took, why = tl.take_named_slot(repo, slot, tl.profile_slots(repo), "run-task " + a.id)
+            took, why = wslots.take_named_slot(repo, slot, wslots.profile_slots(repo), "run-task " + a.id, store=store)
             if not took:
                 print("TAKEN: %s" % why)
                 return {"v": 1, "outcome": "taken", "bead": a.id, "why": why}
             os.environ["TASK_LOOP_SLOT_BEAD"] = took  # the engine's heartbeat keeps it
             RUN_SLOT["owned"] = slot
         lock = enginelock.EngineLock(wt, a.id, slot)
-        busy = take_area(a, repo, cfg, lock, sb=took or sb if slot else "")
+        busy = take_area(a, repo, cfg, lock, took or sb if slot else "", store)
         if busy:
             why = busy if busy.startswith("area ") else "worktree %s: %s" % (wt, busy)
             print("TAKEN: %s" % why)
             return {"v": 1, "outcome": "taken", "bead": a.id, "why": why}
         enginelock.LOCK = lock
-        return run_bead(a, repo, cfg, wt)
+        return run_bead(a, repo, cfg, wt, store)
     finally:
         old = signal.signal(signal.SIGTERM, signal.SIG_IGN) if hasattr(signal, "SIGTERM") and \
             threading.current_thread() is threading.main_thread() else None
@@ -2621,7 +2608,7 @@ def run_in(a, repo, cfg):
                 enginelock.LOCK = None
             if took:
                 os.environ.pop("TASK_LOOP_SLOT_BEAD", None)
-                tl.release_slot(repo, slot, bead=a.id, mine=True)
+                wslots.release_slot(repo, slot, bead=a.id, mine=True, store=store)
         finally:
             if old is not None:
                 signal.signal(signal.SIGTERM, old)
@@ -2630,20 +2617,20 @@ def run_in(a, repo, cfg):
 defer_stop = halting.stop_deferred  # no state: also before an Engine exists
 
 
-def run_bead(a, repo, cfg, wt):
+def run_bead(a, repo, cfg, wt, store=None):
     # a stop during the reclaim and claim waits for them, then the engine closes the run as stopped (trace, bead)
     with defer_stop(None) as stop:
         if not a.dry_run:
-            ok, why = reclaim(a.id, repo)
+            ok, why = reclaim(a.id, repo, store)
             if not ok:
                 print("TAKEN: %s" % why)
                 return {"v": 1, "outcome": "taken", "bead": a.id, "why": why}
             if why:
                 say("%s: %s" % (a.id, why))
-        if not a.dry_run and tl.cmd_claim(Args(id=a.id, worktree=wt, slot=a.slot)) != 0:
+        if not a.dry_run and verbs.claim(a.id, wt, a.slot, store=store) != 0:
             # bd lets this session re-claim its own bead (a reopened one); another session's claim stops here
             return {"v": 1, "outcome": "taken", "bead": a.id, "why": "claimed by another session"}
-        eng = Engine(a.id, wt, cfg, dry_run=a.dry_run, verbose=not getattr(a, "quiet", False), fresh=bool(getattr(a, "fresh", False)))
+        eng = Engine(a.id, wt, cfg, dry_run=a.dry_run, verbose=not getattr(a, "quiet", False), fresh=bool(getattr(a, "fresh", False)), store=store)
         eng.stop_pending = bool(stop)
         say("engine log: %s" % eng.log_path)
     rc = eng.run()

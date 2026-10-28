@@ -22,7 +22,8 @@ from taskloop_dash.api import lanes as lanes_mod  # noqa: E402
 from support.builders import cfg_with  # noqa: E402
 from taskloop_dash.views import arrows, names  # noqa: E402
 from taskloop.app.run.calls import Calls  # noqa: E402
-import tl  # noqa: E402
+from taskloop.app.track import verbs  # noqa: E402
+from taskloop.adapters import opencode  # noqa: E402
 
 SID = "ses_abc123"
 T = 1_790_000_000_000  # OpenCode stores milliseconds
@@ -104,20 +105,20 @@ class OpenCode(unittest.TestCase):
         for path in (os.path.join(self.tmp.name, "gone.db"), junk):
             with mock.patch.dict(os.environ, {"OPENCODE_DB": path}):
                 self.assertEqual(self.dash.events.opencode_events(SID), [])
-                self.assertEqual(tl.transcript_of("xai", SID), "")
+                self.assertEqual(opencode.transcript_of("xai", SID), "")
                 self.assertIsNone(engine.context_tokens("opencode:" + SID))
 
     def test_the_reader_never_writes(self):
         before = Path(self.db).read_bytes()
         self.dash.events.opencode_events(SID)
-        tl.opencode_context(SID)
+        opencode.opencode_context(SID)
         self.assertEqual(Path(self.db).read_bytes(), before)
 
     # lookups
     def test_transcript_of_xai_is_the_session_reference(self):
-        self.assertEqual(tl.transcript_of("xai", SID), "opencode:" + SID)
-        self.assertEqual(tl.transcript_of("xai", "ses_zzz"), "")
-        self.assertEqual(tl.transcript_of("xai", ""), "")
+        self.assertEqual(opencode.transcript_of("xai", SID), "opencode:" + SID)
+        self.assertEqual(opencode.transcript_of("xai", "ses_zzz"), "")
+        self.assertEqual(opencode.transcript_of("xai", ""), "")
 
     def test_context_is_the_last_assistant_message_with_tokens(self):
         self.assertEqual(engine.context_tokens("opencode:" + SID), 9000 + 4000 + 700)
@@ -152,7 +153,7 @@ class OpenCode(unittest.TestCase):
         con.execute("INSERT INTO part VALUES ('p9','m3',?,?,?,'{}')", (SID, T + 9000, T + 99000))
         con.commit()
         con.close()
-        self.assertAlmostEqual(tl.opencode_updated(SID), 1_790_000_099.0)  # a part newer than every message
+        self.assertAlmostEqual(opencode.opencode_updated(SID), 1_790_000_099.0)  # a part newer than every message
 
     def test_a_locked_db_reads_as_empty(self):
         con = sqlite3.connect(self.db, isolation_level=None)
@@ -160,7 +161,7 @@ class OpenCode(unittest.TestCase):
         try:
             t0 = time.time()
             self.assertEqual(self.dash.events.opencode_events(SID), [])
-            self.assertIsNone(tl.opencode_context(SID))
+            self.assertIsNone(opencode.opencode_context(SID))
             self.assertLess(time.time() - t0, 120)  # hang guard only: a read that blocks on the lock never returns; the empty results above are the gate
         finally:
             con.execute("ROLLBACK")
@@ -204,12 +205,12 @@ class OpenCode(unittest.TestCase):
         import io
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
-            rc = tl.cmd_trace(types.SimpleNamespace(id="b-1", last=0, json=True))
+            rc = verbs.trace("b-1", 0, True)
         self.assertEqual(rc, 0)
         self.assertEqual(json.loads(buf.getvalue())[0]["sessions"][0]["transcript"], "")
         sessions = []
         calls = Calls(types.SimpleNamespace(emit=lambda rec: 0), lambda: None, sessions, {"tokens_in": 0, "tokens_cached": 0, "tokens_out": 0},
-                      tl.opencode_id, lambda path: None)
+                      opencode.opencode_id, lambda path: None)
         r = DelegateResult(ref=SID, secs=1, cost=0, family="xai")
         calls.end("c1", "write", "writer", 1, r)
         self.assertEqual(sessions[0]["transcript"], "opencode:" + SID)  # no DB look

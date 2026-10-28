@@ -19,6 +19,7 @@ import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import loop_env  # noqa: E402
 import selftest  # noqa: E402
 import tl  # noqa: E402
+from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.adapters.fake_beads import FakeBeads  # noqa: E402
 from taskloop.app.loop.loop import Loop, LoopArgs  # noqa: E402
 
@@ -44,9 +45,10 @@ class SelfTest(unittest.TestCase):
         def execv(exe, argv):
             self.execs.append(argv)
             raise Moved()
-        for p in (mock.patch.object(os, "execv", side_effect=execv), mock.patch.object(tl, "HERE", self.install("0.1.0"))):
-            p.start()
-            self.addCleanup(p.stop)
+        self.here = self.install("0.1.0")
+        p = mock.patch.object(os, "execv", side_effect=execv)
+        p.start()
+        self.addCleanup(p.stop)
 
     def install(self, ver, plant=None):
         """A copy of this checkout's skill as an installed version; `plant` (old, new) edits its engine.py."""
@@ -67,9 +69,8 @@ class SelfTest(unittest.TestCase):
         return {e["version"]: e for e in json.loads(f.read_text())["entries"]} if f.exists() else {}
 
     def the_loop(self):
-        with mock.patch.object(loop_env.engine, "cfg_source", side_effect=lambda r: (tl.load_profile({}), "", "")):
-            env = loop_env.build(str(self.home), store=FakeBeads())
-            return Loop(env, loop_env.files_of(str(self.home)), loop_env.installs(env.cfgdir), LoopArgs(argv=["loop", "--repo", str(self.home)]))
+        env = loop_env.build(str(self.home), store=FakeBeads(), here=self.here)
+        return Loop(env, loop_env.files_of(str(self.home)), loop_env.installs(env.cfgdir, here=self.here), LoopArgs(argv=["loop", "--repo", str(self.home)]))
 
     def test_the_scenario_through_engine_run_passes(self):
         r = subprocess.run([sys.executable, str(SRC / "tl.py"), "selftest"], capture_output=True, text=True, timeout=300, cwd=self.home)

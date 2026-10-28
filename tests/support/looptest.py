@@ -10,6 +10,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills" / "task-loop"))
 import loop_env  # noqa: E402
 import tl  # noqa: E402
+from taskloop.app.wire import slots as wslots
 from taskloop.app.loop.queue import rank_ready  # noqa: E402
 from taskloop.contracts.loop import LoopState  # noqa: E402
 
@@ -39,11 +40,11 @@ def queue(repo, store=None, say=lambda _: None):
 
 
 def log(repo):
-    return loop_env.cfgdir().loop_log(tl.repo_key(repo))
+    return loop_env.cfgdir().loop_log(wslots.repo_key(repo))
 
 
 def state_path(repo, pid):
-    return loop_env.cfgdir().loop_state("%s.%d" % (tl.repo_key(repo), pid))
+    return loop_env.cfgdir().loop_state("%s.%d" % (wslots.repo_key(repo), pid))
 
 
 def write_state(repo, pid=None, **fields):
@@ -63,7 +64,7 @@ def live(repo):
 
 
 def command(repo):
-    return loop_env.cfgdir().loop_command(tl.repo_key(repo))
+    return loop_env.cfgdir().loop_command(wslots.repo_key(repo))
 
 
 def rests(repo):
@@ -71,7 +72,7 @@ def rests(repo):
 
 
 def rest_file(repo):
-    return loop_env.cfgdir().loop_rest(tl.repo_key(repo))
+    return loop_env.cfgdir().loop_rest(wslots.repo_key(repo))
 
 
 def last_exit(repo):
