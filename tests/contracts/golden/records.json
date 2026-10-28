@@ -326,6 +326,145 @@
   "feedback": "",
   "pending_land_validation": "red"
  },
+ "CheckRun": {
+  "v": 1,
+  "round": 1,
+  "tree": "deadbeef",
+  "results": [
+   {
+    "id": "unittest",
+    "cmd": "python3 -m unittest",
+    "group": "tests",
+    "exit": 1,
+    "status": "failed",
+    "tries": 2,
+    "tail": "",
+    "secs": 43.4,
+    "log": "checks/01.log",
+    "hung": false,
+    "cached": false,
+    "reused": false,
+    "why": "",
+    "note": "",
+    "base_red": true,
+    "producer": "",
+    "sig": "boom"
+   },
+   {
+    "id": "lint",
+    "cmd": "ruff check",
+    "group": "static",
+    "exit": 0,
+    "status": "passed",
+    "tries": 1,
+    "tail": "",
+    "secs": 0.0,
+    "log": "",
+    "hung": false,
+    "cached": true,
+    "reused": false,
+    "why": "",
+    "note": "inputs unchanged",
+    "base_red": false,
+    "producer": "",
+    "sig": ""
+   }
+  ],
+  "hits": 1,
+  "misses": 1
+ },
+ "Check": {
+  "id": "unity-tests",
+  "cmd": "just unity-tests",
+  "group": "tests",
+  "when": [
+   "client/**"
+  ],
+  "retry": 1,
+  "timeout_min": 30.0,
+  "idle_s": 600.0,
+  "cache": true,
+  "inputs": [
+   "client/**"
+  ],
+  "inputs_only": true,
+  "exclude": [
+   "client/Gen/**"
+  ],
+  "env": {
+   "A": "1"
+  },
+  "repo": true,
+  "writer": false,
+  "writer_max_s": 90.0,
+  "tail_log": "client/Logs/unity-project-files.log"
+ },
+ "CheckCacheEntry": {
+  "v": 1,
+  "key": "tree base",
+  "whole": {
+   "just fmt": {
+    "result": {
+     "id": "lint",
+     "cmd": "ruff check",
+     "group": "static",
+     "exit": 0,
+     "status": "passed",
+     "tries": 1,
+     "tail": "",
+     "secs": 0.0,
+     "log": "",
+     "hung": false,
+     "cached": true,
+     "reused": false,
+     "why": "",
+     "note": "inputs unchanged",
+     "base_red": false,
+     "producer": "",
+     "sig": ""
+    },
+    "round": 1,
+    "log_abs": "/r/checks/00.log"
+   }
+  },
+  "inputs": {
+   "abc": {
+    "result": {
+     "id": "lint",
+     "cmd": "ruff check",
+     "group": "static",
+     "exit": 0,
+     "status": "passed",
+     "tries": 1,
+     "tail": "",
+     "secs": 0.0,
+     "log": "",
+     "hung": false,
+     "cached": true,
+     "reused": false,
+     "why": "",
+     "note": "inputs unchanged",
+     "base_red": false,
+     "producer": "",
+     "sig": ""
+    },
+    "round": 2,
+    "log_abs": ""
+   }
+  },
+  "base_red": {
+   "base just fmt": true
+  }
+ },
+ "Durations": {
+  "v": 1,
+  "runs": {
+   "just fmt": [
+    3.1,
+    2.9
+   ]
+  }
+ },
  "RunOutcome": {
   "v": 2,
   "outcome": "blocked",
@@ -624,7 +763,10 @@
      "inputs": "a/**",
      "inputs_only": false,
      "exclude": [],
-     "env": {}
+     "env": {},
+     "writer": null,
+     "writer_check_max_s": null,
+     "tail_log": ""
     }
    ],
    "host": false,
@@ -654,6 +796,9 @@
    "write_idle_stop_min": 25,
    "write_cap_min": 120,
    "writer_check_max_s": 60,
+   "base_red": true,
+   "max_same_red": 3,
+   "max_total_reviews": 12,
    "check_timeout_min": 60,
    "check_idle_min": 10,
    "gate_timeout_min": 90,

@@ -42,6 +42,9 @@ class CheckSpec:
     inputs_only: bool = False
     exclude: list[str] = field(default_factory=list)
     env: dict[str, str] = field(default_factory=dict)
+    writer: bool | None = None  # true: the writer may run it whatever it costs; false: never; absent: by how long it takes
+    writer_check_max_s: float | None = None  # this check's own cut for "too slow for the writer" (else engine.writer_check_max_s)
+    tail_log: str = ""  # a log of the tree whose first compile errors join this check's red output when it shows none
 
 
 @record
@@ -98,6 +101,9 @@ class EngineConfig:
     write_idle_stop_min: float = 25
     write_cap_min: float = 120
     writer_check_max_s: float = 60
+    base_red: bool = True  # a check's first red is run once on the untouched base: red there too, it is not the writer's
+    max_same_red: int = 3  # rounds in a row that end red with the same checks and output: then stop and ask (0: never)
+    max_total_reviews: int = 12  # reviews in all of a run, replans included: then stop and ask (0: never)
     check_timeout_min: float = 60
     check_idle_min: float = 10
     gate_timeout_min: float = 90

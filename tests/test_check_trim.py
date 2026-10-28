@@ -11,7 +11,9 @@ import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 sys.path.insert(0, str(ROOT / "tests"))
 import engine  # noqa: E402
 import test_engine as te  # noqa: E402
-from checks import trim  # noqa: E402
+from taskloop.domain.checks import trim  # noqa: E402
+from taskloop.app.checks import evidence  # noqa: E402
+from support.checks import res  # noqa: E402
 
 FIX = Path(__file__).parent / "fixtures" / "checklogs"
 
@@ -92,7 +94,7 @@ class BriefPaths(unittest.TestCase):
     def test_failure_brief_trims_every_red_fixture_and_names_the_log(self):
         for name, must in MUST.items():
             with self.subTest(log=name):
-                out = engine.failure_brief([dict(cmd="c", exit=1, log="checks/" + name)], self.run_dir)
+                out = evidence.failure_brief([res(cmd="c", exit=1, log="checks/" + name)], self.run_dir)
                 self.assertLessEqual(len(out.encode()), trim.CAP)
                 self.assertIn(str(self.run_dir / "checks" / name), out)
                 for line in must:
@@ -100,16 +102,16 @@ class BriefPaths(unittest.TestCase):
 
     def test_compact_red_keeps_the_failing_name_and_green_stays_one_line(self):
         tail = (FIX / "unittest_fail.log").read_text()[-1500:]
-        red = engine.compact([dict(cmd="t", exit=1, status="failed", group="tests", tail=tail)])
+        red = evidence.compact([res(cmd="t", exit=1, group="tests", tail=tail)])
         self.assertEqual(red.count("\n"), 0)
         self.assertLessEqual(len(red), 700)
         self.assertIn("FAIL: test_refund_rounds", red)
-        green = engine.compact([dict(cmd="t", exit=0, status="ran", group="tests", tail=(FIX / "long_green.log").read_text()[-1500:])])
+        green = evidence.compact([res(cmd="t", exit=0, group="tests", tail=(FIX / "long_green.log").read_text()[-1500:])])
         self.assertEqual(green.count("\n"), 0)
 
     def test_the_stored_log_is_not_changed(self):
         before = (self.run_dir / "checks" / "nunit_fail.log").read_text()
-        engine.failure_brief([dict(cmd="c", exit=1, log="checks/nunit_fail.log")], self.run_dir)
+        evidence.failure_brief([res(cmd="c", exit=1, log="checks/nunit_fail.log")], self.run_dir)
         self.assertEqual((self.run_dir / "checks" / "nunit_fail.log").read_text(), before)
 
 

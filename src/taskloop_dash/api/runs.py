@@ -10,7 +10,6 @@ from taskloop_dash.readers.events import Event, Events
 from taskloop_dash.readers.opencode import PREFIX, OpenCode, session_id
 from taskloop_dash.readers.records import Records
 from taskloop_dash.readers.runlogs import RunLogs
-from taskloop_dash.tails import read_json
 from taskloop_dash.views import names
 
 FILE_BYTES = 4_000_000  # the most of a check log served
@@ -26,17 +25,6 @@ def split_window(rest: str) -> tuple[str, float | None, float | None]:
         except ValueError:
             pass
     return rest, None, None
-
-
-def safe_name(text: str) -> str:
-    """The text with every run of characters outside letters, digits, '_', '.' and '-' made one '_' (a check id as a file name)."""
-    out, gap = "", False
-    for c in text:
-        if c.isalnum() or c in "_.-":
-            out, gap = out + c, False
-        elif not gap:
-            out, gap = out + "_", True
-    return out
 
 
 def servable(rel: object) -> bool:
@@ -96,21 +84,8 @@ class RunsApi:
         d["events_id"] = "%s:%s@%s@%s" % (adapter, tr_id, (b["t0"] or 0) - 30, (b["t1"] or 0) + 30) if tr else ""
         d["transcript"] = tr
         rdir = self.env.config.run_dir(run)
-        legacy_ids: dict[str, str] = {}
-        if d.get("checks_last"):
-            for c in read_json(rdir / "engine-checks.json", []) or []:
-                if isinstance(c, dict) and c.get("cmd"):
-                    legacy_ids[c["cmd"]] = c.get("id") or c["cmd"]
-        files = sorted(os.listdir(str(rdir / "checks"))) if (rdir / "checks").is_dir() else []
         for c in d["checks"]:
             rel = c.get("log") or ""
-            if not rel and legacy_ids:
-                cid = legacy_ids.get(c["cmd"], c["cmd"])
-                if c["cmd"] in legacy_ids:
-                    c["id"] = cid
-                want = "-%s.log" % safe_name(cid)[:40]
-                hit = [f for f in files if f[:2].isdigit() and f[2:] == want]
-                rel = "checks/" + hit[0] if hit else ""
             c["log_url"] = ("/api/file?run=%s&path=%s" % (run, rel)) if rel and (rdir / rel).is_file() else ""
         return d
 

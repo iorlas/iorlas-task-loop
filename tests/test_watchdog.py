@@ -12,7 +12,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from test_engine import engine  # noqa: E402
-from checks import speed as cs  # noqa: E402
+from taskloop.adapters import activity as cs  # noqa: E402
 from support import tags, waits  # noqa: E402
 
 FILES = (3, 120, 1_000)  # (files, bytes, newest mtime)

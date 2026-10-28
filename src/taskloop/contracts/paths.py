@@ -52,6 +52,19 @@ class ConfigDir:
     def run_dir(self, run: RunId | str) -> Path:
         return self.root / "runs" / str(run)
 
+    def check_run(self, run: RunId | str, rnd: int | None = None) -> Path:
+        """The CheckRun of a round of the run; no round: the latest."""
+        return self.run_dir(run) / ("engine-checks.json" if rnd is None else "engine-checks.r%d.json" % rnd)
+
+    def check_logs(self, run: RunId | str) -> Path:
+        return self.run_dir(run) / "checks"
+
+    def check_cache(self, bead: BeadId | str) -> Path:
+        return self.root / "check-cache" / ("%s.json" % bead)
+
+    def check_durations(self, repo_key: str) -> Path:
+        return self.root / "check-durations" / ("%s.json" % repo_key)
+
     def loop_state(self, repo_key: str) -> Path:
         return self.root / "loop" / ("%s.json" % repo_key)
 

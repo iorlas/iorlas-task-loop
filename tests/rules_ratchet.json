@@ -9,7 +9,6 @@
  "oversize_functions": {
   "skills/task-loop/engine.py::Engine.__init__": 104,
   "skills/task-loop/engine.py::Engine._close": 97,
-  "skills/task-loop/engine.py::Engine._run_checks": 209,
   "skills/task-loop/engine.py::Engine.finish": 151,
   "skills/task-loop/engine.py::Engine.plan": 143,
   "skills/task-loop/engine.py::Engine.resume_point": 113,

@@ -27,5 +27,6 @@ def make_engine(wt, bead="t-1", cfg=None, script=None, attrs=None, **seams):
 def cfg_with(base=None, **changes):
     """An EngineConfig: `base` (default: all defaults) with `changes` over it. Values may be plain JSON (a `checks` list of dicts)."""
     d = to_json(base or EngineConfig())
+    d["base_red"] = False  # an always-red command in a test would otherwise be asked again on the base; the tests of that ask turn it on
     d.update(changes)
     return from_json(EngineConfig, d)

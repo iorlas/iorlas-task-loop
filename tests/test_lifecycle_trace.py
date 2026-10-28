@@ -264,7 +264,8 @@ class TraceTelemetry(unittest.TestCase):
         self.assertTrue(start["cmd"] and start["tree"])
         cache = self.records("checks")
         self.assertTrue(cache)
-        self.assertEqual(cache[-1]["hits"] + cache[-1]["misses"], len(cache[-1]["items"]))
+        run = cache[-1]["run"]
+        self.assertEqual(run["hits"] + run["misses"], len(run["results"]))
 
     @unittest.skipIf(os.name == "nt", "the engine stops a process group; sleep and bash are POSIX")
     def test_a_timed_out_command_leaves_a_kill_record(self):
@@ -377,7 +378,7 @@ class TraceTelemetry(unittest.TestCase):
 
         with mock.patch.object(engine.subprocess, "Popen", return_value=p), \
                 mock.patch.object(engine.sproc, "stop_tree", side_effect=stop), \
-                mock.patch.object(engine.cs, "activity", side_effect=slow_activity):
+                mock.patch.object(engine.activity, "activity", side_effect=slow_activity):
             rc, _ = eng.sh("fake-check", timeout=10, idle=0.5)
         self.assertEqual(rc, 124)
         kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
@@ -399,7 +400,7 @@ class TraceTelemetry(unittest.TestCase):
 
         with mock.patch.object(engine.subprocess, "Popen", return_value=p), \
                 mock.patch.object(engine.sproc, "stop_tree", side_effect=stop), \
-                mock.patch.object(engine.cs, "activity", return_value=False):
+                mock.patch.object(engine.activity, "activity", return_value=False):
             rc, tail = eng.sh("fake-check", timeout=0.4, idle=10)
         self.assertEqual(rc, 124)
         self.assertIn("shutdown output after timeout", tail)
@@ -424,7 +425,7 @@ class TraceTelemetry(unittest.TestCase):
 
         with mock.patch.object(engine.subprocess, "Popen", return_value=p), \
                 mock.patch.object(engine.sproc, "stop_tree", side_effect=stop), \
-                mock.patch.object(engine.cs, "activity", side_effect=KeyboardInterrupt):
+                mock.patch.object(engine.activity, "activity", side_effect=KeyboardInterrupt):
             with self.assertRaises(KeyboardInterrupt):
                 eng.sh("fake-check", timeout=10, idle=10)
         self.assertTrue(p.shutdown_sent)

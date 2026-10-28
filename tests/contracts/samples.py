@@ -5,7 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402,F401
-from taskloop.contracts import ask, bead, checkpoint, config, delegate, events, ids, locks, loop, run, slots, snapshots, trace  # noqa: E402
+from taskloop.contracts import ask, bead, checkpoint, checks, config, delegate, events, ids, locks, loop, run, slots, snapshots, trace  # noqa: E402
 from taskloop.contracts import log  # noqa: E402
 from taskloop.contracts.enums import AskClass, AskKind, AskStatus, LockWhat, Outcome, WaitWhat, WhyCode  # noqa: E402
 
@@ -37,6 +37,12 @@ LOCK = locks.EngineLock(pid=1789, bead="tl-1", started=T, by="tl-abc", pid_start
 CMD = {"gate": "just check", "pick_label": "auto", "gate_only": ["a", config.GateOnly(cmd="b", why="c")],
        "visual_paths": config.VisualConfig(include=["a/**"]), "write_fresh_above_k": 150.0, "max_rounds": 4,
        "checks": [config.CheckSpec(id="fmt", cmd="just fmt", group="static", when=["x/**"], inputs="a/**")]}
+
+
+CHECK_RUN = checks.CheckRun(round=1, tree="deadbeef", hits=1, misses=1, results=[
+    checks.CheckResult(id="unittest", cmd="python3 -m unittest", group="tests", exit=1, status="failed", secs=43.4, tries=2, log="checks/01.log",
+                       sig="boom", base_red=True),
+    checks.CheckResult(id="lint", cmd="ruff check", group="static", exit=0, status="passed", cached=True, note="inputs unchanged")])
 
 
 def _log(cls, **kw):
@@ -74,10 +80,7 @@ LOG = {
                  kill_t=T, observed_t=T),
     "transition": _log(log.Transition, from_id="n4", to="write", cause="gate_red", detail="red"),
     "reload": _log(log.Reload, old="0.23.56", new="0.23.57", step="write"),
-    "checks": _log(log.Checks, node_id="n5", round=1, tree="deadbeef", hits=1, misses=1, items=[
-        log.CheckItem(id="unittest", cmd="python3 -m unittest", group="tests", exit=1, status="failed", secs=43.4, tries=2, hung=False,
-                      cached=False, reused=False, why="", log="checks/01.log"),
-        log.CheckItem(id="lint", cmd="ruff check", group="fast", exit=0, status="cached", cached=True)]),
+    "checks": _log(log.Checks, node_id="n5", run=CHECK_RUN),
     "warn": _log(log.Warn, text="careful"),
     "note": _log(log.Note, text="fyi"),
     "close": _log(log.Close, outcome=Outcome.LANDED, why_code=None, sha="abc", why="landed abc"),
@@ -129,6 +132,14 @@ OTHERS = {
         unfiled=[checkpoint.Unfiled(title="t", why="lint")], look_prev=[checkpoint.LookVerdict(item="i", verdict="defect")],
         rendered=["r"], last_reqs=[checkpoint.RenderReq(method="Shots", names=["n"], args=[checkpoint.RenderArg(name="a", value="b")])],
         handoff={"rounds": [{"stage": "1/1"}]}, pending_land_validation="red"),
+    "CheckRun": CHECK_RUN,
+    "Check": checks.Check(id="unity-tests", cmd="just unity-tests", group="tests", when=["client/**"], retry=1, timeout_min=30.0, idle_s=600.0,
+                          inputs=["client/**"], inputs_only=True, exclude=["client/Gen/**"], env={"A": "1"}, repo=True, writer=False,
+                          writer_max_s=90.0, tail_log="client/Logs/unity-project-files.log"),
+    "CheckCacheEntry": checks.CheckCacheEntry(
+        key="tree base", whole={"just fmt": checks.CacheHit(result=CHECK_RUN.results[1], round=1, log_abs="/r/checks/00.log")},
+        inputs={"abc": checks.CacheHit(result=CHECK_RUN.results[1], round=2)}, base_red={"base just fmt": True}),
+    "Durations": checks.Durations(runs={"just fmt": [3.1, 2.9]}),
     "RunOutcome": OUTCOME,
     "LoopLogLine": run.LoopLogLine(outcome=OUTCOME, t=T, slot="s1", run_log="/rl"),
     "Reexec": run.Reexec(run=str(RUN), bead="tl-1", from_version="0.23.56", to_version="0.23.57", step="write", owned=["a"], fallback="f",

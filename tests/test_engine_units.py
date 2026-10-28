@@ -38,7 +38,12 @@ from support import fake_route  # noqa: E402
 from taskloop.domain.lanes import policy as lp  # noqa: E402
 from taskloop.domain.lanes.notes import FRESH_WRITER_TEXT  # noqa: E402,F401
 from taskloop.domain.lanes import netgate  # noqa: E402,F401
-from checks import lint  # noqa: E402,F401
+from taskloop.domain.checks import lint  # noqa: E402,F401
+from taskloop.app.checks import evidence  # noqa: E402
+from support.checks import res  # noqa: E402
+from taskloop.contracts.checks import Durations  # noqa: E402
+from taskloop.domain.checks import durations  # noqa: E402
+from taskloop.domain.checks.writer_split import WriterSplit  # noqa: E402
 import tl  # noqa: E402
 from taskloop.adapters import delegate as lroute  # noqa: E402,F401
 import test_engine as T  # noqa: E402
@@ -64,23 +69,23 @@ class FailureBriefAndDurations(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_analyzer_noise_is_dropped_and_the_real_error_comes_first(self):
-        out = engine.failure_brief([dict(cmd="c", exit=1, log="checks/unity-analyzers.log")], self.run_dir, lines=2)
+        out = evidence.failure_brief([res(cmd="c", exit=1, log="checks/unity-analyzers.log")], self.run_dir, lines=2)
         self.assertIn("error MA0051", out)
         self.assertNotIn("UAC0005", out)
 
     def test_zero_errors_line_is_not_a_hit(self):
-        out = engine.failure_brief([dict(cmd="c", exit=1, log="checks/unity-analyzers.log")], self.run_dir)
+        out = evidence.failure_brief([res(cmd="c", exit=1, log="checks/unity-analyzers.log")], self.run_dir)
         self.assertEqual(out.count("0 Error(s)"), 1)  # only as the log's last line, never ranked as an error
 
     def test_a_timeout_says_so_and_keeps_the_logs_last_line(self):
-        out = engine.failure_brief([dict(cmd="just check", exit=124, secs=600, log="checks/timeout.log")], self.run_dir)
+        out = evidence.failure_brief([res(cmd="just check", exit=124, secs=600, log="checks/timeout.log")], self.run_dir)
         self.assertIn("timed out after 600 s", out)
         self.assertIn("(timed out after 600 s: the engine stopped it", out)
-        killed = engine.failure_brief([dict(cmd="just check", exit=-9, secs=30, log="checks/timeout.log")], self.run_dir)
+        killed = evidence.failure_brief([res(cmd="just check", exit=-9, secs=30, log="checks/timeout.log")], self.run_dir)
         self.assertIn("timed out after 30 s", killed)
 
     def test_a_missing_log_says_none_and_a_long_cmd_is_cut(self):
-        out = engine.failure_brief([dict(cmd="x" * 500, exit=1, tail="boom: error")], self.run_dir)
+        out = evidence.failure_brief([res(cmd="x" * 500, exit=1, tail="boom: error")], self.run_dir)
         self.assertIn("log: none", out)
         self.assertNotIn("x" * 301, out)
 
@@ -88,37 +93,35 @@ class FailureBriefAndDurations(unittest.TestCase):
         (self.run_dir / "tb.log").write_text(
             'Traceback (most recent call last):\n  File "a.py", line 1, in <module>\n    f()\n'
             '  File "b.py", line 9, in f\n    g()\nValueError: bad\n')
-        out = engine.failure_brief([dict(cmd="c", exit=1, log="tb.log")], self.run_dir)
+        out = evidence.failure_brief([res(cmd="c", exit=1, log="tb.log")], self.run_dir)
         self.assertIn('File "b.py", line 9, in f\n    g()', out)
 
-    def _runs(self, *items):
-        d = self.home / "cfg" / "task-loop" / "runs" / ("r%d" % len(list((self.home / "cfg" / "task-loop").glob("runs/*"))))
-        d.mkdir(parents=True)
-        (d / "engine-checks.json").write_text(json.dumps(list(items)))
+    def _history(self, *runs):
+        h = Durations()
+        for cmd, secs in runs:
+            h = durations.merged(h, [(cmd, secs)])
+        return durations.seconds(h)
 
-    def _secs(self):
-        e = mock.Mock(log_path=self.home / "none" / "t-1.jsonl", bead="t")
-        return engine.Engine.check_secs(e, self.home / "cfg" / "task-loop")
-
-    def test_durations_come_from_all_runs_and_a_quick_failure_does_not_hide_a_slow_pass(self):
-        self._runs({"cmd": "just  unity-analyzers", "exit": 0, "secs": 140})
-        self._runs({"cmd": "just unity-analyzers", "exit": 1, "secs": 9})
-        self._runs({"cmd": "just lint", "exit": 1, "secs": 40}, {"cmd": "just lint", "exit": 1, "secs": 7})
-        cache = self.home / "cfg" / "task-loop" / "check-cache"
-        cache.mkdir()
-        (cache / "b.json").write_text(json.dumps({"k": {"just fmt": {"cmd": "just fmt", "exit": 0, "secs": 3}}}))
-        secs = self._secs()
+    def test_durations_keep_the_longest_pass_and_whitespace_does_not_split_a_command(self):
+        secs = self._history(("just  unity-analyzers", 140), ("just unity-analyzers", 9), ("just fmt", 3))
         self.assertEqual(secs["just unity-analyzers"], 140)
-        self.assertEqual(secs["just lint"], 40)  # nothing passed: the longest run
         self.assertEqual(secs["just fmt"], 3)
-        e = mock.Mock(cfg=cfg_with(writer_check_max_s=60))
-        self.assertTrue(engine.Engine.engine_only(e, "just unity-analyzers", secs))
-        self.assertFalse(engine.Engine.engine_only(e, "just lint", secs))
+        split = WriterSplit(cfg_with(writer_check_max_s=60), secs)
+        self.assertTrue(split.engine_only("just unity-analyzers"))
+        self.assertFalse(split.engine_only("just fmt"))
 
     def test_check_build_and_dotnet_commands_without_history_are_engine_only(self):
-        e = mock.Mock(cfg=cfg_with(writer_check_max_s=60))
+        split = WriterSplit(cfg_with(writer_check_max_s=60), {})
         for cmd in ("just check", "dotnet test", "dotnet build", "just build"):
-            self.assertTrue(engine.Engine.engine_only(e, cmd, {}), cmd)
+            self.assertTrue(split.engine_only(cmd), cmd)
+
+    def test_a_check_says_writer_true_or_its_own_cut_and_that_beats_the_global_one(self):
+        cfg = cfg_with(writer_check_max_s=60, checks=[
+            {"id": "analyzers", "cmd": "just unity-analyzers", "group": "static", "writer": True},
+            {"id": "slow", "cmd": "just slow", "group": "tests", "writer_check_max_s": 500},
+            {"id": "fmt", "cmd": "just fmt", "group": "static", "writer": False}])
+        split = WriterSplit(cfg, {"just unity-analyzers": 140, "just slow": 300, "just fmt": 1})
+        self.assertEqual([split.engine_only(c) for c in ("just unity-analyzers", "just slow", "just fmt")], [False, False, True])
 
 
 class Outcome(unittest.TestCase):

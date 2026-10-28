@@ -3,6 +3,7 @@ within the file; an end without its start, or the reverse, is a run that died in
 from dataclasses import field
 from typing import ClassVar
 
+from taskloop.contracts.checks import CheckRun
 from taskloop.contracts.codec import from_tagged, record, table_of
 from taskloop.contracts.enums import Outcome, WaitWhat, WhyCode
 from taskloop.contracts.trace import Tokens
@@ -152,31 +153,11 @@ class WaitEnd(LogRec):
 
 
 @record
-class CheckItem:
-    id: str
-    cmd: str
-    group: str
-    exit: int | None
-    status: str
-    secs: float | None = None
-    tries: int | None = None
-    hung: bool = False
-    cached: bool = False
-    reused: bool = False
-    why: str = ""
-    log: str = ""
-
-
-@record
 class Checks(LogRec):
-    """One round of checks: every check with its result, and what the round's cache saved."""
+    """One round of checks: the CheckRun (every check with its result, and what the round's cache saved)."""
     KIND: ClassVar[str] = "checks"
     node_id: str
-    round: int
-    items: list[CheckItem] = field(default_factory=list)
-    tree: str = ""
-    hits: int = 0
-    misses: int = 0
+    run: CheckRun
 
 
 @record

@@ -2,6 +2,8 @@ import atexit
 import hashlib
 import io
 import functools
+import dataclasses
+from typing import cast
 import json
 import os
 import re
@@ -45,7 +47,15 @@ from support.waits import until  # noqa: E402
 from support import fake_route  # noqa: E402
 from taskloop.domain.lanes import policy as lp  # noqa: E402,F401
 from taskloop.domain.lanes import netgate  # noqa: E402,F401
-from checks import lint  # noqa: E402,F401
+from taskloop.domain.checks import lint  # noqa: E402,F401
+from taskloop.domain.checks.names import log_var  # noqa: E402
+from taskloop.domain.checks import retry  # noqa: E402
+from taskloop.domain.checks import matchers as check_matchers  # noqa: E402
+from taskloop.domain.checks.writer_split import WriterSplit  # noqa: E402
+from taskloop.contracts.checks import CheckRun  # noqa: E402
+from taskloop.app.checks import evidence as check_evidence  # noqa: E402
+from support.checks import res  # noqa: E402
+from taskloop.adapters.check_probe import ShellProbe  # noqa: E402
 import tl  # noqa: E402
 from taskloop.adapters import delegate as lroute  # noqa: E402,F401
 
@@ -383,11 +393,11 @@ class EngineTest(unittest.TestCase):
         first = eng.run_checks(st, "s")
         again = eng.run_checks(st, "s")
         self.assertEqual(count.read_text(), "1")
-        self.assertTrue(again[0].get("cached"))
+        self.assertTrue(again[0].cached)
         (self.wt / "new.txt").write_text("x\n")  # an untracked file changes the tree
         eng.run_checks(st, "s")
         self.assertEqual(count.read_text(), "11")
-        self.assertEqual(first[0]["exit"], 0)
+        self.assertEqual(first[0].exit, 0)
 
     @POSIX_CHECK
     def test_a_check_that_times_out_is_red_and_leaves_no_process(self):
@@ -395,8 +405,8 @@ class EngineTest(unittest.TestCase):
         eng = engine.Engine("t-1", str(self.wt), c, store=self.store)
         mark = "61.%d" % os.getpid()  # unique: a second suite running at once has its own sleep
         res = eng.run_checks({"checks": ["bash -c 'sleep %s; true'" % mark], "files": []}, "s")
-        self.assertEqual(res[0]["exit"], 124)
-        self.assertIn("timed out", res[0]["tail"])
+        self.assertEqual(res[0].exit, 124)
+        self.assertIn("timed out", res[0].tail)
         left = subprocess.run(["pgrep", "-f", "sleep " + mark], capture_output=True, text=True).stdout.strip()
         self.assertEqual(left, "")
 
@@ -406,7 +416,7 @@ class EngineTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {"CLAUDE_CODE_ENTRYPOINT": "cli"}):
             res = eng.run_checks({"checks": [PY + ' -c "import os,sys; sys.exit(1 if os.environ.get(\'CLAUDE_CODE_ENTRYPOINT\') else 0)"'],
                                   "files": []}, "s")
-        self.assertEqual(res[0]["exit"], 0)
+        self.assertEqual(res[0].exit, 0)
 
     def checks_engine(self, attrs=None, **cfg):
         return make_engine(self.wt, cfg=cfg, store=self.store, attrs=attrs)
@@ -415,24 +425,24 @@ class EngineTest(unittest.TestCase):
         eng = self.checks_engine(checks=[{"id": "unit", "cmd": PY + ' -c "pass"', "group": "tests"},
                                          {"id": "lint", "cmd": FALSE, "group": "static"}])
         res = eng.run_checks({"checks": [PY + ' -c "pass"'], "files": []}, "s")
-        self.assertEqual([(c["group"], c["status"]) for c in res],
+        self.assertEqual([(c.group, c.status) for c in res],
                          [("static", "failed"), ("tests", "skipped"), ("acceptance", "skipped")])
-        self.assertIn("static failed", res[1]["why"])
+        self.assertIn("static failed", res[1].why)
 
     def test_a_repo_check_runs_only_when_its_paths_changed(self):
         eng = self.checks_engine(checks=[{"id": "unity", "cmd": PY + ' -c "pass"', "group": "tests", "when": ["client/**"]}])
         eng.git("checkout", "-q", "-b", "task/t-1")
-        self.assertEqual(eng.run_checks({"checks": [], "files": []}, "s")[0]["status"], "skipped")
+        self.assertEqual(eng.run_checks({"checks": [], "files": []}, "s")[0].status, "skipped")
         (self.wt / "client").mkdir()
         (self.wt / "client" / "a.cs").write_text("x\n")
-        self.assertEqual(eng.run_checks({"checks": [], "files": []}, "s")[0]["status"], "ran")
+        self.assertEqual(eng.run_checks({"checks": [], "files": []}, "s")[0].status, "passed")
 
     def test_a_flaky_check_gets_its_retries(self):
         mark = Path(self.tmp.name) / "seen"
         flaky = PY + ' -c "import os,sys; p=%r; first=not os.path.exists(p); open(p,\'w\').close(); sys.exit(1 if first else 0)"' % str(mark)
         eng = self.checks_engine(checks=[{"id": "flaky", "cmd": flaky, "group": "tests", "retry": 1}])
         res = eng.run_checks({"checks": [], "files": []}, "s")
-        self.assertEqual((res[0]["exit"], res[0]["status"], res[0]["tries"]), (0, "ran", 2))
+        self.assertEqual((res[0].exit, res[0].status, res[0].tries), (0, "passed", 2))
 
     # tl-bxk.10.27: a timeout is never retried, one command runs once per block, shared waits are not budget
     def sleeping_check(self, secs, counter):
@@ -446,7 +456,7 @@ class EngineTest(unittest.TestCase):
                                  check_timeout_min=0.02)
         with mock.patch.object(eng, "warn") as warn:
             res = eng.run_checks({"checks": [], "files": []}, "s")
-        self.assertEqual((res[0]["exit"], res[0]["tries"], n.read_text()), (124, 1, "1"))
+        self.assertEqual((res[0].exit, res[0].tries, n.read_text()), (124, 1, "1"))
         self.assertIn("no retry: timed out after", warn.call_args[0][0])
 
     def test_exit_124_from_the_command_itself_is_not_retried_either(self):
@@ -454,24 +464,24 @@ class EngineTest(unittest.TestCase):
         cmd = cmd.replace("sys.exit(0 if", "sys.exit(124 if").replace(" else 1)", " else 124)")
         eng = self.checks_engine(checks=[{"id": "t", "cmd": cmd, "group": "tests", "retry": 2}])
         res = eng.run_checks({"checks": [], "files": []}, "s")
-        self.assertEqual((res[0]["tries"], n.read_text()), (1, "1"))
+        self.assertEqual((res[0].tries, n.read_text()), (1, "1"))
 
     def test_a_checks_own_timeout_min_overrides_the_global_one(self):
         n = Path(self.tmp.name) / "runs-own"
         slow = self.sleeping_check(2, n)
         eng = self.checks_engine(checks=[{"id": "short", "cmd": slow, "group": "tests", "timeout_min": 0.01}],
                                  check_timeout_min=5)
-        self.assertEqual(eng.run_checks({"checks": [], "files": []}, "s")[0]["exit"], 124)
+        self.assertEqual(eng.run_checks({"checks": [], "files": []}, "s")[0].exit, 124)
         eng2 = self.checks_engine(checks=[{"id": "long", "cmd": slow, "group": "tests", "timeout_min": 0.5}],
                                   check_timeout_min=0.01)
-        self.assertEqual(eng2.run_checks({"checks": [], "files": []}, "s")[0]["exit"], 0)
+        self.assertEqual(eng2.run_checks({"checks": [], "files": []}, "s")[0].exit, 0)
 
     def test_a_command_repeated_in_one_block_runs_once(self):
         cmd, n = self.counting_check("ok", ok_after=1)
         eng = self.checks_engine(checks=[{"id": "unit", "cmd": cmd, "group": "tests"}])
         res = eng.run_checks({"checks": [cmd, "  " + cmd + "  "], "files": []}, "s")
-        self.assertEqual([c["exit"] for c in res], [0, 0, 0])
-        self.assertEqual([bool(c.get("reused")) for c in res], [False, True, True])
+        self.assertEqual([c.exit for c in res], [0, 0, 0])
+        self.assertEqual([bool(c.reused) for c in res], [False, True, True])
         self.assertEqual(n.read_text(), "1")
 
     @POSIX_CHECK
@@ -480,7 +490,7 @@ class EngineTest(unittest.TestCase):
         eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests"}])
         res = eng.run_checks({"checks": ["grep -q 'Passed: 12' \"$TL_CHECK_LOG_UNITY_TESTS\" && test \"$TL_CHECK_RC_UNITY_TESTS\" = 0"],
                               "files": []}, "s")
-        self.assertEqual([c["exit"] for c in res], [0, 0])
+        self.assertEqual([c.exit for c in res], [0, 0])
         self.assertEqual(n.read_text(), "1")
 
     @POSIX_CHECK
@@ -495,7 +505,7 @@ class EngineTest(unittest.TestCase):
                      "%s > f; grep -q PASSED f"):
             n.write_text("1")
             res = eng.run_checks({"checks": [wrap % cmd], "files": []}, "s")
-            marks.append((res[1]["exit"], n.read_text()))
+            marks.append((res[1].exit, n.read_text()))
         self.assertEqual(marks, [(0, "3")] * 4)  # 1 + the configured check + the wrapper, which ran itself
 
     def test_a_plan_check_that_re_runs_a_configured_check_is_found(self):
@@ -503,7 +513,7 @@ class EngineTest(unittest.TestCase):
         plan = dict(PLAN, risks=[{"what": "x", "check": "mkdir -p x && just unity-tests > x/f && grep -q a x/f"},
                                  {"what": "y", "check": "just unity-tests-extra"}])
         self.assertEqual([i for _, i in lint.rerun_checks(plan, cfg)], ["unity-tests"])
-        self.assertEqual(lint.check_env_name("unity-tests"), "TL_CHECK_LOG_UNITY_TESTS")
+        self.assertEqual(log_var("unity-tests"), "TL_CHECK_LOG_UNITY_TESTS")
 
     def test_a_plan_with_just_unity_in_acceptance_is_sent_back_once(self):
         bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["just unity-tests"])])
@@ -517,7 +527,7 @@ class EngineTest(unittest.TestCase):
         eng = self.checks_engine(checks=[{"id": "a", "cmd": cmd, "group": "static", "timeout_min": 1, "cache": False},
                                          {"id": "b", "cmd": cmd, "group": "tests", "timeout_min": 2, "cache": False}])
         res = eng.run_checks({"checks": [], "files": []}, "s")
-        self.assertEqual((n.read_text(), [bool(c.get("reused")) for c in res]), ("1", [False, True]))
+        self.assertEqual((n.read_text(), [bool(c.reused) for c in res]), ("1", [False, True]))
 
     def test_a_slot_wait_in_a_check_is_read_and_capped_at_its_wall_time(self):
         cmd, n = self.counting_check("unity-slot: x got slot 0 after 99999999s", ok_after=1)
@@ -557,31 +567,31 @@ class EngineTest(unittest.TestCase):
     @no_repo
     def test_failure_kind_sorts_compile_errors_and_locks(self):
         for line in self.COMPILE:
-            self.assertEqual(engine.failure_kind(line), "deterministic", line)
+            self.assertEqual(check_matchers.failure_kind(line), "deterministic", line)
         for line in self.LOCK:
-            self.assertEqual(engine.failure_kind(line), "lock", line)
+            self.assertEqual(check_matchers.failure_kind(line), "lock", line)
         for line in ("AssertionError: 1 != 2", "Curl error 42", "Connection reset by peer", "", self.ECHO,
                      "error NU1301: Unable to load the service index",
                      "error MSB3021: Unable to copy file",
                      "CSC : error CS0006: Metadata file 'X.dll' could not be found",
                      "CSC : error CS2001: Source file 'A.cs' could not be found",
                      "ModuleNotFoundError: No module named 'foo'", "No such file or directory"):
-            self.assertEqual(engine.failure_kind(line), "flaky", line)
+            self.assertEqual(check_matchers.failure_kind(line), "flaky", line)
 
     @no_repo
     def test_the_normal_editor_echo_with_a_real_compile_error_is_compile_not_lock(self):
-        self.assertEqual(engine.failure_kind(self.ECHO + "\nAssets/A.cs(1,1): error CS1002: ; expected"), "deterministic")
+        self.assertEqual(check_matchers.failure_kind(self.ECHO + "\nAssets/A.cs(1,1): error CS1002: ; expected"), "deterministic")
 
     def test_a_compile_error_amid_library_or_asset_import_lines_is_retried_once(self):
         for ctx in ("Refreshing asset database", "Library/Bee/x.dll locked", "Temp/y missing"):
-            self.assertEqual(engine.failure_kind(ctx + "\nA.cs(1,1): error CS1002: ; expected"), "import", ctx)
+            self.assertEqual(check_matchers.failure_kind(ctx + "\nA.cs(1,1): error CS1002: ; expected"), "import", ctx)
         cmd, n = self.counting_check("Library/x\nA.cs(1,1): error CS1002: ; expected")
         eng = self.checks_engine(checks=[{"id": "imp", "cmd": cmd, "group": "tests", "retry": 0}])
-        self.assertEqual(eng.run_checks({"checks": [], "files": []}, "s")[0]["tries"], 2)
+        self.assertEqual(eng.run_checks({"checks": [], "files": []}, "s")[0].tries, 2)
 
     @no_repo
     def test_lock_waits_are_15_30_60_and_add_up_to_5_min(self):
-        w = engine.lock_waits()
+        w = retry.lock_waits()
         self.assertEqual(w[:4], [15, 30, 60, 60])
         self.assertEqual(sum(w), 300)
 
@@ -596,20 +606,28 @@ class EngineTest(unittest.TestCase):
         cmd, n = self.counting_check(self.COMPILE[1])
         eng = self.checks_engine(checks=[{"id": "an", "cmd": cmd, "group": "tests", "retry": 3}])
         res = eng.run_checks({"checks": [], "files": []}, "s")
-        self.assertEqual((res[0]["status"], res[0]["tries"], n.read_text()), ("failed", 1, "1"))
+        self.assertEqual((res[0].status, res[0].tries, n.read_text()), ("failed", 1, "1"))
 
     def test_an_unclassified_failure_keeps_the_retry(self):
-        cmd, n = self.counting_check("AssertionError: 1 != 2")
-        eng = self.checks_engine(checks=[{"id": "u", "cmd": cmd, "group": "tests", "retry": 2}])
+        n = Path(self.tmp.name) / "runs-differ"
+        code = ("import sys,os; p=%r; k=(int(open(p).read()) if os.path.exists(p) else 0)+1; open(p,'w').write(str(k)); "
+                "print('AssertionError: %%d != 2' %% k); sys.exit(1)" % str(n))
+        eng = self.checks_engine(checks=[{"id": "u", "cmd": PY + " -c " + shq(code), "group": "tests", "retry": 2}])
         res = eng.run_checks({"checks": [], "files": []}, "s")
-        self.assertEqual((res[0]["tries"], n.read_text()), (3, "3"))
+        self.assertEqual((res[0].tries, n.read_text()), (3, "3"))  # each failure says something else: the retry may change the answer
+
+    def test_a_retry_that_failed_the_same_way_twice_is_not_a_third_run(self):
+        cmd, n = self.counting_check("AssertionError: 1 != 2")
+        eng = self.checks_engine(checks=[{"id": "u", "cmd": cmd, "group": "tests", "retry": 5}])
+        res = eng.run_checks({"checks": [], "files": []}, "s")
+        self.assertEqual((res[0].tries, n.read_text()), (2, "2"))
 
     def test_a_locked_editor_is_waited_for_with_backoff_then_passes(self):
         cmd, n = self.counting_check(self.LOCK[0], ok_after=3)
         eng = self.checks_engine(checks=[{"id": "unity", "cmd": cmd, "group": "tests", "retry": 1}])
         with mock.patch.object(engine.time, "sleep") as sleep:
             res = eng.run_checks({"checks": [], "files": []}, "s")
-        self.assertEqual((res[0]["exit"], res[0]["status"], n.read_text()), (0, "ran", "3"))
+        self.assertEqual((res[0].exit, res[0].status, n.read_text()), (0, "passed", "3"))
         self.assertEqual([c[0][0] for c in sleep.call_args_list if c[0][0] >= 15], [15, 30])  # other threads may sleep too
 
     def test_a_lock_is_waited_for_even_on_a_check_with_no_retry(self):
@@ -617,7 +635,7 @@ class EngineTest(unittest.TestCase):
         eng = self.checks_engine(checks=[{"id": "unity", "cmd": cmd, "group": "tests", "retry": 0}])
         with mock.patch.object(engine.time, "sleep"):
             res = eng.run_checks({"checks": [], "files": []}, "s")
-        self.assertEqual((res[0]["exit"], n.read_text()), (0, "2"))
+        self.assertEqual((res[0].exit, n.read_text()), (0, "2"))
 
     def test_a_lock_that_stays_fails_after_5_min_with_the_holder_pid(self):
         cmd, n = self.counting_check(self.LOCK[2])
@@ -631,15 +649,14 @@ class EngineTest(unittest.TestCase):
                 engine.subprocess, "run", side_effect=lambda a, *k, **kw: (
                     mock.Mock(stdout="4242\n") if a[0] == "lsof" else real(a, *k, **kw))):
             res = eng.run_checks({"checks": [], "files": []}, "s")
-        self.assertEqual((res[0]["status"], sum(c[0][0] for c in sleep.call_args_list if c[0][0] >= 15)),
+        self.assertEqual((res[0].status, sum(c[0][0] for c in sleep.call_args_list if c[0][0] >= 15)),
                          ("failed", 300))
-        self.assertIn("lock holder is pid 4242", res[0]["tail"])
-        self.assertEqual(n.read_text(), str(1 + len(engine.lock_waits())))
+        self.assertIn("lock holder is pid 4242", res[0].tail)
+        self.assertEqual(n.read_text(), str(1 + len(retry.lock_waits())))
 
     @no_repo
     def test_a_passing_check_still_shows_its_notable_lines(self):
-        out = engine.compact([{"cmd": "just check", "exit": 0, "status": "ran", "group": "tests",
-                               "tail": "lane light: ok\nunity steps run: client changed\nfoo\nbar\n439 passed"}])
+        out = check_evidence.compact([res("just check", 0, tail="lane light: ok\nunity steps run: client changed\nfoo\nbar\n439 passed")])
         self.assertIn("unity steps run", out)
         self.assertIn("439 passed", out)
 
@@ -704,18 +721,18 @@ class EngineTest(unittest.TestCase):
     def test_a_red_part_after_the_reused_check_still_fails(self):
         eng = self.checks_engine(checks=[{"id": "ut", "cmd": PY + ' -c "pass"', "group": "tests"}])
         res = eng.run_checks({"checks": [PY + ' -c "pass" && ' + FALSE], "files": []}, "s")
-        self.assertEqual(res[-1]["exit"], 1)
+        self.assertEqual(res[-1].exit, 1)
 
     @POSIX_CHECK
     def test_a_stage_check_always_reruns_it_can_read_state_outside_the_tree(self):
         state = Path(self.tmp.name) / "editor-open"  # a running editor, a log, a bead comment: git cannot see them
         eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         st = {"checks": ['! test -e %s' % state], "files": []}
-        self.assertEqual(eng.run_checks(st, "s")[0]["exit"], 0)
+        self.assertEqual(eng.run_checks(st, "s")[0].exit, 0)
         state.write_text("x")
         again = eng.run_checks(st, "s")
-        self.assertEqual(again[0]["exit"], 1)
-        self.assertFalse(again[0].get("cached"))
+        self.assertEqual(again[0].exit, 1)
+        self.assertFalse(again[0].cached)
 
     def test_a_repo_check_marked_cache_false_always_reruns(self):
         count = Path(self.tmp.name) / "count"
@@ -733,13 +750,13 @@ class EngineTest(unittest.TestCase):
         eng.run_checks(st, "s")
         again = eng.run_checks(st, "s")
         self.assertEqual(count.read_text(), "11")
-        self.assertFalse(again[0].get("cached"))
+        self.assertFalse(again[0].cached)
 
     @POSIX_CHECK
     def test_checks_run_in_bash(self):
         eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         res = eng.run_checks({"checks": ['diff <(echo a) <(echo a)'], "files": []}, "s")
-        self.assertEqual(res[0]["exit"], 0, res[0]["tail"])
+        self.assertEqual(res[0].exit, 0, res[0].tail)
 
     @POSIX_CHECK
     def test_a_failing_command_in_a_check_fails_it_wherever_it_sits(self):
@@ -748,7 +765,7 @@ class EngineTest(unittest.TestCase):
         cases = {FALSE + "; true": 1, FALSE + " | cat": 1, "! " + FALSE: 0, FALSE + " || true": 0,
                  "if " + FALSE + "; then exit 3; fi": 0, "true; true": 0}
         res = eng.run_checks({"checks": list(cases), "files": []}, "s")
-        self.assertEqual({c["cmd"]: c["exit"] != 0 for c in res}, {k: v != 0 for k, v in cases.items()})
+        self.assertEqual({c.cmd: c.exit != 0 for c in res}, {k: v != 0 for k, v in cases.items()})
 
     def test_a_stop_during_a_check_stops_the_check_and_everything_it_started(self):
         if os.name == "nt":
@@ -841,7 +858,7 @@ class EngineTest(unittest.TestCase):
 
     def test_red_checks_never_reach_review_and_end_the_round(self):
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[FALSE])])
-        rc, s = self.run_engine({"plan": [plan], "write": [WRITE] * 4}, max_rounds=2, max_check_tries=2, max_replans=0)
+        rc, s = self.run_engine({"plan": [plan], "write": [WRITE] * 4}, max_rounds=2, max_check_tries=2, max_replans=0, max_same_red=0)
         self.assertEqual(rc, 2)
         self.assertNotIn("reviewer", [c[0] for c in s.calls])
         self.assertEqual([c[0] for c in s.calls].count("worker"), 4)
@@ -1192,9 +1209,9 @@ class EngineTest(unittest.TestCase):
         t = time.time()
         res = eng.run_checks({"checks": [self.SPAWN % pidfile + "wait"], "files": []}, "s")
         self.assertLess(time.time() - t, 15, "the engine waited for the check's child to end by itself")
-        self.assertEqual(res[0]["exit"], 124)
-        self.assertIn("timed out after 0.03 min", res[0]["tail"])
-        self.assertEqual(res[0]["status"], "failed")
+        self.assertEqual(res[0].exit, 124)
+        self.assertIn("timed out after 0.03 min", res[0].tail)
+        self.assertEqual(res[0].status, "failed")
         self.assertDead(self.child_of(pidfile))
 
     @no_repo
@@ -1206,8 +1223,8 @@ class EngineTest(unittest.TestCase):
         t = time.time()
         res = eng.run_checks({"checks": [PY + ' -c "import time; time.sleep(30)"'], "files": []}, "s")
         self.assertLess(time.time() - t, 15)
-        self.assertEqual((res[0]["exit"], res[0]["status"]), (124, "failed"))
-        self.assertIn("timed out after 0.02 min", res[0]["tail"])
+        self.assertEqual((res[0].exit, res[0].status), (124, "failed"))
+        self.assertIn("timed out after 0.02 min", res[0].tail)
 
     def test_sigterm_during_a_stage_check_stops_its_tree_and_still_closes(self):
         pidfile = Path(self.tmp.name, "child.pid")
@@ -1633,8 +1650,8 @@ class EngineTest(unittest.TestCase):
 
     @no_repo
     def test_a_check_is_engine_only_by_its_last_duration_else_by_its_name(self):
-        e = mock.Mock(cfg=cfg_with(writer_check_max_s=60))
-        only = lambda cmd, secs: engine.Engine.engine_only(e, cmd, secs)
+        def only(cmd, secs):
+            return WriterSplit(cfg_with(writer_check_max_s=60), secs).engine_only(cmd)
         self.assertTrue(only("just lint", {"just lint": 61}))
         self.assertFalse(only("just unity-tests", {"just unity-tests": 60}))
         self.assertTrue(only("just play-tests", {}))
@@ -1845,9 +1862,9 @@ class EngineTest(unittest.TestCase):
         self.assertIn("conflict", s.prompts[3])
         rounds = self.checks_records()
         self.assertEqual(len(rounds), 2)  # the stage, then the conflict fix
-        fix = {i["id"]: i for i in rounds[1]["items"]}
-        self.assertEqual(fix[engine.Engine.MARKERS]["status"], "ran")
-        self.assertEqual(fix["build"]["status"], "ran")
+        fix = {i["id"]: i for i in rounds[1]["run"]["results"]}
+        self.assertEqual(fix[engine.Engine.MARKERS]["status"], "passed")
+        self.assertEqual(fix["build"]["status"], "passed")
         for skipped in ("unit", HAS_F, stage_check):
             self.assertEqual((fix[skipped]["status"], fix[skipped]["why"]), ("skipped", "conflict_fix"), skipped)
         self.assertEqual((len(build_log.read_text()), len(unit_log.read_text()), len(stage_log.read_text())), (2, 1, 1))
@@ -1865,7 +1882,7 @@ class EngineTest(unittest.TestCase):
             return r
         with mock.patch.object(fake_route.Script, "reply", write_markers):
             rc, s = self.conflict_run({"plan": [PLAN], "write": [WRITE, marked, WRITE], "review": [CLEAN, CLEAN, CLEAN]})
-        recs = [{i["id"]: i["status"] for i in r["items"]} for r in self.checks_records()]
+        recs = [{i["id"]: i["status"] for i in r["run"]["results"]} for r in self.checks_records()]
         self.assertEqual(recs[1][engine.Engine.MARKERS], "failed")  # the marker check judged it, not a stage check
         self.assertEqual(rc, 0, self.blocked)
 
@@ -1934,10 +1951,10 @@ class EngineTest(unittest.TestCase):
                                           "touch %s" % state["next_check"]])
                 if failure in ("checks", "checks_fixed", "checks_exhausted", "review_exhausted") and not state.get("check_failed"):
                     state["check_failed"] = True
-                    return [{"cmd": "retry check", "status": "failed", "exit": 1, "tail": "red", "group": "tests"}]
+                    return CheckRun(round=0, results=[res("retry check", 1, tail="red")])
             result = real_checks(this, st, name, *a, **kw)
             if failure == "checks_exhausted" and (name.startswith("fix ") or state.get("resuming")):
-                result = [dict(c, status="failed", exit=1, tail="still red") for c in result]
+                result = dataclasses.replace(result, results=[dataclasses.replace(c, status="failed", exit=1, tail="still red") for c in result])
             if state.get("resuming"):
                 state.setdefault("resume_checks", []).append(result)
             if name == "land retry":
@@ -2051,7 +2068,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(events.count("enter"), 1)
         self.assertEqual({key: path.read_text() for key, path in counts.items()},
                          {key: "1" if key == "same" else "11" for key in counts})
-        cached = {c["id"] for c in state["results"][0] if c.get("cached")}
+        cached = {c.id for c in state["results"][0] if c.cached}
         self.assertEqual(cached, {"same"})
 
     def push_race_failure_path_cell(self, failure, after):
@@ -2088,7 +2105,7 @@ class EngineTest(unittest.TestCase):
             self.assertEqual(state["resume_calls"], ["planner", "worker"] +
                              (["reviewer"] if failure == "review_exhausted" else []))
             self.assertEqual(len(state["resume_checks"]), 1)
-            self.assertEqual(any(c["status"] == "failed" for c in state["resume_checks"][0]),
+            self.assertEqual(any(c.status == "failed" for c in state["resume_checks"][0]),
                              failure == "checks_exhausted")
             self.assertEqual(state["pushes"], 1)  # only the initial, rejected push
             self.assertEqual(state["gates"], 1)  # a green gate cannot accept the failed fix
@@ -2106,7 +2123,7 @@ class EngineTest(unittest.TestCase):
         real_fix, real_stage = engine.Engine.fix, engine.Engine.stage
         real_delegate = fake_route.Script.reply
         real_sh, real_checks = engine.Engine.sh, engine.Engine.run_checks
-        real_brief = engine.failure_brief
+        real_brief = check_evidence.failure_brief
         real_checkpoint, real_move = engine.Engine.save_checkpoint, Steps.move
         gate = PY + ' -c "pass"'
         with self.stoppable(), mock.patch.object(tl, "cmd_land") as land:
@@ -2120,7 +2137,7 @@ class EngineTest(unittest.TestCase):
 
             def brief(bad, run_dir):
                 # Red results must replace the pre-check recovery barrier without a signal gap.
-                if any(c.get("cmd") == "retry check" for c in bad):
+                if any(c.cmd == "retry check" for c in bad):
                     interrupt_boundary("failed_checks")
                 return real_brief(bad, run_dir)
 
@@ -2169,7 +2186,7 @@ class EngineTest(unittest.TestCase):
 
             with mock.patch.object(engine.Engine, "fix", fix), \
                     mock.patch.object(engine.Engine, "stage", stage), \
-                    mock.patch.object(engine, "failure_brief", brief), \
+                    mock.patch.object(check_evidence, "failure_brief", brief), \
                     mock.patch.object(engine.Engine, "save_checkpoint", checkpoint), \
                     mock.patch.object(Steps, "move", move), \
                     mock.patch.object(fake_route.Script, "reply", delegate):
@@ -2222,7 +2239,7 @@ class EngineTest(unittest.TestCase):
                 self.assertEqual([c[0] for c in script.calls], ["planner", "worker"] +
                                  (["reviewer"] if role == "reviewer" else []))
                 self.assertEqual(len(recovery_checks), 1)
-                self.assertEqual(any(c["exit"] for c in recovery_checks[0]), role != "reviewer")
+                self.assertEqual(any(c.exit for c in recovery_checks[0]), role != "reviewer")
                 self.assertIn(seen["failure"], self.checkpoint()["pending_land_validation"])
                 self.assertEqual(self.checkpoint()["step"], "land-verify-red")
                 self.assertFalse(recovery_pushes)
@@ -2236,7 +2253,7 @@ class EngineTest(unittest.TestCase):
                 self.assertEqual(rc, 0, self.blocked)
                 self.assertEqual([c[0] for c in script.calls], ["planner", "worker", "reviewer"])
                 self.assertEqual(len(recovery_checks), 2)
-                self.assertTrue(all(c["exit"] == 0 for c in recovery_checks[-1]))
+                self.assertTrue(all(c.exit == 0 for c in recovery_checks[-1]))
                 self.assertEqual(len(recovery_pushes), 1)
                 self.assertFalse(self.eng.pending_land_validation)
                 self.assertIsNone(self.checkpoint())
@@ -3521,7 +3538,7 @@ class EngineTest(unittest.TestCase):
     def test_dry_check_reads_syntax_process_substitution_and_missing_files(self):
         def plan(*checks, files=("new.txt",)):
             return dict(PLAN, stages=[dict(PLAN["stages"][0], checks=list(checks), files=list(files))])
-        wt = str(self.wt)
+        wt = ShellProbe(self.wt, sproc.current_env())
         self.assertEqual(lint.dry_check(plan("test -f a.txt", "test -f new.txt", "grep -q '<(' a.txt", HAS_F), wt), [])
         self.assertEqual(lint.dry_check(plan("cd sub && cat nope.txt", "echo hi > out.log; test -f out.log"), wt), [])
         self.assertEqual(lint.dry_check(plan("test -f $HOME/x", "cat dir/*.txt"), wt), [])
@@ -3879,19 +3896,15 @@ class LandReview(EngineTest):
     SUITE = "tests/Sim.Properties/bin/Debug/net10.0/Sim.Properties --filter-class '*SleepSkipTests'"
 
     def engine_checks(self, **over):
-        rows = [{"id": "fmt", "cmd": "just fmt-check", "group": "static", "exit": 0, "status": "ran", "secs": 4,
-                 "log": "checks/00-fmt.r1.log", "tail": ""},
-                {"id": "unity-analyzers", "cmd": "just unity-analyzers", "group": "static", "exit": None, "status": "skipped",
-                 "why": "no change under client/**", "tail": ""},
-                {"id": "unity-tests", "cmd": "just unity-tests", "group": "tests", "exit": None, "status": "skipped",
-                 "why": "no change under client/**, content/**", "tail": ""},
-                {"id": self.SUITE, "cmd": self.SUITE, "group": "acceptance", "exit": 0, "status": "ran", "secs": 3,
-                 "log": "checks/06-tests_Sim.Properties.r2.log", "tail": "succeeded: 4"}]
-        return [dict(r, **over.get(r["id"], {})) for r in rows]
+        rows = [res("just fmt-check", 0, id="fmt", group="static", secs=4, log="checks/00-fmt.r1.log"),
+                res("just unity-analyzers", None, id="unity-analyzers", group="static", why="no change under client/**"),
+                res("just unity-tests", None, id="unity-tests", why="no change under client/**, content/**"),
+                res(self.SUITE, 0, id=self.SUITE, group="acceptance", secs=3, log="checks/06-tests_Sim.Properties.r2.log", tail="succeeded: 4")]
+        return [dataclasses.replace(r, **over.get(r.id, {})) for r in rows]
 
     def evidenced(self, checks=None, attrs=None):
         e = self.verifier(attrs, checks=self.CFG_CHECKS[:2], gate="just check")
-        e.last_checks, e.checks_tree = (checks or self.engine_checks()), e.tree_hash()
+        e.last_run = CheckRun(round=1, tree=e.tree_hash(), results=checks or self.engine_checks())
         return e
 
     def test_the_yxbb6_item_is_not_settled_by_a_suite_name_but_the_brief_carries_the_evidence_and_the_skip_rule(self):
@@ -3926,8 +3939,7 @@ class LandReview(EngineTest):
                 "unit tests for the new function were never run" + cannot,
                 "unity-tests and unity-*: no saved log" + cannot, "the Sim.Properties suite passed" + cannot]
         for what in asks:
-            e = self.evidenced(self.engine_checks() + [{"id": "test", "cmd": "pytest tests/unit", "group": "tests", "exit": 0,
-                                                       "status": "ran", "secs": 1, "log": "checks/x.log", "tail": ""}])
+            e = self.evidenced(self.engine_checks() + [res("pytest tests/unit", 0, id="test", secs=1, log="checks/x.log")])
             with mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="x")]}, None)) as ai:
                 self.assertEqual(len(e.self_verify([{"what": what, "kind": "tooling"}])), 1, what)
             self.assertEqual(ai.call_count, 1, what)
@@ -3935,19 +3947,18 @@ class LandReview(EngineTest):
     def test_a_red_check_an_older_tree_or_an_unknown_tree_settles_nothing(self):
         what = "`unity-tests`: no saved log, so I cannot prove it"
         for how in ("red", "older", "unknown"):
-            e = self.evidenced(self.engine_checks(**({"unity-tests": {"exit": 1, "status": "failed"}} if how == "red" else {})))
+            e = self.evidenced(self.engine_checks(**({"unity-tests": {"exit": 1, "status": "failed", "why": ""}} if how == "red" else {})))
             if how == "older":
-                e.checks_tree = "0" * 40
+                e.last_run = dataclasses.replace(cast(CheckRun, e.last_run), tree="0" * 40)
             if how == "unknown":
-                e.last_checks = None
+                e.last_run = None
                 e.run_dir = Path(self.tmp.name, "nope")
             with mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="x")]}, None)) as ai:
                 self.assertEqual(len(e.self_verify([{"what": what, "kind": "tooling"}])), 1, how)
             self.assertEqual(ai.call_count, 1, how)
 
     def test_the_brief_lists_at_most_30_checks_of_300_characters(self):
-        e = self.evidenced([{"id": "c%d" % i, "cmd": "x" * 900, "group": "tests", "exit": 0, "status": "ran", "secs": 1,
-                             "log": "checks/l.log", "tail": ""} for i in range(40)])
+        e = self.evidenced([res("x" * 900, 0, id="c%d" % i, secs=1, log="checks/l.log") for i in range(40)])
         text = e.checks_evidence()
         rows = [ln for ln in text.splitlines() if ln.startswith("- ")]
         self.assertEqual(len(rows), 31)

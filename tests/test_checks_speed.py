@@ -6,18 +6,34 @@ import subprocess
 import sys
 import time
 import unittest
+from unittest import mock
+from typing import Any
+from dataclasses import replace
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import test_engine as te  # noqa: E402
 from test_engine import PY, engine  # noqa: E402,F401
-from checks import lint  # noqa: E402
+from taskloop.domain.checks import lint, inputs, durations  # noqa: E402
+from taskloop.domain.checks.order import CheckOrder  # noqa: E402
+from taskloop.domain.checks import matchers  # noqa: E402
+from taskloop.domain.checks.names import norm  # noqa: E402
+from taskloop.adapters import check_files  # noqa: E402
+from taskloop.app.checks.cache import InputKeys  # noqa: E402
+from taskloop.contracts.checks import Check, Durations  # noqa: E402
 from support.builders import cfg_with  # noqa: E402
-from checks import speed as cs  # noqa: E402
+
+
+def ignored_paths(wt, globs, exclude=()):
+    listed = check_files.ignored_files(str(wt), inputs.pathspec(globs, exclude), os.environ)
+    return inputs.matching(listed, globs, exclude)
 
 
 class SpeedTest(unittest.TestCase):
+    wt: Path
+    tmp: Any
+
     setUp = te.EngineTest.setUp
     tearDown = te.EngineTest.tearDown
     fake_bd = te.EngineTest.fake_bd
@@ -51,7 +67,7 @@ class InputCache(SpeedTest):
         te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=self.wt)  # the base moves
         again = eng.run_checks(self.ST, "s")
         self.assertEqual(n.read_text(), "1")
-        self.assertTrue(again[0]["cached"])
+        self.assertTrue(again[0].cached)
         self.assertTrue(any("cached: unity, inputs unchanged since round 1" in t for t in self.notes(eng)))
 
     def test_an_edit_inside_the_inputs_or_another_command_reruns(self):
@@ -115,20 +131,17 @@ class InputCache(SpeedTest):
             (self.wt / (n + ".gen")).parent.mkdir(parents=True, exist_ok=True)
             (self.wt / (n + ".gen")).write_text("x")
         for g in ("client/*/*.X", "client/**/*.X", "client/*.X", "client/{App,Core}/**", "client/{App,Core}/*.X", "client/**"):
-            t_ = {p[:-3] for p in tracked if cs.inputs_hash({p: tracked[p]}, [g.replace("X", "cs")])}
-            i_ = {p[:-4] for p in cs.ignored_paths(str(self.wt), [g.replace("X", "gen")])}
+            t_ = {p[:-3] for p in tracked if inputs.inputs_hash({p: tracked[p]}, [g.replace("X", "cs")])}
+            i_ = {p[:-4] for p in ignored_paths(str(self.wt), [g.replace("X", "gen")])}
             self.assertEqual(t_, i_, g)
-        self.assertEqual({p[:-4] for p in cs.ignored_paths(str(self.wt), ["client/*/*.gen"])}, {"client/App/a", "client/Core/c", "client/Other/d"})
-        self.assertEqual({p[:-4] for p in cs.ignored_paths(str(self.wt), ["client/{App,Core}/**"])}, {"client/App/a", "client/App/sub/b", "client/Core/c"})
+        self.assertEqual({p[:-4] for p in ignored_paths(str(self.wt), ["client/*/*.gen"])}, {"client/App/a", "client/Core/c", "client/Other/d"})
+        self.assertEqual({p[:-4] for p in ignored_paths(str(self.wt), ["client/{App,Core}/**"])}, {"client/App/a", "client/App/sub/b", "client/Core/c"})
 
     def test_the_ignored_walk_is_cut_to_the_globs_folders_and_the_excluded_ones(self):
         seen = []
-        real = cs.subprocess.run
-        cs.subprocess.run = lambda args, **kw: (seen.append(args), real(args, **kw))[1]
-        try:
-            cs.ignored_paths(str(self.wt), ["client/Assets/{App,Core}/**"], ["client/Assets/App/*/Gen/**"])
-        finally:
-            cs.subprocess.run = real
+        real = check_files.subprocess.run
+        with mock.patch.object(check_files.subprocess, "run", side_effect=lambda args, **kw: (seen.append(args), real(args, **kw))[1]):
+            ignored_paths(str(self.wt), ["client/Assets/{App,Core}/**"], ["client/Assets/App/*/Gen/**"])
         spec = " ".join(seen[0])
         self.assertIn(":(literal)client/Assets/App/", spec)
         self.assertIn(":(literal)client/Assets/Core/", spec)
@@ -141,17 +154,17 @@ class InputCache(SpeedTest):
         (self.wt / "client" / "a.cs").write_text("1\n")
         (self.wt / "client" / "Gen" / "t.cs").write_text("1\n")
         (self.wt / "client" / "Gen" / "i.gen").write_text("1\n")
-        c = {"cmd": "x", "inputs": ["client/**"], "inputs_only": True, "exclude": ["client/Gen/**"]}
+        c = Check(id="x", cmd="x", inputs=["client/**"], inputs_only=True, exclude=["client/Gen/**"])
 
         def key():
-            return cs.InputKeys(str(self.wt), self.tree(), "b").key(c)
+            return InputKeys(self.wt, self.tree(), "b", os.environ).key(c)
         k = key()
         (self.wt / "client" / "Gen" / "i.gen").write_text("2\n")  # an excluded ignored file
         (self.wt / "client" / "Gen" / "t.cs").write_text("2\n")  # an excluded tracked (here: untracked-new) file
         self.assertEqual(key(), k)
         (self.wt / "client" / "a.cs").write_text("2\n")
         self.assertNotEqual(key(), k)
-        self.assertNotEqual(cs.InputKeys(str(self.wt), self.tree(), "b").key(dict(c, exclude=[])), key())
+        self.assertNotEqual(InputKeys(self.wt, self.tree(), "b", os.environ).key(replace(c, exclude=[])), key())
 
     def tree(self):
         return self.eng_tree.tree_hash()
@@ -166,7 +179,7 @@ class InputCache(SpeedTest):
             eng.run_checks(self.ST, "s")
             again = eng.run_checks(self.ST, "s")
             self.assertEqual(n.read_text(), "11", globs)  # one dead glob is enough
-            self.assertFalse(again[0].get("cached"))
+            self.assertFalse(again[0].cached)
 
     def test_doctor_reports_a_dead_inputs_glob(self):
         (self.wt / "a.cs").write_text("1\n")
@@ -192,14 +205,14 @@ class InputCache(SpeedTest):
     def test_a_red_check_with_inputs_is_not_remembered(self):
         eng = self.checks_engine(checks=[{"id": "t", "cmd": te.FALSE, "group": "tests", "inputs": ["*.txt"]}])
         eng.run_checks(self.ST, "s")
-        self.assertFalse(eng.run_checks(self.ST, "s")[0].get("cached"))
+        self.assertFalse(eng.run_checks(self.ST, "s")[0].cached)
 
     def test_inputs_hash_ignores_files_outside_the_globs(self):
         a = {"x/a": "100644 blob 1", "y/b": "100644 blob 2"}
         b = dict(a, **{"y/b": "100644 blob 3"})
-        self.assertEqual(cs.inputs_hash(a, ["x/**"]), cs.inputs_hash(b, ["x/**"]))
-        self.assertNotEqual(cs.inputs_hash(a, ["y/**"]), cs.inputs_hash(b, ["y/**"]))
-        self.assertEqual(cs.inputs_hash(a, ["z/**"]), "")
+        self.assertEqual(inputs.inputs_hash(a, ["x/**"]), inputs.inputs_hash(b, ["x/**"]))
+        self.assertNotEqual(inputs.inputs_hash(a, ["y/**"]), inputs.inputs_hash(b, ["y/**"]))
+        self.assertEqual(inputs.inputs_hash(a, ["z/**"]), "")
 
 
 class CheapFirst(SpeedTest):
@@ -209,7 +222,8 @@ class CheapFirst(SpeedTest):
         return mark, step("slow"), step("quick")
 
     def seed(self, eng, cmd, secs):
-        cs.record_durations(str(self.wt), [(cmd, secs)] * 3, config_dir=os.environ["XDG_CONFIG_HOME"] + "/task-loop")
+        doc = eng.stores.durations.of(check_files.repo_key(str(self.wt), eng.git_env()))
+        doc.write(durations.merged(doc.read() or Durations(), [(cmd, secs)] * 3))
 
     @te.POSIX_CHECK
     def test_the_cheaper_check_runs_first_and_a_red_stops_the_round(self):
@@ -219,8 +233,8 @@ class CheapFirst(SpeedTest):
         self.seed(eng, slow, 400)
         self.seed(eng, quick + "; exit 1", 2)
         res = eng.run_checks({"checks": [], "files": []}, "s")
-        self.assertEqual([c["id"] for c in res], ["quick", "slow"])
-        self.assertEqual([c["status"] for c in res], ["failed", "skipped"])
+        self.assertEqual([c.id for c in res], ["quick", "slow"])
+        self.assertEqual([c.status for c in res], ["failed", "skipped"])
         self.assertEqual(mark.read_text(), "quick ")
 
     def test_cheap_checks_all_run_before_the_stop_and_only_green_runs_are_recorded(self):
@@ -230,10 +244,10 @@ class CheapFirst(SpeedTest):
                                          {"id": "c", "cmd": slow, "group": "tests"}])
         self.seed(eng, slow, 400)
         res = eng.run_checks({"checks": [], "files": []}, "s")
-        self.assertEqual([(c["id"], c["status"]) for c in res], [("a", "failed"), ("b", "ran"), ("c", "skipped")])
-        hist = cs.load_durations(str(self.wt))
-        self.assertNotIn(cs.norm(red), hist)
-        self.assertIn(cs.norm(quick), hist)
+        self.assertEqual([(c.id, c.status) for c in res], [("a", "failed"), ("b", "passed"), ("c", "skipped")])
+        hist = (eng.stores.durations.of(check_files.repo_key(str(self.wt), eng.git_env())).read() or Durations()).runs
+        self.assertNotIn(norm(red), hist)
+        self.assertIn(norm(quick), hist)
 
     def test_unknown_commands_count_as_cheap_and_durations_are_recorded(self):
         mark, slow, quick = self.slow_then_fast()
@@ -241,10 +255,10 @@ class CheapFirst(SpeedTest):
                                          {"id": "new", "cmd": quick, "group": "tests"}])
         self.seed(eng, slow, 90)
         res = eng.run_checks({"checks": [], "files": []}, "s")
-        self.assertEqual([c["id"] for c in res], ["new", "known"])
-        hist = cs.load_durations(str(self.wt))
-        self.assertEqual(len(hist[cs.norm(quick)]), 1)
-        self.assertEqual(len(hist[cs.norm(slow)]), 4)
+        self.assertEqual([c.id for c in res], ["new", "known"])
+        hist = (eng.stores.durations.of(check_files.repo_key(str(self.wt), eng.git_env())).read() or Durations()).runs
+        self.assertEqual(len(hist[norm(quick)]), 1)
+        self.assertEqual(len(hist[norm(slow)]), 4)
 
     def test_a_check_reading_another_checks_log_stays_after_it(self):
         reader = 'test -n "$TL_CHECK_LOG_SLOW"'
@@ -252,12 +266,12 @@ class CheapFirst(SpeedTest):
                                          {"id": "reader", "cmd": reader, "group": "tests"}])
         self.seed(eng, PY + ' -c "pass"', 300)
         res = eng.run_checks({"checks": [], "files": []}, "s")
-        self.assertEqual([(c["id"], c["status"]) for c in res], [("slow", "ran"), ("reader", "ran")])
+        self.assertEqual([(c.id, c.status) for c in res], [("slow", "passed"), ("reader", "passed")])
 
     def test_order_ignores_sub_five_second_noise(self):
-        items = [{"cmd": "a", "g": 0}, {"cmd": "b", "g": 0}]
-        hist = {"a": [3.0], "b": [0.1]}
-        self.assertEqual([i["cmd"] for i in cs.order_by_cost(items, hist, lambda c: 0)], ["a", "b"])
+        items = [Check(id="a", cmd="a"), Check(id="b", cmd="b")]
+        order = CheckOrder(Durations(runs={"a": [3.0], "b": [0.1]}))
+        self.assertEqual(order.sort(items, {}), [0, 1])
 
 
 class Duplicates(SpeedTest):
@@ -272,7 +286,7 @@ class Duplicates(SpeedTest):
         wrap = "mkdir -p ev && %s > ev/out.log && grep -q 'Passed: 12' ev/out.log" % cmd
         res = eng.run_checks({"checks": [wrap], "files": []}, "s")
         self.assertEqual(n.read_text(), "1")
-        self.assertEqual([(c["id"] == "unity-tests", c["status"]) for c in res], [(True, "ran"), (False, "ran")])
+        self.assertEqual([(c.id == "unity-tests", c.status) for c in res], [(True, "passed"), (False, "passed")])
         self.assertIn("Passed: 12", (self.wt / "ev" / "out.log").read_text())
         self.assertTrue(any("reuses the log of `unity-tests`" in t for t in self.notes(eng)))
 
@@ -280,7 +294,7 @@ class Duplicates(SpeedTest):
         cmd, n = self.counter()
         eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests"}])
         res = eng.run_checks({"checks": ["%s > ev.log && grep -q 'Passed: 99' ev.log" % cmd], "files": []}, "s")
-        self.assertEqual((n.read_text(), res[-1]["status"]), ("1", "failed"))
+        self.assertEqual((n.read_text(), res[-1].status), ("1", "failed"))
 
     @te.POSIX_CHECK
     def test_no_wrapper_pattern_that_is_not_the_bare_command_skips_the_repo_check(self):
@@ -293,7 +307,7 @@ class Duplicates(SpeedTest):
             n.write_text("")
             eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests", "cache": False}])
             res = eng.run_checks({"checks": [w], "files": []}, "s")
-            self.assertEqual(res[0]["status"], "ran", w)  # the repo check always runs
+            self.assertEqual(res[0].status, "passed", w)  # the repo check always runs
             if "echo 'sh" not in w:
                 self.assertEqual(len(n.read_text().split()), 2, w)  # and the wrapper runs its own copy as written
 
@@ -301,29 +315,29 @@ class Duplicates(SpeedTest):
         (self.wt / "other.xml").write_text("x\n")
         for extra, ok in (("grep -q 'Passed: 12' o.log", True), ("grep -q Passed other.xml", False), ("grep -q Passed $(ls)", False),
                           ("python3 check.py o.log", False), ("grep -q Passed ./o.log", False)):
-            self.assertEqual(bool(cs.reuse_log("sh t.sh > o.log && " + extra, "sh t.sh", "V", str(self.wt))), ok, extra)
+            self.assertEqual(bool(matchers.reuse_log("sh t.sh > o.log && " + extra, "sh t.sh", "V", lambda f: (self.wt / f).exists())), ok, extra)
 
     def test_a_wrapper_runs_in_full_when_the_repo_check_is_cached_without_a_log_or_skipped(self):
         cmd, n = self.counter()
         eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests", "when": ["nothing/**"]}])
         wrap = "%s > ev.log && grep -q 'Passed: 12' ev.log" % cmd
         res = eng.run_checks({"checks": [wrap], "files": []}, "s")
-        self.assertEqual(([c["status"] for c in res], n.read_text()), (["skipped", "ran"], "1"))
+        self.assertEqual(([c.status for c in res], n.read_text()), (["skipped", "passed"], "1"))
 
     def test_a_red_recipe_ends_the_round_before_the_wrapper(self):
         red, n = self.counter(1)
         eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": red, "group": "tests"}])
         res = eng.run_checks({"checks": ["%s > ev.log" % red], "files": []}, "s")
-        self.assertEqual(([c["status"] for c in res], n.read_text()), (["failed", "skipped"], "1"))
+        self.assertEqual(([c.status for c in res], n.read_text()), (["failed", "skipped"], "1"))
 
     def test_a_quoted_mention_is_not_a_wrapper(self):
         cmd, n = self.counter()
         eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests"}])
         res = eng.run_checks({"checks": ["echo %s" % shlex.quote(cmd)], "files": []}, "s")
-        self.assertEqual(([c["status"] for c in res], n.read_text()), (["ran", "ran"], "1"))
+        self.assertEqual(([c.status for c in res], n.read_text()), (["passed", "passed"], "1"))
 
     def test_reuse_log_keeps_redirections_and_refuses_what_it_cannot_split(self):
-        f = cs.reuse_log
+        f = lambda outer, inner, var: matchers.reuse_log(outer, inner, var, lambda f: False)
         self.assertEqual(f("mkdir -p e && just t > e/o 2>&1 && grep P e/o", "just t", "V"), 'mkdir -p e && cat "$V" > e/o 2>&1 && grep P e/o')
         self.assertEqual(f("just t | tee e/l && grep P e/l", "just t", "V"), 'cat "$V" | tee e/l && grep P e/l')
         self.assertIsNone(f("just t | tee e/l; grep P e/l", "just t", "V"))
@@ -388,25 +402,25 @@ class Schedule(SpeedTest):
         eng = self.checks_engine(checks=repo, **cfg)
         launched = []
 
-        def fake(cmd, timeout=3600, check=False, save=None, env=None, pin=False, idle=0):
+        def fake(cmd, timeout=3600, check=False, save=None, env=None, pin=False, idle=0, **kw):
             if not isinstance(cmd, str):
                 return real(cmd, timeout=timeout, check=check, save=save, env=env, pin=pin, idle=idle)
             launched.append(cmd)
             eng.hung = False
             if save:
                 Path(save).write_text("ran %s\n" % cmd)
-            return (1 if cmd in red else 0), "ran"
+            return (1 if cmd in red else 0), "passed"
         real = eng.sh
-        eng.sh = fake
+        setattr(eng, "sh", fake)  # noqa: B010
         res = eng.run_checks({"checks": accept, "files": []}, "s")
-        return res, launched, {i: secs.get(c["cmd"], 0) if c.get("log") else 0 for i, c in enumerate(res)}
+        return res, launched, {i: secs.get(c.cmd, 0) if c.log else 0 for i, c in enumerate(res)}
 
     def test_a_plan_copy_with_a_longer_limit_than_the_repo_check_is_one_launch(self):
         cmd, n = self.counter()
         eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests", "timeout_min": 30, "cache": False}])
         res = eng.run_checks({"checks": [cmd], "files": []}, "s")  # the plan's copy gets check_timeout_min, 60
         self.assertEqual(eng.cfg.check_timeout_min, 60)
-        self.assertEqual((n.read_text(), [bool(c.get("reused")) for c in res]), ("1", [False, True]))
+        self.assertEqual((n.read_text(), [bool(c.reused) for c in res]), ("1", [False, True]))
 
     def counter(self, code=0):
         n = Path(self.tmp.name) / "unity-runs"
@@ -417,12 +431,12 @@ class Schedule(SpeedTest):
         cmd, n = self.counter()
         eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests", "cache": False}])
         res = eng.run_checks({"checks": ["mkdir -p e && %s > e/log 2>&1" % cmd], "files": []}, "s")
-        self.assertEqual((n.read_text(), [c["status"] for c in res]), ("1", ["ran", "ran"]))
-        self.assertEqual(cs.canon("mkdir -p e && just unity-tests > e/log"), "just unity-tests")
-        self.assertEqual(cs.canon("just   unity-tests  | tee -a e/log"), "just unity-tests")
+        self.assertEqual((n.read_text(), [c.status for c in res]), ("1", ["passed", "passed"]))
+        self.assertEqual(matchers.canon("mkdir -p e && just unity-tests > e/log"), "just unity-tests")
+        self.assertEqual(matchers.canon("just   unity-tests  | tee -a e/log"), "just unity-tests")
         for kept in ("FOO=1 just unity-tests", "just unity-tests foo", "cd client && just unity-tests", "just unity-tests; true",
                      "mkdir e && just a && just b", "! just unity-tests"):
-            self.assertEqual(cs.canon(kept), " ".join(kept.split()), kept)
+            self.assertEqual(matchers.canon(kept), " ".join(kept.split()), kept)
 
     def test_a_first_run_that_timed_out_under_a_shorter_limit_is_not_reused_by_a_longer_one(self):
         n = Path(self.tmp.name) / "slow-runs"
@@ -430,15 +444,15 @@ class Schedule(SpeedTest):
         eng = self.checks_engine(checks=[{"id": "short", "cmd": slow, "group": "tests", "timeout_min": 0.02, "cache": False},
                                          {"id": "long", "cmd": slow, "group": "tests", "timeout_min": 1, "cache": False}])
         res = eng.run_checks({"checks": [], "files": []}, "s")
-        self.assertEqual(([c["exit"] for c in res], n.read_text()), ([124, 0], "11"))
+        self.assertEqual(([c.exit for c in res], n.read_text()), ([124, 0], "11"))
 
     def test_replay_yxbb3_r1_the_acceptance_copies_of_the_unity_checks_add_nothing(self):
         res, launched, secs = self.replay(self.REPO, self.ACCEPTANCE_R1, self.R1)
         for c in ("just unity-analyzers", "just unity-tests", "just unity-play-tests"):
             self.assertEqual(launched.count(c), 1, c)  # r1 launched unity-tests and unity-play-tests twice
-        copies = [r for r in res if r["group"] == "acceptance" and r["cmd"].startswith("just unity-")]
+        copies = [r for r in res if r.group == "acceptance" and r.cmd.startswith("just unity-")]
         self.assertEqual(len(copies), 6)  # the analyzers, unity-tests and four play-test copies, as in r1
-        self.assertTrue(all(r.get("reused") for r in copies))
+        self.assertTrue(all(r.reused for r in copies))
         # r1 as recorded spent 869 s on the repo checks plus 208 s (unity-tests) and 536 s (unity-play-tests) on acceptance copies
         self.assertEqual(sum(self.R1[c] for c in launched), 869)
 
@@ -453,16 +467,17 @@ class Schedule(SpeedTest):
         accept = ["just cheap-accept", "test -r $TL_CHECK_LOG_UNITY_TESTS", "just unity-tests"]
         res, launched, _ = self.replay(repo, accept, {}, red={"just cheap-accept"})
         self.assertEqual(launched, ["just cheap-accept"])
-        skipped = [(c["id"], c["why"]) for c in res if c["status"] == "skipped"]
+        skipped = [(c.id, c.why) for c in res if c.status == "skipped"]
         self.assertEqual(len(skipped), 4)
-        self.assertTrue(all("failed first" in w for _, w in skipped))
+        self.assertTrue(all("failed first" in w or "did not run" in w for _, w in skipped))
+        self.assertIn("producer unity-tests did not run", dict(skipped)["test -r $TL_CHECK_LOG_UNITY_TESTS"])
 
     def test_replay_of_acceptance_only_red_rounds_never_relaunches_unity(self):
         # a round shaped like yxbb.3 r1 whose only red is a cheap acceptance check, replayed three times (the rounds a writer fixes)
         for bad in ("just worker-plan", "just text theme-check client-layers", "python3 tools/select_tests.py --phase coordinator"):
             res, launched, _ = self.replay(self.REPO, self.ACCEPTANCE_R1, self.R1, red={bad})
             self.assertFalse([c for c in launched if "unity" in c], bad)
-            self.assertEqual([c["id"] for c in res if c["status"] == "failed"], [bad])
+            self.assertEqual([c.id for c in res if c.status == "failed"], [bad])
 
     def test_the_plan_validator_rejects_unity_recipes_in_acceptance_and_a_limit_above_the_cap(self):
         cfg = cfg_with(checks=self.REPO)
@@ -474,7 +489,7 @@ class Schedule(SpeedTest):
         self.assertIn("TL_CHECK_RC_UNITY_PLAY_TESTS", got[1])
         self.assertIn("do not launch it from acceptance", got[2])
         over = dict(te.PLAN, stages=[dict(te.PLAN["stages"][0], checks=["just play --timeout_ms 7200000"])])
-        self.assertEqual(len(lint.timeout_problems(over, 60)), 1)
+        self.assertEqual(len(lint.own_timeout_problems(over, 60)), 1)
         self.assertEqual(lint.repo_check_of("mkdir -p e && just unity-tests > e/log", cfg), "unity-tests")
         self.assertIsNone(lint.repo_check_of("just unity-tests foo", cfg))
 
@@ -492,12 +507,12 @@ class Watchdog(SpeedTest):
         t = time.time()
         res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertLess(time.time() - t, 60)  # hang guard only: below the 71 s sleep, so waiting it out fails; the hung/124/tree-gone asserts below are the real gate
-        self.assertEqual((res[0]["status"], res[0]["hung"], res[0]["exit"]), ("failed", True, 124))
-        self.assertIn("HUNG", res[0]["tail"])
-        self.assertIn("last words", res[0]["tail"])
+        self.assertEqual((res[0].status, res[0].hung, res[0].exit), ("failed", True, 124))
+        self.assertIn("HUNG", res[0].tail)
+        self.assertIn("last words", res[0].tail)
         self.assertEqual(len(n.read_text().split()), 1)  # never retried
         self.assertEqual(self.alive(mark), "")
-        items = [json.loads(l) for l in eng.log_path.read_text().splitlines() if '"kind": "checks"' in l][0]["items"]
+        items = [json.loads(l) for l in eng.log_path.read_text().splitlines() if '"kind": "checks"' in l][0]["run"]["results"]
         self.assertTrue(items[0]["hung"])
 
     def test_a_check_that_keeps_printing_is_not_hung(self):
@@ -505,18 +520,18 @@ class Watchdog(SpeedTest):
         eng = self.checks_engine(checks=[{"id": "chatty", "cmd": PY + " -c " + te.shq(code), "group": "tests"}],
                                  check_idle_min=0.025)  # 1.5 s of silence allowed, 3 s run
         res = eng.run_checks({"checks": [], "files": []}, "s")
-        self.assertEqual((res[0]["status"], res[0].get("hung")), ("ran", False))
+        self.assertEqual((res[0].status, res[0].hung), ("passed", False))
 
     def test_a_check_writing_a_file_under_the_worktree_without_printing_is_not_hung(self):
         code = "import time\nfor i in range(7):\n open('out.log','a').write('x'*50); time.sleep(0.6)"
         eng = self.checks_engine(checks=[{"id": "w", "cmd": PY + " -c " + te.shq(code), "group": "tests"}], check_idle_min=0.03)
         res = eng.run_checks({"checks": [], "files": []}, "s")
-        self.assertEqual((res[0]["status"], res[0].get("hung")), ("ran", False))
+        self.assertEqual((res[0].status, res[0].hung), ("passed", False))
 
     def test_the_hang_notice_names_all_three_signals(self):
         eng = self.checks_engine(checks=[{"id": "h", "cmd": "sleep 30", "group": "tests"}], check_idle_min=0.02)
         res = eng.run_checks({"checks": [], "files": []}, "s")
-        self.assertIn("no output, file writes or CPU", res[0]["tail"])
+        self.assertIn("no output, file writes or CPU", res[0].tail)
 
     @te.POSIX_CHECK
     def test_a_timeout_keeps_the_output_and_kills_a_setsid_descendant(self):
@@ -525,16 +540,16 @@ class Watchdog(SpeedTest):
         eng = self.checks_engine(checks=[{"id": "t", "cmd": PY + " -c " + te.shq(code), "group": "tests", "timeout_min": 0.05}],
                                  check_idle_min=5)
         res = eng.run_checks({"checks": [], "files": []}, "s")
-        self.assertEqual(res[0]["exit"], 124)
-        self.assertIn("before", (Path(eng.run_dir) / res[0]["log"]).read_text())
+        self.assertEqual(res[0].exit, 124)
+        self.assertIn("before", (Path(eng.run_dir) / res[0].log).read_text())
         time.sleep(1)
         self.assertEqual(self.alive(mark), "")
 
     def test_idle_min_zero_turns_the_watchdog_off_and_a_check_can_set_its_own(self):
         eng = self.checks_engine(checks=[{"id": "q", "cmd": "sleep 2", "group": "tests"}], check_idle_min=0)
-        self.assertEqual(eng.run_checks({"checks": [], "files": []}, "s")[0]["status"], "ran")
+        self.assertEqual(eng.run_checks({"checks": [], "files": []}, "s")[0].status, "passed")
         eng = self.checks_engine(checks=[{"id": "q", "cmd": "sleep 30", "group": "tests", "idle_min": 0.02}], check_idle_min=0)
-        self.assertTrue(eng.run_checks({"checks": [], "files": []}, "s")[0]["hung"])
+        self.assertTrue(eng.run_checks({"checks": [], "files": []}, "s")[0].hung)
 
 
 if __name__ == "__main__":

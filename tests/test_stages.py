@@ -4,6 +4,7 @@ import shutil
 import sys
 import time
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
@@ -15,6 +16,9 @@ from support.fakes import FakeBeadStore, as_bead  # noqa: E402
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from taskloop.contracts.config import EngineConfig  # noqa: E402
 from support.builders import cfg_with, make_engine  # noqa: E402
+from support.checks import res  # noqa: E402
+from taskloop.adapters.check_probe import ShellProbe  # noqa: E402
+from taskloop.app.checks import evidence as check_evidence  # noqa: E402
 import test_engine as te  # noqa: E402
 from test_engine import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint, tl  # noqa: E402,F401
 
@@ -23,6 +27,9 @@ _REAL_CMD_BLOCK = tl.cmd_block  # te's harness patches it per test; this is the 
 
 
 class StagesTest(unittest.TestCase):
+    def probe(self):
+        return ShellProbe(getattr(self, "wt"), te.sproc.current_env())  # noqa: B009
+
     setUp = te.EngineTest.setUp
     tearDown = te.EngineTest.tearDown
     fake_bd = te.EngineTest.fake_bd
@@ -87,17 +94,17 @@ class BadChecks(StagesTest):
 
     @te.no_repo
     def test_flagged_why_matches_loose_names(self):
-        c = {"id": "x", "cmd": "grep -qE 'name=\"GameLogTests\"[^>]*result=\"Passed\"' client/Logs/unity-tests.xml"}
-        why = engine.flagged_why
-        self.assertEqual(why(c, [{"cmd": c["cmd"], "why": "a"}]), "a")
+        c = res("grep -qE 'name=\"GameLogTests\"[^>]*result=\"Passed\"' client/Logs/unity-tests.xml", id="x")
+        why = check_evidence.flagged_why
+        self.assertEqual(why(c, [{"cmd": c.cmd, "why": "a"}]), "a")
         self.assertEqual(why(c, [{"cmd": "grep   -qE 'name=\"GameLogTests\"[^>]*result=\"Passed\"'\nclient/Logs/unity-tests.xml", "why": "b"}]), "b")
         self.assertEqual(why(c, [{"cmd": "grep -qE 'name=\"GameLogTests\"...unity-tests.xml", "why": "c"}]), "c")
-        self.assertEqual(why(c, [{"cmd": "`" + c["cmd"] + "`", "why": "d"}]), "d")
-        self.assertEqual(why(dict(c, id="unity-tests"), [{"cmd": "unity-tests", "why": "e"}]), "e")
+        self.assertEqual(why(c, [{"cmd": "`" + c.cmd + "`", "why": "d"}]), "d")
+        self.assertEqual(why(replace(c, id="unity-tests"), [{"cmd": "unity-tests", "why": "e"}]), "e")
         self.assertEqual(why(c, [{"cmd": "grep -qE 'other'...nothing.xml", "why": "f"}]), "")
         self.assertEqual(why(c, [{"cmd": "grep", "why": "g"}]), "")  # too short to say which check
         self.assertEqual(why(c, []), "")
-        mine = {"id": "u", "cmd": "python3 -m unittest discover -s tests -p 'test_a.py'"}
+        mine = res("python3 -m unittest discover -s tests -p 'test_a.py'", id="u")
         self.assertEqual(why(mine, [{"cmd": "python3 -m unittest discover -s tests", "why": "h"}]), "")  # another, shorter check
 
     def test_a_shortened_bad_check_replans_at_once(self):
@@ -410,11 +417,11 @@ class Fdyo(StagesTest):
         te.sh("git", "commit", "-qm", "tools", cwd=self.wt)
         te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=self.wt)
         bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["python3 -I -m unittest tools.tests.test_x"])])
-        self.assertEqual(len(lint.dry_check(bad, str(self.wt))), 1)
-        self.assertIn("python -I removes the working directory", lint.dry_check(bad, str(self.wt))[0])
+        self.assertEqual(len(lint.dry_check(bad, self.probe())), 1)
+        self.assertIn("python -I removes the working directory", lint.dry_check(bad, self.probe())[0])
         for ok in ("python3 -I -m unittest discover -s tools/tests -p 'test_x.py'", "python3 -m unittest tools.tests.test_x",
                    "python3 -I -m json.tool f.json", "python3 -I -c 'import tools.x'"):
-            self.assertEqual(lint.dry_check(dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[ok])]), str(self.wt)), [], ok)
+            self.assertEqual(lint.dry_check(dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[ok])]), self.probe()), [], ok)
         rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual([c[0] for c in s.calls], ["planner", "planner", "worker", "reviewer"])
         self.assertIn("python -I removes the working directory", s.prompts[1])
@@ -423,16 +430,16 @@ class Fdyo(StagesTest):
         eng = self.checks_engine(checks=[{"id": "slow", "cmd": self.PASS, "group": "tests"}])
         st = {"checks": [FALSE], "files": []}
         first = eng.run_checks(st, "s")
-        self.assertEqual([(c["group"], c["status"]) for c in first], [("tests", "ran"), ("acceptance", "failed")])
+        self.assertEqual([(c.group, c.status) for c in first], [("tests", "passed"), ("acceptance", "failed")])
         again = eng.run_checks(st, "s", acceptance_first=True)
-        self.assertEqual([(c["group"], c["status"]) for c in again], [("acceptance", "failed"), ("tests", "skipped")])
-        self.assertIn("acceptance failed first", again[1]["why"])
+        self.assertEqual([(c.group, c.status) for c in again], [("acceptance", "failed"), ("tests", "skipped")])
+        self.assertIn("acceptance failed first", again[1].why)
 
     def test_the_reorder_is_off_when_an_acceptance_check_reads_a_repo_checks_log(self):
         eng = self.checks_engine(checks=[{"id": "slow", "cmd": self.PASS, "group": "tests"}])
         st = {"checks": ['grep -q . "$TL_CHECK_LOG_SLOW" || true'], "files": []}
         res = eng.run_checks(st, "s", acceptance_first=True)
-        self.assertEqual([c["group"] for c in res], ["tests", "acceptance"])
+        self.assertEqual([c.group for c in res], ["tests", "acceptance"])
 
     def test_a_stage_whose_acceptance_check_was_red_runs_acceptance_first_the_next_round(self):
         flaky = te.EngineTest.RED_ONCE
@@ -441,14 +448,14 @@ class Fdyo(StagesTest):
                                 checks=[{"id": "slow", "cmd": self.PASS, "group": "tests"}])
         self.assertEqual(rc, 0, self.blocked)
         rounds = [json.loads(l) for l in self.eng.log_path.read_text().splitlines() if '"kind": "checks"' in l]
-        self.assertEqual([[i["group"] for i in r["items"]] for r in rounds], [["tests", "acceptance"], ["acceptance", "tests"]])
+        self.assertEqual([[i["group"] for i in r["run"]["results"]] for r in rounds], [["tests", "acceptance"], ["acceptance", "tests"]])
 
     def test_acceptance_first_is_used_once_then_the_normal_order_returns(self):
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[FALSE])])
-        rc, s = self.run_engine({"plan": [plan], "write": [WRITE] * 4, "review": [CLEAN]}, max_check_tries=4,
+        rc, s = self.run_engine({"plan": [plan], "write": [WRITE] * 4, "review": [CLEAN]}, max_check_tries=4, max_same_red=0,
                                 checks=[{"id": "slow", "cmd": self.PASS, "group": "tests"}])
         rounds = [json.loads(l) for l in self.eng.log_path.read_text().splitlines() if '"kind": "checks"' in l]
-        self.assertEqual([r["items"][0]["group"] for r in rounds], ["tests", "acceptance", "tests", "acceptance"])
+        self.assertEqual([r["run"]["results"][0]["group"] for r in rounds], ["tests", "acceptance", "tests", "acceptance"])
 
     def test_a_repo_check_red_twice_is_not_offered_to_bad_checks(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE] * 3, "review": [CLEAN]}, max_check_tries=3,
@@ -464,7 +471,7 @@ class Executable(StagesTest):
     @te.NO_BASH
     def test_a_sentence_is_not_a_command(self):
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["After building the current player: python3 tools/x.py", HAS_F])])
-        errs = lint.dry_check(plan, str(self.wt))
+        errs = lint.dry_check(plan, self.probe())
         self.assertEqual(len(errs), 1)
         self.assertIn("`After` is not a command here", errs[0])
 
@@ -472,50 +479,47 @@ class Executable(StagesTest):
         for ok in ("grep -q x a.txt && test -f a.txt", "! grep -q zzz a.txt", "FOO=1 bash -c 'echo hi' | wc -l",
                    "echo hi > out.txt 2>&1 && test -s out.txt", "for f in a b; do echo $f; done", "(cd . && ls)",
                    "git status --short", "python3 -c 'a;b'", te.PY + " -c 'pass'"):
-            self.assertEqual(lint.command_problems(ok, str(self.wt)), [], ok)
+            self.assertEqual(lint.command_problems(ok, self.probe()), [], ok)
 
     @te.NO_BASH
     def test_a_just_recipe_must_exist_in_the_tree(self):
         tools.need(self, "just")
         self.enterContext(tools.on_path("just"))
         (self.wt / "justfile").write_text("fmt-check:\n\techo ok\n")
-        lint._RECIPES.clear()
-        self.assertEqual(lint.command_problems("just fmt-check && echo done", str(self.wt)), [])
-        bad = lint.command_problems("just fmt-check && just unity-play-tests", str(self.wt))
+        self.assertEqual(lint.command_problems("just fmt-check && echo done", self.probe()), [])
+        bad = lint.command_problems("just fmt-check && just unity-play-tests", self.probe())
         self.assertEqual(len(bad), 1)
         self.assertIn("no recipe unity-play-tests", bad[0])
         self.assertIn("fmt-check", bad[0])
-        lint._RECIPES.clear()
 
     def test_valid_checks_the_word_check_must_not_block(self):
+        probe = self.probe()
         for tool in ("make", "npm"):  # tools a dev machine has; this test is about the grammar, not about what is installed
-            lint._WORDS[(str(self.wt), tool)] = (True, time.time())
+            probe.words[tool] = (True, time.time())
         for ok in ("command -v git >/dev/null", "env -i PATH=$PATH git --version", "f () { echo hi; }; f",
                    "cat <<EOF2 > x.txt\nhello\nEOF2\ntest -s x.txt", "cd sub && ./x.sh", "make && ./build/x", "npm ci && node_modules/.bin/jest",
                    "~/bin/foo", ".venv/bin/python -c pass", "source env.sh && git status", "time git status"):
-            self.assertEqual(lint.command_problems(ok, str(self.wt)), [], ok)
+            self.assertEqual(lint.command_problems(ok, probe), [], ok)
 
     @te.NO_BASH
     def test_just_aliases_private_recipes_options_and_a_recipe_a_stage_adds(self):
         tools.need(self, "just")
         self.enterContext(tools.on_path("just"))
         (self.wt / "justfile").write_text("alias ci := check\ncheck:\n\techo ok\n_private:\n\techo p\n")
-        lint._RECIPES.clear()
         for ok in ("just ci", "just _private", "just --justfile justfile check", "just --set v x check", "just -d . check", "just check"):
-            self.assertEqual(lint.command_problems(ok, str(self.wt)), [], ok)
-        self.assertEqual(len(lint.command_problems("just nope", str(self.wt))), 1)
-        self.assertEqual(lint.command_problems("just newrecipe", str(self.wt), made=["justfile"]), [])  # a stage adds it
+            self.assertEqual(lint.command_problems(ok, self.probe()), [], ok)
+        self.assertEqual(len(lint.command_problems("just nope", self.probe())), 1)
+        self.assertEqual(lint.command_problems("just newrecipe", self.probe(), made=["justfile"]), [])  # a stage adds it
         (self.wt / "justfile").write_text("newrecipe:\n\techo n\n")  # a rebase changes the file: seen at once
-        self.assertEqual(lint.command_problems("just newrecipe", str(self.wt)), [])
-        lint._RECIPES.clear()
+        self.assertEqual(lint.command_problems("just newrecipe", self.probe()), [])
 
     @te.NO_BASH
     def test_a_missing_script_is_found_unless_a_stage_makes_it(self):
         check = "./tools/probe.sh --all"
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[check])])
-        self.assertIn("is not a file of this tree", lint.dry_check(plan, str(self.wt))[0])
+        self.assertIn("is not a file of this tree", lint.dry_check(plan, self.probe())[0])
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], files=["tools/probe.sh"], checks=[check])])
-        self.assertEqual([e for e in lint.dry_check(plan, str(self.wt)) if "not a file" in e], [])
+        self.assertEqual([e for e in lint.dry_check(plan, self.probe()) if "not a file" in e], [])
 
     @te.NO_BASH
     def test_the_plan_with_a_sentence_goes_back_once(self):

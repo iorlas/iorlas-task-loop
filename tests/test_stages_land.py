@@ -15,6 +15,8 @@ from support.fakes import FakeBeadStore, as_bead  # noqa: E402
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from taskloop.adapters import bd  # noqa: E402
 from support.builders import make_engine  # noqa: E402
+from taskloop.domain.checks import matchers  # noqa: E402
+from taskloop.domain.checks.shell import matchers as sh_matchers  # noqa: E402
 import test_engine as te  # noqa: E402
 from test_engine import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint, tl  # noqa: E402,F401
 
@@ -119,8 +121,8 @@ class StaleTree(StagesTest):
     @te.no_repo
     def test_words_in_the_middle_of_a_long_output_are_not_a_stale_tree(self):
         noisy = "a test about justfile prints: This checkout has no recipe x\n" + "ok\n" * 300 + "2 failed: Foo"
-        self.assertTrue(engine.STALE_TREE.search(noisy))  # the whole log matches...
-        self.assertFalse(engine.STALE_TREE.search(noisy[-500:]))  # ...its last lines, which the engine reads, do not
+        self.assertTrue(matchers.STALE_TREE.search(noisy))  # the whole log matches...
+        self.assertFalse(matchers.stale_tree(noisy))  # ...its last lines, which the engine reads, do not
 
     def test_the_checkpoint_head_follows_a_squash_and_rebase_over_the_wip_commit(self):
         te.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
@@ -141,8 +143,8 @@ class StaleTree(StagesTest):
         self.assertEqual(e.git("rev-list", "--count", "origin/main..HEAD"), "1")
 
     def test_the_lifesim_wording_is_found_too_and_a_plain_red_check_is_not(self):
-        self.assertTrue(engine.STALE_TREE.search("This checkout has no fmt-check-changed; rebase onto main"))
-        self.assertFalse(engine.STALE_TREE.search("2 tests failed: FooTests.Bar"))
+        self.assertTrue(matchers.stale_tree("This checkout has no fmt-check-changed; rebase onto main"))
+        self.assertFalse(matchers.stale_tree("2 tests failed: FooTests.Bar"))
         plain = [{"id": "unit", "cmd": FALSE, "group": "tests"}]
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE, WRITE]}, checks=plain, max_check_tries=2)
         self.assertNotIn("infrastructure", self.eng.why)
@@ -454,21 +456,21 @@ class PlanTimeout(StagesTest):
         for check, minutes in (("just play --timeout_ms 2400000", 40.0), ("tool -testTimeoutMs=1800000", 30.0), ("run --timeout=40m", 40.0),
                                ("run --timeout 2h", 120.0), ("timeout 2400 python3 t.py", 40.0), ("x --timeout-min 45", 45.0),
                                ("x timeout_seconds=600", 10.0), ("x --timeout 90", 1.5)):
-            got = [m for m, _ in lint.own_timeouts(check)]
+            got = [m for m, _ in sh_matchers.own_timeouts(check)]
             self.assertEqual(got, [minutes], check)
         for check in ("pytest tests", "grep -q timeout config.yaml", "x --timeouts 5", "x --no-timeout", "x timeout_msg"):
-            self.assertEqual(lint.own_timeouts(check), [], check)
+            self.assertEqual(sh_matchers.own_timeouts(check), [], check)
 
     @te.no_repo
     def test_yxbb3s_play_test_of_40_minutes_under_a_30_minute_cap_is_found(self):
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["just unity-play-tests --timeout_ms 2400000", HAS_F])])
-        got = lint.timeout_problems(plan, 30)
+        got = lint.own_timeout_problems(plan, 30)
         self.assertEqual(len(got), 1)
         self.assertIn("= 40 min, above the engine's check limit of 30 min", got[0])
-        self.assertEqual(lint.timeout_problems(plan, 40), [])  # equal is fine
-        self.assertEqual(lint.timeout_problems(plan, 60), [])
+        self.assertEqual(lint.own_timeout_problems(plan, 40), [])  # equal is fine
+        self.assertEqual(lint.own_timeout_problems(plan, 60), [])
         cases = dict(PLAN, cases=[{"criterion": "c", "check": "x --timeout 5400", "class": "test"}])
-        self.assertEqual(len(lint.timeout_problems(cases, 60)), 1)  # cases are checks too
+        self.assertEqual(len(lint.own_timeout_problems(cases, 60)), 1)  # cases are checks too
 
     def test_the_plan_goes_back_to_the_planner_once_with_the_reason(self):
         bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[HAS_F + " ; true --timeout_ms 2400000"])])

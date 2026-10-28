@@ -1203,7 +1203,7 @@ def doctor_warnings(repo, source=None):
                    "the one .git/config every slot shares, so a stray one redirects all slots; `git config "
                    "extensions.worktreeConfig true` gives each worktree its own config file." % repo)
     try:  # engine.checks[].inputs globs that match no tracked file would cache a green over changed code
-        from checks import speed as checks_speed
+        from taskloop.domain.checks.inputs import dead_globs
         if source is None:
             import engine
             source = engine.cfg_source(repo)
@@ -1213,7 +1213,7 @@ def doctor_warnings(repo, source=None):
         files = [path for path in files if path]
         for c in profile.engine.checks:
             ins = [c.inputs] if isinstance(c.inputs, str) else list(c.inputs)
-            for g in checks_speed.dead_globs(files, ins):
+            for g in dead_globs(files, ins):
                 out.append("check %s: inputs glob %s matches no tracked file, so the check is never cached; braces are "
                            "{a,b}, `*` stays in one folder, `**` crosses." % (c.id, g))
     except Exception:

@@ -17,6 +17,7 @@ import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support.dashes import make_dash  # noqa: E402
 from taskloop.contracts import log as rec  # noqa: E402
 from taskloop_dash import jsonl  # noqa: E402
+from taskloop_dash.api import runs as runs_api  # noqa: E402
 
 engine, tl = te.engine, te.tl
 DASH = make_dash()
@@ -86,16 +87,16 @@ class TraceRecords(unittest.TestCase):
         second = next(r for r in records(self.eng, rec.StepStart) if num(r.id) == 5)
         self.assertEqual((second.write, second.round), (2, 1))
         rounds = records(self.eng, rec.Checks)
-        self.assertEqual([(num(r.node_id), r.round) for r in rounds], [(4, 1), (6, 2)])
-        self.assertEqual([i.status for i in rounds[0].items], ["failed"])
-        self.assertEqual([i.status for i in rounds[1].items], ["ran"])
-        item = rounds[0].items[0]
+        self.assertEqual([(num(r.node_id), r.run.round) for r in rounds], [(4, 1), (6, 2)])
+        self.assertEqual([i.status for i in rounds[0].run.results], ["failed"])
+        self.assertEqual([i.status for i in rounds[1].run.results], ["passed"])
+        item = rounds[0].run.results[0]
         self.assertTrue(item.id and item.cmd and item.log)
         self.assertEqual(item.exit, 1)
         run = self.eng.run_dir
-        self.assertTrue((run / rounds[0].items[0].log).exists())
-        self.assertTrue((run / rounds[1].items[0].log).exists())
-        self.assertNotEqual(rounds[0].items[0].log, rounds[1].items[0].log)
+        self.assertTrue((run / rounds[0].run.results[0].log).exists())
+        self.assertTrue((run / rounds[1].run.results[0].log).exists())
+        self.assertNotEqual(rounds[0].run.results[0].log, rounds[1].run.results[0].log)
         self.assertTrue((run / "engine-checks.r1.json").exists())
         self.assertTrue((run / "engine-checks.r2.json").exists())
         self.assertTrue((run / "engine-checks.json").exists())  # the latest round, as before
@@ -232,6 +233,8 @@ class TraceRecords(unittest.TestCase):
         blk = DASH.runlogs.block_detail(str(self.eng.log_path), run["blocks"][2]["node"])
         self.assertEqual([c["status"] for c in blk["checks"]], ["failed"])
         self.assertTrue(blk["checks"][0]["log"])
+        self.assertTrue((Path(getattr(self, "eng").run_dir) / blk["checks"][0]["log"]).is_file())  # found by CheckResult.log, not by a rebuilt file name  # noqa: B009
+        self.assertFalse(hasattr(runs_api, "safe_name"))
 
 
 if __name__ == "__main__":

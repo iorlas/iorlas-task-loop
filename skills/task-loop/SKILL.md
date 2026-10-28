@@ -205,6 +205,19 @@ for that long all three are flat: its stdout/stderr, any file under the worktree
 minute) and the CPU time of its process tree. The whole group is killed, descendants that called setsid too. It is reported as
 `hung: no output, file writes or CPU for N min` (`hung` in the round record, the last output lines in the brief), fails the
 round, and is never retried. A timeout keeps the output collected so far in the log.
+**Producers and consumers.** A check that reads `$TL_CHECK_LOG_<ID>` or `$TL_CHECK_RC_<ID>` of a producer that was skipped (`when`), red, or is not
+in the repo's checks is reported `skipped (producer X did not run)`, never failed, and costs no write round; a producer that is red
+fails the round under its own name. The plan lint sends a plan back whose check reads a producer whose `when` matches no file any stage
+lists, or a file of the evidence folder nothing writes.
+**Red on the base.** The first red of a repo check is run once more on a clean checkout of the base commit (cached by base sha). Red
+there too: the result is `base_red`, the writer is told it is not theirs, and the round does not count it (`engine.base_red: false` turns it
+off). A failed check is run again (`retry`) only when its first two failures differ, never for a hang, a timeout or a compile error, and a
+check slower than 20 minutes is not run again on the output it failed with in the last round. The same red checks with the same output
+`engine.max_same_red` (3) rounds in a row stop the run with one ask that names them. `engine.max_total_reviews` (12) counts reviews
+over the whole run, replans included.
+**Who runs a check.** A repo check is the writer's to run when its longest green run took at most `engine.writer_check_max_s`, or says
+`"writer": true` (`false`: never) or its own `"writer_check_max_s"`; the gate always is the engine's. `"tail_log"` names a log of the tree
+whose first 20 `error CS` lines join a red's output when it shows none (the analyzers default to `client/Logs/unity-project-files.log`).
 **Duplicates.** A stage check whose `&&` segment is exactly a repo check's command (no args, env prefix, `||`, `!`, `;` or subshell),
 optionally redirected (`> f`, `| tee f`), after setup only (`mkdir`, `echo`...) and followed only by readers (`grep`, `test`, `wc`, `tail`,
 `head`, `cat`) of that redirect target, reads the repo check's log instead of running it again, when the repo check ran green (or is cached

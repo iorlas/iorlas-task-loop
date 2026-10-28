@@ -1,0 +1,109 @@
+"""Attempts: one check run until it is decided: passed, red for good, hung, timed out, or held by an editor lock and waited out."""
+import time
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from pathlib import Path
+
+from taskloop.adapters import check_files
+from taskloop.app.checks.base import BaseCheck
+from taskloop.app.checks.host import CheckHost
+from taskloop.contracts.checks import Check
+from taskloop.contracts.enums import WaitWhat
+from taskloop.domain.checks import matchers, retry
+
+
+@dataclass
+class Outcome:
+    rc: int
+    tail: str  # the last lines of the last run's output
+    seen: str  # all of its output
+    tries: int
+    hung: bool
+    secs: float  # of the last run
+    base_red: bool = False
+
+
+class Attempts:
+    def __init__(self, host: CheckHost, base: BaseCheck, last_red: Mapping[str, tuple[str, float]],
+                 sleep: Callable[[float], None] = time.sleep) -> None:
+        self.host, self.base, self.last_red, self.sleep = host, base, last_red, sleep
+
+    def run(self, c: Check, cmd: str, log: Path, env: Mapping[str, str]) -> Outcome:
+        """Run the check; a red one again when that can change the answer: only when the first two failures differ, never for a hang,
+        a timeout or a compile error."""
+        tries, prior = 0, ""
+        while True:
+            tries += 1
+            rc, tail, seen, took, hung = self._once(c, cmd, log, env)
+            out = Outcome(rc, tail, seen, tries, hung, took)
+            if rc == 0 or hung or rc == 124:
+                self._say_stop(c, out)
+                return out
+            sig = matchers.output_signature(seen)
+            kind = matchers.failure_kind(seen)
+            if kind == "lock":
+                return self._wait_lock(c, cmd, log, env, out)
+            if tries == 1 and c.repo and self.base.red(c, cmd, took):
+                return Outcome(rc, tail, seen, tries, hung, took, base_red=True)
+            if not self._again(c, out, tries, sig, prior):
+                return out
+            prior = sig
+
+    def _once(self, c: Check, cmd: str, log: Path, env: Mapping[str, str]) -> tuple[int, str, str, float, bool]:
+        t0 = time.time()
+        rc, tail = self.host.sh(cmd, timeout=c.timeout_min * 60, save=log, env=env, idle=c.idle_s)
+        hung = self.host.hung
+        seen = self._read(log, tail)
+        took = time.time() - t0
+        self.host.note_slot_waits(seen, took)
+        return rc, tail, seen, took, hung
+
+    @staticmethod
+    def _read(log: Path, fallback: str) -> str:
+        try:
+            return log.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return fallback
+
+    def _say_stop(self, c: Check, out: Outcome) -> None:
+        if out.hung:  # silent for check_idle_min: a rerun hangs the same way, and this round has waited enough
+            self.host.warn(f"`{c.id}` hung: no output, file writes or CPU for {c.idle_s / 60:g} min, stopped; not retried")
+        elif out.rc == 124 and c.retry:  # the engine's timeout or the command's own: a rerun hangs the same way
+            self.host.warn(f"`{c.id}` failed (exit 124), no retry: timed out after {round(out.secs / 60, 1):g} min")
+
+    def _again(self, c: Check, out: Outcome, tries: int, sig: str, prior: str) -> bool:
+        if matchers.failure_kind(out.seen) == "deterministic":  # a rerun fails the same way, seconds later
+            if c.retry:
+                self.host.warn(f"`{c.id}` failed (exit {out.rc}) with a compile error: not retried")
+            return False
+        if not retry.retry_allowed(c.retry, tries, out.seen):
+            return False
+        before = self.last_red.get(c.id)
+        if tries == 1 and before and retry.skip_slow_rerun(sig, before[0], out.secs):
+            self.host.warn(f"`{c.id}` took {round(out.secs / 60, 1):g} min and failed with the output it failed with before: not run again")
+            return False
+        if prior and sig == prior:
+            self.host.warn(f"`{c.id}` failed twice with the same output: not retried")
+            return False
+        self.host.warn(f"`{c.id}` failed (exit {out.rc}), retrying: it is marked flaky")
+        return True
+
+    def _wait_lock(self, c: Check, cmd: str, log: Path, env: Mapping[str, str], out: Outcome) -> Outcome:
+        """An editor or project lock: wait, then rerun, 15/30/60 s up to 5 min in all."""
+        rc, tail, seen = out.rc, out.tail, out.seen
+        started = time.time() - out.secs
+        for n, wait in enumerate(retry.lock_waits(), 1):
+            self.host.warn(f"`{c.id}` is held by an editor or project lock; waiting {wait} s ({n})")
+            wid = self.host.wait_start(WaitWhat.EDITOR_LOCK)
+            self.sleep(wait)
+            self.host.add_wait(wait, WaitWhat.EDITOR_LOCK, wid)
+            rc, tail = self.host.sh(cmd, timeout=c.timeout_min * 60, save=log, env=env)
+            seen = self._read(log, tail)
+            self.host.note_slot_waits(seen, time.time() - started)
+            if rc == 0 or matchers.failure_kind(seen) != "lock":
+                break
+        if rc and matchers.failure_kind(seen) == "lock":
+            pids = check_files.lock_holders(str(self.host.wt), matchers.lock_files(seen))
+            holder = "; the lock holder is pid " + pids if pids else ""
+            tail += f"\n(still locked after {retry.LOCK_WAIT_MAX} s of waiting{holder})"
+        return Outcome(rc, tail, seen, out.tries, self.host.hung, out.secs)

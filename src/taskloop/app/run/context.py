@@ -4,10 +4,10 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from taskloop.app.checks.checklog import CheckLog
 from taskloop.app.run import console
 from taskloop.app.run.budget import Budget
 from taskloop.app.run.calls import Calls
-from taskloop.app.run.checklog import CheckLog
 from taskloop.app.run.steps import Steps
 from taskloop.contracts.config import EngineConfig
 from taskloop.stores.bundle import Stores

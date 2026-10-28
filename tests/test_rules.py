@@ -420,20 +420,19 @@ class Signals(unittest.TestCase):
 
 # -- the older folder table --------------------------------------------------------------------------
 SKILL = ROOT / "skills" / "task-loop"
-FOLDERS = ("core", "checks", "asks", "plan", "slots", "review", "loop", "release", "land", "look", "write", "dash")
+FOLDERS = ("core", "asks", "plan", "slots", "review", "loop", "release", "land", "look", "write", "dash")
 ALL = frozenset(FOLDERS)
 ALLOWED = {
     "core": frozenset(),
-    "checks": frozenset({"core"}),
     "asks": frozenset({"core"}),
     "plan": frozenset({"core"}),
     "slots": frozenset({"core"}),
     "look": frozenset({"core"}),
     "release": frozenset({"core"}),
     "dash": frozenset({"core"}),
-    "write": frozenset({"core", "checks"}),
-    "review": frozenset({"core", "checks"}),
-    "land": frozenset({"core", "checks", "slots"}),
+    "write": frozenset({"core"}),
+    "review": frozenset({"core"}),
+    "land": frozenset({"core", "slots"}),
     "loop": ALL - {"loop"},
 }
 

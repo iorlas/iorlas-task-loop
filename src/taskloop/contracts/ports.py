@@ -116,6 +116,27 @@ class CheckResult:
         return self.exit == 0 and not self.timed_out
 
 
+class TreeProbe(Protocol):
+    """What the plan-check lint may ask of the tree and the machine a check will run on."""
+
+    def judges(self) -> bool:
+        """False when there is no bash to ask: then nothing about a command is claimed."""
+        ...
+    def syntax_error(self, cmd: str) -> str:
+        """The first line of `bash -n`'s complaint about the command, '' when it parses (or cannot be asked)."""
+        ...
+    def has_command(self, word: str) -> bool:
+        """True when the word is a builtin, a function or on PATH."""
+        ...
+    def recipes(self) -> set[str] | None:
+        """The recipe and alias names of the tree's justfile, None when there is no just or no justfile."""
+        ...
+    def exists(self, path: str) -> bool:
+        """The path (relative to the tree, or absolute) exists."""
+        ...
+    def is_dir(self, path: str) -> bool: ...
+
+
 class Checks(Protocol):
     def run(self, spec: CheckSpec) -> CheckResult:
         """Run one workflow command (bash semantics: `-e`, pipefail). Exit 124 and `timed_out` when the time ran out."""

@@ -48,7 +48,7 @@ def checks_of(n: dict) -> list[dict]:
                 "id": cmd,
                 "cmd": cmd,
                 "exit": ex,
-                "status": "ran" if ex == 0 else "failed" if ex else "?",
+                "status": "passed" if ex == 0 else "failed" if ex else "?",
                 "secs": round(secs) if isinstance(secs, (int, float)) else None,
                 "tries": 1,
                 "tail": tail,
@@ -57,7 +57,7 @@ def checks_of(n: dict) -> list[dict]:
             for cmd, ex, tail, secs in pairs
         ]
     out, used = [], set()
-    for it in rec.items:
+    for it in rec.run.results:
         tail = ""
         for j, p in enumerate(pairs):
             if j not in used and it.exit is not None and p[1] == it.exit and (p[0] == it.cmd or p[0].endswith(it.cmd[-40:])):

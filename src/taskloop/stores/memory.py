@@ -16,6 +16,7 @@ from jsonl_log.cursor import _parse  # shelf lacks: a public parse of in-memory 
 from taskloop.contracts import codec, events, log
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.checkpoint import Checkpoint
+from taskloop.contracts.checks import CheckCacheEntry, CheckRun, Durations
 from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.locks import LockRecord, LockTimeout, Ticket, pid_alive
 from taskloop.contracts.loop import LoopCommand, LoopState, Rest
@@ -181,6 +182,7 @@ def fake_stores(pid: int | None = None) -> Stores:
     state: dict[str, MemDoc[LoopState]] = {}
     cmds: dict[str, MemDoc[LoopCommand]] = {}
     rests: dict[str, MemDoc[Rest]] = {}
+    check_runs: dict[tuple[str, int | None], MemDoc[CheckRun]] = {}
     return Stores(
         run_log=lambda run: runs.setdefault(run, MemLog(log.decode)),
         events=MemLog(events.decode), traces=MemLog(_decode(RunTrace)),
@@ -188,4 +190,6 @@ def fake_stores(pid: int | None = None) -> Stores:
         loop_state=lambda key: state.setdefault(key, MemDoc(LoopState)),
         loop_command=lambda key: cmds.setdefault(key, MemDoc(LoopCommand)),
         loop_rest=lambda key: rests.setdefault(key, MemDoc(Rest)),
+        check_cache=MemDocSet(CheckCacheEntry), durations=MemDocSet(Durations),
+        check_run=lambda run, rnd: check_runs.setdefault((run, rnd), MemDoc(CheckRun)),
         locks=MemLockTable(pid), tickets=MemTickets())

@@ -2,12 +2,13 @@
 import dataclasses
 from collections.abc import Callable
 
+from taskloop.contracts.checks import CheckCacheEntry, CheckRun, Durations
 from taskloop.contracts.events import Event
 from taskloop.contracts.log import EngineLog
 from taskloop.contracts.loop import LoopCommand, LoopState, Rest
 from taskloop.contracts.stores import AskStore
 from taskloop.contracts.trace import RunTrace
-from taskloop.stores.api import Doc, LockTable, Log, Tickets
+from taskloop.stores.api import Doc, DocSet, LockTable, Log, Tickets
 from taskloop.stores.books import CheckpointBook
 
 
@@ -21,5 +22,8 @@ class Stores:
     loop_state: Callable[[str], Doc[LoopState]]
     loop_command: Callable[[str], Doc[LoopCommand]]
     loop_rest: Callable[[str], Doc[Rest]]
+    check_cache: DocSet[CheckCacheEntry]  # one per bead
+    durations: DocSet[Durations]  # one per repo
+    check_run: Callable[[str, int | None], Doc[CheckRun]]  # a run's round (None: its latest)
     locks: LockTable
     tickets: Tickets

@@ -6,6 +6,7 @@ import os
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
@@ -13,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import engine  # noqa: E402
 from support.builders import cfg_with  # noqa: E402
+from taskloop.domain.checks.writer_split import WriterSplit  # noqa: E402
 
 GOLDEN = ROOT / "tests" / "fixtures" / "prompts"
 FIX_SCOPE = "the fix only: it must %s without breaking what the accepted stages built" % engine.Engine.FIX["gate"][0]
@@ -35,7 +37,7 @@ def stub_engine(rules="worker-rules.md"):
     """An Engine with a config and no run: enough to render the writer's check lists."""
     eng = engine.Engine.__new__(engine.Engine)
     eng.cfg = cfg_with(gate="just check", worker_rules=rules, checks=[{"id": "fmt", "cmd": "just fmt-check", "group": "static"}])
-    eng.check_secs = lambda: {}
+    setattr(eng, "checker", SimpleNamespace(split=lambda: WriterSplit(eng.cfg, {})))  # noqa: B010
     return eng
 
 
