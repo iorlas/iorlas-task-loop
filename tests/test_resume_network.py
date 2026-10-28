@@ -22,7 +22,7 @@ import loop  # noqa: E402
 import netgate  # noqa: E402
 import outcome as oc  # noqa: E402
 import test_engine as te  # noqa: E402
-import test_stages  # noqa: E402
+import test_stages_visual  # noqa: E402
 from test_engine import BEAD, CLEAN, PLAN, WRITE, engine, stop, tl, verdict  # noqa: E402
 
 SAY = "codex: Reconnecting... waiting for network (Connection failed: error sending request)"
@@ -359,7 +359,7 @@ class Gate(unittest.TestCase):
         wt.assert_not_called()
 
 
-class ResumeLook(test_stages.VisualWork):
+class ResumeLook(test_stages_visual.VisualWork):
     """The look judge goes on in its thread after a drop."""
 
     def test_a_drop_in_the_look_judge_resumes_its_thread(self):
@@ -378,7 +378,7 @@ class ResumeLook(test_stages.VisualWork):
     ask = te.EngineTest.ask
 
 
-for _name in dir(test_stages.VisualWork):  # the visual fixture only: not every test of its class again
+for _name in dir(test_stages_visual.VisualWork):  # the visual fixture only: not every test of its class again
     if _name.startswith("test_") and _name not in ResumeLook.__dict__:
         setattr(ResumeLook, _name, None)
 

@@ -17,11 +17,11 @@ FEATURES = {
     "plan": [],
     "slots": ["test_slots", "test_slot_git"],
     "review": ["test_verify_noblock"],
-    "loop": ["test_loop", "test_race_invariants"],
+    "loop": ["test_loop", "test_loop_more", "test_race_invariants"],
     "release": ["test_release"],
     "land": ["test_land_lock", "test_held_branch"],
     "look": ["test_look", "test_looks"],
-    "write": ["test_stages"],
+    "write": ["test_stages", "test_stages_visual", "test_stages_land"],
     "dash": sorted(p.stem for p in HERE.glob("test_dash*.py")),
 }
 

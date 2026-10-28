@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 import test_engine as te
+import test_engine_units
 from test_engine import CLEAN, FALSE, HAS_F, PLAN, PY, WRITE, review, stop
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -119,7 +120,7 @@ class TraceRecords(unittest.TestCase):
         self.assertEqual(ends[2]["outcome"], "asks")
 
     def test_a_resumed_writer_whose_lane_is_out_goes_on_as_a_new_thread(self):
-        L = te.DelegateLauncher
+        L = test_engine_units.DelegateLauncher
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE, L.OUT_LONG, L.FRESH],
                                  "review": [review(unmet=["more"]), CLEAN]})
         self.assertEqual(rc, 0, self.blocked)

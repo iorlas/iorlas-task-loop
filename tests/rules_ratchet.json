@@ -7,9 +7,7 @@
   "skills/task-loop/loop.py": 1059,
   "skills/task-loop/report.py": 404,
   "skills/task-loop/tl.py": 1697,
-  "tests/test_engine.py": 3955,
-  "tests/test_loop.py": 1202,
-  "tests/test_stages.py": 1672
+  "tests/test_engine.py": 3471
  },
  "oversize_functions": {
   "skills/task-loop/core/procs.py::run_proc": 86,

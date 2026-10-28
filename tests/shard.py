@@ -18,7 +18,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 # module -> seconds per test, measured on a Mac with 14 shards at once (a module not listed counts 0.3): what a test costs sets which shard it joins.
-WEIGHT = {"test_engine": 3.7, "test_stages": 3.1, "test_look": 5.3, "test_checks_speed": 2.1, "test_trace_records": 5.1, "test_release": 4.3,
+WEIGHT = {"test_engine": 3.7, "test_stages": 3.1, "test_stages_visual": 3.1, "test_stages_land": 3.1, "test_look": 5.3, "test_checks_speed": 2.1, "test_trace_records": 5.1, "test_release": 4.3,
           "test_verify_noblock": 3.3, "test_doctor": 0.9, "test_slot_git": 0.95, "test_land_lock": 1.5, "test_held_branch": 0.55}
 DEFAULT_WEIGHT = 0.3
 DURATIONS = HERE / "durations.json"  # {test id: seconds}, measured by `python3 dev/suite.py --record`; a test not in it falls back to WEIGHT
