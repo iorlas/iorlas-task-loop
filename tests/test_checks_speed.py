@@ -334,7 +334,7 @@ class Duplicates(SpeedTest):
 class Schedule(SpeedTest):
     """tl-7y6.7.11 / .7 / .16 (R09): one launch per command, Unity last, the ban on Unity in acceptance."""
     # yxbb.3-20261025-005743 engine-checks.r1.json, from ~/.config/task-loop/runs (read-only): the repo checks of lifesim's
-    # .task-loop.json (timeout_min 30 on the two test checks) and the round's items with the seconds they took.
+    # .task-loop.json (wall_min 30 on the two test checks) and the round's items with the seconds they took.
     REPO = [{"id": "fmt", "cmd": "just fmt-check-changed", "group": "static"}, {"id": "text", "cmd": "just text", "group": "static"},
             {"id": "unity-analyzers", "cmd": "just unity-analyzers", "group": "static"},
             {"id": "unity-tests", "cmd": "just unity-tests", "group": "tests", "wall_min": 30},
