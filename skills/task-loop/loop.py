@@ -988,16 +988,7 @@ def passes(repo, a, started, st=None):
             continue
         reclaim(repo)
         tl.close_stale_asks()  # asks of closed or missing beads (throttled)
-        try:
-            tl.renotify()  # an ask unanswered for 24 h pushed again; once a day, the looks that wait (throttled)
-        except Exception as e:  # a push is never worth the loop
-            say("re-push skipped: %s" % e)
         tl.park_stale_asks()  # asks unanswered past parks_at (3 days), throttled with the sweep above
-        try:
-            import digest
-            digest.maybe_send()  # the morning digest, once a day, when a push channel is set
-        except Exception as e:  # a digest never stops a loop
-            say("digest: %s" % e)
         try:
             import reflect_digest
             reflect_digest.maybe_run()  # the run reflections into beads, once a day (tl-bl5)

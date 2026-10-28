@@ -14,7 +14,6 @@ FEATURES = {
     "core": ["test_trace_records", "test_tl"],
     "lanes": ["test_opencode", "test_write_idle"],
     "checks": ["test_checks_speed", "test_check_trim"],
-    "asks": ["test_renotify"],
     "plan": [],
     "slots": ["test_slots", "test_slot_git"],
     "review": ["test_verify_noblock"],

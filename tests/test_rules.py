@@ -10,7 +10,7 @@ What it enforces, over every .py under src/, skills/, dev/ and tests/ (src/<pkg>
             no import inside a function body; no mutable module global in domain/app/cli/hook/dash.
   vendor    the vendored shelf copy is unedited and matches dev/vendor.json (VendorGuard, Smoke); EXEMPT_DIRS skips it for the caps.
   pyrefly   the baseline's error count may only shrink (tests/rules_ratchet.json "pyrefly_baseline_errors").
-The older folder table for skills/task-loop (ALLOWED, formerly tests/test_layers.py) stays here: dev/select_tests.py reads it.
+The older folder table for skills/task-loop (ALLOWED, formerly tests/test_layers.py) stays here.
 """
 import ast
 import io
@@ -369,7 +369,7 @@ def src_problems(root=ROOT):
     return layer_problems(root) + placement_problems(root)
 
 
-# -- the older folder table (dev/select_tests.py reads ALLOWED) --------------------------------------------------------------------------
+# -- the older folder table --------------------------------------------------------------------------
 SKILL = ROOT / "skills" / "task-loop"
 FOLDERS = ("core", "lanes", "checks", "asks", "plan", "slots", "review", "loop", "release", "land", "look", "write", "dash")
 ALL = frozenset(FOLDERS)

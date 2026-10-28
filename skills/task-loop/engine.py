@@ -43,7 +43,6 @@ import links
 import looks
 import loop_health
 import netgate
-import notifier
 import outcome as oc
 import seams
 import tl
@@ -3302,7 +3301,7 @@ class Engine:
             return
         given = bool(str(a.get("answer") or "").strip())  # tl-gy4: an answer filed on the ask is an answer, whether or not the bead changed
         if a.get("brief") == self.brief_hash and not self.cfg.get("fresh") and not given:
-            raise Blocked("waiting: for the owner's answer to ask %s (%s): %s" % (a["id"], a["kind"], fmt.clip(push_text(a["question"]), 200)), kind=oc.Kind.WAIT_ASK)
+            raise Blocked("waiting: for the owner's answer to ask %s (%s): %s" % (a["id"], a["kind"], fmt.clip(ask_line(a["question"]), 200)), kind=oc.Kind.WAIT_ASK)
         a.update(status="answered", answered=time.time())
         self.ask_path().write_text(json.dumps(a, indent=1))
         self.answered = a
@@ -3335,7 +3334,6 @@ class Engine:
         self.ask_path().write_text(json.dumps(a, indent=1))
         moved = self.leave_queue() if kind in ("decision", "ticket") else ""
         self.comment("Ask (engine) %s (%s): %s%s" % (a["id"], kind, a["question"][:1500], moved))
-        self.notify(a)
         return a
 
     def leave_queue(self):
@@ -3350,18 +3348,6 @@ class Engine:
             self.store.bd("label", "add", self.bead, info)
         return "\n(Out of the %s queue: label %s removed%s; relabel it %s once it can be done unattended.)" % (
             pick, pick, ", %s added" % info if info else "", pick)
-
-    def notify(self, a):
-        """The owner's push (tl.push -> notifier.py): a command in ~/.config/task-loop/notify, or the word `desktop`."""
-        err = tl.push(a["kind"], a["bead"], a["id"], push_text(a["question"]))
-        if err:
-            self.warn("notify failed: %s" % err)
-        else:
-            try:  # the clock of the 24 h repeat starts at the first push
-                a["pushed_at"] = time.time()
-                self.ask_path().write_text(json.dumps(a, indent=1))
-            except OSError:
-                pass
 
     def checkpoint_path(self):
         return tl.config_dir() / "checkpoints" / ("%s.json" % self.bead)
@@ -5474,26 +5460,11 @@ def tidy_question(text, cap=600):
     return cut + " ... (more in details)"
 
 
-def ask_hint(kind, why, question):
-    """One line saying what a free-text reply should contain, for the asks that have no buttons for it."""
-    if kind == "denied":
-        hint = "Reply with what to try or what to allow; the run goes on from its checkpoint."
-    elif kind == "budget":
-        hint = "Pick an option, or reply with a hint."
-        if "checks " in why.split("Where it went:")[-1].split(",")[0] and "Where it went:" in why:
-            hint += " Most of the time went to check rounds: running again repeats them unless you say what to change."
-    elif kind == "stuck" and "nothing proves" in why:
-        hint = "Reply with how to prove it, or that it is fine to land without."
-    else:
-        return question
-    return question + "\n" + hint
-
-
 SENT_END = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9(`'\"])")
 
 
-def push_text(markdown):
-    """A push notification's one line from an ask's markdown: the headline, then what is needed."""
+def ask_line(markdown):
+    """One line from an ask's markdown: the headline, then what is needed."""
     lines = [x.strip() for x in (markdown or "").splitlines() if x.strip()]
     head = lines[0].replace("**", "") if lines else ""
     need = next((x.split(":**", 1)[1].strip() for x in lines if x.startswith("**What I need")), "")
@@ -5652,9 +5623,6 @@ class Heartbeat:
 
     def stop(self):
         self.stop_ev.set()
-
-
-GROUPS = ("static", "tests", "acceptance")
 
 
 LINK_CAP = 200  # links opened per review

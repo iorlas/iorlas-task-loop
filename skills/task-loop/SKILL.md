@@ -127,17 +127,10 @@ handles: "Run again" on an over-budget ask (any answer resumes from the checkpoi
 "Allow one more planner run" on the re-plan cap; other stuck asks and tickets have the text box only. decision: the
 planner, writer or reviewer returns `options` (2-4, each label, cost, exact answer, one `recommended`; a required schema
 field, empty with no question) and the engine copies them into the record. A red banner shows when delegate says a subscription lane is out.
-Push: put one shell command in `~/.config/task-loop/notify`; each new ask runs it with `TL_ASK_KIND`, `TL_ASK_BEAD`,
-`TL_ASK_ID`, `TL_ASK_TEXT`. An ask nobody answered is pushed again after 24 h (`TL_ASK_REPEAT=1`, once per 24 h until answered or parked), and once a day one push (kind `look`) says how many owner-look reviews wait; the loop does both (`tl.renotify`). A dashboard left on an older plugin version restarts at the next session start.
-
 Intake: a bead with no acceptance criteria (the field, or a `## Acceptance Criteria` section) is a ticket ask before any
 AI step; a plan of more than `engine.max_stages` (3) stages is a split ticket, unless the owner already answered one. A decision or ticket ask takes the bead out of the unattended queue: with `engine.pick_label` set (lifesim: `auto`) the engine removes that label and adds `engine.needs_info_label` (`needs-info`), and the ask comment says so; answering does not relabel it, the owner does. Verify and stuck asks keep the label. Neither label change counts as an answer.
 
-The owner's push and digest (notifier.py, digest.py): `~/.config/task-loop/notify` holds a shell command (ntfy, Pushover, a Telegram bot: it gets
-`TL_ASK_KIND`, `TL_ASK_BEAD`, `TL_ASK_ID`, `TL_ASK_TEXT`, `TL_DIGEST_TEXT`), or the word `desktop` (a notification on this machine, no account),
-or nothing/`off`. `tl notify test|desktop|off`. Every ask pushes at once; once a day after 07:00 the loop starts a detached `tl digest --send`:
-the night's landed/asked/paused/failed, the asks to answer first, and the counts of refused commands, DNS errors and flakes for the coordinator
-(`tl digest` prints it). An ask nobody answers in 3 days is parked (status `parked`, a comment on the bead; it still waits and an answer
+An ask nobody answers in 3 days is parked (status `parked`, a comment on the bead; it still waits and an answer
 un-parks it). A substantive answer from the dashboard or `tl ask answer` is also filed on the bead's notes under `## Decisions`
 (`## Testing` for verify and denied asks).
 

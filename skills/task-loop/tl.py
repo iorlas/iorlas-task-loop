@@ -28,12 +28,6 @@
   tl.py stop [--repo DIR] [--now]               stop the loop after its current bead, or now (SIGTERM)
   tl.py report [--repo DIR] [--since T] [--until T] [--json]
                                                  the M2 scorecard of a window (see SKILL.md, Report)
-  tl.py experiments [list|check] [--repo DIR] [--since T] [--until T] [--json]
-                                                 typed experiment sidecars (.task-loop/experiments/): open
-                                                 experiments, current metric vs baseline, due/overdue, NO VERDICT,
-                                                 the WIP cap 8 (check exits 1 over it, or on a rejected sidecar)
-  tl.py experiments verdict ID keep|revert|extend [--date D]
-                                                 record the verdict in the sidecar; it closes the experiment
   tl.py lost [--repo DIR] [--since T] [--json]  bead-branch commits that are not landed, reclaimed or pending
   tl.py dash ensure|stop|status|url             the dashboard server (one per machine)
   tl.py pin [VERSION] [--delegate V] [--clear]  pin the plugin install a loop and run-task use (owner override; the loop never pins)
@@ -1660,123 +1654,6 @@ def close_stale_asks(every=600):
     return done
 
 
-REPUSH, LOOK_BATCH = 24 * 3600, 24 * 3600  # an ask nobody answered is pushed again after this; a batch of looks waits at most this often
-
-
-def push(kind, bead, ask_id, text, repeat=False):
-    """The owner's push (notifier.py: a command in ~/.config/task-loop/notify, or the word `desktop`); the command gets TL_ASK_KIND,
-    TL_ASK_BEAD, TL_ASK_ID and TL_ASK_TEXT (and TL_ASK_REPEAT=1 for a second push of the same thing). -> '' when started or when
-    there is no channel, else the error."""
-    import notifier
-    got = notifier.send(kind, text, bead=bead, ask_id=ask_id, repeat=repeat)
-    return got[len("failed: "):] if got.startswith("failed") else ""
-
-
-def _ask_head(markdown):
-    lines = [x.strip() for x in str(markdown or "").splitlines() if x.strip()]
-    return lines[0].replace("**", "")[:300] if lines else ""
-
-
-def _stamp(path):
-    """The time a marker file says (it holds the time it was written), 0 when there is none."""
-    try:
-        return float(Path(path).read_text().strip())
-    except (OSError, ValueError):
-        return 0.0
-
-
-def renotify(every=3600, now=None):
-    """tl-bxk.8.26: one push per new ask was all the owner got. An ask still open and unanswered 24 h after its last push is
-    pushed again (once per 24 h until it is answered or parks); once a day, when reviews of how things look wait in the
-    repos, one push says how many. Throttled to once per `every` seconds across all callers. -> [(kind, id)] pushed."""
-    now = now or time.time()
-    marker = config_dir() / "asks" / ".repushed"
-    if now - _stamp(marker) < every:
-        return []
-    sent = []
-    try:
-        for f in sorted(glob.glob(str(config_dir() / "asks" / "*.json"))):
-            try:
-                got = _repush_one(f, now)
-            except Exception as e:  # one odd ask file never stops the rest, and never the loop that called this
-                sys.stderr.write("tl: re-push of %s skipped: %s\n" % (os.path.basename(f), e))
-                continue
-            if got:
-                sent.append(got)
-        sent += _push_looks(now)
-    except Exception as e:
-        sys.stderr.write("tl: re-push skipped: %s\n" % e)
-    finally:
-        try:
-            marker.parent.mkdir(parents=True, exist_ok=True)
-            marker.write_text(str(now))
-        except OSError:
-            pass
-    return sent
-
-
-def _repush_one(f, now):
-    """One ask file: pushed again when due. -> (kind, id) or None."""
-    def load():
-        a = json.loads(Path(f).read_text(encoding="utf-8"))
-        return a if isinstance(a, dict) and a.get("bead") and a.get("id") else None
-
-    def due(x):
-        last = float(x.get("pushed_at") or x.get("t") or now)
-        return (x.get("status") == "open" and not x.get("answer") and not x.get("answer_t")
-                and not (x.get("parks_at") and now >= float(x["parks_at"])) and now - last >= REPUSH)
-    a = load()
-    if not a or not due(a):
-        return None
-    try:
-        with os_lock(config_dir() / "locks" / ("repush-%s.lock" % hashlib.sha1(f.encode()).hexdigest()[:12]), "pid %d" % os.getpid(), timeout=0.3):
-            a = load()  # another loop may have pushed it a moment ago
-            if not a or not due(a):
-                return None
-            waited = int((now - float(a.get("t") or now)) // 3600)
-            err = push(str(a.get("kind") or "ask"), a["bead"], a["id"], "Still waiting for you (%d h): %s" % (waited, _ask_head(a.get("question"))), True)
-            if err:
-                sys.stderr.write("tl: notify failed: %s\n" % err)
-                return None
-            fresh = load() or a  # the dashboard may have written an answer meanwhile: keep it, add only the push
-            fresh["pushed_at"], fresh["pushes"] = now, int(fresh.get("pushes") or 0) + 1
-            Path(f).write_text(json.dumps(fresh, indent=1), encoding="utf-8")
-            return (a.get("kind") or "ask", a["id"])
-    except TimeoutError:
-        return None
-
-
-def _push_looks(now):
-    """The daily batch: owner-look beads still open across the registered repos."""
-    state = config_dir() / "asks" / ".looks_pushed"
-    if now - _stamp(state) < LOOK_BATCH:
-        return []
-    try:
-        repos = [r for r in json.loads((config_dir() / "repos.json").read_text(encoding="utf-8")) if isinstance(r, str) and os.path.isdir(r)]
-    except (OSError, ValueError):
-        return []
-    waiting, first = 0, ""
-    for r in repos:
-        try:
-            out = bd("list", "--label", "owner-look", "--json", "-n", "0", cwd=r)
-            rows = json.loads(out.stdout or "[]") if out.returncode == 0 else []
-        except (SystemExit, ValueError, OSError):
-            continue
-        rows = [x for x in rows if isinstance(x, dict) and x.get("status") != "closed"]
-        waiting += len(rows)
-        first = first or (rows[0].get("id") if rows else "")
-    try:
-        state.parent.mkdir(parents=True, exist_ok=True)
-        state.write_text(str(now))  # checked once a day whatever it found
-    except OSError:
-        return []
-    if not waiting:
-        return []
-    err = push("look", first, "looks-" + time.strftime("%Y%m%d", time.localtime(now)),
-               "%d look review%s wait for you: the dashboard's Looks tab has the pictures" % (waiting, "" if waiting == 1 else "s"))
-    return [] if err else [("look", "looks")]
-
-
 def cmd_ask(a):
     """The inbox from the terminal: the dashboard's own code answers and withdraws, so both say the same things."""
     d = dash_module()
@@ -1813,7 +1690,7 @@ def cmd_ask(a):
 
 def park_stale_asks(every=600):
     """tl-bxk.8.25: an open ask nobody answered by its parks_at (3 days after it was asked) is parked: status `parked`, a comment on
-    the bead, off the live inbox's top and out of the morning digest's open count. The bead still waits; an answer (the dashboard,
+    the bead, off the live inbox's top and out of the live inbox. The bead still waits; an answer (the dashboard,
     `tl ask answer`, or a comment on the bead) un-parks it. At most once per `every` seconds across all callers. -> bead ids."""
     marker = config_dir() / "asks" / ".parked"
     try:
@@ -1855,29 +1732,9 @@ def park_stale_asks(every=600):
     return done
 
 
-def cmd_notify(a):
-    """tl notify test | desktop | off: the owner's push channel (notifier.py). `desktop` and `off` write ~/.config/task-loop/notify."""
-    import notifier
-    f = config_dir() / "notify"
-    if a.op in ("desktop", "off"):
-        config_dir().mkdir(parents=True, exist_ok=True)
-        f.write_text(a.op + "\n", encoding="utf-8")
-        print("notify: %s" % a.op)
-        return 0
-    how = notifier.channel()[0]
-    got = notifier.send("test", "task-loop push test: if you read this, asks and the morning digest reach you", bead="test")
-    print("notify (%s): %s%s" % (how, got, "" if how != "off" else " -- put a shell command, or the word desktop, in %s" % f))
-    return 0 if got == "sent" else 1
-
-
 def cmd_reflect(a):
     import reflect_digest
     return reflect_digest.cmd_reflect(a)
-
-
-def cmd_digest(a):
-    import digest
-    return digest.cmd_digest(a)
 
 
 def cmd_dash(a):
@@ -2236,12 +2093,6 @@ def main(argv=None):
     p.add_argument("text", nargs="*", help="answer: the answer; withdraw: why")
     p.add_argument("--json", action="store_true")
     p.add_argument("--amend", action="store_true", help="answer: replace an answer no run has used yet (the history stays)")
-    p = sp.add_parser("notify", help="the owner's push channel: test it, or choose desktop notifications / off")
-    p.add_argument("op", choices=["test", "desktop", "off"])
-    p = sp.add_parser("digest", help="the digest of the night (landed, asks, paused, failed) plus refusals, DNS errors, flakes")
-    p.add_argument("--since")
-    p.add_argument("--until")
-    p.add_argument("--send", action="store_true", help="push it through the notify channel (default: print)")
     p = sp.add_parser("dash")
     p.add_argument("op", choices=["ensure", "stop", "status", "url"])
     p = sp.add_parser("run-task")
@@ -2299,16 +2150,6 @@ def main(argv=None):
     p.add_argument("--repo")
     p.add_argument("--since", metavar="T")
     p.add_argument("--json", action="store_true")
-    p = sp.add_parser("experiments", help="typed experiment sidecars: open experiments vs baselines, due/overdue, WIP cap 8")
-    p.add_argument("op", nargs="?", choices=["list", "check", "verdict"], default="list",
-                   help="check: exit 1 when more than 8 are open or a sidecar is rejected; verdict: close one")
-    p.add_argument("bead", nargs="?", help="verdict: the experiment's bead id")
-    p.add_argument("kind", nargs="?", help="verdict: keep | revert | extend")
-    p.add_argument("--repo")
-    p.add_argument("--since", metavar="T", help="reporting window start (default 7d back)")
-    p.add_argument("--until", metavar="T", help="reporting window end (default now)")
-    p.add_argument("--json", action="store_true")
-    p.add_argument("--date", metavar="YYYY-MM-DD", help="verdict: its date (default today, UTC)")
     p = sp.add_parser("pin", help="pin the plugin install loops and runs use (owner override; --clear removes the pin)")
     p.add_argument("version", nargs="?", help="task-loop version (a cache dir under ~/.claude/plugins/cache)")
     p.add_argument("--delegate", metavar="V", help="delegate version")
@@ -2353,9 +2194,6 @@ def main(argv=None):
     if a.cmd in ("report", "lost"):
         import report
         return {"report": report.cmd_report, "lost": report.cmd_lost}[a.cmd](a)
-    if a.cmd == "experiments":
-        import experiments
-        return experiments.cmd_experiments(a)
     if a.cmd == "trace":
         return cmd_trace(a)
     if a.cmd == "bd":
@@ -2363,7 +2201,7 @@ def main(argv=None):
         return r.returncode
     return {"register": cmd_register, "claim": cmd_claim, "heartbeat": cmd_heartbeat, "stage": cmd_stage, "worker": cmd_worker,
             "land": cmd_land, "close": cmd_close, "block": cmd_block, "slot": cmd_slot, "worktree": cmd_worktree,
-            "dash": cmd_dash, "ask": cmd_ask, "notify": cmd_notify, "digest": cmd_digest, "reflect": cmd_reflect, "hook": cmd_hook, "doctor": cmd_doctor, "land-lock": cmd_land_lock,
+            "dash": cmd_dash, "ask": cmd_ask, "reflect": cmd_reflect, "hook": cmd_hook, "doctor": cmd_doctor, "land-lock": cmd_land_lock,
             "pin": cmd_pin, "rollback": cmd_rollback, "cutover": cmd_cutover}[a.cmd](a)
 
 

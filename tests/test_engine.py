@@ -2409,18 +2409,9 @@ class EngineTest(unittest.TestCase):
             self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Build dreams now or park?")]})
         self.assertFalse(any(c[:1] == ("label",) for c in self.bd_calls))
 
-    @POSIX_CHECK
-    def test_an_ask_names_its_repo_and_runs_the_owners_notify_command(self):
-        out = Path(self.tmp.name, "pushed")
-        (tl.config_dir()).mkdir(parents=True, exist_ok=True)
-        (tl.config_dir() / "notify").write_text('echo "$TL_ASK_KIND $TL_ASK_BEAD $TL_ASK_TEXT" > %s' % out)
+    def test_an_ask_names_its_repo(self):
         self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
         self.assertEqual(Path(self.ask()["repo"]).resolve(), self.wt.resolve())
-        for _ in range(50):
-            if out.exists():
-                break
-            time.sleep(0.1)
-        self.assertEqual(out.read_text().strip(), "decision t-1 Old format or new? - Pick an option, or write your own answer.")
 
     def test_a_used_up_replan_is_a_stuck_ask(self):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [review(unmet=["a"])]},
@@ -2551,9 +2542,6 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(engine.tidy_question("over budget: $0.00 of $15, 187 of 180 min"), "over budget: 187 of 180 min")
         keep = engine.tidy_question("denied `git push origin main` and gave no answer; run it or allow it, then rerun. (said:\n" + "x" * 100 + ")")
         self.assertIn("`git push origin main` and gave no answer; run it or allow it, then rerun.", keep)
-        self.assertIn("what to allow", engine.ask_hint("denied", "needs a human: x", "q"))
-        self.assertIn("how to prove it", engine.ask_hint("stuck", "the check before land: nothing proves y", "q"))
-        self.assertEqual(engine.ask_hint("stuck", "replan: x", "q"), "q")
         log = Path(self.tmp.name) / "run.jsonl" if hasattr(self, "tmp") else Path(tempfile.mkdtemp()) / "run.jsonl"
         log.write_text("\n".join(json.dumps({"kind": "end", "step": st, "secs": sec}) for st, sec in (
             ("checks", 6000), ("checks", 3800), ("write", 900), ("plan", 20))))
@@ -2570,7 +2558,7 @@ class EngineTest(unittest.TestCase):
             self.assertTrue(first.startswith("**") and first.endswith("**") and len(first) > 4, (kind, first))
             self.assertEqual(md.count("**") % 2, 0, md)
             self.assertLessEqual(len([x for x in md.splitlines() if x.startswith("- ")]), 3)
-        self.assertNotIn("**", engine.push_text(engine.ask_markdown("decision", "w", "Use **bold** thing. Fine?")))
+        self.assertNotIn("**", engine.ask_line(engine.ask_markdown("decision", "w", "Use **bold** thing. Fine?")))
 
     def test_an_unchecked_requirement_stops_the_land_with_a_verify_ask(self):
         r = dict(CLEAN, unchecked=[{"what": "the cited spec link did not open", "kind": "link"}])

@@ -15,24 +15,10 @@
       "severity": "error"
     },
     {
-      "column": 27,
-      "path": "dev/migrate_experiments.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `group`",
-      "severity": "error"
-    },
-    {
       "column": 17,
       "path": "dev/release.py",
       "name": "not-iterable",
       "concise_description": "Type `None` is not iterable",
-      "severity": "error"
-    },
-    {
-      "column": 46,
-      "path": "dev/replay_select_tests.py",
-      "name": "bad-specialization",
-      "concise_description": "`float | int | list[Unknown] | Unknown` is not assignable to any of constraints `float`, `Decimal`, `Fraction` of type variable `_NumberT`",
       "severity": "error"
     },
     {
@@ -1198,13 +1184,6 @@
       "severity": "error"
     },
     {
-      "column": 58,
-      "path": "skills/task-loop/digest.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of type `dict[Unknown, Unknown] | int | str | Unknown` has no attribute `items`",
-      "severity": "error"
-    },
-    {
       "column": 32,
       "path": "skills/task-loop/engine.py",
       "name": "bad-assignment",
@@ -2059,41 +2038,6 @@
       "severity": "error"
     },
     {
-      "column": 23,
-      "path": "skills/task-loop/experiments.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Unknown | None` is not assignable to parameter `x` with type `Buffer | SupportsFloat | SupportsIndex | str` in function `float.__new__`",
-      "severity": "error"
-    },
-    {
-      "column": 16,
-      "path": "skills/task-loop/experiments.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `float`",
-      "severity": "error"
-    },
-    {
-      "column": 16,
-      "path": "skills/task-loop/experiments.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `int`",
-      "severity": "error"
-    },
-    {
-      "column": 16,
-      "path": "skills/task-loop/experiments.py",
-      "name": "unsupported-operation",
-      "concise_description": "`Literal[True]` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 22,
-      "path": "skills/task-loop/experiments.py",
-      "name": "bad-index",
-      "concise_description": "Cannot index into `dict[str, float | str]`",
-      "severity": "error"
-    },
-    {
       "column": 27,
       "path": "skills/task-loop/lanes/call.py",
       "name": "bad-assignment",
@@ -2756,69 +2700,6 @@
       "path": "tests/cockpit_scenario.py",
       "name": "bad-assignment",
       "concise_description": "`Literal[True]` is not assignable to dict key `passed` with type `list[Unknown]`",
-      "severity": "error"
-    },
-    {
-      "column": 46,
-      "path": "tests/experiments_scenario.py",
-      "name": "unsupported-operation",
-      "concise_description": "`+` is not supported between `dict[Unknown, Unknown]` and `Literal['.jsonl']`",
-      "severity": "error"
-    },
-    {
-      "column": 46,
-      "path": "tests/experiments_scenario.py",
-      "name": "unsupported-operation",
-      "concise_description": "`+` is not supported between `int` and `Literal['.jsonl']`",
-      "severity": "error"
-    },
-    {
-      "column": 46,
-      "path": "tests/experiments_scenario.py",
-      "name": "unsupported-operation",
-      "concise_description": "`+` is not supported between `list[Unknown]` and `Literal['.jsonl']`",
-      "severity": "error"
-    },
-    {
-      "column": 28,
-      "path": "tests/experiments_scenario.py",
-      "name": "unsupported-operation",
-      "concise_description": "`+` is not supported between `dict[Unknown, Unknown]` and `Literal['.jsonl']`",
-      "severity": "error"
-    },
-    {
-      "column": 28,
-      "path": "tests/experiments_scenario.py",
-      "name": "unsupported-operation",
-      "concise_description": "`+` is not supported between `int` and `Literal['.jsonl']`",
-      "severity": "error"
-    },
-    {
-      "column": 28,
-      "path": "tests/experiments_scenario.py",
-      "name": "unsupported-operation",
-      "concise_description": "`+` is not supported between `list[Unknown]` and `Literal['.jsonl']`",
-      "severity": "error"
-    },
-    {
-      "column": 28,
-      "path": "tests/experiments_scenario.py",
-      "name": "unsupported-operation",
-      "concise_description": "`+` is not supported between `dict[Unknown, Unknown]` and `Literal['.jsonl']`",
-      "severity": "error"
-    },
-    {
-      "column": 28,
-      "path": "tests/experiments_scenario.py",
-      "name": "unsupported-operation",
-      "concise_description": "`+` is not supported between `int` and `Literal['.jsonl']`",
-      "severity": "error"
-    },
-    {
-      "column": 28,
-      "path": "tests/experiments_scenario.py",
-      "name": "unsupported-operation",
-      "concise_description": "`+` is not supported between `list[Unknown]` and `Literal['.jsonl']`",
       "severity": "error"
     },
     {
@@ -5461,20 +5342,6 @@
       "severity": "error"
     },
     {
-      "column": 9,
-      "path": "tests/test_digest.py",
-      "name": "not-iterable",
-      "concise_description": "Type `None` is not iterable",
-      "severity": "error"
-    },
-    {
-      "column": 9,
-      "path": "tests/test_digest.py",
-      "name": "not-iterable",
-      "concise_description": "Type `None` is not iterable",
-      "severity": "error"
-    },
-    {
       "column": 21,
       "path": "tests/test_engine.py",
       "name": "bad-assignment",
@@ -7190,27 +7057,6 @@
       "severity": "error"
     },
     {
-      "column": 28,
-      "path": "tests/test_experiments.py",
-      "name": "bad-assignment",
-      "concise_description": "`Literal['', '   ', 5] | None` is not assignable to dict key `hypothesis` with type `str`",
-      "severity": "error"
-    },
-    {
-      "column": 28,
-      "path": "tests/test_experiments.py",
-      "name": "bad-assignment",
-      "concise_description": "`Literal['', '   ', 5] | None` is not assignable to dict key `keep_if` with type `str`",
-      "severity": "error"
-    },
-    {
-      "column": 28,
-      "path": "tests/test_experiments.py",
-      "name": "bad-assignment",
-      "concise_description": "`Literal['', '   ', 5] | None` is not assignable to dict key `revert` with type `str`",
-      "severity": "error"
-    },
-    {
       "column": 53,
       "path": "tests/test_fake_route.py",
       "name": "bad-argument-type",
@@ -8244,34 +8090,6 @@
       "path": "tests/test_prompt_golden.py",
       "name": "bad-assignment",
       "concise_description": "`() -> dict[@_, @_]` is not assignable to attribute `check_secs` with type `(config_dir: Unknown | None = None) -> dict[str, Unknown]`",
-      "severity": "error"
-    },
-    {
-      "column": 20,
-      "path": "tests/test_race.py",
-      "name": "unsupported-operation",
-      "concise_description": "`<` is not supported between `None` and `float`",
-      "severity": "error"
-    },
-    {
-      "column": 17,
-      "path": "tests/test_race.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `flock`",
-      "severity": "error"
-    },
-    {
-      "column": 32,
-      "path": "tests/test_race.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `LOCK_EX`",
-      "severity": "error"
-    },
-    {
-      "column": 48,
-      "path": "tests/test_race.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `LOCK_NB`",
       "severity": "error"
     },
     {

@@ -3,12 +3,12 @@
  "oversize": {
   "skills/task-loop/dash/server.py": 1905,
   "skills/task-loop/dash/timeline.py": 740,
-  "skills/task-loop/engine.py": 5511,
+  "skills/task-loop/engine.py": 5486,
   "skills/task-loop/lifecycle.py": 584,
-  "skills/task-loop/loop.py": 1187,
+  "skills/task-loop/loop.py": 1178,
   "skills/task-loop/report.py": 624,
-  "skills/task-loop/tl.py": 1842,
-  "tests/test_engine.py": 3962,
+  "skills/task-loop/tl.py": 1715,
+  "tests/test_engine.py": 3955,
   "tests/test_loop.py": 1461,
   "tests/test_stages.py": 1672
  },
@@ -26,14 +26,14 @@
   "skills/task-loop/engine.py::Engine.self_verify": 98,
   "skills/task-loop/engine.py::Engine.stage": 224,
   "skills/task-loop/lifecycle.py::lifecycle_report": 237,
-  "skills/task-loop/loop.py::passes": 235,
+  "skills/task-loop/loop.py::passes": 226,
   "skills/task-loop/tl.py::cmd_slot": 131,
-  "skills/task-loop/tl.py::main": 182,
+  "skills/task-loop/tl.py::main": 163,
   "tests/cockpit_scenario.py::main": 166,
   "tests/lifecycle_scenario.py::main": 142,
   "tests/test_engine.py::EngineTest.push_race_interrupted_cell": 125,
   "tests/test_engine.py::EngineTest.run_push_race": 111,
   "tests/test_loop.py::StopRequests.check_legacy_windows_stop": 149
  },
- "pyrefly_baseline_errors": 1928
+ "pyrefly_baseline_errors": 1902
 }
