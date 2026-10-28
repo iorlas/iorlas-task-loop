@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support import tlbd  # noqa: E402
-import engine  # noqa: E402
+from taskloop.app.run import engine  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 import tl  # noqa: E402
 from taskloop.app.wire import doctor  # noqa: E402

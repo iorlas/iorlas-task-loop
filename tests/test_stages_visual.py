@@ -1,4 +1,5 @@
 """Stage tests, part 2: the visual (look) stages, resume counting and bead claims. Split from test_stages."""
+import subprocess
 import json
 import shutil
 import sys
@@ -10,6 +11,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "task-loop"))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from taskloop.app.land.rebase import MAX_REBASE_RESETS  # noqa: E402
 from support import fake_route  # noqa: E402
 from support.checkpoints import put_ck, read_ck  # noqa: E402
 from support.fakes import as_bead  # noqa: E402
@@ -71,7 +73,7 @@ class VisualWork(StagesTest):
         return [c[0] for c in s.calls]
 
     def test_a_look_judge_with_no_lane_leaves_the_pictures_unjudged_and_the_bead_unparked(self):
-        late = te.stop("no_lane", at=engine.time.time() + 3600, family="xai", lane="GROK", say="no lane")
+        late = te.stop("no_lane", at=time.time() + 3600, family="xai", lane="GROK", say="no lane")
         rc, s = self.go({"plan": [PLAN], "write": [self.write()], "look": [late], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertIn("the look judge had no lane", self.eng.log_path.read_text())
@@ -372,7 +374,7 @@ class ResumeCount(StagesTest):
         self.assertEqual(e.rebase.onto_base(), "")  # nothing behind now
 
     def test_the_count_starts_again_after_a_rebase_at_most_twice_per_bead(self):
-        e = make_engine(self.wt, store=self.store, attrs={"rebase_resets": engine.MAX_REBASE_RESETS, "planned": 3})
+        e = make_engine(self.wt, store=self.store, attrs={"rebase_resets": MAX_REBASE_RESETS, "planned": 3})
         self.behind_branch()
         e.git("checkout", "-q", "task/t-1")
         self.assertEqual(e.rebase.onto_base(), "rebased")
@@ -389,9 +391,9 @@ class ResumeCount(StagesTest):
         self.assertNotIn("<old_plan>", s.prompts[0])  # a fresh plan, not an amend
         self.assertIn("Use the new format.", s.prompts[0])  # the answer is in the planner's brief
         self.assertEqual(self.eng.planned, 1)
-        out = engine.subprocess.run(["git", "branch", "--list", "task/t-1-stale-*"], cwd=self.wt, capture_output=True, text=True).stdout
+        out = subprocess.run(["git", "branch", "--list", "task/t-1-stale-*"], cwd=self.wt, capture_output=True, text=True).stdout
         self.assertIn("task/t-1-stale-", out)  # the earlier work is kept
-        shown = engine.subprocess.run(["git", "show", "origin/main:a.txt"], cwd=self.wt, capture_output=True, text=True).stdout
+        shown = subprocess.run(["git", "show", "origin/main:a.txt"], cwd=self.wt, capture_output=True, text=True).stdout
         self.assertEqual(shown, "main moved on\n")
         self.assertTrue(any("Resume (engine)" in str(c) for c in self.bd_calls))  # the bead says where the parked work is
 
@@ -442,7 +444,7 @@ class ResumeCount(StagesTest):
         self.assertNotIn("resume_conflict", text)
         self.assertFalse(self.last_trace()["salvaged"])
         self.assertEqual(gitrepo.git("show", "origin/main:a.txt", cwd=str(self.wt)), "main moved on")
-        self.assertEqual(engine.subprocess.run(["git", "branch", "--list", "task/t-1-stale-*"], cwd=self.wt, capture_output=True, text=True).stdout, "")
+        self.assertEqual(subprocess.run(["git", "branch", "--list", "task/t-1-stale-*"], cwd=self.wt, capture_output=True, text=True).stdout, "")
 
     def test_a_real_resume_conflict_in_a_few_files_is_fixed_not_thrown_away(self):
         self.wip_branch(["mine 1", "mine 2"], "theirs")
@@ -456,7 +458,7 @@ class ResumeCount(StagesTest):
         self.assertTrue(self.last_trace()["salvaged"])
         self.assertEqual(gitrepo.git("show", "origin/main:a.txt", cwd=str(self.wt)), "merged")
         self.assertEqual(self.eng.fixes, 0)  # the land's two fix rounds are its own
-        self.assertEqual(engine.subprocess.run(["git", "branch", "--list", "task/t-1-stale-*"], cwd=self.wt, capture_output=True, text=True).stdout, "")
+        self.assertEqual(subprocess.run(["git", "branch", "--list", "task/t-1-stale-*"], cwd=self.wt, capture_output=True, text=True).stdout, "")
 
     def test_a_resume_conflict_in_more_than_ten_files_starts_again_as_before(self):
         files = ["c%d.txt" % n for n in range(11)]
@@ -466,7 +468,7 @@ class ResumeCount(StagesTest):
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])
         self.assertIn("resume_conflict", self.eng.log_path.read_text())
         self.assertFalse(self.last_trace()["salvaged"])
-        out = engine.subprocess.run(["git", "branch", "--list", "task/t-1-stale-*"], cwd=self.wt, capture_output=True, text=True).stdout
+        out = subprocess.run(["git", "branch", "--list", "task/t-1-stale-*"], cwd=self.wt, capture_output=True, text=True).stdout
         self.assertIn("task/t-1-stale-", out)
         stale = out.split()[-1]
         self.assertEqual(gitrepo.git("show", stale + ":c0.txt", cwd=str(self.wt)), "mine 2")  # the work is kept whole
@@ -493,7 +495,7 @@ class ResumeCount(StagesTest):
         self.assertEqual(rc, 0, self.blocked)
         self.assertIn("resume_conflict", self.eng.log_path.read_text())
         self.assertFalse(self.last_trace()["salvaged"])
-        out = engine.subprocess.run(["git", "branch", "--list", "task/t-1-stale-*"], cwd=self.wt, capture_output=True, text=True).stdout
+        out = subprocess.run(["git", "branch", "--list", "task/t-1-stale-*"], cwd=self.wt, capture_output=True, text=True).stdout
         stale = out.split()[-1]
         self.assertEqual(gitrepo.git("show", stale + ":a.txt", cwd=str(self.wt)), "mine 2")  # the original work, not a half-fixed rebase
         self.assertEqual(self.eng.fixes, 0)

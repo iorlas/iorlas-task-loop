@@ -35,7 +35,7 @@ from clock import FakeClock  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from support.briefs import brief_digest  # noqa: E402
 from support.builders import cfg_with, make_engine  # noqa: E402
-import engine  # noqa: E402
+from taskloop.app.run import engine  # noqa: E402
 from taskloop.app.run import entry  # noqa: E402
 import seams  # noqa: E402
 from support.fakes import FakeBeadStore, as_bead, as_comment  # noqa: E402

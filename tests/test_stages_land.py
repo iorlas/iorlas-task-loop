@@ -1,4 +1,5 @@
 """Stage tests, part 3: the stale tree, slot hygiene, dead lanes, contracts and follow-ups. Split from test_stages."""
+import subprocess
 import json
 import shutil
 import sys
@@ -10,6 +11,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "task-loop"))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from taskloop.domain.land.matchers import _TRANSIENT as TRANSIENT_PUSH  # noqa: E402
 from support import fake_route  # noqa: E402
 from support.checkpoints import put_ck, read_ck  # noqa: E402
 from support import tlbd  # noqa: E402
@@ -241,7 +243,7 @@ class SlotHygiene(StagesTest):
     def test_a_parked_bead_leaves_the_slot_at_the_detached_base(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which format?")]})
         self.assertEqual(rc, 2)
-        head = engine.subprocess.run(["git", "symbolic-ref", "-q", "HEAD"], cwd=self.wt, capture_output=True, text=True)
+        head = subprocess.run(["git", "symbolic-ref", "-q", "HEAD"], cwd=self.wt, capture_output=True, text=True)
         self.assertNotEqual(head.returncode, 0)  # detached
         self.assertEqual(self.eng.git("rev-parse", "HEAD"), self.eng.git("rev-parse", "origin/main"))
         self.assertTrue(self.eng.git("rev-parse", "--verify", "-q", "refs/heads/task/t-1"))  # the branch keeps the bead's work
@@ -352,14 +354,14 @@ class Contracts(StagesTest):
     @te.no_repo
     def test_a_hooks_test_output_before_the_push_is_not_a_network_error(self):
         tail = "tests: Connection refused by the fake server (expected)\n" + "ok test passed\n" * 60 + "error: failed to push some refs\n"
-        self.assertTrue(engine.TRANSIENT_PUSH.search(tail))  # the whole output would match
-        self.assertFalse(engine.TRANSIENT_PUSH.search(tail[-600:]))  # the engine reads only the push's own last lines
+        self.assertTrue(TRANSIENT_PUSH.search(tail))  # the whole output would match
+        self.assertFalse(TRANSIENT_PUSH.search(tail[-600:]))  # the engine reads only the push's own last lines
 
     @te.no_repo
     def test_a_rejected_or_other_push_failure_is_not_retried_as_the_network(self):
-        self.assertFalse(engine.TRANSIENT_PUSH.search("! [rejected] HEAD -> main (non-fast-forward)"))
-        self.assertFalse(engine.TRANSIENT_PUSH.search("remote: error: GH006: Protected branch update failed"))
-        self.assertTrue(engine.TRANSIENT_PUSH.search("fatal: unable to access 'https://x/': Could not resolve host: x"))
+        self.assertFalse(TRANSIENT_PUSH.search("! [rejected] HEAD -> main (non-fast-forward)"))
+        self.assertFalse(TRANSIENT_PUSH.search("remote: error: GH006: Protected branch update failed"))
+        self.assertTrue(TRANSIENT_PUSH.search("fatal: unable to access 'https://x/': Could not resolve host: x"))
 
     def test_a_delegate_crash_is_retried_fresh_and_the_run_goes_on(self):
         crash = fake_route.NO_ANSWER  # route.py died: delegate printed no answer
@@ -555,7 +557,7 @@ class ClaimPerBead(StagesTest):
         self.assertIn("changed hands", why)
 
     def test_a_loop_that_pauses_a_bead_clears_its_assignee(self):
-        late = te.stop("no_lane", at=engine.time.time() + 3600, family="openai", lane="OPENAI", say="no lane")
+        late = te.stop("no_lane", at=time.time() + 3600, family="openai", lane="OPENAI", say="no lane")
         rc, s = self.run_engine({"plan": [late]})
         self.assertTrue(self.eng.why.startswith("paused:"), self.eng.why)
         updates = [c for c in self.bd_calls if c[:2] == ("update", "t-1") and "--append-notes" not in c]

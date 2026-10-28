@@ -20,7 +20,7 @@ from taskloop.domain.prompts import reflect as fp  # noqa: E402
 from taskloop.domain.prompts import review as rp  # noqa: E402
 from taskloop.domain.prompts import verify as vp  # noqa: E402
 from taskloop.domain.prompts import write as wp  # noqa: E402
-import engine  # noqa: E402
+from taskloop.app.run import engine  # noqa: E402
 from support.builders import cfg_with  # noqa: E402
 from taskloop.domain.checks.writer_split import WriterSplit  # noqa: E402
 

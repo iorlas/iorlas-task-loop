@@ -16,14 +16,19 @@ from taskloop.contracts.loop import LoopState  # noqa: E402
 
 
 def fake_install(cache, ver, tl_py="import sys\n", missing=(), loop_py=""):
-    """A version tree in the plugin cache: the core files of an install (loop_env.py holds `loop_py`), a plugin.json."""
+    """A version tree in the plugin cache: the core files of an install (loop_env.py holds `loop_py`), an empty engine module, a plugin.json."""
     d = Path(cache) / ver / "skills" / "task-loop"
     d.mkdir(parents=True)
     (d.parents[1] / ".claude-plugin").mkdir()
     (d.parents[1] / ".claude-plugin" / "plugin.json").write_text("{}")
-    for f in ("tl.py", "loop_env.py", "engine.py"):
+    for f in ("tl.py", "loop_env.py"):
         if f not in missing:
-            (d / f).write_text(tl_py if f == "tl.py" else loop_py if f == "loop_env.py" else "")
+            (d / f).write_text(tl_py if f == "tl.py" else loop_py)
+    engine = d.parents[1] / "src" / "taskloop" / "app" / "run"  # the engine module the loop imports to vet an install
+    engine.mkdir(parents=True)
+    for pkg in (engine.parents[2], engine.parents[1], engine):
+        (pkg / "__init__.py").write_text("")
+    (engine / "engine.py").write_text("")
     return d
 
 

@@ -28,7 +28,6 @@ max-complexity = 12
 # table to tests/rules_ratchet.json ("ruff_baseline"): an entry may be deleted when its last hit is fixed, never added.
 # Ruff takes the union of every matching glob, so these sit beside the groups above.
 "dev/race.py" = ["B007"]
-"skills/task-loop/engine.py" = ["B008", "SIM108"]
 "skills/task-loop/tl.py" = ["UP036"]
 "src/taskloop/adapters/bd.py" = ["E501", "PLW1510", "UP031"]
 "src/taskloop/adapters/delegate_route.py" = ["SIM105", "UP031"]

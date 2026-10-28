@@ -124,6 +124,7 @@ class ConfigDir:
         return self.root / "dash.json"
 
 
+PLAN_FILE = "plan.json"  # the run directory's copy of the plan the dashboard reads
 TASK_EXCLUDE = ".task/"  # the line a repo's info/exclude carries so the scratch folder is never committed
 
 

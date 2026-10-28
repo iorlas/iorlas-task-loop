@@ -17,6 +17,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "skills" / "task-loop"
+ENGINE = ROOT / "src" / "taskloop" / "app" / "run" / "engine.py"
 DELEGATION = ROOT / "src" / "taskloop" / "app" / "run" / "delegation.py"
 sys.path.insert(0, str(SRC))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -24,7 +25,7 @@ import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support.checkpoints import put_ck, read_ck  # noqa: E402
 sys.path.insert(0, str(ROOT / "tests"))
 from taskloop.app.release import reexec  # noqa: E402
-import engine  # noqa: E402
+from taskloop.app.run import engine  # noqa: E402
 from taskloop.app.run import entry  # noqa: E402
 from support.builders import cfg_with  # noqa: E402
 import seams  # noqa: E402
@@ -118,7 +119,7 @@ class Reload(unittest.TestCase):
 
             def __getattr__(this, name):
                 return getattr(script, name)
-        return (mock.patch.object(seams.DelegateRoute, "runner", lambda self, *a, **k: Runner()), mock.patch.object(engine.time, "sleep"))
+        return (mock.patch.object(seams.DelegateRoute, "runner", lambda self, *a, **k: Runner()), mock.patch.object(time, "sleep"))
 
     def run_with(self, eng, script, during=None):
         ps = self.patches(script, during)
@@ -276,7 +277,7 @@ class Reload(unittest.TestCase):
 
     def test_the_engine_and_lanes_never_store_a_resolved_route_or_a_delegate_module_across_calls(self):
         bad = []
-        for f in [SRC / "engine.py", DELEGATION, *sorted((SRC / "lanes").glob("*.py"))]:
+        for f in [ENGINE, DELEGATION, *sorted((SRC / "lanes").glob("*.py"))]:
             tree = ast.parse(f.read_text(encoding="utf-8"))
             parents = {}
             for n in ast.walk(tree):

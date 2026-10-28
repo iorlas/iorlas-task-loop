@@ -4,7 +4,7 @@ Every seam has a default that is a fake (store, router, clock); `git=` and `cfg=
 the wall clock; the engine still writes its own files under the test's XDG_CONFIG_HOME."""
 import shlex
 
-import engine
+from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.codec import from_json, to_json
 from taskloop.contracts.config import EngineConfig

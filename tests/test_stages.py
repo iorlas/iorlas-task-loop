@@ -1,4 +1,6 @@
 """tl-bxk.13: stage handoffs (docs/design/stages.md). Reuses test_engine's harness without re-running its tests."""
+import subprocess
+import os
 import json
 import shutil
 import sys
@@ -342,7 +344,7 @@ class SharedNotes(StagesTest):
     def test_a_task_running_in_another_worktree_is_listed_with_its_files(self):
         other = Path(self.tmp.name, "wt2")
         te.sh("git", "worktree", "add", "-q", "--detach", str(other), cwd=self.wt)
-        engine_lock.write_engine_lock(str(other), {"pid": engine.os.getpid(), "start": pidcheck.proc_start(engine.os.getpid()), "bead": "t-2"})
+        engine_lock.write_engine_lock(str(other), {"pid": os.getpid(), "start": pidcheck.proc_start(os.getpid()), "bead": "t-2"})
         put_ck(self.eng_(), "t-2", plan_data={"summary": "tune the soak", "stages": [
             {"goal": "g", "files": ["SoakTests.cs", "justfile"], "checks": [], "hard": False}]})
         got = self.eng_().shared.siblings()
@@ -361,7 +363,7 @@ class SharedNotes(StagesTest):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertIn("rebased the task branch onto the latest origin/main", self.eng.log_path.read_text())
-        out = engine.subprocess.run(["git", "log", "--format=%s", "origin/main"], cwd=self.wt, capture_output=True, text=True).stdout
+        out = subprocess.run(["git", "log", "--format=%s", "origin/main"], cwd=self.wt, capture_output=True, text=True).stdout
         self.assertIn("engine config", out)
         self.assertIn("Add f (t-1)", out)
 

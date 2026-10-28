@@ -5,11 +5,18 @@ import signal
 import threading
 import time
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 
+import loop_health
+import outcome as oc
+
+from taskloop.adapters import beadtools, ident
 from taskloop.app.asks import raiser
 from taskloop.app.land.followups import file_follow_ups
+from taskloop.app.run import outcomes
+from taskloop.app.run import trace as runtrace
+from taskloop.app.run.console import say
+from taskloop.app.track import verbs as track
 from taskloop.contracts import log as rec
 from taskloop.contracts.answers import VERDICTS
 from taskloop.contracts.enums import Outcome
@@ -22,11 +29,10 @@ DONE = ("landed", "done")
 
 
 class Closer:
-    """`ops` carries the engine-side helpers the close needs: oc (outcome), loop_health, tl, say, outcome_for, node_outcome, close_move,
-    reflection_text, why_code, Args."""
+    """The close of a run: the outcome's policy, the log and trace, the bead's last state."""
 
-    def __init__(self, host: Any, ops: SimpleNamespace) -> None:
-        self.e, self.o = host, ops
+    def __init__(self, host: Any) -> None:
+        self.e = host
 
     def close(self, outcome: str, why: str, sha: str, spec: Any, kind: Any = None) -> None:
         e = self.e
@@ -50,7 +56,7 @@ class Closer:
     def decide(self, outcome: str, why: str, kind: Any) -> Any:
         """The close's Kind after POLICY: a fault seen too often on one bead becomes one ask; the trace fields, the fingerprint and
         the storm check (never for a pause or an ask) are set here. kind None: the verify-gaps ask."""
-        e, oc = self.e, self.o.oc
+        e = self.e
         e.disp = None
         if kind is None:
             return None
@@ -59,7 +65,7 @@ class Closer:
         e.fp = o.fingerprint
         history: list[Any]
         try:
-            history = self.o.loop_health.recent_closes(self.o.config_dir / "traces.jsonl", self.repo_id(), now)
+            history = loop_health.recent_closes(ident.config_dir() / "traces.jsonl", self.repo_id(), now)
         except OSError:
             history = []
         e.disp = oc.apply(o, e.bead, history, now)
@@ -70,24 +76,24 @@ class Closer:
         return e.kind
 
     def storm(self, history: Any, kind: Any, o: Any, why: str) -> None:
-        e, lh = self.e, self.o.loop_health
-        trip = lh.storm_trip(history, e.bead, kind, o.fingerprint, e.clock.now())
+        e = self.e
+        trip = loop_health.storm_trip(history, e.bead, kind, o.fingerprint, e.clock.now())
         if trip and not e.dry:
-            path = lh.storm_path(self.o.config_dir, self.repo_id())
-            if lh.write_storm(path, trip, e.clock.now(), why):
-                e.storm = lh.banner(trip)
+            path = loop_health.storm_path(ident.config_dir(), self.repo_id())
+            if loop_health.write_storm(path, trip, e.clock.now(), why):
+                e.storm = loop_health.banner(trip)
                 e.warn(e.storm)
-                self.o.say(e.storm)
+                say(e.storm)
 
     def run(self, outcome: str, why: str, sha: str, spec: Any, kind: Any = None) -> None:
-        e, oc = self.e, self.o.oc
+        e = self.e
         why = why or ("stopped before a reason was recorded" if outcome == "failed" else "")
         bad = (raiser.problems(spec) if spec else ["the stop carries no ask"]) if kind in oc.ASKS else []
         if bad:  # an ask that is no ask an owner can answer is the engine's own fault; no prose question takes its place
             first = why.splitlines()[0][:200] if why else ""
             why, kind, spec = f"failed: ask_lint: {'; '.join(bad)[:300]} ({first})", oc.Kind.FAULT_ENGINE, None
         kind = self.decide(outcome, why, kind)
-        outcome = self.o.outcome_for(kind, why) if kind and kind not in oc.FINISH else outcome
+        outcome = outcomes.outcome_for(kind, why) if kind and kind not in oc.FINISH else outcome
         if e.disp and e.disp.escalated and spec is None:
             spec = askspecs.repeated_fault(oc.KNOBS["fault_retries"], why.splitlines()[0][:200])
         new = fu.batch(e.bead, e.leftovers, e.filed).file  # one per typed key, at most the cap
@@ -121,15 +127,15 @@ class Closer:
 
     def record(self, outcome: str, why: str, sha: str, spec: Any, kind: Any, stats: str) -> None:
         """The run's log and trace: the close node, the reflection, the owner's question."""
-        e, o = self.e, self.o
+        e = self.e
         e.records.log_run()
         last = e.steps.cur or e.steps.last
         if last and (e.steps.moved_from != last.n or e.steps.moved_to not in ("ask", "pause", "close")):
-            to, cause = o.close_move(outcome, why, kind)  # no move out of the run was logged from the last node: the close is it
+            to, cause = outcomes.close_move(outcome, why, kind)  # no move out of the run was logged from the last node: the close is it
             e.steps.move(to, cause, why.splitlines()[0][:200] if why else outcome)
-        e.steps.end(o.node_outcome(outcome, why, kind))
+        e.steps.end(outcomes.node_outcome(outcome, why, kind))
         e.steps.begin("close", f"close: {outcome}")
-        code = o.why_code(kind.value if kind else "", outcome)
+        code = runtrace.why_code(kind.value if kind else "", outcome)
         e.log.emit(rec.Close(outcome=Outcome(outcome), why_code=code, sha=sha or "", why=why[:500]))
         e.steps.outcome(outcome, why.splitlines()[0][:200] if why else "")
         e.steps.end()
@@ -151,7 +157,7 @@ class Closer:
                 e.comment("Land (engine): " + e.owner_look.unverified_text())
             look = [u for u in e.unchecked if u["kind"] == "other" and not e.judge.is_look(u)]
             if look:
-                self.o.attempt(e.store.add_label, e.bead, "needs-owner-check")
+                beadtools.attempt(e.store.add_label, e.bead, "needs-owner-check")
                 e.comment("Look (engine): landed, but nobody checked: " + "; ".join(u["what"] for u in look))
         shots = e.pictures.keep_evidence()
         if shots:
@@ -167,13 +173,13 @@ class Closer:
         if e.verified:
             verified = "; self-verified=" + ", ".join("{} {}".format(sum(x["verdict"] == k for x in e.verified), k) for k in VERDICTS)
         unfiled = f" unfiled={len(lost)};" if lost else ""
-        text = self.o.reflection_text(e.reflection)
+        text = outcomes.reflection_text(e.reflection)
         e.comment(f"Reflect (engine): outcome={outcome};{text} filed={len(new) - len(lost)};{unfiled} {stats}"
                   f"{verified}{('; why=' + why) if why else ''}; trace={e.log_path.stem} (tl trace {e.bead})")
 
     def settle(self, outcome: str, why: str, sha: str, spec: Any, kind: Any, stats: str) -> None:
         """The bead's status: closed (landed or done), left open (a machine fault or a pause) or blocked on the owner."""
-        e, oc, track = self.e, self.o.oc, self.o.track
+        e = self.e
         summary = e.plan_summary[:300]
         if outcome == "landed":
             base = e.cfg.base.split("/")[-1]
@@ -188,13 +194,13 @@ class Closer:
             e.warn(f"bd refused to {'block' if outcome not in DONE else 'close'} {e.bead} (exit {rc}): close it by hand")
 
     def leave_open(self, kind: Any, why: str) -> int:
-        e, oc = self.e, self.o.oc
+        e = self.e
         fault = kind.name.startswith("FAULT_")
         if not fault:
             e.warn(why)
-        rc = 0 if self.o.attempt(e.store.update, e.bead, BeadPatch(status="open", assignee="")) else 1  # (tl-kwo: it lets go)
+        rc = 0 if beadtools.attempt(e.store.update, e.bead, BeadPatch(status="open", assignee="")) else 1  # (tl-kwo: it lets go)
         if oc.POLICY[kind].label:
-            self.o.attempt(e.store.add_label, e.bead, oc.POLICY[kind].label)
+            beadtools.attempt(e.store.add_label, e.bead, oc.POLICY[kind].label)
         if e.disp.comment:  # a comment, never Notes (tl-7y6.6.2); one per (bead, kind, fingerprint) per hour
             e.comment("Engine {}: {}".format("failed" if fault else "paused", without_prefix(why)[:400]))
         return rc

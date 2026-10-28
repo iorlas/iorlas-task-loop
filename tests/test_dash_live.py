@@ -259,14 +259,14 @@ class CallSite(unittest.TestCase):
         self.assertNotIn("DELEGATE_LIVE_FILE", seen[1])
 
     def test_engine_numbers_its_calls(self):
-        import engine
+        from taskloop.app.run import engine
         with tempfile.TemporaryDirectory() as d:
             e = object.__new__(engine.Engine)
             e.log_path, e.live_n = Path(d) / ("%s-%s.jsonl" % (BEAD, STAMP)), 0
             p1, p2 = e.live("plan"), e.live("write")
             self.assertTrue(p1.endswith(".live/01-plan.jsonl") and p2.endswith(".live/02-write.jsonl"))
             self.assertTrue(os.path.isdir(os.path.dirname(p1)))
-            src = (Path(engine.__file__).parents[2] / "src/taskloop/app/run/worker_call.py").read_text(encoding="utf-8")
+            src = Path(engine.__file__).with_name("worker_call.py").read_text(encoding="utf-8")
             self.assertEqual(src.count("e.live("), 1)  # the one delegate call site passes it
 
 

@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "task
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import test_engine as te  # noqa: E402
 
-import engine  # noqa: E402
+from taskloop.app.run import engine  # noqa: E402
 from taskloop.app.wire import slots as wslots
 import seams  # noqa: E402
 from support import fake_route  # noqa: E402
@@ -204,8 +204,8 @@ class SurvivorBlocksTheRetry(te.EngineTest):
     def test_a_write_under_the_idle_rules_gets_no_close_to_the_limit_warning(self):
         eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         r = DelegateResult(data=te.CLEAN, secs=40 * 60)
-        eng.anomalies("write", r, 1)
-        eng.anomalies("review", r, 1)
+        eng.records.anomalies("write", r, 1)
+        eng.records.anomalies("review", r, 1)
         warned = [json.loads(x)["text"] for x in Path(eng.log_path).read_text().splitlines() if '"warn"' in x]
         self.assertEqual(len(warned), 1)  # the review's, not the write's
         self.assertTrue(warned[0].startswith("review took"))

@@ -15,13 +15,13 @@ from pathlib import Path
 from typing import Any, cast
 
 import outcome as oc
-from engine import Blocked, Engine
 
 from taskloop.adapters import beadtools, gitrepo, ident
 from taskloop.adapters import halt as halting
 from taskloop.app.asks import intake
 from taskloop.app.loop.queue import has_areas
 from taskloop.app.run import console, running
+from taskloop.app.run.engine import Blocked, Engine
 from taskloop.app.slots import engine_lock
 from taskloop.app.track import verbs
 from taskloop.app.wire import slots as wslots

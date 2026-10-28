@@ -25,7 +25,7 @@ from test_loop import LoopBase, rec  # noqa: E402  (puts skills/task-loop on sys
 from support import slots as sl  # noqa: E402
 from support import tlbd  # noqa: E402
 
-import engine  # noqa: E402  (test_loop put skills/task-loop on sys.path)
+from taskloop.app.run import engine  # noqa: E402  (test_loop put skills/task-loop on sys.path)
 from taskloop.app.run import entry  # noqa: E402
 import loop_env  # noqa: E402
 from taskloop.app.loop.take import Taker  # noqa: E402

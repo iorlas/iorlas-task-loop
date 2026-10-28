@@ -3,9 +3,11 @@ import time
 from typing import Any
 
 from taskloop.adapters import ident
+from taskloop.app.run import summaries
 from taskloop.app.run import trace as runtrace
 from taskloop.app.slots import engine_lock
 from taskloop.contracts import log as rec
+from taskloop.contracts.argv import checks_to_text
 from taskloop.domain.report import matchers as lifecycle
 
 
@@ -59,3 +61,24 @@ class Records:
                 reflection=e.reflection, lane_notes=e.lane_notes, salvaged=e.salvaged)))
         except (OSError, ValueError) as err:
             e.warn(f"could not write the trace: {err}")
+
+    def after_call(self, c: Any, res: Any) -> None:
+        """A node's answer was taken: its detail lines, then what was odd about it."""
+        e = self.e
+        checks_to_text(res.data)  # from here on a check is its one-line text
+        e.detail(summaries.details(c.node, res.data))
+        self.anomalies(c.node, res, c.tries)
+
+    def anomalies(self, node: str, r: Any, attempt: int) -> None:
+        e = self.e
+        if attempt > 1:
+            e.warn(f"{node} needed a retry to produce valid output")
+        if node != "write" and r.secs > float(e.cfg.node_timeout_min) * 60 * 0.6:  # a write follows its worker's activity
+            e.warn(f"{node} took {int(r.secs // 60)} min, close to the {e.cfg.node_timeout_min} min limit")
+        spent = e.budget.used()
+        for mark in (0.5, 0.8):
+            if spent > mark and mark not in e.budget_warned:
+                e.budget_warned.add(mark)
+                e.warn(f"{spent * 100:.0f}% of the task's budget is used")
+        if node == "review" and any(f["severity"] == "high" for f in r.data["findings"]):
+            e.warn("the reviewer found a high-severity problem")

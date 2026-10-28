@@ -27,7 +27,7 @@ class RunLog(unittest.TestCase):
     checks_engine = te.EngineTest.checks_engine
 
     def test_engine_has_no_untyped_log_call(self):
-        self.assertEqual((ROOT / "skills" / "task-loop" / "engine.py").read_text().count("self.log("), 0)
+        self.assertEqual((ROOT / "src" / "taskloop" / "app" / "run" / "engine.py").read_text().count("self.log("), 0)
 
     def test_a_run_closes_every_start_by_its_id_and_every_record_decodes(self):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})

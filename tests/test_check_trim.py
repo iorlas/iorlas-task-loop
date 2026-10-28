@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 sys.path.insert(0, str(ROOT / "tests"))
-import engine  # noqa: E402
+from taskloop.app.run import engine  # noqa: E402
 import test_engine as te  # noqa: E402
 from taskloop.domain.checks import trim  # noqa: E402
 from taskloop.app.checks import evidence  # noqa: E402

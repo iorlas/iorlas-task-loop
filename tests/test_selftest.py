@@ -107,7 +107,7 @@ class SelfTest(unittest.TestCase):
                                                                             "        raise RuntimeError('planted: cannot plan')\n",
                                                                             "src/taskloop/app/plan/planner.py"))
         r = subprocess.run([sys.executable, "-I", "-c", "import sys; sys.path.insert(0, sys.argv[1]); sys.path.insert(0, sys.argv[2]); "
-                            "import tl, loop_env, engine", str(d / "skills" / "task-loop"), str(d / "src")], capture_output=True)
+                            "import tl, loop_env; import taskloop.app.run.engine", str(d / "skills" / "task-loop"), str(d / "src")], capture_output=True)
         self.assertEqual(r.returncode, 0)  # it imports fine
         lp, out = self.the_loop(), []
         with mock.patch.object(Loop, "say", side_effect=out.append):

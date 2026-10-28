@@ -10,8 +10,10 @@ import time
 from pathlib import Path
 from unittest import mock
 
-import engine
+import dataclasses
 import seams
+from taskloop.app.run.engine import Engine
+from taskloop.contracts.bead import Bead
 from taskloop.app.wire import slots as wslots
 from taskloop.adapters import delegate as dg
 from taskloop.adapters.fake_beads import FakeBeads
@@ -77,12 +79,12 @@ def run_engine(home, wt):
     contract = res.contract if isinstance(res, dg.Resolved) else {"contract": dg.CONTRACT, "reasons": {}, "run_args": []}
     resolved = dg.Resolved(Path("/selftest"), "/selftest/route.py", contract, "explicit")
     store = FakeBeads()
-    store.beads["t-1"] = engine.Bead(id="t-1", title="Add f", status="open", acceptance_criteria="f.txt exists")
-    cfg = engine.dataclasses.replace(cfg, reflect=False)
+    store.beads["t-1"] = Bead(id="t-1", title="Add f", status="open", acceptance_criteria="f.txt exists")
+    cfg = dataclasses.replace(cfg, reflect=False)
     os.chdir(wt)  # the engine reads cwd
     try:
-        with mock.patch.object(engine.time, "sleep"):
-            rc = engine.Engine("t-1", str(wt), cfg, route=seams.FixedRoute(resolved, Runner()), store=store).run()
+        with mock.patch.object(time, "sleep"):
+            rc = Engine("t-1", str(wt), cfg, route=seams.FixedRoute(resolved, Runner()), store=store).run()
     finally:
         os.chdir(home.parent)  # out of the directory that is removed next
     return rc, store.beads["t-1"]

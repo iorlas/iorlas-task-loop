@@ -246,7 +246,7 @@ class Pause(NetBase):
         self.assertTrue(any(c[:1] == ("update",) and "open" in c for c in self.bd_calls))
         cost, run = first.cost, first.log_path.stem
         real = time.time
-        with mock.patch.object(engine.time, "time", lambda: real() + 7200):  # the bead waited two hours for the network
+        with mock.patch.object(time, "time", lambda: real() + 7200):  # the bead waited two hours for the network
             rc, s = self.run_engine({"review": [CLEAN]}, probe=Cycling(0))
             second = self.eng
             self.assertEqual(rc, 0, self.blocked)
@@ -270,7 +270,7 @@ class Pause(NetBase):
         self.pause_in_review()
         run = self.eng.log_path.stem
         real = time.time
-        with mock.patch.object(engine.time, "time", lambda: real() + reexec.NET_PAUSE_ADOPT_S + 60):
+        with mock.patch.object(time, "time", lambda: real() + reexec.NET_PAUSE_ADOPT_S + 60):
             self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, probe=Cycling(0))
         self.assertNotEqual(self.eng.log_path.stem, run)
 

@@ -12,6 +12,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+import outcome as oc  # noqa: E402
 import test_engine as te  # noqa: E402
 from taskloop.adapters import delegate, gitrepo, runner  # noqa: E402
 from taskloop.adapters import halt as halting  # noqa: E402
@@ -57,7 +58,7 @@ class Halt(unittest.TestCase):
         with self.assertRaises(engine.Blocked) as cm:
             eng.halt_point(wait=30)
         self.assertLess(time.time() - t, 10)
-        self.assertEqual(cm.exception.kind, engine.oc.Kind.PAUSE_KILLED)
+        self.assertEqual(cm.exception.kind, oc.Kind.PAUSE_KILLED)
 
     def test_a_worker_call_is_stopped_by_the_run_flag_and_its_process_is_gone(self):
         d = Path(tempfile.mkdtemp())

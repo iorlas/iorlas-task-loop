@@ -18,7 +18,7 @@ from taskloop.adapters import delegate as dl
 from support import fake_route
 from test_engine import CLEAN, PLAN, PY, WRITE, stop
 
-import engine
+from taskloop.app.run import engine
 from taskloop.domain.report import matchers as lifecycle
 from taskloop.adapters import ident
 

@@ -37,7 +37,7 @@ from taskloop.app.land.lander import Lander  # noqa: E402
 import test_loop  # noqa: E402  (puts skills/task-loop on sys.path)
 
 import clock as clocks  # noqa: E402
-import engine  # noqa: E402
+from taskloop.app.run import engine  # noqa: E402
 from taskloop.app.run import entry  # noqa: E402
 from taskloop.app.run import running  # noqa: E402
 from support.builders import cfg_with  # noqa: E402

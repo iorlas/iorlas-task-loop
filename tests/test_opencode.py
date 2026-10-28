@@ -17,7 +17,7 @@ import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from taskloop.app.write.handoff import Handoff  # noqa: E402
 from taskloop.contracts.delegate import DelegateResult  # noqa: E402
 from taskloop.adapters import context_size  # noqa: E402
-import engine  # noqa: E402
+from taskloop.app.run import engine  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
 from taskloop_dash.api import lanes as lanes_mod  # noqa: E402
 from support.builders import cfg_with  # noqa: E402

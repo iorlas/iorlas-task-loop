@@ -14,7 +14,7 @@ from typing import Any
 
 from taskloop.adapters import applog, beadtools, gitrepo, ident, pidcheck
 from taskloop.domain.beads import matchers as beadlint
-import engine
+import outcome as oc
 from taskloop.app.run import entry
 from taskloop.app.run.running import area_busy, area_lock, running
 from taskloop.app.run import console
@@ -88,7 +88,7 @@ def storm(repo, now=trail.now):
         return None
     banner = ("STOPPED: storm %s on %s; the beads stay open (look at their logs). Record %s expires %d min after it was written; "
               "delete it to start sooner" % (rec.get("fingerprint"), ",".join(rec.get("beads") or []), path,
-                                             engine.oc.KNOBS["storm_window_s"] // 60))
+                                             oc.KNOBS["storm_window_s"] // 60))
     return Storm(rec.get("fingerprint") or "", banner)
 
 

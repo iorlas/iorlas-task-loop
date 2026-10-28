@@ -12,7 +12,7 @@ import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support import fake_route  # noqa: E402
 from support.checkpoints import put_ck, read_ck  # noqa: E402
 from support.fakes import as_bead  # noqa: E402
-from taskloop.app.land.closer import Closer  # noqa: E402
+from taskloop.app.run.closer import Closer  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.contracts import answers  # noqa: E402
 from support.builders import make_engine  # noqa: E402

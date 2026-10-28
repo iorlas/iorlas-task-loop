@@ -57,7 +57,13 @@ from support.checkpoints import flat_ck, stored_ck  # noqa: E402
 from taskloop.app.run.state import Checkpoints  # noqa: E402
 from taskloop.contracts.argv import checks_to_wire  # noqa: E402
 from taskloop.contracts.config import EngineConfig  # noqa: E402
-import engine  # noqa: E402
+from taskloop.app.run import engine  # noqa: E402
+from taskloop.adapters import links  # noqa: E402
+from taskloop.app.slots.lease import Lease  # noqa: E402
+from taskloop.domain.prompts.common import RULES_MAX  # noqa: E402
+from taskloop.domain.lanes.matchers import read_only_command  # noqa: E402
+from taskloop.domain.plan.matchers import gate_only_criteria  # noqa: E402
+import outcome as oc  # noqa: E402
 from taskloop.app.run import entry  # noqa: E402
 from taskloop.app.asks import intake  # noqa: E402
 import seams  # noqa: E402
@@ -191,7 +197,7 @@ def delegate_stack(script, route="/fake/route.py"):
     res = dl.Resolved(Path(route).parent, route, fake_route.CONTRACT, "explicit")
     stack = contextlib.ExitStack()
     for p in (mock.patch.object(dl, "resolve", return_value=res), mock.patch.object(seams.DelegateRoute, "runner", lambda self, *a, **k: script),
-              mock.patch.object(engine.time, "sleep")):
+              mock.patch.object(time, "sleep")):
         stack.enter_context(p)
     return stack
 
@@ -365,7 +371,7 @@ class EngineTest(unittest.TestCase):
         for k in ("minutes", "rounds", "tests_added", "retry_after"):
             self.assertIn(k, res)
         self.assertTrue(self.eng.git("symbolic-ref", "--short", "-q", "HEAD"))  # a landed bead leaves the slot on a branch
-        want = json.loads((Path(engine.__file__).resolve().parents[2] / ".claude-plugin" / "plugin.json").read_text())["version"]
+        want = json.loads((ident.PLUGIN_ROOT / ".claude-plugin" / "plugin.json").read_text())["version"]
         self.assertEqual(ident.plugin_version(), want)  # the log and trace record the plugin version
         self.assertIn("task-loop %s" % want, self.eng.log_path.read_text())
         self.assertEqual(r["version"], want)
@@ -684,9 +690,9 @@ class EngineTest(unittest.TestCase):
         lockfile = proj / "UnityLockfile"
         lockfile.write_text("")
         eng = self.checks_engine(checks=[{"id": "unity", "cmd": cmd, "group": "tests", "retry": 1}])
-        real = engine.subprocess.run
+        real = subprocess.run
         with mock.patch.object(eng.checker, "sleep") as sleep, mock.patch.object(
-                engine.subprocess, "run", side_effect=lambda a, *k, **kw: (
+                subprocess, "run", side_effect=lambda a, *k, **kw: (
                     mock.Mock(stdout="4242\n") if a[0] == "lsof" else real(a, *k, **kw))):
             res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertEqual((res[0].status, sum(c[0][0] for c in sleep.call_args_list if c[0][0] >= 15)),
@@ -799,7 +805,7 @@ class EngineTest(unittest.TestCase):
 
         def stopped(*_):  # what the run's SIGTERM handler does, from the same thread, once the check has started its child
             until(lambda: pidfile.exists() and pidfile.read_text().strip(), 5)
-            raise engine.Blocked("failed: stopped (SIGTERM)", kind=engine.oc.Kind.PAUSE_KILLED)
+            raise engine.Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)
         old = signal.signal(signal.SIGALRM, stopped)
         self.addCleanup(signal.signal, signal.SIGALRM, old)
         signal.setitimer(signal.ITIMER_REAL, 0.5)
@@ -967,8 +973,8 @@ class EngineTest(unittest.TestCase):
         cases = lambda *cs: {"cases": [{"criterion": c, "check": ""} for c in cs]}  # noqa: E731
         bad = ["just check", "`just  check` passes", "The gate (just check) is green.", "just unity-check exits 0", "Done when: just check green"]
         ok = ["f.txt exists", "just check-fmt passes", "the greeting shows after just check ran the migration", "just fmt is clean"]
-        self.assertEqual(engine.gate_only_criteria(cases(*bad, *ok), cfg), bad)
-        self.assertEqual(engine.gate_only_criteria(cases("just check passes"), cfg_with()), [])
+        self.assertEqual(gate_only_criteria(cases(*bad, *ok), cfg), bad)
+        self.assertEqual(gate_only_criteria(cases("just check passes"), cfg_with()), [])
 
     def test_a_write_prompt_names_each_check_command_once_in_its_may_run_lists(self):
         # tl-7y6.6.12: the stage's checks and the where() text both listed "You may run these"
@@ -1129,7 +1135,7 @@ class EngineTest(unittest.TestCase):
             self.skipTest("POSIX signal")
         with mock.patch.object(Planner, "plan", side_effect=lambda *a, **k: os.kill(os.getpid(), sig.SIGTERM)):
             old = sig.getsignal(sig.SIGTERM)
-            sig.signal(sig.SIGTERM, lambda *_: (_ for _ in ()).throw(engine.Blocked("failed: stopped (SIGTERM)", kind=engine.oc.Kind.PAUSE_KILLED)))
+            sig.signal(sig.SIGTERM, lambda *_: (_ for _ in ()).throw(engine.Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)))
             try:
                 rc, _ = self.run_engine({})
             finally:
@@ -1141,7 +1147,7 @@ class EngineTest(unittest.TestCase):
         import signal as sig
         if not hasattr(sig, "SIGTERM") or os.name == "nt":
             self.skipTest("POSIX signal")
-        with self.stoppable(), mock.patch.object(engine.Lease, "stop",
+        with self.stoppable(), mock.patch.object(Lease, "stop",
                                                  side_effect=lambda *a: os.kill(os.getpid(), sig.SIGTERM)):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
@@ -1271,7 +1277,7 @@ class EngineTest(unittest.TestCase):
         with self.stoppable(), mock.patch.object(subprocess, "Popen", SignalledPopen):
             with self.assertRaises(engine.Blocked) as cm:
                 eng.sh(shlex.split(self.spawn(pidfile)))
-        self.assertEqual(cm.exception.kind, engine.oc.Kind.PAUSE_KILLED)
+        self.assertEqual(cm.exception.kind, oc.Kind.PAUSE_KILLED)
         self.assertDead(self.child_of(pidfile))
 
     def test_sigterm_during_the_land_gate_stops_it_and_pushes_nothing(self):
@@ -1318,7 +1324,7 @@ class EngineTest(unittest.TestCase):
         self.assertIn("stopped (SIGTERM)", self.said())
 
     def test_the_heartbeat_keeps_the_slot_bead_the_loop_names(self):
-        hb = engine.Lease(self.store, "t-1", "sl-1")  # pyrefly: ignore[bad-argument-type]
+        hb = Lease(self.store, "t-1", "sl-1")  # pyrefly: ignore[bad-argument-type]
         with mock.patch.object(hb.stopped, "wait", side_effect=[False, True]):
             hb.run()
         self.assertEqual([c for c in self.bd_calls if c[0] == "heartbeat"], [("heartbeat", "t-1"), ("heartbeat", "sl-1")])
@@ -1364,7 +1370,7 @@ class EngineTest(unittest.TestCase):
             if r == role:
                 seen["n"] += 1
                 if seen["n"] == nth:
-                    raise engine.Blocked("failed: stopped (SIGTERM)", kind=engine.oc.Kind.PAUSE_KILLED)
+                    raise engine.Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)
             return real(this, r, *a, **kw)
         return mock.patch.object(fake_route.Script, "reply", call)
 
@@ -2205,7 +2211,7 @@ class EngineTest(unittest.TestCase):
                         signal.raise_signal(signal.SIGTERM)
                     raise engine.Blocked("paused: validation writer unavailable" if interruption == "pause"
                                          else "needs a human: validation command denied",
-                                         kind=engine.oc.Kind.PAUSE_LANE if interruption == "pause" else engine.oc.Kind.FAULT_DENIED)
+                                         kind=oc.Kind.PAUSE_LANE if interruption == "pause" else oc.Kind.FAULT_DENIED)
                 return real_delegate(this, current_role, *a, **kw)
 
             with mock.patch.object(Fixer, "fix", fix), \
@@ -3081,12 +3087,12 @@ class EngineTest(unittest.TestCase):
         for c in ("rg -n foo src", "git log --oneline -5", "git diff main...HEAD -- a", "find . -name '*.cs'",
                   "sed -n '1,5p' f", "git branch", "rg -o x f", "sort -u f", "sort -n -r f", "rg -n --glob '!**/.env*' '^<<<<<<<' .",
                   "/bin/zsh -lc \"rg -n 'x' b\""):
-            self.assertTrue(engine.read_only_command(c), c)
+            self.assertTrue(read_only_command(c), c)
         for c in ("ls\nrm x", "ls & rm x", "sort -o f x", "sort --output=f x", "git diff --output=f", "git log --output=f", "rg --pre sh x",
                   "git grep -O sh x", "git diff --ext-diff", "sed -n '1w out' f", "sed -n '1e cmd' f", "sh -c 'rm x' ls", "git -c core.pager=sh log",
                   "rm -rf x", "cat > f", "git commit -m x", "git branch -D x", "find . -delete", "find . -exec rm {} ;", "sed -i s/a/b/ f",
                   "curl x", "rg x | xargs rm", "head -n 5 a | rg x", "head a && rg x", "ls || rm x", "cat $(ls)", "head -n 5 a; rm b", "git checkout x", "cat <<EOF", "echo `id`", "", None):
-            self.assertFalse(engine.read_only_command(c), c)
+            self.assertFalse(read_only_command(c), c)
 
     RESEARCH_DIFF = ("diff --git a/notes/hair.md b/notes/hair.md\n--- a/notes/hair.md\n+++ b/notes/hair.md\n@@ -0,0 +1,3 @@\n"
                      "+Dread packs: https://fab.com/s/abc is free.\n+Beards: (unverified) https://sketchfab.com/m/x blocks agents.\n"
@@ -3145,7 +3151,7 @@ class EngineTest(unittest.TestCase):
 
     def test_a_task_with_an_unopened_link_is_sent_back_then_asks_when_the_writer_cannot_fix_it(self):
         fake = lambda url: (False, "HTTP 403")
-        with mock.patch.object(engine.links, "check", fake), mock.patch.object(Checkout, "task_diff", return_value=self.RESEARCH_DIFF):
+        with mock.patch.object(links, "check", fake), mock.patch.object(Checkout, "task_diff", return_value=self.RESEARCH_DIFF):
             rc, s = self.run_engine({"plan": [PLAN] * 3, "write": [WRITE] * 8, "review": [CLEAN] * 8},
                                     max_rounds=2, max_replans=0)
         self.assertEqual(rc, 2, self.blocked)
@@ -3408,7 +3414,7 @@ class EngineTest(unittest.TestCase):
 
     def test_a_pause_is_a_comment_never_a_line_of_notes(self):
         calls = []
-        late = stop("no_lane", at=engine.time.time() + 3600, family="openai", lane="OPENAI", say="no lane. Hold the task; advice")
+        late = stop("no_lane", at=time.time() + 3600, family="openai", lane="OPENAI", say="no lane. Hold the task; advice")
         with self.store.stub(bd_fn=lambda *a, **k: calls.append(a) or mock.Mock(returncode=0)):
             self.run_engine({"plan": [late]})
         self.assertFalse([c for c in calls if "--append-notes" in c], calls)
@@ -3519,7 +3525,7 @@ class EngineTest(unittest.TestCase):
 
     def test_the_plan_is_in_the_checkpoint_the_moment_the_planner_answers(self):
         # d5f.38: a SIGTERM after the planner answered lost a finished plan before the checkpoint
-        with mock.patch.object(Planner, "add_leftovers", side_effect=engine.Blocked("failed: stopped (SIGTERM)", kind=engine.oc.Kind.PAUSE_KILLED)):
+        with mock.patch.object(Planner, "add_leftovers", side_effect=engine.Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)):
             rc, _ = self.run_engine({"plan": [PLAN]})
         self.assertEqual(rc, 2)
         ck = self.checkpoint()
@@ -3600,8 +3606,8 @@ class EngineTest(unittest.TestCase):
         self.assertLess(len(p.encode("utf-8")), 12 * 1024)
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, worker_rules="docs/agents/big.md")
         self.assertNotIn("Read %s" % (self.wt / "docs/agents/big.md"), s.prompts[0])  # tl-7y6.6.1: a hard 3 KB cap, no path to read
-        self.assertIn("x" * engine.RULES_MAX, s.prompts[0])
-        self.assertNotIn("x" * (engine.RULES_MAX + 1), s.prompts[0])
+        self.assertIn("x" * RULES_MAX, s.prompts[0])
+        self.assertNotIn("x" * (RULES_MAX + 1), s.prompts[0])
         self.assertLess(len(s.prompts[0].encode("utf-8")), 12 * 1024)
 
     def test_worker_rules_are_clipped_at_a_line_and_missing_ones_say_nothing(self):
@@ -3610,7 +3616,7 @@ class EngineTest(unittest.TestCase):
         eng.cfg, eng.wt, eng.warn = cfg_with(worker_rules="r.md"), self.wt, mock.Mock()
         sh("git", "pull", "-q", "origin", "main", cwd=self.wt)
         text = eng.cases.rules_text()
-        self.assertLessEqual(len(text.encode("utf-8")), engine.RULES_MAX)
+        self.assertLessEqual(len(text.encode("utf-8")), RULES_MAX)
         self.assertTrue(text.endswith("line") and eng.warn.called)
         eng.cfg = cfg_with(worker_rules="nope.md")
         self.assertEqual(eng.cases.rules_text(), "")

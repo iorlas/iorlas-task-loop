@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 sys.path.insert(0, str(ROOT / "tests"))
-import engine  # noqa: E402
+from taskloop.app.run import engine  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 import test_engine as te  # noqa: E402
 from taskloop.adapters.gitenv import pinned_env  # noqa: E402

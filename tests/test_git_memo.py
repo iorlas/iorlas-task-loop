@@ -11,7 +11,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
-import engine  # noqa: E402
+from taskloop.app.run import engine  # noqa: E402
 from taskloop.adapters import gitrepo, slotcheck, treehash  # noqa: E402
 
 
@@ -119,7 +119,7 @@ class GitMemoTest(unittest.TestCase):
                 if failing in cmd:
                     return subprocess.CompletedProcess(cmd, 128, b"", b"fatal: planted")
                 return real(cmd, *a, **k)
-            with self.subTest(failing), mock.patch.object(engine.subprocess, "run", run):
+            with self.subTest(failing), mock.patch.object(subprocess, "run", run):
                 eng.tree_memo = None
                 with self.assertRaises(treehash.TreeHashError) as got:
                     eng.checkout.tree_hash()

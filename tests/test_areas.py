@@ -30,7 +30,7 @@ from taskloop.app.slots import line as slots_line  # noqa: E402
 from taskloop.app.track import verbs  # noqa: E402
 from test_slots import Slots  # noqa: E402
 
-import engine  # noqa: E402
+from taskloop.app.run import engine  # noqa: E402
 from taskloop.app.run import entry  # noqa: E402
 import loop_env  # noqa: E402
 from support import looptest  # noqa: E402

@@ -376,7 +376,7 @@ class LoopSelfUpdate(LoopBase):
 
     def test_an_incomplete_or_failing_install_is_ignored_and_warned_once_per_version(self):
         self.beads({"x-1": [rec("landed")], "x-2": [rec("landed")]})
-        self.install("0.2.0", missing=("engine.py",))
+        self.install("0.2.0", missing=("loop_env.py",))
         self.install("0.3.0", tl_py="raise SystemExit(3)\n")
         self.assertEqual(self.run_loop(), 0)
         self.assertEqual(self.execs, [])
@@ -386,9 +386,9 @@ class LoopSelfUpdate(LoopBase):
 
     def test_an_incomplete_newest_warns_once(self):
         self.beads({"x-1": [rec("landed")], "x-2": [rec("landed")]})
-        self.install("0.2.0", missing=("engine.py",))
+        self.install("0.2.0", missing=("loop_env.py",))
         self.assertEqual(self.run_loop(), 0)
-        self.assertEqual(self.out.count("not moving to 0.2.0: engine.py is missing"), 1)
+        self.assertEqual(self.out.count("not moving to 0.2.0: loop_env.py is missing"), 1)
 
     def test_a_half_copied_loop_py_is_not_moved_to(self):
         self.beads({"x-1": [rec("landed")]})

@@ -15,7 +15,7 @@ from test_loop import LoopBase, rec  # noqa: E402
 import test_loop_more as more  # noqa: E402
 
 from taskloop.app.run import console  # noqa: E402
-import engine  # noqa: E402
+from taskloop.app.run import engine  # noqa: E402
 from support import looptest  # noqa: E402
 import loop_env  # noqa: E402
 import tl  # noqa: E402
