@@ -21,6 +21,7 @@ import subprocess
 import sys
 import tempfile
 import tokenize
+import tomllib
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -455,6 +456,16 @@ class RealTree(unittest.TestCase):
                 actual[e["path"]] = actual.get(e["path"], 0) + 1
         known = load_ratchet()["pyrefly_baseline_src"]
         self.assertEqual(ratchet_problems(actual, known, "pyrefly baseline (src is strict)"), [])
+
+    def test_the_ruff_ignores_may_only_shrink(self):
+        table = tomllib.loads((ROOT / "ruff.toml").read_text(encoding="utf-8"))["lint"]["per-file-ignores"]
+        known = load_ratchet()
+        files = {"%s::%s" % (g, c): 1 for g, codes in table.items() if "*" not in g for c in codes}
+        self.assertEqual(ratchet_problems(files, known["ruff_baseline"], "ruff baseline (file::rule)"), [])
+        for g, codes in table.items():
+            if "*" in g:
+                self.assertLessEqual(set(codes), set(known["ruff_groups"].get(g, [])), "ruff group %s gained a rule" % g)
+        self.assertLessEqual({g for g in table if "*" in g}, set(known["ruff_groups"]), "a new wildcard ruff ignore group")
 
 
 # -- tests: planted trees --------------------------------------------------------------------------------------------------------------
