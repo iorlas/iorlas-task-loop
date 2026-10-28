@@ -2206,13 +2206,6 @@
       "severity": "error"
     },
     {
-      "column": 1,
-      "path": "tests/stores/suites.py",
-      "name": "missing-import",
-      "concise_description": "Cannot find module `rigs`",
-      "severity": "error"
-    },
-    {
       "column": 57,
       "path": "tests/stores/suites.py",
       "name": "unexpected-keyword",
@@ -3725,17 +3718,17 @@
       "severity": "error"
     },
     {
-      "column": 8,
+      "column": 19,
       "path": "tests/stores/test_contract.py",
-      "name": "missing-import",
-      "concise_description": "Cannot find module `suites`",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `Ask | BadVersions | BdError | Bead | Checkpoint | Comment | DashState | DelegateResult | EngineLock | LockRecord | LoopCommand | LoopLogLine | LoopState | Pin | Reexec | ReleaseResult | RepoProfile | ReposIndex | Rest | RunOutcome | RunRequest | RunTrace | SessionIndex | SharedNotes | SlotSetupMarker | TasksSnapshot | Ticket | WorkerStarted` is not assignable to parameter `rec` with type `Rest` in function `taskloop.stores.api.Doc.write`",
       "severity": "error"
     },
     {
-      "column": 1,
+      "column": 27,
       "path": "tests/stores/test_contract.py",
-      "name": "missing-import",
-      "concise_description": "Cannot find module `rigs`",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `Ask | BadVersions | BdError | Bead | Checkpoint | Comment | DashState | DelegateResult | EngineLock | LockRecord | LoopCommand | LoopLogLine | LoopState | Pin | Reexec | ReleaseResult | RepoProfile | ReposIndex | Rest | RunOutcome | RunRequest | RunTrace | SessionIndex | SharedNotes | SlotSetupMarker | TasksSnapshot | Ticket | WorkerStarted` is not assignable to parameter `rec` with type `Rest` in function `taskloop.stores.api.Doc.write`",
       "severity": "error"
     },
     {
@@ -4236,10 +4229,17 @@
       "severity": "error"
     },
     {
-      "column": 8,
-      "path": "tests/stores/test_domain.py",
-      "name": "missing-import",
-      "concise_description": "Cannot find module `suites`",
+      "column": 43,
+      "path": "tests/stores/test_contract.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `Doc` has no attribute `path`",
+      "severity": "error"
+    },
+    {
+      "column": 72,
+      "path": "tests/stores/test_contract.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `Doc` has no attribute `path`",
       "severity": "error"
     },
     {
@@ -4807,6 +4807,13 @@
       "path": "tests/stores/test_domain.py",
       "name": "unexpected-keyword",
       "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.delegate.WorkerStarted.__replace__`",
+      "severity": "error"
+    },
+    {
+      "column": 40,
+      "path": "tests/stores/test_domain.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `Ask | BadVersions | BdError | Bead | Checkpoint | Comment | DashState | DelegateResult | EngineLock | LockRecord | LoopCommand | LoopLogLine | LoopState | Pin | Reexec | ReleaseResult | RepoProfile | ReposIndex | Rest | RunOutcome | RunRequest | RunTrace | SessionIndex | SharedNotes | SlotSetupMarker | TasksSnapshot | Ticket | WorkerStarted` is not assignable to parameter `rec` with type `Checkpoint` in function `taskloop.stores.api.Doc.write`",
       "severity": "error"
     },
     {

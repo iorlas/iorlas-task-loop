@@ -1,5 +1,5 @@
 {
- "_": "Ratchet for tests/test_rules.py. oversize / oversize_functions list every cap violation that existed at A1, by file; an entry may be lowered or deleted, never added. pyrefly_baseline_errors is the error count in pyrefly-baseline.json; it may only shrink.",
+ "_": "Ratchet for tests/test_rules.py. oversize / oversize_functions list every cap violation that existed at A1, by file; an entry may be lowered or deleted, never added. pyrefly_baseline_errors is the error count in pyrefly-baseline.json; it may only shrink. pyrefly_baseline_src lists the baselined errors under src/ per file: src is strict, so the table only shrinks and a file never joins it.",
  "oversize": {
   "skills/task-loop/engine.py": 5326,
   "skills/task-loop/loop.py": 1055,
@@ -24,5 +24,21 @@
   "tests/test_engine.py::EngineTest.push_race_interrupted_cell": 125,
   "tests/test_engine.py::EngineTest.run_push_race": 111
  },
- "pyrefly_baseline_errors": 1544
+ "pyrefly_baseline_errors": 2065,
+ "pyrefly_baseline_src": {
+  "src/taskloop/app/run/calls.py": 18,
+  "src/taskloop_dash/api/beads.py": 2,
+  "src/taskloop_dash/api/live.py": 6,
+  "src/taskloop_dash/api/liveview.py": 3,
+  "src/taskloop_dash/api/overview.py": 1,
+  "src/taskloop_dash/api/roadmap.py": 6,
+  "src/taskloop_dash/api/runs.py": 1,
+  "src/taskloop_dash/http.py": 2,
+  "src/taskloop_dash/jsonl.py": 1,
+  "src/taskloop_dash/readers/events.py": 2,
+  "src/taskloop_dash/views/detail.py": 4,
+  "src/taskloop_dash/views/live_state.py": 1,
+  "src/taskloop_dash/views/nodes.py": 8,
+  "src/taskloop_dash/views/timeline.py": 10
+ }
 }

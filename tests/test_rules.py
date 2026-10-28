@@ -447,6 +447,15 @@ class RealTree(unittest.TestCase):
         self.assertLessEqual(count, recorded, "the baseline grew: fix the new errors instead")
         self.assertEqual(count, recorded, "the baseline shrank: lower pyrefly_baseline_errors in tests/rules_ratchet.json to %d" % count)
 
+    def test_src_files_join_the_pyrefly_baseline_never_and_leave_it_only(self):
+        data = json.loads((ROOT / "pyrefly-baseline.json").read_text(encoding="utf-8"))
+        actual = {}
+        for e in data["errors"]:
+            if e["path"].startswith("src/"):
+                actual[e["path"]] = actual.get(e["path"], 0) + 1
+        known = load_ratchet()["pyrefly_baseline_src"]
+        self.assertEqual(ratchet_problems(actual, known, "pyrefly baseline (src is strict)"), [])
+
 
 # -- tests: planted trees --------------------------------------------------------------------------------------------------------------
 class Planted(unittest.TestCase):
