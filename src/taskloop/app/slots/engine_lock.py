@@ -71,3 +71,53 @@ def engine_busy(wt: str | Path, handoff: bool = False) -> str:
     if left:
         return f"worker pid {','.join(left)} of {lock.get('bead') or '?'} outlived its engine{where}"
     return ""
+
+
+class EngineLock:
+    """<worktree>/.task/engine.lock while run-task runs there (see engine_busy). A worker that outlived its stop keeps the lock (pid 0)
+    until it is gone."""
+
+    def __init__(self, wt: str | Path, bead: str, slot: str = "") -> None:
+        self.wt = wt
+        self.path = engine_lock_path(wt)
+        self.data: dict[str, Any] = {"pid": os.getpid(), "start": proc_start(os.getpid()), "bead": bead, "slot": slot or "",
+                                     "slot_bead": os.environ.get("TASK_LOOP_SLOT_BEAD", ""), "by": "run-task", "started": time.time(),
+                                     "route": None, "workers": []}
+
+    def take(self) -> str:
+        """"" when this run holds the worktree now, else what holds it. A run the loop started takes over the loop's lock for its slot."""
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        for _ in range(3):
+            busy = engine_busy(self.wt, handoff=True)  # a run-task takes over only its parent loop's lock for the same slot bead
+            if busy:
+                return busy
+            try:  # created only if absent: two runs starting at once cannot both win
+                os.close(os.open(str(self.path), os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+            except FileExistsError:
+                with contextlib.suppress(OSError):  # a dead run's lock or the parent loop's (engine_busy said so)
+                    if not engine_busy(self.wt, handoff=True):
+                        self.path.unlink()
+                continue
+            self.write()
+            return ""
+        return "another run took the engine lock at the same time"
+
+    def write(self) -> None:
+        write_engine_lock(self.wt, self.data)
+
+    def note(self, **kw: Any) -> None:
+        self.data.update(kw)
+        with contextlib.suppress(OSError):
+            self.write()
+
+    def release(self) -> None:
+        left = [w for w in self.data.get("workers") or [] if proc_alive(w[0], w[1])]
+        with contextlib.suppress(OSError):
+            if left:
+                self.data.update(pid=0, route=None, workers=left)
+                self.write()
+            else:
+                self.path.unlink()
+
+
+LOCK: EngineLock | None = None  # this process's EngineLock while run-task runs

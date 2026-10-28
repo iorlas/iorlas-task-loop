@@ -1,4 +1,5 @@
 """Who and where this process is: the task-loop config dir, Claude's dir, the session it acts for, and the bd actor name."""
+import json
 import os
 import socket
 from pathlib import Path
@@ -39,3 +40,14 @@ def actor() -> str:
         return f"tl-{hostname()}-{os.environ['CLAUDE_PID']}"
     top = git("rev-parse", "--show-toplevel")
     return "tl-" + (Path(top).name if top else socket.gethostname())
+
+
+PLUGIN_ROOT = Path(__file__).resolve().parents[3]  # the install this code runs from (src/taskloop/adapters/ident.py)
+
+
+def plugin_version() -> str:
+    """This install's task-loop version, from its plugin.json ('' when it is run from a bare copy)."""
+    try:
+        return str(json.loads((PLUGIN_ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")).get("version") or "")
+    except (OSError, ValueError):
+        return ""

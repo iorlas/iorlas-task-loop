@@ -84,6 +84,7 @@ from taskloop.adapters import procs as sproc  # noqa: E402
 from taskloop.adapters.check_probe import PathProbe  # noqa: E402
 from taskloop.adapters import gitrepo  # noqa: E402
 from taskloop.adapters import ident  # noqa: E402
+from taskloop.app.run import outcomes  # noqa: E402
 from taskloop.adapters import landlock  # noqa: E402
 from taskloop.adapters import delegate as lroute  # noqa: E402,F401
 
@@ -361,7 +362,7 @@ class EngineTest(unittest.TestCase):
             self.assertIn(k, res)
         self.assertTrue(self.eng.git("symbolic-ref", "--short", "-q", "HEAD"))  # a landed bead leaves the slot on a branch
         want = json.loads((Path(engine.__file__).resolve().parents[2] / ".claude-plugin" / "plugin.json").read_text())["version"]
-        self.assertEqual(engine.plugin_version(), want)  # the log and trace record the plugin version
+        self.assertEqual(ident.plugin_version(), want)  # the log and trace record the plugin version
         self.assertIn("task-loop %s" % want, self.eng.log_path.read_text())
         self.assertEqual(r["version"], want)
 
@@ -2601,7 +2602,7 @@ class EngineTest(unittest.TestCase):
         log = Path(tempfile.mkdtemp()) / "run.jsonl"
         log.write_text("\n".join(json.dumps({"v": 2, "kind": "step_end", "t": 1.0, "id": "n1", "step": st, "outcome": "done", "secs": sec}) + "\n" for st, sec in (
             ("checks", 6000), ("checks", 3800), ("write", 900), ("plan", 20))))
-        self.assertEqual([(b.step, b.minutes, b.rounds) for b in engine.run_breakdown(log)], [("checks", 163.0, 2), ("write", 15.0, 1)])
+        self.assertEqual([(b.step, b.minutes, b.rounds) for b in outcomes.run_breakdown(log)], [("checks", 163.0, 2), ("write", 15.0, 1)])
 
     def test_an_unchecked_requirement_stops_the_land_with_a_verify_ask(self):
         r = dict(CLEAN, unchecked=[{"what": "the cited spec link did not open", "kind": "link"}])

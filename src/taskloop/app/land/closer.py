@@ -122,7 +122,7 @@ class Closer:
     def record(self, outcome: str, why: str, sha: str, spec: Any, kind: Any, stats: str) -> None:
         """The run's log and trace: the close node, the reflection, the owner's question."""
         e, o = self.e, self.o
-        e.log_run()
+        e.records.log_run()
         last = e.steps.cur or e.steps.last
         if last and (e.steps.moved_from != last.n or e.steps.moved_to not in ("ask", "pause", "close")):
             to, cause = o.close_move(outcome, why, kind)  # no move out of the run was logged from the last node: the close is it
@@ -133,8 +133,8 @@ class Closer:
         e.log.emit(rec.Close(outcome=Outcome(outcome), why_code=code, sha=sha or "", why=why[:500]))
         e.steps.outcome(outcome, why.splitlines()[0][:200] if why else "")
         e.steps.end()
-        e.reflection = e.reflect_run(outcome, why)  # after the close node: the outcome is decided and nothing here changes it
-        e.file_trace(outcome, why, sha)
+        e.reflection = e.reflector.reflect_run(outcome, why)  # after the close node: the outcome is decided and nothing here changes it
+        e.records.file_trace(outcome, why, sha)
         e.detail([stats] + ([why[:400]] if why else []) + (["question: " + spec.decision[:400]] if spec else []))
         if outcome == "failed":
             e.warn(f"task failed: {why.splitlines()[0][:200]}")

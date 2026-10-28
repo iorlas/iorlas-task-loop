@@ -25,6 +25,7 @@ from test_engine import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint  # 
 
 from test_stages import StagesTest  # noqa: E402
 from taskloop.adapters import ident, gitrepo  # noqa: E402
+from taskloop.app.run import outcomes  # noqa: E402
 
 
 class VisualWork(StagesTest):
@@ -612,23 +613,23 @@ class Claims(StagesTest):
             "route": "/fake/route.py",
             "sessions": [{"node": "plan"}],
             })
-        self.assertIsNone(e.reflect_run("failed", "failed: x"))  # a run that only planned
+        self.assertIsNone(e.reflector.reflect_run("failed", "failed: x"))  # a run that only planned
         e.sessions = [{"node": "plan"}, {"node": "write"}]
-        self.assertIsNone(e.reflect_run("blocked", "paused: no lane for write until 04:00"))
+        self.assertIsNone(e.reflector.reflect_run("blocked", "paused: no lane for write until 04:00"))
         e.stop_pending = True
-        self.assertIsNone(e.reflect_run("landed", ""))  # a stop is on its way
+        self.assertIsNone(e.reflector.reflect_run("landed", ""))  # a stop is on its way
         e.stop_pending = False
-        self.assertIsNone(e.reflect_run("failed", "failed: infrastructure: bad_request"))
+        self.assertIsNone(e.reflector.reflect_run("failed", "failed: infrastructure: bad_request"))
         e.dry = True
-        self.assertIsNone(e.reflect_run("landed", ""))
+        self.assertIsNone(e.reflector.reflect_run("landed", ""))
 
     @te.no_repo
     def test_the_reflection_text_names_cause_and_session(self):
-        text = engine.reflection_text(self.REFLECTION)
+        text = outcomes.reflection_text(self.REFLECTION)
         self.assertIn("[prompt]", text)
         self.assertIn("(session ref-review)", text)
-        self.assertEqual(engine.reflection_text(None), "")
-        self.assertIn("badly: none", engine.reflection_text(dict(self.REFLECTION, went_badly=[])))
+        self.assertEqual(outcomes.reflection_text(None), "")
+        self.assertIn("badly: none", outcomes.reflection_text(dict(self.REFLECTION, went_badly=[])))
 
 
 if __name__ == "__main__":

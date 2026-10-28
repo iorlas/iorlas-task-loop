@@ -32,7 +32,6 @@ from functools import cached_property
 from pathlib import Path
 from typing import Any
 
-from core import enginelock, fmt
 from taskloop.adapters import applog, beadtools, gitrepo, ident, landlock, links, looks, opencode, pidcheck
 from taskloop.adapters import halt as halting
 from taskloop.domain.report import matchers as lifecycle
@@ -41,6 +40,7 @@ from types import SimpleNamespace
 import outcome as oc
 import seams
 from taskloop.app.slots import engine_lock
+from taskloop.domain.matchers import clip
 from taskloop.app.track import trail, verbs
 from taskloop.adapters.gitenv import git_env, pinned_env, run_git
 from taskloop.app.wire import slots as wslots
@@ -61,6 +61,7 @@ from taskloop.app.plan.planner import Planner
 from taskloop.app.review.routing import Routing
 from taskloop.app.review.settles import Settles
 from taskloop.app.review.verifier import Verifier
+from taskloop.app.run import outcomes
 from taskloop.app.run import trace as runtrace
 from taskloop.app.write.handoff import Handoff
 from taskloop.app.write.stage_loop import StageLoop
@@ -73,6 +74,8 @@ from taskloop.app.land.rebase import Rebase
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.land.tree import Tree
 from taskloop.app.plan.cases import Cases
+from taskloop.app.run.records import Records
+from taskloop.app.run.reflect import Reflector
 from taskloop.app.run.shared import Shared
 from taskloop.app.write.briefing import Briefing
 from taskloop.app.write.newfiles import NewFiles
@@ -166,14 +169,6 @@ def visual_hit(vp, paths):
 
 # ---- workers --------------------------------------------------------------------------------------------------------
 
-
-
-def plugin_version():
-    """This engine's task-loop version, from the plugin.json next to it ('' when it is run from a bare copy)."""
-    try:
-        return str(json.loads((Path(__file__).resolve().parents[2] / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")).get("version") or "")
-    except (OSError, ValueError, IndexError):
-        return ""
 
 
 # ---- moving to a newer install between steps (tl-7y6.9): by exec only, no module is ever reloaded in place ----------------------------
@@ -485,7 +480,7 @@ class Engine(StateAttrs):
         if not found:
             return
         ver, d, why = found
-        here = plugin_version() or Path(__file__).resolve().parents[2].name
+        here = ident.plugin_version() or Path(__file__).resolve().parents[2].name
         if why:
             self.warn("not moving to task-loop %s at %s: %s; staying on %s" % (ver, step, why, here))
             trail.event("reload_refused", self.bead, who="engine", version=ver, why=why[:300], running=here, step=step,
@@ -494,7 +489,7 @@ class Engine(StateAttrs):
         self.switch(step, ver, d, here)
 
     def switch(self, step, ver, d, here):
-        slot = (enginelock.LOCK.data.get("slot") if enginelock.LOCK else "") or ""
+        slot = (engine_lock.LOCK.data.get("slot") if engine_lock.LOCK else "") or ""
         argv = reexec_args(self.argv if self.argv is not None else sys.argv[1:], slot, self.wt)
         if argv is None:
             self.log.note("not moving to task-loop %s: this run was not started by `tl.py run-task`" % ver)
@@ -591,11 +586,13 @@ class Engine(StateAttrs):
 
     @cached_property
     def closer(self):
-        return Closer(self, SimpleNamespace(oc=oc, loop_health=loop_health, track=verbs, attempt=beadtools.attempt, say=say, outcome_for=outcome_for, node_outcome=node_outcome,
-                                            close_move=close_move, reflection_text=reflection_text, why_code=runtrace.why_code,
+        return Closer(self, SimpleNamespace(oc=oc, loop_health=loop_health, track=verbs, attempt=beadtools.attempt, say=say, outcome_for=outcomes.outcome_for, node_outcome=outcomes.node_outcome,
+                                            close_move=outcomes.close_move, reflection_text=outcomes.reflection_text, why_code=runtrace.why_code,
                                             config_dir=ident.config_dir()))
 
     cases = cached_property(Cases)
+    records = cached_property(Records)
+    reflector = cached_property(Reflector)
     shared = cached_property(Shared)
     briefing = cached_property(Briefing)
 
@@ -625,13 +622,13 @@ class Engine(StateAttrs):
 
     def lock_worker(self, started):
         """The worker delegate launched (the live file's first line) goes into the engine lock, so a SIGKILLed engine leaves it findable."""
-        if enginelock.LOCK:
-            enginelock.LOCK.note(workers=[[started.pid, sproc.proc_start(started.pid) or ""]])
+        if engine_lock.LOCK:
+            engine_lock.LOCK.note(workers=[[started.pid, sproc.proc_start(started.pid) or ""]])
 
     def lock_workers(self, survivors, started):
         """After a call: the pids that outlived its stop keep the slot busy; none: free."""
-        if enginelock.LOCK:
-            enginelock.LOCK.note(workers=[[pid, sproc.proc_start(pid) or ""] for pid in survivors])
+        if engine_lock.LOCK:
+            engine_lock.LOCK.note(workers=[[pid, sproc.proc_start(pid) or ""] for pid in survivors])
 
     def live(self, step):
         """The live file for the next delegate call (delegate appends worker events there; the dashboard's Live view reads them)."""
@@ -644,93 +641,6 @@ class Engine(StateAttrs):
         return path
 
     # -- records
-    def origin(self):
-        """Why this run started and the run before it: the checkpoint's run when there was one, else the bead's previous
-        engine log. answer: an owner's answer to an ask; resume: the checkpoint was used; retry: an earlier run, no
-        checkpoint used; fresh: --fresh; first: no earlier run."""
-        prev = self.ck_run or self.prev_ck
-        if not prev:
-            mine = self.log_path.name
-            older = sorted(p.stem for p in self.log_path.parent.glob("%s-*.jsonl" % self.bead)
-                           if p.name < mine and RUN_STEM.match(p.stem[len(self.bead) + 1:]))
-            prev = older[-1] if older else ""
-        why = ("reexec" if self.reexec else "fresh" if self.fresh else "answer" if self.answered else "resume" if self.resumed
-               else "retry" if prev else "first")
-        return {"prev_run": prev, "started_because": lifecycle.normalize_started_because(why, prev),
-                "ask": self.answered.id if self.answered else ""}
-
-    def log_run(self):
-        """The run record: why it started, once that is known (after the checkpoint is read), or at the close."""
-        if self.run_logged:
-            return
-        self.run_logged = True
-        if self.reexec:  # the run record is in the log already (the exec kept the log): a note says what happened
-            self.log.note("task-loop %s took over run %s from %s%s" % (plugin_version() or "?", self.log_path.stem, self.reexec.get("from"),
-                                                                      " (fallback after a crash)" if self.reexec.get("fallback") else ""))
-            return
-        self.log.emit(rec.RunStart(run=self.log_path.stem, bead=self.bead, worktree=str(self.wt),
-                                   slot=(enginelock.LOCK.data.get("slot") if enginelock.LOCK else "") or None, **self.origin()))
-
-    def reflect_run(self, outcome, why):
-        """tl-05s: one cheap read-only call that reflects on this run: what went well and badly (each bad item with its cause class
-        and the session it comes from), what wasted tokens or minutes, what to change. Never blocks or changes the outcome: any
-        failure, a missing lane, a paused run, a stop, is no reflection. -> the answer dict or None."""
-        if not self.cfg.reflect or self.dry or not self.route or self.stop_pending:
-            return None
-        if not any(s.get("node") in ("write", "review", "verify") for s in self.sessions):
-            return None  # a run that only planned has nothing to reflect on
-        if why.startswith(("paused:", "waiting:", "failed: infrastructure", "failed: stopped")):
-            return None
-        try:
-            prompt = self.reflect_prompt(outcome, why)
-            # a short wait: the close step ignores a stop while this runs (route.py adds 120 s to the limit)
-            self.delegate_route()
-            req = RunRequest(role="reviewer", brief_path="", cwd=str(self.wt), schema_path="", task=self.bead, parent=self.session,
-                             title="%s · reflect" % self.bead, timeout_s=45)
-            cid = self.calls.start("reflect", "reflect", "reviewer", False, self.live_n)
-            res = dg.call(self.resolved, req, prompt, answers.sent_schema("reflect"), self.router.runner(self.err_path, None, None, self.live("reflect"))).res
-            saved = {k: v for k, v in self.stats.items() if k.startswith("tokens_")}
-            self.calls.end(cid, "reflect", "reviewer", 1, res)
-            self.stats.update(saved)  # the run's counts are the run's, as the Reflect comment says them
-            if res.data is None or res.stop is not None:
-                return None
-            data = unstrict(res.data, answers.schema_for("reflect"))
-            if answers.check("reflect", False, data):
-                return None
-            return data
-        except Exception as e:  # nothing here may touch the run's outcome
-            self.warn("no reflection: %s: %s" % (type(e).__name__, str(e)[:160]))
-            return None
-
-    def reflect_prompt(self, outcome, why):
-        rows = []
-        for s in self.sessions:
-            t = s.get("tokens") or {}
-            rows.append("- %s (%s) %s %s: in %s, cached %s, out %s, %ss, session %s" % (
-                s.get("node"), s.get("role"), s.get("family") or "?", s.get("model") or "?", t.get("in") or 0, t.get("cached") or 0,
-                t.get("out") or 0, s.get("secs"), s.get("ref") or "(none)"))
-        lines = ["%s: %s" % (it.rec.KIND, fmt.clip(
-            "%s -> %s: %s" % (it.rec.cause, it.rec.to, it.rec.detail) if isinstance(it.rec, rec.Transition) else it.rec.text, 200))
-                 for it in JsonlStore(self.log_path, rec.decode).read_from().items if isinstance(it.rec, (rec.Transition, rec.Warn))]
-        return REFLECT_PROMPT % (self.bead, fmt.clip(self.bead_title, 120), outcome, fmt.clip(why or "(none)", 600),
-                                 "; ".join("%s=%s" % kv for kv in self.stats.items()), "\n".join(rows[:40]),
-                                 "\n".join(lines[-70:]) or "(none)")
-
-    def file_trace(self, outcome, why, sha):
-        """One line per engine run in traces.jsonl, never pruned: bead, repo, branch, every session, the outcome."""
-        kind = self.kind.value if self.kind else ""
-        try:
-            self.stores.traces.append(runtrace.run_trace(self.log_path.stem, dict(
-                self.origin(), bead=self.bead, repo_url=self.git("remote", "get-url", "origin") or str(self.wt), worktree=str(self.wt),
-                branch=self.git("symbolic-ref", "--short", "-q", "HEAD"), coordinator_session=self.session, version=plugin_version(),
-                started=self.t0, ended=time.time(), outcome=outcome, why=(why or "")[:500], sha=sha or "", kind=kind, kfp=self.fp,
-                why_code=runtrace.why_code(kind, outcome), fingerprint=lifecycle.run_fingerprint(outcome, why), cost=self.cost,
-                stats=self.stats, delegate_path=self.route or "", log=str(self.log_path), stderr=str(self.err_path),
-                sessions=self.sessions, verified=self.verified, write_rounds=self.write_rounds, strays=self.strays,
-                reflection=self.reflection, lane_notes=self.lane_notes, salvaged=self.salvaged)))
-        except (OSError, ValueError) as e:
-            self.warn("could not write the trace: %s" % e)
-
     def warn(self, text):
         """Something a watching coordinator should look at: printed with ⚠, kept in the log, shown on the dashboard."""
         self.log.warn(text)
@@ -792,7 +702,7 @@ class Engine(StateAttrs):
     def budget_check(self):
         over = self.budget.over()
         if over:
-            steps = run_breakdown(self.log_path, self.steps.cur)
+            steps = outcomes.run_breakdown(self.log_path, self.steps.cur)
             went = ", ".join("%s %d min (%d round%s)" % (b.step, b.minutes, b.rounds, "" if b.rounds == 1 else "s") for b in steps)
             raise Blocked("over budget: %s%s%s" % (", ".join(over), (". Where it went: " + went) if went else "",
                                                    (" (%d min waiting for shared resources not counted)" % (self.waited // 60))
@@ -964,7 +874,7 @@ class Engine(StateAttrs):
                               "claude plugin update iorlas-delegate@iorlas-marketplace" % (dg.CONTRACT, why.kind, why.detail),
                               kind=oc.Kind.FAULT_CONTRACT_SKEW)
             self.log.note("workers: delegate %s (contract %d)" % (self.route, dg.CONTRACT))
-            self.log.note("task-loop %s" % (plugin_version() or "(unknown version)"))
+            self.log.note("task-loop %s" % (ident.plugin_version() or "(unknown version)"))
             self.tree.reset(bead)
             self.budget.labels = list(bead.labels)
             self.check_ask()
@@ -974,7 +884,7 @@ class Engine(StateAttrs):
                 raise Blocked("ticket: the bead has no acceptance criteria", askspecs.missing_criteria(), kind=oc.Kind.ASK_TICKET)
             self.scope = AcceptanceText.text(bead) or written
             plan, i, state = self.resume.point()
-            self.log_run()
+            self.records.log_run()
             # tl-fsj: the configured checks come from the base's config, so the tree they run on must have what the base has; every
             # resume rebases first, a plan to make or a stage to go on with (lifesim: 8 beads parked on 'just fmt-check-changed')
             at_land = plan is not None and (i >= len(plan["stages"]) or (state or {}).get("fix"))  # a conflict there is the writer's fix round
@@ -1031,7 +941,7 @@ class Engine(StateAttrs):
             self.checkpoints.drop()
         except Blocked as b:
             kind = b.kind
-            outcome = outcome_for(kind, b.why)
+            outcome = outcomes.outcome_for(kind, b.why)
             why, spec = b.why, b.spec
         except Exec:
             pass  # the process image is gone; nothing below runs in a real exec
@@ -1177,7 +1087,6 @@ class Engine(StateAttrs):
     # -- tl-bxk.13.15: visual work. The engine renders, a look judge judges, the owner decides taste (docs/design/visual-work.md)
     stop_deferred = staticmethod(halting.stop_deferred)
 
-RUN_STEM = re.compile(r"^\d{8}-\d{6}$")  # <bead>-<YYYYMMDD-HHMMSS>: an engine log of that bead, not of a child bead
 
 
 CHECK_ROUNDS_DAYS = 14
@@ -1194,73 +1103,7 @@ def prune_check_rounds(runs, days=CHECK_ROUNDS_DAYS):
             pass
 
 
-def outcome_for(kind, why):
-    """The trace's `outcome` word: landed, done, failed (a fault) or blocked (an ask, a pause, a wait). kind None: the
-    verify-gaps ask, read from its prefix."""
-    if kind in oc.FINISH:
-        return kind.value
-    if kind:  # a stop keeps the word `failed` in the trace (the reports count it); its `loop` field says paused
-        return "failed" if oc.POLICY[kind].loop == "failed" or kind == oc.Kind.PAUSE_KILLED else "blocked"
-    return "failed" if why.startswith("failed:") else "blocked"
-
-
-def node_outcome(outcome, why, kind=None):
-    """What a node still open at the close came to: the run's own end."""
-    if outcome in ("landed", "done"):
-        return outcome
-    if kind:
-        return ("stopped" if kind == oc.Kind.PAUSE_KILLED else "paused" if kind.name.startswith("PAUSE_")
-                else "waiting" if kind == oc.Kind.WAIT_ASK else "failed" if outcome == "failed" else "asks")
-    if why.startswith("paused:"):
-        return "paused"
-    if why.startswith("waiting:"):
-        return "waiting"
-    if why.startswith("failed: stopped"):
-        return "stopped"
-    if outcome == "failed":
-        return "failed"
-    return "blocked"
-
-
-def close_move(outcome, why, kind=None):
-    """(to, cause) of the last move, when no decision point logged one: landed, an ask, a pause, a wait, a failure."""
-    if outcome in ("landed", "done"):
-        return "close", outcome
-    if kind:
-        if kind == oc.Kind.PAUSE_KILLED:
-            return "pause", "stopped"
-        if kind.name.startswith("PAUSE_"):
-            return "pause", "paused"
-        if kind == oc.Kind.WAIT_ASK:
-            return "ask", "waiting"
-        return ("ask", oc.ASK_NAME[kind]) if kind in oc.ASKS else ("close", "failed")
-    if why.startswith("paused:"):
-        return "pause", "paused"
-    if why.startswith("waiting:"):
-        return "ask", "waiting"
-    return "close", "stopped" if why.startswith("failed: stopped") else "failed"
-
-
 engine_written = intake.engine_written  # what the engine (or a receipt of ours) wrote into a bead is never the owner's (tl-7y6.6.2)
-
-
-def run_breakdown(log_path, open_node=None, top=4):
-    """Where a run's minutes went, from its engine log, longest first: BudgetLine(step, minutes, rounds). Steps under a minute are
-    left out; the open step counts up to now."""
-    tot = {}
-    for it in JsonlStore(Path(log_path), rec.decode).read_from().items:
-        if isinstance(it.rec, rec.StepEnd):
-            t = tot.setdefault(it.rec.step, [0.0, 0])
-            t[0] += it.rec.secs
-            t[1] += 1
-    if open_node:
-        t = tot.setdefault(open_node.step, [0.0, 0])
-        t[0] += max(0.0, time.time() - open_node.t)
-        t[1] += 1
-    return [BudgetLine(step=k, minutes=float(v[0] // 60), rounds=int(v[1])) for k, v in sorted(tot.items(), key=lambda kv: -kv[1][0]) if v[0] >= 60][:top]
-
-
-
 
 
 def question_spec(out):
@@ -1270,15 +1113,6 @@ def question_spec(out):
 
 LINK_CAP = 200  # links opened per review
 
-
-
-def reflection_text(r):
-    """The reflection as one line for the bead's Reflect comment ('' when there is none)."""
-    if not r:
-        return ""
-    bad = "; ".join("[%s] %s (session %s)" % (b["cause"], fmt.clip(b["what"], 160), b["session"]) for b in r.get("went_badly") or []) or "none"
-    return " reflection: badly: %s%s%s;" % (fmt.clip(bad, 500), (" | wasted: " + fmt.clip("; ".join(r["wasted"]), 200)) if r.get("wasted") else "",
-                                           (" | change: " + fmt.clip("; ".join(r["change"]), 200)) if r.get("change") else "")
 
 
 def context_tokens(path, tail=1 << 20):
@@ -1618,21 +1452,21 @@ def run_in(a, repo, cfg, store=None):
                 return {"v": 1, "outcome": "taken", "bead": a.id, "why": why}
             os.environ["TASK_LOOP_SLOT_BEAD"] = took  # the engine's heartbeat keeps it
             RUN_SLOT["owned"] = slot
-        lock = enginelock.EngineLock(wt, a.id, slot)
+        lock = engine_lock.EngineLock(wt, a.id, slot)
         busy = take_area(a, repo, cfg, lock, took or sb if slot else "", store)
         if busy:
             why = busy if busy.startswith("area ") else "worktree %s: %s" % (wt, busy)
             print("TAKEN: %s" % why)
             return {"v": 1, "outcome": "taken", "bead": a.id, "why": why}
-        enginelock.LOCK = lock
+        engine_lock.LOCK = lock
         return run_bead(a, repo, cfg, wt, store)
     finally:
         old = signal.signal(signal.SIGTERM, signal.SIG_IGN) if hasattr(signal, "SIGTERM") and \
             threading.current_thread() is threading.main_thread() else None
         try:
-            if enginelock.LOCK:
-                enginelock.LOCK.release()
-                enginelock.LOCK = None
+            if engine_lock.LOCK:
+                engine_lock.LOCK.release()
+                engine_lock.LOCK = None
             if took:
                 os.environ.pop("TASK_LOOP_SLOT_BEAD", None)
                 wslots.release_slot(repo, slot, bead=a.id, mine=True, store=store)

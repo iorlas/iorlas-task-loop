@@ -33,6 +33,14 @@ SPACE = re.compile(r"\s+")
 EDGE = " :;,.-|/"
 
 
+RUN_STAMP = re.compile(r"^\d{8}-\d{6}$")
+
+
+def is_run_stamp(text: str) -> bool:
+    """<YYYYMMDD-HHMMSS>: the tail of an engine log of a bead, not of a child bead."""
+    return bool(RUN_STAMP.match(text))
+
+
 def normalize_started_because(value: object, prev_run: object = "") -> str:
     """One of STARTED_BECAUSE: an older or damaged value becomes retry (a run came before) or first."""
     v = str(value or "").strip().lower()

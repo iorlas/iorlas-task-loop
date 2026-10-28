@@ -56,7 +56,7 @@ class Reload(unittest.TestCase):
         self.cache = Path(self.tmp.name, "cache")
         here = self.install("0.1.0", fake=True)
         self.here = here  # the install the engine under test runs from (loop_env.vet_newer / build take it)
-        p = mock.patch.object(engine, "plugin_version", return_value="0.1.0")
+        p = mock.patch.object(ident, "plugin_version", return_value="0.1.0")
         p.start()
         self.addCleanup(p.stop)
         self.execs = []
@@ -148,7 +148,7 @@ class Reload(unittest.TestCase):
         self.assertEqual([c[0] for c in script.calls], ["planner", "worker", "reviewer"])  # land and close have not run yet
         self.assertEqual(self.closed, [])
         # the new image: same environment, the TL_REEXEC hand-over, the same checkpoint and log
-        with mock.patch.dict(os.environ, {"TL_REEXEC": json.dumps(ex["env"])}), mock.patch.object(engine, "plugin_version", return_value="0.2.0"):
+        with mock.patch.dict(os.environ, {"TL_REEXEC": json.dumps(ex["env"])}), mock.patch.object(ident, "plugin_version", return_value="0.2.0"):
             eng2 = self.engine_for(script)
             self.assertEqual(eng2.log_path, eng.log_path)  # same run id, same log and run dir
             self.assertEqual(eng2.run_dir, eng.run_dir)
