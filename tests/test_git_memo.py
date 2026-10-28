@@ -80,10 +80,12 @@ class GitMemoTest(unittest.TestCase):
         self.assertEqual(self.calls(lambda: slotcheck.tree_problem(r))[1], 0)
         sh("git", "config", "core.bare", "true", cwd=r)
         bad = slotcheck.tree_problem(r)
+        assert bad
         self.assertEqual(bad[0], "core.bare is true")
         sh("git", "config", "core.bare", "false", cwd=r)
         sh("git", "config", "core.worktree", str(r.parent), cwd=r)
         bad = slotcheck.tree_problem(r)
+        assert bad
         self.assertTrue(bad[0].startswith("core.worktree is set (file:"), bad)
         self.assertIn(" = %s)" % r.parent, bad[0])
         sh("git", "config", "--unset", "core.worktree", cwd=r)

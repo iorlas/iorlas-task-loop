@@ -3,10 +3,11 @@ another folder (lifesim-1mm); read as ambient config has it, unpinned, as a work
 import os
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from taskloop.adapters import gitrepo
 
-_MEMO: dict[str, tuple[str, str] | None] = {}  # (slot, what the config files and environment are now) -> tree_problem's answer
+_MEMO: dict[tuple[Any, ...], tuple[str, str] | None] = {}  # (slot, what the config files and environment are now) -> tree_problem's answer
 
 
 def _git(wt: str | Path, *args: str) -> str:
