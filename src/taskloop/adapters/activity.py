@@ -8,7 +8,7 @@ from taskloop.adapters import procs
 
 def tree_cpu(root_pid: int) -> dict[int, float] | None:
     """{pid: cpu seconds} for the process tree under root_pid and every member of its group; None where the system lists no
-    processes at all (macOS has no /proc): the CPU is then unknown, which is not the same as idle."""
+    processes at all (no readable process table): the CPU is then unknown, which is not the same as idle."""
     table = procs.table()
     if table is None:
         return None

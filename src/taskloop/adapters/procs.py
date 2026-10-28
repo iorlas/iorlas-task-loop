@@ -4,19 +4,18 @@ Nothing here (nor anywhere in the repo outside `_vendor/`) sends a signal: a sto
 `stream_proc.alive`. A process this program did not spawn (the dashboard server, a recorded lock holder) is stopped through a
 `PidHandle`, which gives stop_tree the few attributes of a `Popen` it uses; the process-group detail stays inside stream-proc."""
 
-import os
 import subprocess
 import threading
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from os import environ
-from pathlib import Path
 from typing import Any
 
 import child_env
 import stream_proc
 from stream_proc import TermHold, alive, popen_held, proc_start, stop_tree
+from stream_proc.proctable import has_table
 
 GIT_PIN_VARS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")  # the engine's own git is pinned; no child inherits a pin
 KEEP = ("CLAUDE_CONFIG_DIR",)  # a worker on a custom Claude login must find it
@@ -128,34 +127,16 @@ def stop_pid(pid: int, start: str | None = None, grace: float = STOP_GRACE_S) ->
     return stop_tree(PidHandle(pid, start), grace=grace)  # type: ignore[arg-type]
 
 
-@dataclass(frozen=True)
-class Proc:
-    pid: int
-    ppid: int
-    pgid: int
-    cpu_s: float
-    cmd: str
+Proc = stream_proc.Proc
 
 
 def table() -> dict[int, Proc] | None:
-    """Every process the kernel lists, from /proc (no ps, no signal): None where there is no /proc (macOS), so a caller reads that as
-    "cannot tell", never as "nothing runs"."""
-    root = Path("/proc")
-    if not root.is_dir():
+    """Every process the system lists, through stream-proc (/proc on Linux, libproc on macOS; no ps, no signal): None where it lists
+    none at all (no readable table), so a caller reads that as "cannot tell", never as "nothing runs"."""
+    if not has_table():
         return None
-    tick = os.sysconf("SC_CLK_TCK")
-    out: dict[int, Proc] = {}
-    for d in root.iterdir():
-        if not d.name.isdigit():
-            continue
-        try:
-            stat = (d / "stat").read_text()
-            f = stat[stat.rindex(")") + 2 :].split()
-            cmd = (d / "cmdline").read_bytes().replace(b"\0", b" ").decode("utf-8", "replace").strip()
-            out[int(d.name)] = Proc(int(d.name), int(f[1]), int(f[2]), (int(f[11]) + int(f[12])) / tick, cmd)
-        except (OSError, ValueError, IndexError):
-            continue
-    return out
+    rows = stream_proc.table()
+    return rows or None
 
 
 def stop_in_thread(p: Any, grace: float) -> threading.Thread:
