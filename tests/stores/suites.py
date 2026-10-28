@@ -244,6 +244,12 @@ class TicketContract(Base):
         self.assertEqual(t.take("k", "slot", 2, pid=os.getpid(), now=S.T).seq, 4)
         self.assertEqual(t.line("other"), [])
 
+    def test_numbers_keep_growing_after_the_line_has_emptied(self) -> None:
+        t = self.s.tickets
+        first = t.take("k", "slot", 2, pid=os.getpid(), now=S.T)
+        t.drop("k", first.seq)
+        self.assertGreater(t.take("k", "slot", 2, pid=os.getpid(), now=S.T).seq, first.seq)
+
     def test_a_dead_waiter_drops_out_of_the_line(self) -> None:
         t = self.s.tickets
         t.take("k", "dead", 0, pid=dead_pid(), now=S.T)

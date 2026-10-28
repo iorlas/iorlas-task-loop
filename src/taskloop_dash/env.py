@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from taskloop.contracts.locks import Ticket
 from taskloop.contracts.paths import ConfigDir
 from taskloop_dash.cache import FileCache, TtlCache
 from taskloop_dash.tails import Tails
@@ -21,6 +22,10 @@ STALE_RUN = 20 * 60  # a run with no close, no engine lock to ask and no log wri
 
 
 def _no_beads(repo: str) -> list[Bead]:
+    return []
+
+
+def _no_tickets(repo: str) -> list[Ticket]:
     return []
 
 
@@ -45,7 +50,7 @@ class Ports:
     """Read-only facts the launcher injects. The defaults say nothing, so a dash with no launcher still serves its own files."""
 
     slot_beads: Callable[[str], list[Bead]] = _no_beads  # this machine's slot beads of a repo
-    waiting_line: Callable[[str], list[Bead]] = _no_beads  # the live slot tickets, first in line first
+    waiting_line: Callable[[str], list[Ticket]] = _no_tickets  # the live slot tickets, first in line first
     load_cfg: Callable[[str], dict[str, Any]] = _default_cfg  # the repo's engine config: pick_label, skip_labels
     bd: Callable[..., Any] = _no_bd  # bd in a repo through the engine's adapter: bd(repo, *args, timeout=) -> (returncode, stdout, stderr)
     reflections: Callable[[int], dict[str, Any]] = _no_reflections  # the run reflections of the last N hours

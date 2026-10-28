@@ -246,6 +246,10 @@ class Race(unittest.TestCase):
                 parts.append("== %s exit %s, stderr\n%s" % (name, p.returncode, err.read_text(errors="replace")))
         for f in sorted(self.h.glob("*.log")):
             parts.append("== %s\n%s" % (f.name, "\n".join(f.read_text(errors="replace").splitlines()[-25:])))
+        for f in sorted((self.h / "cfg" / "task-loop" / "engine").glob("*.jsonl")):  # a run that did not land: why, from its own log (tl-bjd)
+            lines = f.read_text(errors="replace").splitlines()
+            if lines and "landed" not in lines[-1]:
+                parts.append("== engine log %s (did not land), last records\n%s" % (f.name, "\n".join(l[:600] for l in lines[-8:])))
         for f in sorted((self.h / "cfg" / "task-loop" / "loop").glob("*.jsonl")):
             parts.append("== %s\n%s" % (f.name, f.read_text(errors="replace")[-3000:]))
         return "\n".join(parts)

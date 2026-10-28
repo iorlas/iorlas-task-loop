@@ -7,6 +7,7 @@ from collections.abc import Callable
 from taskloop.app.slots.env import DEFAULT_PRIO, TICKET_POLL, SlotEnv
 from taskloop.app.slots.pool import SlotPool
 from taskloop.contracts.locks import Ticket
+from taskloop.contracts.loop import QueueRow
 
 
 def order(t: Ticket) -> tuple[int, int]:
@@ -19,6 +20,11 @@ def waiting_line(env: SlotEnv) -> list[Ticket]:
     return env.tickets.line(env.repo_key)
 
 
+def queue_rows(env: SlotEnv) -> list[QueueRow]:
+    """The line as the loop's state file carries it (LoopState.queue): first in line first, `ahead` the places before it."""
+    return [QueueRow(bead=t.bead, prio=t.prio, since=t.since, ahead=n) for n, t in enumerate(waiting_line(env))]  # pyrefly: ignore[unexpected-keyword]
+
+
 def wait_slot(env: SlotEnv, why: str, bead: str = "", stop: Callable[[], bool] | None = None,
               sleep: Callable[[float], None] | None = None, poll: tuple[float, float] | None = None,
               on_wait: Callable[[int], None] | None = None, prio: int = DEFAULT_PRIO) -> tuple[str, str, str] | None:
@@ -28,7 +34,7 @@ def wait_slot(env: SlotEnv, why: str, bead: str = "", stop: Callable[[], bool] |
     first, most = poll or TICKET_POLL
     nap = sleep or env.sleep
     pool = SlotPool(env)
-    ticket = env.tickets.take(env.repo_key, why, prio, pid=env.pid, now=env.now())
+    ticket = env.tickets.take(env.repo_key, why, prio, pid=env.pid, now=env.now(), bead=bead)
     delay = first
     try:
         while True:

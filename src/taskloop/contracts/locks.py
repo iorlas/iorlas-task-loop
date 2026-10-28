@@ -58,6 +58,7 @@ class Ticket:
     prio: int
     seq: int
     pid_start: float | None = None
+    bead: str = ""  # the bead the waiter wants a slot for, when it has one (a loop waits before it has picked)
 
     def alive(self) -> bool:
         return pid_alive(self.pid)

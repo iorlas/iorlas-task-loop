@@ -456,7 +456,8 @@
   "since": 1793050200.5,
   "prio": 1,
   "seq": 3,
-  "pid_start": 1793050200.5
+  "pid_start": 1793050200.5,
+  "bead": "x-1"
  },
  "LockRecord": {
   "v": 1,

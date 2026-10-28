@@ -7,6 +7,8 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
+from atomic_io import atomic_write_text
+
 from taskloop.contracts import codec, paths
 from taskloop.contracts.locks import Ticket
 from taskloop.contracts.stores import JsonStore
@@ -40,16 +42,20 @@ class FileTickets:
     def __init__(self, cfg: paths.ConfigDir) -> None:
         self.cfg = cfg
 
-    def take(self, repo_key: str, why: str, prio: int, *, pid: int, now: float, pid_start: float | None = None) -> Ticket:
+    def take(self, repo_key: str, why: str, prio: int, *, pid: int, now: float, pid_start: float | None = None,
+             bead: str = "") -> Ticket:
         folder = self.cfg.ticket(repo_key, 0).parent
         folder.mkdir(parents=True, exist_ok=True)
-        seq = max([0, *(self._seq(p) for p in folder.iterdir())]) + 1
+        counter = self.cfg.ticket_counter(repo_key)
+        seq = max([self._last(counter), *(self._seq(p) for p in folder.iterdir())]) + 1
         while True:
-            ticket = Ticket(pid=pid, why=why, since=now, prio=prio, seq=seq, pid_start=pid_start)  # pyrefly: ignore[unexpected-keyword]
+            ticket = Ticket(pid=pid, why=why, since=now, prio=prio, seq=seq, pid_start=pid_start, bead=bead)  # pyrefly: ignore[unexpected-keyword]
             tmp = folder / (".%d.%d.%d.tmp" % (pid, threading.get_ident(), seq))  # threads of one process may race for a number
             tmp.write_text(json.dumps(codec.to_json(ticket)), encoding="utf-8")
             try:
                 os.link(tmp, self.cfg.ticket(repo_key, seq))
+                if seq > self._last(counter):  # numbers only grow, also across an empty line; a lost race here is harmless
+                    atomic_write_text(counter, str(seq), fsync=False)
                 return ticket
             except FileExistsError:
                 seq += 1
@@ -79,6 +85,13 @@ class FileTickets:
     def drop(self, repo_key: str, seq: int) -> None:
         with contextlib.suppress(OSError):
             self.cfg.ticket(repo_key, seq).unlink()
+
+    @staticmethod
+    def _last(counter: Path) -> int:
+        try:
+            return int(counter.read_text(encoding="utf-8").strip() or 0)
+        except (OSError, ValueError):
+            return 0
 
     @staticmethod
     def _seq(p: Path) -> int:

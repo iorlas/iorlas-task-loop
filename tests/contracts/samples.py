@@ -137,7 +137,7 @@ OTHERS = {
     "Rest": loop.Rest(until=T + 600, why="network", t=T),
     "BadVersions": loop.BadVersions(entries=[loop.BadVersion(version="0.2.0", why="selftest failed", t=T)]),
     "EngineLock": LOCK,
-    "Ticket": locks.Ticket(pid=5, why="slot", since=T, prio=1, seq=3, pid_start=T),
+    "Ticket": locks.Ticket(pid=5, why="slot", since=T, prio=1, seq=3, pid_start=T, bead="x-1"),
     "LockRecord": locks.LockRecord(what=LockWhat.LAND, holder="tl-1", pid=5, t=T),
     "Hold": slots.Hold(by="tl-1", since="2026-10-28T03:00:00", why="screenshots", until=T),
     "Checkout": slots.Checkout(path="/r/.slots/s1", branch="task/x-1", main=False),

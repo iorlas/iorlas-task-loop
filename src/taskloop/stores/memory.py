@@ -151,13 +151,16 @@ class MemLockTable:
 class MemTickets:
     def __init__(self) -> None:
         self.rows: dict[str, dict[int, Ticket]] = {}
+        self.last: dict[str, int] = {}  # numbers only grow, also across an empty line
         self.lock = threading.Lock()
 
-    def take(self, repo_key: str, why: str, prio: int, *, pid: int, now: float, pid_start: float | None = None) -> Ticket:
+    def take(self, repo_key: str, why: str, prio: int, *, pid: int, now: float, pid_start: float | None = None,
+             bead: str = "") -> Ticket:
         with self.lock:
             rows = self.rows.setdefault(repo_key, {})
-            seq = max([0, *rows]) + 1
-            rows[seq] = Ticket(pid=pid, why=why, since=now, prio=prio, seq=seq, pid_start=pid_start)  # pyrefly: ignore[unexpected-keyword]
+            seq = max([self.last.get(repo_key, 0), *rows]) + 1
+            self.last[repo_key] = seq
+            rows[seq] = Ticket(pid=pid, why=why, since=now, prio=prio, seq=seq, pid_start=pid_start, bead=bead)  # pyrefly: ignore[unexpected-keyword]
             return rows[seq]
 
     def line(self, repo_key: str) -> list[Ticket]:

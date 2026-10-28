@@ -469,13 +469,12 @@ local to one machine, hence the host in the title.
   runs too (release it first; reset takes `--force`). An expired hold gives the slot bead back. A slot in use, or one
   whose claim another session wins, cannot be held.
 - **The slot line (tl-bxk.11.5):** every waiter for any slot (each `tl loop`, `run-task --slot any [--wait]`,
-  `tl slot take`) takes a ticket, `<config dir>/slots/<repo>/<seq>.json` (pid, start time, seq, why), made whole in
-  one step under the line's lock; numbers only grow. Only the first live ticket may take a slot, so a waiter with a
-  ticket ahead of it never steals one. The line is ordered by bead priority, then arrival (tl-43k): the ticket's `prio` is the bead's priority when the waiter joined (a loop: the best bead it would run; `run-task`: its bead; P2 when unknown), so a P0 passes P2 waiters; `tl slot list` ends with the line as `WAITING N P<prio> pid why since`. A ticket whose process is gone (pid and start time) is dropped by the next
+  `tl slot take`) takes a ticket, `<config dir>/slots/<repo>/<seq>.json` (a `Ticket`: pid, seq, why, prio, since), made whole in
+  one step (linked in, never replacing another's); numbers only grow. Only the first live ticket may take a slot, so a waiter with a
+  ticket ahead of it never steals one. The line is ordered by bead priority, then arrival (tl-43k): the ticket's `prio` is the bead's priority when the waiter joined (a loop: the best bead it would run; `run-task`: its bead; P2 when unknown), so a P0 passes P2 waiters; `tl slot list` ends with the line as `WAITING N P<prio> pid why since`. A ticket whose process is gone is dropped by the next
   reader. A named take (`run-task --slot S`, `tl slot hold S`) does not queue. Every slot claim runs under one
   per-repo lock with a fresh look at the slot bead: bd lets an actor re-claim its own bead, and hand runs of one
-  session share its actor. Windows: the OS locks are no-ops there (no fcntl), so these guards and the area lock hold on POSIX
-  only.
+  session share its actor. The locks are the vendored ProcessLock (the kernel drops one with its process); POSIX only.
 - `tl slot list`: name, bead, status, holder, why (and since when, or until when for a hold), the live engine if any,
   folder.
 

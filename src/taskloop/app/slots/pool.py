@@ -63,8 +63,15 @@ class Slot:
         ready_for(self, bead, force=force)
 
     def release(self, bead: str | None = None, *, mine: bool = False, force: bool = False) -> bool:
-        """Free the slot. mine=True (a run ending): only while the slot's marks still name this actor (and `bead`, when it
-        is marked): a slot reclaimed and retaken is the new holder's, left alone. False when there is no such slot."""
+        """Free the slot; fails busy while an engine runs in it (force drops the engine's lock and frees it). mine=True (a run
+        ending): only while the slot's marks still name this actor (and `bead`, when it is marked): a slot reclaimed and
+        retaken is the new holder's, left alone. False when the slot bead is gone."""
+        if not mine:  # a person or the loop ending a slot by name: never under a live engine, unless forced (which drops its lock)
+            busy = self.env.busy(self.dir)
+            if busy and not force:
+                raise SlotFail("busy", "slot %s: %s; it frees itself when that run ends (--force: release and drop the lock)" % (self.name, busy))
+            if busy:
+                self.env.drop_engine_lock(self.dir)
         with self.env.take_lock():
             return self.release_locked(bead, mine, force)
 

@@ -16,7 +16,7 @@ from taskloop.adapters.fake_slot_git import FakeSlotGit  # noqa: E402
 from taskloop.adapters.slot_git import classify  # noqa: E402
 from taskloop.app.slots.env import SlotEnv  # noqa: E402
 from taskloop.app.slots.lease import Lease  # noqa: E402
-from taskloop.app.slots.line import wait_slot  # noqa: E402
+from taskloop.app.slots.line import queue_rows, wait_slot  # noqa: E402
 from taskloop.app.slots.pool import SlotPool  # noqa: E402
 from taskloop.cli import slots as cli  # noqa: E402
 from taskloop.contracts import paths  # noqa: E402
@@ -161,6 +161,14 @@ class Taking(Rig):
         self.assertEqual(self.bd.beads[sb].status, "in_progress")
         self.assertIn("left alone", self.err[0])
 
+    def test_releasing_by_name_under_a_live_engine_is_busy_unless_forced(self):
+        self.slot().take("a")
+        self.busy_at[self.d1] = "engine pid 7 runs x-0"
+        self.assertEqual(self.code(lambda: self.slot().release()), "busy")
+        self.assertEqual(self.bd.beads["sl-s1"].status, "in_progress")
+        self.assertTrue(self.slot().release(force=True))
+        self.assertEqual((self.bd.beads["sl-s1"].status, self.busy_at), ("open", {}))  # freed, and the engine's lock dropped
+
     def test_an_expired_hold_frees_the_slot(self):
         verbs = SimpleNamespace(op="hold", name="s1", why="screens", for_min=1, n=None, bead=None, force=False)
         self.assertEqual(cli.run(self.env, verbs), 0)
@@ -210,6 +218,12 @@ class Line(Rig):
         got = wait_slot(self.env, "late", stop=lambda: len(looks) >= 4 or bool(looks.append(1)), poll=(1, 3))
         self.assertIsNone(got)
         self.assertEqual(self.sleeps, [1, 2, 3, 3])  # a sleep after each of four looks
+
+
+    def test_the_line_is_the_typed_queue_the_loop_state_carries(self):
+        self.tickets.take("r-1", "run-task late", 2, pid=1, now=5.0, bead="x-2")
+        self.tickets.take("r-1", "run-task urgent", 0, pid=1, now=6.0, bead="x-1")
+        self.assertEqual([(r.bead, r.prio, r.since, r.ahead) for r in queue_rows(self.env)], [("x-1", 0, 6.0, 0), ("x-2", 2, 5.0, 1)])
 
 
 class OneLease(Rig):

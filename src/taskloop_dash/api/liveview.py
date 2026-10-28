@@ -81,7 +81,7 @@ class Live:
         rows = []
         for repo in self.records.repos():
             for n, t in enumerate(self.env.ports.waiting_line(repo)):
-                rows.append({"repo": basename(repo), "bead": t.get("bead") or "", "prio": t.get("prio"), "since": t.get("t"), "ahead": n})
+                rows.append({"repo": basename(repo), "bead": t.bead, "why": t.why, "prio": t.prio, "since": t.since, "ahead": n})
         return rows
 
     def api_live_overview(self, wait: object = "0") -> dict[str, Any]:

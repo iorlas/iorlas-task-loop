@@ -4,7 +4,7 @@ import os
 from typing import Any, Final
 
 from taskloop.app.slots.env import SlotEnv, stamp
-from taskloop.app.slots.line import order, waiting_line, wait_slot
+from taskloop.app.slots.line import order, wait_slot, waiting_line
 from taskloop.app.slots.marks import held_by, mark_held
 from taskloop.app.slots.pool import Slot, SlotPool
 from taskloop.app.slots.reset import setup
@@ -101,18 +101,13 @@ def take(env: SlotEnv, a: Any) -> int:
 
 
 def release(env: SlotEnv, a: Any) -> int:
-    pool = SlotPool(env)
-    d = env.dir_of(a.name) if a.name else ""
-    busy = env.busy(d) if d else ""
-    if busy and not a.force:
-        env.say("BUSY: slot %s: %s; it frees itself when that run ends (--force: release and drop the lock)" % (a.name, busy))
-        return 1
-    if busy:
-        env.drop_engine_lock(d)
     try:
-        pool.slot(a.name).release(force=a.force)
-    except SlotFail:
-        env.warn("tl: no slot " + str(a.name))
+        SlotPool(env).slot(a.name).release(force=a.force)
+    except SlotFail as e:
+        if e.code == "busy":
+            env.say("BUSY: " + e.why)
+        else:
+            env.warn("tl: no slot " + str(a.name))
         return 1
     return 0
 

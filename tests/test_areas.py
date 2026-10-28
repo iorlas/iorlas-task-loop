@@ -23,6 +23,7 @@ from support import slots as sl  # noqa: E402
 from support.fakes import as_bead  # noqa: E402
 from taskloop.contracts.bead import BdError  # noqa: E402
 from taskloop.contracts.ports import BdFailure  # noqa: E402
+from taskloop.app.slots import marks  # noqa: E402
 from taskloop.app.slots.pool import Slot  # noqa: E402
 from test_slots import Slots  # noqa: E402
 
@@ -137,6 +138,14 @@ class Areas(AreasBase):
         self.run_loop()
         self.assertEqual(seen["meta"].get("held_bead"), "x-1")
         self.assertEqual(seen["lock"].get("bead"), "x-1")
+
+    def test_a_failed_bead_gives_back_its_slot_and_its_area_so_the_loop_goes_on(self):
+        """tl-bjd: w-5 of the race failed and its area stayed busy. The slot's release clears the bead's mark, whatever the outcome."""
+        bd = self.lanes({"x-1": [rec("failed")], "x-2": [rec("landed")]}, {"x-1": "live", "x-2": "live"}, slots=1)
+        self.assertEqual(self.run_loop("--max-beads", "2"), 0)
+        self.assertEqual(self.started, [("x-1", "s1"), ("x-2", "s1")])  # x-2 is of the failed bead's area, in the failed bead's slot
+        self.assertEqual((bd.slots["sl-1"]["status"], bd.slots["sl-1"]["assignee"]), ("open", ""))
+        self.assertFalse(set(bd.slots["sl-1"].get("metadata") or {}) & set(marks.HELD_KEYS))
 
     def test_when_every_ready_bead_waits_for_its_area_the_loop_waits_instead_of_draining(self):
         bd = self.lanes({"x-1": [], "x-2": [rec("landed")]}, {"x-1": "live", "x-2": "live"})
