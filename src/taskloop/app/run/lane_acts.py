@@ -46,12 +46,12 @@ class LaneActs:
         e = self.e
         waited, i, wid = 0.0, 0, e.wait_start(WaitWhat.NETWORK) if up is not False or max_s > 0 else None
         if up is not False:  # the probe says up, or could not run: a beat, then go and see
-            time.sleep(NET_BACKOFF[0])
+            e.halt_point(wait=NET_BACKOFF[0])
             waited, up = NET_BACKOFF[0], True
         while up is False and waited < max_s:
             gap = NET_BACKOFF[min(i, len(NET_BACKOFF) - 1)]
             i += 1
-            time.sleep(gap)
+            e.halt_point(wait=gap)
             waited += gap
             up = self.net_up()
             if up is None:  # the probe could not run: go and see
@@ -133,7 +133,7 @@ class LaneActs:
                 f"{'delegate crashed' if crash else 'waited for a lane'} ({stop.reason}): {int(secs)} s",
             )
             wid = e.wait_start(WaitWhat.DELEGATE_CRASH if crash else WaitWhat.LANE, stop.lane or "", e.clock.now() + secs)
-            time.sleep(secs)
+            e.halt_point(wait=secs)
             e.add_wait(secs, WaitWhat.DELEGATE_CRASH if crash else WaitWhat.LANE, wid)
         self.wc.charge(c, a.charges, secs)
         return self.wc.again(c, a.resume, stop=stop, note="")

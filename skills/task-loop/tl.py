@@ -94,13 +94,13 @@ RETAIN_DAYS = 7
 # ---- paths and identity -------------------------------------------------------------------------------------------
 
 @contextlib.contextmanager
-def os_lock(path, holder, waiting=None, timeout=None):
+def os_lock(path, holder, waiting=None, timeout=None, check=None):
     """One holder at a time, across processes (the vendored ProcessLock; the OS drops it when the process dies); a second
     taker waits. `waiting(text)` is called with the holder's name once, before blocking. With `timeout` (seconds) a wait that
-    long raises TimeoutError (the holder's name in it)."""
+    long raises TimeoutError (the holder's name in it). `check()` runs every round of the wait and raises to end it."""
     told = (lambda rec: waiting(rec.holder if rec else "?")) if waiting else None
     try:
-        with locks.hold_path(path, holder, timeout=timeout, waiting=told):
+        with locks.hold_path(path, holder, timeout=timeout, waiting=told, check=check):
             yield path
     except LockTimeout as e:
         raise TimeoutError(e.holder.holder if e.holder else "?") from None

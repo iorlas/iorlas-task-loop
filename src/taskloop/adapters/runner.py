@@ -121,6 +121,7 @@ class Seam:
         self.obs: dict[str, Any] = {}
         self.secs = 0.0
         self.worker: WorkerStarted | None = None
+        self.outer: threading.Event | None = None  # the run's stop flag: set, the call is stopped
 
     def live_start(self) -> LiveStart | None:
         return None
@@ -148,6 +149,10 @@ class StreamRunner(Seam):
         """While the call runs: note the worker the live file names, and stop the call when the silence says so."""
         nxt = time.monotonic()
         while not done.wait(POLL_S):
+            if self.outer is not None and self.outer.is_set():
+                self.obs.update(kill_t=time.time(), why="interrupted")
+                halt.set()
+                return
             if self.worker is None and live:
                 self.worker = worker_started(live)
                 if self.worker and self.on_worker:

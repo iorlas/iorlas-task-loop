@@ -45,9 +45,11 @@ def read_holder(path: Path, pid: int | None = None) -> LockRecord | None:
 
 @contextlib.contextmanager
 def hold_path(path: Path | str, holder: str, *, what: LockWhat = LockWhat.LAND, timeout: float | None = None,
-              waiting: Callable[[LockRecord | None], None] | None = None) -> Iterator[LockRecord]:
+              waiting: Callable[[LockRecord | None], None] | None = None,
+              check: Callable[[], None] | None = None) -> Iterator[LockRecord]:
     """Wait for the lock on `path` (forever, or `timeout` seconds, then LockTimeout), hold it for the `with` block.
-    `waiting` is called once, before the first wait, with the current holder (None when unknown)."""
+    `waiting` is called once, before the first wait, with the current holder (None when unknown).
+    `check` runs every round of the wait: it raises to end the wait (a stop)."""
     key = Path(path).resolve()
     mutex, end, told, delay = _mutex(key), None if timeout is None else time.monotonic() + timeout, False, POLL
     while True:
@@ -66,6 +68,8 @@ def hold_path(path: Path | str, holder: str, *, what: LockWhat = LockWhat.LAND, 
             waiting(blocker)
         if end is not None and time.monotonic() >= end:
             raise LockTimeout(key.name, blocker)
+        if check is not None:
+            check()
         time.sleep(delay)
         delay = min(delay * 2, POLL_MAX)
     rec = LockRecord(what=what, holder=holder, pid=os.getpid(), t=time.time())  # pyrefly: ignore[unexpected-keyword]

@@ -19,7 +19,7 @@ class CheckRound:
         e = self.e
         s.acc_first = s.acc_only and not s.acc_first  # once, then the normal order: a check may read what a tests-group check writes
         stage = dict(s.st, checks=s.st["checks"] + (e.case_checks() if s.last else []))
-        run = e.run_checks(stage, s.name, acceptance_first=s.acc_first, conflict_fix=s.state.get("conflict_fix"), round=s.rounds + 1,
+        run = e.stoppable_checks(stage, s.name, acceptance_first=s.acc_first, conflict_fix=s.state.get("conflict_fix"), round=s.rounds + 1,
                            **s.meta)
         s.run, e.last_run = run, run
         e.stores.check_run(e.run_dir.name, None).write(run)

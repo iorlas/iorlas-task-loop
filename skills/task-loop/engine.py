@@ -34,6 +34,7 @@ from typing import Any
 
 from core import enginelock, fmt
 from taskloop.adapters import applog
+from taskloop.adapters import halt as halting
 from taskloop.domain.report import matchers as lifecycle
 from taskloop.adapters import links
 from taskloop.adapters import looks
@@ -446,7 +447,7 @@ class Engine(StateAttrs):
                                    lambda text: tl.event("stage", bead, text=text))
         c: Any = self.ctx
         self.log, self.steps, self.budget, self.calls, self.checklog = c.log, c.steps, c.budget, c.calls, c.checklog
-        self.checker = Checker(self, lambda secs: time.sleep(secs))
+        self.checker = Checker(self, lambda secs: self.halt_point(wait=secs))
         self.delegate_route(quiet=True)
         if self.reexec:
             self.restore_run()
@@ -759,7 +760,7 @@ class Engine(StateAttrs):
             t_req[0] = self.clock.now()  # the wait starts when the step before it has ended
             wid.append(self.wait_start(WaitWhat(what), w))  # a wait still going (or cut off) shows up
             self.log.note("waiting for the %s (held by %s)" % (what.replace("_", " "), w))
-        with tl.os_lock(path, holder or self.bead, waiting):
+        with tl.os_lock(path, holder or self.bead, waiting, check=self.halt_point):
             if who:
                 secs = max(0.0, self.clock.now() - t_req[0])
                 self.waited += secs
@@ -876,8 +877,13 @@ class Engine(StateAttrs):
 
     @cached_property
     def halt(self):
-        """The stop flag of the running command: set it from any thread and sh() ends the command's whole tree."""
-        return threading.Event()
+        # The stop flag of the run: set from any thread (the SIGTERM handler does), sh() ends the command's tree, a worker call is
+        # stopped and a wait ends; the run then stops at its next safe point (halt_point), never from inside a signal handler.
+        return halting.RUN_HALT["ev"] or threading.Event()
+
+    def halt_point(self, when=True, wait=0):  # a safe point (and a wait of `wait` s that a stop ends): a stop ends the run here
+        if when and halting.nap(self.halt, wait):
+            raise Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)
 
     def sh(self, cmd, timeout=3600, check=False, save=None, env=None, pin=False, what="command", cwd=None):
         """A command: an argv list, exec'd as given (no shell, no quoting rules; a string is a programming error), run by stream-proc
@@ -886,6 +892,9 @@ class Engine(StateAttrs):
         GIT_DIR/GIT_WORK_TREE of the slot; checks and gates run unpinned (they may run git on other repos)."""
         if isinstance(cmd, str):
             raise TypeError("a command is an argv list, never a string: %r" % cmd[:80])
+        if what == "check" and self.halt.is_set():  # a stop: no check starts; it reports itself failed, the run stops at its next safe point
+            self.killed = True
+            return -15, ""
         cid = self.log.next_id("m")
         cwd = cwd or self.wt  # a check on the untouched base runs in its own checkout
         self.log.emit(rec.CmdStart(id=cid, text=text_of(cmd), cwd=str(cwd)))
@@ -911,6 +920,7 @@ class Engine(StateAttrs):
             Path(save).write_text(text, encoding="utf-8")
         tail = "\n".join(text.strip().splitlines()[-15:])
         self.log.emit(rec.CmdEnd(id=cid, exit=rc, secs=round(time.time() - started, 1), out=tail[-600:] if rc else ""))
+        self.halt_point(what != "check")  # a stop, not the command's verdict (a stopped check reports itself first)
         if check and rc:
             raise Blocked("failed: `%s` exit %d\n%s" % (text_of(cmd), rc, tail), kind=oc.Kind.FAULT_INFRA)
         return rc, tail
@@ -1311,7 +1321,7 @@ class Engine(StateAttrs):
         ck = self.checkpoints.read()
         self.prev_ck = ck.run if ck else ""
         try:
-            if self.stop_pending:  # stopped during the claim (run_bead): close it as stopped
+            if self.stop_pending or self.halt.is_set():  # stopped during the claim (run_bead) or before the engine ran
                 raise Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)
             bead = tl.peek(self.store, self.bead)
             if not bead:
@@ -1629,6 +1639,11 @@ class Engine(StateAttrs):
         out = tl.git("diff", "--name-only", self.base_sha(), tree, cwd=self.wt) if tree else ""
         return [p for p in out.splitlines() if p]
 
+    def stoppable_checks(self, *a, **kw):  # run_checks, then a stop (it ended a check, which reports itself failed) ends the run here
+        run = self.run_checks(*a, **kw)
+        self.halt_point()
+        return run
+
     def run_checks(self, st, name, acceptance_first=False, groups=None, conflict_fix=None, **meta):
         """One engine step, no AI: the repo's checks and the stage's acceptance checks (Checker.run). -> the round's CheckRun."""
         try:
@@ -1801,7 +1816,7 @@ class Engine(StateAttrs):
         reqs = [r for r in w.get("shots") or [] if isinstance(r, dict)]
         if not reqs:
             return ""
-        cheap = self.run_checks(dict(st, checks=[]), name, groups=("static",))
+        cheap = self.stoppable_checks(dict(st, checks=[]), name, groups=("static",))
         if cheap.failed:
             return ""  # the full checks show it to the writer; no render over a red static check
         self.look_done += 1
@@ -2132,18 +2147,7 @@ class Engine(StateAttrs):
                 kept.append(dst)
         return kept
 
-    @contextlib.contextmanager
-    def stop_deferred(self):
-        """SIGTERM inside this block is only noted (the yielded list gets an item); the caller stops after it."""
-        got = []
-        if not (hasattr(signal, "SIGTERM") and threading.current_thread() is threading.main_thread()):
-            yield got
-            return
-        old = signal.signal(signal.SIGTERM, lambda *_: got.append(True))
-        try:
-            yield got
-        finally:
-            signal.signal(signal.SIGTERM, old)
+    stop_deferred = staticmethod(halting.stop_deferred)
 
 RUN_STEM = re.compile(r"^\d{8}-\d{6}$")  # <bead>-<YYYYMMDD-HHMMSS>: an engine log of that bead, not of a child bead
 
@@ -2480,16 +2484,8 @@ def main(a):
 
 
 def run_main(a):
-    """The SIGTERM handler lives only as long as the run: an engine called in a process that goes on (a test runner, a
-    host) must not leave it behind, turning any later stray SIGTERM there into a Blocked."""
-    old = None
-    if hasattr(signal, "SIGTERM") and threading.current_thread() is threading.main_thread():
-        old = signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)))
-    try:
+    with halting.halt_on_sigterm():
         return run_main_stoppable(a)
-    finally:
-        if old is not None:
-            signal.signal(signal.SIGTERM, old)
 
 
 def run_main_stoppable(a):
@@ -2516,8 +2512,11 @@ def run_any_slot(a, repo, cfg):
         if not told:
             say("no free slot%s; waiting in line" % (" (%d ahead)" % ahead if ahead else ""))
             told.append(1)
-    got = tl.wait_slot(repo, tl.profile_slots(repo), "run-task " + a.id, stop=lambda: not wait,
+    halt = halting.RUN_HALT["ev"] or threading.Event()
+    got = tl.wait_slot(repo, tl.profile_slots(repo), "run-task " + a.id, stop=lambda: not wait or halt.is_set(), sleep=halt.wait,
                        on_wait=waiting, prio=tl.bead_priority(repo, a.id))
+    if not got and halt.is_set():
+        raise Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)  # run_bead's caller reports it; no slot was taken
     if not got:
         why = "no free slot (tl slot list); --wait waits in line for one"
         print("TAKEN: %s" % why)
@@ -2628,7 +2627,7 @@ def run_in(a, repo, cfg):
                 signal.signal(signal.SIGTERM, old)
 
 
-defer_stop = Engine.stop_deferred  # it uses no state: also before an Engine exists, as defer_stop(None)
+defer_stop = halting.stop_deferred  # no state: also before an Engine exists
 
 
 def run_bead(a, repo, cfg, wt):

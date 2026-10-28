@@ -30,6 +30,7 @@ class Closer:
 
     def close(self, outcome: str, why: str, sha: str, spec: Any, kind: Any = None) -> None:
         e = self.e
+        e.halt.clear()  # the close-out runs commands: the stop flag has done its work
         old = None
         if hasattr(signal, "SIGTERM") and threading.current_thread() is threading.main_thread():
             old = signal.signal(signal.SIGTERM, signal.SIG_IGN)  # a second stop must not break the close-out

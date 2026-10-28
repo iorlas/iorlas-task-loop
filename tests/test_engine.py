@@ -26,6 +26,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 from taskloop.adapters import applog  # noqa: E402
+from taskloop.adapters import halt as halting  # noqa: E402
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from taskloop.domain.write.matchers import count_tests  # noqa: E402
 from taskloop.domain.plan.matchers import AcceptanceText  # noqa: E402
@@ -637,7 +638,7 @@ class EngineTest(unittest.TestCase):
     def test_a_locked_editor_is_waited_for_with_backoff_then_passes(self):
         cmd, n = self.counting_check(self.LOCK[0], ok_after=3)
         eng = self.checks_engine(checks=[{"id": "unity", "cmd": cmd, "group": "tests", "retry": 1}])
-        with mock.patch.object(engine.time, "sleep") as sleep:
+        with mock.patch.object(eng.checker, "sleep") as sleep:
             res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertEqual((res[0].exit, res[0].status, n.read_text()), (0, "passed", "3"))
         self.assertEqual([c[0][0] for c in sleep.call_args_list if c[0][0] >= 15], [15, 30])  # other threads may sleep too
@@ -645,7 +646,7 @@ class EngineTest(unittest.TestCase):
     def test_a_lock_is_waited_for_even_on_a_check_with_no_retry(self):
         cmd, n = self.counting_check(self.LOCK[0], ok_after=2)
         eng = self.checks_engine(checks=[{"id": "unity", "cmd": cmd, "group": "tests", "retry": 0}])
-        with mock.patch.object(engine.time, "sleep"):
+        with mock.patch.object(eng.checker, "sleep"):
             res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertEqual((res[0].exit, n.read_text()), (0, "2"))
 
@@ -657,7 +658,7 @@ class EngineTest(unittest.TestCase):
         lockfile.write_text("")
         eng = self.checks_engine(checks=[{"id": "unity", "cmd": cmd, "group": "tests", "retry": 1}])
         real = engine.subprocess.run
-        with mock.patch.object(engine.time, "sleep") as sleep, mock.patch.object(
+        with mock.patch.object(eng.checker, "sleep") as sleep, mock.patch.object(
                 engine.subprocess, "run", side_effect=lambda a, *k, **kw: (
                     mock.Mock(stdout="4242\n") if a[0] == "lsof" else real(a, *k, **kw))):
             res = eng.run_checks({"checks": [], "files": []}, "s")
@@ -699,7 +700,7 @@ class EngineTest(unittest.TestCase):
         before = eng.budget.spent_min()
 
         @contextlib.contextmanager
-        def held_by_another(path, holder, waiting=None, timeout=None):
+        def held_by_another(path, holder, waiting=None, timeout=None, check=None):
             waiting("tl-266")
             eng.clock.advance(2251)
             yield path
@@ -1186,21 +1187,11 @@ class EngineTest(unittest.TestCase):
             self.fail("pid %d outlived the engine's stop" % pid)
 
     def stoppable(self):
-        """The engine's own SIGTERM handler (main() installs it), restored after the test."""
-        import contextlib
-        import signal as sig
+        """The engine's own SIGTERM handler (run_main installs it), restored after the test."""
         if os.name == "nt":
             self.skipTest("POSIX signals")
 
-        @contextlib.contextmanager
-        def cm():
-            old = sig.getsignal(sig.SIGTERM)
-            sig.signal(sig.SIGTERM, lambda *_: (_ for _ in ()).throw(engine.Blocked("failed: stopped (SIGTERM)", kind=engine.oc.Kind.PAUSE_KILLED)))
-            try:
-                yield
-            finally:
-                sig.signal(sig.SIGTERM, old)
-        return cm()
+        return halting.halt_on_sigterm()
 
     def test_a_slow_check_that_times_out_is_stopped_with_everything_it_started(self):
         if os.name == "nt":
@@ -2194,9 +2185,9 @@ class EngineTest(unittest.TestCase):
                     mock.patch.object(fake_route.Script, "reply", delegate):
                 rc, events, race = self.run_push_race(failure="checks_fixed", max_rounds=1, max_check_tries=1)
             self.assertEqual(rc, 2, self.blocked)
-            self.assertEqual(bool(seen.get("fix_initialized")), role in ("worker", "reviewer"))
+            self.assertEqual(bool(seen.get("fix_initialized")), role in ("worker", "reviewer", "transition", "failed_checks"))  # a flag: the stop waits for a safe point
             self.assertTrue(seen.get("interrupted"))
-            if role in ("worker", "reviewer"):
+            if role in ("worker", "reviewer", "transition", "failed_checks"):
                 self.assertEqual(events[-2:], ["exit", "fix:verify"])
             else:
                 self.assertEqual(events[-1], "exit")

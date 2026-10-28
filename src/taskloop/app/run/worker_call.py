@@ -113,6 +113,7 @@ class WorkerCall:
     ) -> tuple[Any, str]:
         """-> (the answer's data, its family)."""
         e = self.e
+        e.halt_point()
         e.budget_check()
         e.stats["nodes"] += 1
         c = self.start_call(node, title, prompt, resume_key, writer_family, step, resume_ref, visual, delta, cwd, at)
@@ -242,6 +243,7 @@ class WorkerCall:
         e.delegate_route()
         live = e.live(c.step or c.node)
         runner = e.router.runner(e.err_path, silence and (*silence, e.warn), None, live, e.lock_worker)
+        runner.outer = e.halt  # a stop of the run ends the call
         req = RunRequest(
             role=c.role,
             brief_path="",
@@ -286,6 +288,7 @@ class WorkerCall:
                 ),
                 "FAULT_SLOT",
             )
+        e.halt_point()  # the call was ended by a stop: no retry, no verdict from it
         self.note_result(c, ans, runner)
         return ans
 
