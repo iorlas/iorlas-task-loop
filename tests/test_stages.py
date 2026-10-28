@@ -10,7 +10,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "task-loop"))
 from support import fake_route  # noqa: E402
-from support import tlbd  # noqa: E402
+from support import tlbd, tools  # noqa: E402
 from support.fakes import FakeBeadStore  # noqa: E402
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support.builders import make_engine  # noqa: E402
@@ -471,7 +471,7 @@ class Executable(StagesTest):
                    "git status --short", "python3 -c 'a;b'", te.PY + " -c 'pass'"):
             self.assertEqual(lint.command_problems(ok, str(self.wt)), [], ok)
 
-    @unittest.skipUnless(shutil.which("just"), "needs the real `just` (the engine asks it for the recipes)")
+    @unittest.skipUnless(tools.REAL_JUST, "needs a `just` that works in a fresh directory (the engine asks it for the recipes)")
     @te.NO_BASH
     def test_a_just_recipe_must_exist_in_the_tree(self):
         (self.wt / "justfile").write_text("fmt-check:\n\techo ok\n")
@@ -491,7 +491,7 @@ class Executable(StagesTest):
                    "~/bin/foo", ".venv/bin/python -c pass", "source env.sh && git status", "time git status"):
             self.assertEqual(lint.command_problems(ok, str(self.wt)), [], ok)
 
-    @unittest.skipUnless(shutil.which("just"), "needs the real `just` (the engine asks it for the recipes)")
+    @unittest.skipUnless(tools.REAL_JUST, "needs a `just` that works in a fresh directory (the engine asks it for the recipes)")
     @te.NO_BASH
     def test_just_aliases_private_recipes_options_and_a_recipe_a_stage_adds(self):
         (self.wt / "justfile").write_text("alias ci := check\ncheck:\n\techo ok\n_private:\n\techo p\n")
