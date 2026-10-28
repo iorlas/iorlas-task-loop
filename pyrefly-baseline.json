@@ -330,24 +330,10 @@
       "severity": "error"
     },
     {
-      "column": 21,
+      "column": 115,
       "path": "skills/task-loop/engine.py",
       "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `get`",
-      "severity": "error"
-    },
-    {
-      "column": 21,
-      "path": "skills/task-loop/engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 53,
-      "path": "skills/task-loop/engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
+      "concise_description": "Object of class `NoneType` has no attribute `answer`",
       "severity": "error"
     },
     {
@@ -383,6 +369,13 @@
       "path": "skills/task-loop/engine.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `list` has no attribute `strip`",
+      "severity": "error"
+    },
+    {
+      "column": 79,
+      "path": "skills/task-loop/engine.py",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `list[Any]` is not assignable to parameter `text` with type `str` in function `taskloop.domain.asks.specs.open_question`",
       "severity": "error"
     },
     {
@@ -680,6 +673,20 @@
       "severity": "error"
     },
     {
+      "column": 70,
+      "path": "skills/task-loop/engine.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `NoneType` has no attribute `id`",
+      "severity": "error"
+    },
+    {
+      "column": 78,
+      "path": "skills/task-loop/engine.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `NoneType` has no attribute `kind`",
+      "severity": "error"
+    },
+    {
       "column": 27,
       "path": "skills/task-loop/engine.py",
       "name": "bad-assignment",
@@ -943,13 +950,6 @@
       "path": "skills/task-loop/tl.py",
       "name": "unsupported-operation",
       "concise_description": "Cannot set item in `dict[tuple[str | None, tuple[int, int] | tuple[int, int, int, int] | None], Unknown]`",
-      "severity": "error"
-    },
-    {
-      "column": 35,
-      "path": "skills/task-loop/tl.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `float | int | str | Unknown` is not assignable to parameter `dst` with type `PathLike[bytes] | PathLike[str] | bytes | str` in function `os.link`",
       "severity": "error"
     },
     {
@@ -1383,6 +1383,13 @@
       "column": 64,
       "path": "tests/contracts/test_codec.py",
       "name": "unexpected-keyword",
+      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.slots.Checkout.__replace__`",
+      "severity": "error"
+    },
+    {
+      "column": 64,
+      "path": "tests/contracts/test_codec.py",
+      "name": "unexpected-keyword",
       "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.checkpoint.Checkpoint.__replace__`",
       "severity": "error"
     },
@@ -1412,6 +1419,13 @@
       "path": "tests/contracts/test_codec.py",
       "name": "unexpected-keyword",
       "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.locks.EngineLock.__replace__`",
+      "severity": "error"
+    },
+    {
+      "column": 64,
+      "path": "tests/contracts/test_codec.py",
+      "name": "unexpected-keyword",
+      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.slots.Hold.__replace__`",
       "severity": "error"
     },
     {
@@ -1551,42 +1565,35 @@
       "column": 29,
       "path": "tests/contracts/test_delegate_wire.py",
       "name": "missing-attribute",
-      "concise_description": "Object of type `Ask | BadVersions | BdError | Bead | Checkpoint | Comment | DashState | DelegateResult | EngineLock | LockRecord | LoopCommand | LoopLogLine | LoopState | Pin | Reexec | ReleaseResult | RepoProfile | ReposIndex | Rest | RunOutcome | RunRequest | RunTrace | SessionIndex | SharedNotes | SlotSetupMarker | TasksSnapshot | Ticket | WorkerStarted` has no attribute `stop`",
+      "concise_description": "Object of type `Ask | BadVersions | BdError | Bead | Checkout | Checkpoint | Comment | DashState | DelegateResult | EngineLock | Hold | LockRecord | LoopCommand | LoopLogLine | LoopState | Pin | Reexec | ReleaseResult | RepoProfile | ReposIndex | Rest | RunOutcome | RunRequest | RunTrace | SessionIndex | SharedNotes | SlotSetupMarker | TasksSnapshot | Ticket | WorkerStarted` has no attribute `stop`",
       "severity": "error"
     },
     {
       "column": 67,
       "path": "tests/contracts/test_delegate_wire.py",
       "name": "missing-attribute",
-      "concise_description": "Object of type `Ask | BadVersions | BdError | Bead | Checkpoint | Comment | DashState | DelegateResult | EngineLock | LockRecord | LoopCommand | LoopLogLine | LoopState | Pin | Reexec | ReleaseResult | RepoProfile | ReposIndex | Rest | RunOutcome | RunRequest | RunTrace | SessionIndex | SharedNotes | SlotSetupMarker | TasksSnapshot | Ticket | WorkerStarted` has no attribute `worker`",
+      "concise_description": "Object of type `Ask | BadVersions | BdError | Bead | Checkout | Checkpoint | Comment | DashState | DelegateResult | EngineLock | Hold | LockRecord | LoopCommand | LoopLogLine | LoopState | Pin | Reexec | ReleaseResult | RepoProfile | ReposIndex | Rest | RunOutcome | RunRequest | RunTrace | SessionIndex | SharedNotes | SlotSetupMarker | TasksSnapshot | Ticket | WorkerStarted` has no attribute `worker`",
       "severity": "error"
     },
     {
       "column": 18,
       "path": "tests/contracts/test_jsonl.py",
       "name": "bad-argument-type",
-      "concise_description": "Argument `Ask | BadVersions | BdError | Bead | Checkpoint | Comment | DashState | DelegateResult | EngineLock | LockRecord | LoopCommand | LoopLogLine | LoopState | Pin | Reexec | ReleaseResult | RepoProfile | ReposIndex | Rest | RunOutcome | RunRequest | RunTrace | SessionIndex | SharedNotes | SlotSetupMarker | TasksSnapshot | Ticket | WorkerStarted` is not assignable to parameter `rec` with type `LoopState` in function `taskloop.contracts.stores.JsonStore.write`",
+      "concise_description": "Argument `Ask | BadVersions | BdError | Bead | Checkout | Checkpoint | Comment | DashState | DelegateResult | EngineLock | Hold | LockRecord | LoopCommand | LoopLogLine | LoopState | Pin | Reexec | ReleaseResult | RepoProfile | ReposIndex | Rest | RunOutcome | RunRequest | RunTrace | SessionIndex | SharedNotes | SlotSetupMarker | TasksSnapshot | Ticket | WorkerStarted` is not assignable to parameter `rec` with type `LoopState` in function `taskloop.contracts.stores.JsonStore.write`",
       "severity": "error"
     },
     {
       "column": 18,
       "path": "tests/contracts/test_jsonl.py",
       "name": "bad-argument-type",
-      "concise_description": "Argument `Ask | BadVersions | BdError | Bead | Checkpoint | Comment | DashState | DelegateResult | EngineLock | LockRecord | LoopCommand | LoopLogLine | LoopState | Pin | Reexec | ReleaseResult | RepoProfile | ReposIndex | Rest | RunOutcome | RunRequest | RunTrace | SessionIndex | SharedNotes | SlotSetupMarker | TasksSnapshot | Ticket | WorkerStarted` is not assignable to parameter `rec` with type `Pin` in function `taskloop.contracts.stores.JsonStore.write`",
+      "concise_description": "Argument `Ask | BadVersions | BdError | Bead | Checkout | Checkpoint | Comment | DashState | DelegateResult | EngineLock | Hold | LockRecord | LoopCommand | LoopLogLine | LoopState | Pin | Reexec | ReleaseResult | RepoProfile | ReposIndex | Rest | RunOutcome | RunRequest | RunTrace | SessionIndex | SharedNotes | SlotSetupMarker | TasksSnapshot | Ticket | WorkerStarted` is not assignable to parameter `rec` with type `Pin` in function `taskloop.contracts.stores.JsonStore.write`",
       "severity": "error"
     },
     {
       "column": 26,
       "path": "tests/contracts/test_jsonl.py",
       "name": "bad-argument-type",
-      "concise_description": "Argument `Ask | BadVersions | BdError | Bead | Checkpoint | Comment | DashState | DelegateResult | EngineLock | LockRecord | LoopCommand | LoopLogLine | LoopState | Pin | Reexec | ReleaseResult | RepoProfile | ReposIndex | Rest | RunOutcome | RunRequest | RunTrace | SessionIndex | SharedNotes | SlotSetupMarker | TasksSnapshot | Ticket | WorkerStarted` is not assignable to parameter `rec` with type `Pin` in function `taskloop.contracts.stores.JsonStore.write`",
-      "severity": "error"
-    },
-    {
-      "column": 52,
-      "path": "tests/contracts/test_jsonl.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Ask | BadVersions | BdError | Bead | Checkpoint | Comment | DashState | DelegateResult | EngineLock | LockRecord | LoopCommand | LoopLogLine | LoopState | Pin | Reexec | ReleaseResult | RepoProfile | ReposIndex | Rest | RunOutcome | RunRequest | RunTrace | SessionIndex | SharedNotes | SlotSetupMarker | TasksSnapshot | Ticket | WorkerStarted` is not assignable to parameter `rec` with type `Ask` in function `taskloop.contracts.stores.JsonStore.write`",
+      "concise_description": "Argument `Ask | BadVersions | BdError | Bead | Checkout | Checkpoint | Comment | DashState | DelegateResult | EngineLock | Hold | LockRecord | LoopCommand | LoopLogLine | LoopState | Pin | Reexec | ReleaseResult | RepoProfile | ReposIndex | Rest | RunOutcome | RunRequest | RunTrace | SessionIndex | SharedNotes | SlotSetupMarker | TasksSnapshot | Ticket | WorkerStarted` is not assignable to parameter `rec` with type `Pin` in function `taskloop.contracts.stores.JsonStore.write`",
       "severity": "error"
     },
     {
@@ -1699,6 +1706,13 @@
       "path": "tests/stores/suites.py",
       "name": "unexpected-keyword",
       "concise_description": "Unexpected keyword argument `why` in function `taskloop.contracts.bead.Bead.__replace__`",
+      "severity": "error"
+    },
+    {
+      "column": 57,
+      "path": "tests/stores/suites.py",
+      "name": "unexpected-keyword",
+      "concise_description": "Unexpected keyword argument `why` in function `taskloop.contracts.slots.Checkout.__replace__`",
       "severity": "error"
     },
     {
@@ -1835,1021 +1849,6 @@
       "severity": "error"
     },
     {
-      "column": 50,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `bead` in function `taskloop.contracts.loop.BadVersions.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `bead` in function `taskloop.contracts.bead.BdError.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `bead` in function `taskloop.contracts.bead.Bead.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `bead` in function `taskloop.contracts.bead.Comment.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `bead` in function `taskloop.contracts.snapshots.DashState.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `bead` in function `taskloop.contracts.delegate.DelegateResult.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `bead` in function `taskloop.contracts.locks.LockRecord.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `bead` in function `taskloop.contracts.loop.LoopCommand.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `bead` in function `taskloop.contracts.run.LoopLogLine.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `bead` in function `taskloop.contracts.snapshots.Pin.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `bead` in function `taskloop.contracts.snapshots.ReleaseResult.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `bead` in function `taskloop.contracts.config.RepoProfile.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `bead` in function `taskloop.contracts.snapshots.ReposIndex.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `bead` in function `taskloop.contracts.loop.Rest.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `bead` in function `taskloop.contracts.delegate.RunRequest.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `bead` in function `taskloop.contracts.snapshots.SessionIndex.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `bead` in function `taskloop.contracts.snapshots.SharedNotes.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `bead` in function `taskloop.contracts.snapshots.SlotSetupMarker.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `bead` in function `taskloop.contracts.snapshots.TasksSnapshot.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `bead` in function `taskloop.contracts.locks.Ticket.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `bead` in function `taskloop.contracts.delegate.WorkerStarted.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 61,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `id` in function `taskloop.contracts.loop.BadVersions.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 61,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `id` in function `taskloop.contracts.bead.BdError.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 61,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `id` in function `taskloop.contracts.checkpoint.Checkpoint.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 61,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `id` in function `taskloop.contracts.bead.Comment.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 61,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `id` in function `taskloop.contracts.snapshots.DashState.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 61,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `id` in function `taskloop.contracts.delegate.DelegateResult.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 61,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `id` in function `taskloop.contracts.locks.EngineLock.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 61,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `id` in function `taskloop.contracts.locks.LockRecord.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 61,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `id` in function `taskloop.contracts.loop.LoopCommand.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 61,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `id` in function `taskloop.contracts.run.LoopLogLine.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 61,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `id` in function `taskloop.contracts.loop.LoopState.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 61,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `id` in function `taskloop.contracts.snapshots.Pin.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 61,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `id` in function `taskloop.contracts.run.Reexec.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 61,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `id` in function `taskloop.contracts.snapshots.ReleaseResult.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 61,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `id` in function `taskloop.contracts.config.RepoProfile.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 61,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `id` in function `taskloop.contracts.snapshots.ReposIndex.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 61,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `id` in function `taskloop.contracts.loop.Rest.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 61,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `id` in function `taskloop.contracts.run.RunOutcome.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 61,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `id` in function `taskloop.contracts.delegate.RunRequest.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 61,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `id` in function `taskloop.contracts.trace.RunTrace.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 61,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `id` in function `taskloop.contracts.snapshots.SessionIndex.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 61,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `id` in function `taskloop.contracts.snapshots.SharedNotes.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 61,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `id` in function `taskloop.contracts.snapshots.SlotSetupMarker.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 61,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `id` in function `taskloop.contracts.snapshots.TasksSnapshot.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 61,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `id` in function `taskloop.contracts.locks.Ticket.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 61,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `id` in function `taskloop.contracts.delegate.WorkerStarted.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 77,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.loop.BadVersions.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 77,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.bead.BdError.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 77,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.checkpoint.Checkpoint.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 77,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.bead.Comment.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 77,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.snapshots.DashState.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 77,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.delegate.DelegateResult.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 77,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.locks.EngineLock.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 77,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.locks.LockRecord.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 77,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.loop.LoopCommand.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 77,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.run.LoopLogLine.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 77,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.loop.LoopState.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 77,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.snapshots.Pin.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 77,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.run.Reexec.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 77,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.snapshots.ReleaseResult.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 77,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.config.RepoProfile.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 77,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.snapshots.ReposIndex.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 77,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.loop.Rest.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 77,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.run.RunOutcome.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 77,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.delegate.RunRequest.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 77,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.trace.RunTrace.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 77,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.snapshots.SessionIndex.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 77,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.snapshots.SharedNotes.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 77,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.snapshots.SlotSetupMarker.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 77,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.snapshots.TasksSnapshot.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 77,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.locks.Ticket.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 77,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.delegate.WorkerStarted.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 92,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.loop.BadVersions.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 92,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.bead.BdError.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 92,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.bead.Bead.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 92,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.checkpoint.Checkpoint.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 92,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.bead.Comment.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 92,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.snapshots.DashState.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 92,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.delegate.DelegateResult.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 92,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.locks.EngineLock.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 92,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.locks.LockRecord.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 92,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.loop.LoopCommand.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 92,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.run.LoopLogLine.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 92,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.loop.LoopState.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 92,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.snapshots.Pin.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 92,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.run.Reexec.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 92,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.snapshots.ReleaseResult.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 92,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.config.RepoProfile.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 92,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.snapshots.ReposIndex.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 92,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.loop.Rest.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 92,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.run.RunOutcome.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 92,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.delegate.RunRequest.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 92,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.trace.RunTrace.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 92,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.snapshots.SessionIndex.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 92,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.snapshots.SharedNotes.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 92,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.snapshots.SlotSetupMarker.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 92,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.snapshots.TasksSnapshot.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 92,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.locks.Ticket.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 92,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.delegate.WorkerStarted.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 105,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.loop.BadVersions.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 105,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.bead.BdError.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 105,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.bead.Bead.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 105,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.checkpoint.Checkpoint.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 105,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.bead.Comment.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 105,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.snapshots.DashState.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 105,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.delegate.DelegateResult.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 105,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.locks.EngineLock.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 105,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.locks.LockRecord.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 105,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.loop.LoopCommand.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 105,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.run.LoopLogLine.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 105,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.loop.LoopState.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 105,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.snapshots.Pin.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 105,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.run.Reexec.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 105,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.snapshots.ReleaseResult.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 105,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.config.RepoProfile.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 105,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.snapshots.ReposIndex.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 105,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.loop.Rest.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 105,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.run.RunOutcome.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 105,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.delegate.RunRequest.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 105,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.trace.RunTrace.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 105,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.snapshots.SessionIndex.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 105,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.snapshots.SharedNotes.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 105,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.snapshots.SlotSetupMarker.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 105,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.snapshots.TasksSnapshot.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 105,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.locks.Ticket.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 105,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.delegate.WorkerStarted.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 120,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `t` in function `taskloop.contracts.loop.BadVersions.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 120,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `t` in function `taskloop.contracts.bead.BdError.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 120,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `t` in function `taskloop.contracts.bead.Bead.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 120,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `t` in function `taskloop.contracts.bead.Comment.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 120,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `t` in function `taskloop.contracts.snapshots.DashState.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 120,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `t` in function `taskloop.contracts.delegate.DelegateResult.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 120,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `t` in function `taskloop.contracts.locks.EngineLock.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 120,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `t` in function `taskloop.contracts.snapshots.Pin.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 120,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `t` in function `taskloop.contracts.run.Reexec.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 120,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `t` in function `taskloop.contracts.config.RepoProfile.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 120,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `t` in function `taskloop.contracts.snapshots.ReposIndex.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 120,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `t` in function `taskloop.contracts.run.RunOutcome.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 120,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `t` in function `taskloop.contracts.delegate.RunRequest.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 120,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `t` in function `taskloop.contracts.trace.RunTrace.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 120,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `t` in function `taskloop.contracts.snapshots.SharedNotes.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 120,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `t` in function `taskloop.contracts.locks.Ticket.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 120,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `t` in function `taskloop.contracts.delegate.WorkerStarted.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 16,
-      "path": "tests/stores/suites.py",
-      "name": "bad-return",
-      "concise_description": "Returned type `Ask | BadVersions | BdError | Bead | Checkpoint | Comment | DashState | DelegateResult | EngineLock | LockRecord | LoopCommand | LoopLogLine | LoopState | Pin | Reexec | ReleaseResult | RepoProfile | ReposIndex | Rest | RunOutcome | RunRequest | RunTrace | SessionIndex | SharedNotes | SlotSetupMarker | TasksSnapshot | Ticket | WorkerStarted` is not assignable to declared return type `Ask`",
-      "severity": "error"
-    },
-    {
       "column": 69,
       "path": "tests/stores/suites.py",
       "name": "unexpected-keyword",
@@ -2874,6 +1873,13 @@
       "column": 69,
       "path": "tests/stores/suites.py",
       "name": "unexpected-keyword",
+      "concise_description": "Unexpected keyword argument `bead` in function `taskloop.contracts.slots.Checkout.__replace__`",
+      "severity": "error"
+    },
+    {
+      "column": 69,
+      "path": "tests/stores/suites.py",
+      "name": "unexpected-keyword",
       "concise_description": "Unexpected keyword argument `bead` in function `taskloop.contracts.bead.Comment.__replace__`",
       "severity": "error"
     },
@@ -2889,6 +1895,13 @@
       "path": "tests/stores/suites.py",
       "name": "unexpected-keyword",
       "concise_description": "Unexpected keyword argument `bead` in function `taskloop.contracts.delegate.DelegateResult.__replace__`",
+      "severity": "error"
+    },
+    {
+      "column": 69,
+      "path": "tests/stores/suites.py",
+      "name": "unexpected-keyword",
+      "concise_description": "Unexpected keyword argument `bead` in function `taskloop.contracts.slots.Hold.__replace__`",
       "severity": "error"
     },
     {
@@ -2980,13 +1993,6 @@
       "path": "tests/stores/suites.py",
       "name": "unexpected-keyword",
       "concise_description": "Unexpected keyword argument `bead` in function `taskloop.contracts.snapshots.TasksSnapshot.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 69,
-      "path": "tests/stores/suites.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `bead` in function `taskloop.contracts.locks.Ticket.__replace__`",
       "severity": "error"
     },
     {
@@ -3028,6 +2034,13 @@
       "column": 69,
       "path": "tests/stores/suites.py",
       "name": "unexpected-keyword",
+      "concise_description": "Unexpected keyword argument `unfiled` in function `taskloop.contracts.slots.Checkout.__replace__`",
+      "severity": "error"
+    },
+    {
+      "column": 69,
+      "path": "tests/stores/suites.py",
+      "name": "unexpected-keyword",
       "concise_description": "Unexpected keyword argument `unfiled` in function `taskloop.contracts.bead.Comment.__replace__`",
       "severity": "error"
     },
@@ -3050,6 +2063,13 @@
       "path": "tests/stores/suites.py",
       "name": "unexpected-keyword",
       "concise_description": "Unexpected keyword argument `unfiled` in function `taskloop.contracts.locks.EngineLock.__replace__`",
+      "severity": "error"
+    },
+    {
+      "column": 69,
+      "path": "tests/stores/suites.py",
+      "name": "unexpected-keyword",
+      "concise_description": "Unexpected keyword argument `unfiled` in function `taskloop.contracts.slots.Hold.__replace__`",
       "severity": "error"
     },
     {
@@ -3196,14 +2216,14 @@
       "column": 19,
       "path": "tests/stores/test_contract.py",
       "name": "bad-argument-type",
-      "concise_description": "Argument `Ask | BadVersions | BdError | Bead | Checkpoint | Comment | DashState | DelegateResult | EngineLock | LockRecord | LoopCommand | LoopLogLine | LoopState | Pin | Reexec | ReleaseResult | RepoProfile | ReposIndex | Rest | RunOutcome | RunRequest | RunTrace | SessionIndex | SharedNotes | SlotSetupMarker | TasksSnapshot | Ticket | WorkerStarted` is not assignable to parameter `rec` with type `Rest` in function `taskloop.stores.api.Doc.write`",
+      "concise_description": "Argument `Ask | BadVersions | BdError | Bead | Checkout | Checkpoint | Comment | DashState | DelegateResult | EngineLock | Hold | LockRecord | LoopCommand | LoopLogLine | LoopState | Pin | Reexec | ReleaseResult | RepoProfile | ReposIndex | Rest | RunOutcome | RunRequest | RunTrace | SessionIndex | SharedNotes | SlotSetupMarker | TasksSnapshot | Ticket | WorkerStarted` is not assignable to parameter `rec` with type `Rest` in function `taskloop.stores.api.Doc.write`",
       "severity": "error"
     },
     {
       "column": 27,
       "path": "tests/stores/test_contract.py",
       "name": "bad-argument-type",
-      "concise_description": "Argument `Ask | BadVersions | BdError | Bead | Checkpoint | Comment | DashState | DelegateResult | EngineLock | LockRecord | LoopCommand | LoopLogLine | LoopState | Pin | Reexec | ReleaseResult | RepoProfile | ReposIndex | Rest | RunOutcome | RunRequest | RunTrace | SessionIndex | SharedNotes | SlotSetupMarker | TasksSnapshot | Ticket | WorkerStarted` is not assignable to parameter `rec` with type `Rest` in function `taskloop.stores.api.Doc.write`",
+      "concise_description": "Argument `Ask | BadVersions | BdError | Bead | Checkout | Checkpoint | Comment | DashState | DelegateResult | EngineLock | Hold | LockRecord | LoopCommand | LoopLogLine | LoopState | Pin | Reexec | ReleaseResult | RepoProfile | ReposIndex | Rest | RunOutcome | RunRequest | RunTrace | SessionIndex | SharedNotes | SlotSetupMarker | TasksSnapshot | Ticket | WorkerStarted` is not assignable to parameter `rec` with type `Rest` in function `taskloop.stores.api.Doc.write`",
       "severity": "error"
     },
     {
@@ -3238,7 +2258,7 @@
       "column": 49,
       "path": "tests/stores/test_contract.py",
       "name": "missing-argument",
-      "concise_description": "Missing argument `question` in function `taskloop.contracts.ask.Ask.__init__`",
+      "concise_description": "Missing argument `decision` in function `taskloop.contracts.ask.Ask.__init__`",
       "severity": "error"
     },
     {
@@ -3281,6 +2301,27 @@
       "path": "tests/stores/test_contract.py",
       "name": "missing-argument",
       "concise_description": "Missing argument `status` in function `taskloop.contracts.bead.Bead.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 49,
+      "path": "tests/stores/test_contract.py",
+      "name": "missing-argument",
+      "concise_description": "Missing argument `path` in function `taskloop.contracts.slots.Checkout.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 49,
+      "path": "tests/stores/test_contract.py",
+      "name": "missing-argument",
+      "concise_description": "Missing argument `branch` in function `taskloop.contracts.slots.Checkout.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 49,
+      "path": "tests/stores/test_contract.py",
+      "name": "missing-argument",
+      "concise_description": "Missing argument `main` in function `taskloop.contracts.slots.Checkout.__init__`",
       "severity": "error"
     },
     {
@@ -3372,6 +2413,20 @@
       "path": "tests/stores/test_contract.py",
       "name": "missing-argument",
       "concise_description": "Missing argument `started` in function `taskloop.contracts.locks.EngineLock.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 49,
+      "path": "tests/stores/test_contract.py",
+      "name": "missing-argument",
+      "concise_description": "Missing argument `by` in function `taskloop.contracts.slots.Hold.__init__`",
+      "severity": "error"
+    },
+    {
+      "column": 49,
+      "path": "tests/stores/test_contract.py",
+      "name": "missing-argument",
+      "concise_description": "Missing argument `since` in function `taskloop.contracts.slots.Hold.__init__`",
       "severity": "error"
     },
     {
@@ -3718,584 +2773,10 @@
       "severity": "error"
     },
     {
-      "column": 33,
-      "path": "tests/stores/test_domain.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Ask | BadVersions | BdError | Bead | Checkpoint | Comment | DashState | DelegateResult | EngineLock | LockRecord | LoopCommand | LoopLogLine | LoopState | Pin | Reexec | ReleaseResult | RepoProfile | ReposIndex | Rest | RunOutcome | RunRequest | RunTrace | SessionIndex | SharedNotes | SlotSetupMarker | TasksSnapshot | Ticket | WorkerStarted` is not assignable to parameter `rec` with type `Ask` in function `taskloop.stores.api.Doc.write`",
-      "severity": "error"
-    },
-    {
-      "column": 70,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.loop.BadVersions.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 70,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.bead.BdError.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 70,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.checkpoint.Checkpoint.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 70,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.bead.Comment.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 70,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.snapshots.DashState.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 70,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.delegate.DelegateResult.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 70,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.locks.EngineLock.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 70,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.locks.LockRecord.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 70,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.loop.LoopCommand.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 70,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.run.LoopLogLine.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 70,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.loop.LoopState.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 70,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.snapshots.Pin.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 70,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.run.Reexec.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 70,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.snapshots.ReleaseResult.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 70,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.config.RepoProfile.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 70,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.snapshots.ReposIndex.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 70,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.loop.Rest.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 70,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.run.RunOutcome.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 70,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.delegate.RunRequest.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 70,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.trace.RunTrace.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 70,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.snapshots.SessionIndex.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 70,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.snapshots.SharedNotes.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 70,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.snapshots.SlotSetupMarker.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 70,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.snapshots.TasksSnapshot.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 70,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.locks.Ticket.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 70,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `status` in function `taskloop.contracts.delegate.WorkerStarted.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 93,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.loop.BadVersions.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 93,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.bead.BdError.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 93,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.bead.Bead.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 93,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.checkpoint.Checkpoint.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 93,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.bead.Comment.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 93,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.snapshots.DashState.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 93,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.delegate.DelegateResult.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 93,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.locks.EngineLock.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 93,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.locks.LockRecord.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 93,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.loop.LoopCommand.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 93,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.run.LoopLogLine.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 93,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.loop.LoopState.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 93,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.snapshots.Pin.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 93,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.run.Reexec.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 93,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.snapshots.ReleaseResult.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 93,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.config.RepoProfile.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 93,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.snapshots.ReposIndex.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 93,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.loop.Rest.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 93,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.run.RunOutcome.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 93,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.delegate.RunRequest.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 93,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.trace.RunTrace.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 93,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.snapshots.SessionIndex.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 93,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.snapshots.SharedNotes.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 93,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.snapshots.SlotSetupMarker.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 93,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.snapshots.TasksSnapshot.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 93,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.locks.Ticket.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 93,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answer` in function `taskloop.contracts.delegate.WorkerStarted.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 106,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.loop.BadVersions.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 106,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.bead.BdError.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 106,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.bead.Bead.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 106,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.checkpoint.Checkpoint.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 106,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.bead.Comment.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 106,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.snapshots.DashState.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 106,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.delegate.DelegateResult.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 106,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.locks.EngineLock.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 106,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.locks.LockRecord.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 106,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.loop.LoopCommand.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 106,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.run.LoopLogLine.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 106,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.loop.LoopState.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 106,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.snapshots.Pin.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 106,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.run.Reexec.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 106,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.snapshots.ReleaseResult.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 106,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.config.RepoProfile.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 106,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.snapshots.ReposIndex.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 106,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.loop.Rest.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 106,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.run.RunOutcome.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 106,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.delegate.RunRequest.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 106,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.trace.RunTrace.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 106,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.snapshots.SessionIndex.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 106,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.snapshots.SharedNotes.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 106,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.snapshots.SlotSetupMarker.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 106,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.snapshots.TasksSnapshot.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 106,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.locks.Ticket.__replace__`",
-      "severity": "error"
-    },
-    {
-      "column": 106,
-      "path": "tests/stores/test_domain.py",
-      "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `answered` in function `taskloop.contracts.delegate.WorkerStarted.__replace__`",
-      "severity": "error"
-    },
-    {
       "column": 40,
       "path": "tests/stores/test_domain.py",
       "name": "bad-argument-type",
-      "concise_description": "Argument `Ask | BadVersions | BdError | Bead | Checkpoint | Comment | DashState | DelegateResult | EngineLock | LockRecord | LoopCommand | LoopLogLine | LoopState | Pin | Reexec | ReleaseResult | RepoProfile | ReposIndex | Rest | RunOutcome | RunRequest | RunTrace | SessionIndex | SharedNotes | SlotSetupMarker | TasksSnapshot | Ticket | WorkerStarted` is not assignable to parameter `rec` with type `Checkpoint` in function `taskloop.stores.api.Doc.write`",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/stores/test_domain.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `answer`",
+      "concise_description": "Argument `Ask | BadVersions | BdError | Bead | Checkout | Checkpoint | Comment | DashState | DelegateResult | EngineLock | Hold | LockRecord | LoopCommand | LoopLogLine | LoopState | Pin | Reexec | ReleaseResult | RepoProfile | ReposIndex | Rest | RunOutcome | RunRequest | RunTrace | SessionIndex | SharedNotes | SlotSetupMarker | TasksSnapshot | Ticket | WorkerStarted` is not assignable to parameter `rec` with type `Checkpoint` in function `taskloop.stores.api.Doc.write`",
       "severity": "error"
     },
     {
@@ -4338,13 +2819,6 @@
       "path": "tests/support/fakes.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `NoneType` has no attribute `id`",
-      "severity": "error"
-    },
-    {
-      "column": 9,
-      "path": "tests/support/fakes.py",
-      "name": "bad-override",
-      "concise_description": "Class member `FakeRouter.runner` overrides parent class `FixedRoute` in an inconsistent manner",
       "severity": "error"
     },
     {
@@ -5286,13 +3760,6 @@
       "severity": "error"
     },
     {
-      "column": 40,
-      "path": "tests/test_dash.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
       "column": 15,
       "path": "tests/test_dash.py",
       "name": "missing-attribute",
@@ -5304,20 +3771,6 @@
       "path": "tests/test_dash.py",
       "name": "no-matching-overload",
       "concise_description": "No matching overload found for function `subprocess.run` called with arguments: (list[str | Unknown | None], capture_output=Literal[True], text=Literal[True], timeout=Literal[20])",
-      "severity": "error"
-    },
-    {
-      "column": 27,
-      "path": "tests/test_dash_asks_v2.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `text`",
-      "severity": "error"
-    },
-    {
-      "column": 44,
-      "path": "tests/test_dash_asks_v2.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `action`",
       "severity": "error"
     },
     {
@@ -5479,34 +3932,6 @@
       "path": "tests/test_engine.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `Script` has no attribute `seen_plan`",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 30,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
       "severity": "error"
     },
     {
@@ -5776,174 +4201,6 @@
       "severity": "error"
     },
     {
-      "column": 27,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 38,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 25,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 77,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 80,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 31,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 9,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "Cannot set item in `None`",
-      "severity": "error"
-    },
-    {
-      "column": 22,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "Cannot set item in `None`",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 9,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "Cannot set item in `None`",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 48,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 30,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
       "column": 38,
       "path": "tests/test_engine.py",
       "name": "bad-argument-type",
@@ -5986,195 +4243,6 @@
       "severity": "error"
     },
     {
-      "column": 47,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 27,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 60,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 48,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 41,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 59,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 9,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "Cannot set item in `None`",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 31,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 31,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 57,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 42,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 42,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 35,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 13,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 13,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 58,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 13,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 33,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
       "column": 23,
       "path": "tests/test_engine.py",
       "name": "bad-assignment",
@@ -6204,111 +4272,6 @@
     },
     {
       "column": 26,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 45,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 34,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 61,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 25,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 75,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 45,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 25,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 65,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 55,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 41,
-      "path": "tests/test_engine.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 45,
       "path": "tests/test_engine.py",
       "name": "unsupported-operation",
       "concise_description": "`None` is not subscriptable",
@@ -7981,13 +5944,6 @@
       "severity": "error"
     },
     {
-      "column": 26,
-      "path": "tests/test_look.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
       "column": 34,
       "path": "tests/test_look.py",
       "name": "bad-argument-type",
@@ -8404,7 +6360,7 @@
       "column": 32,
       "path": "tests/test_race_invariants.py",
       "name": "bad-assignment",
-      "concise_description": "`tuple[Unknown, str, Unknown] | None` is not assignable to attribute `got` with type `None`",
+      "concise_description": "`tuple[str, str, str] | None` is not assignable to attribute `got` with type `None`",
       "severity": "error"
     },
     {
@@ -9311,41 +7267,6 @@
       "severity": "error"
     },
     {
-      "column": 24,
-      "path": "tests/test_slot_git.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `brief` in function `taskloop.adapters.delegate.call`",
-      "severity": "error"
-    },
-    {
-      "column": 24,
-      "path": "tests/test_slot_git.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `schema` in function `taskloop.adapters.delegate.call`",
-      "severity": "error"
-    },
-    {
-      "column": 25,
-      "path": "tests/test_slot_git.py",
-      "name": "missing-attribute",
-      "concise_description": "No attribute `CallRequest` in module `taskloop.adapters.delegate`",
-      "severity": "error"
-    },
-    {
-      "column": 32,
-      "path": "tests/test_slot_git.py",
-      "name": "missing-attribute",
-      "concise_description": "No attribute `ProcRunner` in module `taskloop.adapters.delegate`",
-      "severity": "error"
-    },
-    {
-      "column": 30,
-      "path": "tests/test_slot_git.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Answer` has no attribute `data`",
-      "severity": "error"
-    },
-    {
       "column": 28,
       "path": "tests/test_slots.py",
       "name": "unsupported-operation",
@@ -9472,41 +7393,6 @@
       "severity": "error"
     },
     {
-      "column": 57,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `EmptyPlan` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 10,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `EmptyPlan` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 39,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `EmptyPlan` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `EmptyPlan` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `EmptyPlan` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 32,
       "path": "tests/test_stages.py",
       "name": "bad-argument-type",
@@ -9549,13 +7435,6 @@
       "severity": "error"
     },
     {
-      "column": 28,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Deferred` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 43,
       "path": "tests/test_stages.py",
       "name": "missing-attribute",
@@ -9577,13 +7456,6 @@
       "severity": "error"
     },
     {
-      "column": 25,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Scope` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 40,
       "path": "tests/test_stages.py",
       "name": "missing-attribute",
@@ -9591,31 +7463,10 @@
       "severity": "error"
     },
     {
-      "column": 38,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Scope` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 68,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Scope` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 85,
       "path": "tests/test_stages.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `Scope` has no attribute `store`",
-      "severity": "error"
-    },
-    {
-      "column": 25,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Scope` has no attribute `wt`",
       "severity": "error"
     },
     {
@@ -9675,20 +7526,6 @@
       "severity": "error"
     },
     {
-      "column": 38,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Handoff` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 68,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Handoff` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 85,
       "path": "tests/test_stages.py",
       "name": "missing-attribute",
@@ -9717,20 +7554,6 @@
       "severity": "error"
     },
     {
-      "column": 38,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `RepeatedChecks` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 77,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `RepeatedChecks` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 82,
       "path": "tests/test_stages.py",
       "name": "missing-attribute",
@@ -9749,13 +7572,6 @@
       "path": "tests/test_stages.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `RepeatedChecks` has no attribute `blocked`",
-      "severity": "error"
-    },
-    {
-      "column": 28,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SharedNotes` has no attribute `wt`",
       "severity": "error"
     },
     {
@@ -9794,13 +7610,6 @@
       "severity": "error"
     },
     {
-      "column": 57,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SharedNotes` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 29,
       "path": "tests/test_stages.py",
       "name": "bad-argument-type",
@@ -9808,59 +7617,10 @@
       "severity": "error"
     },
     {
-      "column": 51,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SharedNotes` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 22,
       "path": "tests/test_stages.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `SharedNotes` has no attribute `tmp`",
-      "severity": "error"
-    },
-    {
-      "column": 75,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SharedNotes` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 57,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SharedNotes` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 10,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SharedNotes` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 39,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SharedNotes` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 59,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SharedNotes` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SharedNotes` has no attribute `wt`",
       "severity": "error"
     },
     {
@@ -9892,41 +7652,6 @@
       "severity": "error"
     },
     {
-      "column": 87,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SharedNotes` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 57,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SharedNotes` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 10,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SharedNotes` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 39,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SharedNotes` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 59,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SharedNotes` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 29,
       "path": "tests/test_stages.py",
       "name": "bad-argument-type",
@@ -9934,73 +7659,10 @@
       "severity": "error"
     },
     {
-      "column": 51,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SharedNotes` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 32,
       "path": "tests/test_stages.py",
       "name": "bad-argument-type",
       "concise_description": "Argument `Self@Fdyo` is not assignable to parameter `self` with type `EngineTest` in function `test_engine.EngineTest.run_engine`",
-      "severity": "error"
-    },
-    {
-      "column": 10,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Fdyo` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 10,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Fdyo` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 39,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Fdyo` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 52,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Fdyo` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 63,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Fdyo` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 54,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Fdyo` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 90,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Fdyo` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 108,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Fdyo` has no attribute `wt`",
       "severity": "error"
     },
     {
@@ -10067,111 +7729,6 @@
       "severity": "error"
     },
     {
-      "column": 41,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Executable` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 60,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Executable` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 10,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Executable` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 83,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Executable` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 84,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Executable` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 30,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Executable` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 60,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Executable` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 10,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Executable` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 60,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Executable` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 69,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Executable` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 70,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Executable` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 10,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Executable` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 70,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Executable` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 78,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Executable` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 63,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Executable` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 32,
       "path": "tests/test_stages.py",
       "name": "bad-argument-type",
@@ -10179,45 +7736,10 @@
       "severity": "error"
     },
     {
-      "column": 38,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Executable` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 68,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Executable` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 85,
       "path": "tests/test_stages.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `Executable` has no attribute `store`",
-      "severity": "error"
-    },
-    {
-      "column": 14,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Executable` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 14,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Executable` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 14,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Executable` has no attribute `wt`",
       "severity": "error"
     },
     {
@@ -10228,38 +7750,10 @@
       "severity": "error"
     },
     {
-      "column": 38,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Executable` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 68,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Executable` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 85,
       "path": "tests/test_stages.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `Executable` has no attribute `store`",
-      "severity": "error"
-    },
-    {
-      "column": 42,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Executable` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 72,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Executable` has no attribute `wt`",
       "severity": "error"
     },
     {
@@ -10270,20 +7764,6 @@
       "severity": "error"
     },
     {
-      "column": 38,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Executable` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 68,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Executable` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 85,
       "path": "tests/test_stages.py",
       "name": "missing-attribute",
@@ -10291,52 +7771,10 @@
       "severity": "error"
     },
     {
-      "column": 42,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Executable` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 72,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Executable` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 89,
       "path": "tests/test_stages.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `Executable` has no attribute `store`",
-      "severity": "error"
-    },
-    {
-      "column": 14,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Executable` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 14,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Executable` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 42,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Executable` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 72,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Executable` has no attribute `wt`",
       "severity": "error"
     },
     {
@@ -10375,24 +7813,10 @@
       "severity": "error"
     },
     {
-      "column": 25,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Ledger` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 40,
       "path": "tests/test_stages.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `Ledger` has no attribute `store`",
-      "severity": "error"
-    },
-    {
-      "column": 25,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Ledger` has no attribute `wt`",
       "severity": "error"
     },
     {
@@ -10438,13 +7862,6 @@
       "severity": "error"
     },
     {
-      "column": 25,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Ledger` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 40,
       "path": "tests/test_stages.py",
       "name": "missing-attribute",
@@ -10477,13 +7894,6 @@
       "path": "tests/test_stages.py",
       "name": "bad-argument-type",
       "concise_description": "Argument `Self@Ledger` is not assignable to parameter `self` with type `EngineTest` in function `test_engine.EngineTest.run_engine`",
-      "severity": "error"
-    },
-    {
-      "column": 25,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Ledger` has no attribute `wt`",
       "severity": "error"
     },
     {
@@ -10648,34 +8058,6 @@
       "severity": "error"
     },
     {
-      "column": 10,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Inputs` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 39,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Inputs` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 52,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Inputs` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 63,
-      "path": "tests/test_stages.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Inputs` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 32,
       "path": "tests/test_stages.py",
       "name": "bad-argument-type",
@@ -10767,38 +8149,10 @@
       "severity": "error"
     },
     {
-      "column": 51,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `StaleTree` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 10,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `StaleTree` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 10,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `StaleTree` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 25,
       "path": "tests/test_stages_land.py",
       "name": "bad-argument-type",
       "concise_description": "Argument `Self@StaleTree` is not assignable to parameter `self` with type `EngineTest` in function `test_engine.EngineTest.stopped_run`",
-      "severity": "error"
-    },
-    {
-      "column": 56,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `StaleTree` has no attribute `wt`",
       "severity": "error"
     },
     {
@@ -10820,13 +8174,6 @@
       "path": "tests/test_stages_land.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `StaleTree` has no attribute `eng`",
-      "severity": "error"
-    },
-    {
-      "column": 30,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `StaleTree` has no attribute `wt`",
       "severity": "error"
     },
     {
@@ -10837,48 +8184,6 @@
       "severity": "error"
     },
     {
-      "column": 62,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `StaleTree` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 10,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `StaleTree` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 39,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `StaleTree` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 65,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `StaleTree` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `StaleTree` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 56,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `StaleTree` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 32,
       "path": "tests/test_stages_land.py",
       "name": "bad-argument-type",
@@ -10900,27 +8205,6 @@
       "severity": "error"
     },
     {
-      "column": 62,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `StaleTree` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 38,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `StaleTree` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 68,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `StaleTree` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 85,
       "path": "tests/test_stages_land.py",
       "name": "missing-attribute",
@@ -10928,52 +8212,10 @@
       "severity": "error"
     },
     {
-      "column": 10,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `StaleTree` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 32,
       "path": "tests/test_stages_land.py",
       "name": "bad-argument-type",
       "concise_description": "Argument `Self@StaleTree` is not assignable to parameter `self` with type `EngineTest` in function `test_engine.EngineTest.run_engine`",
-      "severity": "error"
-    },
-    {
-      "column": 57,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `StaleTree` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 10,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `StaleTree` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 39,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `StaleTree` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `StaleTree` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `StaleTree` has no attribute `wt`",
       "severity": "error"
     },
     {
@@ -11019,73 +8261,10 @@
       "severity": "error"
     },
     {
-      "column": 57,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `StaleTree` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 10,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `StaleTree` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 39,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `StaleTree` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 51,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `StaleTree` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 38,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `StaleTree` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 68,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `StaleTree` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 85,
       "path": "tests/test_stages_land.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `StaleTree` has no attribute `store`",
-      "severity": "error"
-    },
-    {
-      "column": 10,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `StaleTree` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 66,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `StaleTree` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 51,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `StaleTree` has no attribute `wt`",
       "severity": "error"
     },
     {
@@ -11138,48 +8317,6 @@
       "severity": "error"
     },
     {
-      "column": 51,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SlotHygiene` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 10,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SlotHygiene` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 18,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SlotHygiene` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 18,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SlotHygiene` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 38,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SlotHygiene` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 68,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SlotHygiene` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 85,
       "path": "tests/test_stages_land.py",
       "name": "missing-attribute",
@@ -11187,66 +8324,10 @@
       "severity": "error"
     },
     {
-      "column": 14,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SlotHygiene` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 14,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SlotHygiene` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 21,
       "path": "tests/test_stages_land.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `SlotHygiene` has no attribute `tmp`",
-      "severity": "error"
-    },
-    {
-      "column": 68,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SlotHygiene` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 10,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SlotHygiene` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 10,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SlotHygiene` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 10,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SlotHygiene` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 38,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SlotHygiene` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 68,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SlotHygiene` has no attribute `wt`",
       "severity": "error"
     },
     {
@@ -11271,41 +8352,6 @@
       "severity": "error"
     },
     {
-      "column": 10,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SlotHygiene` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 62,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SlotHygiene` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 10,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SlotHygiene` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 10,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SlotHygiene` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 10,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SlotHygiene` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 32,
       "path": "tests/test_stages_land.py",
       "name": "bad-argument-type",
@@ -11327,20 +8373,6 @@
       "severity": "error"
     },
     {
-      "column": 62,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SlotHygiene` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 10,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SlotHygiene` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 32,
       "path": "tests/test_stages_land.py",
       "name": "bad-argument-type",
@@ -11359,13 +8391,6 @@
       "path": "tests/test_stages_land.py",
       "name": "bad-argument-type",
       "concise_description": "Argument `Self@SlotHygiene` is not assignable to parameter `self` with type `EngineTest` in function `test_engine.EngineTest.run_engine`",
-      "severity": "error"
-    },
-    {
-      "column": 81,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SlotHygiene` has no attribute `wt`",
       "severity": "error"
     },
     {
@@ -11404,20 +8429,6 @@
       "severity": "error"
     },
     {
-      "column": 31,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SlotHygiene` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 10,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SlotHygiene` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 36,
       "path": "tests/test_stages_land.py",
       "name": "bad-argument-type",
@@ -11429,13 +8440,6 @@
       "path": "tests/test_stages_land.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `SlotHygiene` has no attribute `eng`",
-      "severity": "error"
-    },
-    {
-      "column": 31,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `SlotHygiene` has no attribute `wt`",
       "severity": "error"
     },
     {
@@ -11747,14 +8751,14 @@
       "severity": "error"
     },
     {
-      "column": 14,
+      "column": 25,
       "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Contracts` has no attribute `store`",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `Self@Contracts` is not assignable to parameter `self` with type `EngineTest` in function `test_engine.EngineTest.file_answer`",
       "severity": "error"
     },
     {
-      "column": 36,
+      "column": 32,
       "path": "tests/test_stages_land.py",
       "name": "bad-argument-type",
       "concise_description": "Argument `Self@Contracts` is not assignable to parameter `self` with type `EngineTest` in function `test_engine.EngineTest.run_engine`",
@@ -11782,14 +8786,14 @@
       "severity": "error"
     },
     {
-      "column": 14,
+      "column": 25,
       "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Contracts` has no attribute `store`",
+      "name": "bad-argument-type",
+      "concise_description": "Argument `Self@Contracts` is not assignable to parameter `self` with type `EngineTest` in function `test_engine.EngineTest.file_answer`",
       "severity": "error"
     },
     {
-      "column": 36,
+      "column": 32,
       "path": "tests/test_stages_land.py",
       "name": "bad-argument-type",
       "concise_description": "Argument `Self@Contracts` is not assignable to parameter `self` with type `EngineTest` in function `test_engine.EngineTest.run_engine`",
@@ -11800,20 +8804,6 @@
       "path": "tests/test_stages_land.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `Contracts` has no attribute `tmp`",
-      "severity": "error"
-    },
-    {
-      "column": 15,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Contracts` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 77,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Contracts` has no attribute `wt`",
       "severity": "error"
     },
     {
@@ -11859,13 +8849,6 @@
       "severity": "error"
     },
     {
-      "column": 47,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `ClaimPerBead` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 63,
       "path": "tests/test_stages_land.py",
       "name": "missing-attribute",
@@ -11894,13 +8877,6 @@
       "severity": "error"
     },
     {
-      "column": 50,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `ClaimPerBead` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 66,
       "path": "tests/test_stages_land.py",
       "name": "missing-attribute",
@@ -11926,13 +8902,6 @@
       "path": "tests/test_stages_land.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `ClaimPerBead` has no attribute `store`",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `ClaimPerBead` has no attribute `wt`",
       "severity": "error"
     },
     {
@@ -11985,41 +8954,6 @@
       "severity": "error"
     },
     {
-      "column": 57,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `FreshAside` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 14,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `FreshAside` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 43,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `FreshAside` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 61,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `FreshAside` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `FreshAside` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 16,
       "path": "tests/test_stages_land.py",
       "name": "missing-attribute",
@@ -12066,13 +9000,6 @@
       "path": "tests/test_stages_land.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `FreshAside` has no attribute `bd_calls`",
-      "severity": "error"
-    },
-    {
-      "column": 56,
-      "path": "tests/test_stages_land.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `FreshAside` has no attribute `wt`",
       "severity": "error"
     },
     {
@@ -12216,13 +9143,6 @@
       "severity": "error"
     },
     {
-      "column": 58,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `VisualWork` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 31,
       "path": "tests/test_stages_visual.py",
       "name": "bad-argument-type",
@@ -12363,13 +9283,6 @@
       "severity": "error"
     },
     {
-      "column": 58,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `VisualWork` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 46,
       "path": "tests/test_stages_visual.py",
       "name": "missing-attribute",
@@ -12377,45 +9290,10 @@
       "severity": "error"
     },
     {
-      "column": 10,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `VisualWork` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 38,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `VisualWork` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 77,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `VisualWork` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 120,
       "path": "tests/test_stages_visual.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `VisualWork` has no attribute `store`",
-      "severity": "error"
-    },
-    {
-      "column": 38,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `VisualWork` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 77,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `VisualWork` has no attribute `wt`",
       "severity": "error"
     },
     {
@@ -12447,13 +9325,6 @@
       "severity": "error"
     },
     {
-      "column": 25,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `VisualWork` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 74,
       "path": "tests/test_stages_visual.py",
       "name": "missing-attribute",
@@ -12465,13 +9336,6 @@
       "path": "tests/test_stages_visual.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `VisualWork` has no attribute `tmp`",
-      "severity": "error"
-    },
-    {
-      "column": 62,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `VisualWork` has no attribute `wt`",
       "severity": "error"
     },
     {
@@ -12496,31 +9360,10 @@
       "severity": "error"
     },
     {
-      "column": 25,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `VisualWork` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 40,
       "path": "tests/test_stages_visual.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `VisualWork` has no attribute `store`",
-      "severity": "error"
-    },
-    {
-      "column": 42,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `VisualWork` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 72,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `VisualWork` has no attribute `wt`",
       "severity": "error"
     },
     {
@@ -12538,13 +9381,6 @@
       "severity": "error"
     },
     {
-      "column": 25,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `VisualWork` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 40,
       "path": "tests/test_stages_visual.py",
       "name": "missing-attribute",
@@ -12577,41 +9413,6 @@
       "path": "tests/test_stages_visual.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `VisualWork` has no attribute `store`",
-      "severity": "error"
-    },
-    {
-      "column": 57,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `ResumeCount` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 10,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `ResumeCount` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 39,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `ResumeCount` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 65,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `ResumeCount` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `ResumeCount` has no attribute `wt`",
       "severity": "error"
     },
     {
@@ -12633,13 +9434,6 @@
       "path": "tests/test_stages_visual.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `ResumeCount` has no attribute `tmp`",
-      "severity": "error"
-    },
-    {
-      "column": 51,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `ResumeCount` has no attribute `wt`",
       "severity": "error"
     },
     {
@@ -12734,24 +9528,10 @@
       "severity": "error"
     },
     {
-      "column": 25,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `ResumeCount` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 40,
       "path": "tests/test_stages_visual.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `ResumeCount` has no attribute `store`",
-      "severity": "error"
-    },
-    {
-      "column": 25,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `ResumeCount` has no attribute `wt`",
       "severity": "error"
     },
     {
@@ -12797,52 +9577,10 @@
       "severity": "error"
     },
     {
-      "column": 90,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `ResumeCount` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 81,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `ResumeCount` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 66,
       "path": "tests/test_stages_visual.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `ResumeCount` has no attribute `bd_calls`",
-      "severity": "error"
-    },
-    {
-      "column": 57,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `ResumeCount` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 18,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `ResumeCount` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 43,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `ResumeCount` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 68,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `ResumeCount` has no attribute `wt`",
       "severity": "error"
     },
     {
@@ -12867,20 +9605,6 @@
       "severity": "error"
     },
     {
-      "column": 38,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `ResumeCount` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 68,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `ResumeCount` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 85,
       "path": "tests/test_stages_visual.py",
       "name": "missing-attribute",
@@ -12888,13 +9612,6 @@
       "severity": "error"
     },
     {
-      "column": 71,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `ResumeCount` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 32,
       "path": "tests/test_stages_visual.py",
       "name": "bad-argument-type",
@@ -12913,20 +9630,6 @@
       "path": "tests/test_stages_visual.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `ResumeCount` has no attribute `eng`",
-      "severity": "error"
-    },
-    {
-      "column": 73,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `ResumeCount` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 101,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `ResumeCount` has no attribute `wt`",
       "severity": "error"
     },
     {
@@ -12951,24 +9654,10 @@
       "severity": "error"
     },
     {
-      "column": 73,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `ResumeCount` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 26,
       "path": "tests/test_stages_visual.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `ResumeCount` has no attribute `eng`",
-      "severity": "error"
-    },
-    {
-      "column": 101,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `ResumeCount` has no attribute `wt`",
       "severity": "error"
     },
     {
@@ -12990,20 +9679,6 @@
       "path": "tests/test_stages_visual.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `ResumeCount` has no attribute `eng`",
-      "severity": "error"
-    },
-    {
-      "column": 90,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `ResumeCount` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 71,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `ResumeCount` has no attribute `wt`",
       "severity": "error"
     },
     {
@@ -13042,31 +9717,10 @@
       "severity": "error"
     },
     {
-      "column": 90,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `ResumeCount` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
-      "column": 70,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `ResumeCount` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 26,
       "path": "tests/test_stages_visual.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `ResumeCount` has no attribute `eng`",
-      "severity": "error"
-    },
-    {
-      "column": 25,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `ResumeCount` has no attribute `wt`",
       "severity": "error"
     },
     {
@@ -13081,13 +9735,6 @@
       "path": "tests/test_stages_visual.py",
       "name": "bad-assignment",
       "concise_description": "`(cmd: Unknown, **kw: Unknown) -> tuple[Literal[1], Literal['refused']] | tuple[int | Unknown, str]` is not assignable to attribute `sh` with type `(cmd: Unknown, timeout: int | Unknown = 3600, check: bool | Unknown = False, save: Unknown | None = None, env: Unknown | None = None, pin: bool | Unknown = False, idle: int | Unknown = 0) -> tuple[int | Unknown, str]`",
-      "severity": "error"
-    },
-    {
-      "column": 25,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `ResumeCount` has no attribute `wt`",
       "severity": "error"
     },
     {
@@ -13119,13 +9766,6 @@
       "severity": "error"
     },
     {
-      "column": 49,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Claims` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 65,
       "path": "tests/test_stages_visual.py",
       "name": "missing-attribute",
@@ -13147,13 +9787,6 @@
       "severity": "error"
     },
     {
-      "column": 49,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Claims` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 65,
       "path": "tests/test_stages_visual.py",
       "name": "missing-attribute",
@@ -13165,13 +9798,6 @@
       "path": "tests/test_stages_visual.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `Claims` has no attribute `store`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Claims` has no attribute `wt`",
       "severity": "error"
     },
     {
@@ -13294,13 +9920,6 @@
       "severity": "error"
     },
     {
-      "column": 25,
-      "path": "tests/test_stages_visual.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `Claims` has no attribute `wt`",
-      "severity": "error"
-    },
-    {
       "column": 64,
       "path": "tests/test_stages_visual.py",
       "name": "missing-attribute",
@@ -13340,27 +9959,6 @@
       "path": "tests/test_tl.py",
       "name": "unbound-name",
       "concise_description": "`original` may be uninitialized",
-      "severity": "error"
-    },
-    {
-      "column": 42,
-      "path": "tests/test_tl.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `path` in function `taskloop.adapters.delegate.find_route`",
-      "severity": "error"
-    },
-    {
-      "column": 42,
-      "path": "tests/test_tl.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `pinned` in function `taskloop.adapters.delegate.find_route`",
-      "severity": "error"
-    },
-    {
-      "column": 42,
-      "path": "tests/test_tl.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `cache` in function `taskloop.adapters.delegate.find_route`",
       "severity": "error"
     },
     {
@@ -13914,55 +10512,6 @@
       "path": "tests/test_verify_noblock.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `NoBlock` has no attribute `eng`",
-      "severity": "error"
-    },
-    {
-      "column": 21,
-      "path": "tests/test_verify_noblock.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Self@NoBlock` is not assignable to parameter `self` with type `EngineTest` in function `test_engine.EngineTest.ask`",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_verify_noblock.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 35,
-      "path": "tests/test_verify_noblock.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 13,
-      "path": "tests/test_verify_noblock.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 21,
-      "path": "tests/test_verify_noblock.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Self@NoBlock` is not assignable to parameter `self` with type `EngineTest` in function `test_engine.EngineTest.ask`",
-      "severity": "error"
-    },
-    {
-      "column": 42,
-      "path": "tests/test_verify_noblock.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/test_verify_noblock.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Self@NoBlock` is not assignable to parameter `self` with type `EngineTest` in function `test_engine.EngineTest.ask`",
       "severity": "error"
     },
     {
