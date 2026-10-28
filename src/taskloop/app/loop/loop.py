@@ -324,6 +324,11 @@ class Loop(Core):
         if a.pin or not a.argv:
             return False
         found = self.installs.vet(set(c.warned))  # a version that failed is not looked at again (bad-versions.json)
+        gone = self.installs.dangling
+        if gone and f"missing:{gone}" not in c.warned:  # once per loop run (the carry keeps it across a move), not per pass
+            c.warned.append(f"missing:{gone}")
+            self.say(f"warn: installed_plugins.json names {gone}, its directory is missing; falling back to the highest directory")
+            env.event("install_missing", "", who="loop", version=gone, running=env.version, target=found.version if found else "")
         if not found:
             return False
         if found.why:

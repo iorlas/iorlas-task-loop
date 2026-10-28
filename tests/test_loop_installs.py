@@ -74,6 +74,31 @@ class Entry(Moving):
         self.assertEqual(self.run_loop(), 0)
         self.assertEqual(self.execs, [])
 
+    def test_an_entry_whose_directory_is_gone_falls_through_with_one_warning_per_run_and_a_pin_never_does(self):
+        self.install("0.3.0")
+        self.installed("0.2.0")  # recorded, but its directory is not there
+        inst = loop_env.installs(loop_env.cfgdir())
+        self.assertEqual(inst.target(), ("0.3.0", self.cache / "0.3.0"))
+        self.assertEqual(inst.dangling, "0.2.0")
+        (tl.config_dir() / "pinned.json").write_text(json.dumps({"task-loop": "0.3.0"}))
+        inst.target()
+        self.assertEqual(inst.dangling, "")  # a pin is strict: nothing fell through
+        os.unlink(tl.config_dir() / "pinned.json")
+        events = []
+        self.enterContext(mock.patch.object(tl, "event", side_effect=lambda kind, bead="", **kw: events.append(dict(kw, kind=kind)) or {}))
+        self.beads({"x-1": [rec("landed")], "x-2": [rec("landed")]})
+        with self.assertRaises(more.Moved):
+            self.run_loop()
+        self.assertEqual([e["version"] for e in events if e["kind"] == "install_missing"], ["0.2.0"])
+
+    def test_the_missing_entry_warning_is_not_repeated_on_the_next_pass(self):
+        self.installed("0.2.0")  # no such directory, and nothing higher to fall to
+        events = []
+        self.enterContext(mock.patch.object(tl, "event", side_effect=lambda kind, bead="", **kw: events.append(dict(kw, kind=kind)) or {}))
+        self.beads({"x-1": [rec("landed")], "x-2": [rec("landed")]})
+        self.assertEqual(self.run_loop(), 0)
+        self.assertEqual([e["version"] for e in events if e["kind"] == "install_missing"], ["0.2.0"])
+
     def test_with_no_entry_the_highest_directory_above_the_running_one_is_the_fallback(self):
         self.install("0.2.0")
         self.install("0.3.0")

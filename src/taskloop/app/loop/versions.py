@@ -50,6 +50,7 @@ class Installs:
         self.root, self.installed, self.pinned = root, installed, pinned  # root: the running install's dir
         self.tune, self.now = tune, now
         self.bad = JsonStore(cfg.bad_versions(), BadVersions)
+        self.dangling = ""  # the installed entry whose dir is gone, set by the last target() that fell through to the highest dir
 
     @property
     def mine(self) -> str:
@@ -77,6 +78,7 @@ class Installs:
         skip = set(skip) | set(self.refused())
         pinned = self.pinned()
         want = pinned or self.installed()
+        self.dangling = want if want and not pinned and not (self.root.parent / want).is_dir() else ""
         if want and (pinned or (self.root.parent / want).is_dir()):  # a pin is strict; an installed entry whose dir is gone falls through
             d = self.root.parent / want
             k = version_key(want)
