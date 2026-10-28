@@ -25,7 +25,10 @@ import engine  # noqa: E402
 from support.builders import cfg_with  # noqa: E402
 import seams  # noqa: E402
 from taskloop_dash.views import graph  # noqa: E402
-import loop  # noqa: E402
+import loop_env  # noqa: E402
+from support import looptest  # noqa: E402
+from taskloop.app.loop.run import BeadRun, Where  # noqa: E402
+from taskloop.adapters.fake_beads import FakeBeads  # noqa: E402
 from taskloop_dash.views import roadmap  # noqa: E402
 import test_engine as te  # noqa: E402
 import tl  # noqa: E402
@@ -50,7 +53,8 @@ class Reload(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
         self.execs = []
-        for p in (mock.patch.object(dl, "resolve", return_value=self.res("/fake/route.py")),):  # no delegate in an isolated HOME
+        for p in (mock.patch.object(dl, "resolve", return_value=self.res("/fake/route.py")),  # no delegate in an isolated HOME
+                  mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(Path(self.tmp.name, "claude"))})):
             p.start()
             self.addCleanup(p.stop)
 
@@ -178,8 +182,8 @@ class Reload(unittest.TestCase):
         script = fake_route.Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         eng = self.engine_for(script)
         tests = []
-        real = loop.selftest_of
-        with mock.patch.object(loop, "selftest_of", side_effect=lambda here: tests.append(here) or real(here)):
+        real = loop_env.installs.__globals__["Installs"].complete.__globals__["installs"].selftest_fails
+        with mock.patch("taskloop.adapters.installs.selftest_fails", side_effect=lambda here, wait: tests.append(here) or real(here, wait)):
             rc = self.run_with(eng, script, during=lambda: self.install("0.2.0", plant=BREAK_PLAN))
         self.assertEqual(rc, 0)  # finished on 0.1.0
         self.assertEqual(self.execs, [])
@@ -188,18 +192,18 @@ class Reload(unittest.TestCase):
         self.assertEqual((red[0]["version"], red[0]["running"], red[0]["who"]), ("0.2.0", "0.1.0", "engine"))
         self.assertIn("planted: cannot plan", red[0]["why"])
         self.assertEqual(len(tests), 1)  # the next boundaries read bad-versions.json instead of testing it again
-        self.assertEqual(list(json.loads((tl.config_dir() / "bad-versions.json").read_text())), ["0.2.0"])
+        self.assertEqual([e["version"] for e in json.loads((tl.config_dir() / "bad-versions.json").read_text())["entries"]], ["0.2.0"])
         self.assertEqual([e for e in self.events() if e["kind"] == "reload"], [])
 
     def test_a_refused_version_is_tried_again_when_it_is_installed_again_and_a_newer_one_is_tried(self):
         self.install("0.2.0", plant=BREAK_PLAN)
-        self.assertEqual(loop.vet_newer()[:2], ("0.2.0", self.cache / "0.2.0"))
-        self.assertIsNone(loop.vet_newer())  # refused, key unchanged: not looked at
+        self.assertEqual(loop_env.vet_newer()[:2], ("0.2.0", self.cache / "0.2.0"))
+        self.assertIsNone(loop_env.vet_newer())  # refused, key unchanged: not looked at
         shutil.rmtree(self.cache / "0.2.0")
         self.install("0.2.0")  # the same number, re-released
-        self.assertIsNone(loop.vet_newer()[2])
+        self.assertIsNone(loop_env.vet_newer()[2])
         self.install("0.3.0")
-        self.assertEqual(loop.vet_newer()[0], "0.3.0")
+        self.assertEqual(loop_env.vet_newer()[0], "0.3.0")
 
     # -- the crash after an exec: the loop puts the run back on the version it came from, once
     def test_a_run_task_that_dies_right_after_the_exec_is_restarted_once_on_the_old_version(self):
@@ -221,28 +225,33 @@ class Reload(unittest.TestCase):
 
         spawned_env = []
 
-        def spawn(cmd, log):
+        def spawn(cmd, log, extra):
             spawned.append(cmd)
             if len(spawned) == 2:
-                spawned_env.append(json.loads(os.environ["TL_REEXEC"]))
+                spawned_env.append(json.loads(extra["TL_REEXEC"]))
             return Child(cmd), mock.Mock()
         (old / "tl.py").write_text("")
         self.install("0.2.0")
         repo = str(self.wt)
-        with mock.patch.object(loop, "spawn", side_effect=spawn), mock.patch.object(loop, "write_state"), \
-                mock.patch.object(loop, "say") as say, mock.patch.dict(os.environ, {}):
+        said = []
+        with mock.patch.object(loop_env, "spawn", side_effect=spawn), mock.patch.dict(os.environ, {}):
+            env = loop_env.build(repo, store=FakeBeads())
+            run = BeadRun(env, looptest.files(repo), loop_env.installs(env.cfgdir), lambda: env.profile().loop, lambda: "",
+                          lambda running: None, lambda: None, said.append)
             # the first child is the one that exec'd: its note appears while it runs
-            r = loop.run_bead(repo, as_bead({"id": "t-1"}), "s1", str(self.wt), "sb-1", 0.0)
+            t1 = as_bead({"id": "t-1"})
+            assert t1 is not None
+            r = run.run(t1, Where("s1", str(self.wt), "sb-1", 0.0))
             leaked = os.environ.get("TL_REEXEC")
-        self.assertEqual(r["outcome"], "landed")
+        self.assertEqual(r.outcome, "landed")
         self.assertEqual(len(spawned), 2)
         self.assertEqual(spawned[1][1], str(old / "tl.py"))
         self.assertIsNone(leaked)  # the loop's own environment keeps no hand-over for its later run-tasks
         self.assertEqual(spawned_env[0]["run"], "t-1-20261026-120000")  # the fallback child got it
         fb = [e for e in self.events() if e["kind"] == "reload_fallback"]
         self.assertEqual([(e["old"], e["new"]) for e in fb], [("0.2.0", "0.1.0")])
-        self.assertIn("0.2.0", json.loads((tl.config_dir() / "bad-versions.json").read_text()))
-        self.assertTrue(any("RED" in str(c) for c in say.call_args_list))
+        self.assertIn("0.2.0", [e["version"] for e in json.loads((tl.config_dir() / "bad-versions.json").read_text())["entries"]])
+        self.assertTrue(any("RED" in c for c in said))
         self.assertFalse(engine.reexec_path("t-1").exists())
 
     # -- point 2: delegate is resolved per call, never held
@@ -304,9 +313,9 @@ class Reload(unittest.TestCase):
     # -- point 4: loop state and dashboard lane
     def test_loop_state_names_the_running_version_and_code_dir(self):
         repo = str(self.wt)
-        loop.write_state(repo, pid=os.getpid(), started=1.0)
-        st = loop.read_state(repo)
-        self.assertEqual((st["version"], st["code_dir"]), ("0.1.0", str(tl.HERE)))
+        with mock.patch.object(loop_env, "spawn"), mock.patch.object(loop_env.engine, "cfg_source", side_effect=lambda r: (tl.load_profile({}), "", "")):
+            env = loop_env.build(repo, store=FakeBeads())
+        self.assertEqual((env.version, env.code_dir), ("0.1.0", str(tl.HERE)))
 
     def test_releases_behind_counts_installed_versions_above_it(self):
         for v in ("0.2.0", "0.10.0"):

@@ -79,11 +79,6 @@ class States(unittest.TestCase):
         self.assertEqual((n["d"]["state"], n["b"]["state"]), ("deferred", "blocked"))
         self.assertEqual(g["edges"], [{"source": "d", "target": "b"}])
 
-    def test_local_queue_fallback(self):
-        beads = [bead("a"), bead("b", blocks=["a"]), bead("c", labels=[]), bead("e", kind="epic"),
-                 bead("s", labels=["auto", "skipme"])]
-        self.assertEqual(graph.local_queue(beads, {"pick_label": "auto", "skip_labels": ["skipme"]}), {"a"})
-
 
 class Unblocks(unittest.TestCase):
     def test_transitive_count(self):

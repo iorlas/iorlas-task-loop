@@ -68,6 +68,7 @@ class RealRaces(unittest.TestCase):
 
     def test_a_reader_never_sees_half_a_document_while_writers_replace_it(self) -> None:
         from contracts import samples as S
+        from taskloop.contracts.loop import Rest
         doc = self.rig.stores.loop_rest("k")
         doc.write(S.OTHERS["Rest"])
         stop = threading.Event()
@@ -77,7 +78,7 @@ class RealRaces(unittest.TestCase):
             n = 0
             while not stop.is_set():
                 n += 1
-                doc.write(type(S.OTHERS["Rest"])(until=float(n), why="x" * (n % 400), t=0.0))  # pyrefly: ignore[unexpected-keyword]
+                doc.write(Rest(beads={"b-%d" % i: float(n) for i in range(n % 40)}))
 
         w = threading.Thread(target=write)
         w.start()

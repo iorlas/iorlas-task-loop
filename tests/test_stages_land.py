@@ -489,10 +489,10 @@ class ClaimPerBead(StagesTest):
     """tl-kwo: a claim is live when an engine runs that bead, not because the claiming actor's loop is alive."""
 
     def reclaim(self, bead, slots, running, hand_live=False):
-        import loop
+        import loop_env
         with self.store.stub(show=bead), mock.patch.object(tl, "slot_beads", return_value=[as_bead(x) for x in slots]), \
                 mock.patch.object(tl, "live_actors", return_value={"tl-2be89f88"} if hand_live or slots else set()), \
-                mock.patch.object(loop, "running", return_value=running), self.store.stub(comments=[]), \
+                mock.patch.object(loop_env, "running", return_value=running), self.store.stub(comments=[]), \
                 self.store.stub(bd_fn=lambda *a, **k: mock.Mock(returncode=0)):
             return engine.reclaim("o67g", str(self.wt), store=self.store)
 
@@ -521,10 +521,10 @@ class ClaimPerBead(StagesTest):
         self.assertIn("a live claim", why)
 
     def test_the_release_is_conditional_on_the_claim_just_read(self):
-        import loop
+        import loop_env
         calls = []
         with self.store.stub(show=self.BEAD), mock.patch.object(tl, "slot_beads", return_value=[as_bead(self.SLOT)]), \
-                mock.patch.object(tl, "live_actors", return_value={"tl-2be89f88"}), mock.patch.object(loop, "running", return_value={}), \
+                mock.patch.object(tl, "live_actors", return_value={"tl-2be89f88"}), mock.patch.object(loop_env, "running", return_value={}), \
                 self.store.stub(comments=[]), \
                 self.store.stub(bd_fn=lambda *a, **k: calls.append(a) or mock.Mock(returncode=0)):
             ok, why = engine.reclaim("o67g", str(self.wt), store=self.store)
@@ -532,9 +532,9 @@ class ClaimPerBead(StagesTest):
         self.assertEqual(calls[-1], ("update", "o67g", "--if-assignee", "tl-2be89f88", "--assignee", ""))
 
     def test_a_claim_that_changed_hands_meanwhile_is_not_taken(self):
-        import loop
+        import loop_env
         with self.store.stub(show=self.BEAD), mock.patch.object(tl, "slot_beads", return_value=[as_bead(self.SLOT)]), \
-                mock.patch.object(tl, "live_actors", return_value={"tl-2be89f88"}), mock.patch.object(loop, "running", return_value={}), \
+                mock.patch.object(tl, "live_actors", return_value={"tl-2be89f88"}), mock.patch.object(loop_env, "running", return_value={}), \
                 self.store.stub(comments=[]), self.store.stub(bd_fn=lambda *a, **k: mock.Mock(returncode=1)):
             ok, why = engine.reclaim("o67g", str(self.wt), store=self.store)
         self.assertFalse(ok)

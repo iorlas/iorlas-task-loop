@@ -6,6 +6,7 @@ from taskloop_dash.api.asks import Asks
 from taskloop_dash.api.tasks import Tasks
 from taskloop_dash.env import Bead, Env
 from taskloop_dash.readers.beads import Beads, basename
+from taskloop_dash.readers.loops import Loops
 from taskloop_dash.readers.records import Records
 from taskloop_dash.views import graph
 
@@ -13,15 +14,12 @@ Cfg = dict[str, Any]
 
 
 class Graph:
-    def __init__(self, env: Env, records: Records, beads: Beads, tasks: Tasks, asks: Asks) -> None:
-        self.env, self.records, self.beads, self.tasks, self.asks = env, records, beads, tasks, asks
+    def __init__(self, env: Env, records: Records, beads: Beads, tasks: Tasks, asks: Asks, loops: Loops) -> None:
+        self.env, self.records, self.beads, self.tasks, self.asks, self.loops = env, records, beads, tasks, asks, loops
 
     def loop_order(self, repo: str, beads: list[Bead], cfg: Cfg) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
-        """([(id, reason)] in the order the loop takes them, [(id, why skipped)]). graph.local_queue is the only rule here; P2 replaces
-        it with LoopState.queue, the order the loop itself wrote."""
-        pri = {b["id"]: b.get("priority") if b.get("priority") is not None else 2 for b in beads}
-        ids = graph.local_queue(beads, cfg)
-        return [(i, "") for i in sorted(ids, key=lambda i: (pri[i], i))], []
+        """([(id, reason)] in the order the loop takes them, [(id, why skipped)]): LoopState.queue, the order the loop itself wrote."""
+        return self.loops.queue(repo)
 
     def loop_queue(self, repo: str, beads: list[Bead], cfg: Cfg) -> set[str]:
         """The ids the loop would take."""

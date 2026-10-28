@@ -16,8 +16,11 @@ SRC = ROOT / "skills" / "task-loop"
 sys.path.insert(0, str(SRC))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-import loop  # noqa: E402
+import loop_env  # noqa: E402
+import selftest  # noqa: E402
 import tl  # noqa: E402
+from taskloop.adapters.fake_beads import FakeBeads  # noqa: E402
+from taskloop.app.loop.loop import Loop, LoopArgs  # noqa: E402
 
 
 class Moved(Exception):
@@ -32,7 +35,8 @@ class SelfTest(unittest.TestCase):
         self.cfg = self.home / "cfg"
         self.cache = self.home / "cache"
         p = mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(self.cfg), "APPDATA": str(self.cfg), "HOME": str(self.home),
-                                         "USERPROFILE": str(self.home)})
+                                         "USERPROFILE": str(self.home),
+                                         "CLAUDE_CONFIG_DIR": str(self.home / "claude")})
         p.start()
         self.addCleanup(p.stop)
         self.execs = []
@@ -60,7 +64,12 @@ class SelfTest(unittest.TestCase):
 
     def bad_versions(self):
         f = self.cfg / "task-loop" / "bad-versions.json"
-        return json.loads(f.read_text()) if f.exists() else {}
+        return {e["version"]: e for e in json.loads(f.read_text())["entries"]} if f.exists() else {}
+
+    def the_loop(self):
+        with mock.patch.object(loop_env.engine, "cfg_source", side_effect=lambda r: (tl.load_profile({}), "", "")):
+            env = loop_env.build(str(self.home), store=FakeBeads())
+            return Loop(env, loop_env.files_of(str(self.home)), loop_env.installs(env.cfgdir), LoopArgs(argv=["loop", "--repo", str(self.home)]))
 
     def test_the_scenario_through_engine_run_passes(self):
         r = subprocess.run([sys.executable, str(SRC / "tl.py"), "selftest"], capture_output=True, text=True, timeout=300, cwd=self.home)
@@ -79,8 +88,8 @@ class SelfTest(unittest.TestCase):
                 spawned.append(a[0] if a else k.get("args"))
                 super().__init__(*a, **k)
         t = time.monotonic()
-        with mock.patch.object(subprocess, "Popen", Counting), mock.patch.object(loop, "say"):
-            why = loop.selftest()
+        with mock.patch.object(subprocess, "Popen", Counting):
+            why = selftest.selftest()
         print("selftest in-process: %d processes, %.1f s (metric only)" % (len(spawned), time.monotonic() - t))
         self.assertIsNone(why)
         self.assertGreater(len(spawned), 50)  # the counter sees the engine's git work: a zero would mean it counts nothing
@@ -88,23 +97,21 @@ class SelfTest(unittest.TestCase):
 
     def test_a_good_install_is_complete_and_moved_to(self):
         self.install("0.2.0")
-        self.assertIsNone(loop.complete(self.cache / "0.2.0"))
+        self.assertIsNone(self.the_loop().installs.complete(self.cache / "0.2.0"))
         self.assertEqual(self.bad_versions(), {})
 
     def test_an_install_that_imports_but_cannot_plan_is_refused_and_recorded(self):
         d = self.cache / "0.2.0"
         self.install("0.2.0", plant=("    def plan(self, again=False):\n", "    def plan(self, again=False):\n"
                                                                             "        raise RuntimeError('planted: cannot plan')\n"))
-        r = subprocess.run([sys.executable, "-I", "-c", "import sys; sys.path.insert(0, sys.argv[1]); import tl, loop, engine",
-                            str(d / "skills" / "task-loop")], capture_output=True)
+        r = subprocess.run([sys.executable, "-I", "-c", "import sys; sys.path.insert(0, sys.argv[1]); sys.path.insert(0, sys.argv[2]); "
+                            "import tl, loop_env, engine", str(d / "skills" / "task-loop"), str(d / "src")], capture_output=True)
         self.assertEqual(r.returncode, 0)  # it imports fine
-        state = {"warned": []}
-        a = mock.Mock(pin=False, argv=["loop", "--repo", str(self.home)])
-        out = []
-        with mock.patch.object(loop, "say", side_effect=out.append):
-            loop.maybe_move(a, str(self.home), state)
+        lp, out = self.the_loop(), []
+        with mock.patch.object(Loop, "say", side_effect=out.append):
+            lp.maybe_move()
         self.assertEqual(self.execs, [])  # never exec'd into it
-        self.assertEqual(state["warned"], ["0.2.0"])
+        self.assertEqual(lp.c.warned, ["0.2.0"])
         self.assertTrue(any("not moving to 0.2.0: selftest failed" in x and "planted" in x for x in out), out)
         bad = self.bad_versions()
         self.assertEqual(list(bad), ["0.2.0"])
@@ -113,11 +120,9 @@ class SelfTest(unittest.TestCase):
 
     def test_a_good_newer_install_is_still_moved_to(self):
         self.install("0.2.0")
-        a = mock.Mock(pin=False, argv=["loop", "--repo", str(self.home)])
-        with self.assertRaises(Moved), mock.patch.object(loop, "say"), mock.patch.object(loop, "stop_mode", return_value=""), \
-                mock.patch.object(loop.STOP_NOW, "is_set", return_value=False), \
-                mock.patch.object(loop, "START_CWD", [None]):
-            loop.maybe_move(a, str(self.home), {"warned": []})
+        lp = self.the_loop()
+        with self.assertRaises(Moved), mock.patch.object(Loop, "say"), mock.patch.object(loop_env, "START_CWD", [None]):
+            lp.maybe_move()
         self.assertIn("0.2.0", self.execs[0][1])
 
 

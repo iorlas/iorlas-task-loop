@@ -24,21 +24,6 @@ def blockers(b: Bead) -> list[str]:
     return [d.get("id") for d in b.get("dependencies") or [] if d.get("type") == "blocks"]
 
 
-def local_queue(beads: Iterable[Bead], cfg: Bead) -> set[str]:
-    """Fallback for the loop's queue(): ready (open, no open blocker) beads with the pick label, minus skip labels."""
-    beads = list(beads)
-    by_id = {b["id"]: b for b in beads}
-    pick, skip = cfg.get("pick_label"), set(cfg.get("skip_labels") or [])
-    out: set[str] = set()
-    for b in beads:
-        labels = set(b.get("labels") or [])
-        if (b.get("status") == "open" and b.get("issue_type") != "epic" and "slot" not in labels
-                and (not pick or pick in labels) and not labels & skip
-                and not any((by_id.get(x) or {}).get("status", "closed") != "closed" for x in blockers(b))):
-            out.add(b["id"])
-    return out
-
-
 def unblock_counts(edges: Mapping[str, Collection[str]], skip: Collection[str]) -> dict[str, int]:
     """id -> number of beads that wait on it, directly or through others, not counting ids in `skip` (epics, done).
     A cycle never loops: every walk keeps a seen set."""

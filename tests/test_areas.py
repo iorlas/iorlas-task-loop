@@ -16,9 +16,9 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # python3 -m unittest tests.test_areas, from the repo root
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from test_loop import bead, rec  # noqa: E402  (puts skills/task-loop on sys.path)
 from support import tlbd  # noqa: E402
 from support.fakes import FakeBeadStore  # noqa: E402
-from test_loop import bead, rec  # noqa: E402
 from support import slots as sl  # noqa: E402
 from support.fakes import as_bead  # noqa: E402
 from taskloop.contracts.bead import BdError  # noqa: E402
@@ -28,7 +28,11 @@ from taskloop.app.slots.pool import Slot  # noqa: E402
 from test_slots import Slots  # noqa: E402
 
 import engine  # noqa: E402
-import loop  # noqa: E402
+import loop_env  # noqa: E402
+from support import looptest  # noqa: E402
+from taskloop.app.loop.core import Core  # noqa: E402
+from taskloop.app.loop.queue import QueueRule  # noqa: E402
+from taskloop.contracts.config import LoopConfig  # noqa: E402
 from support.builders import cfg_with  # noqa: E402
 import tl  # noqa: E402
 
@@ -45,14 +49,20 @@ def tbead(*a, **k):
 NO_FCNTL = unittest.skipIf(os.name == "nt", "the lock is fcntl; tl has none on Windows (documented no-op)")
 
 
+def area_of(b, cfg, cache):
+    rule = QueueRule(mock.Mock(), cfg, {}, lambda _: "")
+    rule.parents = dict(cache)
+    return rule.area_of(b)
+
+
 class AreaOf(unittest.TestCase):
     def test_the_areas_map_first_then_the_label_prefix_first_match_wins_and_none_is_unrestricted(self):
         cache = {"e-core.1": "e-core", "e-core": None, "e-9": None}
-        self.assertEqual(loop.area_of(tbead("x-1", parent="e-core.1", labels=["lane:live"]), AREAS, cache), "core")
-        self.assertEqual(loop.area_of(tbead("x-2", labels=["lane:live", "lane:sim"]), AREAS, cache), "live")
-        self.assertEqual(loop.area_of(tbead("x-3", labels=["build"]), AREAS, cache), "build")
-        self.assertEqual(loop.area_of(tbead("x-4", parent="e-9", labels=["auto"]), AREAS, cache), "")
-        self.assertEqual(loop.area_of(tbead("x-5", labels=["lane:live"]), cfg_with(), cache), "")  # no area config: none
+        self.assertEqual(area_of(tbead("x-1", parent="e-core.1", labels=["lane:live"]), AREAS, cache), "core")
+        self.assertEqual(area_of(tbead("x-2", labels=["lane:live", "lane:sim"]), AREAS, cache), "live")
+        self.assertEqual(area_of(tbead("x-3", labels=["build"]), AREAS, cache), "build")
+        self.assertEqual(area_of(tbead("x-4", parent="e-9", labels=["auto"]), AREAS, cache), "")
+        self.assertEqual(area_of(tbead("x-5", labels=["lane:live"]), cfg_with(), cache), "")  # no area config: none
 
 
 class AreasBase(Slots):
@@ -72,7 +82,7 @@ class AreasBase(Slots):
         bd.slots[sb].update(status="in_progress", assignee="tl-other", metadata={"held_by": "tl-other", "held_bead": b})
 
     def order(self):
-        ranked, skipped = loop.queue(str(self.repo))
+        ranked, skipped = looptest.queue(str(self.repo))
         return [b.id for b, _ in ranked], dict(skipped)
 
 
@@ -117,14 +127,14 @@ class Areas(AreasBase):
     def test_the_claim_checks_the_area_again_under_the_area_lock(self):
         """Two loops read the queue at once: both see the area free; the claim re-checks under one lock."""
         bd = self.lanes({"x-1": [rec("landed")], "x-2": [rec("landed")]}, {"x-1": "live"})
-        real, calls = loop.busy_areas, []
+        real, calls = QueueRule.busy_areas, []
 
         def busy(*a, **kw):
             calls.append(1)
             if len(calls) == 2:  # the first claim: another loop marked x-9 of live just now
                 return {"live": ("x-9", "s2")}
             return real(*a, **kw)
-        with mock.patch.object(loop, "busy_areas", side_effect=busy):
+        with mock.patch.object(QueueRule, "busy_areas", autospec=True, side_effect=busy):
             self.assertEqual(self.run_loop("--max-beads", "1"), 0)
         self.assertEqual(self.started, [("x-2", "s1")])
         self.assertEqual(bd.beads["x-1"]["status"], "open")
@@ -156,9 +166,9 @@ class Areas(AreasBase):
             self.clock.t += secs
             bd.beads["x-1"].update(status="closed", assignee="")  # x-1 ends
             bd.slots["sl-1"].update(status="open", assignee="", metadata={})
-        with mock.patch.object(loop, "nap", nap):
+        with mock.patch.object(Core, "nap", staticmethod(nap)):
             self.assertEqual(self.run_loop(), 0)
-        self.assertIn(loop.AREA_POLL, self.clock.naps)
+        self.assertIn(round(LoopConfig().area_poll), self.clock.naps)
         self.assertEqual([b for b, _ in self.started], ["x-2"])
         self.assertIn("area", self.out)
 
@@ -169,11 +179,11 @@ class Areas(AreasBase):
         bd.beads["x-1"]["status"] = "closed"
         bd.slots["sl-1"]["metadata"] = {"held_bead": "x-1"}  # open, as reclaim left it
         self.assertEqual(self.cli("slot", "hold", "s1", "--why", "screenshots")[0], 0)
-        self.assertEqual(loop.running(str(self.repo)), {})
+        self.assertEqual(loop_env.running(str(self.repo)), {})
         self.assertEqual(self.order(), (["x-2"], {}))
         bd.slots["sl-2"]["metadata"] = {"held_bead": "x-1"}
         self.assertEqual(sl.take_slot(str(self.repo), self.cfg_slots())[0], "s2")
-        self.assertEqual(loop.running(str(self.repo)), {})
+        self.assertEqual(loop_env.running(str(self.repo)), {})
 
     def cfg_slots(self):
         return tl.profile_slots(str(self.repo))
@@ -383,7 +393,7 @@ class Line(Slots):
             self.clock.t += secs
             if len(naps) == 3:
                 sl.drop_ticket(self.repo, first)  # served (or gone)
-        with mock.patch.object(loop, "nap", nap):
+        with mock.patch.object(Core, "nap", staticmethod(nap)):
             self.assertEqual(self.run_loop(), 0)
         self.assertGreaterEqual(len(naps), 3)  # the slot was free all along: the loop waited its turn
         self.assertEqual(self.started, [("x-1", "s1")])
@@ -457,9 +467,9 @@ class ReviewFixes(AreasBase):
 
         def bd_x1_unreadable(*a, **kw):  # bd answers nothing parseable for x-1 only
             return tlbd.done("") if a[:2] == ("show", "x-1") else real_bd(*a, **kw)
-        with tlbd.bd_boundary(bd_x1_unreadable), \
-                mock.patch.object(loop.engine, "say", side_effect=err.write):
-            ids, skipped = self.order()
+        with tlbd.bd_boundary(bd_x1_unreadable):
+            ranked, skip = looptest.queue(str(self.repo), say=err.write)
+        ids, skipped = [b.id for b, _ in ranked], dict(skip)
         self.assertEqual(ids, ["x-4"])  # a bead of no area is unrestricted
         self.assertIn("area live busy: x-1 in s1", skipped["x-2"])
         self.assertIn("area shell busy: x-1 in s1", skipped["x-3"])

@@ -112,7 +112,8 @@ class Race(unittest.TestCase):
         (r / ".task-loop.json").write_text(json.dumps({"slots": {"count": len(SLOTS)},
                                                        "engine": {"delegate": str(h / "delegate" / "route.py"),
                                                                   "area_label_prefix": "lane:",
-                                                                  "areas": {"b": ["ep-b"]}}}, indent=1))
+                                                                  "areas": {"b": ["ep-b"]}},
+                                                       "loop": {"poll": 0.2, "pause_retry": 2, "area_poll": 0.3}}, indent=1))
         (r / ".claude-plugin").mkdir()
         (r / ".claude-plugin" / "plugin.json").write_text(json.dumps({"name": "iorlas-task-loop", "version": "0.1.0"},
                                                                      indent=2) + "\n")
@@ -360,7 +361,7 @@ class Race(unittest.TestCase):
                 ProcessLock.acquire(lock).release()  # LockHeldError while a process still holds it
             except LockHeldError as e:
                 self.fail("lock left held: %s" % e)
-        self.assertEqual(sorted(p.name for p in (cfg / "loop").glob("*") if p.suffix in (".json", ".stop")), [])
+        self.assertEqual(sorted(p.name for p in (cfg / "loop").glob("*") if p.suffix == ".json"), [])
         print("race duration (metric only): %.1f s" % secs)
 
 

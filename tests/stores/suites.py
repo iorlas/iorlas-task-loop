@@ -40,8 +40,8 @@ class DocContract(Base):
     def test_a_write_replaces_whole_and_delete_removes(self) -> None:
         doc = self.s.loop_rest("k")
         doc.write(S.OTHERS["Rest"])
-        doc.write(dataclasses.replace(S.OTHERS["Rest"], why="lanes"))
-        self.assertEqual(doc.read().why, "lanes")
+        doc.write(dataclasses.replace(S.OTHERS["Rest"], beads={"b-2": 7.0}))  # pyrefly: ignore[bad-argument-type]
+        self.assertEqual(doc.read().beads, {"b-2": 7.0})
         doc.delete()
         self.assertIsNone(doc.read())
         doc.delete()  # deleting nothing is fine

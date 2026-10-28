@@ -715,111 +715,6 @@
       "severity": "error"
     },
     {
-      "column": 25,
-      "path": "skills/task-loop/loop.py",
-      "name": "bad-assignment",
-      "concise_description": "`tuple[float | Unknown, dict[str, Any] | dict[Unknown, Unknown]]` is not assignable to attribute `seen` with type `tuple[None, dict[Unknown, Unknown]]`",
-      "severity": "error"
-    },
-    {
-      "column": 5,
-      "path": "skills/task-loop/loop.py",
-      "name": "unsupported-operation",
-      "concise_description": "Cannot set item in `list[None]`",
-      "severity": "error"
-    },
-    {
-      "column": 17,
-      "path": "skills/task-loop/loop.py",
-      "name": "no-matching-overload",
-      "concise_description": "No matching overload found for function `typing.MutableMapping.setdefault` called with arguments: (Literal['minutes'], float)",
-      "severity": "error"
-    },
-    {
-      "column": 17,
-      "path": "skills/task-loop/loop.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `items`",
-      "severity": "error"
-    },
-    {
-      "column": 25,
-      "path": "skills/task-loop/loop.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `None` is not assignable to parameter `probe` with type `NetProbe` in function `taskloop.domain.lanes.netgate.NetState.poll`",
-      "severity": "error"
-    },
-    {
-      "column": 30,
-      "path": "skills/task-loop/loop.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `str | Unknown | None` is not assignable to parameter `s` with type `PathLike[bytes] | PathLike[str] | bytes | int | str` in function `genericpath.isdir`",
-      "severity": "error"
-    },
-    {
-      "column": 42,
-      "path": "skills/task-loop/loop.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `str | Unknown | None` is not assignable to parameter `s` with type `PathLike[bytes] | PathLike[str] | bytes | int | str` in function `genericpath.isdir`",
-      "severity": "error"
-    },
-    {
-      "column": 34,
-      "path": "skills/task-loop/loop.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `str | Unknown | None` is not assignable to parameter `s` with type `PathLike[bytes] | PathLike[str] | bytes | int | str` in function `genericpath.isdir`",
-      "severity": "error"
-    },
-    {
-      "column": 62,
-      "path": "skills/task-loop/loop.py",
-      "name": "no-matching-overload",
-      "concise_description": "No matching overload found for function `re.Pattern.search` called with arguments: (Literal[True] | str | Unknown)",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "skills/task-loop/loop.py",
-      "name": "not-iterable",
-      "concise_description": "`not in` is not supported between `Literal['already used by worktree']` and `Literal[True]`",
-      "severity": "error"
-    },
-    {
-      "column": 89,
-      "path": "skills/task-loop/loop.py",
-      "name": "unsupported-operation",
-      "concise_description": "`Literal[True]` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 70,
-      "path": "skills/task-loop/loop.py",
-      "name": "unsupported-operation",
-      "concise_description": "`Literal[True]` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 27,
-      "path": "skills/task-loop/loop.py",
-      "name": "unsupported-operation",
-      "concise_description": "`Literal[True]` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 16,
-      "path": "skills/task-loop/loop.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `bool` has no attribute `startswith`",
-      "severity": "error"
-    },
-    {
-      "column": 67,
-      "path": "skills/task-loop/loop.py",
-      "name": "unsupported-operation",
-      "concise_description": "`Literal[True]` is not subscriptable",
-      "severity": "error"
-    },
-    {
       "column": 27,
       "path": "skills/task-loop/outcome.py",
       "name": "bad-assignment",
@@ -1632,38 +1527,10 @@
       "severity": "error"
     },
     {
-      "column": 1,
-      "path": "tests/fixtures/race/loop_fast.py",
-      "name": "bad-assignment",
-      "concise_description": "`float` is not assignable to attribute `POLL` with type `Literal[2]`",
-      "severity": "error"
-    },
-    {
       "column": 12,
       "path": "tests/fixtures/race/loop_fast.py",
       "name": "bad-assignment",
-      "concise_description": "`Literal[2]` is not assignable to attribute `PAUSE_RETRY` with type `Literal[900]`",
-      "severity": "error"
-    },
-    {
-      "column": 30,
-      "path": "tests/fixtures/race/loop_fast.py",
-      "name": "missing-attribute",
-      "concise_description": "No attribute `MARGIN` in module `loop`",
-      "severity": "error"
-    },
-    {
-      "column": 1,
-      "path": "tests/fixtures/race/loop_fast.py",
-      "name": "bad-assignment",
-      "concise_description": "`float` is not assignable to attribute `AREA_POLL` with type `Literal[60]`",
-      "severity": "error"
-    },
-    {
-      "column": 17,
-      "path": "tests/fixtures/race/loop_fast.py",
-      "name": "bad-assignment",
-      "concise_description": "`tuple[float, float]` is not assignable to attribute `TICKET_POLL` with type `tuple[Literal[1], Literal[5]]`",
+      "concise_description": "`(self: Core, secs: float, until: int = 0) -> None` is not assignable to attribute `nap` with type `(self: Core, secs: float, until: float = 0) -> None`",
       "severity": "error"
     },
     {
@@ -1691,161 +1558,196 @@
       "column": 57,
       "path": "tests/stores/suites.py",
       "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `why` in function `taskloop.contracts.loop.BadVersions.__replace__`",
+      "concise_description": "Unexpected keyword argument `beads` in function `taskloop.contracts.ask.Ask.__replace__`",
       "severity": "error"
     },
     {
       "column": 57,
       "path": "tests/stores/suites.py",
       "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `why` in function `taskloop.contracts.bead.BdError.__replace__`",
+      "concise_description": "Unexpected keyword argument `beads` in function `taskloop.contracts.loop.BadVersions.__replace__`",
       "severity": "error"
     },
     {
       "column": 57,
       "path": "tests/stores/suites.py",
       "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `why` in function `taskloop.contracts.bead.Bead.__replace__`",
+      "concise_description": "Unexpected keyword argument `beads` in function `taskloop.contracts.bead.BdError.__replace__`",
       "severity": "error"
     },
     {
       "column": 57,
       "path": "tests/stores/suites.py",
       "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `why` in function `taskloop.contracts.slots.Checkout.__replace__`",
+      "concise_description": "Unexpected keyword argument `beads` in function `taskloop.contracts.bead.Bead.__replace__`",
       "severity": "error"
     },
     {
       "column": 57,
       "path": "tests/stores/suites.py",
       "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `why` in function `taskloop.contracts.checkpoint.Checkpoint.__replace__`",
+      "concise_description": "Unexpected keyword argument `beads` in function `taskloop.contracts.slots.Checkout.__replace__`",
       "severity": "error"
     },
     {
       "column": 57,
       "path": "tests/stores/suites.py",
       "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `why` in function `taskloop.contracts.bead.Comment.__replace__`",
+      "concise_description": "Unexpected keyword argument `beads` in function `taskloop.contracts.checkpoint.Checkpoint.__replace__`",
       "severity": "error"
     },
     {
       "column": 57,
       "path": "tests/stores/suites.py",
       "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `why` in function `taskloop.contracts.snapshots.DashState.__replace__`",
+      "concise_description": "Unexpected keyword argument `beads` in function `taskloop.contracts.bead.Comment.__replace__`",
       "severity": "error"
     },
     {
       "column": 57,
       "path": "tests/stores/suites.py",
       "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `why` in function `taskloop.contracts.delegate.DelegateResult.__replace__`",
+      "concise_description": "Unexpected keyword argument `beads` in function `taskloop.contracts.snapshots.DashState.__replace__`",
       "severity": "error"
     },
     {
       "column": 57,
       "path": "tests/stores/suites.py",
       "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `why` in function `taskloop.contracts.locks.EngineLock.__replace__`",
+      "concise_description": "Unexpected keyword argument `beads` in function `taskloop.contracts.delegate.DelegateResult.__replace__`",
       "severity": "error"
     },
     {
       "column": 57,
       "path": "tests/stores/suites.py",
       "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `why` in function `taskloop.contracts.locks.LockRecord.__replace__`",
+      "concise_description": "Unexpected keyword argument `beads` in function `taskloop.contracts.locks.EngineLock.__replace__`",
       "severity": "error"
     },
     {
       "column": 57,
       "path": "tests/stores/suites.py",
       "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `why` in function `taskloop.contracts.loop.LoopCommand.__replace__`",
+      "concise_description": "Unexpected keyword argument `beads` in function `taskloop.contracts.slots.Hold.__replace__`",
       "severity": "error"
     },
     {
       "column": 57,
       "path": "tests/stores/suites.py",
       "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `why` in function `taskloop.contracts.run.LoopLogLine.__replace__`",
+      "concise_description": "Unexpected keyword argument `beads` in function `taskloop.contracts.locks.LockRecord.__replace__`",
       "severity": "error"
     },
     {
       "column": 57,
       "path": "tests/stores/suites.py",
       "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `why` in function `taskloop.contracts.loop.LoopState.__replace__`",
+      "concise_description": "Unexpected keyword argument `beads` in function `taskloop.contracts.loop.LoopCommand.__replace__`",
       "severity": "error"
     },
     {
       "column": 57,
       "path": "tests/stores/suites.py",
       "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `why` in function `taskloop.contracts.snapshots.Pin.__replace__`",
+      "concise_description": "Unexpected keyword argument `beads` in function `taskloop.contracts.run.LoopLogLine.__replace__`",
       "severity": "error"
     },
     {
       "column": 57,
       "path": "tests/stores/suites.py",
       "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `why` in function `taskloop.contracts.run.Reexec.__replace__`",
+      "concise_description": "Unexpected keyword argument `beads` in function `taskloop.contracts.loop.LoopState.__replace__`",
       "severity": "error"
     },
     {
       "column": 57,
       "path": "tests/stores/suites.py",
       "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `why` in function `taskloop.contracts.config.RepoProfile.__replace__`",
+      "concise_description": "Unexpected keyword argument `beads` in function `taskloop.contracts.snapshots.Pin.__replace__`",
       "severity": "error"
     },
     {
       "column": 57,
       "path": "tests/stores/suites.py",
       "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `why` in function `taskloop.contracts.snapshots.ReposIndex.__replace__`",
+      "concise_description": "Unexpected keyword argument `beads` in function `taskloop.contracts.run.Reexec.__replace__`",
       "severity": "error"
     },
     {
       "column": 57,
       "path": "tests/stores/suites.py",
       "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `why` in function `taskloop.contracts.delegate.RunRequest.__replace__`",
+      "concise_description": "Unexpected keyword argument `beads` in function `taskloop.contracts.snapshots.ReleaseResult.__replace__`",
       "severity": "error"
     },
     {
       "column": 57,
       "path": "tests/stores/suites.py",
       "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `why` in function `taskloop.contracts.snapshots.SessionIndex.__replace__`",
+      "concise_description": "Unexpected keyword argument `beads` in function `taskloop.contracts.config.RepoProfile.__replace__`",
       "severity": "error"
     },
     {
       "column": 57,
       "path": "tests/stores/suites.py",
       "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `why` in function `taskloop.contracts.snapshots.SharedNotes.__replace__`",
+      "concise_description": "Unexpected keyword argument `beads` in function `taskloop.contracts.snapshots.ReposIndex.__replace__`",
       "severity": "error"
     },
     {
       "column": 57,
       "path": "tests/stores/suites.py",
       "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `why` in function `taskloop.contracts.snapshots.SlotSetupMarker.__replace__`",
+      "concise_description": "Unexpected keyword argument `beads` in function `taskloop.contracts.run.RunOutcome.__replace__`",
       "severity": "error"
     },
     {
       "column": 57,
       "path": "tests/stores/suites.py",
       "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `why` in function `taskloop.contracts.snapshots.TasksSnapshot.__replace__`",
+      "concise_description": "Unexpected keyword argument `beads` in function `taskloop.contracts.delegate.RunRequest.__replace__`",
       "severity": "error"
     },
     {
       "column": 57,
       "path": "tests/stores/suites.py",
       "name": "unexpected-keyword",
-      "concise_description": "Unexpected keyword argument `why` in function `taskloop.contracts.delegate.WorkerStarted.__replace__`",
+      "concise_description": "Unexpected keyword argument `beads` in function `taskloop.contracts.trace.RunTrace.__replace__`",
+      "severity": "error"
+    },
+    {
+      "column": 57,
+      "path": "tests/stores/suites.py",
+      "name": "unexpected-keyword",
+      "concise_description": "Unexpected keyword argument `beads` in function `taskloop.contracts.snapshots.SessionIndex.__replace__`",
+      "severity": "error"
+    },
+    {
+      "column": 57,
+      "path": "tests/stores/suites.py",
+      "name": "unexpected-keyword",
+      "concise_description": "Unexpected keyword argument `beads` in function `taskloop.contracts.snapshots.SharedNotes.__replace__`",
+      "severity": "error"
+    },
+    {
+      "column": 57,
+      "path": "tests/stores/suites.py",
+      "name": "unexpected-keyword",
+      "concise_description": "Unexpected keyword argument `beads` in function `taskloop.contracts.snapshots.SlotSetupMarker.__replace__`",
+      "severity": "error"
+    },
+    {
+      "column": 57,
+      "path": "tests/stores/suites.py",
+      "name": "unexpected-keyword",
+      "concise_description": "Unexpected keyword argument `beads` in function `taskloop.contracts.locks.Ticket.__replace__`",
+      "severity": "error"
+    },
+    {
+      "column": 57,
+      "path": "tests/stores/suites.py",
+      "name": "unexpected-keyword",
+      "concise_description": "Unexpected keyword argument `beads` in function `taskloop.contracts.delegate.WorkerStarted.__replace__`",
       "severity": "error"
     },
     {
@@ -2217,545 +2119,6 @@
       "path": "tests/stores/test_contract.py",
       "name": "bad-argument-type",
       "concise_description": "Argument `Ask | BadVersions | BdError | Bead | Checkout | Checkpoint | Comment | DashState | DelegateResult | EngineLock | Hold | LockRecord | LoopCommand | LoopLogLine | LoopState | Pin | Reexec | ReleaseResult | RepoProfile | ReposIndex | Rest | RunOutcome | RunRequest | RunTrace | SessionIndex | SharedNotes | SlotSetupMarker | TasksSnapshot | Ticket | WorkerStarted` is not assignable to parameter `rec` with type `Rest` in function `taskloop.stores.api.Doc.write`",
-      "severity": "error"
-    },
-    {
-      "column": 27,
-      "path": "tests/stores/test_contract.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Ask | BadVersions | BdError | Bead | Checkout | Checkpoint | Comment | DashState | DelegateResult | EngineLock | Hold | LockRecord | LoopCommand | LoopLogLine | LoopState | Pin | Reexec | ReleaseResult | RepoProfile | ReposIndex | Rest | RunOutcome | RunRequest | RunTrace | SessionIndex | SharedNotes | SlotSetupMarker | TasksSnapshot | Ticket | WorkerStarted` is not assignable to parameter `rec` with type `Rest` in function `taskloop.stores.api.Doc.write`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `id` in function `taskloop.contracts.ask.Ask.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `n` in function `taskloop.contracts.ask.Ask.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `bead` in function `taskloop.contracts.ask.Ask.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `kind` in function `taskloop.contracts.ask.Ask.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `decision` in function `taskloop.contracts.ask.Ask.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `run` in function `taskloop.contracts.ask.Ask.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `status` in function `taskloop.contracts.ask.Ask.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `kind` in function `taskloop.contracts.bead.BdError.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `id` in function `taskloop.contracts.bead.Bead.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `title` in function `taskloop.contracts.bead.Bead.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `status` in function `taskloop.contracts.bead.Bead.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `path` in function `taskloop.contracts.slots.Checkout.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `branch` in function `taskloop.contracts.slots.Checkout.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `main` in function `taskloop.contracts.slots.Checkout.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `bead` in function `taskloop.contracts.checkpoint.Checkpoint.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `run` in function `taskloop.contracts.checkpoint.Checkpoint.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `author` in function `taskloop.contracts.bead.Comment.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `text` in function `taskloop.contracts.bead.Comment.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `pid` in function `taskloop.contracts.snapshots.DashState.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `port` in function `taskloop.contracts.snapshots.DashState.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `bind` in function `taskloop.contracts.snapshots.DashState.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `token` in function `taskloop.contracts.snapshots.DashState.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `version` in function `taskloop.contracts.snapshots.DashState.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `started` in function `taskloop.contracts.snapshots.DashState.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `pid` in function `taskloop.contracts.locks.EngineLock.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `bead` in function `taskloop.contracts.locks.EngineLock.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `started` in function `taskloop.contracts.locks.EngineLock.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `by` in function `taskloop.contracts.slots.Hold.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `since` in function `taskloop.contracts.slots.Hold.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `what` in function `taskloop.contracts.locks.LockRecord.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `holder` in function `taskloop.contracts.locks.LockRecord.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `pid` in function `taskloop.contracts.locks.LockRecord.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `action` in function `taskloop.contracts.loop.LoopCommand.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `by` in function `taskloop.contracts.loop.LoopCommand.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `outcome` in function `taskloop.contracts.run.LoopLogLine.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `pid` in function `taskloop.contracts.loop.LoopState.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `started` in function `taskloop.contracts.loop.LoopState.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `repo` in function `taskloop.contracts.loop.LoopState.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `version` in function `taskloop.contracts.loop.LoopState.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `code_dir` in function `taskloop.contracts.loop.LoopState.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `actor` in function `taskloop.contracts.loop.LoopState.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `run` in function `taskloop.contracts.run.Reexec.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `bead` in function `taskloop.contracts.run.Reexec.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `from_version` in function `taskloop.contracts.run.Reexec.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `to_version` in function `taskloop.contracts.run.Reexec.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `step` in function `taskloop.contracts.run.Reexec.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `version` in function `taskloop.contracts.snapshots.ReleaseResult.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `ok` in function `taskloop.contracts.snapshots.ReleaseResult.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `outcome` in function `taskloop.contracts.run.RunOutcome.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `bead` in function `taskloop.contracts.run.RunOutcome.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `run` in function `taskloop.contracts.run.RunOutcome.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `role` in function `taskloop.contracts.delegate.RunRequest.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `brief_path` in function `taskloop.contracts.delegate.RunRequest.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `cwd` in function `taskloop.contracts.delegate.RunRequest.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `schema_path` in function `taskloop.contracts.delegate.RunRequest.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `run` in function `taskloop.contracts.trace.RunTrace.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `bead` in function `taskloop.contracts.trace.RunTrace.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `repo_url` in function `taskloop.contracts.trace.RunTrace.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `worktree` in function `taskloop.contracts.trace.RunTrace.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `branch` in function `taskloop.contracts.trace.RunTrace.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `coordinator_session` in function `taskloop.contracts.trace.RunTrace.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `started` in function `taskloop.contracts.trace.RunTrace.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `ended` in function `taskloop.contracts.trace.RunTrace.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `outcome` in function `taskloop.contracts.trace.RunTrace.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `sha` in function `taskloop.contracts.trace.RunTrace.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `session` in function `taskloop.contracts.snapshots.SessionIndex.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `transcript` in function `taskloop.contracts.snapshots.SessionIndex.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `cmd_hash` in function `taskloop.contracts.snapshots.SlotSetupMarker.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `repo` in function `taskloop.contracts.snapshots.TasksSnapshot.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `pid` in function `taskloop.contracts.locks.Ticket.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `since` in function `taskloop.contracts.locks.Ticket.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `prio` in function `taskloop.contracts.locks.Ticket.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `seq` in function `taskloop.contracts.locks.Ticket.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `pid` in function `taskloop.contracts.delegate.WorkerStarted.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `pgid` in function `taskloop.contracts.delegate.WorkerStarted.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/stores/test_contract.py",
-      "name": "missing-argument",
-      "concise_description": "Missing argument `run_id` in function `taskloop.contracts.delegate.WorkerStarted.__init__`",
       "severity": "error"
     },
     {
@@ -6483,6 +5846,13 @@
       "severity": "error"
     },
     {
+      "column": 78,
+      "path": "tests/test_reload.py",
+      "name": "missing-attribute",
+      "concise_description": "Object of class `Reload` has no attribute `tmp`",
+      "severity": "error"
+    },
+    {
       "column": 33,
       "path": "tests/test_reload.py",
       "name": "missing-attribute",
@@ -6595,7 +5965,7 @@
       "severity": "error"
     },
     {
-      "column": 71,
+      "column": 45,
       "path": "tests/test_reload.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `Reload` has no attribute `wt`",
@@ -8835,7 +8205,7 @@
       "severity": "error"
     },
     {
-      "column": 75,
+      "column": 79,
       "path": "tests/test_stages_land.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `ClaimPerBead` has no attribute `store`",

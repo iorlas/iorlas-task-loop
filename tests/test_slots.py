@@ -2,6 +2,7 @@
 worktree keeps it busy whatever its bead says, a hold reserves a slot for a person, and a stopped engine's worker dies
 with it."""
 
+import dataclasses
 import io
 import json
 import os
@@ -20,19 +21,20 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # python3 -m unittest tests.test_slots, from the repo root
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from test_loop import LoopBase, rec  # noqa: E402  (puts skills/task-loop on sys.path)
 from support import slots as sl  # noqa: E402
 from support import tlbd  # noqa: E402
-from test_loop import LoopBase, rec  # noqa: E402
 
 import engine  # noqa: E402  (test_loop put skills/task-loop on sys.path)
-import loop  # noqa: E402
+import loop_env  # noqa: E402
+from taskloop.app.loop.take import Taker  # noqa: E402
 import tl  # noqa: E402
 from support.fakes import as_bead  # noqa: E402
 from taskloop.app.slots import marks  # noqa: E402
 from taskloop.contracts.config import SlotsConfig  # noqa: E402
 
 POSIX = os.name != "nt"
-REAL_PREPARE = loop.prepare  # LoopBase stubs it
+REAL_PREPARE = Taker.prepare  # LoopBase stubs it
 
 
 NO_FCNTL = unittest.skipIf(os.name == "nt", "the lock is fcntl; tl has none on Windows (documented no-op)")
@@ -220,15 +222,17 @@ class LiveEngineBackstop(Slots):
         self.assertEqual(self.started, [("x-1", "s2")])
 
     def test_slot_reset_never_touches_a_slot_with_a_live_engine(self):
-        self.beads({})
+        self.beads({"x-1": []})
         self.live_lock("s1")
         with mock.patch.object(tl, "git", side_effect=AssertionError("git ran in a live slot")):
             rc, out = self.cli("slot", "reset", "s1", "--bead", "x-1")
         self.assertEqual(rc, 4)
         self.assertIn("BUSY", out)
+        senv = loop_env.build(str(self.repo)).slot_env()  # the profile read is git too: read it before the patch
+        env = dataclasses.replace(loop_env.build(str(self.repo)), slot_env=lambda: senv)
         with mock.patch.object(tl, "git", side_effect=AssertionError("git ran in a live slot")), \
                 redirect_stdout(io.StringIO()):
-            self.assertNotEqual(REAL_PREPARE(str(self.repo), "s1", "x-1")[0], 0)
+            self.assertIsNotNone(REAL_PREPARE(Taker(env, mock.Mock(), mock.Mock(), mock.Mock(), mock.Mock(), {}), "s1", "x-1"))
 
     def test_slot_list_shows_the_live_engine(self):
         self.beads({})
@@ -374,7 +378,7 @@ class SameActor(Slots):
         bd = self.beads({"x-1": [rec("landed")], "x-2": []})
         seen = {}
 
-        def reset(repo, slot, bead_id):
+        def reset(taker, slot, bead_id):
             seen["lock"] = tl.read_engine_lock(self.slot(slot))
             hand = os.getpid() + 1  # another process of this very session (same actor)
             with mock.patch.dict(os.environ, {"TASK_LOOP_SLOT_BEAD": ""}), mock.patch.object(os, "getpid", return_value=hand):
@@ -382,8 +386,7 @@ class SameActor(Slots):
                 rc, r, _ = self.run_task("x-2", worktree=self.slot(slot))
                 bd.slots["sl-1"].update(status="in_progress", assignee=tl.actor())
             seen["hand"] = r
-            return 0, ""
-        with mock.patch.object(loop, "prepare", reset):
+        with mock.patch.object(Taker, "prepare", reset):
             self.run_loop("--max-beads", "1")
         self.assertEqual((seen["lock"]["by"], seen["lock"]["pid"], seen["lock"]["slot_bead"]),
                          ("loop", os.getpid(), "sl-1"))

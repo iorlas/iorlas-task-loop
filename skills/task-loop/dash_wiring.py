@@ -8,6 +8,7 @@ import types
 from collections.abc import Callable
 from typing import Any
 
+from taskloop.adapters import delegate as sdelegate
 from taskloop.adapters.bd import BdStore
 from taskloop.domain.asks import text as asktext
 from taskloop_dash.env import Ports
@@ -39,4 +40,6 @@ def make_ports(tl: Any, engine: Any, reflect_digest: Any) -> Ports:
                  waiting_line=quiet(lambda repo: tl.waiting_line(repo), []),
                  load_cfg=quiet(lambda repo: dataclasses.asdict(engine.load_cfg(repo)), {"pick_label": "auto", "skip_labels": []}),
                  reflections=quiet(lambda hours: reflect_digest.view(hours), {}),
-                 installed_versions=quiet(lambda: sorted(tl.cache_dirs("task-loop")), []))
+                 installed_versions=quiet(lambda: sorted(tl.cache_dirs("task-loop")), []),
+                 delegate_route=quiet(lambda: sdelegate.find_route("", tl.pinned_dir("delegate"), tl.claude_dir() / "plugins" / "cache",
+                                                                   sdelegate.installed_dir(tl.claude_dir())) or "", ""))

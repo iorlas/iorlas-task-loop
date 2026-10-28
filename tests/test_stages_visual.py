@@ -527,9 +527,9 @@ class Claims(StagesTest):
     def test_a_parked_bead_whose_actor_is_live_elsewhere_can_be_taken_over(self):
         parked = {"id": "t-1", "status": "blocked", "assignee": "tl-2be89f88", "lease_expires_at": "2999-01-01T00:00:00Z", "dependencies": []}
         comments = [{"text": "Blocked: stuck: re-planned 3 times", "created_at": "1", "author": "engine"}]
-        import loop
+        import loop_env
         with self.store.stub(show=parked), mock.patch.object(tl, "live_actors", return_value={"tl-2be89f88"}), \
-                self.store.stub(comments=comments), mock.patch.object(loop, "running", return_value={}):
+                self.store.stub(comments=comments), mock.patch.object(loop_env, "running", return_value={}):
             ok, why = engine.reclaim("t-1", str(self.wt), store=self.store)
         self.assertTrue(ok, why)
         self.assertEqual(why, "reopened")
@@ -537,9 +537,9 @@ class Claims(StagesTest):
 
     def test_a_parked_bead_with_an_engine_still_on_it_is_a_live_claim(self):
         parked = {"id": "t-1", "status": "blocked", "assignee": "tl-2be89f88", "lease_expires_at": "", "dependencies": []}
-        import loop
+        import loop_env
         with self.store.stub(show=parked), mock.patch.object(tl, "live_actors", return_value=set()), \
-                mock.patch.object(loop, "running", return_value={"t-1": "s2"}):
+                mock.patch.object(loop_env, "running", return_value={"t-1": "s2"}):
             ok, why = engine.reclaim("t-1", str(self.wt), store=self.store)
         self.assertFalse(ok)
         self.assertIn("a live claim", why)

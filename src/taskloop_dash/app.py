@@ -13,6 +13,7 @@ from taskloop_dash.api.tasks import Tasks
 from taskloop_dash.env import Env
 from taskloop_dash.readers.beads import Beads
 from taskloop_dash.readers.events import Events
+from taskloop_dash.readers.loops import Loops
 from taskloop_dash.readers.opencode import OpenCode
 from taskloop_dash.readers.records import Records
 from taskloop_dash.readers.runlogs import RunLogs
@@ -29,7 +30,8 @@ class Dash:
         self.lanes = Lanes(env)
         self.asks = Asks(env, self.beads, self.lanes)
         self.tasks = Tasks(env, self.records, self.runlogs, self.asks, self.beads, self.lanes)
-        self.graph = Graph(env, self.records, self.beads, self.tasks, self.asks)
+        self.loops = Loops(env)
+        self.graph = Graph(env, self.records, self.beads, self.tasks, self.asks, self.loops)
         self.looks = Looks(env, self.records, self.beads)
         self.roadmap = RoadmapApi(env, self.records, self.beads, self.graph, self.tasks, self.asks, self.looks, self.runlogs)
         self.runs = RunsApi(env, self.records, self.runlogs, self.events, self.opencode)

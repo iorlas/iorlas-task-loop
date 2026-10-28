@@ -184,7 +184,7 @@ of every run (`api_bead` -> `timeline`); hover a segment for its name, length, h
   between steps. Unexplained time inside a run of 10 s or more is "between steps" (idle). Time between runs is "owner ask" (the
   earlier run ended asking), "paused" (it ended paused) or "between runs" (idle).
 - **Live runs end now.** `run_timeline(alive=True)` gives the open step and the run an end of now, not of the last record.
-- **Not recorded yet** (outside the engine's log, so no segment): the slot-take lock (tl.py), the area lock (loop.py), the gap
+- **Not recorded yet** (outside the engine's log, so no segment): the slot-take lock (tl.py), the area lock (loop_env.py), the gap
   from claim to the engine's start, push duration while running. They show up as the unexplained start of a run.
 
 ## Old windows of a huge transcript (tl-65w)

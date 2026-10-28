@@ -124,14 +124,11 @@ class Lanes:
     def delegate_status(self) -> dict[str, Any]:
         """The banner and the cockpit: what delegate says about its lanes (route.py status --json v1). `status --json` only
         reports, it spends no quota. Never cached: the page polls every 2.5 s."""
-        routes = glob.glob(str(self.env.home / ".claude/plugins/cache/*/iorlas-delegate/*/skills/delegate/route.py"))
-        if not routes:
+        route = self.env.ports.delegate_route()
+        if not route:
             return {"ok": False, "say": "delegate is not installed"}
-
-        def version_of(p: str) -> list[int]:
-            return [int(x) if x.isdigit() else 0 for x in p.split("/iorlas-delegate/")[1].split("/", maxsplit=1)[0].split(".")]
         try:
-            r = subprocess.run([sys.executable, max(routes, key=version_of), "status", "--json"],
+            r = subprocess.run([sys.executable, route, "status", "--json"],
                                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=20)
         except (OSError, subprocess.SubprocessError) as e:  # it never ran, or never answered
             return {"ok": False, "say": "delegate status failed: %s" % e}

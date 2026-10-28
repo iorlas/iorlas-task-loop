@@ -19,7 +19,8 @@ from taskloop.stores import call_state as callstate  # noqa: E402
 from taskloop.adapters import delegate as dl  # noqa: E402
 from support import fake_route  # noqa: E402
 from support import tlbd  # noqa: E402
-import loop  # noqa: E402
+from taskloop.app.loop.gate import GateRole  # noqa: E402
+from taskloop.contracts.config import LoopConfig  # noqa: E402
 from taskloop.domain.lanes import netgate  # noqa: E402
 import outcome as oc  # noqa: E402
 import test_engine as te  # noqa: E402
@@ -306,25 +307,23 @@ class Replay5ban16(NetBase):
 
 
 class Gate(unittest.TestCase):
-    """loop.GateRole: a paused bead waits for delegate to call its role usable; a time hint never blocks; unknown fails open."""
+    """GateRole: a paused bead waits for delegate to call its role usable; a time hint never blocks; unknown fails open."""
 
     def setUp(self):
         self.t = 1_800_000_000.0
-        self.roles, self.reads = {"worker": {"usable": False}}, 0
-        for p in (mock.patch.object(dl, "role_status", side_effect=self.read),):
-            p.start()
-            self.addCleanup(p.stop)
-        self.gate = loop.GateRole(lambda: "/r/route.py", now=lambda: self.t)
+        self.roles: dict[str, bool | None] = {"worker": False}
+        self.reads = 0
+        self.gate = GateRole(self.read, now=lambda: self.t)
 
-    def read(self, route):
+    def read(self):
         self.reads += 1
         return self.roles
 
     def test_a_bead_wakes_when_its_role_is_usable(self):
         self.gate.hold("x-1", "worker")
         self.assertFalse(self.gate.ready("x-1"))
-        self.t += loop.GATE_CACHE_S + 1
-        self.roles["worker"]["usable"] = True
+        self.t += LoopConfig().gate_cache + 1
+        self.roles["worker"] = True
         self.assertTrue(self.gate.ready("x-1"))
         self.assertNotIn("x-1", self.gate.held)  # woken once
         self.assertTrue(self.gate.ready("x-2"))  # a bead that is not held is never gated
@@ -335,14 +334,14 @@ class Gate(unittest.TestCase):
             self.gate.ready("x-1")
             self.t += 5
         self.assertEqual(self.reads, 1)
-        self.t += loop.GATE_CACHE_S
+        self.t += LoopConfig().gate_cache
         self.gate.ready("x-1")
         self.assertEqual(self.reads, 2)
 
     def test_an_unknown_role_fails_open_after_the_unknown_wait_and_not_before(self):
         self.roles.clear()
         self.gate.hold("x-1", "worker")
-        self.t += loop.GATE_UNKNOWN_S - 1
+        self.t += LoopConfig().gate_unknown - 1
         self.assertFalse(self.gate.ready("x-1"))
         self.t += 2
         self.assertTrue(self.gate.ready("x-1"))

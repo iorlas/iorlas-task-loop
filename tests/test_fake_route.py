@@ -22,6 +22,7 @@ from support import dlcall, fake_route  # noqa: E402
 from taskloop.adapters import delegate_wire  # noqa: E402
 from taskloop.domain.lanes import policy as lp  # noqa: E402
 from taskloop.domain.lanes import netgate  # noqa: E402
+from taskloop.app.loop.net import NetState  # noqa: E402
 import outcome as oc  # noqa: E402
 
 DELEGATE = fake_route.delegate_dir()
@@ -163,7 +164,7 @@ class Fake(unittest.TestCase):
     def drive(self, steps, probe, key=("write", 1, 0, 1)):
         """The executor loop of the engine (R21's), in miniature: call, decide, wait for the net, resume the same ref."""
         self.script_with(steps)
-        clk, net = clock.FakeClock(), netgate.NetState()
+        clk, net = clock.FakeClock(), NetState()
         st = cs.begin(self.dir / "ck", "run-1", "t-1", key, role="worker", now=clk.now())
         resume, ctx_kw, actions, calls = "", {}, [], 0
         while True:
@@ -180,7 +181,7 @@ class Fake(unittest.TestCase):
                 return r, st, actions, calls, clk
             net.mark_down(clk.now())
             t0 = clk.now()
-            while net.poll(probe, clk.now()) != "up":
+            while not net.poll(probe, clk.now()):
                 clk.advance(netgate.PROBE_EVERY)
             ctx_kw["waited_net_s"] = ctx_kw.get("waited_net_s", 0) + (clk.now() - t0)
             resume = a.resume

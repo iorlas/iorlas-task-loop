@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support.dashes import Env, Ports, make_dash  # noqa: E402
-from taskloop_dash.api import roadmap as roadmap_api  # noqa: E402
+from taskloop_dash.readers import loops as dash_loops  # noqa: E402
 from taskloop_dash.views import graph, roadmap  # noqa: E402
 
 NOW = time.mktime((2026, 10, 23, 12, 0, 0, 0, 0, -1))  # local noon: 'today' counts from midnight, so a run just after 00:00 must not change the answers
@@ -266,17 +266,20 @@ class Api(unittest.TestCase):
         with tempfile.TemporaryDirectory() as home, mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": home, "APPDATA": home}):
             dash = make_dash(home=home)
             repo = str(Path(home) / "repo")
-            key = roadmap_api.loop_key(repo)
+            key = dash_loops.loop_key(repo)
             loops = Path(home) / "task-loop" / "loop"
             loops.mkdir(parents=True)
             mine, parent = os.getpid(), os.getppid()  # two processes that are alive
             for pid, slot, bead_ in ((mine, "s1", "a"), (parent, "s2", "b")):
-                (loops / ("%s.%d.json" % (key, pid))).write_text(json.dumps({"pid": pid, "started": 100, "slot": slot, "bead": bead_}))
-            f = loops / (key + ".stop")
-            for mode in ("now", "after"):
-                f.write_text(json.dumps({"targets": [mine], "time": 100, "mode": mode}))
+                (loops / ("%s.%d.json" % (key, pid))).write_text(json.dumps({"v": 2, "pid": pid, "started": 100, "slot": slot, "bead": bead_}))
+            f = loops / (key + ".command.json")
+            for action, mode in (("stop_now", "now"), ("stop_after_current", "after")):
+                f.write_text(json.dumps({"v": 1, "action": action, "by": "tl", "t": 100, "targets": [mine]}))
                 lanes, _, _ = dash.roadmap.loop_files(repo)
                 self.assertEqual(sorted((ln["loop"], ln["stopping"]) for ln in lanes), sorted([(mine, mode), (parent, "")]))
+            f.write_text(json.dumps({"v": 1, "action": "resume", "by": "tl", "t": 101, "targets": [mine]}))
+            lanes, _, _ = dash.roadmap.loop_files(repo)
+            self.assertEqual({ln["stopping"] for ln in lanes}, {""})  # a resume names no stop
 
     def test_endpoint(self):
         with tempfile.TemporaryDirectory() as home:
@@ -306,11 +309,23 @@ class Api(unittest.TestCase):
                     self.assertTrue(out["signals"] == [] or all("sev" in x for x in out["signals"]))
                     self.assertEqual(dash.roadmap.api_roadmap("nope")["error"], "no such repo")
 
-    def test_the_queue_is_graph_local_queue_alone(self):
-        dash = make_dash(ports=Ports(load_cfg=lambda repo: {"pick_label": "auto", "skip_labels": ["x"]}))
-        beads = [bead("a"), bead("b", labels=["auto", "x"]), bead("c", priority=0)]
-        ranked, skipped = dash.graph.loop_order("/r", beads, dash.graph.config_of("/r"))
-        self.assertEqual(([i for i, _ in ranked], skipped), (["c", "a"], []))
+    def test_the_queue_is_the_live_loops_loopstate_queue_alone(self):
+        with tempfile.TemporaryDirectory() as home, mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": home, "APPDATA": home}):
+            dash = make_dash(home=home)
+            repo = str(Path(home) / "repo")
+            self.assertEqual(dash.graph.loop_order(repo, [], {}), ([], []))  # no live loop, no queue
+            loops = Path(home) / "task-loop" / "loop"
+            loops.mkdir(parents=True)
+            rows = [{"bead": "b", "prio": 2, "since": 1, "ahead": 1, "reason": "lowest id", "skip": None},
+                    {"bead": "a", "prio": 0, "since": 1, "ahead": 0, "reason": "priority P0 before P2", "skip": None},
+                    {"bead": "s", "prio": 2, "since": 1, "ahead": -1, "skip": {"why": "area x busy", "kind": "area"}}]
+            key = dash_loops.loop_key(repo)
+            state = {"v": 2, "pid": os.getpid(), "started": 1, "t": 5, "queue": rows}
+            (loops / ("%s.%d.json" % (key, os.getpid()))).write_text(json.dumps(state))
+            (loops / ("%s.%d.json" % (key, 1))).write_text(json.dumps(dict(state, pid=1, v=1, queue=[])))  # another version: not a loop of this build
+            ranked, skipped = dash.graph.loop_order(repo, [], {})
+            self.assertEqual((ranked, skipped), ([("a", "priority P0 before P2"), ("b", "lowest id")], [("s", "area x busy")]))
+            self.assertEqual(dash.graph.loop_queue(repo, [], {}), {"a", "b"})
 
     def test_the_engine_version_of_a_lane_is_the_last_reload_record_of_its_log(self):
         from support.logs import typed

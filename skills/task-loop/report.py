@@ -24,9 +24,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import engine
-import loop
 import tl
 from taskloop.adapters import procs as sproc
+from taskloop.contracts import paths
 from taskloop.contracts.ports import BdFailure
 
 M2 = {"beads": 10, "landed_no_ask": 7}  # at least; lost and crashes must be 0 (docs/roadmap.md)
@@ -210,7 +210,8 @@ def crashes(repo, since, until, traces, alive=None, now=None):
     alive = alive or run_alive
     now = time.time() if now is None else now
     out = {}
-    for r in read_jsonl(loop.paths(repo)["log"]):
+    log = paths.ConfigDir(tl.config_dir()).loop_log(tl.repo_key(repo))
+    for r in read_jsonl(log):
         try:
             t = time.mktime(time.strptime(r.get("ts") or "", "%Y-%m-%dT%H:%M:%S"))
         except ValueError:
@@ -220,8 +221,7 @@ def crashes(repo, since, until, traces, alive=None, now=None):
             key = "loop:%s:%s" % (r.get("bead"), r.get("ts"))
             out[key] = {"bead": r.get("bead"), "t": t, "run": None, "why": (r.get("why") or "")[:200]}
     traced = {r.get("run") for r in traces} | {Path(r["log"]).stem for r in traces if r.get("log")}
-    prefixes = {prefix(r.get("bead")) for r in traces} | {prefix(r.get("bead")) for r in
-                                                         read_jsonl(loop.paths(repo)["log"])}
+    prefixes = {prefix(r.get("bead")) for r in traces} | {prefix(r.get("bead")) for r in read_jsonl(log)}
     for f in sorted((tl.config_dir() / "engine").glob("*.jsonl")):
         m = STEM.match(f.stem)
         if not m or f.stem in traced or prefix(m.group(1)) not in prefixes:

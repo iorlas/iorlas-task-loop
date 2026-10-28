@@ -116,6 +116,7 @@ class LockWhat(StrEnum):
     SLOT_TAKE = "slot_take"
     WORKTREE = "worktree"
     RELEASE = "release"
+    LOOP = "loop_run"
 
 
 class Family(StrEnum):

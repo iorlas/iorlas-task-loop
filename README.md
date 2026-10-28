@@ -75,7 +75,8 @@ Code (`~/.claude/projects`) and Codex (`~/.codex/sessions`, the codex plugin's j
 ```
 skills/task-loop/SKILL.md        the method (read by the orchestrating session)
 skills/task-loop/tl.py           helper: actor, claim/stage/worker/land/close/block, slots, worktrees, dashboard
-skills/task-loop/loop.py         tl loop / next / stop: one sequential loop over the queue rule
+skills/task-loop/loop_env.py     tl loop / next / stop: the composition root of the loop (src/taskloop/app/loop/ is the loop itself)
+skills/task-loop/selftest.py     tl selftest: one bead through the engine with a scripted lane, on this install's code
 src/taskloop_dash/               the dashboard package (stdlib; `python3 -m taskloop_dash`, started by `tl dash ensure`)
 src/taskloop_dash/static/        dashboard pages: index.html is the task view (no build, no dependencies)
 src/taskloop_dash/views/         engine logs -> runs, blocks, arrows for the task view (timeline.py)

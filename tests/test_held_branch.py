@@ -17,7 +17,10 @@ sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import engine  # noqa: E402
-import loop  # noqa: E402
+import loop_env  # noqa: E402
+from support import looptest  # noqa: E402
+from taskloop.app.loop import verdict as vd  # noqa: E402
+from taskloop.app.loop.take import Taker  # noqa: E402
 from taskloop.contracts.config import SlotsConfig  # noqa: E402
 import test_loop as tlp  # noqa: E402
 import tl  # noqa: E402
@@ -112,32 +115,34 @@ class PreEngineFailure(tlp.LoopBase):
         self.beads({"x-1": [tlp.rec("landed")], "x-2": [tlp.rec("landed")], "x-3": [tlp.rec("landed")]})
         calls = []
 
-        def prepare(repo, slot, bead_id):
+        def prepare(taker, slot, bead_id):
             calls.append(bead_id)
-            return (1, "fatal: 'task/%s' is already used by worktree at '/w'" % bead_id) if len(calls) <= 2 else (0, "")
-        with mock.patch.object(loop, "prepare", prepare):
+            if len(calls) <= 2:  # git's own refusal (a branch held by a worktree): not the slot's breakage
+                return vd.pre_engine("tl slot reset s1 for %s did not give a clean tree: fatal: 'task/%s' is already used by worktree at '/w'"
+                                     % (bead_id, bead_id))
+        with mock.patch.object(Taker, "prepare", prepare):
             self.assertEqual(self.run_loop(), 0)  # two beads failed before their engines: no "2 failures in a row"
         self.assertNotIn("STOPPED", self.out)
         self.assertEqual(calls[:2], ["x-1", "x-2"])
         lines = self.lines()
         self.assertIn("did not give a clean tree: fatal: 'task/x-1'", lines[0]["why"])
         self.assertIn("slot reset s1 for x-1", lines[0]["why"])
-        self.assertEqual(sorted(json.loads(loop.paths(str(self.repo))["rest"].read_text())), ["x-1", "x-2"])
+        self.assertEqual(sorted(json.loads(looptest.rest_file(str(self.repo)).read_text())["beads"]), ["x-1", "x-2"])
 
     def test_a_second_loop_leaves_the_bead_the_first_one_rested(self):
         self.beads({"x-1": [tlp.rec("landed")], "x-2": [tlp.rec("landed")]})
-        loop.rest_bead(str(self.repo), "x-1", self.clock.t + 3600)  # the other loop's pre-engine failure
+        looptest.files(str(self.repo)).rest_bead("x-1", self.clock.t + 3600)  # the other loop's pre-engine failure
         self.run_loop("--max-beads", "1")
         self.assertEqual([b for b, _ in self.started], ["x-2"])
 
     def test_a_real_engine_failure_still_counts(self):
         self.beads({"x-1": [tlp.rec("failed")], "x-2": [tlp.rec("failed")], "x-3": [tlp.rec("landed")]})
         self.assertEqual(self.run_loop(), 2)
-        self.assertFalse(loop.read_rests(str(self.repo)))
+        self.assertFalse(looptest.rests(str(self.repo)))
 
     def test_a_branch_held_live_is_taken_not_failed(self):
         self.beads({"x-1": [tlp.rec("landed")], "x-2": [tlp.rec("landed")]})
-        with mock.patch.object(loop, "prepare", side_effect=[(5, "branch task/x-1 is checked out in /w"), (0, "")]):
+        with mock.patch.object(Taker, "prepare", side_effect=[vd.taken("branch task/x-1 is checked out in /w"), None]):
             self.assertEqual(self.run_loop("--max-beads", "1"), 0)
         self.assertEqual(self.lines()[0]["outcome"], "taken")
         self.assertEqual([b for b, _ in self.started], ["x-2"])

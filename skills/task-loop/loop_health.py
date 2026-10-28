@@ -98,22 +98,3 @@ def clear_storm(path):
         Path(path).unlink()
     except OSError:
         pass
-
-
-@dataclass(frozen=True)
-class LoopHealth:
-    alive: int
-    ready: int
-    last_beat: float
-    verdict: str  # ok | idle_ok | absent
-
-
-def loop_health(alive, ready, last_beat, now, knobs=oc.KNOBS):
-    """absent iff ready beads, no live loop and no beat for loop_absent_s; idle_ok: nothing ready."""
-    if alive:
-        verdict = "ok"
-    elif ready > 0 and (not last_beat or now - last_beat > knobs["loop_absent_s"]):
-        verdict = "absent"
-    else:
-        verdict = "idle_ok"
-    return LoopHealth(alive, ready, last_beat or 0.0, verdict)

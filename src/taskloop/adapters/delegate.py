@@ -110,14 +110,16 @@ def resolve(path: str = "", pinned: Path | None = None, installed: Path | None =
     return Resolved(d.parent if d.suffix == ".py" else d, route, c, source)
 
 
-def find_route(path: str, pinned: Path | None, cache: Path) -> str | None:
+def find_route(path: str, pinned: Path | None, cache: Path, installed: Path | None = None) -> str | None:
     """delegate's route.py: `path` when given, else the pinned dir's (None when that dir is gone: a pin never falls back), else the
-    newest installed under `cache` (<claude>/plugins/cache)."""
+    install installed_plugins.json records (`installed`), else the newest under `cache` (<claude>/plugins/cache)."""
     if path:
         return path if os.path.exists(path) else None
     if pinned:
         route = pinned / "skills" / "delegate" / "route.py"
         return str(route) if route.is_file() else None
+    if installed and (installed / "skills" / "delegate" / "route.py").is_file():
+        return str(installed / "skills" / "delegate" / "route.py")
     found = []
     for p in cache.glob("*/iorlas-delegate/*/skills/delegate/route.py"):
         found.append((tuple(int(x) for x in p.parents[2].name.split(".") if x.isdigit())[:3], str(p)))

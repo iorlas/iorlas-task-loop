@@ -138,11 +138,19 @@ class SlotPool:
         with self.env.take_lock():
             self.free_expired()
             for slot in self.slots():
+                if not self.configured(slot.name):
+                    continue
                 try:
                     return slot.name, slot.dir, slot.take_locked(why, bead, ticket)
                 except SlotFail:
                     continue
         return None
+
+    def configured(self, name: str) -> bool:
+        """Whether `name` is within slots.count (read again each tick): a slot beyond it is taken no more, and one a run still
+        holds ends with that run. count 0 or unset: every slot there is."""
+        n = self.env.cfg.count
+        return not n or name in {f"s{i}" for i in range(1, n + 1)}
 
     def free_expired(self) -> None:
         """An expired hold gives its slot bead back (the holder's claim with it), so the slot is free at once. Takes no lock:

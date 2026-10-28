@@ -37,7 +37,7 @@ import test_loop  # noqa: E402  (puts skills/task-loop on sys.path)
 import clock as clocks  # noqa: E402
 import engine  # noqa: E402
 from support.builders import cfg_with  # noqa: E402
-import loop  # noqa: E402
+import loop_env  # noqa: E402
 import tl  # noqa: E402
 from support import slots as sl  # noqa: E402
 from support import tlbd  # noqa: E402
@@ -221,7 +221,7 @@ class Invariants(test_loop.Base):
     def test_no_two_beads_of_one_area_run_at_once(self):
         """Two runs of one area (a hand run each, --exclusive-area) decide at once: the first in takes the area, the other is refused;
         a bead of another area is not held back.
-        Red when: loop.py area_lock, `if not has_areas(cfg):` is `if True:` (the area lock does nothing)."""
+        Red when: Taker.claimed (app/loop/take.py) takes the area lock only `if False` (the area lock does nothing)."""
         beads = [dict(test_loop.bead(b, labels=["lane:" + area]), status="in_progress") for b, area in
                  (("w-1", "a"), ("w-2", "a"), ("w-3", "b"))]
         bd = self.tracker(beads, slots=3, cfg={"area_label_prefix": "lane:"})
@@ -247,8 +247,13 @@ class Invariants(test_loop.Base):
             return lambda: ((a_in.wait(GUARD) if who == "B" else None),
                             engine.take_area(Args(id=bead, exclusive_area=True), self.repo_s, cfg, Lock(who), sb=slot))[1]
 
-        with mock.patch.object(tl, "os_lock", side_effect=lambda *a, **kw: (arrived.set() if threading.current_thread().name == "B" else None,
-                                                                            self.real_os_lock(*a, **kw))[1]):
+        real_hold = loop_env.hold_path
+
+        def hold(*a, **kw):  # B reaches the area decision when it asks for the area lock
+            if threading.current_thread().name == "B":
+                arrived.set()
+            return real_hold(*a, **kw)
+        with mock.patch.object(loop_env, "hold_path", hold):
             got = self.together({"A": run("w-1", "sl-1", "A"), "B": run("w-2", "sl-2", "B")})
         self.assertEqual(got["A"], "", got)
         self.assertIn("area a busy: w-1 in s1", got["B"])
@@ -256,7 +261,7 @@ class Invariants(test_loop.Base):
         marked = [s for s, b in bd.slots.items() if (b.get("metadata") or {}).get("held_bead")]
         self.assertEqual(marked, ["sl-1"])
         self.assertEqual(run("w-3", "sl-3", "C")(), "")  # area b is free
-        self.assertEqual(sorted(loop.running(self.repo_s).items()), [("w-1", "s1"), ("w-3", "s3")])
+        self.assertEqual(sorted(loop_env.running(self.repo_s).items()), [("w-1", "s1"), ("w-3", "s3")])
 
     # -- 4: slots served in ticket order ---------------------------------------------------------------------------------
 

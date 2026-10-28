@@ -399,8 +399,23 @@ class PinAndRollback(Base):
             self.assertEqual(tl.main(["rollback"]), 2)  # nothing older
         self.assertEqual(self.pinned()["task-loop"], "0.1.0")
 
+    def test_find_route_and_the_dash_delegate_follow_the_pin_then_the_installed_entry_not_the_newest_directory(self):
+        import dash_wiring
+        import engine
+        import reflect_digest
+        from taskloop.adapters import delegate as lroute
+        self.record("iorlas-delegate", "0.5.0")  # the plugin manager installed 0.5.0; 0.6.0 is only a directory
+        route = lambda: lroute.find_route("", tl.pinned_dir("delegate"), tl.claude_dir() / "plugins" / "cache",
+                                          lroute.installed_dir(tl.claude_dir()))
+        dash = lambda: dash_wiring.make_ports(tl, engine, reflect_digest).delegate_route()
+        self.assertIn("/iorlas-delegate/0.5.0/", route())
+        self.assertIn("/iorlas-delegate/0.5.0/", dash())
+        self.assertEqual(self.pin("0.1.0", "--delegate", "0.6.0")[0], 0)
+        self.assertIn("/iorlas-delegate/0.6.0/", route())
+        self.assertIn("/iorlas-delegate/0.6.0/", dash())
+
     def test_the_drill_pin_decides_what_loop_and_find_route_pick_then_clear_returns_to_the_newest(self):
-        import loop
+        import loop_env
         from taskloop.adapters import delegate as lroute
         route = lambda: lroute.find_route("", tl.pinned_dir("delegate"), tl.claude_dir() / "plugins" / "cache")
         self.assertIn("0.6.0", route())  # no pin: the newest
@@ -408,10 +423,11 @@ class PinAndRollback(Base):
         self.assertIn("/iorlas-delegate/0.5.0/", route())
         root = self.claude / "plugins/cache/iorlas-marketplace/iorlas-task-loop/0.2.0"
         with mock.patch.object(tl, "HERE", root / "skills" / "task-loop"):
-            self.assertEqual(loop.newest_install(), ("0.1.0", root.parent / "0.1.0"))  # older than the running one: still the pin
-            self.assertEqual(loop.newest_install(skip=["0.1.0"]), None)
+            target = lambda **kw: loop_env.installs(loop_env.cfgdir()).target(**kw)
+            self.assertEqual(target(), ("0.1.0", root.parent / "0.1.0"))  # older than the running one: still the pin
+            self.assertEqual(target(skip=["0.1.0"]), None)
             self.assertEqual(self.pin("--clear")[0], 0)
-            self.assertEqual(loop.newest_install(), ("0.10.0", root.parent / "0.10.0"))
+            self.assertEqual(target(), ("0.10.0", root.parent / "0.10.0"))
         self.assertIn("0.6.0", route())
         # the CLI end to end, in a fresh process with only the scratch dirs in its environment
         env = dict(os.environ, HOME=str(self.home))
@@ -447,11 +463,11 @@ class CutoverCheck(Base):
         self.assertEqual((rc, out.split()[0]), (0, "CLEAR:"))
 
     def test_a_live_loop_and_a_live_run_exit_1_and_are_listed_a_dead_one_is_not(self):
-        import loop
+        from support import looptest
         child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
         self.addCleanup(child.kill)
         self.addCleanup(child.wait)
-        loop.write_state(str(self.repo), pid=child.pid, started=time.time(), bead="x-9")
+        looptest.write_state(str(self.repo), pid=child.pid, started=time.time(), t=time.time(), bead="x-9")
         tl.write_engine_lock(str(self.repo), {"pid": child.pid, "start": tl.proc_start(child.pid), "bead": "x-7",
                                               "by": "engine", "started": time.time()})
         rc, out = self.check()

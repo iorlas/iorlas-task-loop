@@ -1388,15 +1388,15 @@ def cmd_rollback(a):
 
 def live_work():
     """What runs on this machine: ("loop"|"run", text) for every live loop and every busy engine lock of the registered repos."""
-    import loop
+    import loop_env
     try:
         repos = [r for r in json.loads((config_dir() / "repos.json").read_text(encoding="utf-8")) if os.path.isdir(r)]
     except (OSError, ValueError):
         repos = []
     out = []
     for r in repos:
-        for st in loop.live_loops(r):
-            out.append(("loop", "loop pid %s on %s%s" % (st.get("pid"), r, (" running " + st["bead"]) if st.get("bead") else "")))
+        for st in loop_env.live_loops(r):
+            out.append(("loop", "loop pid %s on %s%s" % (st.pid, r, (" running " + st.bead) if st.bead else "")))
         for wt in [r] + worktrees(r, slots=None if shutil.which("bd") else []):  # slot dirs need bd
             busy = engine_busy(wt)
             if busy:
@@ -1538,7 +1538,7 @@ def main(argv=None):
         import engine
         return engine.main(a)
     if a.cmd == "usage":
-        route = sdelegate.find_route("", pinned_dir("delegate"), claude_dir() / "plugins" / "cache")
+        route = sdelegate.find_route("", pinned_dir("delegate"), claude_dir() / "plugins" / "cache", sdelegate.installed_dir(claude_dir()))
         if not route:
             print("no delegate installed: nothing to feed")
             return 0
@@ -1552,12 +1552,12 @@ def main(argv=None):
             return 1
         return 0
     if a.cmd == "selftest":
-        import loop
-        return loop.cmd_selftest(a)
+        import selftest
+        return selftest.cmd_selftest(a)
     if a.cmd in ("next", "loop", "stop"):
-        import loop
+        import loop_env
         a.argv = list(argv) if argv is not None else sys.argv[1:]  # the loop re-execs itself with these
-        return {"next": loop.cmd_next, "loop": loop.cmd_loop, "stop": loop.cmd_stop}[a.cmd](a)
+        return {"next": loop_env.cmd_next, "loop": loop_env.cmd_loop, "stop": loop_env.cmd_stop}[a.cmd](a)
     if a.cmd in ("report", "lost"):
         import report
         return {"report": report.cmd_report, "lost": report.cmd_lost}[a.cmd](a)

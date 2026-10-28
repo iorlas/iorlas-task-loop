@@ -544,25 +544,46 @@
     "ahead": 0,
     "skip": {
      "why": "area busy",
-     "until": 1793050260.5
-    }
+     "until": 1793050260.5,
+     "kind": "label",
+     "area": "",
+     "holder": "",
+     "where": ""
+    },
+    "reason": "",
+    "title": ""
    }
   ],
   "lanes_seen": [
    "L"
-  ]
+  ],
+  "log": "",
+  "carry": {
+   "fails": [],
+   "ran": 0,
+   "later": {},
+   "pauses": {},
+   "gated": {},
+   "warned": [],
+   "until": 0.0,
+   "wt": "",
+   "back": "",
+   "moved_at": 0.0,
+   "fallback": false
+  }
  },
  "LoopCommand": {
   "v": 1,
   "action": "stop_now",
   "by": "denis",
-  "t": 1793050200.5
+  "t": 1793050200.5,
+  "targets": []
  },
  "Rest": {
-  "v": 1,
-  "until": 1793050800.5,
-  "why": "network",
-  "t": 1793050200.5
+  "v": 2,
+  "beads": {
+   "b-1": 1793050800.5
+  }
  },
  "BadVersions": {
   "v": 1,
@@ -570,7 +591,9 @@
    {
     "version": "0.2.0",
     "why": "selftest failed",
-    "t": 1793050200.5
+    "t": 1793050200.5,
+    "seen_by": "",
+    "key": ""
    }
   ]
  },
@@ -814,6 +837,30 @@
    "setup": "just setup",
    "setup_inputs": [],
    "keep": []
+  },
+  "loop": {
+   "poll": 2,
+   "heartbeat": 60,
+   "drained_poll": 300,
+   "pause_retry": 900,
+   "gate_cache": 30,
+   "gate_unknown": 900,
+   "net_probe": 60,
+   "beat_every": 60,
+   "logs_kept": 5,
+   "slot_fails_to_set_aside": 2,
+   "quick_fail_min": 1.5,
+   "slot_aside_min": 720,
+   "fails_to_stop": 2,
+   "pauses_to_rest": 3,
+   "rest": 3600,
+   "area_poll": 60,
+   "area_say": 600,
+   "fault_cooldown": 1800,
+   "selftest_wait": 30,
+   "help_wait": 20,
+   "absent": 600,
+   "reload_fallback": 120
   }
  },
  "RunRequest": {

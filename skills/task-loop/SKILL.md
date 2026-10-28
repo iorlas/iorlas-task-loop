@@ -331,10 +331,18 @@ container); the session that starts it only watches it.
   `tl run-task` as a child with its own log, release the slot, record the outcome, next pass. `--until`: no bead
   starts after that time. No ready bead: `DRAINED`, exit 0 (`--wait-drained`: look again every 5 minutes). Every
   ready bead waiting for its area is not drained: the loop looks again every minute.
-  Between beads (never mid-bead) the loop moves to the newest installed task-loop: when a newer version dir sits beside its
-  own and `tl.py --help` passes there, it logs `loop: moving to <ver> (was <ver>)` and re-execs itself (same pid; failure
-  count, rests, `--max-beads` count and actor carry over in `TL_LOOP_STATE`). A broken newer install is warned about once
-  and skipped. `--pin` stays on the running version.
+  Between beads (never mid-bead) the loop moves to the installed task-loop: the version `installed_plugins.json` names for
+  task-loop (no entry: the highest version dir above its own; a dir the plugin manager did not install is never a target;
+  `tl pin` / `tl rollback` decide first). The new dir must import and pass `tl selftest`; the loop then logs
+  `loop: moving to <ver> (was <ver>)` and re-execs itself (same pid; failure count, rests, `--max-beads` count and actor
+  carry over in `TL_LOOP_STATE`, which is the loop's own `LoopState` JSON: one that cannot be read is dropped with one
+  `reload` record and a clean pass starts). A broken new install is refused once, shown in red and skipped; a loop that
+  breaks within `loop.reload_fallback` seconds of a move goes back to the dir it came from, once, with a red line.
+  `--pin` stays on the running version.
+- **Constants:** the loop reads the `loop` block of `.task-loop.json` (as committed on the base branch, the working tree when
+  that fails) every pass: `poll`, `heartbeat`, `drained_poll`, `pause_retry`, `fails_to_stop`, `pauses_to_rest`, `rest`,
+  `area_poll`, ... A key left out keeps its default. `slots.count` is read the same way: a slot beyond it is taken no more
+  (a run holding it ends normally).
 - **Outcomes** (`run-task --outcome-file`, also its last stdout line as JSON): `landed` → next. `parked` (an ask was
   raised, or the bead is blocked for the owner) → next. `paused` (lane out, login, network; the bead stays open) → a
   lane back within an hour is waited for, otherwise the next bead first; either way the bead is retried at its
@@ -345,14 +353,17 @@ container); the session that starts it only watches it.
   bead, that one again in 15 minutes. A bead a gone run left assigned (a pause keeps the bead open and assigned) is
   released first, as run-task does.
 - **Watch:** `tl loop status [--last N]`: per live loop its pid, the bead running now, its slot and since when, then one line per
-  finished bead (outcome, minutes, rounds, tests added, ask, trace id). The log is `<config dir>/loop/<repo>-<hash>.jsonl`
+  finished bead (outcome, minutes, rounds, tests added, ask, trace id). Each live loop also writes its `LoopState`
+  (`<repo>-<hash>.<pid>.json`) every pass, with the queue it ranked and why each skipped bead was skipped; the dashboard's
+  queue is that file. The log is `<config dir>/loop/<repo>-<hash>.jsonl`
   (fields `ts bead slot outcome minutes rounds tests_added asked trace engine_log run_log why`); each run's own output
   is beside it, one file per run. `tl next` prints what the loop would take next and why, claiming nothing.
 - **Reflections into fixes:** `tl reflect digest [--since 24h] [--dry-run]` (the loop starts it once a day) clusters the last day's
   run reflections by cause and files or updates one bead per recurring cause in the repo that owns it, with run ids as
   evidence. The dashboard's Causes page shows the clusters. See docs/design/dashboard.md.
-- **Stop:** `tl stop` ends every loop on the repo after its current bead (a loop started after the stop does not
-  read it). Slots off: each loop start reuses its session's worktree (`.worktrees/loop-<session>`); a second loop of
+- **Stop:** `tl stop` writes `<config dir>/loop/<repo>-<hash>.command.json` (a `LoopCommand`: the action and the pids of
+  the repo's live loops); each named loop ends after its current bead (a loop started after the stop is not named, so
+  it does not read it). The dashboard shows the stop from the same file. Slots off: each loop start reuses its session's worktree (`.worktrees/loop-<session>`); a second loop of
   the session at the same time gets its own. `tl stop --now` sends SIGTERM to the running bead (the
   engine's close step still runs, then the loop puts the bead back in the queue unclaimed and releases the slot).
   A stop during the push waits for it: a push that went through closes the bead landed, and the loop never reopens a

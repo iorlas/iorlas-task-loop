@@ -58,6 +58,34 @@ class SlotsConfig:
 
 
 @record
+class LoopConfig:
+    """The `loop` block: the loop's constants. A key left out keeps the code default; read again at every tick."""
+
+    poll: float = 2  # seconds between looks at a running child (stop command, slot lease)
+    heartbeat: float = 60  # the slot bead's lease is kept alive this often while a bead runs
+    drained_poll: float = 300  # --wait-drained: how often an empty queue is looked at again
+    pause_retry: float = 900  # a bead another session holds, or a pause with no delegate to ask: try it again after this
+    gate_cache: float = 30  # delegate's role view is looked at no more often than this
+    gate_unknown: float = 900  # a role delegate cannot judge is tried again after this long (unknown fails open)
+    net_probe: float = 60  # while the network is down the loop looks every this many seconds
+    beat_every: float = 60  # the state file's beat is refreshed at most this often
+    logs_kept: int = 5
+    slot_fails_to_set_aside: int = 2  # instant failures in a row on one slot that set it aside
+    quick_fail_min: float = 1.5  # a failed run shorter than this, in minutes, is an instant failure
+    slot_aside_min: float = 720
+    fails_to_stop: int = 2  # runs in a row that gave no verdict that stop the loop
+    pauses_to_rest: int = 3  # a bead paused this often in one loop run rests for `rest`
+    rest: float = 3600
+    area_poll: float = 60
+    area_say: float = 600
+    fault_cooldown: float = 1800
+    selftest_wait: float = 30
+    help_wait: float = 20
+    absent: float = 600  # ready beads, no live loop and no beat for this long: the loop is absent
+    reload_fallback: float = 120  # a run-task that dies this soon after a re-exec is put back on the version it came from
+
+
+@record
 class EngineConfig:
     """The `engine` block; every key has the default the engine uses today."""
 
@@ -119,6 +147,7 @@ class RepoProfile:
 
     engine: EngineConfig = field(default_factory=EngineConfig)
     slots: SlotsConfig = field(default_factory=SlotsConfig)
+    loop: LoopConfig = field(default_factory=LoopConfig)
 
 
 def load(data: Any) -> RepoProfile:

@@ -150,7 +150,7 @@ OTHERS = {
                                 queue=[loop.QueueRow(bead="tl-2", prio=1, since=T, ahead=0,
                                                      skip=loop.Skip(why="area busy", until=T + 60))], lanes_seen=["L"]),
     "LoopCommand": loop.LoopCommand(action="stop_now", by="denis", t=T),
-    "Rest": loop.Rest(until=T + 600, why="network", t=T),
+    "Rest": loop.Rest(beads={"b-1": T + 600}),
     "BadVersions": loop.BadVersions(entries=[loop.BadVersion(version="0.2.0", why="selftest failed", t=T)]),
     "EngineLock": LOCK,
     "Ticket": locks.Ticket(pid=5, why="slot", since=T, prio=1, seq=3, pid_start=T, bead="x-1"),

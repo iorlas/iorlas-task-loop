@@ -18,7 +18,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support import tlbd  # noqa: E402
 from support.waits import until  # noqa: E402
-import loop  # noqa: E402
+import loop_env  # noqa: E402
+from support import looptest  # noqa: E402
+from taskloop.app.loop.core import Core  # noqa: E402
+from taskloop.app.loop.loop import parse_handover  # noqa: E402
+from taskloop.contracts import codec  # noqa: E402
+from taskloop.contracts.loop import Carry, LoopState  # noqa: E402
+from taskloop.app.slots import verbs  # noqa: E402
+from taskloop.app.loop.take import Taker  # noqa: E402
+from taskloop.contracts.config import LoopConfig  # noqa: E402
 from taskloop.domain.lanes import netgate  # noqa: E402
 import tl  # noqa: E402
 
@@ -96,10 +104,11 @@ class Base(unittest.TestCase):
         self.home = Path(self.tmp.name)
         self.repo = self.home / "repo"
         self.repo.mkdir()
-        env = {"XDG_CONFIG_HOME": str(self.home / "cfg"), "APPDATA": str(self.home / "cfg"),
+        env = {"XDG_CONFIG_HOME": str(self.home / "cfg"), "APPDATA": str(self.home / "cfg"), "CLAUDE_CONFIG_DIR": str(self.home / "claude"),
                "CLAUDE_CODE_SESSION_ID": "abcdef12-3456"}
         self.env = mock.patch.dict(os.environ, env)
         self.env.start()
+        self.addCleanup(self.env.stop)  # last: the patches a subclass starts restore their snapshot first
         os.environ.pop("TASK_LOOP_ACTOR", None)
         self.cwd = os.getcwd()
         for p in (mock.patch.object(tl, "repo_root", return_value=str(self.repo)),
@@ -110,7 +119,6 @@ class Base(unittest.TestCase):
 
     def tearDown(self):
         os.chdir(self.cwd)
-        self.env.stop()
 
         def force(fn, path, _):
             os.chmod(path, stat.S_IWRITE)
@@ -132,7 +140,7 @@ class Base(unittest.TestCase):
 
 class Queue(Base):
     def order(self):
-        ranked, _ = loop.queue(str(self.repo))
+        ranked, _ = looptest.queue(str(self.repo))
         return [b.id for b, _ in ranked]
 
     def test_defaults_take_every_ready_bead_by_priority_then_lowest_id(self):
@@ -153,7 +161,7 @@ class Queue(Base):
         self.config(skip_labels=["owner-taste", "needs-info"])
         self.fake(bead("x-1", labels=["owner-taste"]), bead("x-2"), bead("x-3", type="epic"), bead("x-4", labels=["slot"]),
                   bead("x-5", labels=["needs-info"]))
-        ranked, skipped = loop.queue(str(self.repo))
+        ranked, skipped = looptest.queue(str(self.repo))
         self.assertEqual([b.id for b, _ in ranked], ["x-2"])
         self.assertEqual(dict(skipped), {"x-1": "label owner-taste", "x-3": "an epic", "x-4": "a slot",
                                          "x-5": "label needs-info"})
@@ -164,7 +172,7 @@ class Queue(Base):
         clean = dict(bead("x-2"), description="Edit skills/task-loop/engine.py; see docs/design/stages.md")
         escaped = dict(bead("x-3", labels=["facts-inline"]), description="Per study 84 s.2 (facts below): do X")
         self.fake(cites, clean, escaped)
-        ranked, skipped = loop.queue(str(self.repo))
+        ranked, skipped = looptest.queue(str(self.repo))
         self.assertEqual([b.id for b, _ in ranked], ["x-2", "x-3"])
         self.assertEqual([i for i, _ in skipped], ["x-1"])
         self.assertTrue(skipped[0][1].startswith("needs inlined facts"), skipped)
@@ -183,14 +191,14 @@ class Queue(Base):
     def test_epic_only_drops_beads_under_no_listed_epic(self):
         self.config(epic_order=["e-1"], epic_only=True)
         self.fake(bead("x-1", parent="e-1"), bead("x-2", parent="e-9"), parents={"e-9": None})
-        ranked, skipped = loop.queue(str(self.repo))
+        ranked, skipped = looptest.queue(str(self.repo))
         self.assertEqual([b.id for b, _ in ranked], ["x-1"])
         self.assertEqual(dict(skipped), {"x-2": "under no epic in epic_order (epic_only)"})
 
     def test_each_place_says_which_rule_put_it_there(self):
         self.config(epic_order=["e-1"])
         self.fake(bead("x-1", 1), bead("x-2", 2, parent="e-1"), bead("x-3", 2), bead("x-4", 2))
-        ranked, _ = loop.queue(str(self.repo))
+        ranked, _ = looptest.queue(str(self.repo))
         self.assertEqual([r for _, r in ranked], ["priority P1 before P2", "epic e-1 (1st in epic_order)",
                                                   "lowest id", "last"])
 
@@ -258,20 +266,20 @@ class QueueRuleFromBase(Base):
     def test_the_loop_queue_fetches_before_it_reads_the_rule(self):
         self.push_rule({"engine": {"epic_order": [], "pick_label": "go"}})
         self.fake(bead("x-1"), bead("x-2", labels=["go"]))
-        ranked, _ = loop.queue(str(self.repo))
+        ranked, _ = looptest.queue(str(self.repo))
         self.assertEqual([b.id for b, _ in ranked], ["x-2"])
 
     def test_engine_load_cfg_reads_the_base_branch_with_the_base_the_working_tree_names(self):
         self.push_rule({"engine": {"brief_kb": 7}})
         self.sh("git", "fetch", "-q", "origin", cwd=self.repo)
         (self.repo / ".task-loop.json").write_text(json.dumps({"engine": {"brief_kb": 99}}))
-        self.assertEqual(loop.engine.load_cfg(str(self.repo)).brief_kb, 7)
+        self.assertEqual(loop_env.engine.load_cfg(str(self.repo)).brief_kb, 7)
 
     def test_no_remote_falls_back_to_the_working_tree(self):
         self.sh("git", "remote", "remove", "origin", cwd=self.repo)
         (self.repo / ".task-loop.json").write_text(json.dumps({"engine": {"skip_labels": ["later"]}}))
         self.fake(bead("x-1", labels=["later"]), bead("x-2"))
-        ranked, skipped = loop.queue(str(self.repo))
+        ranked, skipped = looptest.queue(str(self.repo))
         self.assertEqual([b.id for b, _ in ranked], ["x-2"])
         self.assertEqual(skipped, [("x-1", "label later")])
 
@@ -298,8 +306,8 @@ class FakeChild:
     """run-task as the loop starts it: writes its outcome file and leaves the bead as the engine would."""
     AFTER = {"landed": "closed", "parked": "blocked", "failed": "blocked", "paused": "open", "taken": "open"}
 
-    def __init__(self, test, cmd):
-        self.test, self.cmd = test, cmd
+    def __init__(self, test, cmd, extra=None):
+        self.test, self.cmd, self.extra = test, cmd, extra or {}
         self.bead = cmd[cmd.index("run-task") + 1]
         self.out = cmd[cmd.index("--outcome-file") + 1]
         self.pid, self.terminated, self.returncode = 4242, False, None
@@ -314,10 +322,11 @@ class FakeChild:
             self.test.clock.t += timeout or 0
             raise subprocess.TimeoutExpired(self.cmd, timeout)
         r = rec("failed", why="failed: stopped (SIGTERM)") if self.terminated else self.test.script[self.bead].pop(0)
+        after = r.pop("after", None) if r is not None else None
         if r is not None:
             Path(self.out).write_text(json.dumps(dict(r, bead=self.bead)))
             b = self.test.bd.beads[self.bead]
-            b["status"] = "open" if r.get("kind", "").startswith(("fault_", "pause_")) else self.AFTER.get(r["outcome"], b["status"])
+            b["status"] = after or ("open" if r.get("kind", "").startswith(("fault_", "pause_")) else self.AFTER.get(r["outcome"], b["status"]))
             if b["status"] != "in_progress":
                 b["assignee"] = b["assignee"] if b["status"] == "blocked" else ""
         self.returncode = 0 if r and r["outcome"] == "landed" else 2
@@ -335,12 +344,12 @@ class LoopBase(Base):
         self.clock = Clock()
         self.roles = lambda: {"worker": {"usable": True}}  # delegate's `status --json` roles{}: a test makes it a function of the clock
         self.script, self.hold, self.started, self.during = {}, {}, [], []
-        for p in (mock.patch.object(loop, "clock", self.clock), mock.patch.object(loop, "nap", self.clock.nap),
-                  mock.patch.object(loop, "delegate_route", return_value="/fake/route.py"),
-                  mock.patch.object(loop.dg, "role_status", side_effect=lambda route: self.roles()),
-                  mock.patch.object(loop, "spawn", side_effect=lambda cmd, log: (FakeChild(self, cmd), mock.Mock())),
-                  mock.patch.object(loop.sproc, "stop_tree", side_effect=lambda p, **kw: p.terminate() or ()),
-                  mock.patch.object(loop, "prepare", return_value=(0, ""))):
+        for p in (mock.patch.object(tl, "now", self.clock), mock.patch.object(Core, "nap", self.clock.nap),
+                  mock.patch.object(loop_env, "delegate_route", return_value="/fake/route.py"),
+                  mock.patch.object(loop_env.dg, "role_status", side_effect=lambda route: self.roles()),
+                  mock.patch.object(loop_env, "spawn", side_effect=lambda cmd, log, extra: (FakeChild(self, cmd, extra), mock.Mock())),
+                  mock.patch.object(loop_env.sproc, "stop_tree", side_effect=lambda p, **kw: p.terminate() or ()),
+                  mock.patch.object(Taker, "prepare", return_value=None)):
             p.start()
             self.addCleanup(p.stop)
         (self.repo / ".task-loop.json").write_text(json.dumps({"slots": {"count": 2}, "engine": {}}))
@@ -359,7 +368,7 @@ class LoopBase(Base):
         return rc
 
     def lines(self):
-        f = loop.paths(str(self.repo))["log"]
+        f = looptest.log(str(self.repo))
         return [json.loads(x) for x in f.read_text().splitlines()] if f.exists() else []
 
 
@@ -411,7 +420,7 @@ class Loop(LoopBase):
         until = time.strftime("%H:%M", time.localtime(self.clock.t + 3600))
         self.assertEqual(self.run_loop("--until", until), 0)
         self.assertLessEqual(len(self.lines()), 5)
-        self.assertIn(loop.PAUSE_RETRY, self.clock.naps)
+        self.assertIn(LoopConfig().pause_retry, self.clock.naps)
 
     def test_reclaim_returns_only_beads_of_tl_actors_never_a_persons_claim(self):
         bd = self.beads({"x-1": [rec("landed")], "x-2": [], "x-3": []})
@@ -435,11 +444,11 @@ class Loop(LoopBase):
         bd = self.beads({"x-1": [rec("landed")]})
         beats = []
 
-        def slow(repo, slot, bead_id):  # lifesim's agent-setup: 5-12 minutes when its inputs changed
+        def slow(taker, slot, bead_id):  # lifesim's agent-setup: 5-12 minutes when its inputs changed
             until(lambda: {("heartbeat", "x-1"), ("heartbeat", "sl-1")} <= set(bd.calls), limit=2.0, poll=0.02)
             beats.extend(c for c in bd.calls if c[0] == "heartbeat")
-            return 0, ""
-        with mock.patch.object(loop, "HEARTBEAT", 0.05), mock.patch.object(loop, "prepare", slow):
+        (self.repo / ".task-loop.json").write_text(json.dumps({"slots": {"count": 2}, "loop": {"heartbeat": 0.05}}))
+        with mock.patch.object(Taker, "prepare", slow):
             self.run_loop()
         self.assertIn(("heartbeat", "x-1"), beats)
         self.assertIn(("heartbeat", "sl-1"), beats)
@@ -449,9 +458,9 @@ class Loop(LoopBase):
         seen = {}
         real = FakeChild.__init__
 
-        def init(child, test, cmd):
-            seen["slot_bead"] = os.environ.get("TASK_LOOP_SLOT_BEAD")
-            real(child, test, cmd)
+        def init(child, test, cmd, extra=None):
+            seen["slot_bead"] = (extra or {}).get("TASK_LOOP_SLOT_BEAD")
+            real(child, test, cmd, extra)
         with mock.patch.object(FakeChild, "__init__", init):
             self.run_loop()
         self.assertEqual(seen["slot_bead"], "sl-1")
@@ -462,11 +471,11 @@ class Loop(LoopBase):
         children = []
         real = FakeChild.__init__
 
-        def init(child, test, cmd):
-            real(child, test, cmd)
+        def init(child, test, cmd, extra=None):
+            real(child, test, cmd, extra)
             children.append(child)
         with mock.patch.object(FakeChild, "__init__", init), \
-                mock.patch.object(loop, "stop_mode", side_effect=["", "", RuntimeError("disk full")] + [""] * 50):
+                mock.patch.object(Core, "beat", side_effect=[None, RuntimeError("disk full")]):
             with self.assertRaises(RuntimeError):
                 self.run_loop()
         self.assertTrue(children[0].terminated)
@@ -477,7 +486,7 @@ class Loop(LoopBase):
         bd = self.beads({"x-1": [], "x-2": [rec("landed")]})
         self.hold["x-1"] = 3
         self.during.append(lambda: tl.main(["stop", "--repo", str(self.repo), "--now"]))
-        with mock.patch.object(loop, "landed_on_base", return_value=True):
+        with mock.patch.object(loop_env, "landed_on_base", return_value=True):
             self.run_loop()
         self.assertNotIn(("update", "x-1", "--status", "open", "--assignee", ""), bd.calls)
         self.assertIn("on the base", self.lines()[0]["why"])
@@ -509,7 +518,7 @@ class Loop(LoopBase):
         self.assertEqual(self.run_loop("--max-beads", "3"), 0)
         self.assertEqual([b for b, _ in self.started], ["x-1", "x-2", "x-3"])
         self.assertEqual([self.bd.beads[b]["status"] for b in ("x-1", "x-2")], ["open", "open"])
-        rests = loop.read_rests(str(self.repo))
+        rests = looptest.rests(str(self.repo))
         self.assertEqual(sorted(rests), ["x-1", "x-2"])
         self.assertTrue(all(abs(t - (self.clock.t0 + 1800)) < 600 for t in rests.values()))  # fault_cooldown_s, not an hour
 
@@ -522,12 +531,12 @@ class Loop(LoopBase):
         self.assertEqual([b for b, _ in self.started], ["x-1", "x-2"])
         self.assertEqual(self.out.count("STOPPED: storm"), 1)
         self.assertEqual([self.bd.beads[b]["status"] for b in ("x-1", "x-2")], ["open", "open"])
-        self.assertEqual(loop.last_exit(str(self.repo))["reason"], "storm")
+        self.assertEqual(looptest.last_exit(str(self.repo))["reason"], "storm")
 
     def test_a_live_storm_record_stops_a_loop_before_any_claim_with_one_line(self):
         from loop_health import StormTrip, write_storm, storm_path
         self.beads({"x-1": [rec("landed")]})
-        path = storm_path(tl.config_dir(), loop.repo_id(str(self.repo)))
+        path = storm_path(tl.config_dir(), (tl.git('remote', 'get-url', 'origin', cwd=str(self.repo)) or str(self.repo)))
         write_storm(path, StormTrip("FAULT_INFRA y", ("x-8", "x-9"), self.clock.t), self.clock.t)
         self.assertEqual(self.run_loop(), 2)
         self.assertEqual(self.started, [])
@@ -539,31 +548,30 @@ class Loop(LoopBase):
 
     def test_two_instant_failures_on_one_slot_set_the_slot_aside_and_the_loop_goes_on(self):
         # tl-g6a: s4 fed 7 beads in under a minute each, 'worktree has uncommitted work of another branch'
-        bad = lambda: rec("failed", minutes=0.3, why="failed: worktree /w/.slots/s1 has uncommitted work of another branch")
+        bad = lambda: rec("failed", minutes=0.3, kind="fault_slot", after="blocked", why="failed: worktree /w/.slots/s1 has uncommitted work of another branch")
         self.beads({"x-1": [bad()], "x-2": [bad()], "x-3": [rec("landed")]}, slots=2)
         holds = []
-        real = tl.cmd_slot
-        with mock.patch.object(tl, "cmd_slot", side_effect=lambda a: holds.append((a.op, a.name, a.why, a.for_min)) or 0 if a.op == "hold" else real(a)):
+        real = verbs.hold
+        with mock.patch.object(verbs, "hold", side_effect=lambda env, a: holds.append(("hold", a.name, a.why, a.for_min)) or 0 if True else real(env, a)):
             rc = self.run_loop()
         self.assertEqual([h[:2] for h in holds], [("hold", "s1")])
         self.assertIn("SET ASIDE", self.out)
         self.assertIn("set aside by tl loop: 2 runs failed", holds[0][2])
-        self.assertEqual(holds[0][3], loop.SLOT_ASIDE_MIN)
+        self.assertEqual(holds[0][3], LoopConfig().slot_aside_min)
         self.assertNotIn("2 failures in a row", self.out)  # the slot's failures are not the beads' or the loop's
         self.assertEqual([b for b, _ in self.started], ["x-1", "x-2", "x-3"])
 
     def test_one_instant_failure_or_a_slow_one_or_another_reason_sets_nothing_aside(self):
         holds = []
-        real = tl.cmd_slot
-        guard = mock.patch.object(tl, "cmd_slot", side_effect=lambda a: holds.append(a.name) or 0 if a.op == "hold" else real(a))
+        guard = mock.patch.object(verbs, "hold", side_effect=lambda env, a: holds.append(a.name) or 0)
         with guard:
-            self.beads({"x-1": [rec("failed", minutes=0.3, why="failed: worktree X has uncommitted work of another branch")],
-                        "x-2": [rec("landed")], "x-3": [rec("failed", minutes=0.3, why="failed: worktree X has uncommitted work of another branch")],
+            self.beads({"x-1": [rec("failed", minutes=0.3, kind="fault_slot", after="blocked", why="failed: worktree X has uncommitted work of another branch")],
+                        "x-2": [rec("landed")], "x-3": [rec("failed", minutes=0.3, kind="fault_slot", after="blocked", why="failed: worktree X has uncommitted work of another branch")],
                         "x-4": [rec("landed")]})
             self.run_loop()
         self.assertEqual(holds, [])  # a landing ends the run of failures
         with guard:
-            self.beads({"x-1": [rec("failed", minutes=40, why="failed: worktree X has uncommitted work")], "x-2": [rec("failed", minutes=40, why="failed: worktree X has uncommitted work")]})
+            self.beads({"x-1": [rec("failed", minutes=40, kind="fault_slot", after="blocked", why="failed: worktree X has uncommitted work")], "x-2": [rec("failed", minutes=40, kind="fault_slot", after="blocked", why="failed: worktree X has uncommitted work")]})
             self.run_loop()
         self.assertEqual(holds, [])  # slow ones
         with guard:
@@ -572,10 +580,9 @@ class Loop(LoopBase):
         self.assertEqual(holds, [])  # not the slot's
 
     def test_a_slot_that_cannot_be_held_is_said_so_and_the_failures_still_count(self):
-        bad = lambda: rec("failed", minutes=0.3, why="failed: worktree /w/.slots/s1 has uncommitted work of another branch")
+        bad = lambda: rec("failed", minutes=0.3, kind="fault_slot", after="blocked", why="failed: worktree /w/.slots/s1 has uncommitted work of another branch")
         self.beads({"x-1": [bad()], "x-2": [bad()], "x-3": [rec("landed")]}, slots=2)
-        real = tl.cmd_slot
-        with mock.patch.object(tl, "cmd_slot", side_effect=lambda a: 1 if a.op == "hold" else real(a)):
+        with mock.patch.object(verbs, "hold", side_effect=lambda env, a: 1):
             self.run_loop()
         self.assertIn("could not be set aside", self.out)
         self.assertNotIn("SET ASIDE", self.out)
@@ -600,7 +607,7 @@ class Loop(LoopBase):
         self.assertEqual(self.run_loop(), 0)
         self.assertEqual([b for b, _ in self.started], ["x-1", "x-2", "x-1"])  # the next bead runs while the role is down
         self.assertLess(self.clock.t - self.clock.t0, 600)  # woken by the role coming back, 2 hours before the hint
-        self.assertFalse([n for n in self.clock.naps if n > loop.GATE_CACHE_S + 1])
+        self.assertFalse([n for n in self.clock.naps if n > LoopConfig().gate_cache + 1])
         self.assertIn("worker role", self.out)
 
     def test_a_stale_hint_never_blocks_a_usable_role(self):
@@ -614,8 +621,8 @@ class Loop(LoopBase):
         self.beads({"x-1": [rec("paused", kind="pause_lane", role="worker"), rec("landed")]})
         self.assertEqual(self.run_loop(), 0)
         self.assertEqual([b for b, _ in self.started], ["x-1", "x-1"])
-        self.assertGreaterEqual(self.clock.t - self.clock.t0, loop.GATE_UNKNOWN_S)
-        self.assertLess(self.clock.t - self.clock.t0, loop.GATE_UNKNOWN_S + 2 * loop.GATE_CACHE_S)
+        self.assertGreaterEqual(self.clock.t - self.clock.t0, LoopConfig().gate_unknown)
+        self.assertLess(self.clock.t - self.clock.t0, LoopConfig().gate_unknown + 2 * LoopConfig().gate_cache)
 
     def test_a_role_that_stays_down_keeps_the_bead_waiting_while_others_run(self):
         self.roles = lambda: {"worker": {"usable": False}}
@@ -627,19 +634,23 @@ class Loop(LoopBase):
         self.beads({"x-1": [rec("paused"), rec("landed")], "x-2": [rec("paused"), rec("landed")]})
         self.assertEqual(self.run_loop(), 0)
         self.assertEqual([b for b, _ in self.started], ["x-1", "x-2", "x-1", "x-2"])
-        self.assertIn(loop.PAUSE_RETRY, self.clock.naps)
+        self.assertIn(LoopConfig().pause_retry, self.clock.naps)
 
     def test_the_held_beads_go_across_a_move_to_a_newer_install(self):
-        with mock.patch.dict(os.environ, {"TL_LOOP_STATE": json.dumps({"gated": {"x-1": ["worker", 5.0]}, "ran": 1})}):
-            self.assertEqual(loop.inherited()["gated"], {"x-1": ["worker", 5.0]})
-        with mock.patch.dict(os.environ, {"TL_LOOP_STATE": json.dumps({"gated": {"x-1": ["worker"]}})}):
-            self.assertNotIn("gated", loop.inherited())  # a field of the wrong shape is dropped, never trusted
+        st = LoopState(pid=1, started=1.0, t=1.0, repo="r", version="0.0.1", code_dir="/x", actor="tl-a",
+                       carry=Carry(gated={"x-1": ("worker", 5.0)}, ran=1))
+        got, why = parse_handover(json.dumps(codec.to_json(st)))
+        assert got is not None
+        self.assertEqual((got.carry.gated, got.carry.ran, why), ({"x-1": ("worker", 5.0)}, 1, ""))
+        got, why = parse_handover(json.dumps({"gated": {"x-1": ["worker", 5.0]}, "ran": 1}))  # an old shape: absent, never trusted
+        self.assertIsNone(got)
+        self.assertIn("v=None", why)
 
     def test_drained_waits_when_asked_and_polls_until_the_end_time(self):
         self.beads({})
         until = time.strftime("%H:%M", time.localtime(self.clock.t + 3600))
         self.assertEqual(self.run_loop("--wait-drained", "--until", until), 0)
-        self.assertGreaterEqual(len([n for n in self.clock.naps if n == loop.DRAINED_POLL]), 5)
+        self.assertGreaterEqual(len([n for n in self.clock.naps if n == LoopConfig().drained_poll]), 5)
 
     def test_no_free_slot_waits_with_backoff_then_takes_the_one_freed(self):
         bd = self.beads({"x-1": [rec("landed")]}, slots=1)
@@ -652,7 +663,7 @@ class Loop(LoopBase):
             frees["n"] += 1
             if frees["n"] == 3:
                 bd.slots["sl-1"].update(status="open", assignee="")
-        with mock.patch.object(loop, "nap", nap):
+        with mock.patch.object(Core, "nap", staticmethod(nap)):
             self.assertEqual(self.run_loop("--wait-slot-min", "1"), 0)
         self.assertEqual(self.started, [("x-1", "s1")])
         self.assertEqual(self.clock.naps[:3], sorted(self.clock.naps[:3]))
@@ -675,7 +686,7 @@ class Loop(LoopBase):
         self.during.append(lambda: tl.main(["stop", "--repo", str(self.repo)]))
         self.assertEqual(self.run_loop(), 0)
         self.assertEqual([l["outcome"] for l in self.lines()], ["landed"])
-        self.assertFalse(loop.paths(str(self.repo))["stop"].exists())
+        self.assertFalse(looptest.command(str(self.repo)).exists())
 
     def test_stop_now_ends_the_child_and_leaves_no_held_slot_or_claimed_bead(self):
         bd = self.beads({"x-1": [], "x-2": [rec("landed")]})
@@ -698,7 +709,7 @@ class Loop(LoopBase):
         """A second live loop on the repo: its state names a live process that is not this one."""
         k = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
         self.addCleanup(lambda: (k.kill(), k.wait()))
-        loop.write_state(str(self.repo), pid=k.pid, started=self.clock.t, bead="x-9", slot="s2", since=self.clock.t)
+        looptest.write_state(str(self.repo), pid=k.pid, started=self.clock.t, bead="x-9", slot="s2", since=self.clock.t)
         return k
 
     def test_a_second_loop_on_a_repo_runs_beside_the_first_with_its_own_state(self):
@@ -707,7 +718,7 @@ class Loop(LoopBase):
         k = self.other_loop()
         self.assertEqual(self.run_loop(), 0)
         self.assertEqual(self.started, [("x-1", "s1")])
-        self.assertEqual([s["pid"] for s in loop.live_loops(str(self.repo))], [k.pid])
+        self.assertEqual([s.pid for s in looptest.live(str(self.repo))], [k.pid])
         out = io.StringIO()
         with redirect_stdout(out):
             self.assertEqual(tl.main(["loop", "status", "--repo", str(self.repo)]), 0)
@@ -751,9 +762,7 @@ class Loop(LoopBase):
         (self.repo / ".task-loop.json").write_text(json.dumps({"engine": {}}))
         self.beads({"x-1": [rec("landed")]}, slots=0)
         k = self.other_loop()
-        d, key = loop.paths(str(self.repo))["states"]
-        f = d / ("%s.%d.json" % (key, k.pid))
-        f.write_text(json.dumps(dict(json.loads(f.read_text()), worktree=str(self.repo / ".worktrees" / "loop-abcdef12"))))
+        looptest.write_state(str(self.repo), pid=k.pid, started=self.clock.t, worktree=str(self.repo / ".worktrees" / "loop-abcdef12"))
         names = []
         with mock.patch.object(tl, "start_worktree", side_effect=lambda repo, name=None: names.append(name) or
                                str(self.home / "wt")):
@@ -781,12 +790,12 @@ class Loop(LoopBase):
         time.sleep(0.05)
         self.assertEqual(self.run_loop(), 0)  # started after the stop: runs
         self.assertEqual(self.started, [("x-1", "s1")])
-        self.assertTrue(loop.paths(str(self.repo))["stop"].exists())  # still there for the loop it was meant for
+        self.assertTrue(looptest.command(str(self.repo)).exists())  # still there for the loop it was meant for
 
     def test_status_shows_the_running_bead_and_the_last_lines(self):
         self.beads({"x-1": [rec("landed")], "x-2": [rec("parked")]})
         self.run_loop()
-        loop.write_state(str(self.repo), pid=os.getpid(), started=self.clock.t, bead="x-3", slot="s2", since=self.clock.t)
+        looptest.write_state(str(self.repo), pid=os.getpid(), started=self.clock.t, bead="x-3", slot="s2", since=self.clock.t)
         out = io.StringIO()
         with redirect_stdout(out):
             self.assertEqual(tl.main(["loop", "status", "--repo", str(self.repo)]), 0)

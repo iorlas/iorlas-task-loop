@@ -530,8 +530,8 @@ def reexec_args(argv, slot, wt):
 
 
 def vet_newer():
-    import loop  # imports engine itself
-    return loop.vet_newer()
+    import loop_env  # imports engine itself
+    return loop_env.vet_newer()
 
 
 class Exec(BaseException):
@@ -4991,12 +4991,12 @@ def reclaim(bead_id, repo, store=None):
     if who and who != me:
         if not who.startswith("tl-"):
             return False, "claimed by %s" % who
-        import loop  # the queue rule; imports engine itself
+        import loop_env  # the queue rule; imports engine itself
         if b.status == "blocked" or busy_elsewhere(repo, who, bead_id, store):
             # tl-159, tl-kwo: the claim is the actor's, and a loop's actor is live while the loop runs, whatever bead it is on:
             # lifesim-o67g was 'a live claim' of the loop that was running fld.27.12, and its answered ask waited an hour. A bead
             # a loop has left (parked, or the loop went on to another) is live only if an engine is running it now.
-            live = bead_id in loop.running(repo, store)
+            live = bead_id in loop_env.running(repo, store)
         else:  # a session working by hand: its lease and heartbeat are the only sign
             live = who in tl.live_actors(repo, store) or b.lease_expires_at >= time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         if live:
@@ -5141,20 +5141,20 @@ def run_any_slot(a, repo, cfg):
 
 
 def take_area(a, repo, cfg, lock, sb=""):
-    """The engine lock, with the area check before it under the area lock (loop.area_lock): "" when this run holds the
+    """The engine lock, with the area check before it under the area lock (loop_env.area_lock): "" when this run holds the
     worktree, else why not. A bead whose area runs elsewhere: a warning, or refused with --exclusive-area."""
-    import loop  # the queue rule; imports engine itself
+    import loop_env  # the queue rule; imports engine itself
 
     def mark():  # the slot says which bead runs in it (held_bead makes its area busy): only once the area is decided
         if sb:
             tl.attempt(tl.bd_store(repo).update, sb, BeadPatch(set_metadata={"held_bead": a.id}))
-    if not loop.has_areas(cfg):
+    if not loop_env.has_areas(cfg):
         why = lock.take()
         if not why:
             mark()
         return why
-    with loop.area_lock(repo, cfg):
-        area, busy = loop.area_busy(repo, cfg, tl.peek(tl.bd_store(repo), a.id) or Bead(id=a.id, title="", status=""), {})
+    with loop_env.area_lock(repo):
+        area, busy = loop_env.area_busy(repo, cfg, tl.peek(tl.bd_store(repo), a.id) or Bead(id=a.id, title="", status=""))
         if busy and getattr(a, "exclusive_area", False):
             return busy + " (--exclusive-area)"
         if busy:

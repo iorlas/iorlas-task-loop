@@ -1,11 +1,9 @@
 """The Roadmap tab: one lane per slot with its bead, stage rail, unlocks and last passes, then the queue in the order the loop takes
 it, each with the beads it unblocks as a tree. Read only: the loop's state files are read, a dead loop's is left alone."""
 
-import hashlib
 import json
 import time
-from pathlib import Path
-from typing import Any, Final
+from typing import Any
 
 from taskloop.contracts import log as rec
 from taskloop_dash import jsonl
@@ -15,32 +13,17 @@ from taskloop_dash.api.looks import Looks
 from taskloop_dash.api.tasks import Tasks
 from taskloop_dash.env import Env
 from taskloop_dash.readers.beads import Beads, basename
-from taskloop_dash.readers.records import Records, pid_alive
+from taskloop_dash.readers.loops import STOP_KINDS, loop_key
+from taskloop_dash.readers.records import Records
 from taskloop_dash.readers.runlogs import RunLogs
-from taskloop_dash.tails import read_dict
 from taskloop_dash.views import bead_blocks, roadmap
 
 LOG_TAIL = 400  # pass-log lines read
 
 
-def loop_key(repo: str) -> str:
-    """The name the loop files of a repo share (its folder and a hash of its path)."""
-    return "%s-%s" % (Path(repo).name, hashlib.sha1(repo.encode()).hexdigest()[:8])
-
-
 def lapsed(b: dict[str, Any], now_utc: str) -> bool:
     t = b.get("lease_expires_at") or ""
     return bool(t) and t < now_utc
-
-
-STOP_KINDS: Final = {"now": "now", "after_current": "after"}  # LoopState.stop.kind -> the lane's stop mode
-
-
-def stop_request(path: Path) -> dict[str, Any]:
-    """The targeted stop request ({mode: after|now, targets: [pids], time}), or {} when none is filed or it is unreadable."""
-    req = read_dict(path)
-    ok = req.get("mode") in ("after", "now") and isinstance(req.get("targets"), list) and isinstance(req.get("time"), (int, float))
-    return req if ok else {}
 
 
 class RoadmapApi:
@@ -66,24 +49,21 @@ class RoadmapApi:
     def loop_files(self, repo: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
         """(lanes, rows, waiting loops): one lane per slot, the repo's pass log rows oldest first."""
         cfg, key = self.env.config, loop_key(repo)
-        state = cfg.loop_state(key)
         loops: list[dict[str, Any]] = []
-        own_stop: dict[int, str] = {}  # v2 state files carry their own stop request: {kind: now|after_current}
-        for f in [state, *sorted(state.parent.glob(key + ".*.json"))]:
-            st = read_dict(f)
-            if st.get("pid") and pid_alive(st["pid"]):
-                kind = (st.get("stop") or {}).get("kind") if isinstance(st.get("stop"), dict) else None
-                if kind in STOP_KINDS:
-                    own_stop[st["pid"]] = STOP_KINDS[kind]
-                loops.append({"pid": st["pid"], "slot": st.get("slot") or "", "bead": st.get("bead"), "since": st.get("since"),
-                              "started": st.get("started") or 0, "worktree": st.get("worktree") or "", "version": st.get("version") or ""})
+        own_stop: dict[int, str] = {}  # a state file carries its own stop request: {kind: now|after_current}
+        for st in self.graph.loops.live(repo):
+            kind = (st.get("stop") or {}).get("kind") if isinstance(st.get("stop"), dict) else None
+            if kind in STOP_KINDS:
+                own_stop[st["pid"]] = STOP_KINDS[kind]
+            loops.append({"pid": st["pid"], "slot": st.get("slot") or "", "bead": st.get("bead"), "since": st.get("since"),
+                          "started": st.get("started") or 0, "worktree": st.get("worktree") or "", "version": st.get("version") or ""})
         try:
             slots = [b["title"].split()[-1] for b in self.env.ports.slot_beads(repo)]
             running = self.running_slots(repo)
         except Exception:
             slots, running = [], {}
-        request = stop_request(state.with_suffix(".stop"))
-        stop = {st["pid"]: request["mode"] if request and st["pid"] in request["targets"] else own_stop.get(st["pid"], "") for st in loops}
+        commanded = self.graph.loops.command_stops(repo)  # LoopCommand: the loops it names, by pid
+        stop = {st["pid"]: commanded.get(st["pid"]) or own_stop.get(st["pid"], "") for st in loops}
         lanes, waiting = roadmap.lanes_of(slots, running, loops, stop)
         rows = []
         try:

@@ -10,12 +10,11 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "skills" / "task-loop"))
-import loop  # noqa: E402
-import tl  # noqa: E402
+import tl  # noqa: E402  (before the src import: puts src/ on sys.path)
+from taskloop.app.loop.core import Core  # noqa: E402
 
 random.seed(sys.argv[1])
-loop.POLL, loop.PAUSE_RETRY, loop.MARGIN = 0.2, 2, (0.1, 0.4)
-loop.AREA_POLL, tl.TICKET_POLL = 0.3, (0.1, 0.3)
-_nap = loop.nap
-loop.nap = lambda secs, repo=None, until=0: _nap(min(secs, random.uniform(0.1, 0.4)), repo, until)
+tl.TICKET_POLL = (0.1, 0.3)  # pyrefly: ignore[bad-assignment]  # the loop's own waits are the `loop` block of the repo's .task-loop.json (dev/race.py)
+_nap = Core.nap
+Core.nap = lambda self, secs, until=0: _nap(self, min(secs, random.uniform(0.1, 0.4)), until)
 sys.exit(tl.main(sys.argv[2:]))

@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support import tlbd  # noqa: E402
 from support.fakes import FakeBeadStore, as_comment  # noqa: E402
-import loop  # noqa: E402
+from support import looptest  # noqa: E402
 import report  # noqa: E402
 import tl  # noqa: E402
 
@@ -241,7 +241,8 @@ class Scorecard(Base):
         live = tl.config_dir() / "engine" / ("t-9-%s.jsonl" % time.strftime("%Y%m%d-%H%M%S", time.localtime(T0 + 100 * MIN)))
         live.write_text(json.dumps({"t": T0 + 100 * MIN, "kind": "node", "text": "write"}) + "\n")
         # the loop's own record of a run-task that died before its engine wrote anything
-        with open(loop.paths(tl.repo_root(str(self.repo)))["log"], "w") as f:  # the loop keys it so
+        looptest.log(tl.repo_root(str(self.repo))).parent.mkdir(parents=True, exist_ok=True)
+        with open(looptest.log(tl.repo_root(str(self.repo))), "w") as f:  # the loop keys it so
             f.write(json.dumps({"ts": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(T0 + 95 * MIN)), "bead": "t-10",
                                 "slot": "s1", "outcome": "failed", "minutes": 0.1, "trace": None,
                                 "why": "failed: no outcome from run-task (exit 1); see x.log"}) + "\n")

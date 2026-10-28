@@ -12,6 +12,7 @@ import support.paths  # noqa: E402,F401
 from taskloop.adapters import delegate as dl  # noqa: E402
 from taskloop.stores import call_state as cs  # noqa: E402
 from taskloop.domain.lanes import netgate  # noqa: E402
+from taskloop.app.loop.net import NetState  # noqa: E402
 
 KEY = ("write", 1, 0, 2)
 
@@ -98,26 +99,26 @@ class Calls(unittest.TestCase):
 
 class Gate(unittest.TestCase):
     def test_down_is_one_transition_and_up_is_one_transition(self):
-        s, p = netgate.NetState(), netgate.FakeProbe([False, False, False, True])
+        s, p = NetState(), netgate.FakeProbe([False, False, False, True])
         self.assertTrue(s.mark_down(100.0))
         self.assertFalse(s.mark_down(101.0))
-        self.assertEqual([s.poll(p, t) for t in (100.0, 160.0, 220.0, 280.0)], [None, None, None, "up"])
+        self.assertEqual([s.poll(p, t) for t in (100.0, 160.0, 220.0, 280.0)], [False, False, False, True])
         self.assertFalse(s.down)
-        self.assertIsNone(s.poll(p, 340.0))
+        self.assertFalse(s.poll(p, 340.0))
         self.assertEqual(p.calls, 4)
 
     def test_it_probes_no_more_than_once_a_minute(self):
-        s, p = netgate.NetState(), netgate.FakeProbe([False])
+        s, p = NetState(), netgate.FakeProbe([False])
         s.mark_down(0.0)
         for t in range(0, 180, 5):
             s.poll(p, float(t))
         self.assertEqual(p.calls, 3)  # 0, 60, 120
 
     def test_an_unknown_probe_never_holds_the_loop_down_beyond_one_gap(self):
-        s, p = netgate.NetState(), netgate.FakeProbe([None])
+        s, p = NetState(), netgate.FakeProbe([None])
         s.mark_down(0.0)
-        self.assertIsNone(s.poll(p, 0.0))
-        self.assertEqual(s.poll(p, 60.0), "up")
+        self.assertFalse(s.poll(p, 0.0))
+        self.assertTrue(s.poll(p, 60.0))
 
     def probe(self, body):
         d = Path(tempfile.mkdtemp())

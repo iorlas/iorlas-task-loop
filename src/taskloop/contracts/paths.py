@@ -74,6 +74,10 @@ class ConfigDir:
     def loop_log(self, repo_key: str) -> Path:
         return self.root / "loop" / ("%s.jsonl" % repo_key)
 
+    def loop_runs(self, repo_key: str) -> Path:
+        """The loop's own folder of the repo: run logs, outcome files, loop-<pid>.log, exits.jsonl, died-<pid>.json."""
+        return self.root / "loop" / repo_key
+
     def loop_rest(self, repo_key: str) -> Path:
         return self.root / "loop" / ("%s-rest.json" % repo_key)
 

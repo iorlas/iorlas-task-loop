@@ -6,8 +6,11 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills" / "task-loop"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import clock  # noqa: E402
 import loop_health as lh  # noqa: E402
+from taskloop.app.loop.health import loop_health  # noqa: E402
 import outcome as oc  # noqa: E402
 from outcome import Kind, POLICY  # noqa: E402
 
@@ -131,10 +134,10 @@ class Storm(unittest.TestCase):
 
 class Health(unittest.TestCase):
     def test_four_rows(self):
-        self.assertEqual(lh.loop_health(1, 5, 0, 1000).verdict, "ok")
-        self.assertEqual(lh.loop_health(0, 0, 0, 1000).verdict, "idle_ok")
-        self.assertEqual(lh.loop_health(0, 3, 900, 1000).verdict, "idle_ok")
-        self.assertEqual(lh.loop_health(0, 3, 100, 1000).verdict, "absent")
+        self.assertEqual(loop_health(1, 5, 0, 1000).verdict, "ok")
+        self.assertEqual(loop_health(0, 0, 0, 1000).verdict, "idle_ok")
+        self.assertEqual(loop_health(0, 3, 900, 1000).verdict, "idle_ok")
+        self.assertEqual(loop_health(0, 3, 100, 1000).verdict, "absent")
 
 
 FIX = Path(__file__).resolve().parent / "fixtures" / "replay"
