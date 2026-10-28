@@ -15,4 +15,7 @@ def working(tool, *args):
             return False
 
 
-REAL_JUST = working("just", "--version")
+def need(test, tool, *args):
+    """Skip the running test unless `tool` works here and now (call it in the test body, after setUp has set the test's HOME)."""
+    if not working(tool, *args or ("--version",)):
+        test.skipTest("needs a real `%s` that works in a fresh directory under the test's environment" % tool)
