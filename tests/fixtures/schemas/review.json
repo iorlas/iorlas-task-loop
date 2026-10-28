@@ -1,0 +1,153 @@
+{
+ "additionalProperties": false,
+ "properties": {
+  "accept_files": {
+   "items": {
+    "type": "string"
+   },
+   "type": "array"
+  },
+  "decided": {
+   "type": "string"
+  },
+  "findings": {
+   "items": {
+    "additionalProperties": false,
+    "properties": {
+     "file": {
+      "type": "string"
+     },
+     "fix": {
+      "type": "string"
+     },
+     "line": {
+      "type": "integer"
+     },
+     "severity": {
+      "enum": [
+       "high",
+       "medium",
+       "low"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "file",
+     "line",
+     "severity",
+     "fix"
+    ],
+    "type": "object"
+   },
+   "type": "array"
+  },
+  "leftovers": {
+   "items": {
+    "additionalProperties": false,
+    "properties": {
+     "title": {
+      "type": "string"
+     },
+     "why": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "title",
+     "why"
+    ],
+    "type": "object"
+   },
+   "type": "array"
+  },
+  "options": {
+   "items": {
+    "additionalProperties": false,
+    "properties": {
+     "answer": {
+      "type": "string"
+     },
+     "cost": {
+      "type": "string"
+     },
+     "label": {
+      "type": "string"
+     },
+     "recommended": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "label",
+     "cost",
+     "answer",
+     "recommended"
+    ],
+    "type": "object"
+   },
+   "type": "array"
+  },
+  "question": {
+   "type": "string"
+  },
+  "reject_files": {
+   "items": {
+    "type": "string"
+   },
+   "type": "array"
+  },
+  "unchecked": {
+   "items": {
+    "additionalProperties": false,
+    "properties": {
+     "kind": {
+      "enum": [
+       "engine_step",
+       "checkable",
+       "external_fact",
+       "taste",
+       "owner_decision",
+       "requirement",
+       "number",
+       "deletion",
+       "link",
+       "case",
+       "tooling",
+       "other"
+      ],
+      "type": "string"
+     },
+     "source": {
+      "type": "string"
+     },
+     "what": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "what",
+     "kind"
+    ],
+    "type": "object"
+   },
+   "type": "array"
+  },
+  "unmet": {
+   "items": {
+    "type": "string"
+   },
+   "type": "array"
+  }
+ },
+ "required": [
+  "findings",
+  "unmet",
+  "question",
+  "options",
+  "decided",
+  "leftovers",
+  "unchecked"
+ ],
+ "type": "object"
+}

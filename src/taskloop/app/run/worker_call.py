@@ -17,8 +17,10 @@ from taskloop.adapters import delegate_wire
 from taskloop.app.run import done_memo
 from taskloop.app.run.calls import timing
 from taskloop.app.run.lane_acts import LaneActs
+from taskloop.contracts import answers
 from taskloop.contracts import log as rec
 from taskloop.contracts.delegate import REASON_OVERRUN, DelegateResult, RunRequest, StopFacts
+from taskloop.contracts.schema import unstrict
 from taskloop.domain.lanes import policy as lp
 from taskloop.domain.lanes.denials import command_of, secret_false_positive
 from taskloop.domain.lanes.notes import FRESH_WRITER_TEXT, RESUME_AFTER_STOP
@@ -29,14 +31,15 @@ from taskloop.stores import call_state as callstate
 READ_TOOLS = ("Bash", "shell", "bash")
 
 
+def stage_checks(plan: Any) -> list[str]:
+    """Every check of the plan's stages (the plan is None before the first plan is accepted)."""
+    return [c for st in (plan or {}).get("stages") or [] for c in st.get("checks") or []]
+
+
 @dataclass
 class Ops:
     """What the host (the engine) lends: its schemas, its text rules, and the Blocked/Kind of its close step."""
 
-    schema_for: Any
-    strict: Any
-    unstrict: Any
-    validate: Any
     summarize: Any
     read_only_command: Any
     blocked: Any  # (why, kind name, stop=None) -> the exception to raise
@@ -159,7 +162,7 @@ class WorkerCall:
         cwd: Any,
         at: tuple[int, ...],
     ) -> Call:
-        e, ops = self.e, self.ops
+        e = self.e
         writer = writer_family if node in READ_ONLY_NODES else None
         resume = resume_ref or (e.writer.get("delegate") if resume_key else None)
         if resume and resume_key and e.writer_fallback:  # tl-bxk.10.5: a fallback writer would keep the bead off Codex for good
@@ -181,7 +184,7 @@ class WorkerCall:
         c = Call(
             node,
             ROLES[node],
-            ops.strict(ops.schema_for(node, visual)),
+            answers.sent_schema(node, visual),
             cwd or e.wt,
             prompt,
             text,
@@ -252,7 +255,7 @@ class WorkerCall:
             timeout_s=timeout_s,
             idle_s=idle_s,
             live_file=live,
-            engine_only=e.checker.split().engine_recipes() if c.node == "write" else [],
+            engine_only=e.checker.split().engine_recipes(stage_checks(e.plan_data)) if c.node == "write" else [],
         )
         cid = e.calls.start(c.step or c.node, c.node, c.role, bool(c.resume), e.live_n)
         c.state = callstate.begin(
@@ -363,10 +366,9 @@ class WorkerCall:
                 e.fallback_lane = (res.first_lane or c.out_on or e.fallback_lane) if res.fallback else ""
             e.writer["delegate"] = c.resume = res.ref
             e.writer["ctx"] = (e.sessions[-1] if e.sessions else {}).get("context_k")  # k tokens, None = unknown
-            e.writer["seen"] = e.seen_now()  # the brief and plan this session now holds
-        schema = self.ops.schema_for(c.node, c.visual)
-        data = self.ops.unstrict(res.data, schema) if res.data is not None else None
-        return self.ops.validate(data, schema) if data is not None else [f"no structured output: {(res.say or res.text)[:300]}"]
+            e.writer["seen"] = e.hand.seen_now()  # the brief and plan this session now holds
+        data = unstrict(res.data, answers.schema_for(c.node, c.visual)) if res.data is not None else None
+        return answers.check(c.node, c.visual, data) if data is not None else [f"no structured output: {(res.say or res.text)[:300]}"]
 
     def refused(self, c: Call, res: DelegateResult, denied: list[Any], errs: Any = True) -> bool:
         """The guard refused commands during this step. -> True when the step goes again on a fresh thread (it refused only reads)."""

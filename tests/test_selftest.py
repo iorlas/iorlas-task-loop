@@ -56,7 +56,7 @@ class SelfTest(unittest.TestCase):
         (d.parents[1] / ".claude-plugin").mkdir()
         (d.parents[1] / ".claude-plugin" / "plugin.json").write_text("{}")
         if plant:
-            f = d / "engine.py"
+            f = d.parents[1] / (plant[2] if len(plant) > 2 else "skills/task-loop/engine.py")
             text = f.read_text(encoding="utf-8")
             self.assertIn(plant[0], text)
             f.write_text(text.replace(plant[0], plant[1], 1), encoding="utf-8")
@@ -102,8 +102,9 @@ class SelfTest(unittest.TestCase):
 
     def test_an_install_that_imports_but_cannot_plan_is_refused_and_recorded(self):
         d = self.cache / "0.2.0"
-        self.install("0.2.0", plant=("    def plan(self, again=False):\n", "    def plan(self, again=False):\n"
-                                                                            "        raise RuntimeError('planted: cannot plan')\n"))
+        self.install("0.2.0", plant=("    def plan(self, again: bool = False) -> dict[str, Any]:\n", "    def plan(self, again: bool = False) -> dict[str, Any]:\n"
+                                                                            "        raise RuntimeError('planted: cannot plan')\n",
+                                                                            "src/taskloop/app/plan/planner.py"))
         r = subprocess.run([sys.executable, "-I", "-c", "import sys; sys.path.insert(0, sys.argv[1]); sys.path.insert(0, sys.argv[2]); "
                             "import tl, loop_env, engine", str(d / "skills" / "task-loop"), str(d / "src")], capture_output=True)
         self.assertEqual(r.returncode, 0)  # it imports fine

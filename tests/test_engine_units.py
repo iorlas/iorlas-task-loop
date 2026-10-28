@@ -24,6 +24,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 from taskloop.adapters import applog  # noqa: E402
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from taskloop.app.plan.planner import Planner  # noqa: E402
+from taskloop.contracts import answers  # noqa: E402
+from taskloop.contracts.schema import unstrict  # noqa: E402
 from taskloop.adapters import delegate as dl  # noqa: E402,F401
 from taskloop.adapters import procs as sproc  # noqa: E402
 from clock import FakeClock  # noqa: E402
@@ -154,7 +157,7 @@ class Outcome(unittest.TestCase):
         self.assertEqual((r["outcome"], r["retry_after"], r["asked"]), ("paused", 0, False))
 
     def test_an_engine_error_is_failed(self):
-        with mock.patch.object(engine.Engine, "plan", side_effect=RuntimeError("boom")):
+        with mock.patch.object(Planner, "plan", side_effect=RuntimeError("boom")):
             self.run_engine({})
         r = self.eng.result()
         self.assertEqual(r["outcome"], "failed")
@@ -572,15 +575,14 @@ class StoredBriefs(unittest.TestCase):
 
 class Validate(unittest.TestCase):
     def test_schema_subset(self):
-        s = engine.SCHEMAS["review"]
-        self.assertEqual(engine.validate(review(findings=[finding("high")]), s), [])
-        self.assertTrue(engine.validate(review(findings=[dict(finding("high"), severity="maybe")]), s))
-        self.assertTrue(engine.validate({"findings": []}, s))
-        self.assertTrue(engine.validate(dict(CLEAN, unmet="x"), s))
-        self.assertEqual(sorted(engine.SCHEMAS), ["look", "plan", "reflect", "review", "verify", "write"])
-        v = engine.SCHEMAS["verify"]
-        self.assertEqual(engine.validate({"items": [verdict(1, "settled", "a.cs:3")]}, v), [])
-        self.assertTrue(engine.validate({"items": [verdict(1, "maybe")]}, v))
+        ok = lambda node, data: answers.check(node, False, data)  # noqa: E731
+        self.assertEqual(ok("review", review(findings=[finding("high")])), [])
+        self.assertTrue(ok("review", review(findings=[dict(finding("high"), severity="maybe")])))
+        self.assertTrue(ok("review", {"findings": []}))
+        self.assertTrue(ok("review", dict(CLEAN, unmet="x")))
+        self.assertEqual(sorted(answers.NODES), ["look", "plan", "reflect", "review", "verify", "write"])
+        self.assertEqual(ok("verify", {"items": [verdict(1, "settled", "a.cs:3")]}), [])
+        self.assertTrue(ok("verify", {"items": [verdict(1, "maybe")]}))
 
     def test_every_contract_sent_is_strict_mode_valid(self):
         """Codex (strict structured output) rejects an object whose `required` misses a property: 53 lifesim runs
@@ -593,21 +595,21 @@ class Validate(unittest.TestCase):
                     walk(v, path + "." + k)
             if sch.get("type") == "array":
                 walk(sch.get("items") or {}, path + "[]")
-        for node in engine.SCHEMAS:
+        for node in answers.NODES:
             for visual in (False, True):
-                walk(engine.strict(engine.schema_for(node, visual)), "%s%s" % (node, " (visual)" if visual else ""))
+                walk(answers.sent_schema(node, visual), "%s%s" % (node, " (visual)" if visual else ""))
 
     def test_a_strict_answer_with_null_optionals_validates_against_the_contract(self):
-        s = engine.SCHEMAS["review"]
-        sent = engine.strict(s)
+        s = answers.schema_for("review")
+        sent = answers.sent_schema("review")
         self.assertEqual(sent["properties"]["accept_files"]["type"], ["array", "null"])
         got = dict(CLEAN, accept_files=None, reject_files=None,
                    unchecked=[{"what": "x", "kind": "other", "source": None}])
-        back = engine.unstrict(got, s)
+        back = unstrict(got, s)
         self.assertNotIn("accept_files", back)
         self.assertNotIn("source", back["unchecked"][0])
-        self.assertEqual(engine.validate(back, s), [])
-        self.assertEqual(engine.SCHEMAS["review"], s)  # the contract itself is untouched
+        self.assertEqual(answers.check("review", False, back), [])
+        self.assertEqual(answers.schema_for("review"), s)  # the contract itself is untouched
 
 
 if __name__ == "__main__":

@@ -12,8 +12,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "task-loop"))
 from support import fake_route  # noqa: E402
 from support import tlbd, tools  # noqa: E402
-from support.fakes import FakeBeadStore, as_bead  # noqa: E402
+from support.fakes import FakeBeadStore, as_bead, must_bead  # noqa: E402
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from taskloop.app.write.handoff import HANDOFF_CAP  # noqa: E402
+from taskloop.domain.plan.matchers import AcceptanceText  # noqa: E402
+from taskloop.contracts.answers import IRREVERSIBLE  # noqa: E402
+from taskloop.domain.prompts.plan import REPLAN_CAP  # noqa: E402
 from taskloop.contracts.config import EngineConfig  # noqa: E402
 from support.builders import cfg_with, make_engine  # noqa: E402
 from support.checks import res  # noqa: E402
@@ -77,7 +81,7 @@ class EmptyPlan(StagesTest):
 
     @te.no_repo
     def test_done_when_counts_as_acceptance_criteria(self):
-        has = lambda b: engine.has_criteria(as_bead(b))
+        has = lambda b: AcceptanceText.present(must_bead(b))
         self.assertFalse(has({"description": "Done when? tbd"}))
         self.assertTrue(has({"description": "Goal.\n\n## Done when\n- x works\n"}))
         self.assertTrue(has({"description": "Goal.\n\nDone when: x works"}))
@@ -197,7 +201,7 @@ class Scope(StagesTest):
 
     @te.no_repo
     def test_acceptance_text_reads_the_field_and_the_description_from_the_heading(self):
-        txt = engine.acceptance_text(as_bead({"acceptance_criteria": "A works", "description": "Intro.\n## Done when\n- B works\n"}))
+        txt = AcceptanceText.text(must_bead({"acceptance_criteria": "A works", "description": "Intro.\n## Done when\n- B works\n"}))
         self.assertIn("A works", txt)
         self.assertIn("B works", txt)
         self.assertNotIn("Intro", txt)
@@ -237,9 +241,9 @@ class Handoff(StagesTest):
     def test_the_rounds_text_keeps_the_newest_within_its_cap(self):
         e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         for k in range(8):
-            e.note_round("stage 1/1", k + 1, "review", "w" * 300, ["x" * 200])
-        text = e.rounds_text()
-        self.assertLessEqual(len(text), engine.HANDOFF_CAP + 700)
+            e.hand.note_round("stage 1/1", k + 1, "review", "w" * 300, ["x" * 200])
+        text = e.hand.rounds_text()
+        self.assertLessEqual(len(text), HANDOFF_CAP + 700)
         self.assertIn("round 8", text)
         self.assertNotIn("round 1,", text)
 
@@ -270,9 +274,6 @@ class Handoff(StagesTest):
         rc, s = self.boundary(120, write_fresh_stage_k=0)
         self.assertEqual([c[1] for c in s.calls if c[0] == "worker"][1], "ref-write")
 
-
-class RepeatedChecks(StagesTest):
-    """13.4: a slow command wrapped in two checks, or around a repo check, goes back to the planner once."""
 
 class SharedNotes(StagesTest):
     """13.8: the tasks of a repo share what is running, what landed and which tests are flaky."""
@@ -671,7 +672,7 @@ class Inputs(StagesTest):
         self.assertIn("Which file do I follow?", plan["assumptions"][0]["text"])
 
     def test_an_irreversible_step_still_reaches_the_ask_path(self):
-        self.assertEqual(sorted(engine.IRREVERSIBLE), ["close_epic", "delete_outside", "push_shared", "spend_money"])
+        self.assertEqual(sorted(IRREVERSIBLE), ["close_epic", "delete_outside", "push_shared", "spend_money"])
         q = dict(PLAN, question="Push the rewritten history to main?", irreversible="push_shared",
                  options=[{"label": "Push", "cost": "shared", "answer": "push", "recommended": True},
                           {"label": "Hold", "cost": "slow", "answer": "hold", "recommended": False}])

@@ -14,6 +14,7 @@ from support.fakes import as_bead  # noqa: E402
 from support import tlbd  # noqa: E402
 from support.fakes import FakeBeadStore  # noqa: E402
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from taskloop.domain.prompts.plan import REPLAN_CAP  # noqa: E402
 from support.builders import cfg_with, make_engine  # noqa: E402
 import test_engine as te  # noqa: E402
 from test_engine import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint, tl  # noqa: E402,F401
@@ -354,7 +355,7 @@ class ResumeCount(StagesTest):
         bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[FALSE])])
         rc, s = self.run_engine({"plan": [bad, bad], "write": [flag, flag]}, max_replans=1)
         self.assertEqual(rc, 2)
-        self.assertTrue(self.blocked and self.blocked[0].startswith(engine.REPLAN_CAP))
+        self.assertTrue(self.blocked and self.blocked[0].startswith(REPLAN_CAP))
 
     def test_a_rebase_onto_a_new_base_starts_the_plan_count_again(self):
         self.behind_branch()

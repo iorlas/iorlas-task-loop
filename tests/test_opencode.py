@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from taskloop.app.write.handoff import Handoff  # noqa: E402
 from taskloop.contracts.delegate import DelegateResult  # noqa: E402
 import engine  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
@@ -126,11 +127,11 @@ class OpenCode(unittest.TestCase):
     # fresh-writer limit
     def test_xai_has_its_own_fresh_writer_limit(self):
         eng = types.SimpleNamespace(cfg=cfg_with())
-        self.assertEqual(engine.Engine.fresh_above_k(eng, "xai"), 100.0)
+        self.assertEqual(Handoff(eng).fresh_above_k("xai"), 100.0)
         eng.cfg = cfg_with(write_fresh_above_k={"xai": 40})
-        self.assertEqual(engine.Engine.fresh_above_k(eng, "xai"), 40.0)
+        self.assertEqual(Handoff(eng).fresh_above_k("xai"), 40.0)
         eng.cfg = cfg_with(write_fresh_above_k={"claude": 1})
-        self.assertEqual(engine.Engine.fresh_above_k(eng, "xai"), 100.0)
+        self.assertEqual(Handoff(eng).fresh_above_k("xai"), 100.0)
 
 
     # review fixes (7e5b07d)

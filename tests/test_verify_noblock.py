@@ -10,6 +10,9 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from taskloop.contracts import answers  # noqa: E402
+from taskloop.domain.prompts import common as cp  # noqa: E402
+from taskloop.domain.prompts import verify as vp  # noqa: E402
 import test_engine as T  # noqa: E402
 from test_engine import BEAD, CLEAN, PLAN, WRITE, engine, tl, verdict  # noqa: E402
 from support.builders import make_engine  # noqa: E402
@@ -224,13 +227,14 @@ class NoBlock(unittest.TestCase):
 
     def test_the_schemas_and_briefs_name_the_kinds(self):
         for node in ("write", "review"):
-            sch = engine.SCHEMAS[node]["properties"]["unchecked"]["items"]["properties"]["kind"]["enum"]
-            self.assertTrue(set(engine.ROUTED_KINDS) <= set(sch))
-        self.assertIn("kind", engine.SCHEMAS["verify"]["properties"]["items"]["items"]["required"])
-        self.assertIn("source", engine.SCHEMAS["verify"]["properties"]["items"]["items"]["required"])
-        for k in engine.ROUTED_KINDS:
-            self.assertIn(k + ":", engine.VERIFY_PROMPT)
-            self.assertIn(k + ":", engine.UNCHECKED_TEXT)
+            sch = answers.schema_for(node)["properties"]["unchecked"]["items"]["properties"]["kind"]["enum"]
+            self.assertTrue(set(answers.ROUTED_KINDS) <= set(sch))
+        item = answers.schema_for("verify")["properties"]["items"]["items"]
+        self.assertIn("kind", item["required"])
+        self.assertIn("source", item["required"])
+        for k in answers.ROUTED_KINDS:
+            self.assertIn(k + ":", vp.VERIFY_PROMPT)
+            self.assertIn(k + ":", cp.UNCHECKED_TEXT)
 
     def filed(self, bead_id, title, existing):
         """file_owner_look for one more bead of epic t-0 while `existing` (a row) is the epic's review bead."""

@@ -26,6 +26,16 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 from taskloop.adapters import applog  # noqa: E402
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from taskloop.domain.write.matchers import count_tests  # noqa: E402
+from taskloop.domain.plan.matchers import AcceptanceText  # noqa: E402
+from taskloop.contracts.answers import IRREVERSIBLE  # noqa: E402
+from taskloop.domain.prompts.plan import REPLAN_CAP  # noqa: E402
+from taskloop.contracts import answers  # noqa: E402
+from taskloop.app.plan.planner import Planner  # noqa: E402
+from taskloop.app.write.stage_loop import StageLoop  # noqa: E402
+from taskloop.domain.prompts import plan as pp  # noqa: E402
+from taskloop.domain.prompts import review as rp  # noqa: E402
+from taskloop.domain.prompts import write as wp  # noqa: E402
 from taskloop.adapters import delegate as dl  # noqa: E402,F401
 from clock import FakeClock  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -34,7 +44,7 @@ from taskloop.contracts.argv import checks_to_wire  # noqa: E402
 from taskloop.contracts.config import EngineConfig  # noqa: E402
 import engine  # noqa: E402
 import seams  # noqa: E402
-from support.fakes import FakeBeadStore, as_bead, as_comment  # noqa: E402
+from support.fakes import FakeBeadStore, as_bead, as_comment, must_bead  # noqa: E402
 from support.logs import records  # noqa: E402
 from taskloop.app.run.steps import Steps  # noqa: E402
 from contracts import samples as S  # noqa: E402
@@ -738,11 +748,11 @@ class EngineTest(unittest.TestCase):
 
     def test_a_check_that_is_not_an_argv_list_is_refused_with_the_allowed_form(self):
         bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["test -f f.txt && echo ok"])])
-        errs = engine.validate(bad, engine.SCHEMAS["plan"])
+        errs = answers.check("plan", False, bad)
         self.assertEqual(len(errs), 1)
-        self.assertIn("$.stages[0].checks[0]: expected array", errs[0])
+        self.assertIn("stages[0].checks[0]: expected an array", errs[0])
         self.assertIn('["just", "name"]', errs[0])
-        self.assertEqual(engine.validate(checks_to_wire(PLAN), engine.SCHEMAS["plan"]), [])
+        self.assertEqual(answers.check("plan", False, checks_to_wire(PLAN)), [])
 
     def test_a_stop_during_a_check_stops_the_check_and_everything_it_started(self):
         if os.name == "nt":
@@ -782,19 +792,19 @@ class EngineTest(unittest.TestCase):
     def test_tests_added_and_removed_come_from_the_diff(self):
         diff = ("+++ b/tests/test_a.py\n+def test_one():\n+    pass\n+def test_two():\n-def test_old():\n"
                 "+++ b/T.cs\n+    [Fact]\n+    [Test]\n")
-        self.assertEqual(engine.count_tests(diff, EngineConfig().test_pattern), (4, 1))
+        self.assertEqual(count_tests(diff, EngineConfig().test_pattern), (4, 1))
 
     def test_a_unity_play_mode_test_counts(self):  # lifesim-d5f.59: a [UnityTest] read as tests_added=0
         diff = ("+++ b/client/Assets/Tests/PlayMode/LiveSpeedBarTests.cs\n+        [UnityTest]\n"
                 "+        public IEnumerator SpeedButtonsChooseAndLightTheHostSpeed()\n")
-        self.assertEqual(engine.count_tests(diff, EngineConfig().test_pattern), (1, 0))
+        self.assertEqual(count_tests(diff, EngineConfig().test_pattern), (1, 0))
 
     def test_gherkin_scenarios_count_in_feature_files_only(self):  # lifesim-fld.26.10: four scenarios read as 0
         diff = ("+++ b/specs/Build.feature\n+  Scenario: a wall is painted\n+    Given a room\n"
                 "+  Scenario Outline: <tint> paint\n-  Scenario: an old one\n"
                 "+++ b/docs/notes.md\n+Scenario: prose, not a test\n"
                 "+++ b/T.cs\n+    [Test]\n")
-        self.assertEqual(engine.count_tests(diff, EngineConfig().test_pattern), (3, 1))
+        self.assertEqual(count_tests(diff, EngineConfig().test_pattern), (3, 1))
 
     def test_writer_is_told_the_repo_worker_rules_and_never_to_run_the_gate(self):
         self.put_repo_file("docs/agents/worker-rules.md", "RULES-MARK: unity runs on the host\n")
@@ -950,7 +960,7 @@ class EngineTest(unittest.TestCase):
         rc, s = self.run_engine({"plan": [dict(PLAN, leftovers=[lo])], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
         self.assertEqual(sum(1 for c in self.bd_calls if c[:2] == ("create", lo["title"])), 1)
-        self.assertIn("never reads the tracker", engine.PLAN_PROMPT)
+        self.assertIn("never reads the tracker", pp.PLAN_PROMPT)
 
     def test_the_planner_gets_the_repo_rules_and_is_told_the_engine_owns_the_gate(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
@@ -1080,7 +1090,7 @@ class EngineTest(unittest.TestCase):
         import signal as sig
         if not hasattr(sig, "SIGTERM") or os.name == "nt":
             self.skipTest("POSIX signal")
-        with mock.patch.object(engine.Engine, "plan", side_effect=lambda *a, **k: os.kill(os.getpid(), sig.SIGTERM)):
+        with mock.patch.object(Planner, "plan", side_effect=lambda *a, **k: os.kill(os.getpid(), sig.SIGTERM)):
             old = sig.getsignal(sig.SIGTERM)
             sig.signal(sig.SIGTERM, lambda *_: (_ for _ in ()).throw(engine.Blocked("failed: stopped (SIGTERM)", kind=engine.oc.Kind.PAUSE_KILLED)))
             try:
@@ -1738,12 +1748,12 @@ class EngineTest(unittest.TestCase):
     def test_a_brief_the_owner_changed_or_a_checkpoint_without_writer_seen_gets_the_full_prompt(self):
         rc, s = self.two_writes(ctx_k=40)
         args = (1, "g", "f.txt", "checks", "where", "fb", "")
-        self.assertIn("The brief is unchanged", self.eng.write_delta(*args))
+        self.assertIn("The brief is unchanged", self.eng.hand.delta(*args))
         (self.eng.run_dir / "brief.md").write_text("the owner answered: use X\n")  # an answer came in
-        self.assertIsNone(self.eng.write_delta(*args))
+        self.assertIsNone(self.eng.hand.delta(*args))
         (self.eng.run_dir / "brief.md").write_text(self.eng.brief_file.read_text())
         self.eng.writer["seen"] = None  # a checkpoint of before this existed
-        self.assertIsNone(self.eng.write_delta(*args))
+        self.assertIsNone(self.eng.hand.delta(*args))
 
     def test_round_three_after_a_fresh_start_resumes_the_fresh_session(self):
         big, small = Path(self.tmp.name, "big.jsonl"), Path(self.tmp.name, "small.jsonl")
@@ -2104,7 +2114,7 @@ class EngineTest(unittest.TestCase):
             self.assertEqual(tl.git("ls-tree", "--name-only", "main", "f.txt", cwd=str(self.race_origin)), "")
 
     def push_race_interrupted_cell(self, interruption, role):
-        real_fix, real_stage = engine.Engine.fix, engine.Engine.stage
+        real_fix, real_stage = engine.Engine.fix, StageLoop.run
         real_delegate = fake_route.Script.reply
         real_sh, real_checks = engine.Engine.sh, engine.Engine.run_checks
         real_brief = check_evidence.failure_brief
@@ -2149,7 +2159,7 @@ class EngineTest(unittest.TestCase):
                 finally:
                     seen["in_fix"] = False
 
-            def stage(this, plan, i, state=None):
+            def stage(this, plan, i, state=None):  # this: the StageLoop
                 if (state or {}).get("fix"):
                     # fix() has initialized its checkpoint; the pending failure must still be there.
                     ck = self.checkpoint()
@@ -2169,7 +2179,7 @@ class EngineTest(unittest.TestCase):
                 return real_delegate(this, current_role, *a, **kw)
 
             with mock.patch.object(engine.Engine, "fix", fix), \
-                    mock.patch.object(engine.Engine, "stage", stage), \
+                    mock.patch.object(StageLoop, "run", stage), \
                     mock.patch.object(check_evidence, "failure_brief", brief), \
                     mock.patch.object(engine.Engine, "save_checkpoint", checkpoint), \
                     mock.patch.object(Steps, "move", move), \
@@ -2535,17 +2545,17 @@ class EngineTest(unittest.TestCase):
 
     def test_the_decision_schemas_require_options(self):
         for node in ("plan", "write", "review"):
-            sch = engine.SCHEMAS[node]
+            sch = answers.schema_for(node)
             self.assertIn("options", sch["required"])
             self.assertEqual(sch["properties"]["options"]["items"]["required"], ["label", "cost", "answer", "recommended"])
-            self.assertIn("options: with a question, 2-4 answers", {"plan": engine.PLAN_PROMPT, "write": engine.WRITE_PROMPT,
-                                                                     "review": engine.REVIEW_PROMPT}[node])
+            self.assertIn("options: with a question, 2-4 answers", {"plan": pp.PLAN_PROMPT, "write": wp.WRITE_PROMPT,
+                                                                     "review": rp.REVIEW_PROMPT}[node])
         ok = {"label": "A", "cost": "c", "answer": "a", "recommended": True}
-        self.assertEqual(engine.validate(checks_to_wire(dict(PLAN, options=[ok])), engine.SCHEMAS["plan"]), [])
+        self.assertEqual(answers.check("plan", False, checks_to_wire(dict(PLAN, options=[ok]))), [])
         bare = {k: v for k, v in checks_to_wire(PLAN).items() if k != "options"}
-        self.assertEqual(engine.validate(bare, engine.SCHEMAS["plan"]), ["$.options: missing"])
-        self.assertEqual(engine.validate(checks_to_wire(dict(PLAN, options=[{"label": "A"}])), engine.SCHEMAS["plan"]),
-                         ["$.options[0].cost: missing", "$.options[0].answer: missing", "$.options[0].recommended: missing"])
+        self.assertEqual(answers.check("plan", False, bare), ["PlanAnswer.options: missing"])
+        self.assertEqual(answers.check("plan", False, checks_to_wire(dict(PLAN, options=[{"label": "A"}]))),
+                         ["PlanAnswer.options[0].cost: missing"])
 
     def test_a_verify_ask_offers_right_and_a_wrong_that_opens_the_box(self):
         r = dict(CLEAN, unchecked=[{"what": "the cited spec link did not open", "kind": "link"}])
@@ -2927,7 +2937,7 @@ class EngineTest(unittest.TestCase):
     def test_criteria_in_a_description_section_count(self):
         bead = {"id": "t-1", "title": "Add f", "metadata": {},
                 "description": "Add f.\n\n## Acceptance Criteria\n\nf.txt exists.\n\n## Touches\n\nf.txt"}
-        self.assertTrue(engine.has_criteria(as_bead(bead)))
+        self.assertTrue(AcceptanceText.present(must_bead(bead)))
 
     def test_a_plan_of_more_than_three_stages_is_a_split_ticket(self):
         four = dict(PLAN, stages=[dict(PLAN["stages"][0], goal="part %d" % k) for k in range(4)])
@@ -2970,7 +2980,7 @@ class EngineTest(unittest.TestCase):
         self.assertIn("over budget", self.blocked[0])
 
     def test_engine_error_still_closes(self):
-        with mock.patch.object(engine.Engine, "plan", side_effect=RuntimeError("boom")):
+        with mock.patch.object(Planner, "plan", side_effect=RuntimeError("boom")):
             rc, _ = self.run_engine({})
         self.assertEqual(rc, 2)
         self.assertIn("engine error RuntimeError: boom", self.said())
@@ -3456,7 +3466,7 @@ class EngineTest(unittest.TestCase):
                                  "review": [review(unmet=["x"]), review(unmet=["x"])]}, max_rounds=1, max_replans=1)
         self.assertEqual(rc, 2)
         a = self.ask()
-        self.assertTrue(a["why"].startswith(engine.REPLAN_CAP), a["why"])
+        self.assertTrue(a["why"].startswith(REPLAN_CAP), a["why"])
         self.assertIn("stage 1 stuck after 1 rounds", a["why"])
         self.assertIn("allow one more", self.card().lower())
         self.file_answer("rerun")
@@ -3476,7 +3486,7 @@ class EngineTest(unittest.TestCase):
 
     def test_the_plan_is_in_the_checkpoint_the_moment_the_planner_answers(self):
         # d5f.38: a SIGTERM after the planner answered lost a finished plan before the checkpoint
-        with mock.patch.object(engine.Engine, "plan_leftovers", side_effect=engine.Blocked("failed: stopped (SIGTERM)", kind=engine.oc.Kind.PAUSE_KILLED)):
+        with mock.patch.object(Planner, "add_leftovers", side_effect=engine.Blocked("failed: stopped (SIGTERM)", kind=engine.oc.Kind.PAUSE_KILLED)):
             rc, _ = self.run_engine({"plan": [PLAN]})
         self.assertEqual(rc, 2)
         ck = self.checkpoint()
@@ -3721,7 +3731,7 @@ class LandReview(EngineTest):
         e = self.engine_at_land({"stage_tree": "old", "amended": True})
         with mock.patch.object(e, "tree_hash", return_value="T"), mock.patch.object(e, "save_checkpoint", side_effect=RuntimeError("stop")):
             with self.assertRaises(RuntimeError):
-                e.stage({"stages": [{"goal": "g", "files": [], "checks": [], "hard": False}]}, 0)
+                e.stage_loop.run({"stages": [{"goal": "g", "files": [], "checks": [], "hard": False}]}, 0)
         self.assertEqual(e.stage_tree, "T")
 
     def test_untracked_ignore_globs_are_never_staged_nor_listed_even_when_a_stage_lists_the_folder(self):

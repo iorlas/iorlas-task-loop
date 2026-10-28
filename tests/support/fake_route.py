@@ -164,8 +164,8 @@ class Script:
         return self.started
 
     def node_of(self, schema):
-        import engine  # the engine sends each contract in strict form, a visual stage's with its look field too
-        return next(k for k in engine.SCHEMAS if schema in (engine.strict(engine.schema_for(k)), engine.strict(engine.schema_for(k, True))))
+        from taskloop.contracts import answers  # the engine sends each contract in strict form, a visual stage's with its look field too
+        return next(k for k in answers.NODES if schema in (answers.sent_schema(k), answers.sent_schema(k, True)))
 
     def __call__(self, cmd, **kw):
         self.argvs.append(list(cmd))

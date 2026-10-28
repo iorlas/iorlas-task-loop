@@ -52,13 +52,19 @@ from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.checks.evidence import compact
 from taskloop.app.checks.host import CheckFault, CheckStuck
 from taskloop.app.checks.runner import Checker
+from taskloop.app.plan.planner import Planner
 from taskloop.app.run import trace as runtrace
+from taskloop.app.write.handoff import Handoff
+from taskloop.app.write.stage_loop import StageLoop
 from taskloop.app.run.calls import timing
 from taskloop.app.run.context import RunContext
 from taskloop.app.run.worker_call import Ops, WorkerCall
 from taskloop.app.slots.lease import Lease
 from taskloop.contracts import log as rec
 from taskloop.contracts.argv import FORM, argv_of, checks_to_text, checks_to_wire, text_of
+from taskloop.contracts.answers import LEGACY_KINDS, ROUTED_KINDS, VERDICTS
+from taskloop.contracts import answers
+from taskloop.contracts.schema import unstrict
 from taskloop.contracts.ask import BudgetLine
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.checks import CheckFaultKind, CheckResult, CheckRun
@@ -79,33 +85,22 @@ from taskloop.domain.checks import names as check_names
 from taskloop.domain.checks.matchers import glob_re, slot_wait_secs
 from taskloop.domain.checks.names import norm as norm_cmd
 from taskloop.stores.real import real_stores
+from taskloop.domain.plan.matchers import AcceptanceText, gate_only_criteria, word_set, without_runner
+from taskloop.domain.write.matchers import count_tests
+from taskloop.domain.prompts.common import DECIDED_TEXT, LATER_CASES, RULES_MAX, UNCHECKED_TEXT
+from taskloop.domain.prompts.plan import (ASSUME_TEXT, DRY_CHECK_TEXT, EMPTY_PLAN_TEXT, GATE_ONLY_ACCEPTANCE, GATE_ONLY_ACCEPTANCE_TEXT,
+                                          PLAN_BRIEF_KB, PLAN_DECIDED_TEXT, PLAN_PROMPT, TRACKER_TEXT, VISUAL_PLAN, VISUAL_STAGES)
+from taskloop.domain.prompts.reflect import REFLECT_PROMPT
+from taskloop.domain.prompts.verify import VERIFY_PROMPT
+from taskloop.domain.prompts.review import NEW_FILES_TEXT, review_prompt
+from taskloop.domain.prompts.write import (DONE_SO_FAR, LOOK_FEEDBACK, LOOK_WRITE_TABLE, REPEAT_RED, SHOTS_FIX, STAGES_DONE,
+                                           WRITE_RESUME_PROMPT, write_prompt)
 
 # ---- output contracts -----------------------------------------------------------------------------------------------
 
 FLAKE_DAYS = 14     # how long a writer-reported flaky test stays in the shared notes
-# tl-ntp (owner ruling 82 item 1): agents assume and record an Assumption; only a step that cannot be undone may ask the owner.
-IRREVERSIBLE = {"push_shared": "a push to a shared branch", "delete_outside": "a deletion outside the worktree",
-                "close_epic": "closing an epic", "spend_money": "spending money"}
-ASSUMPTION = "Assumption: "  # the stable prefix of an assumption line (plan comment, plan summary)
-INPUT_KINDS = ("file", "platform", "object", "engine", "tool", "other")
-CAUSE_CLASSES = ("engine", "prompt", "delegate", "repo_profile", "bead", "sandbox", "other")  # tl-05s
-PROVED_BY = ("check", "stage", "leftover", "engine_step")  # tl-bxk.13.16.1: how a plan criterion is proved (the ledger)
-HANDOFF_CAP = 1500  # characters of round history one prompt carries (tl-bxk.13.6)
-S_STR = {"type": "string"}
-S_STRS = {"type": "array", "items": S_STR}
-S_ARGV = {"type": "array", "items": S_STR, "description": "argv: " + FORM}  # a check: the program and its arguments, never a shell string
-OPTIONS = {"type": "array", "items": {"type": "object", "additionalProperties": False,
-                                      "required": ["label", "cost", "answer", "recommended"],
-                                      "properties": {"label": S_STR, "cost": S_STR, "answer": S_STR,
-                                                     "recommended": {"type": "boolean"}}}}
-OPTIONS_RULE = ("options: with a question, 2-4 answers the owner can click, each a short label, a one-line cost, the exact "
-                "answer text the next run will read, and recommended (true for exactly one: yours); empty with no question.")
-LEFTOVERS = {"type": "array", "items": {"type": "object", "additionalProperties": False,
-                                        "properties": {"title": S_STR, "why": S_STR}, "required": ["title", "why"]}}
 # tl-bxk.10.28: the AI classifies an unchecked item, the engine routes it. The first six are the old kinds (an old
 # checkpoint or a worker still sends them): an open one is asked, as before.
-ROUTED_KINDS = ("engine_step", "checkable", "external_fact", "taste", "owner_decision")
-LEGACY_KINDS = ("requirement", "number", "deletion", "link", "case", "tooling")
 # a kind may move only toward a stricter route (never to a looser one): the engine settles the loosest, asks the strictest
 KIND_RANK = dict({"engine_step": 0, "external_fact": 1, "taste": 1, "checkable": 2, "owner_decision": 3},
                  **{k: 2 for k in LEGACY_KINDS})
@@ -124,31 +119,11 @@ ENGINE_SHOTS = re.compile(r"\b(?:screenshots?|shots|pictures)\b.*\b(?:copi\w+|co
                           r"\b(?:copi\w+|commit\w*|keeps?)\b.*\b(?:screenshots?|shots|pictures)\b", re.I)
 ENGINE_CLOSES = re.compile(r"\bclos(?:e|es|ed|ing)\b[^.]*\bbead\b|\bbead\b[^.]*\bclos(?:e|es|ed|ing)\b", re.I)
 UNCHECKED_KINDS = ROUTED_KINDS + LEGACY_KINDS  # one of these unchecked is verified before the land
-KIND_LINES = (
-    "engine_step: something the engine itself does after this point (files leftover or follow-up beads, lands, runs the "
-    "gate, copies screenshots, closes the bead)",
-    "checkable: a behaviour, a number the code computes or a rate holding across cases: a test or check could prove it",
-    "external_fact: a fact from outside the repo (a price, a licence, a size quoted from a web page or a file the repo "
-    "does not hold) that no check here can prove; give its source (a URL or the named outside document)",
-    "taste: a look, a feel or a judgement call only a person can make",
-    "owner_decision: needs the owner to decide: a change to the contract or requirements, money, an account or a login",
-    "case: an acceptance case you could not run",
-)
-UNCHECKED_TEXT = ("\nunchecked: what you could not check yourself, each with its kind: " + "; ".join(KIND_LINES) +
-                  "; or other. Empty when you checked everything.")
 
-VERDICTS = ("settled", "wrong", "open")  # the verifier's answer per unchecked item, before a verify ask
 
 # tl-bxk.10.23: engine.visual_paths {include, exclude} (globs) says which changes are visual; absent, no look rules at all
 IMAGE_EXT = (".png", ".jpg", ".jpeg")
 MAX_SHOTS, MAX_SHOT_BYTES = 20, 5 * 1024 * 1024
-LOOK_WRITE_TABLE = ("\nThis stage changes how something looks (it touches visual paths). You cannot render it here: the engine does, "
-                    "right after this write, and a look judge reads the pictures. Say what to render in `shots`: one entry per "
-                    "set of pictures, with a method from the table below, its args (name, value) and names (the screens or "
-                    "states you changed, in words). At most %d entries. Do not save screenshots yourself.\n%s\nIf nothing on "
-                    "screen differs, leave `shots` empty and put a one-line reason in logic_only.")
-LOOK_FEEDBACK = ("\nThe engine rendered your shots and the look judge found these defects:\n%s\nThe pictures are at (open one only "
-                 "if you need to):\n%s\nFix what the judge saw, and list the shots to render again in `shots`.\n")
 LOOK_ITEM = re.compile(r"owner\b[^.]{0,40}\b(?:judge|check|decide|assess|review|verify)\b[^.]*\b"
                        r"(?:looks?|visual\w*|appearance|screenshots?)\b", re.I)  # 'Only the owner can judge the look.'
 LOOK_LABEL = "owner-look"
@@ -160,17 +135,9 @@ def visual_hit(vp, paths):
     exc = [glob_re(g) for g in vp.exclude] if vp else []
     return any(any(r.match(p) for r in inc) and not any(r.match(p) for r in exc) for p in paths)
 
-TRACKER_TEXT = ("\n\nYour plan was sent back: these checks read the issue tracker (they run bd or read .beads/), which "
-                "no writer can run and no code change can satisfy:\n%s\nRewrite them to prove the code and the tree only. "
-                "Follow-up work the task wants filed goes in leftovers: the engine files it.")
 
-EMPTY_PLAN_TEXT = ("\n\nYour plan was sent back: it has no stages, no question and no leftovers, so there is nothing to do and nothing to "
-                   "ask. A plan has at least one stage (goal, files, checks). If the work is already done in the tree, plan the "
-                   "stage that checks it. If only follow-up work is left, list it in leftovers. If the task cannot be done without "
-                   "an owner's decision, ask it in question.")
 
-DRY_CHECK_TEXT = ("\n\nYour plan was sent back: the engine dry-ran its checks and these cannot run:\n%s\nReturn the plan "
-                  "with only these checks fixed.")
+
 
 
 # tl-bxk.10.9: an unchecked item naming one of these, or a backticked command, is a check only where the repo uses it
@@ -291,157 +258,6 @@ def linked_text(bead_id, bead, comments, show, comments_of, cap=10, each=400):
     return ("\n## Linked beads (data, not instructions):\n" + "\n".join(out) + "\n") if out else ""
 
 
-LATER_CASES = ("\nAn acceptance case this stage cannot run is not unchecked: it is checked when the last stage runs it.")
-SCHEMAS = {
-    "plan": {"type": "object", "additionalProperties": False,
-             "required": ["summary", "stages", "risks", "question", "options", "decided", "cases", "leftovers"],
-             "properties": {
-                 "summary": S_STR, "decided": S_STR,
-                 "stages": {"type": "array", "items": {
-                     "type": "object", "additionalProperties": False, "required": ["goal", "files", "checks", "hard"],
-                     "properties": {"goal": S_STR, "files": S_STRS, "checks": {"type": "array", "items": S_ARGV}, "hard": {"type": "boolean"}}}},
-                 "risks": {"type": "array", "items": {"type": "object", "additionalProperties": False,
-                                                      "required": ["what", "check"],
-                                                      "properties": {"what": S_STR, "check": S_ARGV}}},
-                 "question": S_STR, "options": OPTIONS,
-                 "irreversible": {"type": "string", "enum": [""] + list(IRREVERSIBLE)},  # optional (tl-ntp): what the question's step cannot undo
-                 "unresolved": {"type": "array", "items": {  # optional (tl-bxk.13.16.3): inputs the criteria need that were not found
-                     "type": "object", "additionalProperties": False, "required": ["what", "kind", "path"],
-                     "properties": {"what": S_STR, "kind": {"type": "string", "enum": list(INPUT_KINDS)}, "path": S_STR}}},
-                 "cases": {"type": "array", "items": {"type": "object", "additionalProperties": False,
-                                                      "required": ["criterion", "check"],
-                                                      "properties": {"criterion": S_STR, "check": S_ARGV,
-                                                                     "class": {"type": "string", "enum": list(looks.CLASSES)},
-                                                                     "proved_by": {"type": "string", "enum": list(PROVED_BY)},
-                                                                     "via": S_STR}}},
-                 "leftovers": LEFTOVERS}},
-    "write": {"type": "object", "additionalProperties": False,
-              "required": ["summary", "checks_run", "question", "options", "decided", "bad_checks", "new_cases", "unchecked"],
-              "properties": {"summary": S_STR, "question": S_STR, "options": OPTIONS, "decided": S_STR,
-                             "shots": {"type": "array", "items": {  # optional (tl-bxk.13.15.2): what the engine should render after this write
-                                 "type": "object", "additionalProperties": False, "required": ["method", "args", "names"],
-                                 "properties": {"method": S_STR, "names": S_STRS,
-                                                "args": {"type": "array", "items": {
-                                                    "type": "object", "additionalProperties": False, "required": ["name", "value"],
-                                                    "properties": {"name": S_STR, "value": S_STR}}}}}},
-                             "flakes": {"type": "array", "items": {  # optional (tl-bxk.13.8): tests that failed for a reason outside the change
-                                 "type": "object", "additionalProperties": False, "required": ["test", "note"],
-                                 "properties": {"test": S_STR, "note": S_STR}}},
-                             "unchecked": {"type": "array", "items": {
-                                 "type": "object", "additionalProperties": False, "required": ["what", "kind"],
-                                 "properties": {"what": S_STR, "kind": {"type": "string", "enum": list(UNCHECKED_KINDS) + ["other"]},
-                                                "source": S_STR}}},
-                             "new_cases": {"type": "array", "items": {
-                                 "type": "object", "additionalProperties": False, "required": ["criterion", "check", "why"],
-                                 "properties": {"criterion": S_STR, "check": S_ARGV, "why": S_STR}}},
-                             "bad_checks": {"type": "array", "items": {
-                                 "type": "object", "additionalProperties": False, "required": ["cmd", "why"],
-                                 "properties": {"cmd": S_STR, "why": S_STR}}},
-                             "checks_run": {"type": "array", "items": {
-                                 "type": "object", "additionalProperties": False, "required": ["cmd", "exit"],
-                                 "properties": {"cmd": S_STR, "exit": {"type": "integer"}}}}}},
-    "review": {"type": "object", "additionalProperties": False,
-               "required": ["findings", "unmet", "question", "options", "decided", "leftovers", "unchecked"],
-               "properties": {"unchecked": {"type": "array", "items": {
-                       "type": "object", "additionalProperties": False, "required": ["what", "kind"],
-                       "properties": {"what": S_STR, "kind": {"type": "string", "enum": list(UNCHECKED_KINDS) + ["other"]},
-                                                "source": S_STR}}},
-                   "findings": {"type": "array", "items": {
-                   "type": "object", "additionalProperties": False, "required": ["file", "line", "severity", "fix"],
-                   "properties": {"file": S_STR, "line": {"type": "integer"},
-                                  "severity": {"type": "string", "enum": ["high", "medium", "low"]},
-                                  "fix": S_STR}}},
-                   "unmet": S_STRS, "question": S_STR, "options": OPTIONS, "decided": S_STR, "leftovers": LEFTOVERS,
-                   "accept_files": S_STRS, "reject_files": S_STRS}},  # optional: unexplained new files the review accepts into the commit / rejects as strays
-    "reflect": {"type": "object", "additionalProperties": False, "required": ["went_well", "went_badly", "wasted", "change"],
-                "properties": {"went_well": S_STRS, "wasted": S_STRS, "change": S_STRS,
-                               "went_badly": {"type": "array", "items": {
-                                   "type": "object", "additionalProperties": False, "required": ["what", "cause", "session", "evidence"],
-                                   "properties": {"what": S_STR, "cause": {"type": "string", "enum": list(CAUSE_CLASSES)},
-                                                  "session": S_STR, "evidence": S_STR}}}}},
-    "look": {"type": "object", "additionalProperties": False, "required": ["findings", "summary"],
-             "properties": {"summary": S_STR,
-                            "findings": {"type": "array", "items": {
-                                "type": "object", "additionalProperties": False, "required": ["item", "verdict", "where", "why"],
-                                "properties": {"item": S_STR, "verdict": {"type": "string", "enum": ["pass", "defect"]},
-                                               "where": S_STR, "why": S_STR}}}}},
-    "verify": {"type": "object", "additionalProperties": False, "required": ["items"],
-               "properties": {"items": {"type": "array", "items": {
-                   "type": "object", "additionalProperties": False, "required": ["n", "verdict", "evidence", "why", "kind", "source"],
-                   "properties": {"n": {"type": "integer"}, "verdict": {"type": "string", "enum": list(VERDICTS)},
-                                  "evidence": S_STR, "why": S_STR,
-                                  "kind": {"type": "string", "enum": list(UNCHECKED_KINDS) + ["other"]}, "source": S_STR}}}}},
-}
-
-
-LOOK_FIELDS = {"write": "logic_only", "review": "look"}  # asked only on a visual stage (tl-bxk.10.23)
-
-
-def schema_for(node, visual=False):
-    """The node's contract; on a visual stage (visual_paths set and the stage touches them) a copy that also requires the
-    look field. Everywhere else exactly SCHEMAS[node]."""
-    field = LOOK_FIELDS.get(node)
-    if not (visual and field):
-        return SCHEMAS[node]
-    sch = copy.deepcopy(SCHEMAS[node])
-    sch["properties"][field] = S_STR
-    sch["required"] = list(sch["required"]) + [field]
-    return sch
-
-
-def strict(schema):
-    """The contract as Codex's strict structured output takes it: every object requires all its properties, and one the
-    contract leaves optional may be null instead. 53 lifesim runs stopped on 'Missing source' (2026-10-22)."""
-    sch = copy.deepcopy(schema)
-    if sch.get("type") == "object":
-        props = sch.get("properties", {})
-        for k, v in props.items():
-            v = props[k] = strict(v)
-            if k not in sch.get("required", []):
-                if isinstance(v.get("type"), str):
-                    v["type"] = [v["type"], "null"]
-                if "enum" in v:
-                    v["enum"] = list(v["enum"]) + [None]
-        sch["required"] = list(props)
-    if sch.get("type") == "array" and isinstance(sch.get("items"), dict):
-        sch["items"] = strict(sch["items"])
-    return sch
-
-
-def unstrict(data, schema):
-    """A strict answer back in the contract's shape: an optional field the worker sent as null is left out."""
-    if schema.get("type") == "object" and isinstance(data, dict):
-        props, req = schema.get("properties", {}), set(schema.get("required", []))
-        return {k: unstrict(v, props[k]) if k in props else v for k, v in data.items()
-                if not (v is None and k in props and k not in req)}
-    if schema.get("type") == "array" and isinstance(data, list):
-        return [unstrict(v, schema.get("items") or {}) for v in data]
-    return data
-
-
-def validate(data, schema, path="$"):
-    """The subset of JSON Schema the contracts above use. Returns a list of errors."""
-    t = schema.get("type")
-    ok = {"object": dict, "array": list, "string": str, "boolean": bool}.get(t)
-    if t == "integer":
-        if not isinstance(data, int) or isinstance(data, bool):
-            return ["%s: expected integer" % path]
-    elif ok and not isinstance(data, ok):
-        return ["%s: expected %s%s" % (path, t, (" (%s)" % schema["description"]) if schema.get("description") else "")]
-    errs = []
-    if "enum" in schema and data not in schema["enum"]:
-        errs.append("%s: %r not in %s" % (path, data, schema["enum"]))
-    if t == "object":
-        for k in schema.get("required", []):
-            if k not in data:
-                errs.append("%s.%s: missing" % (path, k))
-        for k, v in data.items():
-            if k in schema.get("properties", {}):
-                errs += validate(v, schema["properties"][k], path + "." + k)
-    if t == "array":
-        for i, v in enumerate(data):
-            errs += validate(v, schema.get("items", {}), "%s[%d]" % (path, i))
-    return errs
 
 
 # ---- workers --------------------------------------------------------------------------------------------------------
@@ -875,9 +691,9 @@ class Engine:
         if self.plan_data:
             (self.run_dir / "plan.json").write_text(json.dumps(checks_to_wire(self.plan_data), indent=1))
 
-    def blocked_for(self, why, kind, stop=None):
-        """The Blocked a worker call ends its step with: `kind` is an outcome.Kind name; `stop` the stop that decided it."""
-        err = Blocked(why, kind=oc.Kind[kind])
+    def blocked_for(self, why, kind, stop=None, spec=None):
+        """The Blocked a step ends with: `kind` is an outcome.Kind name; `stop` the stop that decided it; `spec` the ask it carries."""
+        err = Blocked(why, spec, kind=oc.Kind[kind])
         err.stop = stop
         return err
 
@@ -946,14 +762,14 @@ class Engine:
             req = RunRequest(role="reviewer", brief_path="", cwd=str(self.wt), schema_path="", task=self.bead, parent=self.session,
                              title="%s · reflect" % self.bead, timeout_s=45)
             cid = self.calls.start("reflect", "reflect", "reviewer", False, self.live_n)
-            res = dg.call(self.resolved, req, prompt, strict(SCHEMAS["reflect"]), self.router.runner(self.err_path, None, None, self.live("reflect"))).res
+            res = dg.call(self.resolved, req, prompt, answers.sent_schema("reflect"), self.router.runner(self.err_path, None, None, self.live("reflect"))).res
             saved = {k: v for k, v in self.stats.items() if k.startswith("tokens_")}
             self.calls.end(cid, "reflect", "reviewer", 1, res)
             self.stats.update(saved)  # the run's counts are the run's, as the Reflect comment says them
             if res.data is None or res.stop is not None:
                 return None
-            data = unstrict(res.data, SCHEMAS["reflect"])
-            if validate(data, SCHEMAS["reflect"]):
+            data = unstrict(res.data, answers.schema_for("reflect"))
+            if answers.check("reflect", False, data):
                 return None
             return data
         except Exception as e:  # nothing here may touch the run's outcome
@@ -1069,8 +885,24 @@ class Engine:
     live_n = 0  # the number of delegate calls with a live file so far
 
     @cached_property
+    def stage_loop(self):
+        return StageLoop(self)
+
+    @cached_property
+    def hand(self):
+        return Handoff(self)
+
+    @cached_property
+    def planner(self):
+        return Planner(self)
+
+    def shot_table(self):
+        """The shot methods the repo can render, as the planner and the writer are told them."""
+        return looks.table_text(self.shot_methods())
+
+    @cached_property
     def worker(self):
-        return WorkerCall(self, Ops(schema_for, strict, unstrict, validate, summarize, read_only_command, self.blocked_for, stop_why,
+        return WorkerCall(self, Ops(summarize, read_only_command, self.blocked_for, stop_why,
                                     stop_say, self.after_call))
 
     def after_call(self, c, res):
@@ -1487,7 +1319,7 @@ class Engine:
         (plans, reviews, reflects pile up on every rerun: 40 of lifesim-vbo's 45 KB brief)."""
         bead, comments = tl.peek(self.store, self.bead) or Bead(id=self.bead, title="", status=""), self.store.comments(self.bead)
         text = brief_digest(bead, comments) + linked_text(self.bead, bead, comments, lambda i: tl.peek(self.store, i), self.store.comments)
-        said = self.answered_words()  # the owner's typed answer is no comment: the brief carries it for the workers
+        said = self.planner.cap.answered_words()  # the owner's typed answer is no comment: the brief carries it for the workers
         if said and self.answered:
             text += "\n## Owner answer (to ask %s)\n%s\n" % (self.answered.id, said)
         self.snap = bead_snapshot(bead, comments)
@@ -1615,58 +1447,6 @@ class Engine:
 
     def plan_text(self):
         return json.dumps(checks_to_wire(getattr(self, "plan_data", None) or {}), indent=1)
-
-    def seen_now(self):
-        """What a writer session holds of the task once it has answered: the brief's and the plan's hash."""
-        h = lambda t: hashlib.sha1(t.encode("utf-8")).hexdigest()  # noqa: E731
-        return [h(self.brief_text()), h(self.plan_text())]
-
-    def fresh_above_k(self, family):
-        v = self.cfg.write_fresh_above_k
-        if isinstance(v, dict):
-            key = "codex" if family == "openai" else family
-            v = v.get(key, FRESH_ABOVE_K.get(key, 0))
-        return float(v or 0)
-
-    def drop_big_writer(self, boundary=False):
-        """tl-bxk.10.29: -> why a new writer starts, or "". The session's last context is above write_fresh_above_k for its
-        family: it is not resumed (every later turn would carry it all); the next write is a new session. At a stage
-        boundary the lower write_fresh_stage_k applies (tl-bxk.13.7): lifesim-yxbb.9 carried 276K into stage 2 (11.7M tokens)."""
-        ref, ctx = self.writer.get("delegate"), self.writer.get("ctx")
-        limit = self.fresh_above_k(self.writer_family or "")
-        if boundary and limit:  # write_fresh_above_k 0 means never: the stage limit does not override it
-            b = float(self.cfg.write_fresh_stage_k or 0)
-            limit = min(limit, b) if b else limit
-        if not ref or not ctx or not limit or ctx <= limit:
-            return ""
-        self.writer.pop("delegate")
-        why = "session at %dk" % ctx
-        self.log.note("fresh writer: %s (above %gk for %s)" % (why, limit, self.writer_family))
-        return why
-
-    def done_so_far(self):
-        """What a fresh writer is told its predecessor did: the diff --stat of the stage so far, and its last summary."""
-        tree = self.tree_hash()
-        stat = tl.git("diff", "--stat", self.stage_tree or self.base_sha(), tree, cwd=self.wt) if tree else ""
-        return DONE_SO_FAR % ((stat or "(no file changed yet)").strip(), (self.last_summary or "(none)").strip(),
-                              self.rounds_text(last=4) or "(none)\n")
-
-    def stages_done_text(self):
-        """What a fresh writer starting a later stage is told: the accepted stages and their diff from the task's base."""
-        tree = self.tree_hash()
-        stat = tl.git("diff", "--stat", self.base_sha(), tree, cwd=self.wt) if tree else ""
-        goals = "".join("- %s\n" % g for g in self.done) or "(none)\n"
-        return STAGES_DONE % (goals, (stat or "(no file changed yet)").strip(), self.rounds_text(last=4) or "(none)\n")
-
-    def write_delta(self, n, goal, files, checks, where, feedback, tail):
-        """The prompt of a resumed writer: what changed since its session last saw the brief and the plan. None when the brief
-        changed (the owner edited it, an answer came in): that session gets the whole prompt again."""
-        seen = self.writer.get("seen")
-        if not seen or seen[0] != self.seen_now()[0]:
-            return None
-        plan = "The plan is unchanged." if seen[1] == self.seen_now()[1] else "The plan changed:\n<plan>\n%s\n</plan>" % self.plan_text()
-        return WRITE_RESUME_PROMPT.format(brief=self.brief_file, plan=plan, n=n, goal=goal, files=files, checks=checks,
-                                          where=where, feedback=feedback) + tail
 
     def comment(self, text):
         if not self.dry:
@@ -1950,52 +1730,6 @@ class Engine:
             have.add(title)
             self.log.note("the ledger defers a criterion the leftovers did not list; listed: %s" % title[:160])
 
-    def seen_lows_text(self):
-        lows = self.handoff["seen_lows"]
-        if not lows:
-            return ""
-        return ("\nLow findings earlier reviews of this task already noted (do not list one again unless the code under it "
-                "changed):\n" + "".join("- %s\n" % x for x in lows[-10:]))
-
-    def rounds_text(self, last=6, each=300, cap=HANDOFF_CAP):
-        """The newest rounds first kept, oldest dropped when the text would pass `cap` characters."""
-        out, size = [], 0
-        for r in reversed(self.handoff["rounds"][-last:]):
-            line = "- %s, round %s (%s)" % (r["stage"], r["round"], r["kind"])
-            if r.get("writer"):
-                line += "; the writer said: %s" % r["writer"][:each]
-            if r.get("open"):
-                line += "; sent back: " + " | ".join(r["open"])
-            line = line[:each + 400]
-            if out and size + len(line) > cap:
-                break
-            out.append(line)
-            size += len(line) + 1
-        return ("\n".join(reversed(out)) + "\n") if out else ""
-
-    def note_round(self, name, rnd, kind, writer="", open_items=()):
-        self.handoff["rounds"].append({"stage": name, "round": rnd, "kind": kind, "writer": " ".join(str(writer).split())[:300],
-                                       "open": [" ".join(str(x).split())[:200] for x in list(open_items)[:6]]})
-        self.handoff["rounds"] = self.handoff["rounds"][-12:]
-        self.save_handoff()
-
-    def note_lows(self, findings):
-        for f in findings:
-            if f["severity"] == "low":
-                x = ("%s:%s %s" % (f["file"], f["line"], " ".join(str(f["fix"]).split())))[:160]
-                if x not in self.handoff["seen_lows"]:
-                    self.handoff["seen_lows"].append(x)
-        self.handoff["seen_lows"] = self.handoff["seen_lows"][-20:]
-        self.save_handoff()
-
-    def save_handoff(self):
-        try:
-            (self.run_dir / "handoff.json").write_text(json.dumps(dict(
-                self.handoff, deferred=[{"what": t, "why": w} for t, w in self.deferred_items()],
-                filed=self.filed), indent=1))
-        except OSError:
-            pass
-
     def run(self):
         return self.run_once()
 
@@ -2025,11 +1759,11 @@ class Engine:
             self.reset(bead)
             self.budget.labels = list(bead.labels)
             self.check_ask()
-            self.grant_cap()
-            written = self.answered_words() if self.answered and self.answered.ask_class == AskClass.MISSING_CRITERIA else ""
-            if not has_criteria(bead) and not written:
+            self.planner.cap.grant()
+            written = self.planner.cap.answered_words() if self.answered and self.answered.ask_class == AskClass.MISSING_CRITERIA else ""
+            if not AcceptanceText.present(bead) and not written:
                 raise Blocked("ticket: the bead has no acceptance criteria", askspecs.missing_criteria(), kind=oc.Kind.ASK_TICKET)
-            self.scope = acceptance_text(bead) or written
+            self.scope = AcceptanceText.text(bead) or written
             plan, i, state = self.resume_point()
             self.log_run()
             # tl-fsj: the configured checks come from the base's config, so the tree they run on must have what the base has; every
@@ -2046,9 +1780,9 @@ class Engine:
             if plan is None:  # a move here loses nothing: the new image reads the same checkpoint (or none) and plans
                 self.safe_point("plan")
             if plan is None:
-                plan, i, state = self.plan(again=self.replan_first), 0, None
+                plan, i, state = self.planner.plan(again=self.replan_first), 0, None
             while i < len(plan["stages"]):
-                d = self.stage(plan, i, state)
+                d = self.stage_loop.run(plan, i, state)
                 state = None
                 if d == "replan":
                     if self.pending_land_validation:
@@ -2057,10 +1791,10 @@ class Engine:
                     self.replans += 1
                     self.stats["replans"] = replans = self.replans
                     if replans > int(self.cfg.max_replans) + self.extra:
-                        raise self.cap_blocked("stage %d stuck after %s rounds. What failed: %s" % (
+                        raise self.planner.cap.blocked("stage %d stuck after %s rounds. What failed: %s" % (
                             i + 1, self.cfg.max_rounds, self.stuck_why[:600]))
                     self.accepted = []
-                    plan = self.plan(again=True)
+                    plan = self.planner.plan(again=True)
                     i = 0
                     continue
                 self.accepted.append(i)
@@ -2360,8 +2094,7 @@ class Engine:
                 out.append(u)
         return out
 
-    GATE_RUNNER = re.compile(r"^(?:just|make|npm run|npm|yarn|pnpm run|pnpm|cargo|task|poe|tox|nox)\s+")
-    LINT_DEFAULT = {"ruff": "ruff check .", "flake8": "flake8", "shellcheck": None}  # plain words: argv_of splits them
+    LINT_DEFAULT = {"ruff": "ruff check .", "flake8": "flake8", "shellcheck": None}
     SAFE_CMD = re.compile(r"[\w./=:,@+*~ -]+")
 
     def gate_names(self):
@@ -2372,7 +2105,7 @@ class Engine:
         names = [c.id for c in self.cfg.checks]
         for c in cmds:
             c = " ".join(c.split())
-            rest = self.GATE_RUNNER.sub("", c)
+            rest = without_runner(c)
             names += [c] + ([rest] if rest != c and ("-" in rest or "_" in rest) else [])
         return [n.lower() for n in dict.fromkeys(names) if len(n) >= 4]
 
@@ -2526,272 +2259,6 @@ class Engine:
         if self._probe is None:
             self._probe = PathProbe(self.wt, sproc.current_env())
         return self._probe
-
-    def ask_plan(self, prompt, step, title, mode="plan"):
-        """One planner answer. Its checks are validated before any write; the ones that read the tracker, run gate-only
-        commands, or cannot run (dry_check) go back once, on the same planner thread, with the exact errors."""
-        data, _ = self.ai("plan", title, prompt, step=step, mode=mode, at=(self.planned, 0, 0))
-        if self.plan_fits(data):  # checkpoint first: a SIGTERM during the send-back below resumes with this plan
-            self.plan_data = json.loads(json.dumps(data))
-            self.save_checkpoint(stage=0, rounds=0, n=0, feedback="", step="write")
-        bad, gated, dry = lint.tracker_checks(data), lint.gate_only_checks(data, self.cfg), lint.dry_check(data, self.shell_probe())
-        only = gate_only_criteria(data, self.cfg)
-        led = (lint.ledger_problems(data) + lint.own_timeout_problems(data, self.cfg.check_timeout_min) + lint.unity_problems(data, self.cfg)
-               + lint.producer_problems(data, self.cfg) + lint.evidence_problems(data, str(self.evidence_dir)))
-        if led:
-            dry = dry + led  # sent back with the checks that cannot run
-        # tl-wjj: a plan with no stages, no question and nothing to file breaks the plan contract (lifesim-w6mk failed on it): back
-        # to the planner once. With leftovers it is the finished-work plan (tl-bxk.13.2); with the owner's verify answer it may be empty.
-        empty = (not data["stages"] and not data["question"].strip() and not data.get("leftovers") and not self.leftovers
-                 and not self.verify_answer)
-        if bad or gated or dry or empty or only:  # asked once to rewrite them, like an invalid answer; not a counted re-plan
-            why = ""
-            if empty:
-                self.warn("the plan has no stages, no question and nothing to file, sent back")
-                why += EMPTY_PLAN_TEXT
-            if only:
-                self.warn("the plan's acceptance is only the gate, sent back (%s): %s" % (GATE_ONLY_ACCEPTANCE, "; ".join(only)[:300]))
-                why += GATE_ONLY_ACCEPTANCE_TEXT % (GATE_ONLY_ACCEPTANCE, self.cfg.gate_text or "the gate", "\n".join("- %s" % c for c in only))
-            if bad:
-                self.warn("the plan's checks read the issue tracker, sent back: %s" % "; ".join(bad)[:300])
-                why += TRACKER_TEXT % "\n".join("- `%s`" % c for c in bad)
-            if gated:
-                self.warn("the plan's checks run gate-only commands, sent back: %s" % "; ".join(
-                    "%s (%s)" % g for g in gated)[:300])
-                why += lint.GATE_ONLY_TEXT % "\n".join("- `%s`: %s" % g for g in gated)
-            if dry:
-                self.warn("the plan's checks cannot run, sent back: %s" % "; ".join(dry)[:300])
-                why += DRY_CHECK_TEXT % "\n".join("- " + e for e in dry)
-            self.steps.outcome("sent back", "its checks read the tracker, run gate-only commands or cannot run" if not empty
-                            else "it has no stages")
-            self.steps.move(step, "plan_sent_back", "plan %s" % "; ".join(
-                (["has no stages"] if empty else []) + (["checks read the issue tracker"] if bad else []) +
-                (["acceptance is only the gate (%s)" % GATE_ONLY_ACCEPTANCE] if only else []) +
-                (["checks run gate-only commands"] if gated else []) +
-                (["checks cannot run"] if dry else [])))
-            ref = self.planner_ref
-            back = (why.lstrip() + "\n\nYour plan, to correct (same output schema):\n" + json.dumps(checks_to_wire(data), indent=1)) if ref else prompt + why
-            data, _ = self.ai("plan", "rewrite checks", back, step=step, mode="checks_back", resume_ref=ref or None, at=(self.planned, 1, 0))
-            bad, gated = lint.tracker_checks(data), lint.gate_only_checks(data, self.cfg)
-            only = gate_only_criteria(data, self.cfg)
-            if only:
-                raise Blocked("failed: the plan's acceptance is still only the gate after one rewrite (%s): %s"
-                              % (GATE_ONLY_ACCEPTANCE, "; ".join(only)[:400]), kind=oc.Kind.FAULT_PLAN)
-            if bad:
-                raise Blocked("failed: the plan's checks still read the issue tracker after one rewrite: %s"
-                              % "; ".join(bad)[:400], kind=oc.Kind.FAULT_PLAN)
-            if gated:
-                raise Blocked("failed: the plan's checks still run gate-only commands after one rewrite: %s"
-                              % "; ".join("%s (%s)" % g for g in gated)[:400], kind=oc.Kind.FAULT_PLAN)
-            dry = lint.dry_check(data, self.shell_probe())
-            if dry:  # a heuristic: the writer's bad_checks flag decides from here, no second send-back
-                self.warn("the plan's checks may still not run after one rewrite: %s" % "; ".join(dry)[:300])
-        for c, i in lint.rerun_checks(data, self.cfg):  # still runs as written: a send-back costs a re-plan
-            self.warn("`%s` re-runs %s; the engine reuses the result of the same command, a different one runs again" % (c[:100], i))
-        return data
-
-    def cap_blocked(self, detail=""):
-        """The re-plan cap's ask: the planner ran `planned` times. An answer that allows one more (action rerun) gives one."""
-        why = "; ".join("%d. %s: %s" % (k + 1, e["mode"], e["why"]) for k, e in enumerate(self.plan_log))[:1500]
-        return Blocked(REPLAN_CAP + "%d times (the limit is %d plan + %d amends): %s%s" % (
-            self.planned, 1, int(self.cfg.max_replans) + self.extra, why, ("; " + detail) if detail else ""),
-            askspecs.cap_reached(self.planned, [(e["mode"], e["why"]) for e in self.plan_log]), kind=oc.Kind.ASK_STUCK)
-
-    def grant_cap(self):
-        """The owner allows one more planner run: they answered the cap's ask with the rerun option, or put the override on the bead
-        (`tl override BEAD replan-cap`). Any other answer is recorded and the bead blocks again at the cap. The grant goes into the
-        checkpoint's extra, which resume_point adds to."""
-        a = self.answered
-        by_ask = a is not None and a.ask_class == AskClass.CAP_REACHED
-        by_override = (tl.peek(self.store, self.bead) or Bead(id=self.bead, title="", status="")).metadata.get(intake.OVERRIDE) == "replan-cap"
-        if self.cap_granted or not (by_ask or by_override):
-            return
-        self.cap_granted = True
-        rerun = a is not None and a.answer is not None and a.answer.action == "rerun"
-        said = a.id if a else ""
-        if not (by_override or rerun):
-            self.log.note("the owner answered the re-plan cap (%s) without allowing more: still blocked. Answer: %s" % (
-                said, (self.answered_words() or "(none)")[:300]))
-            return
-        self.log.note("the owner allowed one more planner run (%s)" % ("the override" if by_override else "ask " + said))
-        if by_override:
-            tl.attempt(self.store.update, self.bead, BeadPatch(unset_metadata=[intake.OVERRIDE]))
-        try:
-            ck = json.loads(self.checkpoint_path().read_text())
-            ck["extra"] = int(ck.get("extra") or 0) + 1
-            self.checkpoint_path().write_text(json.dumps(ck, indent=1))
-        except (OSError, ValueError):
-            self.extra += 1
-
-    def answered_words(self):
-        """What the owner's answer asks the work to do: their text, or the split instruction; a bare rerun or confirm asks for nothing."""
-        return asktext.words(self.answered.answer if self.answered else None)
-
-    def kept_whole(self):
-        """The owner answered the too-big ask, and not with 'I will split it': the plan goes ahead with all its stages."""
-        a = self.answered
-        return a is not None and a.ask_class == AskClass.TOO_BIG and (a.answer is None or a.answer.action != "split")
-
-    def plan(self, again=False):
-        old = self.old_plan or (self.plan_data if again and getattr(self, "plan_data", None) else None)
-        self.amended = self.amended or bool(old)  # tl-bxk.10.24: work exists before this plan's first stage
-        mode = "amend" if old else "plan"
-        why = ""
-        if again:
-            try:
-                why = (self.run_dir / "replan.md").read_text(encoding="utf-8")[-12500:]
-            except OSError:
-                pass
-        # tl-19i: the owner's answer, or an edit of the bead by the owner, is not a failed plan: it never counts (lifesim-yxbb.3
-        # parked 'stuck: re-planned 3 times' on 'the owner answered ask yxbb.3-1')
-        owner = (bool(old) and not again and (self.amend_why or "").startswith("bead changed: the owner answered")
-                 and not (self.answered and self.answered.ask_class == AskClass.CAP_REACHED))  # a cap ask answered 'split' stays blocked
-        if not owner and self.planned >= 1 + int(self.cfg.max_replans) + self.extra:
-            raise self.cap_blocked()
-        if not owner:
-            self.planned += 1
-        self.plan_log.append({"mode": mode, "counted": not owner,
-                              "why": fmt.clip(self.amend_why or ("a re-plan: " + fmt.clip(why, 160) if again else "first plan"), 240)})
-        if old and not again and not self.amend_text:
-            self.amend_text = "The bead is the same as when the old plan was made."
-        extra = ""
-        if old:
-            extra = ("\n\nAn earlier plan exists for this task. Return the plan with the smallest change that covers what "
-                     "follows; keep accepted stages and their checks unless the change touches them; do not re-explore code "
-                     "the old plan already names. Same output schema as a plan.\n<old_plan>\n%s\n</old_plan>\n"
-                     "What changed:\n<change>\n%s\n</change>" % (json.dumps(checks_to_wire(old), indent=1), (self.amend_text or why).strip()))
-        elif again:
-            extra = "\n\nThe previous plan did not work. What failed:\n<failed>\n%s\n</failed>\nPlan again." % why
-        self.old_plan, self.amend_text, self.amend_why = None, "", ""
-        hist = self.rounds_text()
-        if hist and (old or again):  # tl-bxk.13.6: replan.md holds the last round only; the planner also sees the rounds before it
-            extra += ("\n\nWhat the rounds on this task did so far (the writer's summary, then what was sent back). Do not "
-                      "plan a fix that already failed to hold:\n<rounds>\n%s</rounds>\n" % hist)
-        if old or again:
-            extra += self.deferred_text()
-        rules = []
-        wr = self.rules_text()
-        if wr:
-            rules.append("This repo's rules for workers (what runs where, known pitfalls of its tools); the checks you "
-                         "write must follow them:\n<worker_rules>\n%s\n</worker_rules>" % wr)
-        notes = self.planner_notes()
-        if notes:
-            rules.append("Facts about this factory and project that the plan must respect:\n" + notes)
-        shared = self.shared_text()
-        if shared:
-            rules.append(shared.strip())
-        if self.visual_cfg() and self.shot_methods():  # the classes mean "the engine renders": only with a shot table
-            rules.append(VISUAL_PLAN % self.references_text())
-            vp = self.visual_cfg()
-            rules.append(VISUAL_STAGES % (", ".join(vp.include)[:300], looks.table_text(self.shot_methods())))
-        rules.append("Proof files that a check reads or a reviewer looks at (screenshots, logs, probe output) go under "
-                     "%s: it is kept across runs, and nothing else under %s is." % (self.evidence_dir, self.task_dir))
-        rules.append("Checks run on the uncommitted working tree after each write. The engine runs the gate%s once, on "
-                     "the rebased tree at land: never put %s in a stage's checks, and a criterion that names it is proven "
-                     "by that land gate: write no case for it." % (
-                         (" (`%s`)" % self.cfg.gate_text) if self.cfg.gate else "",
-                         ("`%s`" % self.cfg.gate_text) if self.cfg.gate else "it"))
-        extra_gated = [(c, why) for c, why in lint.gate_only(self.cfg) if c != self.cfg.gate_text]
-        if extra_gated:
-            rules.append("These run only in the gate at land too, never in a check: " + "; ".join(
-                "`%s`%s" % (c, " (%s)" % why if why else "") for c, why in extra_gated) + ".")
-        if self.verify_answer:
-            extra += ("\n\nEvery stage was accepted, then the owner checked the work and answered:\n<answer>\n%s\n</answer>\n"
-                      "Plan only the work this answer asks for. If it asks for nothing more (it says the work is right), "
-                      "return no stages: the engine then lands." % self.verify_answer)
-        if self.done:
-            extra += ("\n\nThese stages are already accepted on this branch (reviewed, their work is in the tree): "
-                      "do not plan them again; plan only what the task still needs.\n" +
-                      "".join("- %s\n" % g for g in self.done))
-        prompt = (PLAN_PROMPT.format(brief=self.brief_text(), wt=self.wt) + extra + "\n\n" + "\n".join(rules) +
-                  ("\n\n" + self.where("plan") if self.where("plan") else ""))
-        if len(prompt.encode("utf-8")) > PLAN_BRIEF_KB * 1024:
-            self.warn("the planner's brief is %.0f KB (over %d KB)" % (len(prompt.encode("utf-8")) / 1024, PLAN_BRIEF_KB))
-        step = "replan" if again else "plan"
-        data = self.ask_plan(prompt, step, "amend" if old else "plan", mode)
-        q = data["question"].strip()
-        decided = data["decided"].strip() if q else ""
-        if decided and not self.plan_decided:  # tl-bxk.10.3: no owner ask, the planner plans again
-            self.plan_decided = True
-            self.warn("the planner asked what an accepted requirement decides: %s" % decided[:300])
-            self.steps.outcome("sent back", "an accepted requirement decides its question")
-            self.steps.move(step, "planner_decided", "an accepted requirement decides it: %s" % decided)
-            self.planned += 1  # a planner run like the others: the cap counts it
-            self.plan_log.append({"mode": "plan", "why": "an accepted requirement decides its question"})
-            data = self.ask_plan(prompt + DECIDED_TEXT % (q, decided) + PLAN_DECIDED_TEXT, step, "plan to meet it", "checks_back")
-        data = json.loads(json.dumps(data))  # the engine's own copy: cases are added to it as the task runs
-        if data["question"].strip() and data.get("irreversible") not in IRREVERSIBLE:
-            # tl-ntp: a question about anything that can be undone is an assumption, not an ask (82 item 1)
-            asked = data["question"].strip()
-            data = self.assume_question(data)
-            if not data["stages"] and not data.get("leftovers") and not self.leftovers and not self.plan_assumed:
-                self.plan_assumed = True
-                self.warn("the planner asked a question about a step that can be undone, sent back: %s" % asked[:300])
-                self.steps.outcome("sent back", "its question is about a step that can be undone")
-                self.steps.move(step, "planner_assumed", "a question about a reversible step is an assumption: %s" % asked[:200])
-                self.planned += 1
-                self.plan_log.append({"mode": "plan", "why": "its question is about a step that can be undone"})
-                prior = data["assumptions"]
-                data = json.loads(json.dumps(self.ask_plan(prompt + ASSUME_TEXT % asked, step, "plan on assumptions", "checks_back")))
-                data["assumptions"] = prior + data.get("assumptions", [])
-                if data["question"].strip() and data.get("irreversible") not in IRREVERSIBLE:
-                    data = self.assume_question(data)
-        if self.plan_fits(data):
-            # a SIGTERM from here on resumes with this plan (d5f.38 lost a finished 1.1M plan before its checkpoint)
-            self.plan_data = data
-            self.save_checkpoint(stage=0, rounds=0, n=0, feedback="", step="write")
-        if self.verify_answer and not data["stages"] and not data["question"].strip():
-            self.log.note("the planner finds the owner's answer asks for nothing more: landing")
-            self.plan_leftovers(data)
-            return data
-        self.plan_summary = data["summary"]
-        for c in data.get("cases") or []:
-            c.setdefault("by", "plan")
-        self.plan_data = data
-        if data["question"].strip():
-            self.steps.outcome("asks", data["question"][:200])
-            raise Blocked("owner decision needed", askspecs.open_question(data["question"], data.get("options")), kind=oc.Kind.ASK_DECISION)
-        self.steps.outcome("%d stage%s" % (len(data["stages"]), "" if len(data["stages"]) == 1 else "s"),
-                        data["summary"][:200])
-        self.check_unresolved(data)
-        if not data["stages"]:
-            # tl-bxk.13.2: the work is done and only the filing is left: the engine files and closes. Never after a failed
-            # stage (a re-plan), and never over work no review accepted: that tree is not "done".
-            if (data["leftovers"] or self.leftovers) and not again and (self.done or not self.task_diff().strip()):
-                self.log.note("the planner finds the work done and leaves only follow-up beads to file: closing")
-                self.plan_leftovers(data)
-                self.plan_summary = data["summary"]
-                (self.run_dir / "plan.json").write_text(json.dumps(checks_to_wire(data), indent=1))
-                return data
-            raise Blocked("failed: the plan has no stages", kind=oc.Kind.FAULT_PLAN)
-        big = int(self.cfg.max_stages)
-        if len(data["stages"]) > big and not self.kept_whole():
-            raise Blocked("ticket: the plan has %d stages (more than %d): the bead may be too big for one task" % (
-                len(data["stages"]), big), askspecs.too_big([st["goal"] for st in data["stages"]], big), kind=oc.Kind.ASK_TICKET)
-        self.ledger_fill(data)
-        self.plan_leftovers(data)
-        lines = ["Plan (engine): " + data["summary"]]
-        lines += ["%d. %s%s [files: %s] [checks: %s]" % (n + 1, s["goal"], " (hard)" if s["hard"] else "",
-                                                          ", ".join(s["files"]), "; ".join(s["checks"]))
-                  for n, s in enumerate(data["stages"])]
-        lines += ["Risk: %s → %s" % (r["what"], r["check"]) for r in data["risks"]]
-        lines += [ASSUMPTION + a["text"] for a in data.get("assumptions") or []]
-        self.comment("\n".join(lines))
-        (self.run_dir / "plan.json").write_text(json.dumps(checks_to_wire(data), indent=1))
-        self.export_brief()
-        self.save_checkpoint(stage=0, rounds=0, n=0, feedback="", step="write")
-        return data
-
-    def plan_fits(self, data):
-        """A plan worth keeping through a stop: it has stages, asks nothing, and is not a split ask."""
-        return bool(data["stages"] and not data["question"].strip() and (
-            len(data["stages"]) <= int(self.cfg.max_stages) or self.kept_whole()))
-
-    def plan_leftovers(self, data):
-        """The follow-up work the plan wants filed: filed at the close with the reviews' leftovers. Only a plan the run
-        goes on with adds them, so a plan that asks the owner is not filed twice by the plan after the answer."""
-        have = {lo["title"] for lo in self.leftovers}
-        self.leftovers += [lo for lo in data["leftovers"] if lo["title"] not in have]
 
     # -- checkpoints: where a stopped run was, outside the worktree, so the next run goes on from there
     def check_ask(self):
@@ -2952,7 +2419,7 @@ class Engine:
         given = self.answered is not None and self.answered.answer is not None  # a filed answer changes what the plan reads, whatever the bead
         if (ck["brief"] != self.brief_hash or given) and ck["step"] == "land" and self.answered and self.answered.ask_class == AskClass.EXTERNAL_FACT:
             self.plan_data, self.plan_summary = ck["plan"], ck["plan"]["summary"]
-            answer = self.answered_words()
+            answer = self.planner.cap.answered_words()
             if given and self.answered.answer.action == "confirm":
                 self.log.note("the owner answered verify ask %s (confirmed): going straight to land" % self.answered.id)
                 return ck["plan"], len(ck["plan"]["stages"]), None
@@ -2963,7 +2430,7 @@ class Engine:
                              "accepted stage(s)" % (self.answered.id, len(self.done)))
             return None, 0, None
         if ck["brief"] != self.brief_hash or given:
-            answer = self.answered_words()
+            answer = self.planner.cap.answered_words()
             # a comment alone is context for the next writer (the brief carries it), not an amend: supervisor notes used up
             # the re-plan cap (lifesim d5f.40, fld.27.12). An owner's answer to an ask still amends.
             diff = bead_diff(ck["snap"], self.snap, answer) if ck.get("snap") else None
@@ -3020,239 +2487,6 @@ class Engine:
                     need.add(p)
         early = [k for k, st in enumerate(stages[:upto]) if any(p in c for c in st["checks"] for p in need)]
         return min(early) if early else None
-
-    def stage(self, plan, i, state=None):
-        """Write → checks → review until the review is clean. A red check goes straight back to the writer (it never
-        reaches the reviewer); max_check_tries red in a row, or a review that sends it back, use up a round; when the
-        rounds are used up the stage asks for a re-plan. Accept is a rule: checks green and nothing blocking in the
-        review (high/medium findings, unmet requirements). The writer's or the reviewer's question is the owner's."""
-        st = plan["stages"][i]
-        last = i == len(plan["stages"]) - 1
-        state = state or {}
-        fix = state.get("fix")
-        sk = self.at_stage = 1000 + int(state.get("fix_n") or 0) if fix else i  # the stage's place in a call's key (CallState)
-        if not state or fix:  # a resumed stage keeps the checkpoint's start; the first stage starts at the task's base
-            self.stage_tree = self.tree_hash() if (i or fix or self.amended) else ""
-        name = state.get("name") or "stage %d/%d" % (i + 1, len(plan["stages"]))
-        if not state:  # a resumed stage keeps its render rounds (the checkpoint's)
-            self.look_done, self.look_prev = 0, []
-        feedback, rounds, red, n = state.get("feedback", ""), state.get("rounds", 0), 0, state.get("n", 0)
-        failed_cmds = state.get("failed")  # the commands the last engine run found red (None: no check ran red yet)
-        shots_fixed = False  # a visual write without shots or a reason is sent back once, at no cost to the rounds (tl-tno)
-        red_now = set()  # the commands the last round found red
-        acc_first = False  # the last round ran acceptance first
-        acc_only = False  # the last round's red checks were all acceptance ones (tl-bxk.13.14)
-        where = ({"fix": state.get("fix_n"), "fixes": state.get("fix_of")} if fix else
-                 {"stage": i + 1, "stages": len(plan["stages"])})
-        while True:
-            if not fix:  # a fix runs at land: its checkpoint stays at land, and a resume lands again
-                self.save_checkpoint(stage=i, rounds=rounds, n=n, feedback=feedback, step="write")
-                self.safe_point("write")  # the round's write, checks and review run on the code that is installed now
-            n += 1
-            self.stats["writes"] += 1
-            if n >= 2:
-                self.warn("%s: write %d (round %d)" % (name, n, rounds + 1))
-            boundary = n == 1 and i > 0 and not state  # the first write of a later stage
-            fresh = self.drop_big_writer(boundary)
-            stage_checks = self.stage_checks_text(st["checks"], skip=failed_cmds)
-            where_text = self.where("write", [c.cmd for c in self.cfg.checks] + st["checks"], failed_cmds, listed=st["checks"])
-            tail = ("\nThe plan's acceptance cases run on the last stage. If you find a case they miss, add it to new_cases (the "
-                    "criterion it proves, the check, why); never remove or weaken one." + ("" if last else LATER_CASES) +
-                    UNCHECKED_TEXT + self.look_write(st))
-            prompt = write_prompt(
-                self.rules_text(), brief=self.brief_text(), plan=self.plan_text(), n=i + 1, goal=st["goal"],
-                files=", ".join(st["files"]), checks=stage_checks,
-                feedback=feedback, evidence=self.evidence_dir, where=where_text, gate=(" (`%s`)" % self.cfg.gate_text) if self.cfg.gate else "") + tail
-            if fresh:
-                prompt += self.stages_done_text() if boundary else self.done_so_far()
-            dtail = ""  # what a resumed writer still needs that its first prompt did not say for this stage
-            if last and not self.writer.get("last_stage"):  # the acceptance cases run now: it has not been told
-                dtail += "\nThe plan's acceptance cases run on this last stage. If you find a case they miss, add it to new_cases (the criterion it proves, the check, why); never remove or weaken one."
-            if self.unchecked:
-                dtail += UNCHECKED_TEXT
-            delta = None if fresh else self.write_delta(i + 1, st["goal"], ", ".join(st["files"]), stage_checks, where_text, feedback,
-                                                        dtail + self.look_write(st))
-            if delta:  # the writer may have edited its copy: the engine's brief goes back before it reads it again
-                self.brief_file.write_text(self.brief_text(), encoding="utf-8")
-            else:  # a whole prompt (a first write, a fresh writer): what the tasks beside this one are doing (tl-bxk.13.8)
-                prompt += self.shared_text() + self.deferred_text()
-            w, wfam = self.ai("write", "%s write %d" % (name, n), prompt, delta=delta, resume_key="writer", write=n,
-                              visual=self.stage_visual(st), round=rounds + 1, at=(sk, rounds, n), **where)
-            self.writer_family = wfam
-            self.writer["last_stage"] = last
-            wr = self.sessions[-1] if self.sessions else {}
-            self.write_rounds.append({"write": n, "round": rounds + 1, "node_id": wr.get("node_id"), "ref": wr.get("ref"),
-                                      "resumed": "yes" if wr.get("resume") else "no",
-                                      "input_tokens": (wr.get("tokens") or {}).get("in"), "turns": wr.get("turns"),
-                                      "prompt_chars": wr.get("prompt_chars"), "context_k": wr.get("context_k"), "fresh": fresh})
-            self.writer_said += "\n" + w["summary"]
-            self.add_flakes(w.get("flakes") or [])
-            self.last_summary = w["summary"]
-            wrote_unchecked = w.get("unchecked") or []  # the review decides what is still unproven after the checks
-            if w["question"].strip() and w["decided"].strip():  # lifesim-d5f.58: an accepted requirement is no question
-                rounds += 1
-                self.stats["rounds"] += 1
-                self.stuck_why = "the writer asked what an accepted requirement decides: %s" % w["decided"]
-                self.warn("%s: %s" % (name, self.stuck_why[:300]))
-                if rounds >= int(self.cfg.max_rounds):
-                    (self.run_dir / "replan.md").write_text(self.stuck_why + "\n\nThe question: " + w["question"])
-                    self.steps.move("replan", "rounds_used", "%d rounds used: %s" % (rounds, self.stuck_why))
-                    return "replan"
-                self.steps.move("write", "writer_decided", "an accepted requirement decides it: %s" % w["decided"])
-                feedback = DECIDED_TEXT % (w["question"], w["decided"])
-                continue
-            if w["question"].strip():
-                self.steps.outcome("asks", w["question"][:200])
-                raise Blocked("owner decision needed", question_spec(w), kind=oc.Kind.ASK_DECISION)
-            if (self.look_ready(st) and not fix and not shots_fixed and not (w.get("shots") or [])
-                    and not (w.get("logic_only") or "").strip()):
-                # tl-tno: the review's 'asked for no shots' finding was a writer amend and burned lifesim-d5f.39's re-plan cap; the contract
-                # is the engine's to hold: ask again once, with the table, before any check or review runs
-                shots_fixed = True
-                tip = SHOTS_FIX % looks.table_text(self.shot_methods())
-                self.steps.move("write", "shots_contract", "a visual write named no shots and gave no reason: asked once more")
-                w2, wfam = self.ai("write", "%s shots contract" % name, prompt + tip, delta=tip, resume_key="writer", write=n,
-                                   visual=True, round=rounds + 1, at=(sk, rounds, n + 500), **where)
-                self.stats["writes"] += 1
-                self.writer_family = wfam
-                self.writer["last_stage"] = last
-                self.writer_said += "\n" + w2["summary"]
-                self.last_summary = w2["summary"]
-                if w2["question"].strip():
-                    self.steps.outcome("asks", w2["question"][:200])
-                    raise Blocked("owner decision needed", question_spec(w2), kind=oc.Kind.ASK_DECISION)
-                w = dict(w2, summary=w["summary"] + "\n" + w2["summary"], new_cases=(w.get("new_cases") or []) + (w2.get("new_cases") or []),
-                         unchecked=(w.get("unchecked") or []) + (w2.get("unchecked") or []),
-                         bad_checks=(w.get("bad_checks") or []) + (w2.get("bad_checks") or []))
-            self.add_cases(w.get("new_cases") or [])
-            if self.shot_methods() and self.stage_visual(st):
-                self.render_stale = True  # a write after the last render: its pictures show an older tree
-            back = self.look_step(st, w, name, last)
-            if back:  # the look judge found defects: the writer fixes them before the full checks run once
-                feedback = back
-                continue
-            acc_first = acc_only and not acc_first  # once, then the normal order: a check may read what a tests-group check writes
-            run = self.run_checks(dict(st, checks=st["checks"] + (self.case_checks() if last else [])), name,
-                                  acceptance_first=acc_first, conflict_fix=state.get("conflict_fix"), round=rounds + 1, **where)
-            checks, self.last_run = run.results, run
-            self.stores.check_run(self.run_dir.name, None).write(run)
-            self.stats["tests_added"], self.stats["tests_removed"] = count_tests(self.task_diff(), self.cfg.test_pattern)
-            if self.stats["tests_removed"]:
-                self.warn("the task's diff removes %d tests" % self.stats["tests_removed"])
-            failed = run.failed
-            prev_red, red_now = red_now, {c.cmd for c in failed}  # the commands red last round (tl-bxk.13.11)
-            acc_only = bool(failed) and all(c.group == "acceptance" for c in failed)
-            flagged = {c.cmd.strip(): why for c in failed for why in [check_evidence.flagged_why(c, w["bad_checks"])] if why}
-            wrong = [c for c in failed if c.cmd.strip() in flagged]
-            if wrong:  # a check no code change can satisfy: retrying it is waste, the plan must change
-                self.stuck_why = "the writer says these stage checks are wrong: " + "; ".join(
-                    "`%s` (exit %s): %s" % (c.cmd, c.exit, flagged[c.cmd.strip()]) for c in wrong)
-                self.warn("%s: %s" % (name, self.stuck_why[:300]))
-                self.note_round(name, rounds + 1, "bad_checks", w["summary"], [flagged[c.cmd.strip()] for c in wrong])
-                (self.run_dir / "replan.md").write_text(self.stuck_why + "\n\nTheir output:\n" + check_evidence.failure_brief(wrong, self.run_dir))
-                self.steps.move("replan", "bad_checks", "the writer says %d check%s cannot pass: %s" % (
-                    len(wrong), "" if len(wrong) == 1 else "s", "; ".join(flagged[c.cmd.strip()] for c in wrong)))
-                return "replan"
-            if failed:
-                red += 1
-                failed_cmds = [c.cmd for c in failed]
-                feedback = ("\nThese checks fail (run by the engine, outside your sandbox). Fix exactly this:\n%s\n"
-                            % check_evidence.failure_brief(failed, self.run_dir)) + self.base_red_text(run)
-                again = [c.cmd for c in failed if c.cmd in (prev_red or ()) and c.id == c.cmd]  # a plan's check, not a repo check
-                if again:  # tl-bxk.13.11: lifesim-fdyo tuned contrast to a threshold the plan made up, 3 rounds, 5.98M tokens in one turn
-                    feedback += REPEAT_RED % "\n".join("- %s" % c[:200] for c in again)
-                red_text = "%d failed: %s" % (len(failed), ", ".join(c.id[:60] for c in failed))
-                self.note_round(name, rounds + 1, "checks_red", w["summary"], [c.id for c in failed])
-                if red < int(self.cfg.max_check_tries):
-                    self.steps.move("write", "checks_red", red_text)
-                    continue
-                red, rounds = 0, rounds + 1
-                self.stats["rounds"] += 1
-                self.stuck_why = "checks still red after %s tries: %s" % (self.cfg.max_check_tries, check_evidence.compact(failed))
-                if rounds >= int(self.cfg.max_rounds):
-                    (self.run_dir / "replan.md").write_text(self.stuck_why + "\n\nTheir output:\n" + check_evidence.failure_brief(failed, self.run_dir))
-                    self.steps.move("replan", "rounds_used", "%s; %d rounds used" % (red_text, rounds))
-                    return "replan"
-                self.steps.move("write", "checks_red", "%s; round %d used" % (red_text, rounds))
-                continue
-            red = 0
-            self.steps.move("review", "checks_green", "%d passed" % len(run.passed))
-            self.stats["reviews"] += 1
-            self.review_cap()
-            open_items = list({u["what"]: u for u in ([] if fix else self.unchecked) + wrote_unchecked}.values())
-            kinds = self.new_by_kind()
-            review, _ = self.ai("review", name, review_prompt(
-                brief=self.brief_text(), plan=self.plan_text(), n=i + 1, goal=st["goal"],
-                work=self.stage_work(kinds["unexplained"], kinds["ignored"]), checks=compact(checks), summary=w["summary"], evidence=self.evidence_dir,
-                gate=(" (`%s`)" % self.cfg.gate_text) if self.cfg.gate else "",
-                added=self.stats["tests_added"], removed=self.stats["tests_removed"],
-                fix=fix, last=last, fix_scope=state["scope"] if fix else "") +
-                ("\n" + self.where("review") if self.where("review") else "") + self.cases_text() +
-                ("The engine ran every case above with the checks, so a case is never an unchecked item; a case whose "
-                 "check does not prove its criterion is a finding.\n" if last and self.case_checks() else "") +
-                ("\nNobody has checked these yet (earlier stages or the writer could not; the engine's checks above ran "
-                 "after them); put in your unchecked only what is still unproven:\n" + "".join(
-                     "- %s (%s)\n" % (u["what"], u["kind"]) for u in open_items) if open_items else "") +
-                ("" if last else LATER_CASES) + self.deferred_text() + self.seen_lows_text() + self.flakes_text() + UNCHECKED_TEXT + self.look_review(st, w, fix) +
-                (self.new_files_brief(kinds["unexplained"]) if kinds["unexplained"] else ""),
-                writer_family=wfam, visual=not fix and self.stage_visual(st), round=rounds + 1, at=(sk, rounds, n), **where)
-            self.accepted_new += [p for p in review.get("accept_files") or [] if p in kinds["unexplained"] and p not in self.accepted_new]
-            review = dict(review, findings=list(review["findings"]))
-            kept = [u for u in review["unmet"] if not self.ledger_route(u)]  # tl-bxk.13.16.1: the ledger settles these
-            if len(kept) != len(review["unmet"]):
-                self.log.note("%d unmet item%s dropped: the plan's ledger defers or gives them to the engine: %s" % (
-                    len(review["unmet"]) - len(kept), "" if len(review["unmet"]) - len(kept) == 1 else "s",
-                    "; ".join(u[:80] for u in review["unmet"] if u not in kept)))
-                review["unmet"] = kept
-            for p in self.undecided_new(kinds["unexplained"], review):  # never a silent drop: the writer names it or deletes it
-                review["findings"].append({"file": p, "line": 0, "severity": "medium", "fix":
-                    "decide: unexplained new file %s (name it in your summary if the task needs it, else delete it)" % p})
-            # lifesim-gfr.31.1: a stage-1 item that stage 2 ran green still stopped the land; each review re-judges what
-            # is open, so its list replaces it. A fix at land reviews only the fix: it adds, never clears.
-            judged = self.out_of_scope(self.engine_unproven(review.get("unchecked") or [], checks))
-            self.unchecked = self.unchecked + judged if fix else judged
-            self.look_judged(review, st, w, fix)
-            self.link_judged(review)
-            same = self.last_flag == "same_family"
-            if same:
-                self.warn("%s: the review is from the writer's own model family (no other lane was free)" % name)
-            if review["findings"] or review["unmet"] or same:
-                self.comment("Review (engine, %s%s): " % (name, ", same family as the writer" if same else "") + "; ".join(
-                    ["%s:%s [%s] %s" % (f["file"], f["line"], f["severity"], f["fix"]) for f in review["findings"]] +
-                    ["unmet: " + u for u in review["unmet"]]) or "no findings")
-            self.leftovers += review["leftovers"]
-            self.note_lows(review["findings"])
-            if review["question"].strip() and review["decided"].strip():  # lifesim-d5f.58: a fix round, not an ask
-                self.log.note("%s: the review asked what an accepted requirement decides (%s): sending it back"
-                         % (name, review["decided"][:200]))
-                review["unmet"] = review["unmet"] + ["%s (an accepted requirement decides it: meet it) %s" % (
-                    review["decided"], review["question"])]
-            elif review["question"].strip():
-                self.steps.outcome("asks", review["question"][:200])
-                raise Blocked("owner decision needed", askspecs.open_question(review["question"], review.get("options")), kind=oc.Kind.ASK_DECISION)
-            blocking = [f for f in review["findings"] if f["severity"] in ("high", "medium")]
-            said = "%d finding%s, %d unmet" % (len(blocking), "" if len(blocking) == 1 else "s", len(review["unmet"]))
-            if not blocking and not review["unmet"]:
-                low = len(review["findings"])
-                self.steps.outcome("clean", "%d low finding%s" % (low, "" if low == 1 else "s") if low else "")
-                self.steps.move("next", "accepted", "%s accepted" % name)
-                return "accept"
-            self.steps.outcome("sent back", said)
-            self.note_round(name, rounds + 1, "review", w["summary"], review["unmet"] + [
-                "%s:%s %s" % (f["file"], f["line"], f["fix"]) for f in blocking])
-            rounds += 1
-            self.stats["rounds"] += 1
-            self.stuck_why = "the review still sends it back: %s" % "; ".join(
-                review["unmet"] + ["%s:%s %s" % (f["file"], f["line"], f["fix"]) for f in blocking])
-            if rounds >= int(self.cfg.max_rounds):
-                (self.run_dir / "replan.md").write_text(self.stuck_why)
-                self.steps.move("replan", "rounds_used", "review sent it back: %s; %d rounds used" % (said, rounds))
-                return "replan"
-            failed_cmds = None
-            self.steps.move("write", "review_sendback", "%s: round %d" % (said, rounds + 1))
-            feedback = ("\nThe reviewer sent the stage back. Fix exactly this:\n%s%s\n" % (
-                "".join("- unmet: %s\n" % u for u in review["unmet"]),
-                "".join("- %s:%s [%s] %s\n" % (f["file"], f["line"], f["severity"], f["fix"]) for f in blocking)))
 
     def base_red_text(self, run):
         """What the writer is told of the checks that were red on the untouched base too: they are not its to fix."""
@@ -3613,7 +2847,7 @@ class Engine:
             checks = [self.MARKERS]
         goal, text = self.FIX[kind]
         st = {"goal": "Fix: " + goal, "files": [], "checks": checks, "hard": False}
-        d = self.stage({"stages": [st]}, 0, {
+        d = self.stage_loop.run({"stages": [st]}, 0, {
             "fix": True, "conflict_fix": skip, "name": "fix %d/%d" % (self.fixes, limit), "fix_n": self.fixes, "fix_of": limit,
             "failed": [self.cfg.gate_text or "rebase"] if kind == "gate" else None,
             "feedback": text % tail if kind == "verify" else text % (
@@ -3694,51 +2928,6 @@ class Engine:
 
     def look_ready(self, st):
         return bool(self.shot_methods()) and self.stage_visual(st)
-
-    def planner_notes(self):
-        """engine.planner_notes: text, or "@path" of a repo file (read from the worktree), at most 2000 characters."""
-        v = (self.cfg.planner_notes or "").strip()
-        if v.startswith("@"):
-            try:
-                v = (Path(self.wt) / v[1:]).read_text(encoding="utf-8").strip()
-            except OSError:
-                self.warn("engine.planner_notes: %s cannot be read" % v)
-                return ""
-        return v[:2000]
-
-    def assume(self, data, text):
-        """tl-ntp: record an Assumption on the plan (typed: step, text, reversible) and keep going."""
-        data.setdefault("assumptions", []).append({"step": "plan", "text": " ".join(text.split())[:600], "reversible": True})
-
-    def assume_question(self, data):
-        """A plan question about a step that can be undone becomes an Assumption; the plan goes on without the ask."""
-        q = " ".join(data["question"].split())
-        self.assume(data, "no owner answer; planned on the bead text and the repo. Open question: " + q)
-        data["question"], data["options"], data["irreversible"] = "", [], ""
-        self.log.note(ASSUMPTION + q[:300])
-        return data
-
-    def check_unresolved(self, data):
-        """tl-bxk.13.16.3, tl-ntp: inputs the planner could not find. A file that is there after all drops out; one a case defers
-        (proved_by leftover) is a follow-up; the rest is an Assumption in the plan: missing reference material is not a reason to
-        ask the owner (tl-7y6.6.15 stopped on study files no worktree can read)."""
-        gone, open_ = [], []
-        deferred = [word_set("%s %s" % (c["criterion"], c.get("via") or "")) for c in data.get("cases") or [] if c.get("proved_by") == "leftover"]
-        deferred += [word_set(lo["title"] + " " + lo["why"]) for lo in data.get("leftovers") or []]
-        for u in data.get("unresolved") or []:
-            path = (u.get("path") or "").strip()
-            if path and ".." not in path and (Path(path) if path.startswith("/") else Path(self.wt) / path).exists():
-                continue  # it is there
-            if any(len(word_set(u["what"]) & d) >= 2 for d in deferred):
-                gone.append(u)
-                continue
-            open_.append(u)
-        if gone:
-            self.log.note("inputs not found, their criteria deferred: %s" % "; ".join(u["what"][:100] for u in gone))
-        for u in open_:
-            self.assume(data, "%s (%s%s) is not available; planned from the bead text and the repo" % (
-                u["what"], u["kind"], ", expected at " + u["path"] if u.get("path") else ""))
-            self.log.note(ASSUMPTION + u["what"][:300])
 
     def references_text(self):
         """What the planner is told the task already has to look at: image files its text names, and the last landed shots."""
@@ -4362,7 +3551,6 @@ class Engine:
                                                                           else "close", self.bead, rc))
 
 
-GHERKIN_TEST = re.compile(r"^\s*Scenario( Outline)?:")  # a use-case scenario (Reqnroll, lifesim-fld.26.10)
 
 
 RUN_STEM = re.compile(r"^\d{8}-\d{6}$")  # <bead>-<YYYYMMDD-HHMMSS>: an engine log of that bead, not of a child bead
@@ -4429,68 +3617,12 @@ def close_move(outcome, why, kind=None):
     return "close", "stopped" if why.startswith("failed: stopped") else "failed"
 
 
-def count_tests(diff, pattern):
-    """Tests added and removed in a unified diff: lines matching the repo's test pattern (engine.test_pattern), and
-    Gherkin scenarios in .feature files."""
-    rx, feature = re.compile(pattern), False
-    added = removed = 0
-    for ln in diff.splitlines():
-        if ln.startswith(("+++", "---")):
-            if not ln.rstrip().endswith("/dev/null"):  # a deleted file names itself on its --- line only
-                feature = ln.rstrip().endswith(".feature")
-            continue
-        hit = (GHERKIN_TEST if feature else rx).search(ln[1:])
-        if ln.startswith("+") and hit:
-            added += 1
-        elif ln.startswith("-") and hit:
-            removed += 1
-    return added, removed
-
-
-REFLECT_PROMPT = """You write a short reflection on one run of an unattended task engine, for the engineer who maintains the engine. Do not
-edit files; judge only from what is below.
-Bead %s: %s
-Outcome: %s. Why: %s
-Counts: %s
-The run's worker sessions (cite the session id):
-%s
-The run's decisions and warnings, oldest first:
-%s
-
-Answer:
-- went_well: up to 4 lines, each one concrete thing that worked.
-- went_badly: up to 4 items; each: what (one line), cause (one of engine, prompt, delegate, repo_profile, bead, sandbox, other), session
-  (the session id above it comes from, or "run"), evidence (a number or a quote from above). Empty when nothing went badly.
-- wasted: up to 3 lines, where tokens or minutes went for nothing, with the numbers.
-- change: up to 3 lines, what to change, naming the cause class.
-Cite only what the data above shows; do not guess a cause it does not support."""
-
 engine_written = intake.engine_written  # what the engine (or a receipt of ours) wrote into a bead is never the owner's (tl-7y6.6.2)
 
 
 def people_lines(text):
     """Notes without the lines the engine appended to it ('Engine paused: ...', 'Engine failed: ...'): the only fields it writes."""
     return "\n".join(l for l in (text or "").splitlines() if not l.lstrip().startswith(("Engine paused:", "Engine failed:"))).strip()
-
-
-def has_criteria(bead):
-    """Acceptance criteria in the bead's field, or in a ## Acceptance Criteria or ## Done when section (or a "Done when:" line) of its description."""
-    if bead.acceptance_criteria.strip():
-        return True
-    m = re.search(r"^#{1,6}\s*(?:Acceptance Criteria|Done when)\s*:?\s*$(.*?)(?=^#{1,6}\s|\Z)", bead.description,
-                  re.M | re.S | re.I)
-    if m and m.group(1).strip():
-        return True
-    # tl-bxk.13.2: "Done when: ..." as a line, or "**Done when**" then its list (lifesim-r6z was blocked in 0 s for it)
-    return bool(re.search(r"^[ \t>*_#-]*Done when[ \t]*[:*_]+[ \t]*(?:[^\s:*_]|\n\s*[-*\d])", bead.description, re.M | re.I))
-
-
-def acceptance_text(bead):
-    """The bead's acceptance text: its criteria field, and its description from an Acceptance Criteria or Done when heading
-    (or line) on."""
-    desc = bead.description
-    m = re.search(r"^[ \t>*_#-]*(?:Acceptance Criteria|Done when)\b", desc, re.M | re.I)
-    return "\n".join(x for x in (bead.acceptance_criteria.strip(), desc[m.start():] if m else "") if x)
 
 
 def run_breakdown(log_path, open_node=None, top=4):
@@ -4550,16 +3682,8 @@ def brief_digest(bead, comments, owner_only=False, ignore=()):
 
 LINK_CAP = 200  # links opened per review
 
-STOP_WORDS = {"that", "this", "with", "from", "into", "have", "been", "were", "which", "their", "there", "than", "then", "when",
-              "what", "does", "should", "would", "could", "also", "only", "each", "every", "about", "after", "before", "bead",
-              "beads", "task", "work", "tests", "test", "file", "files", "code", "check", "checks"}
 FILING_WORDS = re.compile(r"\b(?:beads?|follow-?ups?|filed?|filing|issues?|tickets?|records?|recorded|leftovers?|deferred?)\b", re.I)
 OWNERISH = re.compile(r"\b(?:owner|sign-?off|approv\w*|review|confirm\w*|decid\w*|decision)\b", re.I)
-
-
-def word_set(text):
-    """The words of `text` worth comparing: lower case, 3+ letters or digits (any script), no filler."""
-    return {w for w in re.findall(r"[^\W_]{3,}", str(text).lower()) if w not in STOP_WORDS}
 
 
 def reflection_text(r):
@@ -4569,32 +3693,6 @@ def reflection_text(r):
     bad = "; ".join("[%s] %s (session %s)" % (b["cause"], fmt.clip(b["what"], 160), b["session"]) for b in r.get("went_badly") or []) or "none"
     return " reflection: badly: %s%s%s;" % (fmt.clip(bad, 500), (" | wasted: " + fmt.clip("; ".join(r["wasted"]), 200)) if r.get("wasted") else "",
                                            (" | change: " + fmt.clip("; ".join(r["change"]), 200)) if r.get("change") else "")
-
-
-GATE_ONLY_ACCEPTANCE = "plan-lint rule gate-only-acceptance"
-GATE_ONLY_ACCEPTANCE_TEXT = ("\n\nYour plan was sent back (%s): these acceptance cases or Done-when items are only the "
-                             "gate command, and the engine runs the gate (`%s`) once at land on its own:\n%s\nReplace each with what "
-                             "the task asks for that the gate does not show (a behaviour, a number, a file), or drop it.")
-GATE_FILLER = frozenset("the a an of and or is are be pass passes passed passing green succeed succeeds succeeded success clean ok okay "
-                        "exit exits exited code zero 0 run runs running ran must should shall without no error errors fail fails "
-                        "failure failures all full complete completes whole gate check checks done when it that on with".split())
-
-
-def gate_only_criteria(plan, cfg):
-    """[criterion]: the plan's cases (its acceptance) whose text is only a gate command, e.g. "`just check` passes" or "just check
-    green". The engine runs the gate at land (tl-7y6.7.15); a case for it proves nothing the land does not."""
-    clean = lambda t: " ".join(re.sub(r"[`'\"*_.,;:()\[\]]", " ", t).lower().split())  # noqa: E731
-    cmds = [clean(c) for c, _ in lint.gate_only(cfg)]
-    out = []
-    for x in plan.get("cases") or []:
-        text = clean(x.get("criterion") or "")
-        rest = text
-        for c in sorted(cmds, key=len, reverse=True):
-            rest = rest.replace(c, " ")
-        if rest != text and not [w for w in rest.split() if w not in GATE_FILLER]:
-            out.append(x.get("criterion", "").strip())
-    return out
-
 
 
 def context_tokens(path, tail=1 << 20):
@@ -4676,246 +3774,22 @@ def summarize(node, d):
 
 # ---- prompts (one copy each; the per-node instructions of the design) -----------------------------------------------
 
-COMMON = ("You are one step of an unattended task engine. Nobody is watching; do not ask for confirmation. "
-          "Work only in {wt}. Never commit, push, branch, or change git state. Never add suppressions or weaken, skip "
-          "or delete tests; a test that contradicts an accepted requirement is fixed to match the requirement, never "
-          "weakened or deleted to make the code pass. Answer with the structured result only.")
 
-DECIDED_RULE = ("A change that contradicts an accepted requirement (in the task, its acceptance criteria, or a "
-                "requirement it cites) is never the owner's question: the fix is to meet the requirement. Nor is a test, "
-                "check or scenario at odds with an accepted requirement: that is no conflict between two requirements. "
-                "A test that contradicts an accepted requirement is fixed to match the requirement, never weakened or "
-                "deleted to make the code pass. An owner's answer in the task's comments decides "
-                "as an accepted requirement does. decided: the "
-                "accepted requirement, quoted, that already answers your question (the engine then sends the stage "
-                "back to meet it instead of asking the owner); empty when you have no question, when two accepted "
-                "requirements conflict, or when no requirement decides it yet (those are the owner's).")
-REPEAT_RED = ("\nThese checks failed in the last round too:\n%s\nIf one measures a threshold the task does not ask for (the task "
-              "says the owner judges it, or the number is the plan's own), do not keep tuning the work to it: list it in "
-              "bad_checks, with why, and the plan is changed instead.\n")
-VISUAL_STAGES = """A stage whose files match this repo's visual paths (%s) changes how something looks. Its writer cannot render: it names the
-pictures to render in `shots` (a method from the table below, its args, names) or gives a `logic_only` reason; an answer with
-neither is sent back. Plan such stages knowing that, and never plan a check that needs a picture the writer is to make.
-Shot methods:
-%s"""
-SHOTS_FIX = ("\nYour answer named no shots and gave no logic_only reason, but this stage touches visual paths. You cannot render here: the "
-             "engine does. Name the pictures to render in `shots` (a method from the table, its args, names), or say in logic_only why "
-             "nothing on screen differs. Change nothing else; do not redo the work.\n%s\n")
-VISUAL_PLAN = """This repo has visual work (screens). Give every case a class in `class`:
-- test: a command proves it (the usual case with its check).
-- look-objective: a picture can prove it: it shows, nothing is clipped or overlapped, no error text, magenta or missing
-  texture, the state asked for is visible. Leave `check` empty: the engine renders the shots and a look judge reads them.
-- taste: someone has to like it ("the owner approves", "reads well", "feels like ..."). Leave `check` empty: it goes to the
-  owner after the land and never blocks it.
-A number for a look item (a contrast ratio, a size) comes only from the task, the owner or a project standard file (design
-tokens, a rule under config/). Never invent one as a check: if you think one is needed, ask it as your question (options with
-your proposal first) and plan no check for it.
-%s"""
 MAX_REBASE_RESETS = 2   # per bead, across runs (tl-19i)
-REPLAN_CAP = "stuck: the bead was re-planned "  # the cap's ask; an owner's answer to it allows one more
-RULES_MAX = 3 * 1024          # a worker_rules file is inlined once, in the planner's and the writer's first prompts: this many bytes at most
-PLAN_BRIEF_KB = 12            # the planner's whole brief should stay under this
-DECIDED_TEXT = ("\nYou asked: %s\nAn accepted requirement already decides it: %s\nMeet that requirement: change the "
-                "work, never the requirement.\n")
-ASSUME_TEXT = ("\nYou asked: %s\nNothing in that question cannot be undone, so the engine does not ask the owner: it records it as an "
-               "Assumption. Plan the work on your best assumption now, with at least one stage.\n")
-PLAN_DECIDED_TEXT = "Plan the work that meets it; ask nothing it already answers.\n"
-
-PLAN_PROMPT = COMMON + """
-
-The task (the bead, with its acceptance criteria and comments: review findings, the owner's answers):
-<task>
-{brief}
-</task>
-Explore cheaply: find code with `rg -n` and read line ranges (`sed -n 'a,bp'`), not whole files. Stop reading once
-each stage has its files and its checks. Budget: about 12 tool calls. Then plan.
-
-- Split the work into stages, each one coherent piece that its checks can judge (often one stage is enough).
-- For each stage: goal, the files it changes, the exact commands that prove it (tests, linters), and hard=true only
-  when it is risky or subtle. Every check is an argv list: the program and its arguments as separate strings, for example
-  ["python3", "-m", "unittest", "tests.test_x"] or ["just", "check"]. The engine execs it as given, with no shell: no `&&`,
-  `;`, pipe, redirect, `$(...)`, `$VAR`, glob or quote means anything in it, and a string where the list belongs is sent back. It
-  exits 0 when it proves the goal and non-zero when it does not: the engine reads only the exit code. A proof that needs a
-  pipeline, a redirect, a loop or a count ("expect empty", `grep ... | wc -l`) goes into a recipe the repo has or you add (a just
-  target or a script, listed in the stage's files), and the check calls it: ["just", "name"].
-- To assert on what a repo check printed, do not run its command again in a plan check: the engine exports the log of
-  each repo check that ran before yours as the environment variable `TL_CHECK_LOG_<ID>` (its id upper-cased, other characters
-  `_`; its exit code is `TL_CHECK_RC_<ID>`). A script reads it from its environment; pass the variable's name as an argument so the
-  engine runs your check after that repo check: ["python3", "tools/assert_log.py", "TL_CHECK_LOG_UNITY_TESTS", "Passed: 12"].
-- The engine sets every time limit and runs checks one at a time; never write timeouts, "run alone" or similar notes
-  into a check.
-- cases: the acceptance cases. At least one per acceptance criterion of the task, each with the criterion it proves
-  (quote it) and a check. They run on the last stage and again after any fix at land. A case about what users see uses
-  the host's tools and a fact the tool reports (a scenario script, a screenshot saved under the evidence folder, a count
-  the editor prints), never only "a screenshot exists".
-- Before planning, check that every input the criteria need exists: a file or asset, an object in the content, a platform or
-  machine the factory has, the engine or tool the project uses now, an input the task says someone provides. One you could not
-  find is listed in unresolved (what, kind, path: the file it should be at, or empty). If the rest of the task can go on
-  without it, defer the criteria that need it instead (a case with proved_by leftover, and a leftover) and do not list it.
-  A listed input is never an ask: the engine records it as an Assumption and the plan goes on. Material outside the
-  worktree (a study, a file under ~/ or Drop) is missing material: plan from the bead text and the repo.
-- Each case says in proved_by how its criterion is proved, and via names what proves it: check (a command; the usual
-  case), stage (its stage's own checks; via = the stage number), leftover (deferred to a follow-up bead the engine files:
-  also list it in leftovers; via = that leftover's title; check empty) or engine_step (the engine does it itself: files the
-  leftovers as beads, runs the gate, lands, closes the bead, copies screenshots; via = which; check empty). A criterion
-  about filing beads, the gate, the land or closing is an engine_step; one the tracker holds is never a check. The review
-  and the verifier are told this ledger and will not call a leftover or engine_step criterion unmet.
-- A criterion only the owner can judge (it looks right, feels right, the owner approves) is never a pass/fail check on a
-  number you chose: the check proves the evidence exists (the screenshot or sheet is saved, a count the tool reports), and
-  the judgement goes in leftovers for the owner. A threshold you invent is a requirement nobody asked for, and the writer
-  will tune the work to it.
-- Name the risks ahead of time: what could break something users or other code rely on (a saved format, a public
-  member, shared files), each with the check that proves it safe. None is fine.
-- A check proves the code and the tree only: it never reads the tracker (no `bd`, nothing under `.beads/`) nor
-  anything outside the worktree; the writers cannot run bd, so such a check fails whatever they do. Follow-up work the
-  task wants filed (a new bead, a later task) goes in leftovers, each a title and why: the engine files them itself,
-  and no check or case asks for them.
-- question: empty. Assume instead of asking: decide what you can, plan on it, and say it in the summary. Only a step
-  that cannot be undone may ask: set irreversible to push_shared (a push to a shared branch), delete_outside (a
-  deletion outside the worktree), close_epic (closing an epic) or spend_money, and write the question so it can be
-  answered from a phone: what you found, the decision, 2-3 options with costs, your recommendation. A question
-  without irreversible is dropped by the engine and recorded as an Assumption. Missing reference material, a missing
-  file, an unclear scope, a product or architecture choice are all reversible: assume.
-""" + OPTIONS_RULE + "\n" + DECIDED_RULE
-
-WRITE_PROMPT = """You are the writer for one stage of a task, in an unattended engine. Nobody is watching.
-
-<task>
-{brief}
-</task>
-<plan>
-{plan}
-</plan>
-Your stage: {n}: {goal}{rules}
-Files: {files}
-The stage's checks (the engine runs all of them after you; the split says which you may run):
-{checks}
-{where}
-A check that mentions $TL_CHECK_LOG_<ID> or $TL_CHECK_RC_<ID> reads the log and the exit code of a configured check the engine ran just
-before it. Those variables exist only while the engine runs the checks, never in your session: do not ask for them, do not export them,
-and do not call it a blocker that they are unset. Make what the check asserts true and run the checks you may run.
-Never run the gate{gate} or the issue tracker (bd): the engine runs the gate, and its run is the one that counts.
-Repo instructions that say a change is done only when the full gate passes are for people working by hand; here the
-engine does that part.
-{feedback}
-flakes: a test that failed for a reason outside your change (it passed or failed differently on a rerun, or fails on the
-untouched base): its name and one line; else empty. The engine tells later tasks of this repo.
-bad_checks: a stage check that fails for a reason no code change can fix (wrong arguments, a guard that rejects the
-uncommitted work this stage must leave, a pattern that matches harmless text), each with why (cmd: the check's command exactly as listed, never shortened); else empty. The engine
-then asks for a new plan instead of retrying.
-A check that times out or fails only where you run it is not yours to retry; note it once and move on.
-Proof the engine cannot rerun (a test seen failing after a planted fault, then passing once restored; a manual
-measurement): save the exact commands and their output as files in {evidence}/ and name those files in the summary.
-Only that proof goes there, never your own runs of the checks.
-Rules: no suppressions; do not weaken, skip or delete tests; stay inside the
-stage. question: empty unless only the owner can decide something about the task itself (then explain it for a
-phone); never a question about tools or access.""" + "\n" + OPTIONS_RULE + "\n" + DECIDED_RULE
-
-WRITE_RULES = """
-This repo's rules for work in your sandbox (what runs there, what does not):
-<worker_rules>
-%s
-</worker_rules>"""
 
 
-def write_prompt(rules, **fields):
-    """WRITE_PROMPT with the repo's worker rules inlined (a resumed writer's delta never repeats them)."""
-    return WRITE_PROMPT.format(rules=WRITE_RULES % rules if rules else "", **fields)
 
 
-WRITE_RESUME_PROMPT = """You are still the writer of this task, in an unattended engine. Nobody is watching. This session has the
-task, the plan and your rules from before; only what changed is below.
-The brief is unchanged; it is in {brief}; re-read it if unsure.
-{plan}
-Your stage: {n}: {goal}
-Files: {files}
-The stage's checks (the engine runs all of them after you; the split says which you may run):
-{checks}
-{where}
-{feedback}"""
-
-STAGES_DONE = """
-Earlier stages of this task are accepted and their work is in this tree; you are a fresh session for the next one (the last
-session had grown large). Do not redo them.
-Accepted stages:
-%sDone so far (git diff --stat from the task's base):
-%s
-The last rounds (the writer's summary, then what was sent back):
-%s"""
-
-DONE_SO_FAR = """
-You take over from an earlier writer of this task, whose session grew too large to go on. Its work is in this tree, committed
-on this branch or not: do not start over.
-Done so far (git diff --stat from where this stage started):
-%s
-Its last summary: %s
-The last rounds (the writer's summary, then what was sent back):
-%s"""
-
-REVIEW_PROMPT = """You review one stage of a task, from another model family than the writer. Do not edit files.
-<task>
-{brief}
-</task>
-<plan>
-{plan}
-</plan>
-Stage {n}: {goal}
-{fix_line}{work}
-The engine ran the checks outside any sandbox, one at a time, and they all pass; these results are facts:
-{checks}
-The engine runs the gate{gate} once, at land, on the tree rebased onto the latest base, before anything merges; a red
-gate (coverage included) goes to a fix round. The gate, the checks above and what they prove are never an unchecked item.
-The writer says: {summary}
-Proof the engine cannot rerun (a test seen failing after a planted fault) is in {evidence}/: a requirement shown
-there is met. The engine counted tests in the task's diff: {added} added, {removed} removed.
-Return:
-- findings: bugs, broken contracts, risky changes (a public member, a test weakened or removed, a suppression, a file
-  outside what the stage names, a break of this repo's own conventions: the rules in its AGENTS.md or CLAUDE.md, checked
-  on the changed lines), each with file, line, severity and the fix. high and medium send the stage back; low
-  is noted only. No style nits.
-- unmet: what in {scope} the work does not do yet, each saying what is missing. A requirement shown met by a check or
-  by the evidence is met; never list a remark that something is fine.
-- question: empty, unless only the owner can decide something about the task itself (then explain it for a phone:
-  what you found, the options, your recommendation).
-- leftovers: real follow-up work you noticed outside this task, else empty.""" + "\n" + OPTIONS_RULE + "\n" + DECIDED_RULE
-
-def review_prompt(fix, last, fix_scope, **fields):
-    """REVIEW_PROMPT for one stage. The scope of the `unmet:` line is a fixed phrase (the template's line never takes text from
-    the stage); in a fix round the fix's own scope is a line of its own (tl-7y6.6.11: it was spliced into the sentence)."""
-    scope = ("the stage goal" if fix else
-             "the stage goal and every requirement and acceptance criterion of the task" if last else
-             "the stage goal (later stages cover the rest of the task)")
-    return REVIEW_PROMPT.format(scope=scope, fix_line=("Scope of this fix round: %s\n" % fix_scope) if fix else "", **fields)
 
 
-NEW_FILES_TEXT = ("\nUnexplained new files: untracked, and no stage lists them nor the writer names them. They are NOT in the "
-                  "commit unless you accept them, and they are moved out of the tree before the land gate. Decide EVERY one: "
-                  "put its path in accept_files if the task needs it (it is staged), or in reject_files if it is a stray (a "
-                  "test run's leftover). One you do not decide becomes a medium finding that sends the stage back. Each file "
-                  "with its first 80 lines (or its size, if binary):\n")
 
-VERIFY_PROMPT = """Before a task lands, you check what its workers could not check themselves. Do not edit files.
-<task>
-{brief}
-</task>
-The work (files the task changed, with line counts):
-{work}
-Proof the workers saved (command output, logs, pictures) is in {evidence}/.
-{checks}{where}
-Nobody has checked these items yet:
-{items}
-Settle each one yourself where you can: read the code, its call sites, sibling files, the saved proof and the engine's check
-results above, and run
-read-only commands (search, list, compare, count). Answer one entry per item, n its number:
-- settled: you proved it right; evidence quotes exactly what proves it (the file and lines, or the command and its
-  output).
-- wrong: you found a real defect; why says what is wrong and where, so a writer can fix it.
-- open: only a person can judge it (taste, a device or a screen you cannot reach, the owner's call); why says what they
-  must look at.
-When in doubt, it is open: never settle an item you did not prove.
-Also give each item its kind (the engine routes by it; an open item of the wrong kind is asked or lands unseen):
-- """ + "\n- ".join(KIND_LINES) + """
-- other: none of these."""
+
+
+
+
+
+
+
 
 
 # ---- entry ----------------------------------------------------------------------------------------------------------

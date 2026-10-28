@@ -653,6 +653,13 @@ class EngineOnlyFlags(StagesTest):
         self.assertEqual(flags.get("worker"), ["slow"])
         self.assertEqual([r for r, v in flags.items() if v and r != "worker"], [])
 
+    def test_an_engine_only_just_recipe_of_a_plan_stage_is_named_too(self):
+        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[HAS_F, "just full-check"])])
+        rc, s = self.run_engine({"plan": [plan], "write": [WRITE, WRITE, WRITE], "review": [CLEAN]})
+        flags = {role: [a[i + 1] for i, x in enumerate(a) if x == "--engine-only"] for a in s.argvs for role in [a[3]]}
+        self.assertEqual(flags.get("worker"), ["full-check"])
+        self.assertEqual([r for r, v in flags.items() if v and r != "worker"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,66 @@
+{
+ "additionalProperties": false,
+ "properties": {
+  "change": {
+   "items": {
+    "type": "string"
+   },
+   "type": "array"
+  },
+  "wasted": {
+   "items": {
+    "type": "string"
+   },
+   "type": "array"
+  },
+  "went_badly": {
+   "items": {
+    "additionalProperties": false,
+    "properties": {
+     "cause": {
+      "enum": [
+       "engine",
+       "prompt",
+       "delegate",
+       "repo_profile",
+       "bead",
+       "sandbox",
+       "other"
+      ],
+      "type": "string"
+     },
+     "evidence": {
+      "type": "string"
+     },
+     "session": {
+      "type": "string"
+     },
+     "what": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "what",
+     "cause",
+     "session",
+     "evidence"
+    ],
+    "type": "object"
+   },
+   "type": "array"
+  },
+  "went_well": {
+   "items": {
+    "type": "string"
+   },
+   "type": "array"
+  }
+ },
+ "required": [
+  "went_well",
+  "went_badly",
+  "wasted",
+  "change"
+ ],
+ "type": "object"
+}

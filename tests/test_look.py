@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "task
 from support import fake_route  # noqa: E402
 from support.fakes import as_bead  # noqa: E402
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from taskloop.contracts import answers  # noqa: E402
 from support.builders import make_engine  # noqa: E402
 from taskloop.contracts.config import VisualConfig  # noqa: E402
 import test_engine as T  # noqa: E402
@@ -142,13 +143,12 @@ class LookTest(unittest.TestCase):
     def test_a_non_visual_answer_needs_no_look_field_and_a_visual_one_does(self):
         w = {k: v for k, v in WRITE.items() if k != "logic_only"}
         r = {k: v for k, v in CLEAN.items() if k != "look"}
-        self.assertEqual(engine.validate(w, engine.schema_for("write")), [])
-        self.assertEqual(engine.validate(r, engine.schema_for("review")), [])
-        self.assertEqual(engine.schema_for("write"), engine.SCHEMAS["write"])
-        self.assertEqual(engine.validate(w, engine.schema_for("write", True)), ["$.logic_only: missing"])
-        self.assertEqual(engine.validate(r, engine.schema_for("review", True)), ["$.look: missing"])
-        self.assertEqual(engine.validate(WRITE, engine.schema_for("write", True)), [])
-        self.assertNotIn("logic_only", engine.SCHEMAS["write"]["properties"])  # the shared contract is not changed
+        self.assertEqual(answers.check("write", False, w), [])
+        self.assertEqual(answers.check("review", False, r), [])
+        self.assertEqual(answers.check("write", True, w), ["WriteAnswerLook.logic_only: missing"])
+        self.assertEqual(answers.check("review", True, r), ["ReviewAnswerLook.look: missing"])
+        self.assertEqual(answers.check("write", True, WRITE), [])
+        self.assertNotIn("logic_only", answers.schema_for("write")["properties"])  # the shared contract is not changed
 
     def test_a_settled_look_item_must_name_a_screenshot(self):
         item = {"what": LOOK_ASK, "kind": "other"}

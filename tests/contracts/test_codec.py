@@ -61,7 +61,7 @@ class RoundTrip(unittest.TestCase):
         bases = {"LogRec", "EventRec", "LiveRec"}
         missing = []
         for m in pkgutil.iter_modules(pkg.__path__):
-            if m.name in ("codec", "jsonl", "stores", "schema", "paths", "ports"):  # plumbing, not records (ports: call arguments, never written)
+            if m.name in ("codec", "jsonl", "stores", "schema", "paths", "ports", "answers"):  # plumbing, not records (ports: call arguments, never written; answers: the workers' replies, tests/contracts/test_schema.py)
                 continue
             mod = importlib.import_module("taskloop.contracts." + m.name)
             for n, c in vars(mod).items():

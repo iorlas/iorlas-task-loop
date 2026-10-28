@@ -19,6 +19,11 @@ _NO = object()
 BEAD = {"id": "t-1", "title": "Add f", "metadata": {}, "acceptance_criteria": "f.txt exists"}  # a bead as bd prints it
 
 
+def must_bead(x, default_id="t-1") -> Bead:
+    """as_bead for a test that needs a Bead (an empty one for nothing)."""
+    return as_bead(x, default_id) or Bead(id=default_id, title="", status="")
+
+
 def as_bead(x, default_id="t-1"):
     """A Bead from bd's JSON (a dict), a Bead, or None for nothing/{}."""
     if isinstance(x, Bead) or x is None:

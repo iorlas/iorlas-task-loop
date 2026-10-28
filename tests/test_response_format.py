@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-import engine  # noqa: E402
+from taskloop.contracts import answers, schema  # noqa: E402
 
 PRE_FIX_UNCHECKED = ROOT / "tests" / "fixtures" / "schemas" / "pre_fix_unchecked.json"
 
@@ -67,9 +67,10 @@ def nullable_errors(contract, sent, path="$"):
 def variants():
     """[(label, contract)]: every response_format the engine can send — each node's contract, and a visual stage's
     write/review with its look field added."""
-    for node in sorted(engine.SCHEMAS):
+    for node in sorted(answers.NODES):
         for visual in (False, True):
-            yield "%s%s" % (node, " (visual)" if visual else ""), engine.schema_for(node, visual)
+            if not visual or node in answers.VISUAL:
+                yield "%s%s" % (node, " (visual)" if visual else ""), answers.schema_for(node, visual)
 
 
 class ResponseFormatContracts(unittest.TestCase):
@@ -77,13 +78,13 @@ class ResponseFormatContracts(unittest.TestCase):
         """Every schema the engine sends (planner, writer, reviewer, verifier, look, reflect; a visual stage's variants
         too) is valid strict output: every properties key in required, additionalProperties:false, at any depth."""
         for label, contract in variants():
-            self.assertEqual(strict_errors(engine.strict(contract)), [], label)
+            self.assertEqual(strict_errors(schema.strict(contract)), [], label)
 
     def test_optional_properties_are_nullable(self):
         """What the contract leaves optional, the strict form sent accepts as null — enum values included, so a worker
         that answers null for a field it must always send validates against the contract once mapped back."""
         for label, contract in variants():
-            self.assertEqual(nullable_errors(contract, engine.strict(contract)), [], label)
+            self.assertEqual(nullable_errors(contract, schema.strict(contract)), [], label)
 
     def test_pre_fix_unchecked_fixture_is_rejected(self):
         """The write step's unchecked.items exactly as it went out before the 2026-10-23 fix (ebee8e5): `source` in
@@ -93,8 +94,8 @@ class ResponseFormatContracts(unittest.TestCase):
         errs = strict_errors(broken)
         self.assertTrue(errs)
         self.assertTrue(all("source" in e for e in errs), errs)  # the diagnostic is a path to the offending property
-        self.assertEqual(engine.strict(broken)["properties"]["source"]["type"], ["string", "null"])
-        self.assertEqual(strict_errors(engine.strict(broken)), [])
+        self.assertEqual(schema.strict(broken)["properties"]["source"]["type"], ["string", "null"])
+        self.assertEqual(strict_errors(schema.strict(broken)), [])
 
     def test_walker_rejects_nested_nullable_violations(self):
         """A violation under an optional array of optional objects cannot pass: the walk reads a nullable type (a list)

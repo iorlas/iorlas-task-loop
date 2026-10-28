@@ -11,6 +11,7 @@ from unittest import mock
 
 import test_engine as te
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from taskloop.app.plan.planner import Planner
 from taskloop.adapters import delegate as dl
 from support import fake_route
 from test_engine import CLEAN, PLAN, PY, WRITE, stop
@@ -211,7 +212,7 @@ class TraceTelemetry(unittest.TestCase):
         self.assertTrue(row["fingerprint"])
 
     def test_a_stop_mid_run_still_writes_started_because_and_fingerprint(self):
-        with mock.patch.object(engine.Engine, "plan", side_effect=engine.Blocked("failed: stopped (SIGTERM)")):
+        with mock.patch.object(Planner, "plan", side_effect=engine.Blocked("failed: stopped (SIGTERM)")):
             rc, _ = self.run_engine({})
         self.assertEqual(rc, 2)
         row = self.assert_row("failed")

@@ -8,13 +8,19 @@ from typing import Any, Literal
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402,F401
-from contracts import answers  # noqa: E402
-from taskloop.contracts import codec, schema  # noqa: E402
+from taskloop.contracts import answers, codec, schema  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
-import engine  # noqa: E402
+sys.path.insert(0, str(ROOT / "tests"))
 import test_response_format as strict_test  # noqa: E402  (tl-7y6.4.2's validator)
+
+FIXTURES = ROOT / "tests" / "fixtures" / "schemas"  # the hand-written schemas the engine sent before E6, frozen
+VARIANTS = [(n, v) for n in answers.NODES for v in (False, True) if not v or n in answers.VISUAL]
+
+
+def fixture(node: str, visual: bool, strict: bool = False) -> Any:
+    name = node + ("-visual" if visual else "") + (".strict" if strict else "") + ".json"
+    return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
 
 
 def canon(node: Any) -> Any:
@@ -29,18 +35,18 @@ def canon(node: Any) -> Any:
 
 
 class AnswerSchemas(unittest.TestCase):
-    def test_each_answer_generates_the_engines_contract(self):
-        for node, cls in answers.NODES.items():
-            with self.subTest(node):
-                self.assertEqual(canon(schema.of(cls)), canon(engine.SCHEMAS[node]))
+    def test_each_answer_generates_the_contract_the_engine_sent_before(self):
+        for node, visual in VARIANTS:
+            with self.subTest(node, visual=visual):
+                self.assertEqual(canon(answers.schema_for(node, visual)), canon(fixture(node, visual)))
 
-    def test_each_strict_form_equals_the_engines_and_is_valid(self):
-        for node, cls in answers.NODES.items():
-            with self.subTest(node):
-                strict = schema.strict(schema.of(cls))
-                self.assertEqual(strict_test.strict_errors(strict), [])
-                self.assertEqual(strict_test.nullable_errors(schema.of(cls), strict), [])
-                self.assertEqual(canon(strict), canon(engine.strict(engine.SCHEMAS[node])))
+    def test_each_strict_form_equals_the_one_sent_before_and_is_valid(self):
+        for node, visual in VARIANTS:
+            with self.subTest(node, visual=visual):
+                sent = answers.sent_schema(node, visual)
+                self.assertEqual(strict_test.strict_errors(sent), [])
+                self.assertEqual(strict_test.nullable_errors(answers.schema_for(node, visual), sent), [])
+                self.assertEqual(canon(sent), canon(fixture(node, visual, True)))
 
     def test_strict_returns_a_copy(self):
         contract = schema.of(answers.PlanAnswer)

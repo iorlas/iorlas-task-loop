@@ -1,0 +1,44 @@
+{
+ "additionalProperties": false,
+ "properties": {
+  "findings": {
+   "items": {
+    "additionalProperties": false,
+    "properties": {
+     "item": {
+      "type": "string"
+     },
+     "verdict": {
+      "enum": [
+       "pass",
+       "defect"
+      ],
+      "type": "string"
+     },
+     "where": {
+      "type": "string"
+     },
+     "why": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "item",
+     "verdict",
+     "where",
+     "why"
+    ],
+    "type": "object"
+   },
+   "type": "array"
+  },
+  "summary": {
+   "type": "string"
+  }
+ },
+ "required": [
+  "findings",
+  "summary"
+ ],
+ "type": "object"
+}

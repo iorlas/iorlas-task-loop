@@ -28,6 +28,15 @@ def docstring_lines(tree: ast.AST) -> set[int]:
     return out
 
 
+def literal_lines(tree: ast.AST) -> set[int]:
+    """The lines of `Literal[...]` members: a wire value such as "engine" (a cause class) is no file name."""
+    out: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name) and node.value.id == "Literal":
+            out.update(range(node.lineno, (node.end_lineno or node.lineno) + 1))
+    return out
+
+
 def code_lines(src: str, tree: ast.AST) -> set[int]:
     skip = {tokenize.COMMENT, tokenize.NL, tokenize.NEWLINE, tokenize.INDENT, tokenize.DEDENT, tokenize.ENDMARKER}
     lines: set[int] = set()
@@ -79,7 +88,7 @@ class ContractRules(unittest.TestCase):
         for f, src, tree in self.parsed():
             if f.name == "paths.py":
                 continue
-            doc = docstring_lines(tree)
+            doc = docstring_lines(tree) | literal_lines(tree)
             for node in ast.walk(tree):
                 if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.lineno not in doc:
                     v = node.value

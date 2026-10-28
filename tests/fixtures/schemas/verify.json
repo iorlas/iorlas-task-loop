@@ -1,0 +1,63 @@
+{
+ "additionalProperties": false,
+ "properties": {
+  "items": {
+   "items": {
+    "additionalProperties": false,
+    "properties": {
+     "evidence": {
+      "type": "string"
+     },
+     "kind": {
+      "enum": [
+       "engine_step",
+       "checkable",
+       "external_fact",
+       "taste",
+       "owner_decision",
+       "requirement",
+       "number",
+       "deletion",
+       "link",
+       "case",
+       "tooling",
+       "other"
+      ],
+      "type": "string"
+     },
+     "n": {
+      "type": "integer"
+     },
+     "source": {
+      "type": "string"
+     },
+     "verdict": {
+      "enum": [
+       "settled",
+       "wrong",
+       "open"
+      ],
+      "type": "string"
+     },
+     "why": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "n",
+     "verdict",
+     "evidence",
+     "why",
+     "kind",
+     "source"
+    ],
+    "type": "object"
+   },
+   "type": "array"
+  }
+ },
+ "required": [
+  "items"
+ ],
+ "type": "object"
+}

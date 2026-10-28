@@ -36,7 +36,8 @@ from support.fakes import as_bead  # noqa: E402
 from taskloop.adapters import delegate as dl  # noqa: E402
 from support import fake_route  # noqa: E402
 
-BREAK_PLAN = ("    def plan(self, again=False):\n", "    def plan(self, again=False):\n        raise RuntimeError('planted: cannot plan')\n")
+PLAN_DEF = "    def plan(self, again: bool = False) -> dict[str, Any]:\n"
+BREAK_PLAN = (PLAN_DEF, PLAN_DEF + "        raise RuntimeError('planted: cannot plan')\n", "src/taskloop/app/plan/planner.py")
 
 
 class Reload(unittest.TestCase):
@@ -73,7 +74,7 @@ class Reload(unittest.TestCase):
         (d.parents[1] / ".claude-plugin").mkdir(exist_ok=True)
         (d.parents[1] / ".claude-plugin" / "plugin.json").write_text(json.dumps({"version": ver}))
         if plant:
-            f = d / "engine.py"
+            f = d.parents[1] / plant[2]
             text = f.read_text(encoding="utf-8")
             self.assertIn(plant[0], text)
             f.write_text(text.replace(plant[0], plant[1], 1), encoding="utf-8")

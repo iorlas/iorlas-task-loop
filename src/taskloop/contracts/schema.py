@@ -101,3 +101,24 @@ def strict(schema: dict[str, Any]) -> dict[str, Any]:
     if sch.get("type") == "array" and isinstance(sch.get("items"), dict):
         sch["items"] = strict(sch["items"])
     return sch
+
+
+def unstrict(data: Any, schema: dict[str, Any]) -> Any:
+    """A strict answer back in the contract's shape: an optional field the worker sent as null is left out."""
+    if schema.get("type") == "object" and isinstance(data, dict):
+        props, req = schema.get("properties", {}), set(schema.get("required", []))
+        return {k: unstrict(v, props[k]) if k in props else v for k, v in data.items()
+                if not (v is None and k in props and k not in req)}
+    if schema.get("type") == "array" and isinstance(data, list):
+        return [unstrict(v, schema.get("items") or {}) for v in data]
+    return data
+
+
+def prune(data: Any, schema: dict[str, Any]) -> Any:
+    """`data` without the keys the schema does not name (a worker's extra field is ignored, not a reason to ask again)."""
+    if schema.get("type") == "object" and isinstance(data, dict):
+        props = schema.get("properties", {})
+        return {k: prune(v, props[k]) for k, v in data.items() if k in props}
+    if schema.get("type") == "array" and isinstance(data, list):
+        return [prune(v, schema.get("items") or {}) for v in data]
+    return data

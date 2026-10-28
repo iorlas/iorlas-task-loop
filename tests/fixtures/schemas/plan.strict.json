@@ -1,0 +1,238 @@
+{
+ "additionalProperties": false,
+ "properties": {
+  "cases": {
+   "items": {
+    "additionalProperties": false,
+    "properties": {
+     "check": {
+      "description": "argv: a check is an argv list of strings, e.g. [\"python3\", \"-m\", \"unittest\"]; a pipeline, redirect or loop goes into a repo recipe (a just target or a script) that the argv calls, e.g. [\"just\", \"name\"]",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "class": {
+      "enum": [
+       "test",
+       "look-objective",
+       "taste",
+       null
+      ],
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "criterion": {
+      "type": "string"
+     },
+     "proved_by": {
+      "enum": [
+       "check",
+       "stage",
+       "leftover",
+       "engine_step",
+       null
+      ],
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "via": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "criterion",
+     "check",
+     "class",
+     "proved_by",
+     "via"
+    ],
+    "type": "object"
+   },
+   "type": "array"
+  },
+  "decided": {
+   "type": "string"
+  },
+  "irreversible": {
+   "enum": [
+    "",
+    "push_shared",
+    "delete_outside",
+    "close_epic",
+    "spend_money",
+    null
+   ],
+   "type": [
+    "string",
+    "null"
+   ]
+  },
+  "leftovers": {
+   "items": {
+    "additionalProperties": false,
+    "properties": {
+     "title": {
+      "type": "string"
+     },
+     "why": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "title",
+     "why"
+    ],
+    "type": "object"
+   },
+   "type": "array"
+  },
+  "options": {
+   "items": {
+    "additionalProperties": false,
+    "properties": {
+     "answer": {
+      "type": "string"
+     },
+     "cost": {
+      "type": "string"
+     },
+     "label": {
+      "type": "string"
+     },
+     "recommended": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "label",
+     "cost",
+     "answer",
+     "recommended"
+    ],
+    "type": "object"
+   },
+   "type": "array"
+  },
+  "question": {
+   "type": "string"
+  },
+  "risks": {
+   "items": {
+    "additionalProperties": false,
+    "properties": {
+     "check": {
+      "description": "argv: a check is an argv list of strings, e.g. [\"python3\", \"-m\", \"unittest\"]; a pipeline, redirect or loop goes into a repo recipe (a just target or a script) that the argv calls, e.g. [\"just\", \"name\"]",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "what": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "what",
+     "check"
+    ],
+    "type": "object"
+   },
+   "type": "array"
+  },
+  "stages": {
+   "items": {
+    "additionalProperties": false,
+    "properties": {
+     "checks": {
+      "description": "argv: a check is an argv list of strings, e.g. [\"python3\", \"-m\", \"unittest\"]; a pipeline, redirect or loop goes into a repo recipe (a just target or a script) that the argv calls, e.g. [\"just\", \"name\"]",
+      "items": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "type": "array"
+     },
+     "files": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "goal": {
+      "type": "string"
+     },
+     "hard": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "goal",
+     "files",
+     "checks",
+     "hard"
+    ],
+    "type": "object"
+   },
+   "type": "array"
+  },
+  "summary": {
+   "type": "string"
+  },
+  "unresolved": {
+   "items": {
+    "additionalProperties": false,
+    "properties": {
+     "kind": {
+      "enum": [
+       "file",
+       "platform",
+       "object",
+       "engine",
+       "tool",
+       "other"
+      ],
+      "type": "string"
+     },
+     "path": {
+      "type": "string"
+     },
+     "what": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "what",
+     "kind",
+     "path"
+    ],
+    "type": "object"
+   },
+   "type": [
+    "array",
+    "null"
+   ]
+  }
+ },
+ "required": [
+  "summary",
+  "stages",
+  "risks",
+  "question",
+  "options",
+  "decided",
+  "cases",
+  "leftovers",
+  "irreversible",
+  "unresolved"
+ ],
+ "type": "object"
+}

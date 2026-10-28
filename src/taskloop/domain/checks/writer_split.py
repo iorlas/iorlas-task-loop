@@ -32,11 +32,11 @@ class WriterSplit:
         cut = spec.writer_max_s if spec is not None and spec.writer_max_s is not None else float(self.cfg.writer_check_max_s)
         return s > cut if s is not None else looks_slow(cmd)
 
-    def engine_recipes(self) -> list[str]:
-        """The bare `just` recipe names of the configured checks (and the gate) a writer must not run: delegate's guard blocks them
-        (`route.py run --engine-only`). Only a check that is exactly `just <recipe>` has a recipe name."""
+    def engine_recipes(self, stage_checks: Sequence[str] = ()) -> list[str]:
+        """The bare `just` recipe names of the configured checks, the gate and the plan's stage checks (`stage_checks`) a writer must not
+        run: delegate's guard blocks them (`route.py run --engine-only`). Only a check that is exactly `just <recipe>` has a recipe name."""
         out: list[str] = []
-        for cmd in [self.cfg.gate_text, *(k.cmd for k in self.repo)]:
+        for cmd in [self.cfg.gate_text, *(k.cmd for k in self.repo), *stage_checks]:
             toks = argv_of(cmd) if cmd else []
             if len(toks) == 2 and toks[0] == "just" and toks[1] not in out and self.engine_only(cmd):
                 out.append(toks[1])
