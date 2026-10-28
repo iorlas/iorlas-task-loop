@@ -5,6 +5,7 @@ from taskloop.contracts.checks import Check
 from taskloop.contracts.config import EngineConfig
 from taskloop.domain.checks.matchers import canon, looks_slow
 from taskloop.domain.checks.names import norm
+from taskloop.domain.checks.shell import matchers as sh
 from taskloop.domain.checks.specs import repo_check
 
 
@@ -30,6 +31,16 @@ class WriterSplit:
         s = self.secs.get(norm(cmd), self.secs.get(cmd))
         cut = spec.writer_max_s if spec is not None and spec.writer_max_s is not None else float(self.cfg.writer_check_max_s)
         return s > cut if s is not None else looks_slow(cmd)
+
+    def engine_recipes(self) -> list[str]:
+        """The bare `just` recipe names of the configured checks (and the gate) a writer must not run: delegate's guard blocks them
+        (`route.py run --engine-only`). Only a check that is exactly `just <recipe>` has a recipe name."""
+        out: list[str] = []
+        for cmd in [self.cfg.gate, *(k.cmd for k in self.repo)]:
+            toks = sh.shell_tokens(cmd) if cmd else []
+            if len(toks) == 2 and toks[0] == "just" and toks[1] not in out and self.engine_only(cmd):
+                out.append(toks[1])
+        return out
 
     def divide(self, cmds: Sequence[str]) -> tuple[list[str], list[str]]:
         """(the writer's, the engine's) among the commands."""

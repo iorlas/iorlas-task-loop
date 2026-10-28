@@ -170,6 +170,7 @@
   }
  },
  "run_args": [
+  "--engine-only",
   "--authored-by",
   "--failed",
   "--premium",

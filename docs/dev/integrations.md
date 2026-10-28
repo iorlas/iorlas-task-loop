@@ -31,7 +31,9 @@ delegate directly). The two touch in three places only:
 
 3. **worker-run v3** (`docs/contracts/worker-run-v3.md`): the engine runs each AI step with `route.py run ROLE` and
    feeds usage with `route.py status --claude-usage` (`tl usage`). Code: `engine.find_route`, `engine.call_delegate`,
-   `Engine.ai_delegate`, `tl.py` `usage`. Only route.py from delegate 0.14.0 or later is used; none installed, or an
+   `Engine.ai_delegate`, `tl.py` `usage`. The write step passes `--engine-only RECIPE` once per bare `just` recipe of
+   a configured check (or the gate) its writer must not run (delegate 0.50+; `RunRequest.engine_only`, built only by `to_argv`); read-only
+   steps pass none. Only route.py from delegate 0.14.0 or later is used; none installed, or an
    answer with another `v`, blocks the task with what to do. Delegate keeps its state in its plugin data dir, so always call the
    installed route.py, never a checkout's (a checkout reads `~/.config/delegate`, another store).
 

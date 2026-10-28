@@ -642,5 +642,17 @@ class FollowUps(StagesTest):
         self.assertIn("## Acceptance Criteria", body)
 
 
+class EngineOnlyFlags(StagesTest):
+    """The write step's request lists the engine-only recipes (route.py run --engine-only); read-only steps pass none."""
+
+    def test_only_the_write_step_names_the_recipes_the_writer_must_not_run(self):
+        checks = [{"id": "slow", "cmd": "just slow", "group": "tests", "writer": False},
+                  {"id": "fmt", "cmd": "just fmt", "group": "static", "writer": True}]
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, checks=checks)
+        flags = {role: [a[i + 1] for i, x in enumerate(a) if x == "--engine-only"] for a in s.argvs for role in [a[3]]}
+        self.assertEqual(flags.get("worker"), ["slow"])
+        self.assertEqual([r for r, v in flags.items() if v and r != "worker"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

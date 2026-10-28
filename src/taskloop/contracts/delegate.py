@@ -30,6 +30,7 @@ class RunRequest:
     timeout_s: int = 0
     idle_s: int = 0
     live_file: str = ""  # DELEGATE_LIVE_FILE: where delegate appends the worker's live events
+    engine_only: list[str] = field(default_factory=list)  # bare `just` recipe names a write step must not run: --engine-only once each
 
     def to_argv(self, python: str, route: str) -> list[str]:
         out = [python, route, "run", self.role, "--brief", self.brief_path, "--cwd", self.cwd, "--schema", self.schema_path]
@@ -40,6 +41,8 @@ class RunRequest:
                             ("--timeout", self.timeout_s), ("--idle", self.idle_s)):
             if value:
                 out += [flag, str(value)]
+        for recipe in self.engine_only:
+            out += ["--engine-only", recipe]
         return out
 
     def env(self) -> dict[str, str]:

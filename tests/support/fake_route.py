@@ -140,7 +140,7 @@ class Script:
         self.answers, self.calls, self.prompts, self.cwds, self.timeouts = {k: list(v) for k, v in answers.items()}, [], [], [], []
         self.j_extra = {k: list(v) for k, v in (j_extra or {}).items()}  # per node, per call: fields the answer gains
         self.c = contract(delegate)
-        self.nodes = []
+        self.nodes, self.argvs = [], []
         self.stop, self.obs, self.secs, self.worker = {}, {}, 0.0, None
         self.started = None  # a test sets the LiveStart the call reports
 
@@ -152,6 +152,7 @@ class Script:
         return next(k for k in engine.SCHEMAS if schema in (engine.strict(engine.schema_for(k)), engine.strict(engine.schema_for(k, True))))
 
     def __call__(self, cmd, **kw):
+        self.argvs.append(list(cmd))
         self.stop, self.obs, self.secs, self.worker = {}, {}, 0.0, None
         schema = json.loads(Path(opt(cmd, "--schema")).read_text(encoding="utf-8"))
         j = self.reply(cmd[3], Path(opt(cmd, "--brief")).read_text(encoding="utf-8"), schema, opt(cmd, "--cwd"), opt(cmd, "--resume"),

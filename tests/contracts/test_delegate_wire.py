@@ -51,6 +51,12 @@ class Contract3(unittest.TestCase):
         self.assertEqual(argv[argv.index("--idle") + 1], "30")
         self.assertEqual(delegate.RunRequest(role="worker", brief_path="b", cwd="/w", schema_path="s").to_argv("py", "r").count("--timeout"), 0)
 
+    def test_engine_only_is_one_flag_per_recipe_and_none_by_default(self):
+        base = dict(role="worker", brief_path="b", cwd="/w", schema_path="s")
+        argv = delegate.RunRequest(**base, engine_only=["check", "unity-tests"]).to_argv("py", "r")
+        self.assertEqual([argv[i + 1] for i, x in enumerate(argv) if x == "--engine-only"], ["check", "unity-tests"])
+        self.assertNotIn("--engine-only", delegate.RunRequest(**base).to_argv("py", "r"))
+
 
 if __name__ == "__main__":
     unittest.main()

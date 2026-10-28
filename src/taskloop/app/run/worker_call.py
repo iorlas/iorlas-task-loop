@@ -252,6 +252,7 @@ class WorkerCall:
             timeout_s=timeout_s,
             idle_s=idle_s,
             live_file=live,
+            engine_only=e.checker.split().engine_recipes() if c.node == "write" else [],
         )
         cid = e.calls.start(c.step or c.node, c.node, c.role, bool(c.resume), e.live_n)
         c.state = callstate.begin(

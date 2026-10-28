@@ -115,6 +115,13 @@ class FailureBriefAndDurations(unittest.TestCase):
         for cmd in ("just check", "dotnet test", "dotnet build", "just build"):
             self.assertTrue(split.engine_only(cmd), cmd)
 
+    def test_engine_recipes_are_the_bare_just_recipes_of_checks_and_gate_the_writer_must_not_run(self):
+        cfg = cfg_with(writer_check_max_s=60, gate="just check", checks=[
+            {"id": "slow", "cmd": "just slow", "group": "tests"}, {"id": "fmt", "cmd": "just fmt", "group": "static"},
+            {"id": "u", "cmd": "just unity-tests", "group": "tests", "writer": False},
+            {"id": "w", "cmd": "make test", "group": "tests", "writer": False}])
+        self.assertEqual(WriterSplit(cfg, {"just slow": 300, "just fmt": 1}).engine_recipes(), ["check", "slow", "unity-tests"])
+
     def test_a_check_says_writer_true_or_its_own_cut_and_that_beats_the_global_one(self):
         cfg = cfg_with(writer_check_max_s=60, checks=[
             {"id": "analyzers", "cmd": "just unity-analyzers", "group": "static", "writer": True},
