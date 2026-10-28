@@ -25,6 +25,7 @@ from taskloop.app.slots import engine_lock
 from taskloop.app.release import pins
 from taskloop.app.track import trail
 from taskloop.app.wire import asks as wasks
+from taskloop.app.wire import lanes as wlanes
 from taskloop.app.wire import slots as wslots
 from taskloop.adapters import delegate as dg
 from taskloop.adapters import procs as sproc
@@ -119,6 +120,7 @@ def fetch(repo):
 
 
 def chores(repo):
+    wlanes.chore(console.say)  # delegate's lane status filed again when the snapshot is 20 min old (the dash reads the file)
     wasks.sweep_asks(console.say, wslots.load_cfg(repo))  # asks of closed beads closed, unanswered ones parked, answers no run used flagged
     try:
         import reflect_digest

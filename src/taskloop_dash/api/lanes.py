@@ -81,4 +81,4 @@ class Lanes:
         det = lane_banners(snap.lanes, now)
         return {"ok": not det, "out": sorted(det), "detail": det,
                 "needs_input": [{"what": n.what, "why": n.why, "how": n.how} for n in snap.needs_input],
-                "lanes": [card(ln) for ln in snap.lanes], "at": snap.at}
+                "lanes": [card(ln) for ln in snap.lanes], "at": snap.at, "age_s": int(now - snap.at)}

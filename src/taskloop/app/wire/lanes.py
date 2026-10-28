@@ -3,6 +3,7 @@ dashboard reads. `tl usage` files it too, on its way. The dashboard never runs d
 import json
 import sys
 import time
+from collections.abc import Callable
 
 from taskloop.adapters import delegate as sdelegate
 from taskloop.adapters import procs
@@ -11,6 +12,8 @@ from taskloop.app.release.pins import pinned_dir
 from taskloop.contracts import paths
 from taskloop.contracts.delegate_status import snapshot_of
 from taskloop.contracts.stores import StatusStore
+
+EVERY_S = 20 * 60  # the loop files delegate's status again when the snapshot is this old
 
 
 def find() -> str | None:
@@ -26,12 +29,43 @@ def file_answer(text: str) -> str | None:
     return None
 
 
-def refresh() -> int:
+def file_status() -> str | None:
+    """Ask delegate and file the answer. None when filed, else a line saying why not (no delegate is not a failure: None)."""
     route = find()
     if not route:
+        return None
+    r = procs.capture([sys.executable, route, "status", "--json"], None, None, 60.0)
+    return file_answer(r.out) if r.exit == 0 else f"delegate status exited {r.exit}: {(r.err or r.out)[-200:]}"
+
+
+def refresh() -> int:
+    if not find():
         print("no delegate installed: nothing to file")
         return 0
-    r = procs.capture([sys.executable, route, "status", "--json"], None, None, 60.0)
-    why = file_answer(r.out) if r.exit == 0 else f"delegate status exited {r.exit}: {(r.err or r.out)[-200:]}"
+    why = file_status()
     print(why or f"filed delegate status at {time.strftime('%H:%M:%S')}")
     return 1 if why else 0
+
+
+def due(cfg: paths.ConfigDir, now: float, every: float = EVERY_S) -> bool:
+    """Neither a filed snapshot nor an attempt (a failed one leaves a marker) is newer than `every` seconds."""
+    snap = StatusStore(cfg).read()
+    try:
+        tried = float(json.loads(cfg.snapshot("delegate", "tried").read_text(encoding="utf-8"))["t"])
+    except (OSError, ValueError, KeyError, TypeError):
+        tried = 0.0
+    return now - max(snap.at if snap else 0.0, tried) >= every
+
+
+def chore(say: Callable[[str], None], cfg: paths.ConfigDir | None = None, now: float | None = None) -> bool:
+    """The loop's `chores` step: file delegate's status again when the snapshot is `EVERY_S` old. -> whether it asked."""
+    cfg = cfg or paths.ConfigDir()
+    when = time.time() if now is None else now
+    if not due(cfg, when):
+        return False
+    cfg.snapshot("delegate", "tried").parent.mkdir(parents=True, exist_ok=True)
+    cfg.snapshot("delegate", "tried").write_text(json.dumps({"t": when}), encoding="utf-8")
+    why = file_status()
+    if why:
+        say(f"loop: {why}")
+    return True
