@@ -10,6 +10,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "task-loop"))
 from support import fake_route  # noqa: E402
+from support.checkpoints import put_ck, read_ck  # noqa: E402
 from support.fakes import as_bead  # noqa: E402
 from support import tlbd  # noqa: E402
 from support.fakes import FakeBeadStore  # noqa: E402
@@ -270,12 +271,12 @@ class VisualWork(StagesTest):
             "branch": "task/t-1",
             })
         e.git("checkout", "-q", "-b", "task/t-1")
-        e.save_checkpoint(stage=0, rounds=0, n=1, feedback="", step="write")
-        ck = json.loads(e.checkpoint_path().read_text())
-        self.assertEqual((ck["look_done"], ck["rendered"], ck["render_stale"]), (1, ["a.png"], True))
+        e.checkpoints.save(stage=0, rounds=0, n=1, feedback="", step="write")
+        ck = read_ck(e).state
+        self.assertEqual((ck.look_done, sorted(ck.rendered_names), ck.render_stale), (1, ["a.png"], True))
         again = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         again.reset(as_bead(BEAD))
-        again.resume_point()
+        again.resume.point()
         self.assertEqual((again.look_done, again.rendered_names, again.render_stale), (1, {"a.png"}, True))
 
     def test_a_non_visual_repo_gets_none_of_it(self):
@@ -410,7 +411,7 @@ class ResumeCount(StagesTest):
         e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         e.reset(as_bead(BEAD))
         e.plan_data = dict(PLAN)
-        e.save_checkpoint(stage=0, rounds=0, n=1, feedback="", step="write")
+        e.checkpoints.save(stage=0, rounds=0, n=1, feedback="", step="write")
         te.sh("git", "checkout", "-q", "--detach", "origin/main", cwd=self.wt)
 
     def resolving_worker(self, which=1, file="a.txt", text="merged"):

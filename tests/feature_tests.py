@@ -21,6 +21,7 @@ FEATURES = {
     "loop": ["test_loop", "test_loop_more", "test_race_invariants"],
     "release": ["test_release"],
     "land": ["test_land_lock", "test_held_branch"],
+    "run": [],  # plus every test under tests/run/ (the run state, its one writer, resume_decision)
     "look": ["test_look", "test_looks"],
     "write": ["test_stages", "test_stages_visual", "test_stages_land"],
     "asks": ["test_dash_asks"],  # plus every test under tests/asks/ (lint, specs, intake, sweeps, the single ask store)

@@ -5,17 +5,17 @@ import os
 import threading
 import time
 import unittest
-from typing import Any
+from typing import Any, cast
 
 from rigs import dead_pid
 from contracts import samples as S
 from taskloop.contracts import codec, log as L
 from taskloop.contracts.ask import Ask, AskAnswer
-from taskloop.contracts.checkpoint import Unfiled
+from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.enums import AskStatus, LockWhat
 from taskloop.contracts.locks import LockRecord, LockTimeout
 
-CK = S.OTHERS["Checkpoint"]
+CK = cast(Checkpoint, S.OTHERS["Checkpoint"])
 
 
 class Base(unittest.TestCase):
@@ -112,22 +112,17 @@ class CheckpointContract(Base):
         self.s.checkpoints.of("tl-1").write(CK)
         self.assertEqual(self.s.checkpoints.of("tl-1").read(), CK)
 
-    def test_close_and_open_beads(self) -> None:
+    def test_open_beads_leaves_out_a_closed_one(self) -> None:
         self.s.checkpoints.of("tl-1").write(CK)
         self.s.checkpoints.of("tl-2").write(dataclasses.replace(CK, bead="tl-2"))
         self.assertEqual(self.s.checkpoints.open_beads(), ["tl-1", "tl-2"])
-        self.assertTrue(self.s.checkpoints.close("tl-1").closed)
+        self.s.checkpoints.of("tl-1").write(dataclasses.replace(CK, closed=True))
         self.assertEqual(self.s.checkpoints.open_beads(), ["tl-2"])
-        self.assertIsNone(self.s.checkpoints.close("nope"))
 
-    def test_unfiled_follow_ups_are_kept_beside_the_filed_ones(self) -> None:
-        self.s.checkpoints.of("tl-1").write(dataclasses.replace(CK, unfiled=[]))
-        self.s.checkpoints.add_unfiled("tl-1", [Unfiled(title="t", why="lint")], ["f1", "f2"])  # pyrefly: ignore[unexpected-keyword]
-        got = self.s.checkpoints.of("tl-1").read()
-        self.assertEqual((got.filed, [u.title for u in got.unfiled]), (["f1", "f2"], ["t"]))
+    def test_delete_removes_the_record(self) -> None:
+        self.s.checkpoints.of("tl-1").write(CK)
         self.s.checkpoints.of("tl-1").delete()
         self.assertEqual(self.s.checkpoints.docs.keys(), [])
-        self.assertIsNone(self.s.checkpoints.add_unfiled("tl-1", [], []))
 
 
 class LogContract(Base):

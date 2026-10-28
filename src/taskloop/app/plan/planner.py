@@ -35,7 +35,7 @@ class Planner:
         data, _ = e.ai("plan", title, prompt, step=step, mode=mode, at=(e.planned, 0, 0))
         if self.fits(data):  # checkpoint first: a SIGTERM during the send-back below resumes with this plan
             e.plan_data = copy.deepcopy(data)
-            e.save_checkpoint(stage=0, rounds=0, n=0, feedback="", step="write")
+            e.checkpoints.save(stage=0, rounds=0, n=0, feedback="", step="write")
         p = self.sendback.find(data)
         if p.any():  # asked once to rewrite them, like an invalid answer; not a counted re-plan
             why = self.sendback.text(p)
@@ -131,7 +131,7 @@ class Planner:
         e = self.e
         if self.fits(data):
             e.plan_data = data  # a SIGTERM from here on resumes with this plan (d5f.38 lost a finished 1.1M plan before its checkpoint)
-            e.save_checkpoint(stage=0, rounds=0, n=0, feedback="", step="write")
+            e.checkpoints.save(stage=0, rounds=0, n=0, feedback="", step="write")
         if e.verify_answer and not data["stages"] and not data["question"].strip():
             e.log.note("the planner finds the owner's answer asks for nothing more: landing")
             self.add_leftovers(data)
@@ -177,7 +177,7 @@ class Planner:
         stored(data)
         e.publish_plan()
         e.briefs.export()
-        e.save_checkpoint(stage=0, rounds=0, n=0, feedback="", step="write")
+        e.checkpoints.save(stage=0, rounds=0, n=0, feedback="", step="write")
         return data
 
     @staticmethod

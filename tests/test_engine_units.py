@@ -24,6 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 from taskloop.adapters import applog  # noqa: E402
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from support.checkpoints import put_ck, read_ck  # noqa: E402
 from taskloop.app.plan.planner import Planner  # noqa: E402
 from taskloop.contracts import answers  # noqa: E402
 from taskloop.contracts.schema import unstrict  # noqa: E402
@@ -303,8 +304,8 @@ class DelegateLauncher(unittest.TestCase):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_L, self.FRESH, busy],
                                      "review": [review(unmet=["more"]), review(unmet=["more"])]})
         self.assertEqual(rc, 2)  # round 3 resumed the fallback (Codex still out) and paused
-        ck = json.loads((tl.config_dir() / "checkpoints" / "t-1.json").read_text())
-        self.assertEqual((ck["writer"], ck["fallback_lane"]), ("w2", "OPENAI_SUBSCRIPTION"))
+        ck = read_ck(self.eng).state
+        self.assertEqual((ck.writer["delegate"], ck.fallback_lane), ("w2", "OPENAI_SUBSCRIPTION"))
         with self.lanes(OPENAI_SUBSCRIPTION=False):
             rc, s = self.run_engine({"write": [self.BACK], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)

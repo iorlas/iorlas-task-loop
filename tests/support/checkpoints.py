@@ -1,0 +1,32 @@
+"""Checkpoints as a test reads and arranges them: through the engine's own stores, never by JSON shape."""
+import tl
+from taskloop.contracts import codec
+from taskloop.contracts.paths import ConfigDir
+from taskloop.stores.real import real_stores
+from taskloop.contracts.checkpoint import Checkpoint, RunState
+
+
+def read_ck(e, bead=None):
+    """The stored Checkpoint of the engine's bead (or `bead`), or None."""
+    return e.stores.checkpoints.of(bead or e.bead).read()
+
+
+def put_ck(e, bead=None, head="", step="", run="r-0", **state):
+    """A checkpoint as an earlier run left it: `state` fields go to the RunState."""
+    e.stores.checkpoints.of(bead or e.bead).write(Checkpoint(bead=bead or e.bead, run=run, t=0.0, head=head, step=step, state=RunState(**state)))
+
+
+def flat_ck(ck):
+    """A checkpoint as one dict: the envelope's fields and the run state's, with the names a test reads (plan, brief)."""
+    if ck is None:
+        return None
+    out = {k: v for k, v in codec.to_json(ck).items() if k != "state"}
+    out.update(ck.state.dump())
+    w = ck.state.writer
+    out.update(plan=ck.state.plan_data, brief=ck.state.brief_hash, writer=w.get("delegate") or "", writer_ctx=w.get("ctx"), writer_seen=w.get("seen"))
+    return out
+
+
+def stored_ck(bead="t-1"):
+    """The stored Checkpoint of `bead` in the test's config dir, read through the real stores."""
+    return real_stores(ConfigDir(tl.config_dir())).checkpoints.of(bead).read()

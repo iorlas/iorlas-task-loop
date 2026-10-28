@@ -44,6 +44,8 @@ from clock import FakeClock  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from support.briefs import bead_diff, bead_snapshot, brief_digest, linked_text  # noqa: E402
 from support.builders import argv_cfg, cfg_with, make_engine  # noqa: E402
+from support.checkpoints import flat_ck, stored_ck  # noqa: E402
+from taskloop.app.run.state import Checkpoints  # noqa: E402
 from taskloop.contracts.argv import checks_to_wire  # noqa: E402
 from taskloop.contracts.config import EngineConfig  # noqa: E402
 import engine  # noqa: E402
@@ -1342,8 +1344,7 @@ class EngineTest(unittest.TestCase):
         return mock.patch.object(fake_route.Script, "reply", call)
 
     def checkpoint(self):
-        p = tl.config_dir() / "checkpoints" / "t-1.json"
-        return json.loads(p.read_text()) if p.exists() else None
+        return flat_ck(stored_ck())
 
     def test_a_stop_mid_stage_2_resumes_stage_2_at_its_round_with_the_same_thread(self):
         with self.stop_at("reviewer", 3):  # stage 1 accepted; stage 2 sent back once; stopped in its second review
@@ -1426,12 +1427,11 @@ class EngineTest(unittest.TestCase):
     def test_a_run_killed_before_its_close_still_resumes_its_own_dirty_tree(self):
         with self.stop_at("reviewer", 2):
             self.run_engine({"plan": [self.TWO], "write": [WRITE, WRITE], "review": [CLEAN]})
-        p = tl.config_dir() / "checkpoints" / "t-1.json"  # as if kill -9: no close, no wip commit
-        ck = json.loads(p.read_text())
+        ck = stored_ck()  # as if kill -9: no close, no wip commit
+        assert ck is not None
         sh("git", "checkout", "-q", "task/t-1", cwd=self.wt)  # (a parked slot is left detached at the base: back on the bead's branch)
         sh("git", "reset", "-q", "--soft", "HEAD~1", cwd=self.wt)
-        ck.update(closed=False, head=tl.git("rev-parse", "HEAD", cwd=str(self.wt)))
-        p.write_text(json.dumps(ck))
+        self.eng.stores.checkpoints.of("t-1").write(dataclasses.replace(ck, closed=False, head=tl.git("rev-parse", "HEAD", cwd=str(self.wt))))
         rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
         self.assertEqual([c[0] for c in s.calls], ["worker", "reviewer"])
@@ -2123,7 +2123,7 @@ class EngineTest(unittest.TestCase):
         real_delegate = fake_route.Script.reply
         real_sh, real_checks = engine.Engine.sh, engine.Engine.run_checks
         real_brief = check_evidence.failure_brief
-        real_checkpoint, real_move = engine.Engine.save_checkpoint, Steps.move
+        real_checkpoint, real_move = Checkpoints.save, Steps.move
         gate = PY + ' -c "pass"'
         with self.stoppable(), mock.patch.object(tl, "cmd_land") as land:
             seen, recovery_checks, recovery_pushes = {}, [], []
@@ -2186,7 +2186,7 @@ class EngineTest(unittest.TestCase):
             with mock.patch.object(engine.Engine, "fix", fix), \
                     mock.patch.object(StageLoop, "run", stage), \
                     mock.patch.object(check_evidence, "failure_brief", brief), \
-                    mock.patch.object(engine.Engine, "save_checkpoint", checkpoint), \
+                    mock.patch.object(Checkpoints, "save", checkpoint), \
                     mock.patch.object(Steps, "move", move), \
                     mock.patch.object(fake_route.Script, "reply", delegate):
                 rc, events, race = self.run_push_race(failure="checks_fixed", max_rounds=1, max_check_tries=1)
@@ -3737,7 +3737,7 @@ class LandReview(EngineTest):
 
     def test_a_replanned_first_stage_starts_from_the_current_tree_not_the_task_base(self):
         e = self.engine_at_land({"stage_tree": "old", "amended": True})
-        with mock.patch.object(e, "tree_hash", return_value="T"), mock.patch.object(e, "save_checkpoint", side_effect=RuntimeError("stop")):
+        with mock.patch.object(e, "tree_hash", return_value="T"), mock.patch.object(e.checkpoints, "save", side_effect=RuntimeError("stop")):
             with self.assertRaises(RuntimeError):
                 e.stage_loop.run({"stages": [{"goal": "g", "files": [], "checks": [], "hard": False}]}, 0)
         self.assertEqual(e.stage_tree, "T")

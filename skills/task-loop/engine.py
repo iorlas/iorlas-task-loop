@@ -30,6 +30,7 @@ import time
 import uuid
 from functools import cached_property
 from pathlib import Path
+from typing import Any
 
 from core import enginelock, fmt
 from taskloop.adapters import applog
@@ -61,6 +62,9 @@ from taskloop.app.run import trace as runtrace
 from taskloop.app.write.handoff import Handoff
 from taskloop.app.write.stage_loop import StageLoop
 from taskloop.app.run.calls import timing
+from taskloop.app.run.resume import Resume
+from taskloop.app.run.state import Checkpoints, StateAttrs, carries_state
+from taskloop.contracts.checkpoint import RunState
 from taskloop.app.run.context import RunContext
 from taskloop.app.run.worker_call import Ops, WorkerCall
 from taskloop.app.slots.lease import Lease
@@ -347,7 +351,11 @@ class FixFailed(Blocked):
     """A conflict fix round that could not finish (no rounds left, or the rebase would not continue): a resume salvage starts again."""
 
 
-class Engine:
+@carries_state
+class Engine(StateAttrs):
+    stop_pending = False  # run_bead sets it when a SIGTERM came during the claim
+    tree_memo: Any = None  # (git status, file stats) -> tree hash, of the last tree_hash()
+
     def __init__(self, bead, wt, cfg, dry_run=False, verbose=True, store=None, route=seams.DelegateRoute(), clock=None, git=None,
                  stores=None, fresh=False):
         self.bead, self.wt, self.cfg, self.dry, self.verbose, self.store, self.router, self.repo = bead, wt, cfg, dry_run, verbose, store or tl.bd_store(), route, git
@@ -355,31 +363,15 @@ class Engine:
                       "tokens_in": 0, "tokens_cached": 0, "tokens_out": 0}
         self.session, self.fresh = tl.session_id(), fresh
         self.leftovers = []
-        self.look_notes, self.look_paths, self.bead_parent = [], [], ""  # tl-bxk.10.23
+        self.bead_parent = ""  # tl-bxk.10.23
         self.look_filed = False
-        self.look_unjudged, self.look_retried, self.shots_skipped = {}, set(), set()  # unjudged: item -> why
+        self.look_retried, self.shots_skipped = set(), set()
         self.unverified = []  # tl-bxk.10.28: items that land for the owner
         self.link_ok, self.link_bad, self.link_fn, self.link_tries = set(), {}, None, {}  # tl-bxk.7: links opened from this host (link_fn: a test's check)
-        self.filed = []       # leftover titles filed by an earlier run on this checkpoint: a replan naming one again is no new bead
-        self.stage_tree = ""  # the tree the current stage started from ("" = the task's base): the review's diff runs from here
-        self.writer_said = "" # the writer's answers so far: a new file they name is meant (tl-bxk.10.24)
-        self.accepted_new = []  # untracked files a review accepted into the commit
         self.amended = False  # a plan was amended or replanned: its first stage does not start at the task's base
         self.strays = []  # unaccepted untracked files moved to evidence/strays before the land gate (tl-bxk.10.24)
-        self.done = []        # goals of the stages accepted on this branch, across plans and runs
-        self.accepted = []    # their indices in the current plan
-        self.brief_hash = ""
-        self.replans = 0
         self.cap_granted = False
-        self.planned = 0      # planner runs on this bead, across runs: the first plan, then amends (engine.max_replans caps them)
-        self.extra = 0        # amends the owner allowed past the cap
-        self.plan_log = []    # [{mode, why}] per counted planner run: the cap's ask names each
         self.old_plan, self.amend_text, self.amend_why = None, "", ""  # set where a checkpoint's plan is kept to be amended
-        self.planner_ref = ""  # the last planner thread: a check send-back resumes it
-        self.snap = {}        # the bead's text fields and people's comments as planned: a later amend diffs against it
-        self.fixes = 0
-        self.pending_land_validation = ""  # a rejected push's failed checks still need an accepted fix
-        self.denials = []     # commands refused to this bead's writers, across lanes and runs
         self.unchecked = []   # what the last review of this run says nobody checked (each review re-judges it)
         self.answered = None  # the owner ask this run starts from, once answered
         self.verify_answer = ""  # the owner's answer to a verify ask, when it asks for more than a yes
@@ -390,22 +382,19 @@ class Engine:
         self.at_stage = 0  # the stage a call belongs to, for its key
         self.pause_role, self.pause_lane = "", ""  # the role and lane a paused run waits for: the loop wakes the bead when the role is usable
         self.budget_warned = set()
-        self.writer = {}  # backend -> thread/session id, so later rounds of a task resume the same writer
-        self.writer_family = None  # the family of the last write: the verifier comes from another one when it can
         self.plan_assumed = False  # tl-ntp: the planner was sent back once to plan on assumptions
         self.plan_decided = False  # the planner was sent back once with the requirement that answers its question
-        self.writer_fallback = False  # the writer's thread is a fallback: delegate's answer said so, or it went on
-                                      # as a new thread after a lane_out the engine saw
-        self.fallback_lane = ""  # that writer's first-choice lane, when known: delegate's first_lane, or the lane seen out
         self.verified = []  # the verifier's answer per unchecked item at land: in the trace and on the bead
         self.write_rounds = []  # per write round: resumed, input tokens, turns, prompt chars, context k, why fresh (a fix round's cost)
         self.last_summary = ""  # the last write's summary: a fresh writer is told it
-        self.handoff = {"rounds": [], "seen_lows": []}  # tl-bxk.13.6: what the rounds did and what a review already noted
+        self.state, self.checkpoints = RunState(), Checkpoints(self)  # what survives a park (contracts/checkpoint.py), and its one writer
+        self.plan_summary, self.bead_title, self.reflection = "", "", None
+        self.left_dirty, self.branch, self.task_branch = False, "", ""
+        self.gate_log: Path | None = None
+        self.salvage_tail, self.rebase_orig, self.rebase_pre = "", "", []
+        self.shot_cache: dict[str, Any] | None = None
         self.salvaged = False  # a resume conflict was fixed in place, not by starting again (tl-7y6.2.19)
         self.lane_notes = []  # steps that ran on the writer's own family, with delegate's warning (tl: same_family, never a pause)
-        self.rebase_resets = 0  # times the plan count started again after a rebase (checkpointed)
-        self.look_done, self.look_prev = 0, []  # render rounds this stage; the last round's defects (tl-bxk.13.15)
-        self.rendered_names, self.last_reqs, self.render_stale = set(), [], False  # the engine's own pictures this run, the last request
         self.taste = []  # [{id, title}] taste items for the owner-look bead
         self.scope = ""  # the bead's acceptance text: an unchecked item outside it is a follow-up, not a gap (tl-bxk.13.5)
         self.sessions = []  # every AI call of this run: the trace a later reflection reads (traces.jsonl)
@@ -447,7 +436,8 @@ class Engine:
         self.ctx = RunContext.open(bead, cfg, Path(wt), stem, self.run_dir, self.stores, store, route, self.clock, self.sessions, self.stats,
                                    tl.opencode_id, context_tokens, say, verbose, dry_run, lambda: time.time(), self.assert_tree,
                                    lambda text: tl.event("stage", bead, text=text))
-        self.log, self.steps, self.budget, self.calls, self.checklog = (getattr(self.ctx, k) for k in ("log", "steps", "budget", "calls", "checklog"))
+        c: Any = self.ctx
+        self.log, self.steps, self.budget, self.calls, self.checklog = c.log, c.steps, c.budget, c.calls, c.checklog
         self.checker = Checker(self, lambda secs: time.sleep(secs))
         self.delegate_route(quiet=True)
         if self.reexec:
@@ -457,7 +447,7 @@ class Engine:
             self.log.note("back from a network pause: run %s goes on" % stem)
 
     # the budget's numbers, read and set as the engine's own (waited: seconds spent waiting for a shared resource, not budget_min's)
-    t0, waited, labels, cost = (property(lambda self, k=k: getattr(self.budget, k), lambda self, v, k=k: setattr(self.budget, k, v))
+    t0, waited, labels, cost = (property(lambda obj, k=k: getattr(obj.budget, k), lambda obj, v, k=k: setattr(obj.budget, k, v))
                                 for k in ("t0", "waited", "labels", "spent"))
 
     def restore_run(self, name="reexec.json"):
@@ -631,7 +621,7 @@ class Engine:
         """tl-05s: one cheap read-only call that reflects on this run: what went well and badly (each bad item with its cause class
         and the session it comes from), what wasted tokens or minutes, what to change. Never blocks or changes the outcome: any
         failure, a missing lane, a paused run, a stop, is no reflection. -> the answer dict or None."""
-        if not self.cfg.reflect or self.dry or not self.route or getattr(self, "stop_pending", False):
+        if not self.cfg.reflect or self.dry or not self.route or self.stop_pending:
             return None
         if not any(s.get("node") in ("write", "review", "verify") for s in self.sessions):
             return None  # a run that only planned has nothing to reflect on
@@ -668,7 +658,7 @@ class Engine:
         lines = ["%s: %s" % (it.rec.KIND, fmt.clip(
             "%s -> %s: %s" % (it.rec.cause, it.rec.to, it.rec.detail) if isinstance(it.rec, rec.Transition) else it.rec.text, 200))
                  for it in JsonlStore(self.log_path, rec.decode).read_from().items if isinstance(it.rec, (rec.Transition, rec.Warn))]
-        return REFLECT_PROMPT % (self.bead, fmt.clip(getattr(self, "bead_title", "") or "", 120), outcome, fmt.clip(why or "(none)", 600),
+        return REFLECT_PROMPT % (self.bead, fmt.clip(self.bead_title, 120), outcome, fmt.clip(why or "(none)", 600),
                                  "; ".join("%s=%s" % kv for kv in self.stats.items()), "\n".join(rows[:40]),
                                  "\n".join(lines[-70:]) or "(none)")
 
@@ -683,7 +673,7 @@ class Engine:
                 why_code=runtrace.why_code(kind, outcome), fingerprint=lifecycle.run_fingerprint(outcome, why), cost=self.cost,
                 stats=self.stats, delegate_path=self.route or "", log=str(self.log_path), stderr=str(self.err_path),
                 sessions=self.sessions, verified=self.verified, write_rounds=self.write_rounds, strays=self.strays,
-                reflection=getattr(self, "reflection", None), lane_notes=self.lane_notes, salvaged=self.salvaged)))
+                reflection=self.reflection, lane_notes=self.lane_notes, salvaged=self.salvaged)))
         except (OSError, ValueError) as e:
             self.warn("could not write the trace: %s" % e)
 
@@ -763,8 +753,11 @@ class Engine:
         checks_to_text(out[0])
         return out
 
-    plan_data = None  # the plan as accepted; an unsandboxed worker reads it from the run dir
     live_n = 0  # the number of delegate calls with a live file so far
+
+    @cached_property
+    def resume(self):
+        return Resume(self)
 
     @cached_property
     def stage_loop(self):
@@ -906,7 +899,7 @@ class Engine:
         for q in (p, p[:-5]) if p.endswith(".meta") else (p,):
             if q in self.accepted_new or q + ".meta" in self.accepted_new or self.writer_names(q):
                 return "meant"
-            for st in (getattr(self, "plan_data", None) or {}).get("stages") or []:
+            for st in (self.plan_data or {}).get("stages") or []:
                 for f in st["files"]:
                     f = f.strip().replace("\\", "/")
                     f = "" if f in (".", "./") else f[2:] if f.startswith("./") else f
@@ -1029,6 +1022,10 @@ class Engine:
 
     def git(self, *a):
         return tl.git(*a, cwd=self.wt)
+
+    def branch_now(self):
+        """The branch HEAD is on; "" when detached."""
+        return self.git("symbolic-ref", "--short", "-q", "HEAD")
 
     # -- nodes
     def reset(self, bead):
@@ -1166,7 +1163,7 @@ class Engine:
         return out
 
     def scope_tokens(self):
-        plan = getattr(self, "plan_data", None) or {}
+        plan = self.plan_data or {}
         text = [self.scope] + [st["goal"] for st in plan.get("stages") or []] + [
             c["criterion"] for c in plan.get("cases") or []] + [r["what"] for r in plan.get("risks") or []]
         return word_set(" ".join(text))
@@ -1195,15 +1192,15 @@ class Engine:
 
 
     def case_checks(self):
-        return [c["check"] for c in (getattr(self, "plan_data", None) or {}).get("cases") or []
+        return [c["check"] for c in (self.plan_data or {}).get("cases") or []
                 if c.get("check", "").strip() and c.get("class", "test") == "test" and c.get("proved_by", "check") in ("check", "stage")]
 
     def cases_of(self, cls):
         """The criteria of the plan's cases of one class (look-objective, taste)."""
-        return [c["criterion"] for c in (getattr(self, "plan_data", None) or {}).get("cases") or [] if c.get("class") == cls]
+        return [c["criterion"] for c in (self.plan_data or {}).get("cases") or [] if c.get("class") == cls]
 
     def cases_text(self):
-        cases = (getattr(self, "plan_data", None) or {}).get("cases") or []
+        cases = (self.plan_data or {}).get("cases") or []
         if not cases:
             return ""
         run = [c for c in cases if c.get("class", "test") == "test"]
@@ -1232,7 +1229,7 @@ class Engine:
 
     def plan_text(self, stage=None):
         """The plan as JSON; with `stage` (0-based) the role-sized view a writer or reviewer of that stage reads."""
-        plan = getattr(self, "plan_data", None) or {}
+        plan = self.plan_data or {}
         return json.dumps(checks_to_wire(plan if stage is None else role_view(plan, stage)), indent=1)
 
     def comment(self, text):
@@ -1286,10 +1283,8 @@ class Engine:
             lock = tl.read_engine_lock(wt)
             if not lock.get("bead") or lock["bead"] == self.bead or not tl.proc_alive(lock.get("pid"), lock.get("start") or ""):
                 continue
-            try:
-                plan = json.loads((tl.config_dir() / "checkpoints" / ("%s.json" % lock["bead"])).read_text()).get("plan") or {}
-            except (OSError, ValueError):
-                plan = {}
+            ck = self.stores.checkpoints.of(lock["bead"]).read()
+            plan = (ck.state.plan_data if ck else None) or {}
             files = list(dict.fromkeys(f for st in plan.get("stages") or [] for f in st.get("files") or []))
             out.append((lock["bead"], " ".join(str(plan.get("summary") or "").split())[:100], files[:6]))
         return out[:5]
@@ -1338,7 +1333,7 @@ class Engine:
         if behind in ("", "0"):
             return ""
         orig = self.git("rev-parse", "HEAD")
-        old_parent = self.git("rev-parse", "-q", "--verify", "HEAD~1") if getattr(self, "left_dirty", False) else ""
+        old_parent = self.git("rev-parse", "-q", "--verify", "HEAD~1") if self.left_dirty else ""
         self.squashed = False
         mb = self.git("merge-base", "HEAD", self.cfg.base)
         if mb and self.git("rev-list", "--count", "%s..HEAD" % mb) not in ("", "0", "1"):  # the wip commits become one, like finish()
@@ -1369,15 +1364,13 @@ class Engine:
 
     def follow_checkpoint(self):
         """The checkpoint's head follows a rebase (or squash), or the next resume reads this as an edit from outside."""
-        try:
-            ck = json.loads(self.checkpoint_path().read_text())
-            if isinstance(ck, dict) and ck.get("head") in self.rebase_pre:
-                # unsquashed, the wip commit reset() made on top of the checkpoint's head is still on top of it
-                above = not self.squashed and len(self.rebase_pre) > 1 and ck["head"] == self.rebase_pre[1]
-                ck["head"] = self.git("rev-parse", "HEAD~1" if above else "HEAD")
-                self.checkpoint_path().write_text(json.dumps(ck, indent=1))
-        except (OSError, ValueError):
-            pass
+        def move(ck):
+            if ck.head not in self.rebase_pre:
+                return ck
+            # unsquashed, the wip commit reset() made on top of the checkpoint's head is still on top of it
+            above = not self.squashed and len(self.rebase_pre) > 1 and ck.head == self.rebase_pre[1]
+            return dataclasses.replace(ck, head=self.git("rev-parse", "HEAD~1" if above else "HEAD"))
+        self.checkpoints.amend(move)
 
     def salvage_resume_conflict(self):
         """tl-7y6.2.19: the resume rebase stopped on a few files: one fix(conflict) round (markers and build only) instead of
@@ -1419,7 +1412,7 @@ class Engine:
         starts again on the base with a fresh plan (the owner's answer is in the bead's comments, which the planner reads),
         and nothing so far counts toward the re-plan limit."""
         branch = self.git("symbolic-ref", "--short", "-q", "HEAD")
-        if not branch or branch != getattr(self, "branch", branch):
+        if not branch or branch != (self.branch or branch):
             self.warn("resume conflict, but HEAD is not the task branch (%s): the branch stays as it was" % (branch or "detached"))
             return False
         stale = "%s-stale-%s" % (branch, time.strftime("%Y%m%d-%H%M%S"))
@@ -1430,7 +1423,7 @@ class Engine:
             self.warn("resume conflict, but the branch could not be kept aside (%s): it stays as it was" % tail.strip()[-160:])
             return False
         self.sh(["git", "checkout", "-q", "-B", branch, self.cfg.base], pin=True, check=True)
-        self.drop_checkpoint()
+        self.checkpoints.drop()
         self.old_plan, self.amend_why, self.amend_text, self.replan_first = None, "", "", False
         self.plan_data, self.plan_summary = None, ""  # verify_answer stays: the owner's word still goes to the planner
         self.done, self.accepted, self.unchecked, self.plan_log, self.planned = [], [], [], [], 0
@@ -1459,12 +1452,10 @@ class Engine:
     def run_once(self):
         outcome, why, sha, spec, kind = "failed", "", "", None, oc.Kind.FAULT_ENGINE
         hb = Lease(self.store, self.bead, os.environ.get("TASK_LOOP_SLOT_BEAD", ""))
+        ck = self.checkpoints.read()
+        self.prev_ck = ck.run if ck else ""
         try:
-            self.prev_ck = (json.loads(self.checkpoint_path().read_text()) or {}).get("run") or ""
-        except (OSError, ValueError, AttributeError):
-            self.prev_ck = ""
-        try:
-            if getattr(self, "stop_pending", False):  # stopped during the claim (run_bead): close it as stopped
+            if self.stop_pending:  # stopped during the claim (run_bead): close it as stopped
                 raise Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)
             bead = tl.peek(self.store, self.bead)
             if not bead:
@@ -1487,7 +1478,7 @@ class Engine:
             if not AcceptanceText.present(bead) and not written:
                 raise Blocked("ticket: the bead has no acceptance criteria", askspecs.missing_criteria(), kind=oc.Kind.ASK_TICKET)
             self.scope = AcceptanceText.text(bead) or written
-            plan, i, state = self.resume_point()
+            plan, i, state = self.resume.point()
             self.log_run()
             # tl-fsj: the configured checks come from the base's config, so the tree they run on must have what the base has; every
             # resume rebases first, a plan to make or a stage to go on with (lifesim: 8 beads parked on 'just fmt-check-changed')
@@ -1510,7 +1501,7 @@ class Engine:
                 if d == "replan":
                     if self.pending_land_validation:
                         self.pending_land_validation += "\n" + self.stuck_why
-                        self.save_checkpoint(stage=i, rounds=0, n=0, feedback="", step="write")
+                        self.checkpoints.save(stage=i, rounds=0, n=0, feedback="", step="write")
                     self.replans += 1
                     self.stats["replans"] = replans = self.replans
                     if replans > int(self.cfg.max_replans) + self.extra:
@@ -1525,7 +1516,7 @@ class Engine:
                 i += 1
                 if i == len(plan["stages"]):
                     self.pending_land_validation = ""  # every recovery stage passed checks and review
-                self.save_checkpoint(stage=i, rounds=0, n=0, feedback="", step="write" if i < len(plan["stages"]) else "land")
+                self.checkpoints.save(stage=i, rounds=0, n=0, feedback="", step="write" if i < len(plan["stages"]) else "land")
                 if i == len(plan["stages"]):
                     self.safe_point("land")  # the checkpoint says land: the close and the land run on the newest code
             if self.render_stale and self.last_reqs and self.shot_methods() and not self.dry:
@@ -1542,7 +1533,7 @@ class Engine:
             kind = oc.Kind.LANDED if sha else oc.Kind.DONE
             if sha:
                 self.file_owner_look()  # before the checkpoint goes: a crash from here on still files it on resume
-            self.drop_checkpoint()
+            self.checkpoints.drop()
         except Blocked as b:
             kind = b.kind
             outcome = outcome_for(kind, b.why)
@@ -1647,7 +1638,7 @@ class Engine:
         the engine's own fault, never a prose question. -> the Ask, or None."""
         common = self.git("rev-parse", "--path-format=absolute", "--git-common-dir")
         at = raiser.Asking(bead=self.bead, run=self.log_path.stem, brief_hash=self.brief_hash, now=time.time(), why=why,
-                           repo=str(Path(common).parent) if common else str(self.wt), title=getattr(self, "bead_title", "") or "")
+                           repo=str(Path(common).parent) if common else str(self.wt), title=self.bead_title)
         a, problems = raiser.raise_ask(self.stores.asks, spec, at)
         if a is None:
             self.warn("the ask is not one an owner can answer (%s): %s" % ("; ".join(problems), spec.decision[:200]))
@@ -1656,191 +1647,6 @@ class Engine:
             a.kind.value in ("decision", "ticket") and not self.dry) else ""
         self.comment(asktext.comment(a) + moved)
         return a
-
-    def checkpoint_path(self):
-        return tl.config_dir() / "checkpoints" / ("%s.json" % self.bead)
-
-    def save_checkpoint(self, **at):
-        # mid-rebase (a conflict fix) HEAD is detached: the checkpoint names the task branch the close goes back to
-        branch = self.git("symbolic-ref", "--short", "-q", "HEAD") or getattr(self, "task_branch", "")
-        rec = {"v": 1, "bead": self.bead, "branch": branch,
-               "rebase_resets": self.rebase_resets,
-               "plan": self.plan_data, "planner_ref": self.planner_ref, "planned": self.planned, "extra": self.extra, "plan_log": self.plan_log, "snap": self.snap,
-               "done": self.done, "accepted": self.accepted, "replans": self.replans, "fixes": self.fixes, "denials": self.denials,
-               "writer": self.writer.get("delegate") or "", "writer_fallback": self.writer_fallback, "fallback_lane": self.fallback_lane,
-               "writer_family": self.writer_family or "", "writer_ctx": self.writer.get("ctx"), "writer_seen": self.writer.get("seen"),
-               "brief": self.brief_hash, "head": self.git("rev-parse", "HEAD"),
-               "unchecked": self.unchecked, "filed": self.filed,
-               "look_paths": self.look_paths, "look_notes": self.look_notes, "look_unjudged": self.look_unjudged,
-               "look_done": self.look_done, "look_prev": self.look_prev, "rendered": sorted(self.rendered_names),
-               "last_reqs": self.last_reqs, "render_stale": self.render_stale,
-               "unverified": self.unverified, "handoff": self.handoff, "stage_tree": self.stage_tree, "writer_said": self.writer_said, "accepted_new": self.accepted_new,
-               "closed": False,
-               "run": self.log_path.stem, "t": time.time(), **at}
-        rec["pending_land_validation"] = self.pending_land_validation
-        if self.pending_land_validation:
-            # fix(), a re-plan, or an interrupted recovery must never turn this into a direct-to-land checkpoint.
-            rec.update(step="land-verify-red", feedback=self.pending_land_validation)
-        p = self.checkpoint_path()
-        p.parent.mkdir(exist_ok=True)
-        p.write_text(json.dumps(rec, indent=1))
-
-    def save_unfiled(self, unfiled):
-        """The follow-ups bd refused, kept in the checkpoint (title, why) and out of `filed`, so none is lost or counted."""
-        try:
-            ck = json.loads(self.checkpoint_path().read_text())
-        except (OSError, ValueError):
-            ck = None
-        if ck is not None:
-            ck.update(filed=self.filed)
-            if unfiled:
-                ck["unfiled"] = (ck.get("unfiled") or []) + [{"title": lo["title"], "why": lo["why"]} for lo in unfiled]
-            self.checkpoint_path().write_text(json.dumps(ck, indent=1))
-
-    def mark_checkpoint_closed(self, why=""):
-        """The close step committed everything: the checkpoint's head is now exactly what the next run should find. A
-        red gate at land is no stop: the next run re-plans with the gate's output, or it would rerun the same red gate."""
-        try:
-            ck = json.loads(self.checkpoint_path().read_text())
-        except (OSError, ValueError):
-            return
-        ck.update(head=self.git("rev-parse", "HEAD"), closed=True, filed=self.filed)
-        if why.startswith("gate red") and not ck.get("pending_land_validation"):
-            ck.update(step="gate-red", gate_tail=trim.trim_log(why, log=str(getattr(self, "gate_log", "") or "")))
-        self.checkpoint_path().write_text(json.dumps(ck, indent=1))
-
-    def drop_checkpoint(self):
-        try:
-            self.checkpoint_path().unlink()
-        except OSError:
-            pass
-
-    def resume_point(self):
-        """(plan, stage index, stage state) from the last run's checkpoint, or (None, 0, None) to plan afresh. A tree
-        changed since (someone edited the branch) starts over; a changed bead keeps the accepted stages and re-plans
-        the rest; otherwise the run goes on at the same stage and round, with the same writer thread, or straight to
-        land when every stage was accepted."""
-        self.replan_first = False
-        if self.fresh:
-            self.drop_checkpoint()
-        try:
-            ck = json.loads(self.checkpoint_path().read_text())
-        except (OSError, ValueError):
-            return None, 0, None
-        self.ck_run = ck.get("run") or "" if isinstance(ck, dict) else ""
-        branch = self.git("symbolic-ref", "--short", "-q", "HEAD")
-        if not isinstance(ck, dict) or any(k not in ck for k in CK_FIELDS) or ck["v"] != 1 or ck["branch"] != branch or not ck["plan"]:
-            self.drop_checkpoint()
-            return None, 0, None
-        self.pending_land_validation = ck["pending_land_validation"] or (ck["feedback"] if ck["step"] == "land-verify-red" else "")
-        self.look_paths, self.look_notes = list(ck.get("look_paths") or []), list(ck.get("look_notes") or [])
-        self.look_done, self.look_prev = int(ck.get("look_done") or 0), list(ck.get("look_prev") or [])
-        self.rendered_names, self.last_reqs = set(ck.get("rendered") or []), list(ck.get("last_reqs") or [])
-        self.render_stale = bool(ck.get("render_stale"))
-        self.look_unjudged = dict(ck.get("look_unjudged") or {})
-        self.unverified = list(ck.get("unverified") or [])
-        self.handoff = {"rounds": list(ck["handoff"].get("rounds") or []), "seen_lows": list(ck["handoff"].get("seen_lows") or [])}
-        self.rebase_resets = int(ck.get("rebase_resets") or 0)
-        self.planned = int(ck["planned"])
-        self.extra, self.plan_log = self.extra + int(ck.get("extra") or 0), list(ck.get("plan_log") or [])
-        self.planner_ref = ck.get("planner_ref") or self.planner_ref
-        head = self.git("rev-parse", "HEAD")
-        ours = head == ck["head"] or (self.left_dirty and not ck["closed"] and self.git("rev-parse", "HEAD~1") == ck["head"])
-        if not ours:  # a commit, or an edit after a clean close, that is not this engine's: the plan may not fit it
-            self.log.note("the branch changed since the checkpoint of %s: amending its plan" % ck["run"])
-            self.old_plan, self.amend_why = ck["plan"], "branch changed outside the engine"
-            self.amend_text = ("The branch changed outside the engine since the old plan (commits after %s):\n%s\nNo stage of "
-                               "the old plan is known to be in the tree; read `git status` and the diff from the base."
-                               % (ck["head"][:12], (self.git("log", "--oneline", "-n", "15", "%s..HEAD" % ck["head"]) or "(none)")[:800]))
-            return None, 0, None
-        self.resumed = True
-        self.done = list(ck["done"])
-        self.replans, self.fixes = int(ck.get("replans") or 0), int(ck.get("fixes") or 0)
-        self.denials = list(ck.get("denials") or [])
-        self.filed = list(ck.get("filed") or [])
-        self.stage_tree, self.writer_said = ck.get("stage_tree") or "", ck.get("writer_said") or ""
-        self.accepted_new = list(ck.get("accepted_new") or [])
-        if ck["writer"]:
-            self.writer["delegate"] = ck["writer"]
-            self.writer["ctx"], self.writer["seen"] = ck.get("writer_ctx"), ck.get("writer_seen")
-            self.fallback_lane = ck.get("fallback_lane") or ""
-            self.writer_fallback = bool(ck["writer_fallback"])
-            self.writer_family = ck.get("writer_family") or None
-        if ck["step"] == "gate-red":
-            self.log.note("the gate was red at land in %s: re-planning with its output, keeping %d accepted stage(s)"
-                     % (ck["run"], len(self.done)))
-            (self.run_dir / "replan.md").write_text(
-                "Every stage was accepted, then the gate failed on the tree rebased onto the latest base (often "
-                "another task landed first). Plan the fix.\n\n" + ck.get("gate_tail", ""))
-            self.replan_first = True
-            self.old_plan, self.amend_why = ck["plan"], "gate red at land"
-            return None, 0, None
-        if ck["step"] == "land-verify-red":
-            # A retry fix that failed checks or review is not accepted work, even if its tree passes the gate.
-            # Re-plan it through stages so both checks and review must pass before another land attempt.
-            self.log.note("retry validation failed in %s: re-planning the unaccepted fix" % ck["run"])
-            (self.run_dir / "replan.md").write_text(
-                "A push retry's validation fix did not pass checks and review. Plan the fix before landing.\n\n"
-                + ck.get("feedback", ""))
-            self.replan_first = True
-            self.old_plan, self.amend_why = ck["plan"], "retry validation fix failed at land"
-            return None, 0, None
-        given = self.answered is not None and self.answered.answer is not None  # a filed answer changes what the plan reads, whatever the bead
-        if (ck["brief"] != self.brief_hash or given) and ck["step"] == "land" and self.answered and self.answered.ask_class == AskClass.EXTERNAL_FACT:
-            self.plan_data, self.plan_summary = ck["plan"], ck["plan"]["summary"]
-            answer = self.planner.cap.answered_words()
-            if given and self.answered.answer.action == "confirm":
-                self.log.note("the owner answered verify ask %s (confirmed): going straight to land" % self.answered.id)
-                return ck["plan"], len(ck["plan"]["stages"]), None
-            # lifesim-fld.26.15: 'add a test that ..., then land' landed without the test; any answer but a plain yes
-            # goes to the planner, which plans what it asks for, or nothing (then the run lands)
-            self.verify_answer = answer or "(no comment: the owner edited the bead)"
-            self.log.note("the owner answered verify ask %s with more than a yes: planning what it asks, keeping %d "
-                             "accepted stage(s)" % (self.answered.id, len(self.done)))
-            return None, 0, None
-        if ck["brief"] != self.brief_hash or given:
-            answer = self.planner.cap.answered_words()
-            # a comment alone is context for the next writer (the brief carries it), not an amend: supervisor notes used up
-            # the re-plan cap (lifesim d5f.40, fld.27.12). An owner's answer to an ask still amends.
-            diff = brief.diff(ck["snap"], self.snap, answer) if ck.get("snap") else None
-            if diff and not self.answered and not brief.diff(ck["snap"], self.snap, answer, comments=False):
-                diff = ""
-            if given and not answer and ck["brief"] == self.brief_hash:
-                # tl-bxk.13.16.5: "Run again" changes nothing the plan reads; counted as an amend it used a re-plan (lifesim-fld.10)
-                self.log.note("the owner's answer (%s) only asks for a rerun: keeping the plan, no planner run" % self.answered.answer.action)
-                diff = ""
-            if diff == "":  # the hash moved on a label, a priority or a comment: nothing the plan reads changed
-                self.log.note("the bead changed since the checkpoint of %s, but nothing the plan reads: keeping the plan, "
-                         "no planner run" % ck["run"])
-            else:
-                self.log.note("the bead changed since the checkpoint of %s: amending its plan, keeping %d accepted stage(s)"
-                         % (ck["run"], len(self.done)))
-                self.old_plan = ck["plan"]
-                self.amend_why = "bead changed: %s" % ("the owner answered ask %s" % self.answered.id if self.answered
-                                                       else "an edit with no ask")
-                self.amend_text = diff or "The bead changed since the old plan (the checkpoint holds no copy of the old text): read the task above."
-                self.amend_text += "\nAccepted stages (their work is in the tree): " + ("; ".join(self.done) or "none")
-                return None, 0, None
-        self.plan_data, self.plan_summary, self.accepted = ck["plan"], ck["plan"]["summary"], list(ck["accepted"])
-        (self.run_dir / "plan.json").write_text(json.dumps(checks_to_wire(ck["plan"]), indent=1))
-        stages = ck["plan"]["stages"]
-        again = self.promised_missing(ck["plan"], len(stages) if (ck["step"] == "land" or ck["stage"] >= len(stages)) else ck["stage"])
-        if again is not None:
-            # tl-bxk.13.16.2: lifesim-d5f.40 resumed in another slot, its stage 1 evidence file stayed behind and the checks of stage 2
-            # could never pass (the writer said so 8 times). The stage that made it runs again.
-            self.log.note("resuming %s: a file stage %d promised is missing, so that stage runs again" % (ck["run"], again + 1))
-            self.accepted = [k for k in self.accepted if k < again]
-            redo = {st["goal"] for st in stages[again:]}
-            self.done = [g for g in self.done if g not in redo]
-            self.unchecked = []
-            return ck["plan"], again, None
-        if ck["step"] == "land" or ck["stage"] >= len(stages):
-            self.unchecked = list(ck.get("unchecked") or [])  # still unproven: verified again before land
-            self.log.note("resuming %s: every stage was accepted, going straight to land" % ck["run"])
-            return ck["plan"], len(stages), None
-        self.log.note("resuming %s at stage %d/%d, round %d (write %d)" % (
-            ck["run"], ck["stage"] + 1, len(stages), ck["rounds"] + 1, ck["n"] + 1))
-        return ck["plan"], ck["stage"], {"rounds": ck["rounds"], "n": ck["n"], "feedback": ck["feedback"]}
 
     def promised_missing(self, plan, upto):
         """tl-bxk.13.16.2: the index of the earliest accepted stage (before `upto`) that mentions an evidence file which is gone
@@ -1906,7 +1712,7 @@ class Engine:
     def tree_hash(self):
         """The worktree as git would commit it now, untracked files included, without touching the real index."""
         state = self.tree_state()
-        memo = getattr(self, "_tree_hash_memo", None)
+        memo = self.tree_memo
         if state and memo and memo[0] == state:
             return memo[1]
         with tempfile.TemporaryDirectory() as d:
@@ -1916,7 +1722,7 @@ class Engine:
                 if r.returncode != 0:
                     raise TreeHashError("git %s failed (%d): %s" % (args[0], r.returncode, (r.stderr or "").strip()[:300]))
         if state:
-            self._tree_hash_memo = (state, r.stdout.strip())
+            self.tree_memo = (state, r.stdout.strip())
         return r.stdout.strip()
 
     def tree_state(self):
@@ -2063,7 +1869,7 @@ class Engine:
                         # Save that barrier first, then let sh() receive SIGTERM and stop its process tree.
                         with self.stop_deferred() as stop:
                             self.pending_land_validation = "land retry checks require successful checks and review before landing"
-                            self.save_checkpoint(stage=len((self.plan_data or {}).get("stages") or []), rounds=0, n=0,
+                            self.checkpoints.save(stage=len((self.plan_data or {}).get("stages") or []), rounds=0, n=0,
                                                  feedback="", step="land-verify-red")
                         if stop:
                             raise Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)
@@ -2075,7 +1881,7 @@ class Engine:
                                 self.pending_land_validation = problem[1]
                             else:
                                 self.pending_land_validation = ""
-                            self.save_checkpoint(stage=len((self.plan_data or {}).get("stages") or []), rounds=0, n=0,
+                            self.checkpoints.save(stage=len((self.plan_data or {}).get("stages") or []), rounds=0, n=0,
                                                  feedback="", step="land-verify-red" if bad else "land")
                         if stop:
                             raise Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)
@@ -2146,12 +1952,12 @@ class Engine:
             fixed = self.fix(*problem)
             if problem[0] == "verify" and fixed != "accept":
                 self.pending_land_validation += "\n" + self.stuck_why
-                self.save_checkpoint(stage=len((self.plan_data or {}).get("stages") or []), rounds=0, n=0,
+                self.checkpoints.save(stage=len((self.plan_data or {}).get("stages") or []), rounds=0, n=0,
                                      feedback="", step="land-verify-red")
                 raise Blocked("land retry validation fix did not pass its checks and review; branch kept", kind=oc.Kind.FAULT_LAND)
             if problem[0] == "verify":
                 self.pending_land_validation = ""
-                self.save_checkpoint(stage=len((self.plan_data or {}).get("stages") or []), rounds=0, n=0,
+                self.checkpoints.save(stage=len((self.plan_data or {}).get("stages") or []), rounds=0, n=0,
                                      feedback="", step="land")
             if problem[0] == "verify" and self.git("status", "--porcelain"):
                 # Unlike verification before finish(), a retry check's fix follows the task commit.
@@ -2203,12 +2009,12 @@ class Engine:
         if self.fixes > limit:
             if kind == "conflict":
                 self.sh(["git", "rebase", "--abort"], pin=True)
-            trimmed = trim.trim_log(tail, log=str(getattr(self, "gate_log", "") or "") if kind == "gate" else "")
+            trimmed = trim.trim_log(tail, log=str(self.gate_log or "") if kind == "gate" else "")
             raise (FixFailed if kind == "conflict" else Blocked)("%s after %d fix rounds: it needs the owner's hint\n%s" % (
                 what, limit, trimmed), askspecs.no_progress(what, limit, trimmed), kind=oc.Kind.ASK_STUCK)
         self.warn("%s: %s, fix round %d of %d" % ("resume" if resume else "land", what, self.fixes, limit))
         if not resume:
-            self.save_checkpoint(stage=len((self.plan_data or {}).get("stages") or []), rounds=0, n=0, feedback="", step="land")
+            self.checkpoints.save(stage=len((self.plan_data or {}).get("stages") or []), rounds=0, n=0, feedback="", step="land")
         checks = list(dict.fromkeys(c for s in (self.plan_data or {}).get("stages") or [] for c in s["checks"]))
         skip = None
         if kind == "conflict":  # tl-7y6.2.18: markers and build only; the plan's checks are skipped, the gate runs once on the result
@@ -2221,7 +2027,7 @@ class Engine:
             "failed": [self.cfg.gate_text or "rebase"] if kind == "gate" else None,
             "feedback": text % tail if kind == "verify" else text % (
                 (" (`%s`)" % self.cfg.gate_text) if kind == "gate" and self.cfg.gate else "",
-                check_evidence.failure_brief([CheckResult.failed_run(self.cfg.gate_text or "rebase", tail, log=str(getattr(self, "gate_log", "") or ""))],
+                check_evidence.failure_brief([CheckResult.failed_run(self.cfg.gate_text or "rebase", tail, log=str(self.gate_log or ""))],
                                              self.run_dir)
                 if kind == "gate" else check_evidence.compact([CheckResult.failed_run("rebase", tail)])),
             "scope": "the fix only: it must %s without breaking what the accepted stages built" % goal})
@@ -2281,16 +2087,16 @@ class Engine:
     def shot_methods(self):
         """{method: entry} from engine.shot_table, read from the base branch (a worker can edit the working copy, not that);
         {} when unset or unreadable (then a visual stage works the old way)."""
-        if getattr(self, "_shot_methods", None) is None:
-            self._shot_methods = {}
+        if self.shot_cache is None:
+            self.shot_cache = {}
             rel = (self.cfg.shot_table or "").strip()
             if rel:
                 text = self.git("show", "%s:%s" % (self.cfg.base, rel))
                 methods, err = looks.parse_table(text) if text else ({}, "%s is not on %s" % (rel, self.cfg.base))
                 if err:
                     self.warn("engine.shot_table: %s; visual stages work the old way" % err)
-                self._shot_methods = methods
-        return self._shot_methods
+                self.shot_cache = methods
+        return self.shot_cache
 
     def look_ready(self, st):
         return bool(self.shot_methods()) and self.stage_visual(st)
@@ -2577,13 +2383,7 @@ class Engine:
 
     def persist_look(self):
         """What the owner-look bead needs goes into the checkpoint, so a crash after the land still files it."""
-        try:
-            ck = json.loads(self.checkpoint_path().read_text())
-            ck.update(look_paths=self.look_paths, look_notes=self.look_notes, look_unjudged=self.look_unjudged,
-                      unverified=self.unverified)
-            self.checkpoint_path().write_text(json.dumps(ck, indent=1))
-        except (OSError, ValueError):
-            pass
+        self.checkpoints.keep_look()
 
     def copy_looks(self):
         """The screenshots of a visual change go into the repo (engine.evidence_dir/<bead>/), in the land's commit."""
@@ -2809,7 +2609,7 @@ class Engine:
     def leave_slot(self, outcome, branch):
         """tl-g6a: a bead that parked leaves its work on its own branch (wip committed above) and the slot at the detached base,
         not on an old branch whose untracked files made the next runs fail as 'uncommitted work of another branch'."""
-        if outcome in ("landed", "done") or not branch or branch != getattr(self, "branch", None):
+        if outcome in ("landed", "done") or not branch or branch != (self.branch or None):
             return
         if self.dirty_status() or self.git("symbolic-ref", "--short", "-q", "HEAD") != branch:
             return  # work that could not be committed, or files stage_all left out, stay where they are for the next run
@@ -2832,10 +2632,10 @@ class Engine:
             self.sh(["git", "rebase", "--abort"], pin=True)
         branch = self.git("symbolic-ref", "--short", "-q", "HEAD")
         new = list({lo["title"]: lo for lo in self.leftovers if lo["title"] not in self.filed}.values())  # a title once
-        if outcome not in ("landed", "done") and branch and branch == getattr(self, "branch", None):
+        if outcome not in ("landed", "done") and branch and branch == (self.branch or None):
             if self.git("status", "--porcelain"):
                 self.wip(outcome)  # the next run continues this branch
-            self.mark_checkpoint_closed(why)
+            self.checkpoints.close(why)
         stats = "cost=$%.2f; minutes=%d; %s" % (self.cost, mins, "; ".join("%s=%s" % kv for kv in self.stats.items()))
         self.log_run()
         last = self.steps.cur or self.steps.last
@@ -2878,23 +2678,23 @@ class Engine:
             made, err = self.create_checked(NewBead(title=lo["title"], description=lo["why"], deps=["discovered-from:" + self.bead]))
             if made:
                 self.filed.append(lo["title"])  # only a create that worked; the checkpoint follows at once (a kill loses no title)
-                self.save_unfiled([])
+                self.checkpoints.keep_filed()
             else:
                 unfiled.append(lo)
                 self.warn("follow-up not filed: %s: %s" % (lo["title"][:80], err[:200]))
         if unfiled:
             self.comment("Follow-up (engine): bd refused %d follow-up(s), none was filed: %s" % (
                 len(unfiled), "; ".join("%s (%s)" % (lo["title"], lo["why"][:120]) for lo in unfiled)))
-            self.save_unfiled(unfiled)
+            self.checkpoints.keep_filed(unfiled)
         if outcome == "landed":
             self.file_owner_look()
         verified = ("; self-verified=" + ", ".join("%d %s" % (sum(x["verdict"] == k for x in self.verified), k)
                                                    for k in VERDICTS)) if self.verified else ""
         self.comment("Reflect (engine): outcome=%s;%s filed=%d;%s %s%s%s; trace=%s (tl trace %s)" % (
-            outcome, reflection_text(getattr(self, "reflection", None)), len(new) - len(unfiled),
+            outcome, reflection_text(self.reflection), len(new) - len(unfiled),
             (" unfiled=%d;" % len(unfiled)) if unfiled else "", stats, verified, ("; why=" + why) if why else "",
             self.log_path.stem, self.bead))
-        summary = (getattr(self, "plan_summary", "") or "")[:300]
+        summary = (self.plan_summary)[:300]
         if outcome == "landed":
             rc = tl.cmd_close(Args(id=self.bead, reason="merged %s to %s: %s; %s" % (
                 sha[:12], self.cfg.base.split("/")[-1], summary or "the task's stages passed", stats)))
@@ -3001,11 +2801,6 @@ def run_breakdown(log_path, open_node=None, top=4):
         t[1] += 1
     return [BudgetLine(step=k, minutes=float(v[0] // 60), rounds=int(v[1])) for k, v in sorted(tot.items(), key=lambda kv: -kv[1][0]) if v[0] >= 60][:top]
 
-
-CK_FIELDS = tuple(("v bead branch rebase_resets plan planner_ref planned extra plan_log snap done accepted replans fixes denials writer "
-                   "writer_fallback fallback_lane writer_family writer_ctx writer_seen brief head unchecked filed look_paths look_notes "
-                   "look_unjudged look_done look_prev rendered last_reqs render_stale unverified handoff stage_tree writer_said "
-                   "accepted_new closed run t pending_land_validation stage rounds n feedback step").split())  # what save_checkpoint writes
 
 
 

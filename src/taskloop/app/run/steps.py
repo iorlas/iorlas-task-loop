@@ -1,4 +1,5 @@
 """Steps: the cursor over a run's steps. One step is open at a time; opening the next closes it. Every move writes its record."""
+
 from collections.abc import Callable
 from typing import Any
 
@@ -20,8 +21,13 @@ class Open:
 
 
 class Steps:
-    def __init__(self, log: RunLog, clock: Callable[[], float], guard: Callable[[str], None] | None = None,
-                 on_begin: Callable[[str], None] | None = None) -> None:
+    def __init__(
+        self,
+        log: RunLog,
+        clock: Callable[[], float],
+        guard: Callable[[str], None] | None = None,
+        on_begin: Callable[[str], None] | None = None,
+    ) -> None:
         self.log, self.clock, self.guard, self.on_begin = log, clock, guard, on_begin
         self.n = 0  # steps begun in this run (kept across a move to a newer install)
         self.cur: Open | None = None
@@ -54,8 +60,9 @@ class Steps:
     def end(self, outcome: str = "") -> None:
         c, self.cur = self.cur, None
         if c:
-            self.log.emit(StepEnd(id=c.id, step=c.step, outcome=c.outcome or outcome or "done", detail=c.detail,
-                                  secs=round(self.clock() - c.t)))
+            self.log.emit(
+                StepEnd(id=c.id, step=c.step, outcome=c.outcome or outcome or "done", detail=c.detail, secs=round(self.clock() - c.t))
+            )
 
     def move(self, to: str, cause: str, detail: str = "") -> None:
         """A decision point: from the open (or last) step to the next one, with the cause and what it was."""

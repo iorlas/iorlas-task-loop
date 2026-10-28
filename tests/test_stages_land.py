@@ -10,6 +10,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "task-loop"))
 from support import fake_route  # noqa: E402
+from support.checkpoints import put_ck, read_ck  # noqa: E402
 from support import tlbd  # noqa: E402
 from support.fakes import FakeBeadStore, as_bead  # noqa: E402
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
@@ -134,12 +135,11 @@ class StaleTree(StagesTest):
         (self.wt / "g.txt").write_text("more work\n")
         te.sh("git", "commit", "-qam", "wip (t-1): blocked", cwd=self.wt)  # what reset() does with a dirty tree
         e.left_dirty = True
-        e.checkpoint_path().parent.mkdir(exist_ok=True)
-        e.checkpoint_path().write_text(json.dumps({"v": 1, "head": before}))
+        put_ck(e, head=before)
         self.main_moves()
         te.sh("git", "fetch", "-q", "origin", cwd=self.wt)
         self.assertEqual(e.rebase_onto_base(), "rebased")
-        self.assertEqual(json.loads(e.checkpoint_path().read_text())["head"], e.git("rev-parse", "HEAD"))  # tl-7y6.2.19: the wip commit is squashed in
+        self.assertEqual(read_ck(e).head, e.git("rev-parse", "HEAD"))  # tl-7y6.2.19: the wip commit is squashed in
         self.assertEqual(e.git("rev-list", "--count", "origin/main..HEAD"), "1")
 
     def test_the_lifesim_wording_is_found_too_and_a_plain_red_check_is_not(self):

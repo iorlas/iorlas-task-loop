@@ -9,9 +9,34 @@ read, what the verify step settled and what it left, the follow-ups bd refused, 
 from dataclasses import field
 from typing import Any, ClassVar, Literal
 
-from taskloop.contracts.checkpoint import Unchecked, Unfiled, Unverified
 from taskloop.contracts.codec import from_json, record, to_json
 from taskloop.contracts.trace import Verified
+
+
+@record
+class Unchecked:
+    what: str
+    kind: str = ""
+    source: str = ""
+    why: str = ""
+    proof_round: bool = False
+
+
+@record
+class Unverified:
+    what: str
+    kind: str = ""
+    why: str = ""
+    source: str = ""
+
+
+@record
+class Unfiled:
+    """A follow-up bd refused: kept here so none is lost or counted as filed."""
+
+    title: str
+    why: str
+
 
 Axis = Literal["spec", "standards"]
 Confidence = Literal["certain", "likely", "possible"]

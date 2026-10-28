@@ -20,6 +20,7 @@ SRC = ROOT / "skills" / "task-loop"
 sys.path.insert(0, str(SRC))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from support.checkpoints import put_ck, read_ck  # noqa: E402
 sys.path.insert(0, str(ROOT / "tests"))
 import engine  # noqa: E402
 from support.builders import cfg_with  # noqa: E402
@@ -134,8 +135,8 @@ class Reload(unittest.TestCase):
         self.assertEqual(ex["env"]["run"], run)
         self.assertEqual((ex["marker"]["from"], ex["marker"]["to"], ex["marker"]["step"]), ("0.1.0", "0.2.0", "land"))
         # the stage was accepted on 0.1.0; the checkpoint says land; the move is one event old -> new
-        ck = json.loads(eng.checkpoint_path().read_text())
-        self.assertEqual((ck["step"], ck["run"]), ("land", run))
+        ck = read_ck(eng)
+        self.assertEqual((ck.step, ck.run), ("land", run))
         ev = [e for e in self.events() if e["kind"] == "reload"]
         self.assertEqual([(e["old"], e["new"], e["who"], e["run"]) for e in ev], [("0.1.0", "0.2.0", "engine", run)])
         self.assertEqual([c[0] for c in script.calls], ["planner", "worker", "reviewer"])  # land and close have not run yet

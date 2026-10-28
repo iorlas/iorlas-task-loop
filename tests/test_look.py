@@ -9,6 +9,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "task-loop"))
 from support import fake_route  # noqa: E402
+from support.checkpoints import put_ck, read_ck  # noqa: E402
 from support.fakes import as_bead  # noqa: E402
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from taskloop.contracts import answers  # noqa: E402
@@ -197,13 +198,13 @@ class LookTest(unittest.TestCase):
                 self.go({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, look="matches")]}, first_shot=1,
                         visual_paths=VISUAL, evidence_dir="design/look-reviews")
         self.assertEqual(self.creates(), [])
-        saved = json.loads(self.eng.checkpoint_path().read_text())
-        self.assertEqual(saved["look_paths"], ["design/look-reviews/t-1/home-screen.png"])
+        saved = read_ck(self.eng).state
+        self.assertEqual(saved.look_paths, ["design/look-reviews/t-1/home-screen.png"])
         eng2 = engine.Engine("t-1", str(self.wt), self.eng.cfg, store=self.store)
         eng2.reset(as_bead(BEAD))
         eng2.bead_title = "Add f"
-        eng2.resume_point()
-        self.assertEqual(eng2.look_paths, saved["look_paths"])
+        eng2.resume.point()
+        self.assertEqual(eng2.look_paths, saved.look_paths)
         self.assertEqual(eng2.look_notes, ["matches"])
         with self.store.stub(show=BEAD):
             eng2.file_owner_look()

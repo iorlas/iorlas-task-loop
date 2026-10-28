@@ -1,5 +1,6 @@
 """Budget: what a run may spend (dollars, and minutes of its own time) and what it has. Time spent waiting for a shared resource
 (a Unity slot, a lane, an editor lock) is booked as waited and is not the run's minutes."""
+
 import dataclasses
 from collections.abc import Callable
 
@@ -47,4 +48,6 @@ class Budget:
     def over(self) -> list[str]:
         """What is past its cap, one phrase each ('181 of 180 min', '$16.00 of $15'); empty while inside."""
         mins, limit, usd = self.spent_min(), self.limit_min(), self.cfg.budget_usd
-        return (["%d of %g min" % (mins, limit)] if mins > limit else []) + (["$%.2f of $%s" % (self.spent, usd)] if self.spent > float(usd) else [])
+        return (["%d of %g min" % (mins, limit)] if mins > limit else []) + (
+            ["$%.2f of $%s" % (self.spent, usd)] if self.spent > float(usd) else []
+        )

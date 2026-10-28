@@ -1,11 +1,13 @@
 """The re-plan cap: when the planner has run too often the bead asks the owner; the owner's answer (or an override on the bead)
 allows one more run."""
-import json
+
+import dataclasses
 from typing import Any
 
 from taskloop.adapters.bdsafe import attempt, peek
 from taskloop.app.asks import intake
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.enums import AskClass
 from taskloop.contracts.ports import BeadPatch
 from taskloop.domain.asks import specs as askspecs
@@ -29,7 +31,7 @@ class ReplanCap:
     def grant(self) -> None:
         """The owner allows one more planner run: they answered the cap's ask with the rerun option, or put the override on the bead
         (`tl override BEAD replan-cap`). Any other answer is recorded and the bead blocks again at the cap. The grant goes into the
-        checkpoint's extra, which resume_point adds to."""
+        checkpoint's extra, which the resume adds to."""
         e = self.e
         a = e.answered
         by_ask = a is not None and a.ask_class == AskClass.CAP_REACHED
@@ -41,8 +43,10 @@ class ReplanCap:
         rerun = a is not None and a.answer is not None and a.answer.action == "rerun"
         said = a.id if a else ""
         if not (by_override or rerun):
-            e.log.note(f"the owner answered the re-plan cap ({said}) without allowing more: still blocked. Answer: "
-                       f"{(self.answered_words() or '(none)')[:300]}")
+            e.log.note(
+                f"the owner answered the re-plan cap ({said}) without allowing more: still blocked. Answer: "
+                f"{(self.answered_words() or '(none)')[:300]}"
+            )
             return
         e.log.note("the owner allowed one more planner run (%s)" % ("the override" if by_override else "ask " + said))
         if by_override:
@@ -51,11 +55,11 @@ class ReplanCap:
 
     def add_to_checkpoint(self) -> None:
         e = self.e
-        try:
-            ck = json.loads(e.checkpoint_path().read_text())
-            ck["extra"] = int(ck.get("extra") or 0) + 1
-            e.checkpoint_path().write_text(json.dumps(ck, indent=1))
-        except (OSError, ValueError):
+
+        def one_more(ck: Checkpoint) -> Checkpoint:
+            return dataclasses.replace(ck, state=dataclasses.replace(ck.state, extra=ck.state.extra + 1))
+
+        if not e.checkpoints.amend(one_more):
             e.extra += 1
 
     def answered_words(self) -> str:

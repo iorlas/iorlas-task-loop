@@ -48,7 +48,7 @@ class EngineAndDashOnFakesTest(unittest.TestCase):
         self.assertEqual(s.asks.live(), [])
         self.assertEqual(s.asks.of("tl-1").read().answer.by, "denis")
         self.assertEqual(s.checkpoints.open_beads(), ["tl-1"])
-        s.checkpoints.close("tl-1")
+        s.checkpoints.of("tl-1").write(dataclasses.replace(suites.CK, closed=True))
         self.assertEqual(s.checkpoints.open_beads(), [])
 
     def test_a_land_lock_holder_is_visible_to_the_dashboard_while_it_lands(self) -> None:

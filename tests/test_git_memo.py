@@ -118,7 +118,7 @@ class GitMemoTest(unittest.TestCase):
                     return subprocess.CompletedProcess(cmd, 128, b"", b"fatal: planted")
                 return real(cmd, *a, **k)
             with self.subTest(failing), mock.patch.object(engine.subprocess, "run", run):
-                eng._tree_hash_memo = None
+                eng.tree_memo = None
                 with self.assertRaises(engine.TreeHashError) as got:
                     eng.tree_hash()
                 self.assertIn(failing, str(got.exception))
