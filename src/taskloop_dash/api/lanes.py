@@ -47,15 +47,10 @@ def lane_banners(j: dict[str, Any], now: float | None = None) -> dict[str, dict[
 
 
 def status_lanes(j: object) -> dict[str, dict[str, Any]]:
-    """name -> lane record of a `route.py status --json` answer, in delegate's own order: its v1 dict, or the named list
-    agent-runs v1 records carry."""
+    """name -> lane record of the typed `lanes` dict of a `route.py status --json` answer (delegate 0.48), in its order."""
     lanes = j.get("lanes") if isinstance(j, dict) else None
     if isinstance(lanes, dict) and all(isinstance(ln, dict) for ln in lanes.values()):
         return {str(n): ln for n, ln in lanes.items()}
-    if isinstance(lanes, list) and all(isinstance(ln, dict) and isinstance(ln.get("name"), str) and ln["name"] for ln in lanes):
-        named = {ln["name"]: ln for ln in lanes}
-        if len(named) == len(lanes):
-            return named
     raise ValueError("invalid lanes")
 
 
@@ -63,27 +58,37 @@ def _number(v: object) -> bool:
     return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
 
 
+def _num_or_none(v: object) -> Any:
+    return v if _number(v) else None
+
+
+OUT_STATES: Final = ("resting", "logged_out", "spend")
+
+
 def cockpit_usage(ln: dict[str, Any]) -> list[dict[str, Any]]:
-    """The lane's usage windows: delegate's `usage` list, plus the bare `five`/`week` percentages older answers carry."""
-    supplied = ln.get("usage")
-    usage = [{"window": str(u.get("window") or "?"), "used_pct": u.get("used_pct"), "resets_at": u.get("resets_at")}
-             for u in (supplied if isinstance(supplied, list) else []) if isinstance(u, dict)]
-    for u in usage:
-        if not _number(u["used_pct"]):
-            u["used_pct"] = None
-    for key, window in (("five", "5h"), ("week", "week")):
-        if _number(ln.get(key)) and not any(u["window"] == window for u in usage):
-            usage.append({"window": window, "used_pct": ln[key]})
-    return usage
+    """The lane's usage windows: delegate's `windows` list ({name, used_pct, resets_at, ...})."""
+    return [{"window": str(w.get("name") or "?"), "used_pct": _num_or_none(w.get("used_pct")),
+             "resets_at": _num_or_none(w.get("resets_at"))}
+            for w in ln.get("windows") or [] if isinstance(w, dict)]
 
 
 def cockpit_lanes(j: dict[str, Any]) -> list[dict[str, Any]]:
-    """One record per lane for the cockpit: only what delegate said, in its order."""
-    return [{"name": n, "family": ln.get("family"), "kind": ln.get("kind"), "model": ln.get("model"),
-             "emoji": ln.get("emoji"), "out": ln.get("out"), "out_until": ln.get("out_until"),
-             "reason": ln.get("reason", ln.get("why")),
-             "notes": [str(x) for x in ln.get("notes") or []], "usage": cockpit_usage(ln)}
-            for n, ln in status_lanes(j).items()]
+    """One record per lane for the cockpit, from delegate's `cockpit.lanes` rows (id, model, state, emoji, reason, unlock, windows),
+    in its order. Only what delegate said."""
+    cockpit = j.get("cockpit")
+    rows = cockpit.get("lanes") if isinstance(cockpit, dict) else None
+    if not isinstance(rows, list) or not all(isinstance(r, dict) and isinstance(r.get("id"), str) for r in rows):
+        raise ValueError("invalid cockpit")
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        unlock = r.get("unlock") if isinstance(r.get("unlock"), dict) else {}
+        state = r.get("state")
+        out.append({"name": r["id"], "label": r.get("label"), "family": r.get("family"), "kind": r.get("kind"),
+                    "model": r.get("model"), "emoji": r.get("emoji"), "state": state,
+                    "out": state in OUT_STATES if isinstance(state, str) else None,
+                    "out_until": _num_or_none(unlock.get("at")), "reason": r.get("reason"),
+                    "notes": [str(x) for x in r.get("warnings") or []], "usage": cockpit_usage(r)})
+    return out
 
 
 def _check_lanes(lanes: dict[str, dict[str, Any]]) -> None:
@@ -145,8 +150,9 @@ class Lanes:
         try:
             lanes = status_lanes(j)
             _check_lanes(lanes)
+            cockpit = cockpit_lanes(j)
         except (ValueError, OverflowError, OSError) as e:
             return {"ok": False, "say": "delegate status malformed: %s" % e}
         det = lane_banners({"lanes": lanes}, self.env.clock())
         return {"ok": not det, "out": sorted(det), "detail": det, "needs_input": j.get("needs_input") or [],
-                "lanes": cockpit_lanes(j), "at": self.env.clock()}
+                "lanes": cockpit, "at": self.env.clock()}

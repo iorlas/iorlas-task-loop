@@ -554,15 +554,15 @@ function renderTop(){$('lookn').textContent=lookCount()||'';
 function cockpitTime(t){return typeof t=='number'&&Number.isFinite(t)&&!isNaN(new Date(t*1000).getTime())}
 function cockpitStamp(t){return cockpitTime(t)?`<time datetime="${esc(new Date(t*1000).toISOString())}">${esc(new Date(t*1000).toLocaleString())}</time>`:'unknown'}
 function cockpitRow(l){
-  const state=l.out===true?'out':l.out===false?'available':'unknown';
+  const state=l.state||'unknown';
   const reason=l.reason||(l.notes||[]).join('; ')||'unknown';
   const usage=(l.usage||[]).map(u=>{const known=typeof u.used_pct=='number'&&Number.isFinite(u.used_pct);
     return `<div class="usage-window"><span>${esc(u.window||'?')} · ${known?esc(u.used_pct)+'% used':'usage unknown'}</span>
       <progress max="100" ${known?`value="${Math.max(0,Math.min(100,u.used_pct))}"`:''} aria-label="${esc(l.name+' '+(u.window||'?')+' usage')}" ${known?'':'aria-valuetext="unknown"'}></progress>
       <span class="lane-label">Resets: ${cockpitStamp(u.resets_at)}</span></div>`}).join('');
-  return `<article class="lane" data-lane="${esc(l.name)}" data-state="${state}" aria-label="${esc(l.name)}">
+  return `<article class="lane" data-lane="${esc(l.name)}" data-state="${esc(state)}" aria-label="${esc(l.name)}">
     <div><b><span class="lane-emoji">${esc(l.emoji||(l.out===true?'🔴':l.out===false?'🟢':'❔'))}</span> ${esc(l.name)}</b>
-      <div class="lane-state">${state}</div><div><span class="lane-label">Model:</span> ${esc(l.model||'unknown')}</div>
+      <div class="lane-state">${esc(state)}</div><div><span class="lane-label">Model:</span> ${esc(l.model||'unknown')}</div>
       <div class="lane-reason"><span class="lane-label">Reason:</span> ${esc(reason)}</div></div>
     <div class="lane-unlock"><span class="lane-label">Unlock:</span> ${cockpitStamp(l.out_until)}
       ${cockpitTime(l.out_until)?`<span class="countdown" data-unlock="${l.out_until}"></span>`:'<span class="countdown">Countdown unknown</span>'}</div>

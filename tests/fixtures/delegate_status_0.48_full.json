@@ -1,0 +1,405 @@
+{
+ "v": 1,
+ "ts": 1793158415.1385226,
+ "lanes": {
+  "CLAUDE_SUBSCRIPTION": {
+   "family": "claude",
+   "kind": "subscription",
+   "out": false,
+   "out_until": null,
+   "reason": null,
+   "five": null,
+   "week": null,
+   "pace": null,
+   "burn": false,
+   "notes": []
+  },
+  "OPENAI_SUBSCRIPTION": {
+   "family": "openai",
+   "kind": "subscription",
+   "out": true,
+   "out_until": 1793617739,
+   "reason": "usage_limit",
+   "five": null,
+   "week": 100.0,
+   "pace": 15.053428988529259,
+   "burn": false,
+   "notes": []
+  },
+  "GROK_SUBSCRIPTION": {
+   "family": "xai",
+   "kind": "subscription",
+   "out": false,
+   "out_until": null,
+   "reason": null,
+   "five": null,
+   "week": 12.5,
+   "pace": 15.053428988529259,
+   "burn": false,
+   "notes": []
+  }
+ },
+ "cockpit": {
+  "v": 1,
+  "at": 1793158415.1385226,
+  "legend": {
+   "\u2705": "ready",
+   "\u23f3": "usage limit",
+   "\ud83d\udd11": "logged out",
+   "\ud83d\udcb8": "spend/credit limit",
+   "\ud83d\udc22": "slow/hung",
+   "\u26d4": "disabled",
+   "\u2753": "no read yet"
+  },
+  "next_worker": {
+   "action": "run",
+   "lane": "OPENAI_SUBSCRIPTION",
+   "model": "gpt-6.1-sol",
+   "effort": "medium",
+   "pass": "strict",
+   "fallback": false,
+   "why": null
+  },
+  "lanes": [
+   {
+    "id": "CLAUDE_SUBSCRIPTION",
+    "label": "Claude subscription",
+    "family": "claude",
+    "kind": "subscription",
+    "model": "sonnet-5.5 medium",
+    "state": "ready",
+    "emoji": "\u2705",
+    "reason": "ready",
+    "detail": null,
+    "unlock": {
+     "locked": false,
+     "known": false,
+     "at": null,
+     "in_s": null,
+     "text": null,
+     "why": "not locked"
+    },
+    "windows": [
+     {
+      "name": "5h",
+      "used_pct": 41.0,
+      "resets_at": 1793167415,
+      "resets_in_s": 9000,
+      "source": "claude usage",
+      "age_s": 3
+     },
+     {
+      "name": "weekly",
+      "used_pct": 6.0,
+      "resets_at": 1793558415,
+      "resets_in_s": 400000,
+      "source": "claude usage",
+      "age_s": 3
+     }
+    ],
+    "low_tokens": [],
+    "warnings": [],
+    "meter": true,
+    "login": {
+     "ok": true,
+     "why": "{\n  \"loggedIn\": true,\n  \"authMethod\": \"claude.ai\",\n  \"apiProvider\": \"firstParty\",\n  \"analyticsDisabled\": false,\n  \"proje",
+     "checked_at": 1793158415.1385226
+    },
+    "running": 0
+   },
+   {
+    "id": "OPENAI_SUBSCRIPTION",
+    "label": "ChatGPT / Codex",
+    "family": "openai",
+    "kind": "subscription",
+    "model": "gpt-6.1-sol medium",
+    "state": "resting",
+    "emoji": "\u23f3",
+    "reason": "usage limit: weekly 100% used",
+    "detail": null,
+    "unlock": {
+     "locked": true,
+     "known": true,
+     "at": 1793617739,
+     "in_s": 459324,
+     "text": "Mon 02 Nov 13:09",
+     "why": null
+    },
+    "windows": [
+     {
+      "name": "weekly",
+      "used_pct": 100.0,
+      "resets_at": 1793617739,
+      "resets_in_s": 459324,
+      "source": "live read (codex app-server)",
+      "age_s": 0
+     }
+    ],
+    "low_tokens": [],
+    "warnings": [],
+    "meter": true,
+    "login": {
+     "ok": true,
+     "why": "Logged in using ChatGPT",
+     "checked_at": 1793158415.1385226
+    },
+    "running": 0
+   },
+   {
+    "id": "GROK_SUBSCRIPTION",
+    "label": "SuperGrok / OpenCode",
+    "family": "xai",
+    "kind": "subscription",
+    "model": "grok-4.7 medium",
+    "state": "ready",
+    "emoji": "\u2705",
+    "reason": "ready",
+    "detail": null,
+    "unlock": {
+     "locked": false,
+     "known": false,
+     "at": null,
+     "in_s": null,
+     "text": null,
+     "why": "not in use"
+    },
+    "windows": [
+     {
+      "name": "weekly",
+      "used_pct": 12.5,
+      "resets_at": 1793458415,
+      "resets_in_s": 300000,
+      "source": "opencode",
+      "age_s": 1
+     }
+    ],
+    "low_tokens": [],
+    "warnings": [],
+    "meter": true,
+    "login": {
+     "ok": true,
+     "why": "xai login in opencode's auth file",
+     "checked_at": 1793158415.1385226
+    },
+    "running": 0
+   }
+  ]
+ },
+ "running": [],
+ "needs_input": [
+  {
+   "what": "claude_usage",
+   "why": "Claude subscription use is unknown",
+   "how": "in the Claude desktop app call the get_usage tool and pass its windows as --claude-usage JSON ({five_hour:{used,resets_at},weekly:{used,resets_at}})"
+  }
+ ],
+ "holds": [],
+ "asks": [],
+ "health": [
+  {
+   "lane": "CLAUDE_SUBSCRIPTION",
+   "model": "opus-5.5",
+   "state": "up",
+   "until": null,
+   "source": null,
+   "kind": null,
+   "evidence": "",
+   "canary": false,
+   "rung": 0,
+   "leases": {
+    "live": 0,
+    "suspect": 0
+   },
+   "last_failures": [],
+   "needs_login": false,
+   "usage": {
+    "known": false,
+    "text": null
+   }
+  },
+  {
+   "lane": "CLAUDE_SUBSCRIPTION",
+   "model": "sonnet-5.5",
+   "state": "up",
+   "until": null,
+   "source": null,
+   "kind": null,
+   "evidence": "",
+   "canary": false,
+   "rung": 0,
+   "leases": {
+    "live": 0,
+    "suspect": 0
+   },
+   "last_failures": [],
+   "needs_login": false,
+   "usage": {
+    "known": false,
+    "text": null
+   }
+  },
+  {
+   "lane": "CLAUDE_SUBSCRIPTION",
+   "model": "haiku-5.5",
+   "state": "up",
+   "until": null,
+   "source": null,
+   "kind": null,
+   "evidence": "",
+   "canary": false,
+   "rung": 0,
+   "leases": {
+    "live": 0,
+    "suspect": 0
+   },
+   "last_failures": [],
+   "needs_login": false,
+   "usage": {
+    "known": false,
+    "text": null
+   }
+  },
+  {
+   "lane": "CLAUDE_SUBSCRIPTION",
+   "model": "fable-5.1",
+   "state": "up",
+   "until": null,
+   "source": null,
+   "kind": null,
+   "evidence": "",
+   "canary": false,
+   "rung": 0,
+   "leases": {
+    "live": 0,
+    "suspect": 0
+   },
+   "last_failures": [],
+   "needs_login": false,
+   "usage": {
+    "known": false,
+    "text": null
+   }
+  },
+  {
+   "lane": "OPENAI_SUBSCRIPTION",
+   "model": "gpt-6.1-sol",
+   "state": "up",
+   "until": null,
+   "source": null,
+   "kind": null,
+   "evidence": "",
+   "canary": false,
+   "rung": 0,
+   "leases": {
+    "live": 0,
+    "suspect": 0
+   },
+   "last_failures": [],
+   "needs_login": false,
+   "usage": {
+    "known": true,
+    "text": null
+   }
+  },
+  {
+   "lane": "OPENAI_SUBSCRIPTION",
+   "model": "gpt-6-luna",
+   "state": "up",
+   "until": null,
+   "source": null,
+   "kind": null,
+   "evidence": "",
+   "canary": false,
+   "rung": 0,
+   "leases": {
+    "live": 0,
+    "suspect": 0
+   },
+   "last_failures": [],
+   "needs_login": false,
+   "usage": {
+    "known": true,
+    "text": null
+   }
+  }
+ ],
+ "roles": {
+  "planner": {
+   "usable": true,
+   "lane": "OPENAI_SUBSCRIPTION",
+   "model": "gpt-6.1-sol",
+   "why": null,
+   "until": null,
+   "hosts": [
+    "chatgpt.com",
+    "api.anthropic.com"
+   ],
+   "net": {
+    "up": null,
+    "since": null,
+    "age_s": null
+   }
+  },
+  "worker": {
+   "usable": true,
+   "lane": "OPENAI_SUBSCRIPTION",
+   "model": "gpt-6.1-sol",
+   "why": null,
+   "until": null,
+   "hosts": [
+    "opencode.ai",
+    "api.z.ai",
+    "chatgpt.com",
+    "api.x.ai",
+    "api.anthropic.com"
+   ],
+   "net": {
+    "up": null,
+    "since": null,
+    "age_s": null
+   }
+  },
+  "reviewer": {
+   "usable": true,
+   "lane": "OPENAI_SUBSCRIPTION",
+   "model": "gpt-6.1-sol",
+   "why": null,
+   "until": null,
+   "hosts": [
+    "api.anthropic.com",
+    "opencode.ai",
+    "api.z.ai",
+    "chatgpt.com"
+   ],
+   "net": {
+    "up": null,
+    "since": null,
+    "age_s": null
+   }
+  },
+  "light": {
+   "usable": true,
+   "lane": "OPENAI_SUBSCRIPTION",
+   "model": "gpt-6-luna",
+   "why": null,
+   "until": null,
+   "hosts": [
+    "opencode.ai",
+    "api.z.ai",
+    "chatgpt.com",
+    "api.anthropic.com"
+   ],
+   "net": {
+    "up": null,
+    "since": null,
+    "age_s": null
+   }
+  }
+ },
+ "network": {
+  "up": null,
+  "since": null,
+  "age_s": null,
+  "why": null
+ }
+}
