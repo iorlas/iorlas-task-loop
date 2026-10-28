@@ -51,7 +51,7 @@ def isolated_env(home: Path) -> dict[str, str]:
     if real.is_file():
         (home / ".gitconfig").write_bytes(real.read_bytes())
     env = dict(os.environ, HOME=str(home), XDG_CONFIG_HOME=str(home / ".config"), TMPDIR=str(home / "tmp"))
-    for k in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
+    for k in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "PYTHONPATH"):  # PYTHONPATH: the tree under test sets its own (tests/support/paths.py)
         env.pop(k, None)
     return env
 
