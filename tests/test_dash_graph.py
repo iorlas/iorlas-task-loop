@@ -9,10 +9,10 @@ from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "skills" / "task-loop" / "dash"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-import graph  # noqa: E402
+from support.dashes import make_dash  # noqa: E402
+from taskloop_dash.views import graph  # noqa: E402
 
 NOW = time.mktime((2026, 10, 23, 12, 0, 0, 0, 0, -1))  # local noon: 'today' counts from midnight, so a run just after 00:00 must not change the answers
 
@@ -141,7 +141,6 @@ class Api(unittest.TestCase):
     """/api/graph over a temp HOME and config dir, bd stubbed with a fake beads set."""
 
     def test_endpoint(self):
-        import server
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as home:
             repo = Path(home) / "demo"
             repo.mkdir()
@@ -152,18 +151,18 @@ class Api(unittest.TestCase):
             (cfg / "asks" / "b.json").write_text(json.dumps({"status": "open", "question": "?"}))
             beads = [bead("a"), bead("b", blocks=["a"]), bead("c", blocks=["a"], labels=[])]
             env = {"HOME": home, "XDG_CONFIG_HOME": str(cfg.parent), "APPDATA": str(cfg.parent)}
-            with mock.patch.dict(os.environ, env), mock.patch.object(server, "HOME", Path(home)), \
-                    mock.patch.object(server, "beads_of", lambda r: beads), \
-                    mock.patch.object(server, "api_tasks", lambda: {"tasks": [{"id": "a", "state": "running"}]}), \
-                    mock.patch.object(server, "loop_queue", lambda r, b, c: set()):
-                server._cache.clear()
-                out = server.api_graph("demo")
+            with mock.patch.dict(os.environ, env):
+                dash = make_dash(home=home)
+            with mock.patch.object(dash.beads, "beads_of", lambda r: beads), \
+                    mock.patch.object(dash.tasks, "api_tasks", lambda: {"tasks": [{"id": "a", "state": "running"}]}), \
+                    mock.patch.object(dash.graph, "loop_queue", lambda r, b, c: set()):
+                out = dash.graph.api_graph("demo")
                 self.assertEqual(out["repos"], ["demo"])
                 by = {n["id"]: n for n in out["nodes"]}
                 self.assertEqual((by["a"]["state"], by["b"]["state"], by["c"]["state"]), ("running", "waits", "blocked"))
                 self.assertEqual(by["a"]["unblocks"], 2)
-                self.assertEqual(server.api_graph("nope")["error"], "no such repo")
-                self.assertEqual(server.api_graph("")["repo"], "demo")  # no repo named: the first registered one
+                self.assertEqual(dash.graph.api_graph("nope")["error"], "no such repo")
+                self.assertEqual(dash.graph.api_graph("")["repo"], "demo")  # no repo named: the first registered one
 
 
 if __name__ == "__main__":

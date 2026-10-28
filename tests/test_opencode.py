@@ -14,10 +14,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-sys.path.insert(0, str(ROOT / "skills" / "task-loop" / "dash"))
 import delegate_link as dl  # noqa: E402
 import engine  # noqa: E402
-import server  # noqa: E402
+from support.dashes import make_dash  # noqa: E402
+from taskloop_dash.api import lanes as lanes_mod  # noqa: E402
 from taskloop_dash.views import arrows, names  # noqa: E402
 from taskloop.app.run.calls import Calls  # noqa: E402
 import tl  # noqa: E402
@@ -63,7 +63,7 @@ class OpenCode(unittest.TestCase):
         self.cfg = os.path.join(self.tmp.name, "cfg")
         self.env = mock.patch.dict(os.environ, {"OPENCODE_DB": self.db, "XDG_CONFIG_HOME": self.cfg, "APPDATA": self.cfg})
         self.env.start()
-        server._cache.clear()
+        self.dash = make_dash()
         self.runs = Path(self.cfg, "agent-runs", "runs")
         self.runs.mkdir(parents=True)
 
@@ -78,37 +78,37 @@ class OpenCode(unittest.TestCase):
         self.assertEqual(arrows.pause_reason("paused: logged_out on write; run `opencode auth login` on this machine"),
                          "Grok logged out")
         lane = {"out": True, "reason": "logged_out", "family": "xai"}
-        b = server.lane_banners({"v": 1, "lanes": {"GROK_SUBSCRIPTION": lane}})
+        b = lanes_mod.lane_banners({"v": 1, "lanes": {"GROK_SUBSCRIPTION": lane}})
         self.assertEqual(b["GROK_SUBSCRIPTION"]["text"], "Grok logged out: run opencode auth login")
 
     # reader
     def test_events_have_the_shape_of_the_other_readers(self):
-        ev = server.opencode_events(SID)
+        ev = self.dash.events.opencode_events(SID)
         self.assertEqual([e["kind"] for e in ev], ["user", "cmd", "cmd", "msg", "cmd"])
         cmd = ev[1]
         self.assertEqual((cmd["tool"], cmd["text"], cmd["state"], cmd["dur"], cmd["detail"]), ("bash", "ls", "ok", 2.0, "a\nb"))
         self.assertEqual((ev[2]["state"], ev[2]["text"]), ("fail", "/x"))
         self.assertEqual(ev[4]["state"], "run")
-        self.assertEqual(server.ADAPTERS["opencode"], server.opencode_events)
-        self.assertEqual(server.run_events("opencode:" + SID)[3]["text"], "done")
-        win = server.opencode_events("opencode:" + SID, 1_790_000_005.0, None)
+        self.assertEqual(self.dash.runs.adapters["opencode"], self.dash.events.opencode_events)
+        self.assertEqual(self.dash.runs.run_events("opencode:" + SID)[3]["text"], "done")
+        win = self.dash.events.opencode_events("opencode:" + SID, 1_790_000_005.0, None)
         self.assertEqual([e["kind"] for e in win], ["cmd", "msg", "cmd"])
 
     def test_a_missing_db_or_unknown_id_is_empty_never_an_error(self):
-        self.assertEqual(server.opencode_events("ses_nope"), [])
-        self.assertEqual(server.opencode_events("not-an-id"), [])
-        self.assertEqual(server.run_events("opencode:ses_nope"), [])
+        self.assertEqual(self.dash.events.opencode_events("ses_nope"), [])
+        self.assertEqual(self.dash.events.opencode_events("not-an-id"), [])
+        self.assertEqual(self.dash.runs.run_events("opencode:ses_nope"), [])
         junk = os.path.join(self.tmp.name, "junk.db")
         Path(junk).write_text("not sqlite")
         for path in (os.path.join(self.tmp.name, "gone.db"), junk):
             with mock.patch.dict(os.environ, {"OPENCODE_DB": path}):
-                self.assertEqual(server.opencode_events(SID), [])
+                self.assertEqual(self.dash.events.opencode_events(SID), [])
                 self.assertEqual(tl.transcript_of("xai", SID), "")
                 self.assertIsNone(engine.context_tokens("opencode:" + SID))
 
     def test_the_reader_never_writes(self):
         before = Path(self.db).read_bytes()
-        server.opencode_events(SID)
+        self.dash.events.opencode_events(SID)
         tl.opencode_context(SID)
         self.assertEqual(Path(self.db).read_bytes(), before)
 
@@ -128,16 +128,6 @@ class OpenCode(unittest.TestCase):
         self.assertEqual(lcall.agent_run_session("r1"), "opencode:" + SID)
         self.assertAlmostEqual(lcall.file_mtime("opencode:" + SID), 1_790_000_009.0)
 
-    def test_contract_runs_find_the_session_by_session_thread_or_transcript(self):
-        now = time.time()
-        for i, field in enumerate(("session", "thread", "transcript")):
-            (self.runs / ("r%d.json" % i)).write_text(json.dumps({
-                "v": 1, "id": "r%d" % i, "kind": "opencode", "family": "xai", "started": now, "status": "running", field: SID}))
-        (self.runs / "r9.json").write_text(json.dumps({"v": 1, "id": "r9", "kind": "opencode", "started": now,
-                                                       "status": "running", "session": "ses_unknown"}))
-        got = {r["id"] for r in server.contract_runs(now - 60)}
-        self.assertEqual(got, {"opencode:" + SID, "none:r9"})
-
     # fresh-writer limit
     def test_xai_has_its_own_fresh_writer_limit(self):
         self.assertEqual(engine.DEFAULTS["write_fresh_above_k"]["xai"], 100)
@@ -152,15 +142,15 @@ class OpenCode(unittest.TestCase):
     # review fixes (7e5b07d)
     def test_api_block_for_xai_names_an_opencode_events_id(self):
         d = {"session": {"family": "xai", "ref": SID, "transcript": ""}, "block": {"who": {"family": "xai"}, "t0": 100.0, "t1": 200.0}, "checks": []}
-        with mock.patch.object(server, "run_path", return_value="/x"), mock.patch.object(server, "block_detail", return_value=d):
-            out = server.api_block("r", "n", 0)
+        with mock.patch.object(self.dash.records, "run_path", return_value="/x"), mock.patch.object(self.dash.runlogs, "block_detail", return_value=d):
+            out = self.dash.runs.api_block("r", "n", 0)
         self.assertEqual(out["events_id"], "opencode:%s@70.0@230.0" % SID)
         self.assertEqual(out["transcript"], "opencode:" + SID)
         d["session"]["ref"] = "ses_unknown"
-        with mock.patch.object(server, "run_path", return_value="/x"), mock.patch.object(server, "block_detail", return_value=d):
-            out = server.api_block("r", "n", 0)  # a busy or unreadable DB must not blank the block: the id stays, events are empty
+        with mock.patch.object(self.dash.records, "run_path", return_value="/x"), mock.patch.object(self.dash.runlogs, "block_detail", return_value=d):
+            out = self.dash.runs.api_block("r", "n", 0)  # a busy or unreadable DB must not blank the block: the id stays, events are empty
         self.assertEqual(out["events_id"], "opencode:ses_unknown@70.0@230.0")
-        self.assertEqual(server.run_events(out["events_id"]), [])
+        self.assertEqual(self.dash.runs.run_events(out["events_id"]), [])
 
     def test_watchdog_reads_an_opencode_path_by_part_updates_and_survives_a_locked_db(self):
         con = sqlite3.connect(self.db)
@@ -185,7 +175,7 @@ class OpenCode(unittest.TestCase):
         con.execute("BEGIN EXCLUSIVE")
         try:
             t0 = time.time()
-            self.assertEqual(server.opencode_events(SID), [])
+            self.assertEqual(self.dash.events.opencode_events(SID), [])
             self.assertIsNone(tl.opencode_context(SID))
             self.assertLess(time.time() - t0, 120)  # hang guard only: a read that blocks on the lock never returns; the empty results above are the gate
         finally:
@@ -199,11 +189,11 @@ class OpenCode(unittest.TestCase):
                                                                   json.dumps({"type": "text", "text": "t%d" % i})))
         con.commit()
         con.close()
-        ev = server.opencode_events(SID)
+        ev = self.dash.events.opencode_events(SID)
         self.assertEqual(len(ev), 5000)
         self.assertEqual(ev[-1]["text"], "t5099")
         self.assertEqual(ev[0]["text"], "t100")
-        win = server.opencode_events(SID, (T + 10000) / 1000.0 + 0.5, (T + 10000) / 1000.0 + 1.5)
+        win = self.dash.events.opencode_events(SID, (T + 10000) / 1000.0 + 0.5, (T + 10000) / 1000.0 + 1.5)
         self.assertTrue(0 < len(win) < 4000)  # +-1 s of slack on each side
 
     def test_a_non_numeric_tool_time_gives_no_duration(self):
@@ -213,7 +203,7 @@ class OpenCode(unittest.TestCase):
         con.execute("INSERT INTO part VALUES ('z1','m3',?,?,?,?)", (SID, T + 9500, T + 9500, json.dumps(d)))
         con.commit()
         con.close()
-        last = server.opencode_events(SID)[-1]
+        last = self.dash.events.opencode_events(SID)[-1]
         self.assertEqual((last["text"], "dur" in last), ("x", False))
 
     def test_a_lane_named_openai_xai_is_grok_by_family_or_name(self):

@@ -15,10 +15,14 @@ from unittest import mock
 from playwright.sync_api import expect, sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "skills" / "task-loop" / "dash"))
+PAGE = ROOT / "skills" / "task-loop" / "dash" / "index.html"
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-import server  # noqa: E402
+import glob  # noqa: E402
+import subprocess  # noqa: E402
+from http.server import ThreadingHTTPServer  # noqa: E402
+from support.dashes import make_dash  # noqa: E402
+from taskloop_dash.http import make_handler  # noqa: E402
 
 ROUTE = "/fixture/iorlas-delegate/1.0/skills/delegate/route.py"
 
@@ -64,10 +68,12 @@ def main():
         raise AssertionError("scenario attempted tracker, credentials or local state access")
 
     def fake_asks():
-        return {"asks": [], "delegate": server.delegate_status()}
+        return {"asks": [], "delegate": dash.lanes.delegate_status()}
 
     # Restrict the real handler to the three read-only routes exercised by this scenario.
-    class Handler(server.make_handler(0, ["127.0.0.1"])):
+    dash = make_dash(config=tmp / "state", home=tmp / "home")
+
+    class Handler(make_handler(dash, 0, ["127.0.0.1"], PAGE, PAGE, forbidden, "")):
         def do_GET(self):
             if self.path.split("?", 1)[0] not in ("/", "/api/asks", "/api/tasks", "/favicon.ico"):
                 return self.send(404, b"scenario route blocked", "text/plain")
@@ -78,13 +84,12 @@ def main():
 
     errors, external, navigations = [], [], []
     with contextlib.ExitStack() as stack:
-        stack.enter_context(mock.patch.object(server, "asks", side_effect=fake_asks))
-        stack.enter_context(mock.patch.object(server, "api_tasks", return_value={"tasks": [], "host": "fixture"}))
-        for name in ("bd_json", "config_dir", "read_json", "token"):
-            stack.enter_context(mock.patch.object(server, name, side_effect=forbidden, create=True))
-        stack.enter_context(mock.patch.object(server.glob, "glob", return_value=[ROUTE]))
-        stack.enter_context(mock.patch.object(server.subprocess, "run", side_effect=fake_run))
-        httpd = server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        stack.enter_context(mock.patch.object(dash.asks, "asks", side_effect=fake_asks))
+        stack.enter_context(mock.patch.object(dash.tasks, "api_tasks", return_value={"tasks": [], "host": "fixture"}))
+        stack.enter_context(mock.patch.object(dash.beads, "bd_json", side_effect=forbidden))
+        stack.enter_context(mock.patch.object(glob, "glob", return_value=[ROUTE]))
+        stack.enter_context(mock.patch.object(subprocess, "run", side_effect=fake_run))
+        httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         stack.callback(httpd.server_close)
         thread = threading.Thread(target=httpd.serve_forever, daemon=True)
         thread.start()

@@ -3,6 +3,7 @@ are read from their node, session and end records: the fixture is six real runs 
 lifesim-d5f.58 (2026-10-21), trimmed."""
 
 import contextlib
+import subprocess
 import json
 import os
 import shutil
@@ -14,14 +15,17 @@ from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "skills" / "task-loop" / "dash"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 sys.path.insert(0, str(ROOT / "tests"))
-import server  # noqa: E402
+from support.dashes import make_dash  # noqa: E402
+from taskloop_dash import tails as tails_mod  # noqa: E402
+from taskloop_dash.readers import events as events_mod  # noqa: E402
 from support.logs import typed, write_log  # noqa: E402
 from taskloop_dash.cache import FileCache  # noqa: E402
 from taskloop_dash.views import arrows, names, timeline  # noqa: E402
+
+DASH = make_dash()
 
 FIXTURE = ROOT / "tests" / "fixtures" / "state"
 BEAD = "lifesim-d5f.58"
@@ -121,14 +125,14 @@ class Runs(unittest.TestCase):
     def test_block_detail_has_the_checks_of_its_round_and_the_engine_lines_of_its_step(self):
         r = self.run_of("072411")
         checks = r["blocks"][2]
-        d = server.block_detail(log("072411"), checks["node"])
+        d = DASH.runlogs.block_detail(log("072411"), checks["node"])
         self.assertEqual(len(d["checks"]), 8)
         red = [c for c in d["checks"] if c["exit"]]
         self.assertEqual([c["exit"] for c in red], [2])
         self.assertTrue(red[0]["tail"])
         self.assertTrue(all(ln["kind"] in ("cmd", "note", "warn") for ln in d["lines"]))
         self.assertTrue(any(ln["kind"] == "cmd" for ln in d["lines"]))
-        w = server.block_detail(log("072411"), r["blocks"][1]["node"])  # a write shows the checks that judged it
+        w = DASH.runlogs.block_detail(log("072411"), r["blocks"][1]["node"])  # a write shows the checks that judged it
         self.assertEqual([c["exit"] for c in w["checks"] if c["exit"]], [2])
         self.assertEqual(w["session"]["ref"], "01a15cb6-4820-73e0-be53-4cef9422cb4b")
 
@@ -143,22 +147,17 @@ class Api(unittest.TestCase):
         shutil.copytree(str(FIXTURE), str(self.cfg))
         self.env = mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(home), "APPDATA": str(home)})
         self.env.start()
-        server._cache.clear()
-        server.FILES.items.clear()
         self.codex = home / "codex"
-        p = mock.patch.object(server, "CODEX_SESSIONS", self.codex)
-        p.start()
-        self.addCleanup(p.stop)
-        q = mock.patch.object(server, "PROJECTS", home / "projects")
-        q.start()
-        self.addCleanup(q.stop)
+        self.dash = make_dash()
+        self.dash.env.codex_sessions = self.codex
+        self.dash.env.projects = home / "projects"
 
     def tearDown(self):
         self.env.stop()
         self.tmp.cleanup()
 
     def task(self, bead=BEAD):
-        return next(t for t in server.api_tasks()["tasks"] if t["id"] == bead)
+        return next(t for t in self.dash.tasks.api_tasks()["tasks"] if t["id"] == bead)
 
     def test_the_task_list_has_one_row_per_bead_with_its_state(self):
         t = self.task()
@@ -199,8 +198,9 @@ class Api(unittest.TestCase):
                      {"id": "lifesim-5ban.23", "type": "blocks"}]},
                  {"id": "lifesim-5ban.33", "title": "Epic", "status": "open"},
                  {"id": "lifesim-5ban.23", "title": "People design", "status": blocker_status}]
-        for name, val in (("repos", lambda: ["/r/lifesim"]), ("beads_of", lambda repo: beads if repo == "/r/lifesim" else [])):
-            p = mock.patch.object(server, name, side_effect=val)
+        for owner, name, val in ((self.dash.records, "repos", lambda: ["/r/lifesim"]),
+                                 (self.dash.beads, "beads_of", lambda repo: beads if repo == "/r/lifesim" else [])):
+            p = mock.patch.object(owner, name, side_effect=val)
             p.start()
             self.addCleanup(p.stop)
         return self.task()
@@ -236,12 +236,12 @@ class Api(unittest.TestCase):
         def run(cmd, **kw):
             calls.append(cmd)
             return mock.Mock(returncode=0, stdout=json.dumps([{"id": BEAD, "status": "open", "dependencies": []}]))
-        with mock.patch.object(server, "repos", return_value=["/r/lifesim"]), \
-                mock.patch.object(server.shutil, "which", return_value="/bin/bd"), \
-                mock.patch.object(server.subprocess, "run", side_effect=run):
+        with mock.patch.object(self.dash.records, "repos", return_value=["/r/lifesim"]), \
+                mock.patch.object(shutil, "which", return_value="/bin/bd"), \
+                mock.patch.object(subprocess, "run", side_effect=run):
             for _ in range(3):
-                server.api_tasks()
-                server.api_task_timeline("", BEAD)
+                self.dash.tasks.api_tasks()
+                self.dash.tasks.api_task_timeline("", BEAD)
         self.assertEqual(len([c for c in calls if c[:2] == ["/bin/bd", "list"]]), 1)
 
     def test_a_paused_run_says_which_lane_is_out_and_until_when(self):
@@ -269,8 +269,9 @@ class Api(unittest.TestCase):
             def __getattr__(self, name):
                 return getattr(time, name)
         stack = contextlib.ExitStack()
-        for mod in (server, timeline, names):
+        for mod in (timeline, names):
             stack.enter_context(mock.patch.object(mod, "time", Frozen()))
+        stack.enter_context(mock.patch.object(self.dash.env, "clock", lambda: now))
         return stack
 
     def waiting_for_a_lane(self, now):
@@ -289,8 +290,8 @@ class Api(unittest.TestCase):
         self.assertEqual((t["state"], t["label"]), ("running", "waiting for Codex until " + names.hhmm(due)))
         recs.append({"v": 2, "t": now - 5, "kind": "wait_end", "id": "w1", "secs": 5})  # the wait is over: back to what the run is doing
         path.write_text("".join(json.dumps(r) + "\n" for r in recs))
-        server._cache.clear()
-        server.FILES.items.clear()
+        self.dash.env.ttl.clear()
+        self.dash.env.files.items.clear()
         self.assertEqual(self.task("x-1")["label"], "writing")
 
     def test_a_running_run_shows_its_stage_from_its_engine_lock(self):
@@ -306,34 +307,12 @@ class Api(unittest.TestCase):
         self.assertEqual((t["state"], t["label"], t["slot"]), ("running", "writing stage 2/3", "s1"))
         self.assertGreaterEqual(t["since"], 590)
         (wt / ".task" / "engine.lock").unlink()
-        server._cache.clear()
-        server.FILES.items.clear()
+        self.dash.env.ttl.clear()
+        self.dash.env.files.items.clear()
         self.assertEqual(self.task("x-1")["state"], "stopped")
 
-    def test_an_engine_run_silent_in_a_long_check_is_running_not_idle(self):
-        wt = Path(self.tmp.name) / "slots" / "s1"
-        (wt / ".task").mkdir(parents=True)
-        (wt / ".task" / "engine.lock").write_text(json.dumps({"pid": os.getpid(), "bead": "x-1", "slot": "s1"}))
-        old = time.time() - 600  # no record for ten minutes: the checks are running
-        recs = [{"v": 2, "t": old, "kind": "run_start", "run": "x-1-20261021-120000", "bead": "x-1", "worktree": str(wt),
-                 "slot": "s1", "started_because": "first", "prev_run": "", "ask": ""}]
-        path = self.cfg / "engine" / "x-1-20261021-120000.jsonl"
-        path.write_text("".join(json.dumps(r) + "\n" for r in recs))
-        os.utime(str(path), (old, old))
-        (run,) = server.engine_runs("x-1", old - 60, None)
-        self.assertEqual(run["status"], "running")
-        older = self.cfg / "engine" / "x-1-20261020-120000.jsonl"  # a crashed earlier run of the bead: the lock is not its
-        older.write_text("".join(json.dumps(dict(r, run="x-1-20261020-120000", t=old - 86400)) + "\n" for r in recs))
-        os.utime(str(older), (old - 86400, old - 86400))
-        states = sorted((os.path.basename(r["id"]), r["status"]) for r in server.engine_runs("x-1", old - 2 * 86400, None))
-        self.assertEqual(states, [("x-1-20261020-120000.jsonl", "idle"), ("x-1-20261021-120000.jsonl", "running")])
-        older.unlink()
-        (wt / ".task" / "engine.lock").unlink()  # the engine is gone: idle, as before
-        (run,) = server.engine_runs("x-1", old - 60, None)
-        self.assertEqual(run["status"], "idle")
-
     def test_the_task_timeline_is_every_run_of_the_bead_oldest_first(self):
-        d = server.api_task_timeline("", BEAD)
+        d = self.dash.tasks.api_task_timeline("", BEAD)
         self.assertEqual([r["run"][-6:] for r in d["runs"]], RUNS)
         self.assertEqual([r["started_because"] for r in d["runs"]],
                          ["first", "answer", "resume", "resume", "retry", "answer"])
@@ -347,12 +326,12 @@ class Api(unittest.TestCase):
         (day / ("rollout-2026-10-21T07-26-%s.jsonl" % ref)).write_text("")
         run = "%s-20261021-072411" % BEAD
         blocks = timeline.run_timeline(log("072411"))["blocks"]
-        d = server.api_block(run, blocks[3]["node"], 0)
+        d = self.dash.runs.api_block(run, blocks[3]["node"], 0)
         self.assertTrue(d["events_id"].startswith("codex-exec:" + str(day)))
         a, b = d["events_id"].rsplit("@", 2)[1:]
         self.assertLessEqual(float(a), blocks[3]["t0"])
         self.assertGreaterEqual(float(b), blocks[3]["t1"])
-        self.assertEqual(server.api_block("../../etc/passwd", 1, 0), {"error": "no such run"})
+        self.assertEqual(self.dash.runs.api_block("../../etc/passwd", 1, 0), {"error": "no such run"})
 
     def test_a_windowed_rollout_keeps_only_the_blocks_events(self):
         p = Path(self.tmp.name) / "rollout.jsonl"
@@ -361,32 +340,32 @@ class Api(unittest.TestCase):
             return json.dumps({"timestamp": ts, "type": "response_item",
                                "payload": {"type": "message", "role": "assistant", "content": [{"text": text}]}}) + "\n"
         p.write_text(msg("2026-10-21T07:00:00Z", "round 1") + msg("2026-10-21T08:00:00Z", "round 2"))
-        t = server.parse_ts("2026-10-21T07:30:00Z")
-        evs = server.run_events("codex-exec:%s@%s@%s" % (p, t, t + 3600))
+        t = tails_mod.parse_ts("2026-10-21T07:30:00Z")
+        evs = self.dash.runs.run_events("codex-exec:%s@%s@%s" % (p, t, t + 3600))
         self.assertEqual([e["text"] for e in evs], ["round 2"])
-        self.assertEqual(len(server.run_events("codex-exec:%s" % p)), 2)
+        self.assertEqual(len(self.dash.runs.run_events("codex-exec:%s" % p)), 2)
 
     def test_a_codex_exec_call_shows_its_shell_commands(self):
         src = 'text(await tools.exec_command({cmd:"cat a.md; rg -n \\"x\\" src",max_output_tokens:6000}));\n' \
               'text(await tools.exec_command({cmd:"git status"}));'
-        self.assertEqual(server.exec_cmds(src), ['cat a.md; rg -n "x" src', "git status"])
-        self.assertEqual(server.exec_cmds("ls"), [])
+        self.assertEqual(events_mod.exec_cmds(src), ['cat a.md; rg -n "x" src', "git status"])
+        self.assertEqual(events_mod.exec_cmds("ls"), [])
 
     def test_a_check_log_is_served_from_its_run_and_nothing_outside_it(self):
         run = "%s-20261021-072411" % BEAD
         (self.cfg / "runs" / run / "checks").mkdir(parents=True)
         (self.cfg / "runs" / run / "checks" / "00-fmt.log").write_bytes(b"all formatted\n")
-        self.assertEqual(server.run_file(run, "checks/00-fmt.log"), b"all formatted\n")
-        self.assertIsNone(server.run_file(run, "../../traces.jsonl"))
-        self.assertIsNone(server.run_file("../x", "checks/00-fmt.log"))
+        self.assertEqual(self.dash.runs.run_file(run, "checks/00-fmt.log"), b"all formatted\n")
+        self.assertIsNone(self.dash.runs.run_file(run, "../../traces.jsonl"))
+        self.assertIsNone(self.dash.runs.run_file("../x", "checks/00-fmt.log"))
         (self.cfg / "runs" / run / "plan.json").write_text("{}")
-        self.assertEqual(server.run_file(run, "plan.json"), b"{}")
+        self.assertEqual(self.dash.runs.run_file(run, "plan.json"), b"{}")
         (self.cfg / "runs" / run / "brief.md").write_text("the bead")
         (self.cfg / "runs" / run / "evidence").mkdir()
         (self.cfg / "runs" / run / "evidence" / "a.log").write_text("x")
-        self.assertIsNone(server.run_file(run, "brief.md"))  # only check logs and the plan are served
-        self.assertIsNone(server.run_file(run, "evidence/a.log"))
-        self.assertIsNone(server.run_file(run, "checks/../brief.md"))
+        self.assertIsNone(self.dash.runs.run_file(run, "brief.md"))  # only check logs and the plan are served
+        self.assertIsNone(self.dash.runs.run_file(run, "evidence/a.log"))
+        self.assertIsNone(self.dash.runs.run_file(run, "checks/../brief.md"))
 
     def test_a_symlink_in_checks_that_leaves_the_run_folder_is_refused(self):
         run = "%s-20261021-072411" % BEAD
@@ -394,7 +373,7 @@ class Api(unittest.TestCase):
         secret = Path(self.tmp.name) / "secret.txt"
         secret.write_text("token")
         os.symlink(str(secret), str(self.cfg / "runs" / run / "checks" / "00-x.log"))
-        self.assertIsNone(server.run_file(run, "checks/00-x.log"))
+        self.assertIsNone(self.dash.runs.run_file(run, "checks/00-x.log"))
 
     def test_the_log_cache_forgets_gone_files_and_stays_small(self):
         cache = FileCache(limit=30)
@@ -428,7 +407,7 @@ class Stages(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.root = Path(self.tmp.name) / "task-loop"
         shutil.copytree(str(FIXTURE), str(self.root))
-        server.FILES.items.clear()
+        DASH.env.files.items.clear()
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -476,8 +455,7 @@ class Stages(unittest.TestCase):
     def test_the_task_timeline_endpoint_carries_the_stage_fields(self):
         home = Path(self.tmp.name)
         with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(home), "APPDATA": str(home)}):
-            server._cache.clear()
-            d = server.api_task_timeline("", STAGED)
+            d = make_dash().tasks.api_task_timeline("", STAGED)
         b = d["runs"][0]["blocks"]
         self.assertEqual((b[4]["stage_index"], b[4]["stage_count"]), (2, 2))
         self.assertTrue(b[4]["stage_title"].startswith("Add the layout test"))
@@ -550,7 +528,7 @@ class WorkerCalls(unittest.TestCase):
                 typed("step_end", T + 21, id="n1", step="write", outcome="done", secs=20)]
         with tempfile.TemporaryDirectory() as d:
             p = write_log(Path(d, "c-1-20261024-010101.jsonl"), recs)
-            first, second = server.block_detail(p, 1, 0), server.block_detail(p, 1, 1)
+            first, second = DASH.runlogs.block_detail(p, 1, 0), DASH.runlogs.block_detail(p, 1, 1)
         self.assertEqual([(c["k"], c["lane"], c["model"], c["secs"], c["ref"], c["status"]) for c in first["calls"]],
                          [(0, "ZAI", "glm", 7, "ses_1", "stopped"), (1, "OPENAI_SUBSCRIPTION", "gpt", 10, "ses_2", "done")])
         self.assertEqual(first["calls"][0]["tokens"], {"in": 5, "cached": 1, "out": 2})

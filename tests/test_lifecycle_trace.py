@@ -19,10 +19,11 @@ import lifecycle
 import tl
 
 ROOT = te.ROOT
-sys.path.insert(0, str(ROOT / "skills" / "task-loop" / "dash"))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support.builders import make_engine  # noqa: E402
-import server  # noqa: E402
+from support.dashes import make_dash  # noqa: E402
+
+DASH = make_dash()
 
 
 class FakeCheckProc:
@@ -178,7 +179,7 @@ class TraceTelemetry(unittest.TestCase):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
         row = self.assert_row("landed")
-        run = server.run_timeline(str(self.eng.log_path))
+        run = DASH.runlogs.run_timeline(str(self.eng.log_path))
         self.assertEqual(run["started_because"], row["started_because"])
         self.assertEqual(run["end"]["outcome"], "landed")
 

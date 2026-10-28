@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 sys.path.insert(0, str(ROOT / "skills" / "task-loop" / "dash"))
-import server  # noqa: E402
+from taskloop_dash import bind  # noqa: E402
 import tl  # noqa: E402
 
 SERVER = ROOT / "skills" / "task-loop" / "dash" / "server.py"
@@ -172,19 +172,19 @@ class LoudBind(unittest.TestCase):
 
     def test_open_servers_fails_on_any_address(self):
         port = free_port()
-        with self.assertRaises(server.BindError) as cm:
-            server.open_servers(["127.0.0.1", "203.0.113.9"], port, mock.Mock())
+        with self.assertRaises(bind.BindError) as cm:
+            bind.open_servers(["127.0.0.1", "203.0.113.9"], port, mock.Mock())
         self.assertIn("203.0.113.9:%d" % port, str(cm.exception))
 
-    @unittest.skipIf(os.name == "nt", "server.holder_pid asks lsof, which Windows does not have")
+    @unittest.skipIf(os.name == "nt", "bind.holder_pid asks lsof, which Windows does not have")
     def test_open_servers_names_the_holder_pid(self):
         holder = socket.socket()
         holder.bind(("127.0.0.1", 0))
         holder.listen(1)
         port = holder.getsockname()[1]
         try:
-            with self.assertRaises(server.BindError) as cm:
-                server.open_servers(["127.0.0.1"], port, mock.Mock())
+            with self.assertRaises(bind.BindError) as cm:
+                bind.open_servers(["127.0.0.1"], port, mock.Mock())
         finally:
             holder.close()
         self.assertIn("127.0.0.1:%d" % port, str(cm.exception))
@@ -192,8 +192,8 @@ class LoudBind(unittest.TestCase):
 
     def test_open_servers_closes_earlier_sockets_on_failure(self):
         port = free_port()
-        with self.assertRaises(server.BindError):
-            server.open_servers(["127.0.0.1", "203.0.113.9"], port, mock.Mock())
+        with self.assertRaises(bind.BindError):
+            bind.open_servers(["127.0.0.1", "203.0.113.9"], port, mock.Mock())
         s = socket.socket()
         s.bind(("127.0.0.1", port))  # would raise if the first server were left open
         s.close()
@@ -216,37 +216,37 @@ class DevCheckout(unittest.TestCase):
             (Path(d) / ".git").write_text("gitdir: /x")
             sub = Path(d) / "skills" / "task-loop" / "dash"
             sub.mkdir(parents=True)
-            self.assertTrue(server.is_dev_checkout(sub))
+            self.assertTrue(bind.is_dev_checkout(sub))
 
     def test_plugin_cache_is_not_dev_even_inside_git(self):
         with tempfile.TemporaryDirectory() as d:
             (Path(d) / ".git").mkdir()
             sub = Path(d) / "plugins" / "cache" / "mk" / "tl" / "0.17.0" / "skills" / "task-loop" / "dash"
             sub.mkdir(parents=True)
-            self.assertFalse(server.is_dev_checkout(sub))
+            self.assertFalse(bind.is_dev_checkout(sub))
 
     def test_plain_directory_is_not_dev(self):
         with tempfile.TemporaryDirectory() as d:
-            self.assertFalse(server.is_dev_checkout(Path(d)))
+            self.assertFalse(bind.is_dev_checkout(Path(d)))
 
     def test_dev_defaults_to_loopback_random_port(self):
-        with mock.patch.object(server, "tailscale_ip", return_value="100.1.2.3"), \
+        with mock.patch.object(bind, "tailscale_ip", return_value="100.1.2.3"), \
                 mock.patch.dict(os.environ, {}, clear=False):
             os.environ.pop("TASK_LOOP_DASH_BIND", None)
-            addrs, port = server.plan(None, None, dev=True)
+            addrs, port = bind.plan(None, None, dev=True)
         self.assertEqual(addrs, ["127.0.0.1"])
         self.assertEqual(port, 0)
 
     def test_dev_with_explicit_port_or_bind_is_honoured(self):
-        addrs, port = server.plan(9999, "127.0.0.1,100.9.9.9", dev=True)
+        addrs, port = bind.plan(9999, "127.0.0.1,100.9.9.9", dev=True)
         self.assertEqual((addrs, port), (["127.0.0.1", "100.9.9.9"], 9999))
-        addrs, port = server.plan(9999, None, dev=True)
+        addrs, port = bind.plan(9999, None, dev=True)
         self.assertEqual((addrs, port), (["127.0.0.1"], 9999))
 
     def test_installed_defaults_unchanged(self):
-        with mock.patch.object(server, "tailscale_ip", return_value="100.1.2.3"):
+        with mock.patch.object(bind, "tailscale_ip", return_value="100.1.2.3"):
             os.environ.pop("TASK_LOOP_DASH_BIND", None)
-            addrs, port = server.plan(None, None, dev=False)
+            addrs, port = bind.plan(None, None, dev=False)
         self.assertEqual((addrs, port), (["127.0.0.1", "100.1.2.3"], 7878))
 
     def test_dev_server_process_listens_on_random_loopback_port(self):

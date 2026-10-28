@@ -3,11 +3,10 @@ passes that left the slot) and the queue in the order the loop takes it, each en
 tree. Pure: server.py gathers the inputs and calls build(). Python 3.8+, standard library only."""
 
 import os
-import re
 import time
 from datetime import datetime
 
-import signals
+from taskloop_dash.views import signals
 
 STEPS = ("plan", "write", "checks", "review", "verify", "land")
 OUTCOMES = ("landed", "parked", "failed", "paused")   # "taken" (lost a claim race) is not an outcome of a pass
@@ -235,7 +234,8 @@ def verdict(r, stats):
 
 
 def vkey(v):
-    return tuple(int(x) for x in v.split(".")) if re.fullmatch(r"\d+(\.\d+)*", v or "") else None
+    parts = (v or "").split(".")
+    return tuple(int(x) for x in parts) if all(x.isascii() and x.isdigit() for x in parts) else None
 
 
 def lag(version, installed):

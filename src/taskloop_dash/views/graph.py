@@ -51,10 +51,9 @@ def unblock_counts(edges, skip):
 
 def build(beads, cfg, queued, running=(), asks=(), now=None, repo=""):
     now = now or time.time()
-    running, asks, queued = set(running), set(asks), set(queued)
+    running, asks, queued, pick = set(running), set(asks), set(queued), cfg.get("pick_label")
     beads = [b for b in beads if "slot" not in (b.get("labels") or [])]  # a slot record is a lock, never work: it is in_progress for as long as it exists
     by_id = {b["id"]: b for b in beads}
-    pick = cfg.get("pick_label")
     recent = {b["id"] for b in beads if b.get("status") == "closed" and now - parse(b.get("closed_at")) < DAY}
     live = {b["id"] for b in beads if b.get("status") not in ("closed", "deferred")}
     # a deferred bead shows only where it holds something up or hangs under a shown epic
@@ -125,8 +124,8 @@ def build(beads, cfg, queued, running=(), asks=(), now=None, repo=""):
     for n in nodes:
         n["kids"] = kids.get(n["id"], {}) if n["is_epic"] else None
     flat = [{"source": s, "target": t} for s in sorted(edges) for t in sorted(edges[s])]
-    today = time.strftime("%Y-%m-%d", time.localtime(now))
-    done_today = sum(1 for i in recent if time.strftime("%Y-%m-%d", time.localtime(parse(by_id[i].get("closed_at")))) == today)
+    day = lambda t: time.strftime("%Y-%m-%d", time.localtime(t))  # noqa: E731
+    done_today = sum(1 for i in recent if day(parse(by_id[i].get("closed_at"))) == day(now))
     sc = {s: 0 for s in STATES}
     for n in nodes:
         sc[n["state"]] += 1

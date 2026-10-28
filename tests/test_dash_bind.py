@@ -12,7 +12,7 @@ DASH = ROOT / "skills" / "task-loop" / "dash"
 sys.path.insert(0, str(DASH))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-import server  # noqa: E402
+from taskloop_dash import bind  # noqa: E402
 
 TS = "100.64.1.2"  # tailscale-like (CGNAT) address
 
@@ -45,7 +45,7 @@ class Env(unittest.TestCase):
 
     def guard(self, addrs, port, where=None, **kw):
         os.environ.pop("TASK_LOOP_DASH_DEV_PUBLIC", None)
-        return server.bind_refusal(addrs, port, here=where or self.dev, home=self.home, state=self.state, **kw)
+        return bind.bind_refusal(addrs, port, here=where or self.dev, home=self.home, state=self.state, **kw)
 
 
 class DevCopyRefused(Env):
@@ -79,7 +79,7 @@ class Override(Env):
         self.with_repos()
         os.environ["TASK_LOOP_DASH_DEV_PUBLIC"] = "1"
         try:
-            self.assertIsNone(server.bind_refusal([TS], 7878, here=self.dev, home=self.home, state=self.state))
+            self.assertIsNone(bind.bind_refusal([TS], 7878, here=self.dev, home=self.home, state=self.state))
         finally:
             os.environ.pop("TASK_LOOP_DASH_DEV_PUBLIC")
 
@@ -92,7 +92,7 @@ class Override(Env):
     def test_only_value_1_counts(self):
         os.environ["TASK_LOOP_DASH_DEV_PUBLIC"] = "0"
         try:
-            self.assertTrue(server.bind_refusal([TS], 0, here=self.dev, home=self.home, state=self.state))
+            self.assertTrue(bind.bind_refusal([TS], 0, here=self.dev, home=self.home, state=self.state))
         finally:
             os.environ.pop("TASK_LOOP_DASH_DEV_PUBLIC")
 

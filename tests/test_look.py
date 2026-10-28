@@ -246,8 +246,7 @@ class LookTest(unittest.TestCase):
         self.assertTrue(self.eng.lfs_ok(["a.jpg"]))
 
     def test_the_dashboard_counts_owner_look_as_waits_on_you(self):
-        sys.path.insert(0, str(T.ROOT / "skills" / "task-loop"))
-        from dash import graph
+        from taskloop_dash.views import graph
         self.assertIn("owner-look", graph.OWNER_LABELS)
 
 

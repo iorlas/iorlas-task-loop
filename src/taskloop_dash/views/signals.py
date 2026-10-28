@@ -3,11 +3,11 @@ already reads. Pure: server.py gathers the inputs and calls build(). Every rule 
 lifesim's real distribution (2026-10-21..23: 131 beads, 77 parks of which 51 one cause) so that it fires on something real
 and stays quiet otherwise. Python 3.8+, standard library only."""
 
-import re
 import statistics
 import time
+from typing import Final
 
-SEVERITY = {"red": 0, "amber": 1, "info": 2, "green": 3}
+SEVERITY: Final = {"red": 0, "amber": 1, "info": 2, "green": 3}
 CLUSTER_N, CLUSTER_WINDOW, CLUSTER_LOOKBACK = 4, 3 * 3600, 6 * 3600   # parks with one cause, within, looked at over
 CHURN_CHECKS_RED, CHURN_BLOCKS, CHURN_LOOKBACK = 3, 12, 24 * 3600      # checks fails, steps in one bead
 HOG_FRESH, HOG_TIMES_MEDIAN, HOG_LOOKBACK = 500_000, 3, 48 * 3600     # fresh tokens (input minus cached, plus output)
@@ -42,12 +42,42 @@ def dur(s):
     return "%dd" % (s // 86400) if s >= 2 * 86400 else "%dh%02dm" % (s // 3600, s % 3600 // 60) if s >= 3600 else "%dm" % (s // 60)
 
 
+def _id_like(run):
+    """A token such as `tl-bxk.8` or `abc-12`: letters and digits, one dash, then letters, digits and dots."""
+    core = run.strip(".-")
+    head, dash, tail = core.partition("-")
+    return bool(dash and head and tail and head.isalnum() and all(c.isalnum() or c in ".-" for c in tail))
+
+
 def cause(why):
     """A parked pass's reason with ids, numbers and quoted payloads cut, so the same cause groups."""
-    w = re.sub(r"[`'\"{].*", "", str(why or "").lower())
-    w = re.sub(r"\b[a-z0-9]+-[a-z0-9.]+\b", "", w)
-    w = re.sub(r"[\d$]+", "", w)
-    return re.sub(r"\s+", " ", w).strip(" :;,.-")[:70]
+    w = str(why or "").lower()
+    cut = min((i for i in (w.find(c) for c in "`'\"{") if i >= 0), default=len(w))
+    w, words, run = w[:cut], [], ""
+    for ch in w + " ":
+        if ch.isalnum() or ch in ".-":
+            run += ch
+            continue
+        if run and not _id_like(run):
+            words.append(run)
+        words.append(ch)
+        run = ""
+    w = "".join(words).translate({ord(c): None for c in "0123456789$"})
+    return " ".join(w.split()).strip(" :;,.-")[:70]
+
+
+def budget_pair(text):
+    """(used, limit) from the first 'N of M min' after 'over budget:' in a pass's reason; None when there is none."""
+    _, found, rest = str(text).partition("over budget:")
+    at = rest.find(" of ") if found else -1
+    while at >= 0:
+        left, right = rest[:at], rest[at + 4:]
+        used = len(left) - len(left.rstrip("0123456789"))
+        limit = len(right) - len(right.lstrip("0123456789"))
+        if used and limit and right[limit:].startswith(" min"):
+            return int(left[len(left) - used:]), int(right[:limit])
+        at = rest.find(" of ", at + 1)
+    return None
 
 
 def medians(rows):
@@ -63,6 +93,13 @@ def sig(kind, sev, title, line, look=(), href=None):
     return {"kind": kind, "sev": sev, "title": title, "line": line, "look": list(look)[:4], "href": href}
 
 
+def _reason(why):
+    """The reason up to its first ':', '.' or '('."""
+    text = str(why or "no reason given")
+    cut = min((i for i in (text.find(c) for c in ":.(") if i >= 0), default=len(text))
+    return text[:cut][:60]
+
+
 def lane_out(lanes, now):
     out = []
     for ln in lanes or []:
@@ -73,7 +110,7 @@ def lane_out(lanes, now):
         until = ln.get("out_until")
         if until and float(until) > now:
             out.append(sig("lane_out", "red", "%s lane out" % label, "out for %s (%s): a slot that needs it pauses or parks"
-                           % (dur(float(until) - now), re.split(r"[:.(]", str(ln.get("why") or "no reason given"))[0][:60])))
+                           % (dur(float(until) - now), _reason(ln.get("why")))))
             continue
         for u in ln.get("usage") or []:
             if (u.get("used_pct") or 0) >= USAGE_HIGH:
@@ -178,9 +215,9 @@ def looks_waiting(looks, now):
 def budget_near_miss(passes, now):
     out = []
     for p in reversed(passes):
-        m = re.search(r"over budget:.*?(\d+) of (\d+) min", p.get("why") or "")
-        if p["outcome"] == "parked" and m and now - p["t"] <= 24 * 3600 and int(m.group(1)) <= BUDGET_NEAR * int(m.group(2)):
-            out.append((p, "%s/%s min" % m.groups()))
+        m = budget_pair(p.get("why") or "")
+        if p["outcome"] == "parked" and m and now - p["t"] <= 24 * 3600 and m[0] <= BUDGET_NEAR * m[1]:
+            out.append((p, "%s/%s min" % m))
     if not out:
         return []
     return [sig("near_miss", "info", "%d over budget by a hair" % len(out),

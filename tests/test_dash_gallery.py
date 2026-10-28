@@ -11,11 +11,13 @@ from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "skills" / "task-loop" / "dash"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-import gallery  # noqa: E402
-import signals  # noqa: E402
+from support.dashes import make_dash  # noqa: E402
+from taskloop_dash.api import looks as looks_api  # noqa: E402
+from taskloop_dash.views import gallery, graph, roadmap, signals  # noqa: E402
+
+LOOKS = make_dash().looks
 
 NOW = 1_800_000_000.0
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 16
@@ -65,8 +67,8 @@ def world(*statuses, status="open"):
 class Items(unittest.TestCase):
     def test_metadata_items(self):
         fake = world("open", "good")
-        with mock.patch.object(gallery, "bd", fake):
-            items = gallery.collect("/r", [{"id": "tl-look", "labels": [gallery.LABEL], "created_at": "2026-10-23T10:00:00Z"},
+        with mock.patch.object(looks_api, "bd", fake):
+            items = LOOKS.collect("/r", [{"id": "tl-look", "labels": [gallery.LABEL], "created_at": "2026-10-23T10:00:00Z"},
                                            {"id": "x", "labels": ["auto"]}])
         self.assertEqual([i["status"] for i in items], ["open", "good"])
         self.assertEqual([s["role"] for s in items[0]["shots"]], ["before", "after"])
@@ -99,31 +101,31 @@ class Pictures(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_a_listed_picture_is_served(self):
-        data, ctype = gallery.picture(str(self.repo), "docs/evidence/tl-1/m1.png", self.items)
+        data, ctype = LOOKS.picture(str(self.repo), "docs/evidence/tl-1/m1.png", self.items)
         self.assertEqual((data, ctype), (PNG, "image/png"))
 
     def test_only_listed_pictures(self):
         for rel in ("../secret.png", "docs/evidence/tl-1/other.png", "/etc/passwd", "docs/evidence/tl-1/m1.png/../../../../secret.png", ""):
-            self.assertIsNone(gallery.picture(str(self.repo), rel, self.items), rel)
+            self.assertIsNone(LOOKS.picture(str(self.repo), rel, self.items), rel)
 
     def test_a_listed_path_that_escapes_the_repo_is_not_read(self):
         items = gallery.items_of("b", {"metadata": {"looks": [{"id": "a#1", "shots": [{"path": "../secret.png"}]}]}})
-        self.assertIsNone(gallery.picture(str(self.repo), "../secret.png", items))
+        self.assertIsNone(LOOKS.picture(str(self.repo), "../secret.png", items))
 
     def test_lfs_pointer_and_missing_file_are_not_pictures(self):
         (self.repo / "docs/evidence/tl-1/m1.png").write_bytes(b"version https://git-lfs.github.com/spec/v1\noid sha256:0\n")
-        with mock.patch.object(gallery.subprocess, "run", side_effect=OSError):
-            self.assertIsNone(gallery.picture(str(self.repo), "docs/evidence/tl-1/m1.png", self.items))
+        with mock.patch.object(looks_api.subprocess, "run", side_effect=OSError):
+            self.assertIsNone(LOOKS.picture(str(self.repo), "docs/evidence/tl-1/m1.png", self.items))
 
     def test_a_non_picture_extension_is_refused(self):
         items = gallery.items_of("b", {"metadata": {"looks": [{"id": "a#1", "shots": [{"path": "docs/x.html"}]}]}})
-        self.assertIsNone(gallery.picture(str(self.repo), "docs/x.html", items))
+        self.assertIsNone(LOOKS.picture(str(self.repo), "docs/x.html", items))
 
 
 class Answers(unittest.TestCase):
     def ask(self, fake, verdict, item="tl-1#1", note=""):
-        with mock.patch.object(gallery, "bd", fake):
-            return gallery.answer("/r", {"look_bead": "tl-look", "item": item, "verdict": verdict, "note": note}, now=NOW)
+        with mock.patch.object(looks_api, "bd", fake):
+            return LOOKS.answer("/r", {"look_bead": "tl-look", "item": item, "verdict": verdict, "note": note}, now=NOW)
 
     def stored(self, fake):
         return {e["id"]: e for e in fake.beads["tl-look"]["metadata"]["looks"]}
@@ -191,19 +193,19 @@ class Answers(unittest.TestCase):
     def test_unknown_item_bead_and_bad_input(self):
         fake = world("open")
         self.assertEqual(self.ask(fake, "good", item="tl-1#9")[1]["code"], "item_missing")
-        with mock.patch.object(gallery, "bd", fake):
-            self.assertEqual(gallery.answer("/r", {"look_bead": "nope", "item": "x", "verdict": "good"})[0], 404)
+        with mock.patch.object(looks_api, "bd", fake):
+            self.assertEqual(LOOKS.answer("/r", {"look_bead": "nope", "item": "x", "verdict": "good"})[0], 404)
             for bad in ({"look_bead": "--db=x", "item": "a", "verdict": "good"}, {"look_bead": "tl-look", "item": "a", "verdict": "x"}, [], None):
-                self.assertEqual(gallery.answer("/r", bad)[0], 400, bad)
+                self.assertEqual(LOOKS.answer("/r", bad)[0], 400, bad)
         fake.beads["plain"] = {"id": "plain", "labels": ["auto"], "metadata": {"looks": looks("open")}}
-        with mock.patch.object(gallery, "bd", fake):  # not an owner-look bead: never touched
-            self.assertEqual(gallery.answer("/r", {"look_bead": "plain", "item": "tl-1#1", "verdict": "good"})[0], 404)
+        with mock.patch.object(looks_api, "bd", fake):  # not an owner-look bead: never touched
+            self.assertEqual(LOOKS.answer("/r", {"look_bead": "plain", "item": "tl-1#1", "verdict": "good"})[0], 404)
 
     def test_an_old_description_bead_is_turned_into_metadata_by_the_first_answer(self):
         desc = "## tl-9: Settings\n- docs/e/tl-9/a.png\n"
         fake = FakeBd({"tl-look": {"id": "tl-look", "status": "open", "labels": [gallery.LABEL], "description": desc}})
-        with mock.patch.object(gallery, "bd", fake):
-            code, _ = gallery.answer("/r", {"look_bead": "tl-look", "item": "tl-9#0", "verdict": "good"}, now=NOW)
+        with mock.patch.object(looks_api, "bd", fake):
+            code, _ = LOOKS.answer("/r", {"look_bead": "tl-look", "item": "tl-9#0", "verdict": "good"}, now=NOW)
         self.assertEqual(code, 200)
         self.assertEqual(fake.beads["tl-look"]["metadata"]["looks"][0]["status"], "good")
 
@@ -227,8 +229,8 @@ class Hardening(unittest.TestCase):
         orig = fake.__call__
         fake.__class__ = type("Bad", (FakeBd,), {"__call__": lambda s, repo, *a, timeout=30: subprocess.CompletedProcess(a, 1, "", "boom")
                                                   if a[0] == "update" and "--metadata" in a and a[1] == "tl-look" else orig(repo, *a)})
-        with mock.patch.object(gallery, "bd", fake):
-            code, _ = gallery.answer("/r", {"look_bead": "tl-look", "item": "tl-1#1", "verdict": "redo", "note": "n"}, now=NOW)
+        with mock.patch.object(looks_api, "bd", fake):
+            code, _ = LOOKS.answer("/r", {"look_bead": "tl-look", "item": "tl-1#1", "verdict": "redo", "note": "n"}, now=NOW)
         self.assertEqual(code, 502)
         self.assertEqual(fake.beads["tl-r1"]["status"], "closed")
 
@@ -236,8 +238,8 @@ class Hardening(unittest.TestCase):
         import threading
         fake = world("open")
         res = []
-        with mock.patch.object(gallery, "bd", fake):
-            ts = [threading.Thread(target=lambda: res.append(gallery.answer("/r", {"look_bead": "tl-look", "item": "tl-1#1", "verdict": "redo", "note": "n"})[0]))
+        with mock.patch.object(looks_api, "bd", fake):
+            ts = [threading.Thread(target=lambda: res.append(LOOKS.answer("/r", {"look_bead": "tl-look", "item": "tl-1#1", "verdict": "redo", "note": "n"})[0]))
                   for _ in range(4)]
             [t.start() for t in ts]
             [t.join() for t in ts]
@@ -247,8 +249,8 @@ class Hardening(unittest.TestCase):
     def test_an_odd_redo_id_is_never_closed(self):
         fake = world("open")
         fake.beads["tl-look"]["metadata"]["looks"][0].update(status="redo", redo_bead="--force")
-        with mock.patch.object(gallery, "bd", fake):
-            gallery.answer("/r", {"look_bead": "tl-look", "item": "tl-1#1", "verdict": "undo"})
+        with mock.patch.object(looks_api, "bd", fake):
+            LOOKS.answer("/r", {"look_bead": "tl-look", "item": "tl-1#1", "verdict": "undo"})
         self.assertFalse(any(c[0] == "close" and "--force" in c for c in fake.calls))
 
 
@@ -263,8 +265,6 @@ class Signal(unittest.TestCase):
 
 class RoadmapStrip(unittest.TestCase):
     def test_open_looks_reach_the_signal_strip_and_answered_ones_do_not(self):
-        import graph
-        import roadmap
         g = graph.build([], {"pick_label": "auto", "skip_labels": []}, set(), set(), (), now=NOW)
         out = roadmap.build(g, [], [], [], [], {}, now=NOW, looks=[{"bead": "tl-1", "filed": NOW - 60}])
         self.assertEqual([s["title"] for s in out["signals"] if s["kind"] == "looks"], ["1 look wait for you"])
@@ -274,7 +274,6 @@ class RoadmapStrip(unittest.TestCase):
 
 class Api(unittest.TestCase):
     def test_api_and_post(self):
-        import server
         fake = world("open")
         with tempfile.TemporaryDirectory() as home:
             repo = Path(home) / "demo"
@@ -284,19 +283,20 @@ class Api(unittest.TestCase):
             cfg.mkdir(parents=True)
             (cfg / "repos.json").write_text(json.dumps({str(repo): {}}))
             env = {"HOME": home, "XDG_CONFIG_HOME": str(cfg.parent), "APPDATA": str(cfg.parent)}
-            with mock.patch.dict(os.environ, env), mock.patch.object(gallery, "bd", fake), \
-                    mock.patch.object(server, "beads_of", lambda r: [{"id": "tl-look", "labels": [gallery.LABEL]}]):
-                server._cache.clear()
-                out = server.api_looks("demo")
+            with mock.patch.dict(os.environ, env):
+                dash = make_dash(home=home)
+            with mock.patch.object(looks_api, "bd", fake), \
+                    mock.patch.object(dash.beads, "beads_of", lambda r: [{"id": "tl-look", "labels": [gallery.LABEL]}]):
+                out = dash.looks.api_looks("demo")
                 self.assertEqual((out["repo"], out["summary"]["open"]), ("demo", 1))
                 url = out["items"][0]["shots"][1]["url"]
                 self.assertTrue(url.startswith("/api/look-shot?repo=demo&path=docs"), url)
-                self.assertEqual(server.look_shot("demo", "docs/evidence/tl-1/m1.png"), (PNG, "image/png"))
-                self.assertIsNone(server.look_shot("demo", "docs/evidence/tl-1/nope.png"))
-                self.assertEqual(server.answer_look({"repo": "demo", "look_bead": "tl-look", "item": "tl-1#1", "verdict": "good"})[0], 200)
-                self.assertEqual(server.api_looks("demo")["summary"], {"open": 0, "good": 1, "redo": 0})
-                self.assertEqual(server.api_looks("")["repo"], "demo")  # a bare #looks means the first repo
-                self.assertEqual(server.answer_look({"repo": "nowhere"})[0], 404)
+                self.assertEqual(dash.looks.look_shot("demo", "docs/evidence/tl-1/m1.png"), (PNG, "image/png"))
+                self.assertIsNone(dash.looks.look_shot("demo", "docs/evidence/tl-1/nope.png"))
+                self.assertEqual(dash.looks.answer_look({"repo": "demo", "look_bead": "tl-look", "item": "tl-1#1", "verdict": "good"})[0], 200)
+                self.assertEqual(dash.looks.api_looks("demo")["summary"], {"open": 0, "good": 1, "redo": 0})
+                self.assertEqual(dash.looks.api_looks("")["repo"], "demo")  # a bare #looks means the first repo
+                self.assertEqual(dash.looks.answer_look({"repo": "nowhere"})[0], 404)
 
 
 if __name__ == "__main__":

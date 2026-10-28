@@ -243,11 +243,11 @@ if __name__ == "__main__":
 
 class Api(Base):
     def test_the_dashboard_api_returns_the_view(self):
-        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills" / "task-loop" / "dash"))
-        import server
+        from support.dashes import Ports, make_dash
+        server = make_dash(ports=Ports(reflections=rd.view))
         self.trace("r1", [("writer reran the whole test suite after every edit", "prompt", "9")], t=time.time() - 60)
         self.trace("r2", [("writer reran the whole test suite after every edit again", "prompt", "7")], bead="b2", t=time.time() - 30)
-        v = server.api_reflections("24")
+        v = server.reflections("24")
         self.assertEqual((v["hours"], v["clusters"][0]["runs"], v["clusters"][0]["recurring"]), (24, 2, True))
-        self.assertEqual(server.api_reflections("99999")["hours"], 24 * 14)
-        self.assertEqual(server.api_reflections("abc")["hours"], 24)
+        self.assertEqual(server.reflections("99999")["hours"], 24 * 14)
+        self.assertEqual(server.reflections("abc")["hours"], 24)

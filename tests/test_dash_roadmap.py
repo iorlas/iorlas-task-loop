@@ -10,11 +10,11 @@ from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "skills" / "task-loop" / "dash"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-import graph  # noqa: E402
-import roadmap  # noqa: E402
+from support.dashes import Env, Ports, make_dash  # noqa: E402
+from taskloop_dash.api import roadmap as roadmap_api  # noqa: E402
+from taskloop_dash.views import graph, roadmap  # noqa: E402
 
 NOW = time.mktime((2026, 10, 23, 12, 0, 0, 0, 0, -1))  # local noon: 'today' counts from midnight, so a run just after 00:00 must not change the answers
 CFG = {"pick_label": "auto", "skip_labels": []}
@@ -260,30 +260,25 @@ class Verdict(unittest.TestCase):
 
 
 class Api(unittest.TestCase):
-    """/api/roadmap over a temp HOME and config dir: bd, the loop's queue and its files stubbed."""
+    """/api/roadmap over a temp HOME and config dir: bd and the loop's files stubbed."""
 
     def test_loop_files_reports_only_targeted_stops(self):
-        import server
-        server._engine_dir()
-        import loop
-        import tl
         with tempfile.TemporaryDirectory() as home, mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": home, "APPDATA": home}):
+            dash = make_dash(home=home)
             repo = str(Path(home) / "repo")
-            loop.write_state(repo, pid=111, started=100, slot="s1", bead="a")
-            loop.write_state(repo, pid=222, started=100, slot="s2", bead="b")
-            f = loop.paths(repo)["stop"]
-            with mock.patch.object(tl, "pid_alive", return_value=True), \
-                    mock.patch.object(tl, "slot_beads", return_value=[]), \
-                    mock.patch.object(loop, "running", return_value={}), \
-                    mock.patch.object(server, "loop_version", return_value="test"):
-                for mode in ("now", "after"):
-                    f.write_text(json.dumps({"targets": [111], "time": 100, "mode": mode}))
-                    os.utime(f, (1000, 1000))
-                    lanes, _, _ = server.loop_files(repo)
-                    self.assertEqual([(l["loop"], l["stopping"]) for l in lanes], [(111, mode), (222, "")])
+            key = roadmap_api.loop_key(repo)
+            loops = Path(home) / "task-loop" / "loop"
+            loops.mkdir(parents=True)
+            mine, parent = os.getpid(), os.getppid()  # two processes that are alive
+            for pid, slot, bead_ in ((mine, "s1", "a"), (parent, "s2", "b")):
+                (loops / ("%s.%d.json" % (key, pid))).write_text(json.dumps({"pid": pid, "started": 100, "slot": slot, "bead": bead_}))
+            f = loops / (key + ".stop")
+            for mode in ("now", "after"):
+                f.write_text(json.dumps({"targets": [mine], "time": 100, "mode": mode}))
+                lanes, _, _ = dash.roadmap.loop_files(repo)
+                self.assertEqual(sorted((ln["loop"], ln["stopping"]) for ln in lanes), sorted([(mine, mode), (parent, "")]))
 
     def test_endpoint(self):
-        import server
         with tempfile.TemporaryDirectory() as home:
             repo = Path(home) / "demo"
             repo.mkdir()
@@ -292,53 +287,70 @@ class Api(unittest.TestCase):
             (cfg / "repos.json").write_text(json.dumps({str(repo): {}}))
             beads = [bead("a", status="in_progress"), bead("b", blocks=["a"]), bead("c")]
             env = {"HOME": home, "XDG_CONFIG_HOME": str(cfg.parent), "APPDATA": str(cfg.parent)}
-            with mock.patch.dict(os.environ, env), mock.patch.object(server, "HOME", Path(home)), \
-                    mock.patch.object(server, "beads_of", lambda r: beads), \
-                    mock.patch.object(server, "api_tasks", lambda: {"tasks": [{"id": "a", "state": "running", "repo": "demo", "slot": "s9",
-                                                                              "stage": "writing", "since": 30}], "lanes": []}), \
-                    mock.patch.object(server, "loop_order", lambda r, b, c: ([("c", "lowest id")], [("b", "area x busy")])), \
-                    mock.patch.object(server, "loop_files", lambda r: ([], [], [])), \
-                    mock.patch.object(server, "engine_logs", lambda retain=True: {}):
-                server._cache.clear()
-                out = server.api_roadmap("demo")
-                self.assertEqual(out["repos"], ["demo"])
-                (lane,) = out["lanes"]  # a bead run by hand has a slot but no loop: it still gets a lane
-                self.assertEqual((lane["slot"], lane["bead"]), ("s9", "a"))
-                self.assertEqual([k["id"] for k in lane["unlocks"]], ["b"])
-                self.assertEqual([q["id"] for q in out["queue"]], ["c"])
-                self.assertEqual([h["id"] for h in out["held"]], ["b"])
-                self.assertEqual(out["briefs"]["a"]["state"], "running")
-                self.assertTrue(out["signals"] == [] or all("sev" in x for x in out["signals"]))
-                self.assertEqual(server.api_roadmap("nope")["error"], "no such repo")
+            with mock.patch.dict(os.environ, env):
+                dash = make_dash(home=home)
+                with mock.patch.object(dash.beads, "beads_of", lambda r: beads), \
+                        mock.patch.object(dash.tasks, "api_tasks", lambda: {"tasks": [{"id": "a", "state": "running", "repo": "demo", "slot": "s9",
+                                                                                      "stage": "writing", "since": 30}], "lanes": []}), \
+                        mock.patch.object(dash.graph, "loop_order", lambda r, b, c: ([("c", "lowest id")], [("b", "area x busy")])), \
+                        mock.patch.object(dash.roadmap, "loop_files", lambda r: ([], [], [])), \
+                        mock.patch.object(dash.records, "engine_logs", lambda retain=True: {}):
+                    out = dash.roadmap.api_roadmap("demo")
+                    self.assertEqual(out["repos"], ["demo"])
+                    (lane,) = out["lanes"]  # a bead run by hand has a slot but no loop: it still gets a lane
+                    self.assertEqual((lane["slot"], lane["bead"]), ("s9", "a"))
+                    self.assertEqual([k["id"] for k in lane["unlocks"]], ["b"])
+                    self.assertEqual([q["id"] for q in out["queue"]], ["c"])
+                    self.assertEqual([h["id"] for h in out["held"]], ["b"])
+                    self.assertEqual(out["briefs"]["a"]["state"], "running")
+                    self.assertTrue(out["signals"] == [] or all("sev" in x for x in out["signals"]))
+                    self.assertEqual(dash.roadmap.api_roadmap("nope")["error"], "no such repo")
+
+    def test_the_queue_is_graph_local_queue_alone(self):
+        dash = make_dash(ports=Ports(load_cfg=lambda repo: {"pick_label": "auto", "skip_labels": ["x"]}))
+        beads = [bead("a"), bead("b", labels=["auto", "x"]), bead("c", priority=0)]
+        ranked, skipped = dash.graph.loop_order("/r", beads, dash.graph.config_of("/r"))
+        self.assertEqual(([i for i, _ in ranked], skipped), (["c", "a"], []))
+
+    def test_the_engine_version_of_a_lane_is_the_last_reload_record_of_its_log(self):
+        from support.logs import typed
+        with tempfile.TemporaryDirectory() as d:
+            log = Path(d, "t-1-x.jsonl")
+            log.write_text("\n".join(json.dumps(x) for x in (typed("reload", 1.0, old="", new="0.23.40", step="plan"),
+                                                             typed("note", 2.0, text="plan"),
+                                                             typed("reload", 3.0, old="0.23.40", new="0.23.42", step="write"))) + "\n")
+            dash = make_dash(config=d)
+            self.assertEqual(dash.roadmap.engine_version(str(log)), "0.23.42")
+            self.assertEqual(dash.roadmap.engine_version(str(log) + ".none"), "")
 
 
 class BeadApi(unittest.TestCase):
+    def setUp(self):
+        self.dash = make_dash()
+
     def test_bead_panel_joins_bd_and_the_engine_runs(self):
-        import server
+        dash = self.dash
         shown = [{"id": "a", "title": "T", "status": "open", "priority": 1, "labels": ["auto"], "description": "D", "acceptance_criteria": "AC",
                   "dependencies": [{"id": "z", "title": "Z", "status": "closed", "type": "blocks"}]}]
         comments = [{"author": "me", "text": "hello", "created_at": "2026-10-23T10:00:00Z"}]
-        with mock.patch.object(server, "resolve_repo", lambda r, b="": "/repo"), \
-                mock.patch.object(server, "bd_json", lambda repo, *a: shown if a[0] == "show" else comments), \
-                mock.patch.object(server, "engine_logs", lambda retain=True: {}):
-            server._cache.clear()
-            out = server.api_bead("demo", "a")
+        with mock.patch.object(dash.beads, "resolve_repo", lambda r, b="": "/repo"), \
+                mock.patch.object(dash.beads, "bd_json", lambda repo, *a: shown if a[0] == "show" else comments), \
+                mock.patch.object(dash.records, "engine_logs", lambda retain=True: {}):
+            out = dash.bead.api_bead("demo", "a")
         self.assertEqual((out["title"], out["description"], out["acceptance"], out["found"]), ("T", "D", "AC", True))
         self.assertEqual([c["text"] for c in out["comments"]], ["hello"])
         self.assertEqual(out["deps"][0]["id"], "z")
         self.assertEqual(out["runs"], [])
 
     def test_an_id_is_never_a_bd_option(self):
-        import server
-        with mock.patch.object(server, "bd_json", side_effect=AssertionError("bd must not run")):
+        with mock.patch.object(self.dash.beads, "bd_json", side_effect=AssertionError("bd must not run")):
             for bad in ("--db=/x", "-h", "", "a b", "../x"):
-                self.assertFalse(server.api_bead("demo", bad)["found"])
+                self.assertFalse(self.dash.bead.api_bead("demo", bad)["found"])
 
     def test_unknown_bead_is_not_found_not_an_error(self):
-        import server
-        with mock.patch.object(server, "resolve_repo", lambda r, b="": ""), mock.patch.object(server, "engine_logs", lambda retain=True: {}):
-            server._cache.clear()
-            self.assertFalse(server.api_bead("demo", "nope")["found"])
+        with mock.patch.object(self.dash.beads, "resolve_repo", lambda r, b="": ""), \
+                mock.patch.object(self.dash.records, "engine_logs", lambda retain=True: {}):
+            self.assertFalse(self.dash.bead.api_bead("demo", "nope")["found"])
 
 
 if __name__ == "__main__":

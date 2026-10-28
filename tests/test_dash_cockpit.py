@@ -1,16 +1,19 @@
 """tl-7y6.3.1 stage 1: delegate_status() carries every lane's cockpit data, fresh on every refresh, and only ever
 invokes `route.py status --json`. All of delegate is mocked: no vendor is reached, nothing is written."""
+import glob
 import json
+import subprocess
 import sys
 import unittest
 from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "skills" / "task-loop" / "dash"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-import server  # noqa: E402
+from support.dashes import make_dash  # noqa: E402
+
+DASH = make_dash()
 
 ROUTE = "/x/iorlas-delegate/0.35.1/skills/delegate/route.py"
 
@@ -23,9 +26,9 @@ class Cockpit(unittest.TestCase):
     def status(self, j, **res):
         """delegate_status() with route.py mocked to this answer (extra CompletedProcess fields via res)."""
         ret = dict({"stdout": json.dumps(j), "returncode": 0, "stderr": ""}, **res)
-        with mock.patch.object(server.glob, "glob", return_value=[ROUTE]), \
-                mock.patch.object(server.subprocess, "run", return_value=mock.Mock(**ret)) as run:
-            d = server.delegate_status()
+        with mock.patch.object(glob, "glob", return_value=[ROUTE]), \
+                mock.patch.object(subprocess, "run", return_value=mock.Mock(**ret)) as run:
+            d = DASH.lanes.delegate_status()
         return d, run
 
     def test_every_lane_is_listed_with_its_cockpit_fields(self):
@@ -127,15 +130,15 @@ class Fresh(unittest.TestCase):
         return mock.Mock(stdout=json.dumps({"v": 1, "lanes": lanes}), returncode=0, stderr="")
 
     def patched(self):
-        return [mock.patch.object(server.glob, "glob", return_value=[ROUTE]),
-                mock.patch.object(server.subprocess, "run")]
+        return [mock.patch.object(glob, "glob", return_value=[ROUTE]),
+                mock.patch.object(subprocess, "run")]
 
     def test_a_lane_that_went_out_shows_on_the_next_call(self):
         fixes = self.patched()
         with fixes[0], fixes[1] as run:
             run.side_effect = [self.answer({"A": lane()}), self.answer({"A": lane(out=True, out_until=1793104732)})]
-            self.assertTrue(server.delegate_status()["ok"])
-            d2 = server.delegate_status()  # no wait, no cache to clear
+            self.assertTrue(DASH.lanes.delegate_status()["ok"])
+            d2 = DASH.lanes.delegate_status()  # no wait, no cache to clear
         self.assertFalse(d2["ok"])
         self.assertEqual(d2["out"], ["A"])
         self.assertTrue(d2["lanes"][0]["out"])
@@ -145,35 +148,35 @@ class Fresh(unittest.TestCase):
         fixes = self.patched()
         with fixes[0], fixes[1] as run:
             run.side_effect = [self.answer({"A": lane(out=True)}), self.answer({"A": lane()})]
-            self.assertFalse(server.delegate_status()["ok"])
-            d2 = server.delegate_status()
+            self.assertFalse(DASH.lanes.delegate_status()["ok"])
+            d2 = DASH.lanes.delegate_status()
         self.assertTrue(d2["ok"])
         self.assertEqual(d2["lanes"][0]["out"], False)
 
 
 class Unavailable(unittest.TestCase):
     def test_no_delegate_installed_says_so_and_runs_nothing(self):
-        with mock.patch.object(server.glob, "glob", return_value=[]), \
-                mock.patch.object(server.subprocess, "run") as run:
-            d = server.delegate_status()
+        with mock.patch.object(glob, "glob", return_value=[]), \
+                mock.patch.object(subprocess, "run") as run:
+            d = DASH.lanes.delegate_status()
         self.assertFalse(d["ok"])
         self.assertEqual(d["say"], "delegate is not installed")
         self.assertNotIn("lanes", d)
         run.assert_not_called()
 
     def test_a_route_that_never_answers_is_said(self):
-        with mock.patch.object(server.glob, "glob", return_value=[ROUTE]), \
-                mock.patch.object(server.subprocess, "run", side_effect=OSError("no such file")):
-            d = server.delegate_status()
+        with mock.patch.object(glob, "glob", return_value=[ROUTE]), \
+                mock.patch.object(subprocess, "run", side_effect=OSError("no such file")):
+            d = DASH.lanes.delegate_status()
         self.assertFalse(d["ok"])
         self.assertIn("failed", d["say"])
         self.assertNotIn("lanes", d)
 
     def test_timeout_is_reported_without_retrying_or_serving_old_lanes(self):
-        with mock.patch.object(server.glob, "glob", return_value=[ROUTE]), \
-                mock.patch.object(server.subprocess, "run", side_effect=server.subprocess.TimeoutExpired(
+        with mock.patch.object(glob, "glob", return_value=[ROUTE]), \
+                mock.patch.object(subprocess, "run", side_effect=subprocess.TimeoutExpired(
                     [sys.executable, ROUTE, "status", "--json"], 20)) as run:
-            d = server.delegate_status()
+            d = DASH.lanes.delegate_status()
         self.assertFalse(d["ok"])
         self.assertIn("failed", d["say"])
         self.assertNotIn("lanes", d)
@@ -215,31 +218,31 @@ class Unavailable(unittest.TestCase):
                     self.assertNotIn("lanes", d)
 
     def test_a_nonzero_exit_is_said_with_its_last_word(self):
-        with mock.patch.object(server.glob, "glob", return_value=[ROUTE]), \
-                mock.patch.object(server.subprocess, "run",
+        with mock.patch.object(glob, "glob", return_value=[ROUTE]), \
+                mock.patch.object(subprocess, "run",
                                   return_value=mock.Mock(stdout="", stderr="boom\ncannot read state", returncode=3)):
-            d = server.delegate_status()
+            d = DASH.lanes.delegate_status()
         self.assertFalse(d["ok"])
         self.assertEqual(d["say"], "delegate status exited 3: cannot read state")
         self.assertNotIn("lanes", d)
 
     def test_garbage_output_is_said_as_malformed(self):
         for out in ("", "not json at all"):
-            with mock.patch.object(server.glob, "glob", return_value=[ROUTE]), \
-                    mock.patch.object(server.subprocess, "run",
+            with mock.patch.object(glob, "glob", return_value=[ROUTE]), \
+                    mock.patch.object(subprocess, "run",
                                       return_value=mock.Mock(stdout=out, stderr="", returncode=0)):
-                d = server.delegate_status()
+                d = DASH.lanes.delegate_status()
             self.assertFalse(d["ok"])
             self.assertEqual(d["say"], "delegate status printed no JSON status")
             self.assertNotIn("lanes", d)
 
     def test_notes_before_the_object_are_tolerated(self):
         body = json.dumps({"v": 1, "lanes": {"A": lane(model="sonnet-4.6")}})
-        with mock.patch.object(server.glob, "glob", return_value=[ROUTE]), \
-                mock.patch.object(server.subprocess, "run",
+        with mock.patch.object(glob, "glob", return_value=[ROUTE]), \
+                mock.patch.object(subprocess, "run",
                                   return_value=mock.Mock(stdout="warning: cache is cold\n" + body, stderr="",
                                                          returncode=0)):
-            d = server.delegate_status()
+            d = DASH.lanes.delegate_status()
         self.assertTrue(d["ok"])
         self.assertEqual(d["lanes"][0]["model"], "sonnet-4.6")
 

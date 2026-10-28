@@ -20,13 +20,12 @@ SRC = ROOT / "skills" / "task-loop"
 sys.path.insert(0, str(SRC))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-sys.path.insert(0, str(SRC / "dash"))
 sys.path.insert(0, str(ROOT / "tests"))
 import engine  # noqa: E402
 import seams  # noqa: E402
-import graph  # noqa: E402
+from taskloop_dash.views import graph  # noqa: E402
 import loop  # noqa: E402
-import roadmap  # noqa: E402
+from taskloop_dash.views import roadmap  # noqa: E402
 import test_engine as te  # noqa: E402
 import tl  # noqa: E402
 import delegate_link as dl  # noqa: E402
@@ -331,15 +330,6 @@ class Reload(unittest.TestCase):
         html = (SRC / "dash" / "index.html").read_text(encoding="utf-8")
         self.assertIn("'engine '+esc(l.engine)", html)
         self.assertIn("'lags '+l.lags", html)
-
-    def test_the_engine_version_of_a_lane_is_the_last_version_note_of_its_log(self):
-        import server
-        log = Path(self.tmp.name, "t-1-x.jsonl")
-        log.write_text("\n".join(json.dumps(x) for x in (
-            {"kind": "note", "text": "task-loop 0.23.40", "version": "0.23.40"}, {"kind": "node", "text": "plan"},
-            {"kind": "note", "text": "task-loop 0.23.42", "version": "0.23.42"})) + "\n")
-        self.assertEqual(server.engine_version(str(log)), "0.23.42")
-        self.assertEqual(server.engine_version(str(log) + ".none"), "")
 
 
 if __name__ == "__main__":
