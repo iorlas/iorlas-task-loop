@@ -27,7 +27,9 @@ class LandLockTests(unittest.TestCase):
                               capture_output=True, text=True, timeout=30)
 
     def holder(self, secs, ready):
-        code = "import time,pathlib;pathlib.Path(%r).write_text('x');time.sleep(%s)" % (str(ready), secs)
+        self.release = Path(ready).with_name("release")  # the test touches it when the holder has served its purpose
+        code = ("import time,pathlib;pathlib.Path(%r).write_text('x');end=time.time()+%s\n"
+                "while time.time()<end and not pathlib.Path(%r).exists(): time.sleep(0.01)") % (str(ready), secs, str(self.release))
         p = subprocess.Popen([PY, str(TL), "land-lock", "--repo", self.repo, "--", PY, "-c", code], env=self.env,
                              stdout=subprocess.PIPE, text=True)
         self.addCleanup(p.wait)
@@ -67,6 +69,7 @@ class LandLockTests(unittest.TestCase):
         self.assertEqual(r.returncode, 75)
         self.assertNotIn("never", r.stdout)
         self.assertIn("land lock", r.stderr)
+        self.release.touch()
         p.wait()
 
 

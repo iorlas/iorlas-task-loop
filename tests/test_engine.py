@@ -29,6 +29,7 @@ import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import engine  # noqa: E402
 import seams  # noqa: E402
 from support.fakes import FakeBeadStore  # noqa: E402
+from support.waits import until  # noqa: E402
 from support import fake_route  # noqa: E402
 import lane_policy as lp  # noqa: E402,F401
 import netgate  # noqa: E402,F401
@@ -37,6 +38,14 @@ from core import procs  # noqa: E402,F401
 import tl  # noqa: E402
 from lanes import call as lcall  # noqa: E402,F401
 from lanes import route as lroute  # noqa: E402,F401
+
+
+def pid_gone(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    return False
 
 
 def sh(*a, cwd):
@@ -727,23 +736,14 @@ class EngineTest(unittest.TestCase):
         started = []
 
         def stopped(this, *a, **kw):
-            for _ in range(100):
-                if pidfile.exists() and pidfile.read_text().strip():
-                    break
-                time.sleep(0.05)
+            until(lambda: pidfile.exists() and pidfile.read_text().strip(), 5)
             started.append(this.pid)
             raise engine.Blocked("failed: stopped (SIGTERM)", kind=engine.oc.Kind.PAUSE_KILLED)
         with mock.patch.object(subprocess.Popen, "communicate", stopped):
             with self.assertRaises(engine.Blocked):
                 eng.sh("sleep 30 & echo $! > child.pid; wait")
         child = int(pidfile.read_text())
-        for _ in range(50):
-            try:
-                os.kill(child, 0)
-            except ProcessLookupError:
-                break
-            time.sleep(0.05)
-        else:
+        if not until(lambda: pid_gone(child), 2.5):
             os.killpg(started[0], 9)
             self.fail("the check's child outlived the stop")
 
@@ -1135,21 +1135,14 @@ class EngineTest(unittest.TestCase):
     SPAWN ="sleep 30 & echo $! > %s; "
 
     def child_of(self, pidfile):
-        for _ in range(100):
-            if pidfile.exists() and pidfile.read_text().strip():
-                return int(pidfile.read_text())
-            time.sleep(0.05)
+        if until(lambda: pidfile.exists() and pidfile.read_text().strip(), 5):
+            return int(pidfile.read_text())
         self.fail("the check never started its child")
 
     def assertDead(self, pid):
-        for _ in range(60):
-            try:
-                os.kill(pid, 0)
-            except ProcessLookupError:
-                return
-            time.sleep(0.05)
-        os.kill(pid, 9)
-        self.fail("pid %d outlived the engine's stop" % pid)
+        if not until(lambda: pid_gone(pid), 3):
+            os.kill(pid, 9)
+            self.fail("pid %d outlived the engine's stop" % pid)
 
     def stoppable(self):
         """The engine's own SIGTERM handler (main() installs it), restored after the test."""
@@ -3390,9 +3383,9 @@ class EngineTest(unittest.TestCase):
         cs = [{"author": "tl-x", "text": "Blocked: stuck", "created_at": "2026-10-25T10:00:00Z"},
               {"author": "tl-x", "text": "Lane (engine): the look step ran on the writer's own family", "created_at": "2026-10-25T10:01:00Z"}]
         calls = []
-        with mock.patch.object(tl, "show", return_value=blocked), mock.patch.object(tl, "comments", return_value=cs), \
-                mock.patch.object(tl, "bd", side_effect=lambda *a, **k: calls.append(a) or mock.Mock(returncode=0)):
-            ok, why = engine.reclaim("t-1", str(self.wt))
+        with self.store.stub(show=blocked), self.store.stub(comments=cs), \
+                self.store.stub(bd_fn=lambda *a, **k: calls.append(a) or mock.Mock(returncode=0)):
+            ok, why = engine.reclaim("t-1", str(self.wt), store=self.store)
         self.assertTrue(ok, why)
 
     def test_a_pause_is_a_comment_never_a_line_of_notes(self):

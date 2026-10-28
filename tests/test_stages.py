@@ -1241,27 +1241,26 @@ class Claims(StagesTest):
         parked = {"id": "t-1", "status": "blocked", "assignee": "tl-2be89f88", "lease_expires_at": "2999-01-01T00:00:00Z", "dependencies": []}
         comments = [{"text": "Blocked: stuck: re-planned 3 times", "created_at": "1", "author": "engine"}]
         import loop
-        with mock.patch.object(tl, "show", return_value=parked), mock.patch.object(tl, "live_actors", return_value={"tl-2be89f88"}), \
-                mock.patch.object(tl, "comments", return_value=comments), mock.patch.object(loop, "running", return_value={}), \
-                mock.patch.object(tl, "bd", return_value=mock.Mock(returncode=0)) as bd:
-            ok, why = engine.reclaim("t-1", str(self.wt))
+        with self.store.stub(show=parked), mock.patch.object(tl, "live_actors", return_value={"tl-2be89f88"}), \
+                self.store.stub(comments=comments), mock.patch.object(loop, "running", return_value={}):
+            ok, why = engine.reclaim("t-1", str(self.wt), store=self.store)
         self.assertTrue(ok, why)
         self.assertEqual(why, "reopened")
-        self.assertEqual(bd.call_args_list[0][0], ("update", "t-1", "--status", "open", "--if-assignee", "tl-2be89f88", "--assignee", ""))
+        self.assertEqual(self.store.calls[0], ("update", "t-1", "--status", "open", "--if-assignee", "tl-2be89f88", "--assignee", ""))
 
     def test_a_parked_bead_with_an_engine_still_on_it_is_a_live_claim(self):
         parked = {"id": "t-1", "status": "blocked", "assignee": "tl-2be89f88", "lease_expires_at": "", "dependencies": []}
         import loop
-        with mock.patch.object(tl, "show", return_value=parked), mock.patch.object(tl, "live_actors", return_value=set()), \
+        with self.store.stub(show=parked), mock.patch.object(tl, "live_actors", return_value=set()), \
                 mock.patch.object(loop, "running", return_value={"t-1": "s2"}):
-            ok, why = engine.reclaim("t-1", str(self.wt))
+            ok, why = engine.reclaim("t-1", str(self.wt), store=self.store)
         self.assertFalse(ok)
         self.assertIn("a live claim", why)
 
     def test_a_working_bead_of_a_live_actor_is_still_a_live_claim(self):
         busy = {"id": "t-1", "status": "in_progress", "assignee": "tl-2be89f88", "lease_expires_at": "", "dependencies": []}
-        with mock.patch.object(tl, "show", return_value=busy), mock.patch.object(tl, "live_actors", return_value={"tl-2be89f88"}):
-            ok, why = engine.reclaim("t-1", str(self.wt))
+        with self.store.stub(show=busy), mock.patch.object(tl, "live_actors", return_value={"tl-2be89f88"}):
+            ok, why = engine.reclaim("t-1", str(self.wt), store=self.store)
         self.assertFalse(ok)
         self.assertIn("a live claim", why)
 
@@ -1824,11 +1823,11 @@ class ClaimPerBead(StagesTest):
 
     def reclaim(self, bead, slots, running, hand_live=False):
         import loop
-        with mock.patch.object(tl, "show", return_value=bead), mock.patch.object(tl, "slot_beads", return_value=slots), \
+        with self.store.stub(show=bead), mock.patch.object(tl, "slot_beads", return_value=slots), \
                 mock.patch.object(tl, "live_actors", return_value={"tl-2be89f88"} if hand_live or slots else set()), \
-                mock.patch.object(loop, "running", return_value=running), mock.patch.object(tl, "comments", return_value=[]), \
-                mock.patch.object(tl, "bd", return_value=mock.Mock(returncode=0)):
-            return engine.reclaim("o67g", str(self.wt))
+                mock.patch.object(loop, "running", return_value=running), self.store.stub(comments=[]), \
+                self.store.stub(bd_fn=lambda *a, **k: mock.Mock(returncode=0)):
+            return engine.reclaim("o67g", str(self.wt), store=self.store)
 
     BEAD = {"id": "o67g", "status": "open", "assignee": "tl-2be89f88", "lease_expires_at": "2999-01-01T00:00:00Z", "dependencies": []}
     SLOT = {"id": "sl-5", "status": "in_progress", "assignee": "tl-2be89f88", "lease_expires_at": "2999-01-01T00:00:00Z",
@@ -1857,20 +1856,20 @@ class ClaimPerBead(StagesTest):
     def test_the_release_is_conditional_on_the_claim_just_read(self):
         import loop
         calls = []
-        with mock.patch.object(tl, "show", return_value=self.BEAD), mock.patch.object(tl, "slot_beads", return_value=[self.SLOT]), \
+        with self.store.stub(show=self.BEAD), mock.patch.object(tl, "slot_beads", return_value=[self.SLOT]), \
                 mock.patch.object(tl, "live_actors", return_value={"tl-2be89f88"}), mock.patch.object(loop, "running", return_value={}), \
-                mock.patch.object(tl, "comments", return_value=[]), \
-                mock.patch.object(tl, "bd", side_effect=lambda *a, **k: calls.append(a) or mock.Mock(returncode=0)):
-            ok, why = engine.reclaim("o67g", str(self.wt))
+                self.store.stub(comments=[]), \
+                self.store.stub(bd_fn=lambda *a, **k: calls.append(a) or mock.Mock(returncode=0)):
+            ok, why = engine.reclaim("o67g", str(self.wt), store=self.store)
         self.assertTrue(ok, why)
         self.assertEqual(calls[-1], ("update", "o67g", "--if-assignee", "tl-2be89f88", "--assignee", ""))
 
     def test_a_claim_that_changed_hands_meanwhile_is_not_taken(self):
         import loop
-        with mock.patch.object(tl, "show", return_value=self.BEAD), mock.patch.object(tl, "slot_beads", return_value=[self.SLOT]), \
+        with self.store.stub(show=self.BEAD), mock.patch.object(tl, "slot_beads", return_value=[self.SLOT]), \
                 mock.patch.object(tl, "live_actors", return_value={"tl-2be89f88"}), mock.patch.object(loop, "running", return_value={}), \
-                mock.patch.object(tl, "comments", return_value=[]), mock.patch.object(tl, "bd", return_value=mock.Mock(returncode=1)):
-            ok, why = engine.reclaim("o67g", str(self.wt))
+                self.store.stub(comments=[]), self.store.stub(bd_fn=lambda *a, **k: mock.Mock(returncode=1)):
+            ok, why = engine.reclaim("o67g", str(self.wt), store=self.store)
         self.assertFalse(ok)
         self.assertIn("changed hands", why)
 

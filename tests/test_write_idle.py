@@ -73,7 +73,8 @@ class WriteFollowsTheWorker(unittest.TestCase):
         (runs / "run1.json").write_text(json.dumps({"id": "run1", "transcript": str(self.d / "session.jsonl")}))
         for p in (mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(self.d / "cfg"), "APPDATA": str(self.d / "cfg")}),
                   mock.patch.object(lcall, "POLL", 0.02), mock.patch.object(procs, "STOP_GRACE", 1),
-                  mock.patch.object(procs, "PROOF_TERM", 0.5), mock.patch.object(procs, "PROOF_KILL", 1)):
+                  mock.patch.object(procs, "PROOF_TERM", 0.5), mock.patch.object(procs, "PROOF_KILL", 1),
+                  mock.patch.object(procs, "REAP_WAIT", 0.5), mock.patch.object(procs, "EXIT_WAIT", 0.5)):
             p.start()
             self.addCleanup(p.stop)
         self.clock, self.warns = Clock(), []

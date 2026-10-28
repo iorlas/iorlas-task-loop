@@ -178,6 +178,7 @@ STOP_GRACE = 10  # seconds route.py gets to stop its worker after a SIGTERM, bef
 
 
 PROOF_TERM, PROOF_KILL = 5, 10  # seconds a worker that outlived the stop gets after a SIGTERM, then after a SIGKILL
+REAP_WAIT, EXIT_WAIT = 5, 2  # seconds to reap the killed delegate process, then to see the worker's pid gone (tests shrink both)
 
 
 def own_ids():
@@ -267,8 +268,8 @@ def stop_tree(p, log=None, worker=None):
         with contextlib.suppress(RuntimeError):
             send_pid(pid, 9)
     with contextlib.suppress(Exception):
-        p.wait(timeout=5)
-    end, left = time.time() + 2, same
+        p.wait(timeout=REAP_WAIT)
+    end, left = time.time() + EXIT_WAIT, same
     while left and time.time() < end:
         left = [x for x in left if tl.proc_alive(x[0], x[2])]
         if left:
@@ -364,8 +365,8 @@ def stop_named(p, log, w):
     with contextlib.suppress(RuntimeError):  # the worker route.py named: still that process, still in that group, never ours
         send_group(w["pgid"], 9, pid=w["pid"], start=w.get("start") or "")
     with contextlib.suppress(Exception):
-        p.wait(timeout=5)
-    end = time.time() + 2
+        p.wait(timeout=REAP_WAIT)
+    end = time.time() + EXIT_WAIT
     while time.time() < end and tl.proc_alive(w["pid"], w.get("start") or ""):
         time.sleep(0.05)
     if not tl.proc_alive(w["pid"], w.get("start") or ""):
