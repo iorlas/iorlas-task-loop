@@ -37,6 +37,7 @@ import clock as clocks  # noqa: E402
 import engine  # noqa: E402
 import loop  # noqa: E402
 import tl  # noqa: E402
+from support import tlbd  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "dev"))
 import release  # noqa: E402
@@ -112,9 +113,7 @@ class Invariants(test_loop.Base):
     def tracker(self, beads=(), slots=0, cfg=None):
         (self.repo / ".task-loop.json").write_text(json.dumps({"slots": {"count": slots}, "engine": cfg or {}}))
         self.bd = SafeBd(beads, slots=slots)
-        p = mock.patch.object(tl, "bd", side_effect=self.bd)
-        p.start()
-        self.addCleanup(p.stop)
+        tlbd.install(self, self.bd)
         self.cfg = tl.profile_slots(self.repo_s)
         return self.bd
 

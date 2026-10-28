@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from support import tlbd  # noqa: E402
 import tl  # noqa: E402
 
 
@@ -260,9 +261,7 @@ class SlotReset(Base):
         self.cwd = os.getcwd()
         os.chdir(self.repo)
         # a reset is about git; the slot-bead lookup gets an empty bd, so no real bd (absent on CI) is needed
-        no_beads = mock.patch.object(tl, "bd", return_value=subprocess.CompletedProcess([], 0, "[]", ""))
-        no_beads.start()
-        self.addCleanup(no_beads.stop)
+        tlbd.install(self, result=tlbd.done("[]"))
 
     def tearDown(self):
         os.chdir(self.cwd)

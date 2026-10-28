@@ -16,6 +16,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # python3 -m unittest tests.test_areas, from the repo root
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from support import tlbd  # noqa: E402
+from support.fakes import FakeBeadStore  # noqa: E402
 from test_loop import bead, rec  # noqa: E402
 from test_slots import Slots  # noqa: E402
 
@@ -265,7 +267,7 @@ class Line(Slots):
             th.start()
             th.join(0.3)
             return real_claim(repo, bead_id)
-        with mock.patch.object(tl, "bd", side_effect=bd_13), mock.patch.object(tl, "claim_slot", side_effect=claim):
+        with tlbd.bd_boundary(bd_13), mock.patch.object(tl, "claim_slot", side_effect=claim):
             got = tl.take_slot(str(self.repo), self.cfg, "any")
         won["thread"].join(60)
         self.assertEqual(sum(1 for x in (got, won.get("hand")) if x), 1, (got, won))
@@ -303,10 +305,13 @@ class Line(Slots):
             tl.drop_ticket(t)
 
     def test_a_bead_that_cannot_be_read_waits_as_a_p2(self):
+        store = FakeBeadStore()
         for boom in (IndexError("[]"), SystemExit("no bd"), KeyError("x")):
-            with mock.patch.object(tl, "show", side_effect=boom):
+            def unreadable(bead, cwd=None, _boom=boom):
+                raise _boom
+            with tlbd.bd_boundary(store=store), store.stub(show_fn=unreadable):
                 self.assertEqual(tl.bead_priority(str(self.repo), "x-1"), 2)
-        with mock.patch.object(tl, "show", return_value={"priority": 0}):
+        with tlbd.bd_boundary(store=store), store.stub(show={"priority": 0}):
             self.assertEqual(tl.bead_priority(str(self.repo), "x-1"), 0)
 
     def test_equal_priorities_keep_arrival_order_and_an_unreadable_priority_is_p2(self):
@@ -392,7 +397,7 @@ class ReviewFixes(AreasBase):
 
         def taker(name):
             won[name] = tl.take_slot(repo, cfg, name)
-        with mock.patch.object(tl, "bd", side_effect=bd_pause), \
+        with tlbd.bd_boundary(bd_pause), \
                 mock.patch.object(tl, "actor", side_effect=lambda: threading.current_thread().name):
             p2 = threading.Thread(target=taker, args=("P2",), name="P2")
             p2.start()
@@ -427,9 +432,11 @@ class ReviewFixes(AreasBase):
     def test_an_unreadable_holder_makes_every_area_busy_and_is_logged(self):
         bd = self.lanes({"x-1": [], "x-2": [], "x-3": [], "x-4": []}, {"x-1": "live", "x-2": "live", "x-3": "shell"})
         self.running(bd, "x-1")
-        real = tl.show
-        err = io.StringIO()
-        with mock.patch.object(tl, "show", side_effect=lambda i, **kw: {} if i == "x-1" else real(i, **kw)), \
+        real_bd, err = tl.bd, io.StringIO()
+
+        def bd_x1_unreadable(*a, **kw):  # bd answers nothing parseable for x-1 only
+            return tlbd.done("") if a[:2] == ("show", "x-1") else real_bd(*a, **kw)
+        with tlbd.bd_boundary(bd_x1_unreadable), \
                 mock.patch.object(loop.engine, "say", side_effect=err.write):
             ids, skipped = self.order()
         self.assertEqual(ids, ["x-4"])  # a bead of no area is unrestricted

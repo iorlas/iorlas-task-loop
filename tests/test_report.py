@@ -17,6 +17,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from support import tlbd  # noqa: E402
+from support.fakes import FakeBeadStore  # noqa: E402
 import loop  # noqa: E402
 import report  # noqa: E402
 import tl  # noqa: E402
@@ -170,11 +172,9 @@ class LostWork(Base):
         self.assertEqual(set(self.by_class(self.lost({"t-1": "?"}))), {"unknown"})
 
     def test_bd_failing_reads_as_unknown(self):
-        failed = subprocess.CompletedProcess([], 1, "", "dolt: connection refused")
-        with mock.patch.object(tl, "bd", return_value=failed):
+        with tlbd.bd_boundary(result=tlbd.done(returncode=1, stderr="dolt: connection refused")):
             self.assertEqual(report.bead_status("t-1", str(self.repo)), "?")
-        missing = subprocess.CompletedProcess([], 1, "", "Error: issue t-1 not found")
-        with mock.patch.object(tl, "bd", return_value=missing):
+        with tlbd.bd_boundary(result=tlbd.done(returncode=1, stderr="Error: issue t-1 not found")):
             self.assertIsNone(report.bead_status("t-1", str(self.repo)))
 
     def test_a_slot_resets_wip_branch_is_lost(self):
@@ -305,8 +305,9 @@ class Scorecard(Base):
 
     def test_the_cli_prints_a_table_and_a_verdict_and_json(self):
         args = ["report", "--repo", str(self.repo), "--since", "2026-10-21T06:00", "--until", "2026-10-21T09:20"]
-        with mock.patch.object(report, "default_base", return_value="main"), \
-                mock.patch.object(tl, "comments", lambda b, cwd=None: self.comments.get(b, [])), \
+        store = FakeBeadStore()
+        store.notes = {b: list(c) for b, c in self.comments.items()}
+        with mock.patch.object(report, "default_base", return_value="main"), tlbd.bd_boundary(store=store), \
                 mock.patch.object(report, "bead_status", lambda b, repo: self.status.get(b)), \
                 mock.patch.object(report, "run_alive", lambda bead: bead == "t-9"):
             out = io.StringIO()

@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import call_state as callstate  # noqa: E402
 import delegate_link as dl  # noqa: E402
 from support import fake_route  # noqa: E402
+from support import tlbd  # noqa: E402
 import loop  # noqa: E402
 import netgate  # noqa: E402
 import outcome as oc  # noqa: E402
@@ -352,7 +353,7 @@ class Gate(unittest.TestCase):
 
     def test_nothing_is_written_back(self):
         self.gate.hold("x-1", "worker")
-        with mock.patch.object(tl, "bd") as bd, mock.patch.object(Path, "write_text") as wt:
+        with tlbd.bd_boundary() as bd, mock.patch.object(Path, "write_text") as wt:
             self.gate.ready("x-1")
         bd.assert_not_called()
         wt.assert_not_called()

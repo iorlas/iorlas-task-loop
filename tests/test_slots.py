@@ -19,6 +19,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # python3 -m unittest tests.test_slots, from the repo root
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from support import tlbd  # noqa: E402
 from test_loop import LoopBase, rec  # noqa: E402
 
 import engine  # noqa: E402  (test_loop put skills/task-loop on sys.path)
@@ -455,7 +456,7 @@ class HoldRaces(Slots):
                 self.assertEqual(holds, [])
                 racing.th = th
             return r
-        with mock.patch.object(tl, "bd", side_effect=racing):
+        with tlbd.bd_boundary(racing):
             tl.release_slot(str(self.repo), "s1")
         racing.th.join(10)
         self.assertEqual(holds, [0])

@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from support import tlbd  # noqa: E402
 import loop  # noqa: E402
 import netgate  # noqa: E402
 import tl  # noqa: E402
@@ -124,9 +125,7 @@ class Base(unittest.TestCase):
 
     def fake(self, *beads, **kw):
         f = FakeBd(beads, **kw)
-        p = mock.patch.object(tl, "bd", side_effect=f)
-        p.start()
-        self.addCleanup(p.stop)
+        tlbd.install(self, f)
         return f
 
 
@@ -727,7 +726,7 @@ class Loop(LoopBase):
                 if a[:1] == ("update",) and "--claim" in a and a[1] == "x-1":
                     _claims.append(tl.actor())
                 return _bd(*a, **kw)
-            with mock.patch.object(tl, "bd", side_effect=spy):
+            with tlbd.bd_boundary(spy):
                 self.run_loop()
             seen.append(claims[0])
             os.environ.pop("TASK_LOOP_ACTOR", None)

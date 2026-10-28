@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from support import tlbd  # noqa: E402
 import engine  # noqa: E402
 import tl  # noqa: E402
 
@@ -223,7 +224,7 @@ class DoctorBeads(unittest.TestCase):
                  {"id": "x-3", "description": "study 84 s.2: facts inline", "labels": ["facts-inline"]},
                  {"id": "x-4", "acceptance_criteria": "matches 79-test-impact-and-land-gate.md"},
                  {"id": "x-5", "issue_type": "epic", "description": "study 49"}]
-        with mock.patch.object(tl, "bd", return_value=mock.Mock(stdout=json.dumps(beads))):
+        with tlbd.bd_boundary(result=tlbd.done(json.dumps(beads))):
             out = tl.bead_lint_warnings("/work/repo")
         self.assertEqual([w.split(":")[0] for w in out], ["bead x-1", "bead x-4"])
         self.assertTrue(all("needs inlined facts" in w for w in out))

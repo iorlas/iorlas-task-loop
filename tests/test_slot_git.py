@@ -20,6 +20,7 @@ import test_engine as te  # noqa: E402
 import tl  # noqa: E402
 import delegate_link as dl  # noqa: E402
 from support import fake_route  # noqa: E402
+from support.builders import make_engine  # noqa: E402
 
 
 def sh(*a, cwd):
@@ -65,12 +66,9 @@ class SlotGitTest(unittest.TestCase):
         before = self.decoy_state()
         closed, blocked = [], []
         script = fake_route.Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
-        with mock.patch.object(tl, "bd", return_value=mock.Mock(returncode=0, stdout="", stderr="")), \
-                mock.patch.object(tl, "show", return_value=te.BEAD), mock.patch.object(tl, "comments", return_value=[]), \
-                mock.patch.object(tl, "cmd_close", side_effect=lambda a: closed.append(a.reason) or 0), \
-                mock.patch.object(tl, "cmd_block", side_effect=lambda a: blocked.append(a.why) or 0), \
-                te.delegate_stack(script):
-            eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        with mock.patch.object(tl, "cmd_close", side_effect=lambda a: closed.append(a.reason) or 0), \
+                mock.patch.object(tl, "cmd_block", side_effect=lambda a: blocked.append(a.why) or 0):
+            eng = make_engine(self.wt, script=script)
             rc = eng.run()
         self.assertEqual(rc, 2)
         self.assertTrue(eng.why.startswith("tree: core.worktree is set"), eng.why)
@@ -165,13 +163,10 @@ class SlotGitTest(unittest.TestCase):
         script = Planting({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         before = self.decoy_state()
         landed = []
-        with mock.patch.object(tl, "bd", return_value=mock.Mock(returncode=0, stdout="", stderr="")), \
-                mock.patch.object(tl, "show", return_value=te.BEAD), mock.patch.object(tl, "comments", return_value=[]), \
-                mock.patch.object(tl, "cmd_close", side_effect=lambda a: landed.append(1) or 0), \
+        with mock.patch.object(tl, "cmd_close", side_effect=lambda a: landed.append(1) or 0), \
                 mock.patch.object(tl, "cmd_land", side_effect=lambda a: landed.append(1) or 0), \
-                mock.patch.object(tl, "cmd_block", return_value=0), \
-                te.delegate_stack(script):
-            eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+                mock.patch.object(tl, "cmd_block", return_value=0):
+            eng = make_engine(self.wt, script=script)
             rc = eng.run()
         self.assertEqual(rc, 2)
         self.assertIn("after write", eng.why)

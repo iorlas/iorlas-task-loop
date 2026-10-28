@@ -10,6 +10,8 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "task-loop"))
 from support import fake_route  # noqa: E402
+from support import tlbd  # noqa: E402
+from support.fakes import FakeBeadStore  # noqa: E402
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import test_engine as te  # noqa: E402
 from test_engine import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint, tl  # noqa: E402,F401
@@ -1274,15 +1276,13 @@ class Claims(StagesTest):
 
     @te.no_repo
     def test_parking_a_bead_lets_go_of_its_claim(self):
-        calls = []
         for holder, expect in (("tl-2be89f88", ("update", "t-1", "--status", "blocked", "--assignee", "")),
                                ("denis", ("update", "t-1", "--status", "blocked")), ("", ("update", "t-1", "--status", "blocked"))):
-            calls.clear()
-            with mock.patch.object(tl, "bd", side_effect=lambda *a, **k: calls.append(a) or mock.Mock(returncode=0, stdout="", stderr="")), \
-                    mock.patch.object(tl, "show", return_value={"assignee": holder}), \
+            store = FakeBeadStore().put({"id": "t-1", "assignee": holder})
+            with tlbd.bd_boundary(store=store), \
                     mock.patch.object(tl, "event"), mock.patch.object(tl, "provenance"):
                 self.assertEqual(real_cmd_block(mock.Mock(id="t-1", why="stuck")), 0)
-            self.assertEqual(calls[0], expect, holder)  # a person's own claim stays theirs
+            self.assertEqual(store.said("update")[0], expect, holder)  # a person's own claim stays theirs
 
     def test_a_plan_with_no_stages_goes_back_to_the_planner_once(self):
         empty = dict(PLAN, stages=[])
@@ -1780,7 +1780,7 @@ class Contracts(StagesTest):
                 return (mock.Mock(returncode=0, stdout="[{}]", stderr="") if a[1] == "b-hidden"
                         else mock.Mock(returncode=1, stdout="", stderr="Error: no issue found matching %s" % a[1]))
             return mock.Mock(returncode=0, stderr="", stdout=json.dumps([{"id": "b-open", "status": "open"}, {"id": "b-closed", "status": "closed"}]))
-        with mock.patch.object(tl, "bd", side_effect=fake_bd):
+        with tlbd.bd_boundary(fake_bd):
             closed = tl.close_stale_asks(every=0)
             self.assertEqual(sorted(closed), ["b-closed", "b-gone"])
             self.assertEqual(tl.close_stale_asks(), [])  # throttled

@@ -11,6 +11,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from support import tlbd  # noqa: E402
 import reflect_digest as rd  # noqa: E402
 import tl  # noqa: E402
 
@@ -39,11 +40,11 @@ class Base(unittest.TestCase):
         self.traces = tl.config_dir() / "traces.jsonl"
         self.calls, self.open_rows, self.status, self.fail_create = [], [], {}, False
         self.n = 0
-        self.patch = mock.patch.object(tl, "bd", self.bd)
-        self.patch.start()
+        self.patch = tlbd.bd_boundary(self.bd)
+        self.patch.__enter__()
 
     def tearDown(self):
-        self.patch.stop()
+        self.patch.__exit__(None, None, None)
         self.env.stop()
         self.tmp.cleanup()
 
