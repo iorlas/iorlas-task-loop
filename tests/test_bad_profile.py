@@ -74,5 +74,54 @@ class BadProfile(unittest.TestCase):
         self.assertEqual(profiles.red_rows([str(self.bad)], but=str(self.bad)), [])
 
 
+STALE: dict[str, object] = {"engine": {"checks": [{"id": "t", "cmd": "just test"}]}}  # a string check: bad
+GOOD: dict[str, object] = {"engine": {"checks": [{"id": "t", "argv": ["just", "test"]}]}}
+
+
+class SourceIsTheBaseCommit(unittest.TestCase):
+    """The loop reads the profile off the base commit; doctor must read the same one, not a stale checkout."""
+
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        patch = mock.patch.dict(os.environ, GIT_ENV)
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.repo = Path(tmp.name).resolve() / "r"
+        subprocess.run(["git", "init", "-q", "-b", "main", str(self.repo)], check=True, env=os.environ)
+
+    def commit(self, profile: dict[str, object], base: bool) -> None:
+        (self.repo / ".task-loop.json").write_text(json.dumps(profile))
+        subprocess.run(["git", "-C", str(self.repo), "add", "-A"], check=True, env=os.environ)
+        subprocess.run(["git", "-C", str(self.repo), "commit", "-qm", "x"], check=True, env=os.environ)
+        if base:
+            subprocess.run(["git", "-C", str(self.repo), "update-ref", "refs/remotes/origin/main", "HEAD"], check=True, env=os.environ)
+
+    def sha7(self) -> str:
+        return subprocess.run(["git", "-C", str(self.repo), "rev-parse", "--short=7", "origin/main"], check=True, env=os.environ,
+                              capture_output=True, text=True).stdout.strip()
+
+    def test_a_stale_working_tree_under_a_good_base_commit_is_no_red_row(self) -> None:
+        self.commit(GOOD, base=True)
+        (self.repo / ".task-loop.json").write_text(json.dumps(STALE))
+        self.assertEqual(profiles.red_row(self.repo), "")
+        says: list[str] = []
+        self.assertFalse(profiles.report(str(self.repo), self.repo / "none.json", says.append))
+        self.assertEqual(says, [f"profile: {self.repo} read from base {self.sha7()}"])
+
+    def test_a_bad_base_commit_is_a_row_naming_the_source(self) -> None:
+        self.commit(STALE, base=True)
+        (self.repo / ".task-loop.json").write_text(json.dumps(GOOD))
+        row = profiles.red_row(self.repo)
+        self.assertTrue(row.startswith("RED "), row)
+        self.assertIn(f"(base {self.sha7()})", row)
+
+    def test_no_base_commit_falls_back_to_the_working_tree(self) -> None:
+        self.commit(GOOD, base=False)
+        self.assertEqual(profiles.red_row(self.repo), "")
+        (self.repo / ".task-loop.json").write_text(json.dumps(STALE))
+        self.assertIn("(working tree)", profiles.red_row(self.repo))
+
+
 if __name__ == "__main__":
     unittest.main()
