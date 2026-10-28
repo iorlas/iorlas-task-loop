@@ -5,6 +5,7 @@ import _thread
 import json
 import os
 import sys
+import signal
 import threading
 import time
 import unittest
@@ -265,6 +266,7 @@ class TraceTelemetry(te.EngineTest):
         eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), verbose=False, store=self.store)
         started = self.wt / "child-started"
         stop_waiting = threading.Event()
+        self.addCleanup(signal.signal, signal.SIGINT, signal.signal(signal.SIGINT, signal.default_int_handler))  # a background shell ignores SIGINT
 
         def interrupt_once_the_child_runs():  # the command itself says it runs: the interrupt cannot land before the child exists
             while not started.exists() and not stop_waiting.wait(0.005):
