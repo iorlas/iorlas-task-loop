@@ -13,6 +13,7 @@ from support import fake_route  # noqa: E402
 from support import tlbd  # noqa: E402
 from support.fakes import FakeBeadStore  # noqa: E402
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from support.builders import make_engine  # noqa: E402
 import test_engine as te  # noqa: E402
 from test_engine import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint, tl  # noqa: E402,F401
 
@@ -109,8 +110,8 @@ class Deferred(StagesTest):
 
     LEFT = [{"title": "File the table and chair beads", "why": "the sheet lists them; the engine files them"}]
 
-    def eng_(self):
-        return engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
+    def eng_(self, **attrs):
+        return make_engine(self.wt, store=self.store, attrs=attrs)
 
     def test_the_review_prompt_lists_what_the_plan_set_aside(self):
         rc, s = self.run_engine({"plan": [dict(PLAN, leftovers=self.LEFT)], "write": [WRITE], "review": [CLEAN]})
@@ -136,8 +137,7 @@ class Deferred(StagesTest):
         self.assertFalse(e.engine_does("The beads cover all nine objects"))  # a claim about the result goes to the verifier
 
     def test_an_owner_item_with_an_owner_review_bead_in_the_leftovers_lands_unverified(self):
-        e = self.eng_()
-        e.leftovers = [{"title": "Owner review of the retuned knob values and placeholder art", "why": "iqad"}]
+        e = self.eng_(leftovers=[{"title": "Owner review of the retuned knob values and placeholder art", "why": "iqad"}])
         item = {"what": "Owner sign-off on the retuned knob values and the placeholder art", "kind": "owner_decision"}
         self.assertTrue(e.backed_by_leftover(item["what"]))
         self.assertEqual(e.engine_steps([item]), [])
@@ -150,8 +150,7 @@ class Deferred(StagesTest):
         self.assertFalse(e.backed_by_leftover(item["what"]))
 
     def test_beads_in_other_sentences_are_not_the_filing_step(self):
-        e = self.eng_()
-        e.leftovers = [{"title": "x", "why": "y"}]
+        e = self.eng_(leftovers=[{"title": "x", "why": "y"}])
         for w in ("The config file lists the bead ids", "No open beads remain in the epic", "Open the bead and read it"):
             self.assertFalse(e.engine_does(w), w)
 
@@ -160,9 +159,10 @@ class Scope(StagesTest):
     """13.5: a checkable note outside the done-when is a follow-up, not a verify gap."""
 
     def test_an_item_outside_the_done_when_is_filed_not_verified(self):
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
-        e.scope = "Acceptance Criteria\n- the soak passes with three lifers across five seeds"
-        e.plan_data = dict(PLAN)
+        e = make_engine(self.wt, store=self.store, attrs={
+            "scope": "Acceptance Criteria\n- the soak passes with three lifers across five seeds",
+            "plan_data": dict(PLAN),
+            })
         inside = {"what": "the soak holds with three lifers on seed 4", "kind": "checkable"}
         outside = {"what": "Sit To Stand and Laying Sleeping poses were not probed", "kind": "checkable"}
         taste = {"what": "Sit To Stand and Laying Sleeping poses look right", "kind": "taste"}
@@ -177,9 +177,7 @@ class Scope(StagesTest):
         self.assertEqual(e.leftovers, [])
 
     def test_non_latin_text_is_compared_and_a_note_is_filed_once(self):
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
-        e.scope = "Done when: суп варится три минуты"
-        e.plan_data = dict(PLAN)
+        e = make_engine(self.wt, store=self.store, attrs={"scope": "Done when: суп варится три минуты", "plan_data": dict(PLAN)})
         inside = {"what": "суп варится три минуты на плите", "kind": "checkable"}
         outside = {"what": "wallpaper colour not probed", "kind": "checkable"}
         self.assertEqual(e.out_of_scope([inside, outside]), [inside])
@@ -296,8 +294,8 @@ class RepeatedChecks(StagesTest):
 class SharedNotes(StagesTest):
     """13.8: the tasks of a repo share what is running, what landed and which tests are flaky."""
 
-    def eng_(self):
-        return engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
+    def eng_(self, **attrs):
+        return make_engine(self.wt, store=self.store, attrs=attrs)
 
     def test_flakes_are_kept_per_repo_once_and_listed_for_the_next_prompts(self):
         e = self.eng_()
@@ -661,11 +659,10 @@ class VisualWork(StagesTest):
         self.assertIn("hue gradient", judges[1])
 
     def test_only_the_engines_own_pictures_count_with_a_shot_table(self):
-        e = engine.Engine("t-1", str(self.wt), dict(engine.load_cfg(str(self.wt)), shot_table="shots.json"), store=self.store)
+        e = make_engine(self.wt, cfg={"shot_table": "shots.json"}, store=self.store, attrs={"rendered_names": {"main.png"}})
         e.evidence_dir.mkdir(parents=True, exist_ok=True)
         (e.evidence_dir / "writer.png").write_bytes(b"x")
         (e.evidence_dir / "main.png").write_bytes(b"x")
-        e.rendered_names = {"main.png"}
         self.assertEqual(e.shots(), ["main.png"])
 
     @te.POSIX_CHECK
@@ -693,10 +690,15 @@ class VisualWork(StagesTest):
         self.assertEqual(self.eng.render_stale, False)
 
     def test_a_resumed_stage_keeps_its_render_rounds(self):
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
-        e.look_done, e.look_prev, e.rendered_names, e.last_reqs, e.render_stale = 1, [{"why": "x", "where": ""}], {"a.png"}, self.SHOTS, True
-        e.plan_data = dict(PLAN)
-        e.branch = "task/t-1"
+        e = make_engine(self.wt, store=self.store, attrs={
+            "look_done": 1,
+            "look_prev": [{"why": "x", "where": ""}],
+            "rendered_names": {"a.png"},
+            "last_reqs": self.SHOTS,
+            "render_stale": True,
+            "plan_data": dict(PLAN),
+            "branch": "task/t-1",
+            })
         e.git("checkout", "-q", "-b", "task/t-1")
         e.save_checkpoint(stage=0, rounds=0, n=1, feedback="", step="write")
         ck = json.loads(e.checkpoint_path().read_text())
@@ -711,10 +713,11 @@ class VisualWork(StagesTest):
         self.assertNotIn("look-objective:", s.prompts[0])
 
     def test_the_gallery_data_lands_in_the_owner_look_beads_metadata(self):
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
-        e.plan_data = dict(PLAN, cases=[{"criterion": "it reads well", "check": "", "class": "taste"}])
-        e.look_paths = ["design/look-reviews/t-1/main.png"]
-        e.look_notes = ["the main screen shows"]
+        e = make_engine(self.wt, store=self.store, attrs={
+            "plan_data": dict(PLAN, cases=[{"criterion": "it reads well", "check": "", "class": "taste"}]),
+            "look_paths": ["design/look-reviews/t-1/main.png"],
+            "look_notes": ["the main screen shows"],
+            })
         sent = []
         old = {"metadata": {"looks": [
             {"id": "t-0#1", "bead": "t-0", "title": "other", "shots": [], "status": "open"},
@@ -882,17 +885,16 @@ class Ledger(StagesTest):
         self.assertIn("unmet items dropped", self.eng.log_path.read_text())
 
     def test_a_claim_about_the_code_that_shares_words_with_a_deferred_item_is_not_that_item(self):
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
-        e.plan_data = dict(PLAN, leftovers=[{"title": "Add tests for parser edge cases", "why": "later"}])
+        e = make_engine(self.wt, store=self.store, attrs={
+            "plan_data": dict(PLAN, leftovers=[{"title": "Add tests for parser edge cases", "why": "later"}]),
+            })
         self.assertEqual(e.ledger_route("parser edge cases are not handled"), "")
         self.assertEqual(e.ledger_route("The parser does not handle edge cases such as empty input or nested quotes"), "")
         self.assertEqual(e.ledger_route("Add tests for the parser edge cases"), "leftover")
         self.assertEqual(e.ledger_route("A follow-up bead for tests of parser edge cases is not filed"), "leftover")
 
     def test_a_defect_the_verifier_found_is_not_filed_away_by_the_ledger(self):
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
-        e.plan_data = self.plan()
-        e.unchecked = []
+        e = make_engine(self.wt, store=self.store, attrs={"plan_data": self.plan(), "unchecked": []})
         what = "Import the chosen prefabs and add object rows"
         left = e.route_left([{"what": what, "kind": "checkable", "why": "found wrong: the rows are missing"}])
         self.assertEqual([u["what"] for u in left], [what])  # still a defect: not unverified, not settled
@@ -914,8 +916,7 @@ class Ledger(StagesTest):
 
     def test_an_unrelated_checkable_item_is_still_verified(self):
         item = {"what": "The volume slider saves its value across restarts on every platform", "kind": "checkable", "source": ""}
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
-        e.plan_data = self.plan()
+        e = make_engine(self.wt, store=self.store, attrs={"plan_data": self.plan()})
         self.assertEqual(e.ledger_route(item["what"]), "")
         self.assertEqual(e.engine_steps([dict(item)]), [item])
 
@@ -934,8 +935,7 @@ class Ledger(StagesTest):
         self.assertEqual(lint.ledger_problems(self.plan()), [])
 
     def test_ledgered_cases_run_no_command(self):
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
-        e.plan_data = self.plan()
+        e = make_engine(self.wt, store=self.store, attrs={"plan_data": self.plan()})
         self.assertEqual(e.case_checks(), [HAS_F])
         self.assertEqual(lint.plan_checks(self.plan()), [HAS_F] + [c for st in PLAN["stages"] for c in st["checks"] if c != HAS_F])
 
@@ -1075,18 +1075,15 @@ class ResumeCount(StagesTest):
 
     def test_a_rebase_onto_a_new_base_starts_the_plan_count_again(self):
         self.behind_branch()
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
+        e = make_engine(self.wt, store=self.store, attrs={"planned": 3, "plan_log": [{"mode": "plan", "why": "x"}] * 3})
         e.git("checkout", "-q", "task/t-1")
-        e.planned, e.plan_log = 3, [{"mode": "plan", "why": "x"}] * 3
         self.assertEqual(e.rebase_onto_base(), "rebased")
         self.assertEqual((e.planned, e.rebase_resets), (0, 1))
         self.assertEqual(e.plan_log[-1]["counted"], False)  # the history stays, with a note
         self.assertEqual(e.rebase_onto_base(), "")  # nothing behind now
 
     def test_the_count_starts_again_after_a_rebase_at_most_twice_per_bead(self):
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
-        e.rebase_resets = engine.MAX_REBASE_RESETS
-        e.planned = 3
+        e = make_engine(self.wt, store=self.store, attrs={"rebase_resets": engine.MAX_REBASE_RESETS, "planned": 3})
         self.behind_branch()
         e.git("checkout", "-q", "task/t-1")
         self.assertEqual(e.rebase_onto_base(), "rebased")
@@ -1214,9 +1211,8 @@ class ResumeCount(StagesTest):
 
     def test_a_branch_that_cannot_be_kept_aside_is_not_reset(self):
         self.behind_branch(conflict=True)
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
+        e = make_engine(self.wt, store=self.store, attrs={"branch": "task/t-1"})
         e.git("checkout", "-q", "task/t-1")
-        e.branch = "task/t-1"
         before = e.git("rev-parse", "HEAD")
         real = e.sh
         e.sh = lambda cmd, **kw: (1, "refused") if cmd[:3] == ["git", "branch", "-m"] else real(cmd, **kw)
@@ -1228,11 +1224,11 @@ class ResumeCount(StagesTest):
 
     def test_a_fresh_start_clears_what_the_old_attempt_left(self):
         self.behind_branch(conflict=True)
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
+        e = make_engine(self.wt, store=self.store, attrs={
+            "branch": "task/t-1", "unverified": [{"what": "x"}], "look_paths": ["p.png"], "fixes": 2, "replans": 2, "rendered_names": {"a.png"},
+            "verify_answer": "Use the old format"})
         e.git("checkout", "-q", "task/t-1")
-        e.branch = "task/t-1"
-        e.unverified, e.look_paths, e.handoff["rounds"], e.fixes, e.replans, e.rendered_names = [{"what": "x"}], ["p.png"], [{"r": 1}], 2, 2, {"a.png"}
-        e.verify_answer = "Use the old format"
+        e.handoff["rounds"] = [{"r": 1}]
         self.assertTrue(e.start_again_on_base("x"))
         self.assertEqual((e.unverified, e.look_paths, e.handoff["rounds"], e.fixes, e.replans, e.rendered_names), ([], [], [], 0, 0, set()))
         self.assertEqual(e.verify_answer, "Use the old format")  # the owner's word still goes to the planner
@@ -1334,9 +1330,10 @@ class Claims(StagesTest):
     def test_no_reflection_for_a_paused_run_or_when_switched_off(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})  # reflect off in the harness
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])
-        e = engine.Engine("t-1", str(self.wt), dict(engine.load_cfg(str(self.wt)), reflect=True), store=self.store)
-        e.route = "/fake/route.py"
-        e.sessions = [{"node": "plan"}]
+        e = make_engine(self.wt, cfg=dict(reflect=True), store=self.store, attrs={
+            "route": "/fake/route.py",
+            "sessions": [{"node": "plan"}],
+            })
         self.assertIsNone(e.reflect_run("failed", "failed: x"))  # a run that only planned
         e.sessions = [{"node": "plan"}, {"node": "write"}]
         self.assertIsNone(e.reflect_run("blocked", "paused: no lane for write until 04:00"))

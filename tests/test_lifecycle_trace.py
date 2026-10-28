@@ -21,6 +21,7 @@ import tl
 ROOT = te.ROOT
 sys.path.insert(0, str(ROOT / "skills" / "task-loop" / "dash"))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from support.builders import make_engine  # noqa: E402
 import server  # noqa: E402
 
 
@@ -339,8 +340,7 @@ class TraceTelemetry(unittest.TestCase):
         self.assertGreaterEqual(kill["last_event_t"] - kill["started_t"], 0.5)
 
     def test_hung_freeze_rechecks_activity_inside_the_lock(self):
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False, store=self.store)
-        eng.last_event_t, eng._event_frozen, eng.killed, eng.kill_why = 100.0, False, False, ""
+        eng = make_engine(self.wt, verbose=False, store=self.store, attrs={"last_event_t": 100.0, "_event_frozen": False, "killed": False, "kill_why": ""})
 
         class LateActivityLock:
             def __enter__(self):

@@ -26,6 +26,7 @@ import delegate_link as dl  # noqa: E402,F401
 from clock import FakeClock  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from support.builders import make_engine  # noqa: E402
 import engine  # noqa: E402
 import seams  # noqa: E402
 from support.fakes import FakeBeadStore  # noqa: E402
@@ -383,10 +384,8 @@ class EngineTest(unittest.TestCase):
                                   "files": []}, "s")
         self.assertEqual(res[0]["exit"], 0)
 
-    def checks_engine(self, **cfg):
-        c = engine.load_cfg(str(self.wt))
-        c.update(cfg)
-        return engine.Engine("t-1", str(self.wt), c, store=self.store)
+    def checks_engine(self, attrs=None, **cfg):
+        return make_engine(self.wt, cfg=cfg, store=self.store, attrs=attrs)
 
     def test_checks_run_in_groups_fastest_first_and_stop_at_a_red_group(self):
         eng = self.checks_engine(checks=[{"id": "unit", "cmd": PY + ' -c "pass"', "group": "tests"},
@@ -519,8 +518,9 @@ class EngineTest(unittest.TestCase):
         eng = self.checks_engine(budget_min=5, budget_min_by_label={"unity": 300})
         eng.t0 -= 8 * 60
         self.assertRaises(engine.Blocked, eng.budget_check)
-        eng.labels = ["unity"]
-        eng.budget_check()
+        labelled = self.checks_engine(attrs={"labels": ["unity"]}, budget_min=5, budget_min_by_label={"unity": 300})
+        labelled.t0 -= 8 * 60
+        labelled.budget_check()
 
     # tl-bxk.10.17: real lines from lifesim check logs, and the messages the bead names
     COMPILE = ["Assets/Foo.cs(180,32): error CS0246: The type or namespace name 'X' could not be found",
@@ -643,7 +643,6 @@ class EngineTest(unittest.TestCase):
     def test_a_land_lock_wait_is_not_budget(self):
         # tl-y35: 2251 s on the fake clock waiting for the land lock move the budget by exactly that
         eng = self.checks_engine(budget_min=180)
-        eng.clock = FakeClock()
         before = eng.spent_min()
 
         @contextlib.contextmanager
@@ -2279,8 +2278,7 @@ class EngineTest(unittest.TestCase):
                 go.wait(5)
         t = threading.Thread(target=holder)
         t.start()
-        while not got:
-            time.sleep(0.01)
+        self.assertTrue(until(lambda: got), "the holder never took the lock")
         threading.Timer(0.4, go.set).start()
         with eng.land_lock():
             pass
@@ -3683,12 +3681,9 @@ class LandReview(EngineTest):
     """tl-bxk.10.24 untracked files, tl-bxk.10.19 verify items the engine settles, tl-bxk.10.18 the stage diff."""
     STRAY = ["client/Assets/InitTestScene123.unity", "client/Assets/InitTestScene123.unity.meta"]
 
-    def engine_at_land(self, **cfg):
-        c = engine.load_cfg(str(self.wt))
-        c.update(cfg)
-        e = engine.Engine("t-1", str(self.wt), c, store=self.store)
-        e.plan_data = {"stages": [{"goal": "g", "files": ["f.txt", "docs/"], "checks": [], "hard": False}]}
-        return e
+    def engine_at_land(self, attrs=None, **cfg):
+        plan = {"stages": [{"goal": "g", "files": ["f.txt", "docs/"], "checks": [], "hard": False}]}
+        return make_engine(self.wt, cfg=cfg, store=self.store, attrs=dict({"plan_data": plan}, **(attrs or {})))
 
     def staged(self):
         return sorted(tl.git("diff", "--cached", "--name-only", cwd=str(self.wt)).split())
@@ -3716,15 +3711,13 @@ class LandReview(EngineTest):
 
     def test_an_untracked_file_the_writer_names_or_a_review_accepts_is_staged(self):
         self.make_files("g.txt", *self.STRAY)
-        e = self.engine_at_land()
-        e.writer_said = "I also added g.txt for the fixture"
-        e.accepted_new = [self.STRAY[0]]  # the .meta follows its file
+        e = self.engine_at_land({"writer_said": "I also added g.txt for the fixture",
+                                 "accepted_new": [self.STRAY[0]]})  # the .meta follows its file
         e.stage_all()
         self.assertEqual(self.staged(), sorted(["g.txt"] + self.STRAY))
 
     def test_writer_said_matches_the_path_or_basename_on_word_boundaries(self):
-        e = self.engine_at_land()
-        e.writer_said = "added tools/g.txt, and `h.cfg`. Not ab.md or c.txt.bak"
+        e = self.engine_at_land({"writer_said": "added tools/g.txt, and `h.cfg`. Not ab.md or c.txt.bak"})
         self.assertTrue(e.writer_names("tools/g.txt"))
         self.assertTrue(e.writer_names("other/g.txt"))  # the basename
         self.assertTrue(e.writer_names("h.cfg"))
@@ -3733,9 +3726,7 @@ class LandReview(EngineTest):
         self.assertFalse(e.writer_names("tools/g"))
 
     def test_a_replanned_first_stage_starts_from_the_current_tree_not_the_task_base(self):
-        e = self.engine_at_land()
-        e.stage_tree = "old"
-        e.amended = True
+        e = self.engine_at_land({"stage_tree": "old", "amended": True})
         with mock.patch.object(e, "tree_hash", return_value="T"), mock.patch.object(e, "save_checkpoint", side_effect=RuntimeError("stop")):
             with self.assertRaises(RuntimeError):
                 e.stage({"stages": [{"goal": "g", "files": [], "checks": [], "hard": False}]}, 0)
@@ -3743,8 +3734,7 @@ class LandReview(EngineTest):
 
     def test_untracked_ignore_globs_are_never_staged_nor_listed_even_when_a_stage_lists_the_folder(self):
         self.make_files("docs/keep.md", "docs/junk.tmp", *self.STRAY)
-        e = self.engine_at_land(untracked_ignore=["client/Assets/InitTestScene*.unity*", "*.tmp"])
-        e.accepted_new = [self.STRAY[0]]
+        e = self.engine_at_land({"accepted_new": [self.STRAY[0]]}, untracked_ignore=["client/Assets/InitTestScene*.unity*", "*.tmp"])
         e.stage_all()
         self.assertEqual(self.staged(), ["docs/keep.md"])
         kinds = e.new_by_kind()
@@ -3804,11 +3794,10 @@ class LandReview(EngineTest):
                   {"id": "unity-tests", "cmd": "just unity-tests", "group": "tests"},
                   {"id": "unity-play-tests", "cmd": "just unity-play-tests", "group": "tests"}]
 
-    def verifier(self, **cfg):
-        e = self.engine_at_land(**cfg)
-        e.unchecked, e.verified, e.transition, e.comment, e.outcome_of = [], [], mock.Mock(), mock.Mock(), mock.Mock()
-        e.brief_text, e.last_flag, e.work_summary = (lambda: "the task"), "", (lambda: "f.txt")
-        return e
+    def verifier(self, attrs=None, **cfg):
+        return self.engine_at_land(dict({
+            "unchecked": [], "verified": [], "transition": mock.Mock(), "comment": mock.Mock(), "outcome_of": mock.Mock(),
+            "brief_text": lambda: "the task", "last_flag": "", "work_summary": lambda: "f.txt"}, **(attrs or {})), **cfg)
 
     def test_items_whose_proof_is_the_gate_or_a_stage_check_are_settled_and_never_asked(self):
         # lifesim-5ban.1, 10-22 05:32: blocked on 'could not check: unity-analyzers/unity-tests/unity-play-tests'
@@ -3912,14 +3901,13 @@ class LandReview(EngineTest):
                  "log": "checks/06-tests_Sim.Properties.r2.log", "tail": "succeeded: 4"}]
         return [dict(r, **over.get(r["id"], {})) for r in rows]
 
-    def evidenced(self, checks=None):
-        e = self.verifier(checks=self.CFG_CHECKS[:2], gate="just check")
+    def evidenced(self, checks=None, attrs=None):
+        e = self.verifier(attrs, checks=self.CFG_CHECKS[:2], gate="just check")
         e.last_checks, e.checks_tree = (checks or self.engine_checks()), e.tree_hash()
         return e
 
     def test_the_yxbb6_item_is_not_settled_by_a_suite_name_but_the_brief_carries_the_evidence_and_the_skip_rule(self):
-        e = self.evidenced()
-        e.run_dir = Path("/runs/x")
+        e = self.evidenced(attrs={"run_dir": Path("/runs/x")})
         with mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="x")]}, None)) as ai:
             self.assertEqual(len(e.self_verify([{"what": self.YXBB6, "kind": "tooling"}])), 1)
         brief = ai.call_args[0][2]

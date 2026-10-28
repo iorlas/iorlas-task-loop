@@ -17,6 +17,7 @@ sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support import tlbd  # noqa: E402
+from support.waits import until  # noqa: E402
 import loop  # noqa: E402
 import netgate  # noqa: E402
 import tl  # noqa: E402
@@ -434,9 +435,7 @@ class Loop(LoopBase):
         beats = []
 
         def slow(repo, slot, bead_id):  # lifesim's agent-setup: 5-12 minutes when its inputs changed
-            t = time.time()
-            while time.time() - t < 2 and not ({("heartbeat", "x-1"), ("heartbeat", "sl-1")} <= set(bd.calls)):
-                time.sleep(0.02)
+            until(lambda: {("heartbeat", "x-1"), ("heartbeat", "sl-1")} <= set(bd.calls), limit=2.0, poll=0.02)
             beats.extend(c for c in bd.calls if c[0] == "heartbeat")
             return 0, ""
         with mock.patch.object(loop, "HEARTBEAT", 0.05), mock.patch.object(loop, "prepare", slow):

@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import test_engine as T  # noqa: E402
 from test_engine import BEAD, CLEAN, PLAN, WRITE, engine, tl, verdict  # noqa: E402
+from support.builders import make_engine  # noqa: E402
 
 # lifesim-yxbb.7 and lifesim-fld.25.16: the engine files follow-up beads after the land
 YXBB_7 = {"what": "Follow-up beads for table, chairs, sink, plates and second bed: the engine files them from the plan's "
@@ -57,13 +58,7 @@ class NoBlock(unittest.TestCase):
 
     def unit(self):
         """An engine at land with the verifier's plumbing stubbed (no model, no tree)."""
-        e = T.LandReview.engine_at_land(self)
-        e.unchecked, e.verified, e.transition, e.comment, e.outcome_of = [], [], mock.Mock(), mock.Mock(), mock.Mock()
-        e.brief_text, e.last_flag, e.work_summary = (lambda: "the task"), "", (lambda: "f.txt")
-        e.names_code = e.names_code  # real
-        e.changed_paths = lambda: []
-        e.diff_text = lambda: ""
-        return e
+        return T.LandReview.verifier(self, {"changed_paths": lambda: [], "diff_text": lambda: ""})
 
     def comments(self):
         return [c[3] for c in self.bd_calls if c[:2] == ("comments", "add")]
@@ -238,9 +233,11 @@ class NoBlock(unittest.TestCase):
 
     def filed(self, bead_id, title, existing):
         """file_owner_look for one more bead of epic t-0 while `existing` (a row) is the epic's review bead."""
-        eng = engine.Engine(bead_id, str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
-        eng.bead_title, eng.bead_parent = title, "t-0"
-        eng.unverified = [{"what": "price of the pack", "kind": "external_fact", "why": ""}]
+        eng = make_engine(self.wt, bead=bead_id, store=self.store, attrs={
+            "bead_title": title,
+            "bead_parent": "t-0",
+            "unverified": [{"what": "price of the pack", "kind": "external_fact", "why": ""}],
+            })
         real = self.fake_bd
 
         def bd(*a, **kw):
@@ -299,9 +296,11 @@ class NoBlock(unittest.TestCase):
                 return epic if i == "t-0" else dict(store.get(i, {}))
 
         def land(n):
-            eng = engine.Engine("t-%d" % n, str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
-            eng.bead_title, eng.bead_parent = "Bead %d" % n, "t-0"
-            eng.unverified = [{"what": "price %d" % n, "kind": "external_fact", "why": "", "source": SOURCE}]
+            eng = make_engine(self.wt, bead="t-%d" % n, store=self.store, attrs={
+                "bead_title": "Bead %d" % n,
+                "bead_parent": "t-0",
+                "unverified": [{"what": "price %d" % n, "kind": "external_fact", "why": "", "source": SOURCE}],
+                })
             eng.file_owner_look()
 
         with self.store.stub(bd_fn=bd), self.store.stub(show_fn=show):
@@ -315,9 +314,10 @@ class NoBlock(unittest.TestCase):
             self.assertIn("price %d" % n, row["description"])
 
     def test_a_bead_with_no_epic_files_its_review_bead_under_itself(self):
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
-        eng.bead_title = "Lone"
-        eng.unverified = [{"what": "price", "kind": "external_fact", "why": "", "source": SOURCE}]
+        eng = make_engine(self.wt, store=self.store, attrs={
+            "bead_title": "Lone",
+            "unverified": [{"what": "price", "kind": "external_fact", "why": "", "source": SOURCE}],
+            })
         with self.store.stub(show={}):
             eng.file_owner_look()
         (c,) = self.creates()

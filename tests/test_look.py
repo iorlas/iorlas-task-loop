@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "task-loop"))
 from support import fake_route  # noqa: E402
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from support.builders import make_engine  # noqa: E402
 import test_engine as T  # noqa: E402
 from test_engine import BEAD, CLEAN, PLAN, WRITE, engine, tl, verdict  # noqa: E402
 
@@ -215,8 +216,7 @@ class LookTest(unittest.TestCase):
         self.assertEqual(len(self.creates()), 1)
 
     def test_the_epic_is_found_by_walking_the_parents(self):
-        self.eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
-        self.eng.bead_parent = "t-3"
+        self.eng = make_engine(self.wt, store=self.store, attrs={"bead_parent": "t-3"})
         shows = {"t-3": {"id": "t-3", "issue_type": "feature", "parent": "t-2"},
                  "t-2": {"id": "t-2", "issue_type": "epic", "parent": "t-0"}}
         with self.store.stub(show_fn=lambda i, **k: shows.get(i, {})):

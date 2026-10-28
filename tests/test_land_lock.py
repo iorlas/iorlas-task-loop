@@ -9,6 +9,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 TL = ROOT / "skills" / "task-loop" / "tl.py"
 PY = sys.executable
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from support.waits import until  # noqa: E402
 
 
 NO_FCNTL = unittest.skipIf(os.name == "nt", "the lock is fcntl; tl has none on Windows (documented no-op)")
@@ -33,10 +35,7 @@ class LandLockTests(unittest.TestCase):
         p = subprocess.Popen([PY, str(TL), "land-lock", "--repo", self.repo, "--", PY, "-c", code], env=self.env,
                              stdout=subprocess.PIPE, text=True)
         self.addCleanup(p.wait)
-        end = time.time() + 10
-        while not Path(ready).exists() and time.time() < end:
-            time.sleep(0.02)
-        self.assertTrue(Path(ready).exists())
+        self.assertTrue(until(Path(ready).exists), "the holder never took the lock")
         return p
 
     def test_exit_code_passes_through(self):
