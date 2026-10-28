@@ -6,6 +6,7 @@ import base64
 import heapq
 import json
 import os
+import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -58,6 +59,7 @@ class LiveRun:
 
     def __init__(self, log_path: str) -> None:
         self.log_path = log_path
+        self.lock = threading.RLock()  # the server is threaded: one reader at a time advances the offsets and reads the items
         self.sources = {ev.ENGINE: Source(ev.ENGINE, log_path, False)}
 
     def live_dir(self) -> Path:
@@ -65,6 +67,10 @@ class LiveRun:
         return ConfigDir(Path(self.log_path).parent.parent).live_dir(run)
 
     def refresh(self) -> None:
+        with self.lock:
+            self._refresh()
+
+    def _refresh(self) -> None:
         try:
             names = sorted(n for n in os.listdir(self.live_dir()) if n.endswith(".jsonl"))
         except OSError:
@@ -83,7 +89,8 @@ class LiveRun:
 
     def select(self, keep: Callable[[str, int], bool]) -> list[tuple[str, int, dict]]:
         """(tag, offset, event) of the chosen events, merged by time (ties: the engine first, then file order)."""
-        lists = [[(t, off, e) for off, e in s.items if keep(t, off)] for t, s in self.sources.items()]
+        with self.lock:
+            lists = [[(t, off, e) for off, e in s.items if keep(t, off)] for t, s in self.sources.items()]
         return list(heapq.merge(*lists, key=lambda x: (x[2]["t"], ev.rank(x[2]))))
 
     def events(self) -> list[dict]:
