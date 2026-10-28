@@ -19,6 +19,9 @@ from taskloop.adapters import halt as halting  # noqa: E402
 from support.engine_case import CLEAN, PLAN, WRITE, engine, pyc  # noqa: E402
 
 
+WAIT = 120  # the longest a helper waits for a started process on a loaded runner (it ends the moment the process is there)
+
+
 class Halt(te.EngineTest):
     wt: Path
     tmp: Any
@@ -27,12 +30,15 @@ class Halt(te.EngineTest):
     def test_sigterm_during_a_real_sleeping_check_ends_the_check_and_its_tree_and_the_run_closes_cleanly(self):
         pidfile = Path(self.tmp.name, "child.pid")
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[self.spawn(pidfile)])])
-        waiter = threading.Thread(target=lambda: (self.child_of(pidfile), signal.raise_signal(signal.SIGTERM)), daemon=True)
+        # the signal goes when the check's child exists, however late a loaded runner starts it (a 5 s give-up here once left the run
+        # unsignalled: the check slept its 30 s out and the run closed normally)
+        waiter = threading.Thread(target=lambda: (self.child_of(pidfile, WAIT), signal.raise_signal(signal.SIGTERM)), daemon=True)
         waiter.start()
         t = time.time()
         with halting.halt_on_sigterm():
             rc, _ = self.run_engine({"plan": [plan], "write": [WRITE], "review": [CLEAN]})
         waiter.join(5)
+        self.assertFalse(waiter.is_alive())
         self.assertLess(time.time() - t, 60)
         self.assertEqual(rc, 2)
         self.assertIn("stopped (SIGTERM)", self.said())
@@ -57,7 +63,9 @@ class Halt(te.EngineTest):
         pidfile = d / "pid"
         r = runner.StreamRunner(d / "err.log", None, 60.0, "", None, grace=0.5)
         r.outer = threading.Event()
-        threading.Timer(1.0, r.outer.set).start()
+        # the flag goes when the call's process has written its pid (a fixed delay can beat a loaded runner's python start)
+        threading.Thread(target=lambda: (te.until(pidfile.exists, WAIT), te.until(lambda: pidfile.read_text().strip(), WAIT),
+                                         r.outer.set()), daemon=True).start()
         t = time.time()
         with self.assertRaises(delegate.Stopped):
             r(["python3", "-c", "import os,time; open(%r,'w').write(str(os.getpid())); time.sleep(30)" % str(pidfile)])

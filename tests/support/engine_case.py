@@ -393,8 +393,10 @@ class EngineTest(unittest.TestCase):
                 % (str(pidfile), "os.kill(os.getppid(), signal.SIGTERM);" if term else ""))
         return pyc(code)
 
-    def child_of(self, pidfile):
-        if until(lambda: pidfile.exists() and pidfile.read_text().strip(), 5):
+    def child_of(self, pidfile, limit=5):
+        """The pid the check recorded. A caller that waits for a loaded runner to start the check passes a long limit (the wait ends
+        the moment the pid is there; the limit is only the give-up)."""
+        if until(lambda: pidfile.exists() and pidfile.read_text().strip(), limit):
             return int(pidfile.read_text())
         self.fail("the check never started its child")
 
