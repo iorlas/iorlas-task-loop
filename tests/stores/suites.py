@@ -14,6 +14,7 @@ from taskloop.contracts.ask import Ask, AskAnswer
 from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.enums import AskStatus, LockWhat
 from taskloop.contracts.locks import LockRecord, LockTimeout
+from support.narrow import must  # noqa: E402
 
 CK = cast(Checkpoint, S.OTHERS["Checkpoint"])
 
@@ -202,7 +203,7 @@ class LockContract(Base):
                 with self.s.locks.hold(self.W, "r", "second", timeout=0.2, waiting=seen.append):
                     self.fail("got a held lock")
             self.assertGreaterEqual(time.monotonic() - t0, 0.15)
-        self.assertEqual(cm.exception.holder.holder, "first")
+        self.assertEqual(must(cm.exception.holder).holder, "first")
         self.assertEqual([h.holder for h in seen], ["first"])  # told once, before it waited
         with self.s.locks.hold(self.W, "r", "third", timeout=0.2):
             pass  # the lock is free again

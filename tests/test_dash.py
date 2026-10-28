@@ -23,6 +23,7 @@ from taskloop.contracts import codec  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
 from taskloop_dash import bind as bind_mod, tails as tails_mod  # noqa: E402
 from taskloop_dash.api import lanes as lanes_mod  # noqa: E402
+from support.narrow import must  # noqa: E402
 
 
 SH_FAKE = unittest.skipIf(os.name == "nt", "the bd fake is a #!/bin/sh script, which Windows cannot execute")
@@ -281,7 +282,7 @@ class Markdown(unittest.TestCase):
         tools.need(self, "node")
         node = tools.real("node")
         page = (ROOT / "src" / "taskloop_dash" / "static" / "index.html").read_text(encoding="utf-8")
-        src = re.search(r"/\*md\*/(.*?)/\*end md\*/", page, re.S).group(1)
+        src = must(re.search(r"/\*md\*/(.*?)/\*end md\*/", page, re.S)).group(1)
         esc = "const esc=s=>String(s==null?'':s).replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));"
         r = subprocess.run([node, "-e", esc + src + "\nprocess.stdout.write(md(JSON.parse(process.argv[1])))", json.dumps(text)],
                            capture_output=True, text=True, timeout=20)

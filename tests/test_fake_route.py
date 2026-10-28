@@ -24,9 +24,10 @@ from taskloop.domain.lanes import policy as lp  # noqa: E402
 from taskloop.domain.lanes import netgate  # noqa: E402
 from taskloop.app.loop.net import NetState  # noqa: E402
 import outcome as oc  # noqa: E402
+from support.narrow import must  # noqa: E402
 
 DELEGATE = fake_route.delegate_dir()
-CONTRACT = dl.read_contract_file(DELEGATE / "skills" / "delegate" / "contract.json")
+CONTRACT = dl.read_contract_file(DELEGATE / "skills" / "delegate" / "contract.json") or {}
 FIXTURES = sorted((DELEGATE / "tests" / "contract" / "fixtures").glob("*.json"))
 FAKE = str(Path(__file__).resolve().parent / "support" / "fake_route.py")
 
@@ -98,9 +99,9 @@ class Fake(unittest.TestCase):
             self.script_with([fx.stem])
             r = self.call()
             replayed += 1
-            self.assertEqual(r.stop.reason, exp, fx.name)
-            self.assertEqual((r.stop.scope, r.stop.permanence, r.stop.retry_kind), lp_facts(exp), fx.name)
-            a = lp.decide(r.stop, lp.Ctx(now=1000.0))
+            self.assertEqual(must(r.stop).reason, exp, fx.name)
+            self.assertEqual((must(r.stop).scope, must(r.stop).permanence, must(r.stop).retry_kind), lp_facts(exp), fx.name)
+            a = lp.decide(must(r.stop), lp.Ctx(now=1000.0))
             self.assertFalse(isinstance(a, (lp.Yield, lp.Fail)) and oc.make(oc.Kind[a.kind]).rule.makes_ask, fx.name)
         self.assertGreaterEqual(replayed, 5)
 
@@ -119,36 +120,36 @@ class Fake(unittest.TestCase):
 
     def test_no_answer_is_a_synthesized_stop_of_the_machine_that_tries_again(self):
         r = self.call(runner=lambda cmd, **kw: subprocess.CompletedProcess(cmd, 1, "", "Traceback"), resume="r1")
-        self.assertEqual((r.source, r.stop.reason), ("synthesized", "no_answer"))  # not delegate's own `crash` (needs_owner)
-        self.assertEqual((r.stop.scope, r.stop.permanence, r.stop.retry_kind), ("machine", "transient", "none"))
-        self.assertEqual(r.stop.ref, "r1")
+        self.assertEqual((r.source, must(r.stop).reason), ("synthesized", "no_answer"))  # not delegate's own `crash` (needs_owner)
+        self.assertEqual((must(r.stop).scope, must(r.stop).permanence, must(r.stop).retry_kind), ("machine", "transient", "none"))
+        self.assertEqual(must(r.stop).ref, "r1")
 
     def test_a_wrong_shape_is_a_contract_violation_and_a_call_the_engine_ended_is_a_timeout(self):
         for bad in ('{"v": 2, "status": "done"}', '{"contract": 2, "stop": null}', '{"contract": 3}', '{"contract": 3, "stop": 7}'):
             r = self.call(runner=lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, bad, ""))
-            self.assertEqual(r.stop.reason, "contract_violation", bad)
-            self.assertEqual((r.stop.scope, r.stop.permanence), ("machine", "needs_owner"))
+            self.assertEqual(must(r.stop).reason, "contract_violation", bad)
+            self.assertEqual((must(r.stop).scope, must(r.stop).permanence), ("machine", "needs_owner"))
 
         def hang(cmd, **kw):
             raise dl.Stopped("no worker output for 20 min")
         r = self.call(runner=hang, resume="r9")
-        self.assertEqual((r.stop.reason, r.stop.scope, r.stop.ref), ("timeout", "bead", "r9"))
+        self.assertEqual((must(r.stop).reason, must(r.stop).scope, must(r.stop).ref), ("timeout", "bead", "r9"))
         self.assertIn("no worker output", r.say)
 
         def backstop(cmd, **kw):
             raise subprocess.TimeoutExpired(cmd, 1)
-        self.assertEqual(self.call(runner=backstop).stop.reason, "timeout")
+        self.assertEqual(must(self.call(runner=backstop).stop).reason, "timeout")
 
         def missing(cmd, **kw):
             raise FileNotFoundError("python")
-        self.assertEqual(self.call(runner=missing).stop.reason, "no_answer")
+        self.assertEqual(must(self.call(runner=missing).stop).reason, "no_answer")
 
     def test_a_killed_stop_is_a_signal_and_sandbox_limit_denials_do_not_count(self):
         k = lp.stop_of(delegate_wire.result_of(fake_route.stop_answer("killed", "r1")))
-        self.assertEqual((k.scope, k.permanence, k.retry_kind, bool(k.signal)), ("machine", "transient", "none", True))
-        self.assertIsInstance(lp.decide(k, lp.Ctx(now=1.0)), lp.Yield)
+        self.assertEqual((must(k).scope, must(k).permanence, must(k).retry_kind, bool(must(k).signal)), ("machine", "transient", "none", True))
+        self.assertIsInstance(lp.decide(must(k), lp.Ctx(now=1.0)), lp.Yield)
         n = lp.stop_of(delegate_wire.result_of(fake_route.stop_answer("network", "r1", partial=True)))
-        self.assertEqual((n.reason, n.ref, n.resumable, n.partial, n.signal), ("network", "r1", True, True, 0))
+        self.assertEqual((must(n).reason, must(n).ref, must(n).resumable, must(n).partial, must(n).signal), ("network", "r1", True, True, 0))
         j = {"denied": [{"kind": "sandbox_limit", "tool": "Bash", "input": {}}, {"kind": "policy", "tool": "Bash", "input": {"command": "ls"}}]}
         self.assertEqual([d.kind for d in delegate_wire.denied_of(j["denied"])], ["policy"])
 
@@ -198,7 +199,7 @@ class Fake(unittest.TestCase):
         self.assertEqual(len(actions), 2)
         self.assertTrue(all(isinstance(a, lp.WaitNet) and a.resume == "fake-1" and a.charges == "" for a in actions))
         self.assertEqual(st.phase, "returned")
-        self.assertEqual(cs.reattach(cs.load_for(self.dir / "ck", "t-1", ("write", 1, 0, 1)))[0], "answer")
+        self.assertEqual(must(cs.reattach(cs.load_for(self.dir / "ck", "t-1", ("write", 1, 0, 1))))[0], "answer")
 
     def test_a_dropped_call_charges_no_counter_and_marks_no_lane(self):
         r, st, actions, calls, clk = self.drive(["network", "done"], netgate.FakeProbe([False, True]))
@@ -214,8 +215,8 @@ class Fake(unittest.TestCase):
         first = self.call()
         st.note_ref(first.ref)
         what = cs.reattach(cs.load_for(self.dir / "ck", "t-1", ("write", 1, 0, 1)))  # the loop was killed here
-        self.assertEqual(what[:2], ("resume", "fake-1"))
-        again = self.call(resume=what[1])
+        self.assertEqual(must(what)[:2], ("resume", "fake-1"))
+        again = self.call(resume=must(what)[1])
         self.assertEqual((again.done, again.ref), (True, "fake-1"))
 
 

@@ -8,11 +8,12 @@ import time
 import unittest
 from pathlib import Path
 from unittest import mock
+from support.narrow import must  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 spec = importlib.util.spec_from_file_location("suite_docker", ROOT / "dev" / "suite-docker.py")
-sd = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(sd)
+sd = importlib.util.module_from_spec(must(spec))
+must(must(spec).loader).exec_module(sd)
 
 
 class SuiteDocker(unittest.TestCase):

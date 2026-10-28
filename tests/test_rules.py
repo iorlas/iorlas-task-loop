@@ -104,7 +104,7 @@ def sloc_lines(text, tree):
         if tok.type not in skip:
             lines.update(range(tok.start[0], tok.end[0] + 1))
     for node in docstring_nodes(tree):
-        lines -= set(range(node.lineno, node.end_lineno + 1))
+        lines -= set(range(node.lineno, (node.end_lineno or node.lineno) + 1))
     return lines
 
 
@@ -127,7 +127,7 @@ def measure(path):
     funcs = {}
     for qual, node in walk_defs(tree):
         start = min([node.lineno] + [d.lineno for d in node.decorator_list])
-        size = len(lines & set(range(start, node.end_lineno + 1)))
+        size = len(lines & set(range(start, (node.end_lineno or node.lineno) + 1)))
         funcs[qual] = max(size, funcs.get(qual, 0))
     return len(lines), funcs
 
@@ -239,12 +239,13 @@ def edge_problems(rel, parts, targets):
 
 def slice_edges(parts, targets):
     """{(from slice, to slice)} for app modules importing other app slices."""
-    if layer_of(parts) != "app" or slice_of(parts) is None:
+    mine = slice_of(parts)
+    if layer_of(parts) != "app" or mine is None:
         return set()
     found = set()
     for target in targets:
-        if target[0] == parts[0] and len(target) > 2 and target[1] == "app" and Path(target[2]).stem != slice_of(parts):
-            found.add((slice_of(parts), target[2]))
+        if target[0] == parts[0] and len(target) > 2 and target[1] == "app" and Path(target[2]).stem != mine:
+            found.add((mine, target[2]))
     return found
 
 

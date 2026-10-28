@@ -14,6 +14,7 @@ from clock import FakeClock  # noqa: F401  (re-exported: one place for a test to
 
 from seams import FixedRoute
 from support import fake_route
+from support.narrow import must  # noqa: E402
 
 _NO = object()
 BEAD = {"id": "t-1", "title": "Add f", "metadata": {}, "acceptance_criteria": "f.txt exists"}  # a bead as bd prints it
@@ -48,7 +49,7 @@ class FakeBeadStore:
 
     def put(self, bead):
         b = as_bead(bead)
-        self.beads[b.id] = b
+        self.beads[must(b).id] = b
         return self
 
     def note(self, bead, *comments):

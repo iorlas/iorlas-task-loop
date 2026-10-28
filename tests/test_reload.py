@@ -44,6 +44,7 @@ from taskloop.app.wire import slots as wslots  # noqa: E402
 from support.fakes import as_bead  # noqa: E402
 from taskloop.adapters import delegate as dl  # noqa: E402
 from support import fake_route  # noqa: E402
+from support.narrow import must  # noqa: E402
 
 PLAN_DEF = "    def plan(self, again: bool = False) -> dict[str, Any]:\n"
 BREAK_PLAN = (PLAN_DEF, PLAN_DEF + "        raise RuntimeError('planted: cannot plan')\n", "src/taskloop/app/plan/planner.py")
@@ -206,13 +207,13 @@ class Reload(te.EngineTest):
 
     def test_a_refused_version_is_tried_again_when_it_is_installed_again_and_a_newer_one_is_tried(self):
         self.install("0.2.0", plant=BREAK_PLAN)
-        self.assertEqual(loop_env.vet_newer(self.here)[:2], ("0.2.0", self.cache / "0.2.0"))
+        self.assertEqual(must(loop_env.vet_newer(self.here))[:2], ("0.2.0", self.cache / "0.2.0"))
         self.assertIsNone(loop_env.vet_newer(self.here))  # refused, key unchanged: not looked at
         shutil.rmtree(self.cache / "0.2.0")
         self.install("0.2.0")  # the same number, re-released
-        self.assertIsNone(loop_env.vet_newer(self.here)[2])
+        self.assertIsNone(must(loop_env.vet_newer(self.here))[2])
         self.install("0.3.0")
-        self.assertEqual(loop_env.vet_newer(self.here)[0], "0.3.0")
+        self.assertEqual(must(loop_env.vet_newer(self.here))[0], "0.3.0")
 
     # -- the crash after an exec: the loop puts the run back on the version it came from, once
     def test_a_run_task_that_dies_right_after_the_exec_is_restarted_once_on_the_old_version(self):

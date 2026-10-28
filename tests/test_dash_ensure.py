@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from taskloop_dash import bind  # noqa: E402
 import dash_server  # noqa: E402
+from support.narrow import must  # noqa: E402
 
 SERVER = ROOT / "src" / "taskloop_dash" / "__main__.py"
 
@@ -47,14 +48,14 @@ class StaleReason(unittest.TestCase):
 
     def test_deleted_script_is_stale(self):
         v = live(Path(self.tmp.name) / "gone" / "server.py")
-        self.assertIn("gone", dash_server.stale_reason(v, "v1", ["127.0.0.1"]))
+        self.assertIn("gone", must(dash_server.stale_reason(v, "v1", ["127.0.0.1"])))
 
     def test_version_differs_is_stale(self):
-        self.assertIn("version", dash_server.stale_reason(live(self.script, "v0"), "v1", ["127.0.0.1"]))
+        self.assertIn("version", must(dash_server.stale_reason(live(self.script, "v0"), "v1", ["127.0.0.1"])))
 
     def test_missing_address_is_stale(self):
         r = dash_server.stale_reason(live(self.script), "v1", ["127.0.0.1", "100.1.2.3"])
-        self.assertIn("100.1.2.3", r)
+        self.assertIn("100.1.2.3", must(r))
 
     def test_extra_address_is_fine(self):
         self.assertIsNone(dash_server.stale_reason(live(self.script, binds=("127.0.0.1", "100.1.2.3")), "v1", ["127.0.0.1"]))
@@ -253,7 +254,7 @@ class DevCheckout(unittest.TestCase):
         p = subprocess.Popen([sys.executable, "-m", "taskloop_dash"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                              env={**os.environ, "XDG_CONFIG_HOME": cfg, "APPDATA": cfg, "TASK_LOOP_DASH_BIND": ""})
         try:
-            first = p.stdout.readline()
+            first = must(p.stdout).readline()
             self.assertIn("127.0.0.1:", first)
             self.assertNotIn(":7878", first)
             self.assertNotIn("100.", first)

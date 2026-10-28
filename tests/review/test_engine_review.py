@@ -81,7 +81,7 @@ class EngineReviewTest(EngineTest):
         self.assertEqual(s.calls[0][1], "ref-write")                      # the writer's thread goes on
         self.assertIn("stage two", s.prompts[0])
         self.assertIn("round 2", self.eng.log_path.read_text())
-        self.assertIsNone(self.checkpoint())                                # landed: nothing left to resume
+        self.assertNoCheckpoint()                                # landed: nothing left to resume
 
     def test_the_writer_may_add_a_case_it_is_run_and_shown_to_the_review(self):
         seen, extra = self.counter("extra")

@@ -1,6 +1,6 @@
-"""`must(x)`: x, which a test knows is not None (the assertion fails the test, and tells the type checker so)."""
+"""Narrowing for tests: a value a test knows is present, said once, so the type checker and the reader both agree."""
 
 
-def must[T](x: T | None) -> T:
-    assert x is not None
-    return x
+def must[T](value: T | None) -> T:
+    assert value is not None, "expected a value, got None"
+    return value

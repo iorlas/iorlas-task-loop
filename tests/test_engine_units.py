@@ -56,6 +56,7 @@ from taskloop.adapters import ident  # noqa: E402
 from taskloop.adapters import delegate as lroute  # noqa: E402,F401
 from support import engine_case as T  # noqa: E402
 from support.engine_case import BRIEFS, CLEAN, PLAN, WRITE, finding, full, review, sh, shown, stop, stored_brief, verdict  # noqa: E402
+from support.narrow import must  # noqa: E402
 
 
 class FailureBriefAndDurations(unittest.TestCase):
@@ -566,7 +567,7 @@ class StoredBriefs(unittest.TestCase):
         for p in sorted(BRIEFS.glob("*.md")):
             notes, comments = stored_brief(p.stem)
             bead = {"id": "x", "title": "t", "notes": notes}
-            out = brief_digest(as_bead(bead), [as_comment({"author": a, "text": t}) for a, t in comments])
+            out = brief_digest(must(as_bead(bead)), [as_comment({"author": a, "text": t}) for a, t in comments])
             bad = [l for l in out.splitlines() if ENGINE_LINE.match(l)]
             self.assertEqual(bad, [], p.name)
             old = p.read_text(encoding="utf-8")

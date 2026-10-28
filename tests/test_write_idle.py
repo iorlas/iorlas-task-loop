@@ -25,6 +25,7 @@ from support import fake_route  # noqa: E402
 from taskloop.adapters import delegate as dg, procs, runner  # noqa: E402
 from taskloop.adapters.delegate import Stopped  # noqa: E402
 from taskloop.contracts.delegate import DelegateResult  # noqa: E402
+from support.narrow import must  # noqa: E402
 
 POSIX = os.name != "nt"
 MIN = 60.0
@@ -125,7 +126,7 @@ class StreamRunnerCall(unittest.TestCase):
         seen = []
         r, go = self.run_route("chatty", on_worker=seen.append, CHAT_UNTIL=str(time.time() + 0.6))
         go()
-        self.assertEqual((r.worker.pid, r.worker.run_id), (self.worker_pid(), "run1"))
+        self.assertEqual((must(r.worker).pid, must(r.worker).run_id), (self.worker_pid(), "run1"))
         self.assertEqual(seen, [r.worker])
 
     def test_a_live_file_that_keeps_moving_keeps_the_call_alive_past_the_silence_limit(self):
@@ -144,7 +145,7 @@ class StreamRunnerCall(unittest.TestCase):
         self.assertEqual(r.stop["alive"], [])
         self.assertFalse(procs.alive(self.worker_pid()))  # it ignored SIGTERM and is gone: stream-proc proved it
         self.assertIsNotNone(r.obs["kill_t"])
-        self.assertEqual(r.worker.run_id, "run1")
+        self.assertEqual(must(r.worker).run_id, "run1")
 
     def test_the_wall_limit_stops_the_call_through_stream_proc(self):
         r, go = self.run_route("", wall=0.8)

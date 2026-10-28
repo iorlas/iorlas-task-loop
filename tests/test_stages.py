@@ -34,6 +34,7 @@ from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, 
 from taskloop.app.slots import engine_lock
 from taskloop.adapters import ident
 from taskloop.adapters import pidcheck
+from support.narrow import must  # noqa: E402
 
 
 
@@ -704,7 +705,7 @@ class Inputs(StagesTest):
         rc, s = self.run_engine({"plan": [q]})
         self.assertEqual(rc, 2)
         self.assertEqual([c[0] for c in s.calls], ["planner"])
-        self.assertIn("Push the rewritten history", self.ask()["decision"])
+        self.assertIn("Push the rewritten history", must(self.ask())["decision"])
 
     def test_an_input_a_case_defers_is_no_question(self):
         case = {"criterion": "The play test passes on the Windows PC", "check": "", "proved_by": "leftover",

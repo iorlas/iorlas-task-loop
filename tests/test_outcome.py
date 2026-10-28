@@ -13,6 +13,7 @@ import loop_health as lh  # noqa: E402
 from taskloop.app.loop.health import loop_health  # noqa: E402
 import outcome as oc  # noqa: E402
 from outcome import Kind, POLICY  # noqa: E402
+from support.narrow import must  # noqa: E402
 
 
 class Table(unittest.TestCase):
@@ -108,7 +109,7 @@ class Storm(unittest.TestCase):
         self.assertIsNone(lh.storm_trip([], "a", Kind.FAULT_BAD_REQUEST, fp, c.now()))
         c.advance(60)
         trip = lh.storm_trip(h, "b", Kind.FAULT_BAD_REQUEST, fp, c.now())
-        self.assertEqual(trip.beads, ("a", "b"))
+        self.assertEqual(must(trip).beads, ("a", "b"))
         self.assertIn("STOPPED: storm", lh.banner(trip))
         self.assertIsNone(lh.storm_trip(h, "a", Kind.FAULT_BAD_REQUEST, fp, c.now()))  # one bead repeating is no storm
         c.advance(1800)

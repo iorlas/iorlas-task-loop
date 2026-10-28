@@ -29,202 +29,6 @@
       "severity": "error"
     },
     {
-      "column": 26,
-      "path": "skills/task-loop/_vendor/git_porcelain/history.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `tuple[tuple[str, ...], ...]` is not assignable to parameter `trailers` with type `tuple[tuple[str, str], ...]` in function `Commit.__init__`",
-      "severity": "error"
-    },
-    {
-      "column": 35,
-      "path": "skills/task-loop/_vendor/git_porcelain/real.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Self@_vendor.git_porcelain.real.RealRepo` is not assignable to parameter `repo` with type `git_porcelain.real.RealRepo` in function `git_porcelain.real_read.identity`",
-      "severity": "error"
-    },
-    {
-      "column": 32,
-      "path": "skills/task-loop/_vendor/git_porcelain/real.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Self@_vendor.git_porcelain.real.RealRepo` is not assignable to parameter `repo` with type `git_porcelain.real.RealRepo` in function `git_porcelain.real_write.sync`",
-      "severity": "error"
-    },
-    {
-      "column": 33,
-      "path": "skills/task-loop/_vendor/git_porcelain/real.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Self@_vendor.git_porcelain.real.RealRepo` is not assignable to parameter `repo` with type `git_porcelain.real.RealRepo` in function `git_porcelain.real_read.relate`",
-      "severity": "error"
-    },
-    {
-      "column": 34,
-      "path": "skills/task-loop/_vendor/git_porcelain/real.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Self@_vendor.git_porcelain.real.RealRepo` is not assignable to parameter `repo` with type `git_porcelain.real.RealRepo` in function `git_porcelain.real_read.history`",
-      "severity": "error"
-    },
-    {
-      "column": 35,
-      "path": "skills/task-loop/_vendor/git_porcelain/real.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Self@_vendor.git_porcelain.real.RealRepo` is not assignable to parameter `repo` with type `git_porcelain.real.RealRepo` in function `git_porcelain.real_read.branches`",
-      "severity": "error"
-    },
-    {
-      "column": 31,
-      "path": "skills/task-loop/_vendor/git_porcelain/real.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Self@_vendor.git_porcelain.real.RealRepo` is not assignable to parameter `repo` with type `git_porcelain.real.RealRepo` in function `git_porcelain.real_read.tree`",
-      "severity": "error"
-    },
-    {
-      "column": 36,
-      "path": "skills/task-loop/_vendor/git_porcelain/real.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Self@_vendor.git_porcelain.real.RealRepo` is not assignable to parameter `repo` with type `git_porcelain.real.RealRepo` in function `git_porcelain.real_read.worktrees`",
-      "severity": "error"
-    },
-    {
-      "column": 16,
-      "path": "skills/task-loop/_vendor/git_porcelain/real.py",
-      "name": "bad-return",
-      "concise_description": "Returned type `git_porcelain.real.RealWorktree` is not assignable to declared return type `_vendor.git_porcelain.real.RealWorktree`",
-      "severity": "error"
-    },
-    {
-      "column": 40,
-      "path": "skills/task-loop/_vendor/git_porcelain/real.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Self@_vendor.git_porcelain.real.RealRepo` is not assignable to parameter `repo` with type `git_porcelain.real.RealRepo` in function `git_porcelain.real_write.add_worktree`",
-      "severity": "error"
-    },
-    {
-      "column": 34,
-      "path": "skills/task-loop/_vendor/git_porcelain/real.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Self@_vendor.git_porcelain.real.RealRepo` is not assignable to parameter `repo` with type `git_porcelain.real.RealRepo` in function `git_porcelain.real_write.drop_worktree`",
-      "severity": "error"
-    },
-    {
-      "column": 36,
-      "path": "skills/task-loop/_vendor/git_porcelain/real.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Self@_vendor.git_porcelain.real.RealRepo` is not assignable to parameter `repo` with type `git_porcelain.real.RealRepo` in function `git_porcelain.real_write.exclude_locally`",
-      "severity": "error"
-    },
-    {
-      "column": 33,
-      "path": "skills/task-loop/_vendor/git_porcelain/real.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Self@_vendor.git_porcelain.real.RealWorktree` is not assignable to parameter `wt` with type `git_porcelain.real.RealWorktree` in function `git_porcelain.real_read.health`",
-      "severity": "error"
-    },
-    {
-      "column": 35,
-      "path": "skills/task-loop/_vendor/git_porcelain/real.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Self@_vendor.git_porcelain.real.RealWorktree` is not assignable to parameter `wt` with type `git_porcelain.real.RealWorktree` in function `git_porcelain.real_read.snapshot`",
-      "severity": "error"
-    },
-    {
-      "column": 31,
-      "path": "skills/task-loop/_vendor/git_porcelain/real.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Self@_vendor.git_porcelain.real.RealWorktree` is not assignable to parameter `wt` with type `git_porcelain.real.RealWorktree` in function `git_porcelain.real_read.diff`",
-      "severity": "error"
-    },
-    {
-      "column": 32,
-      "path": "skills/task-loop/_vendor/git_porcelain/real.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Self@_vendor.git_porcelain.real.RealWorktree` is not assignable to parameter `wt` with type `git_porcelain.real.RealWorktree` in function `git_porcelain.real_read.dirty`",
-      "severity": "error"
-    },
-    {
-      "column": 13,
-      "path": "skills/task-loop/_vendor/git_porcelain/real.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Self@_vendor.git_porcelain.real.RealWorktree` is not assignable to parameter `wt` with type `git_porcelain.real.RealWorktree` in function `git_porcelain.real_write.record`",
-      "severity": "error"
-    },
-    {
-      "column": 39,
-      "path": "skills/task-loop/_vendor/git_porcelain/real.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Self@_vendor.git_porcelain.real.RealWorktree` is not assignable to parameter `wt` with type `git_porcelain.real.RealWorktree` in function `git_porcelain.real_write.take_branch`",
-      "severity": "error"
-    },
-    {
-      "column": 42,
-      "path": "skills/task-loop/_vendor/git_porcelain/real.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Self@_vendor.git_porcelain.real.RealWorktree` is not assignable to parameter `wt` with type `git_porcelain.real.RealWorktree` in function `git_porcelain.real_write.release_branch`",
-      "severity": "error"
-    },
-    {
-      "column": 32,
-      "path": "skills/task-loop/_vendor/git_porcelain/real.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Self@_vendor.git_porcelain.real.RealWorktree` is not assignable to parameter `wt` with type `git_porcelain.real.RealWorktree` in function `git_porcelain.real_write.park`",
-      "severity": "error"
-    },
-    {
-      "column": 39,
-      "path": "skills/task-loop/_vendor/git_porcelain/real.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Self@_vendor.git_porcelain.real.RealWorktree` is not assignable to parameter `wt` with type `git_porcelain.real.RealWorktree` in function `git_porcelain.real_write.rebase_onto`",
-      "severity": "error"
-    },
-    {
-      "column": 41,
-      "path": "skills/task-loop/_vendor/git_porcelain/real.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Self@_vendor.git_porcelain.real.RealWorktree` is not assignable to parameter `wt` with type `git_porcelain.real.RealWorktree` in function `git_porcelain.real_write.finish_rebase`",
-      "severity": "error"
-    },
-    {
-      "column": 32,
-      "path": "skills/task-loop/_vendor/git_porcelain/real.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Self@_vendor.git_porcelain.real.RealWorktree` is not assignable to parameter `wt` with type `git_porcelain.real.RealWorktree` in function `git_porcelain.real_write.push`",
-      "severity": "error"
-    },
-    {
-      "column": 33,
-      "path": "skills/task-loop/_vendor/git_porcelain/real.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Self@_vendor.git_porcelain.real.RealWorktree` is not assignable to parameter `wt` with type `git_porcelain.real.RealWorktree` in function `git_porcelain.real_read.landed`",
-      "severity": "error"
-    },
-    {
-      "column": 39,
-      "path": "skills/task-loop/_vendor/git_porcelain/real.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Self@_vendor.git_porcelain.real.RealWorktree` is not assignable to parameter `wt` with type `git_porcelain.real.RealWorktree` in function `git_porcelain.real_read.grep_tracked`",
-      "severity": "error"
-    },
-    {
-      "column": 22,
-      "path": "skills/task-loop/_vendor/git_porcelain/real_parse.py",
-      "name": "no-matching-overload",
-      "concise_description": "No matching overload found for function `dict.__init__` called with arguments: (Generator[tuple[str, ...]])",
-      "severity": "error"
-    },
-    {
-      "column": 30,
-      "path": "skills/task-loop/_vendor/process_lock/__init__.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `dict[str, dict[str, object] | str | None]` is not assignable to parameter `record` with type `dict[str, object]` in function `_try`",
-      "severity": "error"
-    },
-    {
-      "column": 46,
-      "path": "skills/task-loop/_vendor/stream_proc/hold.py",
-      "name": "bad-return",
-      "concise_description": "Function declared to return `tuple[Popen[bytes], TermHold]`, but one or more paths are missing an explicit `return`",
-      "severity": "error"
-    },
-    {
       "column": 27,
       "path": "skills/task-loop/outcome.py",
       "name": "bad-assignment",
@@ -673,20 +477,6 @@
       "severity": "error"
     },
     {
-      "column": 26,
-      "path": "tests/asks/test_engine_asks.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 49,
-      "path": "tests/checks/test_engine_checks.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `str | None` is not assignable to parameter `container` with type `Container | Iterable[Any]` in function `unittest.case.TestCase.assertIn`",
-      "severity": "error"
-    },
-    {
       "column": 19,
       "path": "tests/cockpit_scenario.py",
       "name": "invalid-inheritance",
@@ -1025,176 +815,8 @@
     {
       "column": 26,
       "path": "tests/land/test_engine_land_1.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/land/test_engine_land_1.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 27,
-      "path": "tests/land/test_engine_land_1.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 39,
-      "path": "tests/land/test_engine_land_1.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 34,
-      "path": "tests/land/test_engine_land_1.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 46,
-      "path": "tests/land/test_engine_land_1.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 34,
-      "path": "tests/land/test_engine_land_1.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/land/test_engine_land_1.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 38,
-      "path": "tests/land/test_engine_land_1.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 38,
-      "path": "tests/land/test_engine_land_1.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 38,
-      "path": "tests/land/test_engine_land_1.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 33,
-      "path": "tests/land/test_engine_land_1.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 34,
-      "path": "tests/land/test_engine_land_1.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/land/test_engine_land_1.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 39,
-      "path": "tests/land/test_engine_land_1.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 34,
-      "path": "tests/land/test_engine_land_1.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 34,
-      "path": "tests/land/test_engine_land_1.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 48,
-      "path": "tests/land/test_engine_land_1.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 34,
-      "path": "tests/land/test_engine_land_1.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/land/test_engine_land_1.py",
       "name": "missing-attribute",
       "concise_description": "Object of type `int | list[Unknown]` has no attribute `exists`",
-      "severity": "error"
-    },
-    {
-      "column": 29,
-      "path": "tests/land/test_engine_land_1.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 30,
-      "path": "tests/land/test_engine_land_1.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 43,
-      "path": "tests/land/test_engine_land_1.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 30,
-      "path": "tests/land/test_engine_land_1.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 46,
-      "path": "tests/land/test_engine_land_1.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
       "severity": "error"
     },
     {
@@ -1209,83 +831,6 @@
       "path": "tests/plan/test_engine_plan.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `Script` has no attribute `seen_plan`",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/plan/test_engine_plan.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 27,
-      "path": "tests/plan/test_engine_plan.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/plan/test_engine_plan.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 65,
-      "path": "tests/plan/test_engine_plan.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 27,
-      "path": "tests/plan/test_engine_plan.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/plan/test_engine_plan.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 65,
-      "path": "tests/plan/test_engine_plan.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 27,
-      "path": "tests/review/test_engine_review.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 40,
-      "path": "tests/review/test_engine_review.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 54,
-      "path": "tests/review/test_engine_review.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/review/test_engine_review.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
       "severity": "error"
     },
     {
@@ -1541,13 +1086,6 @@
       "severity": "error"
     },
     {
-      "column": 26,
-      "path": "tests/stores/suites.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `holder`",
-      "severity": "error"
-    },
-    {
       "column": 19,
       "path": "tests/stores/test_contract.py",
       "name": "bad-argument-type",
@@ -1566,13 +1104,6 @@
       "path": "tests/stores/test_contract.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `Doc` has no attribute `path`",
-      "severity": "error"
-    },
-    {
-      "column": 30,
-      "path": "tests/stores/test_domain.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `holder`",
       "severity": "error"
     },
     {
@@ -1649,14 +1180,7 @@
       "column": 39,
       "path": "tests/support/engine_case.py",
       "name": "bad-assignment",
-      "concise_description": "`dict[str, Any] | None` is not assignable to dict key `checkpoint` with type `int | list[Unknown]`",
-      "severity": "error"
-    },
-    {
-      "column": 20,
-      "path": "tests/support/fakes.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `id`",
+      "concise_description": "`dict[str, Any]` is not assignable to dict key `checkpoint` with type `int | list[Unknown]`",
       "severity": "error"
     },
     {
@@ -1688,150 +1212,10 @@
       "severity": "error"
     },
     {
-      "column": 26,
-      "path": "tests/test_areas.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_areas.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `readline`",
-      "severity": "error"
-    },
-    {
-      "column": 9,
-      "path": "tests/test_areas.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `close`",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_areas.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_areas.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
       "column": 61,
       "path": "tests/test_areas.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `str` has no attribute `get`",
-      "severity": "error"
-    },
-    {
-      "column": 27,
-      "path": "tests/test_call_state.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `phase`",
-      "severity": "error"
-    },
-    {
-      "column": 37,
-      "path": "tests/test_call_state.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `ref`",
-      "severity": "error"
-    },
-    {
-      "column": 45,
-      "path": "tests/test_call_state.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `key`",
-      "severity": "error"
-    },
-    {
-      "column": 53,
-      "path": "tests/test_call_state.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `lane`",
-      "severity": "error"
-    },
-    {
-      "column": 62,
-      "path": "tests/test_call_state.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `prompt_sha`",
-      "severity": "error"
-    },
-    {
-      "column": 27,
-      "path": "tests/test_call_state.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `ref`",
-      "severity": "error"
-    },
-    {
-      "column": 38,
-      "path": "tests/test_call_state.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `t_ref`",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_call_state.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `phase`",
-      "severity": "error"
-    },
-    {
-      "column": 27,
-      "path": "tests/test_call_state.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `phase`",
-      "severity": "error"
-    },
-    {
-      "column": 40,
-      "path": "tests/test_call_state.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `ref`",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_call_state.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_call_state.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_call_state.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 29,
-      "path": "tests/test_call_state.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 41,
-      "path": "tests/test_call_state.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
       "severity": "error"
     },
     {
@@ -1849,24 +1233,10 @@
       "severity": "error"
     },
     {
-      "column": 15,
-      "path": "tests/test_dash.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `group`",
-      "severity": "error"
-    },
-    {
       "column": 27,
       "path": "tests/test_dash.py",
       "name": "no-matching-overload",
       "concise_description": "No matching overload found for function `subprocess.run` called with arguments: (list[str | Unknown | None], capture_output=Literal[True], text=Literal[True], timeout=Literal[20])",
-      "severity": "error"
-    },
-    {
-      "column": 37,
-      "path": "tests/test_dash_bind.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `str | None` is not assignable to parameter `container` with type `Container | Iterable[Any]` in function `unittest.case.TestCase.assertIn`",
       "severity": "error"
     },
     {
@@ -1905,34 +1275,6 @@
       "severity": "error"
     },
     {
-      "column": 31,
-      "path": "tests/test_dash_ensure.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `str | None` is not assignable to parameter `container` with type `Container | Iterable[Any]` in function `unittest.case.TestCase.assertIn`",
-      "severity": "error"
-    },
-    {
-      "column": 34,
-      "path": "tests/test_dash_ensure.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `str | None` is not assignable to parameter `container` with type `Container | Iterable[Any]` in function `unittest.case.TestCase.assertIn`",
-      "severity": "error"
-    },
-    {
-      "column": 36,
-      "path": "tests/test_dash_ensure.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `str | None` is not assignable to parameter `container` with type `Container | Iterable[Any]` in function `unittest.case.TestCase.assertIn`",
-      "severity": "error"
-    },
-    {
-      "column": 21,
-      "path": "tests/test_dash_ensure.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `readline`",
-      "severity": "error"
-    },
-    {
       "column": 9,
       "path": "tests/test_dash_gallery.py",
       "name": "not-iterable",
@@ -1944,20 +1286,6 @@
       "path": "tests/test_dash_live.py",
       "name": "bad-argument-type",
       "concise_description": "Argument `LiveRun | dict[Unknown, Unknown]` is not assignable to parameter `run` with type `LiveRun` in function `taskloop_dash.api.live.page`",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_dash_live.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 48,
-      "path": "tests/test_dash_live.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Unknown | None` is not assignable to parameter `container` with type `Container | Iterable[Any]` in function `unittest.case.TestCase.assertNotIn`",
       "severity": "error"
     },
     {
@@ -1996,297 +1324,10 @@
       "severity": "error"
     },
     {
-      "column": 32,
-      "path": "tests/test_engine_units.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Bead | None` is not assignable to parameter `bead` with type `Bead` in function `support.briefs.brief_digest`",
-      "severity": "error"
-    },
-    {
-      "column": 53,
-      "path": "tests/test_fake_route.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `dict[str, Any] | None` is not assignable to parameter `contract` with type `dict[str, Any]` in function `taskloop.adapters.delegate.Resolved.__init__`",
-      "severity": "error"
-    },
-    {
       "column": 30,
       "path": "tests/test_fake_route.py",
       "name": "no-matching-overload",
       "concise_description": "No matching overload found for function `subprocess.run` called with arguments: (list[Unknown], **dict[str, bool | dict[str, str]])",
-      "severity": "error"
-    },
-    {
-      "column": 41,
-      "path": "tests/test_fake_route.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 30,
-      "path": "tests/test_fake_route.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `reason`",
-      "severity": "error"
-    },
-    {
-      "column": 31,
-      "path": "tests/test_fake_route.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `scope`",
-      "severity": "error"
-    },
-    {
-      "column": 45,
-      "path": "tests/test_fake_route.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `permanence`",
-      "severity": "error"
-    },
-    {
-      "column": 64,
-      "path": "tests/test_fake_route.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `retry_kind`",
-      "severity": "error"
-    },
-    {
-      "column": 27,
-      "path": "tests/test_fake_route.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Stop | None` is not assignable to parameter `stop` with type `Stop` in function `taskloop.domain.lanes.policy.decide`",
-      "severity": "error"
-    },
-    {
-      "column": 32,
-      "path": "tests/test_fake_route.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 81,
-      "path": "tests/test_fake_route.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 30,
-      "path": "tests/test_fake_route.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 30,
-      "path": "tests/test_fake_route.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 30,
-      "path": "tests/test_fake_route.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_fake_route.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 37,
-      "path": "tests/test_fake_route.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `reason`",
-      "severity": "error"
-    },
-    {
-      "column": 27,
-      "path": "tests/test_fake_route.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `scope`",
-      "severity": "error"
-    },
-    {
-      "column": 41,
-      "path": "tests/test_fake_route.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `permanence`",
-      "severity": "error"
-    },
-    {
-      "column": 60,
-      "path": "tests/test_fake_route.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `retry_kind`",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_fake_route.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `ref`",
-      "severity": "error"
-    },
-    {
-      "column": 30,
-      "path": "tests/test_fake_route.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `reason`",
-      "severity": "error"
-    },
-    {
-      "column": 31,
-      "path": "tests/test_fake_route.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `scope`",
-      "severity": "error"
-    },
-    {
-      "column": 45,
-      "path": "tests/test_fake_route.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `permanence`",
-      "severity": "error"
-    },
-    {
-      "column": 27,
-      "path": "tests/test_fake_route.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `reason`",
-      "severity": "error"
-    },
-    {
-      "column": 42,
-      "path": "tests/test_fake_route.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `scope`",
-      "severity": "error"
-    },
-    {
-      "column": 56,
-      "path": "tests/test_fake_route.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `ref`",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_fake_route.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `reason`",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_fake_route.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `reason`",
-      "severity": "error"
-    },
-    {
-      "column": 27,
-      "path": "tests/test_fake_route.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `scope`",
-      "severity": "error"
-    },
-    {
-      "column": 36,
-      "path": "tests/test_fake_route.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `permanence`",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/test_fake_route.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `retry_kind`",
-      "severity": "error"
-    },
-    {
-      "column": 69,
-      "path": "tests/test_fake_route.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `signal`",
-      "severity": "error"
-    },
-    {
-      "column": 41,
-      "path": "tests/test_fake_route.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Stop | None` is not assignable to parameter `stop` with type `Stop` in function `taskloop.domain.lanes.policy.decide`",
-      "severity": "error"
-    },
-    {
-      "column": 27,
-      "path": "tests/test_fake_route.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `reason`",
-      "severity": "error"
-    },
-    {
-      "column": 37,
-      "path": "tests/test_fake_route.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `ref`",
-      "severity": "error"
-    },
-    {
-      "column": 44,
-      "path": "tests/test_fake_route.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `resumable`",
-      "severity": "error"
-    },
-    {
-      "column": 57,
-      "path": "tests/test_fake_route.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `partial`",
-      "severity": "error"
-    },
-    {
-      "column": 68,
-      "path": "tests/test_fake_route.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `signal`",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_fake_route.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_fake_route.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 34,
-      "path": "tests/test_fake_route.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 9,
-      "path": "tests/test_fake_route.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
       "severity": "error"
     },
     {
@@ -2343,13 +1384,6 @@
       "path": "tests/test_fake_route.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `Resolved` has no attribute `kind`",
-      "severity": "error"
-    },
-    {
-      "column": 18,
-      "path": "tests/test_lane_policy.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `split`",
       "severity": "error"
     },
     {
@@ -2458,48 +1492,6 @@
       "severity": "error"
     },
     {
-      "column": 47,
-      "path": "tests/test_loop.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `get`",
-      "severity": "error"
-    },
-    {
-      "column": 76,
-      "path": "tests/test_loop.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `get`",
-      "severity": "error"
-    },
-    {
-      "column": 17,
-      "path": "tests/test_loop.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `update`",
-      "severity": "error"
-    },
-    {
-      "column": 34,
-      "path": "tests/test_loop.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `get`",
-      "severity": "error"
-    },
-    {
-      "column": 17,
-      "path": "tests/test_loop.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `update`",
-      "severity": "error"
-    },
-    {
-      "column": 55,
-      "path": "tests/test_loop.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `Unknown | None` is not assignable to parameter `timeout` with type `float` in function `subprocess.TimeoutExpired.__init__`",
-      "severity": "error"
-    },
-    {
       "column": 27,
       "path": "tests/test_loop.py",
       "name": "bad-assignment",
@@ -2535,13 +1527,6 @@
       "severity": "error"
     },
     {
-      "column": 26,
-      "path": "tests/test_outcome.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `beads`",
-      "severity": "error"
-    },
-    {
       "column": 17,
       "path": "tests/test_procs.py",
       "name": "not-callable",
@@ -2563,20 +1548,6 @@
       "severity": "error"
     },
     {
-      "column": 26,
-      "path": "tests/test_race_invariants.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_race_invariants.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
       "column": 53,
       "path": "tests/test_race_invariants.py",
       "name": "missing-attribute",
@@ -2591,20 +1562,6 @@
       "severity": "error"
     },
     {
-      "column": 26,
-      "path": "tests/test_race_invariants.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_race_invariants.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
       "column": 9,
       "path": "tests/test_race_invariants.py",
       "name": "missing-attribute",
@@ -2616,27 +1573,6 @@
       "path": "tests/test_race_invariants.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `Origin` has no attribute `got`",
-      "severity": "error"
-    },
-    {
-      "column": 17,
-      "path": "tests/test_race_invariants.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `flock`",
-      "severity": "error"
-    },
-    {
-      "column": 32,
-      "path": "tests/test_race_invariants.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `LOCK_EX`",
-      "severity": "error"
-    },
-    {
-      "column": 48,
-      "path": "tests/test_race_invariants.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `LOCK_NB`",
       "severity": "error"
     },
     {
@@ -2668,59 +1604,10 @@
       "severity": "error"
     },
     {
-      "column": 22,
-      "path": "tests/test_release.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `group`",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_reload.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 27,
-      "path": "tests/test_reload.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_reload.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
       "column": 37,
       "path": "tests/test_report.py",
       "name": "not-iterable",
       "concise_description": "Type `int` is not iterable",
-      "severity": "error"
-    },
-    {
-      "column": 41,
-      "path": "tests/test_rules.py",
-      "name": "unsupported-operation",
-      "concise_description": "`+` is not supported between `None` and `Literal[1]`",
-      "severity": "error"
-    },
-    {
-      "column": 45,
-      "path": "tests/test_rules.py",
-      "name": "unsupported-operation",
-      "concise_description": "`+` is not supported between `None` and `Literal[1]`",
-      "severity": "error"
-    },
-    {
-      "column": 36,
-      "path": "tests/test_rules.py",
-      "name": "no-matching-overload",
-      "concise_description": "No matching overload found for function `dict.get` called with arguments: (str | Unknown | None, frozenset[str])",
       "severity": "error"
     },
     {
@@ -2787,13 +1674,6 @@
       "severity": "error"
     },
     {
-      "column": 53,
-      "path": "tests/test_stages.py",
-      "name": "unsupported-operation",
-      "concise_description": "`None` is not subscriptable",
-      "severity": "error"
-    },
-    {
       "column": 16,
       "path": "tests/test_stages_visual.py",
       "name": "bad-assignment",
@@ -2801,66 +1681,10 @@
       "severity": "error"
     },
     {
-      "column": 38,
-      "path": "tests/test_suite_docker.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `ModuleSpec | None` is not assignable to parameter `spec` with type `ModuleSpec` in function `_frozen_importlib.module_from_spec`",
-      "severity": "error"
-    },
-    {
-      "column": 1,
-      "path": "tests/test_suite_docker.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `loader`",
-      "severity": "error"
-    },
-    {
       "column": 70,
       "path": "tests/test_tl.py",
       "name": "unbound-name",
       "concise_description": "`original` may be uninitialized",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/test_tl.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `str | None` is not assignable to parameter `container` with type `Container | Iterable[Any]` in function `unittest.case.TestCase.assertIn`",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/test_tl.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `str | None` is not assignable to parameter `container` with type `Container | Iterable[Any]` in function `unittest.case.TestCase.assertIn`",
-      "severity": "error"
-    },
-    {
-      "column": 32,
-      "path": "tests/test_tl.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `str | None` is not assignable to parameter `container` with type `Container | Iterable[Any]` in function `unittest.case.TestCase.assertIn`",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/test_tl.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `str | None` is not assignable to parameter `container` with type `Container | Iterable[Any]` in function `unittest.case.TestCase.assertIn`",
-      "severity": "error"
-    },
-    {
-      "column": 32,
-      "path": "tests/test_tl.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `str | None` is not assignable to parameter `container` with type `Container | Iterable[Any]` in function `unittest.case.TestCase.assertIn`",
-      "severity": "error"
-    },
-    {
-      "column": 50,
-      "path": "tests/test_tl.py",
-      "name": "bad-argument-type",
-      "concise_description": "Argument `str | None` is not assignable to parameter `container` with type `Container | Iterable[Any]` in function `unittest.case.TestCase.assertIn`",
       "severity": "error"
     },
     {
@@ -2875,27 +1699,6 @@
       "path": "tests/test_verify_noblock.py",
       "name": "missing-attribute",
       "concise_description": "Object of class `Engine` has no attribute `fixes`",
-      "severity": "error"
-    },
-    {
-      "column": 27,
-      "path": "tests/test_write_idle.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `pid`",
-      "severity": "error"
-    },
-    {
-      "column": 41,
-      "path": "tests/test_write_idle.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `run_id`",
-      "severity": "error"
-    },
-    {
-      "column": 26,
-      "path": "tests/test_write_idle.py",
-      "name": "missing-attribute",
-      "concise_description": "Object of class `NoneType` has no attribute `run_id`",
       "severity": "error"
     }
   ]

@@ -20,6 +20,7 @@ from support.logs import typed  # noqa: E402
 from taskloop_dash.api import live, overview  # noqa: E402
 from taskloop_dash.views import live_state  # noqa: E402
 from taskloop.adapters import runner as live_runner  # noqa: E402
+from support.narrow import must  # noqa: E402
 
 BEAD, STAMP = "tl-live.1", "20261026-100000"
 T = 1793000000.0
@@ -254,9 +255,9 @@ class CallSite(unittest.TestCase):
             return subprocess.CompletedProcess(cmd, 0, "", "")
         res = dl.Resolved(Path("/fake"), "/fake/route.py", fake_route.CONTRACT, "explicit")
         dlcall.call(res, "worker", "p", {}, ".", runner, live_file="/x/y.live/01-write.jsonl")
-        self.assertEqual(seen[0]["DELEGATE_LIVE_FILE"], "/x/y.live/01-write.jsonl")
+        self.assertEqual(must(seen[0])["DELEGATE_LIVE_FILE"], "/x/y.live/01-write.jsonl")
         dlcall.call(res, "worker", "p", {}, ".", runner, env={})
-        self.assertNotIn("DELEGATE_LIVE_FILE", seen[1])
+        self.assertNotIn("DELEGATE_LIVE_FILE", must(seen[1]))
 
     def test_engine_numbers_its_calls(self):
         from taskloop.app.run import engine

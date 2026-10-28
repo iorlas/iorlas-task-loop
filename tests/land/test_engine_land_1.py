@@ -720,7 +720,7 @@ class EngineLand1Test(EngineTest):
                 self.assertTrue(all(c.exit == 0 for c in recovery_checks[-1]))
                 self.assertEqual(len(recovery_pushes), 1)
                 self.assertFalse(self.eng.pending_land_validation)
-                self.assertIsNone(self.checkpoint())
+                self.assertNoCheckpoint()
                 self.assertEqual(self.eng.result()["outcome"], "landed")
                 self.assertEqual(len(self.closed), closed_before + 1)
                 self.assertEqual(len(self.lands), 1)

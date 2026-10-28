@@ -15,6 +15,7 @@ from taskloop.contracts.ask import AskAnswer  # noqa: E402
 from taskloop.contracts.enums import AskStatus, LockWhat  # noqa: E402
 from taskloop.stores.memory import fake_stores  # noqa: E402
 from taskloop.stores.runlog import RunLog  # noqa: E402
+from support.narrow import must  # noqa: E402
 
 
 @domain
@@ -54,7 +55,7 @@ class EngineAndDashOnFakesTest(unittest.TestCase):
     def test_a_land_lock_holder_is_visible_to_the_dashboard_while_it_lands(self) -> None:
         s = fake_stores()
         with s.locks.hold(LockWhat.LAND, "repo", "tl-1 pushing"):
-            self.assertEqual(s.locks.holder(LockWhat.LAND, "repo").holder, "tl-1 pushing")
+            self.assertEqual(must(s.locks.holder(LockWhat.LAND, "repo")).holder, "tl-1 pushing")
         self.assertIsNone(s.locks.holder(LockWhat.LAND, "repo"))
 
     def test_fakes_are_independent_per_call(self) -> None:

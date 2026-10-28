@@ -41,6 +41,7 @@ from support.builders import cfg_with  # noqa: E402
 from taskloop.app.slots import engine_lock
 from taskloop.adapters import ident
 from taskloop.app.wire import slots as wslots
+from support.narrow import must  # noqa: E402
 
 HERE = Path(__file__).resolve().parents[1] / "skills" / "task-loop"
 AREAS_JSON = {"area_label_prefix": "lane:", "areas": {"core": ["e-core"], "build": ["build"]}}
@@ -188,7 +189,7 @@ class Areas(AreasBase):
         self.assertEqual(loop_env.running(str(self.repo)), {})
         self.assertEqual(self.order(), (["x-2"], {}))
         bd.slots["sl-2"]["metadata"] = {"held_bead": "x-1"}
-        self.assertEqual(sl.take_slot(str(self.repo), self.cfg_slots())[0], "s2")
+        self.assertEqual(must(sl.take_slot(str(self.repo), self.cfg_slots()))[0], "s2")
         self.assertEqual(loop_env.running(str(self.repo)), {})
 
     def cfg_slots(self):
@@ -273,7 +274,7 @@ class Line(Slots):
                               "print('in line', flush=True); time.sleep(60)"
                               % (str(HERE), str(self.repo))], stdout=subprocess.PIPE, text=True)
         self.kids.append(k)
-        self.assertEqual(k.stdout.readline().strip(), "in line")
+        self.assertEqual(must(k.stdout).readline().strip(), "in line")
         tries = []
         got = wslots.wait_slot(str(self.repo), self.cfg, "second", poll=(0.01, 0.01),
                            stop=lambda: tries.append(1) or len(tries) >= 5)
@@ -281,9 +282,9 @@ class Line(Slots):
         self.assertEqual(len(self.tickets()), 1)  # its own ticket gone, the first one's kept
         k.kill()
         k.wait()
-        k.stdout.close()
+        must(k.stdout).close()
         got = wslots.wait_slot(str(self.repo), self.cfg, "second", poll=(0.01, 0.01), stop=lambda: True)
-        self.assertEqual(got[0], "s1")
+        self.assertEqual(must(got)[0], "s1")
         self.assertEqual(self.tickets(), [])  # the dead waiter's ticket was dropped
 
     @NO_FCNTL
@@ -335,7 +336,7 @@ class Line(Slots):
         self.assertEqual([t.why for t in wslots.waiting_line(repo)], ["run-task p0-bead", "run-task p2-bead"])
         sl.drop_ticket(repo, p0)
         got = wslots.wait_slot(repo, self.cfg, "late p0", poll=(0.01, 0.01), stop=lambda: True, prio=0)
-        self.assertEqual(got[0], "s1")  # the P0 newcomer passes the P2 waiter that was there first
+        self.assertEqual(must(got)[0], "s1")  # the P0 newcomer passes the P2 waiter that was there first
         wslots.release_slot(repo, "s1")
         self.assertIsNone(wslots.wait_slot(repo, self.cfg, "late p3", poll=(0.01, 0.01), stop=lambda: True, prio=3))  # the P2 waiter is ahead
         p0b = sl.take_ticket(repo, "p0 again", 0)

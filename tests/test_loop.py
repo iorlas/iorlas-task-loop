@@ -34,6 +34,7 @@ import tl  # noqa: E402
 from taskloop.adapters import gitrepo  # noqa: E402
 from taskloop.app.track import trail  # noqa: E402
 from taskloop.adapters import ident  # noqa: E402
+from support.narrow import must  # noqa: E402
 
 
 def bead(id, priority=2, parent=None, labels=(), type="task"):
@@ -81,14 +82,14 @@ class FakeBd:
             out = json.dumps([b] if b else [{"id": a[1], "parent": self.parents.get(a[1])}])
         elif a[0] == "update" and "--claim" in a:
             b = self.beads.get(a[1]) or self.slots.get(a[1])
-            if a[1] in self.taken_by_other or b.get("status") != "open" or b.get("assignee") not in (None, "", ident.actor()):
+            if a[1] in self.taken_by_other or must(b).get("status") != "open" or must(b).get("assignee") not in (None, "", ident.actor()):
                 rc = 1  # bd 1.3: an open bead still assigned to another actor (a paused run's) refuses the claim
             else:
-                b.update(status="in_progress", assignee=ident.actor())
+                must(b).update(status="in_progress", assignee=ident.actor())
         elif a[0] == "unclaim":  # as bd: only the current assignee frees its own claim; --force frees another's
             b = self.beads.get(a[1]) or self.slots.get(a[1])
-            if "--force" in a or b.get("assignee") in (None, "", ident.actor()):
-                b.update(status="open", assignee="")
+            if "--force" in a or must(b).get("assignee") in (None, "", ident.actor()):
+                must(b).update(status="open", assignee="")
             else:
                 rc = 1
         elif a[0] == "update" and ("--status" in a or "--assignee" in a):
@@ -338,7 +339,7 @@ class FakeChild:
         if self.polls and not self.terminated:
             self.polls -= 1
             self.test.clock.t += timeout or 0
-            raise subprocess.TimeoutExpired(self.cmd, timeout)
+            raise subprocess.TimeoutExpired(self.cmd, must(timeout))
         r = rec("failed", why="failed: stopped (SIGTERM)") if self.terminated else self.test.script[self.bead].pop(0)
         after = r.pop("after", None) if r is not None else None
         if r is not None:

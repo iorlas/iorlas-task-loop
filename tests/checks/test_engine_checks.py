@@ -35,6 +35,7 @@ from support.checks import res  # noqa: E402
 from taskloop.adapters import procs as sproc  # noqa: E402
 from taskloop.adapters.check_probe import PathProbe  # noqa: E402
 from taskloop.adapters import gitrepo  # noqa: E402
+from support.narrow import must  # noqa: E402
 
 
 class EngineChecksTest(EngineTest):
@@ -350,7 +351,7 @@ class EngineChecksTest(EngineTest):
     def test_a_brief_the_owner_changed_or_a_checkpoint_without_writer_seen_gets_the_full_prompt(self):
         rc, s = self.two_writes(ctx_k=40)
         args = (1, "g", "f.txt", "", "checks", "where", "fb", "")
-        self.assertIn("The brief is unchanged", self.eng.hand.delta(*args))
+        self.assertIn("The brief is unchanged", must(self.eng.hand.delta(*args)))
         (self.eng.run_dir / "brief.md").write_text("the owner answered: use X\n")  # an answer came in
         self.assertIsNone(self.eng.hand.delta(*args))
         (self.eng.run_dir / "brief.md").write_text(self.eng.brief_file.read_text())

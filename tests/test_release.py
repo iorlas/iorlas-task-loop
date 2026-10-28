@@ -15,6 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from taskloop.adapters.suiteout import failure_report  # noqa: E402
 from taskloop.app.release import manifest  # noqa: E402
+from support.narrow import must  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 RELEASE = ROOT / "dev" / "release.py"
@@ -484,7 +485,7 @@ class Release(unittest.TestCase):
             self.assertIn(want, r.stderr)
         m = re.search(r"full output: (\S+)", r.stderr)
         self.assertTrue(m, r.stderr)
-        saved = Path(m.group(1))
+        saved = Path(must(m).group(1))
         self.assertIn(str(self.home / "cfg" / "task-loop" / "releases"), str(saved))
         self.assertIn("FAIL: test_red_one", saved.read_text())
         self.assertEqual(self.git("status", "--porcelain", cwd=self.repo), "")

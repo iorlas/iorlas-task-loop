@@ -463,7 +463,7 @@ class EnginePlanTest(EngineTest):
 
     def test_a_plan_with_a_question_or_too_many_stages_is_not_checkpointed_early(self):
         self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
-        self.assertIsNone(self.checkpoint())
+        self.assertNoCheckpoint()
 
     def test_checks_that_cannot_run_go_back_to_the_same_planner_thread_once_and_do_not_count(self):
         bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["no-such-program-x f.txt", "echo a && echo b"])])

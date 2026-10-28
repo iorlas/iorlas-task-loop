@@ -428,8 +428,13 @@ class EngineTest(unittest.TestCase):
             return real(this, r, *a, **kw)
         return mock.patch.object(fake_route.Script, "reply", call)
 
-    def checkpoint(self):
-        return flat_ck(stored_ck())
+    def checkpoint(self) -> dict[str, Any]:
+        ck = flat_ck(stored_ck())
+        assert ck is not None, "no checkpoint is stored"
+        return ck
+
+    def assertNoCheckpoint(self):
+        self.assertIsNone(flat_ck(stored_ck()))
 
     def reclaim(self, bead, comments=(), ask=None, live=()):
         if ask:

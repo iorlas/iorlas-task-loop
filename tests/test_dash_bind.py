@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support.paths import VENDOR  # noqa: E402
 from taskloop_dash import bind  # noqa: E402
+from support.narrow import must  # noqa: E402
 
 TS = "100.64.1.2"  # tailscale-like (CGNAT) address
 
@@ -124,7 +125,7 @@ class EmptyState(Env):
         self.assertIn("repos.json", r.stderr)
 
     def test_guard_refuses_installed_copy_too(self):
-        self.assertIn("repos.json", self.guard(["127.0.0.1"], 7878, where=self.cache))
+        self.assertIn("repos.json", must(self.guard(["127.0.0.1"], 7878, where=self.cache)))
 
     def test_other_port_needs_no_repos_json(self):
         self.assertIsNone(self.guard(["127.0.0.1"], 0, where=self.cache))

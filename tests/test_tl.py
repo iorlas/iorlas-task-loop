@@ -28,6 +28,7 @@ from taskloop.app.wire import asks as wasks  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 from contracts import samples as S  # noqa: E402
 from taskloop.contracts import codec  # noqa: E402
+from support.narrow import must  # noqa: E402
 
 
 CTX = tl.Ctx(tl.HERE, trail.now, [])
@@ -396,32 +397,32 @@ class PinAndRollback(Base):
         route = lambda: lroute.find_route("", pins.pinned_dir("delegate"), ident.claude_dir() / "plugins" / "cache",
                                           lroute.installed_dir(ident.claude_dir()))
         dash = lambda: dash_wiring.ports().delegate_route()
-        self.assertIn("/iorlas-delegate/0.5.0/", route())
+        self.assertIn("/iorlas-delegate/0.5.0/", must(route()))
         self.assertIn("/iorlas-delegate/0.5.0/", dash())
         self.assertEqual(self.pin("0.1.0", "--delegate", "0.6.0")[0], 0)
-        self.assertIn("/iorlas-delegate/0.6.0/", route())
+        self.assertIn("/iorlas-delegate/0.6.0/", must(route()))
         self.assertIn("/iorlas-delegate/0.6.0/", dash())
 
     def test_the_drill_pin_decides_what_loop_and_find_route_pick_then_clear_returns_to_the_newest(self):
         import loop_env
         from taskloop.adapters import delegate as lroute
         route = lambda: lroute.find_route("", pins.pinned_dir("delegate"), ident.claude_dir() / "plugins" / "cache")
-        self.assertIn("0.6.0", route())  # no pin: the newest
+        self.assertIn("0.6.0", must(route()))  # no pin: the newest
         self.assertEqual(self.pin("0.1.0", "--delegate", "0.5.0")[0], 0)
-        self.assertIn("/iorlas-delegate/0.5.0/", route())
+        self.assertIn("/iorlas-delegate/0.5.0/", must(route()))
         root = self.claude / "plugins/cache/iorlas-marketplace/iorlas-task-loop/0.2.0"
         target = lambda **kw: loop_env.installs(loop_env.cfgdir(), here=root / "skills" / "task-loop").target(**kw)
         self.assertEqual(target(), ("0.1.0", root.parent / "0.1.0"))  # older than the running one: still the pin
         self.assertEqual(target(skip=["0.1.0"]), None)
         self.assertEqual(self.pin("--clear")[0], 0)
         self.assertEqual(target(), ("0.10.0", root.parent / "0.10.0"))
-        self.assertIn("0.6.0", route())
+        self.assertIn("0.6.0", must(route()))
         # the CLI end to end, in a fresh process with only the scratch dirs in its environment
         env = dict(os.environ, HOME=str(self.home))
         cli = [sys.executable, str(ROOT / "skills" / "task-loop" / "tl.py"), "pin"]
         r = subprocess.run(cli + ["0.2.0", "--delegate", "0.5.0"], env=env, capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("/iorlas-delegate/0.5.0/", route())
+        self.assertIn("/iorlas-delegate/0.5.0/", must(route()))
         r = subprocess.run(cli + ["0.4.0"], env=env, capture_output=True, text=True)
         self.assertEqual(r.returncode, 2)
         self.assertEqual(self.pinned()["task-loop"], "0.2.0")

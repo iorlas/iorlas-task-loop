@@ -58,6 +58,7 @@ from taskloop.app.slots import marks, reset  # noqa: E402
 
 from taskloop.app.release import push as release_push  # noqa: E402
 from taskloop.app.release.shell import Shell  # noqa: E402
+from support.narrow import must  # noqa: E402
 
 try:
     import fcntl
@@ -229,7 +230,7 @@ class Invariants(test_loop.Base):
         self.assertIsNone(got["B"][0], got)
         self.assertIn("held by", got["B"][1])
         # the hold stays: no loop take, no hand run, no second hold gets it
-        self.assertEqual(sl.take_slot(self.repo_s, self.cfg, "loop")[0], "s3")
+        self.assertEqual(must(sl.take_slot(self.repo_s, self.cfg, "loop"))[0], "s3")
         self.assertIsNone(sl.take_slot(self.repo_s, self.cfg, "loop"))  # s1 and s3 used, s2 held
         self.assertIn("held by", wslots.take_named_slot(self.repo_s, "s2", self.cfg, "hand")[1])
         self.actors["MainThread"] = "tl-other"
@@ -237,7 +238,7 @@ class Invariants(test_loop.Base):
         self.assertEqual(self.hold("s2"), 1)  # another session's hold is not taken over
         # the hold runs out on the fake clock: the next take frees it and gets the slot
         self.clock.advance(30 * 60 + 1)
-        self.assertEqual(sl.take_slot(self.repo_s, self.cfg, "loop")[0], "s2")
+        self.assertEqual(must(sl.take_slot(self.repo_s, self.cfg, "loop"))[0], "s2")
         owners = {b["title"].split()[-1]: b["assignee"] for b in bd.slots.values()}
         self.assertEqual(owners, {"s1": "tl-one", "s2": "tl-other", "s3": "tl-main"})
 
@@ -341,7 +342,7 @@ class Invariants(test_loop.Base):
         (d / "000099.json").write_text(json.dumps({"v": 1, "seq": 99, "prio": 0, "pid": sl.dead_pid(), "why": "dead", "since": 1}))
         self.assertEqual(wslots.waiting_line(self.repo_s), [])
         self.assertFalse((d / "000099.json").exists())
-        self.assertEqual(wslots.wait_slot(self.repo_s, self.cfg, "late", stop=lambda: True)[0], "s1")
+        self.assertEqual(must(wslots.wait_slot(self.repo_s, self.cfg, "late", stop=lambda: True))[0], "s1")
         # tickets taken at once are all different and numbered in arrival order
         seqs = self.together({"T%d" % i: (lambda: sl.take_ticket(self.repo_s, "x").seq) for i in range(6)})
         self.assertEqual(sorted(seqs.values()), list(range(min(seqs.values()), min(seqs.values()) + 6)))
@@ -358,7 +359,7 @@ class Invariants(test_loop.Base):
         engine_lock.write_engine_lock(s1, {"pid": OTHER_ENGINE, "start": "T%d" % OTHER_ENGINE, "bead": "w-9", "started": self.clock.now()})
         self.assertIn("pid %d runs w-9" % OTHER_ENGINE, engine_lock.engine_busy(s1))
         self.assertEqual(bd.slots["sl-1"]["status"], "open")  # the slot bead says free
-        self.assertEqual(sl.take_slot(self.repo_s, self.cfg, "loop")[0], "s2")  # a loop passes over s1
+        self.assertEqual(must(sl.take_slot(self.repo_s, self.cfg, "loop"))[0], "s2")  # a loop passes over s1
         self.assertIn("busy", wslots.take_named_slot(self.repo_s, "s1", self.cfg, "hand")[1])
         self.assertEqual(self.hold("s1"), 1)
         self.assertIn("BUSY", self.out.getvalue())
@@ -517,7 +518,7 @@ class Invariants(test_loop.Base):
             self.assertFalse(engine_lock.engine_lock_path(wslots.slot_dir(self.repo_s, n, self.cfg)).exists(), n)
         for lock in (ident.config_dir() / "locks").glob("*.lock"):
             with open(str(lock), "a+") as f:
-                fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)  # raises while a holder is left
+                must(fcntl).flock(f, must(fcntl).LOCK_EX | must(fcntl).LOCK_NB)  # raises while a holder is left
 
     def test_nothing_is_left_held_after_everyone_is_done(self):
         """Two loops, a hand run, a waiter and a hold use five slots at once and all let go; then a dead waiter, an expired hold and a

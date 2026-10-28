@@ -13,6 +13,7 @@ from taskloop.adapters import delegate as dl  # noqa: E402
 from taskloop.stores import call_state as cs  # noqa: E402
 from taskloop.domain.lanes import netgate  # noqa: E402
 from taskloop.app.loop.net import NetState  # noqa: E402
+from support.narrow import must  # noqa: E402
 
 KEY = ("write", 1, 0, 2)
 
@@ -31,7 +32,7 @@ class Calls(unittest.TestCase):
     def test_begin_writes_calling_before_the_call_and_load_reads_it_back(self):
         self.begin(prompt_sha="abc")
         st = cs.load_for(self.dir, "t-1", KEY)
-        self.assertEqual((st.phase, st.ref, st.key, st.lane, st.prompt_sha), ("calling", "", KEY, "OPENAI", "abc"))
+        self.assertEqual((must(st).phase, must(st).ref, must(st).key, must(st).lane, must(st).prompt_sha), ("calling", "", KEY, "OPENAI", "abc"))
         self.assertEqual(list(self.dir.glob("*.tmp")), [])
 
     def test_the_first_ref_sticks_and_survives_a_reload(self):
@@ -39,7 +40,7 @@ class Calls(unittest.TestCase):
         st.note_ref("sess-1", 11.0)
         st.note_ref("sess-2", 12.0)
         again = cs.load_for(self.dir, "t-1", KEY)
-        self.assertEqual((again.ref, again.t_ref), ("sess-1", 11.0))
+        self.assertEqual((must(again).ref, must(again).t_ref), ("sess-1", 11.0))
 
     def test_another_key_a_newer_version_or_a_damaged_file_loads_as_none(self):
         self.begin()
@@ -56,16 +57,16 @@ class Calls(unittest.TestCase):
         self.begin()
         p = cs.path_for(self.dir, "t-1")
         p.write_text(json.dumps(dict(json.loads(p.read_text()), future_field=1)))
-        self.assertEqual(cs.load_for(self.dir, "t-1", KEY).phase, "calling")
+        self.assertEqual(must(cs.load_for(self.dir, "t-1", KEY)).phase, "calling")
 
     def test_a_returned_answer_is_on_disk_and_a_restart_uses_it_without_a_call(self):
         st = self.begin()
         st.returned({"status": "done", "ref": "sess-1", "data": {"x": 1}}, self.dir / "write-2.raw.json", 20.0)
         again = cs.load_for(self.dir, "t-1", KEY)
-        self.assertEqual((again.phase, again.ref), ("returned", "sess-1"))
+        self.assertEqual((must(again).phase, must(again).ref), ("returned", "sess-1"))
         what = cs.reattach(again)
-        self.assertEqual(what[0], "answer")
-        self.assertEqual(what[1]["data"], {"x": 1})
+        self.assertEqual(must(what)[0], "answer")
+        self.assertEqual(must(what)[1]["data"], {"x": 1})
 
     def test_a_returned_phase_with_a_lost_answer_file_falls_back_to_resuming_the_ref(self):
         st = self.begin()
@@ -78,9 +79,9 @@ class Calls(unittest.TestCase):
     def test_a_call_with_a_ref_resumes_it_with_the_short_note_not_the_brief(self):
         self.begin().note_ref("sess-1")
         what = cs.reattach(cs.load_for(self.dir, "t-1", KEY))
-        self.assertEqual(what[:2], ("resume", "sess-1"))
-        self.assertLess(len(what[2]), 300)
-        self.assertIn("Do not restart", what[2])
+        self.assertEqual(must(what)[:2], ("resume", "sess-1"))
+        self.assertLess(len(must(what)[2]), 300)
+        self.assertIn("Do not restart", must(what)[2])
 
     def test_a_call_that_never_got_a_ref_a_consumed_call_and_no_state_call_as_usual(self):
         self.assertIsNone(cs.reattach(None))

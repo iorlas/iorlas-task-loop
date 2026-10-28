@@ -9,6 +9,7 @@ sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 import support.paths  # noqa: E402,F401
 from taskloop.domain.lanes import policy as lp  # noqa: E402
 import outcome as oc  # noqa: E402
+from support.narrow import must  # noqa: E402
 
 NOW = 1_000_000.0
 
@@ -69,7 +70,7 @@ class Exhaustive(unittest.TestCase):
     def test_the_module_is_pure(self):
         tree = ast.parse((ROOT / "src" / "taskloop" / "domain" / "lanes" / "policy.py").read_text(encoding="utf-8"))
         tops = {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
-        tops |= {n.module.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}
+        tops |= {must(n.module).split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}
         self.assertLessEqual(tops, {"dataclasses", "typing", "taskloop", "__future__", "collections"})
         self.assertNotIn("outcome", tops)
 
