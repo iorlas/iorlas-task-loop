@@ -128,10 +128,17 @@ class SameRed(Base):
 class Retries(Base):
     def host(self):
         calls = []
-        h = SimpleNamespace(killed=False, wall_hit=False, wt=Path(self.tmp.name), warned=[], calls=calls,
+        h = SimpleNamespace(killed=False, wall_hit=False, bead="b-1", wt=Path(self.tmp.name), envs=[], warned=[], calls=calls,
                             warn=lambda t: h.warned.append(t), waits=SimpleNamespace(note_slot_waits=lambda *a: None),
-                            sh=lambda cmd, **kw: (calls.append(cmd), (1, "AssertionError: 1 != 2"))[1])
+                            sh=lambda cmd, **kw: (calls.append(cmd), h.envs.append(kw.get("env")), (1, "AssertionError: 1 != 2"))[2])
         return h
+
+    def test_a_check_gets_the_artifact_directory_and_its_own_id(self):
+        h = self.host()
+        Attempts(cast(Any, h), cast(Any, None), {}, lambda s: None).run(Check(id="shot", cmd="just shot", retry=0), Path(self.tmp.name) / "l.log", {"A": "1"})
+        art = Path(self.tmp.name) / ".task" / "b-1" / "artifacts"
+        self.assertEqual(h.envs[0], {"A": "1", "TL_ARTIFACTS": str(art), "TL_ARTIFACT_STEP": "shot"})
+        self.assertTrue(art.is_dir())
 
     def test_a_check_slower_than_20_minutes_is_not_run_again_on_the_output_it_failed_with(self):
         h = self.host()

@@ -3,6 +3,7 @@ means (a question, an accepted requirement that decides it, shots a visual stage
 from typing import Any
 
 from taskloop.app.write.state import AGAIN, REPLAN, StageState
+from taskloop.contracts.paths import RepoDirs
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.prompts.anchors import anchors_text
 from taskloop.domain.prompts.common import DECIDED_TEXT, LATER_CASES, UNCHECKED_TEXT
@@ -50,7 +51,8 @@ class WriteRound:
         gate = f" (`{e.cfg.gate_text}`)" if e.cfg.gate else ""
         prompt = write_prompt(e.cases.rules_text(), brief=e.briefs.text(), plan=e.cases.plan_text(s.i), n=s.i + 1, goal=st["goal"],
                               files=", ".join(st["files"]), anchors=anchors_text(st), checks=stage_checks, feedback=s.feedback,
-                              evidence=e.evidence_dir, where=where_text, gate=gate) + tail
+                              evidence=e.evidence_dir, where=where_text, gate=gate,
+                              artifacts=RepoDirs(".").artifacts(e.bead)) + tail
         if fresh:
             prompt += e.hand.accepted_text() if boundary else e.hand.so_far_text()
         dtail = ""  # what a resumed writer still needs that its first prompt did not say for this stage

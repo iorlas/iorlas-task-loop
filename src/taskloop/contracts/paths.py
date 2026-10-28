@@ -142,5 +142,9 @@ class RepoDirs:
     def engine_lock(self) -> Path:
         return self.task / "engine.lock"
 
+    def artifacts(self, bead: str) -> Path:
+        """Where a run drops screenshots, PDFs: `StepArtifacts` copies the files from here when a step ends."""
+        return self.task / bead / "artifacts"
+
     def check_log(self, name: str) -> Path:
         return self.task / "checks" / name

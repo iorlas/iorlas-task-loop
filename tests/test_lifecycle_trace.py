@@ -265,14 +265,20 @@ class TraceTelemetry(te.EngineTest):
     def test_an_interrupted_command_leaves_a_kill_record_and_its_tree_is_stopped(self):
         eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), verbose=False, store=self.store)
         started = self.wt / "child-started"
-        stop_waiting = threading.Event()
-        self.addCleanup(signal.signal, signal.SIGINT, signal.signal(signal.SIGINT, signal.default_int_handler))  # a background shell ignores SIGINT
+        stop_waiting, delivered = threading.Event(), threading.Event()
+
+        def raising(signum, frame):  # the test owns SIGINT: interrupt_main does nothing unless a Python handler is installed
+            delivered.set()
+            raise KeyboardInterrupt
+
+        old = signal.signal(signal.SIGINT, raising)
+        self.addCleanup(signal.signal, signal.SIGINT, old)
 
         def interrupt_once_the_child_runs():  # the command itself says it runs: the interrupt cannot land before the child exists
             while not started.exists() and not stop_waiting.wait(0.005):
                 pass
-            if started.exists():
-                _thread.interrupt_main()
+            while started.exists() and not delivered.is_set() and not stop_waiting.wait(0.05):
+                _thread.interrupt_main()  # sent again until the handler ran: an interrupt that did not land is not a verdict
         watcher = threading.Thread(target=interrupt_once_the_child_runs, daemon=True)
         watcher.start()
         self.addCleanup(watcher.join)

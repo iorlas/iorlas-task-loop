@@ -57,11 +57,81 @@ class Reader(unittest.TestCase):
             self.assertIn(need, have)
 
 
+def key_errors(data: object, schema: dict, path: str = "$") -> list[str]:
+    """Where `data` has a key the schema does not name (additionalProperties false) or lacks a required one. Keys only: the repo has
+    no instance validator, and the drift we fear is a renamed, dropped or added key, not a changed scalar type."""
+    errs: list[str] = []
+    t = schema.get("type")
+    if isinstance(data, dict) and "object" in (t if isinstance(t, list) else [t]):
+        props, extra = schema.get("properties"), schema.get("additionalProperties")
+        if props is not None:
+            errs += [f"{path}.{k} is required and missing" for k in schema.get("required", []) if k not in data]
+            for k, v in data.items():
+                if k in props:
+                    errs += key_errors(v, props[k], f"{path}.{k}")
+                elif extra is False:
+                    errs.append(f"{path}.{k} is not in delegate's status_schema")
+        elif isinstance(extra, dict):
+            for k, v in data.items():
+                errs += key_errors(v, extra, f"{path}.{k}")
+    elif isinstance(data, list) and isinstance(schema.get("items"), dict):
+        for v in data:
+            errs += key_errors(v, schema["items"], path + "[]")
+    return errs
+
+
+def installed_route() -> str | None:
+    return sdelegate.find_route("", None, claude_dir() / "plugins" / "cache", sdelegate.installed_dir(claude_dir()))
+
+
+def installed_schema() -> dict:
+    route = installed_route()
+    if not route:
+        raise unittest.SkipTest("no delegate installed")
+    try:
+        schema = json.loads((Path(route).parent / "contract.json").read_text(encoding="utf-8")).get("status_schema")
+    except (OSError, ValueError):
+        schema = None
+    if not isinstance(schema, dict):
+        raise unittest.SkipTest("the installed delegate (%s) carries no status_schema in contract.json (older than 0.52.0): upgrade it" % route)
+    return schema
+
+
+class Schema(unittest.TestCase):
+    """The installed delegate's own status_schema (delegate 0.52.0+, generated from its typed Status records) against our fixture and reader."""
+
+    def test_the_real_fixture_has_exactly_the_keys_the_schema_names(self):
+        self.assertEqual(key_errors(REAL, installed_schema()), [])
+
+    def test_the_schema_catches_a_dropped_and_an_added_key(self):
+        schema = installed_schema()
+        self.assertTrue(key_errors({k: v for k, v in REAL.items() if k != "ts"}, schema))
+        self.assertTrue(key_errors(dict(REAL, surprise=1), schema))
+
+    def test_every_key_the_reader_consumes_is_one_the_schema_names(self):
+        props = installed_schema()["properties"]
+        lane = props["cockpit"]["properties"]["lanes"]["items"]["properties"]
+        old = props["lanes"]["additionalProperties"]["properties"]
+        for k in ("ts", "lanes", "cockpit", "needs_input"):
+            self.assertIn(k, props)
+        for k in ("id", "label", "family", "kind", "model", "state", "emoji", "reason", "unlock", "windows", "warnings"):
+            self.assertIn(k, lane, "delegate's cockpit lane dropped a key snapshot_of reads")
+        for k in ("out", "out_until", "reason", "notes"):
+            self.assertIn(k, old, "delegate's flat lane dropped a key snapshot_of reads")
+
+    def test_the_installed_answer_has_exactly_the_keys_the_schema_names(self):
+        schema = installed_schema()
+        r = subprocess.run([sys.executable, str(installed_route()), "status", "--json"], capture_output=True, text=True, timeout=60, check=False)
+        got = json.loads(r.stdout[r.stdout.index("{"):])
+        self.assertEqual(key_errors(got, schema), [])
+        snapshot_of(got)
+
+
 class Installed(unittest.TestCase):
     """The installed delegate's real answer has the shape of the fixture and reads."""
 
     def test_the_installed_delegate_answers_in_the_shape_of_the_fixture(self):
-        route = sdelegate.find_route("", None, claude_dir() / "plugins" / "cache", sdelegate.installed_dir(claude_dir()))
+        route = installed_route()
         if not route:
             self.skipTest("no delegate installed")
         r = subprocess.run([sys.executable, route, "status", "--json"], capture_output=True, text=True, timeout=60, check=False)

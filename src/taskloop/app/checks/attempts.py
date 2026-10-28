@@ -10,6 +10,7 @@ from taskloop.app.checks.host import CheckHost
 from taskloop.contracts.argv import argv_of
 from taskloop.contracts.checks import Check
 from taskloop.contracts.enums import WaitWhat
+from taskloop.contracts.paths import RepoDirs
 from taskloop.domain.checks import matchers, retry
 
 
@@ -52,7 +53,10 @@ class Attempts:
 
     def _once(self, c: Check, log: Path, env: Mapping[str, str]) -> tuple[int, str, str, float]:
         t0 = time.time()
-        rc, tail = self.host.sh(argv_of(c.cmd), timeout=c.wall_min * 60, save=log, env=env, what="check")
+        art = RepoDirs(self.host.wt).artifacts(self.host.bead)
+        art.mkdir(parents=True, exist_ok=True)  # where a check may drop pictures: ingest copies them at step end
+        rc, tail = self.host.sh(argv_of(c.cmd), timeout=c.wall_min * 60, save=log, what="check",
+                                env={**env, "TL_ARTIFACTS": str(art), "TL_ARTIFACT_STEP": c.id})
         seen = self._read(log, tail)
         took = time.time() - t0
         self.host.waits.note_slot_waits(seen, took)

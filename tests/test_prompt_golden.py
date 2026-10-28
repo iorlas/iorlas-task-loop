@@ -56,7 +56,7 @@ def render_write(rules=RULES, failed=None):
     where = eng.briefing.where("write", [c.cmd for c in eng.cfg.checks] + CHECKS, failed, listed=CHECKS)
     return wp.write_prompt(
         rules, brief="<brief text>", plan="<plan text>", n=1, goal="Add the greeting", files="greet.py", anchors="",
-        checks=eng.briefing.stage_checks_text(CHECKS, skip=failed), feedback="", evidence=".task/t-1/evidence", where=where, gate=" (`just check`)")
+        checks=eng.briefing.stage_checks_text(CHECKS, skip=failed), feedback="", evidence=".task/t-1/evidence", artifacts=".task/t-1/artifacts", where=where, gate=" (`just check`)")
 
 
 def render_resume(failed=None):
