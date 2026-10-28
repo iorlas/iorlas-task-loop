@@ -13,7 +13,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 sys.path.insert(0, str(ROOT / "dev"))
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
-import release  # noqa: E402
+from taskloop.adapters.suiteout import Shard, failure_report, merge_outputs  # noqa: E402
+from taskloop.app.release import suite as runner  # noqa: E402
 import shard  # noqa: E402
 
 TREE = {
@@ -112,7 +113,7 @@ def ok(n):
 
 class Merge(unittest.TestCase):
     def test_green_shards_give_one_total(self):
-        out, green = release.merge_outputs([("s1", 0, ok(3)), ("s2", 0, ok(4))], 7)
+        out, green = merge_outputs([Shard("s1", 0, ok(3)), Shard("s2", 0, ok(4))], 7)
         self.assertTrue(green)
         self.assertTrue(out.rstrip().endswith("Ran 7 tests in 1.500s\n\nOK"), out)
         self.assertEqual(out.count("Ran "), 1)
@@ -134,35 +135,35 @@ class Merge(unittest.TestCase):
 
             FAILED (failures=1, errors=1)
             """)
-        out, green = release.merge_outputs([("s1", 1, red), ("s2", 1, red.replace("test_x", "test_p").replace("test_y", "test_q")),
-                                            ("s3", 0, ok(2))], 8)
+        out, green = merge_outputs([Shard("s1", 1, red), Shard("s2", 1, red.replace("test_x", "test_p").replace("test_y", "test_q")),
+                                            Shard("s3", 0, ok(2))], 8)
         self.assertFalse(green)
         for want in ("FAIL: test_x", "FAIL: test_p", "ERROR: test_q", "AssertionError: boom", "Ran 8 tests in 1.500s",
                      "FAILED (failures=2, errors=2)"):
             self.assertIn(want, out)
-        rep = release.failure_report(out)
+        rep = failure_report(out)
         self.assertIn("FAIL: test_p", rep)
         self.assertIn("FAILED (failures=2, errors=2)", rep)
 
     def test_skips_are_summed_and_stay_green(self):
-        out, green = release.merge_outputs([("s1", 0, ok(2).replace("OK", "OK (skipped=2)")), ("s2", 0, ok(1).replace("OK", "OK (skipped=1)"))], 3)
+        out, green = merge_outputs([Shard("s1", 0, ok(2).replace("OK", "OK (skipped=2)")), Shard("s2", 0, ok(1).replace("OK", "OK (skipped=1)"))], 3)
         self.assertTrue(green)
         self.assertIn("OK (skipped=3)", out)
 
     def test_a_shard_that_died_without_a_summary_is_red_and_its_tail_is_shown(self):
-        out, green = release.merge_outputs([("s1", 0, ok(2)), ("s2", -9, "starting\nSegmentation fault\n")], 5)
+        out, green = merge_outputs([Shard("s1", 0, ok(2)), Shard("s2", -9, "starting\nSegmentation fault\n")], 5)
         self.assertFalse(green)
         self.assertIn("ERROR: shard s2 crashed (exit -9)", out)
         self.assertIn("Segmentation fault", out)
-        self.assertIn("ERROR: shard s2 crashed", release.failure_report(out))
+        self.assertIn("ERROR: shard s2 crashed", failure_report(out))
 
     def test_fewer_tests_run_than_planned_is_red(self):
-        out, green = release.merge_outputs([("s1", 0, ok(2))], 3)
+        out, green = merge_outputs([Shard("s1", 0, ok(2))], 3)
         self.assertFalse(green)
         self.assertIn("ERROR: 2 tests ran, 3 were planned", out)
 
     def test_a_nonzero_exit_with_a_clean_summary_is_red(self):
-        out, green = release.merge_outputs([("s1", 1, ok(2))], 2)
+        out, green = merge_outputs([Shard("s1", 1, ok(2))], 2)
         self.assertFalse(green)
 
 
@@ -172,15 +173,15 @@ class Workers(unittest.TestCase):
         with mock.patch.dict(os.environ, env, clear=True):
             for cpus, want in ((2, 2), (4, 2), (8, 6), (14, 12), (None, 2)):
                 with mock.patch.object(os, "cpu_count", return_value=cpus):
-                    self.assertEqual(release.workers(), want)
+                    self.assertEqual(runner.workers(), want)
 
     def test_the_environment_overrides_it(self):
         with mock.patch.dict(os.environ, {"TASK_LOOP_SUITE_WORKERS": "3"}):
-            self.assertEqual(release.workers(), 3)
+            self.assertEqual(runner.workers(), 3)
 
     def test_a_shard_gets_its_own_home_config_and_temp_dirs(self):
         with tempfile.TemporaryDirectory() as d:
-            a, b = release.isolated_env(Path(d) / "a"), release.isolated_env(Path(d) / "b")
+            a, b = runner.isolated_env(Path(d) / "a"), runner.isolated_env(Path(d) / "b")
             for k in ("HOME", "XDG_CONFIG_HOME", "TMPDIR"):
                 self.assertNotEqual(a[k], b[k])
                 self.assertTrue(a[k].startswith(str(Path(d) / "a")))

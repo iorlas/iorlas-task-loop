@@ -8,8 +8,9 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "dev"))
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
-import release  # noqa: E402
 import suite  # noqa: E402
+from taskloop.app.release import suite as runner  # noqa: E402
+from taskloop.app.release.shell import Abort  # noqa: E402
 
 
 class GateCommand(unittest.TestCase):
@@ -21,10 +22,10 @@ class GateCommand(unittest.TestCase):
         self.assertEqual((ROOT / words[1]).resolve(), (ROOT / "dev" / "suite-docker.py").resolve())
 
     def test_exit_code_follows_the_suite(self):
-        with mock.patch.object(release, "suite", return_value=None) as s:
+        with mock.patch.object(runner, "host_suite", return_value=None) as s:
             self.assertEqual(suite.main(["--repo", "x"]), 0)
-            s.assert_called_once_with("x", record=False)
-        with mock.patch.object(release, "suite", side_effect=release.Abort("red")), mock.patch("sys.stderr"):
+            s.assert_called_once_with(ROOT, Path("x"), False)
+        with mock.patch.object(runner, "host_suite", side_effect=Abort("red")), mock.patch("sys.stderr"):
             self.assertEqual(suite.main(["--repo", "x"]), 1)
 
 

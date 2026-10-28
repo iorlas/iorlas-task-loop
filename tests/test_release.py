@@ -12,6 +12,9 @@ import time
 import unittest
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from taskloop.adapters.suiteout import failure_report  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[1]
 RELEASE = ROOT / "dev" / "release.py"
 PLUGIN = ".claude-plugin/plugin.json"
@@ -95,6 +98,10 @@ class Release(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text)
 
+    def sync_repo(self):
+        """The main checkout follows origin: a release leaves it as it was, so a test that branches from it pulls first."""
+        self.git("pull", "-q", "--ff-only", "origin", "main", cwd=self.repo)
+
     def commit(self, wt, msg):
         self.git("add", "-A", cwd=wt)
         self.git("commit", "-qm", msg, cwd=wt)
@@ -135,8 +142,26 @@ class Release(unittest.TestCase):
         self.assertEqual(self.log("claude").count("plugin marketplace update iorlas-marketplace"), 2)
         self.assertEqual(self.git("status", "--porcelain", cwd=self.repo), "")
 
-    def test_a_dirty_main_checkout_is_refused_before_anything_moves(self):
+    def test_a_dirty_main_checkout_on_another_branch_is_released_from_and_left_byte_identical(self):
+        self.git("checkout", "-q", "-b", "task/wip", cwd=self.repo)
         (self.repo / "stray.txt").write_text("x")
+        (self.repo / PLUGIN).write_text("edited by hand\n")
+        before = (self.git("rev-parse", "HEAD", cwd=self.repo), self.git("status", "--porcelain", cwd=self.repo),
+                  (self.repo / PLUGIN).read_bytes())
+        r = self.release("fix")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.version(self.origin)["version"], "0.1.1")
+        self.assertEqual((self.git("rev-parse", "HEAD", cwd=self.repo), self.git("status", "--porcelain", cwd=self.repo),
+                          (self.repo / PLUGIN).read_bytes()), before)
+        self.assertEqual(self.git("branch", "--show-current", cwd=self.repo), "task/wip")
+        clones = list((self.home / "cfg" / "task-loop" / "release").iterdir())
+        self.assertEqual(len(clones), 1)  # the persistent clone: the next release reuses it
+        self.assertEqual(self.release("fix again").returncode, 0)
+        self.assertEqual(list((self.home / "cfg" / "task-loop" / "release").iterdir()), clones)
+        self.assertEqual(self.version(self.origin)["version"], "0.1.2")
+
+    def test_a_dirty_marketplace_checkout_is_refused_before_anything_moves(self):
+        (self.market / "stray.txt").write_text("x")
         r = self.release("fix")
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("dirty", r.stderr)
@@ -199,7 +224,7 @@ class Release(unittest.TestCase):
         self.assertEqual(self.git("log", "--format=%s", "-2", "main", cwd=self.origin).splitlines(),
                          ["0.1.6: feature", "Add feature (tl-1)"])
         self.assertIn("Co-Authored-By: Claude", self.git("log", "-1", "--format=%B", "main", cwd=self.origin))
-        self.assertEqual(self.log("bd"), ["close tl-1 --reason landed"])
+        self.assertEqual([x.split(" ", 2)[2] for x in self.log("bd")], ["close tl-1 --reason landed --json"])  # after --actor NAME
         self.assertEqual(self.market_versions()["iorlas-task-loop"], "0.1.6")
         self.assertEqual(json.loads((self.repo / PLUGIN).read_text())["author"], {"name": "t"})  # the rest kept
 
@@ -207,6 +232,7 @@ class Release(unittest.TestCase):
         for remote_only in (False, True):
             with self.subTest(remote_only=remote_only):
                 name = "task/remote" if remote_only else "task/local"
+                self.sync_repo()
                 self.git("checkout", "-q", "-b", name, cwd=self.repo)
                 self.write(self.repo / "z.txt", name + "\n")
                 self.git("add", "-A", cwd=self.repo)
@@ -247,6 +273,7 @@ class Release(unittest.TestCase):
         for suite_fails in (False, True):
             with self.subTest(suite_fails=suite_fails):
                 name = "task/red" if suite_fails else "task/green"
+                self.sync_repo()
                 self.git("checkout", "-q", "-b", name, cwd=self.repo)
                 self.write(self.repo / "feature.txt", name + "\n")
                 if suite_fails:
@@ -281,36 +308,6 @@ class Release(unittest.TestCase):
                     self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
                     self.assertEqual(self.git("show", "main:feature.txt", cwd=self.origin), name)
                     self.assertEqual(self.git("show", "main:other.txt", cwd=self.origin), name)
-
-    def test_unpublished_main_commits_absent_from_the_branch_are_refused(self):
-        self.git("checkout", "-q", "-b", "task/sibling", cwd=self.repo)
-        self.write(self.repo / "sibling.txt", "branch change\n")
-        self.git("add", "-A", cwd=self.repo)
-        self.git("commit", "-qm", "sibling change", cwd=self.repo)
-        source = self.git("rev-parse", "HEAD", cwd=self.repo)
-        self.git("checkout", "-q", "main", cwd=self.repo)
-        self.write(self.repo / "unpublished.txt", "keep this main commit\n")
-        self.git("add", "-A", cwd=self.repo)
-        self.git("commit", "-qm", "unpublished main change", cwd=self.repo)
-        start = self.git("rev-parse", "HEAD", cwd=self.repo)
-        origin = self.git("rev-parse", "main", cwd=self.origin)
-        marketplace = self.git("rev-parse", "main", cwd=self.morigin)
-
-        r = self.release("sibling", "--from-branch", "task/sibling")
-
-        self.assertNotEqual(r.returncode, 0)
-        self.assertIn("main has unpublished commits absent from task/sibling", r.stderr)
-        self.assertNotIn("running the full suite", r.stdout)
-        self.assertEqual(self.git("rev-parse", "HEAD", cwd=self.repo), start)
-        self.assertEqual(self.git("branch", "--show-current", cwd=self.repo), "main")
-        self.assertEqual(self.git("status", "--porcelain", cwd=self.repo), "")
-        self.assertEqual((self.repo / "unpublished.txt").read_text(), "keep this main commit\n")
-        self.assertFalse((self.repo / "sibling.txt").exists())
-        self.assertEqual(self.git("rev-parse", "task/sibling", cwd=self.repo), source)
-        self.assertEqual(self.git("rev-parse", "main", cwd=self.origin), origin)
-        self.assertEqual(self.git("rev-parse", "main", cwd=self.morigin), marketplace)
-        self.assertEqual(self.log("claude"), [])
-        self.assertEqual(self.log("bd"), [])
 
     def test_a_rebase_conflict_aborts_and_restores_main(self):
         start = self.git("rev-parse", "HEAD", cwd=self.repo)
@@ -432,7 +429,9 @@ class Release(unittest.TestCase):
         source = self.git("rev-parse", "HEAD", cwd=self.repo)
         self.git("checkout", "-q", "main", cwd=self.repo)
         # another release lands between our fetch and our push: simulated by a pre-push hook that pushes once
-        hook = self.repo / ".git" / "hooks" / "pre-push"
+        hook = self.home / "template" / "hooks" / "pre-push"  # the release clone is cloned from this template
+        hook.parent.mkdir(parents=True)
+        self.env["GIT_TEMPLATE_DIR"] = str(self.home / "template")
         hook.write_text("#!/bin/sh\nunset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE\n[ -f '%s' ] && exit 0\ntouch '%s'\ncd '%s' && sed -i.bak 's/0.1.0/0.1.1/' %s "
                         "&& rm %s.bak && git commit -qam '0.1.1: racer' && git push -q origin HEAD:main\n"
                         % (self.home / "raced", self.home / "raced", self.seed, PLUGIN, PLUGIN))
@@ -479,8 +478,6 @@ class Release(unittest.TestCase):
         self.assertEqual(self.git("status", "--porcelain", cwd=self.repo), "")
 
     def test_failure_report_keeps_every_fail_and_error_section_and_the_summary_lines(self):
-        sys.path.insert(0, str(ROOT / "dev"))
-        import release
         out = textwrap.dedent("""\
             ..E.F.
             ======================================================================
@@ -502,7 +499,7 @@ class Release(unittest.TestCase):
             FAILED (failures=1, errors=1)
             sys:1: ResourceWarning: unclosed file
             """)
-        rep = release.failure_report(out)
+        rep = failure_report(out)
         self.assertIn("ERROR: test_a", rep)
         self.assertIn("ValueError: bang", rep)
         self.assertIn("FAIL: test_b", rep)
@@ -589,7 +586,7 @@ class Release(unittest.TestCase):
         self.assertTrue(last_line.startswith("release FAILED: 0.1.1 was pushed but"), last_line)
         rec = self.last()
         self.assertEqual((rec["ok"], rec["version"]), (False, "0.1.1"))
-        self.assertIn("comment tl-x1 release FAILED", " ".join(self.log("bd")))
+        self.assertIn("comments add tl-x1 release FAILED", " ".join(self.log("bd")))
         self.assertEqual(self.version(self.origin)["version"], "0.1.1")  # pushed all the same: the failure is the install's
         self.assertEqual(self.tags(self.origin), ["v0.1.1"])
 
@@ -612,7 +609,7 @@ class Release(unittest.TestCase):
         self.assertEqual(rec["branch"], "main")
         self.assertTrue(any("test_red" in t for t in rec["tests"]), rec)
         self.assertTrue(Path(rec["log"]).is_file())
-        self.assertIn("comment tl-x2 release FAILED", " ".join(self.log("bd")))
+        self.assertIn("comments add tl-x2 release FAILED", " ".join(self.log("bd")))
         self.assertTrue(r.stderr.strip().splitlines()[-1].startswith("release FAILED: nothing released: "))
         self.assertNotIn("close tl-x2", " ".join(self.log("bd")))
         # a later success replaces the failure record

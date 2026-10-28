@@ -54,8 +54,8 @@ from support import tlbd  # noqa: E402
 from taskloop.adapters import slot_git  # noqa: E402
 from taskloop.app.slots import marks, reset  # noqa: E402
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "dev"))
-import release  # noqa: E402
+from taskloop.app.release import push as release_push  # noqa: E402
+from taskloop.app.release.shell import Shell  # noqa: E402
 
 try:
     import fcntl
@@ -391,6 +391,7 @@ class Invariants(test_loop.Base):
         me = lambda: threading.current_thread().name  # noqa: E731
 
         def git(repo, *a, check=True):
+            repo = str(repo)
             if a[:2] == ("remote", "get-url"):
                 return "file:///origin.git"
             with o.mu:
@@ -405,12 +406,13 @@ class Invariants(test_loop.Base):
             pass
 
         def run(cmd, repo, check=True):
+            repo = str(repo)
             with o.mu:
                 loc = o.local[repo]
                 if "rebase" in cmd:
                     loc["base"] = o.head
                     o.log.append((repo, "rebase"))
-                    return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+                    return subprocess.CompletedProcess(cmd, 0, "", "")
             assert "push" in cmd, cmd
             with o.mu:
                 o.inside += 1
@@ -421,14 +423,14 @@ class Invariants(test_loop.Base):
                 o.inside -= 1
                 o.log.append((repo, "push"))
                 if loc["base"] != o.head:  # a push from a base that is not origin's head is refused
-                    return types.SimpleNamespace(returncode=1, stdout="", stderr="! [rejected] non-fast-forward")
+                    return subprocess.CompletedProcess(cmd, 1, "", "! [rejected] non-fast-forward")
                 o.head += 1
                 o.patch = int(loc["version"].split(".")[2])
                 o.versions.append((repo, loc["version"]))
                 o.log.append((repo, "accepted"))
-                return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+                return subprocess.CompletedProcess(cmd, 0, "", "")
 
-        def bump(repo, message, minor):  # release.next_version reads origin/main's version
+        def bump(repo):  # flow.next_version reads origin/main's version
             with o.mu:
                 o.local[repo]["version"] = "0.1.%d" % (o.patch + 1)
                 o.log.append((repo, "bump"))
@@ -441,10 +443,9 @@ class Invariants(test_loop.Base):
             if len(calls) == 2:
                 arrived.set()
             return self.real_os_lock(*a, **kw)
-        with mock.patch.object(release, "git", side_effect=git), mock.patch.object(release, "fetch", side_effect=fetch), \
-                mock.patch.object(release, "run", side_effect=run), mock.patch.object(release, "bump_and_commit", side_effect=bump), \
-                mock.patch.object(release, "say"), self.watching(watch):
-            got = self.together({n: (lambda n=n: release.push_main(n, "race release", False, "0.1.1", "h0")) for n in "AB"})
+        sh = Shell(git=git, fetch=fetch, run=run, say=lambda msg: None)
+        with self.watching(watch):
+            got = self.together({n: (lambda n=n: release_push.push_main(Path(n), "race release", "0.1.1", "h0", lambda: bump(n), sh)) for n in "AB"})
         o.got = got
         return o
 
@@ -452,7 +453,7 @@ class Invariants(test_loop.Base):
         """Two engine lands and a release push take one lock per origin: never two inside at once. Two releases built on one base:
         the late one rebases onto what the first pushed, and each release's push is accepted once.
         Red when: land.py Lander.lock, `with self.locked("land_lock", path):` is `with contextlib.nullcontext():`; or
-        release.py push_main, `if head != base:` is `if False:` (a moved origin/main is not rebased onto)."""
+        release/push.py push_main, `if head != base:` is `if False:` (a moved origin/main is not rebased onto)."""
         self.tracker()
         url = "file:///origin.git"
         eng = lambda: types.SimpleNamespace(land_lock_path=lambda: landlock.land_lock_path(url),  # noqa: E731 - Lander.lock with the parts it reads
@@ -496,7 +497,7 @@ class Invariants(test_loop.Base):
 
     def test_every_release_takes_a_distinct_version(self):
         """Two releases bumped on one base (both 0.1.1) end as 0.1.1 and 0.1.2: the one that lost the race bumps again on the new base.
-        Red when: release.py push_main, `version = bump_and_commit(repo, message, minor)` inside the `head != base` block is `pass`."""
+        Red when: release/push.py push_main, `version = bump()` inside the `head != base` block is `pass`."""
         self.tracker()
         o = self.releases()
         versions = sorted(v for _, v in o.versions)
