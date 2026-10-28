@@ -144,7 +144,7 @@ class Settles:
         return True
 
     def by_results(self, u: Item, results: list[Any], current: bool) -> bool:
-        if self.e.is_look(u):
+        if self.e.judge.is_look(u):
             return False
         proof = self.proof(u["what"], results, current)
         if proof:

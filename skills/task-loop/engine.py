@@ -71,6 +71,10 @@ from taskloop.app.land.fixer import Fixer
 from taskloop.app.land.lander import Lander
 from taskloop.app.land.rebase import Rebase
 from taskloop.app.land.tree import Tree
+from taskloop.app.look.judge import Judge
+from taskloop.app.look.owner_look import OwnerLook
+from taskloop.app.look.shots import Pictures
+from taskloop.app.review.link_check import LinkCheck
 from taskloop.app.run.state import Checkpoints, StateAttrs, carries_state
 from taskloop.contracts.checkpoint import RunState
 from taskloop.app.run.context import RunContext
@@ -323,21 +327,6 @@ def _tree_problem(wt):
 
 
 # ---- the engine -----------------------------------------------------------------------------------------------------
-
-LINT_FILLER = {
-    "acceptance criteria": "- The follow-up named in the title is done, and the checks of the code it touches pass.",
-    "touches": "Not known yet: the writer who picks this up names the files it changes (found while working on %(bead)s).",
-    "steps to reproduce": "See the description above (found while working on %(bead)s); the reproduction is not recorded.",
-}
-
-
-def with_sections(body, headings, bead):
-    """The description with each missing section appended (a filler that says so, never an invented fact)."""
-    have = {h.lower() for h in re.findall(r"^##\s*(.+?)\s*$", body or "", re.M)}
-    add = ["## %s\n%s" % (h, LINT_FILLER.get(h.lower(), "(not recorded: found while working on %(bead)s)") % {"bead": bead})
-           for h in headings if h.lower() not in have]
-    return (body or "").rstrip() + ("\n\n" + "\n\n".join(add) if add else "")
-
 
 NET_PAUSE_ADOPT_S = lp.KNOBS["net_pause_max_s"]  # a run paused for the network is taken up again by the next run-task within this long
 
@@ -613,6 +602,22 @@ class Engine(StateAttrs):
                                             close_move=close_move, reflection_text=reflection_text, why_code=runtrace.why_code,
                                             config_dir=ident.config_dir()))
 
+    @cached_property
+    def pictures(self):
+        return Pictures(self)
+
+    @cached_property
+    def judge(self):
+        return Judge(self)
+
+    @cached_property
+    def owner_look(self):
+        return OwnerLook(self)
+
+    @cached_property
+    def link_check(self):
+        return LinkCheck(self)
+
     def lock_worker(self, started):
         """The worker delegate launched (the live file's first line) goes into the engine lock, so a SIGKILLed engine leaves it findable."""
         if enginelock.LOCK:
@@ -835,10 +840,6 @@ class Engine(StateAttrs):
         return Verifier(self)
 
     Blocked = Blocked  # the stop a step raises: components catch it through the host
-
-    def shot_table(self):
-        """The shot methods the repo can render, as the planner and the writer are told them."""
-        return looks.table_text(self.shot_methods())
 
     @cached_property
     def worker(self):
@@ -1386,11 +1387,11 @@ class Engine(StateAttrs):
                 self.checkpoints.save(stage=i, rounds=0, n=0, feedback="", step="write" if i < len(plan["stages"]) else "land")
                 if i == len(plan["stages"]):
                     self.safe_point("land")  # the checkpoint says land: the close and the land run on the newest code
-            if self.render_stale and self.last_reqs and self.shot_methods() and not self.dry:
+            if self.render_stale and self.last_reqs and self.pictures.shot_methods() and not self.dry:
                 # code changed after the last render (a fix round past the render rounds): the pictures that land show the tree
                 self.log.note("rendering the last shots again: code changed since the pictures were made")
-                self.render_shots(self.last_reqs, self.look_done + 1)
-            gaps = self.self_verify([u for u in self.unchecked if u["kind"] in UNCHECKED_KINDS or self.is_look(u)])
+                self.pictures.render_shots(self.last_reqs, self.look_done + 1)
+            gaps = self.self_verify([u for u in self.unchecked if u["kind"] in UNCHECKED_KINDS or self.judge.is_look(u)])
             if gaps:
                 raise Blocked("verify: before land, the workers could not check: " + "; ".join(
                     "%s (%s%s)" % (u["what"], u["kind"], ("; " + u["why"]) if u.get("why") else "") for u in gaps),
@@ -1399,7 +1400,7 @@ class Engine(StateAttrs):
             outcome = "landed" if sha else "done"
             kind = oc.Kind.LANDED if sha else oc.Kind.DONE
             if sha:
-                self.file_owner_look()  # before the checkpoint goes: a crash from here on still files it on resume
+                self.owner_look.file_owner_look()  # before the checkpoint goes: a crash from here on still files it on resume
             self.checkpoints.drop()
         except Blocked as b:
             kind = b.kind
@@ -1464,9 +1465,6 @@ class Engine(StateAttrs):
 
     def backed_by_leftover(self, what):
         return self.routing.backed_by_leftover(what)
-
-    def is_look(self, u):
-        return bool(self.visual_cfg()) and Wording.is_look(u["what"])
 
     def add_unverified(self, u, why):
         self.routing.add_unverified(u, why)
@@ -1665,489 +1663,7 @@ class Engine(StateAttrs):
     MARKERS = text_of(MARKERS_ARGV)
 
     # -- look and feel (tl-bxk.10.23): screenshots for a visual change, judged by the agent, held for the owner's batch
-    def visual_cfg(self):
-        vp = self.cfg.visual_paths
-        return vp if vp and vp.include else None
-
-    def shots(self):
-        """The pictures the writer saved under the evidence dir, relative to it."""
-        if not self.evidence_dir.is_dir():
-            return []
-        out = []
-        for f in sorted(self.evidence_dir.rglob("*")):
-            if not (f.is_file() and f.suffix.lower() in IMAGE_EXT):
-                continue
-            rel = str(f.relative_to(self.evidence_dir))
-            if self.shot_methods() and rel not in self.rendered_names:
-                continue  # with a shot table the pictures are the engine's own, of this run: never a writer's or an older run's
-            why = ("over %d MB" % (MAX_SHOT_BYTES >> 20)) if f.stat().st_size > MAX_SHOT_BYTES else (
-                "more than %d screenshots" % MAX_SHOTS if len(out) >= MAX_SHOTS else "")
-            if why:
-                if rel not in self.shots_skipped:
-                    self.shots_skipped.add(rel)
-                    self.log.note("screenshot %s skipped: %s" % (rel, why))
-                continue
-            out.append(rel)
-        return out
-
-    def stage_visual(self, st):
-        vp = self.visual_cfg()
-        return bool(vp) and visual_hit(vp, list(st.get("files") or []) + self.changed_paths())
-
     # -- tl-bxk.13.15: visual work. The engine renders, a look judge judges, the owner decides taste (docs/design/visual-work.md)
-    def shot_methods(self):
-        """{method: entry} from engine.shot_table, read from the base branch (a worker can edit the working copy, not that);
-        {} when unset or unreadable (then a visual stage works the old way)."""
-        if self.shot_cache is None:
-            self.shot_cache = {}
-            rel = (self.cfg.shot_table or "").strip()
-            if rel:
-                text = self.git("show", "%s:%s" % (self.cfg.base, rel))
-                methods, err = looks.parse_table(text) if text else ({}, "%s is not on %s" % (rel, self.cfg.base))
-                if err:
-                    self.warn("engine.shot_table: %s; visual stages work the old way" % err)
-                self.shot_cache = methods
-        return self.shot_cache
-
-    def look_ready(self, st):
-        return bool(self.shot_methods()) and self.stage_visual(st)
-
-    def references_text(self):
-        """What the planner is told the task already has to look at: image files its text names, and the last landed shots."""
-        found = []
-        for rel in dict.fromkeys(re.findall(r"[\w./-]+\.(?:png|jpe?g)\b", self.briefs.text(), re.I)):
-            if (Path(self.wt) / rel).is_file():
-                found.append(rel)
-        dest = (self.cfg.evidence_dir or "").strip("/")
-        before = sorted(Path(self.wt, dest).glob("*/*.png"))[-6:] if dest and Path(self.wt, dest).is_dir() else []
-        if not (found or before):
-            return ("No reference image is in the task or under the repo's look reviews. If the task does not say what it should "
-                    "look like (a mockup, a target, a screen to match), plan from the bead text and assume the look; say the assumption in the summary.")
-        return "Reference images the task has: %s." % ", ".join(found + [str(b.relative_to(self.wt)) for b in before])
-
-    def before_shot(self, name):
-        """A landed picture of the same screen (same file name under evidence_dir, another bead's folder): the newest."""
-        dest = (self.cfg.evidence_dir or "").strip("/")
-        if not dest or not Path(self.wt, dest).is_dir():
-            return None
-        cands = [f for f in Path(self.wt, dest).glob("*/" + glob.escape(name)) if f.parent.name != self.bead]
-        return max(cands, key=lambda f: f.stat().st_mtime) if cands else None
-
-    def render_shots(self, reqs, rnd):
-        """([picture names under the evidence dir], [errors]): the requested shot methods run by the engine, outside any lane's
-        sandbox, each built only from the project's table (looks.build). Full-size copies go to the evidence dir; the judge's
-        shrunk ones to <run>/looks/r<rnd>/."""
-        methods = self.shot_methods()
-        base = self.run_dir / "looks" / ("r%d" % rnd)
-        names, errs = [], []
-        self.last_reqs = [r for r in reqs[:looks.MAX_REQUESTS]]
-        self.steps.begin("render", "render shots, round %d" % rnd, round=rnd)
-        for k, req in enumerate(reqs[:looks.MAX_REQUESTS]):
-            out_dir = base / "raw" / ("%d-%s" % (k, re.sub(r"\W+", "_", str(req.get("method") or "?"))))
-            out_dir.mkdir(parents=True, exist_ok=True)
-            cmd, m, err = looks.build(methods, req, out_dir)
-            if err or m is None:
-                errs.append(err)
-                continue
-            before = looks.snapshot(m, self.wt)
-            rc, tail = self.sh(cmd, timeout=m["timeout_min"] * 60, save=self.run_dir / "looks" / ("r%d-%d-%s.log" % (rnd, k, m["method"])))
-            files = looks.collect(m, self.wt, out_dir, before) if rc == 0 else []  # a failed run's files are no render
-            if not files:
-                errs.append("shot method %s %s: %s" % (m["method"], "failed (exit %d)" % rc if rc else "made no pictures",
-                                                       tail.strip()[-300:] or "no output"))
-                continue
-            inside = [f for f in files if str(f).startswith(str(Path(self.wt)) + os.sep)]
-            if inside and self.sh(["git", "check-ignore", "-q", str(inside[0])], pin=True)[0] != 0:
-                self.warn("shot method %s writes pictures in the worktree (%s) and that folder is not ignored by git: they will "
-                          "show up as unexplained new files; add it to .gitignore" % (m["method"], m["out"] or str(inside[0].parent)))
-            for f in files:
-                name, j = f.name, 1
-                while name in names:  # one name per picture within a round
-                    name, j = "%d-%s" % (j, f.name), j + 1
-                names.append(name)
-                self.evidence_dir.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(f, self.evidence_dir / name)
-                looks.downscale(f, base / name, int(self.cfg.look_max_px))
-        self.rendered_names |= set(names)
-        if names:
-            self.render_stale = False
-        self.steps.outcome("rendered" if names else "failed", "%d picture%s%s" % (
-            len(names), "" if len(names) == 1 else "s", (", %d error%s" % (len(errs), "" if len(errs) == 1 else "s")) if errs else ""))
-        return names, errs
-
-    def judge_shots(self, names, rnd, summary, last=True):
-        """The look judge's findings: a fresh call from another family, in a folder with only the shrunk pictures, the
-        references and the 'before' pictures. -> (defects [{item, where, why}], its summary)."""
-        base = self.run_dir / "looks" / ("r%d" % rnd)
-        refs = [r for r in re.findall(r"[\w./-]+\.(?:png|jpe?g)\b", self.briefs.text(), re.I) if (Path(self.wt) / r).is_file()]
-        shown = []
-        for r in dict.fromkeys(refs):
-            shutil.copy2(Path(self.wt) / r, base / ("ref-" + Path(r).name))
-            shown.append("ref-" + Path(r).name)
-        pairs = []
-        for n in names:
-            b = self.before_shot(n)
-            if b:
-                shutil.copy2(b, base / ("before-" + n))
-                pairs.append((n, "before-" + n))
-        # the plan's look items are for the last stage (like the cases); an earlier stage is judged on the general checks only
-        prompt = looks.judge_prompt(self.cases_of("look-objective") if last else [], names, shown, pairs, summary)
-        try:
-            d, _ = self.ai("look", "round %d: %d picture%s" % (rnd, len(names), "" if len(names) == 1 else "s"), prompt,
-                           writer_family=self.writer_family, cwd=str(base), round=rnd, at=(self.at_stage, rnd, 0))
-        except Blocked as b:
-            st = getattr(b, "stop", None)
-            if not b.why.startswith("paused: no lane") or (st is not None and st.permanence == "needs_owner" and st.reason != "no_lane"):
-                raise  # the network (the step resumes), a crash, a login or credit pause: not this node's to swallow
-            self.retry_after, self.pause_role, self.pause_lane = 0.0, "", ""  # the run goes on: _ai had noted a pause for the loop
-            self.steps.outcome("skipped", "no lane")
-            # no lane for the judge: the pictures go unjudged to the owner-look bead; a look judge never parks the bead
-            self.warn("the look judge had no lane, the pictures are not judged: %s" % b.why[:200])
-            self.look_unjudged["look judge, round %d" % rnd] = "no lane: " + b.why[:160]
-            return [], "(not judged: no lane for the look judge)"
-        note = "[same family as the writer: no other lane was free] " if self.last_flag == "same_family" else ""
-        return [f for f in d["findings"] if f["verdict"] == "defect"], note + d["summary"]
-
-    def look_step(self, st, w, name, last=True):
-        """After a visual write: the cheap checks, the shots the writer asked for, the look judge. -> the feedback that sends the
-        writer back with the defects (text and picture paths), or "" to go on to the full checks. At most engine.look_rounds
-        render rounds per stage; a defect that comes back is a leftover with the pictures, not another write."""
-        if not self.look_ready(st) or self.look_done >= int(self.cfg.look_rounds) or self.dry:
-            return ""
-        reqs = [r for r in w.get("shots") or [] if isinstance(r, dict)]
-        if not reqs:
-            return ""
-        cheap = self.stoppable_checks(dict(st, checks=[]), name, groups=("static",))
-        if cheap.failed:
-            return ""  # the full checks show it to the writer; no render over a red static check
-        self.look_done += 1
-        rnd = self.look_done
-        names, errs = self.render_shots(reqs, rnd)
-        defects = [{"item": "render", "where": "", "why": e} for e in errs]
-        summary = ""
-        if names:
-            found, summary = self.judge_shots(names, rnd, w.get("summary", ""), last)
-            defects += found
-        if summary:
-            self.look_notes = [summary.strip()]
-        self.persist_look()
-        prev, self.look_prev = self.look_prev, defects
-        again = [d for d in defects if any(looks.same_defect(d["why"] + " " + d["where"], p["why"] + " " + p["where"]) for p in prev)]
-        fresh = [d for d in defects if d not in again]
-        out_of_rounds = self.look_done >= int(self.cfg.look_rounds)
-        for d in again + (fresh if out_of_rounds else []):  # tl-bxk.13.15.5: the same defect twice is not the writer's to fix again
-            self.look_leftover(d, names)
-        if not fresh or out_of_rounds:
-            return ""
-        self.steps.move("write", "look_defects", "%d defect%s from the look judge, round %d" % (len(fresh), "" if len(fresh) == 1 else "s", rnd))
-        return LOOK_FEEDBACK % ("\n".join("- %s%s: %s" % (d["item"], (" (%s)" % d["where"]) if d["where"] else "", d["why"]) for d in fresh),
-                               "\n".join("%s/%s" % (self.evidence_dir, n) for n in names))
-
-    def look_leftover(self, d, names):
-        title = ("Look: %s" % d["why"])[:120]
-        if title not in {lo["title"] for lo in self.leftovers}:
-            self.leftovers.append({"title": title, "why": "The look judge found this on %s (%s); it came back after a fix or the render "
-                                   "rounds were used up. Pictures: %s. Defect: %s %s" % (
-                                       self.bead_title or self.bead, d["item"], ", ".join(names) or "none", d["where"], d["why"])})
-            self.log.note("look defect filed as a follow-up: %s" % d["why"][:200])
-
-    def look_write(self, st):
-        if not self.stage_visual(st):
-            return ""
-        if self.shot_methods():
-            return LOOK_WRITE_TABLE % (looks.MAX_REQUESTS, looks.table_text(self.shot_methods()))
-        return ("\nThis stage changes how something looks (it touches visual paths). Save a screenshot of every changed "
-                "screen or state in %s/ with a descriptive name (screen-state.png), and name them in the summary. If the "
-                "change is clearly logic-only and nothing on screen differs, put a one-line reason in logic_only; "
-                "otherwise leave logic_only empty." % self.evidence_dir)
-
-    def look_review(self, st, w, fix=False):
-        if fix or not self.stage_visual(st):
-            return ""
-        shots = self.shots()
-        text = ("\nThis stage changes how something looks. ")
-        if self.shot_methods():  # tl-bxk.13.15: the engine rendered the pictures and a look judge read them
-            text += ("The engine rendered the pictures (%s) and a look judge, a fresh call from another family, read them%s. "
-                     "Judge from its words against the task's done-when; open a picture only if you doubt them. A mismatch "
-                     "is a finding; put your judgement in one paragraph in look." % (
-                         ", ".join("%s/%s" % (self.evidence_dir, x) for x in shots) or "none were made",
-                         (": " + " ".join(self.look_notes)[:900]) if self.look_notes else ""))
-            if (w.get("logic_only") or "").strip():
-                text += ("\nThe writer says this change is logic-only: \"%s\". Accept it only if nothing on screen can differ; "
-                         "if not, give a medium finding." % w["logic_only"].strip())
-            return text + "\nlook: empty when nothing here is visual.\n"
-        if shots:
-            text += ("Screenshots the writer saved: %s. Open every one and judge it against the task's done-when and any "
-                     "linked decision or reference image, honestly: put what you see, and whether it matches, in one "
-                     "paragraph in look; a mismatch is a finding." % ", ".join("%s/%s" % (self.evidence_dir, s) for s in shots))
-        else:
-            text += "The writer saved no screenshots. "
-        if (w.get("logic_only") or "").strip():
-            text += ("\nThe writer says this change is logic-only: \"%s\". Accept it only if nothing on screen can differ; "
-                     "if not, give a medium finding." % w["logic_only"].strip())
-        return text + "\nlook: empty when nothing here is visual.\n"
-
-    def link_judged(self, review):
-        """tl-bxk.7: every link the task adds to a text file is opened from the engine's host (the writer's sandbox has no network,
-        and 'verified' there means nothing). One that does not open is a finding for the writer: replace it, or write `unverified` on
-        its line; a link marked unverified lands as an item for the owner with the claim it carries (a bot-blocking site answers
-        403 from here and opens for a person). Opened links are not asked again."""
-        if not self.cfg.check_links:
-            return
-        try:
-            found = links.added_urls(self.task_diff())
-        except Exception as e:  # no diff to read is no check, never a failed run
-            self.warn("link check skipped: %s" % e)
-            return
-        todo = [u for _, _, u in found if u not in self.link_ok]
-        if not todo:
-            return
-        todo = [u for u in todo if self.link_tries.get(u, 0) < 2][:LINK_CAP]  # each link is opened twice at most, 200 per review
-        try:
-            got = links.check_all(todo, fn=self.link_fn or links.check)
-        except Exception as e:  # opening links must never stop a run
-            self.warn("link check skipped: %s" % e)
-            return
-        if len(got) >= 3 and all(not ok and links.network_down(why) for ok, why in got.values()):
-            self.warn("link check skipped: none of %d links could be reached at all (%s): this host looks offline" % (len(got), next(iter(got.values()))[1]))
-            return
-        for url, (ok, why) in got.items():
-            self.link_tries[url] = self.link_tries.get(url, 0) + 1
-            if ok:
-                self.link_ok.add(url)
-                self.link_bad.pop(url, None)
-            elif why != links.UNKNOWN:  # out of time is no verdict
-                self.link_bad[url] = why
-        seen = set()
-        for path, line, url in found:
-            why = self.link_bad.get(url)
-            if url in self.link_ok or not why or (path, url) in seen:
-                continue
-            seen.add((path, url))
-            if Wording.marked_unverified(line):
-                self.add_unverified({"what": "%s (link: %s)" % (fmt.clip(line, 200), url), "kind": "external_fact", "source": url},
-                                    "the engine could not open %s (%s); the owner checks it" % (url, why))
-                continue
-            review["findings"].append(engine_finding(path, 0, (
-                "the link %s did not open from the engine's host (%s). Replace it with a source that opens. If the site only blocks "
-                "bots, keep it and write `unverified` on the same line, so the owner is asked about the claim it carries. Never "
-                "call a link verified that you could not open." % (url, why)), "a reader who follows %s gets an error (%s)" % (url, why)))
-
-    def look_judged(self, review, st, w, fix):
-        """No screenshot and no logic-only reason on a visual stage is a warning; the reviewer's look is kept."""
-        if fix or not self.stage_visual(st):
-            return
-        if (review.get("look") or "").strip() and self.shots():
-            self.look_notes = [review["look"].strip()]  # the last round's judgement only
-        if not self.shots() and not (w.get("logic_only") or "").strip():  # a warning, never a send-back (tl-7y6.7.24)
-            self.warn("this stage changes visual paths but %s" % (
-                "asked for no shots (name the shot methods to render in `shots`, or say in logic_only why nothing on screen differs)"
-                if self.shot_methods() else "saved no screenshot of any changed screen or state in %s/" % self.evidence_dir))
-
-    def look_verify(self, gaps):
-        looks = [n for n, u in enumerate(gaps, 1) if self.is_look(u)]
-        if not looks:
-            return ""
-        shots = self.shots()
-        return ("\nItems %s are about how it looks. They are never open: judge them from the screenshots (%s), against "
-                "the task's done-when and any linked decision or reference image. Open each one. settled when it matches "
-                "(evidence names the screenshot and what you saw); wrong when it does not (why says what differs).\n" % (
-                    ", ".join(map(str, looks)), ", ".join("%s/%s" % (self.evidence_dir, s) for s in shots) or "none saved"))
-
-    def look_verdict(self, u, v, a, why):
-        """A look item is settled only on evidence that names a screenshot file. Otherwise it goes back to the writer
-        once, noted as not judged (a later verify that settles it clears the note); the second time the run moves on.
-        The owner-look bead carries the note. The owner is never asked."""
-        shots, ev = self.shots(), a.get("evidence") or ""
-        if v == "settled" and any(sh in ev or Path(sh).name in ev for sh in shots):
-            self.look_unjudged.pop(u["what"], None)
-            return v, a, why
-        if v == "wrong":
-            return v, a, why
-        if v == "settled":
-            why = "settled, but its evidence names no screenshot file"
-        reason = why or ("no screenshot saved" if not shots else "no verdict")
-        self.look_unjudged[u["what"]] = "agent could not judge: %s" % reason
-        if u["what"] not in self.look_retried:
-            self.look_retried.add(u["what"])
-            if shots:
-                return "wrong", a, ("judge it from the screenshots (%s): open each one and name the file you judged. %s"
-                                    % (", ".join(shots), why or "")).strip()
-            return "wrong", a, "no screenshot to judge the look from: save them in %s/" % self.evidence_dir
-        self.warn("a look item is still not judged; the owner is not asked, it waits in the owner-look bead")
-        return "settled", dict(a, evidence="agent could not judge: " + reason), reason
-
-    def lfs_ok(self, shots):
-        """False when .gitattributes sends these pictures to LFS and git lfs is not installed."""
-        try:
-            lines = (Path(self.wt) / ".gitattributes").read_text(errors="replace").splitlines()
-        except OSError:
-            return True
-        lfs = [l.split()[0] for l in lines if l.split() and not l.startswith("#") and "filter=lfs" in l]
-        if not any(fnmatch.fnmatch(Path(sh).name, pat.split("/")[-1]) for sh in shots for pat in lfs):
-            return True
-        rc, _ = self.sh(["git", "lfs", "version"], pin=True)
-        return rc == 0
-
-    def persist_look(self):
-        """What the owner-look bead needs goes into the checkpoint, so a crash after the land still files it."""
-        self.checkpoints.keep_look()
-
-    def copy_looks(self):
-        """The screenshots of a visual change go into the repo (engine.evidence_dir/<bead>/), in the land's commit."""
-        vp, dest = self.visual_cfg(), (self.cfg.evidence_dir or "").strip("/")
-        shots = self.shots()
-        if not (vp and shots and visual_hit(vp, self.changed_paths())):
-            self.persist_look()
-            return
-        if not dest:
-            self.warn("screenshots saved but engine.evidence_dir is not set: they are not kept in the repo")
-            return
-        if not self.lfs_ok(shots):
-            self.warn("engine.evidence_dir pictures go to git LFS (.gitattributes) but git lfs is not installed: "
-                      "no screenshot is copied into the repo")
-            return
-        self.look_paths = []
-        for s in shots:
-            to = Path(self.wt) / dest / self.bead / s
-            to.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(self.evidence_dir / s, to)
-            self.look_paths.append("%s/%s/%s" % (dest, self.bead, s))
-        self.persist_look()
-
-    def look_epic(self):
-        """The bead's epic: parents walked up to the first epic, else the direct parent."""
-        cur, seen = self.bead_parent, set()
-        while cur and cur not in seen and len(seen) < 10:
-            seen.add(cur)
-            d = beadtools.peek(self.store, cur)
-            if d and d.issue_type == "epic":
-                return cur
-            cur = d.parent if d else ""
-        return self.bead_parent
-
-    def existing_owner_look(self):
-        """(id, description) of the owner-look bead to reuse: one already linked (related) to this bead, else the one
-        under this bead's epic (tl-bxk.10.28: one review bead per epic, appended to); ('', '') when there is none."""
-        try:
-            rows = self.store.find(BeadQuery(label=LOOK_LABEL))
-        except BdFailure:
-            return "", ""
-        epic, by_epic = self.look_epic() or self.bead, ("", "")
-        for row in rows:
-            d = beadtools.peek(self.store, row.id) or row
-            if any(x.id == self.bead for x in d.dependencies):
-                return row.id, d.description
-            if epic and not by_epic[0] and d.parent == epic and d.status != "closed":
-                by_epic = (row.id, d.description)
-        return by_epic
-
-    def file_owner_look(self):
-        """After the land: one bead per epic for the owner's later round (look and feel, and what no check could prove),
-        filed once and appended to by each later bead of the epic (a re-land replaces its own section)."""
-        if self.look_filed or not (self.look_paths or self.look_unjudged or self.unverified or self.cases_of("taste")):
-            return
-        head = "## %s: %s" % (self.bead, self.bead_title)
-        parts = [head]
-        if self.look_paths or self.look_unjudged or not self.unverified:
-            parts.append("Screenshots of %s (%s), committed with its land:\n%s\n\nWhat the agent judged: %s\n%s\nNot automatable: "
-                         "the owner reviews the look and feel in a later batch." % (self.bead, self.bead_title, "\n".join(
-                             "- " + p for p in self.look_paths) or "(none)", " ".join(self.look_notes) or "(the reviewer gave no judgement)",
-                             ("\n" + "\n".join("%s (%s)" % (w, u) for u, w in self.look_unjudged.items()) + "\n") if self.look_unjudged else ""))
-        if self.cases_of("taste"):
-            parts.append("Taste items (the owner decides; they never blocked the land):\n" + "\n".join("- " + t for t in self.cases_of("taste")))
-        if self.unverified:
-            parts.append(self.unverified_text())
-        section = "\n".join(parts)
-        with self.review_lock():  # list + create/update is one step: three beads of an epic landing together file one bead
-            self.file_review(section)
-
-    @contextlib.contextmanager
-    def review_lock(self):
-        """One filer at a time per (repo, epic), across slots and sessions."""
-        key = "%s|%s" % (self.git("remote", "get-url", "origin") or str(self.wt), self.look_epic() or self.bead)
-        with self.locked("review_lock", ident.config_dir() / "locks" / ("review-%s.lock" % hashlib.sha1(key.encode()).hexdigest()[:12])):
-            yield
-
-    def create_checked(self, new):
-        """bd create that is known to have worked: when bd's lint refuses the body for missing sections (lifesim: Touches and
-        Acceptance Criteria), the sections are added and it is tried once more. -> (the new id, "") or ("", why not): nothing
-        was created then (tl-7y6.7.9: 98 follow-ups were called filed and none existed)."""
-        try:
-            return self.store.create(new), ""
-        except BdFailure as e:
-            need = e.error.missing_sections
-            if not need or not new.description:
-                return "", e.error.text
-        self.log.note("bd refused the create (%s): trying again with the sections it names" % ", ".join(need))
-        try:
-            return self.store.create(dataclasses.replace(new, description=with_sections(new.description, need, self.bead))), ""
-        except BdFailure as e:
-            return "", e.error.text
-
-    def file_review(self, section):
-        head = section.split("\n", 1)[0]
-        have, old = self.existing_owner_look()
-        made, err = have, ""
-        if have:
-            kept = [x for x in re.split(r"\n\n(?=## )", old.strip()) if x and not x.startswith(head.split(":")[0] + ":")]
-            if not beadtools.attempt(self.store.update, have, BeadPatch(description="\n\n".join(kept + [section]))):
-                err = "bd refused the update"
-        else:
-            made, err = self.create_checked(NewBead(
-                title=("Look review: " if self.look_paths or self.look_unjudged else "Owner review: ") + (self.bead_title or self.bead),
-                labels=[LOOK_LABEL], no_inherit_labels=True, description=section, deps=["related:" + self.bead],
-                parent=self.look_epic() or self.bead))  # no epic: the review bead sits under the bead itself
-        if err:
-            self.warn("owner-look bead %s failed: %s" % ("update" if have else "create", err[:300]))
-        else:
-            self.look_filed = True
-            if self.cases_of("taste"):
-                if made:
-                    self.write_looks(made)
-                else:
-                    self.warn("owner-look bead filed, but its id was not in bd's answer: no looks metadata")
-
-    def write_looks(self, bead_id):
-        """tl-bxk.13.15: the gallery's data on the owner-look bead, as metadata `looks` (one entry per taste item: id, bead,
-        title, note, shots[{path, role before|after, label}], status). A re-land of this bead replaces its own entries and
-        keeps one the owner already answered (good or redo)."""
-        after = [p for p in self.look_paths]
-        shots = []
-        for p in after:
-            b = self.before_shot(Path(p).name)
-            if b:
-                shots.append({"path": str(b.relative_to(self.wt)), "role": "before", "label": Path(p).stem})
-            shots.append({"path": p, "role": "after", "label": Path(p).stem})
-        mine = [{"id": "%s#%d" % (self.bead, k), "bead": self.bead, "title": t, "note": " ".join(self.look_notes)[:600],
-                 "shots": shots, "status": "open"} for k, t in enumerate(self.cases_of("taste"), 1)]
-        shown = beadtools.peek(self.store, bead_id)
-        meta = dict(shown.metadata) if shown else {}
-        old = meta.get("looks") if isinstance(meta.get("looks"), list) else []
-        answered = {e.get("id"): e for e in old if isinstance(e, dict) and e.get("bead") == self.bead and e.get("status") in ("good", "redo")}
-        meta["looks"] = [e for e in old if isinstance(e, dict) and e.get("bead") != self.bead] + [answered.get(e["id"], e) for e in mine]
-        if not beadtools.attempt(self.store.update, bead_id, BeadPatch(metadata=meta)):
-            self.warn("owner-look bead %s: looks metadata failed" % bead_id)
-
-    def unverified_text(self):
-        return "Unverified, for the owner:\n" + "\n".join(
-            "- %s (%s%s)%s" % (u["what"], u["kind"], (", source: " + u["source"]) if u.get("source") else "",
-                               (": " + u["why"]) if u.get("why") else "") for u in self.unverified)
-
-    def keep_evidence(self):
-        """Pictures the writer saved as proof outlive the worktree: copied to the run dir, named on the bead."""
-        kept = []
-        if not self.evidence_dir.is_dir():
-            return kept
-        out = self.run_dir / "evidence"
-        for f in sorted(self.evidence_dir.rglob("*")):
-            if f.is_file() and f.suffix.lower() in (".png", ".jpg", ".jpeg", ".gif", ".webp"):
-                dst = out / f.relative_to(self.evidence_dir)
-                dst.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(f, dst)
-                kept.append(dst)
-        return kept
-
     stop_deferred = staticmethod(halting.stop_deferred)
 
 RUN_STEM = re.compile(r"^\d{8}-\d{6}$")  # <bead>-<YYYYMMDD-HHMMSS>: an engine log of that bead, not of a child bead

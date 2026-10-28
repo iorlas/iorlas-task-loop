@@ -20,6 +20,8 @@ from taskloop.contracts.config import VisualConfig  # noqa: E402
 import test_engine as T  # noqa: E402
 from test_engine import BEAD, CLEAN, PLAN, WRITE, engine, verdict  # noqa: E402
 from taskloop.adapters import gitrepo
+from taskloop.app.look import shots
+from taskloop.app.look.owner_look import OwnerLook
 
 VISUAL = {"include": ["*.txt"], "exclude": ["docs/**"]}
 LOOK_ASK = "Whether smiles-front.png matches the rung B ladder image. Only the owner can judge the look."
@@ -56,9 +58,9 @@ class LookTest(unittest.TestCase):
         yes = ["client/Assets/Features/Live/LiveScreen.cs", "client/Assets/Kit/a/b.uss", "client/Assets/x.asset"]
         no = ["client/Assets/Tests/Features/T.cs", "client/Assets/Features/README.md", "client/Assets/Features/A.cs.meta",
               "client/Assets/Kit/a/b.cs", "client/Assets/sub/x.asset", "tools/x.py"]
-        self.assertTrue(all(engine.visual_hit(vp, [p]) for p in yes))
-        self.assertFalse(any(engine.visual_hit(vp, [p]) for p in no))
-        self.assertFalse(engine.visual_hit({}, yes))
+        self.assertTrue(all(shots.visual_hit(vp, [p]) for p in yes))
+        self.assertFalse(any(shots.visual_hit(vp, [p]) for p in no))
+        self.assertFalse(shots.visual_hit({}, yes))
 
     def test_a_visual_stage_brief_asks_for_screenshots_and_a_logic_only_reason(self):
         rc, s = self.go({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN)]}, first_shot=1, visual_paths=VISUAL)
@@ -186,14 +188,14 @@ class LookTest(unittest.TestCase):
         self.bd_calls.clear()
         self.eng.look_notes, self.eng.look_filed = ["second look"], False  # a later run
         self.store.put({"id": "t-9", "labels": ["owner-look"], "dependencies": [{"id": "t-1", "type": "related"}]})
-        self.eng.file_owner_look()
+        self.eng.owner_look.file_owner_look()
         self.assertEqual(self.creates(), [])
         (u,) = [c for c in self.bd_calls if c[0] == "update"]
         self.assertEqual(u[1], "t-9")
         self.assertIn("second look", u[3])
 
     def test_the_look_survives_a_crash_after_the_land(self):
-        with mock.patch.object(Closer, "close"), mock.patch.object(engine.Engine, "file_owner_look",
+        with mock.patch.object(Closer, "close"), mock.patch.object(OwnerLook, "file_owner_look",
                                                                           side_effect=SystemExit):
             with self.assertRaises(SystemExit):  # the process died after the push: no close, the checkpoint stays
                 self.go({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, look="matches")]}, first_shot=1,
@@ -208,7 +210,7 @@ class LookTest(unittest.TestCase):
         self.assertEqual(eng2.look_paths, saved.look_paths)
         self.assertEqual(eng2.look_notes, ["matches"])
         with self.store.stub(show=BEAD):
-            eng2.file_owner_look()
+            eng2.owner_look.file_owner_look()
         self.assertEqual(len(self.creates()), 1)
 
     def test_the_epic_is_found_by_walking_the_parents(self):
@@ -216,9 +218,9 @@ class LookTest(unittest.TestCase):
         shows = {"t-3": {"id": "t-3", "issue_type": "feature", "parent": "t-2"},
                  "t-2": {"id": "t-2", "issue_type": "epic", "parent": "t-0"}}
         with self.store.stub(show_fn=lambda i, **k: shows.get(i, {})):
-            self.assertEqual(self.eng.look_epic(), "t-2")
+            self.assertEqual(self.eng.owner_look.look_epic(), "t-2")
         with self.store.stub(show_fn=lambda i, **k: {}):
-            self.assertEqual(self.eng.look_epic(), "t-3")
+            self.assertEqual(self.eng.owner_look.look_epic(), "t-3")
 
     def test_shots_are_images_capped_and_sized(self):
         self.eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
@@ -226,20 +228,20 @@ class LookTest(unittest.TestCase):
         d.mkdir(parents=True, exist_ok=True)
         (d / "a.png").write_bytes(b"x")
         (d / "b.gif").write_bytes(b"x")
-        (d / "big.jpg").write_bytes(b"x" * (engine.MAX_SHOT_BYTES + 1))
-        self.assertEqual(self.eng.shots(), ["a.png"])
+        (d / "big.jpg").write_bytes(b"x" * (shots.MAX_SHOT_BYTES + 1))
+        self.assertEqual(self.eng.pictures.shots(), ["a.png"])
         for i in range(25):
             (d / ("m%02d.png" % i)).write_bytes(b"x")
-        self.assertEqual(len(self.eng.shots()), engine.MAX_SHOTS)
+        self.assertEqual(len(self.eng.pictures.shots()), shots.MAX_SHOTS)
 
     def test_no_lfs_means_no_copy(self):
         self.eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         Path(self.wt, ".gitattributes").write_text("*.png filter=lfs diff=lfs merge=lfs -text\n")
         with mock.patch.object(self.eng, "sh", return_value=(1, "")):
-            self.assertFalse(self.eng.lfs_ok(["a.png"]))
+            self.assertFalse(self.eng.pictures.lfs_ok(["a.png"]))
         with mock.patch.object(self.eng, "sh", return_value=(0, "")):
-            self.assertTrue(self.eng.lfs_ok(["a.png"]))
-        self.assertTrue(self.eng.lfs_ok(["a.jpg"]))
+            self.assertTrue(self.eng.pictures.lfs_ok(["a.png"]))
+        self.assertTrue(self.eng.pictures.lfs_ok(["a.jpg"]))
 
     def test_the_dashboard_counts_owner_look_as_waits_on_you(self):
         from taskloop_dash.views import graph

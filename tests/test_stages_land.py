@@ -14,7 +14,7 @@ from support import fake_route  # noqa: E402
 from support.checkpoints import put_ck, read_ck  # noqa: E402
 from support import tlbd  # noqa: E402
 from support.fakes import FakeBeadStore, as_bead  # noqa: E402
-from taskloop.adapters import bd  # noqa: E402
+from taskloop.adapters import bd, bdcreate  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 from support.builders import make_engine  # noqa: E402
 from taskloop.domain.checks import matchers  # noqa: E402
@@ -649,7 +649,7 @@ class FollowUps(StagesTest):
         err = bd.error_of("Error: missing required sections for bug: ## Steps to Reproduce, ## Acceptance Criteria", "")
         self.assertEqual((err.kind, err.missing_sections), ("lint", ["Steps to Reproduce", "Acceptance Criteria"]))
         self.assertEqual(bd.error_of("some other failure", "").missing_sections, [])
-        body = engine.with_sections("why\n\n## Touches\nx.py", ["Touches", "Acceptance Criteria"], "t-1")
+        body = bdcreate.with_sections("why\n\n## Touches\nx.py", ["Touches", "Acceptance Criteria"], "t-1")
         self.assertEqual(body.count("## Touches"), 1)
         self.assertIn("## Acceptance Criteria", body)
 

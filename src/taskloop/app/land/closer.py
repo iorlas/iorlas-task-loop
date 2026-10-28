@@ -148,17 +148,17 @@ class Closer:
             if old:
                 e.stores.asks.close(e.bead, old.id, "the run landed")
             if e.unverified:
-                e.comment("Land (engine): " + e.unverified_text())
-            look = [u for u in e.unchecked if u["kind"] == "other" and not e.is_look(u)]
+                e.comment("Land (engine): " + e.owner_look.unverified_text())
+            look = [u for u in e.unchecked if u["kind"] == "other" and not e.judge.is_look(u)]
             if look:
                 self.o.attempt(e.store.add_label, e.bead, "needs-owner-check")
                 e.comment("Look (engine): landed, but nobody checked: " + "; ".join(u["what"] for u in look))
-        shots = e.keep_evidence()
+        shots = e.pictures.keep_evidence()
         if shots:
             e.comment("Evidence (engine): " + ", ".join(str(p) for p in shots))
         lost = file_follow_ups(e)
         if outcome == "landed":
-            e.file_owner_look()
+            e.owner_look.file_owner_look()
         return lost
 
     def reflect_comment(self, outcome: str, why: str, new: list[Any], lost: list[Any], stats: str) -> None:

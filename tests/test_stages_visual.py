@@ -190,12 +190,12 @@ class VisualWork(StagesTest):
     def test_the_table_is_read_from_the_base_branch_not_the_working_copy(self):
         (self.wt / "shots.json").write_text(json.dumps({"v": 1, "methods": [{"method": "Evil", "argv": ["touch", "pwned"]}]}))
         e = engine.Engine("t-1", str(self.wt), cfg_with(wslots.load_cfg(str(self.wt)), shot_table="shots.json"), store=self.store)
-        self.assertEqual(list(e.shot_methods()), ["ScreenShots"])
+        self.assertEqual(list(e.pictures.shot_methods()), ["ScreenShots"])
 
     def test_a_missing_table_is_warned_once_and_the_old_way_stands(self):
         e = engine.Engine("t-1", str(self.wt), cfg_with(wslots.load_cfg(str(self.wt)), shot_table="nowhere.json"), store=self.store)
-        self.assertEqual(e.shot_methods(), {})
-        self.assertEqual(e.shot_methods(), {})
+        self.assertEqual(e.pictures.shot_methods(), {})
+        self.assertEqual(e.pictures.shot_methods(), {})
 
     def test_look_and_taste_cases_have_no_command_and_run_nothing(self):
         cases = [{"criterion": "the picker shows", "check": "", "class": "look-objective"},
@@ -234,7 +234,7 @@ class VisualWork(StagesTest):
         e.evidence_dir.mkdir(parents=True, exist_ok=True)
         (e.evidence_dir / "writer.png").write_bytes(b"x")
         (e.evidence_dir / "main.png").write_bytes(b"x")
-        self.assertEqual(e.shots(), ["main.png"])
+        self.assertEqual(e.pictures.shots(), ["main.png"])
 
     @te.POSIX_CHECK
     def test_a_failed_shot_command_is_a_defect_even_if_it_left_a_picture(self):
@@ -296,7 +296,7 @@ class VisualWork(StagesTest):
             {"id": "t-1#1", "bead": "t-1", "title": "it reads well", "shots": [], "status": "good"}], "keep": "me"}}
         with self.store.stub(show=old), \
                 self.store.stub(bd_fn=lambda *a, **k: sent.append(a) or mock.Mock(returncode=0, stdout="", stderr="")):
-            e.write_looks("lk-1")
+            e.owner_look.write_looks("lk-1")
         (call,) = sent
         self.assertEqual(call[:3], ("update", "lk-1", "--metadata"))
         meta = json.loads(call[3])
@@ -308,7 +308,7 @@ class VisualWork(StagesTest):
         sent.clear()
         with self.store.stub(show=old), \
                 self.store.stub(bd_fn=lambda *a, **k: sent.append(a) or mock.Mock(returncode=0, stdout="", stderr="")):
-            e.write_looks("lk-1")
+            e.owner_look.write_looks("lk-1")
         entry = json.loads(sent[0][3])["looks"][-1]
         self.assertEqual((entry["id"], entry["bead"], entry["title"], entry["status"]), ("t-1#1", "t-1", "it reads well", "open"))
         self.assertEqual(entry["note"], "the main screen shows")

@@ -27,7 +27,7 @@ class ReviewRound:
         e.stats["reviews"] += 1
         e.review_cap()
         kinds = e.new_by_kind()
-        review, _ = e.ai("review", s.name, self.prompt(s, kinds), writer_family=s.wfam, visual=not s.fix and e.stage_visual(s.st),
+        review, _ = e.ai("review", s.name, self.prompt(s, kinds), writer_family=s.wfam, visual=not s.fix and e.pictures.stage_visual(s.st),
                          round=s.rounds + 1, at=(s.sk, s.rounds, s.n), **s.meta)
         e.accepted_new += [p for p in review.get("accept_files") or [] if p in kinds["unexplained"] and p not in e.accepted_new]
         review = self.triage(s, review, kinds)
@@ -47,7 +47,7 @@ class ReviewRound:
         where = e.where("review")
         text += ("\n" + where if where else "") + e.cases_text() + (CASES_RAN if s.last and e.case_checks() else "") + self.open_items(s)
         text += "" if s.last else LATER_CASES
-        text += e.routing.ledger().text() + e.hand.seen_lows_text() + e.flakes_text() + UNCHECKED_TEXT + e.look_review(st, s.w, s.fix)
+        text += e.routing.ledger().text() + e.hand.seen_lows_text() + e.flakes_text() + UNCHECKED_TEXT + e.judge.look_review(st, s.w, s.fix)
         return text + (e.new_files_brief(kinds["unexplained"]) if kinds["unexplained"] else "")
 
     def items(self, s: StageState) -> list[tuple[str, str]]:
@@ -91,8 +91,8 @@ class ReviewRound:
         checks = s.run.results
         judged = e.out_of_scope(e.engine_unproven(review.get("unchecked") or [], checks))
         e.unchecked = e.unchecked + judged if s.fix else judged
-        e.look_judged(review, s.st, s.w, s.fix)
-        e.link_judged(review)
+        e.judge.look_judged(review, s.st, s.w, s.fix)
+        e.link_check.link_judged(review)
         same = e.last_flag == "same_family"
         if same:
             e.warn(f"{s.name}: the review is from the writer's own model family (no other lane was free)")

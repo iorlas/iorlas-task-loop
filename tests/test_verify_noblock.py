@@ -247,7 +247,7 @@ class NoBlock(unittest.TestCase):
         self.bd_calls.clear()
         with self.store.stub(find_fn=lambda q: [{"id": existing["id"]}] if existing else []), \
                 self.store.stub(show_fn=lambda i, **k: shows.get(i, {})):
-            eng.file_owner_look()
+            eng.owner_look.file_owner_look()
         return eng
 
     def test_the_owner_review_bead_of_an_epic_is_reused_and_appended_to(self):
@@ -296,7 +296,7 @@ class NoBlock(unittest.TestCase):
                 "bead_parent": "t-0",
                 "unverified": [{"what": "price %d" % n, "kind": "external_fact", "why": "", "source": SOURCE}],
                 })
-            eng.file_owner_look()
+            eng.owner_look.file_owner_look()
 
         def found(query):
             with lock:
@@ -318,7 +318,7 @@ class NoBlock(unittest.TestCase):
             "unverified": [{"what": "price", "kind": "external_fact", "why": "", "source": SOURCE}],
             })
         with self.store.stub(show={}):
-            eng.file_owner_look()
+            eng.owner_look.file_owner_look()
         (c,) = self.creates()
         self.assertEqual(c[c.index("--parent") + 1], "t-1")
 

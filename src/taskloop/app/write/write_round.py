@@ -25,7 +25,7 @@ class WriteRound:
         fresh = e.hand.drop_big(boundary)
         prompt, delta = self.prompts(s, boundary, fresh)
         s.w, s.wfam = e.ai("write", f"{s.name} write {s.n}", prompt, delta=delta, resume_key="writer", write=s.n,
-                           visual=e.stage_visual(s.st), round=s.rounds + 1, at=(s.sk, s.rounds, s.n), **s.meta)
+                           visual=e.pictures.stage_visual(s.st), round=s.rounds + 1, at=(s.sk, s.rounds, s.n), **s.meta)
         self.record(s, fresh)
         s.wrote_unchecked = s.w.get("unchecked") or []  # the review decides what is still unproven after the checks
         flow = self.question(s)
@@ -33,9 +33,9 @@ class WriteRound:
             return flow
         self.shots_contract(s, prompt)
         e.add_cases(s.w.get("new_cases") or [])
-        if e.shot_methods() and e.stage_visual(s.st):
+        if e.pictures.shot_methods() and e.pictures.stage_visual(s.st):
             e.render_stale = True  # a write after the last render: its pictures show an older tree
-        back = e.look_step(s.st, s.w, s.name, s.last)
+        back = e.judge.look_step(s.st, s.w, s.name, s.last)
         if back:  # the look judge found defects: the writer fixes them before the full checks run once
             s.feedback = back
             return AGAIN
@@ -46,7 +46,7 @@ class WriteRound:
         e, st = self.e, s.st
         stage_checks = e.stage_checks_text(st["checks"], skip=s.failed_cmds)
         where_text = e.where("write", [c.cmd for c in e.cfg.checks] + st["checks"], s.failed_cmds, listed=st["checks"])
-        tail = CASES_TAIL + ("" if s.last else LATER_CASES) + UNCHECKED_TEXT + e.look_write(st)
+        tail = CASES_TAIL + ("" if s.last else LATER_CASES) + UNCHECKED_TEXT + e.judge.look_write(st)
         gate = f" (`{e.cfg.gate_text}`)" if e.cfg.gate else ""
         prompt = write_prompt(e.rules_text(), brief=e.briefs.text(), plan=e.plan_text(s.i), n=s.i + 1, goal=st["goal"],
                               files=", ".join(st["files"]), anchors=anchors_text(st), checks=stage_checks, feedback=s.feedback,
@@ -59,7 +59,7 @@ class WriteRound:
         if e.unchecked:
             dtail += UNCHECKED_TEXT
         delta = None if fresh else e.hand.delta(s.i + 1, st["goal"], ", ".join(st["files"]), anchors_text(st), stage_checks,
-                                                where_text, s.feedback, dtail + e.look_write(st))
+                                                where_text, s.feedback, dtail + e.judge.look_write(st))
         if delta:  # the writer may have edited its copy: the engine's brief goes back before it reads it again
             e.brief_file.write_text(e.briefs.text(), encoding="utf-8")
         else:  # a whole prompt (a first write, a fresh writer): what the tasks beside this one are doing (tl-bxk.13.8)
@@ -104,11 +104,11 @@ class WriteRound:
         """tl-tno: a visual write that named no shots and gave no reason is asked once more, with the table, before any check or review
         runs (the review's 'asked for no shots' finding burned lifesim-d5f.39's re-plan cap)."""
         e, w = self.e, s.w
-        if not (e.look_ready(s.st) and not s.fix and not s.shots_fixed and not (w.get("shots") or [])
+        if not (e.pictures.look_ready(s.st) and not s.fix and not s.shots_fixed and not (w.get("shots") or [])
                 and not (w.get("logic_only") or "").strip()):
             return
         s.shots_fixed = True
-        tip = SHOTS_FIX % e.shot_table()
+        tip = SHOTS_FIX % e.pictures.shot_table()
         e.steps.move("write", "shots_contract", "a visual write named no shots and gave no reason: asked once more")
         w2, wfam = e.ai("write", f"{s.name} shots contract", prompt + tip, delta=tip, resume_key="writer", write=s.n, visual=True,
                         round=s.rounds + 1, at=(s.sk, s.rounds, s.n + 500), **s.meta)

@@ -52,7 +52,7 @@ class Lander:
         base = e.git("merge-base", "HEAD", e.cfg.base)
         if base:
             e.sh(["git", "reset", "-q", "--soft", base], check=True, pin=True)
-        e.copy_looks()
+        e.pictures.copy_looks()
         e.stage_all(check=True)
         e.quarantine_strays()
         rc, tail = e.sh(["git", "commit", "-q", "-m", f"{bead.title[:72]} ({e.bead})"], pin=True)

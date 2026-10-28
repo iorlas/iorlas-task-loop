@@ -71,9 +71,9 @@ class PlanPrompt:
         shared = e.shared_text()
         if shared:
             rules.append(shared.strip())
-        if e.visual_cfg() and e.shot_methods():  # the classes mean "the engine renders": only with a shot table
-            rules.append(VISUAL_PLAN % e.references_text())
-            rules.append(VISUAL_STAGES % (", ".join(e.visual_cfg().include)[:300], e.shot_table()))
+        if e.pictures.visual_cfg() and e.pictures.shot_methods():  # the classes mean "the engine renders": only with a shot table
+            rules.append(VISUAL_PLAN % e.pictures.references_text())
+            rules.append(VISUAL_STAGES % (", ".join(e.pictures.visual_cfg().include)[:300], e.pictures.shot_table()))
         rules.append("Proof files that a check reads or a reviewer looks at (screenshots, logs, probe output) go under "
                      f"{e.evidence_dir}: it is kept across runs, and nothing else under {e.task_dir} is.")
         gate, has = e.cfg.gate_text, bool(e.cfg.gate)

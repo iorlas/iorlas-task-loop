@@ -67,7 +67,7 @@ class Verifier:
         e = self.e
         if not gaps:
             return {"items": []}
-        items = "".join(f"{n}. {u['what']} ({u['kind']})\n" for n, u in enumerate(gaps, 1)) + e.look_verify(gaps)
+        items = "".join(f"{n}. {u['what']} ({u['kind']})\n" for n, u in enumerate(gaps, 1)) + e.judge.look_verify(gaps)
         prompt = VERIFY_PROMPT.format(brief=e.briefs.text(), work=e.settles.work_summary(), evidence=e.evidence_dir,
                                       checks=e.settles.evidence_text(), where=e.where("verify"), items=items) + e.routing.ledger().text()
         try:
@@ -96,8 +96,8 @@ class Verifier:
             v, why = a["verdict"], a["why"]
             if v == "settled" and not a["evidence"].strip():
                 v, why = "open", "settled without quoted evidence"
-            if e.is_look(u):
-                v, a, why = e.look_verdict(u, v, a, why)
+            if e.judge.is_look(u):
+                v, a, why = e.judge.look_verdict(u, v, a, why)
             kind, source = e.routing.resolve_kind(u, a)
             u = dict(u, kind=kind, source=source)
             route = ""

@@ -3,6 +3,7 @@ at most FOLLOW_UP_CAP, the rest in one comment on the source bead."""
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from taskloop.adapters import bdcreate
 from taskloop.contracts.ports import NewBead
 from taskloop.domain.review import followups as fu
 
@@ -17,8 +18,8 @@ def file_follow_ups(e: Any) -> list[dict[str, str]]:
     tag = fu.label(e.bead, e.stats["rounds"])
     unfiled: list[dict[str, str]] = []
     for lo in todo.file:
-        made, err = e.create_checked(NewBead(title=lo["title"], description=lo["why"], deps=["discovered-from:" + e.bead],
-                                             labels=[tag], no_inherit_labels=True))
+        made, err = bdcreate.create_checked(e.store, NewBead(title=lo["title"], description=lo["why"], deps=["discovered-from:" + e.bead],
+                                             labels=[tag], no_inherit_labels=True), e.bead, e.log.note)
         if made:
             e.filed.append(str(fu.FollowKey.of(e.bead, lo)))
             e.checkpoints.keep_filed()
