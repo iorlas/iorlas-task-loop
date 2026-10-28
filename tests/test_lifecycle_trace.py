@@ -224,7 +224,7 @@ class TraceTelemetry(unittest.TestCase):
         self.assert_row("failed")
 
     def test_an_early_failure_before_the_reset_still_writes_the_row(self):
-        with mock.patch.object(tl, "show", return_value=None):
+        with self.store.stub(show=None):
             rc, _ = self.run_engine({})
         self.assertEqual(rc, 2)
         self.assert_row("failed")
@@ -236,7 +236,7 @@ class TraceTelemetry(unittest.TestCase):
 
     def test_a_bead_without_criteria_still_writes_the_row(self):
         bead = {"id": "t-1", "title": "Add f", "metadata": {}}
-        with mock.patch.object(tl, "show", return_value=bead):
+        with self.store.stub(show=bead):
             rc, _ = self.run_engine({})
         self.assertEqual(rc, 2)
         row = self.assert_row("blocked")
@@ -268,7 +268,7 @@ class TraceTelemetry(unittest.TestCase):
 
     @unittest.skipIf(os.name == "nt", "the engine stops a process group; sleep and bash are POSIX")
     def test_a_timed_out_command_leaves_a_kill_record(self):
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False)
+        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False, store=self.store)
         rc, _ = eng.sh("sleep 5", timeout=0.05)
         self.assertEqual(rc, 124)
         kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
@@ -280,7 +280,7 @@ class TraceTelemetry(unittest.TestCase):
         self.assertIn("started_t", kills[-1])
 
     def test_a_command_that_exits_124_by_itself_is_not_a_kill(self):
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False)
+        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False, store=self.store)
         rc, _ = eng.sh(PY + ' -c "import sys; sys.exit(124)"', timeout=10)
         self.assertEqual(rc, 124)
         kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
@@ -297,7 +297,7 @@ class TraceTelemetry(unittest.TestCase):
             def wait(self, timeout=None):
                 return 0
 
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False)
+        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False, store=self.store)
         with mock.patch.object(engine.subprocess, "Popen", return_value=FakeProc()), \
                 mock.patch.object(engine.procs, "kill_tree") as kill:
             with self.assertRaises(KeyboardInterrupt):
@@ -310,7 +310,7 @@ class TraceTelemetry(unittest.TestCase):
         self.assertIn("observed_t", kills[-1])
 
     def test_a_check_that_goes_silent_freezes_its_last_event_at_the_hang_boundary(self):
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False)
+        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False, store=self.store)
         code = (
             "import signal,sys,time\n"
             "def bye(*_):\n"
@@ -341,7 +341,7 @@ class TraceTelemetry(unittest.TestCase):
         self.assertGreaterEqual(kill["last_event_t"] - kill["started_t"], 0.5)
 
     def test_hung_freeze_rechecks_activity_inside_the_lock(self):
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False)
+        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False, store=self.store)
         eng.last_event_t, eng._event_frozen, eng.killed, eng.kill_why = 100.0, False, False, ""
 
         class LateActivityLock:
@@ -363,7 +363,7 @@ class TraceTelemetry(unittest.TestCase):
         self.assertEqual(eng.kill_why, "hung")
 
     def test_a_slow_activity_scan_is_timestamped_when_it_returns(self):
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False)
+        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False, store=self.store)
         p = FakeCheckProc()
         scan_returned = []
 
@@ -392,7 +392,7 @@ class TraceTelemetry(unittest.TestCase):
         self.assertGreaterEqual(kill["kill_t"] - scan_returned[0], 0.4)
 
     def test_an_idle_timeout_freezes_last_event_before_shutdown_output(self):
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False)
+        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False, store=self.store)
         p = FakeCheckProc()
         p.emit("productive output\n")
 
@@ -417,7 +417,7 @@ class TraceTelemetry(unittest.TestCase):
         self.assertGreaterEqual(kill["kill_t"] - kill["last_event_t"], 0.2)
 
     def test_an_idle_interruption_freezes_last_event_before_shutdown_output(self):
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False)
+        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False, store=self.store)
         p = FakeCheckProc()
         p.emit("productive output\n")
 
@@ -442,7 +442,7 @@ class TraceTelemetry(unittest.TestCase):
         self.assertGreaterEqual(kill["kill_t"] - kill["last_event_t"], 0.2)
 
     def test_a_stopped_delegate_worker_that_survives_still_leaves_a_kill_record(self):
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False)
+        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False, store=self.store)
 
         class Survivor(fake_route.Script):  # the engine ended the call, and the worker outlived every signal
             def reply(this, *a, **kw):
@@ -498,7 +498,7 @@ class TraceTelemetry(unittest.TestCase):
                                 kill_t=101.5, why="interrupted", alive=[4242])
                 raise KeyboardInterrupt()
 
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False)
+        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), verbose=False, store=self.store)
         with te.delegate_stack(Interrupted({})):
             with self.assertRaises(KeyboardInterrupt):
                 eng._ai("plan", "title", "prompt")

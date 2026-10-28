@@ -53,18 +53,22 @@ class FakeBeadStore:
 
     def show(self, bead, cwd=None):
         if "show" in self.fns:
-            return self.fns["show"](bead, cwd=cwd)
+            return self.fns["show"](bead, **({"cwd": cwd} if cwd else {}))
         return dict(self.beads.get(bead, self.default))
 
     def comments(self, bead, cwd=None):
         if "comments" in self.fns:
-            return list(self.fns["comments"](bead, cwd=cwd))
+            return list(self.fns["comments"](bead, **({"cwd": cwd} if cwd else {})))
         return list(self.notes.get(bead, []))
 
     def bd(self, *args, cwd=None):
         self.calls.append(args)
         if "bd" in self.fns:
-            return self.fns["bd"](*args, cwd=cwd)
+            return self.fns["bd"](*args, **({"cwd": cwd} if cwd else {}))
+        return self.answer()
+
+    def answer(self):
+        """What a succeeding bd says (the next scripted failure, if any, instead)."""
         rc, err = self.fail.pop(0) if self.fail else (0, "")
         return SimpleNamespace(returncode=rc, stdout=self.reply, stderr=err)
 

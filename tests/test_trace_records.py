@@ -152,7 +152,7 @@ class TraceRecords(unittest.TestCase):
         rc, _ = self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
         first = self.eng.log_path.stem
         time.sleep(1.05)  # a run's name is its start second
-        with te.mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Old format."}]):
+        with self.store.stub(comments=[{"author": "denis", "text": "Old format."}]):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
         traces = [json.loads(x) for x in (tl.config_dir() / "traces.jsonl").read_text().splitlines()]
@@ -192,7 +192,7 @@ class TraceRecords(unittest.TestCase):
         new = tl.config_dir() / "runs" / "t-0-20261020-000000" / "checks"
         new.mkdir(parents=True)
         (new / "00-a.r1.log").write_text("x")
-        engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         self.assertFalse((old / "00-a.r1.log").exists())
         self.assertTrue((old / "00-a.log").exists())  # an old run's single log is its only one: kept
         self.assertTrue((new / "00-a.r1.log").exists())

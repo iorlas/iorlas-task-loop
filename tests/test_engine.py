@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import engine  # noqa: E402
 import seams  # noqa: E402
+from support.fakes import FakeBeadStore  # noqa: E402
 from support import fake_route  # noqa: E402
 import lane_policy as lp  # noqa: E402,F401
 import netgate  # noqa: E402,F401
@@ -171,17 +172,16 @@ class EngineTest(unittest.TestCase):
         self.env = mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(home / "cfg"), "APPDATA": str(home / "cfg"),
                                                 "CLAUDE_CODE_SESSION_ID": "sess1234-x", "GIT_AUTHOR_NAME": "t",
                                                 "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
-                                                "GIT_COMMITTER_EMAIL": "t@t"})
+                                                "GIT_COMMITTER_EMAIL": "t@t",
+                                                "BEADS_DIR": str(home / "no-beads")})  # a bd that slips past the store finds nothing to write
         self.env.start()
         self.wt = home / "wt"
         if not getattr(getattr(self, self._testMethodName), "no_repo", False):
             copy_origin_and_clone(home)
-        self.bd_calls = []
+        self.store = FakeBeadStore()  # bd, show and comments of every engine this test builds (pass store=self.store)
+        self.bd_calls = self.store.calls
         self.closed, self.blocked = [], []
         patches = [
-            mock.patch.object(tl, "bd", side_effect=self.fake_bd),
-            mock.patch.object(tl, "show", return_value=BEAD),
-            mock.patch.object(tl, "comments", return_value=[]),
             mock.patch.object(tl, "cmd_close", side_effect=lambda a: self.closed.append(a.reason) or 0),
             mock.patch.object(tl, "cmd_block", side_effect=lambda a: self.blocked.append(a.why) or 0),
             mock.patch.object(tl, "cmd_land", return_value=0),
@@ -218,8 +218,7 @@ class EngineTest(unittest.TestCase):
         self.tmp.cleanup()
 
     def fake_bd(self, *a, **kw):
-        self.bd_calls.append(a)
-        return mock.Mock(returncode=0, stdout="bead t-1: Add f\n", stderr="")
+        return self.store.answer()  # the store records the call itself
 
     def run_engine(self, answers, route="/fake/route.py", raw=None, j_extra=None, bead="t-1", probe=None, **cfg):
         """`raw` puts keys in the loaded config without committing them. probe: the network probe (netgate.FakeProbe)."""
@@ -229,7 +228,7 @@ class EngineTest(unittest.TestCase):
         c.update(cfg)
         c.update(raw or {})
         with delegate_stack(script, route):
-            self.eng = engine.Engine(bead, str(self.wt), c)
+            self.eng = engine.Engine(bead, str(self.wt), c, store=self.store)
             if probe is not None:
                 self.eng.probe = probe
             rc = self.eng.run()
@@ -359,7 +358,7 @@ class EngineTest(unittest.TestCase):
     def test_a_check_that_times_out_is_red_and_leaves_no_process(self):
         c = engine.load_cfg(str(self.wt))
         c["check_timeout_min"] = 0.03  # under 2 s
-        eng = engine.Engine("t-1", str(self.wt), c)
+        eng = engine.Engine("t-1", str(self.wt), c, store=self.store)
         mark = "61.%d" % os.getpid()  # unique: a second suite running at once has its own sleep
         res = eng.run_checks({"checks": ["bash -c 'sleep %s; true'" % mark], "files": []}, "s")
         self.assertEqual(res[0]["exit"], 124)
@@ -369,7 +368,7 @@ class EngineTest(unittest.TestCase):
 
     def test_checks_run_without_the_launchers_claude_session(self):
         c = engine.load_cfg(str(self.wt))
-        eng = engine.Engine("t-1", str(self.wt), c)
+        eng = engine.Engine("t-1", str(self.wt), c, store=self.store)
         with mock.patch.dict(os.environ, {"CLAUDE_CODE_ENTRYPOINT": "cli"}):
             res = eng.run_checks({"checks": [PY + ' -c "import os,sys; sys.exit(1 if os.environ.get(\'CLAUDE_CODE_ENTRYPOINT\') else 0)"'],
                                   "files": []}, "s")
@@ -378,7 +377,7 @@ class EngineTest(unittest.TestCase):
     def checks_engine(self, **cfg):
         c = engine.load_cfg(str(self.wt))
         c.update(cfg)
-        return engine.Engine("t-1", str(self.wt), c)
+        return engine.Engine("t-1", str(self.wt), c, store=self.store)
 
     def test_checks_run_in_groups_fastest_first_and_stop_at_a_red_group(self):
         eng = self.checks_engine(checks=[{"id": "unit", "cmd": PY + ' -c "pass"', "group": "tests"},
@@ -678,7 +677,7 @@ class EngineTest(unittest.TestCase):
     @POSIX_CHECK
     def test_a_stage_check_always_reruns_it_can_read_state_outside_the_tree(self):
         state = Path(self.tmp.name) / "editor-open"  # a running editor, a log, a bead comment: git cannot see them
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         st = {"checks": ['! test -e %s' % state], "files": []}
         self.assertEqual(eng.run_checks(st, "s")[0]["exit"], 0)
         state.write_text("x")
@@ -697,7 +696,7 @@ class EngineTest(unittest.TestCase):
     def test_a_failed_check_is_never_reused(self):
         count = Path(self.tmp.name) / "count"
         fails = PY + ' -c "import sys; open(%r, \'a\').write(\'1\'); sys.exit(1)"' % str(count)
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         st = {"checks": [fails], "files": []}
         eng.run_checks(st, "s")
         again = eng.run_checks(st, "s")
@@ -706,14 +705,14 @@ class EngineTest(unittest.TestCase):
 
     @POSIX_CHECK
     def test_checks_run_in_bash(self):
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         res = eng.run_checks({"checks": ['diff <(echo a) <(echo a)'], "files": []}, "s")
         self.assertEqual(res[0]["exit"], 0, res[0]["tail"])
 
     @POSIX_CHECK
     def test_a_failing_command_in_a_check_fails_it_wherever_it_sits(self):
         # lifesim-gfr.31.1: `just unity-check > log; ! grep 'error CS' log` passed with unity-check red: `;` dropped it
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         cases = {FALSE + "; true": 1, FALSE + " | cat": 1, "! " + FALSE: 0, FALSE + " || true": 0,
                  "if " + FALSE + "; then exit 3; fi": 0, "true; true": 0}
         res = eng.run_checks({"checks": list(cases), "files": []}, "s")
@@ -722,7 +721,7 @@ class EngineTest(unittest.TestCase):
     def test_a_stop_during_a_check_stops_the_check_and_everything_it_started(self):
         if os.name == "nt":
             self.skipTest("POSIX process groups")
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         pidfile = Path(self.wt, "child.pid")
         real = subprocess.Popen.communicate
         started = []
@@ -1026,7 +1025,7 @@ class EngineTest(unittest.TestCase):
 
     def test_a_question_naming_two_requirements_the_brief_quotes_is_still_an_ask(self):
         owner = [{"author": "Denis Tomilin", "text": "Accepted: R3 keep saves forever; R7 drop them after a week."}]
-        with mock.patch.object(tl, "comments", return_value=owner):
+        with self.store.stub(comments=owner):
             rc, _ = self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="R3 and R7 conflict here: which wins?")]})
         self.assertEqual(rc, 2)
         self.assertEqual(self.ask()["kind"], "decision")
@@ -1035,7 +1034,7 @@ class EngineTest(unittest.TestCase):
         # the engine never answers from the brief by itself: only the step's own decided field skips the owner
         owner = [{"author": "Denis Tomilin", "text": self.D5F58_OWNER}]
         for q in ("Should R10 be relaxed for a sole candidate?", "R10 vs criterion 3: which wins?"):
-            with mock.patch.object(tl, "comments", return_value=owner):
+            with self.store.stub(comments=owner):
                 rc, s = self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question=q)]})
             self.assertEqual(rc, 2, q)
             self.assertEqual(self.ask()["kind"], "decision")
@@ -1261,7 +1260,7 @@ class EngineTest(unittest.TestCase):
         self.assertIn("stopped (SIGTERM)", self.said())
 
     def test_the_heartbeat_keeps_the_slot_bead_the_loop_names(self):
-        hb = engine.Heartbeat("t-1", "sl-1")
+        hb = engine.Heartbeat("t-1", "sl-1", store=self.store)
         with mock.patch.object(hb.stop_ev, "wait", side_effect=[False, True]):
             hb.loop()
         self.assertEqual([c for c in self.bd_calls if c[0] == "heartbeat"], [("heartbeat", "t-1"), ("heartbeat", "sl-1")])
@@ -1274,7 +1273,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(tl.git("show", "task/t-1:f.txt", cwd=str(self.wt)), "d2")
         idle = dict(WRITE, summary="re-proved, no change")
         with mock.patch.object(fake_route.Script, "reply", self.no_write(fake_route.Script.reply)), \
-                mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Rerun it."}]):
+                self.store.stub(comments=[{"author": "denis", "text": "Rerun it."}]):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [idle], "review": [CLEAN]})
         self.assertEqual(rc, 0)
         self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
@@ -1346,7 +1345,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 2)  # two fix rounds could not make it green: the next run re-plans with the gate's output
         self.assertEqual(self.checkpoint()["step"], "gate-red")
         fix = dict(PLAN, stages=[dict(PLAN["stages"][0], goal="reconcile the API file")])
-        with mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Main moved; reconcile it."}]):
+        with self.store.stub(comments=[{"author": "denis", "text": "Main moved; reconcile it."}]):
             rc, s = self.run_engine({"plan": [fix], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])
@@ -1372,7 +1371,7 @@ class EngineTest(unittest.TestCase):
         lo = {"title": "Track hard-to-undo moves", "why": "the plan wants it filed"}
         with self.stop_at("reviewer", 2):
             self.run_engine({"plan": [dict(self.TWO, leftovers=[lo])], "write": [WRITE, WRITE], "review": [CLEAN]})
-        with mock.patch.object(tl, "show", return_value=dict(BEAD, description="Stage two: keep it small.")):
+        with self.store.stub(show=dict(BEAD, description="Stage two: keep it small.")):
             rc, s = self.run_engine({"plan": [dict(self.TWO, stages=self.TWO["stages"][1:], leftovers=[lo])],
                                      "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
@@ -1420,7 +1419,7 @@ class EngineTest(unittest.TestCase):
             self.run_engine({"plan": [self.TWO], "write": [WRITE, WRITE], "review": [CLEAN]})
         bead = dict(BEAD, description="Add the file f, and say hi.")
         one_left = dict(self.TWO, stages=[self.TWO["stages"][1]])
-        with mock.patch.object(tl, "show", return_value=bead):
+        with self.store.stub(show=bead):
             rc, s = self.run_engine({"plan": [one_left], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])
@@ -1434,7 +1433,7 @@ class EngineTest(unittest.TestCase):
         own = [{"author": "tl-sess1234", "text": "Blocked: failed: stopped (SIGTERM)", "created_at": "2026-10-20T21:11:48Z"},
                {"author": "tl-sess1234", "text": "Reflect (engine): outcome=failed; minutes=83", "created_at": "2026-10-20T21:11:49Z"}]
         labelled = dict(BEAD, labels=["needs-owner-check"])  # the engine's own label
-        with mock.patch.object(tl, "comments", return_value=own), mock.patch.object(tl, "show", return_value=labelled):
+        with self.store.stub(comments=own), self.store.stub(show=labelled):
             rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual([c[0] for c in s.calls], ["worker", "reviewer"])
@@ -1473,10 +1472,8 @@ class EngineTest(unittest.TestCase):
             p = tl.config_dir() / "asks" / "t-1.json"
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(json.dumps(ask))
-        with mock.patch.object(tl, "show", return_value=dict(BEAD, **bead)), \
-                mock.patch.object(tl, "comments", return_value=list(comments)), \
-                mock.patch.object(tl, "live_actors", return_value=set(live)):
-            ok, why = engine.reclaim("t-1", str(self.wt))
+        with self.store.stub(show=dict(BEAD, **bead), comments=list(comments)), mock.patch.object(tl, "live_actors", return_value=set(live)):
+            ok, why = engine.reclaim("t-1", str(self.wt), store=self.store)
         updates = [c for c in self.bd_calls if c[:1] == ("update",)]
         return ok, why, updates
 
@@ -1650,7 +1647,7 @@ class EngineTest(unittest.TestCase):
                     {"type": "event_msg", "payload": {"type": "token_count", "info": {"last_token_usage": {"input_tokens": n + 100}}}})
             path.write_text(json.dumps({"type": "user"}) + "\n" + json.dumps(line) + "\n" + json.dumps({"type": "system"}) + "\n")
         extra = {"family": family, "transcript": str(path) if ctx_k is not None else ""}
-        with mock.patch.object(tl, "show", return_value=dict(BEAD, description="Add the file f. " + self.MARK)):
+        with self.store.stub(show=dict(BEAD, description="Add the file f. " + self.MARK)):
             return self.run_engine({"plan": [self.plan_with(self.RED_ONCE)], "write": [WRITE, WRITE], "review": [CLEAN]},
                                    j_extra={"write": [extra, extra]}, **cfg)
 
@@ -1707,7 +1704,7 @@ class EngineTest(unittest.TestCase):
     def test_a_missing_or_empty_transcript_resumes_as_before(self):
         for path in ("", "/nonexistent/s.jsonl"):
             extra = {"transcript": path}
-            with mock.patch.object(tl, "show", return_value=dict(BEAD, description=self.MARK)):
+            with self.store.stub(show=dict(BEAD, description=self.MARK)):
                 rc, s = self.run_engine({"plan": [self.plan_with(self.RED_ONCE)], "write": [WRITE, WRITE], "review": [CLEAN]},
                                         j_extra={"write": [extra, extra]})
             self.assertEqual(s.calls[2][1], "ref-write", path)
@@ -1733,7 +1730,7 @@ class EngineTest(unittest.TestCase):
             f.write_text(json.dumps({"type": "assistant", "message": {"usage": {"input_tokens": k * 1000}}}) + "\n")
         red = PY + ' -c "import sys; sys.exit(0 if open(\'f.txt\').read().strip() == \'d4\' else 1)"'
         ex = [{"family": "claude", "transcript": str(f)} for f in (big, small, small)]
-        with mock.patch.object(tl, "show", return_value=dict(BEAD, description=self.MARK)):
+        with self.store.stub(show=dict(BEAD, description=self.MARK)):
             rc, s = self.run_engine({"plan": [self.plan_with(red)], "write": [WRITE] * 3, "review": [CLEAN]}, j_extra={"write": ex})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual([c[1] for c in s.calls[1:4]], [None, None, "ref-write"])  # fresh at 160k, then resumed
@@ -1758,7 +1755,7 @@ class EngineTest(unittest.TestCase):
         red = PY + (' -c "import sys; t=open(\'f.txt\').read().strip(); '
                     't == \'d2\' and open(\'%s\', \'w\').write(\'tampered\'); sys.exit(0 if t == \'d3\' else 1)"'
                     % str(brief).replace("\\", "/"))
-        with mock.patch.object(tl, "show", return_value=dict(BEAD, description=self.MARK)):
+        with self.store.stub(show=dict(BEAD, description=self.MARK)):
             rc, s = self.run_engine({"plan": [self.plan_with(red)], "write": [WRITE, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertIn(self.MARK, s.prompts[1])
@@ -1983,7 +1980,7 @@ class EngineTest(unittest.TestCase):
                 state["checkpoint"] = self.checkpoint()
                 state["resuming"] = True
                 # An owner comment answers the stuck ask without discarding the checkpoint.
-                with mock.patch.object(tl, "comments", return_value=[{"author": "owner", "text": "Run again."}]):
+                with self.store.stub(comments=[{"author": "owner", "text": "Run again."}]):
                     rc, script = self.run_engine({"plan": [plan], "write": [WRITE], "review": [reviews[-1]]},
                                                  gate=gate, **dict(cfg, max_replans=1))
                 state["resume_calls"] = [c[0] for c in script.calls]
@@ -2197,7 +2194,7 @@ class EngineTest(unittest.TestCase):
                 self.assertEqual(ck["pending_land_validation"], seen["failure"])
                 red_plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[FALSE])]) if role != "reviewer" else PLAN
                 red_review = review(findings=[finding("high")]) if role == "reviewer" else CLEAN
-                with mock.patch.object(tl, "comments", return_value=[{"author": "owner", "text": "Recover validation."}]):
+                with self.store.stub(comments=[{"author": "owner", "text": "Recover validation."}]):
                     rc, script = self.run_engine({"plan": [red_plan], "write": [WRITE], "review": [red_review]},
                                                  gate=gate, max_rounds=1, max_check_tries=1, max_replans=1)
                 self.assertEqual(rc, 2, self.blocked)
@@ -2213,7 +2210,7 @@ class EngineTest(unittest.TestCase):
                 self.assertEqual(len(self.closed), closed_before)
                 land.assert_not_called()
 
-                with mock.patch.object(tl, "comments", return_value=[{"author": "owner", "text": "Recover with passing checks and review."}]):
+                with self.store.stub(comments=[{"author": "owner", "text": "Recover with passing checks and review."}]):
                     rc, script = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
                                                  gate=gate, max_rounds=1, max_check_tries=1, max_replans=2)
                 self.assertEqual(rc, 0, self.blocked)
@@ -2390,7 +2387,7 @@ class EngineTest(unittest.TestCase):
 
     # Denis 2026-10-21 (lifesim-s28t): a bead that lacks the information to do it leaves the unattended queue
     def test_a_decision_ask_takes_the_bead_out_of_the_pick_queue(self):
-        with mock.patch.object(tl, "show", return_value=dict(BEAD, labels=["auto", "lane:sim"])):
+        with self.store.stub(show=dict(BEAD, labels=["auto", "lane:sim"])):
             rc, _ = self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Build dreams now or park?")]}, pick_label="auto")
         self.assertEqual(rc, 2)
         self.assertIn(("label", "remove", "t-1", "auto"), self.bd_calls)
@@ -2400,22 +2397,22 @@ class EngineTest(unittest.TestCase):
 
     def test_a_verify_ask_keeps_the_bead_in_the_pick_queue(self):
         r = dict(CLEAN, unchecked=[{"what": "the cited spec link did not open", "kind": "link"}])
-        with mock.patch.object(tl, "show", return_value=dict(BEAD, labels=["auto"])):
+        with self.store.stub(show=dict(BEAD, labels=["auto"])):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r], "verify": [STILL_OPEN]},
                                     pick_label="auto")
         self.assertEqual(self.ask()["kind"], "verify")
         self.assertFalse(any(c[:2] == ("label", "remove") for c in self.bd_calls))
 
     def test_the_label_swap_does_not_answer_the_ask(self):
-        with mock.patch.object(tl, "show", return_value=dict(BEAD, labels=["auto"])):
+        with self.store.stub(show=dict(BEAD, labels=["auto"])):
             self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Build dreams now or park?")]}, pick_label="auto")
-        with mock.patch.object(tl, "show", return_value=dict(BEAD, labels=["needs-info"])):
+        with self.store.stub(show=dict(BEAD, labels=["needs-info"])):
             rc, s = self.run_engine({}, pick_label="auto")
         self.assertEqual(s.calls, [])
         self.assertEqual(self.ask()["status"], "open")
 
     def test_no_pick_label_configured_touches_no_labels(self):
-        with mock.patch.object(tl, "show", return_value=dict(BEAD, labels=["auto"])):
+        with self.store.stub(show=dict(BEAD, labels=["auto"])):
             self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Build dreams now or park?")]})
         self.assertFalse(any(c[:1] == ("label",) for c in self.bd_calls))
 
@@ -2482,7 +2479,7 @@ class EngineTest(unittest.TestCase):
 
     def test_an_owner_comment_answers_the_ask_and_the_bead_goes_on(self):
         self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
-        with mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Old format."}]):
+        with self.store.stub(comments=[{"author": "denis", "text": "Old format."}]):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
         self.assertEqual(s.calls[0][0], "planner")
@@ -2643,7 +2640,7 @@ class EngineTest(unittest.TestCase):
                 {"author": "denis", "text": text}]
 
     def test_an_answered_verify_ask_goes_straight_to_land(self):
-        with mock.patch.object(tl, "comments", return_value=self.verify_then_answer("Right.")):
+        with self.store.stub(comments=self.verify_then_answer("Right.")):
             rc, s = self.run_engine({})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(s.calls, [])
@@ -2651,14 +2648,14 @@ class EngineTest(unittest.TestCase):
 
     def test_a_verify_answer_with_a_yes_and_evidence_goes_straight_to_land(self):
         text = "Right. The log shows the link opens and returns the spec."
-        with mock.patch.object(tl, "comments", return_value=self.verify_then_answer(text)):
+        with self.store.stub(comments=self.verify_then_answer(text)):
             rc, s = self.run_engine({})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(s.calls, [])
 
     def test_a_verify_answer_with_a_yes_and_a_change_plans_it(self):
         more = dict(PLAN, stages=[dict(PLAN["stages"][0], goal="test Y")])
-        with mock.patch.object(tl, "comments", return_value=self.verify_then_answer("right, but add a test for Y")):
+        with self.store.stub(comments=self.verify_then_answer("right, but add a test for Y")):
             rc, s = self.run_engine({"plan": [more], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])
@@ -2667,7 +2664,7 @@ class EngineTest(unittest.TestCase):
         # lifesim-fld.26.15: 'add a test that ..., then land' went straight to land without the test
         text = "add a test that f.txt is not empty, then land"
         more = dict(PLAN, stages=[dict(PLAN["stages"][0], goal="test f.txt")])
-        with mock.patch.object(tl, "comments", return_value=self.verify_then_answer(text)):
+        with self.store.stub(comments=self.verify_then_answer(text)):
             rc, s = self.run_engine({"plan": [more], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])
@@ -2676,7 +2673,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(self.eng.replans, 0)
 
     def test_a_verify_answer_the_planner_finds_needs_nothing_more_lands(self):
-        with mock.patch.object(tl, "comments", return_value=self.verify_then_answer("Link is fine, checked.")):
+        with self.store.stub(comments=self.verify_then_answer("Link is fine, checked.")):
             rc, s = self.run_engine({"plan": [dict(PLAN, stages=[], summary="nothing left")]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual([c[0] for c in s.calls], ["planner"])
@@ -2689,7 +2686,7 @@ class EngineTest(unittest.TestCase):
         a = self.ask()
         a["answer"] = "correct"
         self.eng.ask_path().write_text(json.dumps(a))
-        with mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "correct"}]):
+        with self.store.stub(comments=[{"author": "denis", "text": "correct"}]):
             rc, s = self.run_engine({})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(s.calls, [])
@@ -2935,7 +2932,7 @@ class EngineTest(unittest.TestCase):
 
     # -- intake: a bead the engine cannot judge is a ticket ask, before any AI step
     def test_a_bead_without_acceptance_criteria_is_a_ticket_and_never_planned(self):
-        with mock.patch.object(tl, "show", return_value={"id": "t-1", "title": "Add f", "metadata": {}, "description": "Add f."}):
+        with self.store.stub(show={"id": "t-1", "title": "Add f", "metadata": {}, "description": "Add f."}):
             rc, s = self.run_engine({"plan": [PLAN]})
         self.assertEqual(rc, 2)
         self.assertEqual(s.calls, [])
@@ -3288,7 +3285,7 @@ class EngineTest(unittest.TestCase):
         refusal = dl.Refusal("skew_delegate_older", "delegate speaks contract 2")
         script = fake_route.Script({})
         with mock.patch.object(dl, "resolve", return_value=refusal), mock.patch.object(seams.DelegateRoute, "runner", lambda self, *a, **k: script):
-            rc = engine.Engine("t-1", str(self.wt), c).run()
+            rc = engine.Engine("t-1", str(self.wt), c, store=self.store).run()
         self.assertEqual(rc, 2)
         self.assertEqual(script.calls, [])
         self.assertIn("contract 3", self.said())
@@ -3306,13 +3303,13 @@ class EngineTest(unittest.TestCase):
     # -- tl-bxk.10.13: amend, never plan again from scratch; cap; validate; checkpoint first
     def stopped_run(self, bead=BEAD, plan=PLAN, answers=None):
         """A run on `bead` stopped in its first review: its checkpoint holds the plan."""
-        with self.stop_at("reviewer", 1), mock.patch.object(tl, "show", return_value=bead):
+        with self.stop_at("reviewer", 1), self.store.stub(show=bead):
             return self.run_engine(answers or {"plan": [plan], "write": [WRITE]})
 
     def test_a_changed_bead_amends_the_old_plan_it_does_not_plan_again(self):
         self.stopped_run(plan=self.TWO, answers={"plan": [self.TWO], "write": [WRITE]})
-        with mock.patch.object(tl, "show", return_value=dict(BEAD, description="Also say hi.")), \
-                mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Keep it small."}]):
+        with self.store.stub(show=dict(BEAD, description="Also say hi.")), \
+                self.store.stub(comments=[{"author": "denis", "text": "Keep it small."}]):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         p = s.prompts[0]
@@ -3327,8 +3324,8 @@ class EngineTest(unittest.TestCase):
 
     def test_a_comment_alone_is_not_an_amend_and_costs_no_replan(self):
         self.stopped_run(plan=self.TWO, answers={"plan": [self.TWO], "write": [WRITE]})
-        with mock.patch.object(tl, "show", return_value=BEAD), \
-                mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Fresh start: use the other slot."}]):
+        with self.store.stub(show=BEAD), \
+                self.store.stub(comments=[{"author": "denis", "text": "Fresh start: use the other slot."}]):
             rc, s = self.run_engine({"write": [WRITE, WRITE], "review": [CLEAN, CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertNotIn("planner", [c[0] for c in s.calls])
@@ -3347,8 +3344,8 @@ class EngineTest(unittest.TestCase):
         noise, _ = self.engine_noise(name)
         self.assertTrue(len(noise) > 1, "the fixture has engine comments")
         self.stopped_run()
-        with mock.patch.object(tl, "show", return_value=dict(BEAD, notes="Engine paused: paused: no lane for write")), \
-                mock.patch.object(tl, "comments", return_value=noise):
+        with self.store.stub(show=dict(BEAD, notes="Engine paused: paused: no lane for write")), \
+                self.store.stub(comments=noise):
             rc, s = self.run_engine({"write": [WRITE, WRITE], "review": [CLEAN, CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         log = self.eng.log_path.read_text()
@@ -3380,12 +3377,12 @@ class EngineTest(unittest.TestCase):
         self.assertNotEqual(h(BEAD, people + [{"author": "denis", "text": "Parked over budget (226 of 180 min): scope change"}]), base)
 
     def test_answer_text_and_reclaim_skip_engine_comments(self):
-        a, eng = {"id": "t-1-1", "answer": ""}, engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        a, eng = {"id": "t-1-1", "answer": ""}, engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         cs = [{"author": "tl-x", "text": "Ask (engine) t-1-1 stuck: why"}, {"author": "tl-x", "text": "Lane (engine): the review ran on the writer's family"},
               {"author": "tl-x", "text": "Resume (engine): the earlier work conflicts"}, {"author": "tl-x", "text": "Verify (engine): self-verified"}]
-        with mock.patch.object(tl, "comments", return_value=cs):
+        with self.store.stub(comments=cs):
             self.assertEqual(eng.answer_text(a), "")
-        with mock.patch.object(tl, "comments", return_value=cs + [{"author": "denis", "text": "Use the new format."}]):
+        with self.store.stub(comments=cs + [{"author": "denis", "text": "Use the new format."}]):
             self.assertEqual(eng.answer_text(a), "Use the new format.")
 
     def test_a_lane_comment_after_a_block_does_not_hide_the_reopen(self):
@@ -3401,7 +3398,7 @@ class EngineTest(unittest.TestCase):
     def test_a_pause_is_a_comment_never_a_line_of_notes(self):
         calls = []
         late = stop("no_lane", at=engine.time.time() + 3600, family="openai", lane="OPENAI", say="no lane. Hold the task; advice")
-        with mock.patch.object(tl, "bd", side_effect=lambda *a, **k: calls.append(a) or mock.Mock(returncode=0)):
+        with self.store.stub(bd_fn=lambda *a, **k: calls.append(a) or mock.Mock(returncode=0)):
             self.run_engine({"plan": [late]})
         self.assertFalse([c for c in calls if "--append-notes" in c], calls)
         self.assertTrue([c for c in calls if c[:3] == ("comments", "add", "t-1") and c[3].startswith("Engine paused:")], calls)
@@ -3411,7 +3408,7 @@ class EngineTest(unittest.TestCase):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [ask]})
         self.assertEqual(rc, 2)
         self.assertEqual(self.ask()["kind"], "decision")
-        with mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Use the new format."}]):
+        with self.store.stub(comments=[{"author": "denis", "text": "Use the new format."}]):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(s.calls[0][0], "planner")
@@ -3421,7 +3418,7 @@ class EngineTest(unittest.TestCase):
 
     def test_a_bead_that_changed_in_nothing_the_plan_reads_keeps_its_plan_and_calls_no_planner(self):
         self.stopped_run()
-        with mock.patch.object(tl, "show", return_value=dict(BEAD, labels=["urgent"])):
+        with self.store.stub(show=dict(BEAD, labels=["urgent"])):
             rc, s = self.run_engine({"write": [WRITE, WRITE], "review": [CLEAN, CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertNotIn("planner", [c[0] for c in s.calls])
@@ -3455,7 +3452,7 @@ class EngineTest(unittest.TestCase):
         for k in (2, 3):                                                # amend 1, amend 2 (across runs)
             self.stopped_run(bead=dict(BEAD, description="v%d" % k))
         self.assertEqual(self.checkpoint()["planned"], 3)
-        with mock.patch.object(tl, "show", return_value=dict(BEAD, description="v4")):
+        with self.store.stub(show=dict(BEAD, description="v4")):
             rc, s = self.run_engine({})
         self.assertEqual(rc, 2)
         self.assertEqual(s.calls, [])
@@ -3465,8 +3462,8 @@ class EngineTest(unittest.TestCase):
         for word in ("split", "say what the plan keeps missing", "allow one more", "1. plan", "2. amend", "bead changed"):
             self.assertIn(word, (a["question"] + a["why"] + a["detail"]).lower())
         self.assertTrue(a["question"].startswith("**Re-planned 3 times"), a["question"])
-        with mock.patch.object(tl, "show", return_value=dict(BEAD, description="v5")), \
-                mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Allow one more."}]):
+        with self.store.stub(show=dict(BEAD, description="v5")), \
+                self.store.stub(comments=[{"author": "denis", "text": "Allow one more."}]):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(s.calls[0][0], "planner")
@@ -3476,10 +3473,10 @@ class EngineTest(unittest.TestCase):
         self.stopped_run()
         for k in (2, 3):
             self.stopped_run(bead=dict(BEAD, description="v%d" % k))
-        with mock.patch.object(tl, "show", return_value=dict(BEAD, description="v4")):
+        with self.store.stub(show=dict(BEAD, description="v4")):
             self.run_engine({})
-        with mock.patch.object(tl, "show", return_value=dict(BEAD, description="v5")), \
-                mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Split it, I will clarify."}]):
+        with self.store.stub(show=dict(BEAD, description="v5")), \
+                self.store.stub(comments=[{"author": "denis", "text": "Split it, I will clarify."}]):
             rc, s = self.run_engine({})
         self.assertEqual(rc, 2)
         self.assertEqual(s.calls, [])
@@ -3495,14 +3492,14 @@ class EngineTest(unittest.TestCase):
         self.assertTrue(a["why"].startswith(engine.REPLAN_CAP), a["why"])
         self.assertIn("stage 1 stuck after 1 rounds", a["why"])
         self.assertIn("allow one more", a["question"])
-        with mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "ALLOW one more"}]):
+        with self.store.stub(comments=[{"author": "denis", "text": "ALLOW one more"}]):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, max_rounds=1, max_replans=1)
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(self.eng.extra, 1)
 
     def test_max_replans_is_read_from_the_config(self):
         self.stopped_run()
-        with mock.patch.object(tl, "show", return_value=dict(BEAD, description="v2")):
+        with self.store.stub(show=dict(BEAD, description="v2")):
             rc, s = self.run_engine({}, max_replans=0)
         self.assertEqual(rc, 2)
         self.assertEqual(s.calls, [])
@@ -3615,8 +3612,8 @@ class EngineTest(unittest.TestCase):
                  "t-6": {"id": "t-6", "title": "Epic", "status": "open"}}
         notes = {"t-9": [{"author": "denis", "text": "B for smile."}, {"author": "tl-sess1234", "text": "Reflect (engine): outcome=landed"}],
                  "t-8": [{"author": "denis", "text": "x" * 900}]}
-        with mock.patch.object(tl, "show", side_effect=lambda b, cwd=None: bead if b == "t-1" else known.get(b, {})), \
-                mock.patch.object(tl, "comments", side_effect=lambda b, cwd=None: notes.get(b, [])):
+        with self.store.stub(show_fn=lambda b, cwd=None: bead if b == "t-1" else known.get(b, {})), \
+                self.store.stub(comments_fn=lambda b, cwd=None: notes.get(b, [])):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         p = s.prompts[0]
@@ -3708,7 +3705,7 @@ class LandReview(EngineTest):
     def engine_at_land(self, **cfg):
         c = engine.load_cfg(str(self.wt))
         c.update(cfg)
-        e = engine.Engine("t-1", str(self.wt), c)
+        e = engine.Engine("t-1", str(self.wt), c, store=self.store)
         e.plan_data = {"stages": [{"goal": "g", "files": ["f.txt", "docs/"], "checks": [], "hard": False}]}
         return e
 
@@ -3722,7 +3719,7 @@ class LandReview(EngineTest):
 
     def run_with(self, script):
         with delegate_stack(script, "/r.py"):
-            self.eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+            self.eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
             return self.eng.run()
 
     def landed(self):
@@ -4476,7 +4473,7 @@ class DelegateLauncher(unittest.TestCase):
 
     def test_close_with_an_empty_reason_still_closes(self):
         c = engine.load_cfg(str(self.wt))
-        eng = engine.Engine("t-1", str(self.wt), c)
+        eng = engine.Engine("t-1", str(self.wt), c, store=self.store)
         eng.close("failed", "", "", "")
         self.assertTrue(self.blocked)
 
@@ -4528,7 +4525,7 @@ class DelegateLauncher(unittest.TestCase):
     def test_no_delegate_blocks_with_the_install_command(self):
         c = engine.load_cfg(str(self.wt))
         with mock.patch.object(dl, "resolve", return_value=dl.Refusal("not_installed")):
-            rc = engine.Engine("t-1", str(self.wt), c).run()
+            rc = engine.Engine("t-1", str(self.wt), c, store=self.store).run()
         self.assertEqual(rc, 2)
         self.assertIn("claude plugin update iorlas-delegate", self.said())
 

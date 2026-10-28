@@ -52,7 +52,7 @@ class NoBlock(unittest.TestCase):
         answers = {"plan": [plan], "write": [WRITE] * writes, "review": [dict(CLEAN, unchecked=items)] + list(extra_reviews)}
         if verify:
             answers["verify"] = verify
-        with mock.patch.object(tl, "show", return_value=bead):
+        with self.store.stub(show=bead):
             return self.run_engine(answers, **cfg)
 
     def unit(self):
@@ -238,7 +238,7 @@ class NoBlock(unittest.TestCase):
 
     def filed(self, bead_id, title, existing):
         """file_owner_look for one more bead of epic t-0 while `existing` (a row) is the epic's review bead."""
-        eng = engine.Engine(bead_id, str(self.wt), engine.load_cfg(str(self.wt)))
+        eng = engine.Engine(bead_id, str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         eng.bead_title, eng.bead_parent = title, "t-0"
         eng.unverified = [{"what": "price of the pack", "kind": "external_fact", "why": ""}]
         real = self.fake_bd
@@ -250,7 +250,7 @@ class NoBlock(unittest.TestCase):
             return r
         shows = {"t-0": {"id": "t-0", "issue_type": "epic"}, existing["id"]: existing} if existing else {"t-0": {"id": "t-0", "issue_type": "epic"}}
         self.bd_calls.clear()
-        with mock.patch.object(tl, "bd", side_effect=bd), mock.patch.object(tl, "show", side_effect=lambda i, **k: shows.get(i, {})):
+        with self.store.stub(bd_fn=bd), self.store.stub(show_fn=lambda i, **k: shows.get(i, {})):
             eng.file_owner_look()
         return eng
 
@@ -299,12 +299,12 @@ class NoBlock(unittest.TestCase):
                 return epic if i == "t-0" else dict(store.get(i, {}))
 
         def land(n):
-            eng = engine.Engine("t-%d" % n, str(self.wt), engine.load_cfg(str(self.wt)))
+            eng = engine.Engine("t-%d" % n, str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
             eng.bead_title, eng.bead_parent = "Bead %d" % n, "t-0"
             eng.unverified = [{"what": "price %d" % n, "kind": "external_fact", "why": "", "source": SOURCE}]
             eng.file_owner_look()
 
-        with mock.patch.object(tl, "bd", side_effect=bd), mock.patch.object(tl, "show", side_effect=show):
+        with self.store.stub(bd_fn=bd), self.store.stub(show_fn=show):
             threads = [threading.Thread(target=land, args=(n,)) for n in (1, 2, 3)]
             [t.start() for t in threads]
             [t.join() for t in threads]
@@ -315,10 +315,10 @@ class NoBlock(unittest.TestCase):
             self.assertIn("price %d" % n, row["description"])
 
     def test_a_bead_with_no_epic_files_its_review_bead_under_itself(self):
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         eng.bead_title = "Lone"
         eng.unverified = [{"what": "price", "kind": "external_fact", "why": "", "source": SOURCE}]
-        with mock.patch.object(tl, "show", return_value={}):
+        with self.store.stub(show={}):
             eng.file_owner_look()
         (c,) = self.creates()
         self.assertEqual(c[c.index("--parent") + 1], "t-1")

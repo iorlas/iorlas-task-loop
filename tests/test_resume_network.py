@@ -255,7 +255,7 @@ class Pause(NetBase):
         self.pause_in_review()
         said = [c[3] for c in self.bd_calls if c[:3] == ("comments", "add", "t-1") and c[3].startswith("Engine paused:")]
         self.assertTrue(said, self.bd_calls)
-        with mock.patch.object(tl, "comments", return_value=[{"author": "tl-a", "text": t} for t in said]):
+        with self.store.stub(comments=[{"author": "tl-a", "text": t} for t in said]):
             rc, s = self.run_engine({"review": [CLEAN]}, probe=Cycling(0))
         self.assertEqual(rc, 0, self.blocked)
         self.assertNotIn("plan", s.nodes)  # the brief it was planned from is the same brief

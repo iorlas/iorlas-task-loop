@@ -81,7 +81,7 @@ class Reload(unittest.TestCase):
         c = engine.load_cfg(str(self.wt))
         c.update({"reflect": False})
         c.update(cfg)
-        eng = engine.Engine("t-1", str(self.wt), c)
+        eng = engine.Engine("t-1", str(self.wt), c, store=self.store)
         eng.argv = ["run-task", "t-1", "--worktree", str(self.wt), "--fresh", "--outcome-file", "/x/out.json"]
 
         def fake_exec(argv):
@@ -247,7 +247,7 @@ class Reload(unittest.TestCase):
     def test_delegate_route_is_resolved_again_each_call(self):
         c = engine.load_cfg(str(self.wt))
         with mock.patch.object(dl, "resolve", side_effect=[self.res("/a/route.py"), self.res("/b/route.py"), self.res("/b/route.py")]) as fr:
-            eng = engine.Engine("t-1", str(self.wt), c)
+            eng = engine.Engine("t-1", str(self.wt), c, store=self.store)
             self.assertEqual(eng.delegate_route(), "/b/route.py")
             self.assertEqual(eng.delegate_route(), "/b/route.py")
             self.assertEqual(fr.call_count, 3)

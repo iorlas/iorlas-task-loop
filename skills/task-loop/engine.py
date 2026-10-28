@@ -5638,8 +5638,8 @@ class Heartbeat:
     """The bead's lease, and the slot bead's when tl loop runs this (TASK_LOOP_SLOT_BEAD): a loop killed with SIGKILL
     leaves its slot held while this run lives."""
 
-    def __init__(self, bead, slot_bead=""):
-        self.beads, self.stop_ev = [b for b in (bead, slot_bead) if b], threading.Event()
+    def __init__(self, bead, slot_bead="", store=seams.TlStore()):
+        self.beads, self.stop_ev, self.store = [b for b in (bead, slot_bead) if b], threading.Event(), store
         self.th = threading.Thread(target=self.loop, daemon=True)
 
     def start(self):
@@ -5648,7 +5648,7 @@ class Heartbeat:
     def loop(self):
         while not self.stop_ev.wait(60):
             for b in self.beads:
-                tl.bd("heartbeat", b)
+                self.store.bd("heartbeat", b)
 
     def stop(self):
         self.stop_ev.set()
@@ -6293,13 +6293,13 @@ def busy_elsewhere(repo, actor, bead_id):
     return False
 
 
-def reclaim(bead_id, repo):
+def reclaim(bead_id, repo, store=seams.TlStore()):
     """(ok, why): run-task takes back what the engine itself left, never what a person holds. A claim by a tl- actor
     whose lease ran out is released (a restarted Claude session gets a new actor name). A bead the engine blocked is
     reopened for a plain retry, or when a comment after the block answers the open ask; it stays blocked when a person
     commented after the block with no ask open (they may have parked it), while an ask waits unanswered, or while
     another bead blocks it."""
-    b = tl.show(bead_id) or {}
+    b = store.show(bead_id) or {}
     who, me = b.get("assignee") or "", tl.actor()
     release = False
     if who and who != me:
@@ -6324,7 +6324,7 @@ def reclaim(bead_id, repo):
                 and d.get("dependency_type") == "blocks" and d.get("status") != "closed"]
         if held:
             return False, "blocked by %s" % ", ".join(held)
-        cs = tl.comments(bead_id)
+        cs = store.comments(bead_id)
         blocks = [c for c in cs if (c.get("text") or "").startswith("Blocked:")]
         if not blocks:
             return False, "blocked by a person, not by the engine"
@@ -6346,7 +6346,7 @@ def reclaim(bead_id, repo):
         # tl-kwo: only if the claim is still the one just read (bd applies --if-assignee atomically): two loops looking at one freed bead
         # must not both release and then both claim
         guard = ["--if-assignee", who] if who and who != me else []
-        r = tl.bd("update", bead_id, *(["--status", "open"] if reopen else []), *guard, "--assignee", "")
+        r = store.bd("update", bead_id, *(["--status", "open"] if reopen else []), *guard, "--assignee", "")
         if guard and getattr(r, "returncode", 0) != 0:
             return False, "the claim of %s changed hands just now (%s no longer holds it): not taken" % (bead_id, who)
     return True, ("reopened" if reopen else "released %s" % who if release else "")

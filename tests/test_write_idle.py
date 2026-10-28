@@ -307,7 +307,7 @@ class SurvivorBlocksTheRetry(te.EngineTest):
         script = Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         c = engine.load_cfg(str(self.wt))
         with te.delegate_stack(script):
-            self.eng = engine.Engine("t-1", str(self.wt), c)
+            self.eng = engine.Engine("t-1", str(self.wt), c, store=self.store)
             rc = self.eng.run()
         self.assertEqual(rc, 2)
         self.assertEqual([x[0] for x in script.calls].count("worker"), 1)  # no second attempt into the same worktree
@@ -319,14 +319,14 @@ class SurvivorBlocksTheRetry(te.EngineTest):
         script = fake_route.Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         c = engine.load_cfg(str(self.wt))
         with te.delegate_stack(script), mock.patch.object(seams.DelegateRoute, "runner", lambda self, log, idle=None, wall=None: idles.append(idle) or script):
-            engine.Engine("t-1", str(self.wt), c).run()
+            engine.Engine("t-1", str(self.wt), c, store=self.store).run()
         seen = dict(zip([x[0] for x in script.calls], idles))  # one runner per call, in call order
         self.assertEqual((seen["worker"].warn, seen["worker"].stop, seen["worker"].cap), (15 * MIN, 25 * MIN, 120 * MIN))
         self.assertIsNone(seen["planner"])
         self.assertIsNone(seen["reviewer"])
 
     def test_a_write_under_the_idle_rules_gets_no_close_to_the_limit_warning(self):
-        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         r = dl.CallResult(te.CLEAN, secs=40 * 60)
         eng.anomalies("write", r, 1)
         eng.anomalies("review", r, 1)

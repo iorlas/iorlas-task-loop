@@ -108,7 +108,7 @@ class Deferred(StagesTest):
     LEFT = [{"title": "File the table and chair beads", "why": "the sheet lists them; the engine files them"}]
 
     def eng_(self):
-        return engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        return engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
 
     def test_the_review_prompt_lists_what_the_plan_set_aside(self):
         rc, s = self.run_engine({"plan": [dict(PLAN, leftovers=self.LEFT)], "write": [WRITE], "review": [CLEAN]})
@@ -158,7 +158,7 @@ class Scope(StagesTest):
     """13.5: a checkable note outside the done-when is a follow-up, not a verify gap."""
 
     def test_an_item_outside_the_done_when_is_filed_not_verified(self):
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         e.scope = "Acceptance Criteria\n- the soak passes with three lifers across five seeds"
         e.plan_data = dict(PLAN)
         inside = {"what": "the soak holds with three lifers on seed 4", "kind": "checkable"}
@@ -169,13 +169,13 @@ class Scope(StagesTest):
         self.assertIn("Sit To Stand", e.leftovers[0]["title"])
 
     def test_with_no_acceptance_text_nothing_moves(self):
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         item = {"what": "Sit To Stand was not probed", "kind": "checkable"}
         self.assertEqual(e.out_of_scope([item]), [item])
         self.assertEqual(e.leftovers, [])
 
     def test_non_latin_text_is_compared_and_a_note_is_filed_once(self):
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         e.scope = "Done when: суп варится три минуты"
         e.plan_data = dict(PLAN)
         inside = {"what": "суп варится три минуты на плите", "kind": "checkable"}
@@ -192,7 +192,7 @@ class Scope(StagesTest):
         self.assertNotIn("Intro", txt)
 
     def test_a_note_outside_the_done_when_does_not_stop_the_run(self):
-        with mock.patch.object(tl, "show", return_value=dict(BEAD, acceptance_criteria="f.txt exists and holds data")):
+        with self.store.stub(show=dict(BEAD, acceptance_criteria="f.txt exists and holds data")):
             review = dict(CLEAN, unchecked=[{"what": "the wallpaper colour was not probed", "kind": "checkable", "source": ""}])
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [review]})
         self.assertEqual(rc, 0, self.blocked)
@@ -224,7 +224,7 @@ class Handoff(StagesTest):
         self.assertIn("rename the helper", reviews[1])
 
     def test_the_rounds_text_keeps_the_newest_within_its_cap(self):
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         for k in range(8):
             e.note_round("stage 1/1", k + 1, "review", "w" * 300, ["x" * 200])
         text = e.rounds_text()
@@ -268,7 +268,7 @@ class RepeatedChecks(StagesTest):
 
     def test_repeats_are_found_through_redirects_and_wrappers(self):
         e = engine.Engine("t-1", str(self.wt), dict(engine.load_cfg(str(self.wt)), checks=[
-            {"id": "tests", "cmd": "just fast-tests", "group": "tests"}]))
+            {"id": "tests", "cmd": "just fast-tests", "group": "tests"}]), store=self.store)
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[self.wrap("a"), self.wrap("b"), "just fast-tests", "just lint"])],
                     cases=[{"criterion": "c", "check": self.wrap("c")}])
         got = {part: len(cs) for part, cs, rid in e.repeated_slow(plan)}
@@ -295,7 +295,7 @@ class SharedNotes(StagesTest):
     """13.8: the tasks of a repo share what is running, what landed and which tests are flaky."""
 
     def eng_(self):
-        return engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        return engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
 
     def test_flakes_are_kept_per_repo_once_and_listed_for_the_next_prompts(self):
         e = self.eng_()
@@ -610,11 +610,11 @@ class VisualWork(StagesTest):
 
     def test_the_table_is_read_from_the_base_branch_not_the_working_copy(self):
         (self.wt / "shots.json").write_text(json.dumps({"v": 1, "methods": [{"method": "Evil", "cmd": "touch pwned"}]}))
-        e = engine.Engine("t-1", str(self.wt), dict(engine.load_cfg(str(self.wt)), shot_table="shots.json"))
+        e = engine.Engine("t-1", str(self.wt), dict(engine.load_cfg(str(self.wt)), shot_table="shots.json"), store=self.store)
         self.assertEqual(list(e.shot_methods()), ["ScreenShots"])
 
     def test_a_missing_table_is_warned_once_and_the_old_way_stands(self):
-        e = engine.Engine("t-1", str(self.wt), dict(engine.load_cfg(str(self.wt)), shot_table="nowhere.json"))
+        e = engine.Engine("t-1", str(self.wt), dict(engine.load_cfg(str(self.wt)), shot_table="nowhere.json"), store=self.store)
         self.assertEqual(e.shot_methods(), {})
         self.assertEqual(e.shot_methods(), {})
 
@@ -651,7 +651,7 @@ class VisualWork(StagesTest):
         self.assertIn("hue gradient", judges[1])
 
     def test_only_the_engines_own_pictures_count_with_a_shot_table(self):
-        e = engine.Engine("t-1", str(self.wt), dict(engine.load_cfg(str(self.wt)), shot_table="shots.json"))
+        e = engine.Engine("t-1", str(self.wt), dict(engine.load_cfg(str(self.wt)), shot_table="shots.json"), store=self.store)
         e.evidence_dir.mkdir(parents=True, exist_ok=True)
         (e.evidence_dir / "writer.png").write_bytes(b"x")
         (e.evidence_dir / "main.png").write_bytes(b"x")
@@ -683,7 +683,7 @@ class VisualWork(StagesTest):
         self.assertEqual(self.eng.render_stale, False)
 
     def test_a_resumed_stage_keeps_its_render_rounds(self):
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         e.look_done, e.look_prev, e.rendered_names, e.last_reqs, e.render_stale = 1, [{"why": "x", "where": ""}], {"a.png"}, self.SHOTS, True
         e.plan_data = dict(PLAN)
         e.branch = "task/t-1"
@@ -691,7 +691,7 @@ class VisualWork(StagesTest):
         e.save_checkpoint(stage=0, rounds=0, n=1, feedback="", step="write")
         ck = json.loads(e.checkpoint_path().read_text())
         self.assertEqual((ck["look_done"], ck["rendered"], ck["render_stale"]), (1, ["a.png"], True))
-        again = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        again = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         again.reset(dict(BEAD))
         again.resume_point()
         self.assertEqual((again.look_done, again.rendered_names, again.render_stale), (1, {"a.png"}, True))
@@ -701,7 +701,7 @@ class VisualWork(StagesTest):
         self.assertNotIn("look-objective:", s.prompts[0])
 
     def test_the_gallery_data_lands_in_the_owner_look_beads_metadata(self):
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         e.plan_data = dict(PLAN, cases=[{"criterion": "it reads well", "check": "", "class": "taste"}])
         e.look_paths = ["design/look-reviews/t-1/main.png"]
         e.look_notes = ["the main screen shows"]
@@ -709,8 +709,8 @@ class VisualWork(StagesTest):
         old = {"metadata": {"looks": [
             {"id": "t-0#1", "bead": "t-0", "title": "other", "shots": [], "status": "open"},
             {"id": "t-1#1", "bead": "t-1", "title": "it reads well", "shots": [], "status": "good"}], "keep": "me"}}
-        with mock.patch.object(tl, "show", return_value=old), \
-                mock.patch.object(tl, "bd", side_effect=lambda *a, **k: sent.append(a) or mock.Mock(returncode=0, stdout="", stderr="")):
+        with self.store.stub(show=old), \
+                self.store.stub(bd_fn=lambda *a, **k: sent.append(a) or mock.Mock(returncode=0, stdout="", stderr="")):
             e.write_looks("lk-1")
         (call,) = sent
         self.assertEqual(call[:3], ("update", "lk-1", "--metadata"))
@@ -721,8 +721,8 @@ class VisualWork(StagesTest):
         e.leftovers = []
         old["metadata"]["looks"].pop()
         sent.clear()
-        with mock.patch.object(tl, "show", return_value=old), \
-                mock.patch.object(tl, "bd", side_effect=lambda *a, **k: sent.append(a) or mock.Mock(returncode=0, stdout="", stderr="")):
+        with self.store.stub(show=old), \
+                self.store.stub(bd_fn=lambda *a, **k: sent.append(a) or mock.Mock(returncode=0, stdout="", stderr="")):
             e.write_looks("lk-1")
         entry = json.loads(sent[0][3])["looks"][-1]
         self.assertEqual((entry["id"], entry["bead"], entry["title"], entry["status"]), ("t-1#1", "t-1", "it reads well", "open"))
@@ -802,7 +802,7 @@ class Executable(StagesTest):
             dict(PLAN["stages"][0], goal="stage two", checks=['test -s %s' % self.PATH1])])
 
     def test_a_file_an_accepted_stage_promised_and_a_later_check_reads(self):
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         plan = self.two_stage()
         self.assertEqual(e.promised_missing(plan, 1), 0)  # stage 1 is accepted, the file is gone, stage 2 reads it
         Path(self.wt, self.PATH1).parent.mkdir(parents=True, exist_ok=True)
@@ -814,30 +814,30 @@ class Executable(StagesTest):
         self.assertIsNone(e.promised_missing(plan, 0))  # nothing accepted yet
 
     def test_a_replanned_runs_goals_survive_the_stage_that_runs_again(self):
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         e.reset(dict(BEAD))
         e.plan_data = self.two_stage()
         e.done, e.accepted = ["an earlier plan's goal", "stage one"], [0]
         e.save_checkpoint(stage=1, rounds=0, n=0, feedback="", step="write")
-        again = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        again = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         again.reset(dict(BEAD))
         again.resume_point()
         self.assertEqual(again.done, ["an earlier plan's goal"])
 
     def test_a_resume_runs_the_stage_again_when_its_file_is_gone(self):
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         e.reset(dict(BEAD))
         e.plan_data = self.two_stage()
         e.done, e.accepted = ["stage one"], [0]
         e.save_checkpoint(stage=1, rounds=0, n=0, feedback="", step="write")
-        again = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        again = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         again.reset(dict(BEAD))
         plan, i, state = again.resume_point()
         self.assertEqual((i, state, again.accepted, again.done), (0, None, [], []))
         self.assertIn("a file stage 1 promised is missing", again.log_path.read_text())
         Path(self.wt, self.PATH1).parent.mkdir(parents=True, exist_ok=True)
         Path(self.wt, self.PATH1).write_text("ok\n")
-        third = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        third = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         third.reset(dict(BEAD))
         self.assertEqual(third.resume_point()[1], 1)  # the file is there: stage 2 goes on
 
@@ -872,7 +872,7 @@ class Ledger(StagesTest):
         self.assertIn("unmet items dropped", self.eng.log_path.read_text())
 
     def test_a_claim_about_the_code_that_shares_words_with_a_deferred_item_is_not_that_item(self):
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         e.plan_data = dict(PLAN, leftovers=[{"title": "Add tests for parser edge cases", "why": "later"}])
         self.assertEqual(e.ledger_route("parser edge cases are not handled"), "")
         self.assertEqual(e.ledger_route("The parser does not handle edge cases such as empty input or nested quotes"), "")
@@ -880,7 +880,7 @@ class Ledger(StagesTest):
         self.assertEqual(e.ledger_route("A follow-up bead for tests of parser edge cases is not filed"), "leftover")
 
     def test_a_defect_the_verifier_found_is_not_filed_away_by_the_ledger(self):
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         e.plan_data = self.plan()
         e.unchecked = []
         what = "Import the chosen prefabs and add object rows"
@@ -904,7 +904,7 @@ class Ledger(StagesTest):
 
     def test_an_unrelated_checkable_item_is_still_verified(self):
         item = {"what": "The volume slider saves its value across restarts on every platform", "kind": "checkable", "source": ""}
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         e.plan_data = self.plan()
         self.assertEqual(e.ledger_route(item["what"]), "")
         self.assertEqual(e.engine_steps([dict(item)]), [item])
@@ -924,7 +924,7 @@ class Ledger(StagesTest):
         self.assertEqual(lint.ledger_problems(self.plan()), [])
 
     def test_ledgered_cases_run_no_command(self):
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         e.plan_data = self.plan()
         self.assertEqual(e.case_checks(), [HAS_F])
         self.assertEqual(lint.plan_checks(self.plan()), [HAS_F] + [c for st in PLAN["stages"] for c in st["checks"] if c != HAS_F])
@@ -1002,7 +1002,7 @@ class Inputs(StagesTest):
     def test_after_the_owner_answered_the_engine_does_not_ask_again(self):
         ask = dict(WRITE, question="Which format?")
         self.run_engine({"plan": [PLAN], "write": [ask]})
-        with mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Use the new format."}]):
+        with self.store.stub(comments=[{"author": "denis", "text": "Use the new format."}]):
             rc, s = self.run_engine({"plan": [dict(PLAN, unresolved=[self.WIN])], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
 
@@ -1041,7 +1041,7 @@ class ResumeCount(StagesTest):
         ask = dict(WRITE, question="Which format?")
         rc, _ = self.run_engine({"plan": [PLAN], "write": [ask]}, max_replans=0)  # one plan allowed, no amend
         self.assertEqual(rc, 2)
-        with mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Use the new format."}]):
+        with self.store.stub(comments=[{"author": "denis", "text": "Use the new format."}]):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, max_replans=0)
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(s.calls[0][0], "planner")  # it amended
@@ -1052,7 +1052,7 @@ class ResumeCount(StagesTest):
         self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which format?")]}, max_replans=1)
         path = tl.config_dir() / "asks" / "t-1.json"
         path.unlink()
-        with mock.patch.object(tl, "show", return_value=dict(BEAD, description="Also say hi.")):
+        with self.store.stub(show=dict(BEAD, description="Also say hi.")):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, max_replans=1)
         self.assertEqual(self.eng.plan_log[-1]["counted"], True)
 
@@ -1065,7 +1065,7 @@ class ResumeCount(StagesTest):
 
     def test_a_rebase_onto_a_new_base_starts_the_plan_count_again(self):
         self.behind_branch()
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         e.git("checkout", "-q", "task/t-1")
         e.planned, e.plan_log = 3, [{"mode": "plan", "why": "x"}] * 3
         self.assertEqual(e.rebase_onto_base(), "rebased")
@@ -1074,7 +1074,7 @@ class ResumeCount(StagesTest):
         self.assertEqual(e.rebase_onto_base(), "")  # nothing behind now
 
     def test_the_count_starts_again_after_a_rebase_at_most_twice_per_bead(self):
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         e.rebase_resets = engine.MAX_REBASE_RESETS
         e.planned = 3
         self.behind_branch()
@@ -1084,7 +1084,7 @@ class ResumeCount(StagesTest):
 
     def test_a_branch_that_conflicts_with_main_starts_again_fresh_and_nothing_is_counted(self):
         self.behind_branch(conflict=True)
-        with mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Use the new format."}]):
+        with self.store.stub(comments=[{"author": "denis", "text": "Use the new format."}]):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, max_replans=0)
         self.assertEqual(rc, 0, self.blocked)
         text = self.eng.log_path.read_text()
@@ -1116,7 +1116,7 @@ class ResumeCount(StagesTest):
         te.sh("git", "add", "-A", cwd=base)
         te.sh("git", "commit", "-qm", "main moves", cwd=base)
         te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         e.reset(dict(BEAD))
         e.plan_data = dict(PLAN)
         e.save_checkpoint(stage=0, rounds=0, n=1, feedback="", step="write")
@@ -1204,7 +1204,7 @@ class ResumeCount(StagesTest):
 
     def test_a_branch_that_cannot_be_kept_aside_is_not_reset(self):
         self.behind_branch(conflict=True)
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         e.git("checkout", "-q", "task/t-1")
         e.branch = "task/t-1"
         before = e.git("rev-parse", "HEAD")
@@ -1218,7 +1218,7 @@ class ResumeCount(StagesTest):
 
     def test_a_fresh_start_clears_what_the_old_attempt_left(self):
         self.behind_branch(conflict=True)
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         e.git("checkout", "-q", "task/t-1")
         e.branch = "task/t-1"
         e.unverified, e.look_paths, e.handoff["rounds"], e.fixes, e.replans, e.rendered_names = [{"what": "x"}], ["p.png"], [{"r": 1}], 2, 2, {"a.png"}
@@ -1327,7 +1327,7 @@ class Claims(StagesTest):
     def test_no_reflection_for_a_paused_run_or_when_switched_off(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})  # reflect off in the harness
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])
-        e = engine.Engine("t-1", str(self.wt), dict(engine.load_cfg(str(self.wt)), reflect=True))
+        e = engine.Engine("t-1", str(self.wt), dict(engine.load_cfg(str(self.wt)), reflect=True), store=self.store)
         e.route = "/fake/route.py"
         e.sessions = [{"node": "plan"}]
         self.assertIsNone(e.reflect_run("failed", "failed: x"))  # a run that only planned
@@ -1414,7 +1414,7 @@ class StaleTree(StagesTest):
 
     def test_a_tracked_change_in_the_slot_still_stops_the_rebase(self):
         te.sh("git", "checkout", "-q", "-b", "task/t-1", cwd=self.wt)
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         self.junk_and_moving_main()
         (self.wt / "a.txt").write_text("edited and not committed\n")
         self.assertEqual(e.rebase_onto_base(), "")
@@ -1454,7 +1454,7 @@ class StaleTree(StagesTest):
         (self.wt / "g.txt").write_text("work\n")
         te.sh("git", "add", "-A", cwd=self.wt)
         te.sh("git", "commit", "-qm", "work", cwd=self.wt)
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         before = e.git("rev-parse", "HEAD")
         (self.wt / "g.txt").write_text("more work\n")
         te.sh("git", "commit", "-qam", "wip (t-1): blocked", cwd=self.wt)  # what reset() does with a dirty tree
@@ -1505,7 +1505,7 @@ class SlotHygiene(StagesTest):
         for f in ("client/log.txt", "client/Logs.log", "client/deep/x.log"):
             Path(self.wt, f).parent.mkdir(parents=True, exist_ok=True)
             Path(self.wt, f).write_text("noise\n")
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         self.assertEqual(e.dirty_status(), "")
         self.assertIn("?? client/", e.git("status", "--porcelain"))  # git alone calls it dirty: the old tree has no such rule
         Path(self.wt, "client/keep.log").write_text("real\n")  # negated by the base: real work
@@ -1520,7 +1520,7 @@ class SlotHygiene(StagesTest):
         (self.wt / "notes.swp").write_text("editor\n")
         (self.wt / "client").mkdir()
         (self.wt / "client" / "log.txt").write_text("unity\n")
-        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         self.assertEqual(e.dirty_status(), "")
 
     def test_files_the_base_does_not_ignore_keep_a_parked_slot_where_it_is(self):
@@ -1733,7 +1733,7 @@ class Contracts(StagesTest):
         path = tl.config_dir() / "asks" / "t-1.json"
         a = json.loads(path.read_text())
         path.write_text(json.dumps(dict(a, kind="stuck")))  # an over-budget or stuck ask, which has a Run again button
-        with mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Run again."}]):
+        with self.store.stub(comments=[{"author": "denis", "text": "Run again."}]):
             rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertNotIn("planner", [c[0] for c in s.calls])
@@ -1746,7 +1746,7 @@ class Contracts(StagesTest):
     def test_a_real_answer_still_amends(self):
         ask = dict(WRITE, question="Which format?")
         self.run_engine({"plan": [PLAN], "write": [ask]})
-        with mock.patch.object(tl, "comments", return_value=[{"author": "denis", "text": "Use the new format, then run again."}]):
+        with self.store.stub(comments=[{"author": "denis", "text": "Use the new format, then run again."}]):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(s.calls[0][0], "planner")
 
@@ -1947,7 +1947,7 @@ class FollowUps(StagesTest):
         return [c[3] for c in self.bd_calls if c[:2] == ("comments", "add") and c[3].startswith("Reflect (engine)")]
 
     def test_a_follow_up_bd_lint_refuses_is_filed_again_with_the_sections_it_names(self):
-        with mock.patch.object(tl, "bd", side_effect=self.lint_bd()):
+        with self.store.stub(bd_fn=self.lint_bd()):
             rc, _ = self.run_engine({"plan": [dict(PLAN, leftovers=[self.LO])], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         creates = [c for c in self.bd_calls if c[:2] == ("create", "Rename x")]
@@ -1960,7 +1960,7 @@ class FollowUps(StagesTest):
         self.assertNotIn("unfiled", self.reflect_comments()[0])
 
     def test_a_follow_up_bd_will_not_take_is_reported_unfiled_the_run_still_lands(self):
-        with mock.patch.object(tl, "bd", side_effect=self.lint_bd(always=True)):
+        with self.store.stub(bd_fn=self.lint_bd(always=True)):
             rc, _ = self.run_engine({"plan": [dict(PLAN, leftovers=[self.LO])], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(self.eng.filed, [])

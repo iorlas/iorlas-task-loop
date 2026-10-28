@@ -36,7 +36,7 @@ class LookTest(unittest.TestCase):
 
     def go(self, answers, first_shot=0, bead=BEAD, **cfg):
         script = type("S", (Shooting,), {"first_shot": first_shot})
-        with mock.patch.object(fake_route, "Script", script), mock.patch.object(tl, "show", return_value=bead):
+        with mock.patch.object(fake_route, "Script", script), self.store.stub(show=bead):
             return self.run_engine(answers, **cfg)
 
     def creates(self):
@@ -188,7 +188,7 @@ class LookTest(unittest.TestCase):
             if a[0] == "list":
                 r.stdout = json.dumps(rows)
             return r
-        with mock.patch.object(tl, "bd", side_effect=bd), mock.patch.object(tl, "show", side_effect=lambda i, **k: shows.get(i, {})):
+        with self.store.stub(bd_fn=bd), self.store.stub(show_fn=lambda i, **k: shows.get(i, {})):
             self.eng.file_owner_look()
         self.assertEqual(self.creates(), [])
         (u,) = [c for c in self.bd_calls if c[0] == "update"]
@@ -204,28 +204,28 @@ class LookTest(unittest.TestCase):
         self.assertEqual(self.creates(), [])
         saved = json.loads(self.eng.checkpoint_path().read_text())
         self.assertEqual(saved["look_paths"], ["design/look-reviews/t-1/home-screen.png"])
-        eng2 = engine.Engine("t-1", str(self.wt), dict(self.eng.cfg))
+        eng2 = engine.Engine("t-1", str(self.wt), dict(self.eng.cfg), store=self.store)
         eng2.reset(BEAD)
         eng2.bead_title = "Add f"
         eng2.resume_point()
         self.assertEqual(eng2.look_paths, saved["look_paths"])
         self.assertEqual(eng2.look_notes, ["matches"])
-        with mock.patch.object(tl, "show", return_value=BEAD):
+        with self.store.stub(show=BEAD):
             eng2.file_owner_look()
         self.assertEqual(len(self.creates()), 1)
 
     def test_the_epic_is_found_by_walking_the_parents(self):
-        self.eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        self.eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         self.eng.bead_parent = "t-3"
         shows = {"t-3": {"id": "t-3", "issue_type": "feature", "parent": "t-2"},
                  "t-2": {"id": "t-2", "issue_type": "epic", "parent": "t-0"}}
-        with mock.patch.object(tl, "show", side_effect=lambda i, **k: shows.get(i, {})):
+        with self.store.stub(show_fn=lambda i, **k: shows.get(i, {})):
             self.assertEqual(self.eng.look_epic(), "t-2")
-        with mock.patch.object(tl, "show", side_effect=lambda i, **k: {}):
+        with self.store.stub(show_fn=lambda i, **k: {}):
             self.assertEqual(self.eng.look_epic(), "t-3")
 
     def test_shots_are_images_capped_and_sized(self):
-        self.eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        self.eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         d = self.eng.evidence_dir
         d.mkdir(parents=True, exist_ok=True)
         (d / "a.png").write_bytes(b"x")
@@ -237,7 +237,7 @@ class LookTest(unittest.TestCase):
         self.assertEqual(len(self.eng.shots()), engine.MAX_SHOTS)
 
     def test_no_lfs_means_no_copy(self):
-        self.eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)))
+        self.eng = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         Path(self.wt, ".gitattributes").write_text("*.png filter=lfs diff=lfs merge=lfs -text\n")
         with mock.patch.object(self.eng, "sh", return_value=(1, "")):
             self.assertFalse(self.eng.lfs_ok(["a.png"]))
