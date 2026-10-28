@@ -6,9 +6,13 @@ from typing import Any
 from taskloop.adapters import procs
 
 
-def tree_cpu(root_pid: int) -> dict[int, float]:
-    """{pid: cpu seconds} for the process tree under root_pid and every member of its group; {} where the kernel lists none."""
-    rows = {p.pid: p for p in (procs.table() or {}).values()}
+def tree_cpu(root_pid: int) -> dict[int, float] | None:
+    """{pid: cpu seconds} for the process tree under root_pid and every member of its group; None where the system lists no
+    processes at all (macOS has no /proc): the CPU is then unknown, which is not the same as idle."""
+    table = procs.table()
+    if table is None:
+        return None
+    rows = {p.pid: p for p in table.values()}
     mine, todo = {root_pid}, [root_pid]
     while todo:
         cur = todo.pop()
@@ -42,6 +46,8 @@ def activity(wt: str, root_pid: int, seen: MutableMapping[str, Any]) -> bool:
     cpu, sig = tree_cpu(root_pid), files_signature(wt)
     prev_cpu, prev_sig = seen.get("cpu") or {}, seen.get("files")
     seen["cpu"], seen["files"] = cpu, sig
+    if cpu is None:
+        return True  # no process table: cannot tell, so never call it hung; the check's wall-time cap is the only guard there
     if prev_sig is None or sig != prev_sig:
         return True
     return any(k not in prev_cpu or v > prev_cpu[k] for k, v in cpu.items())

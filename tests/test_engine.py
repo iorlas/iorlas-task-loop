@@ -55,6 +55,7 @@ from taskloop.domain.checks.writer_split import WriterSplit  # noqa: E402
 from taskloop.contracts.checks import CheckRun  # noqa: E402
 from taskloop.app.checks import evidence as check_evidence  # noqa: E402
 from support.checks import res  # noqa: E402
+from taskloop.adapters import procs as sproc  # noqa: E402
 from taskloop.adapters.check_probe import ShellProbe  # noqa: E402
 import tl  # noqa: E402
 from taskloop.adapters import delegate as lroute  # noqa: E402,F401

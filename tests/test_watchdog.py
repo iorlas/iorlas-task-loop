@@ -45,6 +45,20 @@ class Activity(unittest.TestCase):
         self.assertFalse(w.look())
         self.assertFalse(w.look({1: 2.0, 2: 5.0}))
 
+    def test_an_unreadable_process_table_is_unknown_not_idle(self):
+        seen = {"files": None, "cpu": {}}
+        with mock.patch.object(cs.procs, "table", lambda: None), mock.patch.object(cs, "files_signature", lambda wt: FILES):
+            self.assertIsNone(cs.tree_cpu(1))
+            self.assertTrue(cs.activity("wt", 1, seen))
+            self.assertTrue(cs.activity("wt", 1, seen))  # nothing moved, and still not called hung
+
+    def test_a_real_table_with_no_tree_stays_idle(self):
+        seen = {"files": None, "cpu": {}}
+        with mock.patch.object(cs.procs, "table", lambda: {}), mock.patch.object(cs, "files_signature", lambda wt: FILES):
+            self.assertEqual(cs.tree_cpu(1), {})
+            cs.activity("wt", 1, seen)
+            self.assertFalse(cs.activity("wt", 1, seen))
+
     def test_a_check_burning_cpu_with_no_output_or_files_is_active(self):
         w = Look({1: 2.0, 2: 5.0})
         self.assertTrue(w.look({1: 2.0, 2: 5.01}))  # one child spent a little CPU; nothing else moved
@@ -114,9 +128,9 @@ class Sampler(unittest.TestCase):
         p = subprocess.Popen([sys.executable, "-c", "while True: sum(range(10000))"])
         self.addCleanup(p.wait)
         self.addCleanup(p.kill)
-        first = cs.tree_cpu(p.pid)
+        first = cs.tree_cpu(p.pid) or {}
         self.assertIn(p.pid, first)
-        grew = waits.until(lambda: cs.tree_cpu(p.pid).get(p.pid, 0) > first[p.pid], limit=60, poll=0.1)  # a loaded box only makes this slower
+        grew = waits.until(lambda: (cs.tree_cpu(p.pid) or {}).get(p.pid, 0) > first[p.pid], limit=60, poll=0.1)  # a loaded box only makes this slower
         self.assertTrue(grew)
 
 
