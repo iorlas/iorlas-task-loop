@@ -166,9 +166,8 @@ OTHERS = {
         context={"instructions": [], "env_keys": []}, worker={"end": "ok"}, warnings=["w"], agent_model=None),
     "WorkerStarted": delegate.WorkerStarted(pid=1, pgid=1, run_id="r1"),
     "Bead": bead.Bead(id="tl-1", title="T", status="open", issue_type="feature", priority=1, assignee="a", labels=["auto"], parent="tl-0",
-                      description="d", design="x", acceptance_criteria="ac", notes="n", dependencies=["tl-2"],
-                      metadata=bead.BeadMeta(held_bead="tl-3", slot_hold=bead.SlotHold(until=T, why="w"),
-                                             extra={"k": 1}), lease_expires_at="2026-10-27T00:00:00Z"),
+                      description="d", design="x", acceptance_criteria="ac", notes="n", dependencies=[bead.Dep(id="tl-2", type="blocks", title="t", status="open")],
+                      metadata={"held_bead": "tl-3", "k": 1}, lease_expires_at="2026-10-27T00:00:00Z"),
     "Comment": bead.Comment(author="a", text="t", created_at="2026-10-27T00:00:00Z"),
     "BdError": bead.BdError(kind="lint", missing_sections=["ACCEPTANCE"], text="t"),
 }

@@ -776,17 +776,16 @@
   "acceptance_criteria": "ac",
   "notes": "n",
   "dependencies": [
-   "tl-2"
+   {
+    "id": "tl-2",
+    "type": "blocks",
+    "title": "t",
+    "status": "open"
+   }
   ],
   "metadata": {
    "held_bead": "tl-3",
-   "slot_hold": {
-    "until": 1793050200.5,
-    "why": "w"
-   },
-   "extra": {
-    "k": 1
-   }
+   "k": 1
   },
   "lease_expires_at": "2026-10-27T00:00:00Z"
  },

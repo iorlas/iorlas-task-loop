@@ -1,0 +1,65 @@
+[
+  {
+    "id": "zz-6to.1",
+    "title": "Child",
+    "description": "d",
+    "acceptance_criteria": "ac",
+    "status": "in_progress",
+    "priority": 2,
+    "issue_type": "task",
+    "assignee": "a1",
+    "owner": "owner@example.com",
+    "created_at": "2026-10-28T02:18:29Z",
+    "created_by": "a1",
+    "updated_at": "2026-10-28T02:18:31Z",
+    "started_at": "2026-10-28T02:18:31Z",
+    "lease_expires_at": "2026-10-28T02:23:31Z",
+    "heartbeat_at": "2026-10-28T02:18:31Z",
+    "labels": [
+      "a",
+      "b"
+    ],
+    "dependencies": [
+      {
+        "issue_id": "zz-6to.1",
+        "depends_on_id": "zz-6to",
+        "type": "parent-child",
+        "created_at": "2026-10-28T02:18:29Z",
+        "created_by": "a1",
+        "metadata": "{}"
+      }
+    ],
+    "dependency_count": 0,
+    "dependent_count": 1,
+    "comment_count": 0,
+    "parent": "zz-6to"
+  },
+  {
+    "id": "zz-ciq",
+    "title": "T",
+    "description": "x",
+    "status": "open",
+    "priority": 3,
+    "issue_type": "task",
+    "owner": "owner@example.com",
+    "created_at": "2026-10-28T02:19:38Z",
+    "created_by": "a1",
+    "updated_at": "2026-10-28T02:19:38Z",
+    "labels": [
+      "a"
+    ],
+    "dependencies": [
+      {
+        "issue_id": "zz-ciq",
+        "depends_on_id": "zz-kgz",
+        "type": "related",
+        "created_at": "2026-10-28T02:19:38Z",
+        "created_by": "a1",
+        "metadata": "{}"
+      }
+    ],
+    "dependency_count": 0,
+    "dependent_count": 0,
+    "comment_count": 0
+  }
+]

@@ -3,7 +3,7 @@ sorted and unique, metadata values are strings, a write to an unknown bead is re
 import dataclasses
 from typing import Any
 
-from taskloop.contracts.bead import BdError, Bead, Comment
+from taskloop.contracts.bead import BdError, Bead, Comment, Dep
 from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, NewBead
 
 
@@ -33,10 +33,10 @@ class FakeBeads:
                 if (b.status != "closed" or query.include_closed or query.status == "closed")
                 and (not query.status or b.status == query.status) and (not query.label or query.label in b.labels)]
 
-    def ready(self) -> list[Bead]:
+    def ready(self, label: str = "") -> list[Bead]:
         def open_dep(b: Bead) -> bool:
-            return any(d in self.beads and self.beads[d].status != "closed" for d in b.dependencies)
-        return [b for b in self.beads.values() if b.status == "open" and not open_dep(b)]
+            return any(d.id in self.beads and self.beads[d.id].status != "closed" for d in b.dependencies if d.type in ("", "blocks"))
+        return [b for b in self.beads.values() if b.status == "open" and not open_dep(b) and (not label or label in b.labels)]
 
     def create(self, new: NewBead) -> str:
         if self.refuse_create:
@@ -44,20 +44,17 @@ class FakeBeads:
         bead = "%s-%d" % (self.prefix, len(self.beads) + 1)
         self.beads[bead] = Bead(id=bead, title=new.title, status="open", issue_type=new.issue_type, priority=new.priority,
                                 labels=sorted(set(new.labels)), parent=new.parent, description=new.description,
-                                acceptance_criteria=new.acceptance_criteria, dependencies=list(new.deps))
+                                acceptance_criteria=new.acceptance_criteria, dependencies=[Dep(id=d) for d in new.deps])
         return bead
 
     def update(self, bead: str, patch: BeadPatch) -> None:
         b = self._get(bead)
-        meta = b.metadata
-        extra = {k: v for k, v in meta.extra.items() if k not in patch.unset_metadata}
-        extra.update({k: v for k, v in patch.set_metadata.items() if k != "held_bead"})
-        held = patch.set_metadata.get("held_bead", meta.held_bead)
-        if "held_bead" in patch.unset_metadata:
-            held = ""
+        meta = dict(patch.metadata if patch.metadata is not None else b.metadata)
+        meta = {k: v for k, v in meta.items() if k not in patch.unset_metadata}
+        meta.update(patch.set_metadata)
         self._put(b, status=patch.status or b.status, assignee=b.assignee if patch.assignee is None else patch.assignee,
                   description=b.description if patch.description is None else patch.description,
-                  metadata=dataclasses.replace(meta, held_bead=held, extra=extra))
+                  notes=b.notes if patch.notes is None else patch.notes, metadata=meta)
 
     def claim(self, bead: str) -> bool:
         b = self.beads.get(bead)
@@ -90,3 +87,14 @@ class FakeBeads:
     def remove_label(self, bead: str, label: str) -> None:
         b = self._get(bead)
         self._put(b, labels=[x for x in b.labels if x != label])
+
+    def reclaim(self, older_than: str, assignees: list[str]) -> None:
+        for b in list(self.beads.values()):
+            if b.status == "in_progress" and (not assignees or b.assignee in assignees) and b.lease_expires_at:
+                self._put(b, status="open", assignee="", lease_expires_at="")
+
+    def provenance(self, bead: str, kind: str, source: str, ref: str = "", ref_kind: str = "", at: str = "", payload: str = "") -> None:
+        self._get(bead)
+
+    def at(self, cwd: str) -> "FakeBeads":
+        return self

@@ -1,4 +1,4 @@
-"""Beads as the code reads them from bd (an external contract: no `v`, never written by us)."""
+"""Beads as the code reads them from bd (an external contract: no `v`, never written by us). `adapters/bd.py` is the one reader."""
 from dataclasses import field
 from typing import Any
 
@@ -13,18 +13,13 @@ class Comment:
 
 
 @record
-class SlotHold:
-    """A slot kept off the loop (a person, screenshots): bead metadata."""
+class Dep:
+    """What a bead waits on. `type`: blocks, parent-child, related, ... (bd prints it `dependency_type` in show, `type` in list)."""
 
-    until: float | None = None
-    why: str = ""
-
-
-@record
-class BeadMeta:
-    held_bead: str = ""
-    slot_hold: SlotHold | None = None
-    extra: dict[str, Any] = field(default_factory=dict)
+    id: str
+    type: str = ""
+    title: str = ""
+    status: str = ""
 
 
 @record
@@ -41,13 +36,13 @@ class Bead:
     design: str = ""
     acceptance_criteria: str = ""
     notes: str = ""
-    dependencies: list[str] = field(default_factory=list)
-    metadata: BeadMeta = field(default_factory=BeadMeta)
+    dependencies: list[Dep] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)  # free-form: held_by, held_bead, branch, slot, looks, ...
     lease_expires_at: str = ""
 
 
 @record
 class BdError:
-    kind: str
+    kind: str  # lint, not_found, not_claimable, other
     missing_sections: list[str] = field(default_factory=list)
     text: str = ""

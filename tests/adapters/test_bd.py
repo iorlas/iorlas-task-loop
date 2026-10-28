@@ -1,5 +1,5 @@
-"""Beads: the shared contract on the fake and on real bd (a throwaway database; skipped without bd), the golden bd 1.3.1
-outputs through the real adapter's parser, and logic tests on the fake."""
+"""adapters/bd.py: the shared Beads contract on the fake and on real bd (a throwaway database; skipped without bd), the golden
+bd 1.3.1 outputs through the real adapter's parser (the process replaced by the captured text), and logic tests on the fake."""
 import json
 import os
 import shutil
@@ -13,8 +13,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402,F401
 from ports.beads_contract import BeadsContract  # noqa: E402
 from support.tags import contract, domain  # noqa: E402
-from taskloop.adapters import bd_json  # noqa: E402
-from taskloop.adapters.bd_beads import BdBeads, BdRun, create_argv, update_argv  # noqa: E402
+from taskloop.adapters import bd  # noqa: E402
+from taskloop.adapters.bd import BdRun, BdStore, create_argv, update_argv  # noqa: E402
 from taskloop.adapters.fake_beads import FakeBeads  # noqa: E402
 from taskloop.contracts.bead import BdError  # noqa: E402
 from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, NewBead  # noqa: E402
@@ -65,28 +65,28 @@ class RealBdContract(BeadsContract, unittest.TestCase):
     def tearDownClass(cls) -> None:
         shutil.rmtree(cls.root, ignore_errors=True)
 
-    def make(self) -> BdBeads:
-        return BdBeads(actor=self.ACTOR, cwd=self.root)
+    def make(self) -> BdStore:
+        return BdStore(actor=self.ACTOR, cwd=self.root)
 
 
 @contract
 class GoldenBd(unittest.TestCase):
     """bd 1.3.1's real output through the real adapter, with the process replaced by the captured text."""
 
-    def beads(self, **by_cmd: BdRun) -> BdBeads:
+    def beads(self, **by_cmd: BdRun) -> BdStore:
         calls = []
 
         def run(argv: list[str], cwd: str | None) -> BdRun:
             calls.append(argv)
             return by_cmd[argv[3]]
-        b = BdBeads("x", run=run)
+        b = BdStore("x", run=run)
         b.calls = calls  # type: ignore[attr-defined]
         return b
 
     def test_show_of_a_claimed_bead_with_metadata(self) -> None:
         b = self.beads(show=BdRun(0, gold("show_in_progress.json"), "")).show("t-gold")
         assert b is not None
-        self.assertEqual((b.status, b.assignee, b.metadata.held_bead, b.metadata.extra), ("in_progress", "x", "t-dhc", {"slot": "s1"}))
+        self.assertEqual((b.status, b.assignee, b.metadata), ("in_progress", "x", {"slot": "s1", "held_bead": "t-dhc"}))
         self.assertTrue(b.lease_expires_at)
 
     def test_show_missing_is_none(self) -> None:
@@ -112,9 +112,9 @@ class GoldenBd(unittest.TestCase):
         self.assertFalse(self.beads(update=BdRun(1, gold("claim_closed.out"), gold("claim_closed.err"))).claim("t-eis"))
 
     def test_error_kinds(self) -> None:
-        self.assertEqual(bd_json.error_of(gold("claim_closed.err"), "").kind, "not_claimable")
-        self.assertEqual(bd_json.error_of(gold("show_missing.err"), gold("show_missing.out")).kind, "not_found")
-        lint = bd_json.error_of(gold("create_lint_refused.err"), "")
+        self.assertEqual(bd.error_of(gold("claim_closed.err"), "").kind, "not_claimable")
+        self.assertEqual(bd.error_of(gold("show_missing.err"), gold("show_missing.out")).kind, "not_found")
+        lint = bd.error_of(gold("create_lint_refused.err"), "")
         self.assertEqual((lint.kind, lint.missing_sections), ("lint", ["Acceptance Criteria", "Touches"]))
 
     def test_a_refused_create_raises_with_the_sections(self) -> None:
@@ -125,10 +125,40 @@ class GoldenBd(unittest.TestCase):
 
     def test_argv(self) -> None:
         self.assertEqual(create_argv(NewBead(title="T", labels=["a", "b"], priority=1, parent="p-1", no_inherit_labels=True)),
-                         ["create", "T", "--type", "task", "--json", "--parent", "p-1", "--priority", "1", "--labels", "a,b",
+                         ["create", "T", "--type", "task", "--parent", "p-1", "--priority", "1", "--labels", "a,b",
                           "--no-inherit-labels"])
         self.assertEqual(update_argv("b-1", BeadPatch(status="open", assignee="", set_metadata={"k": "v"}, unset_metadata=["z"])),
                          ["update", "b-1", "--status", "open", "--assignee", "", "--set-metadata", "k=v", "--unset-metadata", "z"])
+
+    def test_dependencies_read_the_same_from_show_and_list(self) -> None:
+        shown = self.beads(show=BdRun(0, gold("show_blocked_by.json"), "")).show("zz-kgz")
+        listed = self.beads(list=BdRun(0, gold("list_with_parent_dep.json"), "")).find(BeadQuery(label="a"))[0]
+        assert shown is not None
+        self.assertEqual([(d.id, d.type, d.title, d.status) for d in shown.dependencies], [("zz-6to.1", "blocks", "Child", "in_progress")])
+        self.assertEqual([(d.id, d.type) for d in listed.dependencies], [("zz-6to", "parent-child")])
+        self.assertEqual(listed.parent, "zz-6to")
+
+    def test_every_call_carries_the_actor_and_json(self) -> None:
+        store = self.beads(show=BdRun(0, gold("show_open.json"), ""), comments=BdRun(0, "[]", ""), update=BdRun(0, "[]", ""))
+        store.show("x")
+        store.comments("x")
+        store.claim("x")
+        store.update("x", BeadPatch(status="open"))
+        for argv in store.calls:  # type: ignore[attr-defined]
+            self.assertEqual((argv[1], argv[2], argv[-1]), ("--actor", "x", "--json"), argv)
+
+    def test_error_text_comes_from_bds_json_error_key(self) -> None:
+        self.assertEqual(bd.error_of(gold("claim_taken.err"), gold("claim_taken.out")).kind, "not_claimable")
+        self.assertEqual(bd.error_of("", gold("show_missing_json.out")).kind, "not_found")
+        self.assertEqual(bd.error_of(gold("provenance_refused.err"), gold("provenance_refused.out")).kind, "other")
+        self.assertIn("unknown kind", bd.error_of("", gold("provenance_refused.out")).text)
+
+    def test_reclaim_and_provenance_argv(self) -> None:
+        store = self.beads(reclaim=BdRun(0, gold("reclaim.json"), ""), provenance=BdRun(0, "{}", ""))
+        store.reclaim("15m", ["a", "b"])
+        store.provenance("b-1", "k", "tl", at="2026-01-01T00:00:00Z")
+        self.assertEqual(store.calls[0][3:], ["reclaim", "--older-than", "15m", "--assignee", "a", "--assignee", "b", "--json"])  # type: ignore[attr-defined]
+        self.assertEqual(store.calls[1][3:7], ["provenance", "record", "--issue", "b-1"])  # type: ignore[attr-defined]
 
     def test_every_golden_file_is_json_or_text(self) -> None:
         for f in GOLD.glob("*.json"):

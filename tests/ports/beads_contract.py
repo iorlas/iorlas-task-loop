@@ -69,11 +69,11 @@ class BeadsContract(_Base):
         self.beads.update(bead, BeadPatch(set_metadata={"slot": "s1", "held_bead": "x-1"}))
         got = self.beads.show(bead)
         assert got is not None
-        self.assertEqual((got.metadata.held_bead, got.metadata.extra), ("x-1", {"slot": "s1"}))
+        self.assertEqual(got.metadata, {"slot": "s1", "held_bead": "x-1"})
         self.beads.update(bead, BeadPatch(unset_metadata=["slot", "held_bead"]))
         got = self.beads.show(bead)
         assert got is not None
-        self.assertEqual((got.metadata.held_bead, got.metadata.extra), ("", {}))
+        self.assertEqual(got.metadata, {})
 
     def test_update_changes_status_and_assignee(self) -> None:
         bead = self.new()

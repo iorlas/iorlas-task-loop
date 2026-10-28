@@ -1,0 +1,2 @@
+Error updating zz-6to.1: issue already claimed by a1
+{"error":"1 of 1 issues failed to update","failed":[{"id":"zz-6to.1","error":"updating issue: issue already claimed by a1"}],"schema_version":1}
