@@ -14,6 +14,7 @@ from taskloop.contracts.answers import ASSUMPTION, IRREVERSIBLE
 from taskloop.contracts.enums import AskClass
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.matchers import clip
+from taskloop.domain.plan.stored import stored
 from taskloop.domain.prompts.common import DECIDED_TEXT
 from taskloop.domain.prompts.plan import ASSUME_TEXT, PLAN_BRIEF_KB, PLAN_DECIDED_TEXT
 
@@ -157,6 +158,7 @@ class Planner:
             e.log.note("the planner finds the work done and leaves only follow-up beads to file: closing")
             self.add_leftovers(data)
             e.plan_summary = data["summary"]
+            stored(data)
             e.publish_plan()
             return data
         raise e.blocked_for("failed: the plan has no stages", "FAULT_PLAN")
@@ -170,8 +172,9 @@ class Planner:
         e.ledger_fill(data)
         self.add_leftovers(data)
         e.comment(self.summary(data))
+        stored(data)
         e.publish_plan()
-        e.export_brief()
+        e.briefs.export()
         e.save_checkpoint(stage=0, rounds=0, n=0, feedback="", step="write")
         return data
 
@@ -180,7 +183,7 @@ class Planner:
         """The plan as the bead's comment says it."""
         lines = ["Plan (engine): " + data["summary"]]
         for n, s in enumerate(data["stages"]):
-            hard = " (hard)" if s["hard"] else ""
+            hard = " (hard)" if s.get("hard") else ""
             lines.append(f"{n + 1}. {s['goal']}{hard} [files: {', '.join(s['files'])}] [checks: {'; '.join(s['checks'])}]")
         lines += [f"Risk: {r['what']} → {r['check']}" for r in data["risks"]]
         lines += [ASSUMPTION + a["text"] for a in data.get("assumptions") or []]

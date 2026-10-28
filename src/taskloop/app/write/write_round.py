@@ -48,7 +48,7 @@ class WriteRound:
         where_text = e.where("write", [c.cmd for c in e.cfg.checks] + st["checks"], s.failed_cmds, listed=st["checks"])
         tail = CASES_TAIL + ("" if s.last else LATER_CASES) + UNCHECKED_TEXT + e.look_write(st)
         gate = f" (`{e.cfg.gate_text}`)" if e.cfg.gate else ""
-        prompt = write_prompt(e.rules_text(), brief=e.brief_text(), plan=e.plan_text(), n=s.i + 1, goal=st["goal"],
+        prompt = write_prompt(e.rules_text(), brief=e.briefs.text(), plan=e.plan_text(s.i), n=s.i + 1, goal=st["goal"],
                               files=", ".join(st["files"]), anchors=anchors_text(st), checks=stage_checks, feedback=s.feedback,
                               evidence=e.evidence_dir, where=where_text, gate=gate) + tail
         if fresh:
@@ -61,7 +61,7 @@ class WriteRound:
         delta = None if fresh else e.hand.delta(s.i + 1, st["goal"], ", ".join(st["files"]), anchors_text(st), stage_checks,
                                                 where_text, s.feedback, dtail + e.look_write(st))
         if delta:  # the writer may have edited its copy: the engine's brief goes back before it reads it again
-            e.brief_file.write_text(e.brief_text(), encoding="utf-8")
+            e.brief_file.write_text(e.briefs.text(), encoding="utf-8")
         else:  # a whole prompt (a first write, a fresh writer): what the tasks beside this one are doing (tl-bxk.13.8)
             prompt += e.shared_text() + e.deferred_text()
         return prompt, delta

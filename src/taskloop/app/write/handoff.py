@@ -19,7 +19,7 @@ class Handoff:
 
     def seen_now(self) -> list[str]:
         """What a writer session holds of the task once it has answered: the brief's and the plan's hash."""
-        return [hashlib.sha1(t.encode("utf-8")).hexdigest() for t in (self.e.brief_text(), self.e.plan_text())]
+        return [hashlib.sha1(t.encode("utf-8")).hexdigest() for t in (self.e.briefs.text(), self.e.plan_text())]
 
     def fresh_above_k(self, family: str) -> float:
         v = self.e.cfg.write_fresh_above_k
@@ -64,7 +64,8 @@ class Handoff:
         seen = self.e.writer.get("seen")
         if not seen or seen[0] != self.seen_now()[0]:
             return None
-        plan = "The plan is unchanged." if seen[1] == self.seen_now()[1] else f"The plan changed:\n<plan>\n{self.e.plan_text()}\n</plan>"
+        same = seen[1] == self.seen_now()[1]
+        plan = "The plan is unchanged." if same else f"The plan changed:\n<plan>\n{self.e.plan_text(n - 1)}\n</plan>"
         return WRITE_RESUME_PROMPT.format(brief=self.e.brief_file, plan=plan, n=n, goal=goal, files=files, anchors=anchors, checks=checks,
                                           where=where, feedback=feedback) + tail
 

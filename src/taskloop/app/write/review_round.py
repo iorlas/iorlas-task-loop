@@ -35,7 +35,8 @@ class ReviewRound:
         e, st = self.e, s.st
         gate = f" (`{e.cfg.gate_text}`)" if e.cfg.gate else ""
         text = review_prompt(
-            bool(s.fix), s.last, s.state["scope"] if s.fix else "", brief=e.brief_text(), plan=e.plan_text(), n=s.i + 1, goal=st["goal"],
+            bool(s.fix), s.last, s.state["scope"] if s.fix else "", brief=e.briefs.text(), plan=e.plan_text(s.i),
+            n=s.i + 1, goal=st["goal"],
             work=e.stage_work(kinds["unexplained"], kinds["ignored"]), checks=compact(s.run.results), summary=s.w["summary"],
             evidence=e.evidence_dir, gate=gate, added=e.stats["tests_added"], removed=e.stats["tests_removed"])
         where = e.where("review")

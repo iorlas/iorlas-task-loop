@@ -95,4 +95,4 @@ class PlanPrompt:
         rules = self.rules()
         extra += self.tail()
         where = e.where("plan")
-        return PLAN_PROMPT.format(brief=e.brief_text(), wt=e.wt) + extra + "\n\n" + "\n".join(rules) + ("\n\n" + where if where else "")
+        return PLAN_PROMPT.format(brief=e.briefs.text(), wt=e.wt) + extra + "\n\n" + "\n".join(rules) + ("\n\n" + where if where else "")

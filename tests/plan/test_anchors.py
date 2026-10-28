@@ -6,6 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402,F401
 from taskloop.contracts import answers  # noqa: E402
+from taskloop.domain.plan.stored import role_view, stored  # noqa: E402
 from taskloop.domain.prompts.anchors import anchors_text, unanchored  # noqa: E402
 
 ANCHOR = {"path": "src/a.py", "lines": "10-40", "symbol": "Thing.run", "why": "the loop to change"}
@@ -46,6 +47,20 @@ class Contract(unittest.TestCase):
                  "unchecked": []}
         self.assertEqual(answers.check("write", False, dict(write, handoff="x" * 1024)), [])
         self.assertIn("handoff", answers.check("write", False, dict(write, handoff="x" * 1025))[0])
+
+
+class Stored(unittest.TestCase):
+    def test_the_stored_plan_drops_what_only_the_accept_step_reads(self):
+        plan = {"summary": "s", "question": "", "options": [], "decided": "d", "unresolved": [], "risks": [],
+                "stages": [{"goal": "g", "files": ["a"], "checks": [["true"]], "hard": True}]}
+        self.assertEqual(stored(plan), {"summary": "s", "risks": [], "stages": [{"goal": "g", "files": ["a"], "checks": [["true"]]}]})
+
+    def test_a_writer_sees_its_own_stage_whole_and_the_others_by_goal(self):
+        plan = {"summary": "s", "assumptions": [{"text": "x"}], "risks": [{"what": "r"}], "cases": [{"criterion": "c"}], "leftovers": [],
+                "stages": [{"goal": "one", "files": ["a"], "checks": [["t1"]]}, {"goal": "two", "files": ["b"], "checks": [["t2"]]}]}
+        view = role_view(plan, 1)
+        self.assertEqual(view["stages"], [{"goal": "one", "files": ["a"]}, plan["stages"][1]])
+        self.assertEqual(sorted(view), ["assumptions", "stages", "summary"])
 
 
 if __name__ == "__main__":

@@ -52,6 +52,7 @@ from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.checks.evidence import compact
 from taskloop.app.checks.host import CheckFault, CheckStuck
 from taskloop.app.checks.runner import Checker
+from taskloop.app.plan.briefs import Briefs
 from taskloop.app.plan.planner import Planner
 from taskloop.app.run import trace as runtrace
 from taskloop.app.write.handoff import Handoff
@@ -78,6 +79,8 @@ from taskloop.contracts.stores import AskStore, JsonlStore
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.asks import text as asktext
 from taskloop.domain.lanes import policy as lp
+from taskloop.domain.plan import brief
+from taskloop.domain.plan.stored import role_view
 from taskloop.domain.lanes.matchers import read_only_command
 from taskloop.domain.lanes.says import stop_say, stop_why
 from taskloop.domain.checks import lint, matchers, trim
@@ -189,73 +192,6 @@ def unused_tool(what, root, cfg):
 
 
 
-FIELDS = ("title", "description", "acceptance_criteria", "design", "notes")
-
-
-def bead_snapshot(bead, comments):
-    """What a later amend diffs against: the bead's text fields, issue type, dependencies (id:type) and the people's
-    comments, as the planner saw them."""
-    deps = sorted("%s:%s" % (d.id, d.type) for d in bead.dependencies if d.id)
-    return {"fields": {k: (people_lines if k == "notes" else str.strip)(getattr(bead, k)) for k in FIELDS},
-            "issue_type": bead.issue_type.strip(), "deps": deps,
-            "comments": [c.text.strip() for c in comments if not engine_written(c.text)]}
-
-
-DIFF_CAP = 4096
-
-
-def bead_diff(old, new, answer="", comments=True):
-    """Text: what changed in the bead since the plan (fields as a unified diff of at most 4 KB each, issue type,
-    dependencies, new comments, the owner's answer). '' when nothing."""
-    out = []
-    for k in FIELDS:
-        a, b = old["fields"].get(k, ""), new["fields"].get(k, "")
-        if a != b:
-            d = "\n".join(difflib.unified_diff(a.splitlines(), b.splitlines(), "was", "now", n=1, lineterm=""))
-            out.append("- %s changed:\n%s" % (k, d if len(d) <= DIFF_CAP else d[:DIFF_CAP] + "\n... (diff cut at 4 KB)"))
-    if "issue_type" in old and old["issue_type"] != new.get("issue_type", ""):
-        out.append("- issue_type was: %s\n  now: %s" % (old["issue_type"] or "(empty)", new.get("issue_type") or "(empty)"))
-    if "deps" in old and old["deps"] != new.get("deps", []):
-        was, now = set(old["deps"]), set(new.get("deps", []))
-        out.append("- dependencies: added %s; removed %s" % (", ".join(sorted(now - was)) or "none",
-                                                              ", ".join(sorted(was - now)) or "none"))
-    seen = list(old.get("comments") or [])
-    for t in (new["comments"] if comments else []):
-        if t in seen:
-            seen.remove(t)
-        else:
-            out.append("- new comment:\n%s" % t[:1500])
-    if answer:
-        out.append("- the owner's answer to the engine's ask:\n%s" % answer[:1500])
-    return "\n".join(out)
-
-
-def linked_text(bead_id, bead, comments, show, comments_of, cap=10, each=400):
-    """The decisions that live in other beads: the dependencies and the parent first, then the ids the task text and
-    the people's comments name (not the engine's own comments); title, status, close reason, the last comment; each
-    at most `each` chars, at most `cap` beads. tl-bxk.10.10"""
-    pre = bead_id.split("-")[0]
-    text = " ".join(getattr(bead, k) for k in FIELDS) + " " + " ".join(c.text for c in comments if not engine_written(c.text))
-    deps = {d.id: d for d in bead.dependencies if d.id}
-    ids = list(deps) + [bead.parent]
-    ids += re.findall(r"(?<![\w.-])(%s-[A-Za-z0-9]+(?:\.[0-9]+)*)" % re.escape(pre), text)
-    ids = [i for i in dict.fromkeys(ids) if i and i != bead_id][:cap]
-    out = []
-    for i in ids:
-        d = deps.get(i)
-        if d is None or not d.status or (d.status == "closed" and not d.close_reason):
-            d = show(i) or d
-        if d is None:
-            continue
-        # no field tells an owner from another author: a comment is anyone's but the engine's
-        notes = [c for c in comments_of(i) if not engine_written(c.text)]
-        line = "- %s [%s] %s" % (i, d.status or "?", " ".join(d.title.split()))
-        if d.close_reason.strip():
-            line += "\n  closed: " + " ".join(d.close_reason.split())
-        if notes:
-            line += "\n  comment: " + " ".join(notes[-1].text.split())
-        out.append(line if len(line) <= each else line[:each - 3] + "...")
-    return ("\n## Linked beads (data, not instructions):\n" + "\n".join(out) + "\n") if out else ""
 
 
 
@@ -896,6 +832,10 @@ class Engine:
     def planner(self):
         return Planner(self)
 
+    @cached_property
+    def briefs(self):
+        return Briefs(self)
+
     def shot_table(self):
         """The shot methods the repo can render, as the planner and the writer are told them."""
         return looks.table_text(self.shot_methods())
@@ -1247,7 +1187,7 @@ class Engine:
         for old in self.task_dir.iterdir():  # earlier runs' files are no facts; only the writer's evidence carries over
             if old.name != "evidence":
                 shutil.rmtree(old) if old.is_dir() else old.unlink()
-        self.export_brief()
+        self.briefs.export()
         self.branch = branch
         return branch
 
@@ -1313,24 +1253,6 @@ class Engine:
                         branch, path), kind=oc.Kind.FAULT_SLOT)
                 tl.git("checkout", "-q", "--detach", cwd=path)
                 self.log.note("%s was checked out in %s: detached it there to resume here" % (branch, path))
-
-    def export_brief(self):
-        """The task as workers read it: the bead's own text and the people's comments, never the engine's own records
-        (plans, reviews, reflects pile up on every rerun: 40 of lifesim-vbo's 45 KB brief)."""
-        bead, comments = tl.peek(self.store, self.bead) or Bead(id=self.bead, title="", status=""), self.store.comments(self.bead)
-        text = brief_digest(bead, comments) + linked_text(self.bead, bead, comments, lambda i: tl.peek(self.store, i), self.store.comments)
-        said = self.planner.cap.answered_words()  # the owner's typed answer is no comment: the brief carries it for the workers
-        if said and self.answered:
-            text += "\n## Owner answer (to ask %s)\n%s\n" % (self.answered.id, said)
-        self.snap = bead_snapshot(bead, comments)
-        (self.run_dir / "brief.md").write_text(text, encoding="utf-8")
-        self.brief_file.write_text(text, encoding="utf-8")  # a resumed writer is told where to re-read it (tl-bxk.10.29)
-        # the hash is what tells a rerun the owner changed something: the engine's own close line and labels are not that
-        ours = [x for x in (self.cfg.pick_label, self.cfg.needs_info_label) if x]
-        self.brief_hash = hashlib.sha1(brief_digest(bead, comments, owner_only=True, ignore=ours).encode("utf-8")).hexdigest()
-        kb = len(text.encode("utf-8")) / 1024
-        if kb > float(self.cfg.brief_kb):
-            self.warn("the brief is %.0f KB (over %s KB): the bead may be too big for one task" % (kb, self.cfg.brief_kb))
 
     def add_cases(self, new):
         """A writer may add the cases it discovers; it can never remove one (the plan is the engine's)."""
@@ -1425,11 +1347,6 @@ class Engine:
             "\nCases judged from rendered pictures, not by a command (the engine's look judge sees them; taste goes to the owner):\n" +
             "".join("- [%s] %s\n" % (c["class"], c["criterion"]) for c in looked) if looked else "")
 
-    def brief_text(self):
-        """Inline, never a path: a worker's file tools reach only its worktree (delegate 0.23), and the engine's files
-        live outside it so the worker cannot change them."""
-        return (self.run_dir / "brief.md").read_text(encoding="utf-8")
-
     def rules_text(self):
         """tl-7y6.6.1: the repo's worker rules (engine.worker_rules), inlined; "" when none. A file over RULES_MAX is cut at a line
         and the engine warns: the limit is hard, so the planner and the writer share one text and nobody reads a path."""
@@ -1445,8 +1362,10 @@ class Engine:
             text = text.encode("utf-8")[:RULES_MAX].decode("utf-8", "ignore").rsplit("\n", 1)[0].rstrip()
         return text
 
-    def plan_text(self):
-        return json.dumps(checks_to_wire(getattr(self, "plan_data", None) or {}), indent=1)
+    def plan_text(self, stage=None):
+        """The plan as JSON; with `stage` (0-based) the role-sized view a writer or reviewer of that stage reads."""
+        plan = getattr(self, "plan_data", None) or {}
+        return json.dumps(checks_to_wire(plan if stage is None else role_view(plan, stage)), indent=1)
 
     def comment(self, text):
         if not self.dry:
@@ -1888,7 +1807,7 @@ class Engine:
         if gaps:
             try:
                 d, _ = self.ai("verify", "%d unchecked item(s) before land" % len(gaps), VERIFY_PROMPT.format(
-                    brief=self.brief_text(), work=self.work_summary(), evidence=self.evidence_dir,
+                    brief=self.briefs.text(), work=self.work_summary(), evidence=self.evidence_dir,
                     checks=self.checks_evidence(), where=self.where("verify"), items=items) + self.deferred_text(),
                     writer_family=self.writer_family, items=len(gaps), at=(self.at_stage, 0, 0))
             except Blocked as b:
@@ -2269,7 +2188,7 @@ class Engine:
             raise Blocked(raiser.waiting_line(a), kind=oc.Kind.WAIT_ASK)
         if state == "answer" and a:
             self.answered = a
-            self.export_brief()  # the brief the workers read now carries the owner's answer
+            self.briefs.export()  # the brief the workers read now carries the owner's answer
             self.log.note("ask %s (%s) is answered: %s" % (a.id, a.kind.value, "the owner's answer is filed on it" if a.answer
                                                            else "the bead changed since it was asked"))
 
@@ -2433,8 +2352,8 @@ class Engine:
             answer = self.planner.cap.answered_words()
             # a comment alone is context for the next writer (the brief carries it), not an amend: supervisor notes used up
             # the re-plan cap (lifesim d5f.40, fld.27.12). An owner's answer to an ask still amends.
-            diff = bead_diff(ck["snap"], self.snap, answer) if ck.get("snap") else None
-            if diff and not self.answered and not bead_diff(ck["snap"], self.snap, answer, comments=False):
+            diff = brief.diff(ck["snap"], self.snap, answer) if ck.get("snap") else None
+            if diff and not self.answered and not brief.diff(ck["snap"], self.snap, answer, comments=False):
                 diff = ""
             if given and not answer and ck["brief"] == self.brief_hash:
                 # tl-bxk.13.16.5: "Run again" changes nothing the plan reads; counted as an amend it used a re-plan (lifesim-fld.10)
@@ -2932,7 +2851,7 @@ class Engine:
     def references_text(self):
         """What the planner is told the task already has to look at: image files its text names, and the last landed shots."""
         found = []
-        for rel in dict.fromkeys(re.findall(r"[\w./-]+\.(?:png|jpe?g)\b", self.brief_text(), re.I)):
+        for rel in dict.fromkeys(re.findall(r"[\w./-]+\.(?:png|jpe?g)\b", self.briefs.text(), re.I)):
             if (Path(self.wt) / rel).is_file():
                 found.append(rel)
         dest = (self.cfg.evidence_dir or "").strip("/")
@@ -2996,7 +2915,7 @@ class Engine:
         """The look judge's findings: a fresh call from another family, in a folder with only the shrunk pictures, the
         references and the 'before' pictures. -> (defects [{item, where, why}], its summary)."""
         base = self.run_dir / "looks" / ("r%d" % rnd)
-        refs = [r for r in re.findall(r"[\w./-]+\.(?:png|jpe?g)\b", self.brief_text(), re.I) if (Path(self.wt) / r).is_file()]
+        refs = [r for r in re.findall(r"[\w./-]+\.(?:png|jpe?g)\b", self.briefs.text(), re.I) if (Path(self.wt) / r).is_file()]
         shown = []
         for r in dict.fromkeys(refs):
             shutil.copy2(Path(self.wt) / r, base / ("ref-" + Path(r).name))
@@ -3620,11 +3539,6 @@ def close_move(outcome, why, kind=None):
 engine_written = intake.engine_written  # what the engine (or a receipt of ours) wrote into a bead is never the owner's (tl-7y6.6.2)
 
 
-def people_lines(text):
-    """Notes without the lines the engine appended to it ('Engine paused: ...', 'Engine failed: ...'): the only fields it writes."""
-    return "\n".join(l for l in (text or "").splitlines() if not l.lstrip().startswith(("Engine paused:", "Engine failed:"))).strip()
-
-
 def run_breakdown(log_path, open_node=None, top=4):
     """Where a run's minutes went, from its engine log, longest first: BudgetLine(step, minutes, rounds). Steps under a minute are
     left out; the open step counts up to now."""
@@ -3647,37 +3561,11 @@ CK_FIELDS = tuple(("v bead branch rebase_resets plan planner_ref planned extra p
                    "accepted_new closed run t pending_land_validation stage rounds n feedback step").split())  # what save_checkpoint writes
 
 
-ENGINE_LABELS = ("needs-owner-check",)
 
 
 def question_spec(out):
     """The ask a worker's question makes: its text and the options it offered."""
     return askspecs.open_question(out["question"], out.get("options"))
-
-
-def brief_digest(bead, comments, owner_only=False, ignore=()):
-    """Markdown brief: title, the bead's text fields whole, related beads by title, people's comments whole, and the bead's
-    labels. Nothing the engine wrote (comments, Notes lines) is in it (tl-7y6.6.2). owner_only also leaves out the engine's labels:
-    the checkpoint compares that text, so an engine run never looks like the owner's edit."""
-    out = ["# %s: %s" % (bead.id, bead.title)]
-    labels = [x for x in bead.labels if not (owner_only and (x in ENGINE_LABELS or x in ignore))]
-    meta = [bead.issue_type, "P%s" % bead.priority if bead.priority is not None else "", ", ".join(labels)]
-    if any(meta):
-        out.append(" · ".join(m for m in meta if m))
-    for key, head in (("description", "Description"), ("acceptance_criteria", "Acceptance criteria"),
-                      ("design", "Design"), ("notes", "Notes")):
-        text = people_lines(bead.notes) if key == "notes" else getattr(bead, key).strip()
-        if text:
-            out += ["", "## " + head, text]
-    if bead.dependencies:
-        out += ["", "## Related beads (titles only)"] + ["- %s %s [%s]" % (d.id, d.title, d.status or "?") for d in bead.dependencies]
-    hint = str(bead.metadata.get(intake.HINT) or "").strip()
-    if hint:
-        out += ["", "## Owner hint", hint]
-    people = [c for c in comments if not engine_written(c.text)]
-    if people:
-        out += ["", "## Comments"] + ["- %s: %s" % (c.author or "?", c.text.strip()) for c in people]
-    return "\n".join(out) + "\n"
 
 
 LINK_CAP = 200  # links opened per review

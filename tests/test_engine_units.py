@@ -31,6 +31,7 @@ from taskloop.adapters import delegate as dl  # noqa: E402,F401
 from taskloop.adapters import procs as sproc  # noqa: E402
 from clock import FakeClock  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from support.briefs import brief_digest  # noqa: E402
 from support.builders import cfg_with, make_engine  # noqa: E402
 import engine  # noqa: E402
 import seams  # noqa: E402
@@ -566,7 +567,7 @@ class StoredBriefs(unittest.TestCase):
         for p in sorted(BRIEFS.glob("*.md")):
             notes, comments = stored_brief(p.stem)
             bead = {"id": "x", "title": "t", "notes": notes}
-            out = engine.brief_digest(as_bead(bead), [as_comment({"author": a, "text": t}) for a, t in comments])
+            out = brief_digest(as_bead(bead), [as_comment({"author": a, "text": t}) for a, t in comments])
             bad = [l for l in out.splitlines() if ENGINE_LINE.match(l)]
             self.assertEqual(bad, [], p.name)
             old = p.read_text(encoding="utf-8")

@@ -670,7 +670,7 @@ class Inputs(StagesTest):
         self.assertEqual(rc, 0, self.blocked)
         self.assertIsNone(self.ask())
         plan = json.loads((self.eng.run_dir / "plan.json").read_text())
-        self.assertEqual((plan["question"], plan["options"]), ("", []))
+        self.assertEqual({"question", "options", "decided", "unresolved"} & set(plan), set())  # the stored plan has none of them
         self.assertIn("84-self-hosting.md", plan["assumptions"][0]["text"])
         self.assertTrue(plan["assumptions"][0]["reversible"])
 
