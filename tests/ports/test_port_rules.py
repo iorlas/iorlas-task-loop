@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402,F401
-from contracts.test_rules import code_lines  # noqa: E402
+from contracts.test_rules import VENDORED, code_lines  # noqa: E402
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "taskloop"
 FILES = sorted((SRC / "adapters").glob("*.py")) + [SRC / "contracts" / "ports.py"]
@@ -36,7 +36,7 @@ class PortRules(unittest.TestCase):
                 mods = ([a.name for a in n.names] if isinstance(n, ast.Import) else
                         [n.module or ""] if isinstance(n, ast.ImportFrom) else [])
                 for m in mods:
-                    ok = m.split(".")[0] in STDLIB or m.startswith(("taskloop.contracts", "taskloop.adapters"))
+                    ok = m.split(".")[0] in STDLIB | VENDORED or m.startswith(("taskloop.contracts", "taskloop.adapters"))
                     self.assertTrue(ok, "%s imports %s" % (f.name, m))
 
     def test_contracts_ports_import_contracts_only(self) -> None:

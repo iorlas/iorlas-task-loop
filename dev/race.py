@@ -33,11 +33,6 @@ import time
 import unittest
 from pathlib import Path
 
-try:
-    import fcntl
-except ImportError:  # Windows: the Race class is skipped there
-    fcntl = None
-
 ROOT = Path(__file__).resolve().parents[1]
 FIX = ROOT / "tests" / "fixtures" / "race"
 TL = ROOT / "skills" / "task-loop" / "tl.py"
@@ -46,6 +41,8 @@ sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import tl  # noqa: E402
+import vendored  # noqa: E402,F401
+from process_lock import LockHeldError, ProcessLock  # noqa: E402
 
 PY = sys.executable
 BEADS = ["w-%d" % i for i in range(1, 7)]
@@ -367,8 +364,10 @@ class Race(unittest.TestCase):
             self.assertFalse(tl.engine_lock_path(str(self.repo / ".slots" / s)).exists(), s)
         cfg = self.h / "cfg" / "task-loop"
         for lock in (cfg / "locks").glob("*.lock"):
-            with open(lock, "a+") as f:
-                fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)  # raises while a process still holds it
+            try:
+                ProcessLock.acquire(lock).release()  # LockHeldError while a process still holds it
+            except LockHeldError as e:
+                self.fail("lock left held: %s" % e)
         self.assertEqual(sorted(p.name for p in (cfg / "loop").glob("*") if p.suffix in (".json", ".stop")), [])
         print("race duration (metric only): %.1f s" % secs)
 

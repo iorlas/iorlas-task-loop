@@ -583,6 +583,25 @@ class VendorGuard(unittest.TestCase):
         for e in entries:
             self.assertEqual(sorted(e), ["name", "shelf_commit", "shelf_tag", "tree_hash"])
 
+    def test_every_vendored_package_imports_by_its_absolute_name(self):
+        import importlib
+        names = [e["name"] for e in vendor.load()]
+        self.assertEqual(names, ["atomic_io", "git_porcelain", "jsonl_log", "process_lock"])
+        for name in names:
+            with self.subTest(name):
+                mod = importlib.import_module(name)
+                self.assertEqual(Path(mod.__file__).resolve().parent, (vendor.VENDOR_DIR / name).resolve())
+                self.assertEqual(vendor.tree_hash(vendor.dir_files(vendor.VENDOR_DIR / name)), next(e["tree_hash"] for e in vendor.load() if e["name"] == name))
+
+    def test_an_edited_or_added_file_in_any_package_is_drift(self):
+        for e in vendor.load():
+            with self.subTest(e["name"]):
+                files = vendor.dir_files(vendor.VENDOR_DIR / e["name"])
+                extra = dict(files, **{"added.py": b"x = 1\n"})
+                self.assertNotEqual(vendor.tree_hash(extra), e["tree_hash"])
+                first = sorted(files)[0]
+                self.assertNotEqual(vendor.tree_hash(dict(files, **{first: files[first] + b"#"})), e["tree_hash"])
+
     def test_only_the_vendor_dir_is_exempt(self):
         self.assertEqual(EXEMPT_DIRS, ("skills/task-loop/_vendor",))
         self.assertEqual(Path(vendored.VENDOR_DIR), ROOT / EXEMPT_DIRS[0])

@@ -2,8 +2,9 @@
 
     import vendored  # noqa: F401
     from git_porcelain import RealRepo
+    from atomic_io import atomic_write_json
 
-The vendored packages (dev/vendor.py) keep their absolute imports, so their top-level names (git_porcelain) must resolve.
+The vendored packages (dev/vendor.py) keep their absolute imports, so their top-level names (git_porcelain, atomic_io, jsonl_log, process_lock) must resolve.
 Nothing else adds a path for them. Stdlib only.
 """
 import sys
