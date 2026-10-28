@@ -42,6 +42,7 @@ import seams
 from taskloop.app.slots import engine_lock
 from taskloop.domain.matchers import clip
 from taskloop.app.track import trail, verbs
+from taskloop.adapters import context_size, slotcheck
 from taskloop.adapters.gitenv import git_env, pinned_env, run_git
 from taskloop.app.wire import slots as wslots
 import vendored  # noqa: F401
@@ -61,7 +62,9 @@ from taskloop.app.plan.planner import Planner
 from taskloop.app.review.routing import Routing
 from taskloop.app.review.settles import Settles
 from taskloop.app.review.verifier import Verifier
-from taskloop.app.run import outcomes
+from taskloop.app.run import outcomes, summaries
+from taskloop.app.run.console import say
+from taskloop.app.run.layout import RunLayout
 from taskloop.app.run import trace as runtrace
 from taskloop.app.write.handoff import Handoff
 from taskloop.app.write.stage_loop import StageLoop
@@ -183,60 +186,6 @@ TRANSIENT_PUSH = re.compile(r"curl \d+|Broken pipe|Connection (?:reset|timed out
 # tl-fsj: a configured check that fails because the tree lacks what the base's config names is the engine's, never a writer's amend
 
 
-_TREE_MEMO = {}   # (slot, what the config files and environment are now) -> tree_problem's answer
-
-
-def tree_problem(wt):
-    """(what is wrong, the owner's fix) when git at `wt`, read as ambient config has it, is not that checkout; else None.
-    Two git calls, none while the config files are as they were: a run asks eleven times."""
-    key = gitrepo.config_key(wt)
-    if key and key in _TREE_MEMO:
-        return _TREE_MEMO[key]
-    out = _tree_problem(wt)
-    if key:
-        _TREE_MEMO[key] = out
-    return out
-
-
-def _tree_problem(wt):
-    clean = {k: v for k, v in os.environ.items() if k not in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR")}
-
-    def g(*a):
-        r = subprocess.run(["git", "-C", str(wt)] + list(a), env=clean, capture_output=True, text=True, encoding="utf-8",
-                           errors="replace")
-        return r.stdout.strip() if r.returncode == 0 else ""
-
-    both = g("rev-parse", "--path-format=absolute", "--git-common-dir", "--show-toplevel").split("\n")
-    if len(both) == 2:
-        common, top = both
-    else:  # one of the two fails (core.bare=true has no top level): ask for each alone, as the message needs what is left
-        common, top = g("rev-parse", "--path-format=absolute", "--git-common-dir"), None
-    repo = str(Path(common or ".").parent)
-    origin = bare = ""
-    for ln in g("config", "--show-origin", "--get-regexp", r"^core\.(worktree|bare)$").splitlines():  # the last of each key wins, as `--get` does
-        where, _, kv = ln.partition("\t")
-        k, _, v = kv.partition(" ")
-        if k.lower() == "core.worktree":
-            origin = "%s\t%s" % (where, v) if v else where
-        elif k.lower() == "core.bare":
-            bare = v
-    origin = origin.strip()
-    if origin:
-        where = origin.split("\t")[0].replace("file:", "")
-        return ("core.worktree is set (%s)" % origin.replace("\t", " = ", 1),
-                "core.worktree redirects every worktree of this repo to another folder. Remove it: "
-                "`git config --unset core.worktree` in %s (it was set in %s), then rerun." % (repo, where))
-    if bare.strip().lower() == "true":
-        return ("core.bare is true",
-                "core.bare=true in the repo's config makes git refuse the work tree. Fix: `git config core.bare false` "
-                "in %s, then rerun." % repo)
-    if top is None:
-        top = g("rev-parse", "--show-toplevel")
-    if not top or not gitrepo.same_dir(top, wt):
-        return ("git's top-level folder is %s, not the slot %s" % (top or "(none)", wt),
-                "Something redirects git away from the slot. Check `git config --show-origin --list` in %s for "
-                "core.worktree or core.bare; `git config --unset core.worktree` in %s if set." % (wt, repo))
-    return None
 
 
 # ---- the engine -----------------------------------------------------------------------------------------------------
@@ -312,36 +261,18 @@ class Engine(StateAttrs):
         self.landed_sha = ""  # set the moment the push goes through: whatever stops the run after it, the bead landed
         self.last_run = None  # the CheckRun of the last stage round: the engine's evidence for the verifier (tl-bxk.10.25)
         self.prev_ck, self.ck_run, self.resumed, self.run_logged = "", "", False, False
-        d = ident.config_dir() / "engine"
-        d.mkdir(exist_ok=True)
         self.reexec = reexec.take_reexec_env()  # this run-task came from an exec into a newer install, or a fallback to the older
         if self.reexec.get("bead") != bead:
             self.reexec = {}
         pause = {} if self.reexec else reexec.take_net_pause(bead)  # a run paused for the network: its run id and counters go on
-        stem = self.reexec.get("run") or pause.get("run")  # the same run id: log, run dir and trace go on
-        if not stem:  # a fresh run has its own id, also when the last run of this bead began in the same second: the stamp moves on
-            t0, n = time.time(), 0
-            while True:
-                stem = "%s-%s" % (bead, time.strftime("%Y%m%d-%H%M%S", time.localtime(t0 + n)))
-                if not ((d / (stem + ".jsonl")).exists() or (ident.config_dir() / "runs" / stem).exists()):
-                    break
-                n += 1
-        self.log_path = d / (stem + ".jsonl")
-        self.err_path = d / (stem + ".stderr")
+        layout = RunLayout.open(bead, wt, self.reexec.get("run") or pause.get("run"))  # the same run id: log, run dir and trace go on
+        self.log_path, self.err_path, self.run_dir = layout.log_path, layout.err_path, layout.run_dir
+        self.task_dir, self.brief_file, self.evidence_dir = layout.task_dir, layout.brief_file, layout.evidence_dir
+        stem = self.log_path.stem
         self.exec_fn, self.newer_fn, self.argv, self.moved, self.os_lock = None, None, None, False, landlock.os_lock  # a test's exec, newer-install lookup, run-task argv, the cross-process lock
-        # Engine files (brief, plan, node answers, check results) live outside the worktree, where no worker can write
-        # them; in lifesim-vbo a writer's sandbox runs kept in .task/ were read as engine results by four planners.
-        self.run_dir = ident.config_dir() / "runs" / self.log_path.stem
-        self.run_dir.mkdir(parents=True, exist_ok=True)
-        prune_check_rounds(ident.config_dir() / "runs")
-        self.task_dir = Path(wt) / ".task" / bead  # the writer's: only evidence/ lives here
-        self.task_dir.mkdir(parents=True, exist_ok=True)
-        self.brief_file = self.task_dir / "brief.md"  # the brief as the writer can re-read it: the engine's copy stays in run_dir
-        self.evidence_dir = self.task_dir / "evidence"  # the writer's proof of what the engine cannot rerun
-        self.evidence_dir.mkdir(exist_ok=True)
         self.stores = stores or real_stores(ConfigDir(ident.config_dir()))
         self.ctx = RunContext.open(bead, cfg, Path(wt), stem, self.run_dir, self.stores, store, route, self.clock, self.sessions, self.stats,
-                                   opencode.opencode_id, context_tokens, say, verbose, dry_run, lambda: time.time(), self.assert_tree,
+                                   opencode.opencode_id, context_size.context_tokens, say, verbose, dry_run, lambda: time.time(), self.assert_tree,
                                    lambda text: trail.event("stage", bead, text=text))
         c: Any = self.ctx
         self.log, self.steps, self.budget, self.calls, self.checklog = c.log, c.steps, c.budget, c.calls, c.checklog
@@ -594,13 +525,13 @@ class Engine(StateAttrs):
 
     @cached_property
     def worker(self):
-        return WorkerCall(self, Ops(summarize, read_only_command, self.blocked_for, stop_why,
+        return WorkerCall(self, Ops(summaries.summarize, read_only_command, self.blocked_for, stop_why,
                                     stop_say, self.after_call))
 
     def after_call(self, c, res):
         """A node's answer was taken: its detail lines, then what was odd about it."""
         checks_to_text(res.data)  # from here on a check is its one-line text
-        self.detail(details(c.node, res.data))
+        self.detail(summaries.details(c.node, res.data))
         self.anomalies(c.node, res, c.tries)
 
     def anomalies(self, node, r, attempt):
@@ -622,7 +553,7 @@ class Engine(StateAttrs):
         """Before and after every node, and before the land: this slot's git is the slot (lifesim-1mm: a core.worktree in the shared
         .git/config pointed every slot's git at another folder). Unpinned, as a worker's or check's git would see it. A wrong tree
         stops the run with an owner ask, never a skip."""
-        bad = tree_problem(self.wt)
+        bad = slotcheck.tree_problem(self.wt)
         if bad:
             why = "tree: %s (%s %s)" % (bad[0], when, step)
             self.steps.move("fault", "wrong_tree", bad[0])
@@ -925,107 +856,18 @@ class Engine(StateAttrs):
 
 
 
-CHECK_ROUNDS_DAYS = 14
-
-
-def prune_check_rounds(runs, days=CHECK_ROUNDS_DAYS):
-    """Every round's check log (NN-id.rK.log) of a run older than `days` goes; plans, briefs and evidence stay."""
-    cut = time.time() - days * 86400
-    for f in runs.glob("*/checks/*.r*.log"):
-        try:
-            if re.search(r"\.r\d+\.log$", f.name) and f.stat().st_mtime < cut:
-                f.unlink()
-        except OSError:
-            pass
 
 
 engine_written = intake.engine_written  # what the engine (or a receipt of ours) wrote into a bead is never the owner's (tl-7y6.6.2)
-
-
-def question_spec(out):
-    """The ask a worker's question makes: its text and the options it offered."""
-    return askspecs.open_question(out["question"], out.get("options"))
 
 
 LINK_CAP = 200  # links opened per review
 
 
 
-def context_tokens(path, tail=1 << 20):
-    """-> the input tokens (cache included) of the last turn in a worker's transcript, or None: Claude's last assistant message
-    usage, Codex's last token_count, OpenCode's last assistant message tokens (`opencode:ses_...`, read from its DB). The
-    answer's own `tokens` add up every turn of the call, so they say nothing of the size."""
-    if opencode.opencode_id(path):
-        return opencode.opencode_context(opencode.opencode_id(path))
-    try:
-        with open(path, "rb") as f:
-            f.seek(0, 2)
-            f.seek(max(0, f.tell() - tail))
-            lines = f.read().decode("utf-8", "replace").splitlines()
-    except (OSError, TypeError, ValueError):
-        return None
-    for line in reversed(lines):
-        if '"usage"' not in line and '"token_count"' not in line:
-            continue
-        try:
-            rec = json.loads(line)
-            if rec.get("type") == "assistant" and not rec.get("isSidechain"):
-                u = rec["message"]["usage"]
-                return sum(int(u.get(k) or 0) for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
-            if (rec.get("payload") or {}).get("type") == "token_count":
-                return int(rec["payload"]["info"]["last_token_usage"]["input_tokens"])
-        except (ValueError, KeyError, TypeError, AttributeError):
-            continue
-    return None
-
-
-def say(line):
-    """Print whatever the console can show (a console may not print ⚠): never crash on output."""
-    try:
-        print(line, flush=True)
-    except UnicodeEncodeError:
-        enc = getattr(sys.stdout, "encoding", None) or "ascii"
-        print(line.encode(enc, "replace").decode(enc), flush=True)
-
-
 class Args:
     def __init__(self, **kw):
         self.__dict__.update(kw)
-
-
-def details(node, d):
-    if node == "plan":
-        return (["%d. %s%s → checks: %s" % (n + 1, s["goal"], " (hard)" if s["hard"] else "", "; ".join(s["checks"]))
-                 for n, s in enumerate(d["stages"])] + ["risk: %s → %s" % (r["what"], r["check"]) for r in d["risks"]])
-    if node == "write":
-        return ["ran `%s` exit %d" % (c["cmd"], c["exit"]) for c in d["checks_run"]] + (
-            ["question: " + d["question"]] if d["question"].strip() else []) + (
-            ["decided by: " + d["decided"]] if d["decided"].strip() else [])
-    if node == "review":
-        return (["%s %s:%s %s" % (f["severity"], f["file"], f["line"], f["fix"]) for f in d["findings"]] +
-                ["unmet: " + u for u in d["unmet"]] + ["leftover: " + lo["title"] for lo in d["leftovers"]] +
-                (["question: " + d["question"]] if d["question"].strip() else []) +
-                (["decided by: " + d["decided"]] if d["decided"].strip() else []))
-    if node == "verify":
-        return ["%d %s: %s" % (a["n"], a["verdict"], a["evidence"] or a["why"]) for a in d["items"]]
-    if node == "look":
-        return ["%s %s%s: %s" % (f["verdict"], f["item"], (" (%s)" % f["where"]) if f["where"] else "", f["why"]) for f in d["findings"]]
-    return []
-
-
-def summarize(node, d):
-    if node == "plan":
-        return "%d stages, %d risks: %s" % (len(d["stages"]), len(d["risks"]), d["summary"][:200])
-    if node == "write":
-        return d["summary"][:300]
-    if node == "review":
-        return "%d findings, %d unmet" % (len(d["findings"]), len(d["unmet"]))
-    if node == "verify":
-        return ", ".join("%d %s" % (sum(a["verdict"] == k for a in d["items"]), k) for k in VERDICTS)
-    if node == "look":
-        return "%d defects, %d pass: %s" % (sum(f["verdict"] == "defect" for f in d["findings"]),
-                                           sum(f["verdict"] == "pass" for f in d["findings"]), d["summary"][:200])
-    return ""
 
 
 # ---- prompts (one copy each; the per-node instructions of the design) -----------------------------------------------

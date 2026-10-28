@@ -1,5 +1,6 @@
 """What a run prints while it works: the lines of the records a person reads. Everything else is for the dashboard only."""
 
+import sys
 import time
 from collections.abc import Callable
 
@@ -43,3 +44,12 @@ def line(verbose: bool = True) -> Callable[[EngineLog], str | None]:
         return "[%s] %s%s" % (time.strftime("%H:%M:%S", time.localtime(rec.t)), "⚠ " if isinstance(rec, Warn) else "", text)
 
     return render
+
+
+def say(text: str) -> None:
+    """Print whatever the console can show (a console may not print ⚠): never crash on output."""
+    try:
+        print(text, flush=True)
+    except UnicodeEncodeError:
+        enc = getattr(sys.stdout, "encoding", None) or "ascii"
+        print(text.encode(enc, "replace").decode(enc), flush=True)

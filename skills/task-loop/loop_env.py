@@ -15,6 +15,7 @@ from typing import Any
 from taskloop.adapters import applog, beadtools, gitrepo, ident, pidcheck
 from taskloop.domain.beads import matchers as beadlint
 import engine
+from taskloop.app.run import console
 import loop_health as lh
 import seams
 from taskloop.app.release import catalog, reexec
@@ -74,7 +75,7 @@ def area_busy(repo, cfg, bead, store=None):
     """(area, "area A busy: B in S") for a bead whose area runs elsewhere, (area, "") when it is free, ("", "") for none (run-task's
     check before it takes the engine lock)."""
     store = store or beadtools.bd_store(repo)
-    return area_busy_text(QueueRule(store, cfg, running(repo, store), lambda b: "", engine.say), bead)
+    return area_busy_text(QueueRule(store, cfg, running(repo, store), lambda b: "", console.say), bead)
 
 
 def files_of(repo, now=trail.now):
@@ -142,12 +143,12 @@ def fetch(repo):
 
 
 def chores(repo):
-    wasks.sweep_asks(engine.say, wslots.load_cfg(repo))  # asks of closed beads closed, unanswered ones parked, answers no run used flagged
+    wasks.sweep_asks(console.say, wslots.load_cfg(repo))  # asks of closed beads closed, unanswered ones parked, answers no run used flagged
     try:
         import reflect_digest
         reflect_digest.maybe_run()  # the run reflections into beads, once a day (tl-bl5)
     except Exception as e:
-        engine.say("loop: reflect digest: %s" % e)
+        console.say("loop: reflect digest: %s" % e)
 
 
 def claim(repo, store, bead, wt, slot, now=trail.now):
@@ -215,7 +216,7 @@ def build(repo, store=None, session_actor="", here=HERE, now=trail.now):
         storm=lambda: storm(repo, now), probe=lambda: make_probe(repo), roles=lambda: roles(repo), has_delegate=lambda: bool(delegate_route(repo)),
         event=trail.event, pid_alive=pidcheck.pid_alive, behind=catalog.releases_behind, version=here.parents[1].name, code_dir=str(here),
         session_actor=session_actor, actor=ident.actor, exec_into=lambda d, argv, handover: exec_into(repo, d, argv, handover),
-        take_handover=lambda: os.environ.pop("TL_LOOP_STATE", ""), say=engine.say, now=now, pid=os.getpid())
+        take_handover=lambda: os.environ.pop("TL_LOOP_STATE", ""), say=console.say, now=now, pid=os.getpid())
 
 
 def installs(cfg, tune=None, here=HERE, now=trail.now):

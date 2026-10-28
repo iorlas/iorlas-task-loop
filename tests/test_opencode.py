@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from taskloop.app.write.handoff import Handoff  # noqa: E402
 from taskloop.contracts.delegate import DelegateResult  # noqa: E402
+from taskloop.adapters import context_size  # noqa: E402
 import engine  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
 from taskloop_dash.api import lanes as lanes_mod  # noqa: E402
@@ -106,7 +107,7 @@ class OpenCode(unittest.TestCase):
             with mock.patch.dict(os.environ, {"OPENCODE_DB": path}):
                 self.assertEqual(self.dash.events.opencode_events(SID), [])
                 self.assertEqual(opencode.transcript_of("xai", SID), "")
-                self.assertIsNone(engine.context_tokens("opencode:" + SID))
+                self.assertIsNone(context_size.context_tokens("opencode:" + SID))
 
     def test_the_reader_never_writes(self):
         before = Path(self.db).read_bytes()
@@ -121,9 +122,9 @@ class OpenCode(unittest.TestCase):
         self.assertEqual(opencode.transcript_of("xai", ""), "")
 
     def test_context_is_the_last_assistant_message_with_tokens(self):
-        self.assertEqual(engine.context_tokens("opencode:" + SID), 9000 + 4000 + 700)
-        self.assertEqual(engine.context_tokens(SID), 13700)
-        self.assertIsNone(engine.context_tokens("opencode:ses_nope"))
+        self.assertEqual(context_size.context_tokens("opencode:" + SID), 9000 + 4000 + 700)
+        self.assertEqual(context_size.context_tokens(SID), 13700)
+        self.assertIsNone(context_size.context_tokens("opencode:ses_nope"))
 
     # fresh-writer limit
     def test_xai_has_its_own_fresh_writer_limit(self):

@@ -84,6 +84,7 @@ from taskloop.adapters import procs as sproc  # noqa: E402
 from taskloop.adapters.check_probe import PathProbe  # noqa: E402
 from taskloop.adapters import gitrepo  # noqa: E402
 from taskloop.adapters import ident  # noqa: E402
+from taskloop.adapters import context_size  # noqa: E402
 from taskloop.app.run import outcomes  # noqa: E402
 from taskloop.adapters import landlock  # noqa: E402
 from taskloop.adapters import delegate as lroute  # noqa: E402,F401
@@ -1770,7 +1771,7 @@ class EngineTest(unittest.TestCase):
             self.assertIsNone(self.eng.write_rounds[0]["context_k"])
         empty = Path(self.tmp.name, "empty.jsonl")
         empty.write_text("")
-        self.assertIsNone(engine.context_tokens(str(empty)))
+        self.assertIsNone(context_size.context_tokens(str(empty)))
 
     def test_a_brief_the_owner_changed_or_a_checkpoint_without_writer_seen_gets_the_full_prompt(self):
         rc, s = self.two_writes(ctx_k=40)

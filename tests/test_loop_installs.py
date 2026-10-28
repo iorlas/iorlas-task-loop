@@ -14,6 +14,7 @@ import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from test_loop import LoopBase, rec  # noqa: E402
 import test_loop_more as more  # noqa: E402
 
+from taskloop.app.run import console  # noqa: E402
 import engine  # noqa: E402
 from support import looptest  # noqa: E402
 import loop_env  # noqa: E402
@@ -117,7 +118,7 @@ class Fallback(Moving):
     def setUp(self):
         super().setUp()
         self.said = []
-        self.enterContext(mock.patch.object(engine, "say", side_effect=self.said.append))
+        self.enterContext(mock.patch.object(console, "say", side_effect=self.said.append))
         self.back = self.cache / "0.1.0"
         self.here = self.install("0.2.0")  # this loop runs the new dir
         self.beads({"x-1": [rec("landed")]})

@@ -1,4 +1,4 @@
-"""The git answers the engine remembers (gitrepo.git, engine.tree_problem, Engine.tree_hash) stay right when the repo changes under them.
+"""The git answers the engine remembers (gitrepo.git, slotcheck.tree_problem, Engine.tree_hash) stay right when the repo changes under them.
 Real git in a temp repo; each case changes the repo behind the memo and asks again."""
 
 import os
@@ -12,7 +12,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 import engine  # noqa: E402
-from taskloop.adapters import gitrepo, treehash  # noqa: E402
+from taskloop.adapters import gitrepo, slotcheck, treehash  # noqa: E402
 
 
 def sh(*a, cwd):
@@ -76,18 +76,18 @@ class GitMemoTest(unittest.TestCase):
 
     def test_tree_problem_is_asked_again_when_the_config_changes(self):
         r = self.repo
-        self.assertIsNone(engine.tree_problem(r))
-        self.assertEqual(self.calls(lambda: engine.tree_problem(r))[1], 0)
+        self.assertIsNone(slotcheck.tree_problem(r))
+        self.assertEqual(self.calls(lambda: slotcheck.tree_problem(r))[1], 0)
         sh("git", "config", "core.bare", "true", cwd=r)
-        bad = engine.tree_problem(r)
+        bad = slotcheck.tree_problem(r)
         self.assertEqual(bad[0], "core.bare is true")
         sh("git", "config", "core.bare", "false", cwd=r)
         sh("git", "config", "core.worktree", str(r.parent), cwd=r)
-        bad = engine.tree_problem(r)
+        bad = slotcheck.tree_problem(r)
         self.assertTrue(bad[0].startswith("core.worktree is set (file:"), bad)
         self.assertIn(" = %s)" % r.parent, bad[0])
         sh("git", "config", "--unset", "core.worktree", cwd=r)
-        self.assertIsNone(engine.tree_problem(r))
+        self.assertIsNone(slotcheck.tree_problem(r))
 
     def test_tree_hash_sees_a_second_edit_of_an_already_modified_file(self):
         r = self.repo
