@@ -665,7 +665,7 @@ const UNDO_MS=8000,STALE=['withdrawn','gone','answered','bead_missing','consumed
   close();return out}/*end md*/
 // the options as a table: the option is the button; what happens next; what it costs
 function optsHtml(a){const os=(a.options||[]).map((o,i)=>[o,i]).sort((x,y)=>!!y[0].recommended-!!x[0].recommended);
-  return os.length?`<table class="opttab"><thead><tr><th>Option</th><th>What happens next</th><th>Cost</th></tr></thead><tbody>`+os.map(([o,i])=>`<tr><td data-l="Option"><button class="opt${o.recommended?' rec':''}" data-opt="${i}" data-ask="${esc(a.id)}"><b>${esc(o.label)}</b>${o.recommended?'<span class="tag">Recommended</span>':''}${o.cost&&o.note?`<small>${esc(o.note)}</small>`:''}</button></td><td data-l="Next">${esc(o.then||'')}</td><td data-l="Cost">${esc(o.cost||o.note||'')}</td></tr>`).join('')+`</tbody></table>`:''}
+  return os.length?`<table class="opttab"><thead><tr><th>Option</th><th>What happens next</th><th>Cost</th></tr></thead><tbody>`+os.map(([o,i])=>`<tr><td data-l="Option"><button class="opt${o.recommended?' rec':''}" data-opt="${i}" data-ask="${esc(a.id)}"><b>${esc(o.label)}</b>${o.recommended?'<span class="tag">Recommended</span>':''}</button></td><td data-l="Next">${esc(o.consequence)}</td><td data-l="Cost">${esc(o.cost)}</td></tr>`).join('')+`</tbody></table>`:''}
 function askHead(a,withLink){
   return `<h3>${chip('s-ask',ASKK[a.kind]||a.kind||'Ask')}${withLink?`<a href="#task=${encodeURIComponent(a.bead)}">${esc(a.title||a.bead)}</a>`:'<span>The engine asks you</span>'}${a.unblocks?`<span class="unb">unblocks ${a.unblocks} bead${a.unblocks>1?'s':''}</span>`:''}</h3>
     ${withLink?`<div class="meta"><span class="mono">${esc(a.bead)}</span> · asked ${esc(ago(a.t))}</div>`:''}`}
@@ -676,9 +676,10 @@ function askBox(a,withLink){
   if(p&&p.done)return `<div class="askbox sent" data-box="${esc(a.id)}">${head}<div class="msg">Sent: ${esc(p.label)}.</div><div class="next">${esc(p.done)}</div></div>`;
   if(p&&p.err&&p.stale)return `<div class="askbox" data-box="${esc(a.id)}">${head}<div class="asknote">${esc(p.err)}</div>${p.dismiss?`<button class="btn" data-dismiss="${esc(a.id)}">Dismiss this ask</button> `:''}<a class="undo" data-clear="${esc(a.id)}">Close</a></div>`;
   const q=a.detail&&a.detail!==a.question?`<details class="more"><summary>The engine's full text</summary><div class="q raw">${esc(a.detail)}</div></details>`:'';
+  const tried=(a.tried||[]).length?`<details class="more"><summary>What was tried</summary><ul>${a.tried.map(t=>`<li>${esc(t)}</li>`).join('')}</ul></details>`:'';
   const err=ERR[a.id]?`<div class="asknote">${esc(ERR[a.id])}</div>`:'';
   return `<div class="askbox" data-box="${esc(a.id)}">${head}
-    <div class="q md">${md(a.question)}</div>${q}${a.answer&&!AMEND[a.id]?`<div class="answered">Answered: ${esc(a.answer)} · the next run starts from it · <a class="undo" data-amend="${esc(a.id)}">Change answer</a></div>`:
+    <div class="q md">${md(a.question)}</div>${tried}${q}${a.answer&&!AMEND[a.id]?`<div class="answered">Answered: ${esc(a.answer)} · the next run starts from it · <a class="undo" data-amend="${esc(a.id)}">Change answer</a></div>`:
     `${optsHtml(a)}<textarea data-ans="${esc(a.id)}" placeholder="Or write your own answer: it goes on the bead as a comment, and the next run starts from it">${esc(DRAFT[a.id]||'')}</textarea><button class="btn" data-send="${esc(a.id)}">${AMEND[a.id]?'Replace answer':'Send answer'}</button>${err}`}</div>`}
 function renderAsks(){const as=S.asks.asks||[];
   const ids=new Set(as.map(a=>a.id)),ghosts=Object.values(PEND).filter(p=>p.ask&&!ids.has(p.ask.id)&&!p.timer);
@@ -713,8 +714,8 @@ async function postAnswer(id){const p=PEND[id];if(!p)return;clearInterval(p.tick
 async function dismissAsk(id){const r=await fetch('/api/withdraw',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ask:id,why:'dismissed from the dashboard'})}).catch(()=>null);
   if(r&&r.ok){delete PEND[id];delete DRAFT[id]}repaintAsks();S.sig={};poll()}
 function pickOption(o){const a=askById(o.dataset.ask),opt=a&&(a.options||[])[+o.dataset.opt];if(!opt)return;
-  if(opt.edit){const ta=document.querySelector(`textarea[data-ans="${CSS.escape(a.id)}"]`);if(ta){ta.value=opt.answer;ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length)}return}
-  sendAnswer(a.id,opt.label,opt.answer)}
+  if(opt.edit){const ta=document.querySelector(`textarea[data-ans="${CSS.escape(a.id)}"]`);if(ta){ta.value=opt.text||opt.label;ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length)}return}
+  sendAnswer(a.id,opt.label,opt.text||opt.label)}
 
 // ---- drawer -------------------------------------------------------------------------------------------------------
 const X='<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m5 5 10 10M15 5 5 15"/></svg>';

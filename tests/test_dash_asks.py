@@ -47,7 +47,7 @@ class DashAsks(unittest.TestCase):
         self.put()
         row = self.dash.asks.inbox()[0]
         self.assertEqual((row["id"], row["question"], len(row["options"])), ("b-1-1", ASK.decision, 3))
-        self.assertEqual(row["options"][0]["then"], ASK.options[0].consequence)
+        self.assertEqual(row["options"][0]["consequence"], ASK.options[0].consequence)
 
     def test_a_dropped_ask_is_listed_as_one_typed_line_for_its_bead(self):
         self.put(v=1)

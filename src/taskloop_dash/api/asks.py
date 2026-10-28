@@ -57,8 +57,7 @@ class Asks:
         out["question"] = self.env.ports.ask_text(a)
         out["detail"] = a.detail.text if a.detail.text.strip() != a.decision else ""
         out["answer"] = (a.answer.text or a.answer.action) if a.answer else None
-        out["options"] = [{"label": o.label, "answer": o.text or o.label, "then": o.consequence, "cost": o.cost, "recommended": o.recommended,
-                           "edit": o.edit, "action": o.action} for o in a.options]
+        out["options"] = [codec.to_json(o) for o in a.options]
         return out
 
     def open_ask(self, bead: str) -> Ask | None:
@@ -66,7 +65,7 @@ class Asks:
         if a is None or a.consumed is not None or a.status.value not in ("open", "parked"):
             return None
         v = self.view(a)
-        return {k: v.get(k) for k in ("id", "kind", "question", "detail", "t", "title", "answer", "repo", "parks_at", "options")} | {"unblocks": None}
+        return {k: v.get(k) for k in ("id", "kind", "question", "detail", "t", "title", "answer", "repo", "parks_at", "options", "tried")} | {"unblocks": None}
 
     def unblocks_by_bead(self, repo: str) -> dict[str, Any] | None:
         """bead id -> how many open beads wait on it (directly or through others), from bd list (cached by beads_of)."""
