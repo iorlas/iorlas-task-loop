@@ -126,7 +126,7 @@ class Reload(te.EngineTest):
 
             def __getattr__(this, name):
                 return getattr(script, name)
-        return (mock.patch.object(seams.DelegateRoute, "runner", lambda self, *a, **k: Runner()), mock.patch.object(time, "sleep"))
+        return (mock.patch.object(seams.DelegateRoute, "runner", lambda self, *a, **k: Runner()), te.no_sleep_here())
 
     def run_with(self, eng, script, during=None):
         ps = self.patches(script, during)

@@ -86,6 +86,7 @@ dev/release.py                   the only way to release: release lock, version 
 docs/design/                     design notes
 docs/contracts/agent-runs-v1.md  the format other tools use to show their workers on the dashboard
 docs/dev/integrations.md         for developers: every external format read, and how delegate connects
+docs/dev/runaway-process.md      for developers: capture a runaway process (/proc, py-spy, cgroup) before killing it
 ```
 
 Work on this plugin is tracked with beads (`bd ready`).

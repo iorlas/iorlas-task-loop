@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import types
 import unittest
@@ -219,6 +220,13 @@ def finding(severity):
             "scenario": "input x gives y" if severity == "high" else ""}
 
 
+def no_sleep_here():
+    """time.sleep skips the wait on the calling thread only (a patch on `time` itself is process-wide: a second thread then spins on a
+    MagicMock that records every call, ~110 MB/s; see docs/dev/runaway-process.md). Other threads keep the real sleep."""
+    real, owner = time.sleep, threading.get_ident()
+    return mock.patch.object(time, "sleep", lambda secs: real(0) if threading.get_ident() == owner else real(secs))
+
+
 def delegate_stack(script, route="/fake/route.py"):
     """The engine's delegate for a test: `route` resolved on fake_route's contract 3, `script` as the process seam, no real sleep."""
     res = dl.Resolved(Path(route).parent, route, fake_route.CONTRACT, "explicit")
@@ -226,7 +234,7 @@ def delegate_stack(script, route="/fake/route.py"):
     for p in (
         mock.patch.object(dl, "resolve", return_value=res),
         mock.patch.object(seams.DelegateRoute, "runner", lambda self, *a, **k: script),
-        mock.patch.object(time, "sleep"),
+        no_sleep_here(),
     ):
         stack.enter_context(p)
     return stack
