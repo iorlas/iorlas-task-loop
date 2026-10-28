@@ -28,6 +28,7 @@ import sys
 import threading
 import types
 import unittest
+from typing import Any
 from pathlib import Path
 from unittest import mock
 
@@ -302,7 +303,8 @@ class Invariants(test_loop.Base):
         class Waiter(threading.Thread):
             def __init__(self, name, prio):
                 super().__init__(name=name, daemon=True)
-                self.prio, self.wake, self.settled, self.got = prio, threading.Event(), threading.Event(), None
+                self.prio, self.wake, self.settled = prio, threading.Event(), threading.Event()
+                self.got: tuple[str, str, str] | None = None
 
             def nap(self, secs):  # the sleep between two looks: parked until the test wakes this waiter
                 self.settled.set()
@@ -384,6 +386,7 @@ class Invariants(test_loop.Base):
             self.mu = threading.Lock()
             self.head, self.patch, self.versions, self.local, self.log = 0, 0, [], {}, []
             self.inside = self.most = 0
+            self.got: dict[str, Any] = {}
 
     def releases(self):
         """Two releases bumped on h0 (both 0.1.1) race through release.push_main; whichever pushes first is held in its push until the other has reached the lock.

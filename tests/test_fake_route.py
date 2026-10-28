@@ -24,7 +24,7 @@ from taskloop.domain.lanes import policy as lp  # noqa: E402
 from taskloop.domain.lanes import netgate  # noqa: E402
 from taskloop.app.loop.net import NetState  # noqa: E402
 import outcome as oc  # noqa: E402
-from support.narrow import must  # noqa: E402
+from support.narrow import must, only  # noqa: E402
 
 DELEGATE = fake_route.delegate_dir()
 CONTRACT = dl.read_contract_file(DELEGATE / "skills" / "delegate" / "contract.json") or {}
@@ -235,14 +235,14 @@ class Resolve(unittest.TestCase):
     def test_an_explicit_dir_wins_a_missing_pin_refuses_and_skew_refuses(self):
         with tempfile.TemporaryDirectory() as t:
             d = self.make(t, dl.CONTRACT)
-            self.assertEqual(dl.resolve(path=str(d)).source, "explicit")
-            self.assertEqual(dl.resolve(pinned=Path(t) / "gone", installed=d).kind, "pin_missing_dir")  # a pin never falls through
-            self.assertEqual(dl.resolve(pinned=d, installed=None).source, "pinned")
-            self.assertEqual(dl.resolve(pinned=Path(t), installed=None).kind, "pin_unreadable")
+            self.assertEqual(only(dl.Resolved, dl.resolve(path=str(d))).source, "explicit")
+            self.assertEqual(only(dl.Refusal, dl.resolve(pinned=Path(t) / "gone", installed=d)).kind, "pin_missing_dir")  # a pin never falls through
+            self.assertEqual(only(dl.Resolved, dl.resolve(pinned=d, installed=None)).source, "pinned")
+            self.assertEqual(only(dl.Refusal, dl.resolve(pinned=Path(t), installed=None)).kind, "pin_unreadable")
             with mock.patch.object(dl, "installed_dir", return_value=None):
-                self.assertEqual(dl.resolve(pinned="").kind, "not_installed")
-            self.assertEqual(dl.resolve(path=str(self.make(Path(t) / "n", dl.CONTRACT + 1))).kind, "skew_delegate_newer_no_match")
-            self.assertEqual(dl.resolve(path=str(self.make(Path(t) / "o", dl.CONTRACT - 1))).kind, "skew_delegate_older")
+                self.assertEqual(only(dl.Refusal, dl.resolve(pinned=None)).kind, "not_installed")
+            self.assertEqual(only(dl.Refusal, dl.resolve(path=str(self.make(Path(t) / "n", dl.CONTRACT + 1)))).kind, "skew_delegate_newer_no_match")
+            self.assertEqual(only(dl.Refusal, dl.resolve(path=str(self.make(Path(t) / "o", dl.CONTRACT - 1)))).kind, "skew_delegate_older")
 
     def test_installed_dir_reads_the_user_scope_record_not_a_glob(self):
         with tempfile.TemporaryDirectory() as t:

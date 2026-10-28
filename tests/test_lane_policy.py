@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 import support.paths  # noqa: E402,F401
 from taskloop.domain.lanes import policy as lp  # noqa: E402
 import outcome as oc  # noqa: E402
-from support.narrow import must  # noqa: E402
+from support.narrow import must, only  # noqa: E402
 
 NOW = 1_000_000.0
 
@@ -80,8 +80,9 @@ class Network(unittest.TestCase):
 
     def test_a_network_stop_waits_for_the_net_and_resumes_the_same_ref(self):
         a = lp.decide(stop(*self.NET, ref="sess-1", partial=True), ctx(resumed=True))
-        self.assertEqual((type(a), a.resume, a.max_s), (lp.WaitNet, "sess-1", 600))
-        self.assertEqual(lp.decide(stop(*self.NET), ctx()).resume, "")  # no session was ever opened
+        w = only(lp.WaitNet, a)
+        self.assertEqual((type(a), w.resume, w.max_s), (lp.WaitNet, "sess-1", 600))
+        self.assertEqual(only(lp.WaitNet, lp.decide(stop(*self.NET), ctx())).resume, "")  # no session was ever opened
 
     def test_a_network_stop_charges_nothing_and_never_reroutes(self):
         c = ctx(attempt=0, crashes=0, polls=0, waited_lane_s=0)
@@ -96,13 +97,14 @@ class Network(unittest.TestCase):
         self.assertFalse(oc.POLICY[kind_of(a)].storm)
 
     def test_the_wait_shrinks_with_what_was_waited(self):
-        self.assertEqual(lp.decide(stop(*self.NET), ctx(waited_net_s=450)).max_s, 150)
+        self.assertEqual(only(lp.WaitNet, lp.decide(stop(*self.NET), ctx(waited_net_s=450))).max_s, 150)
 
     def test_a_probe_that_says_up_at_three_stops_pauses_with_a_banner_and_a_doubling_backoff(self):
         a = lp.decide(stop(*self.NET), ctx(net_up_stops=3))
-        self.assertEqual((kind_of(a), a.banner, a.retry_after), (oc.Kind.PAUSE_NETWORK, True, NOW + 1800))
-        self.assertEqual(lp.decide(stop(*self.NET), ctx(net_up_stops=5)).retry_after, NOW + 7200)
-        self.assertEqual(lp.decide(stop(*self.NET), ctx(net_up_stops=40)).retry_after, NOW + 21600)
+        p = only(lp.Yield, a)
+        self.assertEqual((kind_of(a), p.banner, p.retry_after), (oc.Kind.PAUSE_NETWORK, True, NOW + 1800))
+        self.assertEqual(only(lp.Yield, lp.decide(stop(*self.NET), ctx(net_up_stops=5))).retry_after, NOW + 7200)
+        self.assertEqual(only(lp.Yield, lp.decide(stop(*self.NET), ctx(net_up_stops=40))).retry_after, NOW + 21600)
         self.assertEqual(type(lp.decide(stop(*self.NET), ctx(net_up_stops=2))), lp.WaitNet)
 
 
@@ -110,7 +112,7 @@ class Incidents(unittest.TestCase):
     def test_logged_out_twice_pauses_the_lane_with_the_login_fix_and_no_ask(self):
         for _ in range(2):
             a = lp.decide(stop("lane", "needs_owner", "none", reason="logged_out", fix="claude /login", lane="CLAUDE"), ctx())
-            self.assertEqual((kind_of(a), a.fix, out(a).rule.makes_ask), (oc.Kind.PAUSE_LANE, "claude /login", False))
+            self.assertEqual((kind_of(a), only(lp.Yield, a).fix, out(a).rule.makes_ask), (oc.Kind.PAUSE_LANE, "claude /login", False))
 
     def test_exit_15_is_a_kill_pause_never_a_fail_or_an_ask(self):
         for facts in (("machine", "transient", "none"), ("machine", "needs_owner", "none"), ("machine", "transient", "poll")):
@@ -120,19 +122,20 @@ class Incidents(unittest.TestCase):
     def test_busy_polls_three_times_then_moves_on(self):
         s = stop("lane", "transient", "poll", lane="OPENAI", retry_at=NOW + 20)
         a = lp.decide(s, ctx(polls=2))
-        self.assertEqual((type(a), a.until, a.charges), (lp.Wait, NOW + 20, "polls"))
+        w = only(lp.Wait, a)
+        self.assertEqual((type(a), w.until, w.charges), (lp.Wait, NOW + 20, "polls"))
         self.assertEqual(lp.decide(s, ctx(polls=3)), lp.Reroute("OPENAI"))
         self.assertEqual(lp.decide(s, ctx(polls=3, resumed=True)), lp.NewThread("lane_out"))
 
     def test_busy_with_resume_keeps_the_thread_while_polling(self):
         a = lp.decide(stop("lane", "transient", "poll", ref="r9", resumable=True), ctx(polls=0, resumed=True))
-        self.assertEqual((type(a), a.resume), (lp.Wait, "r9"))
+        self.assertEqual((type(a), only(lp.Wait, a).resume), (lp.Wait, "r9"))
 
     def test_a_rate_limit_inside_the_cap_waits_and_beyond_it_pauses_with_the_time(self):
         s = stop("lane", "transient", "predicted", retry_at=NOW + 120)
         self.assertEqual(lp.decide(s, ctx()), lp.Wait(NOW + 120))
         far = lp.decide(stop("lane", "transient", "predicted", retry_at=NOW + 5000), ctx())
-        self.assertEqual((kind_of(far), far.retry_after), (oc.Kind.PAUSE_LANE, NOW + 5000))
+        self.assertEqual((kind_of(far), only(lp.Yield, far).retry_after), (oc.Kind.PAUSE_LANE, NOW + 5000))
         self.assertEqual(lp.decide(s, ctx(resumed=True)), lp.NewThread("lane_out"))
 
     def test_the_wait_cap_is_shared_across_a_steps_waits(self):

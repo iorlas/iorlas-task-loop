@@ -6,7 +6,7 @@
   "tests/land/test_engine_land_1.py::EngineLand1Test.push_race_interrupted_cell": 125,
   "tests/support/engine_case.py::EngineTest.run_push_race": 111
  },
- "pyrefly_baseline_errors": 102,
+ "pyrefly_baseline_errors": 61,
  "pyrefly_baseline_src": {},
  "ruff_baseline": {
   "dev/race.py::B007": 1,

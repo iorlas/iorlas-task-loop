@@ -11,6 +11,7 @@ import subprocess
 import sys
 import textwrap
 import threading
+from typing import Any
 import time
 import types
 import unittest
@@ -126,7 +127,7 @@ class SlotListShowsTheLine(Slots):
 class RunTaskTakesItsSlot(Slots):
     def test_a_hand_run_holds_the_slot_bead_while_it_runs_and_the_loop_takes_another(self):
         bd = self.beads({"x-1": [], "x-2": [rec("landed")]})
-        seen = {}
+        seen: dict[str, Any] = {}
 
         def during():  # the loop starts while the hand run is mid-bead (2026-10-21 18:17)
             bd.beads["x-1"].update(status="in_progress", assignee=ident.actor())  # run-task's claim (stubbed here)
@@ -457,6 +458,7 @@ class HoldRaces(Slots):
         bd = self.beads({})
         self.assertTrue(sl.take_slot(str(self.repo), SlotsConfig()))
         real, holds = bd.__call__, []
+        racer: list[threading.Thread] = []
 
         def hold():
             with mock.patch.dict(os.environ, {"TASK_LOOP_ACTOR": "tl-denis000"}):
@@ -469,11 +471,11 @@ class HoldRaces(Slots):
                 th.start()
                 th.join(0.3)
                 self.assertEqual(holds, [])
-                racing.th = th
+                racer.append(th)
             return r
         with tlbd.bd_boundary(racing):
             wslots.release_slot(str(self.repo), "s1")
-        racing.th.join(10)
+        racer[0].join(10)
         self.assertEqual(holds, [0])
         self.assertEqual(bd.slots["sl-1"]["assignee"], "tl-denis000")
         self.assertIn("hold_until", bd.slots["sl-1"].get("metadata", {}))

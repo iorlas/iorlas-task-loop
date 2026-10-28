@@ -9,6 +9,8 @@ import sys
 import tempfile
 import time
 import unittest
+from collections.abc import Callable
+from typing import Any
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
@@ -50,9 +52,9 @@ class FakeBd:
     """bd as the loop calls it: ready, show, claim, unclaim, heartbeat, reclaim and the slot beads."""
 
     def __init__(self, beads=(), slots=0, parents=None):
-        self.beads = {b["id"]: dict(b) for b in beads}
+        self.beads: dict[str, dict[str, Any]] = {b["id"]: dict(b) for b in beads}
         self.parents = dict(parents or {})  # beads not in the ready list (epics): id -> parent
-        self.slots = {"sl-%d" % i: {"id": "sl-%d" % i, "title": "slot %s s%d" % (ident.hostname(), i), "status": "open",
+        self.slots: dict[str, dict[str, Any]] = {"sl-%d" % i: {"id": "sl-%d" % i, "title": "slot %s s%d" % (ident.hostname(), i), "status": "open",
                                     "assignee": ""} for i in range(1, slots + 1)}
         self.taken_by_other = set()  # claims another session wins
         self.calls = []
@@ -329,7 +331,8 @@ class FakeChild:
         self.test, self.cmd, self.extra = test, cmd, extra or {}
         self.bead = cmd[cmd.index("run-task") + 1]
         self.out = cmd[cmd.index("--outcome-file") + 1]
-        self.pid, self.terminated, self.returncode = 4242, False, None
+        self.pid, self.terminated = 4242, False
+        self.returncode: int | None = None
         self.polls = test.hold.pop(self.bead, 0)
         test.started.append((self.bead, cmd[cmd.index("--slot") + 1] if "--slot" in cmd else None))
         if test.during:
@@ -361,7 +364,7 @@ class LoopBase(Base):
     def setUp(self):
         super().setUp()
         self.clock = Clock()
-        self.roles = lambda: {"worker": {"usable": True}}  # delegate's `status --json` roles{}: a test makes it a function of the clock
+        self.roles: Callable[[], dict[str, dict[str, Any]]] = lambda: {"worker": {"usable": True}}  # delegate's `status --json` roles{}: a test makes it a function of the clock
         self.script, self.hold, self.started, self.during = {}, {}, [], []
         for p in (mock.patch.object(Core, "nap", self.clock.nap),
                   mock.patch.object(loop_env, "delegate_route", return_value="/fake/route.py"),

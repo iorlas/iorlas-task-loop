@@ -4,3 +4,9 @@
 def must[T](value: T | None) -> T:
     assert value is not None, "expected a value, got None"
     return value
+
+
+def only[T](cls: type[T], value: object) -> T:
+    """The value, known to be an instance of `cls` (the test says which of a union's members it expects)."""
+    assert isinstance(value, cls), "expected %s, got %r" % (cls.__name__, value)
+    return value
