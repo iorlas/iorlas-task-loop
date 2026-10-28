@@ -4955,7 +4955,7 @@ def reclaim(bead_id, repo, store=None):
     store = store or tl.bd_store(repo)
     b = tl.peek(store, bead_id) or Bead(id=bead_id, title="", status="")
     who, me = b.assignee, tl.actor()
-    if b.metadata.get(intake.HOLD):
+    if intake.held(b.metadata, time.time()):
         return False, "held by the owner (%s): `tl hold %s --release` lets it go" % (b.metadata[intake.HOLD], bead_id)
     release = False
     if who and who != me:

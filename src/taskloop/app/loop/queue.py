@@ -2,9 +2,11 @@
 and beads whose area runs elsewhere; then priority, epic order, lowest id. Every skip says which rule skipped it as a typed
 Skip; nothing is parsed back out of text."""
 import itertools
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from taskloop.app.asks import intake
 from taskloop.app.loop.env import LoopEnv
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import EngineConfig
@@ -55,8 +57,8 @@ def area_skip(area: str, holder: str, where: str) -> Skip:
 
 class QueueRule:
     def __init__(self, store: Beads, cfg: EngineConfig, running: dict[str, str], lint: Callable[[Bead], str],
-                 say: Callable[[str], None] = print) -> None:
-        self.store, self.cfg, self.running, self.lint, self.say = store, cfg, running, lint, say
+                 say: Callable[[str], None] = print, now: Callable[[], float] = time.time) -> None:
+        self.store, self.cfg, self.running, self.lint, self.say, self.now = store, cfg, running, lint, say, now
         self.parents: dict[str, str | None] = {}
 
     def parent_of(self, bead_id: str) -> str | None:
@@ -130,6 +132,10 @@ class QueueRule:
             return Skip(why="a slot", kind="slot")
         if hit:
             return Skip(why="label " + hit, kind="label")
+        who = intake.held(b.metadata, self.now())
+        if who:
+            until = float(b.metadata.get(intake.HOLD_UNTIL) or 0)
+            return Skip(why=f"held by {who}", kind="hold", until=until or None)
         return None
 
     def rank(self, ready: list[Bead], repo: str) -> Queue:
@@ -194,5 +200,5 @@ def rank_ready(env: LoopEnv, cfg: EngineConfig, say: Callable[[str], None] = pri
         ready = env.store.ready(cfg.pick_label)
     except BdFailure:
         ready: list[Bead] = []
-    rule = QueueRule(env.store, cfg, env.running(), env.lint, say)
+    rule = QueueRule(env.store, cfg, env.running(), env.lint, say, env.now)
     return rule.rank(ready, env.repo), rule

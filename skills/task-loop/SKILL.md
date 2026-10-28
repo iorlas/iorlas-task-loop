@@ -137,9 +137,10 @@ missing_criteria, too_big. Infra trouble (lane failure, schema or bad request, s
 wrong tree) is never an ask: the bead stays open with an engine fault.
 
 The owner speaks in typed verbs only; prose never acts, and the engine reads no comment as input. `tl answer BEAD [--option N | --rerun |
---confirm | --split | words]` (alias `tl ask answer`, `--amend` replaces an answer no run used) files the AskAnswer; `tl hint BEAD text`
-sets the bead's `owner_hint` (the next brief carries it); `tl hold BEAD [--release]` sets `owner_hold` (run-task will not reclaim the
-bead); `tl override BEAD replan-cap` sets `owner_override` (one more planner run past the cap). Each verb also leaves an `Owner (tl)`
+--confirm | --split | --verdict confirm|work|decline | words]` (alias `tl ask answer`, `--amend` replaces an answer no run used) files the AskAnswer; `tl hint BEAD text`
+sets the bead's `owner_hint` (the next brief carries it); `tl hold BEAD [--until T | --release]` sets `owner_hold` and `owner_hold_until` (neither the loop nor run-task takes the
+bead before T; T is `+2h`, `90m`, `HH:MM` or ISO); `tl override BEAD replan-cap` sets `owner_override` (one more planner run past the cap);
+`tl override BEAD --waive|--defer|--drop CRITERION --approval "<the owner's words>"` records the waiver in `owner_waivers` (an empty approval is refused). Each verb also leaves an `Owner (tl)`
 receipt comment for people. `tl ask list|withdraw|age`: the inbox, ordered by what each ask unblocks, a dismissal, and how long each
 ask has waited. An answer no run used within 30 minutes is an engine fault: `tl ask age` prints a `FAULT:` line and exits 1.
 `app/asks/intake.py` is the one place comments are classified (`parse(comment) -> kind, fields, body`): only receipts and the engine's

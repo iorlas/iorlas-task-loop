@@ -1,6 +1,7 @@
 """`tl ask list|answer|withdraw|age` and the owner's typed verbs `tl answer|hint|hold|override`: the argument handling over app/asks. Every
 write is a typed record (an AskAnswer, or a metadata key on the bead); nothing here reads or writes prose that something later parses."""
 import json
+import time
 from argparse import Namespace
 from collections.abc import Callable
 from typing import Any, Final
@@ -25,6 +26,12 @@ def action_of(a: Namespace, ask: Ask | None) -> tuple[AskAction, str]:
     if pick is not None and ask is not None and 1 <= pick <= len(ask.options):
         o = ask.options[pick - 1]
         return o.action, " ".join(x for x in (o.text, words) if x)
+    verdict = getattr(a, "verdict", None)
+    if verdict:  # the three answers an owner gives a question about work: yes as it is, do the work, no
+        decline = words or "declined by the owner: do not do this"
+        if verdict == "decline":
+            return "text", decline
+        return ("confirm" if verdict == "confirm" else "rerun"), words
     for flag, action in (("rerun", "rerun"), ("confirm", "confirm"), ("split", "split")):
         if getattr(a, flag, False):
             return action, words  # type: ignore[return-value]
@@ -79,13 +86,21 @@ def run(a: Namespace, asks: AskStore, store_at: Callable[[str], Beads], now: Cal
     ask = asks.get(bead)
     verbs = intake.Intake(asks, store_at(ask.repo if ask else ""), now, by)
     try:
-        return verb(a, op, bead, ask, verbs, out)
+        return verb(a, op, bead, ask, verbs, out, now)
     except (BdFailure, ValueError) as e:
         out("tl: %s" % ((getattr(e, "error", None) and e.error.text) or e))  # type: ignore[attr-defined]
         return 1
 
 
-def verb(a: Namespace, op: str, bead: str, ask: Ask | None, verbs: intake.Intake, out: Out) -> int:
+def waive(a: Namespace, verbs: intake.Intake, bead: str, words: str) -> None:
+    for kind in intake.WAIVER_KINDS:
+        if getattr(a, kind, None):
+            verbs.waive(bead, kind, getattr(a, kind), getattr(a, "approval", None) or "")
+            return
+    verbs.override(bead, words)
+
+
+def verb(a: Namespace, op: str, bead: str, ask: Ask | None, verbs: intake.Intake, out: Out, now: Callable[[], float] = time.time) -> int:
     words = " ".join(getattr(a, "text", None) or [])
     if op == "answer":
         action, said = action_of(a, ask)
@@ -99,9 +114,10 @@ def verb(a: Namespace, op: str, bead: str, ask: Ask | None, verbs: intake.Intake
     if op == "hint":
         verbs.hint(bead, words)
     elif op == "hold":
-        verbs.hold(bead, on=not getattr(a, "release", False))
+        until = intake.parse_until(a.until, now()) if getattr(a, "until", None) else 0.0
+        verbs.hold(bead, on=not getattr(a, "release", False), until=until)
     elif op == "override":
-        verbs.override(bead, words)
+        waive(a, verbs, bead, words)
     else:
         out(f"tl: no such verb {op}")
         return 2
@@ -127,6 +143,11 @@ def add_parsers(sp: Any) -> None:
             answer_flags(p)
         if verb == "hold":
             p.add_argument("--release", action="store_true")
+            p.add_argument("--until", metavar="T", help="no claim before T (+2h, 90m, HH:MM, ISO); default: until released")
+        if verb == "override":
+            for kind in intake.WAIVER_KINDS:
+                p.add_argument("--" + kind, metavar="CRITERION", help=f"{kind} this acceptance criterion (needs --approval)")
+            p.add_argument("--approval", metavar="QUOTE", help="the owner's own words approving it, quoted; an empty quote is refused")
 
 
 def answer_flags(p: Any) -> None:
@@ -135,3 +156,4 @@ def answer_flags(p: Any) -> None:
     p.add_argument("--rerun", action="store_true", help="run again, nothing else")
     p.add_argument("--confirm", action="store_true", help="yes, go on as it is")
     p.add_argument("--split", action="store_true", help="split the bead")
+    p.add_argument("--verdict", choices=["confirm", "work", "decline"], help="yes as it is / do the work / no")

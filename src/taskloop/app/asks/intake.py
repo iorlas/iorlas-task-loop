@@ -2,17 +2,23 @@
 a hint, a hold or an override is a metadata key on the bead. Each verb leaves a receipt comment for people reading the bead; the engine
 neither reads nor counts receipts as input, and parse() only labels them."""
 import contextlib
-from collections.abc import Callable
+import json
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Final
 
 from taskloop.app.asks import sweeps
 from taskloop.contracts.ask import Ask, AskAction, AskAnswer
 from taskloop.contracts.ports import BdFailure, BeadPatch, Beads
 from taskloop.contracts.stores import AskStore
+from taskloop.domain import timespec
 
 HINT: Final = "owner_hint"
 HOLD: Final = "owner_hold"
+HOLD_UNTIL: Final = "owner_hold_until"  # epoch seconds; absent = until released
+WAIVERS: Final = "owner_waivers"  # JSON list of Waiver: what the owner waived, deferred or dropped, with the quoted approval
+WAIVER_KINDS: Final = ("waive", "defer", "drop")
 OVERRIDE: Final = "owner_override"
 OVERRIDES: Final = ("replan-cap",)
 VERBS: Final = ("answer", "hint", "hold", "override", "decision")
@@ -22,6 +28,18 @@ RECEIPT: Final = "Owner (tl) "
 ENGINE_PREFIXES: Final = ("Plan (engine", "Review (engine", "Reflect (engine", "Blocked:", "Ask (engine", "Evidence (engine",
                           "Parked (engine", "Lane (engine", "Verify (engine", "Resume (engine", "Look (engine", "Land (engine",
                           "Follow-up (engine", "Engine paused:", "Engine failed:", RECEIPT)
+
+
+def parse_until(text: str, now: float) -> float:
+    """Epoch seconds of what the owner typed after --until (ValueError when it is not a future time)."""
+    return timespec.parse_future(text, datetime.fromtimestamp(now).astimezone())
+
+
+def held(meta: Mapping[str, str], now: float) -> str:
+    """Who holds the bead ("" when nobody): a hold with an `until` ends when that time passes, one without lasts until released."""
+    who = str(meta.get(HOLD) or "")
+    until = float(meta.get(HOLD_UNTIL) or 0)
+    return who if who and (not until or until > now) else ""
 
 
 @dataclass(frozen=True)
@@ -90,9 +108,28 @@ class Intake:
         self.store.update(bead, BeadPatch(set_metadata={HINT: text.strip()}))
         self.note(bead, receipt("hint", text.strip()))
 
-    def hold(self, bead: str, on: bool = True) -> None:
-        self.store.update(bead, BeadPatch(set_metadata={HOLD: self.by}) if on else BeadPatch(unset_metadata=[HOLD]))
-        self.note(bead, receipt("hold", "" if on else "released", on="1" if on else "0"))
+    def hold(self, bead: str, on: bool = True, until: float = 0.0) -> None:
+        """Keep the loop off a bead (until `until`, or until released); the loop reads the keys, the receipt is for people."""
+        if on:
+            patch = BeadPatch(set_metadata={HOLD: self.by, **({HOLD_UNTIL: f"{until:.0f}"} if until else {})},
+                              unset_metadata=[] if until else [HOLD_UNTIL])
+        else:
+            patch = BeadPatch(unset_metadata=[HOLD, HOLD_UNTIL])
+        self.store.update(bead, patch)
+        self.note(bead, receipt("hold", "" if on else "released", on="1" if on else "0", **({"until": f"{until:.0f}"} if until else {})))
+
+    def waive(self, bead: str, kind: str, criterion: str, approval: str) -> None:
+        """Waive, defer or drop one acceptance criterion. The owner's own words must come with it: an empty quote is refused, because a
+        relayed 'he said it is fine' is how a criterion was lost on 10-21."""
+        if kind not in WAIVER_KINDS:
+            raise ValueError("override: one of --{}".format(", --".join(WAIVER_KINDS)))
+        if not criterion.strip() or not approval.strip():
+            raise ValueError(f"override --{kind} needs the criterion and --approval with the owner's own words, quoted")
+        found = self.store.show(bead)
+        have: list[dict[str, object]] = json.loads(found.metadata.get(WAIVERS) or "[]") if found else []
+        have.append({"kind": kind, "criterion": criterion.strip(), "approval": approval.strip(), "t": self.now(), "by": self.by})
+        self.store.update(bead, BeadPatch(set_metadata={WAIVERS: json.dumps(have)}))
+        self.note(bead, receipt("override", f"{kind} {criterion.strip()} - approved: {approval.strip()}", what=kind))
 
     def override(self, bead: str, what: str) -> None:
         if what not in OVERRIDES:
