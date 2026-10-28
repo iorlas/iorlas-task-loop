@@ -204,7 +204,7 @@ class VisualWork(StagesTest):
         self.assertEqual(rc, 0, self.blocked)
         self.assertIn("the picker shows", s.prompts[2])  # the judge judges the look-objective item
         self.assertNotIn("it reads well", s.prompts[2])
-        self.assertEqual(self.eng.case_checks(), [])
+        self.assertEqual(self.eng.cases.case_checks(), [])
 
     def test_the_planner_is_told_the_classes_and_to_assume_a_missing_reference(self):
         rc, s = self.go({"plan": [PLAN], "write": [self.write()], "look": [self.judged()], "review": [CLEAN]})

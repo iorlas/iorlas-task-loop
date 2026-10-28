@@ -3604,13 +3604,13 @@ class EngineTest(unittest.TestCase):
         eng = engine.Engine.__new__(engine.Engine)
         eng.cfg, eng.wt, eng.warn = cfg_with(worker_rules="r.md"), self.wt, mock.Mock()
         sh("git", "pull", "-q", "origin", "main", cwd=self.wt)
-        text = eng.rules_text()
+        text = eng.cases.rules_text()
         self.assertLessEqual(len(text.encode("utf-8")), engine.RULES_MAX)
         self.assertTrue(text.endswith("line") and eng.warn.called)
         eng.cfg = cfg_with(worker_rules="nope.md")
-        self.assertEqual(eng.rules_text(), "")
+        self.assertEqual(eng.cases.rules_text(), "")
         eng.cfg = cfg_with(worker_rules="")
-        self.assertEqual(eng.rules_text(), "")
+        self.assertEqual(eng.cases.rules_text(), "")
 
     def test_the_brief_carries_what_linked_beads_decided(self):
         # lifesim-fld.25.17 asked which rung was picked in yxd6.3, whose close reason said so

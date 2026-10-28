@@ -56,8 +56,8 @@ class OwnerLook:
             unjudged = ("\n" + "\n".join(f"{w} ({u})" for u, w in e.look_unjudged.items()) + "\n") if e.look_unjudged else ""
             parts.append(f"Screenshots of {e.bead} ({e.bead_title}), committed with its land:\n{shots}\n\nWhat the agent judged: {judged}\n"
                          f"{unjudged}\nNot automatable: the owner reviews the look and feel in a later batch.")
-        if e.cases_of("taste"):
-            taste = "\n".join("- " + t for t in e.cases_of("taste"))
+        if e.cases.cases_of("taste"):
+            taste = "\n".join("- " + t for t in e.cases.cases_of("taste"))
             parts.append(f"Taste items (the owner decides; they never blocked the land):\n{taste}")
         if e.unverified:
             parts.append(self.unverified_text())
@@ -67,7 +67,7 @@ class OwnerLook:
         """After the land: one bead per epic for the owner's later round (look and feel, and what no check could prove),
         filed once and appended to by each later bead of the epic (a re-land replaces its own section)."""
         e = self.e
-        if e.look_filed or not (e.look_paths or e.look_unjudged or e.unverified or e.cases_of("taste")):
+        if e.look_filed or not (e.look_paths or e.look_unjudged or e.unverified or e.cases.cases_of("taste")):
             return
         section = self.section()
         with self.review_lock():  # list + create/update is one step: three beads of an epic landing together file one bead
@@ -99,7 +99,7 @@ class OwnerLook:
             e.warn(f"owner-look bead {'update' if have else 'create'} failed: {err[:300]}")
             return
         e.look_filed = True
-        if e.cases_of("taste"):
+        if e.cases.cases_of("taste"):
             if made:
                 self.write_looks(made)
             else:
@@ -117,7 +117,7 @@ class OwnerLook:
                 shots.append({"path": str(b.relative_to(e.wt)), "role": "before", "label": Path(p).stem})
             shots.append({"path": p, "role": "after", "label": Path(p).stem})
         mine = [{"id": f"{e.bead}#{k}", "bead": e.bead, "title": t, "note": " ".join(e.look_notes)[:600], "shots": shots, "status": "open"}
-                for k, t in enumerate(e.cases_of("taste"), 1)]
+                for k, t in enumerate(e.cases.cases_of("taste"), 1)]
         shown = beadtools.peek(e.store, bead_id)
         meta = dict(shown.metadata) if shown else {}
         old = meta.get("looks") if isinstance(meta.get("looks"), list) else []

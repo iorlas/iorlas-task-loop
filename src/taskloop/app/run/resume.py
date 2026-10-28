@@ -96,7 +96,7 @@ class Resume:
     def missing(self, ck: Checkpoint) -> int | None:
         n = stage_count(ck)
         plan = ck.state.plan_data or {}
-        return self.e.promised_missing(plan, n if (ck.step == "land" or ck.stage >= n) else ck.stage) if plan else None
+        return self.e.cases.promised_missing(plan, n if (ck.step == "land" or ck.stage >= n) else ck.stage) if plan else None
 
     def restore(self, ck: Checkpoint, late: bool) -> None:
         """The checkpoint's state into the engine: what every resume keeps, and (HEAD is the engine's) what only a resume keeps."""

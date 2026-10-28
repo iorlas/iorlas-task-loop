@@ -72,6 +72,9 @@ from taskloop.app.land.lander import Lander
 from taskloop.app.land.rebase import Rebase
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.land.tree import Tree
+from taskloop.app.plan.cases import Cases
+from taskloop.app.run.shared import Shared
+from taskloop.app.write.briefing import Briefing
 from taskloop.app.write.newfiles import NewFiles
 from taskloop.app.look.judge import Judge
 from taskloop.app.look.owner_look import OwnerLook
@@ -264,14 +267,6 @@ TRANSIENT_PUSH = re.compile(r"curl \d+|Broken pipe|Connection (?:reset|timed out
 # tl-fsj: a configured check that fails because the tree lacks what the base's config names is the engine's, never a writer's amend
 
 
-def same_dir(a, b):
-    """The same folder: os.path.samefile, realpath equality when either path is missing."""
-    try:
-        return os.path.samefile(a, b)
-    except OSError:
-        return os.path.realpath(str(a)) == os.path.realpath(str(b))
-
-
 _TREE_MEMO = {}   # (slot, what the config files and environment are now) -> tree_problem's answer
 
 
@@ -321,7 +316,7 @@ def _tree_problem(wt):
                 "in %s, then rerun." % repo)
     if top is None:
         top = g("rev-parse", "--show-toplevel")
-    if not top or not same_dir(top, wt):
+    if not top or not gitrepo.same_dir(top, wt):
         return ("git's top-level folder is %s, not the slot %s" % (top or "(none)", wt),
                 "Something redirects git away from the slot. Check `git config --show-origin --list` in %s for "
                 "core.worktree or core.bare; `git config --unset core.worktree` in %s if set." % (wt, repo))
@@ -599,6 +594,10 @@ class Engine(StateAttrs):
         return Closer(self, SimpleNamespace(oc=oc, loop_health=loop_health, track=verbs, attempt=beadtools.attempt, say=say, outcome_for=outcome_for, node_outcome=node_outcome,
                                             close_move=close_move, reflection_text=reflection_text, why_code=runtrace.why_code,
                                             config_dir=ident.config_dir()))
+
+    cases = cached_property(Cases)
+    shared = cached_property(Shared)
+    briefing = cached_property(Briefing)
 
     @cached_property
     def checkout(self):
@@ -936,190 +935,12 @@ class Engine(StateAttrs):
     def git(self, *a):
         return gitrepo.git(*a, cwd=self.wt)
 
-    def add_cases(self, new):
-        """A writer may add the cases it discovers; it can never remove one (the plan is the engine's)."""
-        cases = self.plan_data.setdefault("cases", [])
-        have = {c["check"].strip() for c in cases}
-        for c in new:
-            if c["check"].strip() and c["check"].strip() not in have:
-                cases.append(dict(c, by="writer"))
-                have.add(c["check"].strip())
-                self.log.note("the writer added a case: %s" % c["criterion"][:200])
-
-    def engine_unproven(self, unchecked, checks):
-        """The unchecked items the engine does not prove itself: one that names the gate (it runs at land, and a red gate
-        goes to a fix round) or a check that passed this round is dropped, and so is every case item once this round ran
-        all the plan's cases green (only the last stage and a fix run them). lifesim-5ban.3 and lifesim-fld.27.3 stopped
-        on verify asks for the gate; lifesim-gfr.31.1 on 'there is no nographics.out in evidence yet' after the case
-        that writes it passed."""
-        ran = [c.cmd for c in checks if c.exit == 0]
-        names = [" ".join(x.split()).lower() for x in [self.cfg.gate_text] + ran if x.strip()]
-        cases = self.case_checks()
-        cases_ran = bool(cases) and all(c in ran for c in cases)
-        out = []
-        for u in unchecked:
-            what = " ".join(u["what"].split()).lower()
-            if any(x in what for x in names) or (cases_ran and u["kind"] == "case"):
-                self.log.note("unchecked item dropped, the engine runs it: %s" % u["what"][:200])
-            else:
-                out.append(u)
-        return out
-
-    def scope_tokens(self):
-        plan = self.plan_data or {}
-        text = [self.scope] + [st["goal"] for st in plan.get("stages") or []] + [
-            c["criterion"] for c in plan.get("cases") or []] + [r["what"] for r in plan.get("risks") or []]
-        return word_set(" ".join(text))
-
-    def out_of_scope(self, items):
-        """tl-bxk.13.5: a checkable item a review noted that shares nothing with the bead's done-when, the plan's goals, cases
-        and risks is a follow-up, not a gap: it is filed as a leftover and the land goes on (lifesim-f2by: a note about two
-        poses nobody asked for became two fix rounds, 93 min). Nothing is dropped unseen: the bead is filed. With no
-        acceptance text to compare against, nothing moves."""
-        if not self.scope.strip():
-            return items
-        have, keep = self.scope_tokens(), []
-        for u in items:
-            toks = word_set(u["what"])
-            near = len(toks & have)
-            if u["kind"] != "checkable" or near >= 2 or (toks and near / len(toks) >= 0.3):
-                keep.append(u)
-                continue
-            self.log.note("unchecked item outside the done-when, filed as a follow-up: %s" % u["what"][:200])
-            title = ("Check: " + u["what"])[:120]
-            if title in {lo["title"] for lo in self.leftovers}:
-                continue
-            self.leftovers.append({"title": title, "why": "A review noted this outside the task's "
-                                   "done-when, so it was not verified before the land: " + u["what"][:600]})
-        return keep
-
-
-    def case_checks(self):
-        return [c["check"] for c in (self.plan_data or {}).get("cases") or []
-                if c.get("check", "").strip() and c.get("class", "test") == "test" and c.get("proved_by", "check") in ("check", "stage")]
-
-    def cases_of(self, cls):
-        """The criteria of the plan's cases of one class (look-objective, taste)."""
-        return [c["criterion"] for c in (self.plan_data or {}).get("cases") or [] if c.get("class") == cls]
-
-    def cases_text(self):
-        cases = (self.plan_data or {}).get("cases") or []
-        if not cases:
-            return ""
-        run = [c for c in cases if c.get("class", "test") == "test"]
-        looked = [c for c in cases if c.get("class", "test") != "test"]
-        return ("\nThe task's acceptance cases (they run on the last stage; judge whether each proves its criterion):\n" + \
-            "".join("- %s: `%s`%s\n" % (c["criterion"], c["check"], " (added by the writer: %s; check it does not replace "
-                                                                   "a stronger case)" % c.get("why", "") if c.get("by") == "writer" else "")
-                    for c in run) if run else "") + (
-            "\nCases judged from rendered pictures, not by a command (the engine's look judge sees them; taste goes to the owner):\n" +
-            "".join("- [%s] %s\n" % (c["class"], c["criterion"]) for c in looked) if looked else "")
-
-    def rules_text(self):
-        """tl-7y6.6.1: the repo's worker rules (engine.worker_rules), inlined; "" when none. A file over RULES_MAX is cut at a line
-        and the engine warns: the limit is hard, so the planner and the writer share one text and nobody reads a path."""
-        rel = self.cfg.worker_rules
-        if not rel:
-            return ""
-        try:
-            text = (Path(self.wt) / rel).read_text(encoding="utf-8").strip()
-        except (OSError, ValueError):
-            return ""
-        if len(text.encode("utf-8")) > RULES_MAX:
-            self.warn("worker rules %s are over %d bytes: only the first lines that fit are sent" % (rel, RULES_MAX))
-            text = text.encode("utf-8")[:RULES_MAX].decode("utf-8", "ignore").rsplit("\n", 1)[0].rstrip()
-        return text
-
-    def plan_text(self, stage=None):
-        """The plan as JSON; with `stage` (0-based) the role-sized view a writer or reviewer of that stage reads."""
-        plan = self.plan_data or {}
-        return json.dumps(checks_to_wire(plan if stage is None else role_view(plan, stage)), indent=1)
 
     def comment(self, text):
         if not self.dry:
             beadtools.attempt(self.store.add_comment, self.bead, text)
 
     # -- tl-bxk.13.8: notes shared by the tasks of one repo (docs/design/stages.md section 6)
-    def shared_path(self):
-        common = self.git("rev-parse", "--path-format=absolute", "--git-common-dir") or str(self.wt)
-        return ident.config_dir() / "shared" / ("%s.json" % hashlib.sha1(common.encode("utf-8")).hexdigest()[:12])
-
-    def known_flakes(self):
-        """[{test, note, bead}]: tests known to fail without cause. A writer reports one (flakes); the owner may edit the file."""
-        try:
-            data = json.loads(self.shared_path().read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            return []
-        week2 = time.time() - FLAKE_DAYS * 86400  # a writer's word is not a fact for ever: it lapses unless reported again
-        return [f for f in (data.get("flakes") if isinstance(data, dict) else None) or []
-                if isinstance(f, dict) and str(f.get("test") or "").strip() and (f.get("t") or 0) >= week2]
-
-    def add_flakes(self, new):
-        have = {" ".join(str(f["test"]).split()) for f in self.known_flakes()}
-        add = [{"test": " ".join(str(f["test"]).split())[:200], "note": " ".join(str(f.get("note") or "").split())[:300],
-                "bead": self.bead, "t": int(time.time())}
-               for f in [x for x in new if isinstance(x, dict)][:3] if str(f.get("test") or "").strip()]  # three a write
-        add = [f for f in add if f["test"] not in have]
-        if not add or self.dry:
-            return
-        path = self.shared_path()
-        try:  # read again just before the write: another slot may have added one meanwhile
-            path.parent.mkdir(parents=True, exist_ok=True)
-            cur = self.known_flakes()
-            seen = {f["test"] for f in cur}
-            tmp = path.with_name(path.name + ".%d.tmp" % os.getpid())
-            tmp.write_text(json.dumps({"flakes": (cur + [f for f in add if f["test"] not in seen])[-40:]}, indent=1), encoding="utf-8")
-            os.replace(tmp, path)
-            self.log.note("known flaky: %s" % "; ".join(f["test"] for f in add))
-        except OSError:
-            pass
-
-    def siblings(self):
-        """[(bead, summary, files)]: tasks running in other worktrees of this repo right now (a live engine lock)."""
-        out = []
-        for line in self.git("worktree", "list", "--porcelain").splitlines():
-            if not line.startswith("worktree "):
-                continue
-            wt = line[len("worktree "):]
-            if same_dir(wt, self.wt):
-                continue
-            lock = engine_lock.read_engine_lock(wt)
-            if not lock.get("bead") or lock["bead"] == self.bead or not pidcheck.proc_alive(lock.get("pid"), lock.get("start") or ""):
-                continue
-            ck = self.stores.checkpoints.of(lock["bead"]).read()
-            plan = (ck.state.plan_data if ck else None) or {}
-            files = list(dict.fromkeys(f for st in plan.get("stages") or [] for f in st.get("files") or []))
-            out.append((lock["bead"], " ".join(str(plan.get("summary") or "").split())[:100], files[:6]))
-        return out[:5]
-
-    def landed_since(self):
-        """Subjects of what landed on the base since this task's branch left it (as far as the last fetch knows)."""
-        log = self.git("log", "--format=%s", "-n", "8", "%s..%s" % (self.checkout.base_sha(), self.cfg.base))
-        return [x[:100] for x in log.splitlines() if x.strip()]
-
-    def flakes_text(self):
-        flakes = self.known_flakes()
-        if not flakes:
-            return ""
-        return ("\nKnown flaky tests of this repo (a writer reported each; they fail without a cause in the change). A check red only on one: run it "
-                "once more and say so in your summary; do not build a new isolation or fix for it unless the task is about "
-                "it:\n" + "".join("- %s%s%s\n" % (f["test"][:120], (": " + f["note"][:160]) if f.get("note") else "",
-                                                    (" (found in %s)" % f["bead"]) if f.get("bead") else "") for f in flakes[-8:]))
-
-    def shared_text(self):
-        """What the other tasks of this repo are doing, for the planner and a writer's first prompt: running now, landed since
-        this branch left the base, known flaky tests. '' when there is nothing to say."""
-        out = []
-        sib = self.siblings()
-        if sib:
-            out.append("Running now beside this task (do not edit their files unless this task needs them; do not redo their work):\n" +
-                       "".join("- %s%s%s\n" % (b, (": " + sm) if sm else "", (" [files: %s]" % ", ".join(fs)) if fs else "") for b, sm, fs in sib))
-        landed = self.landed_since()
-        if landed:
-            out.append("Landed on %s since this branch left it:\n%s" % (self.cfg.base, "".join("- %s\n" % x for x in landed)))
-        flakes = self.flakes_text()
-        return ("\n" + "".join(out) + flakes) if (out or flakes) else ""
-
     def run(self):
         return self.run_once()
 
@@ -1319,28 +1140,6 @@ class Engine(StateAttrs):
         self.comment(asktext.comment(a) + moved)
         return a
 
-    def promised_missing(self, plan, upto):
-        """tl-bxk.13.16.2: the index of the earliest accepted stage (before `upto`) that mentions an evidence file which is gone
-        now while a check still to run names it, or None."""
-        ev = re.compile(r"\.task/%s/evidence/[^\s\"'<>|;&)]+" % re.escape(self.bead))
-        stages = plan.get("stages") or []
-        pending = [c for st in stages[upto:] for c in st["checks"]] + [
-            x["check"] for x in plan.get("cases") or [] if x.get("check", "").strip() and x.get("class", "test") == "test"]
-        need = set()
-        for c in pending:
-            for p in ev.findall(c):
-                if not Path(self.wt, p).exists():
-                    need.add(p)
-        early = [k for k, st in enumerate(stages[:upto]) if any(p in c for c in st["checks"] for p in need)]
-        return min(early) if early else None
-
-    def base_red_text(self, run):
-        """What the writer is told of the checks that were red on the untouched base too: they are not its to fix."""
-        if not run.base_red:
-            return ""
-        return ("\nThese checks are red on the untouched base too, so they are not yours; the round does not count them:\n%s\n"
-                % "\n".join("- `%s` (exit %s)" % (c.cmd, c.exit) for c in run.base_red))
-
     def review_cap(self):
         """A run's reviews are counted once for the whole run, a replan does not start them again (engine.max_total_reviews)."""
         cap = int(self.cfg.max_total_reviews)
@@ -1349,36 +1148,6 @@ class Engine(StateAttrs):
                 self.stats["reviews"], cap, self.stuck_why[:600]),
                           askspecs.open_question("%d reviews ran in this run (the limit is %d, replans included). %s" % (
                               self.stats["reviews"], cap, self.stuck_why[:600]), None), kind=oc.Kind.ASK_STUCK)
-
-    def stage_checks_text(self, checks, skip=None):
-        """The stage's check list split for the writer: the fast ones it may run, the slow ones the engine runs alone (WriterSplit)."""
-        return self.checker.split().text(checks, skip)
-
-    def where(self, node, checks=(), failed=None, listed=()):
-        """What the step is for, never what its sandbox allows: delegate tells each worker that (worker-run v3).
-        For the writer: which checks it may run (fast ones) and which are the engine's (slow ones), minus `listed` (the
-        commands the stage's own check list already names)."""
-        if node == "write":
-            pool = list(dict.fromkeys(checks)) if failed is None else list(dict.fromkeys(failed))
-            if failed is None:  # the stage's own checks are in stage_checks_text: name each command once (tl-7y6.6.12)
-                have = {norm_cmd(c) for c in listed}
-                pool = [c for c in pool if norm_cmd(c) not in have]
-            fast, slow = self.checker.split().divide(pool)
-            if failed is None:
-                text = ("Before you say it is done, run the stage's fast checks so an error never reaches the engine; the "
-                        "engine reruns every check after you.")
-            else:
-                text = "Only the failed checks that are fast are yours to rerun; the engine reruns every check after you."
-            if slow:
-                text += ("\nThe engine runs these after you; do not run them:\n" if failed is None else
-                         "\nThese failed checks are slow: the engine re-runs them; fix from the output above, do not run them:\n"
-                         ) + "".join("- %s\n" % c for c in slow).rstrip("\n")
-            if fast:
-                text += "\nYou may run these:\n" + "\n".join("- %s" % c for c in fast)
-            return (text + "\nIf a command is refused, do not reword it to get around the refusal: say which command and "
-                    "why you needed it.\nNever start a command you expect to take over a minute; never poll a running "
-                    "command more than 3 times.")
-        return "You may run commands to check facts (read files, run a linter or a test); never edit, create or delete files."
 
     def stoppable_checks(self, *a, **kw):  # run_checks, then a stop (it ended a check, which reports itself failed) ends the run here
         run = self.run_checks(*a, **kw)

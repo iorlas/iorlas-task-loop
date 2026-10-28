@@ -36,7 +36,7 @@ class Judge:
                 shutil.copy2(b, base / f"before-{n}")
                 pairs.append((n, f"before-{n}"))
         # the plan's look items are for the last stage (like the cases); an earlier stage is judged on the general checks only
-        prompt = looks.judge_prompt(e.cases_of("look-objective") if last else [], names, shown, pairs, summary)
+        prompt = looks.judge_prompt(e.cases.cases_of("look-objective") if last else [], names, shown, pairs, summary)
         try:
             d, _ = e.ai("look", f"round {rnd}: {plural(len(names), 'picture')}", prompt,
                         writer_family=e.writer_family, cwd=str(base), round=rnd, at=(e.at_stage, rnd, 0))

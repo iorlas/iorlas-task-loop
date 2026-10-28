@@ -53,19 +53,19 @@ def stub_engine(rules="worker-rules.md"):
 def render_write(rules=RULES, failed=None):
     """The stage-1 write prompt as Engine.stage builds it: stage checks, where text, rules inlined."""
     eng = stub_engine()
-    where = eng.where("write", [c.cmd for c in eng.cfg.checks] + CHECKS, failed, listed=CHECKS)
+    where = eng.briefing.where("write", [c.cmd for c in eng.cfg.checks] + CHECKS, failed, listed=CHECKS)
     return wp.write_prompt(
         rules, brief="<brief text>", plan="<plan text>", n=1, goal="Add the greeting", files="greet.py", anchors="",
-        checks=eng.stage_checks_text(CHECKS, skip=failed), feedback="", evidence=".task/t-1/evidence", where=where, gate=" (`just check`)")
+        checks=eng.briefing.stage_checks_text(CHECKS, skip=failed), feedback="", evidence=".task/t-1/evidence", where=where, gate=" (`just check`)")
 
 
 def render_resume(failed=None):
     """The delta a resumed writer gets (Engine.write_delta) for the same stage."""
     eng = stub_engine()
-    where = eng.where("write", [c.cmd for c in eng.cfg.checks] + CHECKS, failed, listed=CHECKS)
+    where = eng.briefing.where("write", [c.cmd for c in eng.cfg.checks] + CHECKS, failed, listed=CHECKS)
     return wp.WRITE_RESUME_PROMPT.format(
         brief=".task/t-1/brief.md", plan="The plan is unchanged.", n=1, goal="Add the greeting", files="greet.py", anchors="",
-        checks=eng.stage_checks_text(CHECKS, skip=failed), where=where, feedback="")
+        checks=eng.briefing.stage_checks_text(CHECKS, skip=failed), where=where, feedback="")
 
 
 class Golden(unittest.TestCase):

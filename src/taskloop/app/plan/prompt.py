@@ -61,14 +61,14 @@ class PlanPrompt:
     def rules(self) -> list[str]:
         e = self.e
         rules = []
-        wr = e.rules_text()
+        wr = e.cases.rules_text()
         if wr:
             rules.append("This repo's rules for workers (what runs where, known pitfalls of its tools); the checks you "
                          f"write must follow them:\n<worker_rules>\n{wr}\n</worker_rules>")
         notes = self.notes()
         if notes:
             rules.append("Facts about this factory and project that the plan must respect:\n" + notes)
-        shared = e.shared_text()
+        shared = e.shared.shared_text()
         if shared:
             rules.append(shared.strip())
         if e.pictures.visual_cfg() and e.pictures.shot_methods():  # the classes mean "the engine renders": only with a shot table
@@ -105,5 +105,5 @@ class PlanPrompt:
         extra += self.history(old, again)
         rules = self.rules()
         extra += self.tail()
-        where = e.where("plan")
+        where = e.briefing.where("plan")
         return PLAN_PROMPT.format(brief=e.briefs.text(), wt=e.wt) + extra + "\n\n" + "\n".join(rules) + ("\n\n" + where if where else "")

@@ -40,14 +40,16 @@ class ReviewRound:
         gate = f" (`{e.cfg.gate_text}`)" if e.cfg.gate else ""
         text = review_prompt(
             bool(s.fix), s.last, s.state["scope"] if s.fix else "", round_no=s.rounds + 1, prior=e.hand.rounds_text(last=3),
-            acceptance=acceptance_text(self.items(s)), brief=e.briefs.text(), plan=e.plan_text(s.i),
+            acceptance=acceptance_text(self.items(s)), brief=e.briefs.text(), plan=e.cases.plan_text(s.i),
             n=s.i + 1, goal=st["goal"],
             work=e.newfiles.stage_work(kinds["unexplained"], kinds["ignored"]), checks=compact(s.run.results), summary=s.w["summary"],
             evidence=e.evidence_dir, gate=gate, added=e.stats["tests_added"], removed=e.stats["tests_removed"])
-        where = e.where("review")
-        text += ("\n" + where if where else "") + e.cases_text() + (CASES_RAN if s.last and e.case_checks() else "") + self.open_items(s)
+        where = e.briefing.where("review")
+        text += ("\n" + where if where else "") + e.cases.cases_text()
+        text += (CASES_RAN if s.last and e.cases.case_checks() else "") + self.open_items(s)
         text += "" if s.last else LATER_CASES
-        text += e.routing.ledger().text() + e.hand.seen_lows_text() + e.flakes_text() + UNCHECKED_TEXT + e.judge.look_review(st, s.w, s.fix)
+        text += e.routing.ledger().text() + e.hand.seen_lows_text() + e.shared.flakes_text() + UNCHECKED_TEXT
+        text += e.judge.look_review(st, s.w, s.fix)
         return text + (e.newfiles.new_files_brief(kinds["unexplained"]) if kinds["unexplained"] else "")
 
     def items(self, s: StageState) -> list[tuple[str, str]]:
@@ -89,7 +91,7 @@ class ReviewRound:
         the old; a fix at land reviews only the fix: it adds), the look and link verdicts, the comment, the leftovers, the lows."""
         e = self.e
         checks = s.run.results
-        judged = e.out_of_scope(e.engine_unproven(review.get("unchecked") or [], checks))
+        judged = e.cases.out_of_scope(e.cases.engine_unproven(review.get("unchecked") or [], checks))
         e.unchecked = e.unchecked + judged if s.fix else judged
         e.judge.look_judged(review, s.st, s.w, s.fix)
         e.link_check.link_judged(review)

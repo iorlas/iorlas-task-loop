@@ -146,7 +146,7 @@ class Lander:
         because they can depend on state outside the tracked tree."""
         e = self.e
         stages = (e.plan_data or {}).get("stages") or []
-        checks = list(dict.fromkeys([c for s in stages for c in s["checks"]] + e.case_checks()))
+        checks = list(dict.fromkeys([c for s in stages for c in s["checks"]] + e.cases.case_checks()))
         # A stop during checks or just after they return must resume through acceptance: save that barrier first
         self.park("land retry checks require successful checks and review before landing", "land-verify-red")
         results = e.stoppable_checks({"checks": checks, "files": []}, "land retry")

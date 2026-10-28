@@ -32,7 +32,7 @@ class WriteRound:
         if flow:
             return flow
         self.shots_contract(s, prompt)
-        e.add_cases(s.w.get("new_cases") or [])
+        e.cases.add_cases(s.w.get("new_cases") or [])
         if e.pictures.shot_methods() and e.pictures.stage_visual(s.st):
             e.render_stale = True  # a write after the last render: its pictures show an older tree
         back = e.judge.look_step(s.st, s.w, s.name, s.last)
@@ -44,11 +44,11 @@ class WriteRound:
     def prompts(self, s: StageState, boundary: bool, fresh: str) -> tuple[str, str | None]:
         """(the whole prompt, the delta a resumed writer gets instead or None)."""
         e, st = self.e, s.st
-        stage_checks = e.stage_checks_text(st["checks"], skip=s.failed_cmds)
-        where_text = e.where("write", [c.cmd for c in e.cfg.checks] + st["checks"], s.failed_cmds, listed=st["checks"])
+        stage_checks = e.briefing.stage_checks_text(st["checks"], skip=s.failed_cmds)
+        where_text = e.briefing.where("write", [c.cmd for c in e.cfg.checks] + st["checks"], s.failed_cmds, listed=st["checks"])
         tail = CASES_TAIL + ("" if s.last else LATER_CASES) + UNCHECKED_TEXT + e.judge.look_write(st)
         gate = f" (`{e.cfg.gate_text}`)" if e.cfg.gate else ""
-        prompt = write_prompt(e.rules_text(), brief=e.briefs.text(), plan=e.plan_text(s.i), n=s.i + 1, goal=st["goal"],
+        prompt = write_prompt(e.cases.rules_text(), brief=e.briefs.text(), plan=e.cases.plan_text(s.i), n=s.i + 1, goal=st["goal"],
                               files=", ".join(st["files"]), anchors=anchors_text(st), checks=stage_checks, feedback=s.feedback,
                               evidence=e.evidence_dir, where=where_text, gate=gate) + tail
         if fresh:
@@ -63,7 +63,7 @@ class WriteRound:
         if delta:  # the writer may have edited its copy: the engine's brief goes back before it reads it again
             e.brief_file.write_text(e.briefs.text(), encoding="utf-8")
         else:  # a whole prompt (a first write, a fresh writer): what the tasks beside this one are doing (tl-bxk.13.8)
-            prompt += e.shared_text() + e.routing.ledger().text()
+            prompt += e.shared.shared_text() + e.routing.ledger().text()
         return prompt, delta
 
     def record(self, s: StageState, fresh: str) -> None:
@@ -77,7 +77,7 @@ class WriteRound:
                                "turns": wr.get("turns"), "prompt_chars": wr.get("prompt_chars"), "context_k": wr.get("context_k"),
                                "fresh": fresh})
         e.writer_said += "\n" + w["summary"]
-        e.add_flakes(w.get("flakes") or [])
+        e.shared.add_flakes(w.get("flakes") or [])
         e.last_summary = w["summary"]
 
     def question(self, s: StageState) -> str:

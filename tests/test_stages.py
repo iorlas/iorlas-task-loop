@@ -186,22 +186,22 @@ class Scope(StagesTest):
         inside = {"what": "the soak holds with three lifers on seed 4", "kind": "checkable"}
         outside = {"what": "Sit To Stand and Laying Sleeping poses were not probed", "kind": "checkable"}
         taste = {"what": "Sit To Stand and Laying Sleeping poses look right", "kind": "taste"}
-        self.assertEqual(e.out_of_scope([inside, outside, taste]), [inside, taste])
+        self.assertEqual(e.cases.out_of_scope([inside, outside, taste]), [inside, taste])
         self.assertEqual(len(e.leftovers), 1)
         self.assertIn("Sit To Stand", e.leftovers[0]["title"])
 
     def test_with_no_acceptance_text_nothing_moves(self):
         e = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         item = {"what": "Sit To Stand was not probed", "kind": "checkable"}
-        self.assertEqual(e.out_of_scope([item]), [item])
+        self.assertEqual(e.cases.out_of_scope([item]), [item])
         self.assertEqual(e.leftovers, [])
 
     def test_non_latin_text_is_compared_and_a_note_is_filed_once(self):
         e = make_engine(self.wt, store=self.store, attrs={"scope": "Done when: суп варится три минуты", "plan_data": dict(PLAN)})
         inside = {"what": "суп варится три минуты на плите", "kind": "checkable"}
         outside = {"what": "wallpaper colour not probed", "kind": "checkable"}
-        self.assertEqual(e.out_of_scope([inside, outside]), [inside])
-        e.out_of_scope([outside])
+        self.assertEqual(e.cases.out_of_scope([inside, outside]), [inside])
+        e.cases.out_of_scope([outside])
         self.assertEqual(len(e.leftovers), 1)
 
     @te.no_repo
@@ -300,34 +300,34 @@ class SharedNotes(StagesTest):
 
     def test_flakes_are_kept_per_repo_once_and_listed_for_the_next_prompts(self):
         e = self.eng_()
-        self.assertEqual(e.known_flakes(), [])
-        e.add_flakes([{"test": "SoakTests.HeapGrowth", "note": "process-wide heap check"}, {"test": " ", "note": "x"}])
-        e.add_flakes([{"test": "SoakTests.HeapGrowth", "note": "again"}])
-        self.assertEqual([f["test"] for f in e.known_flakes()], ["SoakTests.HeapGrowth"])
-        self.assertIn("SoakTests.HeapGrowth", e.flakes_text())
-        self.assertIn("do not build a new isolation", e.flakes_text())
-        self.assertIn("SoakTests.HeapGrowth", self.eng_().shared_text())  # another task of the repo reads the same file
-        e.add_flakes(["not a dict", {"test": "A"}, {"test": "B"}, {"test": "C"}, {"test": "D"}])
-        self.assertEqual([f["test"] for f in e.known_flakes()][1:], ["A", "B", "C"])  # three a write
-        data = json.loads(e.shared_path().read_text())
+        self.assertEqual(e.shared.known_flakes(), [])
+        e.shared.add_flakes([{"test": "SoakTests.HeapGrowth", "note": "process-wide heap check"}, {"test": " ", "note": "x"}])
+        e.shared.add_flakes([{"test": "SoakTests.HeapGrowth", "note": "again"}])
+        self.assertEqual([f["test"] for f in e.shared.known_flakes()], ["SoakTests.HeapGrowth"])
+        self.assertIn("SoakTests.HeapGrowth", e.shared.flakes_text())
+        self.assertIn("do not build a new isolation", e.shared.flakes_text())
+        self.assertIn("SoakTests.HeapGrowth", self.eng_().shared.shared_text())  # another task of the repo reads the same file
+        e.shared.add_flakes(["not a dict", {"test": "A"}, {"test": "B"}, {"test": "C"}, {"test": "D"}])
+        self.assertEqual([f["test"] for f in e.shared.known_flakes()][1:], ["A", "B", "C"])  # three a write
+        data = json.loads(e.shared.shared_path().read_text())
         data["flakes"][0]["t"] = 1  # a writer's word lapses
-        e.shared_path().write_text(json.dumps(data))
-        self.assertNotIn("SoakTests.HeapGrowth", [f["test"] for f in e.known_flakes()])
+        e.shared.shared_path().write_text(json.dumps(data))
+        self.assertNotIn("SoakTests.HeapGrowth", [f["test"] for f in e.shared.known_flakes()])
 
     def test_a_flake_entry_without_a_time_has_lapsed(self):
         e = self.eng_()
-        e.add_flakes([{"test": "Old.Test"}, {"test": "Fresh.Test"}])
-        data = json.loads(e.shared_path().read_text())
+        e.shared.add_flakes([{"test": "Old.Test"}, {"test": "Fresh.Test"}])
+        data = json.loads(e.shared.shared_path().read_text())
         del data["flakes"][0]["t"]
-        e.shared_path().write_text(json.dumps(data))
-        self.assertEqual([f["test"] for f in e.known_flakes()], ["Fresh.Test"])
+        e.shared.shared_path().write_text(json.dumps(data))
+        self.assertEqual([f["test"] for f in e.shared.known_flakes()], ["Fresh.Test"])
 
     def test_a_writer_that_reports_a_flake_tells_the_next_prompts(self):
         flake = dict(WRITE, flakes=[{"test": "SoakTests.HeapGrowth", "note": "failed on the untouched base"}])
         rc, s = self.run_engine({"plan": [PLAN], "write": [flake], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertNotIn("Known flaky", s.prompts[1])
-        self.assertEqual([f["test"] for f in self.eng.known_flakes()], ["SoakTests.HeapGrowth"])
+        self.assertEqual([f["test"] for f in self.eng.shared.known_flakes()], ["SoakTests.HeapGrowth"])
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertIn("SoakTests.HeapGrowth", s.prompts[0])  # the planner
         self.assertIn("SoakTests.HeapGrowth", s.prompts[1])  # the writer's first prompt
@@ -337,7 +337,7 @@ class SharedNotes(StagesTest):
         te.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
         self.commit_base_cfg({"gate": ""})
         te.sh("git", "fetch", "-q", "origin", cwd=self.wt)
-        self.assertEqual(self.eng_().landed_since(), ["engine config"])
+        self.assertEqual(self.eng_().shared.landed_since(), ["engine config"])
 
     def test_a_task_running_in_another_worktree_is_listed_with_its_files(self):
         other = Path(self.tmp.name, "wt2")
@@ -345,11 +345,11 @@ class SharedNotes(StagesTest):
         engine_lock.write_engine_lock(str(other), {"pid": engine.os.getpid(), "start": pidcheck.proc_start(engine.os.getpid()), "bead": "t-2"})
         put_ck(self.eng_(), "t-2", plan_data={"summary": "tune the soak", "stages": [
             {"goal": "g", "files": ["SoakTests.cs", "justfile"], "checks": [], "hard": False}]})
-        got = self.eng_().siblings()
+        got = self.eng_().shared.siblings()
         self.assertEqual(got, [("t-2", "tune the soak", ["SoakTests.cs", "justfile"])])
-        self.assertIn("t-2: tune the soak [files: SoakTests.cs, justfile]", self.eng_().shared_text())
+        self.assertIn("t-2: tune the soak [files: SoakTests.cs, justfile]", self.eng_().shared.shared_text())
         engine_lock.write_engine_lock(str(other), {"pid": 99999999, "start": "", "bead": "t-2"})  # dead
-        self.assertEqual(self.eng_().siblings(), [])
+        self.assertEqual(self.eng_().shared.siblings(), [])
 
     def test_a_branch_behind_the_base_is_rebased_before_it_is_planned(self):
         te.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
@@ -535,12 +535,12 @@ class Executable(StagesTest):
     def test_a_file_an_accepted_stage_promised_and_a_later_check_reads(self):
         e = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         plan = self.two_stage()
-        self.assertEqual(e.promised_missing(plan, 1), 0)  # stage 1 is accepted, the file is gone, stage 2 reads it
+        self.assertEqual(e.cases.promised_missing(plan, 1), 0)  # stage 1 is accepted, the file is gone, stage 2 reads it
         Path(self.wt, self.PATH1).parent.mkdir(parents=True, exist_ok=True)
         Path(self.wt, self.PATH1).write_text("ok\n")
-        self.assertIsNone(e.promised_missing(plan, 1))
+        self.assertIsNone(e.cases.promised_missing(plan, 1))
         Path(self.wt, self.PATH1).unlink()
-        self.assertIsNone(e.promised_missing(plan, 0))  # nothing accepted yet
+        self.assertIsNone(e.cases.promised_missing(plan, 0))  # nothing accepted yet
 
     def test_a_replanned_runs_goals_survive_the_stage_that_runs_again(self):
         e = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
@@ -652,7 +652,7 @@ class Ledger(StagesTest):
 
     def test_ledgered_cases_run_no_command(self):
         e = make_engine(self.wt, store=self.store, attrs={"plan_data": self.plan()})
-        self.assertEqual(e.case_checks(), [HAS_F])
+        self.assertEqual(e.cases.case_checks(), [HAS_F])
         self.assertEqual(lint.plan_checks(self.plan()), [HAS_F] + [c for st in PLAN["stages"] for c in st["checks"] if c != HAS_F])
 
 

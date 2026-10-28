@@ -4,6 +4,7 @@ import re
 
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import EngineConfig
+from taskloop.contracts.paths import TASK_EXCLUDE
 from taskloop.domain.checks import lint
 
 STOP_WORDS = frozenset({"that", "this", "with", "from", "into", "have", "been", "were", "which", "their", "there", "than", "then", "when",
@@ -27,6 +28,11 @@ _ACCEPT_START = re.compile(r"^[ \t>*_#-]*(?:Acceptance Criteria|Done when)\b", r
 def word_set(text: object) -> set[str]:
     """The words of `text` worth comparing: lower case, 3+ letters or digits (any script), no filler."""
     return {w for w in _WORD.findall(str(text).lower()) if w not in STOP_WORDS}
+
+
+def evidence_files(bead: str, text: str) -> list[str]:
+    """The evidence files (.task/<bead>/evidence/...) a check command names."""
+    return re.findall(rf"{re.escape(TASK_EXCLUDE)}{re.escape(bead)}/evidence/[^\s\"'<>|;&)]+", text)
 
 
 def without_runner(cmd: str) -> str:

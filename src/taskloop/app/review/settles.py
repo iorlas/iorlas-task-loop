@@ -52,7 +52,7 @@ class Settles:
         its id, its command, and the command without its runner (`just unity-tests` -> unity-tests)."""
         e = self.e
         stages = (e.plan_data or {}).get("stages") or []
-        cmds = [e.cfg.gate_text] + [c.cmd for c in e.cfg.checks] + [c for st in stages for c in st["checks"]] + e.case_checks()
+        cmds = [e.cfg.gate_text] + [c.cmd for c in e.cfg.checks] + [c for st in stages for c in st["checks"]] + e.cases.case_checks()
         names = [c.id for c in e.cfg.checks]
         for cmd in cmds:
             c = " ".join(cmd.split())

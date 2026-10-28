@@ -151,7 +151,7 @@ class OneWriter(unittest.TestCase):
 
 
 OK = {"src/taskloop/app/run/state.py", "src/taskloop/stores/books.py", "src/taskloop/stores/real.py", "src/taskloop/stores/memory.py",
-      "skills/task-loop/engine.py"}  # engine.py: the sibling's plan is read (siblings()), never written
+      "src/taskloop/app/run/shared.py"}  # shared.py: the sibling's plan is read (siblings()), never written
 
 
 if __name__ == "__main__":

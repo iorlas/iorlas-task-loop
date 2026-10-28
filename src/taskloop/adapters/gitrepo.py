@@ -172,3 +172,11 @@ def repo_root(cwd: str | Path | None = None) -> str:
         p = Path(common)
         return str(p.parent if p.name == ".git" else p)
     return git("rev-parse", "--show-toplevel", cwd=cwd) or str(Path(cwd or os.getcwd()).resolve())
+
+
+def same_dir(a: object, b: object) -> bool:
+    """The same folder: os.path.samefile, realpath equality when either path is missing."""
+    try:
+        return os.path.samefile(str(a), str(b))
+    except OSError:
+        return os.path.realpath(str(a)) == os.path.realpath(str(b))

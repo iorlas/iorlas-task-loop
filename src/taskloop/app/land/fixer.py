@@ -58,7 +58,7 @@ class Fixer:
         skip = None
         if kind == "conflict":
             checks = [c for s in (e.plan_data or {}).get("stages") or [] for c in s["checks"]]
-            skip = list(dict.fromkeys(checks + e.case_checks()))
+            skip = list(dict.fromkeys(checks + e.cases.case_checks()))
         return {"fix": True, "conflict_fix": skip, "name": f"fix {e.fixes}/{limit}", "fix_n": e.fixes, "fix_of": limit,
                 "failed": [e.cfg.gate_text or "rebase"] if kind == "gate" else None, "feedback": self.feedback(kind, tail),
                 "scope": f"the fix only: it must {GOAL[kind]} without breaking what the accepted stages built"}

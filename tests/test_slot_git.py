@@ -19,6 +19,7 @@ import engine  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 import test_engine as te  # noqa: E402
 from taskloop.adapters.gitenv import pinned_env  # noqa: E402
+from taskloop.adapters import gitrepo  # noqa: E402
 from support.fakes import FakeBeadStore  # noqa: E402
 from taskloop.app.wire import doctor  # noqa: E402
 from taskloop.adapters import delegate as dl, runner  # noqa: E402
@@ -187,9 +188,9 @@ class SlotGitTest(unittest.TestCase):
     def test_samefile_compares_folders_and_falls_back_to_realpath(self):
         link = Path(self.tmp.name) / "link"
         link.symlink_to(self.wt)
-        self.assertTrue(engine.same_dir(link, self.wt))
-        self.assertFalse(engine.same_dir(self.decoy, self.wt))
-        self.assertTrue(engine.same_dir(link / "nope", self.wt / "nope"))
+        self.assertTrue(gitrepo.same_dir(link, self.wt))
+        self.assertFalse(gitrepo.same_dir(self.decoy, self.wt))
+        self.assertTrue(gitrepo.same_dir(link / "nope", self.wt / "nope"))
 
     def test_doctor_warns_when_worktree_config_is_off(self):
         self.assertTrue(any("extensions.worktreeConfig" in w for w in doctor.git_warnings(str(self.repo))))

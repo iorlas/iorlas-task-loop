@@ -185,7 +185,7 @@ class WriterAndProjectLog(Base):
         slow = PY + ' -c "pass"'
         eng = self.checks_engine(checks=[{"id": "an", "cmd": slow, "group": "static", "writer": True},
                                          {"id": "full", "cmd": "just full", "group": "tests", "writer": False}], writer_check_max_s=1)
-        text = eng.stage_checks_text([slow, "just full"])
+        text = eng.briefing.stage_checks_text([slow, "just full"])
         self.assertIn("You may run these:\n- " + slow, text)
         self.assertIn("The engine runs these, do not run them:\n- just full", text)
 

@@ -18,7 +18,7 @@ class CheckRound:
         """The round's checks. -> "" when they are green, else AGAIN or REPLAN."""
         e = self.e
         s.acc_first = s.acc_only and not s.acc_first  # once, then the normal order: a check may read what a tests-group check writes
-        stage = dict(s.st, checks=s.st["checks"] + (e.case_checks() if s.last else []))
+        stage = dict(s.st, checks=s.st["checks"] + (e.cases.case_checks() if s.last else []))
         run = e.stoppable_checks(stage, s.name, acceptance_first=s.acc_first, conflict_fix=s.state.get("conflict_fix"), round=s.rounds + 1,
                            **s.meta)
         s.run, e.last_run = run, run
@@ -68,7 +68,8 @@ class CheckRound:
         s.red += 1
         s.failed_cmds = [c.cmd for c in failed]
         brief = check_evidence.failure_brief(failed, e.run_dir)
-        s.feedback = f"\nThese checks fail (run by the engine, outside your sandbox). Fix exactly this:\n{brief}\n" + e.base_red_text(run)
+        s.feedback = (f"\nThese checks fail (run by the engine, outside your sandbox). Fix exactly this:\n{brief}\n"
+                      + e.briefing.base_red_text(run))
         again = [c.cmd for c in failed if c.cmd in prev_red and c.id == c.cmd]  # a plan's check, not a repo check
         if again:  # tl-bxk.13.11: lifesim-fdyo tuned contrast to a threshold the plan made up, 3 rounds, 5.98M tokens in one turn
             s.feedback += REPEAT_RED % "\n".join(f"- {c[:200]}" for c in again)

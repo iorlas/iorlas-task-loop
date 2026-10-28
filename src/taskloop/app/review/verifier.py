@@ -69,7 +69,8 @@ class Verifier:
             return {"items": []}
         items = "".join(f"{n}. {u['what']} ({u['kind']})\n" for n, u in enumerate(gaps, 1)) + e.judge.look_verify(gaps)
         prompt = VERIFY_PROMPT.format(brief=e.briefs.text(), work=e.settles.work_summary(), evidence=e.evidence_dir,
-                                      checks=e.settles.evidence_text(), where=e.where("verify"), items=items) + e.routing.ledger().text()
+                                      checks=e.settles.evidence_text(), where=e.briefing.where("verify"),
+                                      items=items) + e.routing.ledger().text()
         try:
             d, _ = e.ai("verify", f"{len(gaps)} unchecked item(s) before land", prompt, writer_family=e.writer_family,
                         items=len(gaps), at=(e.at_stage, 0, 0))
