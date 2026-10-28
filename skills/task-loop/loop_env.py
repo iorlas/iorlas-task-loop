@@ -17,7 +17,7 @@ from taskloop.domain.beads import matchers as beadlint
 import engine
 import loop_health as lh
 import seams
-from taskloop.app.release import catalog
+from taskloop.app.release import catalog, reexec
 from taskloop.app.slots import engine_lock
 from taskloop.app.release import pins
 from taskloop.app.track import trail
@@ -129,8 +129,8 @@ def landed_on_base(repo, store, wt, bead_id):
 
 
 def reload_note(bead):
-    rec = engine.read_reexec(bead)
-    engine.drop_reexec(bead)
+    rec = reexec.read_reexec(bead)
+    reexec.drop_reexec(bead)
     if not rec:
         return None
     return ReloadNote(run=str(rec.get("run") or ""), to=str(rec.get("to") or ""), frm=str(rec.get("from") or ""),

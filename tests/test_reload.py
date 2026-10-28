@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support.checkpoints import put_ck, read_ck  # noqa: E402
 sys.path.insert(0, str(ROOT / "tests"))
+from taskloop.app.release import reexec  # noqa: E402
 import engine  # noqa: E402
 from support.builders import cfg_with  # noqa: E402
 import seams  # noqa: E402
@@ -97,7 +98,7 @@ class Reload(unittest.TestCase):
         eng.argv = ["run-task", "t-1", "--worktree", str(self.wt), "--fresh", "--outcome-file", "/x/out.json"]
 
         def fake_exec(argv):
-            self.execs.append({"argv": argv, "env": json.loads(os.environ["TL_REEXEC"]), "marker": engine.read_reexec("t-1")})
+            self.execs.append({"argv": argv, "env": json.loads(os.environ["TL_REEXEC"]), "marker": reexec.read_reexec("t-1")})
         eng.exec_fn = fake_exec
         eng.newer_fn = lambda: loop_env.vet_newer(self.here)  # pyrefly: ignore[bad-assignment]
         return eng
@@ -157,7 +158,7 @@ class Reload(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertTrue(self.closed and self.closed[0].startswith("merged "))
         self.assertEqual(gitrepo.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")  # pyrefly: ignore[missing-attribute]
-        self.assertFalse(engine.reexec_path("t-1").exists())  # a run that ended is no crash after an exec
+        self.assertFalse(reexec.reexec_path("t-1").exists())  # a run that ended is no crash after an exec
         logs = [json.loads(x) for x in eng.log_path.read_text().splitlines()]
         self.assertEqual(len([x for x in logs if x["kind"] == "run_start"]), 1)  # one run record for the one run
         self.assertTrue([x["text"] for x in logs if x["kind"] == "note" and x["text"].startswith("task-loop 0.")][-1].startswith("task-loop 0.2.0 took"))
@@ -166,9 +167,9 @@ class Reload(unittest.TestCase):
         self.assertEqual(eng2.stats["writes"], eng.stats["writes"])  # the counters went across
 
     def test_the_move_slot_is_handed_on_and_given_back_by_the_new_image(self):
-        self.assertEqual(engine.reexec_args(["run-task", "t-1", "--slot", "any", "--wait", "--worktree", "/w", "--quiet"], "s2", "/wt"),
+        self.assertEqual(reexec.reexec_args(["run-task", "t-1", "--slot", "any", "--wait", "--worktree", "/w", "--quiet"], "s2", "/wt"),
                          ["run-task", "t-1", "--quiet", "--slot", "s2", "--worktree", "/wt"])
-        self.assertIsNone(engine.reexec_args(["loop", "--repo", "."], "", "/wt"))
+        self.assertIsNone(reexec.reexec_args(["loop", "--repo", "."], "", "/wt"))
         with mock.patch.dict(os.environ, {"TL_REEXEC": json.dumps({"run": "x", "owned": "s2"})}):
             self.assertTrue(engine._handed_slot("s2"))
             self.assertFalse(engine._handed_slot("s3"))
@@ -226,8 +227,8 @@ class Reload(unittest.TestCase):
                 if len(spawned) == 2:  # the fallback run gives its outcome
                     Path(self.cmd[self.cmd.index("--outcome-file") + 1]).write_text(json.dumps({"outcome": "landed"}))
                     return 0
-                engine.reexec_path("t-1").parent.mkdir(parents=True, exist_ok=True)
-                engine.reexec_path("t-1").write_text(json.dumps({"run": "t-1-20261026-120000", "bead": "t-1", "from": "0.1.0", "to": "0.2.0",
+                reexec.reexec_path("t-1").parent.mkdir(parents=True, exist_ok=True)
+                reexec.reexec_path("t-1").write_text(json.dumps({"run": "t-1-20261026-120000", "bead": "t-1", "from": "0.1.0", "to": "0.2.0",
                                                                   "from_dir": str(old), "t": time.time()}))
                 return 1  # import error of the new image: no outcome, the note is still there
 
@@ -260,7 +261,7 @@ class Reload(unittest.TestCase):
         self.assertEqual([(e["old"], e["new"]) for e in fb], [("0.2.0", "0.1.0")])
         self.assertIn("0.2.0", [e["version"] for e in json.loads((ident.config_dir() / "bad-versions.json").read_text())["entries"]])
         self.assertTrue(any("RED" in c for c in said))
-        self.assertFalse(engine.reexec_path("t-1").exists())
+        self.assertFalse(reexec.reexec_path("t-1").exists())
 
     # -- point 2: delegate is resolved per call, never held
     def test_delegate_route_is_resolved_again_each_call(self):

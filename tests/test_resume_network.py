@@ -28,6 +28,7 @@ import test_stages_visual  # noqa: E402
 from test_engine import BEAD, CLEAN, PLAN, WRITE, engine, stop, verdict  # noqa: E402
 from taskloop.adapters import gitrepo
 from taskloop.adapters import ident
+from taskloop.app.release import reexec
 
 SAY = "codex: Reconnecting... waiting for network (Connection failed: error sending request)"
 REPLAY = te.ROOT / "tests" / "fixtures" / "replay" / "5ban16_plan_network_drop.jsonl"
@@ -269,7 +270,7 @@ class Pause(NetBase):
         self.pause_in_review()
         run = self.eng.log_path.stem
         real = time.time
-        with mock.patch.object(engine.time, "time", lambda: real() + engine.NET_PAUSE_ADOPT_S + 60):
+        with mock.patch.object(engine.time, "time", lambda: real() + reexec.NET_PAUSE_ADOPT_S + 60):
             self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, probe=Cycling(0))
         self.assertNotEqual(self.eng.log_path.stem, run)
 

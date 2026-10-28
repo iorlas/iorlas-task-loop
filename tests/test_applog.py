@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills" / "task-lo
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from taskloop.adapters import applog  # noqa: E402
 from taskloop.app.track import trail  # noqa: E402
+from taskloop.app.release import reexec  # noqa: E402
 import engine  # noqa: E402
 from support.builders import cfg_with  # noqa: E402
 from taskloop.adapters import ident
@@ -143,7 +144,7 @@ class WiringTest(unittest.TestCase):
     def test_exec_in_place_closes_every_handle_first(self):
         applog.append(Path(self.tmp.name) / "x.log", "x\n")
         with mock.patch.object(engine.os, "execv", side_effect=lambda *a: self.assertEqual(applog.open_count(), 0)):
-            engine.exec_in_place(["x"])
+            reexec.exec_in_place(["x"])
 
 
 if __name__ == "__main__":

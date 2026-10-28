@@ -40,7 +40,7 @@ class StageLoop:
         e = self.e
         if not s.fix:  # a fix runs at land: its checkpoint stays at land, and a resume lands again
             e.checkpoints.save(stage=s.i, rounds=s.rounds, n=s.n, feedback=s.feedback, step="write")
-            e.safe_point("write")  # the round's write, checks and review run on the code that is installed now
+            e.reload.safe_point("write")  # the round's write, checks and review run on the code that is installed now
         s.n += 1
         e.stats["writes"] += 1
         if s.n >= 2:
