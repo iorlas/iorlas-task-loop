@@ -629,9 +629,9 @@ class LaneBanner(unittest.TestCase):
         self.assertEqual(self.banners({"CLAUDE_SUBSCRIPTION": self.lane(out=True, reason="busy")}), {})
 
     def test_delegate_status_carries_the_text(self):
-        j = {"v": 1, "lanes": {"CLAUDE_SUBSCRIPTION": self.lane(out=True, notes=["claude is logged out: run `claude auth login`"])}}
         j = {"v": 1, "lanes": {"CLAUDE_SUBSCRIPTION": self.lane(out=True, notes=["claude is logged out: run `claude auth login`"])},
              "cockpit": {"v": 1, "lanes": [{"id": "CLAUDE_SUBSCRIPTION", "state": "logged_out"}]}}
+        self.dash = make_dash()
         with mock.patch.object(glob, "glob", return_value=["/x/iorlas-delegate/0.35.0/skills/delegate/route.py"]), \
                 mock.patch.object(subprocess, "run", return_value=mock.Mock(stdout=json.dumps(j))):
             d = self.dash.lanes.delegate_status()
