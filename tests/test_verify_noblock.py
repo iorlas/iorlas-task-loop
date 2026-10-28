@@ -69,7 +69,7 @@ class NoBlock(unittest.TestCase):
         return [c[3] for c in self.bd_calls if c[:2] == ("comments", "add")]
 
     def creates(self):
-        return [c for c in self.bd_calls if c[0] == "create" and "--labels" in c]  # review beads (leftovers have no label)
+        return [c for c in self.bd_calls if c[0] == "create" and "owner-look" in c]  # review beads (leftovers carry a from: label)
 
     def test_an_engine_step_is_settled_by_the_engine_with_no_verifier_and_no_ask(self):
         for item in (YXBB_7, FLD_25_16):

@@ -10,6 +10,7 @@ from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.prompts.common import LATER_CASES, UNCHECKED_TEXT
 from taskloop.domain.prompts.review import acceptance_text, review_prompt
 from taskloop.domain.review import findings as fnd
+from taskloop.domain.review.followups import FollowKey
 from taskloop.domain.review.matchers import AcceptanceItems
 
 CASES_RAN = ("The engine ran every case above with the checks, so a case is never an unchecked item; a case whose "
@@ -73,7 +74,7 @@ class ReviewRound:
         for why in routed.dropped:
             e.log.note(f"unmet item dropped: {why}")
         for lo in routed.files:
-            if lo["title"] not in {x["title"] for x in e.leftovers}:
+            if FollowKey.of(e.bead, lo) not in {FollowKey.of(e.bead, x) for x in e.leftovers}:
                 e.leftovers.append(lo)
                 e.log.note(f"filed as a follow-up bead, not sent back: {lo['title'][:120]}")
         out = fnd.lows_after_first(routed.findings, s.rounds + 1)

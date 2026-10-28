@@ -62,9 +62,11 @@ class Routed:
     dropped: list[str] = field(default_factory=list)  # "goal is met" remarks and ledger-settled items, with why
 
 
-def follow_up(text: str, why: str) -> dict[str, str]:
+def follow_up(text: str, why: str, category: str = "", file: str = "") -> dict[str, str]:
+    """A follow-up bead to file; `category` and `file` are its key (domain/review/followups.py)."""
     title = "Follow-up: " + " ".join(text.split())[:100]
-    return {"title": title, "why": f"{why}: {' '.join(text.split())[:500]}"}
+    lo = {"title": title, "why": f"{why}: {' '.join(text.split())[:500]}"}
+    return dict(lo, category=category, file=file) if category else lo
 
 
 def clauses(text: str) -> list[str]:
@@ -101,13 +103,13 @@ def route(unmet: Sequence[str], findings: Sequence[Finding], ledger: Ledger) -> 
             dropped.append(f"the plan's ledger settles it: {u[:80]}")
         else:
             mine, theirs = split_demands(u)
-            files += [follow_up(c, WHY[k]) for c, k in theirs]
+            files += [follow_up(c, WHY[k], k) for c, k in theirs]
             if mine:
                 keep.append(mine)
     kept: list[Finding] = []
     for f in findings:
         mine, theirs = split_demands(str(f.get("fix") or ""))
-        files += [follow_up(c, WHY[k]) for c, k in theirs]
+        files += [follow_up(c, WHY[k], str(f.get("category") or k), str(f.get("file") or "")) for c, k in theirs]
         if not theirs:
             kept.append(f)
         elif mine:
