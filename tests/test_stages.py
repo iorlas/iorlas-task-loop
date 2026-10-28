@@ -474,6 +474,7 @@ class Executable(StagesTest):
     @te.NO_BASH
     def test_a_just_recipe_must_exist_in_the_tree(self):
         tools.need(self, "just")
+        self.enterContext(tools.on_path("just"))
         (self.wt / "justfile").write_text("fmt-check:\n\techo ok\n")
         lint._RECIPES.clear()
         self.assertEqual(lint.command_problems("just fmt-check && echo done", str(self.wt)), [])
@@ -494,6 +495,7 @@ class Executable(StagesTest):
     @te.NO_BASH
     def test_just_aliases_private_recipes_options_and_a_recipe_a_stage_adds(self):
         tools.need(self, "just")
+        self.enterContext(tools.on_path("just"))
         (self.wt / "justfile").write_text("alias ci := check\ncheck:\n\techo ok\n_private:\n\techo p\n")
         lint._RECIPES.clear()
         for ok in ("just ci", "just _private", "just --justfile justfile check", "just --set v x check", "just -d . check", "just check"):
