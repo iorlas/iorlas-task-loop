@@ -41,9 +41,10 @@ sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(ROOT / "tests"))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import tl  # noqa: E402
-from taskloop.app.slots import marks  # noqa: E402
 import vendored  # noqa: E402,F401
 from process_lock import LockHeldError, ProcessLock  # noqa: E402
+
+from taskloop.app.slots import marks  # noqa: E402
 
 PY = sys.executable
 BEADS = ["w-%d" % i for i in range(1, 7)]
@@ -249,7 +250,7 @@ class Race(unittest.TestCase):
         for f in sorted((self.h / "cfg" / "task-loop" / "engine").glob("*.jsonl")):  # a run that did not land: why, from its own log (tl-bjd)
             lines = f.read_text(errors="replace").splitlines()
             if lines and "landed" not in lines[-1]:
-                parts.append("== engine log %s (did not land), last records\n%s" % (f.name, "\n".join(l[:600] for l in lines[-8:])))
+                parts.append("== engine log %s (did not land), last records\n%s" % (f.name, "\n".join(ln[:600] for ln in lines[-8:])))
         for f in sorted((self.h / "cfg" / "task-loop" / "loop").glob("*.jsonl")):
             parts.append("== %s\n%s" % (f.name, f.read_text(errors="replace")[-3000:]))
         return "\n".join(parts)

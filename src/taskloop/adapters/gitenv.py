@@ -3,6 +3,7 @@ import os
 import re
 import subprocess
 from pathlib import Path
+from typing import Any
 
 
 def pinned_env(path: str | Path) -> dict[str, str]:
@@ -29,6 +30,6 @@ def git_env(path: str | Path) -> dict[str, str]:
     return dict(os.environ, **pinned_env(path))
 
 
-def run_git(path: str | Path, *args: str, **kw: object) -> subprocess.CompletedProcess[str]:
+def run_git(path: str | Path, *args: str, **kw: Any) -> subprocess.CompletedProcess[Any]:
     """`git -C path args`, pinned to the checkout at `path` (the one helper for subprocess git calls on a checkout)."""
-    return subprocess.run(["git", "-C", str(path), *args], env=git_env(path), **kw)  # type: ignore[call-overload]
+    return subprocess.run(["git", "-C", str(path), *args], env=git_env(path), check=False, **kw)

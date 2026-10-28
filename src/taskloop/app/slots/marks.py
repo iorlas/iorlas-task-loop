@@ -25,7 +25,7 @@ def hold_of(b: Bead | None, now: float) -> Hold | None:
 
 def held_by(b: Bead) -> str:
     m = b.metadata
-    return "%s since %s (%s)" % (m.get("held_by") or b.assignee or "?", m.get("held_since") or "?", m.get("held_why") or "no reason")
+    return "{} since {} ({})".format(m.get("held_by") or b.assignee or "?", m.get("held_since") or "?", m.get("held_why") or "no reason")
 
 
 def mark_held(env: SlotEnv, bead_id: str, why: str, until: float = 0, bead: str = "") -> None:
@@ -34,7 +34,7 @@ def mark_held(env: SlotEnv, bead_id: str, why: str, until: float = 0, bead: str 
     dead holder's slot bead but keeps its metadata, its bead's area with it."""
     sets = {"held_by": env.actor, "held_since": stamp(env.now()), "held_why": why}
     unset = []
-    for key, value in (("hold_until", "%d" % until if until else ""), ("held_bead", bead)):
+    for key, value in (("hold_until", f"{until:.0f}" if until else ""), ("held_bead", bead)):
         if value:
             sets[key] = value
         else:

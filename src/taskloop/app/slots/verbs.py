@@ -28,11 +28,11 @@ def listing(env: SlotEnv, a: Any) -> int:
         held = b.status == "in_progress" or hold
         m = b.metadata
         holder = (m.get("held_by") or b.assignee or "?") if held else "-"
-        why = ("%s (hold until %s)" % (hold.why, stamp(hold.until)) if hold else
-               "%s since %s" % (m.get("held_why") or "?", m.get("held_since") or "?") if held else "-")
+        why = (f"{hold.why} (hold until {stamp(hold.until)})" if hold else
+               "{} since {}".format(m.get("held_why") or "?", m.get("held_since") or "?") if held else "-")
         env.say("\t".join([s.name, b.id, b.status, holder, why, env.busy(s.dir) or "-", s.dir]))
     for n, t in enumerate(waiting_line(env), 1):
-        env.say("\t".join(["WAITING", str(n), "P%s" % order(t)[0], "pid %s" % t.pid, t.why or "-", stamp(t.since) if t.since else "-"]))
+        env.say("\t".join(["WAITING", str(n), f"P{order(t)[0]}", f"pid {t.pid}", t.why or "-", stamp(t.since) if t.since else "-"]))
     return 0
 
 
@@ -52,18 +52,18 @@ def hold(env: SlotEnv, a: Any) -> int:
         mine = s.hold()
         busy = env.busy(s.dir)
         if not busy and mine and mine.by != env.actor:
-            busy = "held by %s until %s: %s" % (mine.by, stamp(mine.until), mine.why)
+            busy = f"held by {mine.by} until {stamp(mine.until)}: {mine.why}"
         if not busy and not mine and b.status != "open":
-            busy = "held by %s" % held_by(b)
+            busy = f"held by {held_by(b)}"
         if not busy and b.status == "open" and not s.claimed():
             busy = "claimed by another session just now"
         if busy:  # renewing one's own hold is fine; anything else in use is never held
-            env.say("BUSY: slot %s %s" % (a.name, busy))
+            env.say(f"BUSY: slot {a.name} {busy}")
             return 1
         until = env.now() + float(a.for_min if a.for_min is not None else 60) * 60
         mark_held(env, b.id, a.why, until)
     env.event("slot-hold", "", slot=a.name, slot_bead=b.id, why=a.why, until=until, repo=env.repo)
-    env.say("HELD %s until %s: %s" % (a.name, stamp(until), a.why))
+    env.say(f"HELD {a.name} until {stamp(until)}: {a.why}")
     return 0
 
 
@@ -76,9 +76,9 @@ def init(env: SlotEnv, a: Any) -> int:
     pool = SlotPool(env)
     have = {b.title.split()[-1] for b in pool.beads()}
     for i in range(1, n + 1):
-        name = "s%d" % i
+        name = f"s{i}"
         if name not in have:
-            env.store.create(NewBead(title="slot %s %s" % (env.host, name), issue_type="chore", labels=["slot"], priority=4,
+            env.store.create(NewBead(title=f"slot {env.host} {name}", issue_type="chore", labels=["slot"], priority=4,
                                      description="Slot worktree " + name + " for task-loop. Claimed while a session uses it; never work."))
         d = env.dir_of(name)
         env.exclude_local(env.repo)

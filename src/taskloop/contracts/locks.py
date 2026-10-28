@@ -24,7 +24,7 @@ class LockTimeout(TimeoutError):
     """A wait for a lock ran out; `holder` is who had it (None when unreadable)."""
 
     def __init__(self, what: str, holder: "LockRecord | None") -> None:
-        super().__init__("%s held by %s" % (what, holder.holder if holder else "?"))
+        super().__init__("{} held by {}".format(what, holder.holder if holder else "?"))
         self.holder = holder
 
 

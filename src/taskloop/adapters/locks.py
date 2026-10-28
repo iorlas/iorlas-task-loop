@@ -40,7 +40,7 @@ def read_holder(path: Path, pid: int | None = None) -> LockRecord | None:
     try:
         return codec.from_json(LockRecord, json.loads(holder_file(path).read_text(encoding="utf-8")))
     except (OSError, ValueError):
-        return None if pid is None else LockRecord(what=LockWhat.LAND, holder="pid %d" % pid, pid=pid, t=0.0)  # pyrefly: ignore[unexpected-keyword]
+        return None if pid is None else LockRecord(what=LockWhat.LAND, holder=f"pid {pid}", pid=pid, t=0.0)  # pyrefly: ignore[unexpected-keyword]
 
 
 @contextlib.contextmanager

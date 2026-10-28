@@ -66,7 +66,8 @@ class FakeSlotGit:
     def checkout(self, d: str, branch: str) -> None:
         t = self._go("checkout", d, branch)
         if branch in self.elsewhere:
-            raise BranchPinned("fatal: '%s' is already used by worktree at '%s'" % (branch, self.elsewhere[branch].path), self.elsewhere[branch].path)
+            where = self.elsewhere[branch].path
+            raise BranchPinned(f"fatal: '{branch}' is already used by worktree at '{where}'", where)
         t.branch, t.head = branch, branch
 
     def checkout_new(self, d: str, branch: str, start: str) -> None:

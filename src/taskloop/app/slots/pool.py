@@ -23,12 +23,11 @@ class Slot:
         """Why this slot cannot be taken now, "" when it can: a hold, a claim, or a live engine in its worktree."""
         hold = self.hold()
         if hold:
-            return "held by %s since %s until %s: %s (tl slot release %s ends it)" % (
-                hold.by, hold.since, stamp(hold.until), hold.why, self.name)
+            return f"held by {hold.by} since {hold.since} until {stamp(hold.until)}: {hold.why} (tl slot release {self.name} ends it)"
         if self.bead.status != "open":
-            return "held by %s" % held_by(self.bead)
+            return f"held by {held_by(self.bead)}"
         busy = self.env.busy(self.dir)
-        return "busy: %s" % busy if busy else ""
+        return f"busy: {busy}" if busy else ""
 
     def claimed(self) -> bool:
         """True when this session won the slot bead's claim."""
@@ -40,9 +39,9 @@ class Slot:
         """The slot bead's id once this session holds the slot; the caller holds the repo's take lock. Fails busy."""
         why_not = self.free_reason()
         if why_not:
-            raise SlotFail("busy", "slot %s %s" % (self.name, why_not))
+            raise SlotFail("busy", f"slot {self.name} {why_not}")
         if not self.claimed():
-            raise SlotFail("busy", "slot %s held by %s" % (self.name, held_by(peek(self.env.store, self.bead.id) or self.bead)))
+            raise SlotFail("busy", f"slot {self.name} held by {held_by(peek(self.env.store, self.bead.id) or self.bead)}")
         mark_held(self.env, self.bead.id, why, bead=bead)
         self.env.event("slot-take", "", slot=self.name, slot_bead=self.bead.id, worktree=self.dir, repo=self.env.repo,
                        **({"ticket": ticket} if ticket is not None else {}))
@@ -55,7 +54,7 @@ class Slot:
             self.pool.free_expired()
             fresh = self.pool.bead(self.name)
             if fresh is None:
-                raise SlotFail("slot_broken", "no slot %s on %s (tl slot list)" % (self.name, self.env.host))
+                raise SlotFail("slot_broken", f"no slot {self.name} on {self.env.host} (tl slot list)")
             return Slot(self.pool, self.name, fresh).take_locked(why, bead)
 
     def ready_for(self, bead: str, *, force: bool = False) -> None:
@@ -69,7 +68,7 @@ class Slot:
         if not mine:  # a person or the loop ending a slot by name: never under a live engine, unless forced (which drops its lock)
             busy = self.env.busy(self.dir)
             if busy and not force:
-                raise SlotFail("busy", "slot %s: %s; it frees itself when that run ends (--force: release and drop the lock)" % (self.name, busy))
+                raise SlotFail("busy", f"slot {self.name}: {busy}; it frees itself when that run ends (--force: release and drop the lock)")
             if busy:
                 self.env.drop_engine_lock(self.dir)
         with self.env.take_lock():
@@ -82,7 +81,7 @@ class Slot:
         if mine:
             m = b.metadata
             if m.get("held_by") != self.env.actor or (bead is not None and m.get("held_bead") not in (None, "", bead)):
-                self.env.warn("tl: slot %s is no longer held by %s%s (now %s): left alone" % (
+                self.env.warn("tl: slot {} is no longer held by {}{} (now {}): left alone".format(
                     self.name, self.env.actor, " for " + bead if bead else "", held_by(b) if b.status != "open" else "free"))
                 return True
         # the holder's marks go first, while the bead is still claimed: unclaimed first, a hold taken in between would lose
@@ -114,13 +113,13 @@ class SlotPool:
     def slot(self, name: str) -> Slot:
         b = self.bead(name)
         if b is None:
-            raise SlotFail("slot_broken", "no slot %s on %s (tl slot list)" % (name, self.env.host))
+            raise SlotFail("slot_broken", f"no slot {name} on {self.env.host} (tl slot list)")
         return Slot(self, name, b)
 
     def named(self, name: str) -> Slot:
         """The slot `name` for a reset or a setup, which need only its worktree: no bead (id "") when bd has none."""
         b = self.bead(name)
-        return Slot(self, name, b or Bead(id="", title="slot %s %s" % (self.env.host, name), status=""))
+        return Slot(self, name, b or Bead(id="", title=f"slot {self.env.host} {name}", status=""))
 
     def name_of(self, wt: str) -> str:
         """The slot whose worktree `wt` is, or ""."""

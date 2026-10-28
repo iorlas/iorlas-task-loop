@@ -28,11 +28,24 @@ from taskloop.stores.memory import MemTickets  # noqa: E402
 ME = "tl-me"
 
 
+class Beating(FakeBeads):
+    """FakeBeads that remembers its heartbeats."""
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.beats = []
+
+    def heartbeat(self, bead):
+        self.beats.append(bead)
+        super().heartbeat(bead)
+
+
 class Rig(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
-        self.git, self.bd, self.tickets = FakeSlotGit(), FakeBeads(actor=ME, prefix="sl"), MemTickets()
+        self.git, self.tickets = FakeSlotGit(), MemTickets()
+        self.bd = Beating(actor=ME, prefix="sl")
         self.out, self.err, self.events, self.sleeps, self.busy_at, self.t = [], [], [], [], {}, [1000.0]
         self.env = SlotEnv(
             repo="/r", repo_key="r-1", cfg=SlotsConfig(count=2, keep=["ignored"]), store=self.bd, git=self.git, tickets=self.tickets,
@@ -228,26 +241,22 @@ class Line(Rig):
 
 class OneLease(Rig):
     def test_a_lease_beats_every_bead_it_holds_and_the_beat_never_raises(self):
-        beats = []
-        self.bd.heartbeat = lambda b: beats.append(b)
-        lease = Lease(self.bd, "x-1", "", "sl-s1")
+        for b in ("x-1", "x-2"):
+            self.bd.beads[b] = Bead(id=b, title=b, status="open")
+        lease = Lease(self.bd, "x-1", None, "sl-s1")
         lease.add("x-2")
         lease.beat()
         lease.drop("x-1")
         lease.beat()
-        self.assertEqual(beats, ["x-1", "sl-s1", "x-2", "sl-s1", "x-2"])
-        lease.ids.append("nope")
-        lease = Lease(FakeBeads(), "nope")
-        lease.beat()  # bd refuses: nothing changes
+        self.assertEqual(self.bd.beats, ["x-1", "sl-s1", "x-2", "sl-s1", "x-2"])
+        Lease(FakeBeads(), "nope").beat()  # bd refuses: nothing changes
 
     def test_the_thread_beats_until_stopped(self):
-        beats = []
-        self.bd.heartbeat = lambda b: beats.append(b)
-        with Lease(self.bd, "x-1", every=0.01):
+        with Lease(self.bd, "sl-s1", every=0.01):
             deadline = time.monotonic() + 5
-            while len(beats) < 2 and time.monotonic() < deadline:
+            while len(self.bd.beats) < 2 and time.monotonic() < deadline:
                 time.sleep(0.005)
-        self.assertGreaterEqual(len(beats), 2)
+        self.assertGreaterEqual(len(self.bd.beats), 2)
 
 
 if __name__ == "__main__":

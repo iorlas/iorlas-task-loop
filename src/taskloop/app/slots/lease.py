@@ -12,9 +12,9 @@ EVERY = 60.0  # seconds between beats; bd leases last 5 minutes
 
 
 class Lease:
-    def __init__(self, store: Beads, *ids: str, every: float = EVERY) -> None:
+    def __init__(self, store: Beads, *ids: str | None, every: float = EVERY) -> None:
         self.store, self.every = store, every
-        self.ids = [i for i in ids if i]
+        self.ids: list[str] = [i for i in ids if i]
         self.stopped = threading.Event()
         self.thread = threading.Thread(target=self.run, daemon=True)
 

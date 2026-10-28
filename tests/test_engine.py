@@ -1253,7 +1253,7 @@ class EngineTest(unittest.TestCase):
         self.assertIn("stopped (SIGTERM)", self.said())
 
     def test_the_heartbeat_keeps_the_slot_bead_the_loop_names(self):
-        hb = engine.Lease(self.store, "t-1", "sl-1")
+        hb = engine.Lease(self.store, "t-1", "sl-1")  # pyrefly: ignore[bad-argument-type]
         with mock.patch.object(hb.stopped, "wait", side_effect=[False, True]):
             hb.run()
         self.assertEqual([c for c in self.bd_calls if c[0] == "heartbeat"], [("heartbeat", "t-1"), ("heartbeat", "sl-1")])

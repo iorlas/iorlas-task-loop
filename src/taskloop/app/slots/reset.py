@@ -16,21 +16,21 @@ T = TypeVar("T")
 TRIES = 3  # a git lock (index.lock, a ref) held by another process is waited for this many times before the slot is broken
 
 
-def retrying(env: SlotEnv, what: str, call: Callable[[], T]) -> T:
+def retrying[T](env: SlotEnv, what: str, call: Callable[[], T]) -> T:
     """`call`, again while git reports a lock another process holds; BranchPinned is the bead's, anything else the slot's."""
     for i in range(TRIES):
         try:
             return call()
         except (IndexLocked, RefRace) as e:
             if i == TRIES - 1:
-                raise SlotFail("slot_broken", "%s: git is locked: %s" % (what, e.tail)) from e
+                raise SlotFail("slot_broken", f"{what}: git is locked: {e.tail}") from e
             env.sleep(0.2 * (i + 1))
         except BranchPinned as e:
             raise SlotFail("bead_pinned", e.tail) from e
         except DirtyTree as e:
-            raise SlotFail("slot_broken", "%s: %s" % (what, e.tail)) from e
+            raise SlotFail("slot_broken", f"{what}: {e.tail}") from e
         except SlotGitError as e:
-            raise SlotFail("slot_broken", "%s: %s" % (what, e.tail)) from e
+            raise SlotFail("slot_broken", f"{what}: {e.tail}") from e
     raise AssertionError("unreachable")
 
 
@@ -39,40 +39,40 @@ def ready_for(slot: "Slot", bead: str, *, force: bool = False) -> None:
     busy = env.busy(d)  # never commit or switch branches under a running engine (2026-10-21, lifesim-5ar.7)
     hold = slot.hold()
     if not busy and hold:
-        busy = "held by %s until %s: %s" % (hold.by, stamp(hold.until), hold.why)
+        busy = f"held by {hold.by} until {stamp(hold.until)}: {hold.why}"
     if busy and not force:
-        raise SlotFail("busy", "slot %s: %s; not reset (--force: reset anyway and drop the lock)" % (slot.name, busy))
+        raise SlotFail("busy", f"slot {slot.name}: {busy}; not reset (--force: reset anyway and drop the lock)")
     if busy:
         env.drop_engine_lock(d)
-        env.say("FORCED: slot %s reset over: %s" % (slot.name, busy))
+        env.say(f"FORCED: slot {slot.name} reset over: {busy}")
     keep_work(slot)
     try:
         env.git.fetch(d)
     except SlotGitError as e:  # the tree is still clean and on a known base: the checkout below decides
-        env.warn("tl: fetch in slot %s failed: %s" % (slot.name, e.tail))
+        env.warn(f"tl: fetch in slot {slot.name} failed: {e.tail}")
     check_out(slot, bead)
-    retrying(env, "slot %s" % slot.name, lambda: env.git.clean(d, env.cfg.keep))
+    retrying(env, f"slot {slot.name}", lambda: env.git.clean(d, env.cfg.keep))
     setup(slot)
 
 
 def keep_work(slot: "Slot") -> None:
     """A dead session's work: committed where it was (on a wip branch when HEAD was detached), never wiped."""
     env, d = slot.env, slot.dir
-    if retrying(env, "slot %s" % slot.name, lambda: env.git.rebasing(d)):
+    if retrying(env, f"slot {slot.name}", lambda: env.git.rebasing(d)):
         env.git.rebase_abort(d)
-    if not retrying(env, "slot %s" % slot.name, lambda: env.git.dirty(d)):
+    if not retrying(env, f"slot {slot.name}", lambda: env.git.dirty(d)):
         return
-    branch = env.git.branch(d) or "wip/%s/%d" % (slot.name, int(env.now()))
+    branch = env.git.branch(d) or f"wip/{slot.name}/{int(env.now())}"
     try:
-        retrying(env, "slot %s" % slot.name, lambda: env.git.commit_all(d, branch, "wip: left in slot %s" % slot.name))
+        retrying(env, f"slot {slot.name}", lambda: env.git.commit_all(d, branch, f"wip: left in slot {slot.name}"))
     except SlotFail as e:
-        raise SlotFail("slot_broken", "could not commit the leftover work on %s: %s" % (branch, e.why)) from e
+        raise SlotFail("slot_broken", f"could not commit the leftover work on {branch}: {e.why}") from e
     env.say("WIP committed on " + branch)
 
 
 def check_out(slot: "Slot", bead: str) -> None:
     env, d, base = slot.env, slot.dir, slot.env.cfg.base
-    what = "slot %s" % slot.name
+    what = f"slot {slot.name}"
     if bead and env.git.has_branch(d, "task/" + bead):
         # the bead's branch holds its earlier runs' work: check it out as it is, never reset it to base (a forced reset
         # here wiped lifesim-r32's reviewed work on 2026-10-19; the engine rebases at land)
@@ -95,16 +95,16 @@ def free_branch(slot: "Slot", branch: str) -> str:
     for c in held:
         busy = env.busy(c.path)
         if busy or c.main:
-            return "branch %s is checked out in %s%s" % (branch, c.path, ": " + busy if busy else " (the repo's own checkout)")
+            return "branch {} is checked out in {}{}".format(branch, c.path, ": " + busy if busy else " (the repo's own checkout)")
     for c in held:
         if not env.git.dirty(c.path) and env.git.remove_worktree(env.repo, c.path):
-            env.say("FREED: branch %s: removed the clean worktree %s" % (branch, c.path))
+            env.say(f"FREED: branch {branch}: removed the clean worktree {c.path}")
             continue
         try:
             env.git.checkout_detached(c.path, "HEAD")
         except SlotGitError as e:
-            return "branch %s is checked out in %s and cannot be detached: %s" % (branch, c.path, e.tail)
-        env.say("FREED: branch %s: detached HEAD in %s (its files and commits stay)" % (branch, c.path))
+            return f"branch {branch} is checked out in {c.path} and cannot be detached: {e.tail}"
+        env.say(f"FREED: branch {branch}: detached HEAD in {c.path} (its files and commits stay)")
     return ""
 
 
@@ -134,6 +134,6 @@ def setup(slot: "Slot", force: bool = False) -> None:
     rc = env.run_setup(cfg.setup, d)
     env.event("slot-setup", "", slot=slot.name, worktree=d, exit=rc, secs=round(env.now() - t), repo=env.repo)
     if rc != 0:
-        raise SlotFail("slot_broken", "setup exited %d" % rc)
+        raise SlotFail("slot_broken", f"setup exited {rc}")
     mark.write_text(digest)
     env.say("READY " + d)
