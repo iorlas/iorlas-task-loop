@@ -1,6 +1,7 @@
 """Identifiers: one parser each, no regex."""
 import datetime
 import hashlib
+from pathlib import Path
 from typing import NewType
 
 BeadId = NewType("BeadId", str)
@@ -77,3 +78,8 @@ class Version(tuple[int, ...]):
 def repo_key(common_dir: str) -> str:
     """The 12-hex key of a repository: sha1 of its git common dir."""
     return hashlib.sha1(common_dir.encode("utf-8")).hexdigest()[:12]
+
+
+def loop_key(repo: object) -> str:
+    """The key of a repo checkout in the loop's and the slots' files: its folder name and 8 hex of sha1 of its path."""
+    return f"{Path(str(repo)).name}-{hashlib.sha1(str(repo).encode()).hexdigest()[:8]}"

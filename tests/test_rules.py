@@ -69,6 +69,7 @@ APP_EDGES = {
     "plan": frozenset({"checks", "asks"}),
     "look": frozenset({"checks", "asks"}),
     "land": frozenset({"checks", "slots", "asks"}),
+    "wire": EVERY,  # the composition root the launcher (tl.py) calls: it builds the world (stores, git, locks) from this machine
 }
 MUTABLE_LAYERS = frozenset({"domain", "app", "cli", "hook", "dash"})
 MUTABLE_CALLS = frozenset({"list", "dict", "set", "defaultdict", "deque", "OrderedDict", "Counter", "bytearray"})
