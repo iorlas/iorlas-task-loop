@@ -53,6 +53,7 @@ from clock import SystemClock
 from taskloop.app.run import trace as runtrace
 from taskloop.app.run.calls import timing
 from taskloop.app.run.context import RunContext
+from taskloop.app.slots.lease import Lease
 from taskloop.contracts import log as rec
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import FRESH_ABOVE_K
@@ -2331,7 +2332,7 @@ class Engine:
 
     def run_once(self):
         outcome, why, sha, question, kind = "failed", "", "", "", oc.Kind.FAULT_ENGINE
-        hb = Heartbeat(self.bead, os.environ.get("TASK_LOOP_SLOT_BEAD", ""), self.store)
+        hb = Lease(self.store, self.bead, os.environ.get("TASK_LOOP_SLOT_BEAD", ""))
         try:
             self.prev_ck = (json.loads(self.checkpoint_path().read_text()) or {}).get("run") or ""
         except (OSError, ValueError, AttributeError):
@@ -5436,26 +5437,6 @@ def brief_digest(bead, comments, owner_only=False, ignore=()):
     if people:
         out += ["", "## Comments"] + ["- %s: %s" % (c.author or "?", c.text.strip()) for c in people]
     return "\n".join(out) + "\n"
-
-
-class Heartbeat:
-    """The bead's lease, and the slot bead's when tl loop runs this (TASK_LOOP_SLOT_BEAD): a loop killed with SIGKILL
-    leaves its slot held while this run lives."""
-
-    def __init__(self, bead, slot_bead="", store=None):
-        self.beads, self.stop_ev, self.store = [b for b in (bead, slot_bead) if b], threading.Event(), store or tl.bd_store()
-        self.th = threading.Thread(target=self.loop, daemon=True)
-
-    def start(self):
-        self.th.start()
-
-    def loop(self):
-        while not self.stop_ev.wait(60):
-            for b in self.beads:
-                tl.attempt(self.store.heartbeat, b)
-
-    def stop(self):
-        self.stop_ev.set()
 
 
 LINK_CAP = 200  # links opened per review

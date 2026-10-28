@@ -33,6 +33,7 @@ import loop_health
 import netgate
 import outcome as oc
 import tl
+from taskloop.app.slots.lease import Lease
 from taskloop.contracts.ports import BeadPatch, BeadQuery
 
 POLL = 2               # seconds between looks at a running child (stop file, slot heartbeat)
@@ -438,28 +439,6 @@ def open_log(repo):
 
 # ---- one bead -------------------------------------------------------------------------------------------------------
 
-class Beat:
-    """Keeps the slot bead's and the task bead's leases alive from the slot take to the release: a slow slot setup
-    (lifesim: 5-12 min) outlasts a 5-minute lease. run-task heartbeats both too, so a SIGKILLed loop leaves no slot free
-    under a live run."""
-
-    def __init__(self, store, *ids):
-        self.store = store
-        self.ids, self.every, self.ev = [i for i in ids if i], HEARTBEAT, threading.Event()
-        self.th = threading.Thread(target=self.loop, daemon=True)
-        self.th.start()
-
-    def add(self, bead_id):
-        self.ids.append(bead_id)
-
-    def loop(self):
-        while not self.ev.wait(self.every):
-            for i in list(self.ids):
-                tl.attempt(self.store.heartbeat, i)
-
-    def stop(self):
-        self.ev.set()
-
 def spawn(cmd, log):
     """run-task as a child in its own process group: Ctrl-C to the loop reaches it only as the loop's SIGTERM."""
     kw = {"stdin": subprocess.DEVNULL, "stdout": log, "stderr": subprocess.STDOUT}
@@ -498,7 +477,7 @@ def run_bead(repo, b, slot, wt, slot_bead, started, code=None):
     cmd = [sys.executable, str((code or tl.HERE) / "tl.py"), "run-task", b.id, "--worktree", wt, "--outcome-file", str(out)]
     cmd += ["--slot", slot] if slot else []
     t0 = clock()
-    os.environ["TASK_LOOP_SLOT_BEAD"] = slot_bead or ""  # the engine heartbeats it too (see Beat)
+    os.environ["TASK_LOOP_SLOT_BEAD"] = slot_bead or ""  # the engine heartbeats it too (see Lease)
     with open(log_path, "ab") as log:  # append: a rerun of the same stem never cuts a log another reader follows
         p = spawn(cmd, log)
         write_state(repo, pid=os.getpid(), started=started, bead=b.id, slot=slot, since=t0, child=p.pid,
@@ -993,7 +972,7 @@ def passes(repo, a, started, st=None, store=None):
             continue
         name, d, slot_bead = got
         r, bid = None, ""
-        beat = Beat(store, slot_bead)
+        beat = Lease(store, slot_bead, every=HEARTBEAT).start()
         try:
             if os.path.isdir(d):  # from the take to run-task's own lock: no hand run gets in, the slot reset included
                 tl.loop_lock(d, name, slot_bead)
@@ -1033,7 +1012,7 @@ def passes(repo, a, started, st=None, store=None):
                 if r.get("outcome") != "taken":
                     break
                 later[bid] = clock() + PAUSE_RETRY
-                beat.ids.remove(bid)
+                beat.drop(bid)
                 r = None
                 if slot_bead:  # the next candidate's area check must not see this one as running here
                     tl.attempt(store.update, slot_bead, BeadPatch(unset_metadata=["held_bead"]))

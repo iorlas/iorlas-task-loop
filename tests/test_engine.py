@@ -1077,7 +1077,7 @@ class EngineTest(unittest.TestCase):
         import signal as sig
         if not hasattr(sig, "SIGTERM") or os.name == "nt":
             self.skipTest("POSIX signal")
-        with self.stoppable(), mock.patch.object(engine.Heartbeat, "stop",
+        with self.stoppable(), mock.patch.object(engine.Lease, "stop",
                                                  side_effect=lambda *a: os.kill(os.getpid(), sig.SIGTERM)):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
@@ -1253,9 +1253,9 @@ class EngineTest(unittest.TestCase):
         self.assertIn("stopped (SIGTERM)", self.said())
 
     def test_the_heartbeat_keeps_the_slot_bead_the_loop_names(self):
-        hb = engine.Heartbeat("t-1", "sl-1", store=self.store)
-        with mock.patch.object(hb.stop_ev, "wait", side_effect=[False, True]):
-            hb.loop()
+        hb = engine.Lease(self.store, "t-1", "sl-1")
+        with mock.patch.object(hb.stopped, "wait", side_effect=[False, True]):
+            hb.run()
         self.assertEqual([c for c in self.bd_calls if c[0] == "heartbeat"], [("heartbeat", "t-1"), ("heartbeat", "sl-1")])
 
     def test_a_rerun_after_a_red_land_gate_lands_the_reviewed_work_once(self):

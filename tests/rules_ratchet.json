@@ -1,9 +1,9 @@
 {
  "_": "Ratchet for tests/test_rules.py. oversize / oversize_functions list every cap violation that existed at A1, by file; an entry may be lowered or deleted, never added. pyrefly_baseline_errors is the error count in pyrefly-baseline.json; it may only shrink. pyrefly_baseline_src lists the baselined errors under src/ per file: src is strict, so the table only shrinks and a file never joins it. ruff_baseline: one key per file::rule left in ruff.toml's per-file-ignores (delete when fixed, never add); ruff_groups: the rule sets of the wildcard groups (a rule may leave a list, never join).",
  "oversize": {
-  "skills/task-loop/engine.py": 5326,
-  "skills/task-loop/loop.py": 1055,
-  "skills/task-loop/tl.py": 1696,
+  "skills/task-loop/engine.py": 5315,
+  "skills/task-loop/loop.py": 1042,
+  "skills/task-loop/tl.py": 1325,
   "tests/test_engine.py": 3470
  },
  "oversize_functions": {
@@ -18,7 +18,6 @@
   "skills/task-loop/engine.py::Engine.self_verify": 98,
   "skills/task-loop/engine.py::Engine.stage": 224,
   "skills/task-loop/loop.py::passes": 226,
-  "skills/task-loop/tl.py::cmd_slot": 130,
   "skills/task-loop/tl.py::main": 160,
   "tests/cockpit_scenario.py::main": 166,
   "tests/test_engine.py::EngineTest.push_race_interrupted_cell": 125,

@@ -19,9 +19,11 @@ import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support import tlbd  # noqa: E402
 from support.fakes import FakeBeadStore  # noqa: E402
 from test_loop import bead, rec  # noqa: E402
+from support import slots as sl  # noqa: E402
 from support.fakes import as_bead  # noqa: E402
 from taskloop.contracts.bead import BdError  # noqa: E402
 from taskloop.contracts.ports import BdFailure  # noqa: E402
+from taskloop.app.slots.pool import Slot  # noqa: E402
 from test_slots import Slots  # noqa: E402
 
 import engine  # noqa: E402
@@ -161,7 +163,7 @@ class Areas(AreasBase):
         self.assertEqual(loop.running(str(self.repo)), {})
         self.assertEqual(self.order(), (["x-2"], {}))
         bd.slots["sl-2"]["metadata"] = {"held_bead": "x-1"}
-        self.assertEqual(tl.take_slot(str(self.repo), self.cfg_slots())[0], "s2")
+        self.assertEqual(sl.take_slot(str(self.repo), self.cfg_slots())[0], "s2")
         self.assertEqual(loop.running(str(self.repo)), {})
 
     def cfg_slots(self):
@@ -203,7 +205,7 @@ class Line(Slots):
         self.cfg = tl.profile_slots(str(self.repo))
 
     def tickets(self):
-        return list(tl.ticket_dir(str(self.repo)).glob("*.json"))
+        return list(sl.ticket_dir(str(self.repo)).glob("*.json"))
 
     def waiter(self, label, served):
         def go():
@@ -240,7 +242,9 @@ class Line(Slots):
     def test_a_waiter_behind_a_live_ticket_never_takes_a_free_slot_and_a_killed_waiter_does_not_block(self):
         self.beads({}, slots=1)
         k = subprocess.Popen([sys.executable, "-c", "import sys, time; sys.path.insert(0, %r); import tl; "
-                              "tl.take_ticket(%r, 'first'); print('in line', flush=True); time.sleep(60)"
+                              "from taskloop.contracts import paths; from taskloop.stores.files import FileTickets; "
+                              "FileTickets(paths.ConfigDir(tl.config_dir())).take(tl.repo_key(%r), 'first', 2, pid=__import__('os').getpid(), now=time.time()); "
+                              "print('in line', flush=True); time.sleep(60)"
                               % (str(HERE), str(self.repo))], stdout=subprocess.PIPE, text=True)
         self.kids.append(k)
         self.assertEqual(k.stdout.readline().strip(), "in line")
@@ -267,52 +271,51 @@ class Line(Slots):
             if a[0] == "update" and "--claim" in a and bd.slots.get(a[1], {}).get("assignee") == tl.actor():
                 return mock.Mock(returncode=0, stdout="", stderr="")
             return real_bd(*a, **kw)
-        won, real_claim = {}, tl.claim_slot
+        won, real_claim = {}, Slot.claimed
 
-        def claim(repo, bead_id, store=None):  # the hand run takes s1 between this taker's look and its claim
+        def claim(slot):  # the hand run takes s1 between this taker's look and its claim
             if "thread" in won or threading.current_thread() is not threading.main_thread():
-                return real_claim(repo, bead_id, store)
-            th = threading.Thread(target=lambda: won.update(hand=tl.take_named_slot(repo, "s1", self.cfg, "hand")[0]))
+                return real_claim(slot)
+            th = threading.Thread(target=lambda: won.update(hand=tl.take_named_slot(str(self.repo), "s1", self.cfg, "hand")[0]))
             won["thread"] = th
             th.start()
             th.join(0.3)
-            return real_claim(repo, bead_id, store)
-        with tlbd.bd_boundary(bd_13), mock.patch.object(tl, "claim_slot", side_effect=claim):
-            got = tl.take_slot(str(self.repo), self.cfg, "any")
+            return real_claim(slot)
+        with tlbd.bd_boundary(bd_13), mock.patch.object(Slot, "claimed", claim):
+            got = sl.take_slot(str(self.repo), self.cfg, "any")
         won["thread"].join(60)
         self.assertEqual(sum(1 for x in (got, won.get("hand")) if x), 1, (got, won))
 
     def test_tickets_are_numbered_in_arrival_order_and_name_their_waiter(self):
         repo = str(self.repo)
-        a, b = tl.take_ticket(repo, "loop"), tl.take_ticket(repo, "run-task x-1")
-        self.assertLess(a["seq"], b["seq"])
+        a, b = sl.take_ticket(repo, "loop"), sl.take_ticket(repo, "run-task x-1")
+        self.assertLess(a.seq, b.seq)
         line = tl.waiting_line(repo)
-        self.assertEqual([t["seq"] for t in line], [a["seq"], b["seq"]])
-        self.assertEqual((line[0]["pid"], line[0]["start"], line[1]["why"]), (os.getpid(), tl.proc_start(os.getpid()),
-                                                                              "run-task x-1"))
-        tl.drop_ticket(a)
-        c = tl.take_ticket(repo, "later")
-        self.assertGreater(c["seq"], b["seq"])  # a number is never given twice
+        self.assertEqual([t.seq for t in line], [a.seq, b.seq])
+        self.assertEqual((line[0].pid, line[1].why), (os.getpid(), "run-task x-1"))
+        sl.drop_ticket(repo, a)
+        c = sl.take_ticket(repo, "later")
+        self.assertGreater(c.seq, b.seq)  # a number is never given twice
         for t in (b, c):
-            tl.drop_ticket(t)
+            sl.drop_ticket(repo, t)
 
     def test_a_p0_waiter_is_served_before_a_p2_waiter_that_joined_first(self):
         """tl-43k: lifesim's P0 hclf.34 sat 10th in line behind P2 beads."""
         self.beads({}, slots=1)
         repo = str(self.repo)
-        p2 = tl.take_ticket(repo, "run-task p2-bead", 2)  # joined first, alive (this process)
-        p0 = tl.take_ticket(repo, "run-task p0-bead", 0)
-        self.assertLess(p2["seq"], p0["seq"])
-        self.assertEqual([t["why"] for t in tl.waiting_line(repo)], ["run-task p0-bead", "run-task p2-bead"])
-        tl.drop_ticket(p0)
+        p2 = sl.take_ticket(repo, "run-task p2-bead", 2)  # joined first, alive (this process)
+        p0 = sl.take_ticket(repo, "run-task p0-bead", 0)
+        self.assertLess(p2.seq, p0.seq)
+        self.assertEqual([t.why for t in tl.waiting_line(repo)], ["run-task p0-bead", "run-task p2-bead"])
+        sl.drop_ticket(repo, p0)
         got = tl.wait_slot(repo, self.cfg, "late p0", poll=(0.01, 0.01), stop=lambda: True, prio=0)
         self.assertEqual(got[0], "s1")  # the P0 newcomer passes the P2 waiter that was there first
         tl.release_slot(repo, "s1")
         self.assertIsNone(tl.wait_slot(repo, self.cfg, "late p3", poll=(0.01, 0.01), stop=lambda: True, prio=3))  # the P2 waiter is ahead
-        p0b = tl.take_ticket(repo, "p0 again", 0)
+        p0b = sl.take_ticket(repo, "p0 again", 0)
         self.assertIsNone(tl.wait_slot(repo, self.cfg, "p2 behind p0", poll=(0.01, 0.01), stop=lambda: True, prio=2))  # a P0 is ahead
         for t in (p2, p0b):
-            tl.drop_ticket(t)
+            sl.drop_ticket(repo, t)
 
     def test_a_bead_that_cannot_be_read_waits_as_a_p2(self):
         store = FakeBeadStore()
@@ -326,12 +329,11 @@ class Line(Slots):
 
     def test_equal_priorities_keep_arrival_order_and_an_unreadable_priority_is_p2(self):
         repo = str(self.repo)
-        ts = [tl.take_ticket(repo, "a", 1), tl.take_ticket(repo, "b", 1), tl.take_ticket(repo, "c")]
-        self.assertEqual([t["why"] for t in tl.waiting_line(repo)], ["a", "b", "c"][:2] + ["c"])
-        self.assertEqual(tl.ticket_order({"seq": 5, "prio": "x"}), (2, 5))
+        ts = [sl.take_ticket(repo, "a", 1), sl.take_ticket(repo, "b", 1), sl.take_ticket(repo, "c")]
+        self.assertEqual([t.why for t in tl.waiting_line(repo)], ["a", "b", "c"][:2] + ["c"])
         self.assertEqual((tl.prio_of(tbead("x-1", 0)), tl.prio_of(tbead("x-1", 1)), tl.prio_of(None)), (0, 1, 2))
         for t in ts:
-            tl.drop_ticket(t)
+            sl.drop_ticket(repo, t)
 
     def test_run_task_slot_any_takes_a_free_slot_and_gives_it_back(self):
         bd = self.beads({"x-1": []})
@@ -364,14 +366,14 @@ class Line(Slots):
 
     def test_the_loop_waits_in_the_line_too(self):
         bd = self.beads({"x-1": [rec("landed")]}, slots=1)
-        first = tl.take_ticket(str(self.repo), "a hand run waiting before the loop came")
+        first = sl.take_ticket(str(self.repo), "a hand run waiting before the loop came")
         naps = []
 
         def nap(secs, *a, **kw):
             naps.append(secs)
             self.clock.t += secs
             if len(naps) == 3:
-                tl.drop_ticket(first)  # served (or gone)
+                sl.drop_ticket(self.repo, first)  # served (or gone)
         with mock.patch.object(loop, "nap", nap):
             self.assertEqual(self.run_loop(), 0)
         self.assertGreaterEqual(len(naps), 3)  # the slot was free all along: the loop waited its turn
@@ -406,7 +408,7 @@ class ReviewFixes(AreasBase):
             return real_bd(*a, **kw)
 
         def taker(name):
-            won[name] = tl.take_slot(repo, cfg, name)
+            won[name] = sl.take_slot(repo, cfg, name)
         with tlbd.bd_boundary(bd_pause), \
                 mock.patch.object(tl, "actor", side_effect=lambda: threading.current_thread().name):
             p2 = threading.Thread(target=taker, args=("P2",), name="P2")
@@ -428,7 +430,7 @@ class ReviewFixes(AreasBase):
         bd = self.beads({}, slots=1)
         repo = str(self.repo)
         with mock.patch.dict(os.environ, {"TASK_LOOP_ACTOR": "tl-new00000"}):
-            self.assertTrue(tl.take_slot(repo, tl.profile_slots(repo), "loop", bead="x-2"))
+            self.assertTrue(sl.take_slot(repo, tl.profile_slots(repo), "loop", bead="x-2"))
         before = json.loads(json.dumps(bd.slots["sl-1"]))
         err = io.StringIO()
         with mock.patch.dict(os.environ, {"TASK_LOOP_ACTOR": "tl-old00000"}), mock.patch.object(sys, "stderr", err):
@@ -457,14 +459,14 @@ class ReviewFixes(AreasBase):
     def test_a_ticket_without_seq_does_not_break_the_line_and_stale_tmp_files_are_swept(self):
         self.beads({}, slots=1)
         repo = str(self.repo)
-        d = tl.ticket_dir(repo)
-        (d / ("%012d.json" % 7)).write_text(json.dumps({"pid": os.getpid(), "start": tl.proc_start(os.getpid())}))
+        d = sl.ticket_dir(repo)
+        (d / ("%06d.json" % 7)).write_text(json.dumps({"pid": os.getpid()}))  # no seq, no why: not a ticket
         old, fresh = d / ".1.2.tmp", d / ".1.3.tmp"
         old.write_text("{")
         fresh.write_text("{")
         os.utime(old, (time.time() - 700, time.time() - 700))
-        self.assertEqual([t.get("seq", 0) for t in tl.waiting_line(repo)], [0])
-        self.assertTrue(tl.wait_slot(repo, tl.profile_slots(repo), "x", stop=lambda: True) is None)  # behind it
+        self.assertEqual(tl.waiting_line(repo), [])
+        self.assertIsNotNone(tl.wait_slot(repo, tl.profile_slots(repo), "x", stop=lambda: True))  # nobody is ahead: the free slot is taken
         self.assertFalse(old.exists())
         self.assertTrue(fresh.exists())
 

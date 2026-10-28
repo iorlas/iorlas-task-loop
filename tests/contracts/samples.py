@@ -5,7 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402,F401
-from taskloop.contracts import ask, bead, checkpoint, config, delegate, events, ids, locks, loop, run, snapshots, trace  # noqa: E402
+from taskloop.contracts import ask, bead, checkpoint, config, delegate, events, ids, locks, loop, run, slots, snapshots, trace  # noqa: E402
 from taskloop.contracts import log  # noqa: E402
 from taskloop.contracts.enums import AskKind, AskStatus, LockWhat, Outcome, WaitWhat, WhyCode  # noqa: E402
 
@@ -139,6 +139,8 @@ OTHERS = {
     "EngineLock": LOCK,
     "Ticket": locks.Ticket(pid=5, why="slot", since=T, prio=1, seq=3, pid_start=T),
     "LockRecord": locks.LockRecord(what=LockWhat.LAND, holder="tl-1", pid=5, t=T),
+    "Hold": slots.Hold(by="tl-1", since="2026-10-28T03:00:00", why="screenshots", until=T),
+    "Checkout": slots.Checkout(path="/r/.slots/s1", branch="task/x-1", main=False),
     "TasksSnapshot": snapshots.TasksSnapshot(t=T, repo="/r", beads=[snapshots.TaskRow(
         bead="tl-1", title="T", status="in_progress", labels=["auto"], parent="tl-0", slot="s1", worktree="/w", lock=LOCK,
         run=str(RUN), ask="tl-1-1", blocker="")]),

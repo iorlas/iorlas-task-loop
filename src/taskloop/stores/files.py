@@ -1,7 +1,9 @@
-"""File-backed keyed documents and the ticket line (the lock table is in filelock.py)."""
+"""File-backed keyed documents and the ticket line (the lock table is adapters/locks.py)."""
 import contextlib
 import json
 import os
+import threading
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -9,6 +11,8 @@ from taskloop.contracts import codec, paths
 from taskloop.contracts.locks import Ticket
 from taskloop.contracts.stores import JsonStore
 from taskloop.stores.api import Doc
+
+STALE_TMP = 600.0  # seconds after which a half-made ticket is garbage
 
 
 class FileDocSet[T]:
@@ -42,7 +46,7 @@ class FileTickets:
         seq = max([0, *(self._seq(p) for p in folder.iterdir())]) + 1
         while True:
             ticket = Ticket(pid=pid, why=why, since=now, prio=prio, seq=seq, pid_start=pid_start)  # pyrefly: ignore[unexpected-keyword]
-            tmp = folder / (".%d.%d.tmp" % (pid, seq))
+            tmp = folder / (".%d.%d.%d.tmp" % (pid, threading.get_ident(), seq))  # threads of one process may race for a number
             tmp.write_text(json.dumps(codec.to_json(ticket)), encoding="utf-8")
             try:
                 os.link(tmp, self.cfg.ticket(repo_key, seq))
@@ -55,6 +59,10 @@ class FileTickets:
     def line(self, repo_key: str) -> list[Ticket]:
         out: list[Ticket] = []
         folder = self.cfg.ticket(repo_key, 0).parent
+        for tmp in folder.glob(".*.tmp") if folder.is_dir() else []:  # a waiter that died between writing and linking its ticket
+            with contextlib.suppress(OSError):
+                if time.time() - tmp.stat().st_mtime > STALE_TMP:
+                    tmp.unlink()
         for p in sorted(folder.glob("*") if folder.is_dir() else []):
             if self._seq(p) == 0:
                 continue

@@ -465,6 +465,17 @@
   "pid": 5,
   "t": 1793050200.5
  },
+ "Hold": {
+  "by": "tl-1",
+  "since": "2026-10-28T03:00:00",
+  "why": "screenshots",
+  "until": 1793050200.5
+ },
+ "Checkout": {
+  "path": "/r/.slots/s1",
+  "branch": "task/x-1",
+  "main": false
+ },
  "TasksSnapshot": {
   "v": 1,
   "t": 1793050200.5,

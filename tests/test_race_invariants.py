@@ -23,6 +23,7 @@ import contextlib
 import io
 import json
 import os
+import subprocess
 import sys
 import threading
 import types
@@ -38,7 +39,10 @@ import engine  # noqa: E402
 from support.builders import cfg_with  # noqa: E402
 import loop  # noqa: E402
 import tl  # noqa: E402
+from support import slots as sl  # noqa: E402
 from support import tlbd  # noqa: E402
+from taskloop.adapters import slot_git  # noqa: E402
+from taskloop.app.slots import marks, reset  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "dev"))
 import release  # noqa: E402
@@ -191,7 +195,7 @@ class Invariants(test_loop.Base):
         Red when: tl.py slot_lock body is `return contextlib.nullcontext()` (the slot lock does nothing)."""
         bd = self.tracker(slots=3)
         self.actors.update(A="tl-one", B="tl-one", MainThread="tl-main")
-        got = self.race(lambda: tl.take_slot(self.repo_s, self.cfg, "loop"), lambda: tl.take_named_slot(self.repo_s, "s1", self.cfg, "hand"))
+        got = self.race(lambda: sl.take_slot(self.repo_s, self.cfg, "loop"), lambda: tl.take_named_slot(self.repo_s, "s1", self.cfg, "hand"))
         self.assertEqual(got["A"][0], "s1")
         self.assertIsNone(got["B"][0], got)  # refused: the slot is held
         self.assertIn("held by", got["B"][1])
@@ -200,15 +204,15 @@ class Invariants(test_loop.Base):
         self.assertIsNone(got["B"][0], got)
         self.assertIn("held by", got["B"][1])
         # the hold stays: no loop take, no hand run, no second hold gets it
-        self.assertEqual(tl.take_slot(self.repo_s, self.cfg, "loop")[0], "s3")
-        self.assertIsNone(tl.take_slot(self.repo_s, self.cfg, "loop"))  # s1 and s3 used, s2 held
+        self.assertEqual(sl.take_slot(self.repo_s, self.cfg, "loop")[0], "s3")
+        self.assertIsNone(sl.take_slot(self.repo_s, self.cfg, "loop"))  # s1 and s3 used, s2 held
         self.assertIn("held by", tl.take_named_slot(self.repo_s, "s2", self.cfg, "hand")[1])
         self.actors["MainThread"] = "tl-other"
         self.assertEqual(self.hold("s1"), 1)  # a slot in use is never held
         self.assertEqual(self.hold("s2"), 1)  # another session's hold is not taken over
         # the hold runs out on the fake clock: the next take frees it and gets the slot
         self.clock.advance(30 * 60 + 1)
-        self.assertEqual(tl.take_slot(self.repo_s, self.cfg, "loop")[0], "s2")
+        self.assertEqual(sl.take_slot(self.repo_s, self.cfg, "loop")[0], "s2")
         owners = {b["title"].split()[-1]: b["assignee"] for b in bd.slots.values()}
         self.assertEqual(owners, {"s1": "tl-one", "s2": "tl-other", "s3": "tl-main"})
 
@@ -285,7 +289,7 @@ class Invariants(test_loop.Base):
             waiters[name] = Waiter(name, prio)
             waiters[name].start()
             self.assertTrue(waiters[name].settled.wait(GUARD))  # it has its ticket and has looked once
-        line = [t["why"] for t in tl.waiting_line(self.repo_s)]
+        line = [t.why for t in tl.waiting_line(self.repo_s)]
         self.assertEqual(line, ["W3", "W1", "W2"])
         tl.release_slot(self.repo_s, "s1", force=True)  # the owner lets go
         pending = ["W2", "W1", "W3"]  # woken against the line
@@ -301,15 +305,15 @@ class Invariants(test_loop.Base):
         for w in waiters.values():
             w.join(GUARD)
         self.assertEqual(served, ["W3", "W1", "W2"])
-        self.assertEqual(list(tl.ticket_dir(self.repo_s).glob("*.json")), [])
+        self.assertEqual(list(sl.ticket_dir(self.repo_s).glob("*.json")), [])
         # a waiter whose process is gone is dropped by whoever reads the line, and blocks nobody
-        d = tl.ticket_dir(self.repo_s)
-        (d / "000000000099.json").write_text(json.dumps({"seq": 99, "prio": 0, "pid": 5151, "start": "T5151", "why": "dead", "since": 1}))
+        d = sl.ticket_dir(self.repo_s)
+        (d / "000099.json").write_text(json.dumps({"v": 1, "seq": 99, "prio": 0, "pid": sl.dead_pid(), "why": "dead", "since": 1}))
         self.assertEqual(tl.waiting_line(self.repo_s), [])
-        self.assertFalse((d / "000000000099.json").exists())
+        self.assertFalse((d / "000099.json").exists())
         self.assertEqual(tl.wait_slot(self.repo_s, self.cfg, "late", stop=lambda: True)[0], "s1")
         # tickets taken at once are all different and numbered in arrival order
-        seqs = self.together({"T%d" % i: (lambda: tl.take_ticket(self.repo_s, "x")["seq"]) for i in range(6)})
+        seqs = self.together({"T%d" % i: (lambda: sl.take_ticket(self.repo_s, "x").seq) for i in range(6)})
         self.assertEqual(sorted(seqs.values()), list(range(min(seqs.values()), min(seqs.values()) + 6)))
 
     # -- 5: no checkout under another process's live engine lock ---------------------------------------------------------
@@ -324,18 +328,17 @@ class Invariants(test_loop.Base):
         tl.write_engine_lock(s1, {"pid": OTHER_ENGINE, "start": "T%d" % OTHER_ENGINE, "bead": "w-9", "started": self.clock.now()})
         self.assertIn("pid %d runs w-9" % OTHER_ENGINE, tl.engine_busy(s1))
         self.assertEqual(bd.slots["sl-1"]["status"], "open")  # the slot bead says free
-        self.assertEqual(tl.take_slot(self.repo_s, self.cfg, "loop")[0], "s2")  # a loop passes over s1
+        self.assertEqual(sl.take_slot(self.repo_s, self.cfg, "loop")[0], "s2")  # a loop passes over s1
         self.assertIn("busy", tl.take_named_slot(self.repo_s, "s1", self.cfg, "hand")[1])
         self.assertEqual(self.hold("s1"), 1)
         self.assertIn("BUSY", self.out.getvalue())
-        with mock.patch.object(tl, "git", side_effect=AssertionError("git ran in a live slot")), \
-                mock.patch.object(tl, "run_git", side_effect=AssertionError("a checkout ran in a live slot")):
+        with mock.patch.object(slot_git, "run_git", side_effect=AssertionError("git ran in a live slot")):
             self.assertEqual(tl.main(["slot", "reset", "s1", "--bead", "w-1"]), 4)  # the reset stops before any git
             self.assertEqual(tl.main(["slot", "release", "s1"]), 1)
         listing = "task/w-9"
-        with mock.patch.object(tl, "git", return_value="worktree %s\nHEAD abc\nbranch refs/heads/%s\n\nworktree %s\nHEAD abc\n" % (
-                s1, listing, s2)), mock.patch.object(tl, "run_git", side_effect=AssertionError("freed a branch under a live engine")):
-            self.assertIn("runs w-9", tl.free_branch(self.repo_s, s2, listing))  # its branch is not taken from it
+        listed = subprocess.CompletedProcess([], 0, "worktree %s\nHEAD abc\nbranch refs/heads/%s\n\nworktree %s\nHEAD abc\n" % (s1, listing, s2), "")
+        with mock.patch.object(slot_git, "run_git", return_value=listed):  # any other git call would find the same text
+            self.assertIn("runs w-9", reset.free_branch(sl.pool(self.repo_s, cfg=self.cfg).named("s2"), listing))  # its branch is not taken from it
         self.assertEqual(tl.read_engine_lock(s1)["pid"], OTHER_ENGINE)  # and its lock is still there
         self.live.discard(OTHER_ENGINE)  # the engine died: its lock is no obstacle
         self.assertEqual(tl.engine_busy(s1), "")
@@ -477,8 +480,8 @@ class Invariants(test_loop.Base):
     def nothing_held(self, slots):
         for b in self.bd.slots.values():
             self.assertEqual((b["status"], b.get("assignee") or ""), ("open", ""), b)
-            self.assertFalse(set(b.get("metadata") or {}) & set(tl.HELD_KEYS), b)
-        self.assertEqual(list(tl.ticket_dir(self.repo_s).glob("*.json")), [])
+            self.assertFalse(set(b.get("metadata") or {}) & set(marks.HELD_KEYS), b)
+        self.assertEqual(list(sl.ticket_dir(self.repo_s).glob("*.json")), [])
         for n in slots:
             self.assertFalse(tl.engine_lock_path(tl.slot_dir(self.repo_s, n, self.cfg)).exists(), n)
         for lock in (tl.config_dir() / "locks").glob("*.lock"):
@@ -495,7 +498,7 @@ class Invariants(test_loop.Base):
 
         def loop_run(bead):
             def go():
-                got = tl.take_slot(repo, cfg, "tl loop", bead=bead)
+                got = sl.take_slot(repo, cfg, "tl loop", bead=bead)
                 if got:
                     tl.loop_lock(got[1], got[0], got[2], bead=bead)
                     tl.drop_engine_lock(got[1], os.getpid())
@@ -522,7 +525,7 @@ class Invariants(test_loop.Base):
         self.clock.advance(61)  # the hold has run out
         d2 = tl.slot_dir(repo, "s2", cfg)
         tl.write_engine_lock(d2, {"pid": 5252, "start": "T5252", "bead": "w-3", "started": 1})  # not in the process table
-        (tl.ticket_dir(repo) / "000000000077.json").write_text(json.dumps({"seq": 77, "prio": 0, "pid": 5151, "start": "T5151", "why": "dead", "since": 1}))
+        (sl.ticket_dir(repo) / "000077.json").write_text(json.dumps({"v": 1, "seq": 77, "prio": 0, "pid": sl.dead_pid(), "why": "dead", "since": 1}))
         self.actors["MainThread"] = "tl-main"
         for name in ("s1", "s2"):
             sb = tl.take_named_slot(repo, name, cfg, "next")[0]

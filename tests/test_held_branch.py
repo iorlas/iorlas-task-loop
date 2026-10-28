@@ -106,20 +106,6 @@ class HeldBranch(unittest.TestCase):
         tl.write_engine_lock(str(self.old), {"pid": 2 ** 22 + 7, "bead": "x-1", "started": 1})
         self.assertEqual(self.reset()[0], 0)
 
-    def test_a_reset_failure_names_git_error_line(self):
-        sh("git", "branch", "task/x-2", cwd=self.repo)
-        (self.slot / "a.txt").write_text("local edit\n")
-        sh("git", "checkout", "-q", "-b", "other", cwd=self.slot)  # a branch that needs a checkout over a conflict
-        sh("git", "commit", "-qam", "other", cwd=self.slot)
-        with mock.patch.object(tl, "free_branch", return_value=""), \
-                mock.patch.object(tl, "run_git") as rg:
-            rg.return_value = mock.Mock(returncode=128, stdout="", stderr="hint: x\nfatal: 'task/x-1' is already used by worktree at '/w'\n")
-            real = tl.run_git
-            rg.side_effect = lambda p, *a, **kw: rg.return_value if a[:1] == ("checkout",) else real(p, *a, **kw)
-            rc, _, why = self.reset()
-        self.assertEqual(rc, 128)
-        self.assertEqual(why, "fatal: 'task/x-1' is already used by worktree at '/w'")
-
 
 class PreEngineFailure(tlp.LoopBase):
     def test_a_bead_failing_before_its_engine_rests_for_every_loop_and_stops_none(self):

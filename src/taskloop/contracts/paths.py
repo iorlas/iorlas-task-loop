@@ -56,6 +56,9 @@ class ConfigDir:
     def ticket(self, repo_key: str, seq: int) -> Path:
         return self.root / "slots" / repo_key / ("%06d.json" % seq)
 
+    def slot_setup_mark(self, key: str) -> Path:
+        return self.root / "slots" / ("%s.setup" % key)
+
     def lock_record(self, what: str, ident: str) -> Path:
         return self.root / "locks" / ("%s-%s.lock" % (what, ident))
 

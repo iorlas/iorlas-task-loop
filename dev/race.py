@@ -38,9 +38,10 @@ FIX = ROOT / "tests" / "fixtures" / "race"
 TL = ROOT / "skills" / "task-loop" / "tl.py"
 RELEASE = ROOT / "dev" / "release.py"
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(ROOT / "tests"))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import tl  # noqa: E402
+from taskloop.app.slots import marks  # noqa: E402
 import vendored  # noqa: E402,F401
 from process_lock import LockHeldError, ProcessLock  # noqa: E402
 
@@ -211,7 +212,7 @@ class Race(unittest.TestCase):
         time.sleep(3)
         released = time.time()
         sb = self.store()["sl-2"]  # still held, by the hold: no release or clean-up wiped it meanwhile
-        if not tl.slot_hold(sb) or sb.get("status") != "in_progress":
+        if float((sb.get("metadata") or {}).get("hold_until") or 0) <= time.time() or sb.get("status") != "in_progress":
             self.errors.append("the hold on s2 was lost while it was used: %s" % sb)
         rc, out = self.tl("hold-release", "slot", "release", "s2")
         if rc:
@@ -360,7 +361,7 @@ class Race(unittest.TestCase):
         for i, s in enumerate(SLOTS, 1):
             sb = beads["sl-%d" % i]
             self.assertEqual((sb["status"], sb.get("assignee") or ""), ("open", ""), sb)
-            self.assertFalse(set(sb.get("metadata") or {}) & set(tl.HELD_KEYS), sb)
+            self.assertFalse(set(sb.get("metadata") or {}) & set(marks.HELD_KEYS), sb)
             self.assertFalse(tl.engine_lock_path(str(self.repo / ".slots" / s)).exists(), s)
         cfg = self.h / "cfg" / "task-loop"
         for lock in (cfg / "locks").glob("*.lock"):
