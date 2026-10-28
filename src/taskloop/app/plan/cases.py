@@ -60,7 +60,8 @@ class Cases:
         e = self.e
         if not e.scope.strip():
             return items
-        have, keep = self.scope_tokens(), []
+        have = self.scope_tokens()
+        keep: list[Any] = []
         for u in items:
             toks = word_set(u["what"])
             near = len(toks & have)
