@@ -20,7 +20,7 @@ FEATURES = {
     "review": ["test_verify_noblock"],
     "loop": ["test_loop", "test_loop_more", "test_race_invariants"],
     "release": ["test_release"],
-    "land": ["test_land_lock", "test_held_branch"],
+    "land": ["test_land_lock", "test_held_branch"],  # plus every test under tests/land/ (the land's decisions on a scripted git)
     "run": [],  # plus every test under tests/run/ (the run state, its one writer, resume_decision)
     "look": ["test_look", "test_looks"],
     "write": ["test_stages", "test_stages_visual", "test_stages_land"],
