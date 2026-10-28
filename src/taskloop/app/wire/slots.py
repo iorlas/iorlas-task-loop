@@ -135,7 +135,7 @@ def waiting_line(repo: str) -> list[Any]:
 
 
 def wait_slot(repo: str, cfg: SlotsConfig, why: str, bead: str = "", stop: Callable[[], bool] | None = None,
-              sleep: Callable[[float], None] = time.sleep, poll: tuple[float, float] | None = None,
+              sleep: Callable[[float], object] = time.sleep, poll: tuple[float, float] | None = None,
               on_wait: Callable[[int], None] | None = None, prio: int = DEFAULT_PRIO,
               store: Beads | None = None) -> tuple[str, str, str] | None:
     """(name, dir, slot bead) once this waiter is first in line and a slot is free; None when stop() says so (see app/slots/line.py)."""

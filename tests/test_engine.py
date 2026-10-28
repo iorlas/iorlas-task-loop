@@ -26,8 +26,8 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
-from taskloop.adapters import halt as halting  # noqa: E402
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from taskloop.adapters import halt as halting  # noqa: E402
 from taskloop.adapters import applog  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.domain.write.matchers import count_tests  # noqa: E402

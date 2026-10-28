@@ -26,7 +26,7 @@ def queue_rows(env: SlotEnv) -> list[QueueRow]:
 
 
 def wait_slot(env: SlotEnv, why: str, bead: str = "", stop: Callable[[], bool] | None = None,
-              sleep: Callable[[float], None] | None = None, poll: tuple[float, float] | None = None,
+              sleep: Callable[[float], object] | None = None, poll: tuple[float, float] | None = None,
               on_wait: Callable[[int], None] | None = None, prio: int = DEFAULT_PRIO) -> tuple[str, str, str] | None:
     """(name, dir, slot bead) once this waiter is first in line and a slot is free; None when stop() says so after a look
     (stop=lambda: True: one look, no wait). on_wait(ahead) is called before each sleep. Never takes a slot while a live

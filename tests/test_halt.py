@@ -13,8 +13,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import test_engine as te  # noqa: E402
-import tl  # noqa: E402
-from taskloop.adapters import delegate, runner  # noqa: E402
+from taskloop.adapters import delegate, gitrepo, runner  # noqa: E402
 from taskloop.adapters import halt as halting  # noqa: E402
 from test_engine import CLEAN, PLAN, WRITE, engine, pyc  # noqa: E402
 
@@ -48,7 +47,7 @@ class Halt(unittest.TestCase):
         self.assertDead(self.child_of(pidfile))
         rows = [json.loads(line) for line in self.eng.log_path.read_text().splitlines()]
         self.assertEqual([r["why"] for r in rows if r["kind"] == "kill"], ["stopped"])
-        self.assertIn("wip (t-1)", tl.git("log", "-1", "--format=%s", "task/t-1", cwd=str(self.wt)))
+        self.assertIn("wip (t-1)", gitrepo.git("log", "-1", "--format=%s", "task/t-1", cwd=str(self.wt)))
         self.assertIsNone(halting.RUN_HALT["ev"])
 
     def test_a_wait_of_the_engine_ends_on_the_stop_flag_and_stops_the_run(self):
