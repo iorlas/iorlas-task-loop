@@ -9,7 +9,7 @@
 :root{--bg:#0d1117;--panel:#161b22;--line:#21262d;--ink:#c9d1d9;--dim:#6e7681;--ok:#7ee787;--bad:#ff7b72;--amber:#e3b341;--blue:#79c0ff;--mag:#d2a8ff;
   --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;color-scheme:dark}
 *{box-sizing:border-box}
-html,body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.5 var(--mono);-webkit-text-size-adjust:100%;overflow-x:hidden}
+html,body{margin:0;min-width:0;max-width:100vw;background:var(--bg);color:var(--ink);font:13px/1.5 var(--mono);-webkit-text-size-adjust:100%;overflow-x:hidden}
 header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);padding:10px 16px}
 .h1{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
 .h1 a{color:var(--dim);text-decoration:none}.h1 a:hover{color:var(--ink)}
@@ -21,21 +21,21 @@ header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px so
 .run .dot{background:var(--ok);animation:p 1.6s ease-in-out infinite}.am .dot{background:var(--amber)}.rd .dot{background:var(--bad)}
 @keyframes p{50%{opacity:.35}}@media (prefers-reduced-motion:reduce){.run .dot{animation:none}}
 .am{color:var(--amber)}.rd{color:var(--bad)}
-main{padding:8px 16px 80px;max-width:1100px}
+main{padding:8px 16px 80px;max-width:1100px;min-width:0}
 .sec{margin:18px 0 4px}.sec>.hd{display:flex;gap:10px;align-items:baseline;color:var(--mag);font-weight:600;border-bottom:1px solid var(--line);padding-bottom:3px}
 .sec>.hd .d{margin-left:auto;color:var(--dim);font-weight:400;font-variant-numeric:tabular-nums;white-space:nowrap}
 .row{padding:1px 0;overflow-wrap:anywhere;white-space:pre-wrap}
 .cmd{display:flex;gap:10px;cursor:pointer}.cmd .t{flex:1;min-width:0;overflow-wrap:anywhere}.cmd .t::before{content:"$ ";color:var(--dim)}
 .cmd .m{flex:none;color:var(--dim);font-variant-numeric:tabular-nums;white-space:nowrap}
 .cmd.ok .m{color:var(--ok)}.cmd.bad .m,.cmd.bad .t{color:var(--bad)}
-.out{margin:2px 0 6px 16px;padding:6px 10px;background:var(--panel);border-left:2px solid var(--line);color:var(--dim);max-height:260px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+.out{max-width:100%;margin:2px 0 6px 16px;padding:6px 10px;background:var(--panel);border-left:2px solid var(--line);color:var(--dim);max-height:260px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
 .tail{margin:2px 0 4px 2ch;color:var(--dim);border-left:2px solid var(--line);padding-left:8px;white-space:pre-wrap;overflow-wrap:anywhere}
 .tool,.note{color:var(--dim)}.tool .m{font-variant-numeric:tabular-nums}
 .msg{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer;margin:4px 0}.msg.open{display:block}
 .think{color:var(--dim);font-style:italic;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.think.open{white-space:pre-wrap}
 .warn{color:var(--amber)}.bad{color:var(--bad)}.good{color:var(--ok)}
-#latest{position:fixed;right:16px;bottom:16px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:6px 12px;font:12px var(--mono);cursor:pointer;display:none}
-#latest.on{display:block}
+#follow{position:fixed;right:16px;bottom:16px;max-width:calc(100vw - 32px);background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:6px 12px;font:12px var(--mono);cursor:pointer;display:none}
+#follow{display:block}#follow.paused{border-color:var(--amber);color:var(--amber)}
 #earlier{margin:8px 0}#earlier button{background:var(--panel);color:var(--dim);border:1px solid var(--line);border-radius:6px;padding:4px 10px;font:12px var(--mono);cursor:pointer}
 .ov{display:flex;gap:6px 14px;flex-wrap:wrap;align-items:baseline;padding:4px 0;border-bottom:1px solid var(--line);color:inherit;text-decoration:none}
 .ov .b{color:var(--blue);font-weight:600}.ov .s{min-width:7ch}.ov .l{flex:1;min-width:20ch;overflow-wrap:anywhere}.ov .r{color:var(--dim);font-variant-numeric:tabular-nums}
@@ -49,7 +49,7 @@ main{padding:8px 16px 80px;max-width:1100px}
 <div class="chips" id="chips"></div>
 </header>
 <main id="main"><div id="earlier" hidden><button id="more">load earlier</button></div><div id="term"><div class="note">connecting…</div></div></main>
-<button id="latest">&darr; latest</button>
+<button id="follow" title="follow the tail">following</button>
 <script>
 "use strict";
 const $=id=>document.getElementById(id);
@@ -59,7 +59,10 @@ const nowS=()=>Date.now()/1000+skew;
 function dur(s){s=Math.max(0,s);if(s<10)return s.toFixed(1)+'s';s=Math.round(s);if(s<60)return s+'s';const m=Math.floor(s/60);if(m<60)return m+'m'+String(s%60).padStart(2,'0')+'s';const h=Math.floor(m/60);return h+'h'+String(m%60).padStart(2,'0')+'m'}
 function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e}
 const atBottom=()=>document.documentElement.scrollHeight-window.scrollY-window.innerHeight<48;
-const toEnd=()=>window.scrollTo(0,document.documentElement.scrollHeight);
+let follow=true;                              // autoscroll: on at the tail, paused when the user scrolls up
+function setFollow(on){follow=on;const f=$('follow');f.classList.toggle('paused',!on);f.textContent=on?'following':'\u2193 paused \u00b7 back to tail'}
+const toEnd=()=>{programmatic=true;window.scrollTo(0,document.documentElement.scrollHeight);setTimeout(()=>{programmatic=false},60)};
+let programmatic=false;
 function tickEl(t0,t1){const s=el('span','tick');s.dataset.t0=t0;if(t1!=null)s.dataset.t1=t1;return s}
 function tickAll(){const n=nowS();document.querySelectorAll('.tick').forEach(e=>{const a=+e.dataset.t0,z=e.dataset.t1?+e.dataset.t1:n;e.textContent=dur(z-a)});
   document.querySelectorAll('.ago').forEach(e=>{e.textContent=dur(n-(+e.dataset.t0))})}
@@ -100,13 +103,13 @@ class Term{
     this.put(e.seq,el('div','row note',k+': '+(e.text||'')+(facts?' · '+facts:'')));
   }
   step(e){
-    const s=el('div','sec'),hd=el('div','hd'),lab=el('span',null,'§ '+e.step+(e.stage?' stage '+e.stage+'/'+(e.stages||'?'):'')+(e.write>1?' write '+e.write:'')),out=el('span','note'),d=el('span','d'),tk=tickEl(e.t);
+    const s=el('div','sec'),hd=el('div','hd'),lab=el('span',null,'§ '+e.step+(e.stage?' stage '+e.stage+'/'+(e.stages||'?'):'')+(e.write>1?' write '+e.write:'')),out=el('span','note'),d=el('span','d sectimer'),tk=tickEl(e.t);s.dataset.t0=e.t;
     d.appendChild(tk);hd.append(lab,out,d);const body=el('div');s.append(hd,body);this.root.appendChild(s);
     this.sec={body,tick:tk,hd,out};this.secs.set(e.src+'|'+e.id,this.sec);
   }
   cmd(e){
     const gate=e.k==='gate_start',text=e.k==='check_start'?(e.check+' · '+e.cmd):gate?'gate '+e.cmd:e.text,key=this.pairKey(e);
-    const n=el('div','row cmd go'),t=el('span','t',text),m=el('span','m');m.appendChild(tickEl(e.t));n.append(t,m);
+    const n=el('div','row cmd go'),t=el('span','t',text),m=el('span','m');n.dataset.t0=e.t;m.appendChild(tickEl(e.t));n.append(t,m);
     const wrap=el('div');wrap.appendChild(n);n.onclick=()=>{const o=wrap.querySelector('.out');if(o)o.hidden=!o.hidden};
     wrap._m=m;wrap._n=n;wrap._log=e.log||'';wrap._t0=e.t;this.put(key,wrap);
   }
@@ -114,7 +117,7 @@ class Term{
     const w=this.rows.get(this.pairKey(e));if(!w)return;
     const bad=e.exit!=null&&e.exit!==0||e.status==='failed'||e.status==='hung',m=w._m;m.textContent='';
     m.append(el('b',null,e.exit==null?(e.status||'?'):'exit '+e.exit),document.createTextNode(' '+dur(e.secs!=null?e.secs:e.t-w._t0)));
-    w._n.className='row cmd '+(bad?'bad':'ok');
+    w._n.className='row cmd '+(bad?'bad':'ok');if(e.exit!=null)w._n.dataset.exit=e.exit;w._n.dataset.secs=e.secs!=null?e.secs:e.t-w._t0;
     if(e.out){const o=el('div','out',e.out);o.hidden=true;w.appendChild(o)}
     const tail=w.querySelector('.tail');if(tail)tail.remove();w._log='';
   }
@@ -145,7 +148,7 @@ async function fetchLive(extra){
   const r=await fetch('/api/live?'+q,{cache:'no-store'});if(!r.ok)throw new Error('HTTP '+r.status);return r.json();
 }
 function ingest(d,target){
-  skew=d.now-Date.now()/1000;const stick=atBottom();
+  skew=d.now-Date.now()/1000;const stick=follow;
   if(target.root.firstChild&&target.root.firstChild.className==='note'&&target.root.firstChild.textContent==='connecting…')target.root.textContent='';
   target.apply(d.events);
   for(const e of d.events)lastT=Math.max(lastT,e.t);
@@ -184,8 +187,8 @@ function watchTail(){
     watchTail();
   },5000);
 }
-window.addEventListener('scroll',()=>$('latest').classList.toggle('on',!atBottom()),{passive:true});
-$('latest').onclick=toEnd;
+window.addEventListener('scroll',()=>{if(!programmatic)setFollow(atBottom())},{passive:true});
+$('follow').onclick=()=>{setFollow(true);toEnd()};
 
 // ---- overview: /live without a bead --------------------------------------------------------------------------------------
 async function overview(){
