@@ -38,16 +38,18 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 
 HERE = Path(__file__).resolve().parent
+LIVE_PAGE = HERE.parents[2] / "src" / "taskloop_dash" / "static" / "live.html"
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parents[2] / "src"))
 import gallery  # noqa: E402
 import graph  # noqa: E402
-import live  # noqa: E402
 import roadmap  # noqa: E402
 import signals  # noqa: F401,E402
+from livegate import Globals, Live  # noqa: E402
 from runlogs import FILES, block_detail, run_facts, run_timeline, timeline  # noqa: E402,F401  (the engine tests read them here)
 from taskloop.contracts import log as rec  # noqa: E402
 from taskloop_dash import jsonl  # noqa: E402
+from taskloop_dash.views import names  # noqa: E402
 HOME = Path.home()
 PROJECTS = HOME / ".claude" / "projects"
 CODEX_JOBS = HOME / ".claude" / "plugins" / "data" / "codex-openai-codex" / "state"
@@ -78,6 +80,7 @@ def version():
 
 
 VERSION = version()
+LIVE = Live(Globals(globals()))
 _cache = {}
 _lock = threading.Lock()
 
@@ -1297,29 +1300,6 @@ def api_task_timeline(repo, bead):
     return {"task": row, "runs": runs}
 
 
-def api_live(bead, run="", since=""):
-    """The Live view's feed for a bead's newest run (or the named one): new events since the cursor, engine rows and the
-    worker's live files merged by time. Read-only."""
-    _last_seen[0] = time.time()
-    if not re.match(r"^[A-Za-z0-9][\w.-]*$", bead or ""):
-        return {"bead": bead, "found": False, "error": "not a bead id"}
-    path = run_path(run) if run else None
-    if run and not path:
-        return {"bead": bead, "run": run, "found": False, "error": "no such run"}
-    if not path:
-        logs = engine_logs(retain=False).get(bead, [])
-        if not logs:
-            return {"bead": bead, "found": False, "error": "no engine run for this bead"}
-        path = logs[-1]
-    newest = timeline.run_name((engine_logs(retain=False).get(bead) or [path])[-1])
-    f = live.feed(path, since)
-    running = run_alive(path, {"worktree": f["worktree"]} if f["worktree"] else None, None)
-    meta = f["meta"]
-    return {"found": True, "bead": bead, "run": timeline.run_name(path), "step": f["step"], "lane": meta.get("lane"),
-            "model": meta.get("model"), "effort": meta.get("effort"), "started": f["started"], "now": time.time(),
-            "running": running, "newest": newest, "worker_detail": f["worker_detail"], "events": f["events"], "cursor": f["cursor"]}
-
-
 def run_path(run):
     if not isinstance(run, str) or not RUN_NAME.match(run):
         return None
@@ -1985,9 +1965,11 @@ def make_handler(port, addrs):
                 elif u.path == "/api/task-timeline":
                     body = api_task_timeline(q.get("repo", ""), q.get("id", ""))
                 elif u.path == "/api/live":
-                    body = api_live(q.get("bead", ""), q.get("run", ""), q.get("since", ""))
+                    body = LIVE.api_live(q.get("bead", ""), q.get("run", ""), q.get("since", ""), q.get("before", ""), q.get("wait", "0"), q.get("limit", "300"))
+                elif u.path == "/api/live/overview":
+                    body = LIVE.api_live_overview(q.get("wait", "0"))
                 elif u.path == "/live":
-                    return self.send(200, (HERE / "live.html").read_bytes(), "text/html; charset=utf-8")
+                    return self.send(200, LIVE_PAGE.read_bytes(), "text/html; charset=utf-8")
                 elif u.path == "/api/block":
                     body = api_block(q.get("run", ""), q.get("node", ""), q.get("k", "0"))
                 elif u.path == "/api/file":

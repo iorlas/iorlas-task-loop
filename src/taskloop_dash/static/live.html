@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0d1117">
+<title>live · task-loop</title>
+<style>
+:root{--bg:#0d1117;--panel:#161b22;--line:#21262d;--ink:#c9d1d9;--dim:#6e7681;--ok:#7ee787;--bad:#ff7b72;--amber:#e3b341;--blue:#79c0ff;--mag:#d2a8ff;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.5 var(--mono);-webkit-text-size-adjust:100%;overflow-x:hidden}
+header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);padding:10px 16px}
+.h1{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.h1 a{color:var(--dim);text-decoration:none}.h1 a:hover{color:var(--ink)}
+.bead{color:var(--blue);font-weight:600}.title{min-width:0;overflow-wrap:anywhere}
+.state{display:flex;gap:6px 14px;flex-wrap:wrap;margin-top:4px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.state .what{font-weight:600}.state .more{color:var(--dim)}
+.chips{display:flex;gap:6px 14px;flex-wrap:wrap;color:var(--dim)}.chips b{color:var(--ink);font-weight:500}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--dim);margin-right:6px}
+.run .dot{background:var(--ok);animation:p 1.6s ease-in-out infinite}.am .dot{background:var(--amber)}.rd .dot{background:var(--bad)}
+@keyframes p{50%{opacity:.35}}@media (prefers-reduced-motion:reduce){.run .dot{animation:none}}
+.am{color:var(--amber)}.rd{color:var(--bad)}
+main{padding:8px 16px 80px;max-width:1100px}
+.sec{margin:18px 0 4px}.sec>.hd{display:flex;gap:10px;align-items:baseline;color:var(--mag);font-weight:600;border-bottom:1px solid var(--line);padding-bottom:3px}
+.sec>.hd .d{margin-left:auto;color:var(--dim);font-weight:400;font-variant-numeric:tabular-nums;white-space:nowrap}
+.row{padding:1px 0;overflow-wrap:anywhere;white-space:pre-wrap}
+.cmd{display:flex;gap:10px;cursor:pointer}.cmd .t{flex:1;min-width:0;overflow-wrap:anywhere}.cmd .t::before{content:"$ ";color:var(--dim)}
+.cmd .m{flex:none;color:var(--dim);font-variant-numeric:tabular-nums;white-space:nowrap}
+.cmd.ok .m{color:var(--ok)}.cmd.bad .m,.cmd.bad .t{color:var(--bad)}
+.out{margin:2px 0 6px 16px;padding:6px 10px;background:var(--panel);border-left:2px solid var(--line);color:var(--dim);max-height:260px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+.tail{margin:2px 0 4px 2ch;color:var(--dim);border-left:2px solid var(--line);padding-left:8px;white-space:pre-wrap;overflow-wrap:anywhere}
+.tool,.note{color:var(--dim)}.tool .m{font-variant-numeric:tabular-nums}
+.msg{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer;margin:4px 0}.msg.open{display:block}
+.think{color:var(--dim);font-style:italic;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.think.open{white-space:pre-wrap}
+.warn{color:var(--amber)}.bad{color:var(--bad)}.good{color:var(--ok)}
+#latest{position:fixed;right:16px;bottom:16px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:6px 12px;font:12px var(--mono);cursor:pointer;display:none}
+#latest.on{display:block}
+#earlier{margin:8px 0}#earlier button{background:var(--panel);color:var(--dim);border:1px solid var(--line);border-radius:6px;padding:4px 10px;font:12px var(--mono);cursor:pointer}
+.ov{display:flex;gap:6px 14px;flex-wrap:wrap;align-items:baseline;padding:4px 0;border-bottom:1px solid var(--line);color:inherit;text-decoration:none}
+.ov .b{color:var(--blue);font-weight:600}.ov .s{min-width:7ch}.ov .l{flex:1;min-width:20ch;overflow-wrap:anywhere}.ov .r{color:var(--dim);font-variant-numeric:tabular-nums}
+@media (max-width:600px){html,body{font-size:12.5px}header{padding:8px 12px}main{padding:6px 12px 80px}.cmd{flex-direction:column;gap:0}.cmd .m{padding-left:2ch}}
+</style>
+</head>
+<body>
+<header>
+<div class="h1"><a href="/" title="Roadmap">&lsaquo; task-loop</a><span class="bead" id="bead"></span><span class="title" id="title"></span></div>
+<div class="state" id="state"></div>
+<div class="chips" id="chips"></div>
+</header>
+<main id="main"><div id="earlier" hidden><button id="more">load earlier</button></div><div id="term"><div class="note">connecting…</div></div></main>
+<button id="latest">&darr; latest</button>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const P=new URLSearchParams(location.search),BEAD=P.get('bead')||'',RUN_PARAM=P.get('run')||'';
+let skew=0;                                   // server clock minus ours, from every answer
+const nowS=()=>Date.now()/1000+skew;
+function dur(s){s=Math.max(0,s);if(s<10)return s.toFixed(1)+'s';s=Math.round(s);if(s<60)return s+'s';const m=Math.floor(s/60);if(m<60)return m+'m'+String(s%60).padStart(2,'0')+'s';const h=Math.floor(m/60);return h+'h'+String(m%60).padStart(2,'0')+'m'}
+function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e}
+const atBottom=()=>document.documentElement.scrollHeight-window.scrollY-window.innerHeight<48;
+const toEnd=()=>window.scrollTo(0,document.documentElement.scrollHeight);
+function tickEl(t0,t1){const s=el('span','tick');s.dataset.t0=t0;if(t1!=null)s.dataset.t1=t1;return s}
+function tickAll(){const n=nowS();document.querySelectorAll('.tick').forEach(e=>{const a=+e.dataset.t0,z=e.dataset.t1?+e.dataset.t1:n;e.textContent=dur(z-a)});
+  document.querySelectorAll('.ago').forEach(e=>{e.textContent=dur(n-(+e.dataset.t0))})}
+
+// ---- the terminal: append-only; an event makes a row or patches the row it pairs with (src + kind + id) ----------------------
+class Term{
+  constructor(root){this.root=root;this.rows=new Map();this.seen=new Set();this.sec=null;this.secs=new Map();this.open=new Set()}
+  pairKey(e){const b=e.k.replace(/_(start|end)$/,'');return e.src+'|'+(b==='end'?'start':b==='cmd'?'cmd':b)+'|'+(e.id||e.what||'')}
+  body(){return this.sec?this.sec.body:this.root}
+  put(key,node,into){this.rows.set(key,node);(into||this.body()).appendChild(node);return node}
+  apply(list){for(const e of list){if(this.seen.has(e.seq))continue;this.seen.add(e.seq);this.one(e)}}
+  one(e){
+    const k=e.k,src=e.src;
+    if(k==='run_start'||k==='tokens'||k==='checks'||k==='close')return this.misc(e);
+    if(k==='step_start'){return this.step(e)}
+    if(k==='step_end'){const s=this.secs.get(src+'|'+e.id);if(s){s.tick.dataset.t1=e.t;s.hd.classList.add(e.outcome==='done'||e.outcome==='green'||e.outcome==='clean'?'good':'warn');s.out.textContent=' '+(e.outcome||'')}return}
+    if(k==='call_start'){const n=el('div','row note','call '+e.n+' · '+(e.role||'')+' ');n.appendChild(tickEl(e.t));return this.put(this.pairKey(e),n)}
+    if(k==='call_end'){const n=this.rows.get(src+'|call|'+e.id)||this.put(src+'|call|'+e.id,el('div','row note'));n.textContent='';
+      const tk=e.tokens||{};n.className='row '+(e.status==='done'?'note':'bad');
+      n.textContent=[e.lane,e.model,e.effort].filter(Boolean).join(' / ')+' · '+e.status+(e.reason?' ('+e.reason+')':'')+' · '+dur(e.secs||0)+(tk.in!=null?' · '+Math.round((tk.in||0)/1000)+'k in / '+Math.round((tk.out||0)/1000)+'k out':'')+(e.ref?' · '+e.ref:'');return}
+    if(k==='cmd_start'||k==='cmd'||k==='check_start'||k==='gate_start')return this.cmd(e);
+    if(k==='cmd_end'||k==='check_end'||k==='gate_end')return this.cmdEnd(e);
+    if(k==='tool'){const n=el('div','row tool',e.text+' ');n.appendChild(tickEl(e.t));return this.put(this.pairKey(e),n)}
+    if(k==='tool_end'){const n=this.rows.get(src+'|tool|'+e.id);if(n){const t=n.querySelector('.tick');t.dataset.t1=e.t;if(e.text)n.firstChild.textContent=e.text+' '}return}
+    if(k==='wait_start'){const n=el('div','row warn','waiting for '+String(e.what).replace(/_/g,' ')+(e.holder?' · held by '+e.holder:'')+' ');n.appendChild(tickEl(e.t));return this.put(this.pairKey(e),n)}
+    if(k==='wait_end'){const n=this.rows.get(src+'|wait|'+e.id);if(n)n.querySelector('.tick').dataset.t1=e.t;return}
+    if(k==='msg'){const n=el('div','row msg',e.text);n.onclick=()=>n.classList.toggle('open');return this.put(e.seq,n)}
+    if(k==='think'){const n=el('div','row think',e.text);n.onclick=()=>n.classList.toggle('open');return this.put(e.seq,n)}
+    if(k==='start'){return this.put(e.seq,el('div','row note','worker '+[e.harness,e.lane,e.model,e.effort].filter(Boolean).join(' / ')))}
+    if(k==='end'){return this.put(e.seq,el('div','row '+(e.status==='done'?'note':'bad'),'worker '+e.status+' · '+dur(e.secs||0)+(e.cost_usd?' · $'+Number(e.cost_usd).toFixed(2):'')))}
+    if(k==='stall')return this.put(e.seq,el('div','row warn','no output for '+dur(e.secs||0)));
+    if(k==='retry')return this.put(e.seq,el('div','row warn','retry '+(e.n||'?')+'/'+(e.of||'?')+' · '+(e.why||'')));
+    if(k==='warn')return this.put(e.seq,el('div','row warn','⚠ '+e.text));
+    if(k==='vendor_error'||k==='kill')return this.put(e.seq,el('div','row bad',k.replace('_',' ')+': '+(e.reason||e.what||'')+(e.why?' · '+e.why:'')+(e.lane?' · '+e.lane:'')+(e.error?' · '+e.error:'')));
+    if(k==='lock'||k==='unlock')return this.put(e.seq,el('div','row note',k+' '+e.what+(e.holder?' · '+e.holder:'')+(e.secs!=null?' · '+dur(e.secs):'')));
+    if(k==='note')return this.put(e.seq,el('div','row note',e.text));
+    const facts=Object.keys(e).filter(x=>!['t','k','src','seq','text','v'].includes(x)).map(x=>x+'='+(typeof e[x]==='object'?JSON.stringify(e[x]):e[x])).join(' ');
+    this.put(e.seq,el('div','row note',k+': '+(e.text||'')+(facts?' · '+facts:'')));
+  }
+  step(e){
+    const s=el('div','sec'),hd=el('div','hd'),lab=el('span',null,'§ '+e.step+(e.stage?' stage '+e.stage+'/'+(e.stages||'?'):'')+(e.write>1?' write '+e.write:'')),out=el('span','note'),d=el('span','d'),tk=tickEl(e.t);
+    d.appendChild(tk);hd.append(lab,out,d);const body=el('div');s.append(hd,body);this.root.appendChild(s);
+    this.sec={body,tick:tk,hd,out};this.secs.set(e.src+'|'+e.id,this.sec);
+  }
+  cmd(e){
+    const gate=e.k==='gate_start',text=e.k==='check_start'?(e.check+' · '+e.cmd):gate?'gate '+e.cmd:e.text,key=this.pairKey(e);
+    const n=el('div','row cmd go'),t=el('span','t',text),m=el('span','m');m.appendChild(tickEl(e.t));n.append(t,m);
+    const wrap=el('div');wrap.appendChild(n);n.onclick=()=>{const o=wrap.querySelector('.out');if(o)o.hidden=!o.hidden};
+    wrap._m=m;wrap._n=n;wrap._log=e.log||'';wrap._t0=e.t;this.put(key,wrap);
+  }
+  cmdEnd(e){
+    const w=this.rows.get(this.pairKey(e));if(!w)return;
+    const bad=e.exit!=null&&e.exit!==0||e.status==='failed'||e.status==='hung',m=w._m;m.textContent='';
+    m.append(el('b',null,e.exit==null?(e.status||'?'):'exit '+e.exit),document.createTextNode(' '+dur(e.secs!=null?e.secs:e.t-w._t0)));
+    w._n.className='row cmd '+(bad?'bad':'ok');
+    if(e.out){const o=el('div','out',e.out);o.hidden=true;w.appendChild(o)}
+    const tail=w.querySelector('.tail');if(tail)tail.remove();w._log='';
+  }
+  misc(e){}
+}
+let term=new Term($('term'));
+let run='',newest='',cursor='',before='',ended=0,state=null,worker=null,title='',lastT=0,running=true,tailTimer=0;
+
+function head(d){
+  $('bead').textContent=BEAD;document.title='live · '+BEAD;
+  const st=d.state||{},idle=st.what==='silent'?(nowS()-st.since):0;
+  const cls=!d.running?'':st.what==='hung'||st.what==='silent'&&idle>300?'rd':st.what==='silent'?'am':st.what==='check'&&checkIdle(st)?'am':'';
+  const box=$('state');box.className='state '+(d.running?'run ':'')+cls;box.textContent='';
+  const what=el('span','what');what.append(el('i','dot'),document.createTextNode(st.what||'…'));
+  const more=el('span','more',[st.label,st.detail].filter(Boolean).join(' · ')+' · ');more.appendChild(tickEl(st.since,d.running?null:lastT));
+  box.append(what,more);
+  if(st.what==='check'&&st.last_output_t){const a=el('span','more','last output ');const g=el('span','ago');g.dataset.t0=st.last_output_t;a.append(g,document.createTextNode(' ago'));box.appendChild(a)}
+  const w=d.worker||{},tk=w.tokens,c=$('chips');c.textContent='';
+  const add=(l,v)=>{if(v){const s=el('span',null,l+' ');s.appendChild(el('b',null,v));c.appendChild(s)}};
+  add('step',d.step);add('worker',[w.lane,w.model,w.effort].filter(Boolean).join(' / '));
+  add('tokens',tk?Math.round((tk.in||0)/1000)+'k in / '+Math.round((tk.out||0)/1000)+'k out':'');
+  add('run',run);
+}
+function checkIdle(st){return st.last_output_t&&nowS()-st.last_output_t>300}
+
+async function fetchLive(extra){
+  const q=new URLSearchParams(Object.assign({bead:BEAD},extra));if(run)q.set('run',run);
+  const r=await fetch('/api/live?'+q,{cache:'no-store'});if(!r.ok)throw new Error('HTTP '+r.status);return r.json();
+}
+function ingest(d,target){
+  skew=d.now-Date.now()/1000;const stick=atBottom();
+  if(target.root.firstChild&&target.root.firstChild.className==='note'&&target.root.firstChild.textContent==='connecting…')target.root.textContent='';
+  target.apply(d.events);
+  for(const e of d.events)lastT=Math.max(lastT,e.t);
+  if(stick)toEnd();
+}
+async function poll(){
+  let delay=0;
+  try{
+    const first=!cursor;
+    const d=await fetchLive(first?{limit:300}:{since:cursor,wait:20});
+    if(!d.found){$('state').textContent=d.error||'not found';delay=5000}
+    else{
+      if(!RUN_PARAM&&run&&d.newest&&d.newest!==d.run){run=d.newest;cursor='';term.root.textContent='';term=new Term($('term'));return setTimeout(poll,0)}  // a retry started: follow it
+      run=d.run;newest=d.newest;ingest(d,term);cursor=d.cursor;state=d.state;running=d.running;
+      if(first){before=d.before||'';$('earlier').hidden=!before;toEnd()}
+      head(d);tickAll();watchTail();
+      if(d.running)ended=0;else{if(!ended)ended=nowS();if(nowS()-ended>600)return;delay=10000}
+    }
+  }catch(e){$('state').textContent='disconnected: '+e.message;delay=3000}
+  setTimeout(poll,delay);
+}
+$('more').onclick=async()=>{
+  const d=await fetchLive({before:before,limit:300}),y=document.documentElement.scrollHeight;
+  const frag=el('div');const t=new Term(frag);for(const k of term.seen)t.seen.add(k);t.apply(d.events);
+  $('term').parentNode.insertBefore(frag,$('term'));before=d.before||'';$('earlier').hidden=!before;
+  window.scrollTo(0,window.scrollY+document.documentElement.scrollHeight-y);   // expanding above never moves the viewport
+};
+// the output tail of an open check or gate: its log, every 5 s, 6 lines
+function watchTail(){
+  clearTimeout(tailTimer);
+  const open=[...term.rows.values()].filter(w=>w._log&&w._n&&w._n.classList.contains('go'));
+  if(!open.length||!run)return;
+  tailTimer=setTimeout(async()=>{
+    for(const w of open){try{const r=await fetch('/api/file?run='+encodeURIComponent(run)+'&path='+encodeURIComponent(w._log)+'&tail=4000',{cache:'no-store'});
+      if(!r.ok)continue;const lines=(await r.text()).trimEnd().split('\n').slice(-6).join('\n');let t=w.querySelector('.tail');if(!t){t=el('div','tail');w.appendChild(t)}t.textContent=lines}catch(e){}}
+    watchTail();
+  },5000);
+}
+window.addEventListener('scroll',()=>$('latest').classList.toggle('on',!atBottom()),{passive:true});
+$('latest').onclick=toEnd;
+
+// ---- overview: /live without a bead --------------------------------------------------------------------------------------
+async function overview(){
+  $('term').textContent='';const rows=new Map();$('title').textContent='live';$('bead').textContent='';
+  const strip=$('chips');
+  for(;;){
+    try{
+      const r=await fetch('/api/live/overview?wait=20',{cache:'no-store'});if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();skew=d.now-Date.now()/1000;
+      const count=g=>d.beads.filter(b=>b.group===g).length;
+      $('state').textContent='live · '+count('running')+' running · '+count('queued')+' queued · '+count('paused')+' paused';
+      strip.textContent='lanes: '+d.lanes.map(l=>l.id+(l.state==='out'?' out':' ok')+(l.used_pct!=null?' '+Math.round(l.used_pct)+'%':'')).join(' · ');
+      const seen=new Set();
+      for(const b of d.beads){const key=b.bead+'|'+b.run;seen.add(key);let a=rows.get(key);
+        if(!a){a=el('a','ov');a.append(el('span','b'),el('span','s'),el('span','l'),el('span','r'));rows.set(key,a);$('term').appendChild(a)}
+        a.href=b.run?'/live?bead='+encodeURIComponent(b.bead):'#';
+        const [bb,s,l,rr]=a.children;bb.textContent=b.bead;s.textContent=b.state;s.className='s '+(b.state==='paused'?'warn':b.state==='running'?'good':'note');
+        l.textContent=[b.label,b.detail].filter(Boolean).join(' · ')+(b.until?' · until '+new Date(b.until*1000).toTimeString().slice(0,5):'');
+        rr.textContent=[b.step,b.lane,b.elapsed!=null?dur(b.elapsed):''].filter(Boolean).join(' · ')}
+      for(const [k,a] of rows)if(!seen.has(k)){a.remove();rows.delete(k)}
+      // rows are ordered by the server (running, queued, paused): keep the DOM in that order without rebuilding
+      d.beads.forEach(b=>{const a=rows.get(b.bead+'|'+b.run);if(a)$('term').appendChild(a)});
+    }catch(e){$('state').textContent='disconnected: '+e.message;await new Promise(r=>setTimeout(r,3000))}
+  }
+}
+setInterval(tickAll,250);
+if(BEAD){
+  run=RUN_PARAM;
+  fetch('/api/tasks',{cache:'no-store'}).then(r=>r.json()).then(d=>{const t=(d.tasks||[]).find(x=>x.id===BEAD);if(t&&t.title)$('title').textContent=t.title}).catch(()=>{});
+  poll();
+}else overview();
+</script>
+</body>
+</html>
