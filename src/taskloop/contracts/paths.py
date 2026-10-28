@@ -35,6 +35,17 @@ class ConfigDir:
     def asks_dir(self) -> Path:
         return self.root / "asks"
 
+    def ask_beads(self) -> list[str]:
+        """The beads that have an ask file, sorted."""
+        try:
+            return sorted(p.stem for p in self.asks_dir().glob("*.json"))
+        except OSError:
+            return []
+
+    def ask_marker(self, sweep: str) -> Path:
+        """When a throttled sweep of the asks last ran (the file's mtime); not an ask, so the store never lists it."""
+        return self.root / "asks" / ("." + sweep)
+
     def checkpoint(self, bead: BeadId | str) -> Path:
         return self.root / "checkpoints" / ("%s.json" % bead)
 

@@ -1,45 +1,8 @@
-"""Logic over a DocSet that real and fake share, so the two cannot differ: asks and checkpoints."""
+"""Logic over a DocSet that real and fake share, so the two cannot differ: checkpoints."""
 import dataclasses
 
-from taskloop.contracts.ask import Ask, AskAnswer
 from taskloop.contracts.checkpoint import Checkpoint, Unfiled
-from taskloop.contracts.enums import AskStatus
 from taskloop.stores.api import Doc, DocSet
-
-LIVE = (AskStatus.OPEN, AskStatus.PARKED)
-
-
-class AskBook:
-    """asks/<bead>: the engine raises, tl sweeps, the dashboard answers; one record per bead."""
-
-    def __init__(self, docs: DocSet[Ask]) -> None:
-        self.docs = docs
-
-    def of(self, bead: str) -> Doc[Ask]:
-        return self.docs.of(bead)
-
-    def live(self) -> list[Ask]:
-        """Asks still waiting for an owner (open or parked), oldest first."""
-        out = [a for a in (self.docs.of(k).read() for k in self.docs.keys()) if a is not None and a.status in LIVE]
-        return sorted(out, key=lambda a: a.t)
-
-    def answer(self, bead: str, answer: AskAnswer) -> Ask | None:
-        """Record the owner's answer on a live ask; None when there is none to answer. The one write the dashboard makes."""
-        doc = self.docs.of(bead)
-        ask = doc.read()
-        if ask is None or ask.status not in LIVE:
-            return None
-        done = dataclasses.replace(ask, status=AskStatus.ANSWERED, answer=answer, answered=answer.t)  # pyrefly: ignore[bad-specialization]
-        doc.write(done)
-        return done
-
-    def withdraw(self, bead: str) -> bool:
-        doc = self.docs.of(bead)
-        ask = doc.read()
-        if ask is None or ask.status not in LIVE:
-            return False
-        doc.write(dataclasses.replace(ask, status=AskStatus.WITHDRAWN))  # pyrefly: ignore[bad-specialization]
-        return True
 
 
 class CheckpointBook:

@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402,F401
 from taskloop.contracts import ask, bead, checkpoint, config, delegate, events, ids, locks, loop, run, slots, snapshots, trace  # noqa: E402
 from taskloop.contracts import log  # noqa: E402
-from taskloop.contracts.enums import AskKind, AskStatus, LockWhat, Outcome, WaitWhat, WhyCode  # noqa: E402
+from taskloop.contracts.enums import AskClass, AskKind, AskStatus, LockWhat, Outcome, WaitWhat, WhyCode  # noqa: E402
 
 T = 1793050200.5
 RUN = ids.RunId(ids.BeadId("tl-7y6.3.1"), datetime.datetime(2026, 10, 27, 0, 22, 39))
@@ -107,14 +107,16 @@ LIVE = {
     "end": delegate.LiveEnd(t=T, status="done", secs=227.3, cost_usd=0.0),
     "raw": delegate.LiveRaw(t=T, type="x"),
 }
-OTHERS = {
-    "RunTrace": TRACE,
-    "Ask": ask.Ask(id="tl-1-1", n=1, bead="tl-1", kind=AskKind.DECISION, question="Which?", run=str(RUN), t=T, status=AskStatus.ANSWERED,
-                   detail=ask.AskDetail(budget=[ask.BudgetLine(step="write", minutes=12.0, usd=1.0)],
+ASK = ask.Ask(id="tl-1-1", n=1, bead="tl-1", kind=AskKind.DECISION, ask_class=AskClass.OPEN_QUESTION, decision="Which?", run=str(RUN), t=T,
+                   status=AskStatus.ANSWERED, tried=["a"],
+                   detail=ask.AskDetail(budget=[ask.BudgetLine(step="write", minutes=12.0, rounds=3, usd=1.0)],
                                         replans=[ask.ReplanLine(n=1, why="scope")], text="d"),
                    why_code=WhyCode.OWNER_DECISION, why="w", parks_at=T + 3600, brief_hash="b0c0",
-                   options=[ask.AskOption(label="Right", cost="free", answer="right", recommended=True)], repo="/r", title="t",
-                   answer=ask.AskAnswer(action="confirm", text="ok", t=T, by="denis"), answered=T + 5),
+                   options=[ask.AskOption(label="Right", consequence="lands", action="confirm", cost="free", recommended=True)],
+                   repo="/r", title="t", answer=ask.AskAnswer(action="confirm", text="ok", t=T, by="denis"), answered=T + 5, consumed=T + 9)
+OTHERS = {
+    "RunTrace": TRACE,
+    "Ask": ASK,
     "Checkpoint": checkpoint.Checkpoint(
         bead="tl-1", run=str(RUN), t=T, branch="task/tl-1", step="write", stage=2, rounds=3, n=4, head="abc", brief_hash="b0",
         plan={"summary": "s", "stages": [{"goal": "g"}]}, plan_log=[checkpoint.PlanLogLine(mode="plan", counted=True, why="first")],

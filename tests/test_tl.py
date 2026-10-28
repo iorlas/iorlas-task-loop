@@ -17,6 +17,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support import tlbd  # noqa: E402
 import tl  # noqa: E402
+from contracts import samples as S  # noqa: E402
+from taskloop.contracts import codec  # noqa: E402
 
 
 SH_FAKE = unittest.skipIf(os.name == "nt", "the bd fake is a #!/bin/sh script, which Windows cannot execute")
@@ -467,8 +469,15 @@ if __name__ == "__main__":
     unittest.main()
 
 
+def ask_file(asks, bead, **over):
+    """A current-version ask record on disk, the way the engine files one."""
+    base = codec.to_json(S.ASK)
+    rec = {**base, "id": bead + "-1", "bead": bead, "status": "open", "answer": None, "answered": None, "consumed": None, **over}
+    (asks / ("%s.json" % bead)).write_text(json.dumps(rec))
+
+
 class AskCli(unittest.TestCase):
-    """tl ask: the inbox from the terminal, through the dashboard's own answer and withdraw."""
+    """tl ask: the inbox from the terminal. An answer is a typed record on the ask, never a comment."""
 
     @SH_FAKE
     def test_list_answer_and_withdraw(self):
@@ -480,10 +489,7 @@ class AskCli(unittest.TestCase):
             asks = d / "task-loop" / "asks"
             asks.mkdir(parents=True)
             for bead in ("x-1", "x-2"):
-                (asks / ("%s.json" % bead)).write_text(json.dumps({
-                    "v": 1, "id": bead + "-1", "bead": bead, "kind": "verify", "question": "ok?", "t": 1, "status": "open",
-                    "parks_at": 9e12, "repo": str(d), "title": "T " + bead,
-                    "options": [{"label": "Right", "answer": "right"}]}))
+                ask_file(asks, bead, parks_at=9e12, repo=str(d), title="T " + bead)
             env = {"XDG_CONFIG_HOME": str(d), "APPDATA": str(d), "HOME": str(d), "USERPROFILE": str(d),
                    "PATH": str(d / "bin") + os.pathsep + os.environ["PATH"]}
             ns = lambda **k: type("A", (), dict(dict(op="list", bead=None, text=[], json=False), **k))()
@@ -497,10 +503,10 @@ class AskCli(unittest.TestCase):
                     self.assertEqual(tl.cmd_ask(ns(op="answer", bead="x-1", text=["again"])), 1)  # already answered
                     self.assertEqual(tl.cmd_ask(ns(op="answer", bead="x-1", text=["again"], amend=True)), 0)
                 self.assertIn("x-1", out.getvalue())
-                self.assertIn("Right -> right", out.getvalue())
-                self.assertIn("comments add x-1 right", (d / "bd.log").read_text())
+                a = json.loads((asks / "x-1.json").read_text())
+                self.assertEqual((a["status"], a["answer"]["action"], a["answer"]["text"]), ("answered", "text", "again"))
                 a = json.loads((asks / "x-2.json").read_text())
-                self.assertEqual((a["status"], a["withdrawn_why"]), ("withdrawn", "no longer"))
+                self.assertEqual((a["status"], a["closed_why"]), ("withdrawn", "no longer"))
 
 
 class ParkStaleAsks(unittest.TestCase):
@@ -516,18 +522,17 @@ class ParkStaleAsks(unittest.TestCase):
             asks = d / "task-loop" / "asks"
             asks.mkdir(parents=True)
             now = time.time()
-            for bead, parks, extra in (("late", now - 10, {}), ("fresh", now + 9e4, {}), ("done", now - 10, {"answer": "x"}),
+            done = {"status": "answered", "answered": now, "answer": {"action": "text", "text": "x", "t": now, "by": "denis"}}
+            for bead, parks, extra in (("late", now - 10, {}), ("fresh", now + 9e4, {}), ("done", now - 10, done),
                                        ("closed", now - 10, {"status": "closed"})):
-                (asks / ("%s.json" % bead)).write_text(json.dumps(dict({
-                    "v": 1, "id": bead + "-1", "bead": bead, "kind": "verify", "question": "q", "t": 1, "status": "open",
-                    "parks_at": parks, "repo": str(d)}, **extra)))
+                ask_file(asks, bead, parks_at=parks, repo=str(d), **extra)
             env = {"XDG_CONFIG_HOME": str(d), "APPDATA": str(d), "HOME": str(d), "USERPROFILE": str(d),
                    "PATH": str(d / "bin") + os.pathsep + os.environ["PATH"]}
             with mock.patch.dict(os.environ, env):
-                self.assertEqual(tl.park_stale_asks(every=0), ["late"])
-                self.assertEqual(tl.park_stale_asks(every=600), [])  # throttled
+                self.assertEqual(tl.ask_sweep("park", every=0), ["late"])
+                self.assertEqual(tl.ask_sweep("park", every=600), [])  # throttled
             status = lambda b: json.loads((asks / ("%s.json" % b)).read_text())["status"]
-            self.assertEqual([status(b) for b in ("late", "fresh", "done", "closed")], ["parked", "open", "open", "closed"])
+            self.assertEqual([status(b) for b in ("late", "fresh", "done", "closed")], ["parked", "open", "answered", "closed"])
             log = (d / "bd.log").read_text()
             self.assertIn("comments add late Parked (engine): ask late-1 got no answer in 3 days", log)
             self.assertEqual(log.count("comments add"), 1)

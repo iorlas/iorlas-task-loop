@@ -23,6 +23,7 @@ FEATURES = {
     "land": ["test_land_lock", "test_held_branch"],
     "look": ["test_look", "test_looks"],
     "write": ["test_stages", "test_stages_visual", "test_stages_land"],
+    "asks": ["test_dash_asks"],  # plus every test under tests/asks/ (lint, specs, intake, sweeps, the single ask store)
     "dash": sorted(p.stem for p in HERE.glob("test_dash*.py")),
 }
 

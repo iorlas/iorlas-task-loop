@@ -75,7 +75,11 @@ from taskloop.contracts.bead import Bead
 from taskloop.contracts.locks import LockTimeout
 from taskloop.contracts.slots import SlotFail
 from taskloop.stores.files import FileTickets
+from taskloop.app.asks import sweeps as ask_sweeps
+from taskloop.cli import asks as cli_asks
+from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, NewBead
+from taskloop.contracts.stores import AskStore
 from taskloop_dash import bind as dash_bind
 from taskloop_dash.cli import dash as dash_cli
 
@@ -1123,145 +1127,39 @@ def start_server(port, bind=None):
     return None, "dashboard did not start; see " + str(config_dir() / "dash.log")
 
 
-def close_stale_asks(every=600, store=None):
-    """tl-bxk.13.16.5: an open ask whose bead is closed, or does not exist, is closed with the reason (lifesim-u3bx was closed by
-    hand a minute after its ask and sat open 40 hours; a demo record named a bead `demo`). A bd that fails for another reason
-    changes nothing. At most once per `every` seconds across all callers. -> the bead ids closed."""
-    marker = config_dir() / "asks" / ".swept"
-    try:
-        if time.time() - marker.stat().st_mtime < every:
-            return []
-    except OSError:
-        pass
-    done, by_repo = [], {}
-    for f in sorted(glob.glob(str(config_dir() / "asks" / "*.json"))):
-        try:
-            a = json.loads(Path(f).read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            continue
-        if not isinstance(a, dict) or a.get("status") not in ("open", "parked") or not a.get("bead"):
-            continue
-        if not (isinstance(a.get("repo"), str) and (Path(a["repo"]) / ".beads").is_dir()):
-            continue  # which repo's tracker to ask is not known (bd would walk up to another one): the ask stays
-        by_repo.setdefault(a["repo"], []).append((f, a))
-    listed_any = False
-    for repo, items in by_repo.items():  # one bd read per repo (tl-u08: a bd show per ask took over two minutes for 25 asks)
-        try:
-            st = (store or bd_store(repo))
-            status = {b.id: b.status for b in st.find(BeadQuery(include_closed=True))}
-        except SystemExit:  # no bd on this machine
-            return done
-        except BdFailure:
-            continue
-        if not status:
-            continue  # an empty answer proves nothing
-        listed_any = True
-        for f, a in items:
-            why = ""
-            if a["bead"] not in status:  # the list hides gates, ephemeral and infra beads: ask bd about this one before saying so
-                try:
-                    gone = st.show(a["bead"]) is None
-                except SystemExit:
-                    return done
-                if gone:
-                    why = "the bead does not exist"
-            elif status[a["bead"]] == "closed":
-                why = "the bead is closed"
-            if why:
-                try:  # the owner or the engine may have written since the read: close only what is still open or parked
-                    cur = json.loads(Path(f).read_text(encoding="utf-8"))
-                    if cur.get("status") not in ("open", "parked") or cur.get("id") != a.get("id"):
-                        continue
-                    cur.update(status="closed", closed=time.time(), closed_why=why)
-                    Path(f).write_text(json.dumps(cur, indent=1), encoding="utf-8")
-                    done.append(a["bead"])
-                except (OSError, ValueError):
-                    pass
-    try:
-        if listed_any or not by_repo:  # a bd outage is no sweep: it is tried again at once
-            marker.parent.mkdir(parents=True, exist_ok=True)
-            marker.write_text(str(time.time()))
-    except OSError:
-        pass
-    return done
+def ask_store():
+    return AskStore.at(ConfigDir(config_dir()))
 
 
 def cmd_ask(a):
-    """The inbox from the terminal: the dashboard's own code answers and withdraws, so both say the same things."""
-    d = dash_asks()
+    """The owner's inbox and typed verbs (answer, hint, hold, override) from the terminal: src/taskloop/cli/asks.py over the AskStore. A
+    bead's ask names its repo, and the bd of that repo takes the bead's state."""
     if a.op == "list":
-        for b in close_stale_asks():  # throttled: the loop sweeps too, and the inbox hides closed beads itself
+        for b in ask_sweep("close"):  # throttled: the loop sweeps too
             print("closed the ask of %s: its bead is closed or gone" % b)
-        rows = d.inbox()
-        if a.json:
-            print(json.dumps(rows, indent=1))
-            return 0
-        for r in rows:
-            print("%-22s %-8s unblocks %-2d %s" % (r["bead"], r["kind"], r["unblocks"], (r.get("title") or "")[:60]))
-            print("    " + " | ".join("%s -> %s" % (o["label"], o["answer"]) for o in r.get("options") or []) if r.get("options") else
-                  "    (free text: tl ask answer %s <text>)" % r["bead"])
-        if not rows:
-            print("nothing waits on you")
-        return 0
-    if not a.bead:
-        print("tl: ask %s needs a bead id" % a.op)
-        return 2
-    f = config_dir() / "asks" / ("%s.json" % a.bead)
-    try:
-        ask_id = json.loads(f.read_text()).get("id")
-    except (OSError, ValueError):
-        print("tl: no ask for %s" % a.bead)
-        return 1
-    if a.op == "answer":
-        code, out = d.answer({"ask": ask_id, "text": " ".join(a.text), "amend": bool(getattr(a, "amend", False))})
-    else:
-        code, out = d.withdraw({"ask": ask_id, "why": " ".join(a.text) or "withdrawn with tl ask withdraw"})
-    print(out.get("next") if code == 200 and out.get("next") else "done" if code == 200 else "tl: " + out.get("error", "failed"))
-    return 0 if code == 200 else 1
+    return cli_asks.run(a, ask_store(), lambda repo: bd_store(repo or None), now, actor())
 
 
-def park_stale_asks(every=600, store=None):
-    """tl-bxk.8.25: an open ask nobody answered by its parks_at (3 days after it was asked) is parked: status `parked`, a comment on
-    the bead, off the live inbox's top and out of the live inbox. The bead still waits; an answer (the dashboard,
-    `tl ask answer`, or a comment on the bead) un-parks it. At most once per `every` seconds across all callers. -> bead ids."""
-    marker = config_dir() / "asks" / ".parked"
+def ask_sweep(which, every=600):
+    """The throttled sweeps over open asks (app/asks/sweeps.py): close those of closed or missing beads, park those unanswered in 3 days."""
+    cfg = ConfigDir(config_dir())
+    fn = ask_sweeps.close_stale if which == "close" else ask_sweeps.park_stale
     try:
-        if time.time() - marker.stat().st_mtime < every:
-            return []
-    except OSError:
-        pass
-    done = []
-    for f in sorted(glob.glob(str(config_dir() / "asks" / "*.json"))):
-        try:
-            a = json.loads(Path(f).read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            continue
-        if not isinstance(a, dict) or a.get("status") != "open" or not a.get("bead") or a.get("answer"):
-            continue
-        try:
-            late = time.time() > float(a.get("parks_at") or 0) > 0
-        except (TypeError, ValueError):
-            continue
-        if not late or not (isinstance(a.get("repo"), str) and Path(a["repo"]).is_dir()):
-            continue
-        try:  # the engine or the dashboard may have written since the read above: park only what is still open and unanswered
-            cur = json.loads(Path(f).read_text(encoding="utf-8"))
-            if cur.get("status") != "open" or cur.get("answer") or cur.get("id") != a.get("id"):
-                continue
-            cur.update(status="parked", parked=time.time())
-            a = cur
-            Path(f).write_text(json.dumps(a, indent=1), encoding="utf-8")
-            (store or bd_store(a["repo"])).add_comment(a["bead"], "Parked (engine): ask %s got no answer in 3 days. It stays open for an answer: "
-                                                      "`tl ask answer %s <text>`, the dashboard, or a comment here." % (a.get("id"), a["bead"]))
-            done.append(a["bead"])
-        except (OSError, ValueError, SystemExit, BdFailure):
-            pass
-    try:
-        marker.parent.mkdir(parents=True, exist_ok=True)
-        marker.write_text(str(time.time()))
-    except OSError:
-        pass
-    return done
+        return fn(ask_store(), lambda repo: bd_store(repo), cfg.ask_marker("swept" if which == "close" else "parked"), now(), every)
+    except SystemExit:  # no bd on this machine
+        return []
+
+
+def sweep_asks(say=print):
+    """The loop's pass over asks: close the stale, park the unanswered, and shout about an answer no run used for 30 minutes (an engine
+    fault, not the owner's). The three are throttled by marker files, so any caller may call it as often as it likes."""
+    ask_sweep("close")
+    ask_sweep("park")
+    marker = ConfigDir(config_dir()).ask_marker("unused")
+    if ask_sweeps.due(marker, 600, now()):
+        ask_sweeps.touch(marker)
+        for k in ask_sweeps.unused_answers(ask_store(), now()):
+            say("RED: " + ask_sweeps.fault_line(k, now()))
 
 
 def cmd_reflect(a):
@@ -1619,12 +1517,7 @@ def main(argv=None):
     p = sp.add_parser("worktree")
     p.add_argument("op", choices=["start", "sunset"])
     p.add_argument("--self-too", action="store_true")
-    p = sp.add_parser("ask", help="the owner's inbox: list the open asks, answer one, or withdraw one that no longer applies")
-    p.add_argument("op", choices=["list", "answer", "withdraw"])
-    p.add_argument("bead", nargs="?")
-    p.add_argument("text", nargs="*", help="answer: the answer; withdraw: why")
-    p.add_argument("--json", action="store_true")
-    p.add_argument("--amend", action="store_true", help="answer: replace an answer no run has used yet (the history stays)")
+    cli_asks.add_parsers(sp)
     p = sp.add_parser("dash")
     p.add_argument("op", choices=["ensure", "stop", "status", "url"])
     p = sp.add_parser("run-task")
@@ -1730,7 +1623,7 @@ def main(argv=None):
         return cmd_bd(a)
     return {"register": cmd_register, "claim": cmd_claim, "heartbeat": cmd_heartbeat, "stage": cmd_stage, "worker": cmd_worker,
             "land": cmd_land, "close": cmd_close, "block": cmd_block, "slot": cmd_slot, "worktree": cmd_worktree,
-            "dash": cmd_dash, "ask": cmd_ask, "reflect": cmd_reflect, "hook": cmd_hook, "doctor": cmd_doctor, "land-lock": cmd_land_lock,
+            "dash": cmd_dash, "ask": cmd_ask, "answer": cmd_ask, "hint": cmd_ask, "hold": cmd_ask, "override": cmd_ask, "reflect": cmd_reflect, "hook": cmd_hook, "doctor": cmd_doctor, "land-lock": cmd_land_lock,
             "pin": cmd_pin, "rollback": cmd_rollback, "cutover": cmd_cutover}[a.cmd](a)
 
 

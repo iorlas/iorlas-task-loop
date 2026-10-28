@@ -190,13 +190,13 @@ class LostWork(Base):
 # ---- 10.1: the scorecard ----------------------------------------------------------------------------------------------
 
 def trace(bead, outcome, start_min, end_min, why="", sha="", rounds=0, replans=0, sessions=(), worktree=None, run=None,
-          stderr=None):
+          stderr=None, kind=""):
     started, ended = T0 + start_min * MIN, T0 + end_min * MIN
     stem = run or "%s-%s" % (bead, time.strftime("%Y%m%d-%H%M%S", time.localtime(started)))
     return {"v": 1, "run": stem, "bead": bead, "repo": "https://example.invalid/r.git", "worktree": worktree,
             "started": started, "ended": ended, "outcome": outcome, "why": why, "sha": sha,
             "stats": {"rounds": rounds, "replans": replans}, "log": str(tl.config_dir() / "engine" / (stem + ".jsonl")),
-            "sessions": list(sessions), "stderr": stderr}
+            "sessions": list(sessions), "stderr": stderr, "kind": kind}
 
 
 def session(role, family, tin, cached, out):
@@ -213,11 +213,11 @@ class Scorecard(Base):
             trace("t-0", "landed", -200, -150, sha="x", worktree=w),  # before the window: not counted
             trace("t-1", "landed", 10, 40, sha="a1", rounds=1, worktree=w, stderr=str(self.home / "t-1.stderr"),
                   sessions=[session("planner", "claude", 100, 80, 10), session("worker", "openai", 1000, 900, 50)]),
-            trace("t-2", "blocked", 20, 50, why="verify: before land, the workers could not check: x", worktree=w),
+            trace("t-2", "blocked", 20, 50, why="verify: before land, the workers could not check: x", worktree=w, kind="ask_decision"),
             trace("t-2", "landed", 55, 70, sha="a2", worktree=w, sessions=[session("reviewer", "openai", 10, 0, 1)]),
-            trace("t-3", "blocked", -10, 5, why="owner decision needed", worktree=w),  # overlaps 06:00: in the window
+            trace("t-3", "blocked", -10, 5, why="owner decision needed", worktree=w, kind="ask_decision"),  # overlaps 06:00: in the window
             trace("t-3", "landed", 30, 45, sha="a3", worktree=w),
-            trace("t-4", "blocked", 60, 90, why="stage 1 stuck after 3 rounds and 1 re-plan(s)", replans=1, worktree=w),
+            trace("t-4", "blocked", 60, 90, why="stage 1 stuck after 3 rounds and 1 re-plan(s)", replans=1, worktree=w, kind="ask_stuck"),
             trace("t-5", "blocked", 60, 61, why="paused: logged_out on plan", worktree=w),
             trace("t-6", "failed", 60, 70, why="failed: plan node produced no valid output", worktree=w),
             trace("t-7", "landed", 80, 100, sha="a7", worktree=w),

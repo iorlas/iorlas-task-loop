@@ -185,9 +185,9 @@ class StoresTest(unittest.TestCase):
 
     def test_each_family_lives_where_paths_says(self):
         self.assertEqual(stores.TraceStore(self.cfg).file.path.name, "traces.jsonl")
-        self.assertEqual(stores.AskStore(self.cfg).of("tl-1").path, self.cfg.root / "asks" / "tl-1.json")
-        stores.AskStore(self.cfg).of("tl-1").write(S.OTHERS["Ask"])
-        self.assertEqual(stores.AskStore(self.cfg).of("tl-1").read(), S.OTHERS["Ask"])
+        self.assertEqual(stores.AskStore.at(self.cfg).of("tl-1").path, self.cfg.root / "asks" / "tl-1.json")
+        stores.AskStore.at(self.cfg).of("tl-1").write(S.OTHERS["Ask"])
+        self.assertEqual(stores.AskStore.at(self.cfg).of("tl-1").read(), S.OTHERS["Ask"])
         el = stores.EventLog(self.cfg)
         el.append(S.EVENTS["claim"])
         self.assertEqual(el.read_from(0).items[0].rec, S.EVENTS["claim"])

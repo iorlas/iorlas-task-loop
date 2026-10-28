@@ -11,6 +11,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from support.askjson import ask_json  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
 from taskloop_dash.views import graph  # noqa: E402
 
@@ -148,7 +149,7 @@ class Api(unittest.TestCase):
             cfg.mkdir(parents=True)
             (cfg / "repos.json").write_text(json.dumps({str(repo): {}}))
             (cfg / "asks").mkdir()
-            (cfg / "asks" / "b.json").write_text(json.dumps({"status": "open", "question": "?"}))
+            (cfg / "asks" / "b.json").write_text(json.dumps(ask_json("b", status="open")))
             beads = [bead("a"), bead("b", blocks=["a"]), bead("c", blocks=["a"], labels=[])]
             env = {"HOME": home, "XDG_CONFIG_HOME": str(cfg.parent), "APPDATA": str(cfg.parent)}
             with mock.patch.dict(os.environ, env):

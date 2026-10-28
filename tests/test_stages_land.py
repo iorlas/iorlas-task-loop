@@ -402,24 +402,17 @@ class Contracts(StagesTest):
         ask = dict(WRITE, question="Which format?")
         rc, _ = self.run_engine({"plan": [PLAN], "write": [ask]})
         self.assertEqual(rc, 2)
-        path = tl.config_dir() / "asks" / "t-1.json"
-        a = json.loads(path.read_text())
-        path.write_text(json.dumps(dict(a, kind="stuck")))  # an over-budget or stuck ask, which has a Run again button
-        with self.store.stub(comments=[{"author": "denis", "text": "Run again."}]):
-            rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
+        self.file_answer("rerun")  # an over-budget or stuck ask has a Run again button
+        rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertNotIn("planner", [c[0] for c in s.calls])
         self.assertIn("only asks for a rerun", self.eng.log_path.read_text())
-        for text in ("run-again", "Retry!", "re-run", "try again"):
-            self.assertTrue(engine.RERUN_ANSWER.fullmatch(" ".join(text.lower().replace("-", " ").split()).strip(" .!")), text)
-        for text in ("yes", "use option A", "run again with more budget", "continue", "go on", "resume"):
-            self.assertFalse(engine.RERUN_ANSWER.fullmatch(text), text)
 
     def test_a_real_answer_still_amends(self):
         ask = dict(WRITE, question="Which format?")
         self.run_engine({"plan": [PLAN], "write": [ask]})
-        with self.store.stub(comments=[{"author": "denis", "text": "Use the new format, then run again."}]):
-            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
+        self.file_answer("text", "Use the new format, then run again.")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(s.calls[0][0], "planner")
 
     def test_asks_of_closed_or_missing_beads_are_closed_and_others_left(self):
@@ -429,12 +422,10 @@ class Contracts(StagesTest):
         (other / ".beads").mkdir(parents=True)
         (Path(self.wt) / ".beads").mkdir(exist_ok=True)
         for bead in ("b-open", "b-closed", "b-gone", "b-hidden"):
-            (asks / ("%s.json" % bead)).write_text(json.dumps({"v": 1, "id": bead + "-1", "bead": bead, "status": "open", "kind": "stuck",
-                                                                "repo": str(self.wt)}))
-        (asks / "b-flaky.json").write_text(json.dumps({"v": 1, "id": "f-1", "bead": "b-flaky", "status": "open", "kind": "stuck",
-                                                        "repo": str(other)}))  # its tracker fails: nothing is learned, the ask stays
-        (asks / "b-norepo.json").write_text(json.dumps({"v": 1, "id": "n-1", "bead": "b-norepo", "status": "open", "kind": "stuck"}))
-        (asks / "b-answered.json").write_text(json.dumps({"v": 1, "id": "x", "bead": "b-answered", "status": "answered"}))
+            (asks / ("%s.json" % bead)).write_text(json.dumps(te.ask_rec(id=bead + "-1", bead=bead, repo=str(self.wt))))
+        (asks / "b-flaky.json").write_text(json.dumps(te.ask_rec(id="f-1", bead="b-flaky", repo=str(other))))  # its tracker fails: the ask stays
+        (asks / "b-norepo.json").write_text(json.dumps(te.ask_rec(id="n-1", bead="b-norepo", repo="")))
+        (asks / "b-answered.json").write_text(json.dumps(te.ask_rec(id="x", bead="b-answered", status="answered")))
         calls = []
 
         def fake_bd(*a, **k):
@@ -446,9 +437,9 @@ class Contracts(StagesTest):
                         else mock.Mock(returncode=1, stdout="", stderr="Error: no issue found matching %s" % a[1]))
             return mock.Mock(returncode=0, stderr="", stdout=json.dumps([{"id": "b-open", "status": "open"}, {"id": "b-closed", "status": "closed"}]))
         with tlbd.bd_boundary(fake_bd):
-            closed = tl.close_stale_asks(every=0)
+            closed = tl.ask_sweep("close", every=0)
             self.assertEqual(sorted(closed), ["b-closed", "b-gone"])
-            self.assertEqual(tl.close_stale_asks(), [])  # throttled
+            self.assertEqual(tl.ask_sweep("close"), [])  # throttled
         self.assertEqual([c[0][0] for c in calls].count("list"), 2)  # one list per repo, not one read per ask (a show only for an absent id)
         state = {b: json.loads((asks / ("%s.json" % b)).read_text())["status"] for b in ("b-open", "b-closed", "b-gone", "b-hidden", "b-flaky", "b-answered", "b-norepo")}
         self.assertEqual(state, {"b-hidden": "open", "b-open": "open", "b-closed": "closed", "b-gone": "closed", "b-flaky": "open", "b-answered": "answered",

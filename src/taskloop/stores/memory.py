@@ -19,10 +19,12 @@ from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.locks import LockRecord, LockTimeout, Ticket, pid_alive
 from taskloop.contracts.loop import LoopCommand, LoopState, Rest
-from taskloop.contracts.stores import JsonlStore
+from taskloop.contracts.stores import AskStore, JsonlStore
 from taskloop.contracts.trace import RunTrace
 from taskloop.stores.api import Doc, DocSet
 from taskloop.stores.books import AskBook, CheckpointBook
+from taskloop.stores.api import Doc, DocSet, LockTimeout
+from taskloop.stores.books import CheckpointBook
 from taskloop.stores.bundle import Stores
 
 
@@ -184,7 +186,7 @@ def fake_stores(pid: int | None = None) -> Stores:
     return Stores(
         run_log=lambda run: runs.setdefault(run, MemLog(log.decode)),
         events=MemLog(events.decode), traces=MemLog(_decode(RunTrace)),
-        asks=AskBook(MemDocSet(Ask)), checkpoints=CheckpointBook(MemDocSet(Checkpoint)),
+        asks=AskStore(MemDocSet(Ask)), checkpoints=CheckpointBook(MemDocSet(Checkpoint)),
         loop_state=lambda key: state.setdefault(key, MemDoc(LoopState)),
         loop_command=lambda key: cmds.setdefault(key, MemDoc(LoopCommand)),
         loop_rest=lambda key: rests.setdefault(key, MemDoc(Rest)),

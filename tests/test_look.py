@@ -75,7 +75,7 @@ class LookTest(unittest.TestCase):
         rc, _ = self.go({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, unchecked=[item])],
                          "verify": [{"items": [verdict(1, "open", why="a person must look")]}]})
         self.assertEqual(rc, 2)
-        self.assertEqual(self.ask()["kind"], "verify")
+        self.assertEqual(self.ask()["kind"], "decision")
 
     ask = T.EngineTest.ask
 

@@ -2,18 +2,21 @@
 import dataclasses
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from atomic_io import atomic_write_json
 from jsonl_log import Entry, Jsonl
 
 from taskloop.contracts import codec, events, log, paths
-from taskloop.contracts.ask import Ask
+from taskloop.contracts.ask import Ask, AskAnswer
 from taskloop.contracts.codec import CodecError
+from taskloop.contracts.enums import AskStatus
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.loop import BadVersions, LoopCommand, LoopState, Rest
 from taskloop.contracts.snapshots import DashState, Pin, ReleaseResult, ReposIndex, SessionIndex, SharedNotes, TasksSnapshot
 from taskloop.contracts.trace import RunTrace
+
+LIVE = (AskStatus.OPEN, AskStatus.PARKED)
 
 
 class JsonStore[T]:
@@ -100,12 +103,128 @@ class TraceStore(JsonlStore[RunTrace]):
         super().__init__(cfg.traces(), _one(RunTrace))
 
 
-class AskStore:
+class AskDocs(Protocol):
+    """Where the ask documents live: one per bead (files for real, dicts for the fake)."""
+
+    def of(self, key: str) -> Any: ...
+    def keys(self) -> list[str]: ...
+
+
+class AskFiles:
     def __init__(self, cfg: paths.ConfigDir) -> None:
         self.cfg = cfg
 
-    def of(self, bead: BeadId | str) -> JsonStore[Ask]:
-        return JsonStore(self.cfg.ask(bead), Ask)
+    def of(self, key: str) -> JsonStore[Ask]:
+        return JsonStore(self.cfg.ask(key), Ask)
+
+    def keys(self) -> list[str]:
+        return self.cfg.ask_beads()
+
+
+class AskStore:
+    """The one reader and the one writer of asks/<bead>.json: the engine raises and consumes, `tl` sweeps and answers, the dashboard
+    answers. One record per bead; a newer ask replaces the older. Every write re-reads first, so a stale copy never undoes a newer one."""
+
+    def __init__(self, docs: AskDocs) -> None:
+        self.docs = docs
+
+    @classmethod
+    def at(cls, cfg: paths.ConfigDir) -> "AskStore":
+        return cls(AskFiles(cfg))
+
+    def of(self, bead: BeadId | str) -> Any:
+        return self.docs.of(str(bead))
+
+    def get(self, bead: BeadId | str) -> Ask | None:
+        return self.docs.of(str(bead)).read()
+
+    def all(self) -> list[Ask]:
+        names = self.docs.keys()
+        return [a for a in (self.docs.of(k).read() for k in names) if a is not None]
+
+    def live(self) -> list[Ask]:
+        """Asks still waiting for an owner (open or parked), oldest first."""
+        return sorted((a for a in self.all() if a.status in LIVE), key=lambda a: a.t)
+
+    def pending(self) -> list[Ask]:
+        """Asks no run has used yet: waiting for an answer, or answered and waiting for the next run. Oldest first."""
+        return sorted((a for a in self.all() if a.consumed is None and a.status in (*LIVE, AskStatus.ANSWERED)), key=lambda a: a.t)
+
+    def put(self, ask: Ask) -> None:
+        self.docs.of(ask.bead).write(ask)
+
+    def next_n(self, bead: BeadId | str) -> int:
+        a = self.get(bead)
+        return a.n + 1 if a else 1
+
+    def state(self, bead: BeadId | str, ask_id: str) -> tuple[Ask | None, str]:
+        """(the ask, why it cannot be answered): "" when it can; gone, superseded (a newer ask of the bead), withdrawn, closed,
+        answered (first answer wins), consumed (a run already used the answer)."""
+        a = self.get(bead)
+        if a is None:
+            return None, "gone"
+        if a.id != ask_id:
+            return a, "superseded"
+        if a.status == AskStatus.WITHDRAWN:
+            return a, "withdrawn"
+        if a.status == AskStatus.CLOSED:
+            return a, "closed"
+        if a.consumed is not None:
+            return a, "consumed"
+        return a, "answered" if a.answer is not None else ""
+
+    def answer(self, bead: BeadId | str, ask_id: str, answer: AskAnswer) -> tuple[Ask | None, str]:
+        """File the owner's answer on a live, unanswered ask (the first one wins). -> (the ask, "" or why not)."""
+        a, why = self.state(bead, ask_id)
+        if a is None or why:
+            return a, why
+        done = dataclasses.replace(a, status=AskStatus.ANSWERED, answer=answer, answered=answer.t)
+        self.put(done)
+        return done, ""
+
+    def amend(self, bead: BeadId | str, ask_id: str, answer: AskAnswer) -> tuple[Ask | None, str]:
+        """Replace an answer no run has used yet."""
+        a, why = self.state(bead, ask_id)
+        if a is None or why not in ("", "answered"):
+            return a, why
+        done = dataclasses.replace(a, status=AskStatus.ANSWERED, answer=answer, answered=answer.t)
+        self.put(done)
+        return done, ""
+
+    def consume(self, bead: BeadId | str, now: float) -> Ask | None:
+        """A run starts from this ask (answered, or its bead changed): it will not be asked again. None when nothing is live."""
+        a = self.get(bead)
+        if a is None or a.status not in (*LIVE, AskStatus.ANSWERED) or a.consumed is not None:
+            return None
+        done = dataclasses.replace(a, status=AskStatus.ANSWERED, answered=a.answered or now, consumed=now)
+        self.put(done)
+        return done
+
+    def withdraw(self, bead: BeadId | str, ask_id: str, why: str, now: float) -> tuple[Ask | None, str]:
+        """The owner dismisses an ask no run has used. An answer given and not used goes with it."""
+        a, problem = self.state(bead, ask_id)
+        if a is None or problem in ("gone", "superseded", "closed", "consumed"):
+            return a, problem
+        if problem == "withdrawn":
+            return a, ""
+        done = dataclasses.replace(a, status=AskStatus.WITHDRAWN, closed_why=why, answered=now if a.answer else None)
+        self.put(done)
+        return done, ""
+
+    def close(self, bead: BeadId | str, ask_id: str, why: str) -> bool:
+        """The bead is closed or gone, or the run landed: close only the ask that is still the one read (a newer one stays)."""
+        a = self.get(bead)
+        if a is None or a.id != ask_id or a.status not in (*LIVE, AskStatus.ANSWERED) or a.consumed is not None:
+            return False
+        self.put(dataclasses.replace(a, status=AskStatus.CLOSED, closed_why=why))
+        return True
+
+    def park(self, bead: BeadId | str, ask_id: str) -> bool:
+        a = self.get(bead)
+        if a is None or a.id != ask_id or a.status != AskStatus.OPEN or a.answer is not None:
+            return False
+        self.put(dataclasses.replace(a, status=AskStatus.PARKED))
+        return True
 
 
 class LoopStateStore(JsonStore[LoopState]):

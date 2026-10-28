@@ -57,11 +57,27 @@ class Cause(StrEnum):
 
 class AskKind(StrEnum):
     DECISION = "decision"
-    VERIFY = "verify"
     STUCK = "stuck"
-    DENIED = "denied"
     TICKET = "ticket"
     BUDGET = "budget"
+
+
+class AskClass(StrEnum):
+    """Why the engine cannot go on without the owner. The first eight are owner matters; the last five are the engine's own
+    trouble and never become an ask (lint refuses them)."""
+    OPEN_QUESTION = "open_question"
+    EXTERNAL_FACT = "external_fact"
+    UNPROVEN = "unproven"
+    NO_PROGRESS = "no_progress"
+    CAP_REACHED = "cap_reached"
+    OVER_BUDGET = "over_budget"
+    MISSING_CRITERIA = "missing_criteria"
+    TOO_BIG = "too_big"
+    LANE_FAILURE = "lane_failure"
+    BAD_REQUEST = "bad_request"
+    SANDBOX_DENIAL = "sandbox_denial"
+    STALE_BASE = "stale_base"
+    MISSING_TOOL = "missing_tool"
 
 
 class AskStatus(StrEnum):

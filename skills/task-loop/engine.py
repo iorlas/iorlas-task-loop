@@ -50,17 +50,22 @@ import seams
 import tl
 import vendored  # noqa: F401
 from clock import SystemClock
+from taskloop.app.asks import intake, raiser
 from taskloop.app.run import trace as runtrace
 from taskloop.app.run.calls import timing
 from taskloop.app.run.context import RunContext
 from taskloop.app.slots.lease import Lease
 from taskloop.contracts import log as rec
+from taskloop.contracts.ask import BudgetLine
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import FRESH_ABOVE_K
+from taskloop.contracts.enums import AskClass, AskStatus
 from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, NewBead
 from taskloop.contracts.enums import Outcome, WaitWhat
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.stores import JsonlStore
+from taskloop.contracts.stores import AskStore, JsonlStore
+from taskloop.domain.asks import specs as askspecs
+from taskloop.domain.asks import text as asktext
 from taskloop.stores.real import real_stores
 
 # ---- output contracts -----------------------------------------------------------------------------------------------
@@ -686,12 +691,12 @@ def stop_why(node, kind, stop, said, until=0.0, crashes=1, denied=()):
 
 
 class Blocked(Exception):
-    """A stop. kind: the outcome.Kind that says what the engine does at the close (POLICY); None only for the verify gaps ask,
-    which waits for the ask contract (R18) and keeps the prefix reading of ask_kind."""
+    """A stop. kind: the outcome.Kind that says what the engine does at the close (POLICY). spec: the AskSpec of an ask kind (what
+    the owner is asked, built from facts at the raise site); a stop that is no ask carries none."""
 
-    def __init__(self, why, question="", options=None, kind=None):
+    def __init__(self, why, spec=None, kind=None):
         super().__init__(why)
-        self.why, self.question, self.options, self.kind = why, question, options or [], kind
+        self.why, self.spec, self.kind = why, spec, kind
 
 
 class FixFailed(Blocked):
@@ -937,7 +942,7 @@ class Engine:
         why = ("reexec" if self.reexec else "fresh" if self.fresh else "answer" if self.answered else "resume" if self.resumed
                else "retry" if prev else "first")
         return {"prev_run": prev, "started_because": lifecycle.normalize_started_because(why, prev),
-                "ask": (self.answered or {}).get("id") or ""}
+                "ask": self.answered.id if self.answered else ""}
 
     def log_run(self):
         """The run record: why it started, once that is known (after the checkpoint is read), or at the close."""
@@ -1072,10 +1077,12 @@ class Engine:
     def budget_check(self):
         over = self.budget.over()
         if over:
-            went = run_breakdown(self.log_path, self.steps.cur)
+            steps = run_breakdown(self.log_path, self.steps.cur)
+            went = ", ".join("%s %d min (%d round%s)" % (b.step, b.minutes, b.rounds, "" if b.rounds == 1 else "s") for b in steps)
             raise Blocked("over budget: %s%s%s" % (", ".join(over), (". Where it went: " + went) if went else "",
                                                    (" (%d min waiting for shared resources not counted)" % (self.waited // 60))
-                                                   if self.waited >= 60 else ""), kind=oc.Kind.ASK_BUDGET)
+                                                   if self.waited >= 60 else ""),
+                          askspecs.over_budget(over, steps, self.waited // 60), kind=oc.Kind.ASK_BUDGET)
 
     # -- AI node
     def ai(self, node, title, prompt, *a, **kw):
@@ -1444,8 +1451,8 @@ class Engine:
         bad = tree_problem(self.wt)
         if bad:
             why = "tree: %s (%s %s)" % (bad[0], when, step)
-            self.steps.move("ask", "wrong_tree", bad[0])
-            raise Blocked(why, bad[1], kind=oc.Kind.ASK_STUCK)
+            self.steps.move("fault", "wrong_tree", bad[0])
+            raise Blocked("failed: %s. %s" % (why, bad[1]), kind=oc.Kind.FAULT_SLOT)
 
     def sh(self, cmd, timeout=3600, check=False, save=None, env=None, pin=False, idle=0):
         """A command: a string goes through bash with -e and pipefail (checks, profile commands), so a red command in a
@@ -1821,6 +1828,9 @@ class Engine:
         (plans, reviews, reflects pile up on every rerun: 40 of lifesim-vbo's 45 KB brief)."""
         bead, comments = tl.peek(self.store, self.bead) or Bead(id=self.bead, title="", status=""), self.store.comments(self.bead)
         text = brief_digest(bead, comments) + linked_text(self.bead, bead, comments, lambda i: tl.peek(self.store, i), self.store.comments)
+        said = self.answered_words()  # the owner's typed answer is no comment: the brief carries it for the workers
+        if said and self.answered:
+            text += "\n## Owner answer (to ask %s)\n%s\n" % (self.answered.id, said)
         self.snap = bead_snapshot(bead, comments)
         (self.run_dir / "brief.md").write_text(text, encoding="utf-8")
         self.brief_file.write_text(text, encoding="utf-8")  # a resumed writer is told where to re-read it (tl-bxk.10.29)
@@ -2331,7 +2341,7 @@ class Engine:
         return self.run_once()
 
     def run_once(self):
-        outcome, why, sha, question, kind = "failed", "", "", "", oc.Kind.FAULT_ENGINE
+        outcome, why, sha, spec, kind = "failed", "", "", None, oc.Kind.FAULT_ENGINE
         hb = Lease(self.store, self.bead, os.environ.get("TASK_LOOP_SLOT_BEAD", ""))
         try:
             self.prev_ck = (json.loads(self.checkpoint_path().read_text()) or {}).get("run") or ""
@@ -2357,10 +2367,10 @@ class Engine:
             self.budget.labels = list(bead.labels)
             self.check_ask()
             self.grant_cap()
-            if not has_criteria(bead):
-                raise Blocked("ticket: the bead has no acceptance criteria", "What proves this bead done? Add acceptance "
-                              "criteria (the field, or a ## Acceptance Criteria section), then rerun.", kind=oc.Kind.ASK_TICKET)
-            self.scope = acceptance_text(bead)
+            written = self.answered_words() if self.answered and self.answered.ask_class == AskClass.MISSING_CRITERIA else ""
+            if not has_criteria(bead) and not written:
+                raise Blocked("ticket: the bead has no acceptance criteria", askspecs.missing_criteria(), kind=oc.Kind.ASK_TICKET)
+            self.scope = acceptance_text(bead) or written
             plan, i, state = self.resume_point()
             self.log_run()
             # tl-fsj: the configured checks come from the base's config, so the tree they run on must have what the base has; every
@@ -2408,10 +2418,9 @@ class Engine:
                 self.render_shots(self.last_reqs, self.look_done + 1)
             gaps = self.self_verify([u for u in self.unchecked if u["kind"] in UNCHECKED_KINDS or self.is_look(u)])
             if gaps:
-                raise Blocked(VERIFY_GAPS + "the workers could not check: " + "; ".join(
+                raise Blocked("verify: before land, the workers could not check: " + "; ".join(
                     "%s (%s%s)" % (u["what"], u["kind"], ("; " + u["why"]) if u.get("why") else "") for u in gaps),
-                    "Check these yourself, then comment on the bead (right, or wrong and why): " + "; ".join(
-                        u["what"] for u in gaps))
+                    askspecs.external_fact([u["what"] for u in gaps]), kind=oc.Kind.ASK_DECISION)
             sha = self.finish(bead)
             outcome = "landed" if sha else "done"
             kind = oc.Kind.LANDED if sha else oc.Kind.DONE
@@ -2421,7 +2430,7 @@ class Engine:
         except Blocked as b:
             kind = b.kind
             outcome = outcome_for(kind, b.why)
-            why, question, self.blocked_options = b.why, b.question, b.options
+            why, spec = b.why, b.spec
         except Exec:
             pass  # the process image is gone; nothing below runs in a real exec
         except Exception as e:  # the close-out must run whatever broke
@@ -2433,13 +2442,13 @@ class Engine:
                 with self.stop_deferred():  # a stop here would skip the close: no trace, no bead update
                     if self.landed_sha and outcome != "landed":  # stopped after the push: on the base, close it as landed
                         self.warn("%s after the land went through; closing it landed" % (why or outcome))
-                        outcome, why, sha, question, kind = "landed", "", self.landed_sha, "", oc.Kind.LANDED
+                        outcome, why, sha, spec, kind = "landed", "", self.landed_sha, None, oc.Kind.LANDED
                     hb.stop()
                     drop_reexec(self.bead)  # a run that ended is no crash after an exec
                     if kind == oc.Kind.PAUSE_NETWORK and not self.dry:
                         self.save_net_pause()
                     self.outcome, self.why = outcome, why
-                    self.close(outcome, why, sha, question, kind)
+                    self.close(outcome, why, sha, spec, kind)
         return 0 if self.moved or outcome in ("landed", "done") else 2
 
     def result(self):
@@ -2563,7 +2572,8 @@ class Engine:
 
     def proof_stuck(self, items):
         return Blocked("the check before land: nothing proves %s after %d fix rounds: it needs the owner's hint" % (
-            "; ".join(u["what"] for u in items)[:600], int(self.cfg.max_fix_rounds)), kind=oc.Kind.ASK_STUCK)
+            "; ".join(u["what"] for u in items)[:600], int(self.cfg.max_fix_rounds)),
+            askspecs.unproven([u["what"] for u in items], int(self.cfg.max_fix_rounds)), kind=oc.Kind.ASK_STUCK)
 
     def diff_text(self):
         tree = self.tree_hash()
@@ -2953,40 +2963,46 @@ class Engine:
         return [(part, cs, repo.get(part, "")) for part, cs in out.items()]
 
     def cap_blocked(self, detail=""):
-        """The re-plan cap's ask: the planner ran `planned` times. An answer with "allow" or "more" gives one more."""
+        """The re-plan cap's ask: the planner ran `planned` times. An answer that allows one more (action rerun) gives one."""
         why = "; ".join("%d. %s: %s" % (k + 1, e["mode"], e["why"]) for k, e in enumerate(self.plan_log))[:1500]
         return Blocked(REPLAN_CAP + "%d times (the limit is %d plan + %d amends): %s%s" % (
             self.planned, 1, int(self.cfg.max_replans) + self.extra, why, ("; " + detail) if detail else ""),
-            "This bead was planned %d times, so the engine stops instead of burning more planner runs. Why each time: %s\n"
-            "Choose: split the bead; clarify it (comment what the plan keeps missing); or reply \"allow one more\"." % (
-                self.planned, why), kind=oc.Kind.ASK_STUCK)
+            askspecs.cap_reached(self.planned, [(e["mode"], e["why"]) for e in self.plan_log]), kind=oc.Kind.ASK_STUCK)
 
     def grant_cap(self):
-        """The owner answered the cap's ask: an answer with "allow" or "more" (any case) lets the bead plan once more.
-        "split" or "clarify" does not: the answer is recorded and the bead blocks again at the cap. Goes into the
+        """The owner allows one more planner run: they answered the cap's ask with the rerun option, or put the override on the bead
+        (`tl override BEAD replan-cap`). Any other answer is recorded and the bead blocks again at the cap. The grant goes into the
         checkpoint's extra, which resume_point adds to."""
-        a = self.answered or {}
-        if not (a.get("why") or "").startswith(REPLAN_CAP) or self.cap_granted:
+        a = self.answered
+        by_ask = a is not None and a.ask_class == AskClass.CAP_REACHED
+        by_override = (tl.peek(self.store, self.bead) or Bead(id=self.bead, title="", status="")).metadata.get(intake.OVERRIDE) == "replan-cap"
+        if self.cap_granted or not (by_ask or by_override):
             return
-        answer = self.answer_text(a)
-        low = answer.lower()
         self.cap_granted = True
-        if "allow" not in low and "more" not in low:
+        rerun = a is not None and a.answer is not None and a.answer.action == "rerun"
+        said = a.id if a else ""
+        if not (by_override or rerun):
             self.log.note("the owner answered the re-plan cap (%s) without allowing more: still blocked. Answer: %s" % (
-                a["id"], answer[:300] or "(none)"))
-            try:
-                a["answer_recorded"] = answer[:1500]
-                self.ask_path().write_text(json.dumps(a, indent=1))
-            except OSError:
-                pass
+                said, (self.answered_words() or "(none)")[:300]))
             return
-        self.log.note("the owner allowed one more planner run (ask %s): %s" % (a["id"], answer[:200]))
+        self.log.note("the owner allowed one more planner run (%s)" % ("the override" if by_override else "ask " + said))
+        if by_override:
+            tl.attempt(self.store.update, self.bead, BeadPatch(unset_metadata=[intake.OVERRIDE]))
         try:
             ck = json.loads(self.checkpoint_path().read_text())
             ck["extra"] = int(ck.get("extra") or 0) + 1
             self.checkpoint_path().write_text(json.dumps(ck, indent=1))
         except (OSError, ValueError):
             self.extra += 1
+
+    def answered_words(self):
+        """What the owner's answer asks the work to do: their text, or the split instruction; a bare rerun or confirm asks for nothing."""
+        return asktext.words(self.answered.answer if self.answered else None)
+
+    def kept_whole(self):
+        """The owner answered the too-big ask, and not with 'I will split it': the plan goes ahead with all its stages."""
+        a = self.answered
+        return a is not None and a.ask_class == AskClass.TOO_BIG and (a.answer is None or a.answer.action != "split")
 
     def plan(self, again=False):
         old = self.old_plan or (self.plan_data if again and getattr(self, "plan_data", None) else None)
@@ -3001,7 +3017,7 @@ class Engine:
         # tl-19i: the owner's answer, or an edit of the bead by the owner, is not a failed plan: it never counts (lifesim-yxbb.3
         # parked 'stuck: re-planned 3 times' on 'the owner answered ask yxbb.3-1')
         owner = (bool(old) and not again and (self.amend_why or "").startswith("bead changed: the owner answered")
-                 and not (self.answered or {}).get("why", "").startswith(REPLAN_CAP))  # a cap ask answered 'split' stays blocked
+                 and not (self.answered and self.answered.ask_class == AskClass.CAP_REACHED))  # a cap ask answered 'split' stays blocked
         if not owner and self.planned >= 1 + int(self.cfg.max_replans) + self.extra:
             raise self.cap_blocked()
         if not owner:
@@ -3106,7 +3122,7 @@ class Engine:
         self.plan_data = data
         if data["question"].strip():
             self.steps.outcome("asks", data["question"][:200])
-            raise Blocked("owner decision needed", data["question"], data.get("options"), kind=oc.Kind.ASK_DECISION)
+            raise Blocked("owner decision needed", askspecs.open_question(data["question"], data.get("options")), kind=oc.Kind.ASK_DECISION)
         self.steps.outcome("%d stage%s" % (len(data["stages"]), "" if len(data["stages"]) == 1 else "s"),
                         data["summary"][:200])
         self.check_unresolved(data)
@@ -3121,10 +3137,9 @@ class Engine:
                 return data
             raise Blocked("failed: the plan has no stages", kind=oc.Kind.FAULT_PLAN)
         big = int(self.cfg.max_stages)
-        if len(data["stages"]) > big and (self.answered or {}).get("kind") != "ticket":
+        if len(data["stages"]) > big and not self.kept_whole():
             raise Blocked("ticket: the plan has %d stages (more than %d): the bead may be too big for one task" % (
-                len(data["stages"]), big), "Split the bead into these, or comment that it stays one bead:\n" + "\n".join(
-                "%d. %s" % (k + 1, s["goal"]) for k, s in enumerate(data["stages"])), kind=oc.Kind.ASK_TICKET)
+                len(data["stages"]), big), askspecs.too_big([st["goal"] for st in data["stages"]], big), kind=oc.Kind.ASK_TICKET)
         self.ledger_fill(data)
         self.plan_leftovers(data)
         lines = ["Plan (engine): " + data["summary"]]
@@ -3142,7 +3157,7 @@ class Engine:
     def plan_fits(self, data):
         """A plan worth keeping through a stop: it has stages, asks nothing, and is not a split ask."""
         return bool(data["stages"] and not data["question"].strip() and (
-            len(data["stages"]) <= int(self.cfg.max_stages) or (self.answered or {}).get("kind") == "ticket"))
+            len(data["stages"]) <= int(self.cfg.max_stages) or self.kept_whole()))
 
     def plan_leftovers(self, data):
         """The follow-up work the plan wants filed: filed at the close with the reviews' leftovers. Only a plan the run
@@ -3151,67 +3166,32 @@ class Engine:
         self.leftovers += [lo for lo in data["leftovers"] if lo["title"] not in have]
 
     # -- checkpoints: where a stopped run was, outside the worktree, so the next run goes on from there
-    def ask_path(self):
-        return tl.config_dir() / "asks" / ("%s.json" % self.bead)
-
     def check_ask(self):
-        """An open ask is never asked again: with the bead unchanged the run waits; a change (the owner's comment or
-        edit) answers it, and the run goes on from its checkpoint."""
-        try:
-            a = json.loads(self.ask_path().read_text())
-        except (OSError, ValueError):
-            return
-        if a.get("status") not in ("open", "parked"):  # a parked ask (3 days, no answer) still waits
-            return
-        given = bool(str(a.get("answer") or "").strip())  # tl-gy4: an answer filed on the ask is an answer, whether or not the bead changed
-        if a.get("brief") == self.brief_hash and not self.fresh and not given:
-            raise Blocked("waiting: for the owner's answer to ask %s (%s): %s" % (a["id"], a["kind"], fmt.clip(ask_line(a["question"]), 200)), kind=oc.Kind.WAIT_ASK)
-        a.update(status="answered", answered=time.time())
-        self.ask_path().write_text(json.dumps(a, indent=1))
-        self.answered = a
-        self.log.note("ask %s (%s) is answered: %s" % (a["id"], a["kind"], "the owner's answer is filed on it" if given
-                                                           and a.get("brief") == self.brief_hash else "the bead changed since it was asked"))
+        """An open ask is never asked again: with the bead unchanged the run waits; a change (the owner's comment or edit) or a
+        filed answer answers it, and the run goes on from its checkpoint."""
+        state, a = raiser.check(self.stores.asks, self.bead, self.brief_hash, self.fresh, time.time())
+        if state == "wait" and a:
+            raise Blocked(raiser.waiting_line(a), kind=oc.Kind.WAIT_ASK)
+        if state == "answer" and a:
+            self.answered = a
+            self.export_brief()  # the brief the workers read now carries the owner's answer
+            self.log.note("ask %s (%s) is answered: %s" % (a.id, a.kind.value, "the owner's answer is filed on it" if a.answer
+                                                           else "the bead changed since it was asked"))
 
-    def answer_text(self, a):
-        """The owner's answer to ask a: the dashboard's, else the people's comments after the engine's ask comment."""
-        if (a.get("answer") or "").strip():
-            return a["answer"].strip()
-        comments = self.store.comments(self.bead)
-        start = max([k + 1 for k, c in enumerate(comments)
-                     if c.text.startswith("Ask (engine) %s " % a["id"])] or [0])
-        return "\n".join(c.text.strip() for c in comments[start:] if not engine_written(c.text)).strip()
-
-    def raise_ask(self, kind, why, question):
-        try:
-            n = int(json.loads(self.ask_path().read_text()).get("n", 0)) + 1
-        except (OSError, ValueError):
-            n = 1
-        a = {"v": 1, "id": "%s-%d" % (self.bead, n), "n": n, "bead": self.bead, "kind": kind,
-             "question": ask_markdown(kind, why, question or why), "detail": (question or why)[:4000], "why": why[:4000], "run": self.log_path.stem, "t": time.time(),
-             "parks_at": time.time() + 3 * 86400, "brief": self.brief_hash, "status": "open", "fmt": 3,
-             "options": ask_options(kind, why, getattr(self, "blocked_options", None))}
+    def raise_ask(self, spec, why, kind):
+        """File the ask the stop carries. Lint decides whether it is one an owner can answer: if not, nothing is filed and the stop is
+        the engine's own fault, never a prose question. -> the Ask, or None."""
         common = self.git("rev-parse", "--path-format=absolute", "--git-common-dir")
-        a.update(repo=str(Path(common).parent) if common else str(self.wt),
-                 title=(getattr(self, "bead_title", "") or "")[:200])
-        self.ask_path().parent.mkdir(exist_ok=True)
-        self.ask_path().write_text(json.dumps(a, indent=1))
-        moved = self.leave_queue() if kind in ("decision", "ticket") else ""
-        self.comment("Ask (engine) %s (%s): %s%s" % (a["id"], kind, a["question"][:1500], moved))
+        at = raiser.Asking(bead=self.bead, run=self.log_path.stem, brief_hash=self.brief_hash, now=time.time(), why=why,
+                           repo=str(Path(common).parent) if common else str(self.wt), title=getattr(self, "bead_title", "") or "")
+        a, problems = raiser.raise_ask(self.stores.asks, spec, at)
+        if a is None:
+            self.warn("the ask is not one an owner can answer (%s): %s" % ("; ".join(problems), spec.decision[:200]))
+            return None
+        moved = raiser.leave_queue(self.store, self.bead, self.cfg.pick_label or "", self.cfg.needs_info_label or "") if (
+            a.kind.value in ("decision", "ticket") and not self.dry) else ""
+        self.comment(asktext.comment(a) + moved)
         return a
-
-    def leave_queue(self):
-        """A decision or ticket ask means the bead lacks what it needs to be done unattended: drop the pick label so no
-        runner takes it again, add needs-info. Answering does not put it back; the owner relabels it (an answer can
-        split the bead). Verify and stuck asks keep it: the work is there, a fact or a hint is missing."""
-        pick, info = self.cfg.pick_label or "", self.cfg.needs_info_label or ""
-        shown = tl.peek(self.store, self.bead)
-        if not pick or self.dry or not shown or pick not in shown.labels:
-            return ""
-        tl.attempt(self.store.remove_label, self.bead, pick)
-        if info:
-            tl.attempt(self.store.add_label, self.bead, info)
-        return "\n(Out of the %s queue: label %s removed%s; relabel it %s once it can be done unattended.)" % (
-            pick, pick, ", %s added" % info if info else "", pick)
 
     def checkpoint_path(self):
         return tl.config_dir() / "checkpoints" / ("%s.json" % self.bead)
@@ -3341,30 +3321,29 @@ class Engine:
             self.replan_first = True
             self.old_plan, self.amend_why = ck["plan"], "retry validation fix failed at land"
             return None, 0, None
-        if ck["brief"] != self.brief_hash and ck["step"] == "land" and (self.answered or {}).get("kind") in ("verify", "denied"):
+        given = self.answered is not None and self.answered.answer is not None  # a filed answer changes what the plan reads, whatever the bead
+        if (ck["brief"] != self.brief_hash or given) and ck["step"] == "land" and self.answered and self.answered.ask_class == AskClass.EXTERNAL_FACT:
             self.plan_data, self.plan_summary = ck["plan"], ck["plan"]["summary"]
-            answer = self.answer_text(self.answered)
-            gaps = (self.answered.get("why") or "").startswith(VERIFY_GAPS)  # not a denial's ask: its answer is a rerun
-            if not gaps or confirms(answer):
-                self.log.note("the owner answered verify ask %s (%s): going straight to land" % (
-                    self.answered["id"], answer))
+            answer = self.answered_words()
+            if given and self.answered.answer.action == "confirm":
+                self.log.note("the owner answered verify ask %s (confirmed): going straight to land" % self.answered.id)
                 return ck["plan"], len(ck["plan"]["stages"]), None
             # lifesim-fld.26.15: 'add a test that ..., then land' landed without the test; any answer but a plain yes
             # goes to the planner, which plans what it asks for, or nothing (then the run lands)
             self.verify_answer = answer or "(no comment: the owner edited the bead)"
             self.log.note("the owner answered verify ask %s with more than a yes: planning what it asks, keeping %d "
-                             "accepted stage(s)" % (self.answered["id"], len(self.done)))
+                             "accepted stage(s)" % (self.answered.id, len(self.done)))
             return None, 0, None
-        if ck["brief"] != self.brief_hash:
-            answer = self.answer_text(self.answered) if self.answered else ""
+        if ck["brief"] != self.brief_hash or given:
+            answer = self.answered_words()
             # a comment alone is context for the next writer (the brief carries it), not an amend: supervisor notes used up
             # the re-plan cap (lifesim d5f.40, fld.27.12). An owner's answer to an ask still amends.
             diff = bead_diff(ck["snap"], self.snap, answer) if ck.get("snap") else None
             if diff and not self.answered and not bead_diff(ck["snap"], self.snap, answer, comments=False):
                 diff = ""
-            if answer and (self.answered or {}).get("kind") in ("stuck", "budget", "denied", "pause") and RERUN_ANSWER.fullmatch(" ".join(answer.lower().replace("-", " ").split()).strip(" .!")):
+            if given and not answer and ck["brief"] == self.brief_hash:
                 # tl-bxk.13.16.5: "Run again" changes nothing the plan reads; counted as an amend it used a re-plan (lifesim-fld.10)
-                self.log.note("the owner's answer (%s) only asks for a rerun: keeping the plan, no planner run" % answer.strip()[:40])
+                self.log.note("the owner's answer (%s) only asks for a rerun: keeping the plan, no planner run" % self.answered.answer.action)
                 diff = ""
             if diff == "":  # the hash moved on a label, a priority or a comment: nothing the plan reads changed
                 self.log.note("the bead changed since the checkpoint of %s, but nothing the plan reads: keeping the plan, "
@@ -3373,7 +3352,7 @@ class Engine:
                 self.log.note("the bead changed since the checkpoint of %s: amending its plan, keeping %d accepted stage(s)"
                          % (ck["run"], len(self.done)))
                 self.old_plan = ck["plan"]
-                self.amend_why = "bead changed: %s" % ("the owner answered ask %s" % self.answered["id"] if self.answered
+                self.amend_why = "bead changed: %s" % ("the owner answered ask %s" % self.answered.id if self.answered
                                                        else "an edit with no ask")
                 self.amend_text = diff or "The bead changed since the old plan (the checkpoint holds no copy of the old text): read the task above."
                 self.amend_text += "\nAccepted stages (their work is in the tree): " + ("; ".join(self.done) or "none")
@@ -3496,7 +3475,7 @@ class Engine:
                 continue
             if w["question"].strip():
                 self.steps.outcome("asks", w["question"][:200])
-                raise Blocked("owner decision needed", w["question"], w.get("options"), kind=oc.Kind.ASK_DECISION)
+                raise Blocked("owner decision needed", question_spec(w), kind=oc.Kind.ASK_DECISION)
             if (self.look_ready(st) and not fix and not shots_fixed and not (w.get("shots") or [])
                     and not (w.get("logic_only") or "").strip()):
                 # tl-tno: the review's 'asked for no shots' finding was a writer amend and burned lifesim-d5f.39's re-plan cap; the contract
@@ -3513,7 +3492,7 @@ class Engine:
                 self.last_summary = w2["summary"]
                 if w2["question"].strip():
                     self.steps.outcome("asks", w2["question"][:200])
-                    raise Blocked("owner decision needed", w2["question"], w2.get("options"), kind=oc.Kind.ASK_DECISION)
+                    raise Blocked("owner decision needed", question_spec(w2), kind=oc.Kind.ASK_DECISION)
                 w = dict(w2, summary=w["summary"] + "\n" + w2["summary"], new_cases=(w.get("new_cases") or []) + (w2.get("new_cases") or []),
                          unchecked=(w.get("unchecked") or []) + (w2.get("unchecked") or []),
                          bad_checks=(w.get("bad_checks") or []) + (w2.get("bad_checks") or []))
@@ -3622,7 +3601,7 @@ class Engine:
                     review["decided"], review["question"])]
             elif review["question"].strip():
                 self.steps.outcome("asks", review["question"][:200])
-                raise Blocked("owner decision needed", review["question"], review.get("options"), kind=oc.Kind.ASK_DECISION)
+                raise Blocked("owner decision needed", askspecs.open_question(review["question"], review.get("options")), kind=oc.Kind.ASK_DECISION)
             blocking = [f for f in review["findings"] if f["severity"] in ("high", "medium")]
             said = "%d finding%s, %d unmet" % (len(blocking), "" if len(blocking) == 1 else "s", len(review["unmet"]))
             if not blocking and not review["unmet"]:
@@ -4290,8 +4269,9 @@ class Engine:
         if self.fixes > limit:
             if kind == "conflict":
                 self.sh(["git", "rebase", "--abort"], pin=True)
+            trimmed = trim.trim_log(tail, log=str(getattr(self, "gate_log", "") or "") if kind == "gate" else "")
             raise (FixFailed if kind == "conflict" else Blocked)("%s after %d fix rounds: it needs the owner's hint\n%s" % (
-                what, limit, trim.trim_log(tail, log=str(getattr(self, "gate_log", "") or "") if kind == "gate" else "")), kind=oc.Kind.ASK_STUCK)
+                what, limit, trimmed), askspecs.no_progress(what, limit, trimmed), kind=oc.Kind.ASK_STUCK)
         self.warn("%s: %s, fix round %d of %d" % ("resume" if resume else "land", what, self.fixes, limit))
         if not resume:
             self.save_checkpoint(stage=len((self.plan_data or {}).get("stages") or []), rounds=0, n=0, feedback="", step="land")
@@ -4898,13 +4878,13 @@ class Engine:
             self.log.note("wip commit failed: %s" % (tail or "").strip()[-300:])
         return rc == 0
 
-    def close(self, outcome, why, sha, question, kind=None):
+    def close(self, outcome, why, sha, spec, kind=None):
         old = None
         if hasattr(signal, "SIGTERM") and threading.current_thread() is threading.main_thread():
             old = signal.signal(signal.SIGTERM, signal.SIG_IGN)  # a second stop must not break the close-out
         branch = self.git("symbolic-ref", "--short", "-q", "HEAD")
         try:
-            self._close(outcome, why, sha, question, kind)
+            self._close(outcome, why, sha, spec, kind)
             if not self.dry:
                 with contextlib.suppress(Exception):  # last: the trace and the comments above read the branch
                     self.leave_slot(outcome, branch)
@@ -4952,13 +4932,15 @@ class Engine:
         if rc:
             self.warn("the slot could not be left at the base: %s" % tail.strip()[-160:])
 
-    def _close(self, outcome, why, sha, question, kind=None):
+    def _close(self, outcome, why, sha, spec, kind=None):
         why = why or ("stopped before a reason was recorded" if outcome == "failed" else "")
+        bad = (raiser.problems(spec) if spec else ["the stop carries no ask"]) if kind in oc.ASKS else []
+        if bad:  # an ask that is no ask an owner can answer is the engine's own fault; no prose question takes its place
+            why, kind, spec = "failed: ask_lint: %s (%s)" % ("; ".join(bad)[:300], why.splitlines()[0][:200] if why else ""), oc.Kind.FAULT_ENGINE, None
         kind = self.decide_close(outcome, why, kind)
         outcome = outcome_for(kind, why) if kind and kind not in oc.FINISH else outcome
-        if self.disp and self.disp.escalated and not question:
-            question = "The same fault happened %d times on this bead (%s). Fix the cause, or say how to go on." % (
-                oc.KNOBS["fault_retries"], why.splitlines()[0][:200])
+        if self.disp and self.disp.escalated and spec is None:
+            spec = askspecs.repeated_fault(oc.KNOBS["fault_retries"], why.splitlines()[0][:200])
         mins = (time.time() - self.t0) / 60
         gd = Path(self.git("rev-parse", "--absolute-git-dir") or ".")
         if (gd / "rebase-merge").exists() or (gd / "rebase-apply").exists():  # stopped mid-conflict-fix: back to the branch
@@ -4983,7 +4965,7 @@ class Engine:
         self.steps.end()
         self.reflection = self.reflect_run(outcome, why)  # after the close node: the outcome is decided and nothing here changes it
         self.file_trace(outcome, why, sha)
-        self.detail([stats] + ([why[:400]] if why else []) + (["question: " + question[:400]] if question else []))
+        self.detail([stats] + ([why[:400]] if why else []) + (["question: " + spec.decision[:400]] if spec else []))
         if outcome == "failed":
             self.warn("task failed: %s" % why.splitlines()[0][:200])
         if self.dry:
@@ -4992,18 +4974,11 @@ class Engine:
         if kind == oc.Kind.WAIT_ASK or (kind is None and why.startswith("waiting:")):  # asked already: the bead stays as the ask left it, nothing is said twice
             self.log.note(why)
             return
-        ask = (oc.ASK_NAME.get(kind) if kind else ask_kind(why)) if outcome not in ("landed", "done") else None
-        self.asked = bool(ask)
-        if ask:
-            self.raise_ask(ask, why, question)
-        elif outcome in ("landed", "done") and self.ask_path().exists():
-            try:
-                a = json.loads(self.ask_path().read_text())
-                if a.get("status") in ("open", "parked"):
-                    a.update(status="closed", closed=time.time())
-                    self.ask_path().write_text(json.dumps(a, indent=1))
-            except (OSError, ValueError):
-                pass
+        self.asked = bool(kind in oc.ASKS and spec and outcome not in ("landed", "done") and self.raise_ask(spec, why, kind))
+        if outcome in ("landed", "done"):
+            old = self.stores.asks.get(self.bead)
+            if old:
+                self.stores.asks.close(self.bead, old.id, "the run landed")
         if self.unverified and outcome in ("landed", "done"):
             self.comment("Land (engine): " + self.unverified_text())
         look = [u for u in self.unchecked if u["kind"] == "other" and not self.is_look(u)]
@@ -5050,7 +5025,7 @@ class Engine:
             if self.disp.comment:  # a comment, never Notes (tl-7y6.6.2); one per (bead, kind, fingerprint) per hour
                 self.comment("Engine %s: %s" % ("failed" if fault else "paused", re.sub(r"^(failed|paused): ", "", why)[:400]))
         else:
-            text = why + (("\n\nQuestion: " + question) if question else "")
+            text = why + (("\n\nQuestion: " + spec.decision) if spec else "")
             rc = tl.cmd_block(Args(id=self.bead, why=text))
         if rc:  # a repo's bd rules can refuse (e.g. a minimum reason length): say so, never report a clean close
             self.warn("bd refused to %s %s (exit %s): close it by hand" % ("block" if outcome not in ("landed", "done")
@@ -5102,7 +5077,7 @@ def node_outcome(outcome, why, kind=None):
         return "stopped"
     if outcome == "failed":
         return "failed"
-    return "asks" if ask_kind(why) else "blocked"
+    return "blocked"
 
 
 def close_move(outcome, why, kind=None):
@@ -5121,9 +5096,6 @@ def close_move(outcome, why, kind=None):
         return "pause", "paused"
     if why.startswith("waiting:"):
         return "ask", "waiting"
-    kind = ask_kind(why)
-    if kind:
-        return "ask", kind
     return "close", "stopped" if why.startswith("failed: stopped") else "failed"
 
 
@@ -5163,58 +5135,12 @@ Answer:
 - change: up to 3 lines, what to change, naming the cause class.
 Cite only what the data above shows; do not guess a cause it does not support."""
 
-# tl-7y6.6.2: what the engine writes into a bead (comments, and lines of Notes). It is never the owner's: not in the brief, not in the
-# brief hash, not in the snapshot an amend diffs against, not in an answer. Every prefix an engine comment starts with is listed;
-# "Engine paused:" and "Engine failed:" are also the only lines it ever appended to Notes.
-ENGINE_NOTES = ("Plan (engine", "Review (engine", "Reflect (engine", "Blocked:", "Ask (engine", "Evidence (engine", "Parked (engine",
-                "Lane (engine", "Verify (engine", "Resume (engine", "Look (engine", "Land (engine", "Follow-up (engine",
-                "Engine paused:", "Engine failed:")
-
-
-def engine_written(text):
-    """True when a comment (or a line of Notes) is the engine's own record."""
-    return (text or "").lstrip().startswith(ENGINE_NOTES)
+engine_written = intake.engine_written  # what the engine (or a receipt of ours) wrote into a bead is never the owner's (tl-7y6.6.2)
 
 
 def people_lines(text):
     """Notes without the lines the engine appended to it ('Engine paused: ...', 'Engine failed: ...'): the only fields it writes."""
     return "\n".join(l for l in (text or "").splitlines() if not l.lstrip().startswith(("Engine paused:", "Engine failed:"))).strip()
-
-
-VERIFY_GAPS = "verify: before land, "  # the ask for what the workers could not check; its answer may ask for work
-CONFIRM_WORDS = {"right", "yes", "yep", "yeah", "y", "is", "ok", "okay", "k", "correct", "confirmed", "confirm", "lgtm", "land",
-                 "it", "ship", "go", "ahead", "good", "fine", "looks", "all", "approved", "verified", "checked", "sure",
-                 "true", "done", "please", "works", "thanks"}
-
-
-# a yes followed by these asks for work: a turn ('but', 'though', 'missing') anywhere, or a work verb opening a clause
-TURN_WORDS = {"but", "however", "except", "instead", "though", "although", "also", "still", "wrong", "missing", "should",
-              "must", "need", "needs", "never", "don", "dont", "yet", "unless", "todo"}
-WORK_VERBS = {"add", "fix", "change", "rename", "remove", "drop", "delete", "replace", "move", "update", "rewrite",
-              "revert", "undo", "make", "use", "write", "run", "keep", "split", "do", "try", "test", "check"}
-LEAD_WORDS = {"please", "now", "just", "and", "then", "so"}
-
-
-def confirms(answer):
-    """True when an answer says yes and asks for nothing: a few words, every one of them a yes ('right', 'ok, land
-    it', 'LGTM'), or such a yes first and then only evidence or reasons ('Right. The log shows X.'). A first clause
-    that is not a yes ('wrong: ...', 'not right'), a question mark, a turn word anywhere ('right, but ...') or a work
-    verb opening a clause ('Right. Fix ...') means the owner may want work done. When in doubt it is work: a needless
-    re-plan costs one planner call, a wrong land ships without what was asked."""
-    words = re.findall(r"[a-z]+", answer.lower())
-    if 0 < len(words) <= 6 and all(w in CONFIRM_WORDS for w in words):
-        return True
-    clauses = [re.findall(r"[a-z]+", c) for c in re.split(r"[.!;:,\n]", answer.lower())]
-    clauses = [c for c in clauses if c]
-    if not clauses or "?" in answer or not all(w in CONFIRM_WORDS for w in clauses[0]):
-        return False
-    if any(w in TURN_WORDS for w in words):
-        return False
-    for c in clauses[1:]:
-        lead = [w for w in c if w not in LEAD_WORDS]
-        if not c or c[0] in WORK_VERBS or (lead and lead[0] in WORK_VERBS):
-            return False
-    return True
 
 
 def has_criteria(bead):
@@ -5238,8 +5164,8 @@ def acceptance_text(bead):
 
 
 def run_breakdown(log_path, open_node=None, top=4):
-    """Where a run's minutes went, from its engine log: 'checks 163 min (9 rounds), write 16 min (9 rounds)'. Steps under a
-    minute are left out; the open step counts up to now."""
+    """Where a run's minutes went, from its engine log, longest first: BudgetLine(step, minutes, rounds). Steps under a minute are
+    left out; the open step counts up to now."""
     tot = {}
     for it in JsonlStore(Path(log_path), rec.decode).read_from().items:
         if isinstance(it.rec, rec.StepEnd):
@@ -5250,49 +5176,7 @@ def run_breakdown(log_path, open_node=None, top=4):
         t = tot.setdefault(open_node.step, [0.0, 0])
         t[0] += max(0.0, time.time() - open_node.t)
         t[1] += 1
-    parts = ["%s %d min (%d round%s)" % (k, v[0] // 60, v[1], "" if v[1] == 1 else "s")
-             for k, v in sorted(tot.items(), key=lambda kv: -kv[1][0]) if v[0] >= 60][:top]
-    return ", ".join(parts)
-
-
-def ask_kind(why):
-    """The owner ask a block is, or None for the machine's own trouble (paused, waiting) and engine failures."""
-    if why.startswith(("paused:", "waiting:", "failed:")):
-        return None
-    if why.startswith("owner decision needed"):
-        return "decision"
-    if why.startswith("over budget"):
-        return "budget"
-    if why.startswith("needs a human"):
-        return "denied"  # a step was refused or the lane stopped: nothing to confirm as right or wrong (tl-bxk.13.9)
-    if why.startswith("verify:"):
-        return "verify"
-    if why.startswith("ticket:"):
-        return "ticket"
-    return "stuck"
-
-
-BLOB = re.compile(r"(?<![\w.)\]/-])`[^`]{80,}`|(?<![\w.)\]/-])`[^`]{80,}$|\{['\"][^}]{80,}(?:\}|$)")  # a quoted command or tool-call dump, never a thing to read
-ZERO_COST = re.compile(r"\$0\.00 of \$[\d.]+, ")
-
-
-def dump_like(span):
-    """A quoted span that is a script or tool-call dump (multi-line, a dict, very long), not a command worth reading."""
-    return "\n" in span or "\\n" in span or span.startswith(("`{", "{'", '{"')) or len(span) >= 300
-
-
-def tidy_question(text, cap=600):
-    """The ask as the owner reads it: no command dumps, no meaningless $0.00, ends at a word and says it was cut.
-    The full text stays in the ask's `detail`."""
-    t = BLOB.sub(lambda m: "(a long command, see details)" if dump_like(m.group(0)) else m.group(0), text or "")
-    t = ZERO_COST.sub("", t).strip()
-    if len(t) <= cap:
-        return t
-    cut = t[:cap].rsplit(" ", 1)[0].rstrip(",;:( ")
-    return cut + " ... (more in details)"
-
-
-SENT_END = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9(`'\"])")
+    return [BudgetLine(step=k, minutes=float(v[0] // 60), rounds=int(v[1])) for k, v in sorted(tot.items(), key=lambda kv: -kv[1][0]) if v[0] >= 60][:top]
 
 
 CK_FIELDS = tuple(("v bead branch rebase_resets plan planner_ref planned extra plan_log snap done accepted replans fixes denials writer "
@@ -5301,120 +5185,12 @@ CK_FIELDS = tuple(("v bead branch rebase_resets plan planner_ref planned extra p
                    "accepted_new closed run t pending_land_validation stage rounds n feedback step").split())  # what save_checkpoint writes
 
 
-def ask_line(markdown):
-    """One line from an ask's markdown: the headline, then what is needed."""
-    lines = [x.strip() for x in (markdown or "").splitlines() if x.strip()]
-    head = lines[0].replace("**", "") if lines else ""
-    need = next((x.split(":**", 1)[1].strip() for x in lines if x.startswith("**What I need")), "")
-    return ("%s - %s" % (head, need) if need else head)[:500]
-
-
-def ask_markdown(kind, why, question):
-    """An ask as the owner reads it: a headline, what happened (3 bullets at most), what is needed. The options go to the
-    page as a table (they are buttons); the raw text stays in `detail`. Markdown the dashboard renders."""
-    q = tidy_question(question or why, cap=4000)
-    need, head, bullets = "Reply with a hint.", "", []
-    went = why.split("Where it went:", 1)[1].strip() if "Where it went:" in why else ""
-    if kind == "budget":
-        m = re.search(r"over budget: ([^.]*?)(?:\.|$)", why)
-        head = "Over its time limit: %s" % (m.group(1).strip() if m else "see details")
-        bullets = ["%s took %s min (%s round%s)" % (m[0], m[1], m[2], "" if m[2] == "1" else "s")
-                   for m in re.findall(r"(\w+) (\d+) min \((\d+) rounds?\)", went)[:2]]
-        if went.startswith("checks"):
-            bullets.append("Most of it went to check rounds, so running again repeats them unless something changes")
-        need = "Pick an option, or say what to change."
-    elif kind == "stuck" and why.startswith(REPLAN_CAP):
-        m = re.search(r"re-planned (\d+) times", why)
-        head = "Re-planned %s times; the engine stopped" % (m.group(1) if m else "several")
-        reasons = [fmt.clip(re.sub(r"^(?:\d+\.\s*)?(?:amend|plan)\s*:\s*(?:a re-plan:\s*)?", "", x), 160)
-                   for x in re.split(r"(?:^|\s)\d+\.\s+(?=(?:plan|amend):)", why.split("): ", 1)[-1]) if x.strip()]
-        reasons = [r for r in reasons if r and "first plan" not in r]
-        bullets = reasons[-3:]
-        need = "Split the bead, say what the plan keeps missing, or allow one more run."
-    elif kind == "verify":
-        body = q.split("): ", 1)[1] if "): " in q else q.split(": ", 1)[-1]
-        items = [fmt.clip(x, 200) for x in re.split(r";\s+", body) if x.strip()]
-        head = "Please check before it lands"
-        bullets = items[:3] + (["...and %d more (see details)" % (len(items) - 3)] if len(items) > 3 else [])
-        need = "Is it right? Right lands it; Wrong plans a fix from your words."
-    elif kind == "denied":
-        head = "A step was refused or stopped"
-        bullets = [fmt.clip(q.split("needs a human:", 1)[-1], 220)]
-        need = "Say what to try or allow, then Run again."
-    elif kind == "ticket":
-        head = "Nothing says what proves this bead done"
-        bullets = [fmt.clip(q, 200)]
-        need = "Add acceptance criteria to the bead, or answer here."
-    elif kind == "stuck" and "nothing proves" in why:
-        head = "Nothing proves a claim before landing"
-        body = why.split("nothing proves", 1)[1].split(" after ", 1)[0]
-        bullets = [fmt.clip(x, 180) for x in SENT_END.split(" ".join(body.split())) if x.strip()][:3]
-        need = "Say how to prove it, or that it is fine to land without."
-    else:  # decision, and any other stuck
-        text = re.split(r"\bOptions?:", q, 1)[0].strip() if kind == "decision" else q
-        sents = [x for x in SENT_END.split(" ".join(text.split())) if x.strip()]
-        if sents and sents[-1].endswith("?"):
-            need = sents.pop()
-        elif kind == "decision":
-            need = "Pick an option."
-        sents = [x for x in sents if not re.match(r"(?:I recommend|Recommendation)", x)]
-        if not sents and need.endswith("?"):  # the whole ask is one question: it is the headline
-            sents, need = [need], "Pick an option, or write your own answer."
-        head = fmt.clip(sents[0], 150) if sents else "The engine needs you"
-        bullets = [fmt.clip(x, 180) for x in sents[1:4]]
-    dot = lambda t: re.sub(r"(?<!\.)\.$", "", " ".join(t.replace("**", "").split()).rstrip(" ;"))
-    lines = ["**%s**" % (dot(head) or "The engine needs you")]
-    if bullets:
-        lines += ["", "**What happened**"] + ["- %s" % dot(b) for b in bullets[:3] if dot(b)]
-    lines += ["", "**What I need from you:** %s" % (dot(need) + ("." if need.rstrip().endswith(".") else "") or "Reply with a hint.")]
-    return "\n".join(lines)
-
-
-def ask_options(kind, why, given=None):
-    """The answers the dashboard offers as buttons: {label, answer, note?, recommended?, edit?}. Only answers the engine
-    handles: a verify ask's "right" lands it (confirms); the re-plan cap's "allow one more" is read by grant_cap; any
-    other answer to an over-budget ask resumes the run from its checkpoint with a fresh budget. A decision's come from
-    the model, which writes the answer text; the rest have no button: the free text box only."""
-    if kind == "decision":
-        out = []
-        for o in given or []:
-            if not isinstance(o, dict) or not str(o.get("label") or "").strip() or not str(o.get("answer") or "").strip():
-                continue
-            out.append({"label": o["label"].strip()[:120], "answer": o["answer"].strip()[:1000],
-                        "then": "The bead runs again with this as its instruction."})
-            if str(o.get("cost") or "").strip():
-                out[-1]["note"] = o["cost"].strip()[:300]
-            if o.get("recommended"):
-                out[-1]["recommended"] = True
-        return out[:4]
-    if kind == "verify":
-        return [{"label": "Right", "answer": "right", "recommended": True,
-                 "then": "The bead lands on the next pass of its loop."},
-                {"label": "Wrong", "answer": "wrong: ", "edit": True, "note": "Opens the text box: say what is wrong",
-                 "then": "The bead is planned again from your words.", "cost": "One more run"}]
-    if kind == "denied":
-        return [{"label": "Run again", "answer": "run again", "recommended": True,
-                 "note": "After you allowed the command, or ran it yourself",
-                 "then": "The step runs again on the next pass of its loop."}]
-    if kind == "stuck" and why.startswith(REPLAN_CAP):
-        return [{"label": "Allow one more planner run", "answer": "allow one more",
-                 "note": "The bead plans once more; or split it, or comment what the plan keeps missing",
-                 "then": "The planner runs once more on the next pass of its loop."}]
-    if kind == "budget":
-        m = re.search(r"of (\d+) min", why)
-        lim = "%s min" % m.group(1) if m else "a full budget"
-        return [{"label": "Run again", "answer": "run again", "recommended": True,
-                 "note": "Goes on from where it stopped; the budget counts per run",
-                 "then": "The bead runs again from your answer on the next pass of its loop, with a fresh %s." % lim,
-                 "cost": "Up to %s more of a slot" % lim},
-                {"label": "Split the bead", "answer": "split this bead: keep what is done as this bead and file the rest as new beads",
-                 "note": "For a bead too big for one run",
-                 "then": "The planner cuts the bead down from your answer, then the work goes on from the checkpoint.",
-                 "cost": "One planner run"}]
-    return []
-
-
 ENGINE_LABELS = ("needs-owner-check",)
+
+
+def question_spec(out):
+    """The ask a worker's question makes: its text and the options it offered."""
+    return askspecs.open_question(out["question"], out.get("options"))
 
 
 def brief_digest(bead, comments, owner_only=False, ignore=()):
@@ -5433,6 +5209,9 @@ def brief_digest(bead, comments, owner_only=False, ignore=()):
             out += ["", "## " + head, text]
     if bead.dependencies:
         out += ["", "## Related beads (titles only)"] + ["- %s %s [%s]" % (d.id, d.title, d.status or "?") for d in bead.dependencies]
+    hint = str(bead.metadata.get(intake.HINT) or "").strip()
+    if hint:
+        out += ["", "## Owner hint", hint]
     people = [c for c in comments if not engine_written(c.text)]
     if people:
         out += ["", "## Comments"] + ["- %s: %s" % (c.author or "?", c.text.strip()) for c in people]
@@ -5836,7 +5615,6 @@ A number for a look item (a contrast ratio, a size) comes only from the task, th
 tokens, a rule under config/). Never invent one as a check: if you think one is needed, ask it as your question (options with
 your proposal first) and plan no check for it.
 %s"""
-RERUN_ANSWER = re.compile(r"(?:run|try|start) again|re ?run|retry")  # the dashboard's Run again, or the same said by hand
 MAX_REBASE_RESETS = 2   # per bead, across runs (tl-19i)
 REPLAN_CAP = "stuck: the bead was re-planned "  # the cap's ask; an owner's answer to it allows one more
 RULES_MAX = 3 * 1024          # a worker_rules file is inlined once, in the planner's and the writer's first prompts: this many bytes at most
@@ -6080,6 +5858,8 @@ def reclaim(bead_id, repo, store=None):
     store = store or tl.bd_store(repo)
     b = tl.peek(store, bead_id) or Bead(id=bead_id, title="", status="")
     who, me = b.assignee, tl.actor()
+    if b.metadata.get(intake.HOLD):
+        return False, "held by the owner (%s): `tl hold %s --release` lets it go" % (b.metadata[intake.HOLD], bead_id)
     release = False
     if who and who != me:
         if not who.startswith("tl-"):
@@ -6107,15 +5887,12 @@ def reclaim(bead_id, repo, store=None):
         if not blocks:
             return False, "blocked by a person, not by the engine"
         after = [c for c in cs if c.created_at > blocks[-1].created_at and not engine_written(c.text)]
-        try:
-            ask = json.loads((tl.config_dir() / "asks" / ("%s.json" % bead_id)).read_text())
-        except (OSError, ValueError):
-            ask = {}
-        asking = ask.get("status") in ("open", "parked")
-        if asking and str(ask.get("answer") or "").strip():  # tl-gy4: an answer filed on the ask (dashboard, tl ask answer) is an answer
+        ask = AskStore.at(ConfigDir(tl.config_dir())).get(bead_id)
+        asking = ask is not None and ask.consumed is None and ask.status in (AskStatus.OPEN, AskStatus.PARKED, AskStatus.ANSWERED)
+        if ask is not None and asking and ask.answer is not None:  # tl-gy4: an answer filed on the ask (dashboard, tl ask answer) is an answer
             after, asking = [], False  # whether or not a comment followed the block; the run's check_ask consumes it
         if asking and not after:
-            return False, "waiting for the answer to ask %s (%s)" % (ask.get("id"), ask.get("kind"))
+            return False, "waiting for the answer to ask %s (%s)" % (ask.id, ask.kind.value)
         if after and not asking:
             return False, "%s commented after the engine blocked it; read that first" % (after[-1].author or "someone")
         reopen = True

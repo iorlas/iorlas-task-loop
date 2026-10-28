@@ -58,7 +58,7 @@ class DocContract(Base):
 
 class AskContract(Base):
     def raise_ask(self, bead: str, status: AskStatus = AskStatus.OPEN, t: float = S.T) -> Ask:
-        a = dataclasses.replace(S.OTHERS["Ask"], bead=bead, id=bead + "-1", status=status, answer=None, answered=None, t=t)
+        a = dataclasses.replace(S.ASK, bead=bead, id=bead + "-1", status=status, answer=None, answered=None, consumed=None, t=t)
         self.s.asks.of(bead).write(a)
         return a
 
@@ -71,17 +71,40 @@ class AskContract(Base):
     def test_answer_records_the_owner_choice_once(self) -> None:
         self.raise_ask("b1")
         ans = AskAnswer(action="rerun", text="go", t=S.T + 9, by="denis")  # pyrefly: ignore[unexpected-keyword]
-        done = self.s.asks.answer("b1", ans)
-        self.assertEqual((done.status, done.answer, done.answered), (AskStatus.ANSWERED, ans, S.T + 9))
+        done, why = self.s.asks.answer("b1", "b1-1", ans)
+        self.assertEqual((why, done.status, done.answer, done.answered), ("", AskStatus.ANSWERED, ans, S.T + 9))
         self.assertEqual(self.s.asks.of("b1").read(), done)
-        self.assertIsNone(self.s.asks.answer("b1", ans))  # already answered
-        self.assertIsNone(self.s.asks.answer("nope", ans))
+        self.assertEqual(self.s.asks.answer("b1", "b1-1", ans)[1], "answered")  # the first answer wins
+        self.assertEqual(self.s.asks.answer("nope", "nope-1", ans), (None, "gone"))
+        self.assertEqual(self.s.asks.answer("b1", "b1-0", ans)[1], "superseded")
 
-    def test_withdraw_only_a_live_ask(self) -> None:
+    def test_amend_replaces_an_answer_no_run_used_and_consume_ends_it(self) -> None:
         self.raise_ask("b1")
-        self.assertTrue(self.s.asks.withdraw("b1"))
-        self.assertEqual(self.s.asks.of("b1").read().status, AskStatus.WITHDRAWN)
-        self.assertFalse(self.s.asks.withdraw("b1"))
+        one = AskAnswer(action="text", text="a", t=S.T + 1, by="d")  # pyrefly: ignore[unexpected-keyword]
+        two = AskAnswer(action="text", text="b", t=S.T + 2, by="d")  # pyrefly: ignore[unexpected-keyword]
+        self.s.asks.answer("b1", "b1-1", one)
+        self.assertEqual(self.s.asks.amend("b1", "b1-1", two)[0].answer, two)
+        used = self.s.asks.consume("b1", S.T + 5)
+        self.assertEqual((used.consumed, used.answer), (S.T + 5, two))
+        self.assertIsNone(self.s.asks.consume("b1", S.T + 6))  # used once
+        self.assertEqual(self.s.asks.amend("b1", "b1-1", one)[1], "consumed")
+
+    def test_withdraw_only_an_ask_no_run_used(self) -> None:
+        self.raise_ask("b1")
+        done, why = self.s.asks.withdraw("b1", "b1-1", "no longer", S.T + 1)
+        self.assertEqual((why, done.status, done.closed_why), ("", AskStatus.WITHDRAWN, "no longer"))
+        self.assertEqual(self.s.asks.withdraw("b1", "b1-1", "again", S.T + 2)[1], "")  # already withdrawn: fine
+        self.raise_ask("b2")
+        self.s.asks.consume("b2", S.T + 1)
+        self.assertEqual(self.s.asks.withdraw("b2", "b2-1", "x", S.T + 2)[1], "consumed")
+
+    def test_close_and_park_touch_only_the_ask_they_read(self) -> None:
+        self.raise_ask("b1")
+        self.assertFalse(self.s.asks.close("b1", "b1-0", "gone"))
+        self.assertTrue(self.s.asks.park("b1", "b1-1"))
+        self.assertFalse(self.s.asks.park("b1", "b1-1"))  # parked already
+        self.assertTrue(self.s.asks.close("b1", "b1-1", "the bead is closed"))
+        self.assertEqual(self.s.asks.get("b1").closed_why, "the bead is closed")
 
 
 class CheckpointContract(Base):

@@ -41,10 +41,10 @@ class EngineAndDashOnFakesTest(unittest.TestCase):
 
     def test_engine_raises_dashboard_answers_engine_resumes(self) -> None:
         s = fake_stores()
-        s.asks.of("tl-1").write(dataclasses.replace(S.OTHERS["Ask"], status=AskStatus.OPEN, answer=None, answered=None))
+        s.asks.of("tl-1").write(dataclasses.replace(S.ASK, status=AskStatus.OPEN, answer=None, answered=None, consumed=None))
         s.checkpoints.of("tl-1").write(suites.CK)
         self.assertEqual([a.bead for a in s.asks.live()], ["tl-1"])
-        s.asks.answer("tl-1", AskAnswer(action="confirm", text="ok", t=5.0, by="denis"))  # pyrefly: ignore[unexpected-keyword]
+        s.asks.answer("tl-1", "tl-1-1", AskAnswer(action="confirm", text="ok", t=5.0, by="denis"))  # pyrefly: ignore[unexpected-keyword]
         self.assertEqual(s.asks.live(), [])
         self.assertEqual(s.asks.of("tl-1").read().answer.by, "denis")
         self.assertEqual(s.checkpoints.open_beads(), ["tl-1"])

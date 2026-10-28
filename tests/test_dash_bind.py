@@ -10,6 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from support.paths import VENDOR  # noqa: E402
 from taskloop_dash import bind  # noqa: E402
 
 TS = "100.64.1.2"  # tailscale-like (CGNAT) address
@@ -35,7 +36,7 @@ class Env(unittest.TestCase):
     def run_server(self, where, *args, public=False):
         env = {k: v for k, v in os.environ.items() if not k.startswith("TASK_LOOP_")}
         env.update(HOME=str(self.home), USERPROFILE=str(self.home), XDG_CONFIG_HOME=str(self.home / ".config"),
-                   APPDATA=str(self.home / ".config"), PYTHONPATH=str(where))
+                   APPDATA=str(self.home / ".config"), PYTHONPATH=os.pathsep.join([str(where), VENDOR]))  # the copy has no skills/ beside it
         if public:
             env["TASK_LOOP_DASH_DEV_PUBLIC"] = "1"
         return subprocess.run([sys.executable, "-m", "taskloop_dash", *args], env=env,

@@ -82,8 +82,8 @@ already accepted.
 
 Before claiming, run-task takes back what the engine itself left: a `tl-` claim whose lease ran out (a restarted
 Claude session has a new actor name) is released, and a bead the engine blocked is reopened for a plain retry, or when
-a comment after the block answers the open ask. It stays blocked (`TAKEN: <why>`) while a person holds it, while an
-ask waits unanswered, when a person commented after the block with no ask open (they may have parked it), or while
+an answer filed on the open ask (or no ask open) lets it go. It stays blocked (`TAKEN: <why>`) while a person holds it, while an
+ask waits unanswered, when a person commented after the block with no ask open (they may have parked it), when `tl hold` is set, or while
 another bead blocks it. A `tl-` claim whose lease is live is another run-task of the bead, still running: `TAKEN`
 names it and its engine log; wait for it, never start a second one.
 
@@ -116,45 +116,46 @@ for commands red by design on the uncommitted tree a writer leaves (lifesim-fld.
 `|`, `then`...; `just check-fmt` is another command) is sent back once with `<cmd> runs only in the gate at land:
 <why>`, and a second such plan fails the run.
 
-Dashboard Asks tab: open asks, most urgent first, each answerable in place (the answer goes on the bead as a comment and
-opens it; first answer wins). Answering needs no token from loopback or Tailscale (100.64.0.0/10), judged by the socket's
-peer address, never a header; a POST from any other address (a container bound to 0.0.0.0, the LAN) needs the token in
-`~/.config/task-loop/dash.token`: `tl dash url` prints `ANSWER LINK`s with it. The page never asks for a token up front;
-on a 401 it shows one inline hint. Every ask record has `options`, a list of `{label, answer, note?, recommended?, edit?}`,
-shown as buttons above the text box (recommended first); a click posts its `answer` through the same path. verify: "Right"
-(`right`, which the engine reads as accept) and "Wrong" (opens the box with `wrong: `). stuck: only answers the engine
-handles: "Run again" on an over-budget ask (any answer resumes from the checkpoint, and the budget counts per run) and
-"Allow one more planner run" on the re-plan cap; other stuck asks and tickets have the text box only. decision: the
-planner, writer or reviewer returns `options` (2-4, each label, cost, exact answer, one `recommended`; a required schema
-field, empty with no question) and the engine copies them into the record. A red banner shows when delegate says a subscription lane is out.
-Intake: a bead with no acceptance criteria (the field, or a `## Acceptance Criteria` section) is a ticket ask before any
-AI step; a plan of more than `engine.max_stages` (3) stages is a split ticket, unless the owner already answered one. A decision or ticket ask takes the bead out of the unattended queue: with `engine.pick_label` set (lifesim: `auto`) the engine removes that label and adds `engine.needs_info_label` (`needs-info`), and the ask comment says so; answering does not relabel it, the owner does. Verify and stuck asks keep the label. Neither label change counts as an answer.
+Dashboard Asks tab: open asks, most urgent first, each answerable in place. An answer is a typed record (`answer` on the ask file:
+`{action, text, t, by}`, action one of `rerun`, `confirm`, `split`, `text`) and the bead is opened for the loop; first answer wins.
+Answering needs no token from loopback or Tailscale (100.64.0.0/10), judged by the socket's peer address, never a header; a POST
+from any other address (a container bound to 0.0.0.0, the LAN) needs the token in `~/.config/task-loop/dash.token`: `tl dash url`
+prints `ANSWER LINK`s with it. The page never asks for a token up front; on a 401 it shows one inline hint. A red banner shows when
+delegate says a subscription lane is out.
 
-An ask nobody answers in 3 days is parked (status `parked`, a comment on the bead; it still waits and an answer
-un-parks it). A substantive answer from the dashboard or `tl ask answer` is also filed on the bead's notes under `## Decisions`
-(`## Testing` for verify and denied asks).
+An ask is one record, `~/.config/task-loop/asks/<bead>.json` (`taskloop.contracts.ask.Ask`, `v` 2; an older or unknown `v` reads as
+no ask), written only through `AskStore`. It has a class, one decision sentence (at most 120 characters, ends in `?`), at most 3
+`tried` bullets and 2-5 options, recommended first, each with its consequence and a typed action; the card text is rendered from those
+fields (`domain/asks/text.py`), never copied from a worker. The engine lints every ask before it files one; a failed lint files nothing
+and the stop is an engine fault. Owner classes: open_question, external_fact, unproven, no_progress, cap_reached, over_budget,
+missing_criteria, too_big. Infra trouble (lane failure, schema or bad request, sandbox denial, stale base, missing tool or recipe, a
+wrong tree) is never an ask: the bead stays open with an engine fault.
 
-The owner's inbox: `tl ask answer <bead> --amend <text>` replaces an answer no run has used yet (the history stays in the ask's `answers`; the dashboard has Change answer); `tl ask list` (ordered by what each ask unblocks), `tl ask answer <bead> <text>`, `tl ask withdraw <bead> [why]`;
-the dashboard's Asks page does the same with one click per option, an 8 s Undo before the comment is written, and a
-Dismiss button for a stale ask. An ask's `question` is tidied (no command dumps, ends at a word) and the full text is in
-its `detail`; each option carries `then` (what happens next) and `cost`. Withdrawn, closed-bead and replaced asks are never listed.
+The owner speaks in typed verbs only; prose never acts, and the engine reads no comment as input. `tl answer BEAD [--option N | --rerun |
+--confirm | --split | words]` (alias `tl ask answer`, `--amend` replaces an answer no run used) files the AskAnswer; `tl hint BEAD text`
+sets the bead's `owner_hint` (the next brief carries it); `tl hold BEAD [--release]` sets `owner_hold` (run-task will not reclaim the
+bead); `tl override BEAD replan-cap` sets `owner_override` (one more planner run past the cap). Each verb also leaves an `Owner (tl)`
+receipt comment for people. `tl ask list|withdraw|age`: the inbox, ordered by what each ask unblocks, a dismissal, and how long each
+ask has waited. An answer no run used within 30 minutes is an engine fault: `tl ask age` prints a `FAULT:` line and exits 1.
+`app/asks/intake.py` is the one place comments are classified (`parse(comment) -> kind, fields, body`): only receipts and the engine's
+own prefixes are told apart, everything else is a `note`.
 
-Asks: every block is an owner ask, `~/.config/task-loop/asks/<bead>.json` plus an `Ask (engine)` comment: decision
-(a step's question; a planner's, writer's or reviewer's question that an accepted requirement already answers, quoted
-in its `decided` field, is no ask: the planner plans again once with the requirement quoted (transition
-`planner_decided`), a writer or reviewer gets a fix round citing it. A test that an accepted requirement makes fail is
-no conflict between requirements: it is fixed to match the requirement, never weakened or deleted to make the code
-pass (COMMON says the same); an owner's answer in the comments decides as a requirement does. The engine never fills
-`decided` itself: a question whether a requirement should change reaches the owner. Only two accepted requirements in conflict or a
-missing requirement reach the owner, lifesim-d5f.58, tl-bxk.10.3), verify (a denial, or what the workers could not check), stuck (rounds, replans or fix rounds used up,
-budget, land failed), ticket (intake). A machine pause (a `retry` answer past the wait, or `owner` for a login or setup) is no ask. A rerun with the ask open and
-the bead unchanged waits (no AI step, the bead stays blocked); the owner answers by commenting on or editing the bead,
-and the rerun goes on from its checkpoint. An answered verify for a denial goes straight to land; one for what the
-workers could not check goes straight to land only when the answer is a yes (a few words, each a yes: `right`,
-`ok, land it`, `LGTM`), or opens with such a yes and then gives only evidence or reasons (`Right. The log shows X.`);
-an answer whose first clause is not a yes, that has a `?`, a turn word anywhere (`but`, `though`, `missing`, `don't`)
-or a work verb opening a clause (`Right. Fix ...`), or any other answer (`add a test that X, then land`, `wrong: ...`) goes to the planner with the
-answer in its prompt, keeping the accepted stages, and a plan of no stages (the answer asks for nothing more) lands.
+Intake: a bead with no acceptance criteria is a ticket ask (class missing_criteria) before any AI step; a plan of more than
+`engine.max_stages` (3) stages is a too_big ask (answer `confirm` keeps it whole, `split` stops it). A decision or ticket ask takes the
+bead out of the unattended queue: with `engine.pick_label` set (lifesim: `auto`) the engine removes that label and adds
+`engine.needs_info_label` (`needs-info`); answering does not relabel it, the owner does. An ask nobody answers in 3 days is parked
+(status `parked`, a comment on the bead; it still waits and an answer un-parks it). Withdrawn, closed-bead and replaced asks are never
+listed.
+
+Asks come from facts, never from prose: a planner's, writer's or reviewer's question becomes an open_question ask unless an accepted
+requirement already answers it (its `decided` field, quoted: the planner plans again once with the requirement quoted, a writer or
+reviewer gets a fix round citing it; the engine never fills `decided` itself). A test that an accepted requirement makes fail is no
+conflict between requirements: it is fixed to match the requirement, never weakened or deleted to make the code pass. What the workers
+could not check is an external_fact ask; the stuck classes are unproven, no_progress, cap_reached and over_budget. A machine pause (a
+`retry` answer past the wait, or `owner` for a login or setup) is no ask. A rerun with the ask open and the bead unchanged waits (no AI
+step, the bead stays blocked); a filed answer starts it from its checkpoint. A `confirm` on an external_fact ask goes straight to land;
+`rerun` keeps the plan; `text` goes to the planner with the answer in the brief (`## Owner answer`), keeping the accepted stages, and a
+plan of no stages lands.
 The writer's `unchecked` items go to the review, which reports what is still unproven after the checks.
 Unchecked items are per stage: each review is shown every item still open (earlier stages' and this writer's) and its
 list replaces them, so the last stage's review, which sees the whole tree and the acceptance cases run, decides what

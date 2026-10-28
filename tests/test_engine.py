@@ -17,6 +17,7 @@ import unittest
 import contextlib
 from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
+from typing import Any
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -33,7 +34,13 @@ import seams  # noqa: E402
 from support.fakes import FakeBeadStore, as_bead, as_comment  # noqa: E402
 from support.logs import records  # noqa: E402
 from taskloop.app.run.steps import Steps  # noqa: E402
+from contracts import samples as S  # noqa: E402
+from taskloop.contracts import codec  # noqa: E402
+from taskloop.contracts.ask import AskAnswer  # noqa: E402
 from taskloop.contracts.enums import WaitWhat  # noqa: E402
+from taskloop.contracts.paths import ConfigDir  # noqa: E402
+from taskloop.contracts.stores import AskStore  # noqa: E402
+from support.narrow import must  # noqa: E402
 from support.waits import until  # noqa: E402
 from support import fake_route  # noqa: E402
 import lane_policy as lp  # noqa: E402,F401
@@ -176,6 +183,24 @@ def no_repo(fn):
     """The test calls code directly and never touches the repo: setUp skips building origin and clone."""
     fn.no_repo = True
     return fn
+
+
+def read_ask(bead="t-1") -> Any:
+    """The bead's ask record as the dict on disk, or None."""
+    p = tl.config_dir() / "asks" / ("%s.json" % bead)
+    return json.loads(p.read_text()) if p.exists() else None
+
+
+def card_of(a):
+    """All the text the owner reads on an ask record: the decision, what was tried, the options, and the details."""
+    opts = " ".join("%s %s" % (o["label"], o["consequence"]) for o in a["options"])
+    return " ".join([a["decision"], " ".join(a["tried"]), opts, a["detail"]["text"], a["why"]])
+
+
+def ask_rec(**over):
+    """A current-version ask record as a dict, open and unanswered, with fields overridden."""
+    base = codec.to_json(S.ASK)
+    return {**base, "status": "open", "answer": None, "answered": None, "consumed": None, **over}
 
 
 class EngineTest(unittest.TestCase):
@@ -1460,6 +1485,9 @@ class EngineTest(unittest.TestCase):
         self.assertIn("conflict", s.prompts[0])
 
     # -- reclaim: run-task takes back a bead the engine itself left blocked or claimed, never a person's
+    def ask_rec(self, **over):
+        return ask_rec(**over)
+
     def reclaim(self, bead, comments=(), ask=None, live=()):
         if ask:
             p = tl.config_dir() / "asks" / "t-1.json"
@@ -1519,7 +1547,7 @@ class EngineTest(unittest.TestCase):
         self.assertIn(("update", "t-1", "--status", "open", "--if-assignee", "tl-61ba34e7", "--assignee", ""), up)
 
     def test_reclaim_reopens_when_a_comment_answers_the_open_ask(self):
-        ask = {"id": "t-1-1", "kind": "verify", "status": "open", "brief": "x", "t": 0}
+        ask = self.ask_rec(id="t-1-1")
         ok, _, up = self.reclaim({"status": "blocked"}, [self.BLOCKED, {"author": "denis", "text": "Rerun.",
                                                                       "created_at": "2026-10-20T23:25:00Z"}], ask)
         self.assertTrue(ok)
@@ -1528,17 +1556,18 @@ class EngineTest(unittest.TestCase):
     def test_reclaim_reopens_a_bead_whose_ask_has_an_answer_filed_on_it_with_no_comment_after_the_block(self):
         """tl-gy4 (sims qs, lifesim-hclf.32-2): answered on the ask, status open, no comment after 'Blocked:': run-task and --fresh
         (both go through this gate) said 'waiting for the answer'. Only a bead comment after the block got past it."""
+        said = {"action": "rerun", "text": "run again", "t": 1.0, "by": "denis"}
         for status in ("open", "parked"):
-            ask = {"id": "t-1-2", "kind": "denied", "status": status, "brief": "x", "t": 0, "answer": "run again"}
+            ask = self.ask_rec(id="t-1-2", status=status, answer=said)
             ok, why, up = self.reclaim({"status": "blocked"}, [self.BLOCKED], ask)
             self.assertTrue(ok, why)
             self.assertIn(("update", "t-1", "--status", "open", "--assignee", ""), up)
-        ask = {"id": "t-1-2", "kind": "denied", "status": "open", "brief": "x", "t": 0, "answer": "  "}  # a blank answer is none
+        ask = self.ask_rec(id="t-1-2")  # no answer filed
         ok, why, _ = self.reclaim({"status": "blocked"}, [self.BLOCKED], ask)
         self.assertFalse(ok)
         self.assertIn("waiting for the answer", why)
         later = {"author": "denis", "text": "Parked.", "created_at": "2026-10-21T00:05:00Z"}
-        ask = {"id": "t-1-2", "kind": "denied", "status": "answered", "brief": "x", "t": 0, "answer": "go"}  # consumed, then a person spoke
+        ask = self.ask_rec(id="t-1-2", status="answered", answer=said, consumed=2.0)  # consumed, then a person spoke
         ok, why, _ = self.reclaim({"status": "blocked"}, [self.BLOCKED, later], ask)
         self.assertFalse(ok)
         self.assertIn("commented after", why)
@@ -1548,7 +1577,7 @@ class EngineTest(unittest.TestCase):
         ok, why, up = self.reclaim({"status": "blocked"}, [self.BLOCKED, later])
         self.assertFalse(ok)
         self.assertIn("commented after", why)
-        ask = {"id": "t-1-1", "kind": "decision", "status": "open", "brief": "x", "t": 0}
+        ask = self.ask_rec(id="t-1-1")
         ok, why, up = self.reclaim({"status": "blocked"}, [self.BLOCKED], ask)
         self.assertFalse(ok)
         self.assertIn("t-1-1", why)
@@ -2361,17 +2390,27 @@ class EngineTest(unittest.TestCase):
         """The engine's own comments (Engine failed / Engine paused): where a machine fault or pause now says why."""
         return "\n".join(c[3] for c in self.bd_calls if c[:2] == ("comments", "add") and str(c[3]).startswith("Engine "))
 
-    def ask(self):
-        p = tl.config_dir() / "asks" / "t-1.json"
-        return json.loads(p.read_text()) if p.exists() else None
+    def ask(self) -> Any:
+        return read_ask()
+
+    def card(self):
+        return card_of(self.ask())
+
+    def asks(self):
+        return AskStore.at(ConfigDir(tl.config_dir()))
+
+    def file_answer(self, action, text="", bead="t-1"):
+        """The owner answers the bead's ask the way the dashboard and `tl answer` do: an AskAnswer record, never a comment."""
+        a = must(self.asks().get(bead))
+        return self.asks().answer(bead, a.id, AskAnswer(action=action, text=text, t=time.time(), by="denis"))
 
     def test_a_planner_question_is_a_decision_ask_on_the_bead(self):
         rc, _ = self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
         self.assertEqual(rc, 2)
         a = self.ask()
-        self.assertEqual((a["kind"], a["status"]), ("decision", "open"))
-        self.assertTrue(a["question"].startswith("**Old format or new?**"), a["question"])
-        self.assertEqual(a["detail"], "Old format or new?")
+        self.assertEqual((a["kind"], a["class"], a["status"]), ("decision", "open_question", "open"))
+        self.assertEqual(a["decision"], "Old format or new?")
+        self.assertEqual(a["detail"]["text"], "Old format or new?")
         self.assertTrue(any(c[:2] == ("comments", "add") and "%s (decision)" % a["id"] in c[3] for c in self.bd_calls))
 
     # Denis 2026-10-21 (lifesim-s28t): a bead that lacks the information to do it leaves the unattended queue
@@ -2384,13 +2423,13 @@ class EngineTest(unittest.TestCase):
         ask_comment = next(c[3] for c in self.bd_calls if c[:2] == ("comments", "add") and "Ask (engine)" in c[3])
         self.assertIn("needs-info", ask_comment)
 
-    def test_a_verify_ask_keeps_the_bead_in_the_pick_queue(self):
+    def test_a_verify_ask_is_a_decision_and_takes_the_bead_out_of_the_pick_queue(self):
         r = dict(CLEAN, unchecked=[{"what": "the cited spec link did not open", "kind": "link"}])
         with self.store.stub(show=dict(BEAD, labels=["auto"])):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r], "verify": [STILL_OPEN]},
                                     pick_label="auto")
-        self.assertEqual(self.ask()["kind"], "verify")
-        self.assertFalse(any(c[:2] == ("label", "remove") for c in self.bd_calls))
+        self.assertEqual((self.ask()["kind"], self.ask()["class"]), ("decision", "external_fact"))
+        self.assertIn(("label", "remove", "t-1", "auto"), self.bd_calls)
 
     def test_the_label_swap_does_not_answer_the_ask(self):
         with self.store.stub(show=dict(BEAD, labels=["auto"])):
@@ -2430,22 +2469,17 @@ class EngineTest(unittest.TestCase):
         self.assertIn("for the owner's answer", self.eng.log_path.read_text())
         self.assertEqual(self.ask()["status"], "open")
 
-    @no_repo
-    def test_the_park_comment_is_the_engines_own_note_not_an_owner_answer(self):
-        self.assertTrue("Parked (engine): ask x-1 got no answer in 3 days.".startswith(engine.ENGINE_NOTES))
-
     def test_an_ask_with_an_answer_filed_on_it_starts_the_run_and_is_consumed(self):
         """tl-gy4 (lifesim-hclf.32-2): answered at 19:00, status still open, the bead unchanged: run-task said 'waiting for the answer'."""
         self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
-        a = self.ask()
-        a["answer"], a["answer_t"] = "Old format.", time.time()
-        (tl.config_dir() / "asks" / ("%s.json" % a["bead"])).write_text(json.dumps(a))
-        self.assertEqual(a["status"], "open")
+        self.assertEqual(self.ask()["status"], "open")
+        self.file_answer("text", "Old format.")
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertGreaterEqual(len(s.calls), 1)  # it ran, it did not wait
-        self.assertEqual(self.ask()["status"], "answered")
-        self.assertIn("Old format.", self.eng.answer_text(self.ask()))
+        a = self.ask()
+        self.assertEqual((a["status"], a["answer"]["text"], a["consumed"] is not None), ("answered", "Old format.", True))
+        self.assertIn("Old format.", s.prompts[0])  # the planner read the answer
         self.assertIn("owner's answer is filed on it", self.eng.log_path.read_text())
 
     def test_a_parked_ask_still_waits_for_the_owner(self):
@@ -2473,22 +2507,20 @@ class EngineTest(unittest.TestCase):
     def test_a_decision_ask_carries_the_options_the_planner_gave(self):
         rc, _ = self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Build now or park?", options=self.CHOICES)]})
         self.assertEqual(rc, 2)
-        THEN = "The bead runs again with this as its instruction."
-        self.assertEqual(self.ask()["options"], [
-            {"label": "Build it", "answer": "A: build the slice now", "note": "about 4 stages", "then": THEN},
-            {"label": "Keep parked", "answer": "B: keep it parked", "note": "none", "recommended": True, "then": THEN}])
+        self.assertEqual([(o["label"], o["text"], o["cost"], o["recommended"], o["action"]) for o in self.ask()["options"]], [
+            ("Keep parked", "B: keep it parked", "none", True, "text"), ("Build it", "A: build the slice now", "about 4 stages", False, "text")])
 
     def test_a_writer_or_reviewer_decision_carries_its_options_too(self):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [dict(WRITE, question="Which?", options=self.CHOICES[:2])]})
         self.assertEqual(rc, 2)
-        self.assertEqual([o["answer"] for o in self.ask()["options"]], ["A: build the slice now", "B: keep it parked"])
+        self.assertEqual([o["text"] for o in self.ask()["options"]], ["B: keep it parked", "A: build the slice now"])
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, question="Which?", options=self.CHOICES[:2])]})
         self.assertEqual(rc, 2)
         self.assertEqual(len(self.ask()["options"]), 2)
 
-    def test_a_decision_without_options_gets_the_text_box_only(self):
+    def test_a_decision_without_options_is_made_up_to_two(self):
         self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
-        self.assertEqual(self.ask()["options"], [])
+        self.assertEqual([(o["label"], o["recommended"]) for o in self.ask()["options"]], [("Answer in words", True), ("Split the bead", False)])
 
     def test_the_decision_schemas_require_options(self):
         for node in ("plan", "write", "review"):
@@ -2507,62 +2539,29 @@ class EngineTest(unittest.TestCase):
     def test_a_verify_ask_offers_right_and_a_wrong_that_opens_the_box(self):
         r = dict(CLEAN, unchecked=[{"what": "the cited spec link did not open", "kind": "link"}])
         self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r], "verify": [STILL_OPEN]})
-        self.assertEqual([o["label"] for o in self.ask()["options"]], ["Right", "Wrong"])  # the ask file carries them
-        right, wrong = engine.ask_options("verify", "x")
-        self.assertEqual((right["label"], right["answer"]), ("Right", "right"))
-        self.assertTrue(engine.confirms(right["answer"]))  # the engine reads it as accept
-        self.assertEqual((wrong["label"], wrong["answer"], wrong["edit"]), ("Wrong", "wrong: ", True))
-        self.assertFalse(engine.confirms(wrong["answer"] + "the link is dead"))
+        self.assertEqual([(o["label"], o["action"], o["edit"]) for o in self.ask()["options"]],
+                         [("Right, land it", "confirm", False), ("Wrong: say what", "text", True)])
 
     def test_an_over_budget_ask_offers_a_rerun_and_the_cap_ask_offers_one_more(self):
         self.run_engine({"plan": [PLAN], "write": [WRITE]}, budget_usd=0.6)
         a0 = self.ask()
         self.assertEqual((a0["kind"], [o["label"] for o in a0["options"]]), ("budget", ["Run again", "Split the bead"]))
-        self.assertTrue(all(o["then"] for o in a0["options"]))
-        self.assertIn("Pick an option", a0["question"])
-        a = engine.ask_options("stuck", engine.REPLAN_CAP + "3 times")
-        self.assertEqual([o["answer"] for o in a], ["allow one more"])
-        self.assertIn("allow", a[0]["answer"])  # what grant_cap reads
-        self.assertEqual(engine.ask_options("stuck", "stage 1 stuck: checks red"), [])
-        self.assertEqual(engine.ask_options("ticket", "ticket: no criteria"), [])
+        self.assertTrue(all(o["consequence"] for o in a0["options"]))
+        self.assertEqual(a0["options"][0]["action"], "rerun")  # what the next run reads
 
-    def test_every_option_says_what_happens_next_and_the_question_is_readable(self):
-        for kind, why in (("verify", "needs a human: x"), ("budget", "over budget: 1 of 2 min"),
-                          ("stuck", engine.REPLAN_CAP + "3 times")):
-            for o in engine.ask_options(kind, why):
-                self.assertTrue(o["then"], o)
-        dump = "needs a human: the write step was denied `{'command': '/bin/zsh -lc \"" + "x" * 300 + "\"}` after"
-        q = engine.tidy_question(dump)
-        self.assertNotIn("zsh", q)
-        self.assertIn("see details", q)
-        self.assertEqual(engine.tidy_question("over budget: $0.00 of $15, 187 of 180 min"), "over budget: 187 of 180 min")
-        keep = engine.tidy_question("denied `git push origin main` and gave no answer; run it or allow it, then rerun. (said:\n" + "x" * 100 + ")")
-        self.assertIn("`git push origin main` and gave no answer; run it or allow it, then rerun.", keep)
-        log = Path(self.tmp.name) / "run.jsonl" if hasattr(self, "tmp") else Path(tempfile.mkdtemp()) / "run.jsonl"
+    def test_run_breakdown_lists_where_the_minutes_went(self):
+        log = Path(tempfile.mkdtemp()) / "run.jsonl"
         log.write_text("\n".join(json.dumps({"v": 2, "kind": "step_end", "t": 1.0, "id": "n1", "step": st, "outcome": "done", "secs": sec}) + "\n" for st, sec in (
             ("checks", 6000), ("checks", 3800), ("write", 900), ("plan", 20))))
-        self.assertEqual(engine.run_breakdown(log), "checks 163 min (2 rounds), write 15 min (1 round)")
-        cut = engine.tidy_question("word " * 400)
-        self.assertTrue(cut.endswith("(more in details)") and len(cut) < 640)
-
-    def test_ask_markdown_survives_odd_text(self):
-        for kind, why, q in (("decision", "w", "Use **bold** thing. More here. Fine?"), ("decision", "w", "`code only that is long " + "x" * 200),
-                             ("budget", "over budget: 5 of 3\nmin. Where it went: checks 5 min (1 round)", ""), ("stuck", "", ""),
-                             ("verify", "verify: x", "y" * 50000), (None, "needs a human", "z")):
-            md = engine.ask_markdown(kind, why, q)
-            first = md.splitlines()[0]
-            self.assertTrue(first.startswith("**") and first.endswith("**") and len(first) > 4, (kind, first))
-            self.assertEqual(md.count("**") % 2, 0, md)
-            self.assertLessEqual(len([x for x in md.splitlines() if x.startswith("- ")]), 3)
-        self.assertNotIn("**", engine.ask_line(engine.ask_markdown("decision", "w", "Use **bold** thing. Fine?")))
+        self.assertEqual([(b.step, b.minutes, b.rounds) for b in engine.run_breakdown(log)], [("checks", 163.0, 2), ("write", 15.0, 1)])
 
     def test_an_unchecked_requirement_stops_the_land_with_a_verify_ask(self):
         r = dict(CLEAN, unchecked=[{"what": "the cited spec link did not open", "kind": "link"}])
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r], "verify": [STILL_OPEN]})
         self.assertEqual(rc, 2)
         a = self.ask()
-        self.assertEqual(a["kind"], "verify")
-        self.assertIn("the cited spec link did not open", a["question"])
+        self.assertEqual(a["class"], "external_fact")
+        self.assertIn("the cited spec link did not open", a["detail"]["text"])
         self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "")
 
     def test_the_gate_named_as_unchecked_lands_without_an_ask(self):
@@ -2602,7 +2601,7 @@ class EngineTest(unittest.TestCase):
         r = dict(CLEAN, unchecked=[{"what": "the filter that selects nothing", "kind": "case"}])
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r], "verify": [STILL_OPEN]})
         self.assertEqual(rc, 2)
-        self.assertEqual(self.ask()["kind"], "verify")
+        self.assertEqual((self.ask()["kind"], self.ask()["class"]), ("decision", "external_fact"))
 
     def test_a_stage_check_that_passed_named_as_unchecked_lands_without_an_ask(self):
         r = dict(CLEAN, unchecked=[{"what": "`%s` on the final tree" % HAS_F, "kind": "requirement"}])
@@ -2610,14 +2609,14 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 0, self.blocked)
         self.assertIsNone(self.ask())
 
-    def verify_then_answer(self, text):
+    def verify_then_answer(self, action, text=""):
         r = dict(CLEAN, unchecked=[{"what": "the cited spec link did not open", "kind": "link"}])
         self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r], "verify": [STILL_OPEN]})
-        return [{"author": "engine", "text": "Ask (engine) t-1-1 (verify): check the link"},
-                {"author": "denis", "text": text}]
+        self.file_answer(action, text)
+        return [{"author": "engine", "text": "Ask (engine) t-1-1 (decision): check the link"}]
 
     def test_an_answered_verify_ask_goes_straight_to_land(self):
-        with self.store.stub(comments=self.verify_then_answer("Right.")):
+        with self.store.stub(comments=self.verify_then_answer("confirm")):
             rc, s = self.run_engine({})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(s.calls, [])
@@ -2625,14 +2624,14 @@ class EngineTest(unittest.TestCase):
 
     def test_a_verify_answer_with_a_yes_and_evidence_goes_straight_to_land(self):
         text = "Right. The log shows the link opens and returns the spec."
-        with self.store.stub(comments=self.verify_then_answer(text)):
+        with self.store.stub(comments=self.verify_then_answer("confirm", text)):
             rc, s = self.run_engine({})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(s.calls, [])
 
     def test_a_verify_answer_with_a_yes_and_a_change_plans_it(self):
         more = dict(PLAN, stages=[dict(PLAN["stages"][0], goal="test Y")])
-        with self.store.stub(comments=self.verify_then_answer("right, but add a test for Y")):
+        with self.store.stub(comments=self.verify_then_answer("text", "right, but add a test for Y")):
             rc, s = self.run_engine({"plan": [more], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])
@@ -2641,7 +2640,7 @@ class EngineTest(unittest.TestCase):
         # lifesim-fld.26.15: 'add a test that ..., then land' went straight to land without the test
         text = "add a test that f.txt is not empty, then land"
         more = dict(PLAN, stages=[dict(PLAN["stages"][0], goal="test f.txt")])
-        with self.store.stub(comments=self.verify_then_answer(text)):
+        with self.store.stub(comments=self.verify_then_answer("text", text)):
             rc, s = self.run_engine({"plan": [more], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])
@@ -2650,20 +2649,18 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(self.eng.replans, 0)
 
     def test_a_verify_answer_the_planner_finds_needs_nothing_more_lands(self):
-        with self.store.stub(comments=self.verify_then_answer("Link is fine, checked.")):
+        with self.store.stub(comments=self.verify_then_answer("text", "Link is fine, checked.")):
             rc, s = self.run_engine({"plan": [dict(PLAN, stages=[], summary="nothing left")]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual([c[0] for c in s.calls], ["planner"])
         self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
         self.assertEqual(self.eng.plan_summary, "do it")  # the commit is titled after the work, not the empty plan
 
-    def test_a_verify_answer_on_the_dashboard_counts_over_the_comments(self):
+    def test_a_verify_answer_on_the_dashboard_lands_it(self):
         r = dict(CLEAN, unchecked=[{"what": "the cited spec link did not open", "kind": "link"}])
         self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [r], "verify": [STILL_OPEN]})
-        a = self.ask()
-        a["answer"] = "correct"
-        self.eng.ask_path().write_text(json.dumps(a))
-        with self.store.stub(comments=[{"author": "denis", "text": "correct"}]):
+        self.file_answer("confirm")
+        with self.store.stub(comments=[]):
             rc, s = self.run_engine({})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(s.calls, [])
@@ -2690,8 +2687,8 @@ class EngineTest(unittest.TestCase):
                                  "review": [dict(CLEAN, unchecked=[item]), dict(CLEAN, unchecked=[item])],
                                  "verify": [STILL_OPEN]})
         self.assertEqual(rc, 2)
-        self.assertEqual(self.ask()["kind"], "verify")
-        self.assertEqual(self.ask()["question"].count("the cited spec link did not open"), 1)
+        self.assertEqual((self.ask()["kind"], self.ask()["class"]), ("decision", "external_fact"))
+        self.assertEqual(self.ask()["detail"]["text"].count("the cited spec link did not open"), 1)
 
     def test_only_non_final_stages_are_told_a_later_stage_case_is_not_unchecked(self):
         rc, s = self.run_engine({"plan": [self.TWO], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]})
@@ -2759,8 +2756,8 @@ class EngineTest(unittest.TestCase):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, unchecked=[self.RUFF])],
                                      "verify": [STILL_OPEN]})
         self.assertEqual(rc, 2)
-        self.assertEqual(self.ask()["kind"], "verify")
-        self.assertIn("ruff", self.ask()["question"])
+        self.assertEqual((self.ask()["kind"], self.ask()["class"]), ("decision", "external_fact"))
+        self.assertIn("ruff", self.card())
 
     @EXIT_127
     @without_shims
@@ -2769,7 +2766,7 @@ class EngineTest(unittest.TestCase):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, unchecked=[self.RUFF])],
                                      "verify": [STILL_OPEN]})
         self.assertEqual(rc, 2)
-        self.assertIn("ruff", self.ask()["question"])
+        self.assertIn("ruff", self.card())
 
     @no_repo
     def test_a_tool_counts_only_backticked_or_after_a_run_verb(self):
@@ -2834,17 +2831,17 @@ class EngineTest(unittest.TestCase):
         rc, _ = self.verified(answer)
         self.assertEqual(rc, 2)
         a = self.ask()
-        self.assertEqual(a["kind"], "verify")
-        self.assertIn("the menu reads well on a phone", a["question"])
+        self.assertEqual(a["kind"], "decision")
+        self.assertIn("the menu reads well on a phone", self.card())
         self.assertIn("the owner's eye", a["why"])
         self.assertNotIn("Boot() calls", a["why"])
-        self.assertNotIn(".meta", a["question"])
+        self.assertNotIn(".meta", self.card())
 
     def test_a_settled_item_without_quoted_evidence_or_an_unanswered_one_stays_open(self):
         answer = {"items": [verdict(1, "settled", "  "), verdict(2, "settled", "Boot.cs:14"), verdict(7, "settled", "x")]}
         rc, _ = self.verified(answer)
         self.assertEqual(rc, 2)
-        q = self.ask()["question"]
+        q = self.card()
         self.assertIn(".meta", q)
         self.assertIn("the menu reads well on a phone", q)
         self.assertNotIn("Boot() calls", q)
@@ -2868,7 +2865,7 @@ class EngineTest(unittest.TestCase):
         rc, s = self.verified(answer, write=[WRITE, WRITE], review=[dict(CLEAN, unchecked=self.GAPS), left])
         self.assertEqual(rc, 2)
         self.assertEqual([c[0] for c in s.calls].count("reviewer"), 3)  # stage review, the verifier, the fix's review
-        q = self.ask()["question"]
+        q = self.card()
         self.assertIn("the menu reads well on a phone", q)
         self.assertIn("the new guid is unique across Assets", q)
 
@@ -2895,14 +2892,14 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertEqual([c[0] for c in s.calls].count("worker"), 1)
         a = self.ask()
-        self.assertEqual(a["kind"], "verify")
+        self.assertEqual(a["kind"], "decision")
         self.assertIn("the guid is also in Old.cs.meta", a["why"])
 
     def test_a_verifier_that_cannot_run_leaves_every_item_to_the_owner(self):
         out = stop("rate_limited", at=time.time() + 7200, say="no lane")
         rc, _ = self.verified(out, verify=[out])  # the lane is out for hours: given up at once
         self.assertEqual(rc, 2)
-        q = self.ask()["question"]
+        q = self.card()
         for item in self.GAPS:
             self.assertIn(item["what"], q)
         self.assertIn("could not self-verify", self.eng.log_path.read_text())
@@ -2928,7 +2925,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual([c[0] for c in s.calls], ["planner"])
         a = self.ask()
         self.assertEqual(a["kind"], "ticket")
-        self.assertIn("part 3", a["question"])
+        self.assertIn("part 3", self.card())
 
     def test_close_reason_says_what_landed_and_a_refused_close_is_a_warning(self):
         with mock.patch.object(tl, "cmd_close", side_effect=lambda a: self.closed.append(a.reason) or 1):
@@ -3353,15 +3350,6 @@ class EngineTest(unittest.TestCase):
         self.assertNotEqual(h(dict(BEAD, description="Blocked: needs the design first"), people), base)  # the owner's own words stay
         self.assertNotEqual(h(BEAD, people + [{"author": "denis", "text": "Parked over budget (226 of 180 min): scope change"}]), base)
 
-    def test_answer_text_and_reclaim_skip_engine_comments(self):
-        a, eng = {"id": "t-1-1", "answer": ""}, engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
-        cs = [{"author": "tl-x", "text": "Ask (engine) t-1-1 stuck: why"}, {"author": "tl-x", "text": "Lane (engine): the review ran on the writer's family"},
-              {"author": "tl-x", "text": "Resume (engine): the earlier work conflicts"}, {"author": "tl-x", "text": "Verify (engine): self-verified"}]
-        with self.store.stub(comments=cs):
-            self.assertEqual(eng.answer_text(a), "")
-        with self.store.stub(comments=cs + [{"author": "denis", "text": "Use the new format."}]):
-            self.assertEqual(eng.answer_text(a), "Use the new format.")
-
     def test_a_lane_comment_after_a_block_does_not_hide_the_reopen(self):
         blocked = dict(BEAD, status="blocked", assignee="")
         cs = [{"author": "tl-x", "text": "Blocked: stuck", "created_at": "2026-10-25T10:00:00Z"},
@@ -3436,11 +3424,11 @@ class EngineTest(unittest.TestCase):
         a = self.ask()
         self.assertEqual(a["kind"], "stuck")
         self.assertIn("re-planned 3 times", a["why"])
-        for word in ("split", "say what the plan keeps missing", "allow one more", "1. plan", "2. amend", "bead changed"):
-            self.assertIn(word, (a["question"] + a["why"] + a["detail"]).lower())
-        self.assertTrue(a["question"].startswith("**Re-planned 3 times"), a["question"])
-        with self.store.stub(show=dict(BEAD, description="v5")), \
-                self.store.stub(comments=[{"author": "denis", "text": "Allow one more."}]):
+        for word in ("split", "allow one more", "1. plan", "2. amend", "bead changed"):
+            self.assertIn(word, self.card().lower())
+        self.assertTrue(self.card().startswith("The plan was redone 3 times"), self.card())
+        self.file_answer("rerun")
+        with self.store.stub(show=dict(BEAD, description="v5")):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(s.calls[0][0], "planner")
@@ -3452,14 +3440,14 @@ class EngineTest(unittest.TestCase):
             self.stopped_run(bead=dict(BEAD, description="v%d" % k))
         with self.store.stub(show=dict(BEAD, description="v4")):
             self.run_engine({})
-        with self.store.stub(show=dict(BEAD, description="v5")), \
-                self.store.stub(comments=[{"author": "denis", "text": "Split it, I will clarify."}]):
+        self.file_answer("split")
+        with self.store.stub(show=dict(BEAD, description="v5")):
             rc, s = self.run_engine({})
         self.assertEqual(rc, 2)
         self.assertEqual(s.calls, [])
         self.assertEqual(self.eng.extra, 0)
         self.assertIn("re-planned 3 times", self.ask()["why"])
-        self.assertIn("Split it, I will clarify.", self.eng.log_path.read_text())
+        self.assertIn("Answer: split", self.eng.log_path.read_text())
 
     def test_the_stage_level_cap_is_the_replan_cap_ask_and_allow_one_more_works_on_it(self):
         rc, s = self.run_engine({"plan": [PLAN, PLAN], "write": [WRITE, WRITE],
@@ -3468,8 +3456,9 @@ class EngineTest(unittest.TestCase):
         a = self.ask()
         self.assertTrue(a["why"].startswith(engine.REPLAN_CAP), a["why"])
         self.assertIn("stage 1 stuck after 1 rounds", a["why"])
-        self.assertIn("allow one more", a["question"])
-        with self.store.stub(comments=[{"author": "denis", "text": "ALLOW one more"}]):
+        self.assertIn("allow one more", self.card().lower())
+        self.file_answer("rerun")
+        if True:
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, max_rounds=1, max_replans=1)
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual(self.eng.extra, 1)

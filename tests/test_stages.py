@@ -29,6 +29,8 @@ class StagesTest(unittest.TestCase):
     commit_base_cfg = te.EngineTest.commit_base_cfg
     run_engine = te.EngineTest.run_engine
     checks_engine = te.EngineTest.checks_engine
+    asks, file_answer, card = (te.EngineTest.asks, te.EngineTest.file_answer, te.EngineTest.card)
+    wt: Path
 
     def created(self):
         return [a[1] for a in self.bd_calls if a and a[0] == "create"]
@@ -707,7 +709,7 @@ class Inputs(StagesTest):
         rc, s = self.run_engine({"plan": [q]})
         self.assertEqual(rc, 2)
         self.assertEqual([c[0] for c in s.calls], ["planner"])
-        self.assertIn("Push the rewritten history", self.ask()["question"])
+        self.assertIn("Push the rewritten history", self.ask()["decision"])
 
     def test_an_input_a_case_defers_is_no_question(self):
         case = {"criterion": "The play test passes on the Windows PC", "check": "", "proved_by": "leftover",

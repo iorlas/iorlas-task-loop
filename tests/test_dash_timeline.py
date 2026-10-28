@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 sys.path.insert(0, str(ROOT / "tests"))
+from support.askjson import ask_json  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
 from taskloop_dash import tails as tails_mod  # noqa: E402
 from taskloop_dash.readers import events as events_mod  # noqa: E402
@@ -167,9 +168,7 @@ class Api(unittest.TestCase):
 
     def test_an_open_ask_is_waiting_on_you(self):
         (self.cfg / "asks").mkdir()
-        (self.cfg / "asks" / (BEAD + ".json")).write_text(json.dumps({
-            "v": 1, "id": BEAD + "-3", "bead": BEAD, "kind": "decision", "question": "A or B?", "status": "open",
-            "t": time.time(), "title": "Front approach"}))
+        (self.cfg / "asks" / (BEAD + ".json")).write_text(json.dumps(ask_json(BEAD, 3, status="open", t=time.time(), title="Front approach")))
         t = self.task()
         self.assertEqual((t["state"], t["label"]), ("asks", "waiting for your answer"))
         self.assertEqual(t["ask"]["id"], BEAD + "-3")
@@ -177,8 +176,7 @@ class Api(unittest.TestCase):
 
     def test_an_ask_already_answered_waits_for_the_next_run_not_for_you(self):
         (self.cfg / "asks").mkdir()
-        (self.cfg / "asks" / (BEAD + ".json")).write_text(json.dumps({"v": 1, "id": BEAD + "-2", "bead": BEAD,
-                                                                   "status": "answered"}))
+        (self.cfg / "asks" / (BEAD + ".json")).write_text(json.dumps(ask_json(BEAD, 2, status="answered")))
         for s in RUNS[5:]:
             os.unlink(str(self.cfg / "engine" / ("%s-20261021-%s.jsonl" % (BEAD, s))))
         t = self.task()
@@ -190,9 +188,8 @@ class Api(unittest.TestCase):
         for s in RUNS[5:]:
             os.unlink(str(self.cfg / "engine" / ("%s-20261021-%s.jsonl" % (BEAD, s))))
         (self.cfg / "asks").mkdir()
-        (self.cfg / "asks" / (BEAD + ".json")).write_text(json.dumps({
-            "v": 1, "id": BEAD + "-1", "bead": BEAD, "kind": "decision", "question": "A or B?", "status": ask_status,
-            "t": time.time(), "repo": "/r/lifesim", "title": "Front approach"}))
+        (self.cfg / "asks" / (BEAD + ".json")).write_text(json.dumps(ask_json(
+            BEAD, 1, status=ask_status, t=time.time(), repo="/r/lifesim", title="Front approach")))
         beads = [{"id": BEAD, "title": "Front approach", "status": "blocked", "dependencies": [
                      {"id": "lifesim-5ban.33", "type": "parent-child"},
                      {"id": "lifesim-5ban.23", "type": "blocks"}]},

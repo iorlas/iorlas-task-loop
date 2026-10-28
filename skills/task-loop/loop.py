@@ -923,8 +923,7 @@ def passes(repo, a, started, st=None, store=None):
                              "started": started}):
             continue
         reclaim(repo, store)
-        tl.close_stale_asks()  # asks of closed or missing beads (throttled)
-        tl.park_stale_asks()  # asks unanswered past parks_at (3 days), throttled with the sweep above
+        tl.sweep_asks(say)  # asks of closed beads closed, unanswered ones parked, answers no run used flagged (all throttled)
         try:
             import reflect_digest
             reflect_digest.maybe_run()  # the run reflections into beads, once a day (tl-bl5)

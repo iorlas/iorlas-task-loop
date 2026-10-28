@@ -71,15 +71,14 @@ class SlotGitTest(unittest.TestCase):
             eng = make_engine(self.wt, script=script)
             rc = eng.run()
         self.assertEqual(rc, 2)
-        self.assertTrue(eng.why.startswith("tree: core.worktree is set"), eng.why)
+        self.assertTrue(eng.why.startswith("failed: tree: core.worktree is set"), eng.why)
         self.assertEqual(script.calls, [])  # no worker, reviewer or planner ever ran
         self.assertEqual(closed, [])  # the bead is blocked, not closed
-        self.assertEqual(len(blocked), 1)
-        ask = json.loads(eng.ask_path().read_text())
-        self.assertEqual(ask["status"], "open")
-        self.assertIn("git config --unset core.worktree", ask["question"])
-        self.assertIn(str(self.repo), ask["question"])
-        self.assertIn("config", ask["why"])  # names the setting and the file it came from
+        self.assertEqual(blocked, [])  # an engine fault: the bead stays open, nobody is asked
+        self.assertIsNone(eng.stores.asks.get("t-1"))  # a wrong tree is the slot's fault, not a question for the owner
+        self.assertIn("git config --unset core.worktree", eng.why)
+        self.assertIn(str(self.repo), eng.why)
+        self.assertIn("config", eng.why)  # names the setting and the file it came from
         trace = [json.loads(x) for x in eng.log_path.read_text().splitlines()]
         self.assertTrue(any(r["kind"] == "transition" and r.get("cause") == "wrong_tree" for r in trace))
         self.assertEqual(self.decoy_state(), before)
@@ -170,7 +169,7 @@ class SlotGitTest(unittest.TestCase):
             rc = eng.run()
         self.assertEqual(rc, 2)
         self.assertIn("after write", eng.why)
-        self.assertTrue(eng.why.startswith("tree: core.worktree is set"), eng.why)
+        self.assertTrue(eng.why.startswith("failed: tree: core.worktree is set"), eng.why)
         self.assertNotIn("review", [c[0] for c in script.calls])
         self.assertEqual(landed, [])
         self.assertEqual(self.decoy_state(), before)

@@ -155,15 +155,31 @@
   "n": 1,
   "bead": "tl-1",
   "kind": "decision",
-  "question": "Which?",
+  "class": "open_question",
+  "decision": "Which?",
   "run": "tl-7y6.3.1-20261027-002239",
   "t": 1793050200.5,
   "status": "answered",
+  "tried": [
+   "a"
+  ],
+  "options": [
+   {
+    "label": "Right",
+    "consequence": "lands",
+    "action": "confirm",
+    "text": "",
+    "cost": "free",
+    "recommended": true,
+    "edit": false
+   }
+  ],
   "detail": {
    "budget": [
     {
      "step": "write",
      "minutes": 12.0,
+     "rounds": 3,
      "usd": 1.0
     }
    ],
@@ -179,14 +195,6 @@
   "why": "w",
   "parks_at": 1793053800.5,
   "brief_hash": "b0c0",
-  "options": [
-   {
-    "label": "Right",
-    "cost": "free",
-    "answer": "right",
-    "recommended": true
-   }
-  ],
   "repo": "/r",
   "title": "t",
   "answer": {
@@ -195,7 +203,9 @@
    "t": 1793050200.5,
    "by": "denis"
   },
-  "answered": 1793050205.5
+  "answered": 1793050205.5,
+  "consumed": 1793050209.5,
+  "closed_why": ""
  },
  "Checkpoint": {
   "v": 2,

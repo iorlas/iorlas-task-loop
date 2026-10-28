@@ -8,6 +8,7 @@ returns an error for that request; parsers skip lines they cannot read).
 
 | source | owner | reader | what breaks if it changes |
 |---|---|---|---|
+| asks `~/.config/task-loop/asks/<bead>.json` (`v` 2) | **us** (`taskloop.contracts.ask.Ask`) | `AskStore` (`taskloop.contracts.stores`): the engine, `tl` and the dashboard all read and write through it | an older or unknown `v` reads as no ask; the card text is rendered from the record's fields by `domain/asks/text.py` |
 | agent-runs v1 (`~/.config/agent-runs`) | **us** (`docs/contracts/agent-runs-v1.md`); delegate is one producer | `contract_runs`, `contract_lanes` | nothing silently: other major versions are skipped |
 | Claude Code transcripts `~/.claude/projects/*/<session>.jsonl`, subagents `<session>/subagents/agent-*.jsonl` + `.meta.json` | Anthropic, undocumented | `claude_events`, `transcript_of`, `find_transcript` (a task-view block's session) | orchestrator and subagent logs |
 | `$CLAUDE_CODE_SESSION_ID`, `$CLAUDE_PID` in a session's Bash env; SessionStart hook stdin (`session_id`, `transcript_path`) | Anthropic | `tl.actor`, `tl.session_alive`, `tl.cmd_hook` | the per-session bd actor (fallbacks exist), heartbeat exit, log lookup |

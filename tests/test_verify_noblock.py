@@ -150,21 +150,20 @@ class NoBlock(unittest.TestCase):
     def test_an_owner_decision_still_asks(self):
         rc, _ = self.go([IQAD_R2], verify=[open_as("owner_decision")])
         self.assertEqual(rc, 2)
-        a = self.ask()
-        self.assertEqual(a["kind"], "verify")
-        self.assertIn("needs.R2", a["question"])
+        self.assertEqual(T.read_ask()["kind"], "decision")
+        self.assertIn("needs.R2", T.card_of(T.read_ask()))
 
     def test_one_owner_decision_among_unverified_items_asks_only_for_it(self):
         rc, _ = self.go([FLD_25_19, IQAD_R2], verify=[open_as("external_fact", "owner_decision")])
         self.assertEqual(rc, 2)
-        q = self.ask()["question"]
+        q = T.card_of(T.read_ask())
         self.assertIn("needs.R2", q)
         self.assertNotIn("mirror.mat", q)
 
     def test_an_old_kind_that_stays_open_is_still_asked(self):
         rc, _ = self.go([{"what": "the menu reads well", "kind": "requirement"}], verify=[open_as("other")])
         self.assertEqual(rc, 2)
-        self.assertIn("menu reads well", self.ask()["question"])
+        self.assertIn("menu reads well", T.card_of(T.read_ask()))
 
     def test_an_engine_step_is_settled_only_when_the_engine_will_do_it(self):
         e = self.unit()

@@ -9,6 +9,7 @@ from collections.abc import Callable
 from typing import Any
 
 from taskloop.adapters.bd import BdStore
+from taskloop.domain.asks import text as asktext
 from taskloop_dash.env import Ports
 
 
@@ -33,7 +34,7 @@ def bd(repo: str | None, *args: str, timeout: int = 30) -> types.SimpleNamespace
 
 
 def make_ports(tl: Any, engine: Any, reflect_digest: Any) -> Ports:
-    return Ports(bd=bd,
+    return Ports(bd=bd, ask_text=asktext.markdown,
                  slot_beads=quiet(lambda repo: [dataclasses.asdict(b) for b in tl.slot_beads(repo)], []),
                  waiting_line=quiet(lambda repo: tl.waiting_line(repo), []),
                  load_cfg=quiet(lambda repo: dataclasses.asdict(engine.load_cfg(repo)), {"pick_label": "auto", "skip_labels": []}),

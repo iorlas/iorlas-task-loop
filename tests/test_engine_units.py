@@ -559,27 +559,6 @@ class StoredBriefs(unittest.TestCase):
             self.assertLessEqual(len(out), len(old) + 200, p.name)  # the sections rebuilt are never larger than as stored
 
 
-class Confirms(unittest.TestCase):
-    def test_a_plain_yes_is_a_confirmation_anything_else_is_work(self):
-        for t in ("right", "Right.", "yes, land it", "ok", "LGTM", "correct", "looks good, ship it", "checked: fine"):
-            self.assertTrue(engine.confirms(t), t)
-        for t in ("", "wrong", "not right", "add a test that X, then land", "right, but rename f", "no",
-                  "Link is fine, checked."):
-            self.assertFalse(engine.confirms(t), t)
-
-    def test_a_yes_then_only_evidence_or_reasons_confirms(self):
-        # lifesim-gfr.31.1: 'Right. <evidence>' replanned and cost a write round
-        for t in ("Right. The log shows X.", "Correct. The cache entry is written before the lock is released.",
-                  "Yes, the log at /tmp/x shows 3 retries; the link opens.", "right: no errors in the log, it opens fine",
-                  "Right.\nThe screenshot shows the menu at 60 fps, because the shader is cached."):
-            self.assertTrue(engine.confirms(t), t)
-        for t in ("right, but add a test for Y", "wrong: the menu still flickers", "Right. Fix the typo in the doc.",
-                  "Yes, also rename f.", "Correct, though the log should name the file.", "Right, don't land yet",
-                  "Yes. Please add a case for the empty filter.", "Right? The log shows X.", "Right, it is missing a test.",
-                  "yes, change the default to 3", "Right, then remove the debug line."):
-            self.assertFalse(engine.confirms(t), t)
-
-
 class Validate(unittest.TestCase):
     def test_schema_subset(self):
         s = engine.SCHEMAS["review"]

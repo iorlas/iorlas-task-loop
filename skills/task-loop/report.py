@@ -253,6 +253,11 @@ def overlaps(r, since, until):
     return (r.get("started") or 0) < until and (r.get("ended") or r.get("started") or 0) >= since
 
 
+def is_ask(run):
+    """A run that ended on an owner ask: its trace carries the outcome Kind (ask_decision, ask_stuck, ask_budget, ask_ticket)."""
+    return str(run.get("kind") or "").startswith("ask_")
+
+
 def answered_asks(run):
     """Asks a run went on from (its log's 'ask X is answered' notes): the ask came before, maybe before the window."""
     ids = set()
@@ -268,7 +273,7 @@ def who_answered(comments, n):
     out = []
     asks = [i for i, c in enumerate(comments) if c.text.startswith("Ask (engine) ")]
     for i in asks[-n:] if n else []:
-        reply = next((c for c in comments[i + 1:] if not c.text.startswith(engine.ENGINE_NOTES)), None)
+        reply = next((c for c in comments[i + 1:] if not engine.engine_written(c.text)), None)
         out.append("open" if reply is None else "supervisor" if SUPERVISOR.search(reply.text) else "owner")
     return out + ["unknown"] * (n - len(out))
 
@@ -295,7 +300,7 @@ def scorecard(repo, since, until, base=None, comments_of=None, status_of=None, a
     rows, asks = [], {"count": 0, "beads": 0, "supervisor": 0, "owner": 0, "open": 0, "unknown": 0}
     for bead, b in beads.items():
         rs = b["runs"]
-        n_ask = sum(1 for r in rs if r.get("outcome") == "blocked" and engine.ask_kind(r.get("why") or ""))
+        n_ask = sum(1 for r in rs if r.get("outcome") == "blocked" and is_ask(r))
         if not n_ask and any(answered_asks(r) for r in rs):
             n_ask = 1  # it went on from an ask raised before the window
         landed = any(r.get("outcome") in ("landed", "done") for r in rs)
@@ -305,7 +310,7 @@ def scorecard(repo, since, until, base=None, comments_of=None, status_of=None, a
         why = last.get("why") or ""
         if landed:
             state = "landed"
-        elif last.get("outcome") == "blocked" and engine.ask_kind(why):
+        elif last.get("outcome") == "blocked" and is_ask(last):
             state = "parked"
         elif last.get("outcome") == "blocked" and why.startswith(("paused:", "waiting:")):
             state = "paused"

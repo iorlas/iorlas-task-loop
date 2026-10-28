@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.contracts.locks import Ticket
+from taskloop.contracts.ask import Ask
 from taskloop.contracts.paths import ConfigDir
 from taskloop_dash.cache import FileCache, TtlCache
 from taskloop_dash.tails import Tails
@@ -41,6 +42,10 @@ def _no_reflections(hours: int) -> dict[str, Any]:
     return {}
 
 
+def _ask_text(ask: Ask) -> str:
+    return ask.decision
+
+
 def _no_versions() -> list[str]:
     return []
 
@@ -54,6 +59,7 @@ class Ports:
     load_cfg: Callable[[str], dict[str, Any]] = _default_cfg  # the repo's engine config: pick_label, skip_labels
     bd: Callable[..., Any] = _no_bd  # bd in a repo through the engine's adapter: bd(repo, *args, timeout=) -> (returncode, stdout, stderr)
     reflections: Callable[[int], dict[str, Any]] = _no_reflections  # the run reflections of the last N hours
+    ask_text: Callable[[Ask], str] = _ask_text  # the card text of an ask, rendered from its fields (domain/asks/text.py)
     installed_versions: Callable[[], list[str]] = _no_versions  # task-loop versions in the plugin cache
 
 
