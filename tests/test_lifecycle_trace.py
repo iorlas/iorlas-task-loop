@@ -263,11 +263,20 @@ class TraceTelemetry(te.EngineTest):
     @unittest.skipIf(os.name == "nt", "the engine stops a process group; sleep is POSIX")
     def test_an_interrupted_command_leaves_a_kill_record_and_its_tree_is_stopped(self):
         eng = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), verbose=False, store=self.store)
-        timer = threading.Timer(0.5, _thread.interrupt_main)
-        timer.start()
-        self.addCleanup(timer.cancel)
+        started = self.wt / "child-started"
+        stop_waiting = threading.Event()
+
+        def interrupt_once_the_child_runs():  # the command itself says it runs: the interrupt cannot land before the child exists
+            while not started.exists() and not stop_waiting.wait(0.005):
+                pass
+            if started.exists():
+                _thread.interrupt_main()
+        watcher = threading.Thread(target=interrupt_once_the_child_runs, daemon=True)
+        watcher.start()
+        self.addCleanup(watcher.join)
+        self.addCleanup(stop_waiting.set)
         with self.assertRaises(KeyboardInterrupt):
-            eng.sh(["sleep", "30"], timeout=60)
+            eng.sh(["sh", "-c", 'touch "$0"; exec sleep 30', str(started)], timeout=60)
         kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
                  if json.loads(line)["kind"] == "kill"]
         self.assertTrue(kills)

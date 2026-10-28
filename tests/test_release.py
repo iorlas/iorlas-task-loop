@@ -15,6 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from taskloop.adapters.suiteout import failure_report  # noqa: E402
 from taskloop.app.release import manifest  # noqa: E402
+from support import waits  # noqa: E402
 from support.narrow import must  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -40,6 +41,7 @@ class Release(unittest.TestCase):
         (shim / "claude").write_text(textwrap.dedent("""\
             #!/bin/sh
             echo "$@" >> "%(log)s"
+            while [ -n "$FAKE_CLAUDE_GATE" ] && [ ! -e "$FAKE_CLAUDE_GATE" ]; do sleep 0.02; done  # a release holds the lock until the test opens the gate
             if [ "$1 $2" = "plugin update" ]; then
               if [ "$FAKE_CLAUDE_FAIL" = always ] || { [ "$FAKE_CLAUDE_FAIL" = once ] && [ ! -e "%(flag)s" ]; }; then
                 touch "%(flag)s"; echo "fatal: fetch-pack: invalid index-pack output"; exit 0
@@ -126,9 +128,23 @@ class Release(unittest.TestCase):
         return f.read_text().splitlines() if f.exists() else []
 
     def test_two_releases_started_together_both_land_one_after_the_other_with_distinct_versions(self):
-        procs = [subprocess.Popen(self.cmd(msg), env=self.env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                  text=True) for msg in ("first fix", "second fix")]
-        outs = [p.communicate(timeout=120)[0] for p in procs]
+        gate = self.home / "gate"
+        first = subprocess.Popen(self.cmd("first fix"), env=dict(self.env, FAKE_CLAUDE_GATE=str(gate)),
+                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        self.addCleanup(first.kill)
+        holder = must(waits.until(lambda: next(self.home.glob("cfg/**/*.holder"), None)))  # the first holds the lock and says who
+        self.assertTrue(holder.read_text())
+        second = subprocess.Popen(self.cmd("second fix"), env=self.env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                  text=True)
+        self.addCleanup(second.kill)
+        seen = []
+        for line in second.stdout:  # the second says it waits; only then does the first go on
+            seen.append(line)
+            if "waiting for the release lock" in line:
+                break
+        gate.write_text("")
+        procs = [first, second]
+        outs = [first.communicate(timeout=120)[0], "".join(seen) + second.communicate(timeout=120)[0]]
         self.assertEqual([p.returncode for p in procs], [0, 0], outs)
         subjects = self.git("log", "--format=%s", "-2", "main", cwd=self.origin).splitlines()
         self.assertEqual(sorted(s.split(":")[0] for s in subjects), ["0.1.1", "0.1.2"])
