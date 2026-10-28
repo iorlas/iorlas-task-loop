@@ -66,12 +66,8 @@ class Beads:
         return beads
 
     def _list(self, repo: str) -> list[Bead] | None:
-        exe = shutil.which("bd")
-        if not exe:
-            return None
         try:
-            r = subprocess.run([exe, "list", "--json", "--all", "-n", "0"], cwd=repo, capture_output=True,
-                               text=True, encoding="utf-8", errors="replace", timeout=30)
+            r = self.env.ports.bd(repo, "list", "--all", "-n", "0")
             return [norm_bead(b) for b in json.loads(r.stdout)] if r.returncode == 0 else None
         except (subprocess.SubprocessError, ValueError, OSError):
             return None
@@ -86,12 +82,10 @@ class Beads:
             pass
 
     def bd_json(self, repo: str, *args: str) -> Any:
-        exe = shutil.which("bd")
-        if not exe or not repo:
+        if not repo:
             return None
         try:
-            r = subprocess.run([exe, *args, "--json"], cwd=repo, capture_output=True, text=True, encoding="utf-8",
-                               errors="replace", timeout=20)
+            r = self.env.ports.bd(repo, *args, timeout=20)
             return json.loads(r.stdout) if r.returncode == 0 else None
         except (subprocess.SubprocessError, ValueError, OSError):
             return None

@@ -67,7 +67,7 @@ def world(*statuses, status="open"):
 class Items(unittest.TestCase):
     def test_metadata_items(self):
         fake = world("open", "good")
-        with mock.patch.object(looks_api, "bd", fake):
+        with mock.patch.object(LOOKS.env.ports, "bd", fake):
             items = LOOKS.collect("/r", [{"id": "tl-look", "labels": [gallery.LABEL], "created_at": "2026-10-23T10:00:00Z"},
                                            {"id": "x", "labels": ["auto"]}])
         self.assertEqual([i["status"] for i in items], ["open", "good"])
@@ -124,7 +124,7 @@ class Pictures(unittest.TestCase):
 
 class Answers(unittest.TestCase):
     def ask(self, fake, verdict, item="tl-1#1", note=""):
-        with mock.patch.object(looks_api, "bd", fake):
+        with mock.patch.object(LOOKS.env.ports, "bd", fake):
             return LOOKS.answer("/r", {"look_bead": "tl-look", "item": item, "verdict": verdict, "note": note}, now=NOW)
 
     def stored(self, fake):
@@ -193,18 +193,18 @@ class Answers(unittest.TestCase):
     def test_unknown_item_bead_and_bad_input(self):
         fake = world("open")
         self.assertEqual(self.ask(fake, "good", item="tl-1#9")[1]["code"], "item_missing")
-        with mock.patch.object(looks_api, "bd", fake):
+        with mock.patch.object(LOOKS.env.ports, "bd", fake):
             self.assertEqual(LOOKS.answer("/r", {"look_bead": "nope", "item": "x", "verdict": "good"})[0], 404)
             for bad in ({"look_bead": "--db=x", "item": "a", "verdict": "good"}, {"look_bead": "tl-look", "item": "a", "verdict": "x"}, [], None):
                 self.assertEqual(LOOKS.answer("/r", bad)[0], 400, bad)
         fake.beads["plain"] = {"id": "plain", "labels": ["auto"], "metadata": {"looks": looks("open")}}
-        with mock.patch.object(looks_api, "bd", fake):  # not an owner-look bead: never touched
+        with mock.patch.object(LOOKS.env.ports, "bd", fake):  # not an owner-look bead: never touched
             self.assertEqual(LOOKS.answer("/r", {"look_bead": "plain", "item": "tl-1#1", "verdict": "good"})[0], 404)
 
     def test_an_old_description_bead_is_turned_into_metadata_by_the_first_answer(self):
         desc = "## tl-9: Settings\n- docs/e/tl-9/a.png\n"
         fake = FakeBd({"tl-look": {"id": "tl-look", "status": "open", "labels": [gallery.LABEL], "description": desc}})
-        with mock.patch.object(looks_api, "bd", fake):
+        with mock.patch.object(LOOKS.env.ports, "bd", fake):
             code, _ = LOOKS.answer("/r", {"look_bead": "tl-look", "item": "tl-9#0", "verdict": "good"}, now=NOW)
         self.assertEqual(code, 200)
         self.assertEqual(fake.beads["tl-look"]["metadata"]["looks"][0]["status"], "good")
@@ -229,7 +229,7 @@ class Hardening(unittest.TestCase):
         orig = fake.__call__
         fake.__class__ = type("Bad", (FakeBd,), {"__call__": lambda s, repo, *a, timeout=30: subprocess.CompletedProcess(a, 1, "", "boom")
                                                   if a[0] == "update" and "--metadata" in a and a[1] == "tl-look" else orig(repo, *a)})
-        with mock.patch.object(looks_api, "bd", fake):
+        with mock.patch.object(LOOKS.env.ports, "bd", fake):
             code, _ = LOOKS.answer("/r", {"look_bead": "tl-look", "item": "tl-1#1", "verdict": "redo", "note": "n"}, now=NOW)
         self.assertEqual(code, 502)
         self.assertEqual(fake.beads["tl-r1"]["status"], "closed")
@@ -238,7 +238,7 @@ class Hardening(unittest.TestCase):
         import threading
         fake = world("open")
         res = []
-        with mock.patch.object(looks_api, "bd", fake):
+        with mock.patch.object(LOOKS.env.ports, "bd", fake):
             ts = [threading.Thread(target=lambda: res.append(LOOKS.answer("/r", {"look_bead": "tl-look", "item": "tl-1#1", "verdict": "redo", "note": "n"})[0]))
                   for _ in range(4)]
             [t.start() for t in ts]
@@ -249,7 +249,7 @@ class Hardening(unittest.TestCase):
     def test_an_odd_redo_id_is_never_closed(self):
         fake = world("open")
         fake.beads["tl-look"]["metadata"]["looks"][0].update(status="redo", redo_bead="--force")
-        with mock.patch.object(looks_api, "bd", fake):
+        with mock.patch.object(LOOKS.env.ports, "bd", fake):
             LOOKS.answer("/r", {"look_bead": "tl-look", "item": "tl-1#1", "verdict": "undo"})
         self.assertFalse(any(c[0] == "close" and "--force" in c for c in fake.calls))
 
@@ -285,7 +285,7 @@ class Api(unittest.TestCase):
             env = {"HOME": home, "XDG_CONFIG_HOME": str(cfg.parent), "APPDATA": str(cfg.parent)}
             with mock.patch.dict(os.environ, env):
                 dash = make_dash(home=home)
-            with mock.patch.object(looks_api, "bd", fake), \
+            with mock.patch.object(dash.env.ports, "bd", fake), \
                     mock.patch.object(dash.beads, "beads_of", lambda r: [{"id": "tl-look", "labels": [gallery.LABEL]}]):
                 out = dash.looks.api_looks("demo")
                 self.assertEqual((out["repo"], out["summary"]["open"]), ("demo", 1))

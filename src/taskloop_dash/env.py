@@ -28,6 +28,10 @@ def _default_cfg(repo: str) -> dict[str, Any]:
     return {"pick_label": "auto", "skip_labels": []}
 
 
+def _no_bd(repo: str | None, *args: str, timeout: int = 30) -> Any:
+    raise OSError(2, "bd is not installed")
+
+
 def _no_reflections(hours: int) -> dict[str, Any]:
     return {}
 
@@ -43,6 +47,7 @@ class Ports:
     slot_beads: Callable[[str], list[Bead]] = _no_beads  # this machine's slot beads of a repo
     waiting_line: Callable[[str], list[Bead]] = _no_beads  # the live slot tickets, first in line first
     load_cfg: Callable[[str], dict[str, Any]] = _default_cfg  # the repo's engine config: pick_label, skip_labels
+    bd: Callable[..., Any] = _no_bd  # bd in a repo through the engine's adapter: bd(repo, *args, timeout=) -> (returncode, stdout, stderr)
     reflections: Callable[[int], dict[str, Any]] = _no_reflections  # the run reflections of the last N hours
     installed_versions: Callable[[], list[str]] = _no_versions  # task-loop versions in the plugin cache
 

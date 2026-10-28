@@ -23,16 +23,9 @@ NOTE_MAX = 2000
 Reply = tuple[int, dict[str, Any]]
 
 
-def bd(repo: str, *args: str, timeout: int = 30) -> "subprocess.CompletedProcess[str]":
-    exe = shutil.which("bd")
-    if not exe:
-        raise OSError("bd is not installed")
-    return subprocess.run([exe, *args], cwd=repo, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
-
-
-def bd_json(repo: str, *args: str) -> Any:
+def bd_json(bd: Any, repo: str, *args: str) -> Any:
     try:
-        r = bd(repo, *args, "--json")
+        r = bd(repo, *args)
         out = json.loads(r.stdout) if r.returncode == 0 else None
     except (subprocess.SubprocessError, ValueError, OSError):
         return None
@@ -54,7 +47,7 @@ class Looks:
         for b in beads or []:
             if LABEL not in (b.get("labels") or []):
                 continue
-            shown = bd_json(repo, "show", b["id"]) or {}
+            shown = bd_json(self.env.ports.bd, repo, "show", b["id"]) or {}
             filed = gallery.epoch(b.get("created_at") or shown.get("created_at"))
             out += [dict(i, filed=filed) for i in gallery.items_of(b["id"], dict(shown, title=shown.get("title") or b.get("title")))]
         return out
@@ -148,7 +141,7 @@ class Looks:
             return 502, {"code": "bd", "error": "bd did not answer (%s)." % type(err).__name__}
 
     def _apply(self, repo: str, look_bead: str, item_id: str, verdict: str, note: str, now: float) -> Reply:
-        shown = bd_json(repo, "show", look_bead)
+        shown = bd_json(self.env.ports.bd, repo, "show", look_bead)
         if not shown or LABEL not in (shown.get("labels") or []):
             return 404, {"code": "bead_missing", "error": "The look bead %s no longer exists." % look_bead}
         e = next((x for x in gallery.stored(look_bead, shown) if x.get("id") == item_id), None)
@@ -164,7 +157,7 @@ class Looks:
             ok, made = self.file_redo(repo, look_bead, e, note)
             if not ok:
                 return 502, {"code": "bd", "error": "bd refused the follow-up bead: %s" % made}
-        shown = bd_json(repo, "show", look_bead) or shown
+        shown = bd_json(self.env.ports.bd, repo, "show", look_bead) or shown
         items = gallery.stored(look_bead, shown)
         e = next((x for x in items if x.get("id") == item_id), None)
         if e is None:
@@ -185,33 +178,30 @@ class Looks:
             self.drop(repo, old_redo, "the owner took the redo back")
         waiting = sum(1 for x in items if x.get("status") not in ("good", "redo"))
         if verdict == "undo" and shown.get("status") == "closed":
-            bd(repo, "update", look_bead, "--status", "open")
+            self.env.ports.bd(repo, "update", look_bead, "--status", "open")
         elif verdict != "undo" and not waiting:
-            bd(repo, "close", look_bead, "--reason", "the owner answered every look")
+            self.env.ports.bd(repo, "close", look_bead, "--reason", "the owner answered every look")
         return 200, {"ok": True, "status": e["status"], "redo_bead": e.get("redo_bead") or "", "open": waiting}
 
-    @staticmethod
-    def save(repo: str, look_bead: str, shown: dict[str, Any], items_meta: list[dict[str, Any]]) -> tuple[bool, str]:
+    def save(self, repo: str, look_bead: str, shown: dict[str, Any], items_meta: list[dict[str, Any]]) -> tuple[bool, str]:
         meta = dict(shown.get("metadata") or {})
         meta["looks"] = items_meta
-        r = bd(repo, "update", look_bead, "--metadata", json.dumps(meta))
+        r = self.env.ports.bd(repo, "update", look_bead, "--metadata", json.dumps(meta))
         return r.returncode == 0, last_line(r)
 
-    @staticmethod
-    def drop(repo: str, bead: str, why: str = "the answer could not be saved") -> None:
+    def drop(self, repo: str, bead: str, why: str = "the answer could not be saved") -> None:
         """Close a follow-up bead that no answer points at (a failed save, an undone redo)."""
         if bead and names.is_bead_id(bead):
-            bd(repo, "close", bead, "--reason", why)
+            self.env.ports.bd(repo, "close", bead, "--reason", why)
 
-    @staticmethod
-    def file_redo(repo: str, look_bead: str, e: dict[str, Any], note: str) -> tuple[bool, str]:
+    def file_redo(self, repo: str, look_bead: str, e: dict[str, Any], note: str) -> tuple[bool, str]:
         """The follow-up bead of a redo: the owner's note and the pictures, related to the bead the look came from."""
         pics = "\n".join("- %s (%s)" % (s["path"], s.get("role") or "after") for s in e.get("shots") or [])
         desc = "The owner looked at \"%s\" (%s) and asked for a change.\n\nWhat to change:\n%s\n\nPictures:\n%s\n" % (
             e.get("title") or e.get("id"), e.get("bead") or look_bead, note, pics or "(none)")
         args = ["create", "Redo look: " + (e.get("title") or e.get("id") or look_bead)[:90], "--type", "task", "--priority", "2",
-                "--description", desc, "--deps", "related:" + (e.get("bead") or look_bead), "--json"]
-        r = bd(repo, *args)
+                "--description", desc, "--deps", "related:" + (e.get("bead") or look_bead)]
+        r = self.env.ports.bd(repo, *args)
         if r.returncode != 0:
             return False, last_line(r, "no output")
         try:
@@ -222,5 +212,5 @@ class Looks:
             made = ""
         if not made:
             return False, "bd's answer had no id"
-        bd(repo, "update", made, "--metadata", json.dumps({"looks": {"from": e.get("id"), "shots": e.get("shots") or [], "note": note}}))
+        self.env.ports.bd(repo, "update", made, "--metadata", json.dumps({"looks": {"from": e.get("id"), "shots": e.get("shots") or [], "note": note}}))
         return True, made

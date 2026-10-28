@@ -157,13 +157,11 @@ class Asks:
         cwd = a.get("repo") or None
         amend = amend and bool(a.get("answer"))  # nothing to replace: it is a first answer
         try:
-            r = subprocess.run(["bd", "comments", "add", a["bead"],
-                                ("Answer amended (replaces the one above, not used yet): " + text) if amend else text],
-                               cwd=cwd, capture_output=True, text=True)
+            r = self.env.ports.bd(cwd, "comments", "add", a["bead"], ("Answer amended (replaces the one above, not used yet): " + text) if amend else text)
             if r.returncode:
                 return bd_failed(a, r)
             self.file_answer(a, text, cwd, amend)
-            subprocess.run(["bd", "update", a["bead"], "--status", "open"], cwd=cwd, capture_output=True, text=True)
+            self.env.ports.bd(cwd, "update", a["bead"], "--status", "open")
         except OSError as e:
             return 502, {"code": "no_bd", "error": "The dashboard cannot run bd (%s). Nothing was sent." % e.strerror}
         return self.save_answer(f, a, text, amend)
@@ -203,14 +201,14 @@ class Asks:
         first = question.splitlines()[0].replace("**", "") if question else a.get("kind", "ask")
         line = "- %s (ask %s) %s -> %s" % (time.strftime("%Y-%m-%d"), a.get("id"), first[:140], " ".join(text.split())[:600])
         try:
-            r = subprocess.run(["bd", "show", a["bead"], "--json"], cwd=cwd, capture_output=True, text=True, timeout=30)
+            r = self.env.ports.bd(cwd, "show", a["bead"])
             d = json.loads(r.stdout)
             d = d[0] if isinstance(d, list) and d else d
             notes = (d.get("notes") or "").rstrip("\n") if isinstance(d, dict) else ""
             if amend:  # the line this ask filed for the answer it replaces goes
                 notes = "\n".join(x for x in notes.split("\n") if "(ask %s) " % a.get("id") not in x)
                 if plain:
-                    subprocess.run(["bd", "update", a["bead"], "--notes", notes], cwd=cwd, capture_output=True, text=True, timeout=30)
+                    self.env.ports.bd(cwd, "update", a["bead"], "--notes", notes)
                     return
             i = heading_end(notes, head)
             if i >= 0:
@@ -219,7 +217,7 @@ class Asks:
                 notes = notes[:at].rstrip("\n") + "\n" + line + notes[at:]
             else:
                 notes = (notes + "\n\n" if notes else "") + head + "\n" + line
-            subprocess.run(["bd", "update", a["bead"], "--notes", notes], cwd=cwd, capture_output=True, text=True, timeout=30)
+            self.env.ports.bd(cwd, "update", a["bead"], "--notes", notes)
         except (OSError, ValueError, subprocess.SubprocessError):
             pass
 
@@ -245,8 +243,8 @@ class Asks:
             why = "%s (answer dropped: %s)" % (why, " ".join(str(dropped).split())[:120])
             cwd = a.get("repo") or None
             try:  # the bead must not keep it either: a comment says so and the notes line it filed goes
-                subprocess.run(["bd", "comments", "add", a["bead"], "Answer to ask %s withdrawn, no run used it: %s" % (
-                    a.get("id"), " ".join(str(dropped).split())[:300])], cwd=cwd, capture_output=True, text=True, timeout=30)
+                self.env.ports.bd(cwd, "comments", "add", a["bead"], "Answer to ask %s withdrawn, no run used it: %s" % (
+                    a.get("id"), " ".join(str(dropped).split())[:300]))
                 self.file_answer(a, "right", cwd, amend=True)  # a bare answer in amend mode only removes this ask's line from the notes
             except (OSError, subprocess.SubprocessError):
                 pass
