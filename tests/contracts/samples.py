@@ -167,6 +167,15 @@ OTHERS = {
     "TasksSnapshot": snapshots.TasksSnapshot(t=T, repo="/r", beads=[snapshots.TaskRow(
         bead="tl-1", title="T", status="in_progress", labels=["auto"], parent="tl-0", slot="s1", worktree="/w", lock=LOCK,
         run=str(RUN), ask="tl-1-1", blocker="")]),
+    "WindowStatus": snapshots.WindowStatus(name="weekly", used_pct=9.0, resets_at=T + 600),
+    "LaneStatus": snapshots.LaneStatus(
+        id="OPENAI_SUBSCRIPTION", label="ChatGPT / Codex", family="openai", kind="subscription", model="gpt-6.1-sol medium",
+        state="resting", emoji="x", reason="usage limit", unlock_at=T + 600, warnings=["w"],
+        windows=[snapshots.WindowStatus(name="weekly", used_pct=100.0, resets_at=T + 600)], out=True, out_until=T + 600,
+        out_reason="rate_limited", notes=["n"]),
+    "NeedInput": snapshots.NeedInput(what="claude_usage", why="unknown", how="pass the windows"),
+    "StatusSnapshot": snapshots.StatusSnapshot(at=T, lanes=[snapshots.LaneStatus(id="A", state="ready")],
+                                               needs_input=[snapshots.NeedInput(what="w")]),
     "SessionIndex": snapshots.SessionIndex(session="s", transcript="/t.jsonl", cwd="/w", t=T),
     "ReposIndex": snapshots.ReposIndex(repos={"/r": snapshots.RepoEntry(added=T)}),
     "SharedNotes": snapshots.SharedNotes(flakes={"test_x": T}, notes=["n"]),

@@ -7,13 +7,10 @@ import types
 from collections.abc import Callable
 from typing import Any
 
-from taskloop.adapters import delegate as sdelegate
 from taskloop.adapters.bd import BdStore
 from taskloop.domain.asks import text as asktext
 from taskloop_dash.env import Ports
 from taskloop.app.release import catalog
-from taskloop.adapters import ident
-from taskloop.app.release import pins
 from taskloop.app.wire import slots as wslots
 import reflect_digest
 
@@ -46,6 +43,4 @@ def ports() -> Ports:
                  waiting_line=quiet(lambda repo: wslots.waiting_line(repo), []),
                  load_cfg=quiet(lambda repo: dataclasses.asdict(wslots.load_cfg(repo)), {"pick_label": "auto", "skip_labels": []}),
                  reflections=quiet(lambda hours: reflect_digest.view(hours), {}),
-                 installed_versions=quiet(lambda: sorted(catalog.cache_dirs("task-loop")), []),
-                 delegate_route=quiet(lambda: sdelegate.find_route("", pins.pinned_dir("delegate"), ident.claude_dir() / "plugins" / "cache",
-                                                                   sdelegate.installed_dir(ident.claude_dir())) or "", ""))
+                 installed_versions=quiet(lambda: sorted(catalog.cache_dirs("task-loop")), []))

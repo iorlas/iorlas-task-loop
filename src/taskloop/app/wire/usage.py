@@ -6,6 +6,7 @@ from taskloop.adapters import delegate as sdelegate
 from taskloop.adapters import procs
 from taskloop.adapters.ident import claude_dir
 from taskloop.app.release.pins import pinned_dir
+from taskloop.app.wire import lanes
 
 
 def feed(windows: str) -> int:
@@ -14,6 +15,7 @@ def feed(windows: str) -> int:
         print("no delegate installed: nothing to feed")
         return 0
     r = procs.capture([sys.executable, route, "status", "--claude-usage", windows, "--json"], None, None, 60.0)
+    lanes.file_answer(r.out)  # the dashboard's lane cards read this
     try:
         lane = json.loads(r.out)["lanes"]["CLAUDE_SUBSCRIPTION"]
         print("fed {}: Claude subscription 5h {}%, week {}%{}".format(route, lane.get("five"), lane.get("week"),

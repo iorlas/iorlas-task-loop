@@ -17,6 +17,7 @@
   tl.py slot hold S --why TEXT [--for MIN]      keep the loop and run-task off a slot (a person, screenshots)
   tl.py worktree start|sunset ...               one worktree per loop session when slots are off
   tl.py usage '<plan.windows JSON>'             feed get_usage to delegate (every 20 min while an engine runs)
+  tl.py lanes                                   file delegate's lane status for the dashboard (the dashboard runs no delegate)
   tl.py reflect digest [--since 24h] [--dry-run]  the last day's run reflections into one bead per recurring cause
   tl.py trace [ID] [--last N] [--json]          engine runs and every worker session of each (for reflection)
   tl.py run-task ID [--worktree DIR] [--slot S|any [--wait]] [--exclusive-area] [--dry-run] [--fresh]
@@ -58,6 +59,7 @@ from taskloop.app.wire import asks as wire_asks
 from taskloop.app.wire import doctor
 from taskloop.app.wire import hook as hook_wire
 from taskloop.app.wire import slots as wslots
+from taskloop.app.wire import lanes as wire_lanes
 from taskloop.app.wire import usage as wire_usage
 from taskloop.cli import asks as cli_asks
 from taskloop.cli import slots as slots_cli
@@ -152,6 +154,7 @@ def engine_parsers(sp):
     p.add_argument("--fresh", action="store_true", help="drop the bead's checkpoint: plan again from the start")
     p.add_argument("--quiet", action="store_true", help="only steps and ⚠ lines (default: verbose, for a watching coordinator)")
     p.add_argument("--outcome-file", help="also write the outcome (the last stdout line, JSON) to this file")
+    sp.add_parser("lanes", help="file delegate's lane status (route.py status --json) as the snapshot the dashboard reads")
     p = sp.add_parser("usage", help="pass get_usage's plan.windows (JSON) to delegate, so headless Claude steps may run")
     p.add_argument("windows")
     p = sp.add_parser("land-lock", help="run a command under the repo's land lock (the one the engine lands under)")
@@ -277,6 +280,7 @@ VERBS: Final[dict[str, Handler]] = {
     "block": of_args(verbs.block, "id", "why"),
     "trace": of_args(verbs.trace, "id", "last", "json"),
     "usage": of_args(wire_usage.feed, "windows"),
+    "lanes": of_args(wire_lanes.refresh),
     "worktree": of_args(wslots.worktree, "op", "self_too"),
     "dash": of_args(dash_server.run, "op"),
     "pin": of_args(pins.run_pin, "version", "delegate", "clear"),

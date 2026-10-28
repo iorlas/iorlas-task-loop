@@ -21,6 +21,7 @@ from taskloop.contracts.delegate import DelegateResult  # noqa: E402
 from taskloop.adapters import context_size  # noqa: E402
 from taskloop.app.run import engine  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
+from support.lanes import lane_statuses  # noqa: E402
 from taskloop_dash.api import lanes as lanes_mod  # noqa: E402
 from support.builders import cfg_with  # noqa: E402
 from taskloop_dash.views import arrows, names  # noqa: E402
@@ -83,7 +84,7 @@ class OpenCode(unittest.TestCase):
         self.assertEqual(arrows.pause_reason("paused: logged_out on write; run `opencode auth login` on this machine"),
                          "Grok logged out")
         lane = {"out": True, "reason": "logged_out", "family": "xai"}
-        b = lanes_mod.lane_banners({"v": 1, "lanes": {"GROK_SUBSCRIPTION": lane}})
+        b = lanes_mod.lane_banners(lane_statuses({"GROK_SUBSCRIPTION": lane}), time.time())
         self.assertEqual(b["GROK_SUBSCRIPTION"]["text"], "Grok logged out: run opencode auth login")
 
     # reader

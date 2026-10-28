@@ -23,6 +23,7 @@ from taskloop.contracts import codec  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
 from taskloop_dash import bind as bind_mod, tails as tails_mod  # noqa: E402
 from taskloop_dash.api import lanes as lanes_mod  # noqa: E402
+from support.lanes import answer, file_status, lane, lane_statuses  # noqa: E402
 from support.narrow import must  # noqa: E402
 
 
@@ -307,10 +308,9 @@ class LaneBanner(unittest.TestCase):
     """What the banner says of delegate's `route.py status --json` lanes (tl-bxk.10.22)."""
 
     def banners(self, lanes):
-        return lanes_mod.lane_banners({"v": 1, "lanes": lanes})
+        return lanes_mod.lane_banners(lane_statuses(lanes), time.time())
 
-    def lane(self, **kw):
-        return dict({"family": "claude", "kind": "subscription", "out": False, "out_until": None, "notes": []}, **kw)
+    lane = staticmethod(lane)
 
     def test_a_logged_out_claude_lane_says_to_log_in(self):
         b = self.banners({"CLAUDE_SUBSCRIPTION": self.lane(out=True, notes=["claude is logged out: run `claude auth login`"])})
@@ -355,15 +355,11 @@ class LaneBanner(unittest.TestCase):
         self.assertEqual(self.banners({"CLAUDE_SUBSCRIPTION": self.lane(out=True, reason="busy")}), {})
 
     def test_delegate_status_carries_the_text(self):
-        j = {"v": 1, "lanes": {"CLAUDE_SUBSCRIPTION": self.lane(out=True, notes=["claude is logged out: run `claude auth login`"])},
-             "cockpit": {"v": 1, "lanes": [{"id": "CLAUDE_SUBSCRIPTION", "state": "logged_out"}]}}
         self.dash = make_dash()
-        with mock.patch.object(glob, "glob", return_value=["/x/iorlas-delegate/0.35.0/skills/delegate/route.py"]), \
-                mock.patch.object(subprocess, "run", return_value=mock.Mock(stdout=json.dumps(j))):
-            d = self.dash.lanes.delegate_status()
+        file_status(self.dash, answer({"CLAUDE_SUBSCRIPTION": self.lane(out=True, notes=["claude is logged out: run `claude auth login`"])}))
+        d = self.dash.lanes.delegate_status()
         self.assertFalse(d["ok"])
         self.assertEqual(d["detail"]["CLAUDE_SUBSCRIPTION"]["text"], "Claude logged out: run claude auth login")
-
 
 if __name__ == "__main__":
     unittest.main()

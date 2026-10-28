@@ -747,6 +747,73 @@
    }
   ]
  },
+ "WindowStatus": {
+  "name": "weekly",
+  "used_pct": 9.0,
+  "resets_at": 1793050800.5
+ },
+ "LaneStatus": {
+  "id": "OPENAI_SUBSCRIPTION",
+  "label": "ChatGPT / Codex",
+  "family": "openai",
+  "kind": "subscription",
+  "model": "gpt-6.1-sol medium",
+  "state": "resting",
+  "emoji": "x",
+  "reason": "usage limit",
+  "unlock_at": 1793050800.5,
+  "warnings": [
+   "w"
+  ],
+  "windows": [
+   {
+    "name": "weekly",
+    "used_pct": 100.0,
+    "resets_at": 1793050800.5
+   }
+  ],
+  "out": true,
+  "out_until": 1793050800.5,
+  "out_reason": "rate_limited",
+  "notes": [
+   "n"
+  ]
+ },
+ "NeedInput": {
+  "what": "claude_usage",
+  "why": "unknown",
+  "how": "pass the windows"
+ },
+ "StatusSnapshot": {
+  "v": 1,
+  "at": 1793050200.5,
+  "lanes": [
+   {
+    "id": "A",
+    "label": "",
+    "family": "",
+    "kind": "",
+    "model": "",
+    "state": "ready",
+    "emoji": "",
+    "reason": "",
+    "unlock_at": null,
+    "warnings": [],
+    "windows": [],
+    "out": false,
+    "out_until": null,
+    "out_reason": null,
+    "notes": []
+   }
+  ],
+  "needs_input": [
+   {
+    "what": "w",
+    "why": "",
+    "how": ""
+   }
+  ]
+ },
  "SessionIndex": {
   "v": 1,
   "session": "s",

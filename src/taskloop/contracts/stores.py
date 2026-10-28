@@ -13,7 +13,7 @@ from taskloop.contracts.codec import CodecError
 from taskloop.contracts.enums import AskStatus
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.loop import BadVersions, LoopCommand, LoopState, Rest
-from taskloop.contracts.snapshots import DashState, Pin, ReleaseResult, ReposIndex, SessionIndex, SharedNotes, TasksSnapshot
+from taskloop.contracts.snapshots import DashState, Pin, ReleaseResult, ReposIndex, SessionIndex, SharedNotes, StatusSnapshot, TasksSnapshot
 from taskloop.contracts.trace import RunTrace
 
 LIVE = (AskStatus.OPEN, AskStatus.PARKED)
@@ -257,6 +257,11 @@ class RestStore(JsonStore[Rest]):
 class SnapshotStore(JsonStore[TasksSnapshot]):
     def __init__(self, cfg: paths.ConfigDir, repo_key: str) -> None:
         super().__init__(cfg.snapshot(repo_key, "tasks"), TasksSnapshot)
+
+
+class StatusStore(JsonStore[StatusSnapshot]):
+    def __init__(self, cfg: paths.ConfigDir) -> None:
+        super().__init__(cfg.snapshot("delegate", "status"), StatusSnapshot)
 
 
 class SharedNotesStore(JsonStore[SharedNotes]):

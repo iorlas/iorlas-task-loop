@@ -391,18 +391,14 @@ class PinAndRollback(Base):
             self.assertEqual(tl.main(["rollback"]), 2)  # nothing older
         self.assertEqual(self.pinned()["task-loop"], "0.1.0")
 
-    def test_find_route_and_the_dash_delegate_follow_the_pin_then_the_installed_entry_not_the_newest_directory(self):
-        import dash_wiring
+    def test_find_route_follows_the_pin_then_the_installed_entry_not_the_newest_directory(self):
         from taskloop.adapters import delegate as lroute
         self.record("iorlas-delegate", "0.5.0")  # the plugin manager installed 0.5.0; 0.6.0 is only a directory
         route = lambda: lroute.find_route("", pins.pinned_dir("delegate"), ident.claude_dir() / "plugins" / "cache",
                                           lroute.installed_dir(ident.claude_dir()))
-        dash = lambda: dash_wiring.ports().delegate_route()
         self.assertIn("/iorlas-delegate/0.5.0/", must(route()))
-        self.assertIn("/iorlas-delegate/0.5.0/", dash())
         self.assertEqual(self.pin("0.1.0", "--delegate", "0.6.0")[0], 0)
         self.assertIn("/iorlas-delegate/0.6.0/", must(route()))
-        self.assertIn("/iorlas-delegate/0.6.0/", dash())
 
     def test_the_drill_pin_decides_what_loop_and_find_route_pick_then_clear_returns_to_the_newest(self):
         import loop_env

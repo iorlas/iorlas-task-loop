@@ -3,7 +3,6 @@
 The dash imports `taskloop.contracts` and nothing else of the main package. A fact that lives in engine code (the slot beads, the
 waiting line, a repo's config) comes in as a callable on `Ports`, made by the launcher; a test passes fakes."""
 
-import glob
 import os
 import time
 from collections.abc import Callable
@@ -51,16 +50,6 @@ def _no_versions() -> list[str]:
     return []
 
 
-def _newest_route() -> str:
-    """The newest delegate route.py in the plugin cache: what a dash with no launcher can know (the launcher injects the pin and
-    the installed entry)."""
-    routes = glob.glob(str(Path.home() / ".claude/plugins/cache/*/iorlas-delegate/*/skills/delegate/route.py"))
-
-    def version_of(p: str) -> list[int]:
-        return [int(x) if x.isdigit() else 0 for x in p.split("/iorlas-delegate/")[1].split("/", maxsplit=1)[0].split(".")]
-    return max(routes, key=version_of) if routes else ""
-
-
 @dataclass
 class Ports:
     """Read-only facts the launcher injects. The defaults say nothing, so a dash with no launcher still serves its own files."""
@@ -72,7 +61,6 @@ class Ports:
     reflections: Callable[[int], dict[str, Any]] = _no_reflections  # the run reflections of the last N hours
     ask_text: Callable[[Ask], str] = _ask_text  # the card text of an ask, rendered from its fields (domain/asks/text.py)
     installed_versions: Callable[[], list[str]] = _no_versions  # task-loop versions in the plugin cache
-    delegate_route: Callable[[], str] = _newest_route  # the delegate route.py to ask for status ("" none): pin, installed, newest
 
 
 class Env:
