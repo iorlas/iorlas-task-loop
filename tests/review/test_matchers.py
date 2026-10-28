@@ -63,10 +63,14 @@ class BdDemandTable(Table):
             ("verify the script on Windows", "os"), ("the stage goal is met", "met"), ("Nothing is missing", "met"),
             ("README table stale vs evidence", ""), ("crash file overwritten within the same second", ""),
             ("the bd store adapter swallows an error", ""),
-            # real unmet strings of the E7 samples (tl-ogf.1); yxbb.6 r3 and d5f.33 r6 ask for a bd action but are not routed: see the bead
+            # the four real unmet strings of the E7 samples (tl-ogf.1)
             ("Acceptance criterion 3 asks for a play run on Windows. The engine ran only on macOS, so the Windows run is not done. "
              "The plan already lists it as a leftover.", "os"),
-            ("Godot side of 'both engines' is not done (not on main); tracked as a leftover.", "")])
+            ("Godot side of 'both engines' is not done (not on main); tracked as a leftover.", ""),
+            ("Beads lifesim-lgye and lifesim-5ban.13 are not yet closed or folded into lifesim-yxbb.6. The task says to do this once the "
+             "work is done; the coordinator does it with bd.", "bd"),
+            ("The route difference from the +2 shift (bed at 7,6 instead of 5,4) is not written into bead lifesim-d5f.33 yet. The plan "
+             "leaves that to the final report and the bead note.", "bd")])
 
 
 class WordingTable(Table):

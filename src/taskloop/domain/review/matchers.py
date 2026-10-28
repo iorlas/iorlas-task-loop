@@ -97,7 +97,9 @@ class BdDemand:
     BD = re.compile(r"\bbd\s+(?:comment|create|close|update|show|note|issue)|\bwriters?\b[^.]{0,30}\bbarred from\b[^.]{0,10}\bbd\b|"
                     r"\b(?:fil\w*|clos\w*|fold\w*|creat\w*|open\w*)\b[^.;]{0,30}\b(?:follow-?ups?|beads?|tickets?)\b|"
                     r"\b(?:follow-?ups?|beads?)\b[^.;]{0,40}"
-                    r"\b(?:unfiled|not filed|to (?:be )?(?:file[d]?|creat\w+)|the engine files)", re.I)
+                    r"\b(?:unfiled|not filed|to (?:be )?(?:file[d]?|creat\w+)|the engine files)|"
+                    r"\bbeads?\b(?:[^.;]|\.\w){0,60}\bnot (?:yet )?(?:closed|folded)\b|"
+                    r"\bnot (?:yet )?written (?:in)?to (?:the )?bead\b", re.I)
     OTHER_OS = re.compile(r"\b(?:on|under|for)\s+(?:windows|linux|ubuntu|wsl|cmd\.exe|powershell)\b|\bwindows[- ]only\b", re.I)
     GOAL_MET = re.compile(r"^\s*(?:the\s+)?(?:stage\s+)?(?:goal|task|work)\s+(?:is|has been|was)\s+(?:fully\s+)?(?:met|done|achieved|"
                           r"complete[d]?)\b|\bnothing\s+(?:is\s+)?(?:missing|unmet)\b|"
