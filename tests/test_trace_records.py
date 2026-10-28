@@ -212,7 +212,6 @@ class TraceRecords(unittest.TestCase):
         rc, _ = self.run_engine({"plan": [plan], "write": [WRITE, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)
         run = server.run_timeline(str(self.eng.log_path))
-        self.assertTrue(run["structured"])
         self.assertEqual([b["kind"] for b in run["blocks"]], ["plan", "write", "checks", "write", "checks", "review",
                                                               "land"])
         self.assertEqual(run["blocks"][3]["arrow"]["cause"], "checks_red")

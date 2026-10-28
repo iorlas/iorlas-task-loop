@@ -178,7 +178,6 @@ class TraceTelemetry(unittest.TestCase):
         self.assertEqual(rc, 0)
         row = self.assert_row("landed")
         run = server.run_timeline(str(self.eng.log_path))
-        self.assertTrue(run["structured"])
         self.assertEqual(run["started_because"], row["started_because"])
         self.assertEqual(run["end"]["outcome"], "landed")
 
@@ -326,8 +325,7 @@ class TraceTelemetry(unittest.TestCase):
         rc, tail = eng.sh([sys.executable, "-c", code], timeout=10, idle=1)
         self.assertEqual(rc, 124)
         self.assertIn("productive end", tail)
-        if os.name != "nt":  # taskkill /T /F cannot run the SIGTERM handler
-            self.assertIn("shutdown output after the hang", tail)
+        self.assertIn("shutdown output after the hang", tail)
         kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
                  if json.loads(line)["kind"] == "kill"]
         self.assertTrue(kills)

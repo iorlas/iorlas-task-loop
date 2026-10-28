@@ -128,9 +128,9 @@ def first_words(cmd):
 def command_problems(cmd, wt, made=()):
     """[why a plan check cannot start]: a command word that is no builtin, not on PATH and no file of the tree (lifesim-fld.10
     planned 'After building the current player: python3 ...', a sentence run as the command `After`); a `just` recipe the
-    tree's justfile does not have (lifesim-ov3w). Conservative: only a plain word is judged. No bash (Windows): nothing."""
+    tree's justfile does not have (lifesim-ov3w). Conservative: only a plain word is judged. No bash: nothing."""
     bash = shutil.which("bash")
-    if not bash or os.name == "nt":
+    if not bash:
         return []
     out, words = [], first_words(cmd)
     for n, w in enumerate(words):

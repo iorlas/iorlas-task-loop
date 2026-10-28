@@ -395,8 +395,8 @@ class AskFailures(unittest.TestCase):
     def test_the_inbox_is_ordered_by_what_each_ask_unblocks_and_drops_closed_beads(self):
         (self.d / ".beads").mkdir()
         beads = [{"id": "a", "status": "open"}, {"id": "b", "status": "open"}, {"id": "c", "status": "closed"},
-                 {"id": "d", "status": "open", "dependencies": [{"type": "blocks", "depends_on_id": "b"}]},
-                 {"id": "e", "status": "open", "dependencies": [{"type": "blocks", "depends_on_id": "b"}]}]
+                 {"id": "d", "status": "open", "dependencies": [{"type": "blocks", "id": "b"}]},
+                 {"id": "e", "status": "open", "dependencies": [{"type": "blocks", "id": "b"}]}]
         for bead in ("a", "b", "c"):
             self.ask(bead)
         with mock.patch.object(server, "beads_of", return_value=beads):
@@ -607,15 +607,28 @@ esac
         self.assertTrue(text.startswith("### Testing plan\nsee ## Testing below in prose\n\n## Testing\n- "), text)  # a new section, not inside the prose
 
 
+def real_node():
+    """A node that runs: PATH's, else the newest one mise installed (a shim fails where mise does not trust the config). None when none runs."""
+    import glob
+    import shutil
+    found = [shutil.which("node")] + sorted(glob.glob(os.path.expanduser("~/.local/share/mise/installs/node/[0-9]*/bin/node")), reverse=True)
+    for node in filter(None, found):
+        try:
+            if subprocess.run([node, "--version"], capture_output=True, timeout=20).returncode == 0:
+                return node
+        except (OSError, subprocess.SubprocessError):
+            continue
+    return None
+
+
 class Markdown(unittest.TestCase):
     """The page's md(): bullets, tables, bold and code render; HTML in ask text never does."""
 
     def run_md(self, text):
         import re
-        import shutil
-        node = shutil.which("node")
+        node = real_node()
         if not node:
-            self.skipTest("no node")
+            self.skipTest("no working node: `node` is missing or only a mise shim that cannot run here (untrusted config)")
         page = (ROOT / "skills" / "task-loop" / "dash" / "index.html").read_text(encoding="utf-8")
         src = re.search(r"/\*md\*/(.*?)/\*end md\*/", page, re.S).group(1)
         esc = "const esc=s=>String(s==null?'':s).replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));"

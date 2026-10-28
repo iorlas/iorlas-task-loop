@@ -11,6 +11,7 @@ docs/design/coordinator-less.md. Python 3.8+, standard library only.
 import contextlib
 import copy
 import difflib
+import fcntl
 import fnmatch
 import glob
 import hashlib
@@ -245,7 +246,7 @@ FIELDS = ("title", "description", "acceptance_criteria", "design", "notes")
 def bead_snapshot(bead, comments):
     """What a later amend diffs against: the bead's text fields, issue type, dependencies (id:type) and the people's
     comments, as the planner saw them."""
-    deps = sorted("%s:%s" % (d.get("id"), d.get("dependency_type") or d.get("type") or "")
+    deps = sorted("%s:%s" % (d.get("id"), d.get("type") or "")
                   for d in bead.get("dependencies") or [] if isinstance(d, dict) and d.get("id"))
     return {"fields": {k: (people_lines if k == "notes" else str.strip)(bead.get(k) or "") for k in FIELDS},
             "issue_type": (bead.get("issue_type") or "").strip(), "deps": deps,
@@ -1584,13 +1585,13 @@ class Engine:
         self.log("cmd", cmd if isinstance(cmd, str) else " ".join(cmd))
         # Its own process group, so a timeout stops the whole tree (dotnet build nodes, Unity) and not just the shell;
         # the worker env, so a check never inherits this launcher's Claude session.
-        bash = shutil.which("bash") if isinstance(cmd, str) and os.name != "nt" else None  # plans write bash
-        run = [bash, "-e", "-o", "pipefail", "-c", cmd] if bash else cmd  # Windows: cmd.exe, as before
+        bash = shutil.which("bash") if isinstance(cmd, str) else None  # plans write bash
+        run = [bash, "-e", "-o", "pipefail", "-c", cmd] if bash else cmd
         started = time.time()
         p, hold = procs.popen_held(run, shell=isinstance(run, str), cwd=self.wt,  # tl-10s: see TermHold
                                    env=dict(procs.child_env(), **(tl.pinned_env(self.wt) if pin else {}), **(env or {})),
                                    stdin=subprocess.DEVNULL,
-                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=(os.name != "nt"))
+                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
         self.hung, self.killed, self.kill_t, self.kill_why, self.last_event_t, self._event_frozen = False, False, 0.0, "", started, False
         self._event_lock = threading.Lock()
         try:
@@ -3421,21 +3422,19 @@ class Engine:
             return None, 0, None
         self.ck_run = ck.get("run") or "" if isinstance(ck, dict) else ""
         branch = self.git("symbolic-ref", "--short", "-q", "HEAD")
-        if ck.get("v") != 1 or ck.get("branch") != branch or not ck.get("plan"):
+        if not isinstance(ck, dict) or any(k not in ck for k in CK_FIELDS) or ck["v"] != 1 or ck["branch"] != branch or not ck["plan"]:
             self.drop_checkpoint()
             return None, 0, None
-        self.pending_land_validation = ck.get("pending_land_validation") or (
-            ck.get("feedback", "") if ck["step"] == "land-verify-red" else "")
+        self.pending_land_validation = ck["pending_land_validation"] or (ck["feedback"] if ck["step"] == "land-verify-red" else "")
         self.look_paths, self.look_notes = list(ck.get("look_paths") or []), list(ck.get("look_notes") or [])
         self.look_done, self.look_prev = int(ck.get("look_done") or 0), list(ck.get("look_prev") or [])
         self.rendered_names, self.last_reqs = set(ck.get("rendered") or []), list(ck.get("last_reqs") or [])
         self.render_stale = bool(ck.get("render_stale"))
         self.look_unjudged = dict(ck.get("look_unjudged") or {})
         self.unverified = list(ck.get("unverified") or [])
-        if isinstance(ck.get("handoff"), dict):
-            self.handoff = {"rounds": list(ck["handoff"].get("rounds") or []), "seen_lows": list(ck["handoff"].get("seen_lows") or [])}
+        self.handoff = {"rounds": list(ck["handoff"].get("rounds") or []), "seen_lows": list(ck["handoff"].get("seen_lows") or [])}
         self.rebase_resets = int(ck.get("rebase_resets") or 0)
-        self.planned = int(ck.get("planned") or 1 + int(ck.get("replans") or 0))  # checkpoints before the count: plan + replans
+        self.planned = int(ck["planned"])
         self.extra, self.plan_log = self.extra + int(ck.get("extra") or 0), list(ck.get("plan_log") or [])
         self.planner_ref = ck.get("planner_ref") or self.planner_ref
         head = self.git("rev-parse", "HEAD")
@@ -3458,7 +3457,7 @@ class Engine:
             self.writer["delegate"] = ck["writer"]
             self.writer["ctx"], self.writer["seen"] = ck.get("writer_ctx"), ck.get("writer_seen")
             self.fallback_lane = ck.get("fallback_lane") or ""
-            self.writer_fallback = bool(ck.get("writer_fallback", bool(self.fallback_lane)))
+            self.writer_fallback = bool(ck["writer_fallback"])
             self.writer_family = ck.get("writer_family") or None
         if ck["step"] == "gate-red":
             self.log("note", "the gate was red at land in %s: re-planning with its output, keeping %d accepted stage(s)"
@@ -5463,6 +5462,12 @@ def tidy_question(text, cap=600):
 SENT_END = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9(`'\"])")
 
 
+CK_FIELDS = tuple(("v bead branch rebase_resets plan planner_ref planned extra plan_log snap done accepted replans fixes denials writer "
+                   "writer_fallback fallback_lane writer_family writer_ctx writer_seen brief head unchecked filed look_paths look_notes "
+                   "look_unjudged look_done look_prev rendered last_reqs render_stale unverified handoff stage_tree writer_said "
+                   "accepted_new closed run t pending_land_validation stage rounds n feedback step").split())  # what save_checkpoint writes
+
+
 def ask_line(markdown):
     """One line from an ask's markdown: the headline, then what is needed."""
     lines = [x.strip() for x in (markdown or "").splitlines() if x.strip()]
@@ -5937,7 +5942,7 @@ def failure_brief(checks, run_dir, each=trim.CAP, total=3 * trim.CAP, lines=trim
 
 
 def say(line):
-    """Print whatever the console can show (a Windows cp1252 console cannot print ⚠): never crash on output."""
+    """Print whatever the console can show (a console may not print ⚠): never crash on output."""
     try:
         print(line, flush=True)
     except UnicodeEncodeError:
@@ -6289,7 +6294,7 @@ def reclaim(bead_id, repo, store=seams.TlStore()):
     reopen = False
     if b.get("status") == "blocked":
         held = [d.get("id") for d in b.get("dependencies") or [] if isinstance(d, dict)
-                and d.get("dependency_type") == "blocks" and d.get("status") != "closed"]
+                and d.get("type") == "blocks" and d.get("status") != "closed"]
         if held:
             return False, "blocked by %s" % ", ".join(held)
         cs = store.comments(bead_id)
@@ -6324,10 +6329,6 @@ def append_output(stream):
     """Write a stream that is a file at the end of that file, wherever another writer left it: a second
     `run-task ... > log` on the same log truncates it, and a live run writing on at its old offset leaves a hole of NUL
     bytes (lifesim-gfr.31.1). A terminal, a pipe or a stream with no descriptor is left as it is."""
-    try:
-        import fcntl
-    except ImportError:  # Windows: no file status flags
-        return
     try:
         fd = stream.fileno()
         regular = stat.S_ISREG(os.fstat(fd).st_mode)

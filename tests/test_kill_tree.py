@@ -49,7 +49,6 @@ def alive(pid):
     return bool(r.stdout.strip()) and not r.stdout.strip().startswith("Z")
 
 
-@unittest.skipIf(os.name == "nt", "process groups and setsid are POSIX; Windows uses taskkill /T")
 class KillTree(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()

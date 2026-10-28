@@ -2,8 +2,7 @@
 block entered by an arrow that says why the run moved there. Python 3.8+, standard library only.
 
 The engine writes machine-readable records since 0.17 (docs/design/dashboard.md, Timeline records): `node` with id,
-step and counters, `end`, `transition`, `checks`, `run`. Older logs have only the node, session, msg, note and warn
-text; for those the same shapes are read from the text, best effort.
+step and counters, `end`, `transition`, `checks`, `run`. A node record without an id and a step (an older log) is skipped.
 """
 
 import json
@@ -96,67 +95,18 @@ def pause_reason(why):
     return "%s out" % lane if lane else "no lane"
 
 
-# ---- old logs: the step and its counters from the node text ----------------------------------------------------------
-
-LEGACY = [
-    (re.compile(r"^write: stage (\d+)/(\d+) write (\d+)"), "write", ("stage", "stages", "write")),
-    (re.compile(r"^write: fix (\d+)/(\d+) write (\d+)"), "write", ("fix", "fixes", "write")),
-    (re.compile(r"^checks: stage (\d+)/(\d+)"), "checks", ("stage", "stages")),
-    (re.compile(r"^checks: fix (\d+)/(\d+)"), "checks", ("fix", "fixes")),
-    (re.compile(r"^review: stage (\d+)/(\d+)"), "review", ("stage", "stages")),
-    (re.compile(r"^review: fix (\d+)/(\d+)"), "review", ("fix", "fixes")),
-    (re.compile(r"^land \(try (\d+)\)"), "land", ("try",)),
-]
-
-
-def legacy_step(text, prev_step=""):
-    for rx, step, keys in LEGACY:
-        m = rx.match(text)
-        if m:
-            return step, {k: int(v) for k, v in zip(keys, m.groups())}
-    if text == "reset":
-        return "reset", {}
-    if text.startswith("plan: re-plan"):
-        return "replan", {}
-    if text.startswith("plan: rewrite"):
-        return prev_step if prev_step in ("plan", "replan") else "plan", {}
-    if text.startswith("plan"):
-        return "plan", {}
-    if text.startswith("verify"):
-        return "verify", {}
-    if text.startswith("close"):
-        return "close", {}
-    return text.split(":")[0].split(" ")[0] or "step", {}
-
-
-LEGACY_MOVES = [  # warn or note text -> (cause, inside the node: another session of the same step follows)
-    (re.compile(r"the resumed writer's lane is out"), "lane_out", True),
-    (re.compile(r"^\w+ waits (\d+) min"), "lane_wait", True),
-    (re.compile(r"output invalid \(try 1\)"), "invalid_output", True),
-    (re.compile(r"the writer says these stage checks are wrong"), "bad_checks", False),
-    (re.compile(r"^land: gate red on the rebased tree"), "gate_red", False),
-    (re.compile(r"^land: merge conflict"), "conflict", False),
-    (re.compile(r"^land: the check before land found defects"), "verify_wrong", False),
-    (re.compile(r"^push rejected \(main moved\)"), "push_race", False),
-    (re.compile(r"the plan's checks (read the issue tracker|run gate-only)"), "plan_sent_back", True),
-]
-
-
 # ---- records -> nodes ------------------------------------------------------------------------------------------------
 
 def nodes_of(recs):
-    """(nodes, run record or None, structured). A node: one engine step with its sessions, lines and moves."""
-    out, by_id, cur, run, structured, ends = [], {}, None, None, False, {}
+    """(nodes, run record or None). A node: one engine step with its sessions, lines and moves."""
+    out, by_id, cur, run, ends = [], {}, None, None, {}
     for i, r in enumerate(recs):
         k = r.get("kind")
         if k == "node":
-            if "id" in r and "step" in r:
-                structured = True
-                nid, step = r["id"], r["step"]
-                meta = {x: r[x] for x in META if r.get(x) is not None}
-            else:
-                nid = len(out) + 1
-                step, meta = legacy_step(r.get("text") or "", out[-1]["step"] if out else "")
+            if "id" not in r or "step" not in r:
+                continue
+            nid, step = r["id"], r["step"]
+            meta = {x: r[x] for x in META if r.get(x) is not None}
             if out and out[-1]["t1"] is None:
                 out[-1]["t1"] = r.get("t")
             cur = {"id": nid, "step": step, "text": r.get("text") or "", "t0": r.get("t"), "t1": None, "meta": meta,
@@ -187,12 +137,6 @@ def nodes_of(recs):
             (by_id.get(r.get("node_id")) or cur)["checks"] = r
         elif k in LINE_KINDS:
             cur["lines"].append(dict(r, _i=i))
-            if not structured:
-                for rx, cause, inside in LEGACY_MOVES:
-                    m = rx.search(r.get("text") or "")
-                    if m:
-                        cur["moves"].append({"from": cur["id"], "to": cur["step"] if inside else "", "cause": cause,
-                                             "detail": r.get("text") or "", "_i": i, "_inside": inside})
     if out and out[-1]["t1"] is None:
         out[-1]["t1"] = recs[-1].get("t") if recs else None
     for n in out:
@@ -200,15 +144,7 @@ def nodes_of(recs):
         if e:
             n["t1"], n["outcome"], n["detail"] = e.get("t") or n["t1"], e.get("outcome") or "", e.get("detail") or ""
             n["open"] = False
-    for i, n in enumerate(out):
-        if not n["outcome"]:
-            n["outcome"], n["detail"] = legacy_outcome(n)
-            nxt = out[i + 1] if i + 1 < len(out) else None
-            if n["step"] == "land" and nxt:
-                n["outcome"] = ("landed" if nxt["step"] == "close" and nxt["rec"].get("outcome") == "landed" else
-                                "rejected" if nxt["step"] == "land" else "gate red" if nxt["step"] == "write" else
-                                n["outcome"])
-    return out, run, structured
+    return out, run
 
 
 def check_pairs(lines):
@@ -227,46 +163,6 @@ def check_pairs(lines):
             last = None
     return out
 
-
-def msg_text(n):
-    """What the node's answer line says after the arrow: `plan → 2 stages, 4 risks: ...`."""
-    for m in reversed(n["msgs"]):
-        t = m.get("text") or ""
-        if "\u2192" in t:
-            return re.sub(r"\s+\[[^\]]*\]$", "", t.split("\u2192", 1)[1]).strip()
-    return ""
-
-
-def legacy_outcome(n):
-    step, said = n["step"], msg_text(n)
-    if step in ("plan", "replan"):
-        m = re.match(r"(\d+) stages?", said)
-        return ("%s stage%s" % (m.group(1), "" if m.group(1) == "1" else "s")) if m else "done", said.split(": ", 1)[-1]
-    if step == "checks":
-        pairs = check_pairs(n["lines"])
-        bad = [p for p in pairs if p[1]]
-        if bad:
-            return "red", "%d failed" % len(bad)
-        return "green", "%d passed" % len(pairs)
-    if step == "review":
-        m = re.match(r"(\d+) findings?, (\d+) unmet", said)
-        if m and m.group(1) == "0" and m.group(2) == "0":
-            return "clean", said
-        return ("reviewed", said) if m else ("done", said)
-    if step == "write":
-        s = n["sessions"][-1] if n["sessions"] else {}
-        if s and s.get("status") not in (None, "done"):
-            return s.get("reason") or s.get("status"), said
-        return "done", said
-    if step == "verify":
-        return ("wrong" if re.search(r"[1-9]\d* wrong", said) else "open" if re.search(r"[1-9]\d* open", said)
-                else "settled"), said
-    if step == "close":
-        return n["rec"].get("outcome") or "", (n["rec"].get("why") or "").split("\n")[0]
-    return "done", said
-
-
-# ---- nodes -> blocks and arrows --------------------------------------------------------------------------------------
 
 def ask_kind(why):
     if why.startswith(("paused:", "waiting:", "failed:")):
@@ -498,7 +394,7 @@ def plan_titles_in_log(n):
 STAGED = ("write", "checks", "review")
 
 
-def blocks_of(nodes, structured, plan_titles=()):
+def blocks_of(nodes, plan_titles=()):
     """Blocks in order, each with the arrow into it; and the move out of the last one. A write, checks or review
     block names its stage (index, count, title: the plan in force, else plan.json); a review or verify block by the
     family that wrote the last write is marked same_family."""
@@ -590,47 +486,6 @@ def nice_model(m):
 
 # ---- why a run started -----------------------------------------------------------------------------------------------
 
-ORIGIN_NOTES = [
-    (re.compile(r"^ask (\S+) \(\w+\) is answered"), "answer"),
-    (re.compile(r"^the owner answered verify ask (\S+)"), "answer"),
-    (re.compile(r"^resuming (\S+) "), "resume"),
-    (re.compile(r"^resuming (\S+):"), "resume"),
-    (re.compile(r"^the bead changed since the checkpoint of (\S+):"), "resume"),
-    (re.compile(r"^the gate was red at land in (\S+):"), "resume"),
-    (re.compile(r"^the branch changed since the checkpoint of (\S+):"), "retry"),
-]
-
-
-def sibling_before(path):
-    """The bead's engine log before this one, by name (a name is the run's start second)."""
-    run = run_name(path)
-    bead = bead_of(run)
-    d = os.path.dirname(path)
-    try:
-        names = os.listdir(d)
-    except OSError:
-        return ""
-    older = [run_name(x) for x in names if x.endswith(".jsonl") and bead_of(run_name(x)) == bead and run_name(x) < run]
-    return max(older) if older else ""
-
-
-def legacy_origin(path, nodes):
-    because, prev, ask = "", "", ""
-    for n in nodes[:2]:
-        for ln in n["lines"]:
-            for rx, why in ORIGIN_NOTES:
-                m = rx.match(ln.get("text") or "")
-                if not m:
-                    continue
-                if why == "answer":
-                    because, ask = "answer", m.group(1)
-                else:
-                    prev = prev or m.group(1).rstrip(":")
-                    because = because or why
-    prev = prev or sibling_before(path)
-    return {"started_because": because or ("retry" if prev else "first"), "prev_run": prev, "ask": ask}
-
-
 def because_text(run, prev=None):
     b = run.get("started_because")
     pe = (prev or {}).get("end") or {}
@@ -686,13 +541,12 @@ def run_timeline(path, alive=False, trace=None, now=None):
     """One run of a bead: why it started, its blocks with the arrows between them, how it ended. A run that is alive has its
     open step and its end at `now` (the last record only says when something last happened, not how long it has been going)."""
     recs = read(path)
-    nodes, run, structured = nodes_of(recs)
+    nodes, run = nodes_of(recs)
     now = now or time.time()
     if alive and nodes and nodes[-1].get("open"):
         nodes[-1]["t1"] = now
-    blocks, pending, _ = blocks_of(nodes, structured, plan_file_titles(path))
-    origin = ({k: run.get(k) or "" for k in ("started_because", "prev_run", "ask")} if run
-              else legacy_origin(path, nodes))
+    blocks, pending, _ = blocks_of(nodes, plan_file_titles(path))
+    origin = {k: (run or {}).get(k) or "" for k in ("started_because", "prev_run", "ask")}
     t0 = recs[0].get("t") if recs else None
     t1 = now if alive and recs else recs[-1].get("t") if recs else None
     tokens = {"in": 0, "cached": 0, "out": 0}
@@ -705,7 +559,7 @@ def run_timeline(path, alive=False, trace=None, now=None):
         if not (b["session"] or {}).get("ref") or b["kind"] in ("checks", "land"):
             b["result"] = {"status": end["status"], "text": end["outcome"]}
     name = run_name(path)
-    return dict(origin, run=name, bead=bead_of(name), structured=structured, started=t0, ended=t1,
+    return dict(origin, run=name, bead=bead_of(name), started=t0, ended=t1,
                 secs=round(t1 - t0) if t0 and t1 else None, blocks=blocks, end=end,
                 tokens=tokens, slot=(run or {}).get("slot") or "", worktree=(run or {}).get("worktree") or "",
                 waits=waits_of(recs, now if alive else (t1 or 0)), alive=bool(alive))
@@ -729,7 +583,7 @@ def waits_of(recs, until=0):
 
 
 def last_node(path):
-    nodes, _, _ = nodes_of(read(path))
+    nodes, _ = nodes_of(read(path))
     return nodes[-1] if nodes else None
 
 
@@ -753,8 +607,8 @@ def live_label(n):
 def block_detail(path, node_id, k=0):
     """One block: its session, the checks of its round, the engine lines of its step, the step's answer."""
     recs = read(path)
-    nodes, _, structured = nodes_of(recs)
-    blocks, _, _ = blocks_of(nodes, structured, plan_file_titles(path))
+    nodes, _ = nodes_of(recs)
+    blocks, _, _ = blocks_of(nodes, plan_file_titles(path))
     try:
         node_id, k = int(node_id), int(k or 0)
     except (TypeError, ValueError):
@@ -782,7 +636,7 @@ def block_detail(path, node_id, k=0):
         "ref", "family", "model", "effort", "lane", "status", "reason", "transcript", "tokens", "secs", "resume",
         "flag", "attempt")} if sess else None, "checks": checks, "checks_node": judge["id"] if judge else None,
         "checks_last": bool(judge and judge["id"] == last_checks), "lines": lines, "answer": answer,
-        "structured": structured, "node_text": n["text"]}
+        "node_text": n["text"]}
 
 
 def checks_of(n):

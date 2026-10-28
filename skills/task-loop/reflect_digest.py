@@ -329,7 +329,7 @@ def maybe_run(now=None):
             pass
         subprocess.Popen([sys.executable, str(Path(__file__).resolve().with_name("tl.py")), "reflect", "digest"],
                          stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                         start_new_session=(os.name != "nt"))
+                         start_new_session=True)
         st = read_state()
         st["tried"] = now or time.time()
         write_state(st)

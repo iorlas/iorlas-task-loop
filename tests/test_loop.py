@@ -736,21 +736,6 @@ class Loop(LoopBase):
         self.assertNotIn(session_actor, seen)  # a hand run from the session claims as the session
         self.assertTrue(all(a.startswith(session_actor + "-") for a in seen), seen)  # still names its session
 
-    def test_a_loop_started_on_the_old_code_is_seen_by_stop_and_status(self):
-        # before tl-bxk.11.1 the state was <key>.json, one per repo: a loop still running from then is a live loop
-        k = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
-        self.addCleanup(lambda: (k.kill(), k.wait()))
-        d, key = loop.paths(str(self.repo))["states"]
-        (d / (key + ".json")).write_text(json.dumps({"pid": k.pid, "started": self.clock.t, "repo": str(self.repo)}))
-        self.assertEqual([s["pid"] for s in loop.live_loops(str(self.repo))], [k.pid])
-        out = io.StringIO()
-        empty = subprocess.CompletedProcess([], 0, "[]", "")  # no real bd: status asks it for the ready queue
-        with redirect_stdout(out), mock.patch.object(tl, "bd", return_value=empty):
-            self.assertEqual(tl.main(["loop", "status", "--repo", str(self.repo)]), 0)
-            self.assertEqual(tl.main(["stop", "--repo", str(self.repo)]), 0)
-        self.assertIn("LOOP pid %d" % k.pid, out.getvalue())
-        self.assertIn("STOP after the current bead: loop pid %d" % k.pid, out.getvalue())
-
     def test_without_slots_each_loop_start_reuses_its_sessions_worktree(self):
         (self.repo / ".task-loop.json").write_text(json.dumps({"engine": {}}))
         names = []
@@ -1023,295 +1008,44 @@ class StopRequests(LoopBase):
                 self.assertEqual(request["mode"], "now" if now else "after")
                 self.assertEqual(request["time"], self.clock.t)
 
-    def test_stop_modes_and_legacy_timestamps(self):
+    def test_a_stop_applies_to_the_loops_it_names_only(self):
         self.old_loop()
-        f = loop.paths(self.repo_s)["stop"]
         for now in (False, True):
             mode = "now" if now else "after"
             request = self.stop(now)
-            os.utime(f, (self.clock.t + 100, self.clock.t + 100))
-            request = loop.read_stop(self.repo_s)
-            self.assertEqual(loop.stop_for(request, self.old_pid, self.clock.t + 1000), mode)
-            self.assertEqual(loop.stop_for(request, os.getpid(), self.clock.t - 1000), "")
-            f.write_text(mode)
-            for delta in (-1, 0, 0.5, 1, 1.01):
-                os.utime(f, (self.clock.t + delta, self.clock.t + delta))
-                self.assertEqual(loop.stop_for(loop.read_stop(self.repo_s), os.getpid(), self.clock.t),
-                                 mode if delta > 1 else "")
-        with mock.patch.object(loop, "STARTED", [self.clock.t]), mock.patch.object(loop.STOP_NOW, "is_set", return_value=True):
+            self.assertEqual(loop.stop_for(request, self.old_pid), mode)
+            self.assertEqual(loop.stop_for(request, os.getpid()), "")
+        with mock.patch.object(loop.STOP_NOW, "is_set", return_value=True):
             self.assertEqual(loop.stop_mode(self.repo_s), "now")
 
-    def test_stop_now_signals_only_legacy_targets(self):
-        self.old_loop()
-        loop.write_state(self.repo_s, pid=os.getpid(), started=self.clock.t)
-        d, key = loop.paths(self.repo_s)["states"]
-        f = d / ("%s.%d.json" % (key, self.old_pid))
-        st = json.loads(f.read_text())
-        st.pop("stop_protocol")
-        st["child"] = 900002
-        f.write_text(json.dumps(st))
-        for platform, target in (("posix", self.old_pid), ("nt", st["child"])):
-            with self.subTest(platform=platform):
-                compat_os = mock.Mock(wraps=os)
-                compat_os.name = platform
-                compat_os.kill = mock.Mock()
-                with mock.patch.object(loop, "os", compat_os):
-                    self.stop()
-                    compat_os.kill.assert_not_called()
-                    self.stop(now=True)
-                    compat_os.kill.assert_called_once_with(target, loop.signal.SIGTERM)
+    def test_a_stop_file_that_is_not_a_targeted_request_is_ignored(self):
+        f = loop.paths(self.repo_s)["stop"]
+        for text in ("", "after", "now", json.dumps({"mode": "after", "time": 1})):
+            f.write_text(text)
+            self.assertEqual(loop.read_stop(self.repo_s), {}, text)
 
-    def test_legacy_windows_stop_now_reopens_and_unassigns_failed_bead(self):
-        for outcome in ("failed", "missing", "incomplete"):
-            with self.subTest(outcome=outcome):
-                self.check_legacy_windows_stop(outcome=outcome)
-        with self.subTest(own_lock=True):
-            self.check_legacy_windows_stop(own_lock=True)
-
-    def test_legacy_windows_stop_now_preserves_landed_or_reassigned_bead(self):
-        for protection in ("landed", "reassigned", "active_run", "new_state", "closed", "landed_outcome",
-                           "reassigned_during_guard", "active_during_guard", "live_route", "live_worker"):
-            with self.subTest(protection=protection):
-                self.check_legacy_windows_stop(protection=protection)
-
-    def test_legacy_windows_stop_now_preserves_preexisting_reassignment(self):
-        self.check_legacy_windows_stop(protection="reassigned_before_snapshot")
-
-    def test_legacy_windows_stop_now_preserves_reassignment_at_update(self):
-        self.check_legacy_windows_stop(protection="reassigned_at_update")
-        self.check_legacy_windows_stop(protection="closed_at_update")
-
-    def test_legacy_windows_stop_now_uses_stopped_loop_owner(self):
-        self.check_legacy_windows_stop(different_caller=True)
-
-    def test_legacy_windows_stop_now_requires_run_ownership_evidence(self):
-        for evidence in ("missing", "old", "other_worktree", "other_repo", "ambiguous"):
-            with self.subTest(evidence=evidence):
-                self.check_legacy_windows_stop(protection="no_evidence", evidence=evidence)
-
-    def check_legacy_windows_stop(self, outcome="failed", protection="", own_lock=False,
-                                 different_caller=False, evidence="claim"):
-        start_count = len(self.started)
-        bd = self.beads({"x-1": [], "x-2": [rec("landed")]})
-        child_live = [False]
-        stopped = []
-        reader_modes = []
-        original_write = loop.write_state
-        expected_actor = []
-
-        def claim_event(kind, bid="", **fields):
-            if kind != "claim":
-                return {}
-            expected_actor.append(tl.actor())
-            event = dict(t=self.clock.t, kind=kind, bead=bid, actor=tl.actor(), repo=self.repo_s, **fields)
-            if evidence == "old":
-                event["t"] -= 1
-            elif evidence == "other_worktree":
-                event["worktree"] = "another-worktree"
-            elif evidence == "other_repo":
-                event["repo"] = "another-repo"
-            records = [] if evidence == "missing" else [event]
-            if evidence == "ambiguous":
-                records.append(dict(event, actor="another-actor"))
-            (tl.config_dir() / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in records))
-            return event
-
-        def old_write(repo, **st):
-            original_write(repo, **st)
-            f = loop.paths(repo)["state"]
-            data = json.loads(f.read_text())
-            data.pop("stop_protocol")
-            f.write_text(json.dumps(data))
-
-        def old_reader(repo):
-            if loop.STOP_NOW.is_set():
-                return "now"
-            f = loop.paths(repo)["stop"]
-            try:
-                if f.stat().st_mtime < loop.STARTED[0]:
-                    return ""
-                mode = f.read_text().strip() or "after"
-                reader_modes.append(mode)
-                return mode
-            except OSError:
-                return ""
-
-        compat_os = mock.Mock(wraps=os)
-        compat_os.name = "nt"
-        compat_os.environ = os.environ
-        wt = tl.slot_dir(self.repo_s, "s1", tl.profile_slots(self.repo_s))
-        # No areas: the loop's own lock still names it with bead "" until run-task replaces it.
-        replacement_lock = {"pid": os.getpid(), "bead": "", "by": "loop"} if own_lock else {}
-
-        def landed_guard(*args):
-            if protection == "reassigned_during_guard":
-                bd.beads["x-1"].update(status="in_progress", assignee="another-actor")
-            elif protection == "active_during_guard":
-                replacement_lock.update(pid=900003, bead="x-1")
-            return protection == "landed"
-
-        def spawn(cmd, log):
-            p = FakeChild(self, cmd)
-            original_wait = p.wait
-            child_live[0] = True
-            invoked = [False]
-
-            def terminate(pid, sig):
-                self.assertEqual((pid, sig), (p.pid, loop.signal.SIGTERM))
-                self.assertTrue(child_live[0])
-                p.terminate()
-                if outcome == "failed":
-                    original_wait()  # The child closes before it is observed dead.
-                elif outcome == "incomplete":
-                    Path(p.out).write_text('{"outcome":')
-                if protection == "reassigned":
-                    bd.beads["x-1"].update(status="in_progress", assignee="another-actor")
-                elif protection == "closed":
-                    bd.beads["x-1"]["status"] = "closed"
-                elif protection == "landed_outcome":
-                    Path(p.out).write_text(json.dumps(rec("landed")))
-                    bd.beads["x-1"]["status"] = "closed"
-                elif protection == "new_state":
-                    old_write(self.repo_s, pid=os.getpid(), started=loop.STARTED[0],
-                              bead="x-1", child=900004, since=self.clock.t + 1, run_log="another.log")
-                elif protection == "active_run":
-                    replacement_lock.update(pid=900003, bead="x-1")
-                elif protection in ("live_route", "live_worker"):
-                    replacement_lock.update(pid=900003, bead="x-1")
-                    replacement_lock.update({"route": [900004, "route-start"]} if protection == "live_route"
-                                            else {"workers": [[900004, "worker-start"]]})
-                child_live[0] = False
-                stopped.append(pid)
-
-            compat_os.kill = mock.Mock(side_effect=terminate)
-
-            def wait(timeout=None):
-                if not invoked[0]:
-                    invoked[0] = True
-                    # run_bead has now published the legacy state with its child PID.
-                    if protection == "reassigned_before_snapshot":
-                        bd.beads["x-1"].update(status="in_progress", assignee="another-actor")
-                    if different_caller:
-                        with mock.patch.dict(os.environ, TASK_LOOP_ACTOR="tl-stop-caller"):
-                            self.assertNotEqual(tl.actor(), expected_actor[0])
-                            self.stop(now=True)
-                    else:
-                        self.stop(now=True)
-                    f = loop.paths(self.repo_s)["stop"]
-                    os.utime(f, (loop.STARTED[0], loop.STARTED[0]))
-                    self.assertFalse(child_live[0])
-                    raise subprocess.TimeoutExpired(cmd, timeout)
-                return 2  # The legacy parent sees exit without setting stopped=True.
-
-            p.wait = wait
-            return p
-
-        def update(*args, **kwargs):
-            if args[:2] == ("update", "x-1") and "--assignee" in args:
-                self.assertFalse(child_live[0], "claim cleanup preceded child exit")
-                self.assertIn("--if-assignee", args)
-                self.assertEqual(args[args.index("--if-assignee") + 1], expected_actor[0])
-                self.assertIn("--if-status", args)
-                if protection == "reassigned_at_update":
-                    bd.beads["x-1"].update(status="in_progress", assignee="another-actor")
-                elif protection == "closed_at_update":
-                    bd.beads["x-1"]["status"] = "closed"
-            return bd(*args, **kwargs)
-
-        # Each subcase starts without a previous outcome or stop request.
-        runs = loop.paths(self.repo_s)["runs"]
-        if runs.exists():
-            for f in runs.glob("*.outcome.json"):
-                f.unlink()
-        with mock.patch.object(loop, "os", compat_os), \
-                mock.patch.object(loop, "write_state", old_write), \
-                mock.patch.object(loop, "stop_mode", old_reader), \
-                mock.patch.object(loop, "spawn", spawn), \
-                mock.patch.object(loop, "pid_alive", side_effect=lambda pid: child_live[0] if pid == 4242 else pid == os.getpid()), \
-                mock.patch.object(tl, "bd", side_effect=update), \
-                mock.patch.object(tl, "event", side_effect=claim_event), \
-                mock.patch.object(tl, "worktrees", return_value=[wt]), \
-                mock.patch.object(tl, "read_engine_lock", return_value=replacement_lock), \
-                mock.patch.object(tl, "proc_alive", side_effect=lambda pid, start="":
-                                  pid != 900003 if protection in ("live_route", "live_worker") else True), \
-                mock.patch.object(loop, "landed_on_base", side_effect=landed_guard):
-            self.assertEqual(self.run_loop(), 0)
-        self.assertEqual(stopped, [4242])
-        self.assertEqual([b for b, _ in self.started[start_count:]], ["x-1"])
-        self.assertTrue(reader_modes)
-        self.assertTrue(all(mode != "now" and json.loads(mode)["mode"] == "now" for mode in reader_modes))
-        self.assertTrue(all(s["status"] == "open" for s in bd.slots.values()), "parent did not release its slot")
-        cleanup = [a for a in bd.calls if a[:2] == ("update", "x-1") and "--assignee" in a]
-        if protection:
-            self.assertEqual(len(cleanup), 1 if protection.endswith("at_update") else 0)
-            self.assertEqual(bd.beads["x-1"]["status"], "closed" if protection in ("closed", "landed_outcome", "closed_at_update")
-                     else "in_progress" if protection.startswith("reassigned") and protection != "reassigned_before_snapshot"
-                     else "blocked")
-            if protection.startswith("reassigned"):
-                self.assertEqual(bd.beads["x-1"]["assignee"], "another-actor")
-        else:
-            self.assertEqual(len(cleanup), 1)
-            self.assertEqual(bd.beads["x-1"]["status"], "open")
-            self.assertEqual(bd.beads["x-1"]["assignee"], "")
-
-    def test_legacy_windows_stop_does_not_clean_up_a_live_child(self):
-        bd = self.beads({"x-1": []})
-        bd.beads["x-1"].update(status="in_progress", assignee="tl-old")
-        with mock.patch.object(loop.os, "kill"), \
-                mock.patch.object(loop, "pid_alive", return_value=True), \
-                mock.patch.object(loop.time, "monotonic", side_effect=[0, 11]):
-            with self.assertRaises(TimeoutError):
-                loop.stop_legacy_windows_child(self.repo_s, {"child": 4242, "bead": "x-1", "worktree": "wt"})
-        self.assertEqual(bd.beads["x-1"]["status"], "in_progress")
-        self.assertEqual(bd.beads["x-1"]["assignee"], "tl-old")
-
-    def test_legacy_windows_stop_now_tolerates_a_kill_that_raises_oserror(self):
-        bd = self.beads({"x-1": []})
-        bd.beads["x-1"].update(status="in_progress", assignee="tl-old")
-        (tl.config_dir() / "events.jsonl").write_text(json.dumps(dict(
-            kind="claim", bead="x-1", actor="tl-old", repo=self.repo_s, worktree="wt", t=2, slot=None)) + "\n")
-        with mock.patch.object(loop.os, "kill", side_effect=OSError(87, "The parameter is incorrect")), \
-                mock.patch.object(loop, "pid_alive", return_value=False), \
-                mock.patch.object(loop, "landed_on_base", return_value=False), \
-                mock.patch.object(tl, "worktrees", return_value=[]), \
-                mock.patch.object(tl, "bd", side_effect=bd):
-            loop.stop_legacy_windows_child(self.repo_s, {"child": 4242, "bead": "x-1", "worktree": "wt",
-                                                       "started": 1, "since": 2})
-        self.assertEqual(bd.beads["x-1"]["status"], "open")
-        self.assertEqual(bd.beads["x-1"]["assignee"], "")
-
-    def test_same_second_stop_does_not_stop_new_loop(self):
+    def test_a_stop_does_not_stop_a_loop_started_after_it(self):
         self.old_loop()
         self.stop()
-        f = loop.paths(self.repo_s)["stop"]
-        os.utime(f, (self.clock.t, self.clock.t))
         self.beads({"x-1": [rec("landed")], "x-2": [rec("landed")]})
         self.during.append(lambda: self.assertEqual(loop.stop_mode(self.repo_s), ""))
         self.assertEqual(self.run_loop(), 0)
-        self.assertEqual(loop.STARTED[0], f.stat().st_mtime)
         self.assertEqual([b for b, _ in self.started], ["x-1", "x-2"])
-        self.assertEqual(loop.stop_for(loop.read_stop(self.repo_s), self.old_pid, self.clock.t), "after")
+        self.assertEqual(loop.stop_for(loop.read_stop(self.repo_s), self.old_pid), "after")
 
-    def test_start_clears_stop_older_than_every_running_loop(self):
+    def test_start_clears_a_stop_that_names_no_running_loop(self):
         for other in (False, True):
-            for targeted in (False, True):
-                with self.subTest(other=other, targeted=targeted):
-                    self.beads({"x-1": [rec("landed")]})
-                    if other:
-                        self.old_loop()
-                    f = loop.paths(self.repo_s)["stop"]
-                    f.write_text(json.dumps({"mode": "after", "targets": [12345], "time": self.clock.t - 10})
-                                 if targeted else "after")
-                    os.utime(f, (self.clock.t - 10, self.clock.t - 10))
-                    self.during.append(lambda: self.assertFalse(f.exists()))
-                    self.assertEqual(self.run_loop(), 0)
+            with self.subTest(other=other):
+                self.beads({"x-1": [rec("landed")]})
+                if other:
+                    self.old_loop()
+                f = loop.paths(self.repo_s)["stop"]
+                f.write_text(json.dumps({"mode": "after", "targets": [12345], "time": self.clock.t - 10}))
+                self.during.append(lambda: self.assertFalse(f.exists()))
+                self.assertEqual(self.run_loop(), 0)
 
     def test_cleanup_preserves_live_targets_and_concurrent_stop(self):
         self.check_cleanup_preserves_live_targets_and_concurrent_stop()
-
-    def test_cleanup_preserves_live_targets_and_concurrent_stop_without_fcntl(self):
-        with mock.patch.object(tl, "fcntl", None):
-            self.check_cleanup_preserves_live_targets_and_concurrent_stop()
 
     def check_cleanup_preserves_live_targets_and_concurrent_stop(self):
         import threading
@@ -1349,16 +1083,15 @@ class StopRequests(LoopBase):
         with loop.stop_lock(self.repo_s):
             loop.paths(self.repo_s)["state"].unlink()
             loop.clean_stop(self.repo_s, loop.live_loops(self.repo_s))
-        self.assertEqual(loop.stop_for(loop.read_stop(self.repo_s), self.old_pid, self.clock.t), "now")
+        self.assertEqual(loop.stop_for(loop.read_stop(self.repo_s), self.old_pid), "now")
 
-    def test_inherited_loop_keeps_start_time_and_targeted_stop(self):
+    def test_inherited_loop_keeps_targeted_stop(self):
         self.beads({"x-1": [rec("landed")]})
         started = self.clock.t - 100
         loop.write_state(self.repo_s, pid=os.getpid(), started=started)
         self.stop()
-        with mock.patch.dict(os.environ, {"TL_LOOP_STATE": json.dumps({"STARTED": started, "started": started})}):
+        with mock.patch.dict(os.environ, {"TL_LOOP_STATE": json.dumps({"started": started})}):
             self.assertEqual(self.run_loop(), 0)
-        self.assertEqual(loop.STARTED[0], started)
         self.assertEqual(self.started, [])
 
 
@@ -1646,32 +1379,6 @@ class LoopStopNow(Base):
 
     def test_stop_now_sigterms_a_real_child(self):
         self.check_stop_now_sigterms_a_real_child()
-
-    def test_new_stop_writer_stops_an_old_reader_mid_bead(self):
-        # The reader and state format from before structured stop requests.
-        def old_stop_mode(repo):
-            if loop.STOP_NOW.is_set():
-                return "now"
-            f = loop.paths(repo)["stop"]
-            try:
-                if f.stat().st_mtime < loop.STARTED[0]:
-                    return ""
-                return f.read_text().strip() or "after"
-            except OSError:
-                return ""
-
-        write_state = loop.write_state
-
-        def old_write_state(repo, **st):
-            write_state(repo, **st)
-            f = loop.paths(repo)["state"]
-            state = json.loads(f.read_text())
-            state.pop("stop_protocol")
-            f.write_text(json.dumps(state))
-
-        with mock.patch.object(loop, "stop_mode", old_stop_mode), \
-                mock.patch.object(loop, "write_state", old_write_state):
-            self.check_stop_now_sigterms_a_real_child()
 
     def check_stop_now_sigterms_a_real_child(self):
         script = self.home / "child.py"

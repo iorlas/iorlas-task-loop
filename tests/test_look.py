@@ -181,7 +181,7 @@ class LookTest(unittest.TestCase):
         self.bd_calls.clear()
         self.eng.look_notes, self.eng.look_filed = ["second look"], False  # a later run
         rows = [{"id": "t-9"}]
-        shows = {"t-9": {"id": "t-9", "dependencies": [{"id": "t-1", "dependency_type": "related"}]}}
+        shows = {"t-9": {"id": "t-9", "dependencies": [{"id": "t-1", "type": "related"}]}}
         real = self.fake_bd
         def bd(*a, **kw):
             r = real(*a, **kw)

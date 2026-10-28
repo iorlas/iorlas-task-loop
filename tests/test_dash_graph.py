@@ -23,9 +23,9 @@ def ts(ago=0):
 
 def bead(i, status="open", labels=("auto",), blocks=(), parent=None, kind="task", **kw):
     b = {"id": i, "title": "title " + i, "status": status, "labels": list(labels), "issue_type": kind, "priority": 2,
-         "dependencies": [{"issue_id": i, "depends_on_id": x, "type": "blocks"} for x in blocks], "parent": parent}
+         "dependencies": [{"id": x, "type": "blocks"} for x in blocks], "parent": parent}
     if parent:
-        b["dependencies"].append({"issue_id": i, "depends_on_id": parent, "type": "parent-child"})
+        b["dependencies"].append({"id": parent, "type": "parent-child"})
     b.update(kw)
     return b
 

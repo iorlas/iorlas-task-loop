@@ -1,5 +1,5 @@
 """The task-first dashboard: /api/tasks, /api/task-timeline, /api/block, built from the engine's records. Old runs
-(before the structured records) are read from their node, session and warn text: the fixture is six real runs of
+are read from their node, session and end records: the fixture is six real runs of
 lifesim-d5f.58 (2026-10-21), trimmed."""
 
 import contextlib
@@ -38,15 +38,14 @@ def causes(run):
     return [(b["arrow"] or {}).get("cause") for b in run["blocks"]]
 
 
-class LegacyRuns(unittest.TestCase):
-    """Runs logged before the structured records: the timeline comes from their text."""
+class Runs(unittest.TestCase):
+    """Six real runs of one bead (lifesim-d5f.58, 2026-10-21), as structured records."""
 
     def run_of(self, stamp, **kw):
         return timeline.run_timeline(log(stamp), **kw)
 
     def test_run_1_plan_two_writes_red_then_green_checks_a_review_and_an_ask(self):
         r = self.run_of("072411")
-        self.assertFalse(r["structured"])
         self.assertEqual(r["started_because"], "first")
         self.assertEqual(r["prev_run"], "")
         self.assertEqual(kinds(r), ["plan", "write", "checks", "write", "checks", "review"])
@@ -194,8 +193,8 @@ class Api(unittest.TestCase):
             "v": 1, "id": BEAD + "-1", "bead": BEAD, "kind": "decision", "question": "A or B?", "status": ask_status,
             "t": time.time(), "repo": "/r/lifesim", "title": "Front approach"}))
         beads = [{"id": BEAD, "title": "Front approach", "status": "blocked", "dependencies": [
-                     {"issue_id": BEAD, "depends_on_id": "lifesim-5ban.33", "type": "parent-child"},
-                     {"issue_id": BEAD, "depends_on_id": "lifesim-5ban.23", "type": "blocks"}]},
+                     {"id": "lifesim-5ban.33", "type": "parent-child"},
+                     {"id": "lifesim-5ban.23", "type": "blocks"}]},
                  {"id": "lifesim-5ban.33", "title": "Epic", "status": "open"},
                  {"id": "lifesim-5ban.23", "title": "People design", "status": blocker_status}]
         for name, val in (("repos", lambda: ["/r/lifesim"]), ("beads_of", lambda repo: beads if repo == "/r/lifesim" else [])):
@@ -420,18 +419,6 @@ def staged_log(root=FIXTURE):
     return str(Path(root) / "engine" / (STAGED_RUN + ".jsonl"))
 
 
-def legacy_copy(src, dst):
-    """The same run as an old engine would have logged it: no ids, steps, counters, node_id or flag."""
-    with open(src) as f, open(dst, "w") as out:
-        for ln in f:
-            r = json.loads(ln)
-            if r.get("kind") in ("end", "transition", "checks", "run"):
-                continue
-            for k in ("id", "step", "stage", "stages", "write", "round", "fix", "fixes", "node_id", "flag"):
-                r.pop(k, None)
-            out.write(json.dumps(r) + "\n")
-
-
 class Stages(unittest.TestCase):
     """lifesim-d5f.56 (2026-10-21): plan -> stage 1 write, checks, review (clean, same family) -> stage 2 write 1. Each
     block names its stage, with the title from the run's plan.json, and a review by the writer's family says so."""
@@ -447,7 +434,6 @@ class Stages(unittest.TestCase):
 
     def test_every_stage_block_has_its_index_count_and_plan_title(self):
         r = timeline.run_timeline(staged_log())
-        self.assertTrue(r["structured"])
         self.assertEqual(kinds(r), ["plan", "write", "checks", "review", "write"])
         self.assertEqual([(b["stage_index"], b["stage_count"]) for b in r["blocks"]],
                          [(None, None), (1, 2), (1, 2), (1, 2), (2, 2)])
@@ -470,16 +456,6 @@ class Stages(unittest.TestCase):
         rev = r["blocks"][5]
         self.assertEqual((rev["kind"], rev["who"]["family"]), ("review", "claude"))
         self.assertFalse(rev["same_family"])  # the writer was Codex
-
-    def test_an_old_log_reads_the_stage_from_its_node_text_and_the_title_from_plan_json(self):
-        legacy_copy(staged_log(), staged_log(self.root))
-        r = timeline.run_timeline(staged_log(self.root))
-        self.assertFalse(r["structured"])
-        self.assertEqual(kinds(r), ["plan", "write", "checks", "review", "write"])
-        self.assertEqual([(b["stage_index"], b["stage_count"]) for b in r["blocks"]],
-                         [(None, None), (1, 2), (1, 2), (1, 2), (2, 2)])
-        self.assertEqual(r["blocks"][4]["stage_title"], "Add the layout test, building the HUD the way the screen does")
-        self.assertTrue(r["blocks"][3]["same_family"])  # from the families, without the session flag
 
     def test_without_plan_json_the_title_comes_from_the_plan_in_the_log_and_else_is_empty(self):
         shutil.rmtree(str(self.root / "runs" / STAGED_RUN))

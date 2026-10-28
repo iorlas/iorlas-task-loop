@@ -32,7 +32,7 @@ class TermHold:
 
     def __enter__(self):
         self.old, self.held = None, False
-        if os.name != "nt" and threading.current_thread() is threading.main_thread():
+        if threading.current_thread() is threading.main_thread():
             old = signal.getsignal(signal.SIGTERM)
             if callable(old):
                 self.old = old
@@ -91,7 +91,7 @@ def run_proc(cmd, cwd, timeout, log_path, on_line=None, env=None, idle=None, sto
                 obs["first_error_t"] = now
     with open(log_path, "ab") as log:
         p = subprocess.Popen(cmd, cwd=cwd, env=dict(child_env(), **(env or {})), stdin=subprocess.DEVNULL,
-                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=(os.name != "nt"))
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
         if LOCK:
             LOCK.note(route_pid=p.pid)
 
@@ -246,9 +246,6 @@ def stop_tree(p, log=None, worker=None):
     it lives. route.py 0.31.1+ names its worker (`delegate: worker pid=N pgid=N` on stderr): then SIGTERM to route.py
     is the stop (it SIGKILLs the worker's group), and only a route.py still alive after STOP_GRACE is SIGKILLed with the
     worker's group. The ps tree walk is for a route.py that named no worker."""
-    if os.name == "nt":
-        kill_tree(p)
-        return []
     if worker and worker.get("pgid"):
         return stop_named(p, log, worker)
     before = tl.proc_table()
@@ -284,12 +281,9 @@ def stop_tree(p, log=None, worker=None):
 
 def stop_and_prove(p, log, worker):
     """stop_tree, then the proof that nothing of the call is left (prove_dead). -> pids still alive."""
-    tree = []
-    if os.name != "nt":  # looked at before the stop: a child in a session of its own is reparented to init by it
-        tree = descendants(p.pid, tl.proc_table())
+    tree = descendants(p.pid, tl.proc_table())  # looked at before the stop: a child in a session of its own is reparented to init by it
     alive = stop_tree(p, log, worker)
-    if os.name != "nt":
-        alive = prove_dead(alive, worker, log, tree)
+    alive = prove_dead(alive, worker, log, tree)
     if LOCK:
         LOCK.note(workers=[[pid, tl.proc_start(pid)] for pid in alive])  # a survivor keeps the slot busy; none: free
     return alive
@@ -448,29 +442,26 @@ LOCK = None  # this process's EngineLock while run-task runs
 
 def kill_tree(p):
     try:
-        if os.name == "nt":
-            subprocess.run(["taskkill", "/PID", str(p.pid), "/T", "/F"], capture_output=True)
-        else:
-            if p.pid in own_ids() or (p.returncode is None and os.getpgid(p.pid) in own_ids()):
-                raise RuntimeError("kill_tree: child %s is in our own process group; refusing to kill it" % p.pid)
-            try:  # a descendant that called setsid left the group: note it now, before it is reparented
-                away = [(k, st) for k, g, st in descendants(p.pid, tl.proc_table()) if g != p.pid]
-            except Exception:
-                away = []
-            send_group(p.pid, signal.SIGTERM)  # Unity removes Temp/UnityLockfile on SIGTERM
-            end = time.time() + 10
-            while time.time() < end and tl.proc_alive(p.pid):  # not p.wait(): a reaped leader frees its pid, and its
-                time.sleep(0.1)                                # group id with it, for any new process to take
-            if p.returncode is None:
-                send_group(p.pid, signal.SIGKILL)  # stragglers; p is still unreaped, so the group id is still its own
-            for sig in (signal.SIGTERM, signal.SIGKILL):  # setsid'd descendants: the same pid and start time only
-                for k, st in away:
-                    try:
-                        send_pid(k, sig, st)
-                    except RuntimeError:
-                        pass
-                if sig == signal.SIGTERM and away:
-                    time.sleep(1)
+        if p.pid in own_ids() or (p.returncode is None and os.getpgid(p.pid) in own_ids()):
+            raise RuntimeError("kill_tree: child %s is in our own process group; refusing to kill it" % p.pid)
+        try:  # a descendant that called setsid left the group: note it now, before it is reparented
+            away = [(k, st) for k, g, st in descendants(p.pid, tl.proc_table()) if g != p.pid]
+        except Exception:
+            away = []
+        send_group(p.pid, signal.SIGTERM)  # Unity removes Temp/UnityLockfile on SIGTERM
+        end = time.time() + 10
+        while time.time() < end and tl.proc_alive(p.pid):  # not p.wait(): a reaped leader frees its pid, and its
+            time.sleep(0.1)                                # group id with it, for any new process to take
+        if p.returncode is None:
+            send_group(p.pid, signal.SIGKILL)  # stragglers; p is still unreaped, so the group id is still its own
+        for sig in (signal.SIGTERM, signal.SIGKILL):  # setsid'd descendants: the same pid and start time only
+            for k, st in away:
+                try:
+                    send_pid(k, sig, st)
+                except RuntimeError:
+                    pass
+            if sig == signal.SIGTERM and away:
+                time.sleep(1)
     except OSError:
         pass
     p.wait()

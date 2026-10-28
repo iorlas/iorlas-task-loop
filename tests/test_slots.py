@@ -496,15 +496,6 @@ class TreeKillAndPidReuse(unittest.TestCase):
         self.assertNotIn(route, hit)  # reaped: its group id may be someone else's now
 
 
-class WindowsPidAlive(unittest.TestCase):
-    def test_the_pid_column_is_matched_exactly(self):
-        out = '"python.exe","1234","Console","1","10,000 K"\n'
-        with mock.patch.object(tl, "os", types.SimpleNamespace(name="nt")), \
-                mock.patch.object(tl.subprocess, "run", return_value=mock.Mock(stdout=out)):
-            self.assertFalse(tl.pid_alive(12))
-            self.assertTrue(tl.pid_alive(1234))
-
-
 ROUTE = textwrap.dedent('''
     import os, signal, subprocess, sys, time
     w = subprocess.Popen([sys.executable, "-c", "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(60)"],

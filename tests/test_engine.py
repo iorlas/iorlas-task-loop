@@ -1555,7 +1555,7 @@ class EngineTest(unittest.TestCase):
         ok, why, up = self.reclaim({"status": "blocked"}, [])
         self.assertFalse(ok)  # blocked by a person, not by the engine
         ok, why, up = self.reclaim({"status": "blocked", "dependencies": [
-            {"id": "t-0", "title": "design", "status": "open", "dependency_type": "blocks"}]}, [self.BLOCKED])
+            {"id": "t-0", "title": "design", "status": "open", "type": "blocks"}]}, [self.BLOCKED])
         self.assertFalse(ok)
         self.assertIn("t-0", why)
         self.assertEqual(up, [])
@@ -3611,7 +3611,7 @@ class EngineTest(unittest.TestCase):
     @no_repo
     def test_linked_beads_dependencies_first_engine_comments_not_scanned_whitespace_collapsed_with_header(self):
         bead = dict(BEAD, description="see t-30", dependencies=[{"id": "t-7", "title": "Dep\n  two", "status": "open",
-                                                                 "dependency_type": "blocks"}])
+                                                                 "type": "blocks"}])
         eng_note = {"author": "tl-x", "text": "Plan (engine): mentions t-31"}
         show = lambda b, cwd=None: {"id": b, "title": "T" + b, "status": "open"}
         out = engine.linked_text("t-1", bead, [eng_note, {"author": "denis", "text": "and t-32"}], show,
@@ -3625,14 +3625,14 @@ class EngineTest(unittest.TestCase):
     @no_repo
     def test_bead_diff_shows_late_edits_dependency_and_type_changes(self):
         base = {"id": "t-1", "title": "T", "description": "line\n" * 600 + "end A", "issue_type": "task",
-                "dependencies": [{"id": "t-2", "dependency_type": "blocks"}]}
+                "dependencies": [{"id": "t-2", "type": "blocks"}]}
         old = engine.bead_snapshot(base, [])
         late = engine.bead_diff(old, engine.bead_snapshot(dict(base, description="line\n" * 600 + "end B"), []))
         self.assertIn("-end A", late)
         self.assertIn("+end B", late)
         self.assertLessEqual(len(late), 4200)
         d = engine.bead_diff(old, engine.bead_snapshot(dict(base, issue_type="bug", dependencies=[
-            {"id": "t-3", "dependency_type": "blocks"}]), []))
+            {"id": "t-3", "type": "blocks"}]), []))
         self.assertIn("issue_type was: task", d)
         self.assertIn("added t-3:blocks; removed t-2:blocks", d)
         self.assertEqual(engine.bead_diff(old, engine.bead_snapshot(base, [])), "")

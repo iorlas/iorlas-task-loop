@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""tl.py: the task-loop helper. Python 3.8+, standard library only; macOS, Linux (also in Docker), Windows.
+"""tl.py: the task-loop helper. Python 3.8+, standard library only; macOS, Linux (also in Docker).
 
   tl.py actor                                   the --actor name this session uses for every bd call
   tl.py bd ARGS...                              run bd with this session's actor (in the current directory)
@@ -35,7 +35,7 @@
   tl.py cutover check [--json]                  live runs and loops on this machine; exit 1 if any (docs/cutover.md)
   tl.py hook session-start                      SessionStart hook: index session id -> transcript path
 
-State: ~/.config/task-loop (%APPDATA%\\task-loop on Windows): repos.json, events.jsonl, sessions/, dash.*.
+State: ~/.config/task-loop : repos.json, events.jsonl, sessions/, dash.*.
 """
 
 import argparse
@@ -58,10 +58,7 @@ from urllib.parse import quote
 
 import applog
 
-try:
-    import fcntl
-except ImportError:  # Windows
-    fcntl = None
+import fcntl
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[1] / "src"))  # taskloop.contracts: the typed records ship in the plugin dir
@@ -77,42 +74,40 @@ RETAIN_DAYS = 7
 def os_lock(path, holder, waiting=None, timeout=None):
     """One holder at a time, across processes: an flock the OS drops when the process dies; a second taker waits in
     line. The file names the holder; `waiting(text)` is called with it once, before blocking. With `timeout` (seconds) a
-    wait that long raises TimeoutError (the holder's name in it). No-op without fcntl."""
+    wait that long raises TimeoutError (the holder's name in it)."""
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     f = open(path, "a+")
     try:
-        if fcntl:
-            try:
-                fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except OSError:
-                if waiting:
-                    who = ""
-                    for _ in range(20):  # the holder may be between its truncate and its write
-                        who = Path(path).read_text().strip()
-                        if who:
-                            break
-                        time.sleep(0.01)
-                    waiting(who or "?")
-                if timeout is None:
-                    fcntl.flock(f, fcntl.LOCK_EX)
-                else:
-                    end = time.monotonic() + timeout
-                    while True:
-                        try:
-                            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                            break
-                        except OSError:
-                            if time.monotonic() >= end:
-                                raise TimeoutError(Path(path).read_text().strip() or "?")
-                            time.sleep(0.05)
+        try:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            if waiting:
+                who = ""
+                for _ in range(20):  # the holder may be between its truncate and its write
+                    who = Path(path).read_text().strip()
+                    if who:
+                        break
+                    time.sleep(0.01)
+                waiting(who or "?")
+            if timeout is None:
+                fcntl.flock(f, fcntl.LOCK_EX)
+            else:
+                end = time.monotonic() + timeout
+                while True:
+                    try:
+                        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        break
+                    except OSError:
+                        if time.monotonic() >= end:
+                            raise TimeoutError(Path(path).read_text().strip() or "?")
+                        time.sleep(0.05)
         f.seek(0)
         f.truncate()
         f.write(holder)
         f.flush()
         yield path
     finally:
-        if fcntl:
-            fcntl.flock(f, fcntl.LOCK_UN)
+        fcntl.flock(f, fcntl.LOCK_UN)
         f.close()
 
 
@@ -122,10 +117,7 @@ def land_lock_path(url):
 
 
 def config_dir():
-    if os.name == "nt":
-        base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
-    else:
-        base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
     d = base / "task-loop"
     d.mkdir(parents=True, exist_ok=True)
     return d
@@ -594,11 +586,20 @@ def prune_events():
 
 # ---- bead lifecycle -----------------------------------------------------------------------------------------------
 
+def norm_bead(b):
+    """A bead as bd prints it, its dependencies in the one shape the rest of task-loop reads: {id, type, title, status}
+    (`bd list` prints depends_on_id and type, `bd show` id and dependency_type). The only place that knows both."""
+    if isinstance(b, dict) and isinstance(b.get("dependencies"), list):
+        b = dict(b, dependencies=[{"id": d.get("id") or d.get("depends_on_id"), "type": d.get("dependency_type") or d.get("type"),
+                                   "title": d.get("title"), "status": d.get("status")} for d in b["dependencies"] if isinstance(d, dict)])
+    return b
+
+
 def show(bead, cwd=None):
     r = bd("show", bead, "--json", cwd=cwd)
     try:
         d = json.loads(r.stdout)
-        return d[0] if isinstance(d, list) else d
+        return norm_bead(d[0] if isinstance(d, list) else d)
     except ValueError:
         return {}
 
@@ -637,7 +638,7 @@ def cmd_claim(a):
 
 def session_alive():
     pid = os.environ.get("CLAUDE_PID")
-    if not pid or os.name == "nt":  # on Windows os.kill(pid, 0) terminates the process instead of probing it
+    if not pid:
         return True
     try:
         os.kill(int(pid), 0)
@@ -967,7 +968,7 @@ def take_ticket(repo, why, prio=DEFAULT_PRIO):
             try:
                 os.link(str(tmp), t["path"])
                 break
-            except FileExistsError:  # without fcntl (Windows) the lock is a no-op: the link still decides
+            except FileExistsError:  # the link decides who got the number
                 seq += 1
             finally:
                 with contextlib.suppress(OSError):
@@ -1308,8 +1309,8 @@ def ps(*args):
 
 
 def proc_start(pid):
-    """The process's start time as text, "" when unknown (Windows: not read; pid reuse there is not detected)."""
-    if os.name == "nt" or not pid:
+    """The process's start time as text, "" when unknown ."""
+    if not pid:
         return ""
     out = ps("-o", "lstart=", "-p", str(int(pid)))
     if out is None:  # no ps (a slim container): Linux's /proc has it
@@ -1321,8 +1322,6 @@ def proc_start(pid):
 
 
 def zombie(pid):
-    if os.name == "nt":
-        return False
     out = ps("-o", "stat=", "-p", str(int(pid)))
     if out is None:
         try:
@@ -1356,14 +1355,6 @@ def proc_table():
 
 def pid_alive(pid):
     if not pid:
-        return False
-    if os.name == "nt":  # os.kill(pid, 0) terminates a process on Windows instead of probing it
-        r = subprocess.run(["tasklist", "/FI", "PID eq %d" % int(pid), "/NH", "/FO", "CSV"], capture_output=True,
-                           text=True)
-        for ln in (r.stdout or "").splitlines():  # "image","PID",...: the PID column, never a substring (12 in 1234)
-            cols = [c.strip().strip('"') for c in ln.split('","')]
-            if len(cols) > 1 and cols[1] == str(int(pid)):
-                return True
         return False
     try:
         os.kill(int(pid), 0)
@@ -1571,10 +1562,7 @@ def start_server(port, bind=None):
     env = {k: val for k, val in os.environ.items()
            if not k.startswith(("CLAUDE_CODE_SESSION", "DELEGATE_", "CODEX_COMPANION"))}
     kw = {"stdin": subprocess.DEVNULL, "stdout": log, "stderr": log, "env": env, "cwd": str(config_dir()), "close_fds": True}
-    if os.name == "nt":
-        kw["creationflags"] = 0x00000008 | 0x00000200  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
-    else:
-        kw["start_new_session"] = True
+    kw["start_new_session"] = True
     cmd = [sys.executable, str(DASH), "--port", str(port)] + (["--bind", bind] if bind else [])
     proc = subprocess.Popen(cmd, **kw)
     for _ in range(40):
@@ -1811,7 +1799,7 @@ def cmd_hook(a):
         v = ping()
         if v and v.get("version") != code_version():
             subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "dash", "ensure"], stdin=subprocess.DEVNULL,
-                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=(os.name != "nt"))
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     except Exception:
         pass
     return 0

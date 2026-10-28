@@ -22,7 +22,7 @@ CFG = {"pick_label": "auto", "skip_labels": []}
 
 def bead(i, status="open", blocks=(), kind="task", **kw):
     b = {"id": i, "title": "title " + i, "status": status, "labels": ["auto"], "issue_type": kind, "priority": 2,
-         "dependencies": [{"issue_id": i, "depends_on_id": x, "type": "blocks"} for x in blocks], "parent": None}
+         "dependencies": [{"id": x, "type": "blocks"} for x in blocks], "parent": None}
     b.update(kw)
     return b
 
@@ -196,11 +196,11 @@ class Lanes(unittest.TestCase):
                 {"pid": 5, "slot": "s3", "bead": "b3", "since": 450, "started": 60, "version": "0.23.8"}]
 
     def test_five_loops_three_slots_is_three_busy_lanes_and_two_waiting(self):
-        lanes, waiting = roadmap.lanes_of(["s1", "s2", "s3"], {"b1": "s1", "b2": "s2", "b3": "s3"}, self.loops(), (200, "after"))
+        lanes, waiting = roadmap.lanes_of(["s1", "s2", "s3"], {"b1": "s1", "b2": "s2", "b3": "s3"}, self.loops(), {4: "after", 5: "after"})
         self.assertEqual([(l["slot"], l["bead"], l["version"]) for l in lanes],
                          [("s1", "b1", "0.23.6"), ("s2", "b2", "0.23.11"), ("s3", "b3", "0.23.8")])
         self.assertEqual([w["pid"] for w in waiting], [1, 2])
-        # the stop file (mtime 200) stops the loops that started before it (4 and 5); loop 3 started after it, so it goes on
+        # the stop request names loops 4 and 5; loop 3 goes on
         self.assertEqual([l["stopping"] for l in lanes], ["after", "", "after"])
 
     def test_a_free_slot_is_a_lane_with_no_bead_and_no_loop(self):
@@ -215,7 +215,7 @@ class Lanes(unittest.TestCase):
     def test_a_live_idle_loop_in_a_worktree_gets_a_lane_named_after_it_and_says_why(self):
         # shape of ~/.config/task-loop/loop/<repo>.<pid>.json of an idle worktree loop: worktree, no slot, no bead
         st = {"pid": 1789, "started": 1792811528.6, "worktree": "/w/repo/.worktrees/loop-2be89f88", "repo": "/w/repo",
-              "stop_protocol": 1, "version": "0.23.55"}
+              "version": "0.23.55"}
         lanes, waiting = roadmap.lanes_of([], {}, [dict(st, slot="", bead=None)])
         self.assertEqual([(l["slot"], l["bead"], l["loop"]) for l in lanes], [("loop-2be89f88", None, 1789)])
         self.assertEqual(waiting, [])
@@ -229,12 +229,12 @@ class Lanes(unittest.TestCase):
     def test_targeted_stop_indicators(self):
         lanes, _ = roadmap.lanes_of(["s1", "s2", "s3"], {}, self.loops(), {3: "now", 4: "after"})
         self.assertEqual([l["stopping"] for l in lanes], ["after", "now", ""])
-        lanes, _ = roadmap.lanes_of(["s2"], {}, [self.loops()[2]], (300, "after"))
+        lanes, _ = roadmap.lanes_of(["s2"], {}, [self.loops()[2]], {99: "after"})
         self.assertEqual(lanes[0]["stopping"], "")
 
     def test_build_carries_version_stopping_and_waiting(self):
         g = graph.build([bead("b1", status="in_progress")], CFG, set(), {"b1"}, (), now=NOW)
-        lanes, waiting = roadmap.lanes_of(["s1"], {"b1": "s1"}, [dict(self.loops()[3])], (200, "now"))
+        lanes, waiting = roadmap.lanes_of(["s1"], {"b1": "s1"}, [dict(self.loops()[3])], {self.loops()[3]["pid"]: "now"})
         r = roadmap.build(g, lanes, [], [], [], {}, now=NOW, waiting=len(self.loops()[:2]))
         self.assertEqual((r["lanes"][0]["version"], r["lanes"][0]["stopping"], r["loops_waiting"]), ("0.23.6", "now", 2))
 
@@ -316,7 +316,7 @@ class BeadApi(unittest.TestCase):
     def test_bead_panel_joins_bd_and_the_engine_runs(self):
         import server
         shown = [{"id": "a", "title": "T", "status": "open", "priority": 1, "labels": ["auto"], "description": "D", "acceptance_criteria": "AC",
-                  "dependencies": [{"id": "z", "title": "Z", "status": "closed", "dependency_type": "blocks"}]}]
+                  "dependencies": [{"id": "z", "title": "Z", "status": "closed", "type": "blocks"}]}]
         comments = [{"author": "me", "text": "hello", "created_at": "2026-10-23T10:00:00Z"}]
         with mock.patch.object(server, "resolve_repo", lambda r, b="": "/repo"), \
                 mock.patch.object(server, "bd_json", lambda repo, *a: shown if a[0] == "show" else comments), \

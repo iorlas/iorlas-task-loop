@@ -17,7 +17,7 @@ def parse(s):
 
 
 def blockers(b):
-    return [d.get("depends_on_id") for d in b.get("dependencies") or [] if d.get("type") == "blocks"]
+    return [d.get("id") for d in b.get("dependencies") or [] if d.get("type") == "blocks"]
 
 
 def local_queue(beads, cfg):

@@ -59,17 +59,12 @@ _last_seen = [time.time()]
 
 
 def config_dir():
-    if os.name == "nt":
-        base = Path(os.environ.get("APPDATA", HOME / "AppData" / "Roaming"))
-    else:
-        base = Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config"))
+    base = Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config"))
     return base / "task-loop"
 
 
 def agent_runs_dir():
     """The agent-runs v1 contract folder: the only place task-loop learns about other tools' workers."""
-    if os.name == "nt":
-        return Path(os.environ.get("APPDATA", HOME / "AppData" / "Roaming")) / "agent-runs"
     return Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config")) / "agent-runs"
 
 
@@ -280,7 +275,8 @@ def beads_of(repo):
             r = subprocess.run([exe, "list", "--json", "--all", "-n", "0"], cwd=repo, capture_output=True,
                                text=True, encoding="utf-8", errors="replace", timeout=30)
             if r.returncode == 0:
-                beads = json.loads(r.stdout)
+                import tl
+                beads = [tl.norm_bead(b) for b in json.loads(r.stdout)]
                 try:
                     disk.parent.mkdir(parents=True, exist_ok=True)
                     tmp = disk.with_name("%s.%d.%d.tmp" % (disk.name, os.getpid(), threading.get_ident()))
@@ -746,8 +742,6 @@ def contract_lanes():
 
 
 def pid_alive(pid):
-    if os.name == "nt":  # os.kill(pid, 0) terminates the process on Windows; trust the job's own status
-        return True
     try:
         os.kill(int(pid), 0)
         return True
@@ -1044,7 +1038,7 @@ def blocker_of(bead, repo_hint=""):
     for d in me.get("dependencies") or []:
         if d.get("type") != "blocks":
             continue
-        dep = by_id.get(d.get("depends_on_id")) or {}
+        dep = by_id.get(d.get("id")) or {}
         if dep and dep.get("status") != "closed":
             return {"id": dep["id"], "title": dep.get("title") or ""}
     return None
@@ -1307,8 +1301,9 @@ def api_bead(repo, bead):
     path = resolve_repo(repo, bead)
 
     def load():
+        import tl
         shown = bd_json(path, "show", bead)
-        b = (shown[0] if isinstance(shown, list) and shown else shown) or {}
+        b = tl.norm_bead((shown[0] if isinstance(shown, list) and shown else shown) or {})
         comments = bd_json(path, "comments", bead) or []
         return b, comments
     b, comments = cached("bead:%s:%s" % (path, bead), 15, load)
@@ -1318,8 +1313,7 @@ def api_bead(repo, bead):
         alive = False
     runs, tls = cached("beadruns:%s:%s:%d" % (path, bead, alive), 5 if alive else 15, lambda: bead_runs(bead, alive))
     now = time.time()
-    deps = [{"id": d.get("id") or d.get("depends_on_id"), "title": d.get("title"), "status": d.get("status"),
-             "type": d.get("dependency_type") or d.get("type")} for d in (b.get("dependencies") or [])]
+    deps = [{k: d.get(k) for k in ("id", "title", "status", "type")} for d in (b.get("dependencies") or [])]
     return {"id": bead, "title": b.get("title") or "", "status": b.get("status"), "priority": b.get("priority"),
             "labels": b.get("labels") or [], "assignee": b.get("assignee"), "created_at": b.get("created_at"),
             "description": b.get("description") or "", "notes": b.get("notes") or "",
@@ -1329,7 +1323,7 @@ def api_bead(repo, bead):
 
 
 def loop_version(pid):
-    """The task-loop version a loop process runs from its plugin cache path (`ps`); '' when unknown (a dev checkout, Windows)."""
+    """The task-loop version a loop process runs from its plugin cache path (`ps`); '' when unknown (a dev checkout)."""
     try:
         out = subprocess.run(["ps", "-o", "command=", "-p", str(pid)], capture_output=True, text=True, timeout=5).stdout
     except (subprocess.SubprocessError, OSError):
@@ -1377,7 +1371,7 @@ def loop_files(repo):
     except Exception:
         slots, running = [], {}
     request = loop.read_stop(repo)
-    stop = {st["pid"]: loop.stop_for(request, st["pid"], st["started"]) for st in loops}
+    stop = {st["pid"]: loop.stop_for(request, st["pid"]) for st in loops}
     lanes, waiting = roadmap.lanes_of(slots, running, loops, stop)
     rows = []
     try:

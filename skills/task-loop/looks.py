@@ -75,8 +75,8 @@ def parse_table(text):
 
 
 def quote(value):
-    """A value as one shell word: POSIX single quotes, or cmd.exe's double quotes on Windows."""
-    return subprocess.list2cmdline([str(value)]) if os.name == "nt" else shlex.quote(str(value))
+    """A value as one shell word: POSIX single quotes."""
+    return shlex.quote(str(value))
 
 
 def short(summary, n=150):
@@ -163,7 +163,7 @@ def downscale(src, dst, px):
     if tool:
         cmd = [tool, "-Z", str(int(px)), str(src), "--out", str(dst)]
     else:
-        tool = shutil.which("magick") or (shutil.which("convert") if os.name != "nt" else None)  # nt: convert.exe is a disk tool
+        tool = shutil.which("magick") or shutil.which("convert")
         cmd = [tool, str(src), "-resize", "%dx%d>" % (int(px), int(px)), str(dst)] if tool else None
     if cmd:
         try:

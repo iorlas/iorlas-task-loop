@@ -244,18 +244,15 @@ def lag(version, installed):
     return sum(1 for v in installed if mine and vkey(v) and vkey(v) > mine)
 
 
-def lanes_of(slots, running, loops, stop=(0, "")):
+def lanes_of(slots, running, loops, stop=None):
     """One lane per slot, never per loop. slots: this machine's slot names; running: {bead: slot} (a slot bead's held_bead, or
-    a live engine lock); loops: live loop states [{pid, slot, bead, since, started, version}]; stop: {pid: applicable mode},
-    or a legacy (mtime, mode) pair. -> (lanes, waiting): a lane {slot, bead, since, version, stopping, loop}, and loops without a slot
+    a live engine lock); loops: live loop states [{pid, slot, bead, since, started, version}]; stop: {pid: applicable mode}. -> (lanes, waiting): a lane {slot, bead, since, version, stopping, loop}, and loops without a slot
     (they wait in line; they are a note on the queue, not a lane). A slot with no bead is free; a loop with a bead but no
     slot name (run in a worktree) gets a lane named after the worktree folder, or '-'; an idle loop in a worktree too."""
     def wt(lp):
         return os.path.basename(str(lp.get("worktree") or "").rstrip("/\\"))
     def mode(lp):
-        if isinstance(stop, dict):
-            return stop.get(lp.get("pid"), "")
-        return stop[1] if stop[0] > (lp.get("started") or 0) + 1 else ""
+        return (stop or {}).get(lp.get("pid"), "")
     names = set(slots) | set(running.values()) | {lp["slot"] for lp in loops if lp.get("slot")}
     lanes = []
     for name in sorted(names):
