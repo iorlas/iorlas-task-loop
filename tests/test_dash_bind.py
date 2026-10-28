@@ -8,8 +8,6 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-DASH = ROOT / "skills" / "task-loop" / "dash"
-sys.path.insert(0, str(DASH))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from taskloop_dash import bind  # noqa: E402
@@ -23,11 +21,10 @@ class Env(unittest.TestCase):
         self.home = Path(self.tmp.name).resolve() / "home"
         self.state = self.home / ".config" / "task-loop"
         self.state.mkdir(parents=True)
-        self.dev = Path(self.tmp.name).resolve() / "dev" / "dash"
-        self.cache = self.home / ".claude" / "plugins" / "cache" / "mkt" / "task-loop" / "1.0" / "dash"
-        for d in (self.dev, self.cache):
-            shutil.copytree(DASH, d, ignore=shutil.ignore_patterns("__pycache__"))
-            shutil.copytree(DASH.parents[2] / "src", d.parents[2] / "src", dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__"))
+        self.dev = Path(self.tmp.name).resolve() / "dev" / "src"
+        self.cache = self.home / ".claude" / "plugins" / "cache" / "mkt" / "task-loop" / "1.0" / "src"
+        for d in (self.dev, self.cache):  # a copy of the package tree: the rules look at where the code lives
+            shutil.copytree(ROOT / "src", d, ignore=shutil.ignore_patterns("__pycache__"))
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -38,10 +35,10 @@ class Env(unittest.TestCase):
     def run_server(self, where, *args, public=False):
         env = {k: v for k, v in os.environ.items() if not k.startswith("TASK_LOOP_")}
         env.update(HOME=str(self.home), USERPROFILE=str(self.home), XDG_CONFIG_HOME=str(self.home / ".config"),
-                   APPDATA=str(self.home / ".config"), PYTHONPATH=str(ROOT / "src"))  # a copied dash/ has no src/ beside it
+                   APPDATA=str(self.home / ".config"), PYTHONPATH=str(where))
         if public:
             env["TASK_LOOP_DASH_DEV_PUBLIC"] = "1"
-        return subprocess.run([sys.executable, str(where / "server.py"), *args], env=env,
+        return subprocess.run([sys.executable, "-m", "taskloop_dash", *args], env=env,
                               capture_output=True, text=True, timeout=20)
 
     def guard(self, addrs, port, where=None, **kw):

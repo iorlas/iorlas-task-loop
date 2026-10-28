@@ -328,7 +328,7 @@ class Reload(unittest.TestCase):
         g = graph.build([b], {"pick_label": "auto", "skip_labels": []}, set(), {"t-1"}, (), now=time.time())
         out = roadmap.build(g, lanes, [], [], [], {}, now=time.time(), installed=["0.23.40", "0.23.41", "0.23.42"])
         self.assertEqual((out["lanes"][0]["engine"], out["lanes"][0]["lags"]), ("0.23.40", 2))
-        html = (SRC / "dash" / "index.html").read_text(encoding="utf-8")
+        html = (ROOT / "src" / "taskloop_dash" / "static" / "index.html").read_text(encoding="utf-8")
         self.assertIn("'engine '+esc(l.engine)", html)
         self.assertIn("'lags '+l.lags", html)
 

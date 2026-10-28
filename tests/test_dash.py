@@ -14,7 +14,6 @@ from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "skills" / "task-loop" / "dash"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support import tools  # noqa: E402
@@ -162,7 +161,7 @@ class Live(unittest.TestCase):
             port = free_port()
             env = dict(os.environ, XDG_CONFIG_HOME=d, APPDATA=d, TASK_LOOP_DASH_BIND="127.0.0.1", HOME=d,
                        USERPROFILE=d)
-            p = subprocess.Popen([sys.executable, str(ROOT / "skills" / "task-loop" / "dash" / "server.py"),
+            p = subprocess.Popen([sys.executable, "-m", "taskloop_dash",
                                   "--port", str(port)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             try:
                 base = "http://127.0.0.1:%d" % port
@@ -234,8 +233,9 @@ class Asks(unittest.TestCase):
                                                        "parks_at": time.time() + 86400, "status": "open",
                                                        "repo": str(d)}))
             env = dict(os.environ, XDG_CONFIG_HOME=str(d), APPDATA=str(d), TASK_LOOP_DASH_BIND="127.0.0.1", HOME=str(d),
-                       USERPROFILE=str(d), PATH=str(bin_) + os.pathsep + os.environ["PATH"])
-            p = subprocess.Popen([sys.executable, str(ROOT / "skills" / "task-loop" / "dash" / "server.py"),
+                       USERPROFILE=str(d), PATH=str(bin_) + os.pathsep + os.environ["PATH"],
+                       PYTHONPATH=os.pathsep.join([os.environ["PYTHONPATH"], str(ROOT / "skills" / "task-loop")]))
+            p = subprocess.Popen([sys.executable, "-m", "taskloop_dash", "--ports", "tl:dash_ports",  # the launcher's bd, the fake one
                                   "--port", str(port)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             try:
                 base = "http://127.0.0.1:%d" % port
@@ -555,7 +555,7 @@ class Markdown(unittest.TestCase):
         import re
         tools.need(self, "node")
         node = tools.real("node")
-        page = (ROOT / "skills" / "task-loop" / "dash" / "index.html").read_text(encoding="utf-8")
+        page = (ROOT / "src" / "taskloop_dash" / "static" / "index.html").read_text(encoding="utf-8")
         src = re.search(r"/\*md\*/(.*?)/\*end md\*/", page, re.S).group(1)
         esc = "const esc=s=>String(s==null?'':s).replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));"
         r = subprocess.run([node, "-e", esc + src + "\nprocess.stdout.write(md(JSON.parse(process.argv[1])))", json.dumps(text)],

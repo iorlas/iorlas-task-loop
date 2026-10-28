@@ -14,11 +14,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-sys.path.insert(0, str(ROOT / "skills" / "task-loop" / "dash"))
 from taskloop_dash import bind  # noqa: E402
 import tl  # noqa: E402
 
-SERVER = ROOT / "skills" / "task-loop" / "dash" / "server.py"
+SERVER = ROOT / "src" / "taskloop_dash" / "__main__.py"
 
 
 def free_port():
@@ -251,7 +250,7 @@ class DevCheckout(unittest.TestCase):
 
     def test_dev_server_process_listens_on_random_loopback_port(self):
         cfg = tempfile.mkdtemp()
-        p = subprocess.Popen([sys.executable, str(SERVER)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        p = subprocess.Popen([sys.executable, "-m", "taskloop_dash"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                              env={**os.environ, "XDG_CONFIG_HOME": cfg, "APPDATA": cfg, "TASK_LOOP_DASH_BIND": ""})
         try:
             first = p.stdout.readline()

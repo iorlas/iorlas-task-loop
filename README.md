@@ -76,9 +76,10 @@ Code (`~/.claude/projects`) and Codex (`~/.codex/sessions`, the codex plugin's j
 skills/task-loop/SKILL.md        the method (read by the orchestrating session)
 skills/task-loop/tl.py           helper: actor, claim/stage/worker/land/close/block, slots, worktrees, dashboard
 skills/task-loop/loop.py         tl loop / next / stop: one sequential loop over the queue rule
-skills/task-loop/dash/server.py  dashboard server (stdlib)
-skills/task-loop/dash/index.html dashboard page: the task view (no build, no dependencies)
-skills/task-loop/dash/timeline.py engine logs -> runs, blocks, arrows for the task view
+src/taskloop_dash/               the dashboard package (stdlib; `python3 -m taskloop_dash`, started by `tl dash ensure`)
+src/taskloop_dash/static/        dashboard pages: index.html is the task view (no build, no dependencies)
+src/taskloop_dash/views/         engine logs -> runs, blocks, arrows for the task view (timeline.py)
+skills/task-loop/dash_wiring.py  the engine facts the dashboard is handed as ports
 hooks/hooks.json                 SessionStart: index session id -> transcript path
 tests/                           python3 -m unittest discover -s tests   (CI: Ubuntu, Python 3.12)
 dev/release.py                   the only way to release: release lock, version from origin, suite, marketplace, install

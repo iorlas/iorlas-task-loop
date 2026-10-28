@@ -87,7 +87,7 @@ transcript cut to the block's time, the checks of its round (command, exit, outp
 the step. Asks are answered on the task (and on `#asks`).
 
 Endpoints: `/api/tasks`, `/api/task-timeline?repo&id`, `/api/block?run&node&k`, `/api/file?run&path` (a file of the
-run's folder only). `dash/timeline.py` builds runs -> blocks -> arrows.
+run's folder only). `taskloop_dash/views/timeline.py` builds runs -> blocks -> arrows.
 Stages: a write, checks or review block carries `stage_index`, `stage_count`, `stage_title` (the first sentence of the
 stage's goal, from the plan node's answer in the log, else `runs/<run>/plan.json`; old logs read `stage i/N` from the
 node text). The run is drawn in sections, "Stage i of N · title" (fix rounds: "Fix round k"); plan, verify and land sit
@@ -133,14 +133,14 @@ lets go. `#plan` links open the Roadmap; the task list moved to `#tasks`.
 - Up next: the queue in the order `tl next` takes it (`loop.queue`, fetch off), as a git log: each bead a commit, the
   beads that wait on it branch off (depth 3, 5 wide, "+N more needed" = it also waits on other open beads).
 - Held back: ready beads the loop skips for now (an area is busy), most unblocking first, same tree.
-`GET /api/roadmap?repo` -> `dash/roadmap.build()` (pure); inputs: `graph.build()` nodes and edges, `loop.queue()`, the
+`GET /api/roadmap?repo` -> `taskloop_dash/views/roadmap.build()` (pure); inputs: `graph.build()` nodes and edges, `loop.queue()`, the
 loop's state files and pass log (`loop/<key>*.json`, `<key>.jsonl`, read only: a dead loop's file is left), the engine
 log's blocks (`timeline.run_timeline`). Mockups of the three options considered: `docs/design/mockups/`.
 
 ### Cockpit layer (2026-10-23, after a Sonnet ops-UX review of the Roadmap)
 Gaps found: asks were one badge, a lane outage and a 51-park single-cause storm were invisible, churn and token spend
 were not on the page. Added:
-- Signal strip (`dash/signals.py`, pure; thresholds are named constants fitted to lifesim's real distribution): lane
+- Signal strip (`taskloop_dash/views/signals.py`, pure; thresholds are named constants fitted to lifesim's real distribution): lane
   out / usage >= 90 % (red/amber), beads held by nothing (red), >= 4 parks with one normalised cause within 3 h (red),
   asks aging (info > amber 12 h > red 24 h or parking within 24 h), churn (checks failed >= 3, planned >= 3, or >= 12
   steps; amber), token hog (fresh tokens > 500k and 3x the median), budget near-miss (<= 115 % of the limit; info),
@@ -154,7 +154,7 @@ were not on the page. Added:
 ## Looks gallery (owner-look beads)
 
 Taste items never block a land: the engine files them into the owner-look bead (metadata `looks`, see `Engine.write_looks`).
-The **Looks** tab (`#looks&repo=R`, `dash/gallery.py`, `/api/looks`) shows one card per item: the judge's note, before | after
+The **Looks** tab (`#looks&repo=R`, `taskloop_dash/views/gallery.py`, `/api/looks`) shows one card per item: the judge's note, before | after
 pictures (a before-only or after-only item shows what it has), and two answers:
 
 - **Good**: the item's status becomes `good`; when no item of the look bead waits, the bead closes.

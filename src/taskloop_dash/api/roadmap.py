@@ -5,7 +5,7 @@ import hashlib
 import json
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 from taskloop.contracts import log as rec
 from taskloop_dash import jsonl
@@ -31,6 +31,9 @@ def loop_key(repo: str) -> str:
 def lapsed(b: dict[str, Any], now_utc: str) -> bool:
     t = b.get("lease_expires_at") or ""
     return bool(t) and t < now_utc
+
+
+STOP_KINDS: Final = {"now": "now", "after_current": "after"}  # LoopState.stop.kind -> the lane's stop mode
 
 
 def stop_request(path: Path) -> dict[str, Any]:
@@ -64,10 +67,14 @@ class RoadmapApi:
         """(lanes, rows, waiting loops): one lane per slot, the repo's pass log rows oldest first."""
         cfg, key = self.env.config, loop_key(repo)
         state = cfg.loop_state(key)
-        loops = []
+        loops: list[dict[str, Any]] = []
+        own_stop: dict[int, str] = {}  # v2 state files carry their own stop request: {kind: now|after_current}
         for f in [state, *sorted(state.parent.glob(key + ".*.json"))]:
             st = read_dict(f)
             if st.get("pid") and pid_alive(st["pid"]):
+                kind = (st.get("stop") or {}).get("kind") if isinstance(st.get("stop"), dict) else None
+                if kind in STOP_KINDS:
+                    own_stop[st["pid"]] = STOP_KINDS[kind]
                 loops.append({"pid": st["pid"], "slot": st.get("slot") or "", "bead": st.get("bead"), "since": st.get("since"),
                               "started": st.get("started") or 0, "worktree": st.get("worktree") or "", "version": st.get("version") or ""})
         try:
@@ -76,7 +83,7 @@ class RoadmapApi:
         except Exception:
             slots, running = [], {}
         request = stop_request(state.with_suffix(".stop"))
-        stop = {st["pid"]: request["mode"] if request and st["pid"] in request["targets"] else "" for st in loops}
+        stop = {st["pid"]: request["mode"] if request and st["pid"] in request["targets"] else own_stop.get(st["pid"], "") for st in loops}
         lanes, waiting = roadmap.lanes_of(slots, running, loops, stop)
         rows = []
         try:

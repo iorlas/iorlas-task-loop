@@ -2,7 +2,7 @@
 
 A plugin install ships only `skills/` and `hooks/`, so nothing here is loaded when someone just runs the loop.
 
-task-loop reads formats it does not own. Each has one reader in `skills/task-loop/dash/server.py` (or `tl.py`); when a
+task-loop reads formats it does not own. Each has one reader in a module of `src/taskloop_dash/` (or `tl.py`); when a
 format changes, only that reader changes, and a broken reader must cost one panel, never the page (the handler
 returns an error for that request; parsers skip lines they cannot read).
 

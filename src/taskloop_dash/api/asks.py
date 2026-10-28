@@ -10,6 +10,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, Final
 
+from taskloop.contracts.ask import Ask as AskRecord
 from taskloop_dash.api.lanes import Lanes
 from taskloop_dash.env import Env
 from taskloop_dash.readers.beads import Beads, basename
@@ -20,6 +21,7 @@ Ask = dict[str, Any]
 Reply = tuple[int, dict[str, Any]]
 PLAIN_ANSWERS: Final = {"right", "run again", "allow one more", "yes", "ok"}
 OPEN = ("open", "parked")
+READS = (1, AskRecord.V)  # asks/<bead>.json versions read: the engine still writes v1, the typed record is v2
 SHOWN = ("id", "kind", "question", "detail", "unblocks", "t", "title", "answer", "repo", "parks_at", "options")
 
 
@@ -31,6 +33,42 @@ def heading_end(notes: str, head: str) -> int:
             return pos + len(ln)
         pos += len(ln) + 1
     return -1
+
+
+def flatten(a: Ask) -> Ask:
+    """A v2 ask in the shape the page and the answer flow read (v1): the answer is its text, the detail its prose."""
+    if a.get("v") != 2:
+        return a
+    out = dict(a)
+    ans = a.get("answer")
+    if isinstance(ans, dict):
+        out["answer"], out["answer_t"] = ans.get("text") or ans.get("action") or "", ans.get("t")
+    detail = a.get("detail")
+    if isinstance(detail, dict):
+        out["detail"] = detail.get("text") or ""
+    return out
+
+
+def set_answer(cur: Ask, text: str, now: float, amend: bool) -> None:
+    """Put the owner's answer into the ask file's own shape: v1 a string (history kept on amend), v2 an AskAnswer record."""
+    if cur.get("v") == 2:
+        cur["answer"] = {"action": "text", "text": text, "t": now, "by": "dash"}
+        return
+    if amend:  # the history stays: every answer given, oldest first
+        cur["answers"] = list(cur.get("answers") or [{"text": cur.get("answer"), "t": cur.get("answer_t")}]) + [{"text": text, "t": now}]
+    cur.update(answer=text, answer_t=now)
+
+
+def drop_answer(a: Ask, why: str, now: float) -> None:
+    """Withdraw `a`: its unused answer goes with it (v1 keeps it as withdrawn_answer; a v2 record has no such field)."""
+    if a.get("v") == 2:
+        a.pop("answer", None)
+        a.update(status="withdrawn", why=why[:300], answered=None)
+        return
+    if a.get("answer"):
+        a["withdrawn_answer"] = a.pop("answer")
+        a.pop("answer_t", None)
+    a.update(status="withdrawn", withdrawn_why=why[:300], withdrawn=now)
 
 
 def bd_failed(a: Ask, r: "subprocess.CompletedProcess[str]") -> Reply:
@@ -53,11 +91,12 @@ class Asks:
     def ask_files(self) -> Iterator[tuple[str, Ask]]:
         for f in glob.glob(str(self.env.config.asks_dir() / "*.json")):
             a = read_dict(f)
-            if a.get("v") == 1:
-                yield f, a
+            if a.get("v") in READS:
+                yield f, flatten(a)
 
     def ask_file(self, bead: str) -> Ask:
-        return read_dict(self.env.config.ask(bead))
+        a = read_dict(self.env.config.ask(bead))
+        return flatten(a) if a.get("v") in READS else a
 
     def open_ask(self, bead: str) -> Ask | None:
         a = self.ask_file(bead)
@@ -180,9 +219,7 @@ class Asks:
                              "Your new text is a comment on the bead; the next run reads it."}
             return 200, {"ok": True, "bead": a["bead"], "next": next_step(a)}  # a first answer the run already picked up from the comment
         now = self.env.clock()
-        if amend:  # the history stays: every answer given, oldest first
-            cur["answers"] = list(cur.get("answers") or [{"text": cur.get("answer"), "t": cur.get("answer_t")}]) + [{"text": text, "t": now}]
-        cur.update(answer=text, answer_t=now)
+        set_answer(cur, text, now, amend)
         try:
             Path(f).write_text(json.dumps(cur, indent=1))
         except OSError as e:
@@ -238,17 +275,16 @@ class Asks:
         a = cur
         if a.get("answer"):  # an answer no run has used yet goes with the ask, and the record says so
             dropped = a.get("answer")
-            a["withdrawn_answer"] = a.pop("answer")
-            a.pop("answer_t", None)
+            dropped = dropped.get("text") if isinstance(dropped, dict) else dropped
             why = "%s (answer dropped: %s)" % (why, " ".join(str(dropped).split())[:120])
             cwd = a.get("repo") or None
             try:  # the bead must not keep it either: a comment says so and the notes line it filed goes
                 self.env.ports.bd(cwd, "comments", "add", a["bead"], "Answer to ask %s withdrawn, no run used it: %s" % (
                     a.get("id"), " ".join(str(dropped).split())[:300]))
-                self.file_answer(a, "right", cwd, amend=True)  # a bare answer in amend mode only removes this ask's line from the notes
+                self.file_answer(flatten(a), "right", cwd, amend=True)  # a bare answer in amend mode only removes this ask's line from the notes
             except (OSError, subprocess.SubprocessError):
                 pass
-        a.update(status="withdrawn", withdrawn_why=why[:300], withdrawn=self.env.clock())
+        drop_answer(a, why, self.env.clock())
         try:
             Path(f).write_text(json.dumps(a, indent=1))
         except OSError as e:

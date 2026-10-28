@@ -473,7 +473,7 @@ class LiveTaskView(unittest.TestCase):
             shutil.copytree(str(FIXTURE), os.path.join(d, "task-loop"))
             port = free_port()
             env = dict(os.environ, XDG_CONFIG_HOME=d, APPDATA=d, TASK_LOOP_DASH_BIND="127.0.0.1", HOME=d, USERPROFILE=d)
-            p = subprocess.Popen([sys.executable, str(ROOT / "skills" / "task-loop" / "dash" / "server.py"),
+            p = subprocess.Popen([sys.executable, "-m", "taskloop_dash",
                                   "--port", str(port)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             try:
                 base = "http://127.0.0.1:%d" % port

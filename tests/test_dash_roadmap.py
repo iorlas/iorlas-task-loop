@@ -179,7 +179,7 @@ class DoneFeed(unittest.TestCase):
         self.assertEqual(road([])["done"], [])
 
     def test_page_words_live_in_index_html(self):
-        html = (ROOT / "skills" / "task-loop" / "dash" / "index.html").read_text(encoding="utf-8")
+        html = (ROOT / "src" / "taskloop_dash" / "static" / "index.html").read_text(encoding="utf-8")
         for txt in ("nothing closed today", "nothing closed in the last 7 days", "data-win", "by hand / agent"):
             self.assertIn(txt, html)
         self.assertNotIn("recent", json.dumps(sorted(road([]))))
@@ -223,7 +223,7 @@ class Lanes(unittest.TestCase):
         self.assertEqual(r["lanes"][0]["idle"], "idle: no ready auto bead (3 skipped: busy area ×2, needs facts)")
         self.assertEqual(road([bead("b1")], lanes=lanes)["lanes"][0]["idle"], "idle: no ready auto bead")
         self.assertEqual(road([bead("b1")], lanes=lanes, ranked=[("b1", "")])["lanes"][0]["idle"], "")
-        html = (ROOT / "skills" / "task-loop" / "dash" / "index.html").read_text(encoding="utf-8")
+        html = (ROOT / "src" / "taskloop_dash" / "static" / "index.html").read_text(encoding="utf-8")
         self.assertIn("d.loops_waiting?`", html)  # the empty text shows only with no live loop
 
     def test_targeted_stop_indicators(self):

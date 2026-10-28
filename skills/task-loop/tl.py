@@ -65,9 +65,11 @@ from taskloop.adapters.bd import BdStore
 from taskloop.contracts import config
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, NewBead
+from taskloop_dash import bind as dash_bind
+from taskloop_dash.cli import dash as dash_cli
 
 HERE = Path(__file__).resolve().parent
-DASH = HERE / "dash" / "server.py"
+DASH = HERE.parents[1] / "src" / "taskloop_dash" / "__main__.py"  # the script a running `python3 -m taskloop_dash` reports
 PORT = int(os.environ.get("TASK_LOOP_DASH_PORT", "7878"))
 SOURCE = "task-loop"
 RETAIN_DAYS = 7
@@ -1480,33 +1482,28 @@ def live_actors(repo, store=None):
 # ---- dashboard server ---------------------------------------------------------------------------------------------
 
 def code_version():
-    h = hashlib.sha256()
-    for p in sorted((HERE / "dash").glob("*")):
-        if p.is_file():
-            h.update(p.read_bytes())
-    return h.hexdigest()[:12]
+    return dash_cli.code_version()
 
 
-_dash_mod = []
+def dash_ports():
+    """The Ports the dashboard process is started with (`--ports tl:dash_ports`) and the terminal's `tl ask` uses."""
+    import dash_wiring
+    import engine
+    import reflect_digest
+    return dash_wiring.make_ports(sys.modules[__name__], engine, reflect_digest)
 
 
-def dash_module():
-    if not _dash_mod:
-        import importlib.util
-        spec = importlib.util.spec_from_file_location("tl_dash_server", DASH)
-        m = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(m)
-        _dash_mod.append(m)
-    return _dash_mod[0]
+def dash_asks():
+    return dash_cli.make_dash(dash_ports(), code_version()).asks
 
 
 def expected_binds():
     """The addresses the installed server would bind now."""
-    return dash_module().plan(None, None, dev=False)[0]
+    return dash_bind.plan(None, None, dev=False)[0]
 
 
 def is_dev_checkout():
-    return dash_module().is_dev_checkout(HERE)
+    return dash_bind.is_dev_checkout(HERE)
 
 
 def free_port():
@@ -1578,7 +1575,8 @@ def start_server(port, bind=None):
            if not k.startswith(("CLAUDE_CODE_SESSION", "DELEGATE_", "CODEX_COMPANION"))}
     kw = {"stdin": subprocess.DEVNULL, "stdout": log, "stderr": log, "env": env, "cwd": str(config_dir()), "close_fds": True}
     kw["start_new_session"] = True
-    cmd = [sys.executable, str(DASH), "--port", str(port)] + (["--bind", bind] if bind else [])
+    kw["env"]["PYTHONPATH"] = os.pathsep.join([str(DASH.parents[1]), str(HERE)] + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else []))
+    cmd = [sys.executable, "-m", "taskloop_dash", "--ports", "tl:dash_ports", "--port", str(port)] + (["--bind", bind] if bind else [])
     proc = subprocess.Popen(cmd, **kw)
     for _ in range(40):
         if proc.poll() not in (None, 0):
@@ -1655,7 +1653,7 @@ def close_stale_asks(every=600, store=None):
 
 def cmd_ask(a):
     """The inbox from the terminal: the dashboard's own code answers and withdraws, so both say the same things."""
-    d = dash_module()
+    d = dash_asks()
     if a.op == "list":
         for b in close_stale_asks():  # throttled: the loop sweeps too, and the inbox hides closed beads itself
             print("closed the ask of %s: its bead is closed or gone" % b)
