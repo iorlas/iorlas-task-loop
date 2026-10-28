@@ -112,6 +112,8 @@ class Timed(unittest.TextTestResult):
         super().__init__(stream, descriptions, verbosity)
 
     def startTest(self, test):
+        if parent_gone():
+            os._exit(3)
         self.t0 = time.monotonic()
         super().startTest(test)
 
@@ -120,17 +122,27 @@ class Timed(unittest.TextTestResult):
         self.times[test.id()] = time.monotonic() - self.t0
 
 
-def exit_with_parent(parent, every=1.0):
+PARENT = {"pid": 0}  # the launcher's pid, when this shard was started by one
+
+
+def parent_gone():
+    return bool(PARENT["pid"]) and os.getppid() != PARENT["pid"]
+
+
+def exit_with_parent(parent):
     """Leave this process once its parent `parent` (the launcher's pid) is gone: nobody reads this shard's result, and an orphan that
-    holds gigabytes helps no one. A timer signal, not a watcher thread: with a second thread alive, this suite's shards grew from ~150 MB
-    to 2-3 GB (measured). (An EOF on a pipe from the launcher would say the same, but stream-proc's run gives a child /dev/null for stdin.)
-    os._exit: no cleanup can hang on a dead parent."""
-    def check(_signum, _frame):
-        if os.getppid() != parent:
-            os._exit(3)
-    check(0, None)
-    signal.signal(signal.SIGALRM, check)
-    signal.setitimer(signal.ITIMER_REAL, every, every)
+    holds gigabytes helps no one. On Linux the kernel does it (PR_SET_PDEATHSIG, the one primitive made for this); everywhere the shard
+    also looks before each test. No watcher thread (with a second thread alive this suite's shards grew from ~150 MB to 2-3 GB) and no
+    timer signal (a test may own SIGALRM and the interval timer: test_engine_checks does). os._exit: no cleanup can hang on a dead parent."""
+    PARENT["pid"] = parent
+    if sys.platform.startswith("linux"):
+        try:
+            import ctypes
+            ctypes.CDLL(None, use_errno=True).prctl(1, 9, 0, 0, 0)  # PR_SET_PDEATHSIG, SIGKILL
+        except (OSError, AttributeError):
+            pass
+    if parent_gone():
+        os._exit(3)
 
 
 def cap_memory(megabytes):
