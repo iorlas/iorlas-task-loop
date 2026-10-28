@@ -1,9 +1,11 @@
 """CheckRound: the engine's checks after a write, outside the writer's sandbox. A red check goes straight back to the writer; a check
-the writer calls impossible, red tries used up, or the rounds used up ask for a re-plan."""
+the writer calls impossible, red tries used up, or the rounds used up ask for a re-plan. A check that hit its wall limit parks the bead
+at once (ASK_STUCK): it is not the code, so the writer is not asked and nothing is retried."""
 from typing import Any
 
 from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.write.state import AGAIN, REPLAN, StageState
+from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.prompts.write import REPEAT_RED
 from taskloop.domain.write.matchers import count_tests
 
@@ -27,6 +29,9 @@ class CheckRound:
         failed = run.failed
         prev_red, s.red_now = s.red_now, {c.cmd for c in failed}  # the commands red last round (tl-bxk.13.11)
         s.acc_only = bool(failed) and all(c.group == "acceptance" for c in failed)
+        slow = check_evidence.timed_out(failed)
+        if slow:  # the limit, not the code: the writer cannot fix it and a retry only waits again
+            raise e.blocked_for(check_evidence.timeout_why(slow), "ASK_STUCK", spec=askspecs.check_timeout(slow.id, slow.wall_min))
         wrong = self.flagged(s, failed)
         if wrong:  # a check no code change can satisfy: retrying it is waste, the plan must change
             return self.impossible(s, wrong)

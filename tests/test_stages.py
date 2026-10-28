@@ -450,6 +450,20 @@ class Fdyo(StagesTest):
         self.assertTrue(len(writes) >= 3)
         self.assertNotIn("failed in the last round too", writes[2])
 
+    def test_a_wall_hit_parks_at_once_with_no_second_write_and_no_retry(self):
+        t = time.time()
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE, WRITE], "review": [CLEAN]},
+                                checks=[{"id": "slow", "cmd": te.pyc("import time; time.sleep(60)"), "group": "tests", "wall_min": 0.05, "retry": 2}])
+        self.assertLess(time.time() - t, 45)
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker"])  # one write, no fix task, no review
+        self.assertNotEqual(rc, 0)
+        eng = getattr(self, "eng")  # noqa: B009
+        res = eng.result()
+        self.assertEqual(res["outcome"], "parked")
+        self.assertIn("check slow timed out after 0.05 min (wall_min=0.05)", res["why"])
+        ends = [json.loads(x) for x in eng.log_path.read_text().splitlines() if '"kind": "check_end"' in x]
+        self.assertEqual([(e["exit"], e["wall_hit"], e["tries"]) for e in ends if e["exit"] is not None], [(124, True, 1)])
+
 
 class Executable(StagesTest):
     """tl-bxk.13.16.2: a plan check must be able to start; an accepted stage's promised files must exist on resume."""

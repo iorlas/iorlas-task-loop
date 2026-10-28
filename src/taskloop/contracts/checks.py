@@ -50,6 +50,7 @@ class CheckResult:
     secs: float = 0.0
     log: str = ""  # relative to the run folder; empty when this run wrote none (skipped, cached, reused)
     wall_hit: bool = False  # stopped by the engine at the check's wall limit
+    wall_min: float = 0.0  # the limit it ran under (minutes); 0: not recorded
     cached: bool = False
     reused: bool = False
     why: str = ""  # a skip's reason

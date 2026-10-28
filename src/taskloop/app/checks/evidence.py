@@ -100,3 +100,13 @@ def flagged_why(check: CheckResult, bad_checks: Sequence[dict[str, str]]) -> str
         if matchers.names_shortened(said, mine):
             return b["why"]
     return ""
+
+
+def timed_out(failed: Sequence[CheckResult]) -> CheckResult | None:
+    """The first red check the engine stopped at its wall limit, else None. Such a check is parked on, never sent back to the writer."""
+    return next((c for c in failed if c.wall_hit), None)
+
+
+def timeout_why(c: CheckResult) -> str:
+    """The reason a timed-out check parks the bead."""
+    return f"check {c.id} timed out after {c.wall_min:g} min (wall_min={c.wall_min:g})"

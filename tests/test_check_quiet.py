@@ -101,6 +101,17 @@ class RetiredKeys(unittest.TestCase):
         self.assertIn("engine.checks[0].idle_min", lines[1])
         self.assertEqual(f.read_bytes(), before)
 
+    def test_each_renamed_key_fails_naming_the_new_one_and_a_retired_one_does_not(self):
+        rows = [({"engine": {"checks": [{"id": "a", "argv": ["x"]}, {"id": "b", "argv": ["x"], "timeout_min": 5}]}},
+                 "checks[1]: timeout_min was renamed to wall_min"),
+                ({"engine": {"check_timeout_min": 30}}, "engine: check_timeout_min was renamed to check_wall_min")]
+        for raw, msg in rows:
+            with self.subTest(msg):
+                with self.assertRaises(config.ConfigError) as cm:
+                    config.load(raw)
+                self.assertIn(msg, str(cm.exception))
+        self.assertEqual(config.load({"engine": {"check_idle_min": 3}}).engine.check_wall_min, 60)
+
     def test_an_unknown_key_still_fails(self):
         with self.assertRaises(SystemExit):
             tl.load_profile({"engine": {"check_idle_mins": 3}})

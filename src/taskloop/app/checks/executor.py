@@ -164,7 +164,7 @@ class CheckExecutor:
         if out.rc and not out.base_red:
             tail += self._project_log(c, out.seen, self.logs / name)
         return CheckResult(id=c.id, cmd=c.cmd, group=c.group, exit=out.rc, status="passed" if out.rc == 0 else "failed", tries=out.tries,
-                           tail=tail, secs=secs, log="checks/" + name, base_red=out.base_red, wall_hit=out.wall_hit,
+                           tail=tail, secs=secs, log="checks/" + name, base_red=out.base_red, wall_hit=out.wall_hit, wall_min=c.wall_min,
                            sig=output_signature(out.seen) if out.rc else "")
 
     def _project_log(self, c: Check, seen: str, log: Path) -> str:

@@ -96,6 +96,17 @@ def no_progress(what: str, limit: int, tail: str) -> AskSpec:
                    AskDetail(text=tail[-RAW_CAP:]))
 
 
+def check_timeout(check: str, minutes: float) -> AskSpec:
+    """A check hit its wall limit: the writer was not asked to fix it and nothing was retried."""
+    return AskSpec(AskClass.NO_PROGRESS, f"Check {clip(check, 40)} ran out of time at {minutes:g} min; how should it go on?",
+                   bullets([f"check {check} timed out after {minutes:g} min (wall_min={minutes:g})", "the writer was not asked"]),
+                   [AskOption(label="Run again", consequence="It goes on from where it stopped; raise wall_min first if needed.",
+                              action="rerun", text="run again", recommended=True, cost="One more check run"),
+                    AskOption(label="Give direction", consequence="The engine follows your words on the next run.",
+                              action="text", edit=True), SPLIT],
+                   AskDetail(text=f"check {check}: stopped at its wall limit of {minutes:g} min"))
+
+
 def cap_reached(planned: int, plans: Sequence[tuple[str, str]]) -> AskSpec:
     """The plan was redone `planned` times; `plans` is (mode, why) per planner run."""
     return AskSpec(AskClass.CAP_REACHED, f"The plan was redone {planned} times; how should the bead go on?",

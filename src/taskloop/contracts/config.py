@@ -180,6 +180,19 @@ def _string_commands(data: Any) -> list[str]:
 ENG = next(f.name for f in fields(RepoProfile))  # the profile's first block, engine
 RETIRED_ENGINE = ("check_idle_min",)  # keys that once did something and now do nothing: loaded without them, not an error
 RETIRED_CHECK = ("idle_min",)  # the same, on one entry of engine.checks
+RENAMED_ENGINE: dict[str, str] = {"check_timeout_min": "check_wall_min"}  # old key -> new key: the old one fails, naming the new
+RENAMED_CHECK: dict[str, str] = {"timeout_min": "wall_min"}  # the same, on one entry of engine.checks
+
+
+def renamed_keys(data: Any) -> list[str]:
+    """One message per renamed key a parsed .task-loop.json still carries, e.g. `checks[5]: timeout_min was renamed to wall_min`."""
+    eng = data.get(ENG) if isinstance(data, dict) else None
+    if not isinstance(eng, dict):
+        return []
+    found = [f"{ENG}: {k} was renamed to {new}" for k, new in RENAMED_ENGINE.items() if k in eng]
+    for n, c in enumerate(eng.get("checks") or []):
+        found += [f"checks[{n}]: {k} was renamed to {new}" for k, new in RENAMED_CHECK.items() if isinstance(c, dict) and k in c]
+    return found
 
 
 def retired_keys(data: Any) -> list[str]:
@@ -220,6 +233,9 @@ def load(data: Any, say_to: TextIO | None = None) -> RepoProfile:
     if say_to:
         say_retired(data, say_to)
     data = _without_retired(data)
+    moved = renamed_keys(data)
+    if moved:
+        raise ConfigError("the repo profile: " + "; ".join(moved))
     old = _string_commands(data)
     if old:
         raise ConfigError(f"the repo profile: {', '.join(old)} is a string command: {FORM}")
