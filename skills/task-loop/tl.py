@@ -226,7 +226,7 @@ def cmd_trace(a):
         tok = ("  tokens in %.2fM (%.2fM cached) out %dk" % (st["tokens_in"] / 1e6, st.get("tokens_cached", 0) / 1e6,
                                                             st.get("tokens_out", 0) // 1000)) if st.get("tokens_in") else ""
         print("%s  %s  %s  %d min  $%.2f%s  coordinator=%s" % (r.get("run"), r.get("bead"), r.get("outcome"), mins,
-                                                               r.get("cost") or 0, tok, r.get("coordinator_session") or "-"))
+                                                               (r.get("cost") or {}).get("usd", 0) if isinstance(r.get("cost"), dict) else (r.get("cost") or 0), tok, r.get("coordinator_session") or "-"))
         for s in r.get("sessions", []):
             print("  %-7s %-8s %-6s %-9s %s  %s" % (s.get("node"), s.get("role"), s.get("family") or "?", s.get("status"),
                                                    s.get("ref") or "-", s.get("transcript") or ""))

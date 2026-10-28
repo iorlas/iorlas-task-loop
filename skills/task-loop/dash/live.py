@@ -57,31 +57,28 @@ def read_new(path, offset):
 
 
 def engine_event(d, state):
-    """One engine row -> a normalised event or None. `state` holds the open command's id between calls."""
+    """One engine record (EngineLog v2) -> a normalised event or None. `state` holds the open calls' step names between calls."""
     k, t = d.get("kind"), d.get("t")
     if t is None or not k:
         return None
     text = str(d.get("text") or "")
-    if k == "cmd":
-        state["cmd"] = "e%d" % d["_o"]
-        return {"t": t, "k": "cmd", "id": state["cmd"], "text": text, "src": "engine"}
+    if k == "cmd_start":
+        return {"t": t, "k": "cmd", "id": d["id"], "text": text, "src": "engine"}
+    if k == "cmd_end":
+        return {"t": t, "k": "cmd_end", "id": d["id"], "exit": d.get("exit"), "src": "engine"}
     if k == "note":
-        if "exit" in d and state.get("cmd"):
-            cid, state["cmd"] = state["cmd"], None
-            return {"t": t, "k": "cmd_end", "id": cid, "exit": d.get("exit"), "src": "engine"}
-        if d.get("live"):
-            return None
         return {"t": t, "k": "note", "text": text[:NOTE_MAX], "src": "engine"}
-    if k == "node":
+    if k == "step_start":
         return {"t": t, "k": "step", "step": d.get("step") or "", "text": text, "src": "engine"}
-    if k == "end":
-        return {"t": t, "k": "step_end", "step": d.get("step") or "", "text": text, "outcome": d.get("outcome"),
-                "secs": d.get("secs"), "src": "engine"}
-    if k == "session":
-        return {"t": t, "k": "session", "text": text, "node": d.get("node"), "lane": d.get("lane"), "model": d.get("model"),
+    if k == "step_end":
+        return {"t": t, "k": "step_end", "step": d.get("step") or "", "outcome": d.get("outcome"), "secs": d.get("secs"), "src": "engine"}
+    if k == "call_start":
+        state.setdefault("calls", {})[d["id"]] = d.get("step") or ""
+    if k == "call_end":
+        return {"t": t, "k": "session", "node": state.get("calls", {}).pop(d["id"], ""), "lane": d.get("lane"), "model": d.get("model"),
                 "effort": d.get("effort"), "status": d.get("status"), "secs": d.get("secs"), "src": "engine"}
-    # every other kind (wait, vendor_error, kill, transition, gate, checks...) passes through: those rows are the evidence
-    # of throttling and stalls. Scalar fields ride along; the client shows one dim line.
+    # every other kind (call_start, check_start, gate_start, wait_start, wait_end, vendor_error, kill, transition, checks...) passes through:
+    # those rows are the evidence of throttling and stalls. Scalar fields ride along; the client shows one dim line.
     e = {x: v for x, v in d.items() if x not in SKIP and isinstance(v, (str, int, float)) and not isinstance(v, bool)}
     e = {x: (v[:200] if isinstance(v, str) else v) for x, v in e.items()}
     e.update({"t": t, "k": k, "text": text[:NOTE_MAX * 4], "src": "engine"})
@@ -118,7 +115,7 @@ def feed(path, cursor="", alive=False, now=None):
         e = engine_event(d, state)
         if e:
             events.append(e)
-        if d.get("kind") == "run" and d.get("t"):
+        if d.get("kind") == "run_start" and d.get("t"):
             started, worktree = d["t"], d.get("worktree") or ""
     files = live_files(path)
     for p in files:

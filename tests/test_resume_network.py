@@ -247,7 +247,7 @@ class Pause(NetBase):
             self.assertEqual(rc, 0, self.blocked)
             self.assertEqual(second.log_path.stem, run)  # the same run
             self.assertGreaterEqual(second.cost, cost)  # its cost goes on
-            self.assertLess(second.spent_min(), 30)  # the two hours of pause are not charged to the time budget
+            self.assertLess(second.budget.spent_min(), 30)  # the two hours of pause are not charged to the time budget
         self.assertEqual(s.nodes, ["review"])
         self.assertEqual(s.calls[0][1], "net-review")
         self.assertFalse((tl.config_dir() / "pauses" / "t-1.json").exists())  # taken once
@@ -295,7 +295,7 @@ class Replay5ban16(NetBase):
         self.assertEqual(rc, 0, self.blocked)
         planner = [c for c in s.calls if c[0] == "planner"]
         self.assertEqual([c[1] for c in planner], [None, ref])  # exactly one resume, in the same thread
-        plan_ends = [r for r in self.log() if r.get("kind") == "end" and r.get("step") == "plan"]
+        plan_ends = [r for r in self.log() if r.get("kind") == "step_end" and r.get("step") == "plan"]
         self.assertEqual(len(plan_ends), 1)  # one plan node, ended once
         self.assertNotIn("invalid_output", self.causes())
         self.assertNotIn("plan output invalid", self.eng.log_path.read_text())

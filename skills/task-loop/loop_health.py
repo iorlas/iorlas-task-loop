@@ -62,7 +62,7 @@ def recent_closes(traces, repo, now, window=None):
         except ValueError:
             continue
         t = float(r.get("ended") or 0)
-        if r.get("kind") and r.get("repo") == repo and (window is None or t >= now - window):
+        if r.get("kind") and r.get("repo_url") == repo and (window is None or t >= now - window):
             out.append({"bead": r.get("bead"), "kind": r.get("kind"), "fingerprint": r.get("kfp") or "", "t": t})
     return out
 

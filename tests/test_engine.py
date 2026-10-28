@@ -30,6 +30,9 @@ from support.builders import make_engine  # noqa: E402
 import engine  # noqa: E402
 import seams  # noqa: E402
 from support.fakes import FakeBeadStore  # noqa: E402
+from support.logs import records  # noqa: E402
+from taskloop.app.run.steps import Steps  # noqa: E402
+from taskloop.contracts.enums import WaitWhat  # noqa: E402
 from support.waits import until  # noqa: E402
 from support import fake_route  # noqa: E402
 import lane_policy as lp  # noqa: E402,F401
@@ -499,14 +502,14 @@ class EngineTest(unittest.TestCase):
         eng = self.checks_engine(checks=[{"id": "u", "cmd": cmd, "group": "tests"}])
         eng.run_checks({"checks": [], "files": []}, "s")
         self.assertTrue(0 < eng.waited < 60)
-        eng.add_wait(99999999, "x")
+        eng.add_wait(99999999, WaitWhat.SLOT)
         self.assertLessEqual(eng.waited, time.time() - eng.t0)
 
     def test_a_wait_is_not_counted_in_the_budget(self):
         eng = self.checks_engine(budget_min=5)
         eng.t0 -= 8 * 60  # eight minutes wall
         self.assertRaises(engine.Blocked, eng.budget_check)
-        eng.add_wait(600, "a Unity slot")  # capped at the 8 min there are: inside the budget
+        eng.add_wait(600, WaitWhat.UNITY_SLOT)  # capped at the 8 min there are: inside the budget
         eng.budget_check()
         eng.t0 -= 16 * 60
         with self.assertRaises(engine.Blocked) as e:
@@ -636,13 +639,13 @@ class EngineTest(unittest.TestCase):
         self.assertEqual((self.eng.fixes, self.blocked, self.closed), (0, [], []))
         self.assertIn(("update", "t-1", "--status", "open", "--assignee", ""), self.bd_calls)
         log = self.eng.log_path.read_text()
-        self.assertIn("gate: exit -15", log)
+        self.assertEqual([g["exit"] for g in records(self.eng, "gate_end")], [-15])
         self.assertNotIn("gate red", log)
 
     def test_a_land_lock_wait_is_not_budget(self):
         # tl-y35: 2251 s on the fake clock waiting for the land lock move the budget by exactly that
         eng = self.checks_engine(budget_min=180)
-        before = eng.spent_min()
+        before = eng.budget.spent_min()
 
         @contextlib.contextmanager
         def held_by_another(path, holder, waiting=None, timeout=None):
@@ -653,9 +656,9 @@ class EngineTest(unittest.TestCase):
             with eng.locked("land_lock", Path(self.tmp.name) / "land.lock"):
                 pass
         self.assertEqual(eng.waited, 2251)
-        self.assertAlmostEqual(before - eng.spent_min(), 2251 / 60, delta=0.5)  # real time moved by ms; no real sleep
-        waits = [json.loads(l) for l in eng.log_path.read_text().splitlines() if '"kind": "wait"' in l]
-        self.assertEqual([(w["secs"], w["in_budget"], w["holder"]) for w in waits], [(2251, False, "tl-266")])
+        self.assertAlmostEqual(before - eng.budget.spent_min(), 2251 / 60, delta=0.5)  # real time moved by ms; no real sleep
+        (start,), (end,) = records(eng, "wait_start"), records(eng, "wait_end")
+        self.assertEqual((start["holder"], start["id"], end["id"], end["secs"], end["in_budget"]), ("tl-266", end["id"], start["id"], 2251, False))
 
     def test_the_gate_runs_once_at_land_and_tells_the_push_which_tree_it_gated(self):
         count, seen = Path(self.tmp.name) / "gates", Path(self.tmp.name) / "gated-tree"
@@ -1948,9 +1951,9 @@ class EngineTest(unittest.TestCase):
                 return state["fix_result"]
             raise engine.Blocked("test stops at fix: " + kind)
 
-        def wait(this, secs, what):
-            if what != "the network":
-                return real_wait(this, secs, what)
+        def wait(this, secs, what, wid=None):
+            if what != WaitWhat.NETWORK:
+                return real_wait(this, secs, what, wid)
             self.assertFalse(held)
             events.append("wait")
             raise engine.Blocked("test stops at network wait")
@@ -2078,7 +2081,7 @@ class EngineTest(unittest.TestCase):
         real_delegate = fake_route.Script.reply
         real_sh, real_checks = engine.Engine.sh, engine.Engine.run_checks
         real_brief = engine.failure_brief
-        real_checkpoint, real_transition = engine.Engine.save_checkpoint, engine.Engine.transition
+        real_checkpoint, real_move = engine.Engine.save_checkpoint, Steps.move
         gate = PY + ' -c "pass"'
         with self.stoppable(), mock.patch.object(tl, "cmd_land") as land:
             seen, recovery_checks, recovery_pushes = {}, [], []
@@ -2101,11 +2104,11 @@ class EngineTest(unittest.TestCase):
                     interrupt_boundary("checkpoint")
                 return real_checkpoint(this, **at)
 
-            def transition(this, to, cause, detail="", **kw):
+            def move(this, to, cause, detail=""):
                 if to == "fix" and cause == "checks_red":
                     # This used to interrupt before pending validation was saved at all.
                     interrupt_boundary("transition")
-                return real_transition(this, to, cause, detail, **kw)
+                return real_move(this, to, cause, detail)
 
             def fix(this, kind, tail):
                 ck = self.checkpoint()
@@ -2142,7 +2145,7 @@ class EngineTest(unittest.TestCase):
                     mock.patch.object(engine.Engine, "stage", stage), \
                     mock.patch.object(engine, "failure_brief", brief), \
                     mock.patch.object(engine.Engine, "save_checkpoint", checkpoint), \
-                    mock.patch.object(engine.Engine, "transition", transition), \
+                    mock.patch.object(Steps, "move", move), \
                     mock.patch.object(fake_route.Script, "reply", delegate):
                 rc, events, race = self.run_push_race(failure="checks_fixed", max_rounds=1, max_check_tries=1)
             self.assertEqual(rc, 2, self.blocked)
@@ -2253,22 +2256,21 @@ class EngineTest(unittest.TestCase):
     def wait_records(self, eng):
         if not Path(eng.log_path).exists():
             return []
-        return [r for r in (json.loads(x) for x in Path(eng.log_path).read_text().splitlines()) if r.get("kind") == "wait"]
+        return records(eng, "wait_end")
 
     def test_a_wait_is_logged_as_its_own_segment(self):
         eng = self.checks_engine()
         eng.t0 -= 600
-        eng.add_wait(120, "a lane")
-        (w,) = self.wait_records(eng)
-        self.assertEqual((w["what"], w["secs"], w["in_budget"]), ("lane", 120, False))
-        self.assertAlmostEqual(w["t0"], time.time() - 120, delta=5)
+        eng.add_wait(120, WaitWhat.LANE)
+        (start,), (w,) = records(eng, "wait_start"), self.wait_records(eng)
+        self.assertEqual((start["what"], start["id"] == w["id"], w["secs"], w["in_budget"]), ("lane", True, 120, False))
 
     def test_waiting_for_the_land_lock_ends_the_open_node_first_and_is_logged(self):
         if os.name == "nt":
             self.skipTest("POSIX flock")
         eng = self.checks_engine()
         path = tl.land_lock_path(eng.git("remote", "get-url", "origin") or str(eng.wt))
-        eng.node("review", "review")
+        eng.steps.begin("review", "review")
         got, go = [], threading.Event()
 
         def holder():
@@ -2282,15 +2284,13 @@ class EngineTest(unittest.TestCase):
         with eng.land_lock():
             pass
         t.join()
-        recs = [json.loads(x) for x in Path(eng.log_path).read_text().splitlines()]
-        (w,) = [r for r in recs if r.get("kind") == "wait"]
-        self.assertEqual((w["what"], w["holder"], w["in_budget"]), ("land_lock", "other-bead", False))  # tl-y35: a lock wait is not budget
+        (start,), (w,) = records(eng, "wait_start"), records(eng, "wait_end")
+        self.assertEqual((start["what"], start["holder"], start["id"] == w["id"], w["in_budget"]), ("land_lock", "other-bead", True, False))  # tl-y35
+        kinds = [r["kind"] for r in records(eng)]
+        self.assertLess(kinds.index("step_end"), kinds.index("wait_start"))  # the open step ended before the wait began
+        self.assertLess(kinds.index("wait_end"), kinds.index("lock"))
+        self.assertLess(kinds.index("lock"), kinds.index("unlock"))
         self.assertGreaterEqual(w["secs"], 0)
-        end = next(r for r in recs if r.get("kind") == "end")
-        self.assertLess(recs.index(end), recs.index(w))  # the review node ended before the wait began: the wait is not its time
-        start = next(r for r in recs if r.get("kind") == "wait_start")  # logged when the wait begins, so a wait that never ends shows
-        self.assertEqual((start["what"], start["holder"], start["t0"]), ("land_lock", "other-bead", w["t0"]))
-        self.assertLess(recs.index(end), recs.index(start))
 
     def test_a_free_land_lock_logs_no_wait(self):
         eng = self.checks_engine()
@@ -2540,7 +2540,7 @@ class EngineTest(unittest.TestCase):
         keep = engine.tidy_question("denied `git push origin main` and gave no answer; run it or allow it, then rerun. (said:\n" + "x" * 100 + ")")
         self.assertIn("`git push origin main` and gave no answer; run it or allow it, then rerun.", keep)
         log = Path(self.tmp.name) / "run.jsonl" if hasattr(self, "tmp") else Path(tempfile.mkdtemp()) / "run.jsonl"
-        log.write_text("\n".join(json.dumps({"kind": "end", "step": st, "secs": sec}) for st, sec in (
+        log.write_text("\n".join(json.dumps({"v": 2, "kind": "step_end", "t": 1.0, "id": "n1", "step": st, "outcome": "done", "secs": sec}) + "\n" for st, sec in (
             ("checks", 6000), ("checks", 3800), ("write", 900), ("plan", 20))))
         self.assertEqual(engine.run_breakdown(log), "checks 163 min (2 rounds), write 15 min (1 round)")
         cut = engine.tidy_question("word " * 400)
@@ -3256,7 +3256,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(self.eng.sessions[1]["reason"], "rate_limited")
         self.assertEqual(self.eng.sessions[-1]["context"]["instructions"], ["/repo/AGENTS.md"])
         trace = [json.loads(l) for l in (tl.config_dir() / "traces.jsonl").read_text().splitlines()][-1]
-        self.assertNotIn("lanes", trace)
+        self.assertEqual(trace["lanes"], {})
 
     def test_a_delegate_of_another_contract_blocks_before_any_step(self):
         c = engine.load_cfg(str(self.wt))
@@ -3298,7 +3298,7 @@ class EngineTest(unittest.TestCase):
         self.assertIn("description changed:", p)
         self.assertIn("+Also say hi.", p)
         self.assertIn("new comment:\nKeep it small.", p)
-        self.assertIn('"mode": "amend"', self.eng.log_path.read_text())
+        self.assertEqual(self.eng.plan_log[-1]["mode"], "amend")
 
     def test_a_comment_alone_is_not_an_amend_and_costs_no_replan(self):
         self.stopped_run(plan=self.TWO, answers={"plan": [self.TWO], "write": [WRITE]})
@@ -3525,7 +3525,7 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(s.calls[1][1], "ref-plan")  # --resume of the planner thread
         self.assertIn("bash -n", s.prompts[1])
         self.assertIn("process substitution", s.prompts[1])
-        self.assertIn('"mode": "checks_back"', self.eng.log_path.read_text())
+        self.assertIn("plan_sent_back", [r["cause"] for r in records(self.eng, "transition")])
         self.assertEqual(self.eng.planned, 1)
         self.assertLess(len(s.prompts[1]), 3000)
 
@@ -3795,7 +3795,7 @@ class LandReview(EngineTest):
 
     def verifier(self, attrs=None, **cfg):
         return self.engine_at_land(dict({
-            "unchecked": [], "verified": [], "transition": mock.Mock(), "comment": mock.Mock(), "outcome_of": mock.Mock(),
+            "unchecked": [], "verified": [], "steps": mock.Mock(), "comment": mock.Mock(),
             "brief_text": lambda: "the task", "last_flag": "", "work_summary": lambda: "f.txt"}, **(attrs or {})), **cfg)
 
     def test_items_whose_proof_is_the_gate_or_a_stage_check_are_settled_and_never_asked(self):

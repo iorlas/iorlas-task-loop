@@ -1,8 +1,9 @@
 """Engine logs -> the task timeline the dashboard draws: a run is a chain of blocks (one stage + one session), each
 block entered by an arrow that says why the run moved there. Python 3.8+, standard library only.
 
-The engine writes machine-readable records since 0.17 (docs/design/dashboard.md, Timeline records): `node` with id,
-step and counters, `end`, `transition`, `checks`, `run`. A node record without an id and a step (an older log) is skipped.
+The engine writes typed records (EngineLog v2: step_start, step_end, call_end, transition, checks, run_start ...); `logrows`
+turns them into the flat rows below (node with id, step and counters, end, session, transition, checks, run). A node row
+without an id and a step is skipped.
 """
 
 import json
@@ -11,6 +12,8 @@ import re
 import threading
 import time
 from collections import OrderedDict
+
+import logrows
 
 _parsed = OrderedDict()  # path -> ((mtime, size), records), least recently read first
 _plock = threading.Lock()
@@ -36,15 +39,8 @@ def read(path):
         if hit and hit[0] == key:
             _parsed.move_to_end(path)
             return hit[1]
-    recs = []
     with open(path, encoding="utf-8", errors="replace") as f:
-        for ln in f:
-            try:
-                d = json.loads(ln)
-            except ValueError:
-                continue
-            if isinstance(d, dict):
-                recs.append(d)
+        recs = logrows.read(f)
     with _plock:
         _parsed[path] = (key, recs)
         _parsed.move_to_end(path)

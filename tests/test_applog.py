@@ -128,25 +128,15 @@ class WiringTest(unittest.TestCase):
         self.assertEqual(len(lines), 101)
         self.assertEqual(applog.open_count(path), 1)
 
-    def test_engine_log_keeps_one_handle_per_run_log_and_closes_it_when_the_run_ends(self):
+    def test_engine_log_is_one_typed_line_per_record_readable_at_once(self):
         eng = engine.Engine("t-1", self.tmp.name, dict(engine.DEFAULTS))
         with mock.patch.object(engine, "say"), mock.patch.object(tl, "event"):
             for i in range(1000):
-                eng.log("note", "line %d" % i)
-            self.assertEqual(applog.open_count(eng.log_path), 1)
-            self.assertEqual(len(eng.log_path.read_text(encoding="utf-8").splitlines()), 1000)
-            with mock.patch.object(eng, "run_once", return_value=0):
-                eng.run()
-        self.assertEqual(applog.open_count(eng.log_path), 0)
-
-    def test_engine_run_closes_the_log_even_when_the_run_raises(self):
-        eng = engine.Engine("t-1", self.tmp.name, dict(engine.DEFAULTS))
-        with mock.patch.object(engine, "say"), mock.patch.object(tl, "event"):
-            eng.log("note", "x")
-            with mock.patch.object(eng, "run_once", side_effect=RuntimeError("boom")):
-                with self.assertRaises(RuntimeError):
-                    eng.run()
-        self.assertEqual(applog.open_count(eng.log_path), 0)
+                eng.log.note("line %d" % i)
+            lines = eng.log_path.read_text(encoding="utf-8").splitlines()
+        self.assertEqual([json.loads(x)["text"] for x in lines][-2:], ["line 998", "line 999"])
+        self.assertEqual(len(lines), 1000)
+        self.assertEqual(applog.open_count(eng.log_path), 0)  # a record opens, appends and closes: no handle outlives the run
 
     def test_exec_in_place_closes_every_handle_first(self):
         applog.append(Path(self.tmp.name) / "x.log", "x\n")

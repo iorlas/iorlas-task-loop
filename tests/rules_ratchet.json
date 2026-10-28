@@ -1,11 +1,10 @@
 {
  "_": "Ratchet for tests/test_rules.py. oversize / oversize_functions list every cap violation that existed at A1, by file; an entry may be lowered or deleted, never added. pyrefly_baseline_errors is the error count in pyrefly-baseline.json; it may only shrink.",
  "oversize": {
-  "skills/task-loop/dash/server.py": 1698,
-  "skills/task-loop/dash/timeline.py": 617,
-  "skills/task-loop/engine.py": 5485,
+  "skills/task-loop/dash/server.py": 1693,
+  "skills/task-loop/dash/timeline.py": 611,
+  "skills/task-loop/engine.py": 5389,
   "skills/task-loop/loop.py": 1059,
-  "skills/task-loop/report.py": 404,
   "skills/task-loop/tl.py": 1697,
   "tests/test_engine.py": 3471
  },
@@ -14,8 +13,8 @@
   "skills/task-loop/dash/graph.py::build": 81,
   "skills/task-loop/engine.py::Engine.__init__": 104,
   "skills/task-loop/engine.py::Engine._close": 104,
-  "skills/task-loop/engine.py::Engine._run_checks": 220,
-  "skills/task-loop/engine.py::Engine.finish": 152,
+  "skills/task-loop/engine.py::Engine._run_checks": 212,
+  "skills/task-loop/engine.py::Engine.finish": 151,
   "skills/task-loop/engine.py::Engine.plan": 144,
   "skills/task-loop/engine.py::Engine.resume_point": 114,
   "skills/task-loop/engine.py::Engine.run_once": 109,

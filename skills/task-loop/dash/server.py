@@ -43,6 +43,7 @@ sys.path.insert(0, str(HERE.parents[2] / "src"))
 import gallery  # noqa: E402
 import graph  # noqa: E402
 import live  # noqa: E402
+import logrows  # noqa: E402
 import roadmap  # noqa: E402
 import signals  # noqa: F401,E402
 import timeline  # noqa: E402
@@ -538,11 +539,7 @@ def clean_cmd(s):
 def engine_events(path, t0=None, t1=None):
     """The engine's own log (engine.py): one line per node, decision, command."""
     out = []
-    for ln in tail_lines(path):
-        try:
-            d = json.loads(ln)
-        except ValueError:
-            continue
+    for d in logrows.read(tail_lines(path)):
         if d.get("kind") in ("end", "transition", "checks", "run"):  # the task view's records
             continue
         e = {"t": d.get("t"), "kind": d.get("kind", "note"), "text": d.get("text", "")}
@@ -552,8 +549,6 @@ def engine_events(path, t0=None, t1=None):
             out[-1]["state"] = "ok" if d.get("exit") == 0 else "fail"
             out[-1]["detail"] = e["text"]
             continue
-        if d.get("data") is not None:
-            e["detail"] = json.dumps(d["data"], indent=1)[:6000]
         if d.get("cost"):
             e["text"] += "  ($%.2f, %ss)" % (d["cost"], d.get("secs", "?"))
         out.append(e)
@@ -569,12 +564,12 @@ def engine_runs(bead, t0, t1):
         start = first.get("t") or os.path.getmtime(path)
         if start < t0 - 5 or (t1 and start > t1 + 5):
             continue
-        tail = "\n".join(tail_lines(path, 8000)[-8:])  # end, transition and warn records may follow the close
-        closed = '"close: ' in tail
+        tail = "\n".join(tail_lines(path, 8000)[-8:])  # step_end, transition and warn records may follow the close
+        closed = '"kind": "close"' in tail
         st, m = status_of(path, closed)
         if closed:
-            st = "completed" if ('close: landed' in tail or 'close: done' in tail) else "failed"
-        elif st == "idle" and path == newest and first.get("kind") == "run" and first.get("worktree") and run_alive(path, first, None):
+            st = "completed" if ('"outcome": "landed"' in tail or '"outcome": "done"' in tail) else "failed"
+        elif st == "idle" and path == newest and first.get("kind") == "run_start" and first.get("worktree") and run_alive(path, first, None):
             st = "running"  # checks and tests run for minutes without a log record: the engine's own lock says it is alive
         runs.append({"id": "engine:" + path, "kind": "engine", "title": "Engine", "role": "runs the task",
                      "status": st, "started": start, "updated": m, "ended": m if closed else None})
@@ -862,7 +857,7 @@ def slot_of(run, span, trace):
 
 
 def repo_name(span, trace, ask):
-    r = (span or {}).get("repo") or (ask or {}).get("repo") or (trace or {}).get("repo") or ""
+    r = (span or {}).get("repo") or (ask or {}).get("repo") or (trace or {}).get("repo_url") or ""
     r = r.rstrip("/\\")
     return re.sub(r"\.git$", "", os.path.basename(r)) if r else ""
 
@@ -872,12 +867,12 @@ TASK_STATES = {"running": 0, "asks": 1, "paused": 2, "queued": 2, "blocked_by": 
 
 
 def wait_label(recs):
-    """"waiting for Codex until 09:02" while the engine sleeps in its slot for a lane, else "". The engine logs the
-    lane_wait transition (lane, until) before it sleeps; the next step's node or transition ends the wait."""
-    last = next((r for r in reversed(recs) if r.get("kind") in ("transition", "node")), None)
-    if not last or last.get("cause") != "lane_wait" or float(last.get("until") or 0) <= time.time():
+    """"waiting for Codex until 09:02" while the engine sleeps in its slot for a lane, else "". The engine logs the wait's
+    start (the lane, until) before it sleeps; its end, or the next step, ends the wait."""
+    last = next((r for r in reversed(recs) if r.get("kind") in ("wait_start", "wait", "node")), None)
+    if not last or last.get("kind") != "wait_start" or last.get("what") != "lane" or float(last.get("until") or 0) <= time.time():
         return ""
-    who = timeline.lane_name(last.get("lane") or "", "")
+    who = timeline.lane_name(last.get("holder") or "", "")
     return ("waiting for %s until %s" % (who, timeline.when(last["until"]))) if who else ""
 
 
@@ -895,7 +890,7 @@ def task_row(bead, paths, spans, tr):
     trace = tr.get(name)
     # the status, in order: running; an open ask; an open `blocks` dependency; the last run's close reason
     blocked = None if alive or ask else blocker_of(bead, (span or {}).get("repo") or ask_file(bead).get("repo") or
-                                                    (trace or {}).get("repo") or "")
+                                                    (trace or {}).get("repo_url") or "")
     if alive:
         state, label = "running", wait_label(recs) or timeline.live_label(timeline.last_node(newest))
     elif ask:

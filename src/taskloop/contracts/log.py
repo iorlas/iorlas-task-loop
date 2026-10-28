@@ -11,7 +11,7 @@ from taskloop.contracts.trace import Tokens
 @record
 class LogRec:
     V: ClassVar[int] = 2
-    t: float
+    t: float = 0.0  # unset (0): RunLog.emit stamps the time of the append
 
 
 @record
@@ -73,6 +73,9 @@ class CallEnd(LogRec):
     secs: float = 0.0
     tokens: Tokens = field(default_factory=Tokens)
     cost: float = 0.0
+    family: str = ""
+    flag: str | None = None
+    transcript: str = ""
 
 
 @record
@@ -148,6 +151,34 @@ class WaitEnd(LogRec):
 
 
 @record
+class CheckItem:
+    id: str
+    cmd: str
+    group: str
+    exit: int | None
+    status: str
+    secs: float | None = None
+    tries: int | None = None
+    hung: bool = False
+    cached: bool = False
+    reused: bool = False
+    why: str = ""
+    log: str = ""
+
+
+@record
+class Checks(LogRec):
+    """One round of checks: every check with its result, and what the round's cache saved."""
+    KIND: ClassVar[str] = "checks"
+    node_id: str
+    round: int
+    items: list[CheckItem] = field(default_factory=list)
+    tree: str = ""
+    hits: int = 0
+    misses: int = 0
+
+
+@record
 class Lock(LogRec):
     KIND: ClassVar[str] = "lock"
     what: str
@@ -170,6 +201,12 @@ class VendorError(LogRec):
     model: str = ""
     until: float | None = None
     error: str = ""
+    started_t: float | None = None  # the call's boundaries as the process saw them: when it began, ended, first printed a provider
+    ended_t: float | None = None  # error line, last printed anything, and was stopped
+    first_error_t: float | None = None
+    last_event_t: float | None = None
+    kill_t: float | None = None
+    error_observed: bool = False
 
 
 @record
@@ -178,6 +215,15 @@ class Kill(LogRec):
     what: str
     why: str
     secs: float = 0.0
+    exit: int | None = None
+    hung: bool = False
+    alive: list[int] = field(default_factory=list)  # pids that outlived every signal
+    started_t: float | None = None
+    ended_t: float | None = None
+    first_error_t: float | None = None
+    last_event_t: float | None = None  # the last activity seen before the stop, frozen before the signal
+    kill_t: float | None = None
+    observed_t: float | None = None
 
 
 @record
@@ -215,12 +261,13 @@ class Close(LogRec):
     outcome: Outcome
     why_code: WhyCode | None = None
     sha: str = ""
+    why: str = ""
 
 
 EngineLog = (RunStart | StepStart | StepEnd | CallStart | CallEnd | CmdStart | CmdEnd | CheckStart | CheckEnd | GateStart | GateEnd
-             | WaitStart | WaitEnd | Lock | Unlock | VendorError | Kill | Transition | Reload | Warn | Note | Close)
+             | WaitStart | WaitEnd | Lock | Unlock | VendorError | Kill | Transition | Reload | Checks | Warn | Note | Close)
 ENGINE_LOG = table_of(RunStart, StepStart, StepEnd, CallStart, CallEnd, CmdStart, CmdEnd, CheckStart, CheckEnd, GateStart,
-                      GateEnd, WaitStart, WaitEnd, Lock, Unlock, VendorError, Kill, Transition, Reload, Warn, Note, Close)
+                      GateEnd, WaitStart, WaitEnd, Lock, Unlock, VendorError, Kill, Transition, Reload, Checks, Warn, Note, Close)
 
 
 def decode(data: object) -> EngineLog:

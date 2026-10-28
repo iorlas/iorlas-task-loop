@@ -48,6 +48,7 @@ class SelfTest(unittest.TestCase):
         """A copy of this checkout's skill as an installed version; `plant` (old, new) edits its engine.py."""
         d = self.cache / ver / "skills" / "task-loop"
         shutil.copytree(SRC, d, ignore=shutil.ignore_patterns("__pycache__", "dash"))
+        shutil.copytree(ROOT / "src", d.parents[1] / "src", ignore=shutil.ignore_patterns("__pycache__"))
         (d.parents[1] / ".claude-plugin").mkdir()
         (d.parents[1] / ".claude-plugin" / "plugin.json").write_text("{}")
         if plant:

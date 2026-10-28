@@ -68,7 +68,7 @@ class Base(unittest.TestCase):
         return [c for c in self.calls if c[0][0] == "comments"]
 
     def trace(self, run, bad, repo="lifesim", bead="b1", t=NOW - 3600, url=True):  # the engine writes the origin's URL
-        rec = {"run": run, "bead": bead, "repo": ("git@github.com:me/%s.git" % repo) if url else self.repos[repo], "ended": t,
+        rec = {"run": run, "bead": bead, "repo_url": ("git@github.com:me/%s.git" % repo) if url else self.repos[repo], "ended": t,
                "reflection": {"went_well": [], "wasted": [], "change": [], "went_badly": [
                    {"what": w, "cause": c, "session": "s-" + run, "evidence": e} for w, c, e in bad]}}
         with open(self.traces, "a") as f:

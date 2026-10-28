@@ -31,6 +31,7 @@ from support.builders import make_engine  # noqa: E402
 import engine  # noqa: E402
 import seams  # noqa: E402
 from support.fakes import FakeBeadStore  # noqa: E402
+from support.logs import records  # noqa: E402
 from support.waits import until  # noqa: E402
 from support import fake_route  # noqa: E402
 import lane_policy as lp  # noqa: E402,F401
@@ -413,8 +414,8 @@ class DelegateLauncher(unittest.TestCase):
         out = stop("rate_limited", at=time.time() + 120, lane="OPENAI_SUBSCRIPTION")
         rc, s = self.run_engine({"plan": [PLAN], "write": [out, WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
-        waits = [json.loads(ln) for ln in self.eng.log_path.read_text().splitlines() if '"lane_wait"' in ln and '"transition"' in ln]
-        self.assertEqual([w["lane"] for w in waits], ["OPENAI_SUBSCRIPTION"])
+        waits = records(self.eng, "wait_start")
+        self.assertEqual([w["holder"] for w in waits], ["OPENAI_SUBSCRIPTION"])
         self.assertGreater(waits[0]["until"], time.time() + 30)
 
     def test_a_failure_after_work_still_fails(self):

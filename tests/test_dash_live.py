@@ -33,11 +33,10 @@ def make_run(root):
     """An engine log with a command and a write step, and the live file of its write call."""
     eng = os.path.join(root, "task-loop", "engine")
     log = os.path.join(eng, "%s-%s.jsonl" % (BEAD, STAMP))
-    put(log, [{"t": T, "kind": "run", "text": "run: fresh", "run": "%s-%s" % (BEAD, STAMP), "bead": BEAD, "worktree": ""},
-              {"t": T + 1, "kind": "cmd", "text": "git fetch -q origin"},
-              {"t": T + 3, "kind": "note", "text": "exit 0", "exit": 0},
-              {"t": T + 4, "kind": "node", "text": "write: x", "id": 1, "step": "write"},
-              {"t": T + 5, "kind": "note", "text": "live: f", "live": "f"}])
+    put(log, [{"v": 2, "t": T, "kind": "run_start", "text": "run: fresh", "run": "%s-%s" % (BEAD, STAMP), "bead": BEAD, "worktree": ""},
+              {"v": 2, "t": T + 1, "kind": "cmd_start", "id": "m1", "text": "git fetch -q origin"},
+              {"v": 2, "t": T + 3, "kind": "cmd_end", "id": "m1", "exit": 0},
+              {"v": 2, "t": T + 4, "kind": "step_start", "id": "n1", "text": "write: x", "step": "write"}])
     lf = os.path.join(eng, "%s-%s.live" % (BEAD, STAMP), "01-write.jsonl")
     put(lf, [{"t": T + 6, "k": "start", "harness": "codex", "lane": "CODEX", "model": "gpt-x", "effort": "high", "role": "worker", "pid": 1},
              {"t": T + 2, "k": "msg", "text": "earlier than the engine rows' end"},
@@ -113,17 +112,14 @@ class CallSite(unittest.TestCase):
         dl.call(res, dl.CallRequest("worker", "p", {}, "."), runner=runner)
         self.assertIsNone(seen[1])
 
-    def test_engine_numbers_its_calls_and_logs_a_note(self):
+    def test_engine_numbers_its_calls(self):
         import engine
         with tempfile.TemporaryDirectory() as d:
             e = object.__new__(engine.Engine)
             e.log_path = Path(d) / ("%s-%s.jsonl" % (BEAD, STAMP))
-            notes = []
-            e.log = lambda kind, text, **kw: notes.append((kind, text, kw))
             p1, p2 = e.live("plan"), e.live("write")
             self.assertTrue(p1.endswith(".live/01-plan.jsonl") and p2.endswith(".live/02-write.jsonl"))
             self.assertTrue(os.path.isdir(os.path.dirname(p1)))
-            self.assertEqual([(k, kw["live"]) for k, _, kw in notes], [("note", p1), ("note", p2)])
             with open(engine.__file__, encoding="utf-8") as f:
                 src = f.read()
             self.assertEqual(src.count("live=self.live("), 2)  # both delegate call sites pass it

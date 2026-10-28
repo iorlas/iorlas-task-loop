@@ -276,18 +276,16 @@ class Api(unittest.TestCase):
         (wt / ".task").mkdir(parents=True)
         (wt / ".task" / "engine.lock").write_text(json.dumps({"pid": os.getpid(), "bead": "x-1", "slot": "s1"}))
         due = now + 300
-        recs = [{"t": now - 600, "kind": "run", "text": "run: first", "run": "x-1-20261021-120000", "bead": "x-1",
-                 "worktree": str(wt), "slot": "s1", "started_because": "first", "prev_run": "", "ask": ""},
-                {"t": now - 590, "kind": "node", "text": "write: stage 1/1 write 1", "id": 3, "step": "write",
+        recs = [{"v": 2, "t": now - 600, "kind": "run_start", "run": "x-1-20261021-120000", "bead": "x-1", "repo_url": "", "worktree": str(wt),
+                 "slot": "s1", "started_because": "first", "prev_run": "", "ask": ""},
+                {"v": 2, "t": now - 590, "kind": "step_start", "id": "n3", "step": "write", "text": "write: stage 1/1 write 1",
                  "stage": 1, "stages": 1, "write": 1, "round": 1},
-                {"t": now - 10, "kind": "transition", "text": "lane_wait -> write: waited", "from": 3, "to": "write",
-                 "cause": "lane_wait", "detail": "waited 5 min for a lane (lane_out)", "lane": "OPENAI_SUBSCRIPTION",
-                 "until": due}]
+                {"v": 2, "t": now - 10, "kind": "wait_start", "id": "w1", "what": "lane", "holder": "OPENAI_SUBSCRIPTION", "until": due}]
         path = self.cfg / "engine" / "x-1-20261021-120000.jsonl"
         path.write_text("".join(json.dumps(r) + "\n" for r in recs))
         t = self.task("x-1")
         self.assertEqual((t["state"], t["label"]), ("running", "waiting for Codex until " + timeline.hhmm(due)))
-        recs[-1]["until"] = now - 5  # the wait is over: back to what the run is doing
+        recs.append({"v": 2, "t": now - 5, "kind": "wait_end", "id": "w1", "secs": 5})  # the wait is over: back to what the run is doing
         path.write_text("".join(json.dumps(r) + "\n" for r in recs))
         server._cache.clear()
         timeline._parsed.clear()
@@ -297,9 +295,9 @@ class Api(unittest.TestCase):
         wt = Path(self.tmp.name) / "slots" / "s1"
         (wt / ".task").mkdir(parents=True)
         (wt / ".task" / "engine.lock").write_text(json.dumps({"pid": os.getpid(), "bead": "x-1", "slot": "s1"}))
-        recs = [{"t": time.time() - 600, "kind": "run", "text": "run: first", "run": "x-1-20261021-120000", "bead": "x-1",
+        recs = [{"v": 2, "t": time.time() - 600, "kind": "run_start", "run": "x-1-20261021-120000", "bead": "x-1", "repo_url": "",
                  "worktree": str(wt), "slot": "s1", "started_because": "first", "prev_run": "", "ask": ""},
-                {"t": time.time() - 590, "kind": "node", "text": "write: stage 2/3 write 1", "id": 3, "step": "write",
+                {"v": 2, "t": time.time() - 590, "kind": "step_start", "text": "write: stage 2/3 write 1", "id": "n3", "step": "write",
                  "stage": 2, "stages": 3, "write": 1, "round": 1}]
         (self.cfg / "engine" / "x-1-20261021-120000.jsonl").write_text("".join(json.dumps(r) + "\n" for r in recs))
         t = self.task("x-1")
@@ -315,7 +313,7 @@ class Api(unittest.TestCase):
         (wt / ".task").mkdir(parents=True)
         (wt / ".task" / "engine.lock").write_text(json.dumps({"pid": os.getpid(), "bead": "x-1", "slot": "s1"}))
         old = time.time() - 600  # no record for ten minutes: the checks are running
-        recs = [{"t": old, "kind": "run", "text": "run: first", "run": "x-1-20261021-120000", "bead": "x-1", "worktree": str(wt),
+        recs = [{"v": 2, "t": old, "kind": "run_start", "run": "x-1-20261021-120000", "bead": "x-1", "repo_url": "", "worktree": str(wt),
                  "slot": "s1", "started_because": "first", "prev_run": "", "ask": ""}]
         path = self.cfg / "engine" / "x-1-20261021-120000.jsonl"
         path.write_text("".join(json.dumps(r) + "\n" for r in recs))

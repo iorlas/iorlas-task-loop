@@ -422,7 +422,7 @@ class AskFailures(unittest.TestCase):
         (self.asks / "lifesim-fld.27.12.json").write_text(json.dumps(a))
         eng = self.d / "task-loop" / "engine"
         eng.mkdir()
-        (eng / (a["run"] + ".jsonl")).write_text("\n".join(json.dumps({"kind": "end", "step": st, "secs": sec}) for st, sec in (
+        (eng / (a["run"] + ".jsonl")).write_text("\n".join(json.dumps({"v": 2, "t": 1.0, "kind": "step_end", "id": "n1", "step": st, "outcome": "done", "detail": "", "secs": sec}) for st, sec in (
             ("checks", 9800), ("write", 900), ("plan", 100))))
         (shown,) = server.inbox()
         self.assertEqual(shown["kind"], "budget")

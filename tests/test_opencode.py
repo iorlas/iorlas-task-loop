@@ -19,6 +19,7 @@ import delegate_link as dl  # noqa: E402
 import engine  # noqa: E402
 import server  # noqa: E402
 import timeline  # noqa: E402
+from taskloop.app.run.calls import Calls  # noqa: E402
 import tl  # noqa: E402
 from lanes import call as lcall  # noqa: E402,F401
 
@@ -232,11 +233,12 @@ class OpenCode(unittest.TestCase):
             rc = tl.cmd_trace(types.SimpleNamespace(id="b-1", last=0, json=True))
         self.assertEqual(rc, 0)
         self.assertEqual(json.loads(buf.getvalue())[0]["sessions"][0]["transcript"], "")
-        eng = types.SimpleNamespace(cur=None, stats={"tokens_in": 0, "tokens_cached": 0, "tokens_out": 0}, sessions=[],
-                                    log=lambda *a, **k: None)
+        sessions = []
+        calls = Calls(types.SimpleNamespace(emit=lambda rec: 0), lambda: None, sessions, {"tokens_in": 0, "tokens_cached": 0, "tokens_out": 0},
+                      tl.opencode_id, lambda path: None)
         r = dl.CallResult(ref=SID, secs=1, cost=0, family="xai", raw={"ref": SID, "transcript": ""})
-        engine.Engine.trace_call(eng, "write", "writer", 1, r)
-        self.assertEqual(eng.sessions[0]["transcript"], "opencode:" + SID)  # no DB look
+        calls.end("c1", "write", "writer", 1, r)
+        self.assertEqual(sessions[0]["transcript"], "opencode:" + SID)  # no DB look
 
 
 if __name__ == "__main__":

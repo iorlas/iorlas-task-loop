@@ -346,12 +346,12 @@ class PlannerReport(unittest.TestCase):
                 ("planner", "y-9", 1, 1)]
         self.hist.write_text("".join(json.dumps({"ts": t + k, "role": r, "task": b, "tokens": {"in": i, "cached": c, "out": 5}})
                                      + "\n" for k, (r, b, i, c) in enumerate(rows)))
-        nodes = [("plan: plan", {}), ("plan: re-plan", {}), ("plan: rewrite checks", {}), ("plan: amend", {"mode": "amend"})]
+        nodes = [("plan: plan", {}), ("plan: re-plan", {}), ("plan: rewrite checks", {}), ("plan: amend", {})]
         (self.eng / "x-1-20261021-060000.jsonl").write_text("".join(
-            json.dumps(dict({"t": t + k, "kind": "node", "text": txt, "node": "plan"}, **kw)) + "\n"
+            json.dumps(dict({"v": 2, "t": t + k, "kind": "step_start", "id": "n1", "text": txt, "step": "plan"}, **kw)) + "\n"
             for k, (txt, kw) in enumerate(nodes)))
         (self.eng / "x-2-20261021-060000.jsonl").write_text(json.dumps(
-            {"t": t, "kind": "node", "text": "plan: plan", "node": "plan", "mode": "plan"}) + "\n")
+            {"v": 2, "t": t, "kind": "step_start", "id": "n1", "text": "plan: plan", "step": "plan"}) + "\n")
 
     def tearDown(self):
         self.env.stop()

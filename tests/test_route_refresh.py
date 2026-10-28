@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -23,9 +24,7 @@ class Stub:
     def __init__(self, cfg, route):
         self.cfg, self.route, self.contract, self.notes = cfg, route, {"contract": 3}, []
         self.resolved, self.refusal, self.router = None, None, seams.DelegateRoute()
-
-    def log(self, kind, text, **kw):
-        self.notes.append(text)
+        self.log = types.SimpleNamespace(note=self.notes.append)
 
 
 class RouteRefresh(unittest.TestCase):

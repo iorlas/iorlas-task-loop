@@ -89,7 +89,7 @@ def items(since, until, traces=None):
             text = "%s %s" % (b.get("what"), b.get("evidence") or "")
             out.append({"cause": str(b.get("cause") or "other"), "what": str(b["what"]), "evidence": str(b.get("evidence") or ""),
                         "session": str(b.get("session") or ""), "run": str(r.get("run") or ""), "bead": str(r.get("bead") or ""),
-                        "repo": str(r.get("repo") or ""), "t": t, "tokens": tokens(b["what"]), "files": {os.path.basename(f) for f in FILE.findall(text)}})
+                        "repo": str(r.get("repo_url") or ""), "t": t, "tokens": tokens(b["what"]), "files": {os.path.basename(f) for f in FILE.findall(text)}})
     return sorted(out, key=lambda i: i["t"])
 
 

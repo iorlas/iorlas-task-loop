@@ -169,7 +169,7 @@ class TraceTelemetry(unittest.TestCase):
             self.assertEqual(row["fingerprint"], "")
         else:
             self.assertTrue(row["fingerprint"])
-        for old in ("run", "bead", "repo", "worktree", "branch", "version", "started", "ended", "outcome", "why",
+        for old in ("run", "bead", "repo_url", "worktree", "branch", "version", "started", "ended", "outcome", "why",
                     "cost", "stats", "sessions", "log", "prev_run", "ask"):
             self.assertIn(old, row)
         return row
@@ -256,15 +256,14 @@ class TraceTelemetry(unittest.TestCase):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
                                 gate=PY + ' -c "pass"')
         self.assertEqual(rc, 0)
-        gate = self.records("gate")
-        self.assertTrue(gate)
-        self.assertEqual(gate[-1]["exit"], 0)
-        self.assertIn("secs", gate[-1])
-        self.assertFalse(gate[-1]["cached"])
-        cache = self.records("cache")
+        (start,), (end,) = self.records("gate_start"), self.records("gate_end")
+        self.assertEqual(end["exit"], 0)
+        self.assertIn("secs", end)
+        self.assertFalse(end["skipped"])
+        self.assertTrue(start["cmd"] and start["tree"])
+        cache = self.records("checks")
         self.assertTrue(cache)
         self.assertEqual(cache[-1]["hits"] + cache[-1]["misses"], len(cache[-1]["items"]))
-        self.assertIn("changed", cache[-1])
 
     @unittest.skipIf(os.name == "nt", "the engine stops a process group; sleep and bash are POSIX")
     def test_a_timed_out_command_leaves_a_kill_record(self):

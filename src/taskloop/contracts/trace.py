@@ -160,3 +160,5 @@ class RunTrace:
     prev_run: str = ""
     started_because: str = ""
     faults: list[Fault] = field(default_factory=list)
+    kind: str = ""  # the run's outcome.Kind value, and its fingerprint: what the storm detector counts
+    kfp: str = ""

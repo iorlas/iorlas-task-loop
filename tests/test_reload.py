@@ -64,6 +64,7 @@ class Reload(unittest.TestCase):
             d.mkdir(parents=True)
         else:
             shutil.copytree(SRC, d, ignore=shutil.ignore_patterns("__pycache__", "dash"))
+            shutil.copytree(ROOT / "src", d.parents[1] / "src", ignore=shutil.ignore_patterns("__pycache__"))
         (d.parents[1] / ".claude-plugin").mkdir(exist_ok=True)
         (d.parents[1] / ".claude-plugin" / "plugin.json").write_text(json.dumps({"version": ver}))
         if plant:
@@ -146,9 +147,10 @@ class Reload(unittest.TestCase):
         self.assertEqual(tl.git("show", "origin/main:f.txt", cwd=str(self.wt)), "d2")
         self.assertFalse(engine.reexec_path("t-1").exists())  # a run that ended is no crash after an exec
         logs = [json.loads(x) for x in eng.log_path.read_text().splitlines()]
-        self.assertEqual(len([x for x in logs if x["kind"] == "run"]), 1)  # one run record for the one run
-        self.assertEqual([x["version"] for x in logs if x.get("version")][-1], "0.2.0")
-        self.assertTrue(any("took over run %s from 0.1.0" % run in x["text"] for x in logs))
+        self.assertEqual(len([x for x in logs if x["kind"] == "run_start"]), 1)  # one run record for the one run
+        self.assertTrue([x["text"] for x in logs if x["kind"] == "note" and x["text"].startswith("task-loop 0.")][-1].startswith("task-loop 0.2.0 took"))
+        self.assertTrue(any("took over run %s from 0.1.0" % run in x.get("text", "") for x in logs))
+        self.assertEqual([x["step"] for x in logs if x["kind"] == "reload"], ["land"])  # the move is a record of its own
         self.assertEqual(eng2.stats["writes"], eng.stats["writes"])  # the counters went across
 
     def test_the_move_slot_is_handed_on_and_given_back_by_the_new_image(self):

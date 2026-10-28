@@ -231,7 +231,7 @@ def crashes(repo, since, until, traces, alive=None, now=None):
         if not since <= t < until:
             continue
         recs = read_jsonl(f)
-        if any(x.get("kind") == "node" and (x.get("text") or "").startswith("close:") for x in recs):
+        if any(x.get("kind") == "close" for x in recs):
             continue
         try:
             quiet = (now - f.stat().st_mtime) / 60
@@ -366,15 +366,10 @@ HISTORY = "~/.claude/plugins/data/iorlas-delegate-iorlas-marketplace/history.jso
 
 
 def plan_class(rec):
-    """full | amend | back for an engine log's plan node record (older logs: by the node's text)."""
-    mode = rec.get("mode")
-    if mode in ("amend", "back", "full"):
-        return mode
-    if mode == "checks_back":
-        return "back"
-    if mode == "plan":
-        return "full"
+    """full | amend | back for an engine log's plan step_start record, by its text."""
     t = rec.get("text") or ""
+    if t == "plan: amend":
+        return "amend"
     return "back" if t in ("plan: rewrite checks", "plan: plan to meet it") else "full"  # 'plan: plan', 'plan: re-plan'
 
 
@@ -407,7 +402,7 @@ def planner_stats(since, until, prefixes=(), history=None, engine_dir=None):
             if not STEM.match(log.stem) or STEM.match(log.stem).group(1) != bead:
                 continue
             for rec in read_jsonl(log):
-                if rec.get("kind") == "node" and rec.get("node") == "plan" and since <= (rec.get("t") or 0) <= until:
+                if rec.get("kind") == "step_start" and rec.get("step") == "plan" and since <= (rec.get("t") or 0) <= until:
                     kinds[plan_class(rec)] += 1
         n = len(ins)
         first = min(1, kinds["full"] or n)
