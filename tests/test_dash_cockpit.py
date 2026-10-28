@@ -1,5 +1,6 @@
 """The dash's lane cards and banner come from the StatusSnapshot `tl lanes` filed. The dash runs nothing: no delegate, no subprocess."""
 import json
+import tempfile
 import subprocess
 import sys
 import unittest
@@ -78,19 +79,21 @@ class Cockpit(unittest.TestCase):
 
 class Unavailable(unittest.TestCase):
     def setUp(self):
-        self.dash = make_dash()
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.dash = make_dash(config=tmp.name)
 
     def test_no_snapshot_says_so(self):
         d = self.dash.lanes.delegate_status()
         self.assertFalse(d["ok"])
         self.assertIn("tl lanes", d["say"])
 
-    def test_an_old_snapshot_is_said_to_be_old_never_shown_as_the_lanes(self):
-        file_status(self.dash, answer({"A": lane()}, ts=self.dash.env.clock() - 7200))
-        d = self.dash.lanes.delegate_status()
-        self.assertFalse(d["ok"])
-        self.assertIn("120 min old", d["say"])
-        self.assertNotIn("lanes", d)
+    def test_an_old_snapshot_keeps_its_lanes_with_the_age_and_past_an_hour_the_hint(self):
+        for secs, hint in ((900, False), (7200, True)):
+            file_status(self.dash, answer({"A": lane()}, ts=self.dash.env.clock() - secs))
+            d = self.dash.lanes.delegate_status()
+            self.assertEqual((len(d["lanes"]), d["age_s"], "tl lanes" in d.get("hint", "")), (1, secs, hint))
+            self.assertNotIn("say", d)
 
     def test_a_snapshot_of_another_shape_is_no_snapshot(self):
         path = self.dash.env.config.snapshot("delegate", "status")

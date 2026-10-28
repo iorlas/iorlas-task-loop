@@ -59,6 +59,8 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .lanes:not(:empty){padding-top:12px}
 .lane{font-size:12px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr);gap:12px;padding:12px;border-radius:12px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);overflow-wrap:anywhere}
 .lane>div{min-width:0}
+.lane.stale{opacity:.55}
+.lane .lane-age{color:var(--mute)}
 .lane .lane-state{color:var(--mute);margin:4px 0}
 .lane time,.lane .countdown{display:block}
 .lane-label{color:var(--mute)}
@@ -550,20 +552,23 @@ function renderTop(){$('lookn').textContent=lookCount()||'';
   if(S.tasks&&S.tasks.host)$('host').textContent=S.tasks.host;
   const d=S.asks.delegate||{};
   paint($('lanes'),'lanes',d.say?`<div class="lane-status" role="status">${esc(d.say)}</div>`:
-    Array.isArray(d.lanes)?(d.lanes.map(cockpitRow).join('')||'<div class="lane-status">Delegate reports no lanes</div>'):
+    Array.isArray(d.lanes)?((d.hint?`<div class="lane-status" role="status">${esc(d.hint)}</div>`:'')+d.lanes.map(l=>cockpitRow(l,d.age_s)).join('')||'<div class="lane-status">Delegate reports no lanes</div>'):
     '<div class="lane-status">Lane status unknown</div>');tickCockpit()}
 function cockpitTime(t){return typeof t=='number'&&Number.isFinite(t)&&!isNaN(new Date(t*1000).getTime())}
 function cockpitStamp(t){return cockpitTime(t)?`<time datetime="${esc(new Date(t*1000).toISOString())}">${esc(new Date(t*1000).toLocaleString())}</time>`:'unknown'}
-function cockpitRow(l){
+const STALE_LANE_S=600;
+function laneAge(s){return s<3600?Math.floor(s/60)+' min ago':Math.floor(s/3600)+' h ago'}
+function cockpitRow(l,age){
+  const stale=typeof age=='number'&&age>=STALE_LANE_S;
   const state=l.state||'unknown';
   const reason=l.reason||(l.notes||[]).join('; ')||'unknown';
   const usage=(l.usage||[]).map(u=>{const known=typeof u.used_pct=='number'&&Number.isFinite(u.used_pct);
     return `<div class="usage-window"><span>${esc(u.window||'?')} · ${known?esc(u.used_pct)+'% used':'usage unknown'}</span>
       <progress max="100" ${known?`value="${Math.max(0,Math.min(100,u.used_pct))}"`:''} aria-label="${esc(l.name+' '+(u.window||'?')+' usage')}" ${known?'':'aria-valuetext="unknown"'}></progress>
       <span class="lane-label">Resets: ${cockpitStamp(u.resets_at)}</span></div>`}).join('');
-  return `<article class="lane" data-lane="${esc(l.name)}" data-state="${esc(state)}" aria-label="${esc(l.name)}">
+  return `<article class="lane${stale?' stale':''}" data-lane="${esc(l.name)}" data-state="${esc(state)}" aria-label="${esc(l.name)}">
     <div><b><span class="lane-emoji">${esc(l.emoji||(l.out===true?'🔴':l.out===false?'🟢':'❔'))}</span> ${esc(l.name)}</b>
-      <div class="lane-state">${esc(state)}</div><div><span class="lane-label">Model:</span> ${esc(l.model||'unknown')}</div>
+      <div class="lane-state">${esc(state)}${stale?` <span class="lane-age">· ${laneAge(age)}</span>`:''}</div><div><span class="lane-label">Model:</span> ${esc(l.model||'unknown')}</div>
       <div class="lane-reason"><span class="lane-label">Reason:</span> ${esc(reason)}</div></div>
     <div class="lane-unlock"><span class="lane-label">Unlock:</span> ${cockpitStamp(l.out_until)}
       ${cockpitTime(l.out_until)?`<span class="countdown" data-unlock="${l.out_until}"></span>`:'<span class="countdown">Countdown unknown</span>'}</div>

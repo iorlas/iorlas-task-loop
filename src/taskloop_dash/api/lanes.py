@@ -12,7 +12,7 @@ from taskloop_dash.views import names
 
 LOGIN_CMD: Final = {"Codex": "codex login", "Grok": "opencode auth login"}
 LANE_RECORD_MAX_AGE = 6 * 3600
-STATUS_MAX_AGE = 3600  # a snapshot older than this is said to be old, never shown as the lanes' state
+STATUS_MAX_AGE = 3600  # past this a snapshot also carries the hint to run tl lanes; its cards stay, greyed, with their age
 
 
 def logged_out(notes: str) -> bool:
@@ -76,9 +76,8 @@ class Lanes:
         if snap is None:
             return {"ok": False, "say": "no delegate status filed yet: run tl lanes"}
         now = self.env.clock()
-        if now - snap.at > STATUS_MAX_AGE:
-            return {"ok": False, "say": "delegate status is %s old: run tl lanes" % "%d min" % ((now - snap.at) // 60)}
         det = lane_banners(snap.lanes, now)
         return {"ok": not det, "out": sorted(det), "detail": det,
                 "needs_input": [{"what": n.what, "why": n.why, "how": n.how} for n in snap.needs_input],
-                "lanes": [card(ln) for ln in snap.lanes], "at": snap.at, "age_s": int(now - snap.at)}
+                "lanes": [card(ln) for ln in snap.lanes], "at": snap.at, "age_s": int(now - snap.at)} | (
+            {"hint": "delegate status is %d min old: run tl lanes" % ((now - snap.at) // 60)} if now - snap.at > STATUS_MAX_AGE else {})
