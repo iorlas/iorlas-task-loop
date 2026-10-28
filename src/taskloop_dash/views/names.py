@@ -1,6 +1,7 @@
 """Names and times the task view prints: run names, lanes by family, models, clock times. No regex: the engine's own text is
 split with str methods."""
 
+import mimetypes
 import os
 import time
 from typing import Final
@@ -19,6 +20,15 @@ def bead_of(run: str) -> str:
     bead, _, day = head.rpartition("-")
     ok = len(day) == 8 and day.isdigit() and len(rest) == 6 and rest.isdigit()
     return bead if ok and bead else ""
+
+
+IMAGES: Final = ("image/png", "image/jpeg", "image/gif", "image/webp")
+
+
+def kind_of(name: str) -> str:
+    """'image' (shown inline), 'pdf' (opens in a tab) or 'file' (download only: HTML is never run as a page)."""
+    ctype = mimetypes.guess_type(name)[0] or ""
+    return "image" if ctype in IMAGES else "pdf" if ctype == "application/pdf" else "file"
 
 
 def is_bead_id(text: object) -> bool:

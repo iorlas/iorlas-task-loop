@@ -7,12 +7,9 @@ from typing import Any, Final
 from taskloop_dash.env import Env
 from taskloop_dash.views import names
 
-INLINE: Final = ("image/png", "image/jpeg", "image/gif", "image/webp")  # served as an image; the rest as a download
+INLINE: Final = names.IMAGES  # served as an image, a PDF as a PDF; the rest as a download
 MAX_LIST = 200
-
-
-def kind_of(name: str) -> str:
-    return "image" if (mimetypes.guess_type(name)[0] or "") in INLINE else "file"
+kind_of = names.kind_of
 
 
 class Artifacts:

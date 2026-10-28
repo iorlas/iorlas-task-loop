@@ -174,6 +174,7 @@ def blocks_of(nodes: list[dict], titles_in: list | tuple = ()) -> tuple[list[dic
                     "fixes": None,
                     "write": m.get("write"),
                     "round": m.get("round"),
+                    "files": n.get("files", []) if last else [],
                     "t0": t0,
                     "t1": t1,
                     "secs": secs if secs is not None else (round(t1 - t0) if t0 and t1 else None),

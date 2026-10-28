@@ -201,3 +201,11 @@ count, files named, and the bead filed for the cause. Seen-once causes are dimme
 in delegate, the rest in the project the runs ran in. Run ids are the evidence; the acceptance says the next 3 comparable runs
 show no such item. A cause already filed (state file, or an open bead of that repo with a like title) gets a comment with its new
 runs; one whose bead was closed and recurs gets a new bead naming the old. `--dry-run` files nothing.
+
+## Screenshots and files (bead tl-7y6.11.2)
+
+The bead page opens with a gallery, under the title and above cost: the files in `ConfigDir.artifacts(bead)`, newest first, the first
+image large, PDFs as a file tile, the count in the header. Each timeline step that made files shows a 76 px thumb of each, read
+from the typed `Artifacts` record of that step (`views/nodes.py` puts them on the node, `blocks_of` on the block); the live view
+shows the same under the running step. A click opens an image full size and a PDF in a new tab; HTML is served as a download
+only (`api/artifacts.py`). Read only; no lightbox, filters or keep toggle.

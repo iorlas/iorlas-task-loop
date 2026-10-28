@@ -160,7 +160,7 @@ main{max-width:1180px;margin:0 auto;padding:22px 20px 80px}
 .because.b-answer{background:var(--ask-bg);color:var(--ask)}.because.b-resume{background:var(--wait-bg);color:var(--wait)}.because.b-retry{background:var(--warn-bg);color:var(--warn)}
 .rt{color:var(--mute);font-size:12px;margin-left:auto;white-space:nowrap;font-variant-numeric:tabular-nums}
 .chain{display:flex;flex-wrap:wrap;align-items:stretch;row-gap:12px}
-.step{display:flex;align-items:stretch}
+.step{display:flex;align-items:stretch}.bw{display:flex;flex-direction:column}
 .blk{position:relative;width:186px;text-align:left;background:var(--raise);border-radius:11px;box-shadow:inset 0 0 0 1px var(--line);padding:9px 11px 10px 14px;display:flex;flex-direction:column;gap:2px;transition:transform .12s,box-shadow .15s,background .15s;overflow:hidden}
 .blk::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--engine);opacity:.75}
 .blk.f-openai::before{background:var(--codex);opacity:1}.blk.f-claude::before{background:var(--claude);opacity:1}
@@ -431,7 +431,15 @@ details.rheld>summary .rsec::before{content:"▸";color:var(--mute);font-size:11
 #bpanel .why{color:var(--warn);margin-bottom:8px}
 #bpanel .cost{display:flex;flex-direction:column;gap:2px;background:var(--surface);border-radius:8px;padding:8px 12px;box-shadow:inset 0 0 0 1px var(--line)}#bpanel .cost span{color:var(--mute);font-size:12px}
 #bpanel .cm{margin:0 0 12px;padding:8px 12px;background:var(--surface);border-radius:8px;box-shadow:inset 0 0 0 1px var(--line)}#bpanel .cmh{font-size:12px;color:var(--mute);margin-bottom:4px}#bpanel .cmh b{color:var(--ink2)}
-#bpanel .art{display:block;margin:0 0 10px}#bpanel .art span{display:block;color:var(--mute);font-size:12px}
+#bpanel .gal{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start;margin:0 0 10px}
+.gi{display:block;border-radius:8px;overflow:hidden;box-shadow:inset 0 0 0 1px var(--line);background:var(--raise)}
+.gi img{display:block;width:120px;height:80px;object-fit:cover}.gi.big{flex-basis:100%}.gi.big img{width:100%;height:auto;max-height:340px;object-fit:contain}
+.gi.file,.thumb.file{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px;color:var(--mute);font-size:11px;text-decoration:none}
+.gi.file{width:120px;height:80px;box-sizing:border-box}.gi.file .fi,.thumb.file .fi{font-weight:700;color:var(--blue)}
+.fn{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.thumbs{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;align-self:flex-start;max-width:186px}
+.thumb{display:block;width:76px;border-radius:6px;overflow:hidden;box-shadow:inset 0 0 0 1px var(--line);background:var(--raise)}
+.thumb img{display:block;width:76px;height:52px;object-fit:cover}.thumb.file{width:76px;height:52px;box-sizing:border-box}
 #bpanel .hrun{margin:0 0 14px}#bpanel .hh{font-size:12.5px;color:var(--ink2);margin-bottom:4px}
 #bpanel .hb{display:grid;grid-template-columns:minmax(80px,auto) 1fr auto;gap:2px 10px;font-size:12.5px;padding:3px 0;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
 #bpanel .hb .hk{font-weight:600}#bpanel .hb .hr{color:var(--mute)}#bpanel .hb .hs{color:var(--mute);text-align:right}#bpanel .hb .ha{grid-column:1/-1;color:var(--mute);font-size:12px}
@@ -614,10 +622,10 @@ function blockHtml(r,b){const w=b.who||{};const sel=S.block&&S.block.node==b.nod
   const res=b.result||{};const meta=[dur(b.secs),tok(b.tokens)].filter(Boolean).join(' · ');
   const stg=b.stage_count?`<span class="tag stg" title="${esc(stageName(b))}">${b.stage_index}/${b.stage_count}</span>`:'';
   const sf=b.same_family?`<div class="bksf" title="${esc(SAMEFAM)}">same family as writer — weaker review</div>`:'';
-  return `<button class="blk f-${esc(w.family||'engine')}${sel?' sel':''}" data-run="${esc(r.run)}" data-node="${b.node}" data-k="${b.k}" aria-label="${esc(b.label+(b.stage_count?', '+stageName(b):''))}: details">
+  return `<div class="bw"><button class="blk f-${esc(w.family||'engine')}${sel?' sel':''}" data-run="${esc(r.run)}" data-node="${b.node}" data-k="${b.k}" aria-label="${esc(b.label+(b.stage_count?', '+stageName(b):''))}: details">
     <div class="bk1"><span class="bkk">${esc(b.label)}</span>${stg}</div>
     <div class="bkw">${whoLine(w)}</div>${meta||tags.length?`<div class="bkm"><span>${esc(meta)}</span>${tags.join('')}</div>`:''}${sf}
-    <div class="bkr">${chip('s-'+(res.status||'info'),res.text||'—')}</div></button>`}
+    <div class="bkr">${chip('s-'+(res.status||'info'),res.text||'—')}</div></button>${thumbsHtml(S.task,b.files)}</div>`}
 const SAMEFAM='The reviewer is the same model family as the writer of this stage, usually because no other lane was free. A reviewer from the same family tends to share the writer\'s blind spots, so this review is weaker evidence.';
 function stageName(b){return 'Stage '+b.stage_index+' of '+b.stage_count+(b.stage_title?' · '+b.stage_title:'')}
 function secKey(b){return b.stage_count?'s'+b.stage_index+'/'+b.stage_count:b.kind!='land'&&b.kind!='verify'&&b.fix?'f'+b.fix:null}
@@ -876,6 +884,13 @@ function timeHtml(t){if(!t||!t.segments||!t.segments.length)return'';const T=t.t
       .map(w=>[w,t.segments.filter(s=>s.what==w&&s.kind==k).reduce((a,s)=>a+s.secs,0)]).filter(x=>x[1]);
     return `<span class="sw tk-${k}"></span><span>${TKIND[k]}</span><b>${esc(dur(T[k]))}</b>`+(sub.length?`<div class="sub2"><span>${sub.map(x=>esc(x[0].replace(/_/g,' '))+' '+esc(dur(x[1]))).join(' · ')}</span></div>`:'')}).join('');
   return `<h3>Where the time went</h3><div class="tbar">${bar}</div><div class="tax"><span>${esc(hm(t.t0))}</span><span>${esc(dur(span))} start to ${t.segments.length&&t.t1>=t.now-5?'now':'end'}</span><span>${esc(hm(t.t1,true))}</span></div><div class="ttot">${rows}</div>`}
+function artUrl(bead,name){return '/api/artifact?bead='+encodeURIComponent(bead)+'&name='+encodeURIComponent(name)}
+function artTile(bead,a,cls){const u=artUrl(bead,a.name);  // plain links: an image opens full size, a PDF in a tab, HTML downloads
+  return a.kind=='image'?`<a class="${cls}" href="${u}" target="_blank" rel="noopener" title="${esc(a.name)}"><img src="${u}" alt="${esc(a.name)}" loading="lazy"></a>`
+    :`<a class="${cls} file" href="${u}" target="_blank" rel="noopener" title="${esc(a.name)}"><span class="fi">${a.kind=='pdf'?'PDF':'FILE'}</span><span class="fn">${esc(a.name)}</span></a>`}
+function galleryHtml(bead,list){if(!list.length)return'';
+  return `<div class="gallery" id="artgal"><h3>Screenshots and files · ${list.length}</h3><div class="gal">${list.map((a,i)=>artTile(bead,a,i==0&&a.kind=='image'?'gi big':'gi')).join('')}</div></div>`}
+function thumbsHtml(bead,files){return files&&files.length?`<div class="thumbs">${files.map(a=>artTile(bead,a,'thumb')).join('')}</div>`:''}
 function renderBead(){const p=$('bpanel'),sc=$('bscrim');if(!p)return;const on=S.view=='roadmap'&&!!S.bead;p.classList.toggle('on',on);sc.classList.toggle('on',on);p.setAttribute('aria-hidden',on?'false':'true');
   if(!on)return;const b=R.b&&R.b.id==S.bead?R.b:null,br=R.d&&R.d.briefs&&R.d.briefs[S.bead];
   if(!b){paint(p,'bpanel',`<div class="bh"><div><h2>${esc((br&&br.title)||S.bead)}</h2><div class="sub mono">${esc(S.bead)}</div></div><button class="iconbtn x" data-bclose="1" aria-label="Close">${X}</button></div><div class="bb"><div class="loading">Loading…</div></div>`);return}
@@ -883,15 +898,14 @@ function renderBead(){const p=$('bpanel'),sc=$('bscrim');if(!p)return;const on=S
   const pre=t=>t?`<div class="pre">${esc(t)}</div>`:'';
   const cm=[...b.comments].reverse().map(c=>`<div class="cm"><div class="cmh"><b>${esc(c.author||'')}</b> <span>${esc(when(c.at))}</span></div><div class="pre">${esc(c.text||'')}</div></div>`).join('');
   const deps=b.deps.map(d=>`<div class="dp"><span class="mono">${esc(d.id)}</span> ${esc(d.title||'')} <span class="muted">${esc(d.status||'')}${d.type?' · '+esc(d.type):''}</span></div>`).join('');
-  const arts=(b.artifacts||[]).map(a=>{const u='/api/artifact?bead='+encodeURIComponent(b.id)+'&name='+encodeURIComponent(a.name);
-    return a.kind=='image'?`<a class="art" href="${u}" target="_blank" rel="noopener"><img src="${u}" alt="${esc(a.name)}" loading="lazy" style="max-width:100%;max-height:220px"><span>${esc(a.name)}</span></a>`:`<div class="art"><a href="${u}" target="_blank" rel="noopener">${esc(a.name)}</a></div>`}).join('');
+  const arts=galleryHtml(b.id,b.artifacts||[]);
   const tot=(b.runs||[]).reduce((a,r)=>a+((r.tokens&&r.tokens.in)||0),0);
   const cost=br&&br.tok?`<div class="cost"><b>${esc(costLine(br,R.d&&R.d.stats))}</b><span>${br.runs} run${br.runs>1?'s':''} · ${br.blocks} steps · ${esc(dur(br.secs))} in all</span></div>`:'';
   const why=br&&br.why?`<div class="why">${esc(String(br.why).split('\n')[0].slice(0,220))}</div>`:'';
   paint(p,'bpanel',`<div class="bh"><div style="min-width:0"><h2>${esc(b.title||S.bead)}</h2>
       <div class="sub"><span class="mono">${esc(b.id)}</span> <a class="livebtn" href="/live?bead=${encodeURIComponent(b.id)}">live</a> · ${esc(b.status||'')}${b.priority!=null?' · P'+b.priority:''}${b.assignee?' · '+esc(b.assignee):''} ${(b.labels||[]).map(l=>`<span class="tag">${esc(l)}</span>`).join(' ')}</div></div>
       <button class="iconbtn x" data-bclose="1" aria-label="Close">${X}</button></div>
-    <div class="bb">${why}${cost}${timeHtml(b.timeline)}${sec('Artifacts ('+(b.artifacts||[]).length+')',arts)}${sec('Description',pre(b.description))}${sec('Acceptance criteria',pre(b.acceptance))}${sec('Design',pre(b.design))}${sec('Notes',pre(b.notes))}
+    <div class="bb">${why}${arts}${cost}${timeHtml(b.timeline)}${sec('Description',pre(b.description))}${sec('Acceptance criteria',pre(b.acceptance))}${sec('Design',pre(b.design))}${sec('Notes',pre(b.notes))}
       ${sec('Comments ('+b.comments.length+', newest first)',cm)}${sec('Transitions',histHtml(b.runs||[]))}${sec('Depends on',deps)}
       <a class="go" href="#task=${encodeURIComponent(b.id)}&repo=${encodeURIComponent((R.d&&R.d.repo)||S.repo)}">Open the full run timeline, transcripts and checks</a></div>`)}
 document.addEventListener('click',e=>{if(e.target.closest('[data-bclose]')||e.target.id=='bscrim')closeBead()});

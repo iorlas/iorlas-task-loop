@@ -1,6 +1,7 @@
 """The records of one engine run folded into nodes: a node is one step with its worker calls, lines and moves."""
 
 from taskloop.contracts import log as rec
+from taskloop_dash.views import names
 from taskloop_dash.views.names import num
 
 META = ("stage", "stages", "write", "round", "fix")
@@ -73,6 +74,7 @@ def new_node(r: rec.StepStart) -> dict:
         "meta": meta,
         "sessions": [],
         "lines": [],
+        "files": [],
         "moves": [],
         "checks": None,
         "outcome": "",
@@ -137,6 +139,8 @@ class NodeBuilder:
             self.current()["close"] = {"outcome": str(r.outcome), "why": r.why, "sha": r.sha, "why_code": r.why_code}
         elif (ln := line_of(r, i)) is not None:
             self.current()["lines"].append(ln)
+            if isinstance(r, rec.Artifacts):  # the step's files, for the thumbs under its block
+                self.node_for(r.id)["files"] += [{"name": n, "kind": names.kind_of(n)} for n in r.names]
 
     def done(self, recs: list) -> list[dict]:
         if self.nodes and self.nodes[-1]["t1"] is None:
