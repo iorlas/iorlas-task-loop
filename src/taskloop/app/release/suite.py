@@ -70,7 +70,8 @@ def host_suite(tool_root: Path, repo: Path, record: bool = False) -> None:
     seconds to tests/durations.json (what the splitter balances on) when the run is green."""
     n = workers()
     say(f"running the full suite in {n} shards, then the serial group")
-    shard = [sys.executable, str(tool_root / "tests" / "shard.py")]
+    own = repo / "tests" / "shard.py"  # the tree under test runs with its own support code, not the installed checkout's
+    shard = [sys.executable, str(own if own.is_file() else tool_root / "tests" / "shard.py")]
     root = str(repo / "tests")
     r = run([*shard, "plan", str(n), "--root", root], repo, check=False)
     try:
