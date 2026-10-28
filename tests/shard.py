@@ -1,17 +1,16 @@
 """Split the suite across CI shards: python tests/shard.py run INDEX COUNT runs shard INDEX (1-based) of COUNT.
 
-Every test is in exactly one shard. Units (a class, or a chunk of a big one) are placed heaviest first on the lightest shard (weight: its test
-count times WEIGHT, the measured seconds per test of its module), ties broken by name, so the split is stable for a given tree.
+Every test is in exactly one shard. Units (a class, or a chunk of a big one) are placed heaviest first on the lightest shard (weight: the sum of its tests' measured seconds in tests/durations.json), ties broken by name, so the split is stable for a given tree.
 `python tests/shard.py run INDEX COUNT` runs it. `python tests/shard.py --check COUNT` fails when a test would run in no shard or in two.
 
 The release gate (dev/release.py) uses the same split on one machine: `plan COUNT --root DIR` prints {"shards": [[id]], "serial": [id]},
-the tests named in SERIAL left out of the shards; `ids FILE --root DIR [--times F] [--parent PID]` runs the ids listed in FILE (one per line) in this process.
+the tests named in SERIAL left out of the shards; `ids FILE --root DIR [--times F] [--parent PID] [--max-mb MB]` runs the ids listed in FILE (one per line) in this process.
 """
 import argparse
 import json
 import os
+import signal
 import sys
-import threading
 import time
 import unittest
 from typing import Any
@@ -20,11 +19,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-# module -> seconds per test, measured on a Mac with 14 shards at once (a module not listed counts 0.3): what a test costs sets which shard it joins.
-WEIGHT = {"test_engine": 3.7, "test_stages": 3.1, "test_stages_visual": 3.1, "test_stages_land": 3.1, "test_look": 5.3, "test_checks_speed": 2.1, "test_trace_records": 5.1, "test_release": 4.3,
-          "test_verify_noblock": 3.3, "test_doctor": 0.9, "test_slot_git": 0.95, "test_land_lock": 1.5, "test_held_branch": 0.55}
-DEFAULT_WEIGHT = 0.3
-DURATIONS = HERE / "durations.json"  # {test id: seconds}, measured by `python3 dev/suite.py --record`; a test not in it falls back to WEIGHT
+DEFAULT_WEIGHT = 0.3  # seconds a test costs when tests/durations.json has no entry for it (a new test)
+DURATIONS = HERE / "durations.json"  # {test id: seconds}, measured by `python3 dev/suite.py --record`; a test not in it counts DEFAULT_WEIGHT
 
 
 def load_durations(root=HERE):
@@ -36,9 +32,9 @@ def load_durations(root=HERE):
 
 
 def cost(test_id, durations):
-    """What a test costs the shard that runs it: its measured seconds, else the per-test weight of its module."""
+    """What a test costs the shard that runs it: its measured seconds, else DEFAULT_WEIGHT."""
     d = durations.get(test_id)
-    return d if isinstance(d, (int, float)) else WEIGHT.get(test_id.split(".")[0], DEFAULT_WEIGHT)
+    return d if isinstance(d, (int, float)) else DEFAULT_WEIGHT
 
 # Tests that must not share a clock, a port, a lock or a process group with another test running at the same moment, so the release gate
 # runs them in ONE process after the parallel shards. (module, class or None for the whole module, reason); found by measurement and by
@@ -126,20 +122,22 @@ class Timed(unittest.TextTestResult):
 
 def exit_with_parent(parent, every=1.0):
     """Leave this process once its parent `parent` (the launcher's pid) is gone: nobody reads this shard's result, and an orphan that
-    holds gigabytes helps no one. (An EOF on a pipe from the launcher would say the same, but stream-proc's run gives a child /dev/null
-    for stdin.) os._exit: no cleanup can hang on a dead parent."""
-    def watch():
-        while os.getppid() == parent:
-            time.sleep(every)
-        os._exit(3)
-    threading.Thread(target=watch, daemon=True, name="parent-watch").start()
+    holds gigabytes helps no one. A timer signal, not a watcher thread: with a second thread alive, this suite's shards grew from ~150 MB
+    to 2-3 GB (measured). (An EOF on a pipe from the launcher would say the same, but stream-proc's run gives a child /dev/null for stdin.)
+    os._exit: no cleanup can hang on a dead parent."""
+    def check(_signum, _frame):
+        if os.getppid() != parent:
+            os._exit(3)
+    check(0, None)
+    signal.signal(signal.SIGALRM, check)
+    signal.setitimer(signal.ITIMER_REAL, every, every)
 
 
-MAX_AS = 4 << 30  # a shard's address space: a healthy one peaks near 250 MB resident; a runaway gets MemoryError, not the host
-
-
-def cap_memory(limit=MAX_AS):
-    """Linux only (macOS does not enforce RLIMIT_AS): cap this process and its children, never raising an existing lower cap."""
+def cap_memory(megabytes):
+    """Linux only (macOS does not enforce RLIMIT_AS): cap this process's address space, and its children's each, at `megabytes`, never
+    raising an existing lower cap. A runaway test gets MemoryError (red, in the suite log) instead of starving the host. A healthy
+    shard's address space peaks near 430 MB (resident ~250), so the release gate's 2048 MB budget leaves 5x."""
+    limit = megabytes << 20
     try:
         import resource
         soft, hard = resource.getrlimit(resource.RLIMIT_AS)
@@ -167,14 +165,15 @@ if __name__ == "__main__":
         ap.add_argument("arg")
         ap.add_argument("--root", default=str(HERE))
         ap.add_argument("--times")
+        ap.add_argument("--max-mb", type=int, default=0, help="cap this process's address space (Linux), in MB")
         ap.add_argument("--parent", type=int, default=0, help="exit when this pid is no longer this process's parent")
         a = ap.parse_args()
         sys.path.insert(0, a.root)
         if cmd == "plan":
             print(json.dumps(plan(int(a.arg), Path(a.root))))
             sys.exit(0)
-        if cmd == "ids":
-            cap_memory()
+        if a.max_mb:
+            cap_memory(a.max_mb)
         if a.parent:  # the release gate's pid: its death ends this shard (see exit_with_parent)
             exit_with_parent(a.parent)
         ids = [l for l in Path(a.arg).read_text(encoding="utf-8").splitlines() if l.strip()]

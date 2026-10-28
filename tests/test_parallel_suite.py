@@ -70,7 +70,7 @@ class Splitter(unittest.TestCase):
         for i, s in enumerate(shards):
             load[i] = sum(shard.cost(t, d) for t in s)
         self.assertEqual(shard.cost("test_c.D.test_3", d), shard.DEFAULT_WEIGHT)
-        self.assertEqual(shard.cost("test_engine.X.test_new", d), shard.WEIGHT["test_engine"])
+        self.assertEqual(shard.cost("test_engine.X.test_new", d), shard.DEFAULT_WEIGHT)
         self.assertEqual(shard.cost("test_a.A.test_1", d), 100)
         heavy = [sh for sh in shards if "test_a.A.test_1" in sh][0]
         self.assertEqual(sorted(heavy), ["test_a.A.test_1", "test_a.A.test_2"])  # 200 s alone; the rest (5 tests) share the other

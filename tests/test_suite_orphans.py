@@ -13,6 +13,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 import stream_proc
 from taskloop.adapters import landlock, procs
 from taskloop.app.release import suite
+from taskloop.app.release.shell import Abort
 from support.waits import until
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -115,6 +116,45 @@ class OneSuitePerHost(unittest.TestCase):
                 t.join(30)
                 self.assertTrue(ran.is_set())
         self.assertTrue(any("waiting for the suite lock" in m for m in said))
+
+
+class MemoryLimits(unittest.TestCase):
+    def test_a_shard_past_its_address_space_cap_is_red_with_a_memory_error_and_the_other_shard_is_green(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "tests"
+            root.mkdir()
+            (root / "test_ok.py").write_text("import unittest\nclass A(unittest.TestCase):\n    def test_1(self): pass\n")
+            (root / "test_hog.py").write_text("import unittest\nclass H(unittest.TestCase):\n    def test_1(self): bytearray(900 << 20)\n")
+            todo = [("shard1", ["test_ok.A.test_1"]), ("shard2", ["test_hog.H.test_1"])]
+            with mock.patch.object(suite, "SHARD_BUDGET_MB", 300):
+                parts = suite.run_shards([sys.executable, str(ROOT / "tests" / "shard.py")], str(root), Path(d), Path(d), todo)
+        self.assertEqual([p.code for p in parts], [0, 1], [p.out for p in parts])
+        self.assertIn("MemoryError", parts[1].out)
+        self.assertIn("OK", parts[0].out)
+
+    def test_a_host_with_less_free_memory_than_the_budgets_is_refused_in_one_line(self):
+        with tempfile.TemporaryDirectory() as d:
+            info = Path(d) / "meminfo"
+            info.write_text("MemTotal: 99999999 kB\nMemAvailable:     3145728 kB\nMemFree: 1 kB\n")
+            with mock.patch.object(suite, "MEMINFO", info):
+                self.assertEqual(suite.available_mb(), 3072)
+                suite.refuse_if_short(1, suite.available_mb())  # 3072 MB covers one shard
+                with self.assertRaises(Abort) as raised:
+                    suite.refuse_if_short(3, suite.available_mb())
+            line = str(raised.exception)
+            self.assertEqual(len(line.splitlines()), 1)
+            self.assertIn("3072 MB available", line)
+            self.assertIn(f"{3 * suite.SHARD_BUDGET_MB} MB needed", line)
+
+    def test_the_suite_refuses_before_planning_when_memory_is_short(self):
+        with tempfile.TemporaryDirectory() as d:
+            info = Path(d) / "meminfo"
+            info.write_text("MemAvailable:     1024 kB\n")
+            with mock.patch.object(suite, "MEMINFO", info), mock.patch.object(suite, "suite_lock_path", return_value=Path(d) / "l.lock"), \
+                    mock.patch.object(suite, "run") as planned, mock.patch.dict(os.environ, {"TASK_LOOP_SUITE_WORKERS": "2"}):
+                with self.assertRaises(Abort):
+                    suite.host_suite(ROOT, ROOT)
+            planned.assert_not_called()
 
 
 if __name__ == "__main__":

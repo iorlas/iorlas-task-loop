@@ -24,7 +24,8 @@ from taskloop.app.release.shell import Abort, git, run, say
 
 LONG = 3 * 3600.0  # a hang guard for a whole gate run
 SHARD_WALL_S = 1200.0  # one shard's wall limit (the longest recorded shard is ~2.5 min at 3 workers: 8x); then its tree is stopped
-SHARD_BUDGET_MB = 2048  # the RAM one shard may count on (a healthy shard peaks near 250 MB; the rest is the tests' own children)
+SHARD_BUDGET_MB = 2048  # per shard: sets the shard count (RAM / budget), caps its address space (healthy ~430 MB) and is the refusal bar
+MEMINFO = Path("/proc/meminfo")
 
 
 def save_output(out: str) -> Path:
@@ -45,7 +46,7 @@ def red(out: str, lines: list[str]) -> Abort:
 def available_mb() -> int | None:
     """RAM that can be used now, MB: MemAvailable on Linux, else the free pages sysconf reports (macOS: physical pages)."""
     try:
-        for line in Path("/proc/meminfo").read_text(encoding="utf-8").splitlines():
+        for line in MEMINFO.read_text(encoding="utf-8").splitlines():
             if line.startswith("MemAvailable:"):
                 return int(line.split()[1]) // 1024
     except (OSError, ValueError, IndexError):
@@ -114,7 +115,9 @@ def run_shard(argv: list[str], cwd: str, env: dict[str, str], name: str, stop: t
 def run_shards(shard: list[str], root: str, repo: Path, work: Path, todo: list[tuple[str, list[str]]]) -> list[Shard]:
     """`todo` shards at once, each in its own HOME; whatever ends this stops every shard tree first."""
     stop = threading.Event()
-    watch = ["--parent", str(os.getpid())] if "--parent" in Path(shard[-1]).read_text(encoding="utf-8") else []
+    text = Path(shard[-1]).read_text(encoding="utf-8")  # a tree older than these flags runs without them
+    watch = ["--parent", str(os.getpid())] if "--parent" in text else []
+    watch += ["--max-mb", str(SHARD_BUDGET_MB)] if "--max-mb" in text else []
 
     def go(name: str, ids: list[str]) -> Shard:
         f = work / (name + ".ids")
@@ -151,8 +154,17 @@ def host_suite(tool_root: Path, repo: Path, record: bool = False) -> None:
         _host_suite(tool_root, repo, record)
 
 
+def refuse_if_short(n: int, mem_mb: int | None) -> None:
+    """One line and out when the free RAM is below the n shards' budgets together: no wait, no retry (the suite lock was won already)."""
+    need = n * SHARD_BUDGET_MB
+    if mem_mb is not None and mem_mb < need:
+        raise Abort(f"not enough free memory for the suite: {mem_mb} MB available, {need} MB needed "
+                    f"({n} shards x {SHARD_BUDGET_MB} MB); nothing run")
+
+
 def _host_suite(tool_root: Path, repo: Path, record: bool) -> None:
     n = workers()
+    refuse_if_short(n, available_mb())
     say(f"running the full suite in {n} shards, then the serial group")
     own = repo / "tests" / "shard.py"  # the tree under test runs with its own support code, not the installed checkout's
     shard = [sys.executable, str(own if own.is_file() else tool_root / "tests" / "shard.py")]
