@@ -119,8 +119,8 @@ invalid_output, lane_out (a new thread), lane_wait, paused, decision/verify/tick
 verify_wrong, verified, gate_red, conflict, push_race, landed, done, failed, stopped. Check logs keep every round:
 `checks/NN-id.rK.log`, `engine-checks.rK.json` (`engine-checks.json` is the latest). `traces.jsonl` lines add
 `prev_run`, `started_because`, `ask`, and `fingerprint`: a stable slug of the failure cause (bead ids, session refs,
-paths, shas, numbers and quoted payloads normalised; empty for a landed/done run) so the lifecycle report can group
-runs across weeks.
+paths, shas, numbers and quoted payloads normalised; empty for a landed/done run) so failures can be grouped
+across weeks.
 There is no `judge` step: the engine has none yet.
 
 ## Roadmap (v4, 2026-10-23, replaces the Plan graph)

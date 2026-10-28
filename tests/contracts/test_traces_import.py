@@ -1,11 +1,11 @@
-"""dev/traces_import.py: v1 traces enter RunTrace v2 and `tl report lifecycle` reads the same numbers from them."""
+"""dev/traces_import.py: v1 traces enter RunTrace v2."""
 import contextlib
 import io
 import json
 import sys
 import tempfile
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -13,24 +13,11 @@ import support.paths  # noqa: E402,F401
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(ROOT / "dev"))
-import lifecycle  # noqa: E402
 import traces_import as ti  # noqa: E402
 from taskloop.contracts import codec, stores, paths, trace  # noqa: E402
 
 REAL = paths.ConfigDir().traces()
-BASELINE = json.loads((ROOT / "docs" / "study" / "baselines-2026-10-25.json").read_text(encoding="utf-8"))
-TZ = timezone(timedelta(hours=3))
-SINCE = datetime(2026, 10, 18, 0, 0, tzinfo=TZ).timestamp()
-UNTIL = datetime(2026, 10, 25, 20, 7, 28, tzinfo=TZ).timestamp()
 LIFESIM = "https://github.com/yoselabs/lifesim.git"
-# the baseline metrics a trace row alone decides (the rest read engine logs, ask files, delegate history or git)
-TRACE_ONLY = ("landed_beads", "landed_beads_per_day", "slot_min", "slot_min_per_landed_bead", "non_landing_slot_min",
-              "non_landing_slot_min_share", "beads_landed_on_run_1", "beads_touched", "landed_run1_share_touched", "runs",
-              "runs_per_landed_bead", "dead_time_min", "fingerprint_top5", "slot_min_over_180", "uncached_input_tokens_per_landed_bead", "uncached_input")
-
-
-def week(rows):
-    return lifecycle.lifecycle_report(rows, since=SINCE, until=UNTIL, whole=True)["weeks"][0]
 
 
 def row(run, **kw):
@@ -68,11 +55,6 @@ class ImportRow(unittest.TestCase):
                 self.assertEqual(codec.from_json(trace.RunTrace, json.loads(json.dumps(codec.to_json(rec)))), rec)
                 self.assertEqual(str(rec.run), r["run"])
                 self.assertEqual(rec.repo_url, LIFESIM)
-
-    def test_the_fields_the_report_reads_are_carried_exactly(self):
-        w = week(MESSY)
-        self.assertEqual(week([codec.to_json(ti.import_row(r)) for r in MESSY]), w)
-        self.assertEqual((w["runs"], w["landed_beads"]), (3, 1))
 
     def test_the_fingerprint_is_carried_not_recomputed(self):
         self.assertEqual(ti.import_row(MESSY[2]).fingerprint, "busy#1")
@@ -140,7 +122,7 @@ class ImportFile(unittest.TestCase):
 
 @unittest.skipUnless(REAL.is_file(), "no ~/.config/task-loop/traces.jsonl on this machine")
 class RealTraces(unittest.TestCase):
-    """The 10-25 baseline window over the owner's real traces: the imported rows give the same report, to the last digit."""
+    """The owner's real traces all import."""
 
     @classmethod
     def setUpClass(cls):
@@ -151,20 +133,6 @@ class RealTraces(unittest.TestCase):
     def test_every_v1_row_imports(self):
         for r in self.rows:
             ti.import_row(r)
-
-    def test_lifecycle_report_is_identical_before_and_after(self):
-        imported = [codec.to_json(ti.import_row(r)) for r in self.lifesim]
-        self.assertEqual(week(imported), week(self.lifesim))
-        self.assertEqual(lifecycle.lifecycle_report(imported, since=SINCE, until=UNTIL), lifecycle.lifecycle_report(
-            self.lifesim, since=SINCE, until=UNTIL))
-
-    def test_the_trace_only_baseline_numbers_are_reproduced_with_zero_difference(self):
-        w = week([codec.to_json(ti.import_row(r)) for r in self.lifesim])
-        want = BASELINE["metrics"]
-        self.assertGreater(w["runs"], 300)
-        for k in TRACE_ONLY:
-            with self.subTest(k):
-                self.assertEqual(w[k], want[k])
 
 
 if __name__ == "__main__":

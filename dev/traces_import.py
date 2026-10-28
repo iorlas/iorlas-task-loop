@@ -5,7 +5,7 @@
 
 Reads the v1 file, writes one RunTrace v2 line per row to --out (never to the source), and prints a summary: rows read, rows
 written, rows refused (with why), and the v1 keys that have no place in v2. Run once, then put the output where the v2 reader
-looks. Every field the lifecycle report reads is carried byte for byte, so `tl report lifecycle` gives the same numbers.
+looks. Every field a v1 row carries that v2 has a place for is carried byte for byte.
 """
 import argparse
 import collections

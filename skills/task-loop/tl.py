@@ -2126,10 +2126,8 @@ def main(argv=None):
     p.add_argument("--repo")
     p.add_argument("--now", action="store_true")
     p = sp.add_parser("report", help="the M2 scorecard: landed, asks, parked, paused, failed, crashes, lost work")
-    p.add_argument("kind", nargs="?", choices=["lifecycle"],
-                   help="lifecycle: the weekly lifecycle metrics (default: the M2 scorecard)")
     p.add_argument("--repo")
-    p.add_argument("--since", metavar="T", help="ISO, HH:MM (today) or a duration back (12h); default 24h (lifecycle: 28d)")
+    p.add_argument("--since", metavar="T", help="ISO, HH:MM (today) or a duration back (12h); default 24h")
     p.add_argument("--until", metavar="T", help="as --since; default now")
     p.add_argument("--json", action="store_true")
     p.add_argument("--planner", action="store_true", help="only the planner table: calls and input tokens per bead")

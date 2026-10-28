@@ -5218,7 +5218,7 @@ GHERKIN_TEST = re.compile(r"^\s*Scenario( Outline)?:")  # a use-case scenario (R
 WAIT_KINDS = {"a lane": "lane", "a Unity slot": "unity_slot", "an editor lock": "editor_lock", "a delegate crash": "delegate_crash",
               "the network": "network"}  # add_wait's wording -> the `wait` record's kind (the dashboard names them)
 QUIET_KINDS = ("end", "transition", "checks", "run", "wait", "wait_start", "gate", "vendor_error", "kill",
-               "cache")  # trace records for the dashboard and the lifecycle report, never printed
+               "cache")  # trace records for the dashboard, never printed
 RUN_STEM = re.compile(r"^\d{8}-\d{6}$")  # <bead>-<YYYYMMDD-HHMMSS>: an engine log of that bead, not of a child bead
 
 
