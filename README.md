@@ -17,7 +17,7 @@ Claude Code. macOS and Linux (also inside a container); Windows is not supported
 
 Required: [iorlas-delegate](https://github.com/iorlas/iorlas-delegate) 0.14+ from the same marketplace
 (`claude plugin install iorlas-delegate@iorlas-marketplace`). The engine runs every AI step through it
-([worker-run v1](docs/contracts/worker-run-v1.md)); it picks lane and model from live plan limits. You never call it
+([worker-run v3](docs/contracts/worker-run-v3.md)); it picks lane and model from live plan limits. You never call it
 yourself. Its runs and lane limits reach the dashboard as [agent-runs v1](docs/contracts/agent-runs-v1.md) records.
 
 ## What the loop does
@@ -31,8 +31,7 @@ python3 skills/task-loop/tl.py run-task <bead id> --worktree <dir>
 The engine claims the bead and runs reset → plan → per stage (write → checks run by the engine → review by the other
 model family) → gate → land → close, each AI step a headless worker (Codex or `claude -p`) with a schema-checked
 answer. Code routes and accepts by rule (checks green, nothing blocking in the review); close always runs. Its output is verbose with
-⚠ lines for anything the watching session should react to. Settings: `.task-loop.json` → `engine`. Design:
-[docs/design/coordinator-less.md](docs/design/coordinator-less.md).
+⚠ lines for anything the watching session should react to. Settings: `.task-loop.json` → `engine`.
 
 Or let the loop run the queue by itself, one bead after another, each in any free slot:
 

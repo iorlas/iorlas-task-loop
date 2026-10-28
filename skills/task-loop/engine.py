@@ -4,8 +4,7 @@
     tl.py run-task ID [--worktree DIR] [--dry-run]
 
 Code routes; AI nodes only produce structured outputs (validated against a schema). The close step always runs.
-A coordinator session may start it and watch it (attended mode); nothing here needs one. Design:
-docs/design/coordinator-less.md. Python 3.8+, standard library only.
+A coordinator session may start it and watch it (attended mode); nothing here needs one. Python 3.8+, standard library only.
 """
 
 import contextlib
@@ -3307,7 +3306,7 @@ class Engine:
         return self.checker.split().text(checks, skip)
 
     def where(self, node, checks=(), failed=None, listed=()):
-        """What the step is for, never what its sandbox allows: delegate tells each worker that (worker-run v2).
+        """What the step is for, never what its sandbox allows: delegate tells each worker that (worker-run v3).
         For the writer: which checks it may run (fast ones) and which are the engine's (slow ones), minus `listed` (the
         commands the stage's own check list already names)."""
         if node == "write":

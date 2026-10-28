@@ -135,7 +135,7 @@ lets go. `#plan` links open the Roadmap; the task list moved to `#tasks`.
 - Held back: ready beads the loop skips for now (an area is busy), most unblocking first, same tree.
 `GET /api/roadmap?repo` -> `taskloop_dash/views/roadmap.build()` (pure); inputs: `graph.build()` nodes and edges, `loop.queue()`, the
 loop's state files and pass log (`loop/<key>*.json`, `<key>.jsonl`, read only: a dead loop's file is left), the engine
-log's blocks (`timeline.run_timeline`). Mockups of the three options considered: `docs/design/mockups/`.
+log's blocks (`timeline.run_timeline`).
 
 ### Cockpit layer (2026-10-23, after a Sonnet ops-UX review of the Roadmap)
 Gaps found: asks were one badge, a lane outage and a 51-park single-cause storm were invisible, churn and token spend

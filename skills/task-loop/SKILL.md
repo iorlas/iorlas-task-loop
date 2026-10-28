@@ -50,7 +50,7 @@ writer reads first). The profile gives:
                         "retry": 1}]}}
 ```
 
-`engine.host: true` (the 0.6 name `no_sandbox` still works) or `engine.host_beads: [ids]` says the work needs the
+`engine.host: true` or `engine.host_beads: [ids]` says the work needs the
 host: the writer runs Unity and tests itself, on this machine. Only the `.task-loop.json` committed on the base branch
 (`origin/main`) counts: a worker can label its own bead or edit a checkout's config, but not main without review and
 the gate. The labels `host` / `no-sandbox` alone grant nothing (a ⚠ says so); `sandbox` still turns it off for one bead.
@@ -307,13 +307,7 @@ continues the task branch (its earlier work is kept) and the next plan reads the
 - Every problem you notice gets a bead (`tl bd create ... --deps discovered-from:<id>`); problems with the engine
   itself go to iorlas-task-loop.
 
-## 4. By hand (only when the engine cannot run here)
-
-When the engine cannot run here (delegate missing or not set up, no Codex or `claude` CLI login), do the same steps
-yourself in the same order, with the same records: `tl claim`, `tl stage`, plan in the bead, write through workers, run the checks
-yourself, a reviewer from another model family on every stage, `tl land`, `tl close` or `tl block`.
-
-## 5. Stop
+## 4. Stop
 
 No candidate left: `tl bd dolt push`, the profile's close step; slots on: `tl slot release <name>`; slots off:
 `tl worktree sunset --self-too` (removes your worktree if it is clean). One report to the owner: beads closed, beads
@@ -536,10 +530,10 @@ The loop needs these kinds of worker; it does not care what runs them.
 | hard | a subtask two writers failed | |
 
 How to get them: from the **iorlas-delegate** plugin, which every task-loop install has. You don't talk to it; the
-engine does, one `route.py run ROLE` per AI step (contract: `docs/contracts/worker-run-v1.md` in this plugin's repo).
+engine does, one `route.py run ROLE` per AI step (contract: `docs/contracts/worker-run-v3.md` in this plugin's repo).
 Delegate picks lane, model and effort from its role table and live plan limits, and never spends API credit for the
 engine. Its role names (reader → `light`, writer → `worker`, reviewer → `reviewer` with the writer's family, hard →
-`hard`) matter only in §4 by hand, where you ask delegate's skill for each worker yourself. The engine has no verifier
+`hard`) are the Workers table's second column. The engine has no verifier
 or judge: its own checks are the facts, and accept is a rule (checks green, nothing blocking in the review).
 
 The one thing the engine cannot do itself: read your Claude usage. Since delegate 0.18 Claude steps run without a
@@ -547,7 +541,7 @@ reading, but only a fresh reading keeps delegate's reserve for your own sessions
 20 minutes: call `get_usage`, then `$TL usage '<plan.windows as JSON>'`.
 
 Any launcher can put its runs on the dashboard by writing agent-runs v1 records
-(`docs/contracts/agent-runs-v1.md` in this plugin's repo); otherwise record them with `tl worker`.
+(`docs/contracts/agent-runs-v1.md` in this plugin's repo).
 
 ## Beads are the record
 

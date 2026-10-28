@@ -12,7 +12,7 @@ returns an error for that request; parsers skip lines they cannot read).
 | loop state `~/.config/task-loop/loop/<repo>-<hash>.<pid>.json` (`v` 2), commands `...command.json` (`v` 1) | **us** (`taskloop.contracts.loop.LoopState`, `LoopCommand`) | `LoopFiles` (`taskloop.app.loop.files`): the loop writes both, `tl` writes commands; the dashboard (`taskloop_dash.readers.loops`) reads | a file of another `v` is no loop; the dashboard shows no queue without a live loop |
 | agent-runs v1 (`~/.config/agent-runs`) | **us** (`docs/contracts/agent-runs-v1.md`); delegate is one producer | `contract_runs`, `contract_lanes` | nothing silently: other major versions are skipped |
 | Claude Code transcripts `~/.claude/projects/*/<session>.jsonl`, subagents `<session>/subagents/agent-*.jsonl` + `.meta.json` | Anthropic, undocumented | `claude_events`, `transcript_of`, `find_transcript` (a task-view block's session) | orchestrator and subagent logs |
-| `$CLAUDE_CODE_SESSION_ID`, `$CLAUDE_PID` in a session's Bash env; SessionStart hook stdin (`session_id`, `transcript_path`) | Anthropic | `tl.actor`, `tl.session_alive`, `tl.cmd_hook` | the per-session bd actor (fallbacks exist), heartbeat exit, log lookup |
+| `$CLAUDE_CODE_SESSION_ID`, `$CLAUDE_PID` in a session's Bash env; SessionStart hook stdin (`session_id`, `transcript_path`) | Anthropic | `tl.actor`, `tl.cmd_hook` | the per-session bd actor (fallbacks exist), log lookup |
 | codex plugin job state `~/.claude/plugins/data/codex-openai-codex/state/*/jobs/*.json` (+ `.log`) | OpenAI's codex plugin | `codex_log_events` | Codex runs started through the plugin (they carry the launching `sessionId`) |
 | Codex rollouts `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` | OpenAI | `rollout_events` (with `exec_cmds` for the `exec` tool's code input), `find_transcript` | Codex runs started with `codex exec` |
 | OpenCode sessions, SQLite `~/.local/share/opencode/opencode.db` (`OPENCODE_DB` overrides), tables `session`, `message`, `part` only (never the credential tables); delegate's family `xai`, kind `opencode` | OpenCode | `tl.opencode_*`, `opencode_events` (ADAPTERS `opencode`), `tl.transcript_of("xai", ses_...)` -> `opencode:ses_...`, `context_tokens` | Grok lane runs; read only, short timeout, a missing DB or unknown id is empty |
@@ -29,13 +29,13 @@ delegate directly). The two touch in three places only:
    reviewer, hard) to delegate's role names. That mapping is the only delegate vocabulary in this plugin. When
    delegate renames roles or changes how it is asked, update that table.
 
-3. **worker-run v1** (`docs/contracts/worker-run-v1.md`): the engine runs each AI step with `route.py run ROLE` and
+3. **worker-run v3** (`docs/contracts/worker-run-v3.md`): the engine runs each AI step with `route.py run ROLE` and
    feeds usage with `route.py status --claude-usage` (`tl usage`). Code: `engine.find_route`, `engine.call_delegate`,
    `Engine.ai_delegate`, `tl.py` `usage`. Only route.py from delegate 0.14.0 or later is used; none installed, or an
    answer with another `v`, blocks the task with what to do. Delegate keeps its state in its plugin data dir, so always call the
    installed route.py, never a checkout's (a checkout reads `~/.config/delegate`, another store).
 
-Never read delegate's files, and call `route.py` only through worker-run v1. A new need from delegate becomes a new optional
+Never read delegate's files, and call `route.py` only through worker-run v3. A new need from delegate becomes a new optional
 field or record in agent-runs v1 (minor) or v2 (breaking: change the spec, make the reader accept both, then the
 producer).
 

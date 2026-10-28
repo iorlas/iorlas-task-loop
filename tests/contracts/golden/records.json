@@ -793,7 +793,6 @@
     }
    ],
    "host": false,
-   "no_sandbox": false,
    "worker_rules": "",
    "test_pattern": "^\\s*(def test_|async def test_|\\[(Test|UnityTest|Fact|Theory|TestMethod|TestCase)\\b|#\\[test\\]|(it|test)\\(|func Test)",
    "area_label_prefix": "",

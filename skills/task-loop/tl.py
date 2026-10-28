@@ -606,43 +606,6 @@ def cmd_claim(a, store=None):
     return 0
 
 
-def session_alive():
-    pid = os.environ.get("CLAUDE_PID")
-    if not pid:
-        return True
-    try:
-        return sproc.alive(int(pid))
-    except ValueError:
-        return False
-
-
-def cmd_heartbeat(a, store=None):
-    """Keep claims alive. --loop: every 60 s until a heartbeat fails, the session's process is gone, or 12 h pass,
-    so a dead session's leases lapse and `bd reclaim` frees them."""
-    end = now() + 12 * 3600
-    while True:
-        for i in a.ids:
-            try:
-                (store or bd_store()).heartbeat(i)
-            except BdFailure as e:
-                sys.stderr.write(e.error.text + "\n")
-                return 1
-        if not a.loop or now() > end or not session_alive():
-            return 0
-        time.sleep(60)
-
-
-def cmd_stage(a):
-    event("stage", a.id, text=a.text)
-    return 0
-
-
-def cmd_worker(a):
-    event("worker", a.id, worker_kind=a.kind, ref=a.ref, title=a.title, cwd=a.cwd or os.getcwd())
-    provenance(a.id, "handoff", a.ref, "work-id", {"kind": a.kind, "title": a.title})
-    return 0
-
-
 def cmd_land(a):
     sha = git("rev-parse", "--verify", "-q", a.sha + "^{commit}", cwd=a.worktree) or a.sha
     event("land", a.id, sha=sha)
@@ -979,10 +942,6 @@ def dash_ports():
     import engine
     import reflect_digest
     return dash_wiring.make_ports(sys.modules[__name__], engine, reflect_digest)
-
-
-def dash_asks():
-    return dash_cli.make_dash(dash_ports(), code_version()).asks
 
 
 def expected_binds():
@@ -1430,18 +1389,6 @@ def main(argv=None):
     p.add_argument("id")
     p.add_argument("--worktree")
     p.add_argument("--slot")
-    p = sp.add_parser("heartbeat")
-    p.add_argument("ids", nargs="+")
-    p.add_argument("--loop", action="store_true")
-    p = sp.add_parser("stage")
-    p.add_argument("id")
-    p.add_argument("text")
-    p = sp.add_parser("worker")
-    p.add_argument("id")
-    p.add_argument("--kind", required=True, choices=["codex", "claude-p", "subagent", "other"])
-    p.add_argument("--ref", required=True)
-    p.add_argument("--title")
-    p.add_argument("--cwd")
     p = sp.add_parser("land")
     p.add_argument("id")
     p.add_argument("--sha", required=True)
@@ -1565,8 +1512,7 @@ def main(argv=None):
         return cmd_trace(a)
     if a.cmd == "bd":
         return cmd_bd(a)
-    return {"register": cmd_register, "claim": cmd_claim, "heartbeat": cmd_heartbeat, "stage": cmd_stage, "worker": cmd_worker,
-            "land": cmd_land, "close": cmd_close, "block": cmd_block, "slot": cmd_slot, "worktree": cmd_worktree,
+    return {"register": cmd_register, "claim": cmd_claim, "land": cmd_land, "close": cmd_close, "block": cmd_block, "slot": cmd_slot, "worktree": cmd_worktree,
             "dash": cmd_dash, "ask": cmd_ask, "answer": cmd_ask, "hint": cmd_ask, "hold": cmd_ask, "override": cmd_ask, "reflect": cmd_reflect, "hook": cmd_hook, "doctor": cmd_doctor, "land-lock": cmd_land_lock,
             "pin": cmd_pin, "rollback": cmd_rollback, "cutover": cmd_cutover}[a.cmd](a)
 

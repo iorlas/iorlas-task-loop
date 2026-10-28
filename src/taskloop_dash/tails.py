@@ -35,15 +35,6 @@ def read_dict(path: object) -> dict[str, Any]:
     return got if isinstance(got, dict) else {}
 
 
-def first_json(path: str) -> dict[str, Any]:
-    try:
-        with open(path, encoding="utf-8", errors="replace") as f:
-            got = json.loads(f.readline())
-            return got if isinstance(got, dict) else {}
-    except (OSError, ValueError):
-        return {}
-
-
 class Tails:
     def __init__(self, tail_bytes: int = TAIL_BYTES, window_bytes: int = WINDOW_BYTES) -> None:
         self.tail_bytes, self.window_bytes = tail_bytes, window_bytes

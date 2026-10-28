@@ -108,7 +108,6 @@ class EngineConfig:
     untracked_ignore: list[str] = field(default_factory=list)
     checks: list[CheckSpec] = field(default_factory=list)
     host: bool = False
-    no_sandbox: bool = False
     worker_rules: str = ""
     test_pattern: str = TEST_PATTERN
     area_label_prefix: str = ""
