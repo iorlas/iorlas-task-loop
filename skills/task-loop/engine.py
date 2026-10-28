@@ -38,6 +38,7 @@ from taskloop.domain.report import matchers as lifecycle
 from taskloop.adapters import links
 from taskloop.adapters import looks
 import loop_health
+from types import SimpleNamespace
 import outcome as oc
 import seams
 import tl
@@ -63,6 +64,11 @@ from taskloop.app.write.handoff import Handoff
 from taskloop.app.write.stage_loop import StageLoop
 from taskloop.app.run.calls import timing
 from taskloop.app.run.resume import Resume
+from taskloop.app.land.closer import Closer
+from taskloop.app.land.fixer import Fixer
+from taskloop.app.land.lander import Lander
+from taskloop.app.land.rebase import Rebase
+from taskloop.app.land.tree import Tree
 from taskloop.app.run.state import Checkpoints, StateAttrs, carries_state
 from taskloop.contracts.checkpoint import RunState
 from taskloop.app.run.context import RunContext
@@ -243,7 +249,6 @@ def exec_in_place(argv):
     os.execv(sys.executable, argv)
 
 
-PUSH_UP_FAILS = 3  # network errors on the push while the probe says the network is up: the fault is not the network's to cure (a proxy, DNS)
 # tl-bxk.13.16.4: a push that died of the network (lifesim-l4ow: curl 56 broken pipe, after a 17 min hook) is retried with a rest
 TRANSIENT_PUSH = re.compile(r"curl \d+|Broken pipe|Connection (?:reset|timed out|refused)|Could not resolve host|early EOF|RPC failed|"
                             r"remote end hung up|SSL_ERROR|TLS|Operation timed out|Network is unreachable|"
@@ -356,6 +361,8 @@ class FixFailed(Blocked):
 class Engine(StateAttrs):
     stop_pending = False  # run_bead sets it when a SIGTERM came during the claim
     tree_memo: Any = None  # (git status, file stats) -> tree hash, of the last tree_hash()
+    done: list[str]  # RunState fields the tests assign (the type checker saw them assigned in the moved methods before)
+    writer_said: str
 
     def __init__(self, bead, wt, cfg, dry_run=False, verbose=True, store=None, route=seams.DelegateRoute(), clock=None, git=None,
                  stores=None, fresh=False):
@@ -564,11 +571,45 @@ class Engine(StateAttrs):
         if self.plan_data:
             (self.run_dir / "plan.json").write_text(json.dumps(checks_to_wire(self.plan_data), indent=1))
 
-    def blocked_for(self, why, kind, stop=None, spec=None):
-        """The Blocked a step ends with: `kind` is an outcome.Kind name; `stop` the stop that decided it; `spec` the ask it carries."""
-        err = Blocked(why, spec, kind=oc.Kind[kind])
+    def blocked_for(self, why, kind, stop=None, spec=None, fix=False):
+        """The Blocked a step ends with: `kind` is an outcome.Kind name; `stop` the stop that decided it; `spec` the ask it carries;
+        `fix`: a conflict fix round that could not finish (a resume salvage starts again)."""
+        err = (FixFailed if fix else Blocked)(why, spec, kind=oc.Kind[kind])
         err.stop = stop
         return err
+
+    FixFailed = FixFailed
+
+    def git_in(self, path, *a):
+        return tl.git(*a, cwd=path)
+
+    def record_land(self, sha):
+        tl.cmd_land(Args(id=self.bead, sha=sha, worktree=self.wt))
+
+    def land_lock_path(self):
+        return tl.land_lock_path(self.git("remote", "get-url", "origin") or str(self.wt))
+
+    @cached_property
+    def tree(self):
+        return Tree(self)
+
+    @cached_property
+    def rebase(self):
+        return Rebase(self)
+
+    @cached_property
+    def fixer(self):
+        return Fixer(self)
+
+    @cached_property
+    def lander(self):
+        return Lander(self)
+
+    @cached_property
+    def closer(self):
+        return Closer(self, SimpleNamespace(oc=oc, loop_health=loop_health, tl=tl, say=say, outcome_for=outcome_for, node_outcome=node_outcome,
+                                            close_move=close_move, reflection_text=reflection_text, why_code=runtrace.why_code, Args=Args,
+                                            config_dir=tl.config_dir()))
 
     def lock_worker(self, started):
         """The worker delegate launched (the live file's first line) goes into the engine lock, so a SIGKILLed engine leaves it findable."""
@@ -1028,49 +1069,6 @@ class Engine(StateAttrs):
         """The branch HEAD is on; "" when detached."""
         return self.git("symbolic-ref", "--short", "-q", "HEAD")
 
-    # -- nodes
-    def reset(self, bead):
-        self.steps.begin("reset", "reset")
-        branch = bead.metadata.get("branch") or "task/" + self.bead
-        self.fetch(check=True)
-        exclude = Path(self.git("rev-parse", "--path-format=absolute", "--git-common-dir")) / "info" / "exclude"
-        if ".task/" not in (exclude.read_text() if exclude.exists() else ""):
-            with open(exclude, "a") as f:
-                f.write("\n.task/\n")
-        exists = bool(self.git("rev-parse", "--verify", "-q", "refs/heads/" + branch))
-        self.left_dirty = False
-        if self.dirty_status():
-            if self.git("symbolic-ref", "--short", "-q", "HEAD") != branch:
-                raise Blocked("failed: worktree %s has uncommitted work of another branch" % self.wt, kind=oc.Kind.FAULT_SLOT)
-            self.wip("left from an earlier run")
-            self.left_dirty = True
-        if exists and self.fresh:
-            # tl-19i: --fresh starts the task again on the base: the old branch is kept as task/<id>-stale-<time>, never reset in place
-            # and never checked out (lifesim-6pld ran --fresh on its old branch, 56 commits behind, and failed on a missing recipe)
-            self.free_branch(branch)
-            if self.git("rev-list", "--count", "%s..%s" % (self.cfg.base, branch)) not in ("", "0"):
-                stale = "%s-stale-%s" % (branch, time.strftime("%Y%m%d-%H%M%S"))
-                if self.git("rev-parse", "--verify", "-q", "refs/heads/" + stale):
-                    stale += "-2"
-                rc, tail = self.sh(["git", "branch", "-m", branch, stale], pin=True)
-                if rc:
-                    raise Blocked("failed: --fresh could not keep the old branch aside as %s: %s" % (stale, tail.strip()[-200:]), kind=oc.Kind.FAULT_SLOT)
-                self.log.note("--fresh: the old branch %s is kept as %s; the task starts again on %s" % (branch, stale, self.cfg.base))
-                self.comment("Fresh (engine): --fresh: the earlier work on %s is kept as the branch %s; the task starts again on %s." % (
-                    branch, stale, self.cfg.base))
-            exists = False
-        if exists:
-            self.free_branch(branch)
-            self.sh(["git", "checkout", "-q", branch], check=True, pin=True)
-        else:
-            self.sh(["git", "checkout", "-q", "-B", branch, self.cfg.base], check=True, pin=True)
-        for old in self.task_dir.iterdir():  # earlier runs' files are no facts; only the writer's evidence carries over
-            if old.name != "evidence":
-                shutil.rmtree(old) if old.is_dir() else old.unlink()
-        self.briefs.export()
-        self.branch = branch
-        return branch
-
     def dirty_status(self):
         """`git status --porcelain` of the slot, leaving out what the BASE's .gitignore files ignore (tl-g6a): Unity's client/log.txt
         is untracked on an old branch and ignored on main, and made a slot 'dirty with another branch's work' for 7 beads."""
@@ -1119,20 +1117,6 @@ class Engine(StateAttrs):
         finally:
             with contextlib.suppress(OSError):
                 os.unlink(ex)
-
-    def free_branch(self, branch):
-        """A paused bead resumes in any free slot: the slot that last held its branch lets go of it (detached there),
-        unless that slot has uncommitted work, which is never touched."""
-        here, path = str(Path(self.wt).resolve()), None
-        for line in (self.git("worktree", "list", "--porcelain") or "").splitlines():
-            if line.startswith("worktree "):
-                path = line[len("worktree "):]
-            elif line == "branch refs/heads/" + branch and path and str(Path(path).resolve()) != here:
-                if tl.git("status", "--porcelain", cwd=path):
-                    raise Blocked("failed: %s is checked out in %s with uncommitted work; commit or clean it there" % (
-                        branch, path), kind=oc.Kind.FAULT_SLOT)
-                tl.git("checkout", "-q", "--detach", cwd=path)
-                self.log.note("%s was checked out in %s: detached it there to resume here" % (branch, path))
 
     def add_cases(self, new):
         """A writer may add the cases it discovers; it can never remove one (the plan is the engine's)."""
@@ -1318,135 +1302,6 @@ class Engine(StateAttrs):
         flakes = self.flakes_text()
         return ("\n" + "".join(out) + flakes) if (out or flakes) else ""
 
-    SALVAGE_MAX_FILES = 10  # tl-7y6.2.19: a resume conflict in more files than this starts again; fewer is fixed
-
-    def rebase_onto_base(self, salvage=False):
-        """tl-bxk.13.8: a branch resumed from an earlier run is rebased onto the latest base before it is planned or
-        re-planned, so the plan and the engine's checks see what main has now (lifesim-ov3w: a gate check named a recipe the
-        branch's base lacked, three plans in 11 min). -> "rebased" (the plan count starts again: the earlier plans were made on
-        another base), "conflict" (the branch work does not fit main: the caller starts again, tl-19i), "conflict-fixable" (salvage on: the
-        rebase stopped on at most SALVAGE_MAX_FILES files and is left running for the caller's fix(conflict)), or "".
-        tl-7y6.2.19: more than one commit on the branch (the wip commits) is squashed first, as finish() does, so one conflict
-        is fixed once. The branch is left as it was in the conflict (squash undone), and when there is nothing to do."""
-        if self.dry or self.dirty_status():  # (the base-ignored files of an old branch, Unity's logs, are no reason not to rebase)
-            return ""
-        behind = self.git("rev-list", "--count", "HEAD..%s" % self.cfg.base)
-        if behind in ("", "0"):
-            return ""
-        orig = self.git("rev-parse", "HEAD")
-        old_parent = self.git("rev-parse", "-q", "--verify", "HEAD~1") if self.left_dirty else ""
-        self.squashed = False
-        mb = self.git("merge-base", "HEAD", self.cfg.base)
-        if mb and self.git("rev-list", "--count", "%s..HEAD" % mb) not in ("", "0", "1"):  # the wip commits become one, like finish()
-            rc, tail = self.sh(["git", "reset", "-q", "--soft", mb], pin=True)
-            if not rc:
-                rc, tail = self.sh(["git", "commit", "-q", "--no-verify", "--allow-empty", "-m", "wip (%s): earlier work, squashed" % self.bead], pin=True)
-            if rc:  # the branch stays as it was
-                self.sh(["git", "reset", "-q", "--hard", orig], pin=True)
-            else:
-                self.squashed = True
-                self.log.note("squashed the branch's wip commits into one before rebasing")
-        self.rebase_orig, self.rebase_pre = orig, [x for x in (orig, old_parent) if x]
-        rc, tail = self.sh(["git", "rebase", "-q", self.cfg.base], pin=True)
-        if rc:
-            unmerged = self.git("diff", "--name-only", "--diff-filter=U").split()
-            if salvage and unmerged and len(unmerged) <= self.SALVAGE_MAX_FILES:
-                self.salvage_tail = "Conflicted files: %s\n%s" % (", ".join(unmerged), tail)
-                return "conflict-fixable"
-            self.sh(["git", "rebase", "--abort"], pin=True)
-            if self.squashed:
-                self.sh(["git", "reset", "-q", "--hard", orig], pin=True)
-            self.warn("the task branch could not be rebased onto %s before planning: %s"
-                      % (self.cfg.base, tail.strip().splitlines()[-1][:200] if tail.strip() else "conflict"))
-            return "conflict"
-        self.follow_checkpoint()
-        self.log.note("rebased the task branch onto the latest %s (%s commits behind) before planning" % (self.cfg.base, behind))
-        return self.rebased_plan_count()
-
-    def follow_checkpoint(self):
-        """The checkpoint's head follows a rebase (or squash), or the next resume reads this as an edit from outside."""
-        def move(ck):
-            if ck.head not in self.rebase_pre:
-                return ck
-            # unsquashed, the wip commit reset() made on top of the checkpoint's head is still on top of it
-            above = not self.squashed and len(self.rebase_pre) > 1 and ck.head == self.rebase_pre[1]
-            return dataclasses.replace(ck, head=self.git("rev-parse", "HEAD~1" if above else "HEAD"))
-        self.checkpoints.amend(move)
-
-    def salvage_resume_conflict(self):
-        """tl-7y6.2.19: the resume rebase stopped on a few files: one fix(conflict) round (markers and build only) instead of
-        throwing the branch away. -> "rebased" (the run record shows salvaged: true), or "conflict": the fix did not work, the
-        branch is back as it was and the caller starts again."""
-        fixes, ok = self.fixes, False
-        try:
-            d = self.fix("conflict", self.salvage_tail, resume=True)
-            ok = not self.git("diff", "--name-only", "--diff-filter=U")  # (a fix the review sent back still continued the rebase: the stage checks it again)
-            if d != "accept":
-                self.warn("resume: the conflict fix did not pass its checks and review; the stage goes on from it")
-        except FixFailed as e:
-            self.warn("the resume conflict fix failed: %s" % str(e).splitlines()[0][:200])
-        finally:
-            self.fixes = fixes  # the land's two fix rounds are its own
-        gd = Path(self.git("rev-parse", "--absolute-git-dir") or ".")
-        if (gd / "rebase-merge").exists() or (gd / "rebase-apply").exists():
-            self.sh(["git", "rebase", "--abort"], pin=True)
-        if not ok:
-            self.sh(["git", "reset", "-q", "--hard", self.rebase_orig], pin=True)  # the work as it was, for start_again_on_base
-            return "conflict"
-        self.salvaged = True
-        self.follow_checkpoint()
-        self.log.note("resume conflict fixed in place instead of starting again (salvaged)")
-        return self.rebased_plan_count()
-
-    def rebased_plan_count(self):
-        if self.planned and self.rebase_resets < MAX_REBASE_RESETS:
-            # tl-19i: plans made on the old base say nothing about this one (lifesim-ov3w counted 2). At most twice per bead:
-            # a bead whose gate is red for a real reason must still reach the limit while main keeps moving
-            self.log.note("the plan count starts again: %d earlier plan%s were made on another base" % (
-                self.planned, "" if self.planned == 1 else "s"))
-            self.plan_log.append({"mode": "rebase", "counted": False, "why": "the branch moved to a new base; %d plan(s) before it do not count" % self.planned})
-            self.planned, self.rebase_resets = 0, self.rebase_resets + 1
-        return "rebased"
-
-    def start_again_on_base(self, why):
-        """tl-19i: the branch's earlier work conflicts with main, so it cannot go on. It is kept under another name; the task
-        starts again on the base with a fresh plan (the owner's answer is in the bead's comments, which the planner reads),
-        and nothing so far counts toward the re-plan limit."""
-        branch = self.git("symbolic-ref", "--short", "-q", "HEAD")
-        if not branch or branch != (self.branch or branch):
-            self.warn("resume conflict, but HEAD is not the task branch (%s): the branch stays as it was" % (branch or "detached"))
-            return False
-        stale = "%s-stale-%s" % (branch, time.strftime("%Y%m%d-%H%M%S"))
-        if self.git("rev-parse", "--verify", "-q", "refs/heads/" + stale):
-            stale += "-2"
-        rc, tail = self.sh(["git", "branch", "-m", branch, stale], pin=True)
-        if rc:  # never reset a branch whose work could not be kept
-            self.warn("resume conflict, but the branch could not be kept aside (%s): it stays as it was" % tail.strip()[-160:])
-            return False
-        self.sh(["git", "checkout", "-q", "-B", branch, self.cfg.base], pin=True, check=True)
-        self.checkpoints.drop()
-        self.old_plan, self.amend_why, self.amend_text, self.replan_first = None, "", "", False
-        self.plan_data, self.plan_summary = None, ""  # verify_answer stays: the owner's word still goes to the planner
-        self.done, self.accepted, self.unchecked, self.plan_log, self.planned = [], [], [], [], 0
-        self.amended, self.stage_tree, self.writer, self.writer_family = False, "", {}, None
-        self.writer_fallback, self.fallback_lane, self.denials, self.fixes, self.replans = False, "", [], 0, 0
-        self.unverified, self.accepted_new, self.writer_said, self.last_summary = [], [], "", ""
-        self.look_paths, self.look_notes, self.look_unjudged = [], [], {}
-        self.rendered_names, self.last_reqs, self.render_stale = set(), [], False
-        self.handoff = {"rounds": [], "seen_lows": []}
-        self.steps.move("plan", "resume_conflict", "the branch's earlier work conflicts with %s: kept as %s, planning fresh. %s" % (
-            self.cfg.base, stale, why[:160]))
-        self.log.note("resume conflict: %s kept as %s; the task starts again on %s" % (branch, stale, self.cfg.base))
-        self.comment("Resume (engine): the earlier work on %s conflicts with %s. It is kept as the branch %s; the task starts again on "
-                     "%s with a fresh plan." % (branch, self.cfg.base, stale, self.cfg.base))
-        return True
-
-
-
-
-
-
-
     def run(self):
         return self.run_once()
 
@@ -1471,7 +1326,7 @@ class Engine(StateAttrs):
                               kind=oc.Kind.FAULT_CONTRACT_SKEW)
             self.log.note("workers: delegate %s (contract %d)" % (self.route, dg.CONTRACT))
             self.log.note("task-loop %s" % (plugin_version() or "(unknown version)"))
-            self.reset(bead)
+            self.tree.reset(bead)
             self.budget.labels = list(bead.labels)
             self.check_ask()
             self.planner.cap.grant()
@@ -1484,11 +1339,11 @@ class Engine(StateAttrs):
             # tl-fsj: the configured checks come from the base's config, so the tree they run on must have what the base has; every
             # resume rebases first, a plan to make or a stage to go on with (lifesim: 8 beads parked on 'just fmt-check-changed')
             at_land = plan is not None and (i >= len(plan["stages"]) or (state or {}).get("fix"))  # a conflict there is the writer's fix round
-            moved = "" if at_land else self.rebase_onto_base(salvage=plan is not None)  # (no plan: nothing accepted to salvage)
+            moved = "" if at_land else self.rebase.onto_base(salvage=plan is not None)  # (no plan: nothing accepted to salvage)
             if moved == "conflict-fixable":
                 self.plan_data = self.plan_data or plan
-                moved = self.salvage_resume_conflict()
-            if moved == "conflict" and self.start_again_on_base("Its work: %s" % (self.git("log", "--oneline", "-n", "3", "%s..HEAD" % self.cfg.base) or "").replace("\n", "; ")):
+                moved = self.rebase.salvage()
+            if moved == "conflict" and self.rebase.start_again("Its work: %s" % (self.git("log", "--oneline", "-n", "3", "%s..HEAD" % self.cfg.base) or "").replace("\n", "; ")):
                 plan, i, state = None, 0, None
             elif moved == "rebased" and plan is not None:
                 self.stage_tree = ""  # the stage's diff starts at the base now: the rebase moved what it was measured from
@@ -1529,7 +1384,7 @@ class Engine(StateAttrs):
                 raise Blocked("verify: before land, the workers could not check: " + "; ".join(
                     "%s (%s%s)" % (u["what"], u["kind"], ("; " + u["why"]) if u.get("why") else "") for u in gaps),
                     askspecs.external_fact([u["what"] for u in gaps]), kind=oc.Kind.ASK_DECISION)
-            sha = self.finish(bead)
+            sha = self.lander.finish(bead)
             outcome = "landed" if sha else "done"
             kind = oc.Kind.LANDED if sha else oc.Kind.DONE
             if sha:
@@ -1556,7 +1411,7 @@ class Engine(StateAttrs):
                     if kind == oc.Kind.PAUSE_NETWORK and not self.dry:
                         self.save_net_pause()
                     self.outcome, self.why = outcome, why
-                    self.close(outcome, why, sha, spec, kind)
+                    self.closer.close(outcome, why, sha, spec, kind)
         return 0 if self.moved or outcome in ("landed", "done") else 2
 
     def result(self):
@@ -1790,269 +1645,8 @@ class Engine(StateAttrs):
         self.assert_tree("checks", "after")
         return run
 
-    def landed_already(self, fetch=True):
-        """tl-7y6.2.13: a push that died of the network after origin took it. The task branch's tip is the land commit
-        (titled `... (<bead>)`) and it is on the base: it landed, and nothing is pushed twice. -> its sha, or ''."""
-        if self.dry or (fetch and self.fetch()[0]):
-            return ""
-        tip = self.git("rev-parse", "--verify", "-q", "HEAD")
-        if not tip or not self.git("log", "-1", "--format=%s").endswith("(%s)" % self.bead):
-            return ""
-        return tip if self.sh(["git", "merge-base", "--is-ancestor", tip, self.cfg.base], pin=True)[0] == 0 else ""
-
-    def landed_found(self, sha):
-        self.landed_sha = sha
-        tl.cmd_land(Args(id=self.bead, sha=sha, worktree=self.wt))
-        self.steps.outcome("landed", sha[:12])
-        self.warn("the push had already gone through (%s is on %s): not pushed again" % (sha[:12], self.cfg.base))
-        return sha
-
-    def finish(self, bead):
-        if self.pending_land_validation:
-            raise Blocked("land retry validation still needs accepted checks and review; branch kept", kind=oc.Kind.FAULT_LAND)
-        found = self.landed_already()  # the last run's push may have gone through before the network cut its answer
-        if found:
-            return self.landed_found(found)
-        if not self.git("status", "--porcelain"):
-            if self.git("rev-list", "--count", "%s..HEAD" % self.cfg.base) in ("", "0"):
-                self.log.note("nothing changed")
-                return ""
-        # one commit per task, titled after the bead: earlier runs' wip commits are folded in
-        base = self.git("merge-base", "HEAD", self.cfg.base)
-        if base:
-            self.sh(["git", "reset", "-q", "--soft", base], check=True, pin=True)
-        self.copy_looks()
-        self.stage_all(check=True)
-        self.quarantine_strays()
-        msg = "%s (%s)" % (bead.title[:72], self.bead)
-        rc, tail = self.sh(["git", "commit", "-q", "-m", msg], pin=True)
-        if rc:
-            raise Blocked("failed: commit refused (hooks)\n" + tail, kind=oc.Kind.FAULT_LAND)
-        if self.dry:
-            self.log.note("dry run: not landing")
-            return ""
-        flaky_push, rest, net_failed = 0, False, False
-        self.task_branch = self.git("symbolic-ref", "--short", "-q", "HEAD")
-        while True:  # one land at a time per repo: rebase, gate and push see the latest base; a fix runs outside the lock
-            problem = None
-            if rest:  # a network failure, with the lock let go: wait for the network, then fetch and look again
-                waited, back = self.worker.acts.await_net(self.worker.acts.net_up(), lp.KNOBS["net_wait_cap_s"])
-                if not back:
-                    raise Blocked("paused: no network for the land push after %d s; the branch is kept and the next run lands it" % waited,
-                                  kind=oc.Kind.PAUSE_NETWORK)
-                rest = False
-            with self.land_lock():
-                pushes = 0
-                while True:  # initial push plus at most two main-moved retries in this hold
-                    self.steps.begin("land", "land (try %d)" % (pushes + 1), **{"try": pushes + 1})
-                    self.quarantine_strays()
-                    rc, tail = self.fetch()
-                    if rc == 0 and (pushes or net_failed):
-                        found = self.landed_already(fetch=False)  # an earlier push of this land may have gone through
-                        if found:
-                            return self.landed_found(found)
-                    if rc == 0:
-                        rc, tail = self.sh(["git", "rebase", "-q", self.cfg.base], pin=True)
-                    if rc:
-                        unmerged = self.git("diff", "--name-only", "--diff-filter=U")
-                        if not unmerged:
-                            self.sh(["git", "rebase", "--abort"], pin=True)
-                            raise Blocked("failed: fetch or rebase onto %s failed; branch kept\n%s" % (self.cfg.base, tail), kind=oc.Kind.FAULT_LAND)
-                        problem = ("conflict", "Conflicted files: %s\n%s" % (", ".join(unmerged.split()), tail))
-                        self.steps.outcome("conflict", ", ".join(unmerged.split()))
-                    if not problem and pushes:
-                        # Revalidate the rebased inputs. Repo checks reuse their input cache; stage/case checks
-                        # remain conservative because they can depend on state outside the tracked tree.
-                        checks = list(dict.fromkeys(c for st in (self.plan_data or {}).get("stages") or []
-                                                    for c in st["checks"]))
-                        checks = list(dict.fromkeys(checks + self.case_checks()))
-                        # A stop during checks or just after they return must resume through acceptance.
-                        # Save that barrier first, then let sh() receive SIGTERM and stop its process tree.
-                        with self.stop_deferred() as stop:
-                            self.pending_land_validation = "land retry checks require successful checks and review before landing"
-                            self.checkpoints.save(stage=len((self.plan_data or {}).get("stages") or []), rounds=0, n=0,
-                                                 feedback="", step="land-verify-red")
-                        if stop:
-                            raise Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)
-                        results = self.run_checks({"checks": checks, "files": []}, "land retry")
-                        with self.stop_deferred() as stop:
-                            bad = results.failed
-                            if bad:
-                                problem = ("verify", check_evidence.failure_brief(bad, self.run_dir))
-                                self.pending_land_validation = problem[1]
-                            else:
-                                self.pending_land_validation = ""
-                            self.checkpoints.save(stage=len((self.plan_data or {}).get("stages") or []), rounds=0, n=0,
-                                                 feedback="", step="land-verify-red" if bad else "land")
-                        if stop:
-                            raise Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)
-                        self.steps.begin("land", "land (try %d)" % (pushes + 1), **{"try": pushes + 1})
-                    if not problem and self.cfg.gate:
-                        self.gate_log = self.run_dir / ("gate.r%d.log" % (self.fixes + 1))
-                        gtree = self.git("rev-parse", "HEAD^{tree}")
-                        gate_t, gate_skipped = time.time(), False
-                        self.log.emit(rec.GateStart(cmd=self.cfg.gate_text, log=str(self.gate_log), tree=gtree))
-                        if self.gate_green(gtree):  # the gate already passed on exactly this tree (a push rejected, a re-land)
-                            self.log.note("gate skipped: `%s` already passed on tree %s" % (self.cfg.gate_text[:80], gtree[:12]))
-                            rc, tail, gate_skipped = 0, "", True
-                        else:
-                            green = self.green_checks(gtree)  # repo checks green on this tree's inputs: the gate may skip their part
-                            rc, tail = self.sh(self.cfg.gate, save=self.gate_log, timeout=float(self.cfg.gate_timeout_min) * 60,
-                                               env={"TL_CHECKS_GREEN": ",".join(green)} if green else None)
-                            if rc == 0:
-                                self.gate_record(gtree)
-                        self.log.emit(rec.GateEnd(exit=rc, secs=round(time.time() - gate_t), skipped=gate_skipped))
-                        if rc < 0 and not self.killed:  # tl-y35: killed by a signal (an operator's SIGTERM, the machine): not the code's fault
-                            raise Blocked("failed: stopped: the gate was killed by signal %d; the bead goes back to open and the next run "
-                                          "runs the gate again (no fix round, no failure counted)" % -rc, kind=oc.Kind.PAUSE_KILLED)
-                        if rc:
-                            problem = ("gate", tail)
-                            self.steps.outcome("gate red", (tail.strip().splitlines() or [""])[-1])
-                    if not problem:
-                        with self.stop_deferred() as stop:  # a push half done is no state to stop in: finish it, then stop
-                            gated = self.git("rev-parse", "HEAD^{tree}")  # a pre-push hook may skip a gate this exact tree passed
-                            rc, tail = self.sh(self.cfg.land, pin=True, env={"TASK_LOOP_GATED_TREE": gated, "TL_GATE_PASSED": gated}
-                                               if self.cfg.gate else None)
-                            if rc == 0:
-                                self.landed_sha = sha = self.git("rev-parse", "HEAD")
-                                tl.cmd_land(Args(id=self.bead, sha=sha, worktree=self.wt))
-                        if rc == 0:
-                            self.steps.outcome("landed", sha[:12])
-                            if stop:
-                                self.warn("a stop came during the land: landed first, closing now")
-                            return sha
-                        if stop:
-                            raise Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)
-                        if not re.search(r"rejected|non-fast-forward|fetch first|stale info", tail):
-                            if TRANSIENT_PUSH.search(tail[-600:]):  # the push's own last lines, not a hook's test output before them
-                                if self.worker.acts.net_up() is not False:  # the probe cannot see the fault: counted, a proxy or DNS looks like this
-                                    flaky_push += 1
-                                if flaky_push >= PUSH_UP_FAILS:
-                                    raise Blocked("paused: the land push failed %d times with a network error while the network looks up; "
-                                                  "the branch is kept and the next run lands it again: %s" % (flaky_push, tail.strip()[-200:]),
-                                                  kind=oc.Kind.PAUSE_NETWORK)
-                                rest = net_failed = True
-                                self.warn("the push failed with a network error, trying again when the network is back: %s" % tail.strip()[-160:])
-                                self.steps.move("land", "push_network", "network error on the push; the land looks again after the network is back")
-                                break
-                            raise Blocked("land failed\n" + tail, kind=oc.Kind.FAULT_LAND)
-                        pushes += 1
-                        self.steps.outcome("rejected", "main moved")
-                        if pushes >= 3:
-                            raise Blocked("land rejected 3 times: main moves too fast", kind=oc.Kind.FAULT_LAND)
-                        self.warn("push rejected (main moved), try %d of 3" % (pushes + 1))
-                        self.steps.move("land", "push_race", "push rejected (main moved): try %d of 3" % (pushes + 1))
-                        continue
-                    break  # a red check/gate or conflict is fixed outside the land lock
-            if rest:
-                continue
-            if self.fixes < int(self.cfg.max_fix_rounds):
-                self.steps.move("fix", {"gate": "gate_red", "verify": "checks_red", "conflict": "conflict"}[problem[0]],
-                                "gate red on the rebased tree: %s" % (problem[1].strip().splitlines() or [""])[-1][:200]
-                                if problem[0] == "gate" else problem[1].splitlines()[0])
-            fixed = self.fix(*problem)
-            if problem[0] == "verify" and fixed != "accept":
-                self.pending_land_validation += "\n" + self.stuck_why
-                self.checkpoints.save(stage=len((self.plan_data or {}).get("stages") or []), rounds=0, n=0,
-                                     feedback="", step="land-verify-red")
-                raise Blocked("land retry validation fix did not pass its checks and review; branch kept", kind=oc.Kind.FAULT_LAND)
-            if problem[0] == "verify":
-                self.pending_land_validation = ""
-                self.checkpoints.save(stage=len((self.plan_data or {}).get("stages") or []), rounds=0, n=0,
-                                     feedback="", step="land")
-            if problem[0] == "verify" and self.git("status", "--porcelain"):
-                # Unlike verification before finish(), a retry check's fix follows the task commit.
-                self.stage_all(check=True)
-                self.sh(["git", "commit", "-q", "--no-verify", "--amend", "--no-edit"], check=True, pin=True)
-
-    def gate_file(self):
-        return tl.config_dir() / "check-cache" / ("%s.gate.json" % self.bead)
-
-    def gate_green(self, tree):
-        try:
-            got = json.loads(self.gate_file().read_text())
-        except (OSError, ValueError):
-            return False
-        return bool(tree) and got.get("tree") == tree and got.get("cmd") == self.cfg.gate_text
-
-    def gate_record(self, tree):
-        try:
-            self.gate_file().write_text(json.dumps({"tree": tree, "cmd": self.cfg.gate_text}))
-        except OSError:
-            pass
-
-    def green_checks(self, tree):
-        """Ids of the repo checks with a green result on this tree: by their inputs hash, else by tree and base."""
-        return self.checker.green_ids(tree)
-
-    FIX = {"gate": ("make the gate pass on the tree rebased onto the latest base",
-                    "\nAll stages were accepted, then the gate%s failed on the tree rebased onto the latest base (another "
-                    "task may have landed first). Fix exactly this, without undoing what the stages built:\n%s\n"),
-           "conflict": ("resolve the merge conflict with the latest base",
-                        "\nAll stages were accepted, then rebasing onto the latest base hit a merge conflict (another task "
-                        "landed first)%s. The conflict markers are in the files: resolve every one, keeping both changes' "
-                        "intent. Do not run git.\n%s\n"),
-           "verify": ("fix what the check before land found wrong",
-                      "\nAll stages were accepted; then a check before land found these wrong. Fix exactly this, without "
-                      "undoing what the stages built:\n%s\n")}
     MARKERS_ARGV = ["python3", str(Path(__file__).with_name("markers.py"))]  # exit 1 and the lines when a conflict marker is in the tree
     MARKERS = text_of(MARKERS_ARGV)
-
-    def fix(self, kind, tail, resume=False):
-        """One fix round at land: write → checks (a conflict fix: markers and build only; else every stage's checks, again) → a review of the fix only. A gate fix is
-        folded into the task's commit; a conflict fix continues the rebase; a verify fix (what the verifier found wrong,
-        before the task's commit) stays in the tree. max_fix_rounds per bead, then stuck. Returns the fix stage's end.
-        resume: the conflict is the resume rebase's (tl-7y6.2.19), so the checkpoint stays where it is."""
-        self.fixes += 1
-        limit = int(self.cfg.max_fix_rounds)
-        what = {"gate": "gate red on the rebased tree", "conflict": "merge conflict with main",
-                "verify": "the check before land found defects"}[kind]
-        if self.fixes > limit:
-            if kind == "conflict":
-                self.sh(["git", "rebase", "--abort"], pin=True)
-            trimmed = trim.trim_log(tail, log=str(self.gate_log or "") if kind == "gate" else "")
-            raise (FixFailed if kind == "conflict" else Blocked)("%s after %d fix rounds: it needs the owner's hint\n%s" % (
-                what, limit, trimmed), askspecs.no_progress(what, limit, trimmed), kind=oc.Kind.ASK_STUCK)
-        self.warn("%s: %s, fix round %d of %d" % ("resume" if resume else "land", what, self.fixes, limit))
-        if not resume:
-            self.checkpoints.save(stage=len((self.plan_data or {}).get("stages") or []), rounds=0, n=0, feedback="", step="land")
-        checks = list(dict.fromkeys(c for s in (self.plan_data or {}).get("stages") or [] for c in s["checks"]))
-        skip = None
-        if kind == "conflict":  # tl-7y6.2.18: markers and build only; the plan's checks are skipped, the gate runs once on the result
-            skip = list(dict.fromkeys(checks + self.case_checks()))
-            checks = [self.MARKERS]
-        goal, text = self.FIX[kind]
-        st = {"goal": "Fix: " + goal, "files": [], "checks": checks, "hard": False}
-        d = self.stage_loop.run({"stages": [st]}, 0, {
-            "fix": True, "conflict_fix": skip, "name": "fix %d/%d" % (self.fixes, limit), "fix_n": self.fixes, "fix_of": limit,
-            "failed": [self.cfg.gate_text or "rebase"] if kind == "gate" else None,
-            "feedback": text % tail if kind == "verify" else text % (
-                (" (`%s`)" % self.cfg.gate_text) if kind == "gate" and self.cfg.gate else "",
-                check_evidence.failure_brief([CheckResult.failed_run(self.cfg.gate_text or "rebase", tail, log=str(self.gate_log or ""))],
-                                             self.run_dir)
-                if kind == "gate" else check_evidence.compact([CheckResult.failed_run("rebase", tail)])),
-            "scope": "the fix only: it must %s without breaking what the accepted stages built" % goal})
-        if kind == "conflict":
-            if self.sh(self.MARKERS_ARGV, pin=True)[0]:
-                return self.fix("conflict", "conflict markers are still in the tree after the fix", resume=resume)
-            self.stage_all(check=True)
-            rc, out = self.sh(["git", "-c", "core.editor=true", "rebase", "--continue"], pin=True)
-            if rc:
-                self.sh(["git", "rebase", "--abort"], pin=True)
-                raise FixFailed("failed: the rebase did not continue after the conflict fix\n" + out, kind=oc.Kind.FAULT_LAND)
-        elif kind == "gate" and self.git("status", "--porcelain"):
-            self.stage_all(check=True)
-            self.sh(["git", "commit", "-q", "--no-verify", "--amend", "--no-edit"], check=True, pin=True)
-        if d != "accept" and kind != "verify":
-            self.warn("land: the fix round did not pass its checks and review; landing tries the gate again")
-        return d
-
-    @contextlib.contextmanager
-    def land_lock(self):
-        """One land at a time per repo, across slots and sessions: an flock the OS drops when the process dies."""
-        path = tl.land_lock_path(self.git("remote", "get-url", "origin") or str(self.wt))
-        with self.locked("land_lock", path):
-            yield path
 
     # -- look and feel (tl-bxk.10.23): screenshots for a visual change, judged by the agent, held for the owner's batch
     def visual_cfg(self):
@@ -2550,172 +2144,6 @@ class Engine(StateAttrs):
             yield got
         finally:
             signal.signal(signal.SIGTERM, old)
-
-    def wip(self, why):
-        self.stage_all(everything=True)  # tl-g6a: nothing the bead made is left behind in a slot that is reset to the base
-        # --no-verify: a wip commit saves work, it does not judge it; formatting is the checks' and the gate's job. A pre-commit
-        # hook that refused it left staged files in the slot and failed the next bead there (lifesim-6pld, then rl4s)
-        rc, tail = self.sh(["git", "commit", "-q", "--no-verify", "-m", "wip (%s): %s" % (self.bead, why)], pin=True)
-        if rc:
-            self.warn("the wip commit (%s) failed, the work stays uncommitted in %s: %s" % (why, self.wt, (tail or "").strip()[-300:]))
-            self.log.note("wip commit failed: %s" % (tail or "").strip()[-300:])
-        return rc == 0
-
-    def close(self, outcome, why, sha, spec, kind=None):
-        old = None
-        if hasattr(signal, "SIGTERM") and threading.current_thread() is threading.main_thread():
-            old = signal.signal(signal.SIGTERM, signal.SIG_IGN)  # a second stop must not break the close-out
-        branch = self.git("symbolic-ref", "--short", "-q", "HEAD")
-        try:
-            self._close(outcome, why, sha, spec, kind)
-            if not self.dry:
-                with contextlib.suppress(Exception):  # last: the trace and the comments above read the branch
-                    self.leave_slot(outcome, branch)
-        finally:  # what the process starts after this (a notify command, the next test) must stay stoppable
-            if old is not None:
-                signal.signal(signal.SIGTERM, old)
-
-    def repo_id(self):
-        return self.git("remote", "get-url", "origin") or str(self.wt)
-
-    def decide_close(self, outcome, why, kind):
-        """The close's Kind after POLICY: a fault seen too often on one bead becomes one ask; the trace fields, the
-        fingerprint and the storm check (never for a pause or an ask) are set here. kind None: the verify-gaps ask."""
-        self.disp = None
-        if kind is None:
-            return None
-        now = self.clock.now()
-        o = oc.make(kind, why)
-        self.fp = o.fingerprint
-        try:
-            history = loop_health.recent_closes(tl.config_dir() / "traces.jsonl", self.repo_id(), now)
-        except OSError:
-            history = []
-        self.disp = oc.apply(o, self.bead, history, now)
-        self.kind = self.disp.kind
-        if self.disp.escalated:
-            self.warn("the same fault %d times on this bead: asking the owner once" % oc.KNOBS["fault_retries"])
-        trip = loop_health.storm_trip(history, self.bead, kind, o.fingerprint, now)
-        if trip and not self.dry:
-            path = loop_health.storm_path(tl.config_dir(), self.repo_id())
-            if loop_health.write_storm(path, trip, now, why):
-                self.storm = loop_health.banner(trip)
-                self.warn(self.storm)
-                say(self.storm)
-        return self.kind
-
-    def leave_slot(self, outcome, branch):
-        """tl-g6a: a bead that parked leaves its work on its own branch (wip committed above) and the slot at the detached base,
-        not on an old branch whose untracked files made the next runs fail as 'uncommitted work of another branch'."""
-        if outcome in ("landed", "done") or not branch or branch != (self.branch or None):
-            return
-        if self.dirty_status() or self.git("symbolic-ref", "--short", "-q", "HEAD") != branch:
-            return  # work that could not be committed, or files stage_all left out, stay where they are for the next run
-        rc, tail = self.sh(["git", "checkout", "-q", "--detach", self.cfg.base], pin=True)
-        if rc:
-            self.warn("the slot could not be left at the base: %s" % tail.strip()[-160:])
-
-    def _close(self, outcome, why, sha, spec, kind=None):
-        why = why or ("stopped before a reason was recorded" if outcome == "failed" else "")
-        bad = (raiser.problems(spec) if spec else ["the stop carries no ask"]) if kind in oc.ASKS else []
-        if bad:  # an ask that is no ask an owner can answer is the engine's own fault; no prose question takes its place
-            why, kind, spec = "failed: ask_lint: %s (%s)" % ("; ".join(bad)[:300], why.splitlines()[0][:200] if why else ""), oc.Kind.FAULT_ENGINE, None
-        kind = self.decide_close(outcome, why, kind)
-        outcome = outcome_for(kind, why) if kind and kind not in oc.FINISH else outcome
-        if self.disp and self.disp.escalated and spec is None:
-            spec = askspecs.repeated_fault(oc.KNOBS["fault_retries"], why.splitlines()[0][:200])
-        mins = (time.time() - self.t0) / 60
-        gd = Path(self.git("rev-parse", "--absolute-git-dir") or ".")
-        if (gd / "rebase-merge").exists() or (gd / "rebase-apply").exists():  # stopped mid-conflict-fix: back to the branch
-            self.sh(["git", "rebase", "--abort"], pin=True)
-        branch = self.git("symbolic-ref", "--short", "-q", "HEAD")
-        new = list({lo["title"]: lo for lo in self.leftovers if lo["title"] not in self.filed}.values())  # a title once
-        if outcome not in ("landed", "done") and branch and branch == (self.branch or None):
-            if self.git("status", "--porcelain"):
-                self.wip(outcome)  # the next run continues this branch
-            self.checkpoints.close(why)
-        stats = "cost=$%.2f; minutes=%d; %s" % (self.cost, mins, "; ".join("%s=%s" % kv for kv in self.stats.items()))
-        self.log_run()
-        last = self.steps.cur or self.steps.last
-        if last and (self.steps.moved_from != last.n or self.steps.moved_to not in ("ask", "pause", "close")):
-            # no move out of the run was logged from the last node: the close is it
-            to, cause = close_move(outcome, why, kind)
-            self.steps.move(to, cause, why.splitlines()[0][:200] if why else outcome)
-        self.steps.end(node_outcome(outcome, why, kind))
-        self.steps.begin("close", "close: %s" % outcome)
-        self.log.emit(rec.Close(outcome=Outcome(outcome), why_code=runtrace.why_code(kind.value if kind else "", outcome), sha=sha or "", why=why[:500]))
-        self.steps.outcome(outcome, why.splitlines()[0][:200] if why else "")
-        self.steps.end()
-        self.reflection = self.reflect_run(outcome, why)  # after the close node: the outcome is decided and nothing here changes it
-        self.file_trace(outcome, why, sha)
-        self.detail([stats] + ([why[:400]] if why else []) + (["question: " + spec.decision[:400]] if spec else []))
-        if outcome == "failed":
-            self.warn("task failed: %s" % why.splitlines()[0][:200])
-        if self.dry:
-            self.log.note("dry run: bead left as it was. %s" % stats)
-            return
-        if kind == oc.Kind.WAIT_ASK or (kind is None and why.startswith("waiting:")):  # asked already: the bead stays as the ask left it, nothing is said twice
-            self.log.note(why)
-            return
-        self.asked = bool(kind in oc.ASKS and spec and outcome not in ("landed", "done") and self.raise_ask(spec, why, kind))
-        if outcome in ("landed", "done"):
-            old = self.stores.asks.get(self.bead)
-            if old:
-                self.stores.asks.close(self.bead, old.id, "the run landed")
-        if self.unverified and outcome in ("landed", "done"):
-            self.comment("Land (engine): " + self.unverified_text())
-        look = [u for u in self.unchecked if u["kind"] == "other" and not self.is_look(u)]
-        if look and outcome in ("landed", "done"):
-            tl.attempt(self.store.add_label, self.bead, "needs-owner-check")
-            self.comment("Look (engine): landed, but nobody checked: " + "; ".join(u["what"] for u in look))
-        shots = self.keep_evidence()
-        if shots:
-            self.comment("Evidence (engine): %s" % ", ".join(str(p) for p in shots))
-        unfiled = []
-        for lo in new:
-            made, err = self.create_checked(NewBead(title=lo["title"], description=lo["why"], deps=["discovered-from:" + self.bead]))
-            if made:
-                self.filed.append(lo["title"])  # only a create that worked; the checkpoint follows at once (a kill loses no title)
-                self.checkpoints.keep_filed()
-            else:
-                unfiled.append(lo)
-                self.warn("follow-up not filed: %s: %s" % (lo["title"][:80], err[:200]))
-        if unfiled:
-            self.comment("Follow-up (engine): bd refused %d follow-up(s), none was filed: %s" % (
-                len(unfiled), "; ".join("%s (%s)" % (lo["title"], lo["why"][:120]) for lo in unfiled)))
-            self.checkpoints.keep_filed(unfiled)
-        if outcome == "landed":
-            self.file_owner_look()
-        verified = ("; self-verified=" + ", ".join("%d %s" % (sum(x["verdict"] == k for x in self.verified), k)
-                                                   for k in VERDICTS)) if self.verified else ""
-        self.comment("Reflect (engine): outcome=%s;%s filed=%d;%s %s%s%s; trace=%s (tl trace %s)" % (
-            outcome, reflection_text(self.reflection), len(new) - len(unfiled),
-            (" unfiled=%d;" % len(unfiled)) if unfiled else "", stats, verified, ("; why=" + why) if why else "",
-            self.log_path.stem, self.bead))
-        summary = (self.plan_summary)[:300]
-        if outcome == "landed":
-            rc = tl.cmd_close(Args(id=self.bead, reason="merged %s to %s: %s; %s" % (
-                sha[:12], self.cfg.base.split("/")[-1], summary or "the task's stages passed", stats)))
-        elif outcome == "done":
-            rc = tl.cmd_close(Args(id=self.bead, reason="done with nothing to land: " + (summary or stats)))
-        elif kind and oc.POLICY[kind].bd == "open":  # a machine fault or pause (login, network, lanes, kill): the bead stays open and unassigned
-            fault = kind.name.startswith("FAULT_")
-            if not fault:
-                self.warn(why)
-            rc = 0 if tl.attempt(self.store.update, self.bead, BeadPatch(status="open", assignee="")) else 1  # (tl-kwo: it lets go)
-            if oc.POLICY[kind].label:
-                tl.attempt(self.store.add_label, self.bead, oc.POLICY[kind].label)
-            if self.disp.comment:  # a comment, never Notes (tl-7y6.6.2); one per (bead, kind, fingerprint) per hour
-                self.comment("Engine %s: %s" % ("failed" if fault else "paused", re.sub(r"^(failed|paused): ", "", why)[:400]))
-        else:
-            text = why + (("\n\nQuestion: " + spec.decision) if spec else "")
-            rc = tl.cmd_block(Args(id=self.bead, why=text))
-        if rc:  # a repo's bd rules can refuse (e.g. a minimum reason length): say so, never report a clean close
-            self.warn("bd refused to %s %s (exit %s): close it by hand" % ("block" if outcome not in ("landed", "done")
-                                                                          else "close", self.bead, rc))
-
-
-
 
 RUN_STEM = re.compile(r"^\d{8}-\d{6}$")  # <bead>-<YYYYMMDD-HHMMSS>: an engine log of that bead, not of a child bead
 

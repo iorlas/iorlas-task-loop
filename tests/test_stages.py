@@ -372,7 +372,7 @@ class SharedNotes(StagesTest):
         put_ck(e, head=old)
         self.commit_base_cfg({"gate": ""})
         te.sh("git", "fetch", "-q", "origin", cwd=self.wt)
-        e.rebase_onto_base()
+        e.rebase.onto_base()
         new = e.git("rev-parse", "HEAD")
         self.assertNotEqual(old, new)
         self.assertEqual(read_ck(e).head, new)
@@ -527,30 +527,30 @@ class Executable(StagesTest):
 
     def test_a_replanned_runs_goals_survive_the_stage_that_runs_again(self):
         e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
-        e.reset(as_bead(BEAD))
+        e.tree.reset(as_bead(BEAD))
         e.plan_data = self.two_stage()
         e.done, e.accepted = ["an earlier plan's goal", "stage one"], [0]
         e.checkpoints.save(stage=1, rounds=0, n=0, feedback="", step="write")
         again = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
-        again.reset(as_bead(BEAD))
+        again.tree.reset(as_bead(BEAD))
         again.resume.point()
         self.assertEqual(again.done, ["an earlier plan's goal"])
 
     def test_a_resume_runs_the_stage_again_when_its_file_is_gone(self):
         e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
-        e.reset(as_bead(BEAD))
+        e.tree.reset(as_bead(BEAD))
         e.plan_data = self.two_stage()
         e.done, e.accepted = ["stage one"], [0]
         e.checkpoints.save(stage=1, rounds=0, n=0, feedback="", step="write")
         again = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
-        again.reset(as_bead(BEAD))
+        again.tree.reset(as_bead(BEAD))
         plan, i, state = again.resume.point()
         self.assertEqual((i, state, again.accepted, again.done), (0, None, [], []))
         self.assertIn("a file stage 1 promised is missing", again.log_path.read_text())
         Path(self.wt, self.PATH1).parent.mkdir(parents=True, exist_ok=True)
         Path(self.wt, self.PATH1).write_text("ok\n")
         third = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
-        third.reset(as_bead(BEAD))
+        third.tree.reset(as_bead(BEAD))
         self.assertEqual(third.resume.point()[1], 1)  # the file is there: stage 2 goes on
 
 

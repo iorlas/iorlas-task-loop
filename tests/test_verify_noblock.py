@@ -115,7 +115,7 @@ class NoBlock(unittest.TestCase):
             e.fixes += 1
             rounds.append(tail)
             return "stuck"  # the fix round did not pass its checks and review
-        with mock.patch.object(e, "ai", return_value=(open_as("checkable"), None)), mock.patch.object(e, "fix", side_effect=fix):
+        with mock.patch.object(e, "ai", return_value=(open_as("checkable"), None)), mock.patch.object(e.fixer, "fix", side_effect=fix):
             with self.assertRaises(engine.Blocked) as ctx:
                 e.self_verify([IQAD])
         self.assertEqual(len(rounds), 2)  # one per round of the budget, then stuck
@@ -181,7 +181,7 @@ class NoBlock(unittest.TestCase):
         self.assertTrue(e.engine_does("the engine closes the bead"))
         self.assertFalse(e.engine_does("screenshots are copied into the repo"))  # no visual paths set
         with mock.patch.object(e, "ai", return_value=(open_as("engine_step"), None)) as ai, \
-                mock.patch.object(e, "fix", return_value="accept") as fix:
+                mock.patch.object(e.fixer, "fix", return_value="accept") as fix:
             e.plan_data = PLAN
             e.self_verify([{"what": claim, "kind": "engine_step"}])
         ai.assert_called_once()  # sent to the verifier, not settled blindly
@@ -195,7 +195,7 @@ class NoBlock(unittest.TestCase):
             self.assertEqual(e.resolve_kind(item, {"kind": "external_fact", "source": SOURCE})[0], "checkable")
             self.assertEqual(e.resolve_kind(dict(item, kind="taste"), {})[0], "checkable")
             with mock.patch.object(e, "ai", return_value=(open_as("external_fact"), None)), \
-                    mock.patch.object(e, "fix", return_value="accept") as fix:
+                    mock.patch.object(e.fixer, "fix", return_value="accept") as fix:
                 e.self_verify([item])
         fix.assert_called_once()  # a proving round, not an unverified landing
         self.assertEqual(e.unverified, [])

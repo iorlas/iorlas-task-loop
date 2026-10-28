@@ -274,7 +274,7 @@ class VisualWork(StagesTest):
         ck = read_ck(e).state
         self.assertEqual((ck.look_done, sorted(ck.rendered_names), ck.render_stale), (1, ["a.png"], True))
         again = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
-        again.reset(as_bead(BEAD))
+        again.tree.reset(as_bead(BEAD))
         again.resume.point()
         self.assertEqual((again.look_done, again.rendered_names, again.render_stale), (1, {"a.png"}, True))
 
@@ -361,16 +361,16 @@ class ResumeCount(StagesTest):
         self.behind_branch()
         e = make_engine(self.wt, store=self.store, attrs={"planned": 3, "plan_log": [{"mode": "plan", "why": "x"}] * 3})
         e.git("checkout", "-q", "task/t-1")
-        self.assertEqual(e.rebase_onto_base(), "rebased")
+        self.assertEqual(e.rebase.onto_base(), "rebased")
         self.assertEqual((e.planned, e.rebase_resets), (0, 1))
         self.assertEqual(e.plan_log[-1]["counted"], False)  # the history stays, with a note
-        self.assertEqual(e.rebase_onto_base(), "")  # nothing behind now
+        self.assertEqual(e.rebase.onto_base(), "")  # nothing behind now
 
     def test_the_count_starts_again_after_a_rebase_at_most_twice_per_bead(self):
         e = make_engine(self.wt, store=self.store, attrs={"rebase_resets": engine.MAX_REBASE_RESETS, "planned": 3})
         self.behind_branch()
         e.git("checkout", "-q", "task/t-1")
-        self.assertEqual(e.rebase_onto_base(), "rebased")
+        self.assertEqual(e.rebase.onto_base(), "rebased")
         self.assertEqual(e.planned, 3)  # a bead stuck for a real reason still reaches the limit while main moves
 
     def test_a_branch_that_conflicts_with_main_starts_again_fresh_and_nothing_is_counted(self):
@@ -408,7 +408,7 @@ class ResumeCount(StagesTest):
         te.sh("git", "commit", "-qm", "main moves", cwd=base)
         te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
         e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
-        e.reset(as_bead(BEAD))
+        e.tree.reset(as_bead(BEAD))
         e.plan_data = dict(PLAN)
         e.checkpoints.save(stage=0, rounds=0, n=1, feedback="", step="write")
         te.sh("git", "checkout", "-q", "--detach", "origin/main", cwd=self.wt)
@@ -500,11 +500,11 @@ class ResumeCount(StagesTest):
         before = e.git("rev-parse", "HEAD")
         real = e.sh
         e.sh = lambda cmd, **kw: (1, "refused") if cmd[:3] == ["git", "branch", "-m"] else real(cmd, **kw)
-        self.assertFalse(e.start_again_on_base("x"))
+        self.assertFalse(e.rebase.start_again("x"))
         self.assertEqual(e.git("rev-parse", "HEAD"), before)  # the work is where it was
         e.sh = real
         e.git("checkout", "-q", "--detach")
-        self.assertFalse(e.start_again_on_base("x"))  # detached: nothing renamed or reset
+        self.assertFalse(e.rebase.start_again("x"))  # detached: nothing renamed or reset
 
     def test_a_fresh_start_clears_what_the_old_attempt_left(self):
         self.behind_branch(conflict=True)
@@ -513,7 +513,7 @@ class ResumeCount(StagesTest):
             "verify_answer": "Use the old format"})
         e.git("checkout", "-q", "task/t-1")
         e.handoff["rounds"] = [{"r": 1}]
-        self.assertTrue(e.start_again_on_base("x"))
+        self.assertTrue(e.rebase.start_again("x"))
         self.assertEqual((e.unverified, e.look_paths, e.handoff["rounds"], e.fixes, e.replans, e.rendered_names), ([], [], [], 0, 0, set()))
         self.assertEqual(e.verify_answer, "Use the old format")  # the owner's word still goes to the planner
 

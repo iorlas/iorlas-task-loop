@@ -33,6 +33,8 @@ from taskloop.contracts.answers import IRREVERSIBLE  # noqa: E402
 from taskloop.domain.prompts.plan import REPLAN_CAP  # noqa: E402
 from taskloop.contracts import answers  # noqa: E402
 from taskloop.app.plan.planner import Planner  # noqa: E402
+from taskloop.app.land.fixer import Fixer  # noqa: E402
+from taskloop.app.land.lander import Lander  # noqa: E402
 from taskloop.app.review.settles import Settles  # noqa: E402
 from taskloop.domain.review.matchers import Tools  # noqa: E402
 from taskloop.app.write.stage_loop import StageLoop  # noqa: E402
@@ -1916,8 +1918,8 @@ class EngineTest(unittest.TestCase):
             sh("git", "clone", "-q", str(origin), str(checkout), cwd=home)
         events, held = [], []
         state = {"pushes": 0, "fetches": 0, "gates": 0, "results": []}
-        real_lock, real_sh, real_wait = engine.Engine.land_lock, engine.Engine.sh, engine.Engine.add_wait
-        real_fetch, real_checks, real_fix = engine.Engine.fetch, engine.Engine.run_checks, engine.Engine.fix
+        real_lock, real_sh, real_wait = Lander.lock, engine.Engine.sh, engine.Engine.add_wait
+        real_fetch, real_checks, real_fix = engine.Engine.fetch, engine.Engine.run_checks, Fixer.fix
         gate = [sys.executable, "-c", "pass"]
 
         @contextmanager
@@ -1986,11 +1988,11 @@ class EngineTest(unittest.TestCase):
                     return 1, "Connection reset" if failure == "network" else "hook failed"
             return real_sh(this, cmd, *a, **kw)
 
-        def fix(this, kind, tail):
+        def fix(this, kind, tail, resume=False):
             self.assertFalse(held)
             events.append("fix:" + kind)
             if failure in ("checks_fixed", "checks_exhausted", "review_exhausted"):
-                state["fix_result"] = real_fix(this, kind, tail)
+                state["fix_result"] = real_fix(this, kind, tail, resume)
                 return state["fix_result"]
             raise engine.Blocked("test stops at fix: " + kind)
 
@@ -2004,11 +2006,11 @@ class EngineTest(unittest.TestCase):
         config_home = str(home / ("race-cfg-%d" % n))
         state["config_home"] = config_home
         with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": config_home, "APPDATA": config_home}), \
-                mock.patch.object(engine.Engine, "land_lock", lock), \
+                mock.patch.object(Lander, "lock", lock), \
                 mock.patch.object(engine.Engine, "fetch", fetch), \
                 mock.patch.object(engine.Engine, "run_checks", checks), \
                 mock.patch.object(engine.Engine, "sh", command), \
-                mock.patch.object(engine.Engine, "fix", fix), \
+                mock.patch.object(Fixer, "fix", fix), \
                 mock.patch.object(engine.Engine, "add_wait", wait):
             reviews = [CLEAN, review(findings=[finding("high")])] if failure == "review_exhausted" else [CLEAN] * 2
             rc, _ = self.run_engine({"plan": [plan], "write": [WRITE] * 2, "review": reviews}, gate=gate, **cfg)
@@ -2120,7 +2122,7 @@ class EngineTest(unittest.TestCase):
             self.assertEqual(tl.git("ls-tree", "--name-only", "main", "f.txt", cwd=str(self.race_origin)), "")
 
     def push_race_interrupted_cell(self, interruption, role):
-        real_fix, real_stage = engine.Engine.fix, StageLoop.run
+        real_fix, real_stage = Fixer.fix, StageLoop.run
         real_delegate = fake_route.Script.reply
         real_sh, real_checks = engine.Engine.sh, engine.Engine.run_checks
         real_brief = check_evidence.failure_brief
@@ -2153,7 +2155,7 @@ class EngineTest(unittest.TestCase):
                     interrupt_boundary("transition")
                 return real_move(this, to, cause, detail)
 
-            def fix(this, kind, tail):
+            def fix(this, kind, tail, resume=False):
                 ck = self.checkpoint()
                 self.assertEqual(ck["step"], "land-verify-red")
                 self.assertIn("retry check", ck["pending_land_validation"])
@@ -2161,7 +2163,7 @@ class EngineTest(unittest.TestCase):
                 seen["failure"] = ck["feedback"]
                 seen["in_fix"] = True
                 try:
-                    return real_fix(this, kind, tail)
+                    return real_fix(this, kind, tail, resume)
                 finally:
                     seen["in_fix"] = False
 
@@ -2184,7 +2186,7 @@ class EngineTest(unittest.TestCase):
                                          kind=engine.oc.Kind.PAUSE_LANE if interruption == "pause" else engine.oc.Kind.FAULT_DENIED)
                 return real_delegate(this, current_role, *a, **kw)
 
-            with mock.patch.object(engine.Engine, "fix", fix), \
+            with mock.patch.object(Fixer, "fix", fix), \
                     mock.patch.object(StageLoop, "run", stage), \
                     mock.patch.object(check_evidence, "failure_brief", brief), \
                     mock.patch.object(Checkpoints, "save", checkpoint), \
@@ -2291,7 +2293,7 @@ class EngineTest(unittest.TestCase):
         probe = ("import fcntl,sys; f=open(sys.argv[1],'a')\n"
                  "try:\n fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB); print('free')\n"
                  "except OSError: print('held')")
-        with eng.land_lock() as path:
+        with eng.lander.lock() as path:
             held = subprocess.run([sys.executable, "-c", probe, str(path)], capture_output=True, text=True).stdout
         free = subprocess.run([sys.executable, "-c", probe, str(path)], capture_output=True, text=True).stdout
         self.assertEqual((held.strip(), free.strip()), ("held", "free"))
@@ -2324,7 +2326,7 @@ class EngineTest(unittest.TestCase):
         t.start()
         self.assertTrue(until(lambda: got), "the holder never took the lock")
         threading.Timer(0.4, go.set).start()
-        with eng.land_lock():
+        with eng.lander.lock():
             pass
         t.join()
         (start,), (w,) = records(eng, "wait_start"), records(eng, "wait_end")
@@ -2337,7 +2339,7 @@ class EngineTest(unittest.TestCase):
 
     def test_a_free_land_lock_logs_no_wait(self):
         eng = self.checks_engine()
-        with eng.land_lock():
+        with eng.lander.lock():
             pass
         self.assertEqual(self.wait_records(eng), [])
 

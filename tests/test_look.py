@@ -12,6 +12,7 @@ from support import fake_route  # noqa: E402
 from support.checkpoints import put_ck, read_ck  # noqa: E402
 from support.fakes import as_bead  # noqa: E402
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from taskloop.app.land.closer import Closer  # noqa: E402
 from taskloop.contracts import answers  # noqa: E402
 from support.builders import make_engine  # noqa: E402
 from taskloop.contracts.config import VisualConfig  # noqa: E402
@@ -190,7 +191,7 @@ class LookTest(unittest.TestCase):
         self.assertIn("second look", u[3])
 
     def test_the_look_survives_a_crash_after_the_land(self):
-        with mock.patch.object(engine.Engine, "close"), mock.patch.object(engine.Engine, "file_owner_look",
+        with mock.patch.object(Closer, "close"), mock.patch.object(engine.Engine, "file_owner_look",
                                                                           side_effect=SystemExit):
             with self.assertRaises(SystemExit):  # the process died after the push: no close, the checkpoint stays
                 self.go({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, look="matches")]}, first_shot=1,
@@ -199,7 +200,7 @@ class LookTest(unittest.TestCase):
         saved = read_ck(self.eng).state
         self.assertEqual(saved.look_paths, ["design/look-reviews/t-1/home-screen.png"])
         eng2 = engine.Engine("t-1", str(self.wt), self.eng.cfg, store=self.store)
-        eng2.reset(as_bead(BEAD))
+        eng2.tree.reset(as_bead(BEAD))
         eng2.bead_title = "Add f"
         eng2.resume.point()
         self.assertEqual(eng2.look_paths, saved.look_paths)

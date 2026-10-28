@@ -121,6 +121,9 @@ class ConfigDir:
         return self.root / "dash.json"
 
 
+TASK_EXCLUDE = ".task/"  # the line a repo's info/exclude carries so the scratch folder is never committed
+
+
 class RepoDirs:
     """The scratch folder a worktree carries (.task/, never committed)."""
 

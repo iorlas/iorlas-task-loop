@@ -93,7 +93,7 @@ class StaleTree(StagesTest):
         e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
         self.junk_and_moving_main()
         (self.wt / "a.txt").write_text("edited and not committed\n")
-        self.assertEqual(e.rebase_onto_base(), "")
+        self.assertEqual(e.rebase.onto_base(), "")
 
     def test_the_writer_is_told_the_check_variables_exist_only_inside_the_engines_checks(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
@@ -138,7 +138,7 @@ class StaleTree(StagesTest):
         put_ck(e, head=before)
         self.main_moves()
         te.sh("git", "fetch", "-q", "origin", cwd=self.wt)
-        self.assertEqual(e.rebase_onto_base(), "rebased")
+        self.assertEqual(e.rebase.onto_base(), "rebased")
         self.assertEqual(read_ck(e).head, e.git("rev-parse", "HEAD"))  # tl-7y6.2.19: the wip commit is squashed in
         self.assertEqual(e.git("rev-list", "--count", "origin/main..HEAD"), "1")
 
@@ -204,7 +204,7 @@ class SlotHygiene(StagesTest):
         e = self.eng
         e.git("checkout", "-q", "task/t-1")
         (self.wt / "stray.dat").write_text("not ignored, not committed\n")
-        e.leave_slot("blocked", "task/t-1")
+        e.tree.leave_slot("blocked", "task/t-1")
         self.assertEqual(e.git("symbolic-ref", "--short", "-q", "HEAD"), "task/t-1")
 
     def test_a_slot_left_on_an_old_branch_with_only_ignored_files_is_not_another_branchs_work(self):
@@ -364,12 +364,12 @@ class Contracts(StagesTest):
         hook.write_text("#!/bin/sh\necho 'csharpier: unformatted' >&2\nexit 1\n")
         os.chmod(str(hook), 0o755)
         (Path(eng.wt) / "wip-file.txt").write_text("x\n")
-        self.assertTrue(eng.wip("paused"))
+        self.assertTrue(eng.tree.wip("paused"))
         self.assertEqual(eng.git("status", "--porcelain"), "")
         self.assertIn("wip (t-1): paused", eng.git("log", "-1", "--format=%s"))
         (Path(eng.wt) / "wip-file2.txt").write_text("y\n")
         with mock.patch.object(eng, "sh", return_value=(1, "fatal: boom")), mock.patch.object(eng, "warn") as warn:
-            self.assertFalse(eng.wip("paused"))
+            self.assertFalse(eng.tree.wip("paused"))
         self.assertIn("wip commit", warn.call_args[0][0])
         self.assertIn("boom", warn.call_args[0][0])
 

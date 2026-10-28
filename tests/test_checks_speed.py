@@ -326,9 +326,9 @@ class Duplicates(SpeedTest):
         rc, count, seen = self.gate_run()
         self.assertEqual(rc, 0)
         eng = self.eng
-        eng.gate_record("abc")
-        self.assertTrue(eng.gate_green("abc"))
-        self.assertFalse(eng.gate_green("abd"))
+        eng.lander.gate.remember("abc")
+        self.assertTrue(eng.lander.gate.green("abc"))
+        self.assertFalse(eng.lander.gate.green("abd"))
 
 
 class Schedule(SpeedTest):

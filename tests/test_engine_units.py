@@ -493,7 +493,7 @@ class DelegateLauncher(unittest.TestCase):
     def test_close_with_an_empty_reason_still_closes(self):
         c = engine.load_cfg(str(self.wt))
         eng = engine.Engine("t-1", str(self.wt), c, store=self.store)
-        eng.close("failed", "", "", "")
+        eng.closer.close("failed", "", "", "")
         self.assertTrue(self.blocked)
 
     def test_no_lane_pauses_the_bead_open(self):

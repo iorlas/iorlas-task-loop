@@ -152,7 +152,7 @@ class Verifier:
         e.unchecked = [u for u in e.unchecked if u["kind"] not in UNCHECKED_KINDS] + still + pending
         before = len(e.unchecked)
         pending = [dict(u, why=u.get("why") or "add a test or check that proves: {}".format(u["what"])) for u in pending]
-        done = e.fix("verify", "".join("- {}: {}\n".format(u["what"], u["why"]) for u in pending))
+        done = e.fixer.fix("verify", "".join("- {}: {}\n".format(u["what"], u["why"]) for u in pending))
         fixed = {u["what"] for u in pending}
         # what the fix's review added stays
         e.unchecked = [u for u in e.unchecked[:before] if u["what"] not in fixed] + e.unchecked[before:]

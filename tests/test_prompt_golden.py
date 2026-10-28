@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from taskloop.domain.prompts.review import acceptance_text  # noqa: E402
 from taskloop.domain.prompts import common as cp  # noqa: E402
+from taskloop.domain.prompts.land import FIX_GOAL  # noqa: E402
 from taskloop.domain.prompts import plan as pp  # noqa: E402
 from taskloop.domain.prompts import reflect as fp  # noqa: E402
 from taskloop.domain.prompts import review as rp  # noqa: E402
@@ -25,8 +26,8 @@ from taskloop.domain.checks.writer_split import WriterSplit  # noqa: E402
 
 TEMPLATES = {"PLAN_PROMPT": pp, "WRITE_PROMPT": wp, "WRITE_RESUME_PROMPT": wp, "REVIEW_PROMPT": rp, "VERIFY_PROMPT": vp, "REFLECT_PROMPT": fp}
 GOLDEN = ROOT / "tests" / "fixtures" / "prompts"
-FIX_SCOPE = "the fix only: it must %s without breaking what the accepted stages built" % engine.Engine.FIX["gate"][0]
-FIX_GOAL = "Fix: " + engine.Engine.FIX["gate"][0]
+FIX_SCOPE = "the fix only: it must %s without breaking what the accepted stages built" % FIX_GOAL["gate"]
+FIX_GOAL = "Fix: " + FIX_GOAL["gate"]
 
 
 def render_review(fix=False, last=False):

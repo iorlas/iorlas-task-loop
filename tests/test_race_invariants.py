@@ -32,6 +32,7 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # python3 -m unittest tests.test_race_invariants, from the repo root
+from taskloop.app.land.lander import Lander  # noqa: E402
 import test_loop  # noqa: E402  (puts skills/task-loop on sys.path)
 
 import clock as clocks  # noqa: E402
@@ -428,11 +429,11 @@ class Invariants(test_loop.Base):
     def test_every_land_holds_the_land_lock_and_is_rebased_and_pushed_once(self):
         """Two engine lands and a release push take one lock per origin: never two inside at once. Two releases built on one base:
         the late one rebases onto what the first pushed, and each release's push is accepted once.
-        Red when: engine.py land_lock, `with self.locked("land_lock", path):` is `with contextlib.nullcontext():`; or
+        Red when: land.py Lander.lock, `with self.locked("land_lock", path):` is `with contextlib.nullcontext():`; or
         release.py push_main, `if head != base:` is `if False:` (a moved origin/main is not rebased onto)."""
         self.tracker()
         url = "file:///origin.git"
-        eng = lambda: types.SimpleNamespace(git=lambda *a: url, wt=self.repo_s,  # noqa: E731 - Engine.land_lock with the parts it reads
+        eng = lambda: types.SimpleNamespace(land_lock_path=lambda: tl.land_lock_path(url),  # noqa: E731 - Lander.lock with the parts it reads
                                             locked=lambda what, path: tl.os_lock(path, "bead"))
         mu, inside, most, entered, joined = threading.Lock(), [0], [0], [], threading.Event()
 
@@ -459,7 +460,7 @@ class Invariants(test_loop.Base):
                 joined.set()
             return self.real_os_lock(*a, **kw)
         with mock.patch.object(tl, "os_lock", side_effect=watch):
-            self.together({"X": section(engine.Engine.land_lock(eng())), "Y": section(engine.Engine.land_lock(eng())),
+            self.together({"X": section(Lander(eng()).lock()), "Y": section(Lander(eng()).lock()),
                            "Z": section(tl.os_lock(tl.land_lock_path(url), "release: z"))})
         self.assertEqual((most[0], sorted(entered)), (1, ["X", "Y", "Z"]))
         o = self.releases()

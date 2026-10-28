@@ -60,6 +60,12 @@ class RunState:
     pending_land_validation: str = ""
     review: ReviewState = field(default_factory=ReviewState)
 
+    def start_again(self) -> "RunState":
+        """The state of a task that starts again on the base: nothing of the old attempt, but what belongs to the bead (the follow-ups
+        filed or refused, the owner's extra amends, the rebase resets, the brief as it is now, the planner thread)."""
+        keep = ("filed", "unfiled", "extra", "rebase_resets", "brief_hash", "snap", "planner_ref", "pending_land_validation")
+        return RunState(**{k: getattr(self, k) for k in keep})
+
     def dump(self) -> dict[str, Any]:
         """The payload that survives a park: every field, nothing else."""
         return codec.to_json(self)
