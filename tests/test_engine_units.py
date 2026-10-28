@@ -54,8 +54,8 @@ from taskloop.domain.checks.writer_split import WriterSplit  # noqa: E402
 from taskloop.adapters import gitrepo  # noqa: E402
 from taskloop.adapters import ident  # noqa: E402
 from taskloop.adapters import delegate as lroute  # noqa: E402,F401
-import test_engine as T  # noqa: E402
-from test_engine import BRIEFS, CLEAN, PLAN, WRITE, finding, full, review, sh, shown, stop, stored_brief, verdict  # noqa: E402
+from support import engine_case as T  # noqa: E402
+from support.engine_case import BRIEFS, CLEAN, PLAN, WRITE, finding, full, review, sh, shown, stop, stored_brief, verdict  # noqa: E402
 
 
 class FailureBriefAndDurations(unittest.TestCase):

@@ -13,8 +13,8 @@ import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from taskloop.contracts import answers  # noqa: E402
 from taskloop.domain.prompts import common as cp  # noqa: E402
 from taskloop.domain.prompts import verify as vp  # noqa: E402
-import test_engine as T  # noqa: E402
-from test_engine import BEAD, CLEAN, PLAN, WRITE, engine, verdict  # noqa: E402
+from support import engine_case as T  # noqa: E402
+from support.engine_case import BEAD, CLEAN, PLAN, WRITE, engine, verdict  # noqa: E402
 from support.builders import make_engine  # noqa: E402
 
 # lifesim-yxbb.7 and lifesim-fld.25.16: the engine files follow-up beads after the land
@@ -59,7 +59,7 @@ class NoBlock(unittest.TestCase):
         with self.store.stub(show=bead):
             return self.run_engine(answers, **cfg)
 
-    engine_at_land, verifier = T.LandReview.engine_at_land, T.LandReview.verifier
+    engine_at_land, verifier = T.LandReviewBase.engine_at_land, T.LandReviewBase.verifier
 
     def unit(self):
         """An engine at land with the verifier's plumbing stubbed (no model, no tree)."""

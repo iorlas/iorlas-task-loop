@@ -13,10 +13,10 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import outcome as oc  # noqa: E402
-import test_engine as te  # noqa: E402
+from support import engine_case as te  # noqa: E402
 from taskloop.adapters import delegate, gitrepo, runner  # noqa: E402
 from taskloop.adapters import halt as halting  # noqa: E402
-from test_engine import CLEAN, PLAN, WRITE, engine, pyc  # noqa: E402
+from support.engine_case import CLEAN, PLAN, WRITE, engine, pyc  # noqa: E402
 
 
 class Halt(unittest.TestCase):

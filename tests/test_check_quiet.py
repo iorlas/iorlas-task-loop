@@ -13,10 +13,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-import test_engine as te  # noqa: E402
+from support import engine_case as te  # noqa: E402
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import config  # noqa: E402
-from test_engine import engine, pyc  # noqa: E402
+from support.engine_case import engine, pyc  # noqa: E402
 from test_checks_speed import SpeedTest  # noqa: E402
 
 SLEEP_S = 5  # well past the 1.2 s the old watchdog allowed in this test

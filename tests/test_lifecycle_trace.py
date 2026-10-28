@@ -10,13 +10,13 @@ import time
 import unittest
 from unittest import mock
 
-import test_engine as te
+from support import engine_case as te
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from taskloop.app.plan.planner import Planner
 from taskloop.app.wire import slots as wslots
 from taskloop.adapters import delegate as dl
 from support import fake_route
-from test_engine import CLEAN, PLAN, PY, WRITE, stop
+from support.engine_case import CLEAN, PLAN, PY, WRITE, stop
 
 from taskloop.app.run import engine
 from taskloop.domain.report import matchers as lifecycle

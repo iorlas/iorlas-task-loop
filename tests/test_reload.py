@@ -35,7 +35,7 @@ from support import looptest  # noqa: E402
 from taskloop.app.loop.run import BeadRun, Where  # noqa: E402
 from taskloop.adapters.fake_beads import FakeBeads  # noqa: E402
 from taskloop_dash.views import roadmap  # noqa: E402
-import test_engine as te  # noqa: E402
+from support import engine_case as te  # noqa: E402
 import tl  # noqa: E402
 from taskloop.app.release import catalog  # noqa: E402
 from taskloop.adapters import gitrepo  # noqa: E402

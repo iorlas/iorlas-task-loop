@@ -7,9 +7,9 @@ import time
 import unittest
 from pathlib import Path
 
-import test_engine as te
+from support import engine_case as te
 import test_engine_units
-from test_engine import CLEAN, FALSE, HAS_F, PLAN, PY, WRITE, review, stop
+from support.engine_case import CLEAN, FALSE, HAS_F, PLAN, PY, WRITE, review, stop
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))

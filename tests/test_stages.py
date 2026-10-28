@@ -29,8 +29,8 @@ from support.checks import res  # noqa: E402
 from taskloop.adapters.check_probe import PathProbe  # noqa: E402
 from taskloop.contracts.argv import argv_of  # noqa: E402
 from taskloop.app.checks import evidence as check_evidence  # noqa: E402
-import test_engine as te  # noqa: E402
-from test_engine import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint  # noqa: E402,F401
+from support import engine_case as te  # noqa: E402
+from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint  # noqa: E402,F401
 from taskloop.app.slots import engine_lock
 from taskloop.adapters import ident
 from taskloop.adapters import pidcheck

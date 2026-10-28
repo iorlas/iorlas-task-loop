@@ -10,8 +10,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-import test_engine as te  # noqa: E402
-from test_engine import CLEAN, PLAN, PY, WRITE, engine, review  # noqa: E402
+from support import engine_case as te  # noqa: E402
+from support.engine_case import CLEAN, PLAN, PY, WRITE, engine, review  # noqa: E402
 from support.builders import cfg_with  # noqa: E402
 from taskloop.app.checks import evidence  # noqa: E402
 from taskloop.app.checks.attempts import Attempts  # noqa: E402

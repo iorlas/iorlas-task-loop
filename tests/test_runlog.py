@@ -5,8 +5,8 @@ import sys
 import unittest
 from pathlib import Path
 
-import test_engine as te
-from test_engine import CLEAN, PLAN, PY, WRITE
+from support import engine_case as te
+from support.engine_case import CLEAN, PLAN, PY, WRITE
 from support.logs import pairs, records
 
 ROOT = Path(__file__).resolve().parents[1]

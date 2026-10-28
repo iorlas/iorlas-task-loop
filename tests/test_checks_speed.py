@@ -13,8 +13,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-import test_engine as te  # noqa: E402
-from test_engine import PY, engine, pyc  # noqa: E402,F401
+from support import engine_case as te  # noqa: E402
+from support.engine_case import PY, engine, pyc  # noqa: E402,F401
 from taskloop.domain.checks import lint, inputs, durations  # noqa: E402
 from taskloop.domain.checks.order import CheckOrder  # noqa: E402
 from taskloop.contracts.argv import text_of  # noqa: E402

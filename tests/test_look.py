@@ -17,8 +17,8 @@ from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.contracts import answers  # noqa: E402
 from support.builders import make_engine  # noqa: E402
 from taskloop.contracts.config import VisualConfig  # noqa: E402
-import test_engine as T  # noqa: E402
-from test_engine import BEAD, CLEAN, PLAN, WRITE, engine, verdict  # noqa: E402
+from support import engine_case as T  # noqa: E402
+from support.engine_case import BEAD, CLEAN, PLAN, WRITE, engine, verdict  # noqa: E402
 from taskloop.adapters import gitrepo
 from taskloop.app.look import shots
 from taskloop.app.look.owner_look import OwnerLook

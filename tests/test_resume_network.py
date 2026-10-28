@@ -23,9 +23,9 @@ from taskloop.app.loop.gate import GateRole  # noqa: E402
 from taskloop.contracts.config import LoopConfig  # noqa: E402
 from taskloop.domain.lanes import netgate  # noqa: E402
 import outcome as oc  # noqa: E402
-import test_engine as te  # noqa: E402
+from support import engine_case as te  # noqa: E402
 import test_stages_visual  # noqa: E402
-from test_engine import BEAD, CLEAN, PLAN, WRITE, engine, stop, verdict  # noqa: E402
+from support.engine_case import BEAD, CLEAN, PLAN, WRITE, engine, stop, verdict  # noqa: E402
 from taskloop.adapters import gitrepo
 from taskloop.adapters import ident
 from taskloop.app.release import reexec

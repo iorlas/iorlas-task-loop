@@ -7,8 +7,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402,F401
-import test_engine as T  # noqa: E402
-from test_engine import BEAD, CLEAN, PLAN, WRITE, finding, review  # noqa: E402
+from support import engine_case as T  # noqa: E402
+from support.engine_case import BEAD, CLEAN, PLAN, WRITE, finding, review  # noqa: E402
 
 
 class ReviewRound(unittest.TestCase):

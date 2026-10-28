@@ -21,8 +21,8 @@ from taskloop.app.wire import slots as wslots  # noqa: E402
 from support.builders import make_engine  # noqa: E402
 from taskloop.domain.checks import matchers  # noqa: E402
 from taskloop.domain.checks.cmd import matchers as sh_matchers  # noqa: E402
-import test_engine as te  # noqa: E402
-from test_engine import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint  # noqa: E402,F401
+from support import engine_case as te  # noqa: E402
+from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint  # noqa: E402,F401
 from taskloop.app.run import entry  # noqa: E402
 from taskloop.app.run import running as wrunning  # noqa: E402
 
