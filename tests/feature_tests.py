@@ -15,6 +15,7 @@ FEATURES = {
     "lanes": ["test_opencode", "test_write_idle"],
     "checks": ["test_checks_speed", "test_check_trim"],
     "plan": [],
+    "adapters": [],
     "slots": ["test_slots", "test_slot_git"],
     "review": ["test_verify_noblock"],
     "loop": ["test_loop", "test_loop_more", "test_race_invariants"],
