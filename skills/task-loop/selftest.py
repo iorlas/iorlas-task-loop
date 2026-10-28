@@ -22,7 +22,7 @@ PLAN = {"summary": "do it", "stages": [{"goal": "add f", "files": ["f.txt"], "ch
         "risks": [], "question": "", "options": [], "decided": "", "cases": [], "leftovers": []}
 WRITE = {"summary": "wrote f", "checks_run": [{"cmd": shlex.join(CHECK), "exit": 0}], "question": "", "options": [], "decided": "",
          "bad_checks": [], "new_cases": [], "unchecked": [], "logic_only": ""}
-REVIEW = {"findings": [], "unmet": [], "question": "", "options": [], "decided": "", "leftovers": [], "unchecked": [], "look": ""}
+REVIEW = {"findings": [], "unmet": [], "criteria": [], "question": "", "options": [], "decided": "", "leftovers": [], "unchecked": [], "look": ""}
 
 
 def lane(cmd, **kw):
@@ -35,7 +35,9 @@ def lane(cmd, **kw):
         data, node = WRITE, "write"
         Path(cwd, "f.txt").write_text("f\n", encoding="utf-8")
     else:
-        data, node = REVIEW, "review"
+        brief = Path(cmd[cmd.index("--brief") + 1]).read_text(encoding="utf-8")
+        ids = [ln.split(". ", 1)[0] for ln in brief.splitlines() if ln[:1] == "A" and ln.split(". ", 1)[0][1:].isdigit()]
+        data, node = dict(REVIEW, criteria=[{"item": i, "status": "met", "evidence": "the checks pass"} for i in ids]), "review"
     tokens = {"in": 1, "cached": 0, "out": 1}
     j = {"contract": dg.CONTRACT, "data": data, "text": "ok", "say": "", "ref": "ref-" + node, "lane": "L", "model": "m", "effort": "e",
          "family": "openai" if node == "write" else "claude", "flag": None, "fallback": False, "first_lane": "L", "rung": 0,

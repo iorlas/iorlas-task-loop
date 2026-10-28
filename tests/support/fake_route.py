@@ -153,6 +153,8 @@ class Script:
     j_extra: {node: [fields the next done answer gains]}. calls: (role, resume, authored_by) per call; prompts, cwds, nodes,
     timeouts per call. A test wraps `reply(role, prompt, schema, cwd, resume, writer, timeout)` to change what a call does."""
 
+    items: list[str] = ["A1"]  # the acceptance ids of the last review prompt, kept across runs: a resumed call carries a short note
+
     def __init__(self, answers, j_extra=None, delegate=None):
         self.answers, self.calls, self.prompts, self.cwds, self.timeouts = {k: list(v) for k, v in answers.items()}, [], [], [], []
         self.j_extra = {k: list(v) for k, v in (j_extra or {}).items()}  # per node, per call: fields the answer gains
@@ -192,10 +194,7 @@ class Script:
         if a == NO_ANSWER:
             return a
         if isinstance(a, dict) and a.get("contract") is not None:
-            return a
-        if node == "review" and isinstance(a, dict) and "criteria" not in a:  # a canned review maps every item the prompt lists
-            a = dict(a, criteria=[{"item": m.group(1), "status": "met", "evidence": "the checks pass"}
-                                  for m in re.finditer(r"^(A\d+)\. ", prompt, re.M)])
+            return self.mapped(node, prompt, a)
         if node == "write":
             Path(cwd, "f.txt").write_text("d%d\n" % len(self.calls))
         j = answer(self.c, None, "ref-" + node, bool(resume), a, cost=0.5, secs=1, family="openai" if node == "write" else "claude",
@@ -203,6 +202,18 @@ class Script:
                    context={"instructions": ["/repo/AGENTS.md"], "env_keys": ["PATH"]})
         if self.j_extra.get(node):
             j.update(self.j_extra[node].pop(0))
+        return self.mapped(node, prompt, j)
+
+    def mapped(self, node, prompt, j):
+        """A canned review maps every acceptance item the prompt lists to evidence, as a real reviewer must (a resumed call remembers the
+        items of its first prompt)."""
+        data = j.get("data") if node == "review" and isinstance(j, dict) else None
+        found = re.findall(r"^(A\d+)\. ", prompt, re.M)
+        Script.items = found or Script.items
+        if isinstance(data, dict) and not data.get("criteria"):
+            j = dict(j, data=dict(data))  # a canned answer is shared between tests: never changed in place
+            j["data"]["criteria"] = [{"item": i, "status": "met", "evidence": "the checks pass"}
+                                     for i in Script.items]
         return j
 
 

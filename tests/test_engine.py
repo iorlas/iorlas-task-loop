@@ -135,7 +135,7 @@ PLAN: dict[str, Any] = {"summary": "do it", "stages": [{"goal": "add f", "files"
 WRITE = {"summary": "wrote f", "checks_run": [{"cmd": "test -f f.txt", "exit": 0}], "question": "", "options": [], "decided": "", "bad_checks": [],
          "new_cases": [], "unchecked": [], "logic_only": ""}
 ROUTE = "/h/.claude/plugins/cache/m/iorlas-delegate/%s/skills/delegate/route.py"
-CLEAN = {"findings": [], "unmet": [], "question": "", "options": [], "decided": "", "leftovers": [], "unchecked": [], "look": ""}
+CLEAN = {"findings": [], "unmet": [], "criteria": [], "question": "", "options": [], "decided": "", "leftovers": [], "unchecked": [], "look": ""}
 BEAD = {"id": "t-1", "title": "Add f", "metadata": {}, "acceptance_criteria": "f.txt exists"}
 
 

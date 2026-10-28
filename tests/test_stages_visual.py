@@ -158,10 +158,9 @@ class VisualWork(StagesTest):
         rc, s = self.go({"plan": [PLAN], "write": [self.write()], "look": [self.judged()], "review": [CLEAN]})
         self.assertEqual(self.roles(s).count("worker"), 1)
 
-    def test_a_writer_that_still_names_nothing_meets_the_reviews_finding_as_before(self):
+    def test_a_writer_that_still_names_nothing_gets_a_warning_from_the_review_not_a_send_back(self):
         rc, s = self.go({"plan": [PLAN], "write": [WRITE, WRITE, WRITE, WRITE], "review": [CLEAN, CLEAN]})
-        handoff = self.eng.run_dir.joinpath("handoff.json").read_text()
-        self.assertIn("asked for no shots", handoff)
+        self.assertIn("asked for no shots", self.eng.log_path.read_text())
         self.assertEqual(sum(1 for t in s.prompts if "named no shots and gave no logic_only reason" in t), 1)  # asked once, not again
 
     def test_the_planner_is_told_the_rule_and_the_repos_shot_methods(self):

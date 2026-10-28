@@ -4,6 +4,7 @@ import shutil
 import sys
 import time
 import unittest
+from typing import Any
 from dataclasses import replace
 from pathlib import Path
 from unittest import mock
@@ -554,6 +555,7 @@ class Executable(StagesTest):
 
 
 class Ledger(StagesTest):
+    eng: Any
     """tl-bxk.13.16.1: the plan says how each criterion is proved; review and verify go by it, not by the wording of an item."""
 
     LEFT = [{"title": "Import the chosen prefabs and add object rows", "why": "next bead"}]
@@ -579,7 +581,7 @@ class Ledger(StagesTest):
         rc, s = self.run_engine({"plan": [self.plan()], "write": [WRITE], "review": [review_with(unmet)]})
         self.assertEqual(rc, 0, self.blocked)
         self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])  # no send-back
-        self.assertIn("unmet items dropped", self.eng.log_path.read_text())
+        self.assertIn("unmet item dropped", self.eng.log_path.read_text())
 
     def test_a_claim_about_the_code_that_shares_words_with_a_deferred_item_is_not_that_item(self):
         e = make_engine(self.wt, store=self.store, attrs={
