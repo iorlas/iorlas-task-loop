@@ -121,14 +121,10 @@ ASK = ask.Ask(id="tl-1-1", n=1, bead="tl-1", kind=AskKind.DECISION, ask_class=As
                    options=[ask.AskOption(label="Right", consequence="lands", action="confirm", cost="free", recommended=True)],
                    repo="/r", title="t", answer=ask.AskAnswer(action="confirm", text="ok", t=T, by="denis"), answered=T + 5, consumed=T + 9)
 REVIEW_STATE = review.ReviewState(
-    reviews=3, rounds=2, seen_lows=["style nit"],
-    book=[review.BookedFinding(fid="f1", stage=1, round=1, axis="spec", severity="high", confidence="likely", category="logic",
-                               file="a.py", line=7, fix="handle none", scenario="a None input raises", status="claimed")],
-    unchecked=[review.Unchecked(what="w", kind="checkable")], unverified=[review.Unverified(what="u", kind="taste")],
-    verified=[trace.Verified(what="w", kind="checkable", verdict="settled", evidence="e", why="y")],
-    verify=review.VerifyResult(settled=1, wrong=1, open=0, fixes=1, asked=False), filed=["f"],
-    unfiled=[review.Unfiled(title="t", why="lint")],
-    replan=review.ReplanDigest(cause="gate red", notes="n", accepted=["g1"], open_findings=["f1"], diff_stat="1 file changed"))
+    reviews=3, rounds=2, unchecked=[review.Unchecked(what="w", kind="checkable")],
+    unverified=[review.Unverified(what="u", kind="taste")],
+    verified=[trace.Verified(what="w", kind="checkable", verdict="settled", evidence="e", why="y")], filed=["f"],
+    unfiled=[review.Unfiled(title="t", why="lint")])
 OTHERS = {
     "RunTrace": TRACE,
     "Ask": ASK,

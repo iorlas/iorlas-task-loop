@@ -6,7 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402,F401
 from taskloop.domain.review import kinds  # noqa: E402
-from taskloop.domain.review.matchers import BdDemand, CodeNames, EngineActions, GateProof, Tools, Wording, word_in  # noqa: E402
+from taskloop.domain.review.matchers import AcceptanceItems, BdDemand, CodeNames, EngineActions, GateProof, Tools, Wording, word_in  # noqa: E402
 
 
 class Table(unittest.TestCase):
@@ -88,6 +88,14 @@ class GateProofTable(Table):
         self.assertEqual(GateProof.first_named("unity-tests passes", ["lint", "unity-tests"]), "unity-tests")
         self.assertTrue(word_in("lint", "ran lint ok"))
         self.assertFalse(word_in("lint", "ran lint-all ok"))
+
+
+class AcceptanceItemsTable(Table):
+    def test_split(self):
+        self.rows(AcceptanceItems.split, [
+            ("", []), ("f.txt exists", [("A1", "f.txt exists")]),
+            ("  - first\n  - second\n    goes on\n", [("A1", "first"), ("A2", "second goes on")]),
+            ("1. one\n2) two", [("A1", "one"), ("A2", "two")]), ("\u2022 a\n\u2022 b", [("A1", "a"), ("A2", "b")])])
 
 
 class ResolveKind(unittest.TestCase):

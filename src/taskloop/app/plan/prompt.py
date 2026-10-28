@@ -8,6 +8,8 @@ from taskloop.contracts.argv import checks_to_wire
 from taskloop.domain.checks import lint
 from taskloop.domain.prompts.plan import PLAN_PROMPT, VISUAL_PLAN, VISUAL_STAGES
 
+REPLAN_CALLS = 6  # the calls a replan may spend looking (study 63: the median replan used 4)
+
 
 class PlanPrompt:
     def __init__(self, host: Any) -> None:
@@ -45,7 +47,16 @@ class PlanPrompt:
         if hist and (old or again):
             out += ("\n\nWhat the rounds on this task did so far (the writer's summary, then what was sent back). Do not "
                     f"plan a fix that already failed to hold:\n<rounds>\n{hist}</rounds>\n")
-        return out + (e.routing.ledger().text() if old or again else "")
+        return out + (self.digest() + e.routing.ledger().text() if old or again else "")
+
+    def digest(self) -> str:
+        """What a replan starts from beyond the old plan, the cause and the rounds: what the tree holds now, and a budget for looking."""
+        e = self.e
+        tree = e.tree_hash()
+        stat = (e.git("diff", "--stat", e.base_sha(), tree) if tree else "").strip()
+        return (f"\n\nThe tree now, against the task's base (git diff --stat):\n<tree>\n{stat or '(no file changed yet)'}\n</tree>\n"
+                f"The old plan, the cause and the rounds above are your start: read at most {REPLAN_CALLS} files or run at most "
+                f"{REPLAN_CALLS} commands before you answer.\n")
 
     def rules(self) -> list[str]:
         e = self.e

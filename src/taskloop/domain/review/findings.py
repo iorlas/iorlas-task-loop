@@ -8,20 +8,18 @@ from taskloop.domain.review.ledger import Ledger
 from taskloop.domain.review.matchers import BdDemand
 
 SEVERITY = ("low", "medium", "high")
-CONFIDENCE = ("possible", "likely", "certain")
 Finding = Mapping[str, Any]
 
 
 def blocks(f: Finding) -> bool:
-    """A finding sends the stage back only if its severity is high, its confidence is likely or better and it names a failure
-    scenario (inputs, then the wrong output). Everything else is a note (tl-7y6.7.27)."""
-    sure = CONFIDENCE.index(f.get("confidence", "possible")) >= CONFIDENCE.index("likely")
-    return SEVERITY.index(f["severity"]) >= SEVERITY.index("high") and sure and bool(str(f.get("scenario") or "").strip())
+    """A finding sends the stage back only if its severity is high and it names a failure scenario (inputs, then the wrong
+    output). Everything else is a note (tl-7y6.7.27)."""
+    return SEVERITY.index(f["severity"]) >= SEVERITY.index("high") and bool(str(f.get("scenario") or "").strip())
 
 
 def engine_finding(file: str, line: int, fix: str, scenario: str, axis: str = "standards", category: str = "engine") -> dict[str, Any]:
-    """A finding the engine itself raises: certain, high, with its scenario, so it blocks by the same rule as a reviewer's."""
-    return {"file": file, "line": line, "severity": "high", "confidence": "certain", "axis": axis, "category": category, "fix": fix,
+    """A finding the engine itself raises: high, with its scenario, so it blocks by the same rule as a reviewer's."""
+    return {"file": file, "line": line, "severity": "high", "axis": axis, "category": category, "fix": fix,
             "scenario": scenario}
 
 
@@ -41,7 +39,7 @@ def lows_after_first(findings: Sequence[Finding], round_no: int) -> list[Finding
 
 def unmapped(items: Sequence[tuple[str, str]], criteria: Sequence[Finding]) -> list[dict[str, Any]]:
     """The spec axis: every acceptance item (id, text) is met (with evidence), unmet or the engine's, or it is a finding."""
-    said = {str(c.get("item") or "").strip().upper() for c in criteria}
+    said = {str(c.get("item") or "").strip().upper() for c in criteria if c.get("status") != "met" or str(c.get("evidence") or "").strip()}
     return [engine_finding("", 0, f"say for acceptance item {i} whether it is met, with evidence: {text[:200]}",
                            f"acceptance item {i} has no evidence in the review, so nothing shows it is met",
                            axis="spec", category="unmapped")

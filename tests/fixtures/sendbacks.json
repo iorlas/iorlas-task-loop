@@ -1,0 +1,352 @@
+[
+ {
+  "n": 0,
+  "bead": "-yxbb.12",
+  "reviewer": "grok-4.7",
+  "said": "interface.md SHALLs contradict (reduced motion; Now vs passing chance)",
+  "class": "a"
+ },
+ {
+  "n": 1,
+  "bead": "-hclf.45",
+  "reviewer": "grok-4.7",
+  "said": "docs claim csc.rsp points at globalconfig (false)",
+  "class": "b"
+ },
+ {
+  "n": 2,
+  "bead": "-d5f.40",
+  "reviewer": "gpt-6.1-sol",
+  "said": "research table digits differ from the JSON",
+  "class": "b"
+ },
+ {
+  "n": 3,
+  "bead": "-9akx",
+  "reviewer": "gpt-6.1-sol",
+  "said": "eating: far detour exhausts path search, meal abandoned",
+  "class": "a"
+ },
+ {
+  "n": 4,
+  "bead": "-ruhq",
+  "reviewer": "grok-4.7",
+  "said": "stray outline in wrong feature file, wrong tag",
+  "class": "b"
+ },
+ {
+  "n": 5,
+  "bead": "-ov3w",
+  "reviewer": "gpt-6.1-sol",
+  "said": "acceptance test never checks warn/fix/play still need variants",
+  "class": "b"
+ },
+ {
+  "n": 6,
+  "bead": "-d5f.39",
+  "reviewer": "gpt-6.1-sol",
+  "said": "head-mark route jump (cached arrival route cleared)",
+  "class": "a"
+ },
+ {
+  "n": 7,
+  "bead": "-hclf.44",
+  "reviewer": "grok-4.7",
+  "said": "config guide names wrong reader; checker accepts a fake module",
+  "class": "b"
+ },
+ {
+  "n": 8,
+  "bead": "-fld.27.12",
+  "reviewer": "gpt-6.1-sol",
+  "said": "restart: LiveScreen draws Lots[0], not the played lot",
+  "class": "a"
+ },
+ {
+  "n": 9,
+  "bead": "-fld.10",
+  "reviewer": "sonnet-5.5",
+  "said": "crash file overwritten within the same second",
+  "class": "b"
+ },
+ {
+  "n": 10,
+  "bead": "-rl4s",
+  "reviewer": "grok-4.7",
+  "said": "guide tells agents to re-run a log-reading check",
+  "class": "b"
+ },
+ {
+  "n": 11,
+  "bead": "-hclf.44",
+  "reviewer": "grok-4.7",
+  "said": "guides carry HTML entities in the path template; checker too weak",
+  "class": "b"
+ },
+ {
+  "n": 12,
+  "bead": "-yxbb.3",
+  "reviewer": "gpt-6.1-sol",
+  "said": "test import fails under python -I",
+  "class": "b"
+ },
+ {
+  "n": 13,
+  "bead": "-d5f.44",
+  "reviewer": "sonnet-5.5",
+  "said": "pointer raycast over HUD (low); blocking item added by engine",
+  "class": "e"
+ },
+ {
+  "n": 14,
+  "bead": "-fld.27.12",
+  "reviewer": "sonnet-5.5",
+  "said": "hand-rolled scan, test wiring nits (low); blocking item added by engine",
+  "class": "e"
+ },
+ {
+  "n": 15,
+  "bead": "-22b3",
+  "reviewer": "sonnet-5.5",
+  "said": "tautological test, public test helpers (low); blocking item added by engine",
+  "class": "e"
+ },
+ {
+  "n": 16,
+  "bead": "-l4ow",
+  "reviewer": "grok-4.7",
+  "said": "smile check proves little; engine wants screenshots",
+  "class": "e"
+ },
+ {
+  "n": 17,
+  "bead": "-fld.25.16",
+  "reviewer": "sonnet-5.5",
+  "said": "README table stale vs evidence; bd follow-ups unfiled",
+  "class": "b"
+ },
+ {
+  "n": 18,
+  "bead": "-22b3",
+  "reviewer": "sonnet-5.5",
+  "said": "look review missing for child sheets; deltaE unproven",
+  "class": "a"
+ },
+ {
+  "n": 19,
+  "bead": "-d5f.40",
+  "reviewer": "sonnet-5.5",
+  "said": "README look text contradicts screenshots",
+  "class": "b"
+ },
+ {
+  "n": 20,
+  "bead": "-y7ll",
+  "reviewer": "grok-4.7",
+  "said": "first-crisis spec still requires evacuate/call-for-help (owner cut it)",
+  "class": "a"
+ },
+ {
+  "n": 21,
+  "bead": "-j43r",
+  "reviewer": "grok-4.7",
+  "said": "spike replaces the accepted busy-slot rule",
+  "class": "a"
+ },
+ {
+  "n": 22,
+  "bead": "-fld.10",
+  "reviewer": "gpt-6.1-sol",
+  "said": "native crash after declined recovery leaves no crash file",
+  "class": "a"
+ },
+ {
+  "n": 23,
+  "bead": "-fld.27.17",
+  "reviewer": "sonnet-5.5",
+  "said": "lot-card framing hides the house behind the UI card",
+  "class": "a"
+ },
+ {
+  "n": 24,
+  "bead": "-yxbb.3",
+  "reviewer": "sonnet-5.5",
+  "said": "plan's production fix (stale handed session) absent",
+  "class": "a"
+ },
+ {
+  "n": 25,
+  "bead": "-d5f.34",
+  "reviewer": "sonnet-5.5",
+  "said": "README zoom claim contradicts shot; follow-up beads unfiled",
+  "class": "b"
+ },
+ {
+  "n": 26,
+  "bead": "-f2by",
+  "reviewer": "sonnet-5.5",
+  "said": "decision record stale; beads unfiled",
+  "class": "b"
+ },
+ {
+  "n": 27,
+  "bead": "-40jy",
+  "reviewer": "gpt-6.1-sol",
+  "said": "diagnosis incomplete; table != evidence",
+  "class": "b"
+ },
+ {
+  "n": 28,
+  "bead": "-fdyo",
+  "reviewer": "gpt-6.1-sol",
+  "said": "README predates the completed capture",
+  "class": "a"
+ },
+ {
+  "n": 29,
+  "bead": "-yxbb.12",
+  "reviewer": "grok-4.7",
+  "said": "mock annotation covers the caption in a shot",
+  "class": "b"
+ },
+ {
+  "n": 30,
+  "bead": "-fld.25.16",
+  "reviewer": "sonnet-5.5",
+  "said": "table != final evidence (again); beads unfiled",
+  "class": "b"
+ },
+ {
+  "n": 31,
+  "bead": "-40jy",
+  "reviewer": "sonnet-5.5",
+  "said": "asks failing proof for a premise the run disproved",
+  "class": "e"
+ },
+ {
+  "n": 32,
+  "bead": "-yxbb.2",
+  "reviewer": "sonnet-5.5",
+  "said": "screenshot judgement needs a bd comment (writer barred from bd)",
+  "class": "e"
+ },
+ {
+  "n": 33,
+  "bead": "-d5f.34",
+  "reviewer": "sonnet-5.5",
+  "said": "beads to file (writer barred from bd)",
+  "class": "e"
+ },
+ {
+  "n": 34,
+  "bead": "-40jy",
+  "reviewer": "sonnet-5.5",
+  "said": "'goal is met' listed under unmet; 2 lows",
+  "class": "d"
+ },
+ {
+  "n": 35,
+  "bead": "-yxbb.6",
+  "reviewer": "sonnet-5.5",
+  "said": "close/fold 2 beads (bd action)",
+  "class": "e"
+ },
+ {
+  "n": 36,
+  "bead": "-d5f.34",
+  "reviewer": "sonnet-5.5",
+  "said": "README typos (low); beads 'engine files'",
+  "class": "c"
+ },
+ {
+  "n": 37,
+  "bead": "-iqad",
+  "reviewer": "sonnet-5.5",
+  "said": "soak still waives meal_minutes; waiver test count",
+  "class": "a"
+ },
+ {
+  "n": 38,
+  "bead": "-hclf.45",
+  "reviewer": "grok-4.7",
+  "said": "blueprint managed-block gate red",
+  "class": "a"
+ },
+ {
+  "n": 39,
+  "bead": "-d5f.40",
+  "reviewer": "sonnet-5.5",
+  "said": "probe measures mattress top wrongly; numbers wrong",
+  "class": "a"
+ },
+ {
+  "n": 40,
+  "bead": "-yxbb.12",
+  "reviewer": "grok-4.7",
+  "said": "spec bans simultaneous actions against R14; R26 delta",
+  "class": "a"
+ },
+ {
+  "n": 41,
+  "bead": "-hclf.44",
+  "reviewer": "grok-4.7",
+  "said": "AGENTS guides: wrong unity-check claim, absolute slot path",
+  "class": "b"
+ },
+ {
+  "n": 42,
+  "bead": "-gfr.27",
+  "reviewer": "grok-4.7",
+  "said": "README links gitignored .task/; design lint fails off-slot",
+  "class": "a"
+ },
+ {
+  "n": 43,
+  "bead": "-fld.27.12",
+  "reviewer": "grok-4.7",
+  "said": "EndingShots not requested via stage shots field",
+  "class": "e"
+ },
+ {
+  "n": 44,
+  "bead": "-d5f.34",
+  "reviewer": "sonnet-5.5",
+  "said": "approval + follow-up beads unfiled",
+  "class": "e"
+ },
+ {
+  "n": 45,
+  "bead": "-fld.27.12",
+  "reviewer": "grok-4.7",
+  "said": "shots=[EndingShots] undeclared (3 rounds -> replan)",
+  "class": "e"
+ },
+ {
+  "n": 46,
+  "bead": "-qu7h",
+  "reviewer": "sonnet-5.5",
+  "said": "bd recipe change not demonstrated on a scratch db",
+  "class": "b"
+ },
+ {
+  "n": 47,
+  "bead": "-fld.27.12",
+  "reviewer": "grok-4.7",
+  "said": "EndingShots declaration (engine contract)",
+  "class": "e"
+ },
+ {
+  "n": 48,
+  "bead": "-d5f.34",
+  "reviewer": "gpt-6.1-sol",
+  "said": "LiveCameraShots view request (engine contract)",
+  "class": "e"
+ },
+ {
+  "n": 49,
+  "bead": "-d5f.34",
+  "reviewer": "gpt-6.1-sol",
+  "said": "same, engine contract",
+  "class": "e"
+ }
+]

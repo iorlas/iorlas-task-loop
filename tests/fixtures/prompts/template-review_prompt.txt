@@ -14,11 +14,17 @@ gate (coverage included) goes to a fix round. The gate, the checks above and wha
 The writer says: {summary}
 Proof the engine cannot rerun (a test seen failing after a planted fault) is in {evidence}/: a requirement shown
 there is met. The engine counted tests in the task's diff: {added} added, {removed} removed.
-Return:
+{host_rule}
+{round_rule}{acceptance}Return:
 - findings: bugs, broken contracts, risky changes (a public member, a test weakened or removed, a suppression, a file
-  outside what the stage names, a break of this repo's own conventions: the rules in its AGENTS.md or CLAUDE.md, checked
-  on the changed lines), each with file, line, severity and the fix. high and medium send the stage back; low
-  is noted only. No style nits.
+  outside what the stage names), each with file, line, severity, axis, category, fix and scenario. axis: spec (a
+  requirement of the task is not met, or behaviour nobody asked for) or standards (a break of this repo's own
+  conventions: the rules in its AGENTS.md or CLAUDE.md, checked on the changed lines; name the rule). category: one word
+  (logic, contract, test, docs, security, convention). scenario: the inputs and the wrong output, concretely. Only a high
+  finding with a scenario sends the stage back; every other finding is noted. A finding whose scenario you cannot state
+  is not high. No style nits.
+- criteria: one entry per acceptance item listed above (empty when none is listed): item (its id), status (met, unmet,
+  or engine when the engine proves it), evidence (what shows it: a check, a file and line, the evidence folder).
 - unmet: what in {scope} the work does not do yet, each saying what is missing. A requirement shown met by a check or
   by the evidence is met; never list a remark that something is fine.
 - question: empty, unless only the owner can decide something about the task itself (then explain it for a phone:

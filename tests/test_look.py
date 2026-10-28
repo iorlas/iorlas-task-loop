@@ -81,13 +81,11 @@ class LookTest(unittest.TestCase):
 
     ask = T.EngineTest.ask
 
-    def test_no_screenshot_and_no_reason_is_a_medium_finding(self):
-        rc, s = self.go({"plan": [PLAN], "write": [WRITE, WRITE], "review": [dict(CLEAN), dict(CLEAN)]}, first_shot=2,
-                        visual_paths=VISUAL)
+    def test_no_screenshot_and_no_reason_is_a_warning_never_a_send_back(self):
+        rc, s = self.go({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN)]}, first_shot=2, visual_paths=VISUAL)
         self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer", "worker", "reviewer"])
-        self.assertIn("saved no screenshot", s.prompts[3])  # the writer is told, with the finding's fix
-        self.assertIn("[medium]", " ".join(c[3] for c in self.bd_calls if c[:2] == ("comments", "add")))
+        self.assertEqual([c[0] for c in s.calls], ["planner", "worker", "reviewer"])
+        self.assertIn("saved no screenshot", self.eng.log_path.read_text())
 
     def test_a_logic_only_reason_is_shown_to_the_reviewer_and_stands(self):
         w = dict(WRITE, logic_only="only the save format changes; no screen differs")

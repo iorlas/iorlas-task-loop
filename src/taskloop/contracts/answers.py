@@ -17,6 +17,8 @@ Irreversible = Literal["", "push_shared", "delete_outside", "close_epic", "spend
 Cause = Literal["engine", "prompt", "delegate", "repo_profile", "bead", "sandbox", "other"]
 Severity = Literal["high", "medium", "low"]
 Verdict = Literal["settled", "wrong", "open"]
+Axis = Literal["spec", "standards"]
+Status = Literal["met", "unmet", "engine"]
 
 ARGV_DOC = "argv: " + FORM  # a check: the program and its arguments, never a shell string
 NOT_AN_ARRAY = "expected an array"
@@ -175,12 +177,23 @@ class Finding:
     line: int
     severity: Severity
     fix: str
+    axis: Axis = field(metadata={"doc": "spec: a requirement is unmet or unasked behaviour; standards: a break of the repo's rules"})
+    category: str = field(metadata={"doc": "one word: logic, contract, test, docs, security, convention"})
+    scenario: str = field(metadata={"doc": "the inputs and the wrong output; empty when you cannot state one (then it is only a note)"})
+
+
+@record
+class Criterion:
+    item: str = field(metadata={"doc": "the id of an acceptance item as listed in the prompt (A1, A2, ...)"})
+    status: Status
+    evidence: str = field(metadata={"doc": "what shows it: a check, a file and line, the evidence folder; empty only for engine"})
 
 
 @record
 class ReviewAnswer:
     findings: list[Finding]
     unmet: list[str]
+    criteria: list[Criterion] = field(metadata={"doc": "one entry per acceptance item the prompt lists; [] when it lists none"})
     question: str
     options: list[Option]
     decided: str

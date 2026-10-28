@@ -387,25 +387,6 @@
   "v": 1,
   "reviews": 3,
   "rounds": 2,
-  "book": [
-   {
-    "fid": "f1",
-    "stage": 1,
-    "round": 1,
-    "axis": "spec",
-    "severity": "high",
-    "confidence": "likely",
-    "category": "logic",
-    "file": "a.py",
-    "line": 7,
-    "fix": "handle none",
-    "scenario": "a None input raises",
-    "status": "claimed"
-   }
-  ],
-  "seen_lows": [
-   "style nit"
-  ],
   "unchecked": [
    {
     "what": "w",
@@ -432,13 +413,6 @@
     "why": "y"
    }
   ],
-  "verify": {
-   "settled": 1,
-   "wrong": 1,
-   "open": 0,
-   "fixes": 1,
-   "asked": false
-  },
   "filed": [
    "f"
   ],
@@ -447,18 +421,7 @@
     "title": "t",
     "why": "lint"
    }
-  ],
-  "replan": {
-   "cause": "gate red",
-   "notes": "n",
-   "accepted": [
-    "g1"
-   ],
-   "open_findings": [
-    "f1"
-   ],
-   "diff_stat": "1 file changed"
-  }
+  ]
  },
  "CheckRun": {
   "v": 1,

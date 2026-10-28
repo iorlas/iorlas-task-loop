@@ -190,3 +190,23 @@ class GateProof:
     def check_names(cls, what: str) -> list[str]:
         """Every check-like name in the lower-cased item (a backticked word, or a word with a dash, dot, slash or star)."""
         return [(m.group(1) or m.group(2)).strip(".,;:").lower() for m in cls.CHECK_LIKE.finditer(what)]
+
+
+class AcceptanceItems:
+    """The items of a bead's acceptance text: one per bullet or numbered line (a text with no list is one item)."""
+
+    BULLET = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+(.*\S)\s*$")
+
+    @classmethod
+    def split(cls, text: str) -> list[tuple[str, str]]:
+        """[(A1, text), ...]; a bullet's continuation lines belong to it."""
+        items: list[str] = []
+        for line in text.splitlines():
+            m = cls.BULLET.match(line)
+            if m:
+                items.append(m.group(1))
+            elif line.strip() and items:
+                items[-1] += " " + line.strip()
+            elif line.strip():
+                items.append(line.strip())
+        return [(f"A{n}", " ".join(t.split())) for n, t in enumerate(items, 1)]

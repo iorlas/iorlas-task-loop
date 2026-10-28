@@ -97,6 +97,7 @@ from taskloop.domain.checks.names import norm as norm_cmd
 from taskloop.stores.real import real_stores
 from taskloop.domain.plan.matchers import AcceptanceText, gate_only_criteria, word_set, without_runner
 from taskloop.domain.review.kinds import UNCHECKED_KINDS
+from taskloop.domain.review.findings import engine_finding
 from taskloop.domain.review.matchers import Wording
 from taskloop.domain.write.matchers import count_tests
 from taskloop.domain.prompts.common import DECIDED_TEXT, LATER_CASES, RULES_MAX, UNCHECKED_TEXT
@@ -2317,24 +2318,21 @@ class Engine(StateAttrs):
                 self.add_unverified({"what": "%s (link: %s)" % (fmt.clip(line, 200), url), "kind": "external_fact", "source": url},
                                     "the engine could not open %s (%s); the owner checks it" % (url, why))
                 continue
-            review["findings"].append({"file": path, "line": 0, "severity": "medium", "fix":
+            review["findings"].append(engine_finding(path, 0, (
                 "the link %s did not open from the engine's host (%s). Replace it with a source that opens. If the site only blocks "
                 "bots, keep it and write `unverified` on the same line, so the owner is asked about the claim it carries. Never "
-                "call a link verified that you could not open." % (url, why)})
+                "call a link verified that you could not open." % (url, why)), "a reader who follows %s gets an error (%s)" % (url, why)))
 
     def look_judged(self, review, st, w, fix):
-        """No screenshot and no logic-only reason on a visual stage is a medium finding; the reviewer's look is kept."""
+        """No screenshot and no logic-only reason on a visual stage is a warning; the reviewer's look is kept."""
         if fix or not self.stage_visual(st):
             return
         if (review.get("look") or "").strip() and self.shots():
             self.look_notes = [review["look"].strip()]  # the last round's judgement only
-        if not self.shots() and not (w.get("logic_only") or "").strip():
-            review["findings"] = review["findings"] + [{
-                "file": str(self.evidence_dir), "line": 0, "severity": "medium",
-                "fix": ("this stage changes visual paths but asked for no shots: name the shot methods to render in `shots`, "
-                        "or say in logic_only why nothing on screen differs" if self.shot_methods() else
-                        "this stage changes visual paths but saved no screenshot of any changed screen or state: save them "
-                        "in %s/ (descriptive names), or say in logic_only why nothing on screen differs" % self.evidence_dir)}]
+        if not self.shots() and not (w.get("logic_only") or "").strip():  # a warning, never a send-back (tl-7y6.7.24)
+            self.warn("this stage changes visual paths but %s" % (
+                "asked for no shots (name the shot methods to render in `shots`, or say in logic_only why nothing on screen differs)"
+                if self.shot_methods() else "saved no screenshot of any changed screen or state in %s/" % self.evidence_dir))
 
     def look_verify(self, gaps):
         looks = [n for n, u in enumerate(gaps, 1) if self.is_look(u)]

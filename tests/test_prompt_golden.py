@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from taskloop.domain.prompts.review import acceptance_text  # noqa: E402
 from taskloop.domain.prompts import common as cp  # noqa: E402
 from taskloop.domain.prompts import plan as pp  # noqa: E402
 from taskloop.domain.prompts import reflect as fp  # noqa: E402
@@ -33,7 +34,7 @@ def render_review(fix=False, last=False):
     return rp.review_prompt(
         brief="<brief text>", plan="<plan text>", n=2, goal=FIX_GOAL if fix else "Add the greeting", work="<work: 1 file, +3 -0>",
         checks="<checks: all pass>", summary="<writer summary>", evidence=".task/t-1/evidence", gate=" (`just check`)",
-        added=1, removed=0, fix=fix, last=last, fix_scope=FIX_SCOPE)
+        added=1, removed=0, fix=fix, last=last, fix_scope=FIX_SCOPE, acceptance=acceptance_text([("A1", "greets by name")]) if last else "")
 
 
 RULES = "Unity runs on the host, not in a sandbox.\nNever run `just check`: the engine does."

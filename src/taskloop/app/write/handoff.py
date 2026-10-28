@@ -9,6 +9,7 @@ from typing import Any
 
 from taskloop.contracts.config import FRESH_ABOVE_K
 from taskloop.domain.prompts.write import DONE_SO_FAR, STAGES_DONE, WRITE_RESUME_PROMPT
+from taskloop.domain.review.findings import blocks
 
 HANDOFF_CAP = 1500  # characters of round history one prompt carries (tl-bxk.13.6)
 
@@ -101,7 +102,7 @@ class Handoff:
 
     def note_lows(self, findings: Sequence[dict[str, Any]]) -> None:
         for f in findings:
-            if f["severity"] == "low":
+            if not blocks(f):
                 x = ("{}:{} {}".format(f["file"], f["line"], " ".join(str(f["fix"]).split())))[:160]
                 if x not in self.e.handoff["seen_lows"]:
                     self.e.handoff["seen_lows"].append(x)

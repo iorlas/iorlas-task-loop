@@ -11,7 +11,7 @@ from contracts import samples as S  # noqa: E402
 from taskloop.contracts.codec import CodecError, StaleRecord  # noqa: E402
 from taskloop.contracts.review import ReviewState  # noqa: E402
 
-FIELDS = ["reviews", "rounds", "book", "seen_lows", "unchecked", "unverified", "verified", "verify", "filed", "unfiled", "replan"]
+FIELDS = ["reviews", "rounds", "unchecked", "unverified", "verified", "filed", "unfiled"]
 
 
 class ReviewStateFields(unittest.TestCase):

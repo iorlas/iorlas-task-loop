@@ -231,7 +231,7 @@ class Handoff(StagesTest):
         self.assertEqual(handoff["rounds"][0]["kind"], "bad_checks")
 
     def test_a_low_finding_is_not_listed_again_by_the_next_review(self):
-        first = dict(CLEAN, findings=[te.finding("medium"), dict(te.finding("low"), fix="rename the helper")])
+        first = dict(CLEAN, findings=[te.finding("high"), dict(te.finding("low"), fix="rename the helper")])
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE], "review": [first, CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
         reviews = [p for p, c in zip(s.prompts, s.calls) if c[0] == "reviewer"]

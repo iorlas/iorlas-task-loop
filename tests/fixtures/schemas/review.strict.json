@@ -10,6 +10,37 @@
     "null"
    ]
   },
+  "criteria": {
+   "description": "one entry per acceptance item the prompt lists; [] when it lists none",
+   "items": {
+    "additionalProperties": false,
+    "properties": {
+     "evidence": {
+      "description": "what shows it: a check, a file and line, the evidence folder; empty only for engine",
+      "type": "string"
+     },
+     "item": {
+      "description": "the id of an acceptance item as listed in the prompt (A1, A2, ...)",
+      "type": "string"
+     },
+     "status": {
+      "enum": [
+       "met",
+       "unmet",
+       "engine"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "item",
+     "status",
+     "evidence"
+    ],
+    "type": "object"
+   },
+   "type": "array"
+  },
   "decided": {
    "type": "string"
   },
@@ -17,6 +48,18 @@
    "items": {
     "additionalProperties": false,
     "properties": {
+     "axis": {
+      "description": "spec: a requirement is not met or behaviour nobody asked for; standards: a break of the repo's own rules (cite one)",
+      "enum": [
+       "spec",
+       "standards"
+      ],
+      "type": "string"
+     },
+     "category": {
+      "description": "one word: logic, contract, test, docs, security, convention",
+      "type": "string"
+     },
      "file": {
       "type": "string"
      },
@@ -25,6 +68,10 @@
      },
      "line": {
       "type": "integer"
+     },
+     "scenario": {
+      "description": "the inputs and the wrong output, concretely; empty when you cannot state one (then it is only a note)",
+      "type": "string"
      },
      "severity": {
       "enum": [
@@ -39,7 +86,10 @@
      "file",
      "line",
      "severity",
-     "fix"
+     "fix",
+     "axis",
+     "category",
+     "scenario"
     ],
     "type": "object"
    },
@@ -151,13 +201,14 @@
   }
  },
  "required": [
-  "unchecked",
   "findings",
   "unmet",
+  "criteria",
   "question",
   "options",
   "decided",
   "leftovers",
+  "unchecked",
   "accept_files",
   "reject_files"
  ],

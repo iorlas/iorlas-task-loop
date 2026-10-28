@@ -15,6 +15,7 @@ real checkout when one is there). Python 3.8+, stdlib only.
 """
 
 import json
+import re
 import os
 import shlex
 import subprocess
@@ -192,6 +193,9 @@ class Script:
             return a
         if isinstance(a, dict) and a.get("contract") is not None:
             return a
+        if node == "review" and isinstance(a, dict) and "criteria" not in a:  # a canned review maps every item the prompt lists
+            a = dict(a, criteria=[{"item": m.group(1), "status": "met", "evidence": "the checks pass"}
+                                  for m in re.finditer(r"^(A\d+)\. ", prompt, re.M)])
         if node == "write":
             Path(cwd, "f.txt").write_text("d%d\n" % len(self.calls))
         j = answer(self.c, None, "ref-" + node, bool(resume), a, cost=0.5, secs=1, family="openai" if node == "write" else "claude",

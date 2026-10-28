@@ -167,7 +167,8 @@ CAT_ENV = {"kind": "policy", "tool": "shell", "path": ".env", "input": {"command
 
 
 def finding(severity):
-    return {"file": "f.txt", "line": 1, "severity": severity, "fix": "a %s fix" % severity}
+    return {"file": "f.txt", "line": 1, "severity": severity, "fix": "a %s fix" % severity, "axis": "standards", "category": "logic",
+            "scenario": "input x gives y" if severity == "high" else ""}
 
 
 def delegate_stack(script, route="/fake/route.py"):
@@ -981,7 +982,7 @@ class EngineTest(unittest.TestCase):
 
     def test_a_medium_finding_sends_back(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE],
-                                 "review": [review(findings=[finding("medium")]), CLEAN]})
+                                 "review": [review(findings=[finding("high")]), CLEAN]})
         self.assertEqual(rc, 0)
         self.assertEqual([c[0] for c in s.calls].count("worker"), 2)
 
