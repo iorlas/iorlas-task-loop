@@ -2,8 +2,7 @@
 python-version = "3.12"
 project-includes = ["src", "skills", "tests", "dev"]
 # Flat sibling imports (`import tl`) resolve through skills/task-loop; tests import their own helpers by bare name.
-# C1 adds "src" here with the first file under src/ (pyrefly warns on a search-path entry that does not exist).
-search-path = ["skills/task-loop", "tests", "dev"]
+search-path = ["src", "skills/task-loop", "skills/task-loop/_vendor", "tests", "dev"]
 check-unannotated-defs = true
 # Off: pyrefly matches .gitignore against absolute paths, so under .claude/worktrees/ it would match no file and pass.
 use-ignore-files = false
