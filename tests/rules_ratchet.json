@@ -3,7 +3,7 @@
  "oversize": {
   "skills/task-loop/dash/server.py": 1905,
   "skills/task-loop/dash/timeline.py": 740,
-  "skills/task-loop/engine.py": 5512,
+  "skills/task-loop/engine.py": 5511,
   "skills/task-loop/lifecycle.py": 584,
   "skills/task-loop/loop.py": 1187,
   "skills/task-loop/report.py": 624,
