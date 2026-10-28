@@ -10,6 +10,7 @@ import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from taskloop.contracts import log
 from taskloop.contracts.paths import ConfigDir
@@ -47,10 +48,13 @@ class Source:
 
     def refresh(self) -> None:
         if jsonl.size_of(self.path) < self.offset:  # the file was replaced
-            self.offset, self.items = 0, []
+            self.offset = 0
+            self.items = []
         decode_one = ev.decode_worker if self.worker else log.decode
         rows, self.offset = jsonl.read_from(self.path, self.offset, decode_one)
-        build = (lambda r, off: ev.worker_event(r, self.tag, off)) if self.worker else ev.engine_event
+        def build(r: Any, off: int) -> dict:
+            return ev.worker_event(r, self.tag, off) if self.worker else ev.engine_event(r, off)
+
         self.items += [(off, build(r, off)) for off, r in rows]
 
 
@@ -72,7 +76,7 @@ class LiveRun:
 
     def _refresh(self) -> None:
         try:
-            names = sorted(n for n in os.listdir(self.live_dir()) if n.endswith(".jsonl"))
+            names: list[str] = sorted(n for n in os.listdir(self.live_dir()) if n.endswith(".jsonl"))
         except OSError:
             names = []
         for name in names:
@@ -126,7 +130,9 @@ def page(run: LiveRun, since: dict[str, int] | None = None, before: dict[str, in
     if since is not None:
         got = run.select(lambda t, off: off >= since.get(t, 0))
         return {"events": [e for _, _, e in got[-MAX_PAGE:]], "cursor": encode(run.offsets()), "before": None}
-    limit_of = (lambda t, off: off < before.get(t, 0)) if before is not None else (lambda t, off: True)
+    def limit_of(t: str, off: int) -> bool:
+        return before is None or off < before.get(t, 0)
+
     got = run.select(limit_of)
     tail = got[-limit:]
     left = len(got) > len(tail)

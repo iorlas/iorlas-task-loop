@@ -46,7 +46,8 @@ def read_from(path: str, offset: int, decode: Callable[[object], Any] = log.deco
     end = data.rfind(b"\n")
     if end < 0:
         return [], offset
-    out, pos = [], offset
+    out: list[tuple[int, Any]] = []
+    pos = offset
     for raw in data[: end + 1].split(b"\n")[:-1]:
         rec = parse(raw, decode)
         if rec is not None:

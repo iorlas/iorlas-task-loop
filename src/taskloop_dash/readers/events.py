@@ -43,7 +43,8 @@ def exec_cmds(src: object) -> list[str]:
     """The shell commands in a Codex `exec` tool call, whose input is code: text(await tools.exec_command({cmd:"..."}))."""
     if not isinstance(src, str) or "exec_command(" not in src:
         return []
-    out, pos = [], 0
+    out: list[str] = []
+    pos = 0
     while (hit := src.find("exec_command(", pos)) >= 0:
         pos = hit + len("exec_command(")
         i = pos
@@ -251,7 +252,7 @@ class Events:
                 out.append(open_cmd)
             elif body.startswith(("Command completed: ", "Command failed: ")):
                 ok = body.startswith("Command completed")
-                target = open_cmd if open_cmd and open_cmd.get("state") == "run" else None
+                target: Event | None = open_cmd if open_cmd and open_cmd.get("state") == "run" else None
                 if target is None:
                     target = {"t": t, "kind": "cmd", "tool": "shell", "text": clean_cmd(body.split(": ", 1)[1])}
                     out.append(target)

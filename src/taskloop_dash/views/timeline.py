@@ -134,7 +134,10 @@ def block_result(n: dict, s: dict | None, last: bool) -> dict:
 def blocks_of(nodes: list[dict], titles_in: list | tuple = ()) -> tuple[list[dict], dict | None]:
     """Blocks in order, each with the arrow into it, and the move out of the last one. A write, checks or review block names
     its stage (index, count, title); a review or verify block by the family that wrote the last write is marked same_family."""
-    blocks, pending, titles, writer = [], None, list(titles_in or []), ""
+    blocks: list[dict] = []
+    pending: dict | None = None
+    titles = list(titles_in or [])
+    writer = ""
     for idx, n in enumerate(nodes):
         if n["step"] in ("reset", "close"):
             continue
@@ -223,7 +226,7 @@ def because_text(run: dict, prev: dict | None = None) -> str:
         "stopped": "after a stop",
         "failed": "after a failure",
         "asks": "after the bead changed",
-    }.get(pe.get("outcome"), "")
+    }.get(pe.get("outcome") or "", "")
     return "resumed " + (after or "from the checkpoint") if b == "resume" else "retry" + ((" " + after) if after else "")
 
 
@@ -253,7 +256,7 @@ def run_end(nodes: list[dict], pending: dict | None, alive: bool) -> dict:
     elif why.startswith("waiting:"):
         end.update(outcome="waiting", status="ask", text=arrows.arrow_text("waiting"))
     elif outcome == "blocked" and arrows.ask_kind(why):
-        end.update(outcome="asks", status="ask", text=arrows.arrow_text(cause if cause in arrows.ASKS else arrows.ask_kind(why)))
+        end.update(outcome="asks", status="ask", text=arrows.arrow_text(cause if cause in arrows.ASKS else arrows.ask_kind(why) or ""))
     elif why.startswith("failed: stopped"):
         end.update(outcome="stopped", status="fail", text="stopped")
     else:
@@ -266,7 +269,9 @@ def run_end(nodes: list[dict], pending: dict | None, alive: bool) -> dict:
 def waits_of(recs: list, until: float = 0) -> list[dict]:
     """The engine's waits: [{what, label, t0, secs, holder, in_budget}], oldest first. A wait_start with no wait_end after it is a
     wait still going (or cut off when the process died): it lasts until `until`."""
-    out, starts, ended = [], {r.id: r for r in recs if isinstance(r, rec.WaitStart)}, set()
+    out: list[dict] = []
+    starts = {r.id: r for r in recs if isinstance(r, rec.WaitStart)}
+    ended: set[str] = set()
     for r in recs:
         if isinstance(r, rec.WaitEnd):
             s = starts.get(r.id)

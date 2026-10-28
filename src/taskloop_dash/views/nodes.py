@@ -39,7 +39,7 @@ def session_of(end: rec.CallEnd, start: rec.CallStart | None, index: int) -> dic
     }
 
 
-def line_of(r, index: int) -> dict | None:
+def line_of(r: rec.EngineLog, index: int) -> dict | None:
     """A command, note or warning as the one line the block's detail shows."""
     if isinstance(r, rec.CmdStart):
         return {"t": r.t, "kind": "cmd", "text": r.text, "_i": index}
@@ -91,10 +91,16 @@ class NodeBuilder:
         self.ends: dict[int, rec.StepEnd] = {}
         self.calls: dict[str, rec.CallStart] = {}
 
-    def node_for(self, ident: object) -> dict | None:
-        return self.by_id.get(num(ident)) or self.cur
+    def current(self) -> dict:
+        assert self.cur is not None, "a record before any step"
+        return self.cur
 
-    def feed(self, i: int, r) -> None:
+    def node_for(self, ident: object) -> dict:
+        node = self.by_id.get(num(ident)) or self.cur
+        assert node is not None, "a record before any step"
+        return node
+
+    def feed(self, i: int, r: rec.EngineLog) -> None:
         if isinstance(r, rec.StepStart):
             if self.nodes and self.nodes[-1]["t1"] is None:
                 self.nodes[-1]["t1"] = r.t
@@ -114,7 +120,7 @@ class NodeBuilder:
         elif self.cur is not None:
             self.within(i, r)
 
-    def within(self, i: int, r) -> None:
+    def within(self, i: int, r: rec.EngineLog) -> None:
         """A record that belongs to a step."""
         if isinstance(r, rec.Transition):
             self.node_for(r.from_id)["moves"].append({"from": r.from_id, "to": r.to, "cause": r.cause, "detail": r.detail, "_i": i})
@@ -126,9 +132,9 @@ class NodeBuilder:
         elif isinstance(r, rec.Checks):
             self.node_for(r.node_id)["checks"] = r
         elif isinstance(r, rec.Close):
-            self.cur["close"] = {"outcome": str(r.outcome), "why": r.why, "sha": r.sha, "why_code": r.why_code}
+            self.current()["close"] = {"outcome": str(r.outcome), "why": r.why, "sha": r.sha, "why_code": r.why_code}
         elif (ln := line_of(r, i)) is not None:
-            self.cur["lines"].append(ln)
+            self.current()["lines"].append(ln)
 
     def done(self, recs: list) -> list[dict]:
         if self.nodes and self.nodes[-1]["t1"] is None:

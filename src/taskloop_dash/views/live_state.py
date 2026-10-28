@@ -3,7 +3,7 @@ pairs and the last events; the page only draws it and ticks `now - since`. Pairs
 ended, wait, check, tool, thinking | silent, hung, engine."""
 
 from collections.abc import Callable
-from typing import Final
+from typing import Any, Final
 
 SILENT_AFTER = 60  # seconds without a worker line before "thinking" becomes "silent"
 ENGINE_ENDS: Final = {
@@ -41,7 +41,7 @@ def of_kind(opened: Open, *kinds: str, engine: bool | None = None) -> list[dict]
     return [e for e in opened.values() if e["k"] in kinds and (engine is None or (e["src"] == "engine") == engine)]
 
 
-def state(what: str, since: float, label: str = "", detail: str = "", **more) -> dict:
+def state(what: str, since: float, label: str = "", detail: str = "", **more: Any) -> dict:
     return {"what": what, "since": since, "label": label, "detail": detail, **more}
 
 

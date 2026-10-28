@@ -18,7 +18,9 @@ class BeadApi:
     def bead_runs(self, bead: str, alive: bool = False) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         """Every engine run of the bead, oldest first: why it started, its blocks with outcome, arrow, time and tokens. -> (runs,
         the run timelines for segments.bead_segments). The last run is alive when the bead is running: its open step ends now."""
-        runs, prev, tls = [], None, []
+        runs: list[dict[str, Any]] = []
+        tls: list[dict[str, Any]] = []
+        prev: dict[str, Any] | None = None
         logs = self.records.engine_logs(retain=False).get(bead, [])
         for n, p in enumerate(logs):
             r = self.runlogs.run_timeline(p, alive=alive and n == len(logs) - 1)

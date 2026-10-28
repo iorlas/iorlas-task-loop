@@ -70,7 +70,7 @@ class RunsApi:
         tr = s.get("transcript") if s.get("transcript") and os.path.exists(s["transcript"]) else self.find_transcript(fam, s.get("ref"))
         return tr, ("codex-exec" if fam == "openai" else "claude-p"), tr
 
-    def api_block(self, run: str, node: str, k: object = 0) -> dict[str, Any]:
+    def api_block(self, run: str, node: str, k: str | int = 0) -> dict[str, Any]:
         """One block: the transcript to show (an /api/events id, cut to the block's time), its round's checks with their logs, the
         engine lines of its step."""
         path = self.records.run_path(run)

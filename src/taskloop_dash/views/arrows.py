@@ -191,7 +191,7 @@ def paused_text(detail: str, ctx: dict) -> str:
     return f"{what} → paused{(' until ' + until) if until else ''}"
 
 
-def arrow_text(cause: str, detail: str = "", ctx: dict | None = None) -> str:
+def arrow_text(cause: str, detail: str | None = "", ctx: dict | None = None) -> str:
     """What the arrow into a block (or the run's end) says."""
     ctx = ctx or {}
     detail = (detail or "").strip()

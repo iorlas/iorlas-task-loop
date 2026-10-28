@@ -38,9 +38,9 @@ def num(ident: object) -> int:
     return int(digits) if digits.isdigit() else 0
 
 
-def lane_name(lane: str = "", family: str = "") -> str:
+def lane_name(lane: str | None = "", family: str | None = "") -> str:
     """Codex, Claude or Grok, from delegate's family or lane name."""
-    if family in FAMILY:
+    if family and family in FAMILY:
         return FAMILY[family]
     up = (lane or "").upper()
     if "GROK" in up or up.endswith("XAI") or "_XAI" in up:

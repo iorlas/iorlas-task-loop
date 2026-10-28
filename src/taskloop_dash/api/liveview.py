@@ -38,7 +38,7 @@ class Live:
         """From the typed log alone (no pid probe): running until the close record, stale when nothing was written for STALE_RUN."""
         return lr.is_alive(self.env.clock(), STALE_RUN)
 
-    def api_live(self, bead: str, run: str = "", since: str = "", before: str = "", wait: object = "0", limit: object = "300") -> dict[str, Any]:
+    def api_live(self, bead: str, run: str = "", since: str = "", before: str = "", wait: str | float = "0", limit: str | int = "300") -> dict[str, Any]:
         """A bead's newest run (or the named one): its page of events, merged by time, with the state line. Without `since` the newest
         events and a `before` cursor; with it only what is new, held up to `wait` seconds."""
         self.env.touch()
@@ -84,7 +84,7 @@ class Live:
                 rows.append({"repo": basename(repo), "bead": t.bead, "why": t.why, "prio": t.prio, "since": t.since, "ahead": n})
         return rows
 
-    def api_live_overview(self, wait: object = "0") -> dict[str, Any]:
+    def api_live_overview(self, wait: str | float = "0") -> dict[str, Any]:
         """A line per running, queued or paused bead and the lanes strip; held up to `wait` seconds until a log grows."""
         self.env.touch()
         try:

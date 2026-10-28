@@ -2,7 +2,7 @@
 object the bead page shows) plus the slot line and the lanes strip. Sources are handed in: engine logs through LiveRun, tickets and
 the cheap lane snapshot from the caller, so one call spawns nothing."""
 
-from typing import Final
+from typing import Any, Final
 
 from taskloop_dash.api.live import LiveRun
 from taskloop_dash.views import live_state
@@ -43,7 +43,7 @@ def bead_row(entry: dict, lanes: list[dict], now: float) -> dict | None:
         "until": None,
     }
     if st["what"] == "ended":
-        close = next((e for e in reversed(events) if e["k"] == "close"), {})
+        close: dict[str, Any] = next((e for e in reversed(events) if e["k"] == "close"), {})
         why = str(close.get("why") or "")
         if not why.startswith("paused:"):
             return None

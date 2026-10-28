@@ -57,11 +57,14 @@ class RoadmapApi:
                 own_stop[st["pid"]] = STOP_KINDS[kind]
             loops.append({"pid": st["pid"], "slot": st.get("slot") or "", "bead": st.get("bead"), "since": st.get("since"),
                           "started": st.get("started") or 0, "worktree": st.get("worktree") or "", "version": st.get("version") or ""})
+        slots: list[str]
+        running: dict[str, str]
         try:
             slots = [b["title"].split()[-1] for b in self.env.ports.slot_beads(repo)]
             running = self.running_slots(repo)
         except Exception:
-            slots, running = [], {}
+            slots = []
+            running = {}
         commanded = self.graph.loops.command_stops(repo)  # LoopCommand: the loops it names, by pid
         stop = {st["pid"]: commanded.get(st["pid"]) or own_stop.get(st["pid"], "") for st in loops}
         lanes, waiting = roadmap.lanes_of(slots, running, loops, stop)
@@ -91,7 +94,8 @@ class RoadmapApi:
                     lanes.append({"slot": t.get("slot") or "-", "bead": t["id"], "since": since})
 
     def trails(self, lanes: list[dict[str, Any]], tasks: dict[str, Any]) -> dict[str, Any]:
-        out, logs = {}, self.records.engine_logs(retain=False)
+        out: dict[str, Any] = {}
+        logs = self.records.engine_logs(retain=False)
         for ln in lanes:
             b = ln["bead"]
             if not b or b not in logs:
@@ -115,10 +119,15 @@ class RoadmapApi:
         def build() -> dict[str, Any]:
             beads = self.beads.beads_of(path)
             ranked, skipped = self.graph.loop_order(path, beads, self.graph.config_of(path))
+            lanes: list[dict[str, Any]]
+            rows: list[dict[str, Any]]
+            waiting: list[dict[str, Any]]
             try:
                 lanes, rows, waiting = self.loop_files(path)
             except Exception:
-                lanes, rows, waiting = [], [], []
+                lanes = []
+                rows = []
+                waiting = []
             api = self.tasks.api_tasks()
             tasks = {t["id"]: t for t in api["tasks"]}
             self.hand_run(lanes, tasks, g["repo"])

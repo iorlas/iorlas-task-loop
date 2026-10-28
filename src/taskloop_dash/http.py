@@ -6,7 +6,7 @@ import os
 from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, override
 from urllib.parse import parse_qs, urlparse
 
 from taskloop_dash.app import Dash
@@ -48,7 +48,8 @@ POSTS: Final[dict[str, Callable[[Dash, Any], Reply]]] = {
 
 def make_handler(dash: Dash, port: int, addrs: list[str], page: Path, live_page: Path, secret: Callable[[], str], script: str) -> type[BaseHTTPRequestHandler]:
     class H(BaseHTTPRequestHandler):
-        def log_message(self, *args: Any) -> None:
+        @override
+        def log_message(self, format: str, *args: Any) -> None:
             pass
 
         def send(self, code: int, body: bytes, ctype: str) -> None:
