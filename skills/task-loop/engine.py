@@ -855,10 +855,9 @@ class Engine:
             self.restore_run("pause.json")
             self.log.note("back from a network pause: run %s goes on" % stem)
 
-    t0 = property(lambda self: self.budget.t0, lambda self, v: setattr(self.budget, "t0", v))
-    waited = property(lambda self: self.budget.waited, lambda self, v: setattr(self.budget, "waited", v))  # seconds spent waiting for a shared
-    labels = property(lambda self: self.budget.labels, lambda self, v: setattr(self.budget, "labels", v))
-    cost = property(lambda self: self.budget.spent, lambda self, v: setattr(self.budget, "spent", v))  # resource: not budget_min's; dollars
+    # the budget's numbers, read and set as the engine's own (waited: seconds spent waiting for a shared resource, not budget_min's)
+    t0, waited, labels, cost = (property(lambda self, k=k: getattr(self.budget, k), lambda self, v, k=k: setattr(self.budget, k, v))
+                                for k in ("t0", "waited", "labels", "spent"))
 
     def restore_run(self, name="reexec.json"):
         """The counters of the run that exec'd (run_dir/reexec.json) or paused for the network (pause.json), so the run's cost,
