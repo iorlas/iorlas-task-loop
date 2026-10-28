@@ -280,7 +280,7 @@ class AskOptions(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)
             (d / "bin").mkdir()
-            (d / "bin" / "bd").write_text("#!/bin/sh\nfor a in \"$@\"; do printf '[%s]' \"$a\"; done >> " + str(d / "bd.log") + "\necho >> " + str(d / "bd.log") + "\n")
+            (d / "bin" / "bd").write_text("#!/bin/sh\nshift 2; for a in \"$@\"; do printf '[%s]' \"$a\"; done >> " + str(d / "bd.log") + "\necho >> " + str(d / "bd.log") + "\n")
             (d / "bin" / "bd").chmod(0o755)
             asks = d / "task-loop" / "asks"
             asks.mkdir(parents=True)
@@ -305,9 +305,9 @@ class AskOptions(unittest.TestCase):
                 self.assertEqual(self.dash.asks.answer({"ask": "x-1-1", "text": "A: build now"})[0], 409)
                 self.assertEqual(self.dash.asks.asks()["asks"][0]["answer"], text)
             log = (d / "bd.log").read_text().splitlines()
-            self.assertEqual(log[0], "[comments][add][x-1][%s]" % text)
+            self.assertEqual(log[0], "[comments][add][x-1][%s][--json]" % text)
             self.assertEqual(log[1], "[show][x-1][--json]")  # the answer is filed on the bead's notes (here bd shows nothing: skipped)
-            self.assertEqual(log[-1], "[update][x-1][--status][open]")
+            self.assertEqual(log[-1], "[update][x-1][--status][open][--json]")
 
 
 class AskFailures(unittest.TestCase):
@@ -329,7 +329,7 @@ class AskFailures(unittest.TestCase):
         self.dash = make_dash()
 
     def bd(self, script):
-        (self.d / "bin" / "bd").write_text("#!/bin/sh\n" + script)
+        (self.d / "bin" / "bd").write_text("#!/bin/sh\nshift 2\n" + script)
         (self.d / "bin" / "bd").chmod(0o755)
 
     def ask(self, bead="x-1", n=1, **kw):
@@ -444,7 +444,7 @@ class AskFailures(unittest.TestCase):
         real = subprocess.run
 
         def engine_consumes(cmd, *a, **k):
-            if cmd[:3] == ["bd", "comments", "add"]:
+            if "comments" in cmd and "add" in cmd:
                 f = self.asks / "z.json"
                 d = json.loads(f.read_text())
                 d["status"] = "answered"
@@ -500,7 +500,7 @@ esac
         real = subprocess.run
 
         def engine_asks_again(cmd, *a, **k):
-            if cmd[:3] == ["bd", "comments", "add"]:
+            if "comments" in cmd and "add" in cmd:
                 self.ask("x", n=2, question="a new question")
             return real(cmd, *a, **k)
         self.bd("echo ok\n")

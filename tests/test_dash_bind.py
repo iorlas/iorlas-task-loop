@@ -27,6 +27,7 @@ class Env(unittest.TestCase):
         self.cache = self.home / ".claude" / "plugins" / "cache" / "mkt" / "task-loop" / "1.0" / "dash"
         for d in (self.dev, self.cache):
             shutil.copytree(DASH, d, ignore=shutil.ignore_patterns("__pycache__"))
+            shutil.copytree(DASH.parents[2] / "src", d.parents[2] / "src", dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__"))
 
     def tearDown(self):
         self.tmp.cleanup()

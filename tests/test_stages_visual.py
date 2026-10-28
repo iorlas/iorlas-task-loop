@@ -10,6 +10,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "task-loop"))
 from support import fake_route  # noqa: E402
+from support.fakes import as_bead  # noqa: E402
 from support import tlbd  # noqa: E402
 from support.fakes import FakeBeadStore  # noqa: E402
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
@@ -271,7 +272,7 @@ class VisualWork(StagesTest):
         ck = json.loads(e.checkpoint_path().read_text())
         self.assertEqual((ck["look_done"], ck["rendered"], ck["render_stale"]), (1, ["a.png"], True))
         again = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
-        again.reset(dict(BEAD))
+        again.reset(as_bead(BEAD))
         again.resume_point()
         self.assertEqual((again.look_done, again.rendered_names, again.render_stale), (1, {"a.png"}, True))
 
@@ -405,7 +406,7 @@ class ResumeCount(StagesTest):
         te.sh("git", "commit", "-qm", "main moves", cwd=base)
         te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
         e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
-        e.reset(dict(BEAD))
+        e.reset(as_bead(BEAD))
         e.plan_data = dict(PLAN)
         e.save_checkpoint(stage=0, rounds=0, n=1, feedback="", step="write")
         te.sh("git", "checkout", "-q", "--detach", "origin/main", cwd=self.wt)

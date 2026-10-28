@@ -33,6 +33,7 @@ import loop_health
 import netgate
 import outcome as oc
 import tl
+from taskloop.contracts.ports import BeadPatch, BeadQuery
 
 POLL = 2               # seconds between looks at a running child (stop file, slot heartbeat)
 HEARTBEAT = 60         # the slot bead's lease is kept alive this often while a bead runs
@@ -69,13 +70,13 @@ def natural(bead_id):
     return [int(p) if p.isdigit() else p for p in re.split(r"(\d+)", bead_id)]
 
 
-def epics_of(bead, cache):
+def epics_of(bead, cache, store=None):
     """Every ancestor of a bead, nearest first; `parent` in bd's JSON is the direct one only."""
-    out, pid = [], bead.get("parent")
+    out, pid = [], bead.parent
     while pid and pid not in out:
         out.append(pid)
         if pid not in cache:
-            cache[pid] = tl.show(pid).get("parent")
+            cache[pid] = getattr(tl.peek(store or tl.bd_store(), pid), "parent", None)
         pid = cache[pid]
     return out
 
@@ -86,15 +87,15 @@ def has_areas(cfg):
     return bool(cfg.areas or cfg.area_label_prefix)
 
 
-def area_of(b, cfg, cache):
+def area_of(b, cfg, cache, store=None):
     """The bead's area, "" for none (unrestricted). engine.areas {area: [epic id or label, ...]} first, in its order:
     the bead, any of its ancestors or one of its labels named; then the first label with engine.area_label_prefix
     (lane:live is area live). First match wins."""
-    labels = b.get("labels") or []
+    labels = b.labels
     ups = None
     for name, members in cfg.areas.items():
         if ups is None:
-            ups = [b.get("id")] + epics_of(b, cache)
+            ups = [b.id] + epics_of(b, cache, store)
         if any(m in ups or m in labels for m in members or []):
             return name
     prefix = cfg.area_label_prefix
@@ -106,18 +107,18 @@ def area_of(b, cfg, cache):
 
 
 def lapsed(b):
-    t = b.get("lease_expires_at") or ""
+    t = b.lease_expires_at
     return bool(t) and t < time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
-def running(repo):
+def running(repo, store=None):
     """{bead: where} of the beads running now: a slot bead held for one (held_bead), or a live engine lock naming
     one, in a slot or any worktree of the repo."""
-    out, slots = {}, tl.slot_beads(repo)
+    out, slots = {}, tl.slot_beads(repo, store)
     for b in slots:
-        bid = (b.get("metadata") or {}).get("held_bead")
-        if bid and b.get("status") == "in_progress" and not lapsed(b):
-            out[bid] = b["title"].split()[-1]
+        bid = b.metadata.get("held_bead")
+        if bid and b.status == "in_progress" and not lapsed(b):
+            out[bid] = b.title.split()[-1]
     for wt in tl.worktrees(repo, slots):
         lock = tl.read_engine_lock(wt)
         if lock.get("bead") and lock.get("pid") and tl.proc_alive(lock["pid"], lock.get("start") or ""):
@@ -130,29 +131,29 @@ AREA_WAIT_SAY = 600  # seconds between the "still waiting on an area" lines
 ANY_AREA = "*"  # busy_areas key for a running bead that could not be read
 
 
-def busy_areas(repo, cfg, cache, but=""):
+def busy_areas(repo, cfg, cache, but="", store=None):
     """{area: (bead, where)} of the areas a running bead (other than `but`) works in."""
     out = {}
-    for bid, where in sorted(running(repo).items()):
+    for bid, where in sorted(running(repo, store).items()):
         if bid == but:
             continue
-        held = tl.show(bid, cwd=repo)
+        held = tl.peek(store or tl.bd_store(repo), bid)
         if not held:  # its area is unknown: it may be any, so every area waits (a slot hung on a bd error stays visible)
             say("running bead %s in %s is unreadable (bd show failed): every area counts as busy" % (bid, where))
             out.setdefault(ANY_AREA, (bid, where))
             continue
-        a = area_of(held, cfg, cache)
+        a = area_of(held, cfg, cache, store)
         if a:
             out.setdefault(a, (bid, where))
     return out
 
 
-def area_busy(repo, cfg, b, cache):
+def area_busy(repo, cfg, b, cache, store=None):
     """(area, "area A busy: B in S") for a bead whose area runs elsewhere, (area, "") when it is free, ("", "")."""
-    a = area_of(b, cfg, cache)
+    a = area_of(b, cfg, cache, store)
     if not a:
         return "", ""
-    busy = busy_areas(repo, cfg, cache, but=b.get("id", ""))
+    busy = busy_areas(repo, cfg, cache, but=b.id, store=store)
     hit = busy.get(a) or busy.get(ANY_AREA)
     return a, ("area %s busy: %s in %s" % (a, hit[0], hit[1]) if hit else "")
 
@@ -165,43 +166,40 @@ def area_lock(repo, cfg):
     return tl.os_lock(tl.config_dir() / "locks" / ("area-%s.lock" % tl.repo_key(repo)), "pid %d" % os.getpid())
 
 
-def queue(repo):
+def queue(repo, store=None):
     """([(bead, reason)] in the order the loop takes them, [(id, why skipped)]). A reason names the rule that puts a
     bead before the next one. Fetches first: the rule is read from the base branch (engine.load_cfg). A bead whose
     area runs elsewhere is skipped (`area A busy: B in S`); the claim checks again under the area lock."""
     tl.fetch(repo)
     cfg = engine.load_cfg(repo)
-    args = ["ready", "--json", "-n", "0"] + (["--label", cfg.pick_label] if cfg.pick_label else [])
-    try:
-        ready = json.loads(tl.bd(*args, cwd=repo).stdout or "[]")
-    except ValueError:
-        ready = []
+    store = store or tl.bd_store(repo)
+    ready = tl.listed(store.ready, cfg.pick_label)
     order, skip = list(cfg.epic_order), list(cfg.skip_labels)
     keep, skipped, cache = [], [], {}
     for b in ready:
-        labels = b.get("labels") or []
+        labels = b.labels
         hit = next((x for x in skip if x in labels), None)
-        why = ("an epic" if b.get("issue_type") == "epic" else "a slot" if "slot" in labels
+        why = ("an epic" if b.issue_type == "epic" else "a slot" if "slot" in labels
                else "label " + hit if hit else "")
         rank = len(order)
         if not why and order:
-            ups = epics_of(b, cache)
+            ups = epics_of(b, cache, store)
             rank = min([order.index(e) for e in ups if e in order] or [len(order)])
             if rank == len(order) and cfg.epic_only:
                 why = "under no epic in epic_order (epic_only)"
         if not why:
             why = beadlint.why(b, str(repo))
         if why:
-            skipped.append((b["id"], why))
+            skipped.append((b.id, why))
         else:
-            keep.append((int(b.get("priority") if b.get("priority") is not None else 2), rank, natural(b["id"]), b))
+            keep.append((b.priority if b.priority is not None else 2, rank, natural(b.id), b))
     keep.sort(key=lambda k: k[:3])
     if has_areas(cfg) and keep:
-        busy, free = busy_areas(repo, cfg, cache), []
+        busy, free = busy_areas(repo, cfg, cache, store=store), []
         for k in keep:
-            hit = busy.get(area_of(k[3], cfg, cache)) or (busy.get(ANY_AREA) if area_of(k[3], cfg, cache) else None)
+            hit = busy.get(area_of(k[3], cfg, cache, store)) or (busy.get(ANY_AREA) if area_of(k[3], cfg, cache, store) else None)
             if hit:
-                skipped.append((k[3]["id"], "area %s busy: %s in %s" % (area_of(k[3], cfg, cache), hit[0], hit[1])))
+                skipped.append((k[3].id, "area %s busy: %s in %s" % (area_of(k[3], cfg, cache, store), hit[0], hit[1])))
             else:
                 free.append(k)
         keep = free
@@ -227,14 +225,14 @@ def cmd_next(a):
     repo = tl.repo_root(a.repo)
     ranked, skipped = queue(repo)
     if a.json:
-        print(json.dumps({"pick": ranked[0][0] if ranked else None, "reason": ranked[0][1] if ranked else "",
-                          "next": [{"id": b["id"], "priority": b.get("priority"), "reason": r} for b, r in ranked[1:6]],
+        print(json.dumps({"pick": engine.dataclasses.asdict(ranked[0][0]) if ranked else None, "reason": ranked[0][1] if ranked else "",
+                          "next": [{"id": b.id, "priority": b.priority, "reason": r} for b, r in ranked[1:6]],
                           "skipped": [{"id": i, "why": w} for i, w in skipped]}, ensure_ascii=False))
         return 0 if ranked else 1
     if not ranked:
         print("NONE: no ready bead in the queue")
     for n, (b, r) in enumerate(ranked[:6]):
-        print("%s %s  P%s  %s  (%s)" % ("NEXT" if n == 0 else "then", b["id"], b.get("priority"), b.get("title", "")[:70], r))
+        print("%s %s  P%s  %s  (%s)" % ("NEXT" if n == 0 else "then", b.id, b.priority, b.title[:70], r))
     for i, w in skipped:
         print("skip %s: %s" % (i, w))
     return 0 if ranked else 1
@@ -445,7 +443,8 @@ class Beat:
     (lifesim: 5-12 min) outlasts a 5-minute lease. run-task heartbeats both too, so a SIGKILLed loop leaves no slot free
     under a live run."""
 
-    def __init__(self, *ids):
+    def __init__(self, store, *ids):
+        self.store = store
         self.ids, self.every, self.ev = [i for i in ids if i], HEARTBEAT, threading.Event()
         self.th = threading.Thread(target=self.loop, daemon=True)
         self.th.start()
@@ -456,7 +455,7 @@ class Beat:
     def loop(self):
         while not self.ev.wait(self.every):
             for i in list(self.ids):
-                tl.bd("heartbeat", i)
+                tl.attempt(self.store.heartbeat, i)
 
     def stop(self):
         self.ev.set()
@@ -476,12 +475,12 @@ def prepare(repo, slot, bead_id):
     return rc, getattr(a, "error", "")
 
 
-def landed_on_base(repo, wt, bead_id):
+def landed_on_base(repo, wt, bead_id, store=None):
     """True when the bead's land commit (titled `... (<id>)`) is the tip of its branch and already on the base."""
     if not os.path.isdir(wt):
         return False
     base = engine.load_cfg(repo).base
-    branch = (tl.show(bead_id).get("metadata") or {}).get("branch") or "task/" + bead_id
+    branch = getattr(tl.peek(store or tl.bd_store(repo), bead_id), "metadata", {}).get("branch") or "task/" + bead_id
     tl.fetch(wt)
     tip = tl.git("rev-parse", "--verify", "-q", "refs/heads/" + branch, cwd=wt)
     if not tip or not tl.git("log", "-1", "--format=%s", tip, cwd=wt).endswith("(%s)" % bead_id):
@@ -494,17 +493,17 @@ def run_bead(repo, b, slot, wt, slot_bead, started, code=None):
     task-loop dir to run from (the fallback after a crash-after-exec; default this loop's own)."""
     runs = paths(repo)["runs"]
     runs.mkdir(exist_ok=True)
-    stem = "%s-%s" % (b["id"], time.strftime("%Y%m%d-%H%M%S", time.localtime(clock())))
+    stem = "%s-%s" % (b.id, time.strftime("%Y%m%d-%H%M%S", time.localtime(clock())))
     out, log_path = runs / (stem + ".outcome.json"), runs / (stem + ".log")
-    cmd = [sys.executable, str((code or tl.HERE) / "tl.py"), "run-task", b["id"], "--worktree", wt, "--outcome-file", str(out)]
+    cmd = [sys.executable, str((code or tl.HERE) / "tl.py"), "run-task", b.id, "--worktree", wt, "--outcome-file", str(out)]
     cmd += ["--slot", slot] if slot else []
     t0 = clock()
     os.environ["TASK_LOOP_SLOT_BEAD"] = slot_bead or ""  # the engine heartbeats it too (see Beat)
     with open(log_path, "ab") as log:  # append: a rerun of the same stem never cuts a log another reader follows
         p = spawn(cmd, log)
-        write_state(repo, pid=os.getpid(), started=started, bead=b["id"], slot=slot, since=t0, child=p.pid,
+        write_state(repo, pid=os.getpid(), started=started, bead=b.id, slot=slot, since=t0, child=p.pid,
                     run_log=str(log_path), worktree=None if slot else wt)
-        say("%s in %s (log %s)" % (b["id"], slot or wt, log_path))
+        say("%s in %s (log %s)" % (b.id, slot or wt, log_path))
         stopped = False
         try:
             while True:
@@ -515,7 +514,7 @@ def run_bead(repo, b, slot, wt, slot_bead, started, code=None):
                     pass
                 touch_beat(repo)
                 if not stopped and stop_mode(repo) == "now":
-                    say("stop now: SIGTERM to %s (its close step still runs)" % b["id"])
+                    say("stop now: SIGTERM to %s (its close step still runs)" % b.id)
                     p.terminate()  # SIGTERM on POSIX, which the engine traps; TerminateProcess on Windows
                     stopped = True
         except BaseException:  # the loop itself broke: the run ends (its close step runs) before the slot is freed
@@ -528,25 +527,25 @@ def run_bead(repo, b, slot, wt, slot_bead, started, code=None):
     except (OSError, ValueError):
         r = {"outcome": "failed", "why": "failed: no outcome from run-task (exit %s); see %s" % (rc, log_path)}
         gave = False
-    moved = engine.read_reexec(b["id"])  # the engine exec'd into a newer install and left this note; a clean end removes it
-    engine.drop_reexec(b["id"])
+    moved = engine.read_reexec(b.id)  # the engine exec'd into a newer install and left this note; a clean end removes it
+    engine.drop_reexec(b.id)
     if moved and not gave and not stopped and rc not in (0, None) and code is None and time.time() - float(moved.get("t") or 0) < engine.RELOAD_FALLBACK_S:
         back = Path(moved.get("from_dir") or "")
         if (back / "tl.py").is_file():  # died within RELOAD_FALLBACK_S of the exec: that version is refused, once more on the old one
             why = "run-task died (exit %s) %d s after the exec into it" % (rc, time.time() - float(moved.get("t") or 0))
             record_bad_version(str(moved.get("to")), why)
-            tl.event("reload_fallback", b["id"], who="loop", old=moved.get("to"), new=moved.get("from"), why=why, run=moved.get("run"))
-            say("RED: %s died after the move to task-loop %s; %s goes on from its checkpoint on %s" % (b["id"], moved.get("to"), b["id"], moved.get("from")))
-            os.environ["TL_REEXEC"] = json.dumps({"run": moved.get("run"), "bead": b["id"], "from": moved.get("to"), "owned": "", "fallback": True})
+            tl.event("reload_fallback", b.id, who="loop", old=moved.get("to"), new=moved.get("from"), why=why, run=moved.get("run"))
+            say("RED: %s died after the move to task-loop %s; %s goes on from its checkpoint on %s" % (b.id, moved.get("to"), b.id, moved.get("from")))
+            os.environ["TL_REEXEC"] = json.dumps({"run": moved.get("run"), "bead": b.id, "from": moved.get("to"), "owned": "", "fallback": True})
             try:
                 return run_bead(repo, b, slot, wt, slot_bead, started, code=back)
             finally:
                 os.environ.pop("TL_REEXEC", None)  # the fallback run took it; no later run-task of this loop may inherit it
     if stopped and r.get("outcome") == "failed":  # a stop is no verdict on the bead: back to the queue, unclaimed,
-        if landed_on_base(repo, wt, b["id"]):     # unless the stop came during a land that went through
+        if landed_on_base(repo, wt, b.id):     # unless the stop came during a land that went through
             r["why"] = "%s; its land commit is on the base: not reopened, close it by hand" % (r.get("why") or "stopped")
         else:
-            tl.bd("update", b["id"], "--status", "open", "--assignee", "", cwd=repo)
+            tl.attempt(tl.bd_store(repo).update, b.id, BeadPatch(status="open", assignee=""))
     r.setdefault("minutes", round((clock() - t0) / 60, 1))
     r["run_log"] = str(log_path)
     return r
@@ -786,16 +785,14 @@ def acquire(repo, cfg, wait_min, until, prio=tl.DEFAULT_PRIO):
                         on_wait=waiting, prio=prio)
 
 
-def reclaim(repo):
+def reclaim(repo, store=None):
     """A dead loop's or session's beads and slots back to ready: only claims of tl- actors (bd's lease rule decides
     which are dead), never a person's hand claim."""
-    try:
-        held = json.loads(tl.bd("list", "--json", "--status", "in_progress", "-n", "0", cwd=repo).stdout or "[]")
-    except ValueError:
-        held = []
-    who = sorted({b.get("assignee") for b in held if (b.get("assignee") or "").startswith("tl-")})
+    store = store or tl.bd_store(repo)
+    held = tl.listed(store.find, BeadQuery(status="in_progress"))
+    who = sorted({b.assignee for b in held if b.assignee.startswith("tl-")})
     if who:
-        tl.bd("reclaim", "--older-than", "15m", *sum((["--assignee", w] for w in who), []), cwd=repo)
+        tl.attempt(store.reclaim, "15m", who)
 
 
 def cmd_loop(a):
@@ -897,10 +894,10 @@ def worktree_name(repo):
     return name
 
 
-def passes(repo, a, started, st=None):
-    st = st or {}
+def passes(repo, a, started, st=None, store=None):
+    st, store = st or {}, store or tl.bd_store(repo)
     cfg, until = tl.profile_slots(repo), st.get("until") if "until" in st else end_time(a.until)
-    slots = int(cfg.get("count") or 0) > 0
+    slots = cfg.count > 0
     wt = st.get("wt")
     if not slots and wt:
         write_state(repo, pid=os.getpid(), started=started, worktree=wt)
@@ -946,7 +943,7 @@ def passes(repo, a, started, st=None):
                              "wt": wt, "actor": os.environ.get("TASK_LOOP_ACTOR"),
                              "started": started}):
             continue
-        reclaim(repo)
+        reclaim(repo, store)
         tl.close_stale_asks()  # asks of closed or missing beads (throttled)
         tl.park_stale_asks()  # asks unanswered past parks_at (3 days), throttled with the sweep above
         try:
@@ -954,18 +951,18 @@ def passes(repo, a, started, st=None):
             reflect_digest.maybe_run()  # the run reflections into beads, once a day (tl-bl5)
         except Exception as e:
             say("reflect digest: %s" % e)
-        ranked, skipped = queue(repo)
+        ranked, skipped = queue(repo, store)
         now = clock()
         for rested, due in read_rests(repo).items():  # another loop's pre-engine failure rests the bead here too
             later[rested] = max(later.get(rested, 0), due)
-        cands = [b for b, _ in ranked if later.get(b["id"], 0) <= now and gate.ready(b["id"])]
-        cands.sort(key=lambda b: b["id"] not in net_first)  # a bead the network paused goes first, the same one (stable sort)
-        net_first = [] if cands and cands[0]["id"] not in net_first else net_first
+        cands = [b for b, _ in ranked if later.get(b.id, 0) <= now and gate.ready(b.id)]
+        cands.sort(key=lambda b: b.id not in net_first)  # a bead the network paused goes first, the same one (stable sort)
+        net_first = [] if cands and cands[0].id not in net_first else net_first
         if cands:
             area_wait[0] = 0.0
         if not cands:
             if ranked:
-                wake = min(gate.next_look(b["id"]) if b["id"] in gate.held and later.get(b["id"], 0) <= now else later[b["id"]]
+                wake = min(gate.next_look(b.id) if b.id in gate.held and later.get(b.id, 0) <= now else later[b.id]
                            for b, _ in ranked)
                 say("every ready bead waits for a lane or another session: looking again at %s"
                     % time.strftime("%H:%M:%S", time.localtime(wake)))
@@ -996,15 +993,15 @@ def passes(repo, a, started, st=None):
             continue
         name, d, slot_bead = got
         r, bid = None, ""
-        beat = Beat(slot_bead)
+        beat = Beat(store, slot_bead)
         try:
             if os.path.isdir(d):  # from the take to run-task's own lock: no hand run gets in, the slot reset included
                 tl.loop_lock(d, name, slot_bead)
             ecfg, cache = engine.load_cfg(repo), {}
             for b in cands:
-                bid = b["id"]
+                bid = b.id
                 with area_lock(repo, ecfg):  # the area check, the claim and the mark that makes the area busy: as one
-                    area, busy = area_busy(repo, ecfg, b, cache) if has_areas(ecfg) else ("", "")
+                    area, busy = area_busy(repo, ecfg, b, cache, store) if has_areas(ecfg) else ("", "")
                     if busy:  # another run took the area since the queue was read
                         say("%s: %s; the next bead" % (bid, busy))
                         continue
@@ -1019,27 +1016,27 @@ def passes(repo, a, started, st=None):
                         if os.path.isdir(d):
                             tl.loop_lock(d, name, slot_bead, bead=bid)
                         if slot_bead:
-                            tl.bd("update", slot_bead, "--set-metadata", "held_bead=" + bid, cwd=repo)
+                            tl.attempt(store.update, slot_bead, BeadPatch(set_metadata={"held_bead": bid}))
                 beat.add(bid)
-                rc, err = prepare(repo, name, b["id"]) if slots else (0, "")
+                rc, err = prepare(repo, name, b.id) if slots else (0, "")
                 if rc != 0:
-                    tl.bd("unclaim", b["id"], cwd=repo)
+                    store.unclaim(b.id)
                     if rc == 5:  # a live run holds the bead's branch: not this loop's failure
                         r = {"outcome": "taken", "why": err}
                     else:  # before the engine: the bead rests for every loop, no failure of this loop's
                         r = {"outcome": "failed", "pre_engine": True, "why": "failed before the engine: %s" % (
-                            "tl slot reset %s for %s found the slot busy (a live engine or a hold)" % (name, b["id"]) if rc == 4
-                            else "tl slot reset %s for %s did not give a clean tree: %s" % (name, b["id"], err or "exit %d" % rc))}
+                            "tl slot reset %s for %s found the slot busy (a live engine or a hold)" % (name, b.id) if rc == 4
+                            else "tl slot reset %s for %s did not give a clean tree: %s" % (name, b.id, err or "exit %d" % rc))}
                 else:
                     r = run_bead(repo, b, name, d, slot_bead, started)
-                record(repo, b["id"], name, r)
+                record(repo, b.id, name, r)
                 if r.get("outcome") != "taken":
                     break
                 later[bid] = clock() + PAUSE_RETRY
                 beat.ids.remove(bid)
                 r = None
                 if slot_bead:  # the next candidate's area check must not see this one as running here
-                    tl.bd("update", slot_bead, "--unset-metadata", "held_bead", cwd=repo)
+                    tl.attempt(store.update, slot_bead, BeadPatch(unset_metadata=["held_bead"]))
                 if os.path.isdir(d):
                     tl.loop_lock(d, name, slot_bead)
         finally:
@@ -1245,8 +1242,9 @@ def selftest():
     on this install's code. None when it lands and closes the bead, else why not. Nothing real is touched: no bd, no
     delegate, no network, no model."""
     import tempfile
-    import types
     from unittest import mock
+
+    from taskloop.adapters.fake_beads import FakeBeads
 
     py = '"%s"' % sys.executable
     check = py + " -c \"import os,sys; sys.exit(0 if os.path.exists('f.txt') else 1)\""
@@ -1256,7 +1254,7 @@ def selftest():
              "bad_checks": [], "new_cases": [], "unchecked": [], "logic_only": ""}
     review = {"findings": [], "unmet": [], "question": "", "options": [], "decided": "", "leftovers": [], "unchecked": [],
               "look": ""}
-    bead = {"id": "t-1", "title": "Add f", "metadata": {}, "acceptance_criteria": "f.txt exists"}
+    bead = engine.Bead(id="t-1", title="Add f", status="open", acceptance_criteria="f.txt exists")
     closed, blocked = [], []
 
     def lane(cmd, **kw):  # fake route.py run: one contract 3 answer on stdout
@@ -1304,17 +1302,16 @@ def selftest():
             res = dl.resolve(cfg.delegate)  # the configured delegate's own contract when there is one; else a bare one
             contract = res.contract if isinstance(res, dl.Resolved) else {"contract": dl.CONTRACT, "reasons": {}, "run_args": []}
             resolved = dl.Resolved(Path("/selftest"), "/selftest/route.py", contract, "explicit")
-            fake_bd = types.SimpleNamespace(returncode=0, stdout="bead t-1: Add f\n", stderr="")
-            with mock.patch.object(tl, "bd", return_value=fake_bd), mock.patch.object(tl, "show", return_value=bead), \
-                    mock.patch.object(tl, "comments", return_value=[]), \
-                    mock.patch.object(tl, "cmd_close", side_effect=lambda a: closed.append(a.reason) or 0), \
+            store = FakeBeads()
+            store.beads["t-1"] = bead
+            with mock.patch.object(tl, "cmd_close", side_effect=lambda a: closed.append(a.reason) or 0), \
                     mock.patch.object(tl, "cmd_block", side_effect=lambda a: blocked.append(a.why) or 0), \
                     mock.patch.object(tl, "cmd_land", return_value=0), \
                     mock.patch.object(engine.time, "sleep"):
                 cfg = engine.dataclasses.replace(cfg, reflect=False)
                 os.chdir(wt)  # the engine reads cwd
                 try:
-                    rc = engine.Engine("t-1", str(wt), cfg, route=seams.FixedRoute(resolved, Runner())).run()
+                    rc = engine.Engine("t-1", str(wt), cfg, route=seams.FixedRoute(resolved, Runner()), store=store).run()
                 finally:
                     os.chdir(home.parent)  # out of the directory that is removed next
     if rc != 0 or not closed:

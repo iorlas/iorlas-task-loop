@@ -133,7 +133,7 @@ class Base(unittest.TestCase):
 class Queue(Base):
     def order(self):
         ranked, _ = loop.queue(str(self.repo))
-        return [b["id"] for b, _ in ranked]
+        return [b.id for b, _ in ranked]
 
     def test_defaults_take_every_ready_bead_by_priority_then_lowest_id(self):
         self.fake(bead("x-3", 2), bead("x-10", 1), bead("x-2", 2))
@@ -147,14 +147,14 @@ class Queue(Base):
         self.config(pick_label="auto")
         f = self.fake(bead("x-1"), bead("x-2", labels=["auto"]))
         self.assertEqual(self.order(), ["x-2"])
-        self.assertIn(("ready", "--json", "-n", "0", "--label", "auto"), f.calls)
+        self.assertIn(("ready", "-n", "0", "--label", "auto"), f.calls)
 
     def test_skip_labels_epics_and_slots_are_skipped_with_a_reason(self):
         self.config(skip_labels=["owner-taste", "needs-info"])
         self.fake(bead("x-1", labels=["owner-taste"]), bead("x-2"), bead("x-3", type="epic"), bead("x-4", labels=["slot"]),
                   bead("x-5", labels=["needs-info"]))
         ranked, skipped = loop.queue(str(self.repo))
-        self.assertEqual([b["id"] for b, _ in ranked], ["x-2"])
+        self.assertEqual([b.id for b, _ in ranked], ["x-2"])
         self.assertEqual(dict(skipped), {"x-1": "label owner-taste", "x-3": "an epic", "x-4": "a slot",
                                          "x-5": "label needs-info"})
 
@@ -165,7 +165,7 @@ class Queue(Base):
         escaped = dict(bead("x-3", labels=["facts-inline"]), description="Per study 84 s.2 (facts below): do X")
         self.fake(cites, clean, escaped)
         ranked, skipped = loop.queue(str(self.repo))
-        self.assertEqual([b["id"] for b, _ in ranked], ["x-2", "x-3"])
+        self.assertEqual([b.id for b, _ in ranked], ["x-2", "x-3"])
         self.assertEqual([i for i, _ in skipped], ["x-1"])
         self.assertTrue(skipped[0][1].startswith("needs inlined facts"), skipped)
 
@@ -184,7 +184,7 @@ class Queue(Base):
         self.config(epic_order=["e-1"], epic_only=True)
         self.fake(bead("x-1", parent="e-1"), bead("x-2", parent="e-9"), parents={"e-9": None})
         ranked, skipped = loop.queue(str(self.repo))
-        self.assertEqual([b["id"] for b, _ in ranked], ["x-1"])
+        self.assertEqual([b.id for b, _ in ranked], ["x-1"])
         self.assertEqual(dict(skipped), {"x-2": "under no epic in epic_order (epic_only)"})
 
     def test_each_place_says_which_rule_put_it_there(self):
@@ -259,7 +259,7 @@ class QueueRuleFromBase(Base):
         self.push_rule({"engine": {"epic_order": [], "pick_label": "go"}})
         self.fake(bead("x-1"), bead("x-2", labels=["go"]))
         ranked, _ = loop.queue(str(self.repo))
-        self.assertEqual([b["id"] for b, _ in ranked], ["x-2"])
+        self.assertEqual([b.id for b, _ in ranked], ["x-2"])
 
     def test_engine_load_cfg_reads_the_base_branch_with_the_base_the_working_tree_names(self):
         self.push_rule({"engine": {"brief_kb": 7}})
@@ -272,7 +272,7 @@ class QueueRuleFromBase(Base):
         (self.repo / ".task-loop.json").write_text(json.dumps({"engine": {"skip_labels": ["later"]}}))
         self.fake(bead("x-1", labels=["later"]), bead("x-2"))
         ranked, skipped = loop.queue(str(self.repo))
-        self.assertEqual([b["id"] for b, _ in ranked], ["x-2"])
+        self.assertEqual([b.id for b, _ in ranked], ["x-2"])
         self.assertEqual(skipped, [("x-1", "label later")])
 
 

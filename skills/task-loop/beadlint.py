@@ -31,9 +31,9 @@ def outside_root(path, root):
 
 def refs(bead, root=""):
     """[(kind, text)] this bead's text cites outside the repo; empty when the bead is self-contained or escaped."""
-    if ESCAPE_LABEL in (bead.get("labels") or []):
+    if ESCAPE_LABEL in bead.labels:
         return []
-    text = "\n".join(str(bead.get(f) or "") for f in FIELDS)
+    text = "\n".join(getattr(bead, f) for f in FIELDS)
     if ESCAPE_LINE.search(text):
         return []
     out, seen = [], set()

@@ -49,6 +49,8 @@ class FakeBeads:
 
     def update(self, bead: str, patch: BeadPatch) -> None:
         b = self._get(bead)
+        if patch.if_assignee and b.assignee != patch.if_assignee:
+            raise BdFailure(BdError(kind="other", text="assignee changed"))
         meta = dict(patch.metadata if patch.metadata is not None else b.metadata)
         meta = {k: v for k, v in meta.items() if k not in patch.unset_metadata}
         meta.update(patch.set_metadata)

@@ -28,9 +28,11 @@ class BdRun:
 Runner = Callable[[list[str], str | None], BdRun]
 
 
-def subprocess_runner(argv: list[str], cwd: str | None) -> BdRun:
+def subprocess_runner(argv: list[str], cwd: str | None, timeout: float | None = None) -> BdRun:
+    """The one `bd` process call. A timeout raises subprocess.TimeoutExpired (a caller that cannot wait catches SubprocessError)."""
     try:
-        r = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL)
+        r = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL,
+                           timeout=timeout)
     except OSError as e:
         return BdRun(127, "", "bd: %s" % e)
     return BdRun(r.returncode, r.stdout, r.stderr)
@@ -45,7 +47,7 @@ def _str(d: dict[str, Any], key: str) -> str:
 
 def dep_of(d: dict[str, Any]) -> Dep:
     return Dep(id=_str(d, "id") or _str(d, "depends_on_id"), type=_str(d, "dependency_type") or _str(d, "type"),
-               title=_str(d, "title"), status=_str(d, "status"))
+               title=_str(d, "title"), status=_str(d, "status"), close_reason=_str(d, "close_reason"))
 
 
 def bead_of(d: dict[str, Any]) -> Bead:
@@ -56,7 +58,17 @@ def bead_of(d: dict[str, Any]) -> Bead:
                 parent=_str(d, "parent"), description=_str(d, "description"), design=_str(d, "design"),
                 acceptance_criteria=_str(d, "acceptance_criteria"), notes=_str(d, "notes"),
                 dependencies=[dep_of(x) for x in deps if isinstance(x, dict)] if isinstance(deps, list) else [],
-                metadata=dict(meta) if isinstance(meta, dict) else {}, lease_expires_at=_str(d, "lease_expires_at"))
+                metadata=dict(meta) if isinstance(meta, dict) else {}, lease_expires_at=_str(d, "lease_expires_at"), close_reason=_str(d, "close_reason"))
+
+
+def norm_bead(d: dict[str, Any]) -> dict[str, Any]:
+    """A bead as bd prints it, its dependencies in the one dict shape {id, type, title, status}. For the dashboard, which still
+    reads bd's JSON as dicts until it takes typed snapshots; everything else reads `bead_of`."""
+    deps = d.get("dependencies")
+    if not isinstance(deps, list):
+        return d
+    return dict(d, dependencies=[{"id": x.id, "type": x.type, "title": x.title, "status": x.status, "close_reason": x.close_reason}
+                                 for x in map(dep_of, (y for y in deps if isinstance(y, dict)))])
 
 
 def beads_of(data: Any) -> list[Bead]:
@@ -112,6 +124,8 @@ def update_argv(bead: str, patch: BeadPatch) -> list[str]:
     a = ["update", bead]
     if patch.status:
         a += ["--status", patch.status]
+    if patch.if_assignee:
+        a += ["--if-assignee", patch.if_assignee]
     if patch.assignee is not None:
         a += ["--assignee", patch.assignee]
     if patch.description is not None:
@@ -139,12 +153,13 @@ def find_argv(query: BeadQuery) -> list[str]:
 
 
 class BdStore:
-    def __init__(self, actor: str, cwd: str | None = None, exe: str = "", run: Runner = subprocess_runner) -> None:
-        self.actor, self.cwd, self._run = actor, cwd, run
+    def __init__(self, actor: str, cwd: str | None = None, exe: str = "", run: Runner | None = None, timeout: float | None = None) -> None:
+        self.actor, self.cwd, self.timeout = actor, cwd, timeout
+        self._run: Runner = run or (lambda argv, where: subprocess_runner(argv, where, timeout))
         self.exe = exe or shutil.which("bd") or "bd"
 
     def at(self, cwd: str) -> "BdStore":
-        return BdStore(self.actor, cwd, self.exe, self._run)
+        return BdStore(self.actor, cwd, self.exe, self._run, self.timeout)
 
     def _call(self, *args: str) -> BdRun:
         return self._run([self.exe, "--actor", self.actor, *args, "--json"], self.cwd)
@@ -161,7 +176,12 @@ class BdStore:
 
     def show(self, bead: str) -> Bead | None:
         r = self._call("show", bead)
-        found = beads_of(_loads(r.out)) if r.code == 0 else []
+        if r.code != 0:
+            err = error_of(r.err, r.out)
+            if err.kind == "not_found":
+                return None
+            raise BdFailure(err)
+        found = beads_of(_loads(r.out))
         return found[0] if found else None
 
     def comments(self, bead: str) -> list[Comment]:

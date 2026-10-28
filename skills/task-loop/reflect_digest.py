@@ -20,6 +20,7 @@ from collections import Counter
 from pathlib import Path
 
 import tl
+from taskloop.contracts.ports import BdFailure, BeadQuery, NewBead
 
 MIN_RUNS = 2
 SIMILAR = 0.35  # token overlap (Jaccard) that makes two went_badly items one cause
@@ -169,16 +170,6 @@ def owner_repo(c, repos=None):
     return mine.most_common(1)[0][0] if mine else ""
 
 
-def bd_json(args, repo):
-    r = tl.bd(*args, cwd=repo)
-    if r.returncode != 0:
-        return None
-    try:
-        return json.loads(r.stdout or "null")
-    except ValueError:
-        return None
-
-
 def same_cause(e, c):
     t = jaccard(set(e.get("tokens") or []), c["tokens"])
     return t >= SIMILAR or bool(set(e.get("files") or []) & set(c["files"]) and t >= FILE_SIMILAR)
@@ -190,18 +181,20 @@ def known_bead(c, repo, state):
     for e in reversed(state.get("filed", [])):  # the newest first: a closed one's successor wins
         if e.get("cause") == c["cause"] and e.get("repo") == repo and same_cause(e, c):
             return e["bead"], "filed"
-    rows = bd_json(["list", "--json", "--limit", "0"], repo) or []  # the default filter leaves out closed beads only
+    try:
+        rows = tl.bd_store(repo).find(BeadQuery())  # the default filter leaves out closed beads only
+    except BdFailure:
+        rows = []
     ct = tokens(c["title"])
-    for b in rows if isinstance(rows, list) else []:
-        if jaccard(tokens(b.get("title") or ""), ct) >= TITLE_SIMILAR:
-            return b.get("id") or "", "open"
+    for b in rows:
+        if jaccard(tokens(b.title), ct) >= TITLE_SIMILAR:
+            return b.id, "open"
     return "", ""
 
 
 def is_closed(bead, repo):
-    d = bd_json(["show", bead, "--json"], repo)
-    row = d[0] if isinstance(d, list) and d else d
-    return isinstance(row, dict) and row.get("status") == "closed"
+    row = tl.peek(tl.bd_store(repo), bead)
+    return row is not None and row.status == "closed"
 
 
 def evidence_lines(c):
@@ -250,17 +243,19 @@ def file_cluster(c, state, dry=False, repos=None):
         if new:
             res["action"] = "commented"
             if not dry:
-                tl.bd("comments", "add", bead, "Reflect digest: the cause recurred in %d more run(s): %s\n%s" % (
-                    len(new), ", ".join(new), "\n".join(evidence_lines(dict(c, items=[i for i in c["items"] if i["run"] in new])))), cwd=repo)
+                tl.attempt(tl.bd_store(repo).add_comment, bead, "Reflect digest: the cause recurred in %d more run(s): %s\n%s" % (
+                    len(new), ", ".join(new), "\n".join(evidence_lines(dict(c, items=[i for i in c["items"] if i["run"] in new])))))
                 entry["runs"] = sorted(set(entry["runs"]) | set(new))
         return res
     title = "Reflect: %s: %s" % (c["cause"], c["title"])[:140]
     res["action"] = "filed"
     if dry:
         return res
-    r = tl.bd("create", "--title", title, "--type", "task", "--priority", "3", "--labels", "reflect,cause-%s" % c["cause"],
-              "--description", description(c, old), "--acceptance", acceptance(c), "--silent", cwd=repo)
-    new_id = (r.stdout or "").strip().splitlines()[-1].strip() if r.returncode == 0 and (r.stdout or "").strip() else ""
+    try:
+        new_id = tl.bd_store(repo).create(NewBead(title=title, priority=3, labels=["reflect", "cause-%s" % c["cause"]],
+                                                  description=description(c, old), acceptance_criteria=acceptance(c)))
+    except BdFailure:
+        new_id = ""
     if not new_id:
         res["action"] = "failed"
         return res

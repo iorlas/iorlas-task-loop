@@ -43,6 +43,7 @@ class BeadPatch:
     """What `update` changes; a field left at its default is not touched. assignee "" clears it."""
 
     status: str = ""
+    if_assignee: str = ""  # apply only while this actor still holds the bead (bd checks it atomically)
     assignee: str | None = None
     description: str | None = None
     notes: str | None = None
@@ -67,7 +68,8 @@ class BdFailure(Exception):
 
 
 class Beads(Protocol):
-    """bd as the code uses it. Reads of an unknown bead answer None or []; a refused write raises BdFailure,
+    """bd as the code uses it. Reads of an unknown bead answer None or []; `show` of a bead when bd itself fails (down, locked)
+    raises BdFailure, so "no such bead" is never confused with "could not ask". A refused write raises BdFailure,
     except `claim`/`unclaim`, which answer whether the bead changed hands."""
 
     def show(self, bead: str) -> Bead | None: ...

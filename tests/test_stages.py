@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "task-loop"))
 from support import fake_route  # noqa: E402
 from support import tlbd, tools  # noqa: E402
-from support.fakes import FakeBeadStore  # noqa: E402
+from support.fakes import FakeBeadStore, as_bead  # noqa: E402
 from taskloop.contracts.config import EngineConfig  # noqa: E402
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support.builders import cfg_with, make_engine  # noqa: E402
@@ -67,7 +67,7 @@ class EmptyPlan(StagesTest):
 
     @te.no_repo
     def test_done_when_counts_as_acceptance_criteria(self):
-        has = engine.has_criteria
+        has = lambda b: engine.has_criteria(as_bead(b))
         self.assertFalse(has({"description": "Done when? tbd"}))
         self.assertTrue(has({"description": "Goal.\n\n## Done when\n- x works\n"}))
         self.assertTrue(has({"description": "Goal.\n\nDone when: x works"}))
@@ -187,7 +187,7 @@ class Scope(StagesTest):
 
     @te.no_repo
     def test_acceptance_text_reads_the_field_and_the_description_from_the_heading(self):
-        txt = engine.acceptance_text({"acceptance_criteria": "A works", "description": "Intro.\n## Done when\n- B works\n"})
+        txt = engine.acceptance_text(as_bead({"acceptance_criteria": "A works", "description": "Intro.\n## Done when\n- B works\n"}))
         self.assertIn("A works", txt)
         self.assertIn("B works", txt)
         self.assertNotIn("Intro", txt)
@@ -543,30 +543,30 @@ class Executable(StagesTest):
 
     def test_a_replanned_runs_goals_survive_the_stage_that_runs_again(self):
         e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
-        e.reset(dict(BEAD))
+        e.reset(as_bead(BEAD))
         e.plan_data = self.two_stage()
         e.done, e.accepted = ["an earlier plan's goal", "stage one"], [0]
         e.save_checkpoint(stage=1, rounds=0, n=0, feedback="", step="write")
         again = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
-        again.reset(dict(BEAD))
+        again.reset(as_bead(BEAD))
         again.resume_point()
         self.assertEqual(again.done, ["an earlier plan's goal"])
 
     def test_a_resume_runs_the_stage_again_when_its_file_is_gone(self):
         e = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
-        e.reset(dict(BEAD))
+        e.reset(as_bead(BEAD))
         e.plan_data = self.two_stage()
         e.done, e.accepted = ["stage one"], [0]
         e.save_checkpoint(stage=1, rounds=0, n=0, feedback="", step="write")
         again = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
-        again.reset(dict(BEAD))
+        again.reset(as_bead(BEAD))
         plan, i, state = again.resume_point()
         self.assertEqual((i, state, again.accepted, again.done), (0, None, [], []))
         self.assertIn("a file stage 1 promised is missing", again.log_path.read_text())
         Path(self.wt, self.PATH1).parent.mkdir(parents=True, exist_ok=True)
         Path(self.wt, self.PATH1).write_text("ok\n")
         third = engine.Engine("t-1", str(self.wt), engine.load_cfg(str(self.wt)), store=self.store)
-        third.reset(dict(BEAD))
+        third.reset(as_bead(BEAD))
         self.assertEqual(third.resume_point()[1], 1)  # the file is there: stage 2 goes on
 
 

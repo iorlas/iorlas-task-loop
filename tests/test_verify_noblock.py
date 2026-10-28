@@ -240,16 +240,10 @@ class NoBlock(unittest.TestCase):
             "bead_parent": "t-0",
             "unverified": [{"what": "price of the pack", "kind": "external_fact", "why": ""}],
             })
-        real = self.fake_bd
-
-        def bd(*a, **kw):
-            r = real(*a, **kw)
-            if a[0] == "list":
-                r.stdout = json.dumps([{"id": existing["id"]}] if existing else [])
-            return r
         shows = {"t-0": {"id": "t-0", "issue_type": "epic"}, existing["id"]: existing} if existing else {"t-0": {"id": "t-0", "issue_type": "epic"}}
         self.bd_calls.clear()
-        with self.store.stub(bd_fn=bd), self.store.stub(show_fn=lambda i, **k: shows.get(i, {})):
+        with self.store.stub(find_fn=lambda q: [{"id": existing["id"]}] if existing else []), \
+                self.store.stub(show_fn=lambda i, **k: shows.get(i, {})):
             eng.file_owner_look()
         return eng
 
@@ -279,11 +273,7 @@ class NoBlock(unittest.TestCase):
         def bd(*a, **kw):
             self.bd_calls.append(a)
             out = mock.Mock(returncode=0, stdout="", stderr="")
-            with lock:
-                rows = list(store.values())
-            if a[0] == "list":
-                out.stdout = json.dumps([{"id": r["id"]} for r in rows])
-            elif a[0] == "create":
+            if a[0] == "create":
                 time.sleep(0.05)  # the window a race needs: list is done, create is not
                 with lock:
                     store["t-9%d" % len(store)] = {"id": "t-9%d" % len(store), "parent": a[a.index("--parent") + 1], "status": "open",
@@ -305,7 +295,11 @@ class NoBlock(unittest.TestCase):
                 })
             eng.file_owner_look()
 
-        with self.store.stub(bd_fn=bd), self.store.stub(show_fn=show):
+        def found(query):
+            with lock:
+                return [{"id": r["id"]} for r in store.values()]
+
+        with self.store.stub(bd_fn=bd, find_fn=found), self.store.stub(show_fn=show):
             threads = [threading.Thread(target=land, args=(n,)) for n in (1, 2, 3)]
             [t.start() for t in threads]
             [t.join() for t in threads]

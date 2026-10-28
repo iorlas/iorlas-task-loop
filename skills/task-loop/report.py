@@ -26,6 +26,7 @@ from pathlib import Path
 import engine
 import loop
 import tl
+from taskloop.contracts.ports import BdFailure
 from lanes import route as lroute
 
 M2 = {"beads": 10, "landed_no_ask": 7}  # at least; lost and crashes must be 0 (docs/roadmap.md)
@@ -129,15 +130,13 @@ def prefix(bead):
 
 # ---- 10.2: lost work --------------------------------------------------------------------------------------------------
 
-def bead_status(bead, repo):
+def bead_status(bead, repo, store=None):
     """The bead's status, None when the tracker has no such bead, "?" when bd itself failed (no false lost work)."""
-    r = tl.bd("show", bead, "--json", cwd=repo)
     try:
-        d = json.loads(r.stdout)
-    except ValueError:
-        return None if r.returncode == 0 or "not found" in (r.stderr or "").lower() else "?"
-    d = d[0] if isinstance(d, list) and d else d
-    return d.get("status") if isinstance(d, dict) else None
+        found = (store or tl.bd_store(repo)).show(bead)
+    except BdFailure:
+        return "?"
+    return found.status if found else None
 
 
 def lost_work(repo, since=None, base=None, status_of=None, traces=None):
@@ -267,10 +266,10 @@ def answered_asks(run):
 def who_answered(comments, n):
     """For the bead's last n asks: 'supervisor', 'owner' or 'open', from the first person's comment after each."""
     out = []
-    asks = [i for i, c in enumerate(comments) if (c.get("text") or "").startswith("Ask (engine) ")]
+    asks = [i for i, c in enumerate(comments) if c.text.startswith("Ask (engine) ")]
     for i in asks[-n:] if n else []:
-        reply = next((c for c in comments[i + 1:] if not (c.get("text") or "").startswith(engine.ENGINE_NOTES)), None)
-        out.append("open" if reply is None else "supervisor" if SUPERVISOR.search(reply.get("text") or "") else "owner")
+        reply = next((c for c in comments[i + 1:] if not c.text.startswith(engine.ENGINE_NOTES)), None)
+        out.append("open" if reply is None else "supervisor" if SUPERVISOR.search(reply.text) else "owner")
     return out + ["unknown"] * (n - len(out))
 
 
@@ -284,7 +283,7 @@ def pctl(xs, p):
 
 def scorecard(repo, since, until, base=None, comments_of=None, status_of=None, alive=None, now=None):
     repo = tl.repo_root(repo)  # the loop keys its log by this path
-    comments_of = comments_of or (lambda b: tl.comments(b, cwd=repo))
+    comments_of = comments_of or tl.bd_store(repo).comments
     traces = repo_traces(repo)
     runs = sorted([r for r in traces if overlaps(r, since, until)], key=lambda r: r.get("started") or 0)
     crash = crashes(repo, since, until, traces, alive=alive, now=now)

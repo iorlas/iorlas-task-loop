@@ -9,6 +9,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "task-loop"))
 from support import fake_route  # noqa: E402
+from support.fakes import as_bead  # noqa: E402
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support.builders import make_engine  # noqa: E402
 from taskloop.contracts.config import VisualConfig  # noqa: E402
@@ -182,16 +183,8 @@ class LookTest(unittest.TestCase):
         self.assertEqual(rc, 0, self.blocked)
         self.bd_calls.clear()
         self.eng.look_notes, self.eng.look_filed = ["second look"], False  # a later run
-        rows = [{"id": "t-9"}]
-        shows = {"t-9": {"id": "t-9", "dependencies": [{"id": "t-1", "type": "related"}]}}
-        real = self.fake_bd
-        def bd(*a, **kw):
-            r = real(*a, **kw)
-            if a[0] == "list":
-                r.stdout = json.dumps(rows)
-            return r
-        with self.store.stub(bd_fn=bd), self.store.stub(show_fn=lambda i, **k: shows.get(i, {})):
-            self.eng.file_owner_look()
+        self.store.put({"id": "t-9", "labels": ["owner-look"], "dependencies": [{"id": "t-1", "type": "related"}]})
+        self.eng.file_owner_look()
         self.assertEqual(self.creates(), [])
         (u,) = [c for c in self.bd_calls if c[0] == "update"]
         self.assertEqual(u[1], "t-9")
@@ -207,7 +200,7 @@ class LookTest(unittest.TestCase):
         saved = json.loads(self.eng.checkpoint_path().read_text())
         self.assertEqual(saved["look_paths"], ["design/look-reviews/t-1/home-screen.png"])
         eng2 = engine.Engine("t-1", str(self.wt), self.eng.cfg, store=self.store)
-        eng2.reset(BEAD)
+        eng2.reset(as_bead(BEAD))
         eng2.bead_title = "Add f"
         eng2.resume_point()
         self.assertEqual(eng2.look_paths, saved["look_paths"])

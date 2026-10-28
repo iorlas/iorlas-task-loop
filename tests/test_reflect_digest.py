@@ -54,7 +54,7 @@ class Base(unittest.TestCase):
             if self.fail_create:
                 return Res("", 1)
             self.n += 1
-            return Res("tl-new%d\n" % self.n)
+            return Res(json.dumps({"id": "tl-new%d" % self.n}))
         if args[0] == "list":
             return Res(json.dumps(self.open_rows))
         if args[0] == "show":

@@ -60,8 +60,13 @@ import applog
 
 import fcntl
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))  # taskloop: the typed records and adapters ship in the plugin dir
+from taskloop.adapters.bd import BdStore
+from taskloop.contracts import config
+from taskloop.contracts.bead import Bead
+from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, NewBead
+
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parents[1] / "src"))  # taskloop.contracts: the typed records ship in the plugin dir
 DASH = HERE / "dash" / "server.py"
 PORT = int(os.environ.get("TASK_LOOP_DASH_PORT", "7878"))
 SOURCE = "task-loop"
@@ -490,15 +495,52 @@ def actor():
     return "tl-" + (Path(top).name if top else socket.gethostname())
 
 
-def bd(*args, cwd=None, check=False):
-    exe = shutil.which("bd")
-    if not exe:
+def bd_store(cwd=None):
+    """The bd of this session (adapters/bd.py, the one place that starts `bd`), asking the tracker of `cwd` (default: here)."""
+    if not shutil.which("bd"):
         sys.exit("tl: bd is not on PATH")
-    r = subprocess.run([exe, "--actor", actor()] + list(args), cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace")
-    if check and r.returncode != 0:
-        sys.stderr.write(r.stderr)
-        sys.exit(r.returncode)
-    return r
+    return BdStore(actor(), str(cwd) if cwd else None)
+
+
+def peek(store, bead_id):
+    """The bead, None when it is not there or bd could not be asked (a caller that must tell the two apart calls store.show)."""
+    try:
+        return store.show(bead_id)
+    except BdFailure:
+        return None
+
+
+def cmd_bd(a):
+    """`tl bd ...`: bd with this session's actor and --json, through the adapter."""
+    r = bd_store().passthrough(a.rest)
+    sys.stdout.write(r.out)
+    sys.stderr.write(r.err)
+    return r.code
+
+
+def must(call, *args):
+    """A bd write that ends the command when bd refuses."""
+    try:
+        return call(*args)
+    except BdFailure as e:
+        sys.exit("tl: " + e.error.text)
+
+
+def listed(call, *args):
+    """The beads a bd read lists, none when bd could not be asked."""
+    try:
+        return call(*args)
+    except BdFailure:
+        return []
+
+
+def attempt(call, *args, **kw):
+    """A bd write whose refusal changes nothing: True when it worked."""
+    try:
+        call(*args, **kw)
+        return True
+    except BdFailure:
+        return False
 
 
 # ---- records ------------------------------------------------------------------------------------------------------
@@ -518,18 +560,13 @@ def event(kind, bead="", **fields):
     return rec
 
 
-def provenance(bead, kind, ref, ref_kind, payload=None, cwd=None):
+def provenance(bead, kind, ref, ref_kind, payload=None, cwd=None, store=None):
     """The shared record in bd (append-only, idempotent); a bd without provenance is not fatal."""
-    args = ["provenance", "record", "--issue", bead, "--kind", kind, "--source", SOURCE]
-    if ref:
-        args += ["--ref", ref, "--ref-kind", ref_kind]
-    else:
-        args += ["--at", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())]
-    if payload:
-        args += ["--payload", json.dumps(payload)]
-    r = bd(*args, cwd=cwd)
-    if r.returncode != 0:
-        sys.stderr.write("tl: provenance not recorded: " + (r.stderr.strip().splitlines() or ["?"])[-1] + "\n")
+    try:
+        (store or bd_store(cwd)).provenance(bead, kind, SOURCE, ref, ref_kind, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                                            json.dumps(payload) if payload else "")
+    except BdFailure as e:
+        sys.stderr.write("tl: provenance not recorded: " + (e.error.text.strip().splitlines() or ["?"])[-1] + "\n")
 
 
 def register_repo(path):
@@ -586,52 +623,21 @@ def prune_events():
 
 # ---- bead lifecycle -----------------------------------------------------------------------------------------------
 
-def norm_bead(b):
-    """A bead as bd prints it, its dependencies in the one shape the rest of task-loop reads: {id, type, title, status}
-    (`bd list` prints depends_on_id and type, `bd show` id and dependency_type). The only place that knows both."""
-    if isinstance(b, dict) and isinstance(b.get("dependencies"), list):
-        b = dict(b, dependencies=[{"id": d.get("id") or d.get("depends_on_id"), "type": d.get("dependency_type") or d.get("type"),
-                                   "title": d.get("title"), "status": d.get("status")} for d in b["dependencies"] if isinstance(d, dict)])
-    return b
-
-
-def show(bead, cwd=None):
-    r = bd("show", bead, "--json", cwd=cwd)
-    try:
-        d = json.loads(r.stdout)
-        return norm_bead(d[0] if isinstance(d, list) else d)
-    except ValueError:
-        return {}
-
-
-def comments(bead, cwd=None):
-    """A bead's comments, oldest first: [{author, text, created_at}]."""
-    r = bd("comments", bead, "--json", cwd=cwd)
-    try:
-        d = json.loads(r.stdout)
-        return d if isinstance(d, list) else []
-    except ValueError:
-        return []
-
-
-def cmd_claim(a):
-    r = bd("update", a.id, "--claim")
-    if r.returncode != 0:
-        sys.stderr.write(r.stderr)
+def cmd_claim(a, store=None):
+    st = store or bd_store()
+    if not st.claim(a.id):
         print("TAKEN")
         return 1
-    b = show(a.id)
-    if b.get("assignee") not in (None, "", actor()):
-        print("TAKEN by " + str(b.get("assignee")))
+    b = peek(st, a.id) or Bead(id=a.id, title="", status="")
+    if b.assignee not in ("", actor()):
+        print("TAKEN by " + b.assignee)
         return 1
     wt = str(Path(a.worktree).resolve()) if a.worktree else git("rev-parse", "--show-toplevel")
-    branch = (b.get("metadata") or {}).get("branch") or "task/" + a.id
-    bd("update", a.id, "--set-metadata", "branch=" + branch)
-    if a.slot:
-        bd("update", a.id, "--set-metadata", "slot=" + a.slot)
-    event("claim", a.id, worktree=wt, branch=branch, title=b.get("title"), slot=a.slot)
+    branch = b.metadata.get("branch") or "task/" + a.id
+    attempt(st.update, a.id, BeadPatch(set_metadata=dict({"branch": branch}, **({"slot": a.slot} if a.slot else {}))))
+    event("claim", a.id, worktree=wt, branch=branch, title=b.title, slot=a.slot)
     provenance(a.id, "claim", session_id() or actor(), "transcript" if session_id() else "work-id",
-               {"worktree": wt, "actor": actor(), "slot": a.slot})
+               {"worktree": wt, "actor": actor(), "slot": a.slot}, store=st)
     print("CLAIMED " + a.id + " branch=" + branch)
     return 0
 
@@ -649,16 +655,17 @@ def session_alive():
         return False
 
 
-def cmd_heartbeat(a):
+def cmd_heartbeat(a, store=None):
     """Keep claims alive. --loop: every 60 s until a heartbeat fails, the session's process is gone, or 12 h pass,
     so a dead session's leases lapse and `bd reclaim` frees them."""
     end = now() + 12 * 3600
     while True:
         for i in a.ids:
-            r = bd("heartbeat", i)
-            if r.returncode != 0:
-                sys.stderr.write(r.stderr)
-                return r.returncode
+            try:
+                (store or bd_store()).heartbeat(i)
+            except BdFailure as e:
+                sys.stderr.write(e.error.text + "\n")
+                return 1
         if not a.loop or now() > end or not session_alive():
             return 0
         time.sleep(60)
@@ -682,27 +689,31 @@ def cmd_land(a):
     return 0
 
 
-def cmd_close(a):
-    r = bd("close", a.id, "--reason", a.reason or "done")
-    sys.stderr.write(r.stderr)
-    if r.returncode == 0:
-        event("close", a.id, reason=a.reason)
-        prune_events()
-    return r.returncode
+def cmd_close(a, store=None):
+    try:
+        (store or bd_store()).close(a.id, a.reason or "done")
+    except BdFailure as e:
+        sys.stderr.write(e.error.text + "\n")
+        return 1
+    event("close", a.id, reason=a.reason)
+    prune_events()
+    return 0
 
 
-def cmd_block(a):
+def cmd_block(a, store=None):
     # tl-159: a parked bead lets go of its claim; the actor that held it stays live (a loop holds other beads), and a claim
     # nobody works on refused --fresh as 'taken: live claim'. A person's pre-existing claim is released too: parking ends the work.
-    held = (show(a.id) or {}).get("assignee") or ""
+    st = store or bd_store()
+    held = (peek(st, a.id) or Bead(id=a.id, title="", status="")).assignee
     # a claim by an engine's actor ends with the run; a person's own claim stays theirs (tl-159)
-    r = bd("update", a.id, "--status", "blocked", *(["--assignee", ""] if held.startswith("tl-") else []))
-    if r.returncode != 0:
-        sys.stderr.write(r.stderr)
-        return r.returncode
-    bd("comments", "add", a.id, "Blocked: " + a.why)
+    try:
+        st.update(a.id, BeadPatch(status="blocked", assignee="" if held.startswith("tl-") else None))
+    except BdFailure as e:
+        sys.stderr.write(e.error.text + "\n")
+        return 1
+    attempt(st.add_comment, a.id, "Blocked: " + a.why)
     event("block", a.id, why=a.why)
-    provenance(a.id, "suspend", session_id() or actor(), "transcript", {"why": a.why})
+    provenance(a.id, "suspend", session_id() or actor(), "transcript", {"why": a.why}, store=st)
     return 0
 
 
@@ -731,32 +742,34 @@ def profile_source(repo, base=None):
         return {}, ""
 
 
-def profile_slots(repo):
-    """The `slots` block of the repo's loop profile, as JSON in .task-loop.json (generic, read by tl.py)."""
-    f = Path(repo) / ".task-loop.json"
+def load_profile(data):
+    """A parsed .task-loop.json as a RepoProfile; an unknown key or a wrong type exits, naming it."""
     try:
-        return json.loads(f.read_text(encoding="utf-8")).get("slots") or {}
+        return config.load(data)
+    except config.ConfigError as e:
+        sys.exit("task-loop: %s" % e)
+
+
+def profile_slots(repo):
+    """The `slots` block of the repo's loop profile (.task-loop.json in the working tree)."""
+    try:
+        return load_profile(json.loads((Path(repo) / ".task-loop.json").read_text(encoding="utf-8"))).slots
     except (OSError, ValueError):
-        return {}
+        return config.SlotsConfig()
 
 
 def slot_dir(repo, name, cfg):
-    root = cfg.get("dir") or os.path.join(repo, ".slots")
+    root = cfg.dir
     return str(Path(root if os.path.isabs(root) else os.path.join(repo, root)) / name)
 
 
 HOST = socket.gethostname().split(".")[0].lower()
 
 
-def slot_beads(repo):
+def slot_beads(repo, store=None):
     """This machine's slot beads (title `slot <host> <name>`): a lease is local to one machine's bd."""
-    r = bd("list", "--json", "--all", "-n", "0", "--label", "slot", cwd=repo)
-    try:
-        beads = json.loads(r.stdout)
-    except ValueError:
-        return []
-    mine = [b for b in beads if b.get("status") != "closed" and b.get("title", "").split()[1:2] == [HOST]]
-    return sorted(mine, key=lambda b: b["title"])
+    beads = listed((store or bd_store(repo)).find, BeadQuery(label="slot", include_closed=True))
+    return sorted((b for b in beads if b.status != "closed" and b.title.split()[1:2] == [HOST]), key=lambda b: b.title)
 
 
 def cmd_slot(a):
@@ -766,13 +779,13 @@ def cmd_slot(a):
         with slot_lock(repo):
             free_expired(repo)
         for b in slot_beads(repo):
-            name = b["title"].split()[-1]
-            m, hold, d = b.get("metadata") or {}, slot_hold(b), slot_dir(repo, name, cfg)
-            held = b.get("status") == "in_progress" or hold
-            holder = (m.get("held_by") or b.get("assignee") or "?") if held else "-"
+            name = b.title.split()[-1]
+            m, hold, d = b.metadata, slot_hold(b), slot_dir(repo, name, cfg)
+            held = b.status == "in_progress" or hold
+            holder = (m.get("held_by") or b.assignee or "?") if held else "-"
             why = ("%s (hold until %s)" % (hold["why"], hold["until"]) if hold else
                    "%s since %s" % (m.get("held_why") or "?", m.get("held_since") or "?") if held else "-")
-            print("\t".join([name, b["id"], b.get("status", ""), holder, why, engine_busy(d) or "-", d]))
+            print("\t".join([name, b.id, b.status, holder, why, engine_busy(d) or "-", d]))
         for n, t in enumerate(waiting_line(repo), 1):  # the line, first served first: WAITING N P<priority> WHO WHY SINCE
             print("\t".join(["WAITING", str(n), "P%s" % ticket_order(t)[0], "pid %s" % t.get("pid"), str(t.get("why") or "-"),
                              stamp(t["since"]) if t.get("since") else "-"]))
@@ -788,28 +801,27 @@ def cmd_slot(a):
             hold = slot_hold(b)
             busy = (engine_busy(slot_dir(repo, a.name, cfg)) or
                     ("held by %s until %s: %s" % (hold["by"], hold["until"], hold["why"]) if hold and hold["by"] != actor()
-                     else "" if hold or b.get("status") == "open" else "held by %s" % held_by(b)))
-            if not busy and b.get("status") == "open" and not claim_slot(repo, b["id"]):
+                     else "" if hold or b.status == "open" else "held by %s" % held_by(b)))
+            if not busy and b.status == "open" and not claim_slot(repo, b.id):
                 busy = "claimed by another session just now"
             if busy:  # renewing one's own hold is fine; anything else in use is never held
                 print("BUSY: slot %s %s" % (a.name, busy))
                 return 1
             until = now() + float(a.for_min if a.for_min is not None else 60) * 60
-            mark_held(repo, b["id"], a.why, until)
-        event("slot-hold", "", slot=a.name, slot_bead=b["id"], why=a.why, until=until, repo=repo)
+            mark_held(repo, b.id, a.why, until)
+        event("slot-hold", "", slot=a.name, slot_bead=b.id, why=a.why, until=until, repo=repo)
         print("HELD %s until %s: %s" % (a.name, stamp(until), a.why))
         return 0
     if a.op == "init":  # once per repo: the slot beads and their worktrees
-        n = int(a.n or cfg.get("count") or 0)
+        n = int(a.n or cfg.count or 0)
         if n < 1:
             sys.exit("tl: slots.count is not set in .task-loop.json")
-        have = {b["title"].split()[-1] for b in slot_beads(repo)}
+        have = {b.title.split()[-1] for b in slot_beads(repo)}
         for i in range(1, n + 1):
             name = "s%d" % i
             if name not in have:
-                bd("create", "slot %s %s" % (HOST, name), "--type", "chore", "--labels", "slot", "--priority", "4",
-                   "--description", "Slot worktree " + name + " for task-loop. Claimed while a session uses it; never work.",
-                   cwd=repo, check=True)
+                must(bd_store(repo).create, NewBead(title="slot %s %s" % (HOST, name), issue_type="chore", labels=["slot"], priority=4,
+                                                    description="Slot worktree " + name + " for task-loop. Claimed while a session uses it; never work."))
             d = slot_dir(repo, name, cfg)
             exclude_local(repo, ".slots/", ".task/")
             if not os.path.isdir(d):
@@ -839,7 +851,7 @@ def cmd_slot(a):
     if a.op == "reset":  # per task: a clean tree on a fresh task branch; ignored setup output stays
         d = slot_dir(repo, a.name, cfg)
         busy = engine_busy(d)  # never commit or switch branches under a running engine (2026-10-21, lifesim-5ar.7)
-        hold = slot_hold(slot_bead(repo, a.name) or {})
+        hold = slot_hold(slot_bead(repo, a.name))
         if not busy and hold:
             busy = "held by %s until %s: %s" % (hold["by"], hold["until"], hold["why"])
         if busy and not a.force:
@@ -865,7 +877,7 @@ def cmd_slot(a):
                 return 3
             print("WIP committed on " + br)
         fetch(d)
-        base = cfg.get("base") or "origin/main"
+        base = cfg.base
         if a.bead and git("rev-parse", "--verify", "-q", "refs/heads/task/" + a.bead, cwd=d):
             # the bead's branch holds its earlier runs' work: check it out as it is, never reset it to base (a forced
             # reset here wiped lifesim-r32's reviewed work on 2026-10-19; the engine rebases at land)
@@ -884,7 +896,7 @@ def cmd_slot(a):
             sys.stderr.write(r.stderr)
             a.error = error_line(r.stderr)
             return r.returncode
-        run_git(d, "clean", "-fdq", *sum((["-e", k] for k in cfg.get("keep", [])), []))
+        run_git(d, "clean", "-fdq", *sum((["-e", k] for k in cfg.keep), []))
         rc = cmd_slot_setup(repo, a.name, cfg, d)
         if rc != 0:
             a.error = "setup exited %d" % rc
@@ -894,21 +906,21 @@ def cmd_slot(a):
     return 2
 
 
-def take_slot(repo, cfg, why="tl loop", bead="", ticket=None):
+def take_slot(repo, cfg, why="tl loop", bead="", ticket=None, store=None):
     """(name, dir, slot bead) of the first free slot this session could claim, or None. Free: its bead open, no hold,
     and no live engine or worker in its worktree (a run started without the slot bead, an older engine). A waiter
     calls wait_slot, which takes its turn in the line first; `ticket` is its number, kept on the take's event."""
     with slot_lock(repo):
-        free_expired(repo)
-        for b in slot_beads(repo):
-            name = b["title"].split()[-1]
+        free_expired(repo, store)
+        for b in slot_beads(repo, store):
+            name = b.title.split()[-1]
             d = slot_dir(repo, name, cfg)
-            if b.get("status") != "open" or slot_hold(b) or engine_busy(d) or not claim_slot(repo, b["id"]):
+            if b.status != "open" or slot_hold(b) or engine_busy(d) or not claim_slot(repo, b.id, store):
                 continue
-            mark_held(repo, b["id"], why, bead=bead)
-            event("slot-take", "", slot=name, slot_bead=b["id"], worktree=d, repo=repo,
+            mark_held(repo, b.id, why, bead=bead, store=store)
+            event("slot-take", "", slot=name, slot_bead=b.id, worktree=d, repo=repo,
                   **({"ticket": ticket} if ticket is not None else {}))
-            return name, d, b["id"]
+            return name, d, b.id
     return None
 
 
@@ -1003,22 +1015,19 @@ def waiting_line(repo):
 
 
 def prio_of(bead):
-    """The priority number of a bead dict (0 = P0), DEFAULT_PRIO when it has none or a odd one."""
-    try:
-        return int(bead.get("priority")) if bead and bead.get("priority") is not None else DEFAULT_PRIO
-    except (TypeError, ValueError):
-        return DEFAULT_PRIO
+    """The priority number of a bead (0 = P0), DEFAULT_PRIO when it has none."""
+    return bead.priority if bead and bead.priority is not None else DEFAULT_PRIO
 
 
-def bead_priority(repo, bead_id):
+def bead_priority(repo, bead_id, store=None):
     """The priority (0 = P0) of a bead, DEFAULT_PRIO when it cannot be read."""
     try:
-        return prio_of(show(bead_id, cwd=repo))
-    except (SystemExit, IndexError, KeyError, AttributeError):  # no bd, or a bead bd answers `[]` for: it waits as a P2
+        return prio_of(peek(store or bd_store(repo), bead_id))
+    except SystemExit:  # no bd: it waits as a P2
         return DEFAULT_PRIO
 
 
-def wait_slot(repo, cfg, why, bead="", stop=None, sleep=time.sleep, poll=None, on_wait=None, prio=DEFAULT_PRIO):
+def wait_slot(repo, cfg, why, bead="", stop=None, sleep=time.sleep, poll=None, on_wait=None, prio=DEFAULT_PRIO, store=None):
     """(name, dir, slot bead) once this waiter is first in line and a slot is free; None when stop() says so after a
     look (stop=lambda: True: one look, no wait). on_wait(ahead) is called before each sleep. Never takes a slot while a
     live ticket is ahead of it: a lower `prio` number (read when the waiter joins), or the same and earlier."""
@@ -1028,7 +1037,7 @@ def wait_slot(repo, cfg, why, bead="", stop=None, sleep=time.sleep, poll=None, o
         while True:
             ahead = [x for x in waiting_line(repo) if ticket_order(x) < ticket_order(t)]
             if not ahead:
-                got = take_slot(repo, cfg, why, bead=bead, ticket=t["seq"])
+                got = take_slot(repo, cfg, why, bead=bead, ticket=t["seq"], store=store)
                 if got:
                     return got
             if stop and stop():
@@ -1041,107 +1050,108 @@ def wait_slot(repo, cfg, why, bead="", stop=None, sleep=time.sleep, poll=None, o
         drop_ticket(t)
 
 
-def take_named_slot(repo, name, cfg, why, bead=""):
+def take_named_slot(repo, name, cfg, why, bead="", store=None):
     """(slot bead, "") when this session now holds slot `name`, or (None, why not): `slot S held by X since T`. A held
     slot bead is refused even when this session's actor holds it (two hand runs from one session
     share its actor, and bd lets an actor re-claim its own bead); a hold too, its holder's own included."""
     with slot_lock(repo):
-        free_expired(repo)
-        return take_named_slot_locked(repo, name, cfg, why, bead)
+        free_expired(repo, store)
+        return take_named_slot_locked(repo, name, cfg, why, bead, store)
 
 
-def take_named_slot_locked(repo, name, cfg, why, bead):
-    b = slot_bead(repo, name)
+def take_named_slot_locked(repo, name, cfg, why, bead, store=None):
+    b = slot_bead(repo, name, store)
     if not b:
         return None, "no slot %s on %s (tl slot list)" % (name, HOST)
     hold = slot_hold(b)
     if hold:
         return None, "slot %s held by %s since %s until %s: %s (tl slot release %s ends it)" % (
             name, hold["by"], hold["since"], hold["until"], hold["why"], name)
-    if b.get("status") != "open":
+    if b.status != "open":
         return None, "slot %s held by %s" % (name, held_by(b))
     busy = engine_busy(slot_dir(repo, name, cfg))
     if busy:
         return None, "slot %s busy: %s" % (name, busy)
-    if not claim_slot(repo, b["id"]):
-        return None, "slot %s held by %s" % (name, held_by(show(b["id"], cwd=repo) or b))
-    mark_held(repo, b["id"], why, bead=bead)
-    event("slot-take", "", slot=name, slot_bead=b["id"], worktree=slot_dir(repo, name, cfg), repo=repo)
-    return b["id"], ""
+    if not claim_slot(repo, b.id, store):
+        return None, "slot %s held by %s" % (name, held_by(peek(store or bd_store(repo), b.id) or b))
+    mark_held(repo, b.id, why, bead=bead, store=store)
+    event("slot-take", "", slot=name, slot_bead=b.id, worktree=slot_dir(repo, name, cfg), repo=repo)
+    return b.id, ""
 
 
-def slot_of(repo, wt):
+def slot_of(repo, wt, store=None):
     """The slot whose worktree `wt` is, or ""."""
     cfg, here = profile_slots(repo), Path(wt).resolve()
-    for b in slot_beads(repo):
-        name = b["title"].split()[-1]
+    for b in slot_beads(repo, store):
+        name = b.title.split()[-1]
         if Path(slot_dir(repo, name, cfg)).resolve() == here:
             return name
     return ""
 
 
-def claim_slot(repo, bead_id):
+def claim_slot(repo, bead_id, store=None):
     """True when this session won the slot bead's claim."""
-    return (bd("update", bead_id, "--claim", cwd=repo).returncode == 0
-            and (show(bead_id, cwd=repo).get("assignee") or actor()) == actor())
+    st = store or bd_store(repo)
+    return st.claim(bead_id) and ((peek(st, bead_id) or Bead(id=bead_id, title="", status="")).assignee or actor()) == actor()
 
 
 def held_by(b):
-    m = b.get("metadata") or {}
-    return "%s since %s (%s)" % (m.get("held_by") or b.get("assignee") or "?", m.get("held_since") or "?",
-                                 m.get("held_why") or "no reason")
+    m = b.metadata
+    return "%s since %s (%s)" % (m.get("held_by") or b.assignee or "?", m.get("held_since") or "?", m.get("held_why") or "no reason")
 
 
-def unclaim_slot(repo, b, force=False):
+def unclaim_slot(repo, b, force=False, store=None):
     """Gives a slot bead back. `bd unclaim` frees only the caller's own claim: a slot claimed by a loop's actor and held by one of
     its runs (or a dead loop's) stayed in_progress after `slot release --force` / an expired hold (lifesim, 0.23.34). The
     marks say who holds the slot; the claim is the slot's, so it is released with --force when asked."""
-    r = bd("unclaim", b["id"], cwd=repo)
-    if getattr(r, "returncode", 0) and force:
-        bd("unclaim", b["id"], "--force", cwd=repo)
+    st = store or bd_store(repo)
+    if not st.unclaim(b.id) and force:
+        st.unclaim(b.id, force=True)
 
 
-def release_slot(repo, name, bead=None, mine=False, force=False):
+def release_slot(repo, name, bead=None, mine=False, force=False, store=None):
     """Frees slot `name`. mine=True (a run ending): under slot_lock, and only while the slot's marks still name this
     actor (and `bead`, when it is marked): a slot reclaimed and retaken is the new holder's, left alone."""
     with slot_lock(repo):
-        return release_slot_locked(repo, name, bead, mine, force)
+        return release_slot_locked(repo, name, bead, mine, force, store)
 
 
-def release_slot_locked(repo, name, bead, mine, force=False):
-    b = slot_bead(repo, name)
+def release_slot_locked(repo, name, bead, mine, force=False, store=None):
+    b = slot_bead(repo, name, store)
     if not b:
         return False
     if mine:
-        m = b.get("metadata") or {}
+        m = b.metadata
         if m.get("held_by") != actor() or (bead is not None and m.get("held_bead") not in (None, "", bead)):
             print("tl: slot %s is no longer held by %s%s (now %s): left alone" % (
-                name, actor(), " for " + bead if bead else "", held_by(b) if b.get("status") != "open" else "free"),
+                name, actor(), " for " + bead if bead else "", held_by(b) if b.status != "open" else "free"),
                 file=sys.stderr)
             return True
     # the holder's marks go first, while the bead is still claimed: unclaimed first, a hold taken in between would lose
     # its marks to this clean-up (race test, tl-bxk.11.1)
-    bd("update", b["id"], *sum((["--unset-metadata", k] for k in HELD_KEYS), []), cwd=repo)
-    unclaim_slot(repo, b, force)
-    event("slot-release", "", slot=name, slot_bead=b["id"], repo=repo)
+    st = store or bd_store(repo)
+    attempt(st.update, b.id, BeadPatch(unset_metadata=list(HELD_KEYS)))
+    unclaim_slot(repo, b, force, st)
+    event("slot-release", "", slot=name, slot_bead=b.id, repo=repo)
     return True
 
 
-def free_expired(repo):
+def free_expired(repo, store=None):
     """An expired hold gives its slot bead back (the holder's claim with it), so the slot is free at once. Takes no
     lock: the caller holds slot_lock, so a stale look never wipes a slot another session took meanwhile."""
-    for b in slot_beads(repo):
-        m = b.get("metadata") or {}
+    st = store or bd_store(repo)
+    for b in slot_beads(repo, st):
+        m = b.metadata
         if hold_until(b) and not slot_hold(b):
-            bd("update", b["id"], *sum((["--unset-metadata", k] for k in HELD_KEYS), []), cwd=repo)  # first: see release_slot
-            who = b.get("assignee") or ""
-            if b.get("status") == "in_progress" and (who in ("", m.get("held_by")) or who.startswith("tl-")):
-                unclaim_slot(repo, b, force=True)
-            event("slot-hold-expired", "", slot=b["title"].split()[-1], slot_bead=b["id"], repo=repo)
+            attempt(st.update, b.id, BeadPatch(unset_metadata=list(HELD_KEYS)))  # first: see release_slot
+            who = b.assignee
+            if b.status == "in_progress" and (who in ("", m.get("held_by")) or who.startswith("tl-")):
+                unclaim_slot(repo, b, force=True, store=st)
+            event("slot-hold-expired", "", slot=b.title.split()[-1], slot_bead=b.id, repo=repo)
 
 
-def slot_bead(repo, name):
-    return next((x for x in slot_beads(repo) if x["title"].split()[-1] == name), None)
+def slot_bead(repo, name, store=None):
+    return next((x for x in slot_beads(repo, store) if x.title.split()[-1] == name), None)
 
 
 HELD_KEYS = ("held_by", "held_since", "held_why", "hold_until", "held_bead")
@@ -1151,27 +1161,33 @@ def stamp(t):
     return time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(t))
 
 
-def mark_held(repo, bead_id, why, until=0, bead=""):
+def mark_held(repo, bead_id, why, until=0, bead="", store=None):
     """Who holds a slot, since when and why, on its bead: tl slot list and a refused run-task read them. `until`: a hold
     (tl slot hold), which outlives the bead's lease. `bead`: the bead run there (held_bead), which makes its area busy."""
-    sets = ["held_by=" + actor(), "held_since=" + stamp(now()), "held_why=" + why]
-    args = sum((["--set-metadata", x] for x in sets), [])
-    args += ["--set-metadata", "hold_until=%d" % until] if until else ["--unset-metadata", "hold_until"]
+    sets = {"held_by": actor(), "held_since": stamp(now()), "held_why": why}
+    unset = []
+    if until:
+        sets["hold_until"] = "%d" % until
+    else:
+        unset.append("hold_until")
     # unset when none: bd reclaim frees a dead holder's slot bead but keeps its metadata, its bead's area with it
-    args += ["--set-metadata", "held_bead=" + bead] if bead else ["--unset-metadata", "held_bead"]
-    bd("update", bead_id, *args, cwd=repo)
+    if bead:
+        sets["held_bead"] = bead
+    else:
+        unset.append("held_bead")
+    attempt((store or bd_store(repo)).update, bead_id, BeadPatch(set_metadata=sets, unset_metadata=unset))
 
 
 def hold_until(b):
     try:
-        return float(((b or {}).get("metadata") or {}).get("hold_until") or 0)
+        return float(b.metadata.get("hold_until") or 0) if b else 0.0
     except (TypeError, ValueError):
         return 0.0
 
 
 def slot_hold(b):
     """{by, since, why, until} of a slot's hold that has not expired, else None."""
-    until, m = hold_until(b), (b or {}).get("metadata") or {}
+    until, m = hold_until(b), b.metadata if b else {}
     if until <= now():
         return None
     return {"by": m.get("held_by") or "?", "since": m.get("held_since") or "?", "why": m.get("held_why") or "",
@@ -1227,7 +1243,7 @@ def worktrees(repo, slots=None):
     out = git("worktree", "list", "--porcelain", cwd=repo) or ""
     found = [ln[9:] for ln in out.splitlines() if ln.startswith("worktree ")]
     cfg = profile_slots(repo)
-    found += [slot_dir(repo, b["title"].split()[-1], cfg) for b in (slot_beads(repo) if slots is None else slots)]
+    found += [slot_dir(repo, b.title.split()[-1], cfg) for b in (slot_beads(repo) if slots is None else slots)]
     seen, keep = set(), []
     for d in found:
         k = os.path.realpath(d)
@@ -1377,14 +1393,14 @@ def inputs_hash(d, patterns):
 
 def cmd_slot_setup(repo, name, cfg, d, force=False):
     """Run the profile's setup only when its inputs changed since the last setup in this slot."""
-    cmd = cfg.get("setup")
+    cmd = cfg.setup
     if not cmd:
         print("READY " + d)
         return 0
-    digest = inputs_hash(d, cfg.get("setup_inputs", []))
+    digest = inputs_hash(d, cfg.setup_inputs)
     mark = config_dir() / "slots" / (hashlib.sha1(d.encode()).hexdigest()[:12] + ".setup")
     mark.parent.mkdir(exist_ok=True)
-    if not force and cfg.get("setup_inputs") and mark.exists() and mark.read_text() == digest:
+    if not force and cfg.setup_inputs and mark.exists() and mark.read_text() == digest:
         print("READY " + d + " (setup unchanged)")
         return 0
     t = now()
@@ -1451,15 +1467,14 @@ def start_worktree(repo, name=None):
     return str(d)
 
 
-def live_actors(repo):
+def live_actors(repo, store=None):
     """Actors holding a live lease on any bead: a session that heartbeats is alive."""
-    r = bd("list", "--json", "--status", "in_progress", "-n", "0", cwd=repo)
     try:
-        beads = json.loads(r.stdout)
-    except ValueError:
+        beads = (store or bd_store(repo)).find(BeadQuery(status="in_progress"))
+    except BdFailure:
         return set()
     t = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime())
-    return {b.get("assignee") for b in beads if (b.get("lease_expires_at") or "") >= t}
+    return {b.assignee for b in beads if b.lease_expires_at >= t}
 
 
 # ---- dashboard server ---------------------------------------------------------------------------------------------
@@ -1575,7 +1590,7 @@ def start_server(port, bind=None):
     return None, "dashboard did not start; see " + str(config_dir() / "dash.log")
 
 
-def close_stale_asks(every=600):
+def close_stale_asks(every=600, store=None):
     """tl-bxk.13.16.5: an open ask whose bead is closed, or does not exist, is closed with the reason (lifesim-u3bx was closed by
     hand a minute after its ask and sat open 40 hours; a demo record named a bead `demo`). A bd that fails for another reason
     changes nothing. At most once per `every` seconds across all callers. -> the bead ids closed."""
@@ -1599,14 +1614,11 @@ def close_stale_asks(every=600):
     listed_any = False
     for repo, items in by_repo.items():  # one bd read per repo (tl-u08: a bd show per ask took over two minutes for 25 asks)
         try:
-            r = bd("list", "--json", "--all", "-n", "0", cwd=repo)
+            st = (store or bd_store(repo))
+            status = {b.id: b.status for b in st.find(BeadQuery(include_closed=True))}
         except SystemExit:  # no bd on this machine
             return done
-        if r.returncode != 0:
-            continue
-        try:
-            status = {b.get("id"): b.get("status") for b in json.loads(r.stdout) if isinstance(b, dict)}
-        except (ValueError, TypeError):
+        except BdFailure:
             continue
         if not status:
             continue  # an empty answer proves nothing
@@ -1615,11 +1627,10 @@ def close_stale_asks(every=600):
             why = ""
             if a["bead"] not in status:  # the list hides gates, ephemeral and infra beads: ask bd about this one before saying so
                 try:
-                    one = bd("show", a["bead"], "--json", cwd=repo)
+                    gone = st.show(a["bead"]) is None
                 except SystemExit:
                     return done
-                if one.returncode != 0 and re.search(r"no issues? found matching|issue .{0,60}not found|no such issue",
-                                                     (one.stderr or "") + (one.stdout or ""), re.I):
+                if gone:
                     why = "the bead does not exist"
             elif status[a["bead"]] == "closed":
                 why = "the bead is closed"
@@ -1676,7 +1687,7 @@ def cmd_ask(a):
     return 0 if code == 200 else 1
 
 
-def park_stale_asks(every=600):
+def park_stale_asks(every=600, store=None):
     """tl-bxk.8.25: an open ask nobody answered by its parks_at (3 days after it was asked) is parked: status `parked`, a comment on
     the bead, off the live inbox's top and out of the live inbox. The bead still waits; an answer (the dashboard,
     `tl ask answer`, or a comment on the bead) un-parks it. At most once per `every` seconds across all callers. -> bead ids."""
@@ -1707,10 +1718,10 @@ def park_stale_asks(every=600):
             cur.update(status="parked", parked=time.time())
             a = cur
             Path(f).write_text(json.dumps(a, indent=1), encoding="utf-8")
-            bd("comments", "add", a["bead"], "Parked (engine): ask %s got no answer in 3 days. It stays open for an answer: "
-               "`tl ask answer %s <text>`, the dashboard, or a comment here." % (a.get("id"), a["bead"]), cwd=a["repo"])
+            (store or bd_store(a["repo"])).add_comment(a["bead"], "Parked (engine): ask %s got no answer in 3 days. It stays open for an answer: "
+                                                      "`tl ask answer %s <text>`, the dashboard, or a comment here." % (a.get("id"), a["bead"]))
             done.append(a["bead"])
-        except (OSError, ValueError, SystemExit):
+        except (OSError, ValueError, SystemExit, BdFailure):
             pass
     try:
         marker.parent.mkdir(parents=True, exist_ok=True)
@@ -1833,21 +1844,21 @@ def doctor_warnings(repo, source=None):
     return out
 
 
-def bead_lint_warnings(repo):
+def bead_lint_warnings(repo, store=None):
     """tl-f52: one line per open bead whose text cites material outside the repo (beadlint). [] when bd cannot be read."""
     import beadlint
     try:
-        beads = json.loads(bd("list", "--status", "open", "--json", "-n", "0", cwd=repo).stdout or "[]")
-    except (ValueError, SystemExit, OSError):
+        beads = (store or bd_store(repo)).find(BeadQuery(status="open"))
+    except (SystemExit, OSError, BdFailure):
         return []
     out = []
-    for b in beads if isinstance(beads, list) else []:
-        if b.get("issue_type") == "epic" or "slot" in (b.get("labels") or []):
+    for b in beads:
+        if b.issue_type == "epic" or "slot" in b.labels:
             continue
         r = beadlint.refs(b, str(repo))
         if r:
             out.append("bead %s: %s: %s; inline the facts, or label it %s if this is a false positive" % (
-                b["id"], beadlint.REASON, "; ".join("%s %s" % (k, t[:60]) for k, t in r[:3]), beadlint.ESCAPE_LABEL))
+                b.id, beadlint.REASON, "; ".join("%s %s" % (k, t[:60]) for k, t in r[:3]), beadlint.ESCAPE_LABEL))
     return out
 
 
@@ -2183,8 +2194,7 @@ def main(argv=None):
     if a.cmd == "trace":
         return cmd_trace(a)
     if a.cmd == "bd":
-        r = subprocess.run([shutil.which("bd") or "bd", "--actor", actor()] + a.rest)
-        return r.returncode
+        return cmd_bd(a)
     return {"register": cmd_register, "claim": cmd_claim, "heartbeat": cmd_heartbeat, "stage": cmd_stage, "worker": cmd_worker,
             "land": cmd_land, "close": cmd_close, "block": cmd_block, "slot": cmd_slot, "worktree": cmd_worktree,
             "dash": cmd_dash, "ask": cmd_ask, "reflect": cmd_reflect, "hook": cmd_hook, "doctor": cmd_doctor, "land-lock": cmd_land_lock,

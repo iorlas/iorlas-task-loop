@@ -19,6 +19,9 @@ import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support import tlbd  # noqa: E402
 from support.fakes import FakeBeadStore  # noqa: E402
 from test_loop import bead, rec  # noqa: E402
+from support.fakes import as_bead  # noqa: E402
+from taskloop.contracts.bead import BdError  # noqa: E402
+from taskloop.contracts.ports import BdFailure  # noqa: E402
 from test_slots import Slots  # noqa: E402
 
 import engine  # noqa: E402
@@ -31,17 +34,22 @@ AREAS_JSON = {"area_label_prefix": "lane:", "areas": {"core": ["e-core"], "build
 AREAS = cfg_with(**AREAS_JSON)
 
 
+
+def tbead(*a, **k):
+    return as_bead(bead(*a, **k))
+
+
 NO_FCNTL = unittest.skipIf(os.name == "nt", "the lock is fcntl; tl has none on Windows (documented no-op)")
 
 
 class AreaOf(unittest.TestCase):
     def test_the_areas_map_first_then_the_label_prefix_first_match_wins_and_none_is_unrestricted(self):
         cache = {"e-core.1": "e-core", "e-core": None, "e-9": None}
-        self.assertEqual(loop.area_of(bead("x-1", parent="e-core.1", labels=["lane:live"]), AREAS, cache), "core")
-        self.assertEqual(loop.area_of(bead("x-2", labels=["lane:live", "lane:sim"]), AREAS, cache), "live")
-        self.assertEqual(loop.area_of(bead("x-3", labels=["build"]), AREAS, cache), "build")
-        self.assertEqual(loop.area_of(bead("x-4", parent="e-9", labels=["auto"]), AREAS, cache), "")
-        self.assertEqual(loop.area_of(bead("x-5", labels=["lane:live"]), cfg_with(), cache), "")  # no area config: none
+        self.assertEqual(loop.area_of(tbead("x-1", parent="e-core.1", labels=["lane:live"]), AREAS, cache), "core")
+        self.assertEqual(loop.area_of(tbead("x-2", labels=["lane:live", "lane:sim"]), AREAS, cache), "live")
+        self.assertEqual(loop.area_of(tbead("x-3", labels=["build"]), AREAS, cache), "build")
+        self.assertEqual(loop.area_of(tbead("x-4", parent="e-9", labels=["auto"]), AREAS, cache), "")
+        self.assertEqual(loop.area_of(tbead("x-5", labels=["lane:live"]), cfg_with(), cache), "")  # no area config: none
 
 
 class AreasBase(Slots):
@@ -62,7 +70,7 @@ class AreasBase(Slots):
 
     def order(self):
         ranked, skipped = loop.queue(str(self.repo))
-        return [b["id"] for b, _ in ranked], dict(skipped)
+        return [b.id for b, _ in ranked], dict(skipped)
 
 
 class Areas(AreasBase):
@@ -253,7 +261,7 @@ class Line(Slots):
         """bd lets an actor re-claim its own bead, and hand runs of one session share its actor: a `--slot any` that
         listed s1 free must not win it after a hand `--slot s1` took it (race test, seed 3)."""
         bd = self.beads({}, slots=1)
-        real_bd = tl.bd
+        real_bd = bd
 
         def bd_13(*a, **kw):  # bd 1.3: a claim by the bead's own assignee succeeds again
             if a[0] == "update" and "--claim" in a and bd.slots.get(a[1], {}).get("assignee") == tl.actor():
@@ -261,14 +269,14 @@ class Line(Slots):
             return real_bd(*a, **kw)
         won, real_claim = {}, tl.claim_slot
 
-        def claim(repo, bead_id):  # the hand run takes s1 between this taker's look and its claim
+        def claim(repo, bead_id, store=None):  # the hand run takes s1 between this taker's look and its claim
             if "thread" in won or threading.current_thread() is not threading.main_thread():
-                return real_claim(repo, bead_id)
+                return real_claim(repo, bead_id, store)
             th = threading.Thread(target=lambda: won.update(hand=tl.take_named_slot(repo, "s1", self.cfg, "hand")[0]))
             won["thread"] = th
             th.start()
             th.join(0.3)
-            return real_claim(repo, bead_id)
+            return real_claim(repo, bead_id, store)
         with tlbd.bd_boundary(bd_13), mock.patch.object(tl, "claim_slot", side_effect=claim):
             got = tl.take_slot(str(self.repo), self.cfg, "any")
         won["thread"].join(60)
@@ -308,7 +316,7 @@ class Line(Slots):
 
     def test_a_bead_that_cannot_be_read_waits_as_a_p2(self):
         store = FakeBeadStore()
-        for boom in (IndexError("[]"), SystemExit("no bd"), KeyError("x")):
+        for boom in (BdFailure(BdError(kind="other", text="x")), BdFailure(BdError(kind="not_found"))):
             def unreadable(bead, cwd=None, _boom=boom):
                 raise _boom
             with tlbd.bd_boundary(store=store), store.stub(show_fn=unreadable):
@@ -321,7 +329,7 @@ class Line(Slots):
         ts = [tl.take_ticket(repo, "a", 1), tl.take_ticket(repo, "b", 1), tl.take_ticket(repo, "c")]
         self.assertEqual([t["why"] for t in tl.waiting_line(repo)], ["a", "b", "c"][:2] + ["c"])
         self.assertEqual(tl.ticket_order({"seq": 5, "prio": "x"}), (2, 5))
-        self.assertEqual((tl.prio_of({"priority": 0}), tl.prio_of({}), tl.prio_of({"priority": "P1"}), tl.prio_of(None)), (0, 2, 2, 2))
+        self.assertEqual((tl.prio_of(tbead("x-1", 0)), tl.prio_of(tbead("x-1", 1)), tl.prio_of(None)), (0, 1, 2))
         for t in ts:
             tl.drop_ticket(t)
 
@@ -388,7 +396,7 @@ class ReviewFixes(AreasBase):
         bd = self.beads({}, slots=1)
         self.expired(bd)
         repo, cfg = str(self.repo), tl.profile_slots(str(self.repo))
-        real_bd, paused, go, won = tl.bd, threading.Event(), threading.Event(), {}
+        real_bd, paused, go, won = bd, threading.Event(), threading.Event(), {}
 
         def bd_pause(*a, **kw):  # P2 has read the expired hold and stops before it wipes the marks
             if a[0] == "update" and "--unset-metadata" in a and threading.current_thread().name == "P2" \
@@ -434,7 +442,7 @@ class ReviewFixes(AreasBase):
     def test_an_unreadable_holder_makes_every_area_busy_and_is_logged(self):
         bd = self.lanes({"x-1": [], "x-2": [], "x-3": [], "x-4": []}, {"x-1": "live", "x-2": "live", "x-3": "shell"})
         self.running(bd, "x-1")
-        real_bd, err = tl.bd, io.StringIO()
+        real_bd, err = bd, io.StringIO()
 
         def bd_x1_unreadable(*a, **kw):  # bd answers nothing parseable for x-1 only
             return tlbd.done("") if a[:2] == ("show", "x-1") else real_bd(*a, **kw)

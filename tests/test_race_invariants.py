@@ -181,7 +181,7 @@ class Invariants(test_loop.Base):
         self.assertEqual(self.out.getvalue().count("CLAIMED w-1"), 1)
         late = tl.cmd_claim(Args(id="w-1", worktree=self.repo_s, slot=None))  # the main thread, a fifth session
         self.assertEqual((late, [a for b, a in bd.won if b == "w-1"]), (1, [who]))
-        self.assertEqual(json.loads(tl.bd("ready", "--json").stdout), [])  # nothing is left for a loop to pick and run again
+        self.assertEqual(tl.bd_store().ready(), [])  # nothing is left for a loop to pick and run again
 
     # -- 2: no slot used by two at once, a hold included -----------------------------------------------------------------
 

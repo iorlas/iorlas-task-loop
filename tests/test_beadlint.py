@@ -7,12 +7,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills" / "task-lo
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import beadlint  # noqa: E402
+from support.fakes import as_bead  # noqa: E402
 
 ROOT = "/Users/me/Workspaces/proj"
 
 
 def refs(**f):
-    return beadlint.refs(f, ROOT)
+    return beadlint.refs(as_bead(f), ROOT)
 
 
 class Detector(unittest.TestCase):
@@ -41,9 +42,9 @@ class Detector(unittest.TestCase):
 
     def test_one_reference_is_reported_once_and_why_names_it(self):
         b = {"description": "~/Documents/Drop/arch-study-1025/28-synthesis.md"}
-        self.assertEqual(len(beadlint.refs(b, ROOT)), 1)
-        self.assertTrue(beadlint.why(b, ROOT).startswith("needs inlined facts"))
-        self.assertEqual(beadlint.why({"description": "fine"}, ROOT), "")
+        self.assertEqual(len(beadlint.refs(as_bead(b), ROOT)), 1)
+        self.assertTrue(beadlint.why(as_bead(b), ROOT).startswith("needs inlined facts"))
+        self.assertEqual(beadlint.why(as_bead({"description": "fine"}), ROOT), "")
 
 
 if __name__ == "__main__":

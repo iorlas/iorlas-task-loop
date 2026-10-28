@@ -29,6 +29,7 @@ import loop  # noqa: E402
 from taskloop_dash.views import roadmap  # noqa: E402
 import test_engine as te  # noqa: E402
 import tl  # noqa: E402
+from support.fakes import as_bead  # noqa: E402
 import delegate_link as dl  # noqa: E402
 from support import fake_route  # noqa: E402
 
@@ -231,7 +232,7 @@ class Reload(unittest.TestCase):
         with mock.patch.object(loop, "spawn", side_effect=spawn), mock.patch.object(loop, "write_state"), \
                 mock.patch.object(loop, "say") as say, mock.patch.dict(os.environ, {}):
             # the first child is the one that exec'd: its note appears while it runs
-            r = loop.run_bead(repo, {"id": "t-1"}, "s1", str(self.wt), "sb-1", 0.0)
+            r = loop.run_bead(repo, as_bead({"id": "t-1"}), "s1", str(self.wt), "sb-1", 0.0)
             leaked = os.environ.get("TL_REEXEC")
         self.assertEqual(r["outcome"], "landed")
         self.assertEqual(len(spawned), 2)

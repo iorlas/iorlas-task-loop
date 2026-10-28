@@ -20,6 +20,7 @@ class Dep:
     type: str = ""
     title: str = ""
     status: str = ""
+    close_reason: str = ""
 
 
 @record
@@ -39,6 +40,7 @@ class Bead:
     dependencies: list[Dep] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)  # free-form: held_by, held_bead, branch, slot, looks, ...
     lease_expires_at: str = ""
+    close_reason: str = ""
 
 
 @record

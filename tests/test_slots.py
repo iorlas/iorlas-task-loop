@@ -25,6 +25,8 @@ from test_loop import LoopBase, rec  # noqa: E402
 import engine  # noqa: E402  (test_loop put skills/task-loop on sys.path)
 import loop  # noqa: E402
 import tl  # noqa: E402
+from support.fakes import as_bead  # noqa: E402
+from taskloop.contracts.config import SlotsConfig  # noqa: E402
 from core import procs  # noqa: E402,F401
 
 POSIX = os.name != "nt"
@@ -420,7 +422,7 @@ class HoldRaces(Slots):
     def test_releasing_a_slot_claimed_by_another_actor_frees_the_claim_too(self):
         # lifesim 0.23.34: `slot release --force` cleared the marks but the loop actor's claim kept the slot bead in_progress
         bd = self.beads({})
-        self.assertTrue(tl.take_slot(str(self.repo), {}))
+        self.assertTrue(tl.take_slot(str(self.repo), SlotsConfig()))
         bd.slots["sl-1"].update(status="in_progress", assignee="tl-551cf8ee")
         tl.release_slot(str(self.repo), "s1")
         self.assertEqual(bd.slots["sl-1"]["assignee"], "tl-551cf8ee")  # without --force another actor's claim is left alone
@@ -429,7 +431,7 @@ class HoldRaces(Slots):
 
     def test_an_expired_hold_frees_the_claim_of_the_loop_that_held_the_slot(self):
         bd = self.beads({})
-        self.assertTrue(tl.take_slot(str(self.repo), {}))
+        self.assertTrue(tl.take_slot(str(self.repo), SlotsConfig()))
         bd.slots["sl-1"].update(status="in_progress", assignee="tl-551cf8ee")
         bd.slots["sl-1"].setdefault("metadata", {}).update(held_by="tl-abcdef12-f296a9", hold_until="1000")
         tl.free_expired(str(self.repo))
@@ -440,7 +442,7 @@ class HoldRaces(Slots):
         # race test (tl-bxk.11.1): the release unclaimed the slot bead, a person's hold claimed it at once, and the
         # release's own clean-up then wiped the hold's metadata: the hold was gone, the slot only leased
         bd = self.beads({})
-        self.assertTrue(tl.take_slot(str(self.repo), {}))
+        self.assertTrue(tl.take_slot(str(self.repo), SlotsConfig()))
         real, holds = bd.__call__, []
 
         def hold():
@@ -462,7 +464,7 @@ class HoldRaces(Slots):
         self.assertEqual(holds, [0])
         self.assertEqual(bd.slots["sl-1"]["assignee"], "tl-denis000")
         self.assertIn("hold_until", bd.slots["sl-1"].get("metadata", {}))
-        self.assertTrue(tl.slot_hold(bd.slots["sl-1"]))
+        self.assertTrue(tl.slot_hold(as_bead(bd.slots["sl-1"])))
 
     def test_ones_own_hold_keeps_ones_own_runs_and_resets_off_unless_forced(self):
         self.beads({"x-1": []})

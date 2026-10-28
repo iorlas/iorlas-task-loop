@@ -242,7 +242,7 @@ class Api(unittest.TestCase):
             for _ in range(3):
                 self.dash.tasks.api_tasks()
                 self.dash.tasks.api_task_timeline("", BEAD)
-        self.assertEqual(len([c for c in calls if c[:2] == ["/bin/bd", "list"]]), 1)
+        self.assertEqual(len([c for c in calls if c[0] == "/bin/bd" and "list" in c]), 1)
 
     def test_a_paused_run_says_which_lane_is_out_and_until_when(self):
         for s in RUNS[2:]:

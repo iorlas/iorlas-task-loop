@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import engine  # noqa: E402
 import loop  # noqa: E402
+from taskloop.contracts.config import SlotsConfig  # noqa: E402
 import test_loop as tlp  # noqa: E402
 import tl  # noqa: E402
 
@@ -54,7 +55,7 @@ class HeldBranch(unittest.TestCase):
         self.tip = sh("git", "rev-parse", "HEAD", cwd=self.old)
         for p in (mock.patch.object(tl, "repo_root", return_value=str(self.repo)),
                   mock.patch.object(tl, "event", return_value={}),
-                  mock.patch.object(tl, "profile_slots", return_value={"count": 1, "base": "origin/main"}),
+                  mock.patch.object(tl, "profile_slots", return_value=SlotsConfig(count=1, base="origin/main")),
                   mock.patch.object(tl, "slot_dir", return_value=str(self.slot)),
                   mock.patch.object(tl, "slot_bead", return_value={})):
             p.start()

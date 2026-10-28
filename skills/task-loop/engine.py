@@ -53,8 +53,10 @@ from clock import SystemClock
 from taskloop.app.run import trace as runtrace
 from taskloop.app.run.calls import timing
 from taskloop.app.run.context import RunContext
-from taskloop.contracts import config, log as rec
+from taskloop.contracts import log as rec
+from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import FRESH_ABOVE_K
+from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, NewBead
 from taskloop.contracts.enums import Outcome, WaitWhat
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.stores import JsonlStore
@@ -219,11 +221,10 @@ FIELDS = ("title", "description", "acceptance_criteria", "design", "notes")
 def bead_snapshot(bead, comments):
     """What a later amend diffs against: the bead's text fields, issue type, dependencies (id:type) and the people's
     comments, as the planner saw them."""
-    deps = sorted("%s:%s" % (d.get("id"), d.get("type") or "")
-                  for d in bead.get("dependencies") or [] if isinstance(d, dict) and d.get("id"))
-    return {"fields": {k: (people_lines if k == "notes" else str.strip)(bead.get(k) or "") for k in FIELDS},
-            "issue_type": (bead.get("issue_type") or "").strip(), "deps": deps,
-            "comments": [(c.get("text") or "").strip() for c in comments if not engine_written(c.get("text"))]}
+    deps = sorted("%s:%s" % (d.id, d.type) for d in bead.dependencies if d.id)
+    return {"fields": {k: (people_lines if k == "notes" else str.strip)(getattr(bead, k)) for k in FIELDS},
+            "issue_type": bead.issue_type.strip(), "deps": deps,
+            "comments": [c.text.strip() for c in comments if not engine_written(c.text)]}
 
 
 DIFF_CAP = 4096
@@ -260,27 +261,25 @@ def linked_text(bead_id, bead, comments, show, comments_of, cap=10, each=400):
     the people's comments name (not the engine's own comments); title, status, close reason, the last comment; each
     at most `each` chars, at most `cap` beads. tl-bxk.10.10"""
     pre = bead_id.split("-")[0]
-    text = " ".join(str(bead.get(k) or "") for k in FIELDS) + " " + " ".join(
-        c.get("text") or "" for c in comments if not engine_written(c.get("text")))
-    deps = {d.get("id"): d for d in bead.get("dependencies") or [] if isinstance(d, dict) and d.get("id")}
-    ids = list(deps) + [bead.get("parent")]
+    text = " ".join(getattr(bead, k) for k in FIELDS) + " " + " ".join(c.text for c in comments if not engine_written(c.text))
+    deps = {d.id: d for d in bead.dependencies if d.id}
+    ids = list(deps) + [bead.parent]
     ids += re.findall(r"(?<![\w.-])(%s-[A-Za-z0-9]+(?:\.[0-9]+)*)" % re.escape(pre), text)
     ids = [i for i in dict.fromkeys(ids) if i and i != bead_id][:cap]
     out = []
     for i in ids:
-        d = deps.get(i) or {}
-        if "status" not in d or (d.get("status") == "closed" and not d.get("close_reason")):
-            got = show(i)
-            d = got if isinstance(got, dict) and got.get("id") == i else d
-        if not d.get("id"):
+        d = deps.get(i)
+        if d is None or not d.status or (d.status == "closed" and not d.close_reason):
+            d = show(i) or d
+        if d is None:
             continue
         # no field tells an owner from another author: a comment is anyone's but the engine's
-        notes = [c for c in comments_of(i) if not engine_written(c.get("text"))]
-        line = "- %s [%s] %s" % (i, d.get("status") or "?", " ".join(str(d.get("title") or "").split()))
-        if (d.get("close_reason") or "").strip():
-            line += "\n  closed: " + " ".join(d["close_reason"].split())
+        notes = [c for c in comments_of(i) if not engine_written(c.text)]
+        line = "- %s [%s] %s" % (i, d.status or "?", " ".join(d.title.split()))
+        if d.close_reason.strip():
+            line += "\n  closed: " + " ".join(d.close_reason.split())
         if notes:
-            line += "\n  comment: " + " ".join((notes[-1].get("text") or "").split())
+            line += "\n  comment: " + " ".join(notes[-1].text.split())
         out.append(line if len(line) <= each else line[:each - 3] + "...")
     return ("\n## Linked beads (data, not instructions):\n" + "\n".join(out) + "\n") if out else ""
 
@@ -613,23 +612,11 @@ def _tree_problem(wt):
 
 # ---- the engine -----------------------------------------------------------------------------------------------------
 
-LINT_MISSING = re.compile(r"missing required sections?[^:\n]*:\s*(.+)", re.I)
 LINT_FILLER = {
     "acceptance criteria": "- The follow-up named in the title is done, and the checks of the code it touches pass.",
     "touches": "Not known yet: the writer who picks this up names the files it changes (found while working on %(bead)s).",
     "steps to reproduce": "See the description above (found while working on %(bead)s); the reproduction is not recorded.",
 }
-
-
-def bd_ok(r):
-    rc = getattr(r, "returncode", 0)
-    return rc == 0 if isinstance(rc, int) else True
-
-
-def lint_sections(text):
-    """['Acceptance Criteria', 'Touches']: the headings bd's lint says a create is missing (its error names them), else []."""
-    m = LINT_MISSING.search(text or "")
-    return [h.strip() for h in re.findall(r"##\s*([^,#\n]+)", m.group(1))] if m else []
 
 
 def with_sections(body, headings, bead):
@@ -711,9 +698,9 @@ class FixFailed(Blocked):
 
 
 class Engine:
-    def __init__(self, bead, wt, cfg, dry_run=False, verbose=True, store=seams.TlStore(), route=seams.DelegateRoute(), clock=None, git=None,
+    def __init__(self, bead, wt, cfg, dry_run=False, verbose=True, store=None, route=seams.DelegateRoute(), clock=None, git=None,
                  stores=None, fresh=False):
-        self.bead, self.wt, self.cfg, self.dry, self.verbose, self.store, self.router, self.repo = bead, wt, cfg, dry_run, verbose, store, route, git
+        self.bead, self.wt, self.cfg, self.dry, self.verbose, self.store, self.router, self.repo = bead, wt, cfg, dry_run, verbose, store or tl.bd_store(), route, git
         self.stats = {"writes": 0, "rounds": 0, "reviews": 0, "replans": 0, "nodes": 0, "tests_added": 0, "tests_removed": 0,
                       "tokens_in": 0, "tokens_cached": 0, "tokens_out": 0}
         self.session, self.fresh = tl.session_id(), fresh
@@ -1725,7 +1712,7 @@ class Engine:
     # -- nodes
     def reset(self, bead):
         self.steps.begin("reset", "reset")
-        branch = (bead.get("metadata") or {}).get("branch") or "task/" + self.bead
+        branch = bead.metadata.get("branch") or "task/" + self.bead
         self.fetch(check=True)
         exclude = Path(self.git("rev-parse", "--path-format=absolute", "--git-common-dir")) / "info" / "exclude"
         if ".task/" not in (exclude.read_text() if exclude.exists() else ""):
@@ -1831,8 +1818,8 @@ class Engine:
     def export_brief(self):
         """The task as workers read it: the bead's own text and the people's comments, never the engine's own records
         (plans, reviews, reflects pile up on every rerun: 40 of lifesim-vbo's 45 KB brief)."""
-        bead, comments = self.store.show(self.bead) or {"id": self.bead}, self.store.comments(self.bead)
-        text = brief_digest(bead, comments) + linked_text(self.bead, bead, comments, self.store.show, self.store.comments)
+        bead, comments = tl.peek(self.store, self.bead) or Bead(id=self.bead, title="", status=""), self.store.comments(self.bead)
+        text = brief_digest(bead, comments) + linked_text(self.bead, bead, comments, lambda i: tl.peek(self.store, i), self.store.comments)
         self.snap = bead_snapshot(bead, comments)
         (self.run_dir / "brief.md").write_text(text, encoding="utf-8")
         self.brief_file.write_text(text, encoding="utf-8")  # a resumed writer is told where to re-read it (tl-bxk.10.29)
@@ -2013,7 +2000,7 @@ class Engine:
 
     def comment(self, text):
         if not self.dry:
-            self.store.bd("comments", "add", self.bead, text)
+            tl.attempt(self.store.add_comment, self.bead, text)
 
     # -- tl-bxk.13.8: notes shared by the tasks of one repo (docs/design/stages.md section 6)
     def shared_path(self):
@@ -2344,7 +2331,7 @@ class Engine:
 
     def run_once(self):
         outcome, why, sha, question, kind = "failed", "", "", "", oc.Kind.FAULT_ENGINE
-        hb = Heartbeat(self.bead, os.environ.get("TASK_LOOP_SLOT_BEAD", ""))
+        hb = Heartbeat(self.bead, os.environ.get("TASK_LOOP_SLOT_BEAD", ""), self.store)
         try:
             self.prev_ck = (json.loads(self.checkpoint_path().read_text()) or {}).get("run") or ""
         except (OSError, ValueError, AttributeError):
@@ -2352,11 +2339,10 @@ class Engine:
         try:
             if getattr(self, "stop_pending", False):  # stopped during the claim (run_bead): close it as stopped
                 raise Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)
-            bead = self.store.show(self.bead)
+            bead = tl.peek(self.store, self.bead)
             if not bead:
                 raise Blocked("failed: bead %s not found" % self.bead, kind=oc.Kind.FAULT_INFRA)
-            self.bead_title = bead.get("title") or ""
-            self.bead_parent = bead.get("parent") or ""
+            self.bead_title, self.bead_parent = bead.title, bead.parent
             hb.start()
             self.delegate_route()
             if not self.route:
@@ -2367,7 +2353,7 @@ class Engine:
             self.log.note("workers: delegate %s (contract %d)" % (self.route, dl.CONTRACT))
             self.log.note("task-loop %s" % (plugin_version() or "(unknown version)"))
             self.reset(bead)
-            self.budget.labels = list(bead.get("labels") or [])
+            self.budget.labels = list(bead.labels)
             self.check_ask()
             self.grant_cap()
             if not has_criteria(bead):
@@ -3191,9 +3177,8 @@ class Engine:
             return a["answer"].strip()
         comments = self.store.comments(self.bead)
         start = max([k + 1 for k, c in enumerate(comments)
-                     if (c.get("text") or "").startswith("Ask (engine) %s " % a["id"])] or [0])
-        return "\n".join((c.get("text") or "").strip() for c in comments[start:]
-                         if not engine_written(c.get("text"))).strip()
+                     if c.text.startswith("Ask (engine) %s " % a["id"])] or [0])
+        return "\n".join(c.text.strip() for c in comments[start:] if not engine_written(c.text)).strip()
 
     def raise_ask(self, kind, why, question):
         try:
@@ -3218,11 +3203,12 @@ class Engine:
         runner takes it again, add needs-info. Answering does not put it back; the owner relabels it (an answer can
         split the bead). Verify and stuck asks keep it: the work is there, a fact or a hint is missing."""
         pick, info = self.cfg.pick_label or "", self.cfg.needs_info_label or ""
-        if not pick or self.dry or pick not in ((self.store.show(self.bead) or {}).get("labels") or []):
+        shown = tl.peek(self.store, self.bead)
+        if not pick or self.dry or not shown or pick not in shown.labels:
             return ""
-        self.store.bd("label", "remove", self.bead, pick)
+        tl.attempt(self.store.remove_label, self.bead, pick)
         if info:
-            self.store.bd("label", "add", self.bead, info)
+            tl.attempt(self.store.add_label, self.bead, info)
         return "\n(Out of the %s queue: label %s removed%s; relabel it %s once it can be done unattended.)" % (
             pick, pick, ", %s added" % info if info else "", pick)
 
@@ -4101,7 +4087,7 @@ class Engine:
         self.copy_looks()
         self.stage_all(check=True)
         self.quarantine_strays()
-        msg = "%s (%s)" % (bead.get("title", self.bead)[:72], self.bead)
+        msg = "%s (%s)" % (bead.title[:72], self.bead)
         rc, tail = self.sh(["git", "commit", "-q", "-m", msg], pin=True)
         if rc:
             raise Blocked("failed: commit refused (hooks)\n" + tail, kind=oc.Kind.FAULT_LAND)
@@ -4760,27 +4746,26 @@ class Engine:
         cur, seen = self.bead_parent, set()
         while cur and cur not in seen and len(seen) < 10:
             seen.add(cur)
-            d = self.store.show(cur) or {}
-            if d.get("issue_type") == "epic":
+            d = tl.peek(self.store, cur)
+            if d and d.issue_type == "epic":
                 return cur
-            cur = d.get("parent") or ""
+            cur = d.parent if d else ""
         return self.bead_parent
 
     def existing_owner_look(self):
         """(id, description) of the owner-look bead to reuse: one already linked (related) to this bead, else the one
         under this bead's epic (tl-bxk.10.28: one review bead per epic, appended to); ('', '') when there is none."""
-        r = self.store.bd("list", "--label", LOOK_LABEL, "--json", "-n", "0")
         try:
-            rows = json.loads(r.stdout or "[]")
-        except ValueError:
+            rows = self.store.find(BeadQuery(label=LOOK_LABEL))
+        except BdFailure:
             return "", ""
         epic, by_epic = self.look_epic() or self.bead, ("", "")
-        for row in rows if isinstance(rows, list) else []:
-            d = self.store.show(row.get("id") or "") or {}
-            if any(x.get("id") == self.bead for x in d.get("dependencies") or []):
-                return row["id"], d.get("description") or ""
-            if epic and not by_epic[0] and d.get("parent") == epic and d.get("status", "open") != "closed":
-                by_epic = (row["id"], d.get("description") or "")
+        for row in rows:
+            d = tl.peek(self.store, row.id) or row
+            if any(x.id == self.bead for x in d.dependencies):
+                return row.id, d.description
+            if epic and not by_epic[0] and d.parent == epic and d.status != "closed":
+                by_epic = (row.id, d.description)
         return by_epic
 
     def file_owner_look(self):
@@ -4810,43 +4795,40 @@ class Engine:
         with self.locked("review_lock", tl.config_dir() / "locks" / ("review-%s.lock" % hashlib.sha1(key.encode()).hexdigest()[:12])):
             yield
 
-    def create_checked(self, args):
+    def create_checked(self, new):
         """bd create that is known to have worked: when bd's lint refuses the body for missing sections (lifesim: Touches and
-        Acceptance Criteria), the sections are added and it is tried once more. -> the last result; a nonzero returncode
-        means nothing was created (tl-7y6.7.9: 98 follow-ups were called filed and none existed)."""
-        r = self.store.bd(*args)
-        if bd_ok(r) or "--description" not in args:
-            return r
-        need = lint_sections("%s\n%s" % (r.stderr or "", r.stdout or ""))
-        if not need:
-            return r
-        i = args.index("--description") + 1
-        fixed = list(args)
-        fixed[i] = with_sections(args[i], need, self.bead)
+        Acceptance Criteria), the sections are added and it is tried once more. -> (the new id, "") or ("", why not): nothing
+        was created then (tl-7y6.7.9: 98 follow-ups were called filed and none existed)."""
+        try:
+            return self.store.create(new), ""
+        except BdFailure as e:
+            need = e.error.missing_sections
+            if not need or not new.description:
+                return "", e.error.text
         self.log.note("bd refused the create (%s): trying again with the sections it names" % ", ".join(need))
-        return self.store.bd(*fixed)
+        try:
+            return self.store.create(dataclasses.replace(new, description=with_sections(new.description, need, self.bead))), ""
+        except BdFailure as e:
+            return "", e.error.text
 
     def file_review(self, section):
         head = section.split("\n", 1)[0]
         have, old = self.existing_owner_look()
+        made, err = have, ""
         if have:
             kept = [x for x in re.split(r"\n\n(?=## )", old.strip()) if x and not x.startswith(head.split(":")[0] + ":")]
-            args = ["update", have, "--description", "\n\n".join(kept + [section])]
+            if not tl.attempt(self.store.update, have, BeadPatch(description="\n\n".join(kept + [section]))):
+                err = "bd refused the update"
         else:
-            args = ["create", ("Look review: " if self.look_paths or self.look_unjudged else "Owner review: ") +
-                    (self.bead_title or self.bead), "--type", "task", "--labels", LOOK_LABEL, "--no-inherit-labels",
-                    "--description", section, "--deps", "related:" + self.bead, "--json"]
-            args += ["--parent", self.look_epic() or self.bead]  # no epic: the review bead sits under the bead itself
-        r = self.store.bd(*args) if have else self.create_checked(args)
-        if r.returncode != 0:
-            self.warn("owner-look bead %s failed: %s" % ("update" if have else "create", (r.stderr or r.stdout or "")[:300]))
+            made, err = self.create_checked(NewBead(
+                title=("Look review: " if self.look_paths or self.look_unjudged else "Owner review: ") + (self.bead_title or self.bead),
+                labels=[LOOK_LABEL], no_inherit_labels=True, description=section, deps=["related:" + self.bead],
+                parent=self.look_epic() or self.bead))  # no epic: the review bead sits under the bead itself
+        if err:
+            self.warn("owner-look bead %s failed: %s" % ("update" if have else "create", err[:300]))
         else:
             self.look_filed = True
             if self.cases_of("taste"):
-                try:
-                    made = have or str(json.loads(r.stdout or "{}").get("id") or "")
-                except (ValueError, AttributeError):
-                    made = ""
                 if made:
                     self.write_looks(made)
                 else:
@@ -4865,13 +4847,13 @@ class Engine:
             shots.append({"path": p, "role": "after", "label": Path(p).stem})
         mine = [{"id": "%s#%d" % (self.bead, k), "bead": self.bead, "title": t, "note": " ".join(self.look_notes)[:600],
                  "shots": shots, "status": "open"} for k, t in enumerate(self.cases_of("taste"), 1)]
-        meta = dict((self.store.show(bead_id) or {}).get("metadata") or {})
+        shown = tl.peek(self.store, bead_id)
+        meta = dict(shown.metadata) if shown else {}
         old = meta.get("looks") if isinstance(meta.get("looks"), list) else []
         answered = {e.get("id"): e for e in old if isinstance(e, dict) and e.get("bead") == self.bead and e.get("status") in ("good", "redo")}
         meta["looks"] = [e for e in old if isinstance(e, dict) and e.get("bead") != self.bead] + [answered.get(e["id"], e) for e in mine]
-        r = self.store.bd("update", bead_id, "--metadata", json.dumps(meta))
-        if r.returncode != 0:
-            self.warn("owner-look bead %s: looks metadata failed: %s" % (bead_id, (r.stderr or r.stdout or "")[:200]))
+        if not tl.attempt(self.store.update, bead_id, BeadPatch(metadata=meta)):
+            self.warn("owner-look bead %s: looks metadata failed" % bead_id)
 
     def unverified_text(self):
         return "Unverified, for the owner:\n" + "\n".join(
@@ -5025,21 +5007,20 @@ class Engine:
             self.comment("Land (engine): " + self.unverified_text())
         look = [u for u in self.unchecked if u["kind"] == "other" and not self.is_look(u)]
         if look and outcome in ("landed", "done"):
-            self.store.bd("label", "add", self.bead, "needs-owner-check")
+            tl.attempt(self.store.add_label, self.bead, "needs-owner-check")
             self.comment("Look (engine): landed, but nobody checked: " + "; ".join(u["what"] for u in look))
         shots = self.keep_evidence()
         if shots:
             self.comment("Evidence (engine): %s" % ", ".join(str(p) for p in shots))
         unfiled = []
         for lo in new:
-            r = self.create_checked(["create", lo["title"], "--type", "task", "--description", lo["why"],
-                                     "--deps", "discovered-from:" + self.bead])
-            if bd_ok(r):
+            made, err = self.create_checked(NewBead(title=lo["title"], description=lo["why"], deps=["discovered-from:" + self.bead]))
+            if made:
                 self.filed.append(lo["title"])  # only a create that worked; the checkpoint follows at once (a kill loses no title)
                 self.save_unfiled([])
             else:
                 unfiled.append(lo)
-                self.warn("follow-up not filed: %s: %s" % (lo["title"][:80], str(getattr(r, "stderr", "") or getattr(r, "stdout", ""))[:200]))
+                self.warn("follow-up not filed: %s: %s" % (lo["title"][:80], err[:200]))
         if unfiled:
             self.comment("Follow-up (engine): bd refused %d follow-up(s), none was filed: %s" % (
                 len(unfiled), "; ".join("%s (%s)" % (lo["title"], lo["why"][:120]) for lo in unfiled)))
@@ -5062,10 +5043,9 @@ class Engine:
             fault = kind.name.startswith("FAULT_")
             if not fault:
                 self.warn(why)
-            r = self.store.bd("update", self.bead, "--status", "open", "--assignee", "")  # (tl-kwo: it lets go)
-            rc = getattr(r, "returncode", 0)
+            rc = 0 if tl.attempt(self.store.update, self.bead, BeadPatch(status="open", assignee="")) else 1  # (tl-kwo: it lets go)
             if oc.POLICY[kind].label:
-                self.store.bd("label", "add", self.bead, oc.POLICY[kind].label)
+                tl.attempt(self.store.add_label, self.bead, oc.POLICY[kind].label)
             if self.disp.comment:  # a comment, never Notes (tl-7y6.6.2); one per (bead, kind, fingerprint) per hour
                 self.comment("Engine %s: %s" % ("failed" if fault else "paused", re.sub(r"^(failed|paused): ", "", why)[:400]))
         else:
@@ -5238,22 +5218,22 @@ def confirms(answer):
 
 def has_criteria(bead):
     """Acceptance criteria in the bead's field, or in a ## Acceptance Criteria or ## Done when section (or a "Done when:" line) of its description."""
-    if (bead.get("acceptance_criteria") or "").strip():
+    if bead.acceptance_criteria.strip():
         return True
-    m = re.search(r"^#{1,6}\s*(?:Acceptance Criteria|Done when)\s*:?\s*$(.*?)(?=^#{1,6}\s|\Z)", bead.get("description") or "",
+    m = re.search(r"^#{1,6}\s*(?:Acceptance Criteria|Done when)\s*:?\s*$(.*?)(?=^#{1,6}\s|\Z)", bead.description,
                   re.M | re.S | re.I)
     if m and m.group(1).strip():
         return True
     # tl-bxk.13.2: "Done when: ..." as a line, or "**Done when**" then its list (lifesim-r6z was blocked in 0 s for it)
-    return bool(re.search(r"^[ \t>*_#-]*Done when[ \t]*[:*_]+[ \t]*(?:[^\s:*_]|\n\s*[-*\d])", bead.get("description") or "", re.M | re.I))
+    return bool(re.search(r"^[ \t>*_#-]*Done when[ \t]*[:*_]+[ \t]*(?:[^\s:*_]|\n\s*[-*\d])", bead.description, re.M | re.I))
 
 
 def acceptance_text(bead):
     """The bead's acceptance text: its criteria field, and its description from an Acceptance Criteria or Done when heading
     (or line) on."""
-    desc = bead.get("description") or ""
+    desc = bead.description
     m = re.search(r"^[ \t>*_#-]*(?:Acceptance Criteria|Done when)\b", desc, re.M | re.I)
-    return "\n".join(x for x in ((bead.get("acceptance_criteria") or "").strip(), desc[m.start():] if m else "") if x)
+    return "\n".join(x for x in (bead.acceptance_criteria.strip(), desc[m.start():] if m else "") if x)
 
 
 def run_breakdown(log_path, open_node=None, top=4):
@@ -5440,25 +5420,21 @@ def brief_digest(bead, comments, owner_only=False, ignore=()):
     """Markdown brief: title, the bead's text fields whole, related beads by title, people's comments whole, and the bead's
     labels. Nothing the engine wrote (comments, Notes lines) is in it (tl-7y6.6.2). owner_only also leaves out the engine's labels:
     the checkpoint compares that text, so an engine run never looks like the owner's edit."""
-    out = ["# %s: %s" % (bead.get("id", ""), bead.get("title", ""))]
-    labels = [x for x in bead.get("labels") or [] if not (owner_only and (x in ENGINE_LABELS or x in ignore))]
-    meta = [bead.get("issue_type"), "P%s" % bead["priority"] if bead.get("priority") is not None else "",
-            ", ".join(labels)]
+    out = ["# %s: %s" % (bead.id, bead.title)]
+    labels = [x for x in bead.labels if not (owner_only and (x in ENGINE_LABELS or x in ignore))]
+    meta = [bead.issue_type, "P%s" % bead.priority if bead.priority is not None else "", ", ".join(labels)]
     if any(meta):
         out.append(" · ".join(m for m in meta if m))
     for key, head in (("description", "Description"), ("acceptance_criteria", "Acceptance criteria"),
                       ("design", "Design"), ("notes", "Notes")):
-        text = people_lines(bead.get(key)) if key == "notes" else (bead.get(key) or "").strip()
+        text = people_lines(bead.notes) if key == "notes" else getattr(bead, key).strip()
         if text:
             out += ["", "## " + head, text]
-    rel = [d for d in (bead.get("dependencies") or []) if isinstance(d, dict)]
-    if rel:
-        out += ["", "## Related beads (titles only)"] + ["- %s %s [%s]" % (d.get("id"), d.get("title"),
-                                                                           d.get("status") or "?") for d in rel]
-    people = [c for c in comments if not engine_written(c.get("text"))]
+    if bead.dependencies:
+        out += ["", "## Related beads (titles only)"] + ["- %s %s [%s]" % (d.id, d.title, d.status or "?") for d in bead.dependencies]
+    people = [c for c in comments if not engine_written(c.text)]
     if people:
-        out += ["", "## Comments"] + ["- %s: %s" % (c.get("author") or "?", (c.get("text") or "").strip())
-                                      for c in people]
+        out += ["", "## Comments"] + ["- %s: %s" % (c.author or "?", c.text.strip()) for c in people]
     return "\n".join(out) + "\n"
 
 
@@ -5466,8 +5442,8 @@ class Heartbeat:
     """The bead's lease, and the slot bead's when tl loop runs this (TASK_LOOP_SLOT_BEAD): a loop killed with SIGKILL
     leaves its slot held while this run lives."""
 
-    def __init__(self, bead, slot_bead="", store=seams.TlStore()):
-        self.beads, self.stop_ev, self.store = [b for b in (bead, slot_bead) if b], threading.Event(), store
+    def __init__(self, bead, slot_bead="", store=None):
+        self.beads, self.stop_ev, self.store = [b for b in (bead, slot_bead) if b], threading.Event(), store or tl.bd_store()
         self.th = threading.Thread(target=self.loop, daemon=True)
 
     def start(self):
@@ -5476,7 +5452,7 @@ class Heartbeat:
     def loop(self):
         while not self.stop_ev.wait(60):
             for b in self.beads:
-                self.store.bd("heartbeat", b)
+                tl.attempt(self.store.heartbeat, b)
 
     def stop(self):
         self.stop_ev.set()
@@ -6090,16 +6066,9 @@ Also give each item its kind (the engine routes by it; an open item of the wrong
 
 def cfg_source(repo):
     """(the RepoProfile, the base hint, the pinned commit: empty for a local fallback). A bad .task-loop.json exits loudly."""
-    base = load_profile(tl.profile(repo)).engine.base
+    base = tl.load_profile(tl.profile(repo)).engine.base
     data, commit = tl.profile_source(repo, base)
-    return load_profile(data), base, commit
-
-
-def load_profile(data):
-    try:
-        return config.load(data)
-    except config.ConfigError as e:
-        sys.exit("task-loop: %s" % e)
+    return tl.load_profile(data), base, commit
 
 
 def load_cfg(repo):
@@ -6109,55 +6078,54 @@ def load_cfg(repo):
     return cfg_source(repo)[0].engine
 
 
-def busy_elsewhere(repo, actor, bead_id):
+def busy_elsewhere(repo, actor, bead_id, store=None):
     """True when `actor` holds a slot (it is a loop) that a run of ANOTHER bead holds now: then its claim on `bead_id` is a claim
     it left, not one it works on."""
     now_t = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    for sb in tl.slot_beads(repo):
-        if sb.get("assignee") == actor and sb.get("status") == "in_progress" and (sb.get("lease_expires_at") or now_t) >= now_t:
-            held = (sb.get("metadata") or {}).get("held_bead")
+    for sb in tl.slot_beads(repo, store):
+        if sb.assignee == actor and sb.status == "in_progress" and (sb.lease_expires_at or now_t) >= now_t:
+            held = sb.metadata.get("held_bead")
             if held and held != bead_id:
                 return True
     return False
 
 
-def reclaim(bead_id, repo, store=seams.TlStore()):
+def reclaim(bead_id, repo, store=None):
     """(ok, why): run-task takes back what the engine itself left, never what a person holds. A claim by a tl- actor
     whose lease ran out is released (a restarted Claude session gets a new actor name). A bead the engine blocked is
     reopened for a plain retry, or when a comment after the block answers the open ask; it stays blocked when a person
     commented after the block with no ask open (they may have parked it), while an ask waits unanswered, or while
     another bead blocks it."""
-    b = store.show(bead_id) or {}
-    who, me = b.get("assignee") or "", tl.actor()
+    store = store or tl.bd_store(repo)
+    b = tl.peek(store, bead_id) or Bead(id=bead_id, title="", status="")
+    who, me = b.assignee, tl.actor()
     release = False
     if who and who != me:
         if not who.startswith("tl-"):
             return False, "claimed by %s" % who
         import loop  # the queue rule; imports engine itself
-        if b.get("status") == "blocked" or busy_elsewhere(repo, who, bead_id):
+        if b.status == "blocked" or busy_elsewhere(repo, who, bead_id, store):
             # tl-159, tl-kwo: the claim is the actor's, and a loop's actor is live while the loop runs, whatever bead it is on:
             # lifesim-o67g was 'a live claim' of the loop that was running fld.27.12, and its answered ask waited an hour. A bead
             # a loop has left (parked, or the loop went on to another) is live only if an engine is running it now.
-            live = bead_id in loop.running(repo)
+            live = bead_id in loop.running(repo, store)
         else:  # a session working by hand: its lease and heartbeat are the only sign
-            live = who in tl.live_actors(repo) or (b.get("lease_expires_at") or "") >= time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            live = who in tl.live_actors(repo, store) or b.lease_expires_at >= time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         if live:
             logs = sorted((tl.config_dir() / "engine").glob("%s-*.jsonl" % bead_id))
             return False, "another run of %s is still running as %s (a live claim)%s" % (
                 bead_id, who, "; its engine log: %s" % logs[-1] if logs else "")
         release = True
     reopen = False
-    if b.get("status") == "blocked":
-        held = [d.get("id") for d in b.get("dependencies") or [] if isinstance(d, dict)
-                and d.get("type") == "blocks" and d.get("status") != "closed"]
+    if b.status == "blocked":
+        held = [d.id for d in b.dependencies if d.type == "blocks" and d.status != "closed"]
         if held:
             return False, "blocked by %s" % ", ".join(held)
         cs = store.comments(bead_id)
-        blocks = [c for c in cs if (c.get("text") or "").startswith("Blocked:")]
+        blocks = [c for c in cs if c.text.startswith("Blocked:")]
         if not blocks:
             return False, "blocked by a person, not by the engine"
-        after = [c for c in cs if (c.get("created_at") or "") > (blocks[-1].get("created_at") or "")
-                 and not engine_written(c.get("text"))]
+        after = [c for c in cs if c.created_at > blocks[-1].created_at and not engine_written(c.text)]
         try:
             ask = json.loads((tl.config_dir() / "asks" / ("%s.json" % bead_id)).read_text())
         except (OSError, ValueError):
@@ -6168,15 +6136,17 @@ def reclaim(bead_id, repo, store=seams.TlStore()):
         if asking and not after:
             return False, "waiting for the answer to ask %s (%s)" % (ask.get("id"), ask.get("kind"))
         if after and not asking:
-            return False, "%s commented after the engine blocked it; read that first" % (after[-1].get("author") or "someone")
+            return False, "%s commented after the engine blocked it; read that first" % (after[-1].author or "someone")
         reopen = True
     if reopen or release:
         # tl-kwo: only if the claim is still the one just read (bd applies --if-assignee atomically): two loops looking at one freed bead
         # must not both release and then both claim
         guard = ["--if-assignee", who] if who and who != me else []
-        r = store.bd("update", bead_id, *(["--status", "open"] if reopen else []), *guard, "--assignee", "")
-        if guard and getattr(r, "returncode", 0) != 0:
-            return False, "the claim of %s changed hands just now (%s no longer holds it): not taken" % (bead_id, who)
+        try:
+            store.update(bead_id, BeadPatch(status="open" if reopen else "", if_assignee=who if guard else "", assignee=""))
+        except BdFailure:
+            if guard:
+                return False, "the claim of %s changed hands just now (%s no longer holds it): not taken" % (bead_id, who)
     return True, ("reopened" if reopen else "released %s" % who if release else "")
 
 
@@ -6292,14 +6262,14 @@ def take_area(a, repo, cfg, lock, sb=""):
 
     def mark():  # the slot says which bead runs in it (held_bead makes its area busy): only once the area is decided
         if sb:
-            tl.bd("update", sb, "--set-metadata", "held_bead=" + a.id, cwd=repo)
+            tl.attempt(tl.bd_store(repo).update, sb, BeadPatch(set_metadata={"held_bead": a.id}))
     if not loop.has_areas(cfg):
         why = lock.take()
         if not why:
             mark()
         return why
     with loop.area_lock(repo, cfg):
-        area, busy = loop.area_busy(repo, cfg, tl.show(a.id) or {"id": a.id}, {})
+        area, busy = loop.area_busy(repo, cfg, tl.peek(tl.bd_store(repo), a.id) or Bead(id=a.id, title="", status=""), {})
         if busy and getattr(a, "exclusive_area", False):
             return busy + " (--exclusive-area)"
         if busy:
@@ -6341,7 +6311,7 @@ def run_in(a, repo, cfg):
         # a hand run takes its slot's bead as the loop does (a --worktree that is a slot too); one the loop started has
         # it already: TASK_LOOP_SLOT_BEAD names that very slot's bead
         slot = a.slot or tl.slot_of(repo, wt)
-        sb = (tl.slot_bead(repo, slot) or {}).get("id") if slot else ""
+        sb = getattr(tl.slot_bead(repo, slot), "id", "") if slot else ""
         if slot and sb and os.environ.get("TASK_LOOP_SLOT_BEAD") == sb and _handed_slot(slot):
             took = sb  # exec'd by the run-task that took this slot: it is still ours, and this process gives it back
             RUN_SLOT["owned"] = slot

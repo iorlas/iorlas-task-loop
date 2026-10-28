@@ -11,8 +11,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "task-loop"))
 from support import fake_route  # noqa: E402
 from support import tlbd  # noqa: E402
-from support.fakes import FakeBeadStore  # noqa: E402
+from support.fakes import FakeBeadStore, as_bead  # noqa: E402
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from taskloop.adapters import bd  # noqa: E402
 from support.builders import make_engine  # noqa: E402
 import test_engine as te  # noqa: E402
 from test_engine import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint, tl  # noqa: E402,F401
@@ -441,7 +442,7 @@ class Contracts(StagesTest):
             if k.get("cwd") == str(other):
                 return mock.Mock(returncode=1, stdout="", stderr="dolt: database not found")
             if a[0] == "show":  # absent from the list: only a bead bd really does not know is gone (a gate or wisp is hidden from lists)
-                return (mock.Mock(returncode=0, stdout="[{}]", stderr="") if a[1] == "b-hidden"
+                return (mock.Mock(returncode=0, stdout=json.dumps([{"id": "b-hidden", "status": "open"}]), stderr="") if a[1] == "b-hidden"
                         else mock.Mock(returncode=1, stdout="", stderr="Error: no issue found matching %s" % a[1]))
             return mock.Mock(returncode=0, stderr="", stdout=json.dumps([{"id": "b-open", "status": "open"}, {"id": "b-closed", "status": "closed"}]))
         with tlbd.bd_boundary(fake_bd):
@@ -496,7 +497,7 @@ class ClaimPerBead(StagesTest):
 
     def reclaim(self, bead, slots, running, hand_live=False):
         import loop
-        with self.store.stub(show=bead), mock.patch.object(tl, "slot_beads", return_value=slots), \
+        with self.store.stub(show=bead), mock.patch.object(tl, "slot_beads", return_value=[as_bead(x) for x in slots]), \
                 mock.patch.object(tl, "live_actors", return_value={"tl-2be89f88"} if hand_live or slots else set()), \
                 mock.patch.object(loop, "running", return_value=running), self.store.stub(comments=[]), \
                 self.store.stub(bd_fn=lambda *a, **k: mock.Mock(returncode=0)):
@@ -529,7 +530,7 @@ class ClaimPerBead(StagesTest):
     def test_the_release_is_conditional_on_the_claim_just_read(self):
         import loop
         calls = []
-        with self.store.stub(show=self.BEAD), mock.patch.object(tl, "slot_beads", return_value=[self.SLOT]), \
+        with self.store.stub(show=self.BEAD), mock.patch.object(tl, "slot_beads", return_value=[as_bead(self.SLOT)]), \
                 mock.patch.object(tl, "live_actors", return_value={"tl-2be89f88"}), mock.patch.object(loop, "running", return_value={}), \
                 self.store.stub(comments=[]), \
                 self.store.stub(bd_fn=lambda *a, **k: calls.append(a) or mock.Mock(returncode=0)):
@@ -539,7 +540,7 @@ class ClaimPerBead(StagesTest):
 
     def test_a_claim_that_changed_hands_meanwhile_is_not_taken(self):
         import loop
-        with self.store.stub(show=self.BEAD), mock.patch.object(tl, "slot_beads", return_value=[self.SLOT]), \
+        with self.store.stub(show=self.BEAD), mock.patch.object(tl, "slot_beads", return_value=[as_bead(self.SLOT)]), \
                 mock.patch.object(tl, "live_actors", return_value={"tl-2be89f88"}), mock.patch.object(loop, "running", return_value={}), \
                 self.store.stub(comments=[]), self.store.stub(bd_fn=lambda *a, **k: mock.Mock(returncode=1)):
             ok, why = engine.reclaim("o67g", str(self.wt), store=self.store)
@@ -639,10 +640,10 @@ class FollowUps(StagesTest):
         self.assertEqual(len([c for c in self.bd_calls if c[:2] == ("create", "Rename x")]), 2)  # one retry, no more
 
     @te.no_repo
-    def test_lint_sections_reads_the_headings_bd_names(self):
-        self.assertEqual(engine.lint_sections("Error: missing required sections for bug: ## Steps to Reproduce, ## Acceptance Criteria"),
-                         ["Steps to Reproduce", "Acceptance Criteria"])
-        self.assertEqual(engine.lint_sections("some other failure"), [])
+    def test_the_headings_bd_names_come_out_of_its_error(self):
+        err = bd.error_of("Error: missing required sections for bug: ## Steps to Reproduce, ## Acceptance Criteria", "")
+        self.assertEqual((err.kind, err.missing_sections), ("lint", ["Steps to Reproduce", "Acceptance Criteria"]))
+        self.assertEqual(bd.error_of("some other failure", "").missing_sections, [])
         body = engine.with_sections("why\n\n## Touches\nx.py", ["Touches", "Acceptance Criteria"], "t-1")
         self.assertEqual(body.count("## Touches"), 1)
         self.assertIn("## Acceptance Criteria", body)

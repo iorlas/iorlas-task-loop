@@ -30,7 +30,7 @@ import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support.builders import cfg_with, make_engine  # noqa: E402
 import engine  # noqa: E402
 import seams  # noqa: E402
-from support.fakes import FakeBeadStore  # noqa: E402
+from support.fakes import FakeBeadStore, as_bead, as_comment  # noqa: E402
 from support.logs import records  # noqa: E402
 from support.waits import until  # noqa: E402
 from support import fake_route  # noqa: E402
@@ -552,7 +552,7 @@ class StoredBriefs(unittest.TestCase):
         for p in sorted(BRIEFS.glob("*.md")):
             notes, comments = stored_brief(p.stem)
             bead = {"id": "x", "title": "t", "notes": notes}
-            out = engine.brief_digest(bead, [{"author": a, "text": t} for a, t in comments])
+            out = engine.brief_digest(as_bead(bead), [as_comment({"author": a, "text": t}) for a, t in comments])
             bad = [l for l in out.splitlines() if ENGINE_LINE.match(l)]
             self.assertEqual(bad, [], p.name)
             old = p.read_text(encoding="utf-8")

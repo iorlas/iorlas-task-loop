@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support import tlbd  # noqa: E402
-from support.fakes import FakeBeadStore  # noqa: E402
+from support.fakes import FakeBeadStore, as_comment  # noqa: E402
 import loop  # noqa: E402
 import report  # noqa: E402
 import tl  # noqa: E402
@@ -266,7 +266,7 @@ class Scorecard(Base):
 
     def card(self, until=None):
         return report.scorecard(str(self.repo), T0, until or T0 + 200 * MIN, base="main",
-                                comments_of=lambda b: self.comments.get(b, []), status_of=lambda b: self.status.get(b),
+                                comments_of=lambda b: [as_comment(c) for c in self.comments.get(b, [])], status_of=lambda b: self.status.get(b),
                                 alive=lambda bead: bead == "t-9", now=T0 + 200 * MIN)
 
     def test_the_six_counts(self):
@@ -306,7 +306,7 @@ class Scorecard(Base):
     def test_the_cli_prints_a_table_and_a_verdict_and_json(self):
         args = ["report", "--repo", str(self.repo), "--since", "2026-10-21T06:00", "--until", "2026-10-21T09:20"]
         store = FakeBeadStore()
-        store.notes = {b: list(c) for b, c in self.comments.items()}
+        store.notes = {b: [as_comment(x) for x in c] for b, c in self.comments.items()}
         with mock.patch.object(report, "default_base", return_value="main"), tlbd.bd_boundary(store=store), \
                 mock.patch.object(report, "bead_status", lambda b, repo: self.status.get(b)), \
                 mock.patch.object(report, "run_alive", lambda bead: bead == "t-9"):
