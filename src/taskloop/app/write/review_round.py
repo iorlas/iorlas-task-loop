@@ -42,7 +42,7 @@ class ReviewRound:
         where = e.where("review")
         text += ("\n" + where if where else "") + e.cases_text() + (CASES_RAN if s.last and e.case_checks() else "") + self.open_items(s)
         text += "" if s.last else LATER_CASES
-        text += e.deferred_text() + e.hand.seen_lows_text() + e.flakes_text() + UNCHECKED_TEXT + e.look_review(st, s.w, s.fix)
+        text += e.routing.ledger().text() + e.hand.seen_lows_text() + e.flakes_text() + UNCHECKED_TEXT + e.look_review(st, s.w, s.fix)
         return text + (e.new_files_brief(kinds["unexplained"]) if kinds["unexplained"] else "")
 
     def open_items(self, s: StageState) -> str:

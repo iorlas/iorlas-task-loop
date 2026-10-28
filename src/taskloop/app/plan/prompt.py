@@ -45,7 +45,7 @@ class PlanPrompt:
         if hist and (old or again):
             out += ("\n\nWhat the rounds on this task did so far (the writer's summary, then what was sent back). Do not "
                     f"plan a fix that already failed to hold:\n<rounds>\n{hist}</rounds>\n")
-        return out + (e.deferred_text() if old or again else "")
+        return out + (e.routing.ledger().text() if old or again else "")
 
     def rules(self) -> list[str]:
         e = self.e

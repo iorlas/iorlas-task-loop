@@ -63,7 +63,7 @@ class WriteRound:
         if delta:  # the writer may have edited its copy: the engine's brief goes back before it reads it again
             e.brief_file.write_text(e.briefs.text(), encoding="utf-8")
         else:  # a whole prompt (a first write, a fresh writer): what the tasks beside this one are doing (tl-bxk.13.8)
-            prompt += e.shared_text() + e.deferred_text()
+            prompt += e.shared_text() + e.routing.ledger().text()
         return prompt, delta
 
     def record(self, s: StageState, fresh: str) -> None:

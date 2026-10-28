@@ -169,7 +169,9 @@ class Planner:
         if len(data["stages"]) > big and not self.cap.kept_whole():
             why = f"ticket: the plan has {len(data['stages'])} stages (more than {big}): the bead may be too big for one task"
             raise e.blocked_for(why, "ASK_TICKET", spec=askspecs.too_big([st["goal"] for st in data["stages"]], big))
-        e.ledger_fill(data)
+        for lo in e.routing.ledger_of(data).missing_leftovers(t for t, _ in e.routing.ledger().deferred()):
+            data.setdefault("leftovers", []).append(lo)
+            e.log.note("the ledger defers a criterion the leftovers did not list; listed: {}".format(lo["title"][:160]))
         self.add_leftovers(data)
         e.comment(self.summary(data))
         stored(data)

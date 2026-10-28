@@ -111,5 +111,5 @@ class Handoff:
     def save(self) -> None:
         with contextlib.suppress(OSError):
             (self.e.run_dir / "handoff.json").write_text(json.dumps(dict(
-                self.e.handoff, deferred=[{"what": t, "why": w} for t, w in self.e.deferred_items()],
+                self.e.handoff, deferred=[{"what": t, "why": w} for t, w in self.e.routing.ledger().deferred()],
                 filed=self.e.filed), indent=1))

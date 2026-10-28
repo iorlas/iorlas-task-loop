@@ -33,6 +33,8 @@ from taskloop.contracts.answers import IRREVERSIBLE  # noqa: E402
 from taskloop.domain.prompts.plan import REPLAN_CAP  # noqa: E402
 from taskloop.contracts import answers  # noqa: E402
 from taskloop.app.plan.planner import Planner  # noqa: E402
+from taskloop.app.review.settles import Settles  # noqa: E402
+from taskloop.domain.review.matchers import Tools  # noqa: E402
 from taskloop.app.write.stage_loop import StageLoop  # noqa: E402
 from taskloop.domain.prompts import plan as pp  # noqa: E402
 from taskloop.domain.prompts import review as rp  # noqa: E402
@@ -2742,6 +2744,9 @@ class EngineTest(unittest.TestCase):
     def no_ruff(self, name):
         return None if name == "ruff" else "/usr/bin/" + name
 
+    def unused(self, what, cfg, on_path=lambda name: None):
+        return Settles(types.SimpleNamespace(wt=str(self.wt), cfg=cfg, on_path=on_path)).unused_tool(what)
+
     @contextmanager
     def ruff_cannot_start(self):
         # Tool discovery is mocked separately; a host install or mise shim must not decide this test's exit code.
@@ -2794,17 +2799,17 @@ class EngineTest(unittest.TestCase):
 
     @no_repo
     def test_a_tool_counts_only_backticked_or_after_a_run_verb(self):
-        self.assertEqual(engine.tools_named("`UseCellBeside` handles a rotated slot; `justfile` has the recipe"), [])
-        self.assertEqual(engine.tools_named("nobody ran `shellcheck -x hooks/*.sh` or linted with ruff"),
+        self.assertEqual(Tools.named("`UseCellBeside` handles a rotated slot; `justfile` has the recipe"), [])
+        self.assertEqual(Tools.named("nobody ran `shellcheck -x hooks/*.sh` or linted with ruff"),
                          ["shellcheck", "ruff"])
-        self.assertEqual(engine.tools_named("the biome transition fades in; no black screen between lots"), [])
-        self.assertEqual(engine.tools_named("`mypy` was not run; nobody checked with eslint"), ["mypy", "eslint"])
+        self.assertEqual(Tools.named("the biome transition fades in; no black screen between lots"), [])
+        self.assertEqual(Tools.named("`mypy` was not run; nobody checked with eslint"), ["mypy", "eslint"])
 
     def test_prose_that_happens_to_name_a_tool_still_goes_to_the_verifier(self):
         cfg = engine.load_cfg(str(self.wt))
         with mock.patch.object(engine, "tool_on_path", return_value=None):
             for what in ("the biome transition fades in", "no black screen between lots"):
-                self.assertEqual(engine.unused_tool(what, str(self.wt), cfg), "", what)
+                self.assertEqual(self.unused(what, cfg), "", what)
 
     def test_a_tool_the_tree_mentions_anywhere_still_goes_to_the_verifier(self):
         cfg = self.wt / ".config"
@@ -2813,13 +2818,13 @@ class EngineTest(unittest.TestCase):
         sh("git", "add", "-A", cwd=self.wt)
         sh("git", "commit", "-qm", "tools", cwd=self.wt)
         with mock.patch.object(engine, "tool_on_path", return_value=None):
-            self.assertEqual(engine.unused_tool("nobody ran csharpier on src/", str(self.wt), engine.load_cfg(str(self.wt))), "")
+            self.assertEqual(self.unused("nobody ran csharpier on src/", engine.load_cfg(str(self.wt))), "")
 
     def test_only_the_unused_tool_item_is_dropped_the_rest_go_to_the_verifier(self):
         cfg = engine.load_cfg(str(self.wt))
         with mock.patch.object(engine, "tool_on_path", side_effect=self.no_ruff):
-            self.assertIn("not a check here", engine.unused_tool(self.RUFF["what"], str(self.wt), cfg))
-            self.assertEqual(engine.unused_tool(self.GAPS[1]["what"], str(self.wt), cfg), "")
+            self.assertIn("not a check here", self.unused(self.RUFF["what"], cfg, self.no_ruff))
+            self.assertEqual(self.unused(self.GAPS[1]["what"], cfg, self.no_ruff), "")
 
     def test_unchecked_items_the_verifier_settles_land_without_an_ask(self):
         # lifesim-d5f.46, lifesim-fld.26.15: the supervisor settled each in a minute with read-only commands
@@ -3802,7 +3807,7 @@ class LandReview(EngineTest):
     def verifier(self, attrs=None, **cfg):
         return self.engine_at_land(dict({
             "unchecked": [], "verified": [], "steps": mock.Mock(), "comment": mock.Mock(),
-            "briefs": types.SimpleNamespace(text=lambda: "the task"), "last_flag": "", "work_summary": lambda: "f.txt"}, **(attrs or {})), **cfg)
+            "briefs": types.SimpleNamespace(text=lambda: "the task"), "last_flag": ""}, **(attrs or {})), **cfg)
 
     def test_items_whose_proof_is_the_gate_or_a_stage_check_are_settled_and_never_asked(self):
         # lifesim-5ban.1, 10-22 05:32: blocked on 'could not check: unity-analyzers/unity-tests/unity-play-tests'
@@ -3886,8 +3891,8 @@ class LandReview(EngineTest):
         e = self.engine_at_land()
         (self.wt / "justfile").write_text("lint:\n    ruff check tools\n")
         with mock.patch.object(engine, "tool_on_path", return_value="/bin/ruff"):
-            self.assertEqual(e.lint_command("`ruff check . ; rm -rf ~` was not run"), "ruff check .")
-            self.assertEqual(e.lint_command("`ruff check tools` was not run"), "ruff check tools")
+            self.assertEqual(e.settles.lint_command("`ruff check . ; rm -rf ~` was not run"), "ruff check .")
+            self.assertEqual(e.settles.lint_command("`ruff check tools` was not run"), "ruff check tools")
 
     # -- tl-bxk.10.25
     YXBB6 = ("I did not re-run the whole Sim.Properties suite or the just unity-* checks. The engine ran the suite, and it "
@@ -3959,7 +3964,7 @@ class LandReview(EngineTest):
 
     def test_the_brief_lists_at_most_30_checks_of_300_characters(self):
         e = self.evidenced([res("x" * 900, 0, id="c%d" % i, secs=1, log="checks/l.log") for i in range(40)])
-        text = e.checks_evidence()
+        text = e.settles.evidence_text()
         rows = [ln for ln in text.splitlines() if ln.startswith("- ")]
         self.assertEqual(len(rows), 31)
         self.assertTrue(all(len(ln) <= 300 for ln in rows))

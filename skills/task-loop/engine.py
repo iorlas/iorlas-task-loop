@@ -54,6 +54,9 @@ from taskloop.app.checks.host import CheckFault, CheckStuck
 from taskloop.app.checks.runner import Checker
 from taskloop.app.plan.briefs import Briefs
 from taskloop.app.plan.planner import Planner
+from taskloop.app.review.routing import Routing
+from taskloop.app.review.settles import Settles
+from taskloop.app.review.verifier import Verifier
 from taskloop.app.run import trace as runtrace
 from taskloop.app.write.handoff import Handoff
 from taskloop.app.write.stage_loop import StageLoop
@@ -89,6 +92,8 @@ from taskloop.domain.checks.matchers import glob_re, slot_wait_secs
 from taskloop.domain.checks.names import norm as norm_cmd
 from taskloop.stores.real import real_stores
 from taskloop.domain.plan.matchers import AcceptanceText, gate_only_criteria, word_set, without_runner
+from taskloop.domain.review.kinds import UNCHECKED_KINDS
+from taskloop.domain.review.matchers import Wording
 from taskloop.domain.write.matchers import count_tests
 from taskloop.domain.prompts.common import DECIDED_TEXT, LATER_CASES, RULES_MAX, UNCHECKED_TEXT
 from taskloop.domain.prompts.plan import (ASSUME_TEXT, DRY_CHECK_TEXT, EMPTY_PLAN_TEXT, GATE_ONLY_ACCEPTANCE, GATE_ONLY_ACCEPTANCE_TEXT,
@@ -102,34 +107,14 @@ from taskloop.domain.prompts.write import (DONE_SO_FAR, LOOK_FEEDBACK, LOOK_WRIT
 # ---- output contracts -----------------------------------------------------------------------------------------------
 
 FLAKE_DAYS = 14     # how long a writer-reported flaky test stays in the shared notes
-# tl-bxk.10.28: the AI classifies an unchecked item, the engine routes it. The first six are the old kinds (an old
-# checkpoint or a worker still sends them): an open one is asked, as before.
-# a kind may move only toward a stricter route (never to a looser one): the engine settles the loosest, asks the strictest
-KIND_RANK = dict({"engine_step": 0, "external_fact": 1, "taste": 1, "checkable": 2, "owner_decision": 3},
-                 **{k: 2 for k in LEGACY_KINDS})
-CODE_EXT = re.compile(r"\.(?:py|cs|js|jsx|ts|tsx|go|rs|java|kt|rb|sh|c|h|cpp|hpp|json|ya?ml|toml|md|txt|csv|sql|css|html|gd|"
-                      r"lua|swift|asmdef|unity|prefab)$", re.I)
-SYMBOL = re.compile(r"\b(?:[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]*)+|[a-z][a-z0-9]*(?:_[a-z0-9]+)+)\b")
-# what the engine itself does for a bead; an engine_step item settles only when it names one of these and the engine will
-ENGINE_FILES = re.compile(r"\b(?:fil(?:e|es|ed|ing)|creat(?:e|es|ed|ing)|open(?:s|ed|ing)?)\b.*\b(?:follow-?ups?|leftovers?)\b|"
-                          r"\b(?:follow-?ups?|leftovers?)\b.*\b(?:not filed|filed|files?|creat\w+)\b", re.I)
-ENGINE_BEADS = re.compile(r"\bfil(?:e|es|ed|ing)\s+(?:(?:the|a|an|these|those|all|each|new|nine|\d+|follow-?ups?)\s+)*beads?\b|"
-                          r"\bcreat(?:e|es|ed|ing)\s+(?:(?:the|a|an|these|those|all|each|new|nine|\d+|follow-?ups?)\s+)*beads?\b|"
-                          r"\bbeads?\b[^.]{0,40}\b(?:to be (?:filed|created)|(?:is |are )?(?:not )?filed|to file)\b", re.I)
-ENGINE_LANDS = re.compile(r"\b(?:at|after|before|on) (?:the )?land(?:ing)?\b|\bthe engine (?:lands|merges|pushes|runs the gate)\b|"
-                          r"\bthe (?:land )?gate (?:runs|will run)\b", re.I)
-ENGINE_SHOTS = re.compile(r"\b(?:screenshots?|shots|pictures)\b.*\b(?:copi\w+|committed|kept|saved into the repo)\b|"
-                          r"\b(?:copi\w+|commit\w*|keeps?)\b.*\b(?:screenshots?|shots|pictures)\b", re.I)
-ENGINE_CLOSES = re.compile(r"\bclos(?:e|es|ed|ing)\b[^.]*\bbead\b|\bbead\b[^.]*\bclos(?:e|es|ed|ing)\b", re.I)
-UNCHECKED_KINDS = ROUTED_KINDS + LEGACY_KINDS  # one of these unchecked is verified before the land
-
-
 # tl-bxk.10.23: engine.visual_paths {include, exclude} (globs) says which changes are visual; absent, no look rules at all
 IMAGE_EXT = (".png", ".jpg", ".jpeg")
 MAX_SHOTS, MAX_SHOT_BYTES = 20, 5 * 1024 * 1024
-LOOK_ITEM = re.compile(r"owner\b[^.]{0,40}\b(?:judge|check|decide|assess|review|verify)\b[^.]*\b"
-                       r"(?:looks?|visual\w*|appearance|screenshots?)\b", re.I)  # 'Only the owner can judge the look.'
 LOOK_LABEL = "owner-look"
+
+
+def tool_on_path(name):
+    return shutil.which(name)
 
 
 def visual_hit(vp, paths):
@@ -143,51 +128,12 @@ def visual_hit(vp, paths):
 
 
 
-# tl-bxk.10.9: an unchecked item naming one of these, or a backticked command, is a check only where the repo uses it
-KNOWN_TOOLS = {"ruff", "black", "flake8", "pylint", "mypy", "pyright", "isort", "bandit", "eslint", "prettier", "tsc",
-               "biome", "stylelint", "shellcheck", "shfmt", "hadolint", "yamllint", "markdownlint", "actionlint",
-               "golangci-lint", "gofmt", "staticcheck", "clippy", "rustfmt", "rubocop", "ktlint", "detekt", "swiftlint",
-               "clang-tidy", "clang-format", "cppcheck", "csharpier", "semgrep", "codespell", "vale", "pre-commit", "prek"}
-RUN_VERB = r"(?:run|runs|ran|running|lint|lints|linted|linting|format|formats|formatted|check|checks|checked)"
 
 
-def tools_named(what):
-    """The tools an unchecked item names: the first word of a backticked command with arguments (`ruff check tools`),
-    or a known linter or formatter backticked (`mypy`) or right after a run, lint, format or check verb ("ran ruff",
-    "checked with eslint"). Prose that only contains a tool's name ("the biome transition") names none."""
-    found = []
-    for cmd in re.findall(r"`([^`]+)`", what):
-        words = cmd.split()
-        if (len(words) > 1 and re.fullmatch(r"[a-z][a-z0-9+-]*", words[0])) or cmd.strip().lower() in KNOWN_TOOLS:
-            found.append(words[0].lower())
-    rx = re.compile(r"\b%s\s+(?:(?:with|by|using|the)\s+)?([a-z][a-z0-9+-]*)" % RUN_VERB)
-    found += [w for w in rx.findall(what.lower()) if w in KNOWN_TOOLS]
-    return list(dict.fromkeys(found))
 
 
-def tool_on_path(name):
-    return shutil.which(name)
 
 
-def unused_tool(what, root, cfg):
-    """The evidence that every tool an item names is one the repo does not use: nothing in the tracked tree mentions
-    it (`git grep -w -I`, dot directories, CI, toolchain and agent files included), nor the engine's gate and checks,
-    and it is not on PATH; "" when it names none or the repo uses one."""
-    tools = tools_named(what)
-    if not tools:
-        return ""
-    engine_text = " ".join([cfg.gate_text] + [str(c) for c in cfg.checks])
-    said = []
-    for t in tools:
-        r = tl.run_git(root, "grep", "-w", "-I", "-l", "-F", t, capture_output=True, text=True, encoding="utf-8",
-                       errors="replace")
-        if r.returncode not in (0, 1):  # no git tree to read: no evidence, the item stays
-            return ""
-        if r.stdout.strip() or re.search(r"(?<![\w-])%s(?![\w-])" % re.escape(t), engine_text) or tool_on_path(t):
-            return ""
-        said.append("git grep -w -I %s: no match in the tracked tree nor the engine's gate and checks; which %s: "
-                    "not found" % (t, t))
-    return "not a check here: the repo does not use it (%s)" % "; ".join(said)
 
 
 
@@ -836,6 +782,23 @@ class Engine:
     def briefs(self):
         return Briefs(self)
 
+    def on_path(self, name):
+        return tool_on_path(name)
+
+    @cached_property
+    def routing(self):
+        return Routing(self)
+
+    @cached_property
+    def settles(self):
+        return Settles(self)
+
+    @cached_property
+    def verifier(self):
+        return Verifier(self)
+
+    Blocked = Blocked  # the stop a step raises: components catch it through the host
+
     def shot_table(self):
         """The shot methods the repo can render, as the planner and the writer are told them."""
         return looks.table_text(self.shot_methods())
@@ -1230,20 +1193,6 @@ class Engine:
                                    "done-when, so it was not verified before the land: " + u["what"][:600]})
         return keep
 
-    def backed_by_leftover(self, what):
-        """True when an owner-review follow-up bead for this item is already in the leftovers (tl-bxk.13.1): the owner sees
-        it there, so it need not stop the land as well (lifesim-iqad twice)."""
-        mine = word_set(what)
-        if len(mine) < 3:
-            return False
-        for lo in self.leftovers:  # the beads the engine will file
-            t, w = " ".join(str(lo.get("title") or "").split()), str(lo.get("why") or "")
-            if not OWNERISH.search(t):
-                continue
-            theirs = word_set(t + " " + w)
-            if len(mine & theirs) >= max(4, int(0.5 * len(mine))):
-                return True
-        return False
 
     def case_checks(self):
         return [c["check"] for c in (getattr(self, "plan_data", None) or {}).get("cases") or []
@@ -1498,75 +1447,11 @@ class Engine:
                      "%s with a fresh plan." % (branch, self.cfg.base, stale, self.cfg.base))
         return True
 
-    # -- tl-bxk.13: the handoff record (docs/design/stages.md section 5): what a stage after this one needs to know
-    def deferred_items(self):
-        """[(title, why)]: the follow-up work the plan and the reviews already set aside; the engine files each at land."""
-        out, seen = [], set()
-        for lo in ((getattr(self, "plan_data", None) or {}).get("leftovers") or []) + self.leftovers:
-            t = " ".join(str(lo.get("title") or "").split())
-            if t and t not in seen:
-                seen.add(t)
-                out.append((t, " ".join(str(lo.get("why") or "").split())))
-        return out
 
-    def deferred_text(self):
-        items = self.deferred_items()
-        steps = [e for e in self.ledger() if e["proved_by"] == "engine_step"]
-        out = ""
-        if items:
-            lines = "".join("- %s%s\n" % (t[:160], (": " + w[:160]) if w else "") for t, w in items[:10])
-            out += ("\nAlready set aside (the plan or an earlier review put each in leftovers; the engine files each as a follow-up "
-                    "bead at land, and nobody here can run bd). Never list one as unmet, as a finding or as unchecked, nor ask "
-                    "the owner about it:\n" + lines)
-        if steps:
-            out += ("\nThe engine does these itself, after the stages (the plan's ledger). Never list one as unmet, as a "
-                    "finding or as unchecked:\n" + "".join("- %s (%s)\n" % (e["criterion"][:160], e["via"][:60] or "engine step") for e in steps[:8]))
-        return out
 
-    # -- tl-bxk.13.16.1: the ledger. The plan says how each criterion is proved; review and verify go by it, not by wording.
-    def ledger(self):
-        """[{criterion, proved_by, via, text}]: what the plan defers (leftover) or leaves to the engine (engine_step)."""
-        out = []
-        for c in (getattr(self, "plan_data", None) or {}).get("cases") or []:
-            if c.get("proved_by") in ("leftover", "engine_step"):
-                out.append({"criterion": c["criterion"], "proved_by": c["proved_by"], "via": c.get("via") or "",
-                            "text": "%s %s" % (c["criterion"], c.get("via") or "")})
-        for t, _ in self.deferred_items():
-            out.append({"criterion": t, "proved_by": "leftover", "via": t, "text": t})
-        return out
 
-    def ledger_match(self, what):
-        """The ledger entry an item is about: most of the entry's words are the item's (3 at least)."""
-        mine = word_set(what)
-        if len(mine) < 3:
-            return None
-        filing = bool(FILING_WORDS.search(what))  # an item about follow-ups, beads, records: the ledger's own subject
-        for e in self.ledger():
-            theirs = word_set(e["text"])
-            shared = len(mine & theirs)
-            # a claim about the code that merely shares words with a deferred item is not that item: unless the item is about
-            # filing, it must be a near-paraphrase (60% of both sides, 4 words at least)
-            if shared >= max(3, int(0.6 * len(theirs) + 0.99)) and (filing or (shared >= 4 and shared >= 0.6 * len(mine))):
-                return e
-        return None
 
-    def ledger_route(self, what):
-        e = self.ledger_match(what)
-        return e["proved_by"] if e else ""
 
-    def ledger_fill(self, data):
-        """A case deferred in the ledger whose leftover the plan forgot to list: the engine lists it, so the work is filed."""
-        have = {" ".join(lo["title"].split()) for lo in data.get("leftovers") or []} | {t for t, _ in self.deferred_items()}
-        for c in data.get("cases") or []:
-            if c.get("proved_by") != "leftover":
-                continue
-            via = " ".join((c.get("via") or "").split())
-            if via and any(word_set(via) and len(word_set(via) & word_set(t)) >= 0.6 * len(word_set(via)) for t in have):
-                continue
-            title = (via or c["criterion"])[:120]
-            data.setdefault("leftovers", []).append({"title": title, "why": "Deferred by the plan: " + c["criterion"]})
-            have.add(title)
-            self.log.note("the ledger defers a criterion the leftovers did not list; listed: %s" % title[:160])
 
     def run(self):
         return self.run_once()
@@ -1694,401 +1579,47 @@ class Engine:
                 "kind": self.kind.value if self.kind else "", "fingerprint": self.fp, "storm": self.storm,
                 "role": self.pause_role if out == "paused" else "", "lane": self.pause_lane if out == "paused" else ""}
 
-    def self_verify(self, gaps):
-        """One read-only verifier call before a verify ask; returns the items that still go to the owner. Per item:
-        settled with quoted evidence drops it, wrong goes to one fix round at land (max_fix_rounds; none left: to the
-        owner, naming the defect), open goes to the owner. The 2026-10-21 lifesim night: lifesim-d5f.46 (a hand-written
-        .meta against its siblings), lifesim-fld.26.15 (a call site) and lifesim-gfr.31.1 (an evidence file that proved
-        it) each waited hours for an ask a supervisor settled in a minute by reading."""
-        if not gaps:
-            return gaps
-        unused = [(u, unused_tool(u["what"], self.wt, self.cfg)) for u in gaps]
-        for u, ev in unused:
-            if ev:
-                self.verified.append({"what": u["what"], "kind": u["kind"], "verdict": "settled", "evidence": ev,
-                                      "why": "not a check here"})
-        if any(ev for _, ev in unused):
-            gaps = [u for u, ev in unused if not ev]
-            n_drop = len(unused) - len(gaps)
-            self.steps.move("verify" if gaps else "land", "not_a_check", "%d item%s name a tool the repo does not use" % (
-                n_drop, "" if n_drop == 1 else "s"))
-            if not gaps:
-                counts = ", ".join("%d %s" % (sum(x["verdict"] == k for x in self.verified), k) for k in VERDICTS)
-                self.log.note("verify: before land: %s" % counts)
-                self.comment("Verify (engine): what the workers could not check, before land: " + "; ".join(
-                    "%s: %s, %s" % (x["verdict"], x["what"], '"%s"' % x["evidence"]) for x in self.verified))
-                return []
-        gaps, failed = self.engine_settles(gaps)  # tl-bxk.10.19: what the engine proves itself is never asked
-        gaps = self.engine_steps(gaps)
-        items = "".join("%d. %s (%s)\n" % (n, u["what"], u["kind"]) for n, u in enumerate(gaps, 1))
-        items += self.look_verify(gaps)
-        d = {"items": []}
-        if gaps:
-            try:
-                d, _ = self.ai("verify", "%d unchecked item(s) before land" % len(gaps), VERIFY_PROMPT.format(
-                    brief=self.briefs.text(), work=self.work_summary(), evidence=self.evidence_dir,
-                    checks=self.checks_evidence(), where=self.where("verify"), items=items) + self.deferred_text(),
-                    writer_family=self.writer_family, items=len(gaps), at=(self.at_stage, 0, 0))
-            except Blocked as b:
-                if b.kind in (oc.Kind.FAULT_BAD_REQUEST, oc.Kind.PAUSE_NETWORK, oc.Kind.PAUSE_KILLED):
-                    raise  # tl-bxk.10.31: the request is malformed for every bead; the network and a kill resume this step, they do not skip it
-                # no verifier now is no reason to land unchecked: the owner checks them, as before
-                self.warn("could not self-verify before land, the owner checks every item: %s" % b.why[:300])
-                return gaps + failed
-            if self.last_flag == "same_family":
-                self.warn("the check before land is from the writer's own model family (no other lane was free)")
-        said = {}
-        for a in d["items"]:
-            said.setdefault(a["n"], a)
-        still, wrong = [], list(failed)
-        for n, u in enumerate(gaps, 1):
-            a = said.get(n) or {"verdict": "open", "evidence": "", "why": "the verifier did not answer it"}
-            v, why = a["verdict"], a["why"]
-            if v == "settled" and not a["evidence"].strip():
-                v, why = "open", "settled without quoted evidence"
-            if self.is_look(u):
-                v, a, why = self.look_verdict(u, v, a, why)
-            kind, source = self.resolve_kind(u, a)
-            u = dict(u, kind=kind, source=source)
-            route = ""
-            if v == "open":
-                v, a, why, route = self.route_open(u, a, why)
-            self.verified.append({"what": u["what"], "kind": u["kind"], "verdict": "open" if route == "unverified" else v,
-                                  "evidence": a["evidence"], "why": why})
-            if route == "proof":
-                wrong.append(dict(u, why=why, proof_round=True))
-            elif v != "settled" and route != "unverified":
-                (wrong if v == "wrong" else still).append(dict(u, why=why))
-        counts = ", ".join("%d %s" % (sum(x["verdict"] == k for x in self.verified), k) for k in VERDICTS)
-        self.log.note("verify: before land: %s" % counts)
-        self.steps.outcome("wrong" if wrong else "open" if still else "settled", counts)
-        self.comment("Verify (engine): what the workers could not check, self-verified read-only before land: " + "; ".join(
-            "%s: %s, %s" % (x["verdict"], x["what"], ('"%s"' % x["evidence"]) if x["verdict"] == "settled" else x["why"])
-            for x in self.verified))
-        if not wrong:
-            if still:
-                self.steps.move("ask", "verify_open", "%d item%s only the owner can decide" % (
-                    len(still), "" if len(still) == 1 else "s"))
-            elif self.unverified:
-                self.steps.move("land", "unverified", "%d item%s land unverified, for the owner" % (
-                    len(self.unverified), "" if len(self.unverified) == 1 else "s"))
-            else:
-                self.steps.move("land", "verified", counts)
-            return still
-        if self.fixes >= int(self.cfg.max_fix_rounds):
-            self.steps.move("ask", "verify_wrong", "%d found wrong, no fix round left" % len(wrong))
-            return still + [dict(u, why="found wrong: %s; no fix round left" % u["why"]) for u in wrong]
-        self.steps.move("fix", "verify_wrong", "%d found wrong: %s" % (len(wrong), "; ".join(u["why"] for u in wrong)))
-        pending = wrong
-        while True:
-            # the pending items stay unchecked in the fix's checkpoint: a fix round that pauses resumes at land and verifies
-            # them again, never lands them; the fix's review adds what it leaves unproven
-            self.unchecked = [u for u in self.unchecked if u["kind"] not in UNCHECKED_KINDS] + still + pending
-            before = len(self.unchecked)
-            pending = [dict(u, why=u.get("why") or "add a test or check that proves: %s" % u["what"]) for u in pending]
-            done = self.fix("verify", "".join("- %s: %s\n" % (u["what"], u["why"]) for u in pending))
-            fixed = {u["what"] for u in pending}
-            self.unchecked = [u for u in self.unchecked[:before] if u["what"] not in fixed] + self.unchecked[before:]  # what the fix's review added stays
-            left = [u for u in self.unchecked if u["kind"] in UNCHECKED_KINDS]
-            if done != "accept":
-                left += [dict(u, why="found wrong: %s; the fix round did not pass" % u["why"]) for u in pending]
-            left = self.route_left(left)
-            pending = [u for u in left if u.get("proof_round")]
-            if not pending:
-                return left
-            if self.fixes >= int(self.cfg.max_fix_rounds):  # a bead with an unproven checkable item never lands
-                raise self.proof_stuck(pending)
-            still = [u for u in left if not u.get("proof_round")]
-            self.steps.move("fix", "verify_unproven", "%d still unproven after the fix round" % len(pending))
 
-    def proof_stuck(self, items):
-        return Blocked("the check before land: nothing proves %s after %d fix rounds: it needs the owner's hint" % (
-            "; ".join(u["what"] for u in items)[:600], int(self.cfg.max_fix_rounds)),
-            askspecs.unproven([u["what"] for u in items], int(self.cfg.max_fix_rounds)), kind=oc.Kind.ASK_STUCK)
 
     def diff_text(self):
         tree = self.tree_hash()
         return (tl.git("diff", self.base_sha(), tree, cwd=self.wt) if tree else "") or ""
 
-    def names_code(self, what):
-        """True when the item names something a check can reach: a repo path, a code or config file, or a code symbol
-        (CamelCase or snake_case) that is in the task's diff."""
-        text = re.sub(r"https?://\S+", " ", what)
-        files = set(tl.git("ls-files", cwd=self.wt).splitlines()) | set(self.changed_paths())
-        names = {Path(f).name for f in files}
-        for t in re.findall(r"[\w][\w./-]*[\w]", text):
-            if t in files or t in names or CODE_EXT.search(t):
-                return True
-        syms = {t for t in SYMBOL.findall(text.replace(".", " "))}
-        if syms:
-            diff = self.diff_text()
-            return any(x in diff for x in syms)
-        return False
+    # -- review and verify (src/taskloop/app/review): the engine lends its state, the components do the work
+    def self_verify(self, gaps):
+        return self.verifier.run(gaps)
+
+    def ledger_route(self, what):
+        return self.routing.ledger_route(what)
 
     def engine_does(self, what):
-        """True when the item names an action the engine will in fact perform for this bead."""
-        w = " ".join(what.split())
-        if ENGINE_FILES.search(w) or ENGINE_BEADS.search(w):  # tl-bxk.13.1: "file beads" is the same step as "file follow-ups"
-            return bool(self.leftovers or ((getattr(self, "plan_data", None) or {}).get("leftovers")))
-        if ENGINE_SHOTS.search(w):
-            vp = self.visual_cfg()
-            return bool(vp and visual_hit(vp, self.changed_paths()))
-        return bool(ENGINE_LANDS.search(w) or ENGINE_CLOSES.search(w))
-
-    def resolve_kind(self, u, a):
-        """(kind, source) for an item: the verifier's kind (it read the code) when it is as strict as the writer's, else the
-        writer's. An engine_step the engine will not do, an external_fact with no source, and a taste or external_fact that
-        names a path, a code file or a symbol in the diff is checkable, whatever its label."""
-        old = u["kind"]
-        new = a.get("kind") if a.get("kind") in UNCHECKED_KINDS else old
-        if KIND_RANK.get(new, 2) < KIND_RANK.get(old, 2):
-            new = old
-        source = (a.get("source") or u.get("source") or "").strip()
-        if new == "engine_step" and not self.engine_does(u["what"]):
-            new = "checkable"
-        elif new in ("external_fact", "taste") and (self.names_code(u["what"]) or (new == "external_fact" and not source)):
-            new = "checkable"
-        return new, source
+        return self.routing.engine_does(what)
 
     def engine_steps(self, gaps):
-        """tl-bxk.10.28: an item the writer calls an engine step is settled here, no verifier call, only when it names an
-        action the engine will do for this bead (engine_does): lifesim-yxbb.7 and lifesim-fld.25.16 parked on 'the engine
-        files them'. A claim about the result ('the beads cover all nine objects') goes to the verifier."""
-        out = []
-        for u in gaps:
-            if u["kind"] == "engine_step" and self.engine_does(u["what"]):  # the writer's own typing of it, when it names the step
-                self.settle_engine_step(u)
-                continue
-            route = self.ledger_route(u["what"])
-            if route == "engine_step":  # tl-bxk.13.16.1: the plan's ledger says the engine does it
-                self.settle_engine_step(u)
-                continue
-            if route == "leftover":
-                self.add_unverified(u, "the plan defers it to a follow-up bead")
-                continue
-            if u["kind"] in ("owner_decision", "external_fact", "taste") and self.backed_by_leftover(u["what"]):
-                self.add_unverified(u, "a follow-up bead for the owner is filed at land")
-            elif u["kind"] in ("engine_step", "external_fact", "taste"):
-                out.append(dict(u, kind=self.resolve_kind(u, {"kind": u["kind"], "source": "x"})[0]))  # source is the verifier's to give
-            else:
-                out.append(u)
-        return out
+        return self.routing.engine_steps(gaps)
 
-    def settle_engine_step(self, u):
-        self.verified.append({"what": u["what"], "kind": u["kind"], "verdict": "settled", "why": "the engine does this at land",
-                              "evidence": "the engine does this at land"})
-
-    def route_open(self, u, a, why):
-        """tl-bxk.10.28: where an item the verifier left open goes, by its (resolved) kind: (verdict, answer, why, route).
-        An engine step is settled; a checkable item goes to the writer for a test (a fix round, counted in max_fix_rounds;
-        none left: the bead is stuck, never landed); an item no check can prove lands for the owner (route 'unverified');
-        an owner decision, or an old kind, is asked."""
-        k = u["kind"]
-        route = self.ledger_route(u["what"])
-        if route == "leftover":
-            self.add_unverified(u, why or "the plan defers it to a follow-up bead")
-            return "open", a, why, "unverified"
-        if k == "engine_step" or route == "engine_step":
-            return "settled", dict(a, evidence="the engine does this at land"), "the engine does this at land", ""
-        if k == "checkable":
-            if self.fixes >= int(self.cfg.max_fix_rounds):
-                raise self.proof_stuck([u])
-            return "wrong", a, "add a test or check that proves: %s" % u["what"], "proof"
-        if k in ("external_fact", "taste"):
-            self.add_unverified(u, why)
-            return "open", a, why, "unverified"
-        return "open", a, why, ""
-
-    def add_unverified(self, u, why):
-        if u["what"] not in {x["what"] for x in self.unverified}:
-            self.unverified.append({"what": u["what"], "kind": u["kind"], "why": why, "source": u.get("source") or ""})
+    def resolve_kind(self, u, a):
+        return self.routing.resolve_kind(u, a)
 
     def route_left(self, left):
-        """The items still unchecked after a verify fix round, routed: an engine step the engine does is settled; one that
-        no check can prove (external_fact with a source, taste) lands unverified; a checkable one (or one a failed proving
-        round left) comes back flagged proof_round, to be sent again while a fix round is left; the rest still asks."""
-        out = []
-        for u in left:
-            defect = str(u.get("why") or "").startswith("found wrong:") and not u.get("proof_round")
-            route = "" if defect else self.ledger_route(u["what"])  # a defect the verifier found is never the ledger's
-            if route == "engine_step":
-                self.settle_engine_step(u)
-                continue
-            if route == "leftover":
-                self.add_unverified(dict(u, kind=u.get("kind") or "other"), "the plan defers it to a follow-up bead")
-                continue
-            k = self.resolve_kind(u, {})[0] if not u.get("proof_round") else "checkable"
-            if defect:
-                out.append(u)
-            elif k == "engine_step":
-                self.settle_engine_step(u)
-            elif k in ("external_fact", "taste"):
-                self.add_unverified(dict(u, kind=k), u.get("why") or "")
-            elif k == "owner_decision" and self.backed_by_leftover(u["what"]):
-                self.add_unverified(dict(u, kind=k), "a follow-up bead for the owner is filed at land")
-            elif k == "checkable":
-                out.append(dict(u, kind=k, proof_round=True))
-            else:
-                out.append(u)
-        return out
+        return self.routing.route_left(left)
 
-    LINT_DEFAULT = {"ruff": "ruff check .", "flake8": "flake8", "shellcheck": None}
-    SAFE_CMD = re.compile(r"[\w./=:,@+*~ -]+")
+    def backed_by_leftover(self, what):
+        return self.routing.backed_by_leftover(what)
 
-    def gate_names(self):
-        """Names a verify item can use for a check the engine runs by itself (the gate, a configured check, a plan stage
-        check or case): its id, its command, and the command without its runner (`just unity-tests` -> unity-tests)."""
-        cmds = [self.cfg.gate_text] + [c.cmd for c in self.cfg.checks] + [
-            c for st in (getattr(self, "plan_data", None) or {}).get("stages") or [] for c in st["checks"]] + self.case_checks()
-        names = [c.id for c in self.cfg.checks]
-        for c in cmds:
-            c = " ".join(c.split())
-            rest = without_runner(c)
-            names += [c] + ([rest] if rest != c and ("-" in rest or "_" in rest) else [])
-        return [n.lower() for n in dict.fromkeys(names) if len(n) >= 4]
+    def is_look(self, u):
+        return bool(self.visual_cfg()) and Wording.is_look(u["what"])
 
-    # tl-bxk.10.19: an item is settled only when it names a configured check and says it passes or runs; an item about
-    # coverage, skips, fakes or a check that never ran is a claim about the check, not its result.
-    HEDGE_LIGHT = re.compile(r"\b(?:flaky|stale|though|but|yet|however|although|unless|except|new tests?)\b")
-    PROVES = re.compile(r"\b(passe[sd]?|passing|is green|stays? green|green|runs?|ran|exits? 0)\b|engine-run")
-    NOT_PROOF = re.compile(r"\b(covers?|covered|coverage|a tests? for|skipped|false green|never (?:been )?run|not run|only tested|"
-                           r"fake|untested|not tested)\b")
+    def add_unverified(self, u, why):
+        self.routing.add_unverified(u, why)
 
-    def engine_settles(self, gaps):
-        """tl-bxk.10.19: (items still to verify, items the engine found wrong). An item whose proof is the gate or a stage
-        check (matched by check id or command name) is settled as 'the gate runs it at land': the read-only verifier cannot
-        run it, and lifesim-5ban.1 stopped on 'could not check: unity-analyzers/unity-tests/unity-play-tests'. An item naming
-        a linter the repo has (ruff) is run here; its exit code settles it, a red one goes to a fix round."""
-        names, left, failed = self.gate_names(), [], []
-        results, current = self.checks_now()
-        for u in gaps:
-            what = " ".join(u["what"].split()).lower()
-            hit = None
-            if not self.NOT_PROOF.search(what) and not self.HEDGE_LIGHT.search(what) and self.PROVES.search(what):
-                hit = next((n for n in names if re.search(r"(?<![\w-])%s(?![\w-])" % re.escape(n), what)), None)
-                if hit and any(c.status == "failed" and hit in (c.id.lower(), " ".join(c.cmd.split()).lower())
-                               for c in results):
-                    hit = None  # the engine saw it red: nothing is proven
-            if hit:
-                self.verified.append({"what": u["what"], "kind": u["kind"], "verdict": "settled", "why": "the gate runs it at land",
-                                      "evidence": "`%s` is a gate or stage check: the engine runs it, the gate at land (a red one "
-                                                  "goes to a fix round)" % hit})
-                continue
-            proof = None if self.is_look(u) else self.engine_proof(u["what"], results, current)
-            if proof:
-                self.verified.append({"what": u["what"], "kind": u["kind"], "verdict": "settled", "evidence": proof,
-                                      "why": "the engine's own check results settle it"})
-                continue
-            cmd = self.lint_command(u["what"])
-            if not cmd:
-                left.append(u)
-                continue
-            rc, tail = self.sh(argv_of(cmd), timeout=600)
-            if rc in (126, 127):  # the tool cannot start here: nothing was proven, the verifier and the owner still judge it
-                left.append(u)
-                continue
-            out = "ran `%s`: exit %d%s" % (cmd, rc, (" " + tail[-300:]) if rc else "")
-            self.verified.append({"what": u["what"], "kind": u["kind"], "verdict": "settled" if rc == 0 else "wrong",
-                                  "evidence": out, "why": out})
-            if rc:
-                failed.append(dict(u, why=out))
-        return left, failed
 
-    # tl-bxk.10.25: an item settles from the engine's results only in one narrow form: its sole doubt is that the verifier
-    # cannot prove the engine ran or passed check X, every check-like name in it is a known check id, and each such check
-    # passed or was skipped by its own path trigger on the current tree. A wrong settle lands broken work unseen; an ask
-    # costs a minute. Everything else goes to the verifier, whose brief carries the results (checks_evidence).
-    OTHER_DOUBT = re.compile(r"\b(behaviou?rs?|looks?|visual(?:ly)?|screens?|screenshots?|layout|render\w*|devices?|manual(?:ly)?|"
-                             r"by hand|ui|ux|taste|feels?|edge cases?|regress\w*|race|crash\w*|coverage|covers?|covered|fake|"
-                             r"false green|bug)\b")
-    CANNOT_PROVE = re.compile(r"\b(?:cannot|can not|unable to) (?:prove|verify|confirm|see)\b|\bno (?:saved )?logs?\b")
-    HEDGE = re.compile(r"\b(?:not|never|no|nor|none|nothing|without|flaky|stale|only|yet|though|but|unless|except|missing|"
-                       r"still|also|however|although|wrong|fails?|failed|new tests?)\b|n't")
-    CHECK_LIKE = re.compile(r"`([^`]+)`|(?<![\w.-])([\w.]*[-_./*][\w.*/-]*)")
 
-    def engine_proof(self, what, results, current):
-        """The evidence text when the item names only known check ids, each green or skipped by its path trigger, on the
-        current known tree, and doubts nothing but whether the engine ran or passed them; else ''."""
-        what = " ".join(what.split()).lower()
-        if not current or not results or not self.CANNOT_PROVE.search(what) or self.OTHER_DOUBT.search(what):
-            return ""
-        if self.HEDGE.search(self.CANNOT_PROVE.sub(" ", what)):
-            return ""
-        ids = {c.id.lower(): c for c in results}
-        hits = [c for i, c in ids.items() if len(i) >= 4 and re.search(r"(?<![\w-])%s(?![\w-])" % re.escape(i), what)]
-        like = [(m.group(1) or m.group(2)).strip(".,;:").lower() for m in self.CHECK_LIKE.finditer(what)]
-        if not hits or any(n not in ids for n in like) or tools_named(what):
-            return ""
-        parts = []
-        for c in hits:
-            idn = c.id[:80]
-            if c.status == "passed" and c.exit == 0:
-                parts.append("`%s` [%s] passed: exit 0, %g s, log %s" % (idn, c.group, c.secs, self.log_path_of(c)))
-            elif c.status == "skipped" and c.why.startswith("no change under"):
-                parts.append("`%s` [%s] skipped: %s, so the check does not apply to this change" % (idn, c.group, c.why))
-            else:
-                return ""
-        return "the engine's own check results for this tree: " + "; ".join(parts)
 
-    def log_path_of(self, c, full=True):
-        """The saved log of a check: absolute in the trace; in a prompt relative to the engine's run folder, since a path
-        into it is a file no step can read (the brief is inline, never a path outside the worktree)."""
-        return str(self.run_dir / c.log if full else c.log) if c.log else "none (cached: same tree and base, earlier result)"
 
-    def checks_now(self):
-        """(the engine's last check results, whether they ran on the tree as it is now). After a resume the saved
-        engine-checks.json stands in for the brief; its tree is unknown, so it settles nothing."""
-        run = self.last_run
-        if run is None:
-            saved = self.stores.check_run(self.run_dir.name, None).read()
-            return (saved.results if saved else []), False
-        return run.results, bool(run.tree) and run.tree == self.tree_hash()
 
-    def checks_evidence(self, checks=None, current=None):
-        """The engine's check results as brief text: per check id, group, command, status (pass, fail, skipped and why),
-        exit code, duration, log path; said plainly to be the engine's evidence the reader may cite. '' when none ran."""
-        if checks is None:
-            checks, current = self.checks_now()
-        if not checks:
-            return ""
-        out = []
-        for c in checks[:30]:
-            if c.status == "skipped" or c.exit is None:
-                what = "skipped (%s)" % (c.why or "no reason given")
-            else:
-                what = "%s, exit %s, %g s, log %s" % ("pass" if c.exit == 0 else "fail", c.exit, c.secs, self.log_path_of(c, False))
-            cmd = "" if c.cmd == c.id else "; command `%s`" % c.cmd[:300]
-            last = " ".join(" ".join(c.tail.strip().splitlines()[-2:]).split())  # the log is no file the verifier can open
-            row = ("- `%s` [%s] %s%s" % (c.id[:100], c.group, what, cmd))[:300]
-            room = 300 - len(row) - len("; last output: ")
-            if last and c.exit == 0 and room >= 20:  # what a pass printed last, within the 300-character row
-                row += "; last output: " + last[-min(160, room):]
-            out.append(row)
-        if len(checks) > 30:
-            out.append("- (%d more checks not listed)" % (len(checks) - 30))
-        return ("The engine's own check results for %s (the engine's evidence, run by the engine itself: you may cite them as "
-                "proof; a log path is relative to the engine's run folder, which you cannot open. A check skipped for "
-                "'no change under ...' matched no changed path: it is proven by design that the check does not apply, so an item "
-                "whose only doubt is such a skipped check, or a check listed here as pass, is settled; cite this list):\n%s\n" % ("the tree as it is now" if current else
-                                      "an earlier tree (files changed since: weigh them accordingly)", "\n".join(out)))
 
-    def lint_command(self, what):
-        """The command the engine runs for an item naming a linter this repo uses: the backticked command if it is plain
-        words (no shell syntax), else the linter's default; "" when it names none, or the repo does not use it."""
-        for tool in tools_named(what):
-            if tool not in KNOWN_TOOLS or unused_tool("`%s`" % tool, self.wt, self.cfg):
-                continue
-            for c in re.findall(r"`([^`]+)`", what):
-                if c.split()[:1] == [tool] and self.SAFE_CMD.fullmatch(c):
-                    return c.strip()
-            if self.LINT_DEFAULT.get(tool):
-                return self.LINT_DEFAULT[tool]
-        return ""
 
-    def work_summary(self):
-        """The task's changed files with their line counts, untracked files included."""
-        tree = self.tree_hash()
-        return (tl.git("diff", "--stat", self.base_sha(), tree, cwd=self.wt) if tree else "") or "(no files changed)"
 
     _probe: PathProbe | None = None
 
@@ -2721,9 +2252,6 @@ class Engine:
         vp = self.cfg.visual_paths
         return vp if vp and vp.include else None
 
-    def is_look(self, u):
-        return bool(self.visual_cfg()) and bool(LOOK_ITEM.search(u["what"]))
-
     def shots(self):
         """The pictures the writer saved under the evidence dir, relative to it."""
         if not self.evidence_dir.is_dir():
@@ -2979,7 +2507,7 @@ class Engine:
             if url in self.link_ok or not why or (path, url) in seen:
                 continue
             seen.add((path, url))
-            if re.search(r"\bunverified\b", line, re.I):
+            if Wording.marked_unverified(line):
                 self.add_unverified({"what": "%s (link: %s)" % (fmt.clip(line, 200), url), "kind": "external_fact", "source": url},
                                     "the engine could not open %s (%s); the owner checks it" % (url, why))
                 continue
@@ -3489,8 +3017,6 @@ def question_spec(out):
 
 LINK_CAP = 200  # links opened per review
 
-FILING_WORDS = re.compile(r"\b(?:beads?|follow-?ups?|filed?|filing|issues?|tickets?|records?|recorded|leftovers?|deferred?)\b", re.I)
-OWNERISH = re.compile(r"\b(?:owner|sign-?off|approv\w*|review|confirm\w*|decid\w*|decision)\b", re.I)
 
 
 def reflection_text(r):
