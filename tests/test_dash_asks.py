@@ -133,7 +133,7 @@ class AskFailures(unittest.TestCase):
         with mock.patch.object(self.dash.env.ports, "store", side_effect=FileNotFoundError(2, "No such file or directory")):
             code, out = self.dash.asks.answer({"ask": "x-1-1", "text": "b"})
         self.assertEqual((code, out["code"]), (502, "no_bd"))
-        self.assertEqual(self.dash.asks.store.get("x-1").answer, None)  # nothing was filed
+        self.assertIsNone(must(self.dash.asks.store.get("x-1")).answer)  # nothing was filed
 
     def test_a_withdrawn_ask_says_why_and_is_not_listed(self):
         self.ask()
