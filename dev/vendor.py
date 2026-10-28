@@ -81,7 +81,9 @@ def tag_files(shelf, name, tag):
     with tarfile.open(fileobj=io.BytesIO(raw)) as tar:
         for m in tar.getmembers():
             if m.isfile() and m.name.startswith(prefix):
-                out[m.name[len(prefix):]] = tar.extractfile(m).read()
+                member = tar.extractfile(m)
+                assert member is not None, m.name
+                out[m.name[len(prefix):]] = member.read()
     if not out:
         raise SystemExit("vendor: no files at %s:%s" % (tag, prefix))
     return out

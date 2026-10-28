@@ -15,6 +15,7 @@ import argparse
 import ast
 import subprocess
 import sys
+from typing import override
 
 DEFS = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
 
@@ -69,16 +70,18 @@ class Renamer(ast.NodeTransformer):
     def __init__(self, old, new):
         self.old, self.new = old, new
 
-    def visit_Name(self, n):
-        if n.id == self.old:
-            n.id = self.new
-        return n
+    @override
+    def visit_Name(self, node: ast.Name) -> ast.AST:
+        if node.id == self.old:
+            node.id = self.new
+        return node
 
-    def visit_arg(self, n):
-        if n.arg == self.old:
-            n.arg = self.new
-        self.generic_visit(n)
-        return n
+    @override
+    def visit_arg(self, node: ast.arg) -> ast.AST:
+        if node.arg == self.old:
+            node.arg = self.new
+        self.generic_visit(node)
+        return node
 
 
 def dump(node):

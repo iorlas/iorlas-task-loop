@@ -18,6 +18,7 @@ import sys
 import time
 from collections import Counter
 from pathlib import Path
+from typing import Any
 
 from taskloop.adapters import beadtools, ident, landlock
 from taskloop.adapters import procs as sproc
@@ -62,10 +63,10 @@ def jaccard(a, b):
     return len(a & b) / float(len(a | b)) if a and b else 0.0
 
 
-def items(since, until, traces=None):
+def items(since, until, traces=None) -> list[dict[str, Any]]:
     """The went_badly items of the reflected runs ended in the window, oldest first."""
     path = traces or ident.config_dir() / "traces.jsonl"
-    out = []
+    out: list[dict[str, Any]] = []
     try:
         lines = Path(path).read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError:
@@ -95,9 +96,9 @@ def items(since, until, traces=None):
     return sorted(out, key=lambda i: i["t"])
 
 
-def cluster(its):
+def cluster(its: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Greedy, per cause class: an item joins the cluster of any item it shares a file with or says nearly the same as."""
-    cl = []
+    cl: list[dict[str, Any]] = []
     for it in its:
         for c in cl:
             if c["cause"] == it["cause"] and any(jaccard(it["tokens"], m["tokens"]) >= SIMILAR or
@@ -107,12 +108,12 @@ def cluster(its):
                 break
         else:
             cl.append({"cause": it["cause"], "items": [it]})
-    out = []
+    out: list[dict[str, Any]] = []
     for c in cl:
         m = c["items"]
         runs = sorted({i["run"] for i in m if i["run"]})
         counts = Counter(w for i in m for w in i["tokens"])
-        out.append({"cause": c["cause"], "title": min((i["what"] for i in m), key=len)[:100], "runs": runs,
+        out.append({"cause": c["cause"], "title": min((str(i["what"]) for i in m), key=len)[:100], "runs": runs,
                     "beads": sorted({i["bead"] for i in m if i["bead"]}), "repos": Counter(i["repo"] for i in m if i["repo"]),
                     "files": sorted(set().union(*[i["files"] for i in m]))[:8], "items": m,
                     "tokens": {w for w, _ in counts.most_common(12)}, "last": max(i["t"] for i in m)})
@@ -219,7 +220,7 @@ def acceptance(c):
             "went_badly item of cause '%s' saying: %s" % (c["beads"][0] if c["beads"] else "the beads above", c["cause"], c["title"]))
 
 
-def file_cluster(c, state, dry=False, repos=None):
+def file_cluster(c: dict[str, Any], state: dict[str, Any], dry=False, repos=None):
     """File or update the bead for one recurring cause. -> {action: filed|commented|skipped|none, bead, repo, cause, runs}."""
     repo = owner_repo(c, repos)
     res = {"cause": c["cause"], "title": c["title"], "repo": repo, "runs": c["runs"], "bead": "", "action": "none"}
@@ -233,7 +234,7 @@ def file_cluster(c, state, dry=False, repos=None):
                 e["closed"] = True  # its successor takes the cause from here
         old, bead = bead, ""
     if bead:
-        entry = next((e for e in state.get("filed", []) if e.get("bead") == bead and e.get("repo") == repo), None)
+        entry: dict[str, Any] | None = next((e for e in state.get("filed", []) if e.get("bead") == bead and e.get("repo") == repo), None)
         if entry is None:  # an open bead found by title: remember it, so its runs are commented once
             entry = {"cause": c["cause"], "repo": repo, "bead": bead, "tokens": sorted(c["tokens"]), "files": c["files"], "runs": [],
                      "at": time.time()}

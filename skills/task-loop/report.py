@@ -20,6 +20,7 @@ import re
 import statistics
 import subprocess
 import time
+from typing import Any
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -209,7 +210,7 @@ def crashes(repo, since, until, traces, alive=None, now=None):
     the engine caught). A run's .stderr is route.py's, where a worker's test tracebacks land too: never read."""
     alive = alive or run_alive
     now = time.time() if now is None else now
-    out = {}
+    out: dict[Any, dict[str, Any]] = {}
     log = paths.ConfigDir(ident.config_dir()).loop_log(wslots.repo_key(repo))
     for r in read_jsonl(log):
         try:
@@ -240,8 +241,7 @@ def crashes(repo, since, until, traces, alive=None, now=None):
         if live or (live is None and quiet < QUIET_MIN):
             continue
         last = (recs[-1].get("text") or "") if recs else ""
-        out[f.stem] = {"bead": m.group(1), "t": t, "run": f.stem,
-                       "why": "the engine log ends with no close: %s" % last[:120]}
+        out[f.stem] = {"bead": m.group(1), "t": t, "run": f.stem, "why": "the engine log ends with no close: %s" % last[:120]}
     for r in traces:  # the engine caught it and closed (engine.py: Engine.run): an engine bug all the same
         if overlaps(r, since, until) and (r.get("why") or "").startswith("failed: engine error"):
             out[r.get("run")] = {"bead": r.get("bead"), "t": r.get("started") or 0, "run": r.get("run"),
@@ -344,7 +344,7 @@ def scorecard(repo, since, until, base=None, comments_of=None, status_of=None, a
     lost = [x for x in lost_work(repo, since=since, base=base, status_of=status_of, traces=traces)
             if x["class"] in ("lost", "pending", "unknown")]
     mins = [x["minutes"] for x in rows if x["runs"]]
-    c = {"repo": repo, "since": since, "until": until, "beads": len(rows),
+    c: dict[str, Any] = {"repo": repo, "since": since, "until": until, "beads": len(rows),
          "landed": sum(x["state"] == "landed" for x in rows),
          "landed_no_ask": sum(x["state"] == "landed" and not x["asks"] for x in rows),
          "parked": sum(x["state"] == "parked" for x in rows), "paused": sum(x["state"] == "paused" for x in rows),
@@ -403,7 +403,7 @@ def planner_stats(since, until, prefixes=(), history=None, engine_dir=None):
     for bead, ins in sorted(calls.items()):
         kinds = {"full": 0, "amend": 0, "back": 0}
         for log in engine_dir.glob("%s-*.jsonl" % bead):
-            if not STEM.match(log.stem) or STEM.match(log.stem).group(1) != bead:
+            if not (stem := STEM.match(log.stem)) or stem.group(1) != bead:
                 continue
             for rec in read_jsonl(log):
                 if rec.get("kind") == "step_start" and rec.get("step") == "plan" and since <= (rec.get("t") or 0) <= until:

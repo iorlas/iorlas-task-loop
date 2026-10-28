@@ -311,13 +311,13 @@ class Race(unittest.TestCase):
                 if b[0] < a[1]:
                     self.assertNotEqual(a[2], b[2], "%s and %s in one slot at once%s" % (a[3], b[3], msg))
         # areas: no two beads of one area held at once, from each won claim to the release that follows it
-        held = {}
+        held: dict[str, list[list[float | None]]] = {}
         for c in claims:
             if c["op"] == "claim":
                 held.setdefault(c["bead"], []).append([c["t"], None])
             elif c["op"].startswith("release:") and held.get(c["bead"]) and held[c["bead"]][-1][1] is None:
                 held[c["bead"]][-1][1] = c["t"]
-        spans_area = sorted((t0, t1 or 1e18, b) for b, ts in held.items() for t0, t1 in ts if AREA.get(b))
+        spans_area = sorted((t0 or 0.0, t1 or 1e18, b) for b, ts in held.items() for t0, t1 in ts if AREA.get(b))
         for i, (a0, a1, a) in enumerate(spans_area):
             for b0, b1, b in spans_area[i + 1:]:
                 if b0 < a1 and AREA[a] == AREA[b]:
