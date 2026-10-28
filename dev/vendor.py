@@ -6,7 +6,7 @@
     python3 dev/vendor.py check [--shelf DIR]                   recompute every vendored tree hash; exit 1 on drift
 
 NAME is the shelf directory or the import name (process-lock or process_lock); the vendored directory uses the import name.
-Packages today: git_porcelain, atomic_io, jsonl_log, process_lock. src/ imports them by absolute name; the process edge
+Packages today: git_porcelain, atomic_io, jsonl_log, process_lock, stream_proc, child_env. src/ imports them by absolute name; the process edge
 (vendored.py, tests/support/paths.py) puts _vendor on sys.path.
 
 dev/vendor.json is a list of {name, shelf_tag, shelf_commit, tree_hash}. `sync` reads the files with `git archive` from the
