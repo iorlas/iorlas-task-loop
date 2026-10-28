@@ -38,6 +38,8 @@ TL = ROOT / "skills" / "task-loop" / "tl.py"
 RELEASE = ROOT / "dev" / "release.py"
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(ROOT / "tests"))
+sys.path.append(str(ROOT / "skills" / "task-loop" / "_vendor"))  # before the shelf imports below, as tests/support/paths.py does
+sys.path.append(str(ROOT / "src"))
 import stream_proc  # noqa: E402
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import tl  # noqa: E402
