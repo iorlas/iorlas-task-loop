@@ -34,18 +34,6 @@ def denied(tool, **args):
 
 
 class PreToolUse(unittest.TestCase):
-    def test_an_agent_call_without_a_model_is_denied_and_the_reason_lists_the_values(self):
-        why = denied("Agent", prompt="do it", description="x")
-        for model in ("sonnet", "opus", "haiku"):
-            self.assertIn(model, why)
-        self.assertEqual(json.loads(call("Agent", prompt="x"))["hookSpecificOutput"]["permissionDecision"], "deny")
-        self.assertEqual(len(why.splitlines()), 1)
-
-    def test_an_agent_call_with_a_model_or_a_fork_is_allowed(self):
-        self.assertEqual(call("Agent", prompt="x", model="sonnet"), "")
-        self.assertEqual(call("Agent", prompt="x", subagent_type="fork"), "")
-        self.assertNotEqual(call("Agent", prompt="x", model=" "), "")
-
     def test_pkill_and_killall_are_denied_wherever_they_stand_as_a_command(self):
         for cmd in ('pkill -f "unittest discover"', "killall python3", "cd x && pkill -f foo", "sudo pkill foo", "ls; killall node",
                     "sh -c 'pkill -f x'", "bash -c \"cd a && killall b\"", "/usr/bin/pkill -9 x", "echo hi\npkill foo"):

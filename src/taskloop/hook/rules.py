@@ -4,18 +4,10 @@ import shlex
 from collections.abc import Mapping
 from typing import Any
 
-MODELS = ("sonnet", "opus", "haiku", "fable")
 KILLERS = frozenset({"pkill", "killall"})
 SHELLS = frozenset({"sh", "bash", "zsh", "dash"})
 WRAPPERS = frozenset({"sudo", "exec", "env", "nohup", "time", "command", "xargs", "nice"})
 BREAKS = frozenset({";", "&", "|", "&&", "||", "(", ")"})
-
-
-def agent_needs_model(tool: str, args: Mapping[str, Any]) -> str:
-    forked = args.get("subagent_type") == "fork"  # a fork runs on its parent's model
-    if tool in ("Agent", "Task") and not forked and not str(args.get("model") or "").strip():
-        return f"Agent needs an explicit model: pass model as one of {', '.join(MODELS)}."
-    return ""
 
 
 def words(command: str) -> list[str]:
@@ -53,7 +45,7 @@ def no_kill_by_name(tool: str, args: Mapping[str, Any]) -> str:
     return ""
 
 
-RULES = (agent_needs_model, no_kill_by_name)
+RULES = (no_kill_by_name,)
 
 
 def deny_reason(tool: str, args: Mapping[str, Any]) -> str:

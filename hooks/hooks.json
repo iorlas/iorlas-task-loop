@@ -1,5 +1,5 @@
 {
-  "description": "task-loop: index each session's transcript for the dashboard, write the handoff before a compaction and give it back after, refuse an Agent call without a model and a pkill/killall.",
+  "description": "task-loop: index each session's transcript for the dashboard, write the handoff before a compaction and give it back after, refuse a pkill/killall.",
   "hooks": {
     "SessionStart": [
       {
@@ -17,7 +17,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Agent|Task|Bash",
+        "matcher": "Bash",
         "hooks": [
           {"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/hook.py\" pretool", "timeout": 3}
         ]
