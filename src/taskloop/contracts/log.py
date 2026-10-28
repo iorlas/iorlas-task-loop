@@ -265,6 +265,17 @@ class Reload(LogRec):
 
 
 @record
+class Artifacts(LogRec):
+    """The files ingest copied into the bead's artifact directory when a step ended (one record per ingest that copied something)."""
+
+    KIND: ClassVar[str] = "artifacts"
+    id: str  # the step that produced them
+    step: str
+    bead: str
+    names: list[str] = field(default_factory=list)
+
+
+@record
 class Warn(LogRec):
     KIND: ClassVar[str] = "warn"
     text: str
@@ -287,10 +298,10 @@ class Close(LogRec):
 
 EngineLog = (RunStart | StepStart | StepEnd | CallStart | CallEnd | CmdStart | CmdEnd | CheckStart | CheckEnd | GateStart | GateEnd
              | LandTry | WaitStart | WaitEnd | Lock | Unlock | VendorError | Kill | Overrun | RetryDecision | Transition
-             | Reload | Checks | Warn | Note | Close)
+             | Reload | Checks | Artifacts | Warn | Note | Close)
 ENGINE_LOG = table_of(RunStart, StepStart, StepEnd, CallStart, CallEnd, CmdStart, CmdEnd, CheckStart, CheckEnd, GateStart,
                       GateEnd, LandTry, WaitStart, WaitEnd, Lock, Unlock, VendorError, Kill, Overrun, RetryDecision, Transition,
-                      Reload, Checks, Warn, Note, Close)
+                      Reload, Checks, Artifacts, Warn, Note, Close)
 
 
 def decode(data: object) -> EngineLog:

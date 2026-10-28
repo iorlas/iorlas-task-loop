@@ -44,6 +44,41 @@ class Ingest(unittest.TestCase):
         self.assertEqual(artifacts.ingest(self.src / "missing", self.dest), [])
 
 
+class AtStepEnd(unittest.TestCase):
+    """The engine ingests as a step ends: one Artifacts record under that step, only for files new since the last step, no model call."""
+
+    def test_a_step_that_left_files_logs_one_record_before_its_end_and_a_later_step_logs_only_new_ones(self):
+        from taskloop.contracts import log
+        from taskloop.stores.memory import fake_stores
+        from taskloop.stores.runlog import RunLog
+        from taskloop.app.run.steps import Steps
+        with tempfile.TemporaryDirectory() as d:
+            src, dest = Path(d, "src"), Path(d, "dest")
+            src.mkdir()
+            stores = fake_stores()
+            rl = RunLog(stores.run_log("r"), None, frozenset(), None, lambda: 5.0, 0)
+            steps = Steps(rl, lambda: 5.0, None, None, artifacts.StepArtifacts("tl-1", src, dest, rl))
+            steps.begin("write", "write")
+            (src / "a.png").write_bytes(b"1")
+            steps.begin("checks", "checks")  # ends `write`
+            steps.end()  # ends `checks`: nothing new
+            steps.begin("write", "write")
+            (src / "b.pdf").write_bytes(b"2")
+            steps.end()
+            kinds = [(r.KIND, getattr(r, "names", None)) for r in (i.rec for i in stores.run_log("r").read_from().items)]
+            self.assertEqual([k for k in kinds if k[1]], [("artifacts", ["a.png"]), ("artifacts", ["b.pdf"])])
+            self.assertEqual([k[0] for k in kinds[:3]], ["step_start", "artifacts", "step_end"])
+            self.assertEqual(sorted(p.name for p in dest.iterdir()), ["a.png", "b.pdf"])
+
+
+class OnTheTimeline(unittest.TestCase):
+    def test_the_record_is_a_line_of_its_step_in_the_existing_style(self):
+        from taskloop.contracts import log
+        from taskloop_dash.views import nodes
+        got = nodes.line_of(log.Artifacts(t=3.0, id="n1", step="write", bead="tl-1", names=["a.png", "b.pdf"]), 7)
+        self.assertEqual(got, {"t": 3.0, "kind": "note", "text": "artifacts: a.png, b.pdf", "_i": 7})
+
+
 class Page(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

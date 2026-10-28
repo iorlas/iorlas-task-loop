@@ -98,6 +98,7 @@ class Term{
     if(k==='warn')return this.put(e.seq,el('div','row warn','⚠ '+e.text));
     if(k==='vendor_error'||k==='kill')return this.put(e.seq,el('div','row bad',k.replace('_',' ')+': '+(e.reason||e.what||'')+(e.why?' · '+e.why:'')+(e.lane?' · '+e.lane:'')+(e.error?' · '+e.error:'')));
     if(k==='lock'||k==='unlock')return this.put(e.seq,el('div','row note',k+' '+e.what+(e.holder?' · '+e.holder:'')+(e.secs!=null?' · '+dur(e.secs):'')));
+    if(k==='artifacts')return this.put(e.seq,el('div','row note','artifacts: '+(e.names||[]).join(', ')));
     if(k==='note')return this.put(e.seq,el('div','row note',e.text));
     const facts=Object.keys(e).filter(x=>!['t','k','src','seq','text','v'].includes(x)).map(x=>x+'='+(typeof e[x]==='object'?JSON.stringify(e[x]):e[x])).join(' ');
     this.put(e.seq,el('div','row note',k+': '+(e.text||'')+(facts?' · '+facts:'')));

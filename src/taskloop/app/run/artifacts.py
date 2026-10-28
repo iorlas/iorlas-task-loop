@@ -6,6 +6,9 @@ from pathlib import Path
 
 from atomic_io import atomic_write_bytes
 
+from taskloop.contracts.log import Artifacts
+from taskloop.stores.runlog import RunLog
+
 SECRET_NAMES = (".env*", "*.pem", "*.key", "id_*", "*token*", "*secret*")
 MAX_BYTES = 25 * 1024 * 1024
 
@@ -16,8 +19,9 @@ def skipped(p: Path) -> bool:
     return p.is_symlink() or not p.is_file() or hidden or any(fnmatch.fnmatch(name, pat) for pat in SECRET_NAMES)
 
 
-def ingest(src: Path, dest: Path) -> list[str]:
-    """Copy each regular file directly under `src` into `dest`; the names copied. A name already there is replaced."""
+def ingest(src: Path, dest: Path, seen: dict[str, tuple[int, int]] | None = None) -> list[str]:
+    """Copy each regular file directly under `src` into `dest`; the names copied. A name already there is replaced. With `seen`
+    (name -> (mtime, size) of what an earlier call copied) a file that has not changed since is not copied again."""
     got: list[str] = []
     try:
         files = sorted(src.iterdir())
@@ -25,14 +29,34 @@ def ingest(src: Path, dest: Path) -> list[str]:
         return got
     for f in files:
         try:
-            if skipped(f) or f.stat().st_size > MAX_BYTES:
+            st = f.stat()
+            if skipped(f) or st.st_size > MAX_BYTES or (seen is not None and seen.get(f.name) == (st.st_mtime_ns, st.st_size)):
                 continue
             dest.mkdir(parents=True, exist_ok=True)
             atomic_write_bytes(dest / f.name, f.read_bytes(), fsync=False)
             got.append(f.name)
+            if seen is not None:
+                seen[f.name] = (st.st_mtime_ns, st.st_size)
         except OSError:
             continue
     return got
 
 
-__all__ = ["MAX_BYTES", "SECRET_NAMES", "ingest"]
+class StepArtifacts:
+    """Called as a step ends: copies what the run left in `src` (<worktree>/.task/<bead>/artifacts) and, when something new was
+    copied, writes one Artifacts record under that step. Never raises into the engine; calls no model."""
+
+    def __init__(self, bead: str, src: Path, dest: Path, log: RunLog) -> None:
+        self.bead, self.src, self.dest, self.log = bead, src, dest, log
+        self.seen: dict[str, tuple[int, int]] = {}
+
+    def __call__(self, step_id: str, step: str) -> None:
+        try:
+            names = ingest(self.src, self.dest, self.seen)
+            if names:
+                self.log.emit(Artifacts(id=step_id, step=step, bead=self.bead, names=names))
+        except Exception as e:  # pictures are never worth a run
+            self.log.warn(f"artifacts: {type(e).__name__}: {e}")
+
+
+__all__ = ["MAX_BYTES", "SECRET_NAMES", "StepArtifacts", "ingest"]

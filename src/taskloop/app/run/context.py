@@ -7,10 +7,12 @@ from typing import Any
 
 from taskloop.app.checks.checklog import CheckLog
 from taskloop.app.run import console
+from taskloop.app.run.artifacts import StepArtifacts
 from taskloop.app.run.budget import Budget
 from taskloop.app.run.calls import Calls
 from taskloop.app.run.steps import Steps
 from taskloop.contracts.config import EngineConfig
+from taskloop.contracts.paths import TASK_EXCLUDE, ConfigDir
 from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
 
@@ -60,7 +62,7 @@ class RunContext:
         now = now or clock.now
         seen = stores.run_log(run).read_from()
         log = RunLog(stores.run_log(run), echo, console.QUIET, console.line(verbose), now, len(seen.items) + seen.skipped)
-        steps = Steps(log, now, guard, on_step)
+        steps = Steps(log, now, guard, on_step, StepArtifacts(bead, wt / TASK_EXCLUDE.rstrip("/") / bead / "artifacts", ConfigDir().artifacts(bead), log))
         return cls(
             bead,
             cfg,

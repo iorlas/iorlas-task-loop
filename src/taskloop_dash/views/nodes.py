@@ -55,6 +55,8 @@ def line_of(r: rec.EngineLog, index: int) -> dict | None:
         }
     if isinstance(r, (rec.Note, rec.Warn)):
         return {"t": r.t, "kind": r.KIND, "text": r.text, "_i": index}
+    if isinstance(r, rec.Artifacts):
+        return {"t": r.t, "kind": "note", "text": "artifacts: " + ", ".join(r.names), "_i": index}
     return None
 
 

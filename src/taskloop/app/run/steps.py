@@ -27,8 +27,9 @@ class Steps:
         clock: Callable[[], float],
         guard: Callable[[str], None] | None = None,
         on_begin: Callable[[str], None] | None = None,
+        on_end: Callable[[str, str], None] | None = None,
     ) -> None:
-        self.log, self.clock, self.guard, self.on_begin = log, clock, guard, on_begin
+        self.log, self.clock, self.guard, self.on_begin, self.on_end = log, clock, guard, on_begin, on_end
         self.n = 0  # steps begun in this run (kept across a move to a newer install)
         self.cur: Open | None = None
         self.last: Open | None = None
@@ -60,6 +61,8 @@ class Steps:
     def end(self, outcome: str = "") -> None:
         c, self.cur = self.cur, None
         if c:
+            if self.on_end:
+                self.on_end(c.id, c.step)  # before the end record, so what it writes belongs to this step
             self.log.emit(
                 StepEnd(id=c.id, step=c.step, outcome=c.outcome or outcome or "done", detail=c.detail, secs=round(self.clock() - c.t))
             )
