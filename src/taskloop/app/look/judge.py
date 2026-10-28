@@ -67,7 +67,7 @@ class Judge:
         reqs = [r for r in w.get("shots") or [] if isinstance(r, dict)]
         if not reqs:
             return ""
-        if e.stoppable_checks(dict(st, checks=[]), name, groups=("static",)).failed:
+        if e.stage_checks.stoppable(dict(st, checks=[]), name, groups=("static",)).failed:
             return ""  # the full checks show it to the writer; no render over a red static check
         e.look_done += 1
         rnd = e.look_done

@@ -55,7 +55,7 @@ class Attempts:
         rc, tail = self.host.sh(argv_of(c.cmd), timeout=c.wall_min * 60, save=log, env=env, what="check")
         seen = self._read(log, tail)
         took = time.time() - t0
-        self.host.note_slot_waits(seen, took)
+        self.host.waits.note_slot_waits(seen, took)
         return rc, tail, seen, took
 
     @staticmethod
@@ -92,12 +92,12 @@ class Attempts:
         started = time.time() - out.secs
         for n, wait in enumerate(retry.lock_waits(), 1):
             self.host.warn(f"`{c.id}` is held by an editor or project lock; waiting {wait} s ({n})")
-            wid = self.host.wait_start(WaitWhat.EDITOR_LOCK)
+            wid = self.host.waits.start(WaitWhat.EDITOR_LOCK)
             self.sleep(wait)
-            self.host.add_wait(wait, WaitWhat.EDITOR_LOCK, wid)
+            self.host.waits.add(wait, WaitWhat.EDITOR_LOCK, wid)
             rc, tail = self.host.sh(argv_of(c.cmd), timeout=c.wall_min * 60, save=log, env=env, what="check")
             seen = self._read(log, tail)
-            self.host.note_slot_waits(seen, time.time() - started)
+            self.host.waits.note_slot_waits(seen, time.time() - started)
             if rc == 0 or matchers.failure_kind(seen) != "lock":
                 break
         if rc and matchers.failure_kind(seen) == "lock":

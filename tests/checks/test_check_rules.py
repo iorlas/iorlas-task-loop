@@ -129,7 +129,7 @@ class Retries(Base):
     def host(self):
         calls = []
         h = SimpleNamespace(killed=False, wall_hit=False, wt=Path(self.tmp.name), warned=[], calls=calls,
-                            warn=lambda t: h.warned.append(t), note_slot_waits=lambda *a: None,
+                            warn=lambda t: h.warned.append(t), waits=SimpleNamespace(note_slot_waits=lambda *a: None),
                             sh=lambda cmd, **kw: (calls.append(cmd), (1, "AssertionError: 1 != 2"))[1])
         return h
 

@@ -70,6 +70,12 @@ from taskloop.app.write.handoff import Handoff
 from taskloop.app.write.stage_loop import StageLoop
 from taskloop.app.run.calls import timing
 from taskloop.app.run.resume import Resume
+from taskloop.app.run.blocked import Blocked, FixFailed, blocked_for
+from taskloop.app.run.waits import Waits
+from taskloop.app.run.delegation import Delegation
+from taskloop.app.run.ask_flow import AskFlow
+from taskloop.app.run.stage_checks import StageChecks
+from taskloop.app.run.run_once import RunOnce
 from taskloop.app.land.closer import Closer
 from taskloop.app.land.fixer import Fixer
 from taskloop.app.land.lander import Lander
@@ -192,25 +198,15 @@ TRANSIENT_PUSH = re.compile(r"curl \d+|Broken pipe|Connection (?:reset|timed out
 
 
 
-class Blocked(Exception):
-    """A stop. kind: the outcome.Kind that says what the engine does at the close (POLICY). spec: the AskSpec of an ask kind (what
-    the owner is asked, built from facts at the raise site); a stop that is no ask carries none."""
-
-    def __init__(self, why, spec=None, kind=None):
-        super().__init__(why)
-        self.why, self.spec, self.kind = why, spec, kind
-
-
-class FixFailed(Blocked):
-    """A conflict fix round that could not finish (no rounds left, or the rebase would not continue): a resume salvage starts again."""
-
-
 @carries_state
 class Engine(StateAttrs):
     stop_pending = False  # run_bead sets it when a SIGTERM came during the claim
     tree_memo: Any = None  # (git status, file stats) -> tree hash, of the last tree_hash()
     done: list[str]  # RunState fields the tests assign (the type checker saw them assigned in the moved methods before)
     writer_said: str
+    plan_data: Any
+    accepted: list[int]
+    stage_tree: str
 
     def __init__(self, bead, wt, cfg, dry_run=False, verbose=True, store=None, route=seams.DelegateRoute(), clock=None, git=None,
                  stores=None, fresh=False):
@@ -277,7 +273,7 @@ class Engine(StateAttrs):
         c: Any = self.ctx
         self.log, self.steps, self.budget, self.calls, self.checklog = c.log, c.steps, c.budget, c.calls, c.checklog
         self.checker = Checker(self, lambda secs: self.halt_point(wait=secs))
-        self.delegate_route(quiet=True)
+        self.delegation.route(quiet=True)
         if self.reexec:
             self.reload.restore_run()
         elif pause:
@@ -288,27 +284,6 @@ class Engine(StateAttrs):
     t0, waited, labels, cost = (property(lambda obj, k=k: getattr(obj.budget, k), lambda obj, v, k=k: setattr(obj.budget, k, v))
                                 for k in ("t0", "waited", "labels", "spent"))
 
-    def delegate_route(self, quiet=False):
-        """The delegate for the next call (tl-6ax): resolved again each call (a configured path, then the pin, then the installed
-        one). A refused one (another contract, a pin that is gone) keeps the one in use (noted); with none in use the run says why."""
-        new = self.router.resolve(self.cfg.delegate)
-        if isinstance(new, dg.Refusal):
-            if self.resolved is None:
-                self.refusal = new
-            elif not quiet:
-                self.log.note("delegate not switched: %s %s; keeping %s" % (new.kind, new.detail, self.route))
-            return self.route
-        if self.resolved is not None and new.route != self.resolved.route and not quiet:
-            self.log.note("delegate switched: %s -> %s" % (self.route, new.route))
-        self.resolved, self.route, self.contract, self.refusal = new, new.route, new.contract, None
-        if not quiet:
-            self.log.note("delegate call via %s" % self.route)
-        return self.route
-
-    def net_probe(self):
-        """The network probe: a test's, else delegate's `route.py net`."""
-        return self.probe or dg.RouteProbe(self.route)
-
     def call_dir(self):
         return ident.config_dir() / "checkpoints"
 
@@ -317,13 +292,10 @@ class Engine(StateAttrs):
             (self.run_dir / "plan.json").write_text(json.dumps(checks_to_wire(self.plan_data), indent=1))
 
     def blocked_for(self, why, kind, stop=None, spec=None, fix=False):
-        """The Blocked a step ends with: `kind` is an outcome.Kind name; `stop` the stop that decided it; `spec` the ask it carries;
-        `fix`: a conflict fix round that could not finish (a resume salvage starts again)."""
-        err = (FixFailed if fix else Blocked)(why, spec, kind=oc.Kind[kind])
-        err.stop = stop
-        return err
+        return blocked_for(why, kind, stop, spec, fix)
 
-    FixFailed = FixFailed
+    def run_checks(self, *a, **kw):
+        return self.stage_checks.run(*a, **kw)
 
     def git_in(self, path, *a):
         return gitrepo.git(*a, cwd=path)
@@ -356,6 +328,10 @@ class Engine(StateAttrs):
                                             close_move=outcomes.close_move, reflection_text=outcomes.reflection_text, why_code=runtrace.why_code,
                                             config_dir=ident.config_dir()))
 
+    waits = cached_property(Waits)
+    delegation = cached_property(Delegation)
+    ask_flow = cached_property(AskFlow)
+    stage_checks = cached_property(StageChecks)
     cases = cached_property(Cases)
     reload = cached_property(Reload)
     records = cached_property(Records)
@@ -419,63 +395,6 @@ class Engine(StateAttrs):
                 if ln:
                     say("           %s" % ln[:400])
 
-    def wait_start(self, what, holder="", until=None):
-        """A wait begins (before the sleep, so a wait still going shows): its id, which add_wait closes."""
-        wid = self.log.next_id("w")
-        self.log.emit(rec.WaitStart(id=wid, what=what, holder=holder, until=until))
-        return wid
-
-    def add_wait(self, secs, what, wid=None):
-        """`secs` spent waiting for a shared resource (not the budget's), the end of the wait `wid` (one is written when it was not begun)."""
-        secs = self.budget.wait(secs)
-        if wid or secs > 0:
-            wid = wid or self.wait_start(what)
-            if secs > 0:
-                self.log.note("waited %d min for %s: not counted in budget_min" % (secs // 60, what.value.replace("_", " ")))
-            self.log.emit(rec.WaitEnd(id=wid, secs=round(secs), in_budget=False))
-
-    @contextlib.contextmanager
-    def locked(self, what, path, holder=None):
-        """landlock.os_lock with a wait recorded as its own segment (tl-9h2): the open step ends before the wait starts (it was
-        booked to the step before), and the wait's records name the lock, who held it and how long it took. The lock is a record
-        of its own while held. tl-y35: the wait is a wait for a shared resource like any other: it is added to `waited`, so
-        budget_min does not count it. Timed on self.clock."""
-        who, t_req, wid = [], [self.clock.now()], []
-
-        def waiting(w):
-            who.append(w)
-            self.steps.end()
-            t_req[0] = self.clock.now()  # the wait starts when the step before it has ended
-            wid.append(self.wait_start(WaitWhat(what), w))  # a wait still going (or cut off) shows up
-            self.log.note("waiting for the %s (held by %s)" % (what.replace("_", " "), w))
-        with self.os_lock(path, holder or self.bead, waiting, check=self.halt_point):
-            if who:
-                secs = max(0.0, self.clock.now() - t_req[0])
-                self.waited += secs
-                self.log.emit(rec.WaitEnd(id=wid[0], secs=round(secs), in_budget=False))
-            held = self.clock.now()
-            self.log.emit(rec.Lock(what=what.removesuffix("_lock"), holder=holder or self.bead))
-            try:
-                yield path
-            finally:
-                self.log.emit(rec.Unlock(what=what.removesuffix("_lock"), secs=round(self.clock.now() - held, 1)))
-
-    def note_slot_waits(self, text, wall):
-        """A check's output says how long it queued for a Unity slot ("unity-slot: x got slot 0 after 686s"). The output
-        is not trusted: all the waits in one run together are at most that run's wall time."""
-        total = slot_wait_secs(text)
-        self.add_wait(min(total, wall), WaitWhat.UNITY_SLOT)
-
-    def budget_check(self):
-        over = self.budget.over()
-        if over:
-            steps = outcomes.run_breakdown(self.log_path, self.steps.cur)
-            went = ", ".join("%s %d min (%d round%s)" % (b.step, b.minutes, b.rounds, "" if b.rounds == 1 else "s") for b in steps)
-            raise Blocked("over budget: %s%s%s" % (", ".join(over), (". Where it went: " + went) if went else "",
-                                                   (" (%d min waiting for shared resources not counted)" % (self.waited // 60))
-                                                   if self.waited >= 60 else ""),
-                          askspecs.over_budget(over, steps, self.waited // 60), kind=oc.Kind.ASK_BUDGET)
-
     # -- AI node
     def ai(self, node, title, prompt, *a, **kw):
         """One AI node, then the tree check: a worker that wrote core.worktree is caught before review or land."""
@@ -522,6 +441,7 @@ class Engine(StateAttrs):
         return Verifier(self)
 
     Blocked = Blocked  # the stop a step raises: components catch it through the host
+    FixFailed = FixFailed
 
     @cached_property
     def worker(self):
@@ -619,116 +539,7 @@ class Engine(StateAttrs):
 
     # -- tl-bxk.13.8: notes shared by the tasks of one repo (docs/design/stages.md section 6)
     def run(self):
-        return self.run_once()
-
-    def run_once(self):
-        outcome, why, sha, spec, kind = "failed", "", "", None, oc.Kind.FAULT_ENGINE
-        hb = Lease(self.store, self.bead, os.environ.get("TASK_LOOP_SLOT_BEAD", ""))
-        ck = self.checkpoints.read()
-        self.prev_ck = ck.run if ck else ""
-        try:
-            if self.stop_pending or self.halt.is_set():  # stopped during the claim (run_bead) or before the engine ran
-                raise Blocked("failed: stopped (SIGTERM)", kind=oc.Kind.PAUSE_KILLED)
-            bead = beadtools.peek(self.store, self.bead)
-            if not bead:
-                raise Blocked("failed: bead %s not found" % self.bead, kind=oc.Kind.FAULT_INFRA)
-            self.bead_title, self.bead_parent = bead.title, bead.parent
-            hb.start()
-            self.delegate_route()
-            if not self.route:
-                why = self.refusal or dg.Refusal("not_installed")
-                raise Blocked("failed: the engine needs the iorlas-delegate plugin that speaks contract %d (%s %s); update both: "
-                              "claude plugin update iorlas-delegate@iorlas-marketplace" % (dg.CONTRACT, why.kind, why.detail),
-                              kind=oc.Kind.FAULT_CONTRACT_SKEW)
-            self.log.note("workers: delegate %s (contract %d)" % (self.route, dg.CONTRACT))
-            self.log.note("task-loop %s" % (ident.plugin_version() or "(unknown version)"))
-            self.tree.reset(bead)
-            self.budget.labels = list(bead.labels)
-            self.check_ask()
-            self.planner.cap.grant()
-            written = self.planner.cap.answered_words() if self.answered and self.answered.ask_class == AskClass.MISSING_CRITERIA else ""
-            if not AcceptanceText.present(bead) and not written:
-                raise Blocked("ticket: the bead has no acceptance criteria", askspecs.missing_criteria(), kind=oc.Kind.ASK_TICKET)
-            self.scope = AcceptanceText.text(bead) or written
-            plan, i, state = self.resume.point()
-            self.records.log_run()
-            # tl-fsj: the configured checks come from the base's config, so the tree they run on must have what the base has; every
-            # resume rebases first, a plan to make or a stage to go on with (lifesim: 8 beads parked on 'just fmt-check-changed')
-            at_land = plan is not None and (i >= len(plan["stages"]) or (state or {}).get("fix"))  # a conflict there is the writer's fix round
-            moved = "" if at_land else self.rebase.onto_base(salvage=plan is not None)  # (no plan: nothing accepted to salvage)
-            if moved == "conflict-fixable":
-                self.plan_data = self.plan_data or plan
-                moved = self.rebase.salvage()
-            if moved == "conflict" and self.rebase.start_again("Its work: %s" % (self.git("log", "--oneline", "-n", "3", "%s..HEAD" % self.cfg.base) or "").replace("\n", "; ")):
-                plan, i, state = None, 0, None
-            elif moved == "rebased" and plan is not None:
-                self.stage_tree = ""  # the stage's diff starts at the base now: the rebase moved what it was measured from
-            if plan is None:  # a move here loses nothing: the new image reads the same checkpoint (or none) and plans
-                self.reload.safe_point("plan")
-            if plan is None:
-                plan, i, state = self.planner.plan(again=self.replan_first), 0, None
-            while i < len(plan["stages"]):
-                d = self.stage_loop.run(plan, i, state)
-                state = None
-                if d == "replan":
-                    if self.pending_land_validation:
-                        self.pending_land_validation += "\n" + self.stuck_why
-                        self.checkpoints.save(stage=i, rounds=0, n=0, feedback="", step="write")
-                    self.replans += 1
-                    self.stats["replans"] = replans = self.replans
-                    if replans > int(self.cfg.max_replans) + self.extra:
-                        raise self.planner.cap.blocked("stage %d stuck after %s rounds. What failed: %s" % (
-                            i + 1, self.cfg.max_rounds, self.stuck_why[:600]))
-                    self.accepted = []
-                    plan = self.planner.plan(again=True)
-                    i = 0
-                    continue
-                self.accepted.append(i)
-                self.done.append(plan["stages"][i]["goal"])
-                i += 1
-                if i == len(plan["stages"]):
-                    self.pending_land_validation = ""  # every recovery stage passed checks and review
-                self.checkpoints.save(stage=i, rounds=0, n=0, feedback="", step="write" if i < len(plan["stages"]) else "land")
-                if i == len(plan["stages"]):
-                    self.reload.safe_point("land")  # the checkpoint says land: the close and the land run on the newest code
-            if self.render_stale and self.last_reqs and self.pictures.shot_methods() and not self.dry:
-                # code changed after the last render (a fix round past the render rounds): the pictures that land show the tree
-                self.log.note("rendering the last shots again: code changed since the pictures were made")
-                self.pictures.render_shots(self.last_reqs, self.look_done + 1)
-            gaps = self.self_verify([u for u in self.unchecked if u["kind"] in UNCHECKED_KINDS or self.judge.is_look(u)])
-            if gaps:
-                raise Blocked("verify: before land, the workers could not check: " + "; ".join(
-                    "%s (%s%s)" % (u["what"], u["kind"], ("; " + u["why"]) if u.get("why") else "") for u in gaps),
-                    askspecs.external_fact([u["what"] for u in gaps]), kind=oc.Kind.ASK_DECISION)
-            sha = self.lander.finish(bead)
-            outcome = "landed" if sha else "done"
-            kind = oc.Kind.LANDED if sha else oc.Kind.DONE
-            if sha:
-                self.owner_look.file_owner_look()  # before the checkpoint goes: a crash from here on still files it on resume
-            self.checkpoints.drop()
-        except Blocked as b:
-            kind = b.kind
-            outcome = outcomes.outcome_for(kind, b.why)
-            why, spec = b.why, b.spec
-        except Exec:
-            pass  # the process image is gone; nothing below runs in a real exec
-        except Exception as e:  # the close-out must run whatever broke
-            outcome, why, kind = "failed", "failed: engine error %s: %s" % (type(e).__name__, e), oc.Kind.FAULT_ENGINE
-        finally:
-            if self.moved:
-                hb.stop()
-            else:
-                with self.stop_deferred():  # a stop here would skip the close: no trace, no bead update
-                    if self.landed_sha and outcome != "landed":  # stopped after the push: on the base, close it as landed
-                        self.warn("%s after the land went through; closing it landed" % (why or outcome))
-                        outcome, why, sha, spec, kind = "landed", "", self.landed_sha, None, oc.Kind.LANDED
-                    hb.stop()
-                    reexec.drop_reexec(self.bead)  # a run that ended is no crash after an exec
-                    if kind == oc.Kind.PAUSE_NETWORK and not self.dry:
-                        self.reload.save_net_pause()
-                    self.outcome, self.why = outcome, why
-                    self.closer.close(outcome, why, sha, spec, kind)
-        return 0 if self.moved or outcome in ("landed", "done") else 2
+        return RunOnce(self).go()
 
     def result(self):
         """The run's outcome for the loop: landed (closed, done too), parked (blocked for the owner: an ask, or one
@@ -749,38 +560,6 @@ class Engine(StateAttrs):
         return (gitrepo.git("diff", self.checkout.base_sha(), tree, cwd=self.wt) if tree else "") or ""
 
     # -- review and verify (src/taskloop/app/review): the engine lends its state, the components do the work
-    def self_verify(self, gaps):
-        return self.verifier.run(gaps)
-
-    def ledger_route(self, what):
-        return self.routing.ledger_route(what)
-
-    def engine_does(self, what):
-        return self.routing.engine_does(what)
-
-    def engine_steps(self, gaps):
-        return self.routing.engine_steps(gaps)
-
-    def resolve_kind(self, u, a):
-        return self.routing.resolve_kind(u, a)
-
-    def route_left(self, left):
-        return self.routing.route_left(left)
-
-    def backed_by_leftover(self, what):
-        return self.routing.backed_by_leftover(what)
-
-    def add_unverified(self, u, why):
-        self.routing.add_unverified(u, why)
-
-
-
-
-
-
-
-
-
     _probe: PathProbe | None = None
 
     def shell_probe(self):
@@ -790,63 +569,6 @@ class Engine(StateAttrs):
         return self._probe
 
     # -- checkpoints: where a stopped run was, outside the worktree, so the next run goes on from there
-    def check_ask(self):
-        """An open ask is never asked again: with the bead unchanged the run waits; a change (the owner's comment or edit) or a
-        filed answer answers it, and the run goes on from its checkpoint."""
-        state, a = raiser.check(self.stores.asks, self.bead, self.brief_hash, self.fresh, time.time())
-        if state == "wait" and a:
-            raise Blocked(raiser.waiting_line(a), kind=oc.Kind.WAIT_ASK)
-        if state == "answer" and a:
-            self.answered = a
-            self.briefs.export()  # the brief the workers read now carries the owner's answer
-            self.log.note("ask %s (%s) is answered: %s" % (a.id, a.kind.value, "the owner's answer is filed on it" if a.answer
-                                                           else "the bead changed since it was asked"))
-
-    def raise_ask(self, spec, why, kind):
-        """File the ask the stop carries. Lint decides whether it is one an owner can answer: if not, nothing is filed and the stop is
-        the engine's own fault, never a prose question. -> the Ask, or None."""
-        common = self.git("rev-parse", "--path-format=absolute", "--git-common-dir")
-        at = raiser.Asking(bead=self.bead, run=self.log_path.stem, brief_hash=self.brief_hash, now=time.time(), why=why,
-                           repo=str(Path(common).parent) if common else str(self.wt), title=self.bead_title)
-        a, problems = raiser.raise_ask(self.stores.asks, spec, at)
-        if a is None:
-            self.warn("the ask is not one an owner can answer (%s): %s" % ("; ".join(problems), spec.decision[:200]))
-            return None
-        moved = raiser.leave_queue(self.store, self.bead, self.cfg.pick_label or "", self.cfg.needs_info_label or "") if (
-            a.kind.value in ("decision", "ticket") and not self.dry) else ""
-        self.comment(asktext.comment(a) + moved)
-        return a
-
-    def review_cap(self):
-        """A run's reviews are counted once for the whole run, a replan does not start them again (engine.max_total_reviews)."""
-        cap = int(self.cfg.max_total_reviews)
-        if cap and self.stats["reviews"] > cap:
-            raise Blocked("%d reviews in this run (the limit is %d, replans included): it needs the owner's hint\n%s" % (
-                self.stats["reviews"], cap, self.stuck_why[:600]),
-                          askspecs.open_question("%d reviews ran in this run (the limit is %d, replans included). %s" % (
-                              self.stats["reviews"], cap, self.stuck_why[:600]), None), kind=oc.Kind.ASK_STUCK)
-
-    def stoppable_checks(self, *a, **kw):  # run_checks, then a stop (it ended a check, which reports itself failed) ends the run here
-        run = self.run_checks(*a, **kw)
-        self.halt_point()
-        return run
-
-    def run_checks(self, st, name, acceptance_first=False, groups=None, conflict_fix=None, **meta):
-        """One engine step, no AI: the repo's checks and the stage's acceptance checks (Checker.run). -> the round's CheckRun."""
-        try:
-            run = self.checker.run(st["checks"], name, markers=self.MARKERS, acceptance_first=acceptance_first, groups=groups,
-                                   conflict_fix=conflict_fix, **meta)
-        except CheckFault as e:
-            raise Blocked(e.text, kind={CheckFaultKind.STALE_BASE: oc.Kind.FAULT_STALE_BASE, CheckFaultKind.KILLED: oc.Kind.PAUSE_KILLED}[e.kind])
-        except CheckStuck as e:
-            self.assert_tree("checks", "after")
-            raise Blocked("the same checks failed with the same output in %d rounds in a row: more writes will not fix them; it needs the "
-                          "owner's hint\nsignature: %s\n%s" % (e.rounds, e.signature[:400], check_evidence.failure_brief(self.checker.reds(), self.run_dir)),
-                          askspecs.no_progress("the same red checks", e.rounds, e.signature),
-                          kind=oc.Kind.ASK_STUCK)
-        self.assert_tree("checks", "after")
-        return run
-
     MARKERS_ARGV = ["python3", str(Path(__file__).with_name("markers.py"))]  # exit 1 and the lines when a conflict marker is in the tree
     MARKERS = text_of(MARKERS_ARGV)
 

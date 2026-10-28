@@ -117,7 +117,7 @@ class NoBlock(unittest.TestCase):
             return "stuck"  # the fix round did not pass its checks and review
         with mock.patch.object(e, "ai", return_value=(open_as("checkable"), None)), mock.patch.object(e.fixer, "fix", side_effect=fix):
             with self.assertRaises(engine.Blocked) as ctx:
-                e.self_verify([IQAD])
+                e.verifier.run([IQAD])
         self.assertEqual(len(rounds), 2)  # one per round of the budget, then stuck
         self.assertIn("it needs the owner's hint", ctx.exception.why)
         self.assertEqual(e.unverified, [])
@@ -171,19 +171,19 @@ class NoBlock(unittest.TestCase):
     def test_an_engine_step_is_settled_only_when_the_engine_will_do_it(self):
         e = self.unit()
         claim = "the follow-up beads cover all nine objects correctly"
-        self.assertFalse(e.engine_does(claim))
-        self.assertFalse(e.engine_does(YXBB_7["what"]))  # the plan has no leftovers: nothing is filed
+        self.assertFalse(e.routing.engine_does(claim))
+        self.assertFalse(e.routing.engine_does(YXBB_7["what"]))  # the plan has no leftovers: nothing is filed
         e.plan_data = PLAN_LEFT
-        self.assertFalse(e.engine_does(claim))  # a claim about the result, not about the filing
-        self.assertTrue(e.engine_does(YXBB_7["what"]))
-        self.assertTrue(e.engine_does(FLD_25_16["what"]))
-        self.assertTrue(e.engine_does("The gate runs at land"))
-        self.assertTrue(e.engine_does("the engine closes the bead"))
-        self.assertFalse(e.engine_does("screenshots are copied into the repo"))  # no visual paths set
+        self.assertFalse(e.routing.engine_does(claim))  # a claim about the result, not about the filing
+        self.assertTrue(e.routing.engine_does(YXBB_7["what"]))
+        self.assertTrue(e.routing.engine_does(FLD_25_16["what"]))
+        self.assertTrue(e.routing.engine_does("The gate runs at land"))
+        self.assertTrue(e.routing.engine_does("the engine closes the bead"))
+        self.assertFalse(e.routing.engine_does("screenshots are copied into the repo"))  # no visual paths set
         with mock.patch.object(e, "ai", return_value=(open_as("engine_step"), None)) as ai, \
                 mock.patch.object(e.fixer, "fix", return_value="accept") as fix:
             e.plan_data = PLAN
-            e.self_verify([{"what": claim, "kind": "engine_step"}])
+            e.verifier.run([{"what": claim, "kind": "engine_step"}])
         ai.assert_called_once()  # sent to the verifier, not settled blindly
         fix.assert_called_once()  # and, unproven, treated as checkable
 
@@ -192,38 +192,38 @@ class NoBlock(unittest.TestCase):
         item = {"what": "LotGrids.UseCellBeside picks the facing side", "kind": "external_fact"}
         diff = "+    public Cell UseCellBeside(Lot lot) {\n"
         with mock.patch.object(e, "diff_text", return_value=diff):
-            self.assertEqual(e.resolve_kind(item, {"kind": "external_fact", "source": SOURCE})[0], "checkable")
-            self.assertEqual(e.resolve_kind(dict(item, kind="taste"), {})[0], "checkable")
+            self.assertEqual(e.routing.resolve_kind(item, {"kind": "external_fact", "source": SOURCE})[0], "checkable")
+            self.assertEqual(e.routing.resolve_kind(dict(item, kind="taste"), {})[0], "checkable")
             with mock.patch.object(e, "ai", return_value=(open_as("external_fact"), None)), \
                     mock.patch.object(e.fixer, "fix", return_value="accept") as fix:
-                e.self_verify([item])
+                e.verifier.run([item])
         fix.assert_called_once()  # a proving round, not an unverified landing
         self.assertEqual(e.unverified, [])
         for what in ("see src/lots/grid.py for the rule", "the config.yaml key is read", "snake_case_name is unchanged in the diff"):
             with mock.patch.object(e, "diff_text", return_value="+ snake_case_name = 1\n"):
-                self.assertEqual(e.resolve_kind({"what": what, "kind": "taste"}, {})[0], "checkable", what)
+                self.assertEqual(e.routing.resolve_kind({"what": what, "kind": "taste"}, {})[0], "checkable", what)
         with mock.patch.object(e, "diff_text", return_value=""):  # a symbol not in the diff is no code of this task
-            self.assertEqual(e.resolve_kind({"what": "the MakeHuman licence is CC0", "kind": "external_fact"},
+            self.assertEqual(e.routing.resolve_kind({"what": "the MakeHuman licence is CC0", "kind": "external_fact"},
                                             {"source": SOURCE})[0], "external_fact")
 
     def test_an_external_fact_without_a_source_is_checkable(self):
         e = self.unit()
         item = {"what": "the dread pack costs 12 dollars", "kind": "external_fact"}
-        self.assertEqual(e.resolve_kind(item, {"kind": "external_fact", "source": ""})[0], "checkable")
-        self.assertEqual(e.resolve_kind(item, {"kind": "external_fact", "source": SOURCE})[0], "external_fact")
-        self.assertEqual(e.resolve_kind(dict(item, source=SOURCE), {})[0], "external_fact")
+        self.assertEqual(e.routing.resolve_kind(item, {"kind": "external_fact", "source": ""})[0], "checkable")
+        self.assertEqual(e.routing.resolve_kind(item, {"kind": "external_fact", "source": SOURCE})[0], "external_fact")
+        self.assertEqual(e.routing.resolve_kind(dict(item, source=SOURCE), {})[0], "external_fact")
 
     def test_a_kind_only_moves_toward_a_stricter_route(self):
         e = self.unit()
         fact = {"what": "the dread pack costs 12 dollars", "kind": "checkable"}
-        self.assertEqual(e.resolve_kind(fact, {"kind": "external_fact", "source": SOURCE})[0], "checkable")  # never looser
-        self.assertEqual(e.resolve_kind(fact, {"kind": "owner_decision"})[0], "owner_decision")
+        self.assertEqual(e.routing.resolve_kind(fact, {"kind": "external_fact", "source": SOURCE})[0], "checkable")  # never looser
+        self.assertEqual(e.routing.resolve_kind(fact, {"kind": "owner_decision"})[0], "owner_decision")
         for legacy in ("requirement", "case", "number", "tooling"):
             for loose in ("taste", "external_fact", "engine_step"):
                 u = {"what": "the menu reads well", "kind": legacy}
-                self.assertEqual(e.resolve_kind(u, {"kind": loose, "source": SOURCE})[0], legacy)
+                self.assertEqual(e.routing.resolve_kind(u, {"kind": loose, "source": SOURCE})[0], legacy)
         taste = {"what": "the menu reads well", "kind": "taste"}
-        self.assertEqual(e.resolve_kind(taste, {"kind": "checkable"})[0], "checkable")  # stricter is allowed
+        self.assertEqual(e.routing.resolve_kind(taste, {"kind": "checkable"})[0], "checkable")  # stricter is allowed
 
     def test_the_schemas_and_briefs_name_the_kinds(self):
         for node in ("write", "review"):

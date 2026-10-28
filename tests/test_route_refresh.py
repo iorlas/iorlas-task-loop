@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 import engine  # noqa: E402
+from taskloop.app.run.delegation import Delegation  # noqa: E402
 import seams  # noqa: E402
 from support.builders import cfg_with  # noqa: E402
 
@@ -21,7 +22,7 @@ OLD = {"contract": 2, "reasons": {}}
 
 
 class Stub:
-    """Just what Engine.delegate_route touches."""
+    """Just what Delegation.route touches."""
     def __init__(self, cfg, route):
         self.cfg, self.route, self.contract, self.notes = cfg_with(**cfg), route, {"contract": 3}, []
         self.resolved, self.refusal, self.router = None, None, seams.DelegateRoute()
@@ -51,7 +52,7 @@ class RouteRefresh(unittest.TestCase):
         return str(p / "route.py")
 
     def call(self, eng):
-        return engine.Engine.delegate_route(eng)
+        return Delegation(eng).route()
 
     def test_a_newer_delegate_appearing_between_two_calls_is_used_by_the_second(self):
         old = self.install("0.40.10")

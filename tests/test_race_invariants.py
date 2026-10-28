@@ -459,7 +459,7 @@ class Invariants(test_loop.Base):
         self.tracker()
         url = "file:///origin.git"
         eng = lambda: types.SimpleNamespace(land_lock_path=lambda: landlock.land_lock_path(url),  # noqa: E731 - Lander.lock with the parts it reads
-                                            locked=lambda what, path: landlock.os_lock(path, "bead"))
+                                            waits=types.SimpleNamespace(locked=lambda what, path: landlock.os_lock(path, "bead")))
         mu, inside, most, entered, joined = threading.Lock(), [0], [0], [], threading.Event()
 
         def section(cm):

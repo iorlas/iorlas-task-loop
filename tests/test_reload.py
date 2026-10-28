@@ -17,6 +17,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "skills" / "task-loop"
+DELEGATION = ROOT / "src" / "taskloop" / "app" / "run" / "delegation.py"
 sys.path.insert(0, str(SRC))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
@@ -269,13 +270,13 @@ class Reload(unittest.TestCase):
         c = wslots.load_cfg(str(self.wt))
         with mock.patch.object(dl, "resolve", side_effect=[self.res("/a/route.py"), self.res("/b/route.py"), self.res("/b/route.py")]) as fr:
             eng = engine.Engine("t-1", str(self.wt), c, store=self.store)
-            self.assertEqual(eng.delegate_route(), "/b/route.py")
-            self.assertEqual(eng.delegate_route(), "/b/route.py")
+            self.assertEqual(eng.delegation.route(), "/b/route.py")
+            self.assertEqual(eng.delegation.route(), "/b/route.py")
             self.assertEqual(fr.call_count, 3)
 
     def test_the_engine_and_lanes_never_store_a_resolved_route_or_a_delegate_module_across_calls(self):
         bad = []
-        for f in [SRC / "engine.py", *sorted((SRC / "lanes").glob("*.py"))]:
+        for f in [SRC / "engine.py", DELEGATION, *sorted((SRC / "lanes").glob("*.py"))]:
             tree = ast.parse(f.read_text(encoding="utf-8"))
             parents = {}
             for n in ast.walk(tree):
@@ -292,14 +293,14 @@ class Reload(unittest.TestCase):
                 if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "resolve" \
                         and isinstance(n.func.value, ast.Name) and n.func.value.id == "dl":
                     where = inside(n)
-                    if where not in ("__init__", "delegate_route", None) and f.name == "engine.py":
+                    if where not in ("__init__", "route", None) and f.name in ("engine.py", "delegation.py"):
                         bad.append("%s: dl.resolve called in %s" % (f.name, where))
                     stmt = parents.get(n)
                     while stmt is not None and not isinstance(stmt, (ast.Assign, ast.AnnAssign, ast.FunctionDef, ast.Module)):
                         stmt = parents.get(stmt)
                     if isinstance(stmt, ast.Assign):
                         for t in stmt.targets:
-                            if isinstance(t, ast.Attribute) and not (f.name == "engine.py" and t.attr == "route" and where in ("__init__", "delegate_route")):
+                            if isinstance(t, ast.Attribute) and not (f.name in ("engine.py", "delegation.py") and t.attr == "route" and where in ("__init__", "route")):
                                 bad.append("%s:%d stores dl.resolve() in .%s" % (f.name, n.lineno, t.attr))
                             if isinstance(t, ast.Name) and where is None:
                                 bad.append("%s:%d keeps dl.resolve() in module global %s" % (f.name, n.lineno, t.id))

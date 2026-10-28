@@ -61,7 +61,7 @@ class LinkCheck:
                 continue
             seen.add((path, url))
             if Wording.marked_unverified(line):
-                e.add_unverified({"what": f"{clip(line, 200)} (link: {url})", "kind": "external_fact", "source": url},
+                e.routing.add_unverified({"what": f"{clip(line, 200)} (link: {url})", "kind": "external_fact", "source": url},
                                  f"the engine could not open {url} ({why}); the owner checks it")
                 continue
             review["findings"].append(engine_finding(path, 0, (

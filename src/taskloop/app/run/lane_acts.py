@@ -30,7 +30,7 @@ class LaneActs:
     # -- the network gate
     def net_up(self) -> bool | None:
         """True, False, or None (the probe could not run): the host's probe, else delegate's `route.py net`."""
-        return self.e.net_probe().up()
+        return self.e.delegation.net_probe().up()
 
     def note_net(self, c: Any, stop: lp.Stop) -> None:
         """A stop of the machine that polls (the network): ask the probe now. Up at a stop is counted: three in five minutes mean the
@@ -44,7 +44,7 @@ class LaneActs:
         """Wait until the probe passes, at most max_s (backoff NET_BACKOFF); `up` is the probe's last answer. -> (seconds waited,
         whether the network is back). The time is neither the budget's nor a failure's: it is written as a wait."""
         e = self.e
-        waited, i, wid = 0.0, 0, e.wait_start(WaitWhat.NETWORK) if up is not False or max_s > 0 else None
+        waited, i, wid = 0.0, 0, e.waits.start(WaitWhat.NETWORK) if up is not False or max_s > 0 else None
         if up is not False:  # the probe says up, or could not run: a beat, then go and see
             e.halt_point(wait=NET_BACKOFF[0])
             waited, up = NET_BACKOFF[0], True
@@ -57,7 +57,7 @@ class LaneActs:
             if up is None:  # the probe could not run: go and see
                 up = True
         if wid:
-            e.add_wait(waited, WaitWhat.NETWORK, wid)
+            e.waits.add(waited, WaitWhat.NETWORK, wid)
         return waited, up is not False
 
     def ctx_of(self, c: Any) -> lp.Ctx:
@@ -132,9 +132,9 @@ class LaneActs:
                 "delegate_crash" if crash else "lane_wait",
                 f"{'delegate crashed' if crash else 'waited for a lane'} ({stop.reason}): {int(secs)} s",
             )
-            wid = e.wait_start(WaitWhat.DELEGATE_CRASH if crash else WaitWhat.LANE, stop.lane or "", e.clock.now() + secs)
+            wid = e.waits.start(WaitWhat.DELEGATE_CRASH if crash else WaitWhat.LANE, stop.lane or "", e.clock.now() + secs)
             e.halt_point(wait=secs)
-            e.add_wait(secs, WaitWhat.DELEGATE_CRASH if crash else WaitWhat.LANE, wid)
+            e.waits.add(secs, WaitWhat.DELEGATE_CRASH if crash else WaitWhat.LANE, wid)
         self.wc.charge(c, a.charges, secs)
         return self.wc.again(c, a.resume, stop=stop, note="")
 

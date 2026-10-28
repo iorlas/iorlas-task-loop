@@ -33,7 +33,7 @@ class Reflector:
         try:
             prompt = self.reflect_prompt(outcome, why)
             # a short wait: the close step ignores a stop while this runs (route.py adds 120 s to the limit)
-            e.delegate_route()
+            e.delegation.route()
             req = RunRequest(role="reviewer", brief_path="", cwd=str(e.wt), schema_path="", task=e.bead, parent=e.session,
                              title=f"{e.bead} · reflect", timeout_s=45)
             cid = e.calls.start("reflect", "reflect", "reviewer", False, e.live_n)

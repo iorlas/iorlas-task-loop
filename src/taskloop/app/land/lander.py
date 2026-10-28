@@ -80,7 +80,7 @@ class Lander:
 
     def lock(self) -> AbstractContextManager[Any]:
         """One land at a time per repo, across slots and sessions: an flock the OS drops when the process dies."""
-        return self.e.locked("land_lock", self.e.land_lock_path())
+        return self.e.waits.locked("land_lock", self.e.land_lock_path())
 
     def land(self) -> str:
         e = self.e
@@ -149,7 +149,7 @@ class Lander:
         checks = list(dict.fromkeys([c for s in stages for c in s["checks"]] + e.cases.case_checks()))
         # A stop during checks or just after they return must resume through acceptance: save that barrier first
         self.park("land retry checks require successful checks and review before landing", "land-verify-red")
-        results = e.stoppable_checks({"checks": checks, "files": []}, "land retry")
+        results = e.stage_checks.stoppable({"checks": checks, "files": []}, "land retry")
         bad = results.failed
         problem = Problem("verify", check_evidence.failure_brief(bad, e.run_dir)) if bad else None
         self.park(problem.text if problem else "", "land-verify-red" if bad else "land")

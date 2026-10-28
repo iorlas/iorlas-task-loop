@@ -78,7 +78,7 @@ class OwnerLook:
         """One filer at a time per (repo, epic), across slots and sessions."""
         e = self.e
         key = f"{e.git('remote', 'get-url', 'origin') or str(e.wt)}|{self.look_epic() or e.bead}"
-        with e.locked("review_lock", ident.config_dir() / "locks" / f"review-{hashlib.sha1(key.encode()).hexdigest()[:12]}.lock"):
+        with e.waits.locked("review_lock", ident.config_dir() / "locks" / f"review-{hashlib.sha1(key.encode()).hexdigest()[:12]}.lock"):
             yield
 
     def file_review(self, section: str) -> None:

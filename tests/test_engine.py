@@ -39,6 +39,7 @@ from taskloop.app.plan.planner import Planner  # noqa: E402
 from taskloop.app.land.fixer import Fixer  # noqa: E402
 from taskloop.app.write.newfiles import NewFiles  # noqa: E402
 from taskloop.app.land.checkout import Checkout  # noqa: E402
+from taskloop.app.run.waits import Waits  # noqa: E402
 from taskloop.domain.look.matchers import writer_names  # noqa: E402
 from taskloop.app.land.lander import Lander  # noqa: E402
 from taskloop.app.review.settles import Settles  # noqa: E402
@@ -573,27 +574,27 @@ class EngineTest(unittest.TestCase):
         eng = self.checks_engine(checks=[{"id": "u", "cmd": cmd, "group": "tests"}])
         eng.run_checks({"checks": [], "files": []}, "s")
         self.assertTrue(0 < eng.waited < 60)
-        eng.add_wait(99999999, WaitWhat.SLOT)
+        eng.waits.add(99999999, WaitWhat.SLOT)
         self.assertLessEqual(eng.waited, time.time() - eng.t0)
 
     def test_a_wait_is_not_counted_in_the_budget(self):
         eng = self.checks_engine(budget_min=5)
         eng.t0 -= 8 * 60  # eight minutes wall
-        self.assertRaises(engine.Blocked, eng.budget_check)
-        eng.add_wait(600, WaitWhat.UNITY_SLOT)  # capped at the 8 min there are: inside the budget
-        eng.budget_check()
+        self.assertRaises(engine.Blocked, eng.waits.budget_check)
+        eng.waits.add(600, WaitWhat.UNITY_SLOT)  # capped at the 8 min there are: inside the budget
+        eng.waits.budget_check()
         eng.t0 -= 16 * 60
         with self.assertRaises(engine.Blocked) as e:
-            eng.budget_check()
+            eng.waits.budget_check()
         self.assertIn("8 min waiting for shared resources not counted", str(e.exception))
 
     def test_budget_min_by_label_raises_the_budget_for_a_labelled_bead(self):
         eng = self.checks_engine(budget_min=5, budget_min_by_label={"unity": 300})
         eng.t0 -= 8 * 60
-        self.assertRaises(engine.Blocked, eng.budget_check)
+        self.assertRaises(engine.Blocked, eng.waits.budget_check)
         labelled = self.checks_engine(attrs={"labels": ["unity"]}, budget_min=5, budget_min_by_label={"unity": 300})
         labelled.t0 -= 8 * 60
-        labelled.budget_check()
+        labelled.waits.budget_check()
 
     # tl-bxk.10.17: real lines from lifesim check logs, and the messages the bead names
     COMPILE = ["Assets/Foo.cs(180,32): error CS0246: The type or namespace name 'X' could not be found",
@@ -731,7 +732,7 @@ class EngineTest(unittest.TestCase):
             eng.clock.advance(2251)
             yield path
         eng.os_lock = held_by_another
-        with eng.locked("land_lock", Path(self.tmp.name) / "land.lock"):
+        with eng.waits.locked("land_lock", Path(self.tmp.name) / "land.lock"):
             pass
         self.assertEqual(eng.waited, 2251)
         self.assertAlmostEqual(before - eng.budget.spent_min(), 2251 / 60, delta=0.5)  # real time moved by ms; no real sleep
@@ -1940,7 +1941,7 @@ class EngineTest(unittest.TestCase):
             sh("git", "clone", "-q", str(origin), str(checkout), cwd=home)
         events, held = [], []
         state = {"pushes": 0, "fetches": 0, "gates": 0, "results": []}
-        real_lock, real_sh, real_wait = Lander.lock, engine.Engine.sh, engine.Engine.add_wait
+        real_lock, real_sh, real_wait = Lander.lock, engine.Engine.sh, Waits.add
         real_fetch, real_checks, real_fix = Checkout.fetch, engine.Engine.run_checks, Fixer.fix
         gate = [sys.executable, "-c", "pass"]
 
@@ -2033,7 +2034,7 @@ class EngineTest(unittest.TestCase):
                 mock.patch.object(engine.Engine, "run_checks", checks), \
                 mock.patch.object(engine.Engine, "sh", command), \
                 mock.patch.object(Fixer, "fix", fix), \
-                mock.patch.object(engine.Engine, "add_wait", wait):
+                mock.patch.object(Waits, "add", wait):
             reviews = [CLEAN, review(findings=[finding("high")])] if failure == "review_exhausted" else [CLEAN] * 2
             rc, _ = self.run_engine({"plan": [plan], "write": [WRITE] * 2, "review": reviews}, gate=gate, **cfg)
             if resume_failed_fix:
@@ -2327,7 +2328,7 @@ class EngineTest(unittest.TestCase):
     def test_a_wait_is_logged_as_its_own_segment(self):
         eng = self.checks_engine()
         eng.t0 -= 600
-        eng.add_wait(120, WaitWhat.LANE)
+        eng.waits.add(120, WaitWhat.LANE)
         (start,), (w,) = records(eng, "wait_start"), self.wait_records(eng)
         self.assertEqual((start["what"], start["id"] == w["id"], w["secs"], w["in_budget"]), ("lane", True, 120, False))
 
@@ -3840,7 +3841,7 @@ class LandReview(EngineTest):
             "just unity-analyzers, unity-tests, unity-play-tests: engine-run, no client changes",
             "unity-play-tests ran green", "just check is green")]
         with mock.patch.object(e, "ai") as ai:
-            self.assertEqual(e.self_verify(items), [])
+            self.assertEqual(e.verifier.run(items), [])
         ai.assert_not_called()  # no verifier call: the engine proves them
         self.assertEqual([v["verdict"] for v in e.verified], ["settled"] * 3)
         self.assertIn("gate", e.verified[0]["evidence"])
@@ -3849,10 +3850,10 @@ class LandReview(EngineTest):
         item = [{"what": "just scenarios passes", "kind": "tooling"}]
         e = self.verifier(checks=self.CFG_CHECKS)
         with mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="a person")]}, None)):
-            self.assertEqual(len(e.self_verify(item)), 1)
+            self.assertEqual(len(e.verifier.run(item)), 1)
         e = self.verifier(checks=[{"id": "scenarios", "cmd": "just scenarios", "group": "tests"}])
         with mock.patch.object(e, "ai") as ai:
-            self.assertEqual(e.self_verify(item), [])
+            self.assertEqual(e.verifier.run(item), [])
         ai.assert_not_called()
 
     def test_items_about_coverage_skips_or_fakes_are_never_settled_but_a_pass_is(self):
@@ -3863,11 +3864,11 @@ class LandReview(EngineTest):
                                  {"id": "unity-check", "cmd": "just unity-check", "group": "tests"}]
         e = self.verifier(checks=cfg, gate="just check")
         with mock.patch.object(e, "ai", return_value=({"items": [verdict(i + 1, "open", why="x") for i in range(3)]}, None)):
-            left = e.self_verify([{"what": a, "kind": "tooling"} for a in asks])
+            left = e.verifier.run([{"what": a, "kind": "tooling"} for a in asks])
         self.assertEqual(len(left), 3)
         e = self.verifier(checks=cfg, gate="just check")
         with mock.patch.object(e, "ai") as ai:
-            self.assertEqual(e.self_verify([{"what": "just unity-tests passes", "kind": "tooling"}]), [])
+            self.assertEqual(e.verifier.run([{"what": "just unity-tests passes", "kind": "tooling"}]), [])
         ai.assert_not_called()
 
     def test_a_stage_check_of_the_plan_settles_an_item_naming_it(self):
@@ -3876,7 +3877,7 @@ class LandReview(EngineTest):
         items = [{"what": "python3 tools/check_design.py passes", "kind": "tooling"},
                  {"what": "the menu reads well", "kind": "requirement"}]
         with mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="taste")]}, None)) as ai:
-            left = e.self_verify(items)
+            left = e.verifier.run(items)
         self.assertEqual([u["what"] for u in left], ["the menu reads well"])
         self.assertEqual(ai.call_count, 1)
         self.assertNotIn("check_design", ai.call_args[0][2])
@@ -3887,7 +3888,7 @@ class LandReview(EngineTest):
         item = {"what": "nobody ran `ruff check tools` on the new module", "kind": "tooling"}
         with mock.patch.object(engine, "tool_on_path", return_value="/bin/ruff"), \
                 mock.patch.object(e, "sh", return_value=(0, "")) as sh_, mock.patch.object(e, "ai") as ai:
-            self.assertEqual(e.self_verify([item]), [])
+            self.assertEqual(e.verifier.run([item]), [])
         self.assertEqual(sh_.call_args[0][0], ["ruff", "check", "tools"])
         ai.assert_not_called()
         self.assertEqual(e.verified[0]["verdict"], "settled")
@@ -3901,7 +3902,7 @@ class LandReview(EngineTest):
             with mock.patch.object(engine, "tool_on_path", return_value="/bin/ruff"), \
                     mock.patch.object(e, "sh", return_value=(rc, "E501 line too long")) as sh_, \
                     mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="x")]}, None)) as ai:
-                left = e.self_verify([item])
+                left = e.verifier.run([item])
             self.assertEqual(sh_.call_args[0][0], ["ruff", "check", "."])
             self.assertEqual(len(left), 1)
             if rc == 1:
@@ -3939,7 +3940,7 @@ class LandReview(EngineTest):
     def test_the_yxbb6_item_is_not_settled_by_a_suite_name_but_the_brief_carries_the_evidence_and_the_skip_rule(self):
         e = self.evidenced(attrs={"run_dir": Path("/runs/x")})
         with mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="x")]}, None)) as ai:
-            self.assertEqual(len(e.self_verify([{"what": self.YXBB6, "kind": "tooling"}])), 1)
+            self.assertEqual(len(e.verifier.run([{"what": self.YXBB6, "kind": "tooling"}])), 1)
         brief = ai.call_args[0][2]
         self.assertIn("`unity-tests` [tests] skipped (no change under client/**, content/**)", brief)
         self.assertIn("Sim.Properties", brief)
@@ -3951,7 +3952,7 @@ class LandReview(EngineTest):
         for what in ("`unity-tests`: no saved log, so I cannot prove it", "unity-analyzers: there is no log, so I cannot prove it"):
             e = self.evidenced()
             with mock.patch.object(e, "ai") as ai:
-                self.assertEqual(e.self_verify([{"what": what, "kind": "tooling"}]), [], what)
+                self.assertEqual(e.verifier.run([{"what": what, "kind": "tooling"}]), [], what)
             ai.assert_not_called()
             v = e.verified[0]
             self.assertEqual(v["verdict"], "settled")
@@ -3970,7 +3971,7 @@ class LandReview(EngineTest):
         for what in asks:
             e = self.evidenced(self.engine_checks() + [res("pytest tests/unit", 0, id="test", secs=1, log="checks/x.log")])
             with mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="x")]}, None)) as ai:
-                self.assertEqual(len(e.self_verify([{"what": what, "kind": "tooling"}])), 1, what)
+                self.assertEqual(len(e.verifier.run([{"what": what, "kind": "tooling"}])), 1, what)
             self.assertEqual(ai.call_count, 1, what)
 
     def test_a_red_check_an_older_tree_or_an_unknown_tree_settles_nothing(self):
@@ -3983,7 +3984,7 @@ class LandReview(EngineTest):
                 e.last_run = None
                 e.run_dir = Path(self.tmp.name, "nope")
             with mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="x")]}, None)) as ai:
-                self.assertEqual(len(e.self_verify([{"what": what, "kind": "tooling"}])), 1, how)
+                self.assertEqual(len(e.verifier.run([{"what": what, "kind": "tooling"}])), 1, how)
             self.assertEqual(ai.call_count, 1, how)
 
     def test_the_brief_lists_at_most_30_checks_of_300_characters(self):

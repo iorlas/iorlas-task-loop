@@ -25,7 +25,7 @@ class ReviewRound:
         """-> ACCEPT, AGAIN (sent back) or REPLAN."""
         e = self.e
         e.stats["reviews"] += 1
-        e.review_cap()
+        e.ask_flow.review_cap()
         kinds = e.newfiles.new_by_kind()
         review, _ = e.ai("review", s.name, self.prompt(s, kinds), writer_family=s.wfam, visual=not s.fix and e.pictures.stage_visual(s.st),
                          round=s.rounds + 1, at=(s.sk, s.rounds, s.n), **s.meta)

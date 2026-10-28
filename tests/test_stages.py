@@ -149,30 +149,30 @@ class Deferred(StagesTest):
         e = self.eng_()
         for w in ("File beads for the table, chairs and sink", "Follow-up beads for each object are to be filed",
                   "The nine beads are not filed", "Create a bead per object", "file follow-up tasks"):
-            self.assertFalse(e.engine_does(w), w + " (no leftovers yet)")
+            self.assertFalse(e.routing.engine_does(w), w + " (no leftovers yet)")
         e.leftovers = [{"title": "x", "why": "y"}]
         for w in ("File beads for the table, chairs and sink", "Follow-up beads for each object are to be filed",
                   "The nine beads are not filed", "Create a bead per object", "file follow-up tasks"):
-            self.assertTrue(e.engine_does(w), w)
-        self.assertFalse(e.engine_does("The beads cover all nine objects"))  # a claim about the result goes to the verifier
+            self.assertTrue(e.routing.engine_does(w), w)
+        self.assertFalse(e.routing.engine_does("The beads cover all nine objects"))  # a claim about the result goes to the verifier
 
     def test_an_owner_item_with_an_owner_review_bead_in_the_leftovers_lands_unverified(self):
         e = self.eng_(leftovers=[{"title": "Owner review of the retuned knob values and placeholder art", "why": "iqad"}])
         item = {"what": "Owner sign-off on the retuned knob values and the placeholder art", "kind": "owner_decision"}
-        self.assertTrue(e.backed_by_leftover(item["what"]))
-        self.assertEqual(e.engine_steps([item]), [])
+        self.assertTrue(e.routing.backed_by_leftover(item["what"]))
+        self.assertEqual(e.routing.engine_steps([item]), [])
         self.assertEqual([u["what"] for u in e.unverified], [item["what"]])
         other = {"what": "Whether the storyteller preset is the intended default", "kind": "owner_decision"}
-        self.assertEqual(e.engine_steps([other]), [other])
+        self.assertEqual(e.routing.engine_steps([other]), [other])
         e.leftovers = [{"title": "Tune the knob values and placeholder art", "why": "later"}]  # not an owner bead
-        self.assertFalse(e.backed_by_leftover(item["what"]))
+        self.assertFalse(e.routing.backed_by_leftover(item["what"]))
         e.leftovers = [{"title": "Owner review of retry timeout defaults", "why": "unrelated"}]
-        self.assertFalse(e.backed_by_leftover(item["what"]))
+        self.assertFalse(e.routing.backed_by_leftover(item["what"]))
 
     def test_beads_in_other_sentences_are_not_the_filing_step(self):
         e = self.eng_(leftovers=[{"title": "x", "why": "y"}])
         for w in ("The config file lists the bead ids", "No open beads remain in the epic", "Open the bead and read it"):
-            self.assertFalse(e.engine_does(w), w)
+            self.assertFalse(e.routing.engine_does(w), w)
 
 
 class Scope(StagesTest):
@@ -604,15 +604,15 @@ class Ledger(StagesTest):
         e = make_engine(self.wt, store=self.store, attrs={
             "plan_data": dict(PLAN, leftovers=[{"title": "Add tests for parser edge cases", "why": "later"}]),
             })
-        self.assertEqual(e.ledger_route("parser edge cases are not handled"), "")
-        self.assertEqual(e.ledger_route("The parser does not handle edge cases such as empty input or nested quotes"), "")
-        self.assertEqual(e.ledger_route("Add tests for the parser edge cases"), "leftover")
-        self.assertEqual(e.ledger_route("A follow-up bead for tests of parser edge cases is not filed"), "leftover")
+        self.assertEqual(e.routing.ledger_route("parser edge cases are not handled"), "")
+        self.assertEqual(e.routing.ledger_route("The parser does not handle edge cases such as empty input or nested quotes"), "")
+        self.assertEqual(e.routing.ledger_route("Add tests for the parser edge cases"), "leftover")
+        self.assertEqual(e.routing.ledger_route("A follow-up bead for tests of parser edge cases is not filed"), "leftover")
 
     def test_a_defect_the_verifier_found_is_not_filed_away_by_the_ledger(self):
         e = make_engine(self.wt, store=self.store, attrs={"plan_data": self.plan(), "unchecked": []})
         what = "Import the chosen prefabs and add object rows"
-        left = e.route_left([{"what": what, "kind": "checkable", "why": "found wrong: the rows are missing"}])
+        left = e.routing.route_left([{"what": what, "kind": "checkable", "why": "found wrong: the rows are missing"}])
         self.assertEqual([u["what"] for u in left], [what])  # still a defect: not unverified, not settled
         self.assertEqual(e.unverified, [])
 
@@ -633,8 +633,8 @@ class Ledger(StagesTest):
     def test_an_unrelated_checkable_item_is_still_verified(self):
         item = {"what": "The volume slider saves its value across restarts on every platform", "kind": "checkable", "source": ""}
         e = make_engine(self.wt, store=self.store, attrs={"plan_data": self.plan()})
-        self.assertEqual(e.ledger_route(item["what"]), "")
-        self.assertEqual(e.engine_steps([dict(item)]), [item])
+        self.assertEqual(e.routing.ledger_route(item["what"]), "")
+        self.assertEqual(e.routing.engine_steps([dict(item)]), [item])
 
     def test_a_deferred_case_the_plan_forgot_to_list_is_listed(self):
         plan = dict(PLAN, cases=[self.DEFER], leftovers=[])

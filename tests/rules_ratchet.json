@@ -5,7 +5,6 @@
   "tests/test_engine.py": 3444
  },
  "oversize_functions": {
-  "skills/task-loop/engine.py::Engine.run_once": 105,
   "tests/cockpit_scenario.py::main": 166,
   "tests/test_engine.py::EngineTest.push_race_interrupted_cell": 125,
   "tests/test_engine.py::EngineTest.run_push_race": 111

@@ -114,7 +114,7 @@ class WorkerCall:
         """-> (the answer's data, its family)."""
         e = self.e
         e.halt_point()
-        e.budget_check()
+        e.waits.budget_check()
         e.stats["nodes"] += 1
         c = self.start_call(node, title, prompt, resume_key, writer_family, step, resume_ref, visual, delta, cwd, at)
         e.steps.begin(step or node, f"{node}: {title}", node=node, backend="delegate", role=c.role, resume=bool(c.resume), **meta)
@@ -167,7 +167,7 @@ class WorkerCall:
         writer = writer_family if node in READ_ONLY_NODES else None
         resume = resume_ref or (e.writer.get("delegate") if resume_key else None)
         if resume and resume_key and e.writer_fallback:  # tl-bxk.10.5: a fallback writer would keep the bead off Codex for good
-            lane = dg.lane_status(e.delegate_route() or "").get(e.fallback_lane) if e.fallback_lane else None
+            lane = dg.lane_status(e.delegation.route() or "").get(e.fallback_lane) if e.fallback_lane else None
             if e.fallback_lane and not isinstance(lane, dict):  # that lane is not configured here: no fallback
                 e.writer_fallback, e.fallback_lane = False, ""
             elif lane is None or lane.get("out") is False:  # back again, or no lane known to wait for
@@ -240,7 +240,7 @@ class WorkerCall:
         e = self.e
         timeout_s, idle_s, silence = self.limits(c)
         c.limit_s = float(timeout_s)
-        e.delegate_route()
+        e.delegation.route()
         live = e.live(c.step or c.node)
         runner = e.router.runner(e.err_path, silence and (*silence, e.warn), None, live, e.lock_worker)
         runner.outer = e.halt  # a stop of the run ends the call

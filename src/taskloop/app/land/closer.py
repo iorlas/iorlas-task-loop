@@ -101,7 +101,7 @@ class Closer:
         if kind == oc.Kind.WAIT_ASK or (kind is None and why.startswith("waiting:")):  # asked already: the bead stays as the ask left it
             e.log.note(why)
             return
-        e.asked = bool(kind in oc.ASKS and spec and outcome not in DONE and e.raise_ask(spec, why, kind))
+        e.asked = bool(kind in oc.ASKS and spec and outcome not in DONE and e.ask_flow.raise_ask(spec, why, kind))
         lost = self.follow_ups(outcome)
         self.reflect_comment(outcome, why, new, lost, stats)
         self.settle(outcome, why, sha, spec, kind, stats)
