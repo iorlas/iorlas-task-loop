@@ -12,6 +12,8 @@ from contracts import samples as S
 from taskloop.contracts import codec, log as L
 from taskloop.contracts.ask import Ask, AskAnswer
 from taskloop.contracts.checkpoint import Checkpoint
+from taskloop.contracts.loop import LoopCommand, LoopState, Rest
+from taskloop.contracts.run import LoopLogLine
 from taskloop.contracts.enums import AskStatus, LockWhat
 from taskloop.contracts.locks import LockRecord, LockTimeout
 from support.narrow import must  # noqa: E402
@@ -33,15 +35,15 @@ class DocContract(Base):
     def test_a_missing_document_reads_as_none_and_a_write_reads_back_equal(self) -> None:
         doc = self.s.loop_state("k")
         self.assertIsNone(doc.read())
-        doc.write(S.OTHERS["LoopState"])
-        self.assertEqual(doc.read(), S.OTHERS["LoopState"])
-        self.assertEqual(self.s.loop_state("k").read(), S.OTHERS["LoopState"])  # a new handle sees it
+        doc.write(S.other(LoopState))
+        self.assertEqual(doc.read(), S.other(LoopState))
+        self.assertEqual(self.s.loop_state("k").read(), S.other(LoopState))  # a new handle sees it
         self.assertIsNone(self.s.loop_state("other").read())
 
     def test_a_write_replaces_whole_and_delete_removes(self) -> None:
         doc = self.s.loop_rest("k")
-        doc.write(S.OTHERS["Rest"])
-        doc.write(dataclasses.replace(S.OTHERS["Rest"], beads={"b-2": 7.0}))  # pyrefly: ignore[bad-argument-type]
+        doc.write(S.other(Rest))
+        doc.write(dataclasses.replace(S.other(Rest), beads={"b-2": 7.0}))
         self.assertEqual(doc.read().beads, {"b-2": 7.0})
         doc.delete()
         self.assertIsNone(doc.read())
@@ -53,8 +55,8 @@ class DocContract(Base):
         self.assertIsNone(doc.read())
         self.rig.poison(doc, {"v": 1, "action": "dance", "by": "x", "t": 1.0})
         self.assertIsNone(doc.read())
-        doc.write(S.OTHERS["LoopCommand"])
-        self.assertEqual(doc.read(), S.OTHERS["LoopCommand"])
+        doc.write(S.other(LoopCommand))
+        self.assertEqual(doc.read(), S.other(LoopCommand))
 
 
 class AskContract(Base):

@@ -12,6 +12,9 @@ import support.paths  # noqa: E402,F401
 from contracts import samples as S  # noqa: E402
 from jsonl_log import Jsonl, cursor  # noqa: E402
 from taskloop.contracts import codec, paths, stores  # noqa: E402
+from taskloop.contracts.ask import Ask  # noqa: E402
+from taskloop.contracts.loop import LoopState  # noqa: E402
+from taskloop.contracts.snapshots import Pin  # noqa: E402
 
 
 class JsonlTest(unittest.TestCase):
@@ -160,8 +163,8 @@ class StoresTest(unittest.TestCase):
     def test_a_json_document_is_replaced_whole(self):
         st = stores.LoopStateStore(self.cfg, "abc123abc123")
         self.assertIsNone(st.read())
-        st.write(S.OTHERS["LoopState"])
-        self.assertEqual(st.read(), S.OTHERS["LoopState"])
+        st.write(S.other(LoopState))
+        self.assertEqual(st.read(), S.other(LoopState))
         self.assertEqual(list(st.path.parent.glob("*.tmp")), [])
         self.assertEqual(json.loads(st.path.read_text())["v"], 2)
         st.delete()
@@ -176,18 +179,18 @@ class StoresTest(unittest.TestCase):
 
     def test_a_failed_write_leaves_no_temp_file_and_keeps_the_old_one(self):
         st = stores.PinStore(self.cfg)
-        st.write(S.OTHERS["Pin"])
+        st.write(S.other(Pin))
         with mock.patch.object(Path, "replace", side_effect=OSError("disk")):
             with self.assertRaises(OSError):
-                st.write(S.OTHERS["Pin"])
-        self.assertEqual(st.read(), S.OTHERS["Pin"])
+                st.write(S.other(Pin))
+        self.assertEqual(st.read(), S.other(Pin))
         self.assertEqual(list(st.path.parent.glob("*.tmp")), [])
 
     def test_each_family_lives_where_paths_says(self):
         self.assertEqual(stores.TraceStore(self.cfg).file.path.name, "traces.jsonl")
         self.assertEqual(stores.AskStore.at(self.cfg).of("tl-1").path, self.cfg.root / "asks" / "tl-1.json")
-        stores.AskStore.at(self.cfg).of("tl-1").write(S.OTHERS["Ask"])
-        self.assertEqual(stores.AskStore.at(self.cfg).of("tl-1").read(), S.OTHERS["Ask"])
+        stores.AskStore.at(self.cfg).of("tl-1").write(S.other(Ask))
+        self.assertEqual(stores.AskStore.at(self.cfg).of("tl-1").read(), S.other(Ask))
         el = stores.EventLog(self.cfg)
         el.append(S.EVENTS["claim"])
         self.assertEqual(el.read_from(0).items[0].rec, S.EVENTS["claim"])

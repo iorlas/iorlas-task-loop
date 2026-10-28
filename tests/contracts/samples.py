@@ -1,6 +1,7 @@
 """One filled instance of every record in taskloop.contracts, for the round-trip, golden and completeness tests."""
 import datetime
 import sys
+from typing import cast
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -197,3 +198,8 @@ OTHERS = {
     "Comment": bead.Comment(author="a", text="t", created_at="2026-10-27T00:00:00Z"),
     "BdError": bead.BdError(kind="lint", missing_sections=["ACCEPTANCE"], text="t"),
 }
+
+
+def other[T](cls: type[T]) -> T:
+    """The OTHERS sample of this record class, typed."""
+    return cast(T, OTHERS[cls.__name__])

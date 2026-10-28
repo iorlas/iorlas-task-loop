@@ -29,16 +29,16 @@ class Contract3(unittest.TestCase):
         self.assertFalse(fields & {"status", "next", "reason", "retry_after", "v"})
 
     def test_the_sample_answer_is_read_by_the_adapter_into_the_same_result(self):
-        wire = codec.to_json(S.OTHERS["DelegateResult"])
+        wire = codec.to_json(S.other(delegate.DelegateResult))
         self.assertNotIn("v", wire)
-        self.assertEqual(codec.from_json(delegate.DelegateResult, wire), S.OTHERS["DelegateResult"])
+        self.assertEqual(codec.from_json(delegate.DelegateResult, wire), S.other(delegate.DelegateResult))
         r = delegate_wire.result_of(wire)
-        st, facts = r.stop, S.OTHERS["DelegateResult"].stop
+        st, facts = r.stop, S.other(delegate.DelegateResult).stop
         self.assertEqual(st, facts)
-        self.assertEqual((r.worker, r.exit_code, r.first_error), (S.OTHERS["DelegateResult"].worker, -15, "429 rate limited"))
+        self.assertEqual((r.worker, r.exit_code, r.first_error), (S.other(delegate.DelegateResult).worker, -15, "429 rate limited"))
 
     def test_a_done_answer_has_a_null_stop(self):
-        wire = {**codec.to_json(S.OTHERS["DelegateResult"]), "stop": None}
+        wire = {**codec.to_json(S.other(delegate.DelegateResult)), "stop": None}
         self.assertIsNone(delegate_wire.result_of(wire).stop)
         self.assertIsNone(codec.from_json(delegate.DelegateResult, wire).stop)
 

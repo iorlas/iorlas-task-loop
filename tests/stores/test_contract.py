@@ -70,7 +70,7 @@ class RealRaces(unittest.TestCase):
         from contracts import samples as S
         from taskloop.contracts.loop import Rest
         doc = self.rig.stores.loop_rest("k")
-        doc.write(S.OTHERS["Rest"])
+        doc.write(S.other(Rest))
         stop = threading.Event()
         bad: list[object] = []
 

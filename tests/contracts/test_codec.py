@@ -13,6 +13,9 @@ import support.paths  # noqa: E402,F401
 from contracts import samples as S  # noqa: E402
 from taskloop.contracts import codec, delegate, events, ids, log, trace  # noqa: E402
 from taskloop.contracts.codec import CodecError, StaleRecord  # noqa: E402
+from taskloop.contracts.ask import Ask  # noqa: E402
+from taskloop.contracts.loop import LoopCommand  # noqa: E402
+from taskloop.contracts.run import LoopLogLine  # noqa: E402
 
 GOLDEN = Path(__file__).resolve().parent / "golden"
 FAMILIES = {"engine_log": (S.LOG, log.ENGINE_LOG), "events": (S.EVENTS, events.EVENT), "live_events": (S.LIVE, delegate.LIVE_EVENT)}
@@ -147,10 +150,10 @@ class Refusals(unittest.TestCase):
             codec.from_json(log.Note, [])
 
     def test_a_literal_takes_only_its_members(self):
-        d = codec.to_json(S.OTHERS["LoopCommand"])
+        d = codec.to_json(S.other(LoopCommand))
         d["action"] = "explode"
         with self.assertRaisesRegex(CodecError, "not one of"):
-            codec.from_json(type(S.OTHERS["LoopCommand"]), d)
+            codec.from_json(type(S.other(LoopCommand)), d)
 
 
 class Wire(unittest.TestCase):
@@ -170,12 +173,12 @@ class Wire(unittest.TestCase):
         self.assertEqual(codec.to_json(S.LOCK)["route"], [10, S.T])
 
     def test_an_optional_nested_record_is_null_or_a_dict(self):
-        a = S.OTHERS["Ask"]
+        a = S.other(Ask)
         self.assertEqual(codec.to_json(a)["answer"]["action"], "confirm")
         self.assertIsNone(codec.to_json(dataclasses.replace(a, answer=None))["answer"])
 
     def test_nested_records_carry_no_version(self):
-        d = codec.to_json(S.OTHERS["LoopLogLine"])
+        d = codec.to_json(S.other(LoopLogLine))
         self.assertEqual(d["v"], 2)
         self.assertNotIn("v", d["outcome"])
 
