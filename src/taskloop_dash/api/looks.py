@@ -5,7 +5,6 @@ makes, all through bd)."""
 import json
 import mimetypes
 import os
-import shutil
 import subprocess
 import threading
 from pathlib import Path

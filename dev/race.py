@@ -287,7 +287,7 @@ class Race(unittest.TestCase):
         beads = self.store()
 
         # every bead landed once, claimed by one actor, its worker run once
-        self.assertEqual({b: beads[b]["status"] for b in BEADS}, {b: "closed" for b in BEADS}, msg)
+        self.assertEqual({b: beads[b]["status"] for b in BEADS}, dict.fromkeys(BEADS, "closed"), msg)
         claims = jsonl(self.h / "bd" / "claims.jsonl")
         for b in BEADS:
             who = {(c["tree"], c["by"]) for c in claims if c["bead"] == b and c["op"] in ("claim", "reclaim")}
@@ -360,7 +360,7 @@ class Race(unittest.TestCase):
         for i, s in enumerate(SLOTS, 1):
             sb = beads["sl-%d" % i]
             self.assertEqual((sb["status"], sb.get("assignee") or ""), ("open", ""), sb)
-            self.assertFalse(set((sb.get("metadata") or {})) & set(tl.HELD_KEYS), sb)
+            self.assertFalse(set(sb.get("metadata") or {}) & set(tl.HELD_KEYS), sb)
             self.assertFalse(tl.engine_lock_path(str(self.repo / ".slots" / s)).exists(), s)
         cfg = self.h / "cfg" / "task-loop"
         for lock in (cfg / "locks").glob("*.lock"):

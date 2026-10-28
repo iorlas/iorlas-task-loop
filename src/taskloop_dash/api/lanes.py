@@ -129,7 +129,7 @@ class Lanes:
             return {"ok": False, "say": "delegate is not installed"}
 
         def version_of(p: str) -> list[int]:
-            return [int(x) if x.isdigit() else 0 for x in p.split("/iorlas-delegate/")[1].split("/")[0].split(".")]
+            return [int(x) if x.isdigit() else 0 for x in p.split("/iorlas-delegate/")[1].split("/", maxsplit=1)[0].split(".")]
         try:
             r = subprocess.run([sys.executable, max(routes, key=version_of), "status", "--json"],
                                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=20)

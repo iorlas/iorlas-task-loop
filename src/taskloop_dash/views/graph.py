@@ -135,7 +135,7 @@ def build(beads: Iterable[Bead], cfg: Bead, queued: Iterable[str], running: Iter
         n["kids"] = kids.get(n["id"], {}) if n["is_epic"] else None
     flat = [{"source": s, "target": t} for s in sorted(edges) for t in sorted(edges[s])]
     done_today = sum(1 for i in recent if _day(parse(by_id[i].get("closed_at"))) == _day(now))
-    sc = {s: 0 for s in STATES}
+    sc = dict.fromkeys(STATES, 0)
     for n in nodes:
         sc[n["state"]] += 1
     summary = {"ready": sc["queued"], "running": sc["running"], "stuck": sc["stuck"], "blocked": sc["blocked"], "waits": sc["waits"],

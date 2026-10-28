@@ -1,8 +1,7 @@
 """The file-backed Stores of one process: everything under one ConfigDir."""
-from taskloop.contracts import events, log, paths, stores
+from taskloop.contracts import paths, stores
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.checkpoint import Checkpoint
-from taskloop.contracts.loop import LoopCommand, LoopState, Rest
 from taskloop.stores.books import AskBook, CheckpointBook
 from taskloop.stores.bundle import Stores
 from taskloop.stores.filelock import FileLockTable

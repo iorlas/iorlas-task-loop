@@ -126,7 +126,7 @@ class Invariants(test_loop.Base):
             try:
                 start.wait()
                 res[name] = fn()
-            except BaseException as e:  # noqa: B902 - re-raised below, in the test's thread
+            except BaseException as e:
                 errs[name] = e
         ths = [threading.Thread(target=go, args=(n, f), name=n) for n, f in fns.items()]
         for t in ths:
