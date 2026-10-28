@@ -1,7 +1,7 @@
 """One bead's whole time: every step, check and wait as a bar."""
 
 import time
-from typing import Final
+from typing import Any, Final
 
 WAIT_NAMES: Final = {
     "land_lock": "land lock",
@@ -21,16 +21,16 @@ LOCKS = ("land_lock", "review_lock")  # waited for after the step before them en
 MIN_GAP = 10  # seconds of unexplained time worth a bar of its own
 
 
-def _seg(kind, what, label, t0, t1, run, **kw):
+def _seg(kind: str, what: str, label: str, t0: float, t1: float, run: str, **kw: Any) -> dict[str, Any]:
     return dict({"kind": kind, "what": what, "label": label, "t0": t0, "t1": t1, "secs": max(0, round(t1 - t0)), "run": run}, **kw)
 
 
 def block_segments(b: dict, waits: list, used: set, name: str) -> list[dict]:
     """A step's bars: the work, cut by the waits that started inside it."""
-    out = []
+    out: list[dict] = []
     kind = "checks" if b["kind"] == "checks" else "work"
     label = b.get("label") or b["kind"]
-    cuts = []
+    cuts: list[tuple[float, float, dict]] = []
     for i, w in enumerate(waits):
         if i not in used and w["what"] not in LOCKS and b["t0"] - 1 <= w["t0"] < b["t1"]:  # a wait that starts in a step belongs to it
             cuts.append((max(b["t0"], w["t0"]), min(b["t1"], w["t0"] + w["secs"]), w))
@@ -49,10 +49,11 @@ def block_segments(b: dict, waits: list, used: set, name: str) -> list[dict]:
     return out
 
 
-def run_segments(r: dict, end) -> list[dict]:
+def run_segments(r: dict, end: float | None) -> list[dict]:
     """The segments of one run: its steps, the waits the engine recorded (cut out of the step they happened in, or a bar of their
     own between steps), and the unexplained gaps between them."""
-    name, out, used = r["run"], [], set()
+    name, used = r["run"], set[int]()
+    out: list[dict] = []
     waits = [w for w in r.get("waits") or [] if w["secs"] > 0]
     for b in r["blocks"]:
         if b.get("t0") and b.get("t1") and b["t1"] >= b["t0"]:
@@ -62,7 +63,8 @@ def run_segments(r: dict, end) -> list[dict]:
         if i not in used and w["t0"] + w["secs"] > t0:
             out.append(_seg("wait", w["what"], WAIT_NAMES.get(w["what"], w["what"]), t0, w["t0"] + w["secs"], name, holder=w["holder"]))
     out.sort(key=lambda x: (x["t0"], x["t1"]))
-    filled, at = [], r.get("started")
+    filled: list[dict] = []
+    at = r.get("started")
     for s in out:
         if at and s["t0"] - at >= MIN_GAP:
             filled.append(_seg("idle", "between_steps", WAIT_NAMES["between_steps"], at, s["t0"], name))
@@ -77,7 +79,8 @@ def bead_segments(runs: list[dict], now: float | None = None) -> dict:
     """runs: run_timeline() results of one bead, oldest first, the last one `alive` when the bead is running. -> {t0, t1, segments,
     totals}. Time between two runs is an owner ask (the earlier one ended asking), a pause (it ended paused) or idle."""
     now = now or time.time()
-    segs, prev = [], None
+    segs: list[dict] = []
+    prev: dict | None = None
     for r in runs:
         start = r.get("started")
         if not start:
@@ -89,9 +92,10 @@ def bead_segments(runs: list[dict], now: float | None = None) -> dict:
             segs.append(_seg("idle" if what == "between_runs" else "wait", what, WAIT_NAMES[what], prev["end"], start, r["run"]))
         segs += run_segments(r, end)
         prev = {"r": r, "end": end}
-    totals = {"work": 0, "checks": 0, "wait": 0, "idle": 0, "by_what": {}}
+    by_what: dict[str, float] = {}
+    totals: dict[str, Any] = {"work": 0, "checks": 0, "wait": 0, "idle": 0, "by_what": by_what}
     for s in segs:
         totals[s["kind"]] += s["secs"]
         if s["kind"] in ("wait", "idle", "checks"):
-            totals["by_what"][s["what"]] = totals["by_what"].get(s["what"], 0) + s["secs"]
+            by_what[s["what"]] = by_what.get(s["what"], 0) + s["secs"]
     return {"t0": segs[0]["t0"] if segs else None, "t1": segs[-1]["t1"] if segs else None, "segments": segs, "totals": totals, "now": now}

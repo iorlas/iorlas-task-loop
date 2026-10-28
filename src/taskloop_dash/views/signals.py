@@ -5,7 +5,10 @@ and stays quiet otherwise. Python 3.8+, standard library only."""
 
 import statistics
 import time
-from typing import Final
+from collections.abc import Iterable, Sequence
+from typing import Any, Final
+
+Row = dict[str, Any]
 
 SEVERITY: Final = {"red": 0, "amber": 1, "info": 2, "green": 3}
 CLUSTER_N, CLUSTER_WINDOW, CLUSTER_LOOKBACK = 4, 3 * 3600, 6 * 3600   # parks with one cause, within, looked at over
@@ -19,41 +22,42 @@ USAGE_HIGH = 90.0
 BUDGET_NEAR = 1.15  # an over-budget stop at most this far over its limit is a near miss
 
 
-def fresh(row):
+def fresh(row: Row) -> int:
     t = row.get("tokens_all") or {}
     return max(0, (t.get("in") or 0) - (t.get("cached") or 0)) + (t.get("out") or 0)
 
 
-def total(row):
+def total(row: Row) -> int:
     t = row.get("tokens_all") or {}
     return (t.get("in") or 0) + (t.get("out") or 0)
 
 
-def short(i):
+def short(i: object) -> str:
     return str(i).split("-", 1)[-1]
 
 
-def human(n):
+def human(n: float) -> str:
     return "%.1fM" % (n / 1e6) if n >= 1e6 else "%dk" % round(n / 1e3) if n >= 1e3 else str(int(n))
 
 
-def dur(s):
+def dur(s: float) -> str:
     s = int(s)
     return "%dd" % (s // 86400) if s >= 2 * 86400 else "%dh%02dm" % (s // 3600, s % 3600 // 60) if s >= 3600 else "%dm" % (s // 60)
 
 
-def _id_like(run):
+def _id_like(run: str) -> bool:
     """A token such as `tl-bxk.8` or `abc-12`: letters and digits, one dash, then letters, digits and dots."""
     core = run.strip(".-")
     head, dash, tail = core.partition("-")
     return bool(dash and head and tail and head.isalnum() and all(c.isalnum() or c in ".-" for c in tail))
 
 
-def cause(why):
+def cause(why: object) -> str:
     """A parked pass's reason with ids, numbers and quoted payloads cut, so the same cause groups."""
     w = str(why or "").lower()
     cut = min((i for i in (w.find(c) for c in "`'\"{") if i >= 0), default=len(w))
-    w, words, run = w[:cut], [], ""
+    w, run = w[:cut], ""
+    words: list[str] = []
     for ch in w + " ":
         if ch.isalnum() or ch in ".-":
             run += ch
@@ -66,7 +70,7 @@ def cause(why):
     return " ".join(w.split()).strip(" :;,.-")[:70]
 
 
-def budget_pair(text):
+def budget_pair(text: object) -> tuple[int, int] | None:
     """(used, limit) from the first 'N of M min' after 'over budget:' in a pass's reason; None when there is none."""
     _, found, rest = str(text).partition("over budget:")
     at = rest.find(" of ") if found else -1
@@ -80,7 +84,7 @@ def budget_pair(text):
     return None
 
 
-def medians(rows):
+def medians(rows: Sequence[Row]) -> Row:
     """Median and p90 of fresh tokens per bead over the beads that spent any."""
     v = sorted(fresh(r) for r in rows if fresh(r))
     if not v:
@@ -89,19 +93,19 @@ def medians(rows):
             "median_blocks": int(statistics.median([r.get("blocks") or 0 for r in rows if r.get("blocks")] or [0]))}
 
 
-def sig(kind, sev, title, line, look=(), href=None):
+def sig(kind: str, sev: str, title: str, line: str, look: Iterable[str] = (), href: str | None = None) -> Row:
     return {"kind": kind, "sev": sev, "title": title, "line": line, "look": list(look)[:4], "href": href}
 
 
-def _reason(why):
+def _reason(why: object) -> str:
     """The reason up to its first ':', '.' or '('."""
     text = str(why or "no reason given")
     cut = min((i for i in (text.find(c) for c in ":.(") if i >= 0), default=len(text))
     return text[:cut][:60]
 
 
-def lane_out(lanes, now):
-    out = []
+def lane_out(lanes: Sequence[Row] | None, now: float) -> list[Row]:
+    out: list[Row] = []
     for ln in lanes or []:
         name = str(ln.get("name") or "")
         if "CREDIT" in name.upper():  # a credit lane is never used by an unattended run (the subscription lanes are): out is no alarm
@@ -120,12 +124,12 @@ def lane_out(lanes, now):
     return out
 
 
-def park_cluster(passes, now):
+def park_cluster(passes: Sequence[Row], now: float) -> list[Row]:
     recent = [p for p in passes if p["outcome"] in ("parked", "failed") and now - p["t"] <= CLUSTER_LOOKBACK]
-    groups = {}
+    groups: dict[str, list[Row]] = {}
     for p in recent:
         groups.setdefault(cause(p.get("why")) or "(no reason recorded)", []).append(p)
-    out = []
+    out: list[Row] = []
     for c, ps in groups.items():
         ps.sort(key=lambda p: p["t"])
         best = max((sum(1 for q in ps if 0 <= q["t"] - p["t"] <= CLUSTER_WINDOW) for p in ps), default=0)
@@ -135,12 +139,12 @@ def park_cluster(passes, now):
     return out
 
 
-def churn(rows, now):
-    hits = []
+def churn(rows: Sequence[Row], now: float) -> list[Row]:
+    hits: list[tuple[int, Row]] = []
     for r in rows:
         if r.get("state") in ("landed", "done") or now - (r.get("updated") or 0) > CHURN_LOOKBACK:
             continue
-        why = []
+        why: list[str] = []
         if (r.get("red_checks") or 0) >= CHURN_CHECKS_RED:
             why.append("checks failed %d×" % r["red_checks"])
         if (r.get("replans") or 0) >= REPLANS:
@@ -159,7 +163,7 @@ def churn(rows, now):
     return [s for _, s in sorted(hits, key=lambda h: -h[0])[:3]]
 
 
-def token_hogs(rows, now, med):
+def token_hogs(rows: Sequence[Row], now: float, med: Row) -> list[Row]:
     floor = max(HOG_FRESH, HOG_TIMES_MEDIAN * med["median_fresh"])
     hogs = sorted((r for r in rows if fresh(r) > floor and now - (r.get("updated") or 0) <= HOG_LOOKBACK), key=lambda r: -fresh(r))
     if not hogs:
@@ -172,7 +176,7 @@ def token_hogs(rows, now, med):
                 human(total(r)), r.get("runs") or 0, "" if r.get("runs") == 1 else "s", more), [h["id"] for h in hogs])]
 
 
-def big_turns(rows, now):
+def big_turns(rows: Sequence[Row], now: float) -> list[Row]:
     hit = sorted((r for r in rows if (r.get("big_turn") or 0) >= BIG_TURN and now - (r.get("updated") or 0) <= HOG_LOOKBACK),
                  key=lambda r: -r["big_turn"])
     if not hit:
@@ -183,13 +187,14 @@ def big_turns(rows, now):
                 % (" (+%d more beads)" % (len(hit) - 1) if len(hit) > 1 else ""), [h["id"] for h in hit])]
 
 
-def ask_aging(asks, now):
+def ask_aging(asks: Sequence[Row] | None, now: float) -> list[Row]:
     open_ = [a for a in asks or [] if a.get("status", "open") == "open" and not a.get("answered_here")]
     if not open_:
         return []
-    age = lambda a: now - float(a.get("t") or now)
+    def age(a: Row) -> float:
+        return now - float(a.get("t") or now)
     old = sorted(open_, key=lambda a: -age(a))
-    kinds = {}
+    kinds: dict[str, int] = {}
     for a in open_:
         kinds[a.get("kind") or "ask"] = kinds.get(a.get("kind") or "ask", 0) + 1
     soon = [a for a in open_ if a.get("parks_at") and 0 < float(a["parks_at"]) - now < ASK_PARK_SOON]
@@ -201,7 +206,7 @@ def ask_aging(asks, now):
                 [a["bead"] for a in old[:3]], href="#asks")]
 
 
-def looks_waiting(looks, now):
+def looks_waiting(looks: Sequence[Row], now: float) -> list[Row]:
     """Taste items the owner has not answered: they never block the loop, so only age makes them worth a colour."""
     if not looks:
         return []
@@ -212,8 +217,8 @@ def looks_waiting(looks, now):
                 "good or redo, one click each: the pictures are in the gallery", [l["bead"] for l in looks][:3], href="#looks")]
 
 
-def budget_near_miss(passes, now):
-    out = []
+def budget_near_miss(passes: Sequence[Row], now: float) -> list[Row]:
+    out: list[tuple[Row, str]] = []
     for p in reversed(passes):
         m = budget_pair(p.get("why") or "")
         if p["outcome"] == "parked" and m and now - p["t"] <= 24 * 3600 and m[0] <= BUDGET_NEAR * m[1]:
@@ -225,13 +230,13 @@ def budget_near_miss(passes, now):
                 [p["id"] for p, _ in out])]
 
 
-def stuck(graph_summary):
+def stuck(graph_summary: Row | None) -> list[Row]:
     n = (graph_summary or {}).get("stuck") or 0
     return [sig("stuck", "red", "%d bead%s held by nothing" % (n, "" if n == 1 else "s"),
                 "in progress in bd, but no slot runs it: nobody will pick it up")] if n else []
 
 
-def good(passes, rows, now):
+def good(passes: Sequence[Row], rows: Sequence[Row], now: float) -> list[Row]:
     day = [p for p in passes if p["outcome"] == "landed" and now - p["t"] <= 24 * 3600]
     if not day:
         return []
@@ -243,7 +248,8 @@ def good(passes, rows, now):
     return [sig("good", "green", "%d landed in 24 h" % len(day), line, [p["id"] for p in day[-3:]])]
 
 
-def build(rows, passes, lanes, asks, graph_summary, now=None, looks=()):
+def build(rows: Sequence[Row], passes: Sequence[Row], lanes: Sequence[Row], asks: Sequence[Row], graph_summary: Row | None,
+          now: float | None = None, looks: Sequence[Row] = ()) -> Row:
     """rows: task rows (server.api_tasks) of this repo; passes: roadmap passes ({id, outcome, t, minutes, why}); lanes:
     agent-runs lane records; asks: open asks; graph_summary: graph.build()'s summary. -> {signals: [...], stats: {...}}"""
     now = now or time.time()

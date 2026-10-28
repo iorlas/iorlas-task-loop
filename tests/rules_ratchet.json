@@ -24,5 +24,5 @@
   "tests/test_engine.py::EngineTest.push_race_interrupted_cell": 125,
   "tests/test_engine.py::EngineTest.run_push_race": 111
  },
- "pyrefly_baseline_errors": 1755
+ "pyrefly_baseline_errors": 1544
 }
