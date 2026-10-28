@@ -137,6 +137,18 @@ class GateEnd(LogRec):
 
 
 @record
+class LandTry(LogRec):
+    """One try of the land: what main was before the fetch and after it, whether the rebase moved the branch, and the recipe that failed."""
+
+    KIND: ClassVar[str] = "land_try"
+    n: int
+    base_before: str = ""
+    base_after: str = ""
+    rebase_moved: bool = False
+    failing: str = ""  # "gate", "conflict" or "verify" when the try ended in a fix round; "" when it went on to the push
+
+
+@record
 class WaitStart(LogRec):
     KIND: ClassVar[str] = "wait_start"
     id: str
@@ -274,10 +286,10 @@ class Close(LogRec):
 
 
 EngineLog = (RunStart | StepStart | StepEnd | CallStart | CallEnd | CmdStart | CmdEnd | CheckStart | CheckEnd | GateStart | GateEnd
-             | WaitStart | WaitEnd | Lock | Unlock | VendorError | Kill | Overrun | RetryDecision | Transition
+             | LandTry | WaitStart | WaitEnd | Lock | Unlock | VendorError | Kill | Overrun | RetryDecision | Transition
              | Reload | Checks | Warn | Note | Close)
 ENGINE_LOG = table_of(RunStart, StepStart, StepEnd, CallStart, CallEnd, CmdStart, CmdEnd, CheckStart, CheckEnd, GateStart,
-                      GateEnd, WaitStart, WaitEnd, Lock, Unlock, VendorError, Kill, Overrun, RetryDecision, Transition,
+                      GateEnd, LandTry, WaitStart, WaitEnd, Lock, Unlock, VendorError, Kill, Overrun, RetryDecision, Transition,
                       Reload, Checks, Warn, Note, Close)
 
 

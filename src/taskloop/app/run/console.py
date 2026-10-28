@@ -16,6 +16,7 @@ QUIET = frozenset(
         "check_end",
         "gate_start",
         "gate_end",
+        "land_try",
         "wait_start",
         "wait_end",
         "lock",

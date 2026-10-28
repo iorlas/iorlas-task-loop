@@ -2321,11 +2321,13 @@ class EngineTest(unittest.TestCase):
         def holder():
             with tl.os_lock(path, "other-bead"):
                 got.append(1)
-                go.wait(5)
+                go.wait(60)
         t = threading.Thread(target=holder)
         t.start()
         self.assertTrue(until(lambda: got), "the holder never took the lock")
-        threading.Timer(0.4, go.set).start()
+        # The holder lets go only once the engine has logged that it waits (a fixed delay raced a loaded machine: the holder could let
+        # go before the engine asked, and no wait was ever recorded).
+        threading.Thread(target=lambda: until(lambda: records(eng, "wait_start")) and go.set()).start()
         with eng.lander.lock():
             pass
         t.join()

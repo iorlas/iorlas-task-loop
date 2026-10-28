@@ -7,6 +7,7 @@ from typing import Any
 
 from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.land.gate import Gate, Problem
+from taskloop.contracts import log as rec
 from taskloop.domain.land.matchers import Push
 from taskloop.domain.lanes import policy as lp
 
@@ -107,6 +108,7 @@ class Lander:
         while True:
             e.steps.begin("land", f"land (try {st.pushes + 1})", **{"try": st.pushes + 1})
             e.quarantine_strays()
+            before, head = e.git("rev-parse", e.cfg.base), e.git("rev-parse", "HEAD")
             rc, tail = e.fetch()
             if rc == 0 and (st.pushes or st.net_failed):
                 found = self.already(fetch=False)  # an earlier push of this land may have gone through
@@ -117,6 +119,8 @@ class Lander:
                 problem = self.recheck(st)
             if problem is None and e.cfg.gate:
                 problem = self.gate.run()
+            e.log.emit(rec.LandTry(n=st.pushes + 1, base_before=before[:12], base_after=e.git("rev-parse", e.cfg.base)[:12],
+                                   rebase_moved=e.git("rev-parse", "HEAD") != head, failing=problem.kind if problem else ""))
             if problem is not None:
                 return "", problem
             sha, again = self.push(st)

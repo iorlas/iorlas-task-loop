@@ -52,6 +52,16 @@ class StaleTree(StagesTest):
         self.assertNotIn("planner", [c[0] for c in s.calls])  # the plan was kept
         self.assertEqual(self.eng.stage_tree, "")
 
+    def test_a_land_logs_its_try_with_the_bases_and_whether_the_rebase_moved(self):
+        self.stopped_run()
+        self.main_moves()
+        rc, _ = self.run_engine({"write": [WRITE], "review": [CLEAN]})
+        self.assertEqual(rc, 0, self.blocked)
+        tries = [json.loads(line) for line in self.eng.log_path.read_text().splitlines() if '"land_try"' in line]
+        self.assertEqual([(t["n"], t["rebase_moved"], t["failing"]) for t in tries], [(1, False, "")])  # the resume rebased already
+        self.assertEqual(tries[0]["base_before"], tries[0]["base_after"])
+        self.assertEqual(len(tries[0]["base_after"]), 12)
+
     def junk_and_moving_main(self):
         """The slot has Unity's untracked log (the base ignores it) and main has moved on with a new recipe file."""
         base = Path(self.tmp.name, "base-ignore")

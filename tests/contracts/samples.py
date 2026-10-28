@@ -70,6 +70,7 @@ LOG = {
     "check_end": _log(log.CheckEnd, id="k5.1", exit=1, status="failed", tries=2, secs=43.4, wall_hit=True),
     "gate_start": _log(log.GateStart, cmd="just check", log="g.log", tree="deadbeef"),
     "gate_end": _log(log.GateEnd, exit=0, secs=2101.0, skipped=False),
+    "land_try": _log(log.LandTry, n=2, base_before="1a2b3c4d5e6f", base_after="6f5e4d3c2b1a", rebase_moved=True, failing="gate"),
     "wait_start": _log(log.WaitStart, id="w1", what=WaitWhat.LANE, holder="", until=T + 60),
     "wait_end": _log(log.WaitEnd, id="w1", secs=60.0, in_budget=True),
     "lock": _log(log.Lock, what="land", holder="tl-7y6.1.2"),
@@ -132,8 +133,8 @@ OTHERS = {
         bead="tl-1", run=str(RUN), t=T, branch="task/tl-1", step="write", stage=2, rounds=3, n=4, head="abc", feedback="f",
         state=checkpoint.RunState(
             brief_hash="b0", plan_data={"summary": "s", "stages": [{"goal": "g"}]}, plan_log=[{"mode": "plan", "counted": True, "why": "first"}],
-            done=["g1"], accepted=[0], writer={"delegate": "codex", "seen": ["abc"], "ctx": 35}, filed=["f1"],
-            unfiled=[review.Unfiled(title="t", why="lint")], look_prev=[{"item": "i", "verdict": "defect"}], rendered_names={"r"},
+            done=["g1"], accepted=[0], writer={"delegate": "codex", "seen": ["abc"], "ctx": 35},
+            look_prev=[{"item": "i", "verdict": "defect"}], rendered_names={"r"},
             last_reqs=[{"method": "Shots", "names": ["n"]}], handoff={"rounds": [{"stage": "1/1"}], "seen_lows": []}, pending_land_validation="red",
             review=REVIEW_STATE)),
     "ReviewState": REVIEW_STATE,
