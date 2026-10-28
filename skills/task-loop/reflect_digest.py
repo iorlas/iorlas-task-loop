@@ -156,7 +156,7 @@ def resolve_repo(value, repos):
     return ""
 
 
-def owner_repo(c, repos=None):
+def owner_repo(c, repos=None) -> str:
     """The repo whose bead list takes this cause: task-loop, delegate, or the project most of its runs ran in."""
     repos = registered() if repos is None else repos
     want = OWNERS.get(c["cause"])
@@ -164,11 +164,11 @@ def owner_repo(c, repos=None):
         for p in repos:
             if Path(p).name == want:
                 return p
-    mine = Counter()
+    mine = Counter[str]()
     for r_, n in c["repos"].items():
         hit = resolve_repo(r_, repos)
         if hit:
-            mine[hit] += n
+            mine[str(hit)] += n
     return mine.most_common(1)[0][0] if mine else ""
 
 

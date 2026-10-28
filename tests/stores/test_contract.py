@@ -1,6 +1,7 @@
 """The store contract: every suite runs on the file-backed stores and on the in-memory ones. Real-FS only here: temp dirs, real
 processes for the races (atomic replace, concurrent append, lock exclusion across processes)."""
 import json
+from typing import Any, cast
 import os
 import signal
 import subprocess
@@ -88,7 +89,7 @@ class RealRaces(unittest.TestCase):
         stop.set()
         w.join()
         self.assertEqual(bad, [])
-        self.assertEqual([p.name for p in doc.path.parent.iterdir()], [doc.path.name])  # no temp file left behind
+        self.assertEqual([p.name for p in cast(Any, doc).path.parent.iterdir()], [cast(Any, doc).path.name])  # no temp file left behind
 
     def test_processes_taking_one_lock_do_not_lose_updates(self) -> None:
         counter = self.cfg.root / "count.txt"

@@ -9,7 +9,7 @@ What it enforces, over every .py under src/, skills/, dev/ and tests/ (src/<pkg>
   placement `import re` only in adapters/ and domain/**/matchers.py; our file names only in contracts/paths.py;
             no import inside a function body; no mutable module global in domain/app/cli/hook/dash.
   vendor    the vendored shelf copy is unedited and matches dev/vendor.json (VendorGuard, Smoke); EXEMPT_DIRS skips it for the caps.
-  pyrefly   the baseline's error count may only shrink (tests/rules_ratchet.json "pyrefly_baseline_errors").
+  pyrefly   no baseline file: pyrefly check is clean, and a deliberate exception is a `# pyrefly: ignore[kind]` with its reason.
 The older folder table for skills/task-loop (ALLOWED, formerly tests/test_layers.py) stays here.
 """
 import ast
@@ -541,22 +541,9 @@ class RealTree(unittest.TestCase):
     def test_the_old_folder_table_has_no_sideways_import(self):
         self.assertEqual(violations(), [])
 
-    def test_the_pyrefly_baseline_error_count_may_only_shrink(self):
-        path = ROOT / "pyrefly-baseline.json"
-        recorded = load_ratchet()["pyrefly_baseline_errors"]
-        data = json.loads(path.read_text(encoding="utf-8"))
-        count = len(data["errors"])
-        self.assertLessEqual(count, recorded, "the baseline grew: fix the new errors instead")
-        self.assertEqual(count, recorded, "the baseline shrank: lower pyrefly_baseline_errors in tests/rules_ratchet.json to %d" % count)
-
-    def test_src_files_join_the_pyrefly_baseline_never_and_leave_it_only(self):
-        data = json.loads((ROOT / "pyrefly-baseline.json").read_text(encoding="utf-8"))
-        actual = {}
-        for e in data["errors"]:
-            if e["path"].startswith("src/"):
-                actual[e["path"]] = actual.get(e["path"], 0) + 1
-        known = load_ratchet()["pyrefly_baseline_src"]
-        self.assertEqual(ratchet_problems(actual, known, "pyrefly baseline (src is strict)"), [])
+    def test_pyrefly_has_no_baseline_every_error_is_fixed_or_ignored_with_a_reason(self):
+        self.assertNotIn("baseline", tomllib.loads((ROOT / "pyrefly.toml").read_text(encoding="utf-8")))
+        self.assertFalse((ROOT / "pyrefly-baseline.json").exists())
 
     def test_the_ruff_ignores_may_only_shrink(self):
         table = tomllib.loads((ROOT / "ruff.toml").read_text(encoding="utf-8"))["lint"]["per-file-ignores"]
@@ -712,7 +699,7 @@ class VendorGuard(unittest.TestCase):
         for name in names:
             with self.subTest(name):
                 mod = importlib.import_module(name)
-                self.assertEqual(Path(mod.__file__).resolve().parent, (vendor.VENDOR_DIR / name).resolve())
+                self.assertEqual(Path(mod.__file__ or "").resolve().parent, (vendor.VENDOR_DIR / name).resolve())
                 self.assertEqual(vendor.tree_hash(vendor.dir_files(vendor.VENDOR_DIR / name)), next(e["tree_hash"] for e in vendor.load() if e["name"] == name))
 
     def test_an_edited_or_added_file_in_any_package_is_drift(self):

@@ -1,6 +1,8 @@
 """The dash wired together: every reader and every endpoint of the server, made once over one Env and handed to each other.
 A test makes its own `Dash` over a temp config dir and fake ports."""
 
+from typing import Any
+
 from taskloop_dash.api.asks import Asks
 from taskloop_dash.api.beads import BeadApi
 from taskloop_dash.api.graph import Graph
@@ -38,7 +40,7 @@ class Dash:
         self.bead = BeadApi(env, self.records, self.beads, self.runlogs, self.tasks)
         self.live = Live(env, self.records, self.lanes)
 
-    def reflections(self, hours: object) -> dict[str, object]:
+    def reflections(self, hours: object) -> dict[str, Any]:
         try:
             n = int(str(hours))
         except ValueError:

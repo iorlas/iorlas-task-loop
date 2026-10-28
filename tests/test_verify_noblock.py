@@ -1,6 +1,7 @@
 """tl-bxk.10.28: a verify item never parks a bead unless it is a real owner decision. The fixtures are the five asks that
 parked lifesim on 2026-10-22 (~/.config/task-loop/asks/lifesim-*.json), each item with the kind the engine now routes by."""
 import json
+from typing import Any, cast
 import sys
 import threading
 import time
@@ -47,7 +48,7 @@ def open_as(*kinds, source=SOURCE):
                       for n, k in enumerate(kinds, 1)]}
 
 
-class NoBlock(T.EngineTest):
+class NoBlock(T.LandReviewBase):
 
     def go(self, items, verify=None, extra_reviews=(), bead=BEAD, writes=1, plan=PLAN_LEFT, **cfg):
         answers = {"plan": [plan], "write": [WRITE] * writes, "review": [dict(CLEAN, unchecked=items)] + list(extra_reviews)}
@@ -55,8 +56,6 @@ class NoBlock(T.EngineTest):
             answers["verify"] = verify
         with self.store.stub(show=bead):
             return self.run_engine(answers, **cfg)
-
-    engine_at_land, verifier = T.LandReviewBase.engine_at_land, T.LandReviewBase.verifier
 
     def unit(self):
         """An engine at land with the verifier's plumbing stubbed (no model, no tree)."""
@@ -109,7 +108,7 @@ class NoBlock(T.EngineTest):
         rounds = []
 
         def fix(kind, tail):
-            e.fixes += 1
+            cast(Any, e).fixes += 1
             rounds.append(tail)
             return "stuck"  # the fix round did not pass its checks and review
         with mock.patch.object(e, "ai", return_value=(open_as("checkable"), None)), mock.patch.object(e.fixer, "fix", side_effect=fix):

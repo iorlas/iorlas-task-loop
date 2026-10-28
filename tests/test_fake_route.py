@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from typing import Any
 from pathlib import Path
 from unittest import mock
 
@@ -47,10 +48,11 @@ class Fake(unittest.TestCase):
     def script_with(self, steps, net=None):
         self.script.write_text(json.dumps({"steps": steps, "net": net or [True]}))
 
-    def runner(self, cmd, **kw):  # route.py is fake_route.py: the same process seam, a different script
+    def runner(self, cmd, **kw: Any):  # route.py is fake_route.py: the same process seam, a different script
         cmd = list(cmd)
         cmd[1] = FAKE
-        return subprocess.run(cmd, **dict(kw, env=self.env, capture_output=True, text=True))
+        kw.update(env=self.env, capture_output=True, text=True)
+        return subprocess.run(cmd, **kw)
 
     def req(self, **kw):
         return dlcall.request("worker", str(self.dir), task="t-1", parent="t-1", title="x", timeout_s=900, **kw)

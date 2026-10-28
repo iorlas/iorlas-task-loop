@@ -506,7 +506,9 @@ class ResumeCount(StagesTest):
         e.git("checkout", "-q", "task/t-1")
         before = e.git("rev-parse", "HEAD")
         real = e.sh
-        e.sh = lambda cmd, **kw: (1, "refused") if cmd[:3] == ["git", "branch", "-m"] else real(cmd, **kw)
+        patch = mock.patch.object(e, "sh", new=lambda cmd, **kw: (1, "refused") if cmd[:3] == ["git", "branch", "-m"] else real(cmd, **kw))
+        patch.start()
+        self.addCleanup(patch.stop)
         self.assertFalse(e.rebase.start_again("x"))
         self.assertEqual(e.git("rev-parse", "HEAD"), before)  # the work is where it was
         e.sh = real

@@ -27,7 +27,7 @@ class StoreRules(unittest.TestCase):
             self.assertTrue(ast.get_docstring(tree), f.name)
             for node in ast.walk(tree):
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    n = len({i for i in code if node.lineno <= i <= node.end_lineno})
+                    n = len({i for i in code if node.lineno <= i <= (node.end_lineno or node.lineno)})
                     self.assertLessEqual(n, FUNC_CAP, "%s.%s" % (f.name, node.name))
 
     def test_imports(self):

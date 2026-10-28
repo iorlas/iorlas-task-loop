@@ -284,7 +284,7 @@ class Markdown(unittest.TestCase):
         page = (ROOT / "src" / "taskloop_dash" / "static" / "index.html").read_text(encoding="utf-8")
         src = must(re.search(r"/\*md\*/(.*?)/\*end md\*/", page, re.S)).group(1)
         esc = "const esc=s=>String(s==null?'':s).replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));"
-        r = subprocess.run([node, "-e", esc + src + "\nprocess.stdout.write(md(JSON.parse(process.argv[1])))", json.dumps(text)],
+        r = subprocess.run([must(node), "-e", esc + src + "\nprocess.stdout.write(md(JSON.parse(process.argv[1])))", json.dumps(text)],
                            capture_output=True, text=True, timeout=20)
         self.assertEqual(r.returncode, 0, r.stderr)
         return r.stdout

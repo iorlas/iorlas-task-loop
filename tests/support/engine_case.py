@@ -483,7 +483,7 @@ class EngineTest(unittest.TestCase):
         for checkout in (self.wt, other):
             sh("git", "clone", "-q", str(origin), str(checkout), cwd=home)
         events, held = [], []
-        state = {"pushes": 0, "fetches": 0, "gates": 0, "results": []}
+        state: dict[str, Any] = {"pushes": 0, "fetches": 0, "gates": 0, "results": []}
         real_lock, real_sh, real_wait = Lander.lock, engine.Engine.sh, Waits.add
         real_fetch, real_checks, real_fix = Checkout.fetch, engine.Engine.run_checks, Fixer.fix
         gate = [sys.executable, "-c", "pass"]

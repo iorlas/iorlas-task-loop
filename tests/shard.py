@@ -12,6 +12,7 @@ import json
 import sys
 import time
 import unittest
+from typing import Any
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -106,6 +107,12 @@ def plan(count, root=HERE, serial=SERIAL):
 
 class Timed(unittest.TextTestResult):
     """A result that remembers how long each test took (seconds, by id)."""
+    times: dict[str, float] = {}
+    t0 = 0.0
+
+    def __init__(self, stream: Any, descriptions: bool, verbosity: int) -> None:
+        super().__init__(stream, descriptions, verbosity)
+
     def startTest(self, test):
         self.t0 = time.monotonic()
         super().startTest(test)
@@ -118,7 +125,7 @@ class Timed(unittest.TextTestResult):
 def run_ids(ids, times=None):
     class Result(Timed):
         pass
-    Result.times = {}
+    Result.times = {}  # this run's own table, not Timed's
     res = unittest.TextTestRunner(verbosity=2, resultclass=Result).run(unittest.defaultTestLoader.loadTestsFromNames(ids))
     if times:
         Path(times).write_text(json.dumps(Result.times), encoding="utf-8")

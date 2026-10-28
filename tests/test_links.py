@@ -5,6 +5,7 @@ import socket
 import sys
 import threading
 import unittest
+from typing import override
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
@@ -49,7 +50,8 @@ class Check(unittest.TestCase):
                 self.end_headers()
             do_GET = do_HEAD
 
-            def log_message(self, *a):
+            @override
+            def log_message(self, format, *a):
                 pass
         base = self.serve(H)
         self.assertEqual(links.check(base + "ok"), (True, ""))

@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 sys.path.insert(0, str(ROOT / "tests"))
+from support.narrow import must  # noqa: E402
 from support.askjson import ask_json  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
 from taskloop_dash import tails as tails_mod  # noqa: E402
@@ -328,7 +329,7 @@ class Api(unittest.TestCase):
         a, b = d["events_id"].rsplit("@", 2)[1:]
         self.assertLessEqual(float(a), blocks[3]["t0"])
         self.assertGreaterEqual(float(b), blocks[3]["t1"])
-        self.assertEqual(self.dash.runs.api_block("../../etc/passwd", 1, 0), {"error": "no such run"})
+        self.assertEqual(self.dash.runs.api_block("../../etc/passwd", "1", 0), {"error": "no such run"})
 
     def test_a_windowed_rollout_keeps_only_the_blocks_events(self):
         p = Path(self.tmp.name) / "rollout.jsonl"
@@ -338,7 +339,7 @@ class Api(unittest.TestCase):
                                "payload": {"type": "message", "role": "assistant", "content": [{"text": text}]}}) + "\n"
         p.write_text(msg("2026-10-21T07:00:00Z", "round 1") + msg("2026-10-21T08:00:00Z", "round 2"))
         t = tails_mod.parse_ts("2026-10-21T07:30:00Z")
-        evs = self.dash.runs.run_events("codex-exec:%s@%s@%s" % (p, t, t + 3600))
+        evs = self.dash.runs.run_events("codex-exec:%s@%s@%s" % (p, t, must(t) + 3600))
         self.assertEqual([e["text"] for e in evs], ["round 2"])
         self.assertEqual(len(self.dash.runs.run_events("codex-exec:%s" % p)), 2)
 

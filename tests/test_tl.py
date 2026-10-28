@@ -167,6 +167,7 @@ class RegisterCLI(Base):
         ordinary.mkdir()
         file = self.home / "file"
         file.write_text("not a directory")
+        original = b""
         for configured in (False, True):
             if configured:
                 self.config.mkdir(parents=True)

@@ -118,7 +118,8 @@ class Feed(unittest.TestCase):
     def test_long_poll_returns_when_a_file_grows_and_waits_when_none_does(self):
         with tempfile.TemporaryDirectory() as d:
             log, lf, run = self.run_of(d)
-            cur = live.page(live.poll(run, None) and run)["cursor"]
+            self.assertTrue(live.poll(run, None))
+            cur = live.page(run)["cursor"]
             t0 = time.monotonic()
             self.assertEqual(live.poll(run, live.decode(cur), wait=2)["events"], [])
             self.assertGreaterEqual(time.monotonic() - t0, 2)

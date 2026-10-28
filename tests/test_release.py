@@ -234,6 +234,7 @@ class Release(unittest.TestCase):
         for remote_only in (False, True):
             with self.subTest(remote_only=remote_only):
                 name = "task/remote" if remote_only else "task/local"
+                worktree = self.home / "source-worktree"
                 self.sync_repo()
                 self.git("checkout", "-q", "-b", name, cwd=self.repo)
                 self.write(self.repo / "z.txt", name + "\n")
@@ -245,7 +246,6 @@ class Release(unittest.TestCase):
                     self.git("push", "-q", "origin", name, cwd=self.repo)
                     self.git("branch", "-D", name, cwd=self.repo)
                 else:
-                    worktree = self.home / "source-worktree"
                     self.git("worktree", "add", "-q", str(worktree), name, cwd=self.repo)
                 self.git("pull", "-q", "--ff-only", "origin", "main", cwd=self.seed)
                 self.write(self.seed / "other.txt", name + "\n")

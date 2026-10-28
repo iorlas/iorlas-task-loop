@@ -1,5 +1,6 @@
 """tl-bxk.10.32: the Grok lane (delegate family xai, OpenCode): login hint, transcript reader, context size, fresh-writer limit."""
 import json
+from typing import cast
 import os
 import sqlite3
 import sys
@@ -15,6 +16,7 @@ sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from taskloop.app.write.handoff import Handoff  # noqa: E402
+from taskloop.stores.runlog import RunLog  # noqa: E402
 from taskloop.contracts.delegate import DelegateResult  # noqa: E402
 from taskloop.adapters import context_size  # noqa: E402
 from taskloop.app.run import engine  # noqa: E402
@@ -154,7 +156,7 @@ class OpenCode(unittest.TestCase):
         con.execute("INSERT INTO part VALUES ('p9','m3',?,?,?,'{}')", (SID, T + 9000, T + 99000))
         con.commit()
         con.close()
-        self.assertAlmostEqual(opencode.opencode_updated(SID), 1_790_000_099.0)  # a part newer than every message
+        self.assertAlmostEqual(opencode.opencode_updated(SID) or 0.0, 1_790_000_099.0)  # a part newer than every message
 
     def test_a_locked_db_reads_as_empty(self):
         con = sqlite3.connect(self.db, isolation_level=None)
@@ -210,7 +212,7 @@ class OpenCode(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(json.loads(buf.getvalue())[0]["sessions"][0]["transcript"], "")
         sessions = []
-        calls = Calls(types.SimpleNamespace(emit=lambda rec: 0), lambda: None, sessions, {"tokens_in": 0, "tokens_cached": 0, "tokens_out": 0},
+        calls = Calls(cast(RunLog, types.SimpleNamespace(emit=lambda rec: 0)), lambda: None, sessions, {"tokens_in": 0, "tokens_cached": 0, "tokens_out": 0},
                       opencode.opencode_id, lambda path: None)
         r = DelegateResult(ref=SID, secs=1, cost=0, family="xai")
         calls.end("c1", "write", "writer", 1, r)

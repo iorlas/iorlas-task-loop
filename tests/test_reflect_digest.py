@@ -122,7 +122,7 @@ class Clusters(Base):
         for cause, want in (("engine", "iorlas-task-loop"), ("prompt", "iorlas-task-loop"), ("delegate", "iorlas-delegate"),
                             ("repo_profile", "lifesim"), ("sandbox", "lifesim")):
             self.trace("r-" + cause, [("x %s thing" % cause, cause, "e")])
-        owners = {c["cause"]: Path(rd.owner_repo(c)).name for c in rd.cluster(rd.items(NOW - 86400, NOW))}
+        owners = {c["cause"]: Path(rd.owner_repo(c) or "").name for c in rd.cluster(rd.items(NOW - 86400, NOW))}
         self.assertEqual(owners, {"engine": "iorlas-task-loop", "prompt": "iorlas-task-loop", "delegate": "iorlas-delegate",
                                   "repo_profile": "lifesim", "sandbox": "lifesim"})
 

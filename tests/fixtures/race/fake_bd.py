@@ -5,6 +5,7 @@ State in $FAKE_BD_DIR: store.json, store.lock, calls.jsonl (every call) and clai
 """
 
 import fcntl
+from typing import Any
 import json
 import os
 import sys
@@ -17,7 +18,7 @@ def stamp(t):
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t))
 
 
-def opt(args, flag, default=None):
+def opt(args, flag, default=None) -> Any:
     return args[args.index(flag) + 1] if flag in args and args.index(flag) + 1 < len(args) else default
 
 
@@ -92,7 +93,7 @@ class Bd:
             if "--status" in a:
                 st = opt(a, "--status")
                 if st != "in_progress" and b["status"] == "in_progress":
-                    self.held(b, "release:status " + st, b.get("assignee") or "")
+                    self.held(b, "release:status %s" % st, b.get("assignee") or "")
                     b.pop("lease_expires_at", None)
                 b["status"] = st
             if "--assignee" in a:
@@ -133,7 +134,7 @@ class Bd:
         if cmd == "create":
             self.s["n"] = self.s.get("n", 0) + 1
             bid = "new-%d" % self.s["n"]
-            self.s["beads"][bid] = {"id": bid, "title": a[1], "status": "open", "priority": int(opt(a, "--priority", 2)),
+            self.s["beads"][bid] = {"id": bid, "title": a[1], "status": "open", "priority": int(opt(a, "--priority", "2")),
                                     "issue_type": opt(a, "--type", "task"),
                                     "labels": [x for x in (opt(a, "--labels") or "").split(",") if x]}
             return 0, "Created issue: " + bid

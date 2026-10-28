@@ -1,6 +1,7 @@
 """One delegate call for a test: `call(resolved, role, brief, schema, cwd, runner=, **request)` -> `Got`, the answer with the facts
 a test asserts on (the typed result, its wire object, the policy's Stop)."""
 import support.paths  # noqa: F401
+from typing import Any
 from taskloop.adapters import delegate as dl
 from taskloop.contracts.delegate import RunRequest
 from taskloop.domain.lanes import policy as lp
@@ -15,8 +16,9 @@ class Got:
         self.source = "delegate" if answer.raw else "synthesized"
 
 
-def request(role, cwd, **kw):
-    return RunRequest(role=role, cwd=cwd, **dict({"brief_path": "", "schema_path": ""}, **kw))
+def request(role, cwd, **kw: Any):
+    fields: dict[str, Any] = dict({"brief_path": "", "schema_path": ""}, **kw)
+    return RunRequest(role=role, cwd=cwd, **fields)
 
 
 def call(resolved, role, brief, schema, cwd, runner, env=None, **kw):

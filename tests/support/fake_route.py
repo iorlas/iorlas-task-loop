@@ -152,6 +152,7 @@ class Script:
     answers: {node: [data | a full answer dict (has "contract") | a callable(script, node, cwd, resume)]};
     j_extra: {node: [fields the next done answer gains]}. calls: (role, resume, authored_by) per call; prompts, cwds, nodes,
     timeouts per call. A test wraps `reply(role, prompt, schema, cwd, resume, writer, timeout)` to change what a call does."""
+    seen_plan = ""  # the plan.json a reviewer call read, when a test wraps reply to record it
 
     items: list[str] = ["A1"]  # the acceptance ids of the last review prompt, kept across runs: a resumed call carries a short note
 

@@ -67,7 +67,9 @@ class SigtermWhileSpawning(unittest.TestCase):
             def __init__(self, *a, **kw):
                 super().__init__(*a, **kw)
                 outer.pids.append(self.pid)
-                signal.getsignal(signal.SIGTERM)(signal.SIGTERM, None)  # the signal lands here, between fork and the return
+                handler = signal.getsignal(signal.SIGTERM)
+                assert callable(handler)
+                handler(signal.SIGTERM, None)  # the signal lands here, between fork and the return
         self.old = signal.signal(signal.SIGTERM, self.handler)
         self.addCleanup(signal.signal, signal.SIGTERM, self.old)
         self.addCleanup(lambda: [procs.stop_pid(p, grace=0.2) for p in self.pids])

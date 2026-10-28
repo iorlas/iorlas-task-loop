@@ -1,6 +1,7 @@
 """The Roadmap tab: lanes (stage rail, unlocks, last passes), the queue as a tree of what each bead unblocks, /api/roadmap."""
 
 import json
+from typing import Any
 import os
 import sys
 import tempfile
@@ -132,7 +133,7 @@ class Build(unittest.TestCase):
         beads = [bead("a", status="closed", closed_at=stamp(60)), bead("b", blocks=["a"])]
         g = graph.build(beads, CFG, {"b"}, set(), (), now=NOW)
         before = {n["id"]: set(n) for n in g["nodes"]}
-        hist = [5, "x", {"ts": stamp(60), "outcome": "landed", "slot": "s1"},
+        hist: list[Any] = [5, "x", {"ts": stamp(60), "outcome": "landed", "slot": "s1"},
                 {"ts": stamp(50), "bead": "a", "slot": None, "outcome": "landed", "minutes": 3}]
         r = roadmap.build(g, [{"slot": "", "bead": None, "since": None}], [("b", "")], [], hist, {}, now=NOW)
         self.assertEqual([p["id"] for p in r["lanes"][0]["past"]], ["a"])  # the odd lines are dropped, slot None meets ""

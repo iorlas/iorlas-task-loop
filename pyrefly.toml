@@ -1,4 +1,4 @@
-# Type checking (88 sec 6). `just check` runs `pyrefly check`; the baseline may only shrink (tests/test_rules.py).
+# Type checking (88 sec 6). `just check` runs `pyrefly check`; there is no baseline (tests/test_rules.py).
 python-version = "3.12"
 project-includes = ["src", "skills", "tests", "dev"]
 # Vendored copies are byte-identical to their source repos and checked there; this repo only imports them.
@@ -8,7 +8,6 @@ search-path = ["src", "skills/task-loop", "skills/task-loop/_vendor", "tests", "
 check-unannotated-defs = true
 # Off: pyrefly matches .gitignore against absolute paths, so under .claude/worktrees/ it would match no file and pass.
 use-ignore-files = false
-baseline = "pyrefly-baseline.json"
 
 # playwright is installed only on a machine that runs the cockpit screenshot scenario; it is the one real third-party import.
 [[sub-config]]
@@ -16,7 +15,7 @@ matches = "tests/cockpit_scenario.py"
 [sub-config.errors]
 missing-import = false
 
-# New code is strict from its first commit (88 D10); only the old flat files carry the baseline. A sub-config cannot take
+# New code is strict from its first commit (88 D10); A sub-config cannot take
 # `preset`, so the kinds the strict preset adds are spelled out.
 [[sub-config]]
 matches = "src/**"

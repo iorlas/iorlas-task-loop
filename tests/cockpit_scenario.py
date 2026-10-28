@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Offline cockpit browser assertions; real page/handler, fake delegate, no tracker or vendor access."""
 import argparse
+from typing import Any
 import contextlib
 import json
 import os
@@ -34,7 +35,7 @@ def main():
     evidence.mkdir(parents=True, exist_ok=True)
     tmp = evidence / "tmp"
     tmp.mkdir(exist_ok=True)
-    results = {"assertions": [], "delegate_calls": [], "status_requests": []}
+    results: dict[str, Any] = {"assertions": [], "delegate_calls": [], "status_requests": []}
     until = time.time() + 12
     hostile = '<img src="https://vendor.invalid/quota" onerror="window.injected=true">'
     long_name = "UNKNOWN_" + "long_lane_" * 12
@@ -73,7 +74,8 @@ def main():
     # Restrict the real handler to the three read-only routes exercised by this scenario.
     dash = make_dash(config=tmp / "state", home=tmp / "home")
 
-    class Handler(make_handler(dash, 0, ["127.0.0.1"], PAGE, PAGE, forbidden, "")):
+    # make_handler builds its handler class inside the call (the dash server's own seam): the checker cannot take a call as a base
+    class Handler(make_handler(dash, 0, ["127.0.0.1"], PAGE, PAGE, forbidden, "")):  # pyrefly: ignore[invalid-inheritance]
         def do_GET(self):
             if self.path.split("?", 1)[0] not in ("/", "/api/asks", "/api/tasks", "/favicon.ico"):
                 return self.send(404, b"scenario route blocked", "text/plain")

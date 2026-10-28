@@ -24,7 +24,7 @@ def docstring_lines(tree: ast.AST) -> set[int]:
         if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
             body = node.body
             if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) and isinstance(body[0].value.value, str):
-                out.update(range(body[0].lineno, body[0].end_lineno + 1))
+                out.update(range(body[0].lineno, (body[0].end_lineno or body[0].lineno) + 1))
     return out
 
 
@@ -62,7 +62,7 @@ class ContractRules(unittest.TestCase):
                 self.assertLessEqual(len(code), FILE_CAP, "%s has %d SLOC" % (f.name, len(code)))
             for node in ast.walk(tree):
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    n = len({i for i in code if node.lineno <= i <= node.end_lineno})
+                    n = len({i for i in code if node.lineno <= i <= (node.end_lineno or node.lineno)})
                     with self.subTest("%s:%s" % (f.name, node.name)):
                         self.assertLessEqual(n, FUNC_CAP, "%s.%s has %d SLOC" % (f.name, node.name, n))
 

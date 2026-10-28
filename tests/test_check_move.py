@@ -127,7 +127,7 @@ class CheckMove(unittest.TestCase):
         # Runs against this repo's history; skipped if history is shallow.
         r = subprocess.run(["git", "log", "--diff-filter=A", "--format=%H", "--", "skills/task-loop/trim.py"],
                            cwd=ROOT, stdout=subprocess.PIPE, universal_newlines=True)
-        sha = r.stdout.split()[-1] if r.stdout.split() else None
+        sha = r.stdout.split()[-1] if r.stdout.split() else ""
         if not sha:
             self.skipTest("trim.py history unavailable")
 

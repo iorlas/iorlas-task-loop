@@ -384,7 +384,7 @@ def input_tokens(tk):
     return i if i >= c else i + c
 
 
-def planner_stats(since, until, prefixes=(), history=None, engine_dir=None):
+def planner_stats(since, until, prefixes=(), history=None, engine_dir=None) -> dict[str, Any]:
     """Planner calls per bead from delegate's history (input: `in`, plus cached on rows from before delegate 0.22), split by the engine logs' plan nodes:
     first plan, full plans again (a new thread from scratch), amends, check send-backs. Reads only."""
     history = Path(history or os.path.expanduser(HISTORY))

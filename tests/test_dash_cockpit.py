@@ -1,6 +1,7 @@
 """tl-7y6.3.1 stage 1: delegate_status() carries every lane's cockpit data, fresh on every refresh, and only ever
 invokes `route.py status --json`. All of delegate is mocked: no vendor is reached, nothing is written."""
 import glob
+from typing import Any
 import json
 import subprocess
 import sys
@@ -36,7 +37,7 @@ def answer(j):
 class Cockpit(unittest.TestCase):
     def status(self, j, **res):
         """delegate_status() with route.py mocked to this answer (extra CompletedProcess fields via res)."""
-        ret = dict({"stdout": json.dumps(j), "returncode": 0, "stderr": ""}, **res)
+        ret: dict[str, Any] = dict({"stdout": json.dumps(j), "returncode": 0, "stderr": ""}, **res)
         with mock.patch.object(glob, "glob", return_value=[ROUTE]), \
                 mock.patch.object(subprocess, "run", return_value=mock.Mock(**ret)) as run:
             d = DASH.lanes.delegate_status()

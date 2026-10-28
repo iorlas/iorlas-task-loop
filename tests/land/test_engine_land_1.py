@@ -1,9 +1,11 @@
 """Engine tests: the land, the push, the rebase and the conflict fix."""
 import sys
+from typing import Any, cast
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from support.narrow import must  # noqa: E402
 from support.engine_case import CLEAN, ENGINE_BASH, EngineTest, FALSE, HAS_F, PLAN, POSIX_CHECK, PY, WRITE, _cells, finding, no_repo, pyc, review, sh, stop  # noqa: E402
 import json  # noqa: E402
 import os  # noqa: E402
@@ -117,8 +119,8 @@ class EngineLand1Test(EngineTest):
 
         @contextlib.contextmanager
         def held_by_another(path, holder, waiting=None, timeout=None, check=None):
-            waiting("tl-266")
-            eng.clock.advance(2251)
+            must(waiting)("tl-266")
+            cast(Any, eng.clock).advance(2251)  # the test's fake clock
             yield path
         eng.os_lock = held_by_another
         with eng.waits.locked("land_lock", Path(self.tmp.name) / "land.lock"):

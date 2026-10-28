@@ -13,6 +13,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from support.narrow import must  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
 from taskloop_dash.api import looks as looks_api  # noqa: E402
 from taskloop_dash.views import gallery, graph, roadmap, signals  # noqa: E402
@@ -101,7 +102,7 @@ class Pictures(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_a_listed_picture_is_served(self):
-        data, ctype = LOOKS.picture(str(self.repo), "docs/evidence/tl-1/m1.png", self.items)
+        data, ctype = must(LOOKS.picture(str(self.repo), "docs/evidence/tl-1/m1.png", self.items))
         self.assertEqual((data, ctype), (PNG, "image/png"))
 
     def test_only_listed_pictures(self):

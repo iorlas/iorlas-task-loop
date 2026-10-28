@@ -1,6 +1,7 @@
 """tl-bxk.10.23: look and feel. A visual change saves screenshots; the agent judges them; the land keeps them in the repo
 and files an owner-look bead for the owner's later round."""
 import json
+from typing import Any, cast
 import sys
 import unittest
 from pathlib import Path
@@ -182,7 +183,7 @@ class LookTest(T.EngineTest):
                         visual_paths=VISUAL, evidence_dir="design/look-reviews")
         self.assertEqual(rc, 0, self.blocked)
         self.bd_calls.clear()
-        self.eng.look_notes, self.eng.look_filed = ["second look"], False  # a later run
+        cast(Any, self.eng).look_notes, self.eng.look_filed = ["second look"], False  # a later run
         self.store.put({"id": "t-9", "labels": ["owner-look"], "dependencies": [{"id": "t-1", "type": "related"}]})
         self.eng.owner_look.file_owner_look()
         self.assertEqual(self.creates(), [])

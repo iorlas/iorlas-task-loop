@@ -21,7 +21,7 @@ class RunLogs:
     def last_node(self, path: str) -> Any:
         return tlv.last_node(path, self.files)
 
-    def block_detail(self, path: str, node_id: str, k: int = 0) -> dict[str, Any]:
+    def block_detail(self, path: str, node_id: str | int, k: int = 0) -> dict[str, Any]:
         return detail.block_detail(path, node_id, k, self.files)
 
     @staticmethod
