@@ -39,8 +39,8 @@ class Live:
             return self.runs[path]
 
     def alive(self, lr, path):
-        start = next((e for e in lr.events() if e["k"] == "run_start"), None)
-        return self.srv.run_alive(path, {"worktree": start["worktree"]} if start and start.get("worktree") else None, None)
+        """From the typed log alone (no pid probe): running until the close record, stale when nothing was written for STALE_RUN."""
+        return lr.is_alive(time.time(), self.srv.STALE_RUN)
 
     def api_live(self, bead, run="", since="", before="", wait="0", limit="300"):
         """A bead's newest run (or the named one): its page of events, merged by time, with the state line. Without `since` the

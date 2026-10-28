@@ -89,6 +89,19 @@ class LiveRun:
     def events(self) -> list[dict]:
         return [e for _, _, e in self.select(lambda t, off: True)]
 
+    def is_alive(self, now: float, stale: float) -> bool:
+        """Running until the end record is written; stale only when no file of the run (engine log, worker live files) was
+        written for `stale` seconds, the engine's heartbeat having lapsed. No process is probed: a scripted lane has none."""
+        if any(e["k"] == "close" for e in self.events()):
+            return False
+        newest = 0.0
+        for s in self.sources.values():
+            try:
+                newest = max(newest, os.stat(s.path).st_mtime)
+            except OSError:
+                continue
+        return now - newest < stale
+
 
 def before_cursor(run: LiveRun, shown: list[tuple[str, int, dict]], older: bool) -> str | None:
     """Where the events before `shown` end, per source; None when nothing is left before them."""

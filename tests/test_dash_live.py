@@ -187,6 +187,28 @@ class Overview(unittest.TestCase):
             self.assertEqual(out["lanes"], [{"id": "OPENAI_SUBSCRIPTION", "state": "out", "out_until": T + 5000, "used_pct": 97}])
 
 
+class RunningFromTheLog(unittest.TestCase):
+    """running comes from the typed log alone: no end record, no stale heartbeat, no process needed (a scripted lane has none)."""
+
+    def test_steps_and_no_end_record_is_running_with_no_process(self):
+        with tempfile.TemporaryDirectory() as d:
+            log, lf = make_run(d)
+            put(log, [typed("run_start", T, run="%s-%s" % (BEAD, STAMP), bead=BEAD, worktree="/no/such/worktree")], mode="w")
+            put(log, [typed("step_start", T + 1, id="n1", step="write", text="write")])
+            run = live.LiveRun(log)
+            run.refresh()
+            now = os.stat(log).st_mtime + 1
+            self.assertTrue(run.is_alive(now, 1200))
+            ans = live.answer(run, BEAD, "n", run.is_alive(now, 1200), now=now)
+            self.assertTrue(ans["running"])
+            rows = overview.overview([{"bead": BEAD, "repo": "r", "title": "", "name": "n", "run": run, "alive": run.is_alive(now, 1200)}], [], [], now)["beads"]
+            self.assertEqual([r["bead"] for r in rows], [BEAD])
+            self.assertFalse(run.is_alive(now + 5000, 1200))  # the heartbeat lapsed
+            put(log, [typed("close", T + 9, outcome="landed", why="")])
+            run.refresh()
+            self.assertFalse(run.is_alive(now, 1200))
+
+
 class Page(unittest.TestCase):
     """The page is one html file; its renderer keys rows by src + kind + id and ticks from data-t0 (checked on the source)."""
 
