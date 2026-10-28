@@ -275,6 +275,18 @@ class Handoff(StagesTest):
         self.assertEqual([c[1] for c in s.calls if c[0] == "worker"][1], "ref-write")
 
 
+class Anchors(StagesTest):
+    """Plan v2: a plan that changes an existing file without an anchor for it goes back to the planner once."""
+
+    def test_an_unanchored_existing_file_sends_the_plan_back_once_and_the_anchor_reaches_the_writer(self):
+        bare = dict(PLAN, stages=[dict(PLAN["stages"][0], files=["a.txt"])])  # a.txt is tracked in the fixture repo
+        good = dict(bare, stages=[dict(bare["stages"][0], anchors=[{"path": "a.txt", "lines": "1-3", "symbol": "top", "why": "the file"}])])
+        rc, s = self.run_engine({"plan": [bare, good], "write": [WRITE, WRITE], "review": [CLEAN]})
+        self.assertEqual([c[0] for c in s.calls][:3], ["planner", "planner", "worker"])  # sent back once, then written
+        self.assertIn("name no anchor", s.prompts[1])
+        self.assertIn("- a.txt:1-3 top -- the file", s.prompts[2])
+
+
 class SharedNotes(StagesTest):
     """13.8: the tasks of a repo share what is running, what landed and which tests are flaky."""
 

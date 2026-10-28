@@ -28,7 +28,7 @@ WRITE_PROMPT = """You are the writer for one stage of a task, in an unattended e
 </plan>
 Your stage: {n}: {goal}{rules}
 Files: {files}
-The stage's checks (the engine runs all of them after you; the split says which you may run):
+{anchors}The stage's checks (the engine runs all of them after you; the split says which you may run):
 {checks}
 {where}
 A check that mentions $TL_CHECK_LOG_<ID> or $TL_CHECK_RC_<ID> reads the log and the exit code of a configured check the engine ran just
@@ -69,7 +69,7 @@ The brief is unchanged; it is in {brief}; re-read it if unsure.
 {plan}
 Your stage: {n}: {goal}
 Files: {files}
-The stage's checks (the engine runs all of them after you; the split says which you may run):
+{anchors}The stage's checks (the engine runs all of them after you; the split says which you may run):
 {checks}
 {where}
 {feedback}"""

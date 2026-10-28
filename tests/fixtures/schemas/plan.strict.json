@@ -151,6 +151,37 @@
    "items": {
     "additionalProperties": false,
     "properties": {
+     "anchors": {
+      "description": "at most 8: where in the code the stage's work starts",
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "lines": {
+         "type": "string"
+        },
+        "path": {
+         "type": "string"
+        },
+        "symbol": {
+         "type": "string"
+        },
+        "why": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "path",
+        "lines",
+        "symbol",
+        "why"
+       ],
+       "type": "object"
+      },
+      "type": [
+       "array",
+       "null"
+      ]
+     },
      "checks": {
       "description": "argv: a check is an argv list of strings, e.g. [\"python3\", \"-m\", \"unittest\"]; a pipeline, redirect or loop goes into a repo recipe (a just target or a script) that the argv calls, e.g. [\"just\", \"name\"]",
       "items": {
@@ -160,6 +191,13 @@
        "type": "array"
       },
       "type": "array"
+     },
+     "constraints": {
+      "description": "what the stage must not break or touch",
+      "type": [
+       "string",
+       "null"
+      ]
      },
      "files": {
       "items": {
@@ -172,13 +210,37 @@
      },
      "hard": {
       "type": "boolean"
+     },
+     "patterns": {
+      "description": "existing code to follow, one line each",
+      "items": {
+       "type": "string"
+      },
+      "type": [
+       "array",
+       "null"
+      ]
+     },
+     "read_first": {
+      "description": "files to read before touching anything",
+      "items": {
+       "type": "string"
+      },
+      "type": [
+       "array",
+       "null"
+      ]
      }
     },
     "required": [
      "goal",
      "files",
      "checks",
-     "hard"
+     "hard",
+     "anchors",
+     "read_first",
+     "patterns",
+     "constraints"
     ],
     "type": "object"
    },

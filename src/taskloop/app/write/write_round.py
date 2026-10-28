@@ -4,6 +4,7 @@ from typing import Any
 
 from taskloop.app.write.state import AGAIN, REPLAN, StageState
 from taskloop.domain.asks import specs as askspecs
+from taskloop.domain.prompts.anchors import anchors_text
 from taskloop.domain.prompts.common import DECIDED_TEXT, LATER_CASES, UNCHECKED_TEXT
 from taskloop.domain.prompts.write import SHOTS_FIX, write_prompt
 
@@ -48,8 +49,8 @@ class WriteRound:
         tail = CASES_TAIL + ("" if s.last else LATER_CASES) + UNCHECKED_TEXT + e.look_write(st)
         gate = f" (`{e.cfg.gate_text}`)" if e.cfg.gate else ""
         prompt = write_prompt(e.rules_text(), brief=e.brief_text(), plan=e.plan_text(), n=s.i + 1, goal=st["goal"],
-                              files=", ".join(st["files"]), checks=stage_checks, feedback=s.feedback, evidence=e.evidence_dir,
-                              where=where_text, gate=gate) + tail
+                              files=", ".join(st["files"]), anchors=anchors_text(st), checks=stage_checks, feedback=s.feedback,
+                              evidence=e.evidence_dir, where=where_text, gate=gate) + tail
         if fresh:
             prompt += e.hand.accepted_text() if boundary else e.hand.so_far_text()
         dtail = ""  # what a resumed writer still needs that its first prompt did not say for this stage
@@ -57,8 +58,8 @@ class WriteRound:
             dtail += CASES_NOW
         if e.unchecked:
             dtail += UNCHECKED_TEXT
-        delta = None if fresh else e.hand.delta(s.i + 1, st["goal"], ", ".join(st["files"]), stage_checks, where_text, s.feedback,
-                                                dtail + e.look_write(st))
+        delta = None if fresh else e.hand.delta(s.i + 1, st["goal"], ", ".join(st["files"]), anchors_text(st), stage_checks,
+                                                where_text, s.feedback, dtail + e.look_write(st))
         if delta:  # the writer may have edited its copy: the engine's brief goes back before it reads it again
             e.brief_file.write_text(e.brief_text(), encoding="utf-8")
         else:  # a whole prompt (a first write, a fresh writer): what the tasks beside this one are doing (tl-bxk.13.8)

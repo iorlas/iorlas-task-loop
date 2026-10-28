@@ -64,6 +64,13 @@
     "null"
    ]
   },
+  "handoff": {
+   "description": "at most 1 KB: what a fresh writer taking over needs that the diff does not show",
+   "type": [
+    "string",
+    "null"
+   ]
+  },
   "logic_only": {
    "type": "string"
   },
@@ -224,6 +231,7 @@
   "unchecked",
   "shots",
   "flakes",
+  "handoff",
   "logic_only"
  ],
  "type": "object"

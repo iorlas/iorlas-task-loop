@@ -124,8 +124,8 @@ def pyc(code, *args):
 
 HAS_F = shlex.join([sys.executable, "-c", "import os,sys; sys.exit(0 if os.path.exists('f.txt') else 1)"])
 FALSE = shlex.join([sys.executable, "-c", "import sys; sys.exit(1)"])
-PLAN = {"summary": "do it", "stages": [{"goal": "add f", "files": ["f.txt"], "checks": [HAS_F],
-                                        "hard": False}], "risks": [], "question": "", "options": [], "decided": "", "cases": [], "leftovers": []}
+PLAN: dict[str, Any] = {"summary": "do it", "stages": [{"goal": "add f", "files": ["f.txt"], "checks": [HAS_F],
+                                        "hard": False, "anchors": [{"path": "f.txt", "lines": "1", "symbol": "", "why": "the file"}]}], "risks": [], "question": "", "options": [], "decided": "", "cases": [], "leftovers": []}
 WRITE = {"summary": "wrote f", "checks_run": [{"cmd": "test -f f.txt", "exit": 0}], "question": "", "options": [], "decided": "", "bad_checks": [],
          "new_cases": [], "unchecked": [], "logic_only": ""}
 ROUTE = "/h/.claude/plugins/cache/m/iorlas-delegate/%s/skills/delegate/route.py"
@@ -1320,8 +1320,9 @@ class EngineTest(unittest.TestCase):
         return call
 
     # -- checkpoints: a rerun resumes where the last run stopped, never from scratch
-    TWO = {"summary": "two", "stages": [{"goal": "stage one", "files": ["f.txt"], "checks": [HAS_F], "hard": False},
-                                        {"goal": "stage two", "files": ["f.txt"], "checks": [HAS_F], "hard": False}],
+    ANCHORS = [{"path": "f.txt", "lines": "1", "symbol": "", "why": "the file"}]
+    TWO = {"summary": "two", "stages": [{"goal": "stage one", "files": ["f.txt"], "checks": [HAS_F], "hard": False, "anchors": ANCHORS},
+                                        {"goal": "stage two", "files": ["f.txt"], "checks": [HAS_F], "hard": False, "anchors": ANCHORS}],
            "risks": [], "question": "", "options": [], "decided": "", "cases": [], "leftovers": []}
 
     def stop_at(self, role, nth):
@@ -1747,7 +1748,7 @@ class EngineTest(unittest.TestCase):
 
     def test_a_brief_the_owner_changed_or_a_checkpoint_without_writer_seen_gets_the_full_prompt(self):
         rc, s = self.two_writes(ctx_k=40)
-        args = (1, "g", "f.txt", "checks", "where", "fb", "")
+        args = (1, "g", "f.txt", "", "checks", "where", "fb", "")
         self.assertIn("The brief is unchanged", self.eng.hand.delta(*args))
         (self.eng.run_dir / "brief.md").write_text("the owner answered: use X\n")  # an answer came in
         self.assertIsNone(self.eng.hand.delta(*args))

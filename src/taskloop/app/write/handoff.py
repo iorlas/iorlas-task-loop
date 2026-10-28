@@ -58,14 +58,14 @@ class Handoff:
         goals = "".join(f"- {g}\n" for g in self.e.done) or "(none)\n"
         return STAGES_DONE % (goals, (stat or "(no file changed yet)").strip(), self.rounds_text(last=4) or "(none)\n")
 
-    def delta(self, n: int, goal: str, files: str, checks: str, where: str, feedback: str, tail: str) -> str | None:
+    def delta(self, n: int, goal: str, files: str, anchors: str, checks: str, where: str, feedback: str, tail: str) -> str | None:
         """The prompt of a resumed writer: what changed since its session last saw the brief and the plan. None when the brief
         changed (the owner edited it, an answer came in): that session gets the whole prompt again."""
         seen = self.e.writer.get("seen")
         if not seen or seen[0] != self.seen_now()[0]:
             return None
         plan = "The plan is unchanged." if seen[1] == self.seen_now()[1] else f"The plan changed:\n<plan>\n{self.e.plan_text()}\n</plan>"
-        return WRITE_RESUME_PROMPT.format(brief=self.e.brief_file, plan=plan, n=n, goal=goal, files=files, checks=checks,
+        return WRITE_RESUME_PROMPT.format(brief=self.e.brief_file, plan=plan, n=n, goal=goal, files=files, anchors=anchors, checks=checks,
                                           where=where, feedback=feedback) + tail
 
     def seen_lows_text(self) -> str:

@@ -14,7 +14,7 @@ FEATURES = {
     "core": ["test_trace_records", "test_tl"],
     "lanes": ["test_opencode", "test_write_idle", "test_worker_calls", "test_lane_policy", "test_call_state", "test_procs", "test_kill_tree"],
     "checks": ["test_checks_speed", "test_check_trim", "test_watchdog", "test_engine_units"],
-    "plan": [],
+    "plan": [],  # plus every test under tests/plan/
     "adapters": [],
     "slots": ["test_slots", "test_slot_git"],
     "review": ["test_verify_noblock"],

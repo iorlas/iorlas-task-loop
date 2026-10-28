@@ -4,7 +4,7 @@ The brief is unchanged; it is in {brief}; re-read it if unsure.
 {plan}
 Your stage: {n}: {goal}
 Files: {files}
-The stage's checks (the engine runs all of them after you; the split says which you may run):
+{anchors}The stage's checks (the engine runs all of them after you; the split says which you may run):
 {checks}
 {where}
 {feedback}

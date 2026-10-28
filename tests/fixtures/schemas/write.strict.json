@@ -64,6 +64,13 @@
     "null"
    ]
   },
+  "handoff": {
+   "description": "at most 1 KB: what a fresh writer taking over needs that the diff does not show",
+   "type": [
+    "string",
+    "null"
+   ]
+  },
   "new_cases": {
    "items": {
     "additionalProperties": false,
@@ -220,7 +227,8 @@
   "new_cases",
   "unchecked",
   "shots",
-  "flakes"
+  "flakes",
+  "handoff"
  ],
  "type": "object"
 }

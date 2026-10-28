@@ -53,7 +53,7 @@ def render_write(rules=RULES, failed=None):
     eng = stub_engine()
     where = eng.where("write", [c.cmd for c in eng.cfg.checks] + CHECKS, failed, listed=CHECKS)
     return wp.write_prompt(
-        rules, brief="<brief text>", plan="<plan text>", n=1, goal="Add the greeting", files="greet.py",
+        rules, brief="<brief text>", plan="<plan text>", n=1, goal="Add the greeting", files="greet.py", anchors="",
         checks=eng.stage_checks_text(CHECKS, skip=failed), feedback="", evidence=".task/t-1/evidence", where=where, gate=" (`just check`)")
 
 
@@ -62,7 +62,7 @@ def render_resume(failed=None):
     eng = stub_engine()
     where = eng.where("write", [c.cmd for c in eng.cfg.checks] + CHECKS, failed, listed=CHECKS)
     return wp.WRITE_RESUME_PROMPT.format(
-        brief=".task/t-1/brief.md", plan="The plan is unchanged.", n=1, goal="Add the greeting", files="greet.py",
+        brief=".task/t-1/brief.md", plan="The plan is unchanged.", n=1, goal="Add the greeting", files="greet.py", anchors="",
         checks=eng.stage_checks_text(CHECKS, skip=failed), where=where, feedback="")
 
 

@@ -12,6 +12,10 @@ TRACKER_TEXT = ("\n\nYour plan was sent back: these checks read the issue tracke
                 "no writer can run and no code change can satisfy:\n%s\nRewrite them to prove the code and the tree only. "
                 "Follow-up work the task wants filed goes in leftovers: the engine files it.")
 
+UNANCHORED_TEXT = ("\n\nYour plan was sent back: these stages change files that exist but name no anchor for them:\n%s\nGive each "
+                   "such file an anchor in the stage's `anchors` (path, lines, symbol, why; at most 8 per stage) so the writer "
+                   "starts where you already looked instead of searching the tree again.")
+
 EMPTY_PLAN_TEXT = ("\n\nYour plan was sent back: it has no stages, no question and no leftovers, so there is nothing to do and nothing to "
                    "ask. A plan has at least one stage (goal, files, checks). If the work is already done in the tree, plan the "
                    "stage that checks it. If only follow-up work is left, list it in leftovers. If the task cannot be done without "

@@ -61,6 +61,10 @@
    },
    "type": "array"
   },
+  "handoff": {
+   "description": "at most 1 KB: what a fresh writer taking over needs that the diff does not show",
+   "type": "string"
+  },
   "logic_only": {
    "type": "string"
   },

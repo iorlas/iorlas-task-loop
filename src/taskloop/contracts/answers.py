@@ -56,11 +56,23 @@ class Unchecked:
 
 
 @record
+class Anchor:
+    path: str
+    lines: str
+    symbol: str
+    why: str
+
+
+@record
 class Stage:
     goal: str
     files: list[str]
     checks: list[list[str]] = field(metadata={"doc": ARGV_DOC})
     hard: bool
+    anchors: list[Anchor] = field(default_factory=list, metadata={"doc": "at most 8: where in the code the stage's work starts"})
+    read_first: list[str] = field(default_factory=list, metadata={"doc": "files to read before touching anything"})
+    patterns: list[str] = field(default_factory=list, metadata={"doc": "existing code to follow, one line each"})
+    constraints: str | None = field(default=None, metadata={"doc": "what the stage must not break or touch"})
 
 
 @record
@@ -149,6 +161,7 @@ class WriteAnswer:
     unchecked: list[Unchecked]
     shots: list[Shot] = field(default_factory=list)
     flakes: list[Flake] = field(default_factory=list)
+    handoff: str = field(default="", metadata={"doc": "at most 1 KB: what a fresh writer taking over needs that the diff does not show"})
 
 
 @record
@@ -247,9 +260,14 @@ def sent_schema(node: str, visual: bool = False) -> dict[str, Any]:
     return schema.strict(schema_for(node, visual))
 
 
+HANDOFF_MAX = 1024
+
+
 def check(node: str, visual: bool, data: Any) -> list[str]:
     """The reasons `data` is not this node's answer ([] when it is). `data` is a strict answer already mapped back
     (`schema.unstrict`); a key the contract does not name is ignored."""
+    if node == "write" and len(str((data or {}).get("handoff") or "").encode()) > HANDOFF_MAX:
+        return [f"WriteAnswer.handoff: over {HANDOFF_MAX} bytes; keep what a fresh writer needs and nothing else"]
     try:
         from_json(record_for(node, visual), schema.prune(data, schema_for(node, visual)))
     except CodecError as e:
