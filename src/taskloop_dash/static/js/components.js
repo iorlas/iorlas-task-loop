@@ -74,10 +74,10 @@ function Sheet1({ snap, beads }) {
     <${Item} name="StopActions" note="under a stuck worker">${by('5ban.3') && html`<${StopActions} card=${by('5ban.3')} />`}<//>
     <${Item} name="LookCard">${look && look.ask && html`<${LookCard} ask=${look.ask} now=${now} onApprove=${nop} onSendBack=${nop} />`}<//>
     <${Item} name="Message line">${live && live.passes[live.passes.length - 1].messages.map((m, i) => html`<${MsgLine} key=${i} msg=${m} now=${now} />`)}<//>
-    <${Item} name="Drawer" note="contained here">${frame(html`<${Drawer} open onClose=${nop} onWide=${nop}><div class="dh"><div class="l1"><span>lifesim · 6dq0</span></div><h3>Drawer shell</h3></div><//>`)}<//>
-    <${Item} name="Sheet" note="phone, contained here">${frame(html`<${Sheet} open title="Filter" onClose=${nop}><p>Sheet body.</p><//>`)}<//>
+    <${Item} name="Drawer" note="contained here">${frame(html`<${Drawer} open modal=${false} onClose=${nop} onWide=${nop}><div class="dh"><div class="l1"><span>lifesim · 6dq0</span></div><h3>Drawer shell</h3></div><//>`)}<//>
+    <${Item} name="Sheet" note="phone, contained here">${frame(html`<${Sheet} open modal=${false} title="Filter" onClose=${nop}><p>Sheet body.</p><//>`)}<//>
     <${Item} name="Popover"><${Popover} label="⚠2 problems"><div>same test failed 3×</div><div>tokens 2.8× usual</div><//><//>
-    <${Item} name="Toast">${frame(html`<${Toast} toast=${{ text: '✅ Approved · d5f.48 is landing', n: 1 }} />`)}<//>
+    <${Item} name="Toast">${frame(html`<${Toast} modal=${false} toast=${{ text: '✅ Approved · d5f.48 is landing', n: 1 }} />`)}<//>
     <${Item} name="EmptyState"><${EmptyState} title="No beads yet" body="Register a repo, then start its loop." cmd="tl register <repo>  ·  tl run" /><${Nothing} /><//>
     <${Item} name="Ring" note="lanes, refresh circle"><div class="row"><${Ring} v=${0.91} tone="w" value="91%" label="codex" /><${Ring} v=${1} tone="x" value="3d" label="gemini" />
       <${Ring} value="2s" /><${Ring} tone="w" value="41s" /><${Ring} v=${0.62} value="62%" size=${46} /></div><//>

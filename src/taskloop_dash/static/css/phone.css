@@ -132,10 +132,10 @@ html.phone .gal{grid-template-columns:1fr 1fr;gap:6px}html.phone .gal .big{grid-
 .pab button{flex:1;height:48px;border-radius:12px;border:1px solid var(--line);background:var(--card);font-size:15px;color:var(--tx)}
 .pab .stop{color:var(--red)}.pab .pri{flex:2;background:var(--ok);color:var(--onfill);border:0}
 /* sheet */
-.scrim{position:fixed;inset:0;background:var(--scrim);opacity:0;pointer-events:none;transition:opacity .25s;z-index:20}
-.scrim.on{opacity:1;pointer-events:auto}
-.sh{position:fixed;left:0;right:0;bottom:0;z-index:21;background:var(--card);border-radius:20px 20px 0 0;padding:8px 16px calc(16px + env(safe-area-inset-bottom));transform:translateY(105%);transition:transform .32s cubic-bezier(.2,.8,.2,1);max-height:88vh;overflow-y:auto;overscroll-behavior:contain}
-.sh.on{transform:none}
+.sh{inset:auto 0 0 0;margin:0;border:0;width:auto;max-width:none;color:inherit;background:var(--card);border-radius:20px 20px 0 0;padding:8px 16px calc(16px + env(safe-area-inset-bottom));transform:translateY(105%);transition:transform .32s cubic-bezier(.2,.8,.2,1),display .32s allow-discrete,overlay .32s allow-discrete;max-height:88vh;overflow-y:auto;overscroll-behavior:contain}
+.sh.on{transform:none}@starting-style{.sh.on{transform:translateY(105%)}}
+.sh::backdrop{background:var(--scrim);opacity:0;transition:opacity .25s,display .25s allow-discrete,overlay .25s allow-discrete}
+.sh[open]::backdrop{opacity:1}@starting-style{.sh[open]::backdrop{opacity:0}}
 .grab{width:40px;height:5px;border-radius:3px;background:var(--line);margin:0 auto 12px}
 .sh h3{font-size:19px;font-weight:600;margin:2px 0 6px}
 .sh p{font-size:15px;color:var(--mut);margin:0 0 12px}

@@ -23,8 +23,11 @@ button{font:inherit;color:inherit}b{font-weight:600}
 .ln .end{position:absolute;top:1px;font-size:13px}
 .ln .cap{position:absolute;top:2px;font-size:11px;color:var(--mut);white-space:nowrap}
 /* drawer (round 3b) */
-.drw{position:fixed;top:0;right:0;bottom:0;width:min(640px,100%);background:var(--card);box-shadow:var(--sh);border-left:1px solid var(--line);transform:translateX(105%);transition:transform .22s;z-index:5;display:flex;flex-direction:column}
-.drw.open{transform:none}
+/* the overlays are native: <dialog> (drawer, sheet) and popover (popb, toast) live in the top layer, so no z-index; a closed one
+   slides or fades out before display goes (allow-discrete) and slides or fades in from @starting-style */
+.drw{inset:0 0 0 auto;margin:0;padding:0;border:0;border-left:1px solid var(--line);height:100%;max-height:none;max-width:none;width:min(640px,100%);color:inherit;background:var(--card);box-shadow:var(--sh);flex-direction:column;transform:translateX(105%);transition:transform .22s,display .22s allow-discrete,overlay .22s allow-discrete}
+.drw[open]{display:flex}.drw.open{transform:none}@starting-style{.drw.open{transform:translateX(105%)}}
+.drw::backdrop{background:transparent}.drw:focus,.sh:focus{outline:none}
 .dh{padding:12px 16px 0;border-bottom:1px solid var(--line)}.dh .x{float:right;border:0;background:none;font-size:20px;cursor:pointer;line-height:1}
 .dh .l1{display:flex;gap:8px;font-size:12px;color:var(--mut)}.dh .l1 .tot{margin-left:auto;margin-right:26px;color:var(--tx);font-variant-numeric:tabular-nums}
 .dh h3{margin:2px 0 8px;font-size:16px;font-weight:600}
@@ -59,7 +62,8 @@ button{font:inherit;color:inherit}b{font-weight:600}
 .cm{border-top:1px solid var(--line);padding:6px 0;font-size:12px}.cm .w{color:var(--mut);font-size:11px}
 .ctl{border-top:1px solid var(--line);padding:8px 12px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .ctl button{font-size:12px;border:1px solid var(--line);background:var(--card);border-radius:8px;padding:5px 10px;cursor:pointer}.ctl .stop{color:var(--red);border-color:var(--red)}.ctl .pri{background:var(--ink);color:var(--bg);border-color:var(--ink)}
-.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--tx);color:var(--card);padding:6px 14px;border-radius:99px;font-size:12px;opacity:0;transition:opacity .3s;z-index:20}.toast.on{opacity:1}
+.toast{position:fixed;inset:auto auto 20px 50%;margin:0;border:0;transform:translateX(-50%);background:var(--tx);color:var(--card);padding:6px 14px;border-radius:99px;font-size:12px;opacity:0;transition:opacity .3s,display .3s allow-discrete,overlay .3s allow-discrete}
+.toast:popover-open,.toast.in{opacity:1}@starting-style{.toast:popover-open{opacity:0}}
 /* ---- kit additions (one look each, dash-kit-audit-1029) ---- */
 .btn{font-size:12px;border:1px solid var(--line);background:var(--card);border-radius:8px;padding:5px 10px;cursor:pointer}.btn.pri{background:var(--ink);color:var(--bg);border-color:var(--ink)}.btn.stop{color:var(--red);border-color:var(--red)}
 .tag{display:inline-block;font-size:11px;padding:1px 6px;border-radius:4px;background:var(--cell);color:var(--mut)}.tag.run{background:var(--runbg);color:var(--run)}.tag.bad{background:var(--redbg);color:var(--red)}.tag.watch{background:var(--ambbg);color:var(--amb)}.tag.you{background:var(--youbg);color:var(--you)}.tag.ok{background:var(--okbg);color:var(--ok)}
@@ -69,7 +73,7 @@ button{font:inherit;color:inherit}b{font-weight:600}
 .panel{padding:4px 16px 16px}.perr{color:var(--red);font-size:13px}
 .mk{display:inline-block;width:20px;text-align:center;flex:none}
 .meter{display:block;height:4px;border-radius:2px;background:var(--cell);overflow:hidden}.meter i{display:block;height:100%;background:var(--ink)}
-.pop{position:relative;display:inline-block}.popb{position:absolute;right:0;top:calc(100% + 4px);background:var(--card);border:1px solid var(--line);border-radius:10px;box-shadow:var(--sh);padding:8px 10px;z-index:8;min-width:180px;font-size:12px}
+.popb{inset:auto;top:anchor(bottom);right:anchor(right);margin:4px 0;position-try-fallbacks:flip-block,flip-inline;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:10px;box-shadow:var(--sh);padding:8px 10px;min-width:180px;font-size:12px}
 .empty{color:var(--mut);padding:40px 14px;text-align:center}.empty .emt{font-size:15px;color:var(--tx);margin:0 0 6px}.empty p{margin:0 0 8px}.cmd{font:12px var(--mono);background:var(--card);border:1px solid var(--line);border-radius:6px;padding:3px 8px}
 .ban{padding:6px 14px;font-size:13px;border-bottom:1px solid var(--line)}.ban.watch{background:var(--ambbg);color:var(--amb)}.ban.bad{background:var(--redbg);color:var(--red)}.ban code{font:12px var(--mono)}
 .ban .lnk{height:auto;font-size:13px;color:inherit;text-decoration:underline;cursor:pointer}
@@ -80,7 +84,6 @@ button{font:inherit;color:inherit}b{font-weight:600}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}.seg button{font-size:12px;border:0;background:var(--card);padding:3px 9px;cursor:pointer}.seg button+button{border-left:1px solid var(--line)}.seg button.on{background:var(--ink);color:var(--bg)}
 html.phone .ban{font-size:14px;padding:10px 16px}
 /* ---- kit, round 2 ---- */
-.dscrim{position:fixed;inset:0;z-index:4}
 .drw.wide{width:100%}.dctl{position:absolute;top:8px;right:10px;z-index:2;display:flex;gap:2px}.dctl .x{border:0;background:none;font-size:18px;cursor:pointer;line-height:1;padding:2px 6px;color:var(--mut)}.dctl .x:hover{color:var(--tx)}
 .dh .l1{padding-right:56px;align-items:baseline}.dh .l1>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tot{margin-left:auto;white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--tx)}.tot .tk.watch{color:var(--amb)}.tot .tk.bad{color:var(--red)}.tot .tk.grey{color:var(--mut)}.mut{color:var(--mut)}

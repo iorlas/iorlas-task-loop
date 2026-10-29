@@ -1,6 +1,6 @@
 // The kit: one look per component (docs/design/dashboard/dash-kit-audit-1029.md). Components take contract records
 // (src/taskloop/contracts/dash.py) and callbacks; they hold no server state and decide nothing the engine decides.
-import { html, useEffect, useState } from '../../vendor/ui-runtime.js';
+import { html, useEffect, useRef, useState } from '../../vendor/ui-runtime.js';
 import { causeOf, muted, troubleOf } from '../data.js';
 import { MARK, MARK_TONE, age, bid, dur, md, tokens } from '../format.js';
 
@@ -120,42 +120,59 @@ export function MsgLine({ msg, now }) {
     <${Md} cls="tx" text=${msg.md} /></div></div>`;
 }
 
+// a native modal <dialog> kept in step with `open`: Esc and a click on the backdrop call onClose (the caller owns the state, a
+// sheet's history entry included); modal=false leaves it in the flow (the kit page shows it in a frame)
+function useDialog(open, onClose, modal) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const d = ref.current;
+    if (!modal || !d) return;
+    if (open && !d.open) { d.showModal(); d.focus(); } // the dialog itself, not its first button (no focus ring on ⤢)
+    else if (!open && d.open) d.close();
+  }, [open, modal]);
+  return {
+    ref,
+    tabIndex: -1,
+    onCancel: (e) => { e.preventDefault(); onClose(); },
+    onClick: (e) => { if (e.target === e.currentTarget) onClose(); },
+  };
+}
+
 // side drawer (desktop) with ⤢ full width; closes on ×, Esc or a click outside
-export function Drawer({ open, wide, onClose, onWide, children }) {
-  useEffect(() => {
-    if (!open) return undefined;
-    const k = (e) => { if (e.key === 'Escape') onClose(); };
-    addEventListener('keydown', k);
-    return () => removeEventListener('keydown', k);
-  }, [open]);
-  return html`${open && html`<div class="dscrim" onClick=${onClose}></div>`}
-    <aside class=${`drw ${open ? 'open' : ''} ${wide ? 'wide' : ''}`} aria-hidden=${!open}>
+export function Drawer({ open, wide, onClose, onWide, modal = true, children }) {
+  const dlg = useDialog(open, onClose, modal);
+  return html`<dialog ...${dlg} open=${!modal && open} class=${`drw ${open ? 'open' : ''} ${wide ? 'wide' : ''}`}>
     ${open && html`<div class="dctl"><button class="x" title=${wide ? 'Narrow' : 'Full width'} onClick=${onWide}>⤢</button>
-      <button class="x" aria-label="Close" onClick=${onClose}>×</button></div>`}${open && children}</aside>`;
+      <button class="x" aria-label="Close" onClick=${onClose}>×</button></div>`}${open && children}</dialog>`;
 }
 
-// bottom sheet (phone) and its scrim; the scrim closes it
-export function Sheet({ open, title, onClose, children }) {
-  return html`<div class=${`scrim ${open ? 'on' : ''}`} onClick=${onClose}></div>
-    <div class=${`sh ${open ? 'on' : ''}`} role="dialog" aria-hidden=${!open}><div class="grab"></div>
-      ${open && title && html`<h3>${title}</h3>`}${open && children}</div>`;
+// bottom sheet (phone); a tap above it closes it
+export function Sheet({ open, title, onClose, modal = true, children }) {
+  const dlg = useDialog(open, onClose, modal);
+  return html`<dialog ...${dlg} open=${!modal && open} class=${`sh ${open ? 'on' : ''}`}><div class="grab"></div>
+    ${open && title && html`<h3>${title}</h3>`}${open && children}</dialog>`;
 }
 
+// a native popover: a click outside or Esc closes it, a click inside too; it sits under its button (CSS anchor)
+let pops = 0;
 export function Popover({ label, cls = 'lbtn', children }) {
-  const [open, setOpen] = useState(false);
-  return html`<span class="pop"><button class=${cls} onClick=${() => setOpen(!open)}>${label}</button>
-    ${open && html`<div class="popb" onClick=${() => setOpen(false)}>${children}</div>`}</span>`;
+  const [id] = useState(() => `pop${++pops}`);
+  return html`<button class=${cls} popovertarget=${id} style=${`anchor-name:--${id}`}>${label}</button>
+    <div id=${id} popover="auto" class="popb" style=${`position-anchor:--${id}`} onClick=${(e) => e.currentTarget.hidePopover()}>${children}</div>`;
 }
 
-export function Toast({ toast }) {
-  const [on, setOn] = useState(false);
+// a manual popover, so it shows above an open dialog (the top layer); shown again for each new toast; modal=false: in the flow
+export function Toast({ toast, modal = true }) {
+  const ref = useRef(null);
   useEffect(() => {
-    if (!toast) return undefined;
-    setOn(true);
-    const t = setTimeout(() => setOn(false), 2600);
+    const el = ref.current;
+    if (!modal || !toast || !el) return undefined;
+    if (el.matches(':popover-open')) el.hidePopover();
+    el.showPopover();
+    const t = setTimeout(() => el.hidePopover(), 2600);
     return () => clearTimeout(t);
   }, [toast && toast.n]);
-  return html`<div class=${`toast ${on ? 'on' : ''}`} role="status">${toast && toast.text}</div>`;
+  return html`<div ref=${ref} popover=${modal ? 'manual' : undefined} class=${`toast ${modal ? '' : 'in'}`} role="status">${toast && toast.text}</div>`;
 }
 
 // first run and other "nothing yet" places: one look
