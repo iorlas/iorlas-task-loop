@@ -1,0 +1,22 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Round 9 Phone</title>
+<style>:root{--bg:#f4f2ee;--tx:#1d1d1b;--mut:#6b6a66;--line:#dedbd4;--you:#2459cf}
+@media (prefers-color-scheme:dark){:root{--bg:#17181a;--tx:#e8e6e1;--mut:#9a9893;--line:#2c2d30}}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.45 -apple-system,system-ui,sans-serif}
+.w{max-width:2200px;margin:auto;padding:16px}h1{font-size:20px;margin:0 0 4px;font-weight:600}p{margin:0 0 12px;color:var(--mut);max-width:900px}
+.row{display:flex;flex-wrap:wrap;gap:22px;padding:8px 2px 18px}.ph{flex:none;width:390px}.ph h3{font-size:13px;font-weight:500;margin:0 0 6px}.ph h3 span{color:var(--mut);font-weight:400}
+.fr{width:390px;height:844px;border:10px solid #1d1d1b;border-radius:44px;overflow:hidden;background:#fff;box-sizing:content-box}iframe{width:390px;height:844px;border:0;display:block}
+table{border-collapse:collapse;font-size:13px;max-width:1100px}td,th{border-bottom:1px solid var(--line);padding:6px 10px;text-align:left;vertical-align:top}th{color:var(--mut);font-weight:500}
+</style></head><body><div class="w">
+<h1>📱 Round 9: the phone view</h1>
+<p>Same data, its own layout below 600px. Rules: no sideways scrolling anywhere, every tap target at least 40px, text at least 12px, inputs 16px (no iOS zoom), actions in thumb reach, system back closes the top layer. Each frame is live.</p>
+<div class="row"><div class="ph"><h3>① Board <span>· stuck first, then needs you · answer from the card</span></h3><div class="fr"><iframe src="dash-round-9-app.html#board"></iframe></div></div><div class="ph"><h3>② One-tap answer <span>· sheet: sent, make it stick</span></h3><div class="fr"><iframe src="dash-round-9-app.html#board~~fld.27~~stick"></iframe></div></div><div class="ph"><h3>③ Bead page <span>· pushed screen · swipe from the edge to go back</span></h3><div class="fr"><iframe src="dash-round-9-app.html#board~~5ban.3"></iframe></div></div><div class="ph"><h3>④ Stop <span>· confirm sheet, never one tap</span></h3><div class="fr"><iframe src="dash-round-9-app.html#board~~6dq0~~stop"></iframe></div></div><div class="ph"><h3>⑤ Floor <span>· one card per slot · 2 h strip</span></h3><div class="fr"><iframe src="dash-round-9-app.html#floor"></iframe></div></div><div class="ph"><h3>⑥ Goals <span>· drill down, one level at a time</span></h3><div class="fr"><iframe src="dash-round-9-app.html#board~tree~~~g:g2"></iframe></div></div><div class="ph"><h3>⑦ Decisions <span>· learning on top, sticky tabs</span></h3><div class="fr"><iframe src="dash-round-9-app.html#dec"></iframe></div></div><div class="ph"><h3>⑧ Lanes <span>· worst first</span></h3><div class="fr"><iframe src="dash-round-9-app.html#lanes"></iframe></div></div><div class="ph"><h3>⑨ Filter <span>· bottom sheet instead of a chip strip</span></h3><div class="fr"><iframe src="dash-round-9-app.html#board~~~~filter"></iframe></div></div></div>
+<table><tr><th>Was (round 9 v1)</th><th>Now</th></tr>
+<tr><td>Filter chips in a sideways-scrolling strip, 23px tall; Flow/Goal toggle squeezed to zero width</td><td>Segmented Flow · Goals + one Filter button; filter is a bottom sheet with wrapping 40px chips and "Show N beads"</td></tr>
+<tr><td>Kanban cards; to answer an ask you open the bead</td><td>🛑 Stuck first, then 🙋 Needs you with the recommended answer as a button on the card; "More" opens the full ask</td></tr>
+<tr><td>Drawer squeezed into the phone: × 24px, trace wider than the screen, Park/Stop/input/Send crammed in one row</td><td>Bead page pushed from the right, "‹ Back", swipe from the edge, trace fitted to width, bottom bar Park · Stop · Note; Stop and Note open sheets</td></tr>
+<tr><td>Terminal lines cut off, 10px labels</td><td>Terminal wraps; nothing below 12px</td></tr>
+<tr><td>Floor: tiny 22px bars with overlapping names</td><td>Slot cards: state pill, current bead, stage and time, a 2 h strip; counts on top (running · stuck · your look · free)</td></tr>
+<tr><td>Goal tree indented 4 levels with 10px fold arrows</td><td>Drill down: goal → what it needs → bead; back returns one level</td></tr>
+<tr><td>Rings in the header with 10px text, refresh ring</td><td>One pill: only the lanes in trouble; tap opens Lanes</td></tr>
+<tr><td>Ledger table cut to fit</td><td>One row per ask as a stacked list; ADR reuse moved under the text</td></tr>
+</table></div></body></html>

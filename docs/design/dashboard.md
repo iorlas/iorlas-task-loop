@@ -1,5 +1,7 @@
 # task-loop dashboard: strategy (v2, after Fable review 2026-10-18)
 
+> **Superseded UI (2026-10-29):** the dashboard v2 spec in [dashboard-v2/dash-spec.md](dashboard-v2/dash-spec.md) replaces the UI parts below (Task view v3, Roadmap v4, Cockpit layer). Records and server parts stay valid unless that spec changes them.
+
 ## Goal
 Real time: which tasks are in flight, in which repo; click a task, see every session working on it with a live
 log (the orchestrating Claude session, Agent-tool subagents, Codex runs, `claude -p` runs). Also the whole
