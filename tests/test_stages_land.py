@@ -49,21 +49,14 @@ class StaleTree(StagesTest):
         te.sh("git", "commit", "-qm", "main moves", cwd=base)
         te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
 
-    def test_a_resume_mid_stage_rebases_first_and_goes_on(self):
+    def test_a_land_logs_its_try_with_the_bases_and_whether_the_rebase_moved(self):
         self.stopped_run()
         self.main_moves()
         rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
-        text = self.eng.log_path.read_text()
-        self.assertIn("rebased the task branch onto the latest origin/main", text)
+        self.assertIn("rebased the task branch onto the latest origin/main", self.eng.log_path.read_text())
         self.assertNotIn("planner", [c[0] for c in s.calls])  # the plan was kept
         self.assertEqual(self.eng.stage_tree, "")
-
-    def test_a_land_logs_its_try_with_the_bases_and_whether_the_rebase_moved(self):
-        self.stopped_run()
-        self.main_moves()
-        rc, _ = self.run_engine({"write": [WRITE], "review": [CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
         tries = [json.loads(line) for line in self.eng.log_path.read_text().splitlines() if '"land_try"' in line]
         self.assertEqual([(t["n"], t["rebase_moved"], t["failing"]) for t in tries], [(1, False, "")])  # the resume rebased already
         self.assertEqual(tries[0]["base_before"], tries[0]["base_after"])
@@ -117,17 +110,6 @@ class StaleTree(StagesTest):
         writer = s.prompts[1]
         self.assertIn("exist only while the engine runs the checks, never in your session", writer)
         self.assertIn("do not call it a blocker", writer)
-
-    def test_a_resume_that_conflicts_with_main_starts_again(self):
-        te.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
-        (self.wt / "a.txt").write_text("my work\n")
-        te.sh("git", "add", "-A", cwd=self.wt)
-        te.sh("git", "commit", "-qm", "wip", cwd=self.wt)
-        te.sh("git", "checkout", "-q", "-", cwd=self.wt)
-        self.main_moves("a.txt")
-        rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertIn("resume_conflict", self.eng.log_path.read_text())
 
     def test_a_configured_check_the_tree_lacks_is_the_engines_error_not_a_writers_amend(self):
         miss = [

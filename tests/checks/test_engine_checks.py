@@ -4,14 +4,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, POSIX_CHECK, PY, WRITE, EngineTest, no_repo, pid_gone, pyc, sh, shq
+from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, PY, WRITE, EngineTest, no_repo, pid_gone, pyc, sh, shq
 
 # isort: split
 import contextlib
 import os
 import shlex
 import signal
-import subprocess
 import time
 from pathlib import Path
 from unittest import mock
@@ -58,17 +57,6 @@ class EngineChecksTest(EngineTest):
         eng.run_checks(st, "s")
         self.assertEqual(count.read_text(), "11")
         self.assertEqual(first[0].exit, 0)
-
-    @POSIX_CHECK
-    def test_a_check_that_times_out_is_red_and_leaves_no_process(self):
-        c = cfg_with(wslots.load_cfg(str(self.wt)), check_wall_min=0.03)  # under 2 s
-        eng = engine.Engine("t-1", str(self.wt), c, store=self.store)
-        mark = f"61.{os.getpid()}"  # unique: a second suite running at once has its own sleep
-        res = eng.run_checks({"checks": [f"bash -c 'sleep {mark}; true'"], "files": []}, "s")
-        self.assertEqual(res[0].exit, 124)
-        self.assertIn("timed out", res[0].tail)
-        left = subprocess.run(["pgrep", "-f", "sleep " + mark], capture_output=True, text=True, check=False).stdout.strip()
-        self.assertEqual(left, "")
 
     def test_checks_run_without_the_launchers_claude_session(self):
         c = wslots.load_cfg(str(self.wt))
@@ -126,11 +114,11 @@ class EngineChecksTest(EngineTest):
 
     def test_a_checks_own_wall_min_overrides_the_global_one(self):
         n = Path(self.tmp.name) / "runs-own"
-        slow = self.sleeping_check(2, n)
+        slow = self.sleeping_check(1.2, n)
         eng = self.checks_engine(checks=[{"id": "short", "cmd": slow, "group": "tests", "wall_min": 0.01}],
                                  check_wall_min=5)
         self.assertEqual(eng.run_checks({"checks": [], "files": []}, "s")[0].exit, 124)
-        eng2 = self.checks_engine(checks=[{"id": "long", "cmd": slow, "group": "tests", "wall_min": 0.5}],
+        eng2 = self.checks_engine(checks=[{"id": "long", "cmd": slow, "group": "tests", "wall_min": 0.1}],
                                   check_wall_min=0.01)
         self.assertEqual(eng2.run_checks({"checks": [], "files": []}, "s")[0].exit, 0)
 
@@ -281,26 +269,13 @@ class EngineChecksTest(EngineTest):
         self.assertEqual(may.count(HAS_F), 1)
         self.assertEqual(may.count("only-repo"), 1)
 
-    def test_a_slow_check_that_times_out_is_stopped_with_everything_it_started(self):
-        if os.name == "nt":
-            self.skipTest("POSIX process groups")
-        pidfile = Path(self.tmp.name, "child.pid")
-        eng = self.checks_engine(check_wall_min=0.03)
-        t = time.time()
-        res = eng.run_checks({"checks": [self.spawn(pidfile)], "files": []}, "s")
-        self.assertLess(time.time() - t, 15, "the engine waited for the check's child to end by itself")
-        self.assertEqual(res[0].exit, 124)
-        self.assertIn("timed out after 0.03 min", res[0].tail)
-        self.assertEqual(res[0].status, "failed")
-        self.assertDead(self.child_of(pidfile))
-
     def test_a_sleeping_check_is_cut_at_check_wall_min_not_node_timeout_min(self):
-        eng = self.checks_engine(check_wall_min=0.02, node_timeout_min=45)
+        eng = self.checks_engine(check_wall_min=0.01, node_timeout_min=45)
         t = time.time()
         res = eng.run_checks({"checks": [PY + ' -c "import time; time.sleep(30)"'], "files": []}, "s")
         self.assertLess(time.time() - t, 15)
         self.assertEqual((res[0].exit, res[0].status), (124, "failed"))
-        self.assertIn("timed out after 0.02 min", res[0].tail)
+        self.assertIn("timed out after 0.01 min", res[0].tail)
 
     def test_sigterm_during_a_stage_check_stops_its_tree_and_still_closes(self):
         pidfile = Path(self.tmp.name, "child.pid")

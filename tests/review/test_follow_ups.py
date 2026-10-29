@@ -8,7 +8,8 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support import engine_case as T
-from support.engine_case import CLEAN, PLAN, WRITE, finding, review
+from support.engine_case import CLEAN, WRITE, finding, review
+from support.engine_case import FAST_PLAN as PLAN
 
 from taskloop.domain.review.followups import FOLLOW_UP_CAP, FollowKey
 

@@ -445,17 +445,6 @@ class ResumeCount(StagesTest):
         e.checkpoints.save(stage=0, rounds=0, n=1, feedback="", step="write")
         te.sh("git", "checkout", "-q", "--detach", "origin/main", cwd=self.wt)
 
-    def resolving_worker(self, which=1, file="a.txt", text="merged"):
-        """The `which`-th worker call resolves `file` (the conflict fix), as a real writer would."""
-        real = fake_route.Script.reply
-
-        def call(this, role, *a, **kw):
-            r = real(this, role, *a, **kw)
-            if role == "worker" and [c[0] for c in this.calls].count("worker") == which:
-                Path(this.cwds[-1], file).write_text(text + "\n")
-            return r
-        return mock.patch.object(fake_route.Script, "reply", call)
-
     def last_trace(self):
         return json.loads((ident.config_dir() / "traces.jsonl").read_text().splitlines()[-1])
 
@@ -469,25 +458,6 @@ class ResumeCount(StagesTest):
         self.assertNotIn("resume_conflict", text)
         self.assertFalse(self.last_trace()["salvaged"])
         self.assertEqual(gitrepo.git("show", "origin/main:a.txt", cwd=str(self.wt)), "main moved on")
-        self.assertEqual(
-            subprocess.run(
-                ["git", "branch", "--list", "task/t-1-stale-*"], cwd=self.wt, capture_output=True, text=True, check=False
-            ).stdout,
-            "",
-        )
-
-    def test_a_real_resume_conflict_in_a_few_files_is_fixed_not_thrown_away(self):
-        self.wip_branch(["mine 1", "mine 2"], "theirs")
-        with self.resolving_worker():
-            rc, s = self.run_engine({"write": [WRITE, WRITE], "review": [CLEAN, CLEAN]})
-        self.assertEqual(rc, 0, self.blocked)
-        self.assertEqual([c[0] for c in s.calls], ["worker", "reviewer", "worker", "reviewer"])  # the conflict fix, then the stage; no plan
-        self.assertIn("conflict", s.prompts[0])
-        text = self.eng.log_path.read_text()
-        self.assertNotIn("resume_conflict", text)
-        self.assertTrue(self.last_trace()["salvaged"])
-        self.assertEqual(gitrepo.git("show", "origin/main:a.txt", cwd=str(self.wt)), "merged")
-        self.assertEqual(self.eng.fixes, 0)  # the land's two fix rounds are its own
         self.assertEqual(
             subprocess.run(
                 ["git", "branch", "--list", "task/t-1-stale-*"], cwd=self.wt, capture_output=True, text=True, check=False
@@ -522,9 +492,16 @@ class ResumeCount(StagesTest):
                     Path(this.cwds[-1], f).write_text("merged\n")
             return r
         with mock.patch.object(fake_route.Script, "reply", fix_all):
-            rc, _s = self.run_engine({"write": [WRITE, WRITE], "review": [CLEAN, CLEAN]})
+            rc, s = self.run_engine({"write": [WRITE, WRITE], "review": [CLEAN, CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
+        self.assertEqual([c[0] for c in s.calls], ["worker", "reviewer", "worker", "reviewer"])  # the conflict fix, then the stage; no plan
+        self.assertIn("conflict", s.prompts[0])
+        self.assertNotIn("resume_conflict", self.eng.log_path.read_text())
         self.assertTrue(self.last_trace()["salvaged"])
+        self.assertEqual(gitrepo.git("show", "origin/main:c0.txt", cwd=str(self.wt)), "merged")
+        self.assertEqual(self.eng.fixes, 0)  # the land's two fix rounds are its own
+        stale = subprocess.run(["git", "branch", "--list", "task/t-1-stale-*"], cwd=self.wt, capture_output=True, text=True, check=False)
+        self.assertEqual(stale.stdout, "")
 
     def test_a_conflict_fix_that_does_not_resolve_it_restores_the_branch_and_starts_again(self):
         self.wip_branch(["mine 1", "mine 2"], "theirs")

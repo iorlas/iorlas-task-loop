@@ -102,14 +102,14 @@ class StreamRunnerCall(unittest.TestCase):
 
     def test_the_worker_is_read_from_the_live_files_first_line(self):
         seen = []
-        r, go = self.run_route("chatty", on_worker=seen.append, CHAT_UNTIL=str(time.time() + 0.6))
+        r, go = self.run_route("chatty", on_worker=seen.append, CHAT_UNTIL=str(time.time() + 0.3))
         go()
         self.assertEqual((must(r.worker).pid, must(r.worker).run_id), (self.worker_pid(), "run1"))
         self.assertEqual(seen, [r.worker])
 
     def test_a_quiet_worker_is_not_stopped_by_the_engine_before_its_wall_limit(self):
         """Silence is delegate's: the engine's runner stops a call only at the wall limit or a stop of the run."""
-        r, go = self.run_route("chatty", CHAT_UNTIL=str(time.time() + 1.2))
+        r, go = self.run_route("chatty", CHAT_UNTIL=str(time.time() + 0.4))
         done = go()
         self.assertEqual(done.returncode, 0)
         self.assertEqual(r.stop, {})

@@ -733,7 +733,7 @@ class Loop(LoopBase):
     def test_a_role_that_stays_down_keeps_the_bead_waiting_while_others_run(self):
         self.roles = lambda: {"worker": {"usable": False}}
         self.beads({"x-1": [rec("paused", kind="pause_lane", role="worker")], "x-2": [rec("landed")]})
-        self.assertEqual(self.run_loop("--until", time.strftime("%H:%M", time.localtime(self.clock.t + 3600))), 0)
+        self.assertEqual(self.run_loop("--until", time.strftime("%H:%M", time.localtime(self.clock.t + 300))), 0)
         self.assertEqual([b for b, _ in self.started], ["x-1", "x-2"])  # x-1 is never run again while its role is down
 
     def test_a_pause_with_no_role_rests_pause_retry(self):

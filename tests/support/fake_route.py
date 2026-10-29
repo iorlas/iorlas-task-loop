@@ -175,6 +175,7 @@ class Script:
     answers: {node: [data | a full answer dict (has "contract") | a callable(script, node, cwd, resume)]};
     j_extra: {node: [fields the next done answer gains]}. calls: (role, resume, authored_by) per call; prompts, cwds, nodes,
     timeouts per call. A test wraps `reply(role, prompt, schema, cwd, resume, writer, timeout)` to change what a call does."""
+    _sent: ClassVar[list] = []
     seen_plan = ""  # the plan.json a reviewer call read, when a test wraps reply to record it
 
     items: ClassVar[list[str]] = [
@@ -195,7 +196,9 @@ class Script:
     def node_of(self, schema):
         # imported here: this file also runs as route.py in a child process, where src/ is not on sys.path (only in-process calls get here)
         from taskloop.contracts import answers  # noqa: PLC0415
-        return next(k for k in answers.NODES if schema in (answers.sent_schema(k), answers.sent_schema(k, True)))
+        if not Script._sent:  # the sent schemas are constants: built once per process, not once per call
+            Script._sent = [(k, [answers.sent_schema(k), answers.sent_schema(k, True)]) for k in answers.NODES]
+        return next(k for k, sent in Script._sent if schema in sent)
 
     def __call__(self, cmd, **kw):
         self.argvs.append(list(cmd))

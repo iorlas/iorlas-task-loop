@@ -81,7 +81,7 @@ class KillTree(unittest.TestCase):
             p, pids = self.run_shim()
         finally:
             del os.environ["IGNORE_TERM"]
-        self.assertEqual(procs.stop_tree(p, grace=2.0), ())
+        self.assertEqual(procs.stop_tree(p, grace=0.3), ())
         deadline = time.time() + 60
         while time.time() < deadline and (alive(pids["same"]) or alive(pids["setsid"])):
             time.sleep(0.1)

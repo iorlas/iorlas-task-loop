@@ -2,7 +2,6 @@ import os
 import subprocess
 import sys
 import tempfile
-import time
 import unittest
 from pathlib import Path
 
@@ -10,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 TL = ROOT / "skills" / "task-loop" / "tl.py"
 PY = sys.executable
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from support.narrow import must  # noqa: E402
 from support.waits import until  # noqa: E402
 
 NO_FCNTL = unittest.skipIf(os.name == "nt", "the lock is fcntl; tl has none on Windows (documented no-op)")
@@ -45,13 +45,16 @@ class LandLockTests(unittest.TestCase):
 
     @NO_FCNTL
     def test_second_waits_while_first_holds(self):
-        p = self.holder(1.5, Path(self.tmp.name) / "ready")
-        t = time.time()
-        r = self.run_ll("--", PY, "-c", "print('ran')")
-        self.assertEqual(r.returncode, 0)
-        self.assertGreater(time.time() - t, 0.5)
-        self.assertIn("waiting for the land lock (held by", r.stdout)
-        self.assertIn("ran", r.stdout)
+        p = self.holder(30, Path(self.tmp.name) / "ready")
+        w = subprocess.Popen([PY, str(TL), "land-lock", "--repo", self.repo, "--", PY, "-c", "print('ran')"], env=self.env,
+                             stdout=subprocess.PIPE, text=True)
+        stream = must(w.stdout)
+        self.addCleanup(w.wait)
+        self.addCleanup(stream.close)
+        self.assertIn("waiting for the land lock (held by", stream.readline())  # it waits until the holder lets go
+        self.release.touch()
+        out, _ = w.communicate(timeout=30)
+        self.assertEqual((w.returncode, out.strip()), (0, "ran"))
         p.wait()
 
     def test_released_after_failing_command(self):
@@ -62,8 +65,8 @@ class LandLockTests(unittest.TestCase):
 
     @NO_FCNTL
     def test_wait_min_times_out_with_75(self):
-        p = self.holder(3, Path(self.tmp.name) / "ready")
-        r = self.run_ll("--wait-min", "0.01", "--", PY, "-c", "print('never')")
+        p = self.holder(30, Path(self.tmp.name) / "ready")
+        r = self.run_ll("--wait-min", "0.002", "--", PY, "-c", "print('never')")
         self.assertEqual(r.returncode, 75)
         self.assertNotIn("never", r.stdout)
         self.assertIn("land lock", r.stderr)

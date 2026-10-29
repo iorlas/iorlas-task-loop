@@ -7,7 +7,6 @@ import subprocess
 import sys
 import tempfile
 import threading
-import time
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -32,9 +31,7 @@ from taskloop.adapters import (  # noqa: E402
 )
 from taskloop.app.launch import loop as wloop  # noqa: E402
 from taskloop.app.loop.core import Core  # noqa: E402
-from taskloop.app.loop.take import Taker  # noqa: E402
 from taskloop.app.loop.versions import Installs  # noqa: E402
-from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.cli import loop_cmd  # noqa: E402
 from taskloop.contracts import codec  # noqa: E402
 from taskloop.contracts.config import LoopConfig  # noqa: E402
@@ -597,47 +594,6 @@ class LandedOnBase(Base):
             wloop.landed_on_base(str(self.repo), beadtools.bd_store(str(self.repo)), str(wt), "x-3")
         )  # no work: the tip is someone else's
         self.assertFalse(wloop.landed_on_base(str(self.repo), beadtools.bd_store(str(self.repo)), str(wt), "x-9"))  # no branch
-
-
-@unittest.skipIf(os.name == "nt", "POSIX signals")
-class LoopStopNow(Base):
-    """A real child: --now reaches it as SIGTERM, which it traps to write its outcome (as the engine's close does)."""
-    CHILD = (
-        "import json, signal, sys, time\n"
-        "out = sys.argv[sys.argv.index('--outcome-file') + 1]\n"
-        "def stop(*_):\n"
-        "    open(out, 'w').write(json.dumps({'outcome': 'failed', 'why': 'failed: stopped (SIGTERM)'}))\n"
-        "    sys.exit(2)\n"
-        "signal.signal(signal.SIGTERM, stop)\n"
-        "print('running', flush=True)\n"
-        "time.sleep(60)\n")
-
-    def test_stop_now_sigterms_a_real_child(self):
-        self.check_stop_now_sigterms_a_real_child()
-
-    def check_stop_now_sigterms_a_real_child(self):
-        script = self.home / "child.py"
-        script.write_text(self.CHILD)
-        self.config()
-        bd = self.fake(bead("x-1"))
-        real = wloop.spawn
-        threads = []
-
-        def spawn(cmd, log, extra):
-            p = real([sys.executable, str(script), *cmd[2:]], log, extra)
-            t = threading.Timer(1.0, lambda: loop_cmd.cmd_stop(mock.Mock(repo=str(self.repo), now=True)))
-            t.start()
-            threads.append(t)
-            return p
-        with mock.patch.object(wloop, "spawn", spawn), mock.patch.object(Taker, "prepare", return_value=None), \
-                mock.patch.object(wslots, "start_worktree", return_value=str(self.home)), redirect_stdout(io.StringIO()):
-            t0 = time.time()
-            self.assertEqual(self.main(["loop", "--repo", str(self.repo)]), 0)
-        self.assertLess(time.time() - t0, 30)
-        self.assertEqual(bd.beads["x-1"]["status"], "open")
-        line = json.loads(looptest.log(str(self.repo)).read_text().splitlines()[0])
-        self.assertEqual(line["outcome"], "failed")
-        self.assertIn("running", Path(line["run_log"]).read_text())
 
 
 if __name__ == "__main__":

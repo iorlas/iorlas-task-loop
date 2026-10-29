@@ -4,7 +4,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support.engine_case import BEAD, CAP_PARKS, CLEAN, FALSE, HAS_F, PLAN, PY, WRITE, EngineTest, review, sh, stop
+from support.engine_case import BEAD, CAP_PARKS, CLEAN, FALSE, HAS_F, PY, WRITE, EngineTest, review, sh, stop
+from support.engine_case import FAST_PLAN as PLAN
 
 # isort: split
 import json

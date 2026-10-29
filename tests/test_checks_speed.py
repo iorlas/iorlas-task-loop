@@ -4,7 +4,6 @@ import os
 import shlex
 import subprocess
 import sys
-import time
 import unittest
 from dataclasses import replace
 from pathlib import Path
@@ -16,6 +15,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support.builders import cfg_with
 from support.engine_case import PY, engine, pyc, real_git  # noqa: F401
+from support.waits import until
 
 from taskloop.adapters import (
     check_files,
@@ -407,8 +407,8 @@ class Schedule(SpeedTest):
 
     def test_a_first_run_that_timed_out_under_a_shorter_limit_is_not_reused_by_a_longer_one(self):
         n = Path(self.tmp.name) / "slow-runs"
-        slow = pyc(f"import time; open({str(n)!r}, 'a').write('1'); time.sleep(3)")
-        eng = self.checks_engine(checks=[{"id": "short", "cmd": slow, "group": "tests", "wall_min": 0.02, "cache": False},
+        slow = pyc(f"import time; open({str(n)!r}, 'a').write('1'); time.sleep(1.2)")
+        eng = self.checks_engine(checks=[{"id": "short", "cmd": slow, "group": "tests", "wall_min": 0.01, "cache": False},
                                          {"id": "long", "cmd": slow, "group": "tests", "wall_min": 1, "cache": False}])
         res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertEqual(([c.exit for c in res], n.read_text()), ([124, 0], "11"))
@@ -470,12 +470,11 @@ class WallLimit(SpeedTest):
         mark = f"72.{os.getpid()}"
         code = (f"import os,subprocess,sys,time\nprint('before', flush=True)\nsubprocess.Popen(['sleep','{mark}'], "
                 f"start_new_session=True)\ntime.sleep(30)")
-        eng = self.checks_engine(checks=[{"id": "t", "cmd": PY + " -c " + te.shq(code), "group": "tests", "wall_min": 0.05}])
+        eng = self.checks_engine(checks=[{"id": "t", "cmd": PY + " -c " + te.shq(code), "group": "tests", "wall_min": 0.01}])
         res = eng.run_checks({"checks": [], "files": []}, "s")
         self.assertEqual(res[0].exit, 124)
         self.assertIn("before", (Path(eng.run_dir) / res[0].log).read_text())
-        time.sleep(1)
-        self.assertEqual(self.alive(mark), "")
+        self.assertTrue(until(lambda: self.alive(mark) == "", limit=5), "the setsid descendant outlived the check")
 
 
 if __name__ == "__main__":
