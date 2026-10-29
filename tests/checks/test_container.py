@@ -1,36 +1,44 @@
-"""Checks that say `"in": "container"`: they run through container_run.py on a fake docker; the result is the host path's."""
+"""Checks that say `"in": "container"`: they run through container_run.py on a recorder that stands for docker (no docker anywhere); the result is the host path's."""
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support.engine_case import PY, EngineTest, no_repo, real_git, real_proc, shq
+from support.engine_case import EngineTest, no_repo, real_git
 
 # isort: split
 import os
-import threading
+import signal
 from unittest import mock
 
 from support.fakedocker import FakeDocker
-from support.waits import until
+from support import procsim
 
+from taskloop.app.checks import container_run
 from taskloop.contracts import config
 from taskloop.contracts.paths import RepoDirs
 
-LIST = PY + " -c " + shq("import os; print(sorted(os.listdir('.')))")
-WRITE = PY + " -c " + shq(
-    "import os; open(os.environ['TL_ARTIFACTS'] + '/p.txt', 'w').write(os.environ['TL_ARTIFACT_STEP']); open('made', 'w'); print('ok')")
+
+def listing(cwd, env):
+    return 0, str(sorted(os.listdir(cwd)))
+
+
+def write(cwd, env):
+    (Path(env["TL_ARTIFACTS"]) / "p.txt").write_text(env["TL_ARTIFACT_STEP"])
+    (cwd / "made").write_text("")
+    return 0, "ok"
+
+
+LIST = procsim.default("box-list", listing)
+WRITE = procsim.default("box-write", write)
 BOX = {"image": "img:1"}
 
 
-@real_proc("container_run.py is a real process driving a fake docker script: the verbs it sends and the stop that kills the container")
 class ContainerChecksTest(EngineTest):
     def setUp(self):
         super().setUp()
-        self.docker = FakeDocker(Path(self.tmp.name) / "fake-docker", sys.executable)
-        env = mock.patch.dict(os.environ, {"PATH": self.docker.path})
-        env.start()
-        self.addCleanup(env.stop)
+        self.docker = FakeDocker(Path(self.tmp.name) / "fake-docker")
+        self.docker.install(self)
 
     def run_one(self, cmd, boxed=True, **cfg):
         check = {"id": "c", "cmd": cmd, **({"in": "container"} if boxed else {})}
@@ -65,7 +73,7 @@ class ContainerChecksTest(EngineTest):
         res, log = self.run_one(WRITE, boxed=False)
         self.assertEqual(res.exit, 0)
         self.assertNotIn("container", log)
-        self.assertEqual(self.docker.calls(), [])
+        self.assertEqual(self.docker.calls, [])
 
     @real_git("the runner lists the worktree with a real git")
     def test_untracked_files_go_in_and_ignored_ones_do_not(self):
@@ -78,17 +86,17 @@ class ContainerChecksTest(EngineTest):
 
     @real_git("the runner lists the worktree with a real git")
     def test_a_stop_kills_the_named_container(self):
-        sleeper = PY + " -c " + shq("import time; time.sleep(60)")
-        self.eng = self.checks_engine(checks=[{"id": "c", "cmd": sleeper, "in": "container"}], container=BOX)
-        t = threading.Thread(target=lambda: self.eng.run_checks({"checks": [], "files": []}, "s"), daemon=True)
-        t.start()
-        self.assertTrue(until(lambda: any(p.suffix == ".pid" for p in self.docker.root.iterdir())))
-        self.eng.halt.set()
-        t.join(30)
-        self.assertFalse(t.is_alive())
-        kills = [c for c in self.docker.calls() if c[0] == "kill"]
-        self.assertEqual(len(kills), 1)
-        self.assertTrue(kills[0][1].startswith("tl-check-t-1"))
+        """The stop reaches the runner as SIGTERM while it waits on `docker run`: its handler (called here from inside the wait)
+        kills the container by its name and exits 128+15."""
+        handlers = {}
+        self.docker.on_wait = lambda name: handlers[signal.SIGTERM](signal.SIGTERM, None)
+        name = "tl-check-t-1-c"
+        with mock.patch.object(container_run.signal, "signal", lambda n, h: handlers.__setitem__(n, h)), \
+                mock.patch.dict(os.environ), mock.patch("os.getcwd", return_value=str(self.wt)):
+            with self.assertRaises(SystemExit) as stop:
+                container_run.main(["--image", "img:1", "--name", name, "--", "box-list"])
+        self.assertEqual(stop.exception.code, 128 + signal.SIGTERM)
+        self.assertEqual([c for c in self.docker.calls if c[0] == "kill"], [["kill", name]])
 
     @no_repo
     def test_a_bad_container_setting_fails_the_config_load(self):

@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest import mock
 
 from support.narrow import must
+from support.procsim import real_proc
 
 ROOT = Path(__file__).resolve().parent.parent
 spec = importlib.util.spec_from_file_location("suite_docker", ROOT / "dev" / "suite-docker.py")
@@ -27,8 +28,10 @@ class SuiteDocker(unittest.TestCase):
         warned = "".join(c.args[0] for c in err.write.call_args_list)
         self.assertEqual(warned.count("WARNING"), 1)
 
-    @unittest.skipUnless(sd.docker_ok(), "needs a reachable docker")
+    @real_proc("a SIGTERM to the real suite-docker.py must remove the real named container")
     def test_sigterm_removes_the_named_container(self):
+        if not sd.docker_ok():  # asked here, not at import: collecting the suite starts no docker
+            self.skipTest("needs a reachable docker")
         env = dict(os.environ, TASK_LOOP_SUITE_INSIDE="cat >/dev/null; sleep 300")
         p = subprocess.Popen([sys.executable, str(ROOT / "dev" / "suite-docker.py"), "--repo", str(ROOT)], env=env,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
