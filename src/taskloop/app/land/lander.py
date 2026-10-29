@@ -23,6 +23,7 @@ class Land:
     flaky: int = 0  # network errors on the push while the network looked up
     net_failed: bool = False  # the last push died of the network: look again before pushing
     moved: int = 0  # times the lock was let go because main moved under the gate: the gate runs outside again (land_optimistic_tries)
+    open_step: bool = False  # the outside gate's land step is still open: the lock's first try goes on in it
 
 
 class Lander:
@@ -127,6 +128,7 @@ class Lander:
             where = "cached" if self.gate.green(e.git("rev-parse", "HEAD^{tree}")) else "outside"
             problem = self.gate.run()
         self.emit(st, before, head, problem, where)
+        st.open_step = problem is None
         return problem
 
     def emit(self, st: Land, before: str, head: str, problem: Problem | None, where: str) -> None:
@@ -152,7 +154,9 @@ class Lander:
         lock; ("", None) a network error: rest first."""
         e = self.e
         while True:
-            e.steps.begin("land", f"land (try {st.pushes + 1})", **{"try": st.pushes + 1})
+            if not st.open_step:
+                e.steps.begin("land", f"land (try {st.pushes + 1})", **{"try": st.pushes + 1})
+            st.open_step = False
             e.newfiles.quarantine_strays()
             before, head = e.git("rev-parse", e.cfg.base), e.git("rev-parse", "HEAD")
             rc, tail = e.checkout.fetch()
