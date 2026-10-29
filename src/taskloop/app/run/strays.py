@@ -1,6 +1,7 @@
 """Strict bounds on a worker (tl-7y6.24): the engine alone makes branches and worktrees. After a worker call the slot's HEAD must still be
-on the task branch (detached only mid-rebase, a conflict fix) and the repo must hold no worktree that was not there before the call.
-Whatever moved fails the bead (FAULT_ENGINE) with what moved; nothing is repaired."""
+on the task branch (detached only mid-rebase, a conflict fix) and the slot worktree must hold no worktree that was not there before the
+call. Worktrees elsewhere are not counted: other slots, base checks and sessions add them to the same repo at any time. Whatever moved
+fails the bead (FAULT_ENGINE) with what moved; nothing is repaired."""
 
 from pathlib import Path
 from typing import Any
@@ -21,5 +22,6 @@ def check(e: Any, before: frozenset[str], blocked: Any) -> None:
     now = e.git("symbolic-ref", "--short", "-q", "HEAD")
     if e.branch and now != e.branch and not (not now and rebasing(e)):
         raise blocked(f"failed: the worker left {e.branch} for {now or 'a detached HEAD'}", "FAULT_ENGINE")
-    if added := sorted(worktrees(e) - before):
+    inside = Path(e.wt).resolve()
+    if added := sorted(p for p in worktrees(e) - before if Path(p).resolve().is_relative_to(inside)):
         raise blocked(f"failed: the worker added worktree {', '.join(added)}", "FAULT_ENGINE")

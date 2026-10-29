@@ -52,10 +52,17 @@ class Strays(te.EngineTest):
         self.go(lambda cwd: ("checkout", "-b", "elsewhere"))
         self.assertEqual(self.raised, [("FAULT_ENGINE", "failed: the worker left task/t-1 for elsewhere")])
 
-    def test_a_worker_that_adds_a_worktree_fails_the_bead_with_its_path(self):
-        path = str(Path(self.tmp.name) / "extra")
-        self.go(lambda cwd: ("worktree", "add", "--detach", path))
-        self.assertEqual(self.raised, [("FAULT_ENGINE", f"failed: the worker added worktree {path}")])
+    def test_a_worker_that_adds_a_worktree_in_its_slot_fails_the_bead_with_its_path(self):
+        path = {}
+        def add(cwd):
+            path["p"] = str((Path(cwd) / ".wt" / "extra").resolve())
+            return ("worktree", "add", "--detach", path["p"])
+        self.go(add)
+        self.assertEqual(self.raised, [("FAULT_ENGINE", f"failed: the worker added worktree {path['p']}")])
+
+    def test_a_worktree_added_outside_the_slot_is_not_the_workers(self):
+        self.go(lambda cwd: ("worktree", "add", "--detach", str(Path(self.tmp.name) / "other-slot")))  # another slot, a base check
+        self.assertEqual(self.raised, [])
 
 
 if __name__ == "__main__":

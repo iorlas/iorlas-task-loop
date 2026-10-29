@@ -558,7 +558,7 @@ engine. Its role names (reader → `light`, writer → `worker`, reviewer → `r
 `hard`) are the Workers table's second column. The engine has no verifier
 or judge: its own checks are the facts, and accept is a rule (checks green, nothing blocking in the review).
 After every worker call, reader and reviewer included, the engine checks that the slot is still on the task branch and that the
-repo gained no worktree; a worker that moved either fails the bead (`FAULT_ENGINE`, naming what moved) and nothing is repaired.
+slot gained no worktree inside it (other slots add theirs anywhere); a worker that moved either fails the bead (`FAULT_ENGINE`, naming what moved) and nothing is repaired.
 
 The one thing the engine cannot do itself: read your Claude usage. Since delegate 0.18 Claude steps run without a
 reading, but only a fresh reading keeps delegate's reserve for your own sessions, so while an engine runs feed it every
