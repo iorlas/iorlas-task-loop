@@ -32,10 +32,10 @@ def cmd_loop(a: Any, here: Path = wloop.HERE, now: Callable[[], float] = trail.n
     if a.op == "status":
         for row in wloop.other_red_rows(repo):
             print(row)  # another repo's bad profile: its red row here, nothing else changes
-        return cli.cmd_status(env, files, wloop.installs(env.cfgdir, lambda: env.profile().loop, here, now), a)
+        return cli.cmd_status(env, files, wloop.installs(env.cfgdir, here, now), a)
     start_cwd, session = wloop.begin_loop(repo)
     env = wloop.build(repo, session_actor=session, here=here, now=now, start_cwd=start_cwd)
-    return cli.cmd_loop(env, files, wloop.installs(env.cfgdir, lambda: env.profile().loop, here, now), a)
+    return cli.cmd_loop(env, files, wloop.installs(env.cfgdir, here, now), a)
 
 
 def cmd_cutover(a: Any) -> int:

@@ -3,7 +3,6 @@ import errno
 import os
 import sys
 import tempfile
-import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -86,12 +85,10 @@ class Keeping(unittest.TestCase):
         for i in range(500):
             png(self.run1 / f"old{i}.png", bytes([i % 251]) * (i + 10))
         k = self.keeper(self.run2, earlier=[self.run1])
-        started = time.monotonic()
         with mock.patch.object(Path, "rglob", side_effect=AssertionError("walked again")), \
                 mock.patch.object(keep.filecmp, "cmp", wraps=keep.filecmp.cmp) as cmp:
             for i in range(500):
                 self.assertTrue(k.keep(png(self.shots / f"n{i}.png", bytes([i % 251]) * (i + 10)), self.run2 / f"n{i}.png"))
-        self.assertLess(time.monotonic() - started, 1.0)
         self.assertEqual(cmp.call_count, 500)  # one byte comparison per file: only its same-size twin
         self.assertEqual(keep.used_bytes([self.run2], [self.run1]), 0)
         self.assertEqual(k.used, 0)

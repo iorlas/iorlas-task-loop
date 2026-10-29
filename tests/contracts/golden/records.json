@@ -1052,8 +1052,6 @@
    "area_poll": 60,
    "area_say": 600,
    "fault_cooldown": 1800,
-   "selftest_wait": 30,
-   "help_wait": 20,
    "absent": 600,
    "reload_fallback": 120,
    "keep_days": 14,

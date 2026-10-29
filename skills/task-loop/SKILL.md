@@ -333,11 +333,11 @@ container); the session that starts it only watches it.
   ready bead waiting for its area is not drained: the loop looks again every minute.
   Between beads (never mid-bead) the loop moves to the installed task-loop: the version `installed_plugins.json` names for
   task-loop (no entry: the highest version dir above its own; a dir the plugin manager did not install is never a target;
-  `tl pin` / `tl rollback` decide first). The new dir must import and pass `tl selftest`; the loop then logs
+  `tl pin` / `tl rollback` decide first). Nothing is tested before the move; the loop logs
   `loop: moving to <ver> (was <ver>)` and re-execs itself (same pid; failure count, rests, `--max-beads` count and actor
   carry over in `TL_LOOP_STATE`, which is the loop's own `LoopState` JSON: one that cannot be read is dropped with one
-  `reload` record and a clean pass starts). A broken new install is refused once, shown in red and skipped; a loop that
-  breaks within `loop.reload_fallback` seconds of a move goes back to the dir it came from, once, with a red line.
+  `reload` record and a clean pass starts). A loop or run that breaks within `loop.reload_fallback` seconds of a move goes
+  back to the dir it came from, once, with a red line, and that version is skipped until it is installed again.
   `--pin` stays on the running version.
 - **Constants:** the loop reads the `loop` block of `.task-loop.json` (as committed on the base branch, the working tree when
   that fails) every pass: `poll`, `heartbeat`, `drained_poll`, `pause_retry`, `fails_to_stop`, `pauses_to_rest`, `rest`,

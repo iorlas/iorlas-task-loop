@@ -11,21 +11,13 @@ from taskloop.app.wire import slots as wslots
 from taskloop.contracts.loop import LoopState
 
 
-def fake_install(cache, ver, tl_py="import sys\n", missing=(), loop_py=""):
-    """A version tree in the plugin cache: the core file of an install (tl.py), the loop module (`loop_py`) and an empty engine module
-    under src/, a plugin.json."""
+def fake_install(cache, ver, tl_py="import sys\n"):
+    """A version tree in the plugin cache: tl.py and a plugin.json."""
     d = Path(cache) / ver / "skills" / "task-loop"
     d.mkdir(parents=True)
     (d.parents[1] / ".claude-plugin").mkdir()
     (d.parents[1] / ".claude-plugin" / "plugin.json").write_text("{}")
-    if "tl.py" not in missing:
-        (d / "tl.py").write_text(tl_py)
-    app = d.parents[1] / "src" / "taskloop" / "app"  # the loop and engine modules the loop imports to vet an install
-    for pkg in (app.parent, app, app / "run", app / "launch"):
-        pkg.mkdir(parents=True, exist_ok=True)
-        (pkg / "__init__.py").write_text("")
-    (app / "run" / "engine.py").write_text("")
-    (app / "launch" / "loop.py").write_text(loop_py)
+    (d / "tl.py").write_text(tl_py)
     return d
 
 

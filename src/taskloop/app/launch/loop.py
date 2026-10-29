@@ -37,7 +37,7 @@ from taskloop.app.wire import asks as wasks
 from taskloop.app.wire import lanes as wlanes
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import paths
-from taskloop.contracts.config import LoopConfig, RepoProfile
+from taskloop.contracts.config import RepoProfile
 from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.loop import LoopState
 from taskloop.contracts.ports import Beads
@@ -248,18 +248,16 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
     )
 
 
-def installs(cfg: paths.ConfigDir, tune: Callable[[], LoopConfig] | None = None, here: Path = HERE,
-             now: Callable[[], float] = trail.now) -> Installs:
-    """The installs of task-loop on this machine; `tune` gives the loop constants (the repo's `loop` block), else the defaults."""
-    kw = {"tune": tune} if tune else {}
+def installs(cfg: paths.ConfigDir, here: Path = HERE, now: Callable[[], float] = trail.now) -> Installs:
+    """The installs of task-loop on this machine."""
     return Installs(cfg, here.parents[1], lambda: catalog.installed_version("task-loop"), lambda: pins.read_pin().get("task-loop") or "",
-                    now=now, **kw)
+                    now=now)
 
 
-def vet_newer(here: Path = HERE) -> tuple[str, Path, str | None] | None:
-    """(version, dir, why) of the install the loop would move to (why: None when usable), or None: engine's step-boundary look."""
-    t = installs(cfgdir(), here=here).vet()
-    return (t.version, t.dir, t.why) if t else None
+def newer(here: Path = HERE) -> tuple[str, Path] | None:
+    """(version, dir) of the install the loop would move to, or None: the engine's step-boundary look."""
+    t = installs(cfgdir(), here=here).move_to()
+    return (t.version, t.dir) if t else None
 
 
 def other_red_rows(repo: str) -> list[str]:
