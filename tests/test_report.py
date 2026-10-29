@@ -194,6 +194,19 @@ class LostWork(Base):
         self.branch("wip/s1/1792540800", [("f.txt", "dead session\n", "wip: left in slot s1")], T0)
         self.assertEqual(set(self.by_class(self.lost({}))), {"lost"})
 
+    def test_a_branch_fresh_set_aside_is_superseded_and_names_its_bead(self):
+        self.branch("task/t-1-stale-20261020-101500", [("f.txt", "old try\n", "wip (t-1): blocked")], T0)
+        rows = self.lost({"t-1": "closed"})
+        self.assertEqual(self.by_class(rows), {"superseded": [("task/t-1-stale-20261020-101500", rows[0]["sha"][:8])]})
+        self.assertEqual(rows[0]["bead"], "t-1")
+
+    def test_a_set_aside_branch_whose_bead_landed_later_is_landed(self):
+        self.branch("task/t-1-stale-20261020-101500", [("f.txt", "old try\n", "wip (t-1): blocked")], T0)
+        (self.repo / "g.txt").write_text("landed\n")
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-qm", "Do the thing (t-1)", t=T0 + 30 * MIN)
+        self.assertEqual(set(self.by_class(self.lost({"t-1": "closed"}))), {"landed"})
+
     def test_since_skips_older_commits(self):
         self.branch("task/t-1", [("f.txt", "old\n", "wip (t-1): failed")], T0 - 120 * MIN)
         self.assertEqual(self.lost({"t-1": "closed"}, since=T0), [])

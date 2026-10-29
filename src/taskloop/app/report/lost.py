@@ -43,6 +43,7 @@ def lost_work(repo: str, base: str, since: float | None = None, status_of: Calla
     landed     its patch is on the base (git cherry), or a land of its bead came after it: a base commit titled
                '... (<bead>)' or the land sha a trace recorded, on the base (squash lands are no ancestors);
     reclaimed  a later run of the bead started after it (the engine continues the branch);
+    superseded it is on a task/<bead>-stale-<time> branch --fresh set aside: the bead started again on the base;
     pending    its bead is still open, blocked or in progress: the next run continues the branch;
     unknown    bd failed, so the bead's state cannot be told (listed, never counted as lost);
     lost       its bead is closed (or unknown) with no land after it, or it is on a wip/* branch of a dead session."""
@@ -54,7 +55,7 @@ def lost_work(repo: str, base: str, since: float | None = None, status_of: Calla
     statuses: dict[str, str | None] = {}
     refs = git(repo, "for-each-ref", "--format=%(refname:short)", "refs/heads/task/", "refs/heads/wip/").splitlines()
     for ref in refs:
-        bead = ref[len("task/"):] if ref.startswith("task/") else None
+        bead, aside = matchers.unstale(ref[len("task/"):]) if ref.startswith("task/") else (None, False)
         log = git(repo, "log", "--format=%H %ct %s", ref, "--not", *bases)
         if not log:
             continue
@@ -69,6 +70,8 @@ def lost_work(repo: str, base: str, since: float | None = None, status_of: Calla
                 row.update({"class": "landed", "why": f"its patch is on {bases[0]}"})
             elif bead and any(t >= ct for t in lands.get(bead, [])):
                 row.update({"class": "landed", "why": f"{bead} landed on {bases[0]} after it"})
+            elif aside:
+                row.update({"class": "superseded", "why": f"--fresh set {ref} aside: {bead} started again on {bases[0]}"})
             elif not bead:
                 row.update({"class": "lost", "why": f"a dead session's work on {ref}: no bead, no run takes it"})
             else:

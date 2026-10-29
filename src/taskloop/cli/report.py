@@ -103,10 +103,11 @@ def cmd_lost(a: Any) -> int:
         for x in rows:
             if x["class"] != "landed":
                 print("{!s:<9} {!s:<28} {} {}  {}".format(x["class"], x["branch"], x["sha"][:8], stamp(x["time"]), x["why"]))
-        n = {k: sum(x["class"] == k for x in rows) for k in ("landed", "reclaimed", "pending", "unknown", "lost")}
+        n = {k: sum(x["class"] == k for x in rows) for k in ("landed", "reclaimed", "superseded", "pending", "unknown", "lost")}
         print(
-            "{:d} lost, {:d} pending, {:d} unknown, {:d} reclaimed, {:d} landed (commits on task/* and wip/* not on the base)".format(
-                int(n["lost"]), int(n["pending"]), int(n["unknown"]), int(n["reclaimed"]), int(n["landed"])
+            ("{:d} lost, {:d} pending, {:d} unknown, {:d} reclaimed, {:d} superseded, {:d} landed"
+             " (commits on task/* and wip/* not on the base)").format(
+                int(n["lost"]), int(n["pending"]), int(n["unknown"]), int(n["reclaimed"]), int(n["superseded"]), int(n["landed"])
             )
         )
     return 1 if any(x["class"] == "lost" for x in rows) else 0

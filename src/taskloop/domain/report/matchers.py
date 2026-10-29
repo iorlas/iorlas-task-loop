@@ -168,6 +168,15 @@ def split_stem(stem: str) -> tuple[str, str] | None:
     return (m.group(1), m.group(2)) if m else None
 
 
+STALE_TAIL = re.compile(r"-stale-\d{8}-\d{6}$")
+
+
+def unstale(name: str) -> tuple[str, bool]:
+    """A task branch name without the `-stale-<YYYYmmdd-HHMMSS>` tail --fresh gives the branch it sets aside: (the bead, set aside)."""
+    bare = STALE_TAIL.sub("", name)
+    return bare, bare != name
+
+
 def land_bead(subject: str) -> str:
     """The bead a land commit's subject names: '... (<bead>)', else ''."""
     m = LAND_TAIL.search(subject)
