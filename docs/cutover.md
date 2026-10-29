@@ -1,13 +1,14 @@
 # Cutover protocol
 
-Some changes migrate data or a contract that older code cannot read and that has no rollback: asks format 4, checkpoint
-schema, records.db import, history version, health state, contract 3. Each is a cutover: nothing live may run across it.
+Some changes migrate data or a contract that older code cannot read and that has no rollback: asks format, checkpoint schema,
+history version, health state, a delegate contract number. Each is a cutover: nothing live may run across it.
 
 ## The steps (one cutover = one freeze window)
 
-1. Tag. Both repos at the version before the change: `v<version>` on iorlas-task-loop (dev/release.py tags every release;
-   a tag missing for the current version is made by hand: `git tag v<version> <sha> && git push origin v<version>`), the same
-   on iorlas-delegate. The first one is `pre-substrate-2026-10-25` on both main branches.
+1. Tag. Both repos at the version before the change: `v<version>` on iorlas-task-loop and on iorlas-delegate. dev/release.py
+   tags every release that way (since R02, 0.23.41); a tag missing for the current version is made by hand:
+   `git tag v<version> <sha> && git push origin v<version>`. There is no other tag to look for (`pre-substrate-2026-10-25` was
+   never made on either repo).
 2. Stop the loops. `tl stop --repo DIR` for each loop (after the current bead; `--now` only when a run is stuck).
    Wait until `tl cutover check` prints `CLEAR` (exit 0). It lists every live loop and every live run on the registered
    repos and exits 1 while any is live. Do not use `tl stop` on a run you did not start without the owner's word.
@@ -28,21 +29,28 @@ schema, records.db import, history version, health state, contract 3. Each is a 
 
 ## The cutovers
 
-| # | slice | what changes | needs |
-|---|---|---|---|
-| 1 | slice 2 | contract 3 (delegate stop reasons), `lane_policy` replacing the `_ai` ladder, records.db import (asks, checkpoints, run logs), release from a dedicated clone | tags on both repos, no live run, delegate and task-loop released as a pair |
-| 2 | slice 3 | RunState and `resume_decision` (checkpoint reader) | cutover 1 done, no live run, no parked run waiting to resume |
+| # | what changed | landed |
+|---|---|---|
+| 1 | contract 3 (delegate stop reasons), `lane_policy` replacing the `_ai` ladder, release from a dedicated clone | R21, 0.23.69, 2026-10-27 |
+| 2 | RunState and `resume_decision` (the checkpoint reader) | E8b, 0.23.108; the engine moved to src/ in E9b, 0.23.116 |
 
-Contract 3 and its consumer land together; `tl pin <tl> --delegate <dg>` holds a pair while one of them is rolled back.
+Records are typed file stores under src/taskloop/stores/; the records.db import was never built. Contract 3 and its consumer
+landed together; `tl pin <tl> --delegate <dg>` holds a pair while one of them is rolled back.
+
+The next cutover is the Mac. It runs task-loop 0.23.99 and moves to the current version only after the owner converts the
+lifesim profile: the `checks` in `.task-loop.json` become argv lists, and `timeout_min` becomes `wall_min`. It needs the
+converted profile on lifesim's base branch, the tag of the version the Mac runs (`v0.23.99`), no live loop or run on
+the Mac (`tl cutover check` prints `CLEAR`), then the plugin update on the Mac (step 3).
 
 ## By hand or by the loop
 
 Blast radius decides.
 
-- By hand, in a session, in a freeze window: the engine's own run-lifecycle path, the stop protocol, checkpoints, slot reset,
-  release tooling (dev/release.py), `maybe_move`, the pin files. A loop that rewrites its own engine mid-flight would run three
+- By hand, in a session, in a freeze window: the engine's own run-lifecycle path (src/taskloop/app/run/), the stop protocol,
+  checkpoints, slot reset (src/taskloop/app/slots/), release tooling (dev/release.py, src/taskloop/app/release/), the loop's
+  `maybe_move` (src/taskloop/app/loop/loop.py), the pin files. A loop that rewrites its own engine mid-flight would run three
   generations of code at once.
-- Loop-safe: delegate classifier and fixtures (a separate process, pinned per loop), lifesim docs and lint, `tl prune`,
-  dashboard readers, tests, check ordering, prompt trimming behind golden tests.
+- Loop-safe: delegate classifier and fixtures (a separate process, pinned per loop), lifesim docs and lint, dashboard readers
+  (src/taskloop_dash/), tests, check ordering, prompt trimming behind golden tests.
 - Never by the loop: `pinned.json`. Only `tl pin` and `tl rollback`, run by the owner, write it. The loop reads it when it
   picks the version to run between beads, and records nothing in it.
