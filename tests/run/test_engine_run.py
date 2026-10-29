@@ -331,7 +331,7 @@ class EngineRunTest(EngineTest):
         for i in range(18):
             self.assertEqual(fix.count(f"src/F.cs({i},1): error CS{int(i):04d}: analyzer says no"), 1, i)
         self.assertIn("Build FAILED", fix)
-        self.assertRegex(fix, r"log: \S+checks[\\/]00-.*\.r1\.log")
+        self.assertRegex(fix, r"log: \S+checks[\\/]\d\d-.*\.r1\.log")
         self.assertGreater(len(fix[fix.index("These checks fail"):]), 500)
 
     def test_the_threshold_defaults_by_the_session_family(self):

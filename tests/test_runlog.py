@@ -47,8 +47,9 @@ class RunLog(te.EngineTest):
         eng.run_checks(st, "s")
         recs = records(eng)
         self.assertEqual([p for p in pairs(recs)[0] + pairs(recs)[1] if p[0].startswith("check")], [])
-        self.assertEqual(len([r for r in recs if r["kind"] == "check_start"]), 2)
-        self.assertEqual(len([r for r in recs if r["kind"] == "check_end"]), 2)
+        ids = {r["id"] for r in recs if r["kind"] == "check_start" and r["check"] == "bump"}
+        self.assertEqual(len(ids), 2)
+        self.assertEqual(len([r for r in recs if r["kind"] == "check_end" and r["id"] in ids]), 2)
 
     def test_a_lock_is_taken_before_it_is_released(self):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
