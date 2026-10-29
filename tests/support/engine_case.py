@@ -375,8 +375,9 @@ class EngineTest(unittest.TestCase):
     def fake_bd(self, *a, **kw):
         return mock.Mock(returncode=0, stdout="", stderr="")  # the store records the call itself
 
-    def run_engine(self, answers, route="/fake/route.py", raw=None, j_extra=None, bead="t-1", probe=None, **cfg):
-        """`raw` puts keys in the loaded config without committing them. probe: the network probe (netgate.FakeProbe)."""
+    def run_engine(self, answers, route="/fake/route.py", raw=None, j_extra=None, bead="t-1", probe=None, prep=None, **cfg):
+        """`raw` puts keys in the loaded config without committing them. probe: the network probe (netgate.FakeProbe). prep: called
+        with the engine before it runs."""
         script = fake_route.Script(answers, j_extra)
         c = wslots.load_cfg(str(self.wt))
         fresh = cfg.pop("fresh", False)
@@ -385,6 +386,8 @@ class EngineTest(unittest.TestCase):
             self.eng = engine.Engine(bead, str(self.wt), c, store=self.store, fresh=fresh)
             if probe is not None:
                 self.eng.probe = probe
+            if prep is not None:
+                prep(self.eng)
             rc = self.eng.run()
         return rc, script
 

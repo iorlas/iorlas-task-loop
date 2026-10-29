@@ -185,7 +185,7 @@ class EngineAsksTest(EngineTest):
         self.assertEqual((b["resumed"], b["context_k"], b["fresh"]), ("yes", 149, ""))
         self.assertLess(b["prompt_chars"], a["prompt_chars"])
 
-    def test_a_bead_parked_on_a_dropped_v1_ask_asks_again_with_a_v2_ask(self):
+    def test_a_bead_parked_on_a_dropped_v1_ask_asks_again_with_a_v3_ask(self):
         p = ident.config_dir() / "asks" / "t-1.json"
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps({"v": 1, "id": "t-1-4", "bead": "t-1", "status": "open", "kind": "verify", "question": "old?"}))
@@ -194,7 +194,7 @@ class EngineAsksTest(EngineTest):
         self.assertEqual(rc, 2)
         self.assertEqual([c[0] for c in s.calls], ["planner"])  # one planner step, not a second asking of the dropped one
         a = self.ask()
-        self.assertEqual((a["v"], a["id"], a["status"]), (2, "t-1-1", "open"))
+        self.assertEqual((a["v"], a["id"], a["status"]), (3, "t-1-1", "open"))
         self.assertEqual(self.asks().orphans(), [])
 
     def test_a_decision_ask_takes_the_bead_out_of_the_pick_queue(self):

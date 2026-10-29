@@ -1,11 +1,14 @@
 """Raising an ask and starting from an answered one: the engine's two moments with the owner. Pure of bd and git except for the
 queue label, which goes through the Beads port."""
+import dataclasses
 from dataclasses import dataclass
 
+from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.enums import AskStatus, WhyCode
 from taskloop.contracts.ports import BdFailure, BeadPatch, Beads
 from taskloop.contracts.stores import HAD_PICK, AskStore
+from taskloop.domain.asks import similar
 from taskloop.domain.asks.lint import lint
 from taskloop.domain.asks.spec import AskSpec
 
@@ -31,17 +34,19 @@ def build(spec: AskSpec, n: int, at: Asking) -> Ask:
     return Ask(id=f"{at.bead}-{n}", n=n, bead=at.bead, kind=spec.kind, ask_class=spec.ask_class, decision=spec.decision, run=at.run,
                t=at.now, status=AskStatus.OPEN, tried=list(spec.tried), options=list(spec.options), detail=spec.detail,
                why_code=at.why_code, why=at.why[:WHY_CAP], parks_at=at.now + PARK_AFTER_S, brief_hash=at.brief_hash, repo=at.repo,
-               title=at.title[:200])
+               title=at.title[:200], owner_cause=spec.owner_cause, blocking=spec.blocking, default=spec.default,
+               key=similar.key_of(spec.ask_class, spec.decision))
 
 
-def raise_ask(asks: AskStore, spec: AskSpec, at: Asking) -> tuple[Ask | None, list[str]]:
+def raise_ask(asks: AskStore, spec: AskSpec, at: Asking, adrs: AdrStore | None = None) -> tuple[Ask | None, list[str]]:
     """File the ask and return it; (None, the broken lint rules) when it is not one an owner can answer: nothing is written then,
-    and no prose ask takes its place."""
+    and no prose ask takes its place. The ask carries what its repeat key matched: answered past asks and the repo's ADRs."""
     ask = build(spec, asks.next_n(at.bead), at)
     problems = lint(ask)
     if problems:
         return None, problems
-    asks.put(ask)
+    ask = dataclasses.replace(ask, similar=similar.find(ask.key, ask.id, asks.rows(), adrs.in_force() if adrs else []))
+    asks.file(ask)
     return ask, []
 
 
@@ -51,9 +56,12 @@ def waiting_line(ask: Ask) -> str:
 
 def check(asks: AskStore, bead: str, brief_hash: str, fresh: bool, now: float) -> tuple[str, Ask | None]:
     """The run starts. -> ("none", None): no ask is open; ("wait", ask): still open and the bead unchanged, so the run waits;
-    ("answer", ask): the owner answered it (or changed the bead), so it is consumed and the run goes on from it."""
+    ("answer", ask): the owner answered it (or changed the bead), so it is consumed and the run goes on from it. A soft ask
+    (`blocking` false) never makes the run wait; only an answer to it is used."""
     ask = asks.get(bead)
     if ask is None or ask.consumed is not None or ask.status not in (AskStatus.OPEN, AskStatus.PARKED, AskStatus.ANSWERED):
+        return "none", None
+    if not ask.blocking and ask.answer is None:  # a soft ask: the run went on with its default; it stays open for the owner
         return "none", None
     if ask.answer is None and ask.brief_hash == brief_hash and not fresh:
         return "wait", ask

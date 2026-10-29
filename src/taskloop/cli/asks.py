@@ -7,8 +7,10 @@ from collections.abc import Callable
 from typing import Any, Final
 
 from taskloop.app.asks import intake, sweeps
+from taskloop.app.run import requests
 from taskloop.contracts import codec
 from taskloop.contracts.ask import Ask, AskAction
+from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, Beads
 from taskloop.contracts.stores import AskStore
 
@@ -111,6 +113,13 @@ def verb(a: Namespace, op: str, bead: str, ask: Ask | None, verbs: intake.Intake
         _done, why = verbs.withdraw(bead, words or "withdrawn with tl ask withdraw")
         out("done" if not why else "tl: " + SAYS.get(why, why))
         return 0 if not why else 1
+    if op in ("park", "note"):
+        cfg = ConfigDir()
+        owner = requests.OwnerVerbs(verbs, cfg, now())
+        run = requests.newest_run(cfg, bead)
+        why, said = owner.park(bead, run) if op == "park" else owner.note(bead, run, words)
+        out(said if not why else "tl: " + why)
+        return 0 if not why else 1
     if op == "hint":
         verbs.hint(bead, words)
     elif op == "hold":
@@ -126,7 +135,7 @@ def verb(a: Namespace, op: str, bead: str, ask: Ask | None, verbs: intake.Intake
 
 
 def add_parsers(sp: Any) -> None:
-    """`tl ask ...` and the owner's verbs `tl answer|hint|hold|override`, on tl's subparsers."""
+    """`tl ask ...` and the owner's verbs `tl answer|hint|hold|override|park|note`, on tl's subparsers."""
     p = sp.add_parser("ask", help="the owner's inbox: list the open asks, answer one, withdraw one that no longer applies, or their age")
     p.add_argument("op", choices=["list", "answer", "withdraw", "age"])
     p.add_argument("bead", nargs="?")
@@ -134,7 +143,9 @@ def add_parsers(sp: Any) -> None:
     p.add_argument("--json", action="store_true")
     answer_flags(p)
     for verb, what in (("answer", "answer an ask (same as tl ask answer)"), ("hint", "give the bead a hint the next run reads"),
-                       ("hold", "keep the loop off a bead (--release lets it go)"), ("override", "override a cap once: replan-cap")):
+                       ("hold", "keep the loop off a bead (--release lets it go)"), ("override", "override a cap once: replan-cap"),
+                       ("park", "hold a bead and end its live run at the next step, branch kept (tl hold --release lets it go)"),
+                       ("note", "a note the live run's next stage reads (no run going: a hint the next run reads)")):
         p = sp.add_parser(verb, help=what)
         p.set_defaults(op=verb)
         p.add_argument("bead")

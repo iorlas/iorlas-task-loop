@@ -89,7 +89,8 @@ class WriteRound:
             return ""
         if not w["decided"].strip():
             e.steps.outcome("asks", w["question"][:200])
-            raise e.blocked_for("owner decision needed", "ASK_DECISION", spec=askspecs.open_question(w["question"], w.get("options")))
+            spec = askspecs.open_question(w["question"], w.get("options"), w.get("owner_cause"))
+            raise e.blocked_for("owner decision needed", "ASK_DECISION", spec=spec)
         s.rounds += 1
         e.stats["rounds"] += 1
         e.stuck_why = f"the writer asked what an accepted requirement decides: {w['decided']}"
@@ -121,6 +122,7 @@ class WriteRound:
         e.last_summary = w2["summary"]
         if w2["question"].strip():
             e.steps.outcome("asks", w2["question"][:200])
-            raise e.blocked_for("owner decision needed", "ASK_DECISION", spec=askspecs.open_question(w2["question"], w2.get("options")))
+            spec = askspecs.open_question(w2["question"], w2.get("options"), w2.get("owner_cause"))
+            raise e.blocked_for("owner decision needed", "ASK_DECISION", spec=spec)
         both = {k: (w.get(k) or []) + (w2.get(k) or []) for k in ("new_cases", "unchecked", "bad_checks")}
         s.w = dict(w2, summary=w["summary"] + "\n" + w2["summary"], **both)

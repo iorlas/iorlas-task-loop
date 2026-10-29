@@ -10,11 +10,29 @@ from collections.abc import Sequence
 from enum import StrEnum
 from typing import Final
 
+from taskloop.contracts.enums import Step
 from taskloop.contracts.log import Close, EngineLog
 
 BEAT_EVERY: Final = 60.0  # seconds between the Beat records of a live run
 CRASHED_AFTER: Final = 300.0  # N: an open run whose newest record is older than this has died (5 beats missed)
 RETAIN: Final = 7 * 86400  # seconds a run's log, and its .live/ folder, are kept after the last write
+
+# The stuck rule (dash-spec 2.4, 2.6), in one place: a step silent this long (no record but Beats, no worker output) is stuck, and so are
+# SAME_RED rounds in a row with the same red checks. The limits sit above the engine's own stops of a silent worker (write_idle_min 25).
+SILENT_LIMIT: Final[dict[Step, float]] = {
+    Step.PLAN: 20 * 60.0, Step.REPLAN: 20 * 60.0, Step.WRITE: 30 * 60.0, Step.CHECKS: 45 * 60.0, Step.REVIEW: 20 * 60.0,
+    Step.VERIFY: 20 * 60.0, Step.LOOK: 20 * 60.0, Step.GATE: 45 * 60.0, Step.LAND: 20 * 60.0,
+}
+SILENT_DEFAULT: Final = 30 * 60.0  # a step the table does not name (reset, close, reflect)
+SAME_RED: Final = 3
+
+
+def silent_limit(step: str) -> float:
+    """The seconds of silence after which `step` is stuck."""
+    try:
+        return SILENT_LIMIT.get(Step(step), SILENT_DEFAULT)
+    except ValueError:
+        return SILENT_DEFAULT
 
 
 class Liveness(StrEnum):

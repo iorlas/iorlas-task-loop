@@ -46,6 +46,7 @@ def snapshot_of(j: object) -> StatusSnapshot:
             unlock_at=_num(unlock.get("at")), warnings=_strings(r.get("warnings")),
             windows=[WindowStatus(name=str(w.get("name") or "?"), used_pct=_num(w.get("used_pct")), resets_at=_num(w.get("resets_at")))
                      for w in r.get("windows") or [] if isinstance(w, dict)],
+            five=_num(old.get("five")), week=_num(old.get("week")),
             out=bool(old.get("out")), out_until=_num(old.get("out_until")), out_reason=reason if isinstance(reason, str) else None,
             notes=_strings(old.get("notes"))))
     need = [NeedInput(what=str(n.get("what") or ""), why=str(n.get("why") or ""), how=str(n.get("how") or ""))

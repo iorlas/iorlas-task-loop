@@ -1,5 +1,5 @@
 """`tl lanes`: ask delegate for its status once (`route.py status --json`, spends no quota) and file it as the StatusSnapshot the
-dashboard reads. `tl usage` files it too, on its way. The dashboard never runs delegate."""
+dashboard reads, and each window's use into the usage history. `tl usage` files it too, on its way. The dashboard never runs delegate."""
 import json
 import sys
 import time
@@ -11,7 +11,7 @@ from taskloop.adapters.ident import claude_dir
 from taskloop.app.release.pins import pinned_dir
 from taskloop.contracts import paths
 from taskloop.contracts.delegate_status import snapshot_of
-from taskloop.contracts.stores import StatusStore
+from taskloop.contracts.stores import StatusStore, UsageHistory
 
 EVERY_S = 20 * 60  # the loop files delegate's status again when the snapshot is this old
 
@@ -23,7 +23,12 @@ def find() -> str | None:
 def file_answer(text: str) -> str | None:
     """Parse one `status --json` answer and file it. None when filed, else why not."""
     try:
-        StatusStore(paths.ConfigDir()).write(snapshot_of(json.loads(text[text.index("{"):])))
+        snap = snapshot_of(json.loads(text[text.index("{"):]))
+        cfg = paths.ConfigDir()
+        StatusStore(cfg).write(snap)
+        history = UsageHistory(cfg)  # the usage history grows with each filed snapshot and is pruned by age here, its one owner
+        history.record(snap)
+        history.prune(snap.at)
     except (ValueError, OSError) as e:
         return f"delegate status not filed: {e}"
     return None

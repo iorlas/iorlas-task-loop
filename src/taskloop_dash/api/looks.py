@@ -1,34 +1,27 @@
 """The gallery's endpoints: every look item of a repo with its pictures, and the owner's answers. "good" settles an item; "redo" with a
 note files a follow-up bead that carries the note and the pictures; every answer can be taken back (the only writes the gallery
-makes, all through the typed bd port)."""
+makes, all through the `look` port)."""
 
-import contextlib
 import mimetypes
 import os
-import threading
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from taskloop.contracts.ports import BdFailure, BeadPatch, NewBead
+from taskloop.contracts import gallery
+from taskloop.contracts.dash import Result
+from taskloop.contracts.gallery import LABEL, PICTURES
 from taskloop_dash.env import Env
 from taskloop_dash.readers.beads import Beads, basename
 from taskloop_dash.readers.records import Records
-from taskloop_dash.views import gallery, names
-from taskloop_dash.views.gallery import LABEL, PICTURES
+from taskloop_dash.views import names
 
-NOTE_MAX = 2000
 Reply = tuple[int, dict[str, Any]]
-
-
-def why_of(err: BdFailure) -> str:
-    return (err.error.text.strip().splitlines() or ["no output"])[-1][:200]
 
 
 class Looks:
     def __init__(self, env: Env, records: Records, beads: Beads) -> None:
         self.env, self.records, self.beads = env, records, beads
-        self.answering = threading.Lock()  # one answer at a time: two clicks never file two follow-ups
 
     def collect(self, repo: str, beads: list[dict[str, Any]]) -> list[gallery.Item]:
         """Every item of every owner-look bead of the repo (open or closed: an answered item stays so it can be taken back)."""
@@ -87,120 +80,24 @@ class Looks:
         return data, PICTURES.get(ext) or mimetypes.guess_type(rel)[0] or "application/octet-stream"
 
     def answer_look(self, body: object) -> Reply:
-        repo = body.get("repo") if isinstance(body, dict) and isinstance(body.get("repo"), str) else ""
-        path = self.beads.resolve_repo(str(repo), "")
-        if not path:
-            return 404, {"code": "repo_missing", "error": "That repo is not registered."}
-        code, out = self.answer(path, body)
-        self.env.ttl.drop("looks:" + path)
-        self.env.ttl.drop("roadmap:" + path)
-        return code, out
-
-    def answer(self, repo: str, body: object, now: float | None = None) -> Reply:
-        """body: {look_bead, item, verdict good|redo|undo, note}. good: the item is settled, and the look bead closes when no item
-        waits. redo: a follow-up bead carries the note and the pictures. undo: back to open. One answer per item."""
-        now = now or self.env.clock()
+        """The page's v1 answer: {repo, look_bead, item, verdict good|redo|undo, note}: the same `look` port as /api/v2/look."""
         if not isinstance(body, dict):
             return 400, {"code": "bad_body", "error": "The request was not understood."}
-        look_bead, item_id, verdict = body.get("look_bead"), body.get("item"), body.get("verdict")
+        repo, look_bead, item, verdict = body.get("repo"), body.get("look_bead"), body.get("item"), body.get("verdict")
         note = body.get("note") if isinstance(body.get("note"), str) else ""
-        note = note.strip()[:NOTE_MAX]
-        if verdict not in ("good", "redo", "undo") or not names.is_bead_id(look_bead) or not isinstance(item_id, str):
+        if verdict not in ("good", "redo", "undo") or not names.is_bead_id(look_bead) or not isinstance(item, str):
             return 400, {"code": "bad_body", "error": "The request was not understood."}
-        if verdict == "redo" and not note:
-            return 400, {"code": "empty", "error": "Write what to change first."}
-        with self.answering:
-            return self._answer(repo, str(look_bead), item_id, str(verdict), note, now)
+        path = self.beads.resolve_repo(str(repo or ""), "")
+        if not path:
+            return 404, {"code": "repo_missing", "error": "That repo is not registered."}
+        done = self.answer(path, item, verdict, note, str(look_bead))
+        if not done.ok:
+            return 409, {"code": "refused", "error": done.message}
+        return 200, {"ok": True, "status": "open" if verdict == "undo" else verdict}
 
-    def _answer(self, repo: str, look_bead: str, item_id: str, verdict: str, note: str, now: float) -> Reply:
-        try:
-            return self._apply(repo, look_bead, item_id, verdict, note, now)
-        except OSError as err:
-            return 502, {"code": "no_bd", "error": f"The dashboard cannot run bd ({err}). Nothing was changed."}
-        except BdFailure as err:
-            return 502, {"code": "bd", "error": f"bd did not answer ({why_of(err)})."}
-
-    def _apply(self, repo: str, look_bead: str, item_id: str, verdict: str, note: str, now: float) -> Reply:
-        shown = self.beads.show(repo, look_bead)
-        if not shown or LABEL not in (shown.get("labels") or []):
-            return 404, {"code": "bead_missing", "error": f"The look bead {look_bead} no longer exists."}
-        e = next((x for x in gallery.stored(look_bead, shown) if x.get("id") == item_id), None)
-        if e is None:
-            return 404, {"code": "item_missing", "error": "That item is gone. Reload the page."}
-        state = e.get("status") if e.get("status") in ("good", "redo") else "open"
-        if verdict == "undo" and state == "open":
-            return 200, {"ok": True, "status": "open"}
-        if verdict != "undo" and state != "open":
-            return 409, {"code": "answered", "error": f"Already answered ({state}). Take that back first.", "status": state}
-        made = ""
-        if verdict == "redo":  # before the fresh read below: the engine may have written `looks` meanwhile
-            ok, made = self.file_redo(repo, look_bead, e, note)
-            if not ok:
-                return 502, {"code": "bd", "error": f"bd refused the follow-up bead: {made}"}
-        return self._record(repo, (look_bead, item_id, verdict, note, now), shown, made)
-
-    def _record(self, repo: str, answer: tuple[str, str, str, str, float], shown: dict[str, Any], made: str) -> Reply:
-        """Write the answer into the item (read again: the engine may have changed `looks`), then close or reopen the look bead."""
-        look_bead, item_id, verdict, note, now = answer
-        shown = self.beads.show(repo, look_bead) or shown
-        items = gallery.stored(look_bead, shown)
-        e = next((x for x in items if x.get("id") == item_id), None)
-        if e is None:
-            self.drop(repo, made)
-            return 404, {"code": "item_missing", "error": "That item is gone. Reload the page."}
-        old_redo = e.get("redo_bead") or ""
-        if verdict == "undo":
-            e.update(status="open", redo_bead="", answer_note="", answered=0)
-        elif verdict == "good":
-            e.update(status="good", answer_note=note, answered=now)
-        else:
-            e.update(status="redo", redo_bead=made, answer_note=note, answered=now)
-        ok, why = self.save(repo, look_bead, shown, items)
-        if not ok:
-            self.drop(repo, made)
-            return 502, {"code": "bd", "error": f"bd refused the answer: {why}"}
-        if verdict == "undo":
-            self.drop(repo, old_redo, "the owner took the redo back")
-        waiting = sum(1 for x in items if x.get("status") not in ("good", "redo"))
-        if verdict == "undo" and shown.get("status") == "closed":
-            self.env.ports.store(repo).update(look_bead, BeadPatch(status="open"))
-        elif verdict != "undo" and not waiting:
-            self.env.ports.store(repo).close(look_bead, "the owner answered every look")
-        return 200, {"ok": True, "status": e["status"], "redo_bead": e.get("redo_bead") or "", "open": waiting}
-
-    def save(self, repo: str, look_bead: str, shown: dict[str, Any], items_meta: list[dict[str, Any]]) -> tuple[bool, str]:
-        meta = dict(shown.get("metadata") or {})
-        meta["looks"] = items_meta
-        try:
-            self.env.ports.store(repo).update(look_bead, BeadPatch(metadata=meta))
-        except BdFailure as err:
-            return False, why_of(err)
-        return True, ""
-
-    def drop(self, repo: str, bead: str, why: str = "the answer could not be saved") -> None:
-        """Close a follow-up bead that no answer points at (a failed save, an undone redo)."""
-        if bead and names.is_bead_id(bead):
-            with contextlib.suppress(BdFailure):
-                self.env.ports.store(repo).close(bead, why)
-
-    def file_redo(self, repo: str, look_bead: str, e: dict[str, Any], note: str) -> tuple[bool, str]:
-        """The follow-up bead of a redo: the owner's note and the pictures, related to the bead the look came from."""
-        pics = "\n".join("- {} ({})".format(s["path"], s.get("role") or "after") for s in e.get("shots") or [])
-        desc = 'The owner looked at "{}" ({}) and asked for a change.\n\nWhat to change:\n{}\n\nPictures:\n{}\n'.format(
-            e.get("title") or e.get("id"), e.get("bead") or look_bead, note, pics or "(none)"
-        )
-        store = self.env.ports.store(repo)
-        try:
-            made = store.create(
-                NewBead(
-                    title="Redo look: " + (e.get("title") or e.get("id") or look_bead)[:90],
-                    priority=2,
-                    description=desc,
-                    deps=["related:" + (e.get("bead") or look_bead)],
-                )
-            )
-        except BdFailure as err:
-            return False, why_of(err)
-        with contextlib.suppress(BdFailure):  # the bead and its description already carry the note
-            store.update(made, BeadPatch(metadata={"looks": {"from": e.get("id"), "shots": e.get("shots") or [], "note": note}}))
-        return True, made
+    def answer(self, repo: str, item: str, verdict: str, note: str, look_bead: str = "") -> Result:
+        """Answer one look item through the `look` port, then drop what the gallery and the roadmap cached about the repo."""
+        done = self.env.ports.look(repo, item, verdict, note, look_bead)
+        self.env.ttl.drop("looks:" + repo)
+        self.env.ttl.drop("roadmap:" + repo)
+        return done

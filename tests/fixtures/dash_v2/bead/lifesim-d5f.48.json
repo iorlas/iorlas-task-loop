@@ -1,0 +1,420 @@
+{
+ "v": 1,
+ "t": 1793050200.0,
+ "card": {
+  "id": "lifesim-d5f.48",
+  "project": "lifesim",
+  "title": "Fix save corruption on quit",
+  "column": "look",
+  "marker": "look",
+  "status": "4 screens ready to approve",
+  "tone": "you",
+  "t": 1793049840.0,
+  "epic": "lifesim-d5f",
+  "slot": "mac·1",
+  "lane": "claude",
+  "loops": 2,
+  "dots": [
+   {
+    "phase": "plan",
+    "state": "done"
+   },
+   {
+    "phase": "write",
+    "state": "done"
+   },
+   {
+    "phase": "test",
+    "state": "done"
+   },
+   {
+    "phase": "review",
+    "state": "done"
+   },
+   {
+    "phase": "look",
+    "state": "you"
+   },
+   {
+    "phase": "land",
+    "state": "todo"
+   }
+  ],
+  "needs": [],
+  "goal": false,
+  "waits_why": "",
+  "cause": null,
+  "ack": false,
+  "totals": {
+   "secs": 13920,
+   "tokens": 2204000,
+   "usual": 600000,
+   "usual_n": 12,
+   "tone": "watch"
+  },
+  "assumptions": 1,
+  "shots": 4
+ },
+ "description": "Fix save corruption on quit. Part of Save system.",
+ "acceptance": "- works in a new save and an old one\n- tests cover the rule\n- no new warnings in the build",
+ "comments": [
+  {
+   "t": 1793049840.0,
+   "icon": "📸",
+   "who": "look",
+   "md": "4 screens of the quit dialog ready for you",
+   "phase": null
+  },
+  {
+   "t": 1793047920.0,
+   "icon": "✉️",
+   "who": "you",
+   "md": "answered: keep autosave, add a confirm",
+   "phase": null
+  },
+  {
+   "t": 1793045160.0,
+   "icon": "🙋",
+   "who": "reviewer · claude",
+   "md": "asked: drop autosave on quit or keep it?",
+   "phase": null
+  },
+  {
+   "t": 1793042640.0,
+   "icon": "🧪",
+   "who": "loop",
+   "md": "test failed: `save_roundtrip` (2nd time)",
+   "phase": null
+  },
+  {
+   "t": 1793036280.0,
+   "icon": "🧭",
+   "who": "planner · claude",
+   "md": "plan: 5 steps",
+   "phase": null
+  }
+ ],
+ "passes": [
+  {
+   "n": 1,
+   "cells": [
+    {
+     "phase": "plan",
+     "state": "visited",
+     "secs": 960,
+     "tokens": 152000,
+     "last": ""
+    },
+    {
+     "phase": "write",
+     "state": "visited",
+     "secs": 2640,
+     "tokens": 418000,
+     "last": ""
+    },
+    {
+     "phase": "test",
+     "state": "failed",
+     "secs": 540,
+     "tokens": 85500,
+     "last": ""
+    },
+    {
+     "phase": "review",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "look",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "land",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    }
+   ],
+   "end": "test_failed",
+   "end_text": "test failed: back to write",
+   "resumed": null,
+   "messages": [
+    {
+     "t": 1793036280.0,
+     "icon": "🧭",
+     "who": "planner · claude",
+     "md": "plan: 5 steps",
+     "phase": null
+    }
+   ]
+  },
+  {
+   "n": 2,
+   "cells": [
+    {
+     "phase": "plan",
+     "state": "skipped",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "write",
+     "state": "visited",
+     "secs": 1740,
+     "tokens": 275500,
+     "last": ""
+    },
+    {
+     "phase": "test",
+     "state": "failed",
+     "secs": 480,
+     "tokens": 76000,
+     "last": ""
+    },
+    {
+     "phase": "review",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "look",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "land",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    }
+   ],
+   "end": "test_failed",
+   "end_text": "test failed: back to write",
+   "resumed": null,
+   "messages": [
+    {
+     "t": 1793042640.0,
+     "icon": "🧪",
+     "who": "loop",
+     "md": "test failed: `save_roundtrip` (2nd time)",
+     "phase": null
+    }
+   ]
+  },
+  {
+   "n": 3,
+   "cells": [
+    {
+     "phase": "plan",
+     "state": "skipped",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "write",
+     "state": "visited",
+     "secs": 1320,
+     "tokens": 209000,
+     "last": ""
+    },
+    {
+     "phase": "test",
+     "state": "small",
+     "secs": 480,
+     "tokens": 76000,
+     "last": ""
+    },
+    {
+     "phase": "review",
+     "state": "visited",
+     "secs": 720,
+     "tokens": 114000,
+     "last": ""
+    },
+    {
+     "phase": "look",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "land",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    }
+   ],
+   "end": "asked",
+   "end_text": "asked; answered",
+   "resumed": null,
+   "messages": [
+    {
+     "t": 1793047920.0,
+     "icon": "✉️",
+     "who": "you",
+     "md": "answered: keep autosave, add a confirm",
+     "phase": null
+    },
+    {
+     "t": 1793045160.0,
+     "icon": "🙋",
+     "who": "reviewer · claude",
+     "md": "asked: drop autosave on quit or keep it?",
+     "phase": null
+    },
+    {
+     "t": 1793042640.0,
+     "icon": "🧪",
+     "who": "loop",
+     "md": "test failed: `save_roundtrip` (2nd time)",
+     "phase": null
+    }
+   ]
+  },
+  {
+   "n": 4,
+   "cells": [
+    {
+     "phase": "plan",
+     "state": "skipped",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "write",
+     "state": "skipped",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "test",
+     "state": "skipped",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "review",
+     "state": "visited",
+     "secs": 960,
+     "tokens": 152000,
+     "last": ""
+    },
+    {
+     "phase": "look",
+     "state": "you",
+     "secs": 1320,
+     "tokens": 209000,
+     "last": ""
+    },
+    {
+     "phase": "land",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    }
+   ],
+   "end": "",
+   "end_text": "",
+   "resumed": null,
+   "messages": [
+    {
+     "t": 1793049840.0,
+     "icon": "📸",
+     "who": "look",
+     "md": "4 screens of the quit dialog ready for you",
+     "phase": null
+    },
+    {
+     "t": 1793047920.0,
+     "icon": "✉️",
+     "who": "you",
+     "md": "answered: keep autosave, add a confirm",
+     "phase": null
+    }
+   ]
+  }
+ ],
+ "artifacts": [
+  {
+   "name": "shot-1.png",
+   "url": "/api/artifact?project=lifesim&bead=lifesim-d5f.48&name=shot-1.png",
+   "kind": "image",
+   "t": 1793049840.0,
+   "pass_n": 4,
+   "phase": "look"
+  },
+  {
+   "name": "shot-2.png",
+   "url": "/api/artifact?project=lifesim&bead=lifesim-d5f.48&name=shot-2.png",
+   "kind": "image",
+   "t": 1793049840.0,
+   "pass_n": 4,
+   "phase": "look"
+  },
+  {
+   "name": "shot-3.png",
+   "url": "/api/artifact?project=lifesim&bead=lifesim-d5f.48&name=shot-3.png",
+   "kind": "image",
+   "t": 1793049840.0,
+   "pass_n": 4,
+   "phase": "look"
+  },
+  {
+   "name": "shot-4.png",
+   "url": "/api/artifact?project=lifesim&bead=lifesim-d5f.48&name=shot-4.png",
+   "kind": "image",
+   "t": 1793049840.0,
+   "pass_n": 4,
+   "phase": "look"
+  }
+ ],
+ "waits_for": [],
+ "unblocks": [
+  "lifesim-q4"
+ ],
+ "live": null,
+ "ask": {
+  "id": "lifesim-d5f.48-look",
+  "bead": "lifesim-d5f.48",
+  "project": "lifesim",
+  "source": "look",
+  "question": "4 screens of the quit dialog",
+  "t": 1793049840.0,
+  "blocking": true,
+  "why": "",
+  "tried": [],
+  "options": [],
+  "default": "",
+  "owner_cause": "unknown",
+  "cause_by": "agent",
+  "shots": [
+   "/api/artifact?project=lifesim&bead=lifesim-d5f.48&name=shot-1.png",
+   "/api/artifact?project=lifesim&bead=lifesim-d5f.48&name=shot-2.png",
+   "/api/artifact?project=lifesim&bead=lifesim-d5f.48&name=shot-3.png",
+   "/api/artifact?project=lifesim&bead=lifesim-d5f.48&name=shot-4.png"
+  ],
+  "thread": [],
+  "ask_backs": 0,
+  "similar": null,
+  "stale": 0
+ }
+}

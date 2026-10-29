@@ -13,17 +13,21 @@ from taskloop.contracts import (
     checkpoint,
     checks,
     config,
+    dash,
     delegate,
     events,
     ids,
+    ledger,
     locks,
     log,
     loop,
+    requests,
     review,
     run,
     slots,
     snapshots,
     trace,
+    usage,
 )
 from taskloop.contracts.enums import AskClass, AskKind, AskStatus, LockWhat, Outcome, WaitWhat, WhyCode
 
@@ -116,7 +120,8 @@ def _ev(cls, **kw):
 
 
 LOG = {
-    "run_start": _log(log.RunStart, run=str(RUN), bead="tl-1", worktree="/w", slot="s1", prev_run="p", started_because="retry", ask="a"),
+    "run_start": _log(log.RunStart, run=str(RUN), bead="tl-1", worktree="/w", slot="s1", prev_run="p", started_because="retry", ask="a",
+                      branch="task/tl-1"),
     "step_start": _log(log.StepStart, id="n4", step="write", text="write: stage 2/2", stage=2, stages=2, round=1, write=1, fix=0),
     "step_end": _log(log.StepEnd, id="n4", step="write", outcome="done", detail="", secs=231.0),
     "artifacts": _log(log.Artifacts, id="n4", step="write", bead="tl-1", names=["menu.png", "report.pdf"]),
@@ -205,6 +210,9 @@ LOG = {
     "checks": _log(log.Checks, node_id="n5", run=CHECK_RUN),
     "warn": _log(log.Warn, text="careful"),
     "note": _log(log.Note, text="fyi"),
+    "said": _log(log.Said, step="n4", who="engine", text="Review (engine, opus): one finding"),
+    "assumed": _log(log.Assumed, step="n2", text="the Windows PC is not available; planned from the bead text", reversible=True),
+    "stuck": _log(log.Stuck, why="same_red", step="checks", since=T - 600, limit_s=0.0, sig="unittest:1:boom"),
     "beat": _log(log.Beat),
     "close": _log(log.Close, outcome=Outcome.LANDED, why_code=None, sha="abc", why="landed abc"),
 }
@@ -242,7 +250,11 @@ ASK = ask.Ask(id="tl-1-1", n=1, bead="tl-1", kind=AskKind.DECISION, ask_class=As
                                         replans=[ask.ReplanLine(n=1, why="scope")], text="d"),
                    why_code=WhyCode.OWNER_DECISION, why="w", parks_at=T + 3600, brief_hash="b0c0",
                    options=[ask.AskOption(label="Right", consequence="lands", action="confirm", cost="free", recommended=True)],
-                   repo="/r", title="t", answer=ask.AskAnswer(action="confirm", text="ok", t=T, by="denis"), answered=T + 5, consumed=T + 9)
+                   repo="/r", title="t", answer=ask.AskAnswer(action="confirm", text="ok", t=T, by="denis"), answered=T + 5, consumed=T + 9,
+                   owner_cause=dash.OwnerCause.PROCESS, cause_by="owner", blocking=True, default="keep v1", key="open_question:old save",
+                   similar=[ask.SimilarRef(kind="adr", id="ADR-2"), ask.SimilarRef(kind="ask", id="tl-0-1")],
+                   thread=[ask.ThreadEntry(by="owner", t=T + 1, md="why?"), ask.ThreadEntry(by="helper", t=T + 2, md="because")],
+                   outcome=dash.Stick.ADR, outcome_ref="ADR-3")
 REVIEW_STATE = review.ReviewState(
     reviews=3, rounds=2, unchecked=[review.Unchecked(what="w", kind="checkable")],
     unverified=[review.Unverified(what="u", kind="taste")],
@@ -251,6 +263,13 @@ REVIEW_STATE = review.ReviewState(
 OTHERS = {
     "RunTrace": TRACE,
     "Ask": ASK,
+    "LedgerEntry": ledger.LedgerEntry(
+        t=T, event="stick", ask="tl-1-1", bead="tl-1", repo="/r", question="Which?", key="open_question:which", blocking=False,
+        cause=dash.OwnerCause.DECISION, cause_by="owner", answer="ok", outcome=dash.Stick.ADR, outcome_ref="ADR-3",
+        similar=[ask.SimilarRef(kind="ask", id="tl-0-1")], why="w"),
+    "Adr": ledger.Adr(id="ADR-3", n=3, repo="/r", text="Saves stay v1.", question="Which?", answer="ok", ask="tl-1-1", bead="tl-1",
+                      key="open_question:which", t=T, by="denis", refs=["tl-2-1"], retired_by="denis", retired_t=T + 9),
+    "AdrUse": ledger.AdrUse(adr="ADR-3", bead="tl-2", run=str(RUN), t=T),
     "Checkpoint": checkpoint.Checkpoint(
         bead="tl-1",
         run=str(RUN),
@@ -354,11 +373,14 @@ OTHERS = {
         unlock_at=T + 600,
         warnings=["w"],
         windows=[snapshots.WindowStatus(name="weekly", used_pct=100.0, resets_at=T + 600)],
+        five=12.0,
+        week=100.0,
         out=True,
         out_until=T + 600,
         out_reason="rate_limited",
         notes=["n"],
     ),
+    "UsageRow": usage.UsageRow(at=T, lane="A", window="weekly", used_pct=9.0, resets_at=T + 600),
     "NeedInput": snapshots.NeedInput(what="claude_usage", why="unknown", how="pass the windows"),
     "StatusSnapshot": snapshots.StatusSnapshot(
         at=T, lanes=[snapshots.LaneStatus(id="A", state="ready")], needs_input=[snapshots.NeedInput(what="w")]
@@ -473,6 +495,9 @@ OTHERS = {
     ),
     "Comment": bead.Comment(author="a", text="t", created_at="2026-10-27T00:00:00Z"),
     "BdError": bead.BdError(kind="lint", missing_sections=["ACCEPTANCE"], text="t"),
+    "OwnerRequest": requests.OwnerRequest(
+        park=True, stop=False, notes=[requests.OwnerNote(text="use the blue one", t=T, by="dash")], by="dash", t=T
+    ),
 }
 
 

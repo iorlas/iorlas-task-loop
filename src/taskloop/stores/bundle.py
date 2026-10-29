@@ -2,6 +2,7 @@
 import dataclasses
 from collections.abc import Callable
 
+from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.checks import CheckCacheEntry, CheckRun, Durations
 from taskloop.contracts.events import Event
 from taskloop.contracts.log import EngineLog
@@ -18,6 +19,7 @@ class Stores:
     events: Log[Event]
     traces: Log[RunTrace]
     asks: AskStore
+    adrs: Callable[[str], AdrStore]  # the decision store of a repo (its path)
     checkpoints: CheckpointBook
     loop_state: Callable[[str], Doc[LoopState]]
     loop_command: Callable[[str], Doc[LoopCommand]]

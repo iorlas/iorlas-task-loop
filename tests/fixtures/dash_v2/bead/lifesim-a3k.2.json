@@ -1,0 +1,233 @@
+{
+ "v": 1,
+ "t": 1793050200.0,
+ "card": {
+  "id": "lifesim-a3k.2",
+  "project": "lifesim",
+  "title": "Prices with a currency sign",
+  "column": "questions",
+  "marker": "soft_ask",
+  "status": "⏩ Landed with \"$\". Real currency symbols too?",
+  "tone": "you",
+  "t": 1793046600.0,
+  "epic": "lifesim-eco",
+  "slot": "mac·3",
+  "lane": "claude 2",
+  "loops": 0,
+  "dots": [
+   {
+    "phase": "plan",
+    "state": "done"
+   },
+   {
+    "phase": "write",
+    "state": "done"
+   },
+   {
+    "phase": "test",
+    "state": "done"
+   },
+   {
+    "phase": "review",
+    "state": "done"
+   },
+   {
+    "phase": "look",
+    "state": "todo"
+   },
+   {
+    "phase": "land",
+    "state": "done"
+   }
+  ],
+  "needs": [],
+  "goal": false,
+  "waits_why": "",
+  "cause": null,
+  "ack": false,
+  "totals": {
+   "secs": 7020,
+   "tokens": 1111500,
+   "usual": 600000,
+   "usual_n": 12,
+   "tone": ""
+  },
+  "assumptions": 0,
+  "shots": 0
+ },
+ "description": "Prices with a currency sign. Part of Economy.",
+ "acceptance": "- works in a new save and an old one\n- tests cover the rule\n- no new warnings in the build",
+ "comments": [
+  {
+   "t": 1793046600.0,
+   "icon": "🙋",
+   "who": "writer · claude",
+   "md": "asked, not blocking: going on with \"$\" meanwhile",
+   "phase": null
+  },
+  {
+   "t": 1793041200.0,
+   "icon": "🧭",
+   "who": "planner · claude",
+   "md": "plan: 2 steps",
+   "phase": null
+  }
+ ],
+ "passes": [
+  {
+   "n": 1,
+   "cells": [
+    {
+     "phase": "plan",
+     "state": "visited",
+     "secs": 600,
+     "tokens": 95000,
+     "last": ""
+    },
+    {
+     "phase": "write",
+     "state": "visited",
+     "secs": 2700,
+     "tokens": 427500,
+     "last": ""
+    },
+    {
+     "phase": "test",
+     "state": "small",
+     "secs": 420,
+     "tokens": 66500,
+     "last": ""
+    },
+    {
+     "phase": "review",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "look",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "land",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    }
+   ],
+   "end": "",
+   "end_text": "",
+   "resumed": null,
+   "messages": [
+    {
+     "t": 1793041200.0,
+     "icon": "🧭",
+     "who": "planner · claude",
+     "md": "plan: 2 steps",
+     "phase": null
+    }
+   ]
+  },
+  {
+   "n": 2,
+   "cells": [
+    {
+     "phase": "plan",
+     "state": "skipped",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "write",
+     "state": "visited",
+     "secs": 1680,
+     "tokens": 266000,
+     "last": ""
+    },
+    {
+     "phase": "test",
+     "state": "skipped",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "review",
+     "state": "visited",
+     "secs": 1140,
+     "tokens": 180500,
+     "last": ""
+    },
+    {
+     "phase": "look",
+     "state": "skipped",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "land",
+     "state": "small",
+     "secs": 480,
+     "tokens": 76000,
+     "last": ""
+    }
+   ],
+   "end": "",
+   "end_text": "",
+   "resumed": null,
+   "messages": [
+    {
+     "t": 1793046600.0,
+     "icon": "🙋",
+     "who": "writer · claude",
+     "md": "asked, not blocking: going on with \"$\" meanwhile",
+     "phase": null
+    }
+   ]
+  }
+ ],
+ "artifacts": [],
+ "waits_for": [],
+ "unblocks": [
+  "lifesim-q6"
+ ],
+ "live": null,
+ "ask": {
+  "id": "lifesim-a3k.2-1",
+  "bead": "lifesim-a3k.2",
+  "project": "lifesim",
+  "source": "ask",
+  "question": "Show real currency symbols, or \"$\" everywhere?",
+  "t": 1793046600.0,
+  "blocking": false,
+  "why": "The design doc mentions \"$\" only; real symbols need a locale table (about 1 more bead).",
+  "tried": [],
+  "options": [
+   {
+    "label": "\"$\" only for now",
+    "consequence": "No extra work; file a bead for locales",
+    "recommended": true
+   },
+   {
+    "label": "Real symbols now",
+    "consequence": "+1 bead, about 1h",
+    "recommended": false
+   }
+  ],
+  "default": "\"$\" only",
+  "owner_cause": "decision",
+  "cause_by": "agent",
+  "shots": [],
+  "thread": [],
+  "ask_backs": 0,
+  "similar": null,
+  "stale": 0
+ }
+}

@@ -44,12 +44,14 @@ from taskloop.app.run.layout import RunLayout
 from taskloop.app.run.records import Records
 from taskloop.app.run.reflect import Reflector
 from taskloop.app.run.reload import Reload
+from taskloop.app.run.requests import OwnerRequests
 from taskloop.app.run.resume import Resume
 from taskloop.app.run.run_once import RunOnce
 from taskloop.app.run.shared import Shared
 from taskloop.app.run.shell import Shell
 from taskloop.app.run.stage_checks import StageChecks
 from taskloop.app.run.state import carries_state
+from taskloop.app.run.stuck import StuckTick
 from taskloop.app.run.waits import Waits
 from taskloop.app.run.worker_call import Ops, WorkerCall
 from taskloop.app.slots import engine_lock
@@ -59,6 +61,7 @@ from taskloop.app.write.handoff import Handoff
 from taskloop.app.write.newfiles import NewFiles
 from taskloop.app.write.stage_loop import StageLoop
 from taskloop.contracts.argv import checks_to_text, checks_to_wire, text_of
+from taskloop.contracts.log import Assumed, Said
 from taskloop.contracts.paths import PLAN_FILE, ConfigDir
 from taskloop.domain import outcome as oc
 from taskloop.domain.lanes.matchers import read_only_command
@@ -77,6 +80,7 @@ class Engine(RunFields):
     tree_memo: Any = None  # (git status, file stats) -> tree hash, of the last tree_hash()
     stop_pending = False  # run_bead sets it when a SIGTERM came during the claim
     live_n = 0  # the number of delegate calls with a live file so far
+    live_now = ""  # the live file of the newest delegate call (the stuck tick reads when it was last written)
     _probe: PathProbe | None = None
     MARKERS_ARGV: ClassVar[list[str]] = ["python3", str(ident.PLUGIN_ROOT / "src" / "taskloop" / "cli" / "markers.py")]
     MARKERS = text_of(MARKERS_ARGV)
@@ -111,7 +115,7 @@ class Engine(RunFields):
         stem = self.log_path.stem
         self.ctx = RunContext.open(bead, cfg, Path(wt), stem, self.run_dir, self.stores, store, route, self.clock, self.sessions,
                                    self.stats, opencode.opencode_id, context_size.context_tokens, say, verbose, dry_run,
-                                   self.now, self.assert_tree, self.on_step)
+                                   self.now, self.step_guard, self.on_step)
         c: Any = self.ctx
         self.log, self.steps, self.budget, self.calls, self.checklog = c.log, c.steps, c.budget, c.calls, c.checklog
         host: Any = self
@@ -158,6 +162,8 @@ class Engine(RunFields):
     routing = cached_property(Routing)
     settles = cached_property(Settles)
     verifier = cached_property(Verifier)
+    stuck = cached_property(StuckTick)
+    requests = cached_property(OwnerRequests)
 
     @cached_property
     def worker(self) -> WorkerCall:
@@ -201,15 +207,38 @@ class Engine(RunFields):
                     say(f"           {ln[:400]}")
 
     def comment(self, text: str) -> None:
+        """The one poster of the engine's comments on the bead: each is also a Said record, tied to the open step (or the last)."""
         if not self.dry:
+            self.log.emit(Said(step=self.step_id(), who="engine", text=text))
             beadtools.attempt(self.store.add_comment, self.bead, text)
 
+    def assumed(self, text: str) -> None:
+        """What the planner planned around instead of asking: an Assumed record, tied to the open step."""
+        self.log.emit(Assumed(step=self.step_id(), text=text))
+
+    def step_id(self) -> str:
+        """The open step's id; between steps (the close-out after the close step), the last one's."""
+        last = self.steps.cur or self.steps.last
+        return last.id if last else ""
+
     def ai(self, node: str, title: str, prompt: str, *a: Any, **kw: Any) -> Any:
-        """One AI node, then the tree check: a worker that wrote core.worktree is caught before review or land."""
+        """One AI node, then the tree check: a worker that wrote core.worktree is caught before review or land. Before it, the
+        owner's requests are taken (a safe point), and the notes taken since the last call end its prompt (and its delta)."""
+        self.requests.at_step(kw.get("step") or node)
+        notes = self.requests.prompt_tail()
+        if notes:
+            prompt += notes
+            if kw.get("delta") is not None:
+                kw["delta"] += notes
         out = self.worker.run(node, title, prompt, *a, **kw)
         self.assert_tree(kw.get("step") or node, "after")
         checks_to_text(out[0])
         return out
+
+    def step_guard(self, step: str) -> None:
+        """Before every step but the close: the owner's requests (a park or a stop ends the run here), then the tree check."""
+        self.requests.at_step(step)
+        self.assert_tree(step)
 
     def assert_tree(self, step: str, when: str = "before") -> None:
         """Before and after every node, and before the land: this slot's git is the slot (lifesim-1mm: a core.worktree in the shared
@@ -267,6 +296,7 @@ class Engine(RunFields):
             os.makedirs(os.path.dirname(path), exist_ok=True)
         except OSError:
             return ""
+        self.live_now = str(path)
         return str(path)
 
     def diff_text(self) -> str:

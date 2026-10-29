@@ -1,0 +1,219 @@
+{
+ "v": 1,
+ "t": 1793050200.0,
+ "card": {
+  "id": "lifesim-fld.27",
+  "project": "lifesim",
+  "title": "Rent and bills every week",
+  "column": "questions",
+  "marker": "ask",
+  "status": "Which bills are monthly, which weekly?",
+  "tone": "you",
+  "t": 1793049480.0,
+  "epic": "lifesim-eco",
+  "slot": "devbox·1",
+  "lane": "claude",
+  "loops": 0,
+  "dots": [
+   {
+    "phase": "plan",
+    "state": "done"
+   },
+   {
+    "phase": "write",
+    "state": "done"
+   },
+   {
+    "phase": "test",
+    "state": "done"
+   },
+   {
+    "phase": "review",
+    "state": "done"
+   },
+   {
+    "phase": "look",
+    "state": "todo"
+   },
+   {
+    "phase": "land",
+    "state": "todo"
+   }
+  ],
+  "needs": [],
+  "goal": false,
+  "waits_why": "",
+  "cause": null,
+  "ack": false,
+  "totals": {
+   "secs": 4200,
+   "tokens": 665000,
+   "usual": 600000,
+   "usual_n": 12,
+   "tone": ""
+  },
+  "assumptions": 0,
+  "shots": 0
+ },
+ "description": "Rent and bills every week. Part of Economy.",
+ "acceptance": "- works in a new save and an old one\n- tests cover the rule\n- no new warnings in the build",
+ "comments": [
+  {
+   "t": 1793049480.0,
+   "icon": "🙋",
+   "who": "reviewer · claude",
+   "md": "asked: which bills are monthly vs weekly?",
+   "phase": null
+  },
+  {
+   "t": 1793049060.0,
+   "icon": "🧪",
+   "who": "loop",
+   "md": "tests pass (14)",
+   "phase": null
+  },
+  {
+   "t": 1793046000.0,
+   "icon": "🧭",
+   "who": "planner · claude",
+   "md": "plan: 4 steps",
+   "phase": null
+  }
+ ],
+ "passes": [
+  {
+   "n": 1,
+   "cells": [
+    {
+     "phase": "plan",
+     "state": "visited",
+     "secs": 720,
+     "tokens": 114000,
+     "last": ""
+    },
+    {
+     "phase": "write",
+     "state": "visited",
+     "secs": 1920,
+     "tokens": 304000,
+     "last": ""
+    },
+    {
+     "phase": "test",
+     "state": "small",
+     "secs": 420,
+     "tokens": 66500,
+     "last": ""
+    },
+    {
+     "phase": "review",
+     "state": "small",
+     "secs": 420,
+     "tokens": 66500,
+     "last": ""
+    },
+    {
+     "phase": "look",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "land",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    }
+   ],
+   "end": "asked",
+   "end_text": "asking you",
+   "resumed": null,
+   "messages": [
+    {
+     "t": 1793049480.0,
+     "icon": "🙋",
+     "who": "reviewer · claude",
+     "md": "asked: which bills are monthly vs weekly?",
+     "phase": null
+    },
+    {
+     "t": 1793049060.0,
+     "icon": "🧪",
+     "who": "loop",
+     "md": "tests pass (14)",
+     "phase": null
+    },
+    {
+     "t": 1793046000.0,
+     "icon": "🧭",
+     "who": "planner · claude",
+     "md": "plan: 4 steps",
+     "phase": null
+    }
+   ]
+  }
+ ],
+ "artifacts": [],
+ "waits_for": [],
+ "unblocks": [
+  "lifesim-q2"
+ ],
+ "live": null,
+ "ask": {
+  "id": "lifesim-fld.27-1",
+  "bead": "lifesim-fld.27",
+  "project": "lifesim",
+  "source": "ask",
+  "question": "Which bills are monthly and which are weekly?",
+  "t": 1793049480.0,
+  "blocking": true,
+  "why": "The bead says \"rent and bills every week\", but phone and internet are monthly in real life.",
+  "tried": [
+   "read docs/design/economy.md: lists rent only",
+   "balance tests fail if the period is guessed wrong"
+  ],
+  "options": [
+   {
+    "label": "Rent weekly, phone and internet monthly",
+    "consequence": "Matches real life; 2 more tests",
+    "recommended": true
+   },
+   {
+    "label": "Everything weekly",
+    "consequence": "Simplest; feels off for phone bills",
+    "recommended": false
+   },
+   {
+    "label": "Everything monthly",
+    "consequence": "Changes the bead title; slower money pressure",
+    "recommended": false
+   }
+  ],
+  "default": "",
+  "owner_cause": "requirement",
+  "cause_by": "agent",
+  "shots": [],
+  "thread": [
+   {
+    "by": "owner",
+    "t": 1793049300.0,
+    "md": "What does the design doc say about utilities?"
+   },
+   {
+    "by": "agent",
+    "t": 1793049360.0,
+    "md": "Nothing; it lists rent only (`docs/design/economy.md`)."
+   }
+  ],
+  "ask_backs": 1,
+  "similar": {
+   "bead": "lifesim-a3k.1",
+   "question": "Monthly salary or weekly?",
+   "answer": "weekly",
+   "t": 1792531800.0
+  },
+  "stale": 0
+ }
+}

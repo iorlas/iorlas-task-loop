@@ -113,7 +113,7 @@ class ReviewRound:
                 f"{review['decided']} (an accepted requirement decides it: meet it) {review['question']}"]
         elif review["question"].strip():
             e.steps.outcome("asks", review["question"][:200])
-            spec = askspecs.open_question(review["question"], review.get("options"))
+            spec = askspecs.open_question(review["question"], review.get("options"), review.get("owner_cause"))
             raise e.blocked_for("owner decision needed", "ASK_DECISION", spec=spec)
         blocking = fnd.blocking(review["findings"])
         n = len(blocking)

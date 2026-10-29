@@ -1,0 +1,306 @@
+{
+ "v": 1,
+ "t": 1793050200.0,
+ "card": {
+  "id": "lifesim-7hv.2",
+  "project": "lifesim",
+  "title": "Pets need feeding twice a day",
+  "column": "done",
+  "marker": "done",
+  "status": "landed · came back after codex ran out",
+  "tone": "",
+  "t": 1793046600.0,
+  "epic": "lifesim-wld",
+  "slot": "devbox·1",
+  "lane": "claude",
+  "loops": 1,
+  "dots": [
+   {
+    "phase": "plan",
+    "state": "done"
+   },
+   {
+    "phase": "write",
+    "state": "done"
+   },
+   {
+    "phase": "test",
+    "state": "done"
+   },
+   {
+    "phase": "review",
+    "state": "done"
+   },
+   {
+    "phase": "look",
+    "state": "done"
+   },
+   {
+    "phase": "land",
+    "state": "done"
+   }
+  ],
+  "needs": [],
+  "goal": false,
+  "waits_why": "",
+  "cause": null,
+  "ack": false,
+  "totals": {
+   "secs": 9300,
+   "tokens": 1472500,
+   "usual": 600000,
+   "usual_n": 12,
+   "tone": "watch"
+  },
+  "assumptions": 0,
+  "shots": 0
+ },
+ "description": "Pets need feeding twice a day. Part of World.",
+ "acceptance": "- works in a new save and an old one\n- tests cover the rule\n- no new warnings in the build",
+ "comments": [
+  {
+   "t": 1793043600.0,
+   "icon": "🚀",
+   "who": "loop",
+   "md": "landed on main",
+   "phase": null
+  },
+  {
+   "t": 1793040000.0,
+   "icon": "↪",
+   "who": "loop",
+   "md": "resumed on devbox·1 · claude from branch `bd/7hv.2` (pass ③ continues)",
+   "phase": null
+  },
+  {
+   "t": 1793037900.0,
+   "icon": "⏸",
+   "who": "loop",
+   "md": "parked: codex quota ran out mid-write; work kept on the branch",
+   "phase": null
+  },
+  {
+   "t": 1793035920.0,
+   "icon": "🧪",
+   "who": "loop",
+   "md": "test failed: `pet_hunger_tick`",
+   "phase": null
+  },
+  {
+   "t": 1793032200.0,
+   "icon": "🧭",
+   "who": "planner · claude",
+   "md": "plan: 3 steps",
+   "phase": null
+  }
+ ],
+ "passes": [
+  {
+   "n": 1,
+   "cells": [
+    {
+     "phase": "plan",
+     "state": "visited",
+     "secs": 720,
+     "tokens": 114000,
+     "last": ""
+    },
+    {
+     "phase": "write",
+     "state": "visited",
+     "secs": 2520,
+     "tokens": 399000,
+     "last": ""
+    },
+    {
+     "phase": "test",
+     "state": "failed",
+     "secs": 480,
+     "tokens": 76000,
+     "last": ""
+    },
+    {
+     "phase": "review",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "look",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "land",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    }
+   ],
+   "end": "test_failed",
+   "end_text": "test failed: back to write",
+   "resumed": null,
+   "messages": [
+    {
+     "t": 1793035920.0,
+     "icon": "🧪",
+     "who": "loop",
+     "md": "test failed: `pet_hunger_tick`",
+     "phase": null
+    },
+    {
+     "t": 1793032200.0,
+     "icon": "🧭",
+     "who": "planner · claude",
+     "md": "plan: 3 steps",
+     "phase": null
+    }
+   ]
+  },
+  {
+   "n": 2,
+   "cells": [
+    {
+     "phase": "plan",
+     "state": "skipped",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "write",
+     "state": "visited",
+     "secs": 1560,
+     "tokens": 247000,
+     "last": ""
+    },
+    {
+     "phase": "test",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "review",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "look",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "land",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    }
+   ],
+   "end": "lane_out",
+   "end_text": "lane ran out, parked",
+   "resumed": null,
+   "messages": [
+    {
+     "t": 1793037900.0,
+     "icon": "⏸",
+     "who": "loop",
+     "md": "parked: codex quota ran out mid-write; work kept on the branch",
+     "phase": null
+    },
+    {
+     "t": 1793035920.0,
+     "icon": "🧪",
+     "who": "loop",
+     "md": "test failed: `pet_hunger_tick`",
+     "phase": null
+    }
+   ]
+  },
+  {
+   "n": 3,
+   "cells": [
+    {
+     "phase": "plan",
+     "state": "skipped",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "write",
+     "state": "visited",
+     "secs": 1800,
+     "tokens": 285000,
+     "last": ""
+    },
+    {
+     "phase": "test",
+     "state": "small",
+     "secs": 540,
+     "tokens": 85500,
+     "last": ""
+    },
+    {
+     "phase": "review",
+     "state": "visited",
+     "secs": 780,
+     "tokens": 123500,
+     "last": ""
+    },
+    {
+     "phase": "look",
+     "state": "skipped",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "land",
+     "state": "small",
+     "secs": 480,
+     "tokens": 76000,
+     "last": ""
+    }
+   ],
+   "end": "done",
+   "end_text": "landed",
+   "resumed": {
+    "slot": "devbox·1",
+    "branch": "bd/lifesim-7hv.2",
+    "waited_secs": 2100
+   },
+   "messages": [
+    {
+     "t": 1793043600.0,
+     "icon": "🚀",
+     "who": "loop",
+     "md": "landed on main",
+     "phase": null
+    },
+    {
+     "t": 1793040000.0,
+     "icon": "↪",
+     "who": "loop",
+     "md": "resumed on devbox·1 · claude from branch `bd/7hv.2` (pass ③ continues)",
+     "phase": null
+    }
+   ]
+  }
+ ],
+ "artifacts": [],
+ "waits_for": [],
+ "unblocks": [],
+ "live": null,
+ "ask": null
+}

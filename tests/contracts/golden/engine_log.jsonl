@@ -1,4 +1,4 @@
-{"v": 2, "kind": "run_start", "t": 1793050200.5, "run": "tl-7y6.3.1-20261027-002239", "bead": "tl-1", "worktree": "/w", "slot": "s1", "prev_run": "p", "started_because": "retry", "ask": "a"}
+{"v": 2, "kind": "run_start", "t": 1793050200.5, "run": "tl-7y6.3.1-20261027-002239", "bead": "tl-1", "worktree": "/w", "slot": "s1", "prev_run": "p", "started_because": "retry", "ask": "a", "branch": "task/tl-1"}
 {"v": 2, "kind": "step_start", "t": 1793050200.5, "id": "n4", "step": "write", "text": "write: stage 2/2", "stage": 2, "stages": 2, "round": 1, "write": 1, "fix": 0}
 {"v": 2, "kind": "step_end", "t": 1793050200.5, "id": "n4", "step": "write", "outcome": "done", "detail": "", "secs": 231.0}
 {"v": 2, "kind": "artifacts", "t": 1793050200.5, "id": "n4", "step": "write", "bead": "tl-1", "names": ["menu.png", "report.pdf"]}
@@ -24,5 +24,8 @@
 {"v": 2, "kind": "checks", "t": 1793050200.5, "node_id": "n5", "run": {"round": 1, "tree": "deadbeef", "results": [{"id": "unittest", "cmd": "python3 -m unittest", "group": "tests", "exit": 1, "status": "failed", "tries": 2, "tail": "", "secs": 43.4, "log": "checks/01.log", "wall_hit": false, "wall_min": 0.0, "cached": false, "reused": false, "why": "", "note": "", "base_red": true, "producer": "", "sig": "boom"}, {"id": "lint", "cmd": "ruff check", "group": "static", "exit": 0, "status": "passed", "tries": 1, "tail": "", "secs": 0.0, "log": "", "wall_hit": false, "wall_min": 0.0, "cached": true, "reused": false, "why": "", "note": "inputs unchanged", "base_red": false, "producer": "", "sig": ""}], "hits": 1, "misses": 1}}
 {"v": 2, "kind": "warn", "t": 1793050200.5, "text": "careful"}
 {"v": 2, "kind": "note", "t": 1793050200.5, "text": "fyi"}
+{"v": 2, "kind": "said", "t": 1793050200.5, "step": "n4", "who": "engine", "text": "Review (engine, opus): one finding"}
+{"v": 2, "kind": "assumed", "t": 1793050200.5, "step": "n2", "text": "the Windows PC is not available; planned from the bead text", "reversible": true}
+{"v": 2, "kind": "stuck", "t": 1793050200.5, "why": "same_red", "step": "checks", "since": 1793049600.5, "limit_s": 0.0, "sig": "unittest:1:boom"}
 {"v": 2, "kind": "beat", "t": 1793050200.5}
 {"v": 2, "kind": "close", "t": 1793050200.5, "outcome": "landed", "why_code": null, "sha": "abc", "why": "landed abc"}

@@ -26,7 +26,7 @@ def node_outcome(outcome: str, why: str, kind: Any = None) -> str:
     if outcome in ("landed", "done"):
         return outcome
     if kind:
-        return ("stopped" if kind == oc.Kind.PAUSE_KILLED else "paused" if kind.name.startswith("PAUSE_")
+        return ("stopped" if kind == oc.Kind.PAUSE_KILLED else "paused" if kind.name.startswith("PAUSE_") or kind == oc.Kind.OWNER_PARK
                 else "waiting" if kind == oc.Kind.WAIT_ASK else "failed" if outcome == "failed" else "asks")
     if why.startswith("paused:"):
         return "paused"
@@ -40,7 +40,7 @@ def node_outcome(outcome: str, why: str, kind: Any = None) -> str:
 def kind_move(kind: Any) -> tuple[str, str]:
     if kind == oc.Kind.PAUSE_KILLED:
         return "pause", "stopped"
-    if kind.name.startswith("PAUSE_"):
+    if kind.name.startswith("PAUSE_") or kind == oc.Kind.OWNER_PARK:
         return "pause", "paused"
     if kind == oc.Kind.WAIT_ASK:
         return "ask", "waiting"

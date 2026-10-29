@@ -6,7 +6,8 @@ Machine faults (FAULT_*) never make an ask; network and killed stops (PAUSE_*) a
 no cap. `apply` is pure: the same (outcome, bead, history, now) gives the same Disposition. Stdlib only;
 imports lifecycle (the one fingerprint normaliser), never engine.
 
-Design: 60-design-A1 sec 2.1 and 61-integration sec 1.2; ASK_VERIFY is retired (68-design-asks sec 8), so 22 members.
+Design: 60-design-A1 sec 2.1 and 61-integration sec 1.2; ASK_VERIFY is retired (68-design-asks sec 8); OWNER_PARK
+is the owner's park (dash v2 backend item 7), so 23 members.
 """
 
 import enum
@@ -29,6 +30,7 @@ class Kind(enum.Enum):
     PAUSE_LANE = "pause_lane"
     PAUSE_NETWORK = "pause_network"
     PAUSE_KILLED = "pause_killed"
+    OWNER_PARK = "owner_park"  # the owner parked it (a park request): the branch and checkpoint stay, the hold keeps the loop off
     FAULT_INFRA = "fault_infra"
     FAULT_SLOT = "fault_slot"
     FAULT_DENIED = "fault_denied"
@@ -94,6 +96,7 @@ POLICY: Final = {
     Kind.PAUSE_LANE: Rule("open", "paused", "paused", False, "lane", wake="lane"),
     Kind.PAUSE_NETWORK: Rule("open", "paused", "paused", False, "network", wake="net"),  # counts toward no cap
     Kind.PAUSE_KILLED: Rule("open", "paused", "paused", False, "none"),
+    Kind.OWNER_PARK: Rule("open", "parked", "parked", False, "owner"),
     Kind.FAULT_INFRA: _fault(),
     Kind.FAULT_SLOT: _fault(),
     Kind.FAULT_DENIED: _fault(),

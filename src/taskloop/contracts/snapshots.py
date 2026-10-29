@@ -27,6 +27,8 @@ class LaneStatus:
     unlock_at: float | None = None
     warnings: list[str] = field(default_factory=list)
     windows: list[WindowStatus] = field(default_factory=list)
+    five: float | None = None  # the contract's typed 5-hour window, percent used (the top-level `lanes[id].five`); windows[] names are free
+    week: float | None = None  # the contract's typed weekly window, percent used (`lanes[id].week`)
     out: bool = False
     out_until: float | None = None
     out_reason: str | None = None

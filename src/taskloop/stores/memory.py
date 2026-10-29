@@ -14,10 +14,12 @@ from jsonl_log import Entry, Jsonl, decode_object
 from jsonl_log.cursor import _parse  # shelf lacks: a public parse of in-memory bytes
 
 from taskloop.contracts import codec, events, log
+from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.checks import CheckCacheEntry, CheckRun, Durations
 from taskloop.contracts.enums import LockWhat
+from taskloop.contracts.ledger import Adr, AdrUse, LedgerEntry
 from taskloop.contracts.locks import LockRecord, LockTimeout, Ticket, pid_alive
 from taskloop.contracts.loop import LoopCommand, LoopState, Rest
 from taskloop.contracts.stores import AskStore, JsonlStore
@@ -183,10 +185,13 @@ def fake_stores(pid: int | None = None) -> Stores:
     cmds: dict[str, MemDoc[LoopCommand]] = {}
     rests: dict[str, MemDoc[Rest]] = {}
     check_runs: dict[tuple[str, int | None], MemDoc[CheckRun]] = {}
+    adrs: dict[str, AdrStore] = {}
     return Stores(
         run_log=lambda run: runs.setdefault(run, MemLog(log.decode)),
         events=MemLog(events.decode), traces=MemLog(_decode(RunTrace)),
-        asks=AskStore(MemDocSet(Ask)), checkpoints=CheckpointBook(MemDocSet(Checkpoint)),
+        asks=AskStore(MemDocSet(Ask), MemLog(_decode(LedgerEntry))),
+        adrs=lambda repo: adrs.setdefault(repo, AdrStore(MemDocSet(Adr), MemLog(_decode(AdrUse)))),
+        checkpoints=CheckpointBook(MemDocSet(Checkpoint)),
         loop_state=lambda key: state.setdefault(key, MemDoc(LoopState)),
         loop_command=lambda key: cmds.setdefault(key, MemDoc(LoopCommand)),
         loop_rest=lambda key: rests.setdefault(key, MemDoc(Rest)),

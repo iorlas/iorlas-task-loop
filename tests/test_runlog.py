@@ -35,7 +35,8 @@ class RunLog(te.EngineTest):
             self.assertEqual(r["v"], 2)
             rec.decode(r)
         self.assertIn("run_start", [r["kind"] for r in recs])
-        self.assertIn(recs[-1]["kind"], ("step_end", "close"))
+        ends = [r for r in recs if r["kind"] != "said"]  # a comment the close-out posts (Said) may follow the Close
+        self.assertIn(ends[-1]["kind"], ("step_end", "close"))
 
     def test_a_cached_check_writes_both_records(self):
         count = Path(self.tmp.name) / "count"

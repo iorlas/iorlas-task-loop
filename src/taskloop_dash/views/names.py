@@ -6,6 +6,8 @@ import os
 import time
 from typing import Final
 
+from taskloop.contracts.bead import is_bead_id as valid_bead_id
+
 FAMILY: Final = {"openai": "Codex", "claude": "Claude", "xai": "Grok"}
 
 
@@ -33,8 +35,7 @@ def kind_of(name: str) -> str:
 
 def is_bead_id(text: object) -> bool:
     """A letter or digit first, then letters, digits, '_', '.' and '-': never something bd would read as an option."""
-    s = text if isinstance(text, str) else ""
-    return bool(s) and s[0].isalnum() and s.isascii() and all(c.isalnum() or c in "_.-" for c in s)
+    return valid_bead_id(text)
 
 
 def is_run_name(text: object) -> bool:

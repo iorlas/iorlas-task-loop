@@ -1,0 +1,149 @@
+{
+ "v": 1,
+ "t": 1793050200.0,
+ "card": {
+  "id": "lifesim-9xq.1",
+  "project": "lifesim",
+  "title": "Fridge spoils food after 3 days",
+  "column": "review",
+  "marker": "run",
+  "status": "AI review · 2 notes so far",
+  "tone": "run",
+  "t": 1793049660.0,
+  "epic": "lifesim-eco",
+  "slot": "mac·3",
+  "lane": "claude 2",
+  "loops": 0,
+  "dots": [
+   {
+    "phase": "plan",
+    "state": "done"
+   },
+   {
+    "phase": "write",
+    "state": "done"
+   },
+   {
+    "phase": "test",
+    "state": "done"
+   },
+   {
+    "phase": "review",
+    "state": "live"
+   },
+   {
+    "phase": "look",
+    "state": "todo"
+   },
+   {
+    "phase": "land",
+    "state": "todo"
+   }
+  ],
+  "needs": [],
+  "goal": false,
+  "waits_why": "",
+  "cause": null,
+  "ack": false,
+  "totals": {
+   "secs": 1680,
+   "tokens": 266000,
+   "usual": 600000,
+   "usual_n": 12,
+   "tone": ""
+  },
+  "assumptions": 0,
+  "shots": 0
+ },
+ "description": "Fridge spoils food after 3 days. Part of Economy.",
+ "acceptance": "- works in a new save and an old one\n- tests cover the rule\n- no new warnings in the build",
+ "comments": [
+  {
+   "t": 1793050200.0,
+   "icon": "👀",
+   "who": "reviewer · claude",
+   "md": "2 notes so far (naming, a missing test)",
+   "phase": null
+  }
+ ],
+ "passes": [
+  {
+   "n": 1,
+   "cells": [
+    {
+     "phase": "plan",
+     "state": "small",
+     "secs": 240,
+     "tokens": 38000,
+     "last": ""
+    },
+    {
+     "phase": "write",
+     "state": "visited",
+     "secs": 600,
+     "tokens": 95000,
+     "last": ""
+    },
+    {
+     "phase": "test",
+     "state": "small",
+     "secs": 300,
+     "tokens": 47500,
+     "last": ""
+    },
+    {
+     "phase": "review",
+     "state": "live",
+     "secs": 540,
+     "tokens": 85500,
+     "last": ""
+    },
+    {
+     "phase": "look",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "land",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    }
+   ],
+   "end": "",
+   "end_text": "",
+   "resumed": null,
+   "messages": [
+    {
+     "t": 1793050200.0,
+     "icon": "👀",
+     "who": "reviewer · claude",
+     "md": "2 notes so far (naming, a missing test)",
+     "phase": null
+    }
+   ]
+  }
+ ],
+ "artifacts": [],
+ "waits_for": [],
+ "unblocks": [
+  "lifesim-q6"
+ ],
+ "live": {
+  "kind": "run",
+  "phase": "review",
+  "pass_n": 1,
+  "t": 1793049660.0,
+  "cmd": "claude -p review bd/lifesim-9xq.1",
+  "tokens": 84000,
+  "subtasks": [],
+  "checks": null,
+  "why": "",
+  "silent_secs": null,
+  "exit_code": null
+ },
+ "ask": null
+}

@@ -9,10 +9,11 @@ from taskloop.contracts.stores import StatusStore
 from taskloop_dash.env import Env
 from taskloop_dash.tails import read_dict
 from taskloop_dash.views import names
+from taskloop_dash.views.lanecards import STATUS_MAX_AGE
 
 LOGIN_CMD: Final = {"Codex": "codex login", "Grok": "opencode auth login"}
 LANE_RECORD_MAX_AGE = 6 * 3600
-STATUS_MAX_AGE = 3600  # past this a snapshot also carries the hint to run tl lanes; its cards stay, greyed, with their age
+# STATUS_MAX_AGE (views.lanecards): past this a snapshot also carries the hint to run tl lanes; its cards stay, greyed, with their age
 
 
 def logged_out(notes: str) -> bool:

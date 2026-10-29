@@ -46,11 +46,39 @@ class ConfigDir:
         """When a throttled sweep of the asks last ran (the file's mtime); not an ask, so the store never lists it."""
         return self.root / "asks" / ("." + sweep)
 
+    def ask_ledger(self) -> Path:
+        """The append-only ledger of every ask transition; never swept."""
+        return self.root / "ask-ledger.jsonl"
+
+    def adr_dir(self, repo_key: str) -> Path:
+        return self.root / "decisions" / repo_key
+
+    def adr(self, repo_key: str, adr: str) -> Path:
+        return self.adr_dir(repo_key) / (f"{adr}.json")
+
+    def adr_ids(self, repo_key: str) -> list[str]:
+        """The ids of a repo's decisions (ADR-1, ADR-2, ...), by number."""
+        try:
+            found = [p.stem for p in self.adr_dir(repo_key).glob("*.json")]
+        except OSError:
+            return []
+        return sorted((k for k in found if k[:4] == "ADR-" and k[4:].isdigit()), key=lambda k: int(k[4:]))
+
+    def adr_uses(self, repo_key: str) -> Path:
+        return self.adr_dir(repo_key) / "uses.jsonl"
+
     def checkpoint(self, bead: BeadId | str) -> Path:
         return self.root / "checkpoints" / (f"{bead}.json")
 
     def run_dir(self, run: RunId | str) -> Path:
         return self.root / "runs" / str(run)
+
+    def run_request(self, run: RunId | str) -> Path:
+        """The owner's requests to the live run (park, stop, notes): contracts/requests.py; the run takes it at a step boundary."""
+        return self.run_dir(run) / "owner-request.json"
+
+    def run_request_lock(self, run: RunId | str) -> Path:
+        return self.run_dir(run) / "owner-request.lock"
 
     def check_run(self, run: RunId | str, rnd: int | None = None) -> Path:
         """The CheckRun of a round of the run; no round: the latest."""
@@ -126,6 +154,9 @@ class ConfigDir:
 
     def dash_state(self) -> Path:
         return self.root / "dash.json"
+
+    def usage_history(self) -> Path:
+        return self.root / "usage-history.jsonl"
 
 
 PLAN_FILE = "plan.json"  # the run directory's copy of the plan the dashboard reads

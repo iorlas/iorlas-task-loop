@@ -6,6 +6,7 @@ import threading
 import time
 from typing import Any
 
+from taskloop.contracts import codec
 from taskloop.contracts.runlife import Liveness
 from taskloop_dash.api import live as live_api
 from taskloop_dash.api import overview as overview_api
@@ -14,7 +15,7 @@ from taskloop_dash.api.tasks import repo_name
 from taskloop_dash.env import Env
 from taskloop_dash.readers.beads import basename
 from taskloop_dash.readers.records import Records
-from taskloop_dash.views import names
+from taskloop_dash.views import live_lines, names
 
 LIVE_MAX = 24  # runs kept open
 RECENT = 2 * 3600  # a run that ended longer ago is not on the overview
@@ -60,6 +61,23 @@ class Live:
         newest = names.run_name((logs or [path])[-1])
         now = self.env.clock()
         return live_api.answer(lr, bead, newest, lr.liveness(now), since or None, before or None, wait, limit, now=now)
+
+    def api_v2_live(self, bead: str, since: str = "", wait: str | float = "0") -> tuple[int, dict[str, Any]]:
+        """GET /api/v2/live: the bead's newest run as a typed LivePage. Without `since` the newest events, with it only what is new, held up
+        to `wait` seconds until a file grows. 404 for a bead with no run. The same LiveRun and cursor as /api/live."""
+        self.env.touch()
+        logs = self.records.engine_logs(retain=False).get(bead, []) if names.is_bead_id(bead) else []
+        if not logs:
+            return 404, {"error": "no engine run for this bead"}
+        lr = self.live_run(logs[-1])
+        try:
+            hold = float(wait or 0)
+        except ValueError:
+            hold = 0.0
+        lr.refresh()
+        cursor = live_api.decode(since or None)
+        got = live_api.poll(lr, cursor, hold)
+        return 200, codec.to_json(live_lines.page(got["events"], got["cursor"], lr.liveness(self.env.clock())))
 
     def entries(self) -> list[dict[str, Any]]:
         """The newest run of each bead that is alive or ended lately, as the overview takes them."""

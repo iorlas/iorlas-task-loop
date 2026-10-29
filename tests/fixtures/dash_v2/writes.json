@@ -1,0 +1,49 @@
+{
+ "answer": {
+  "project": "lifesim",
+  "ask": "lifesim-fld.27-1",
+  "kind": "answer",
+  "option": 0,
+  "text": ""
+ },
+ "look": {
+  "project": "lifesim",
+  "bead": "lifesim-d5f.48",
+  "verdict": "redo",
+  "note": "the confirm button is cut off"
+ },
+ "stick": {
+  "project": "lifesim",
+  "ask": "lifesim-fld.27-1",
+  "outcome": "adr",
+  "text": ""
+ },
+ "cause": {
+  "project": "lifesim",
+  "bead": "lifesim-5ban.3",
+  "cause": "flaky_test",
+  "ask": null
+ },
+ "ack": {
+  "project": "lifesim",
+  "bead": "lifesim-5ban.3",
+  "ack": true
+ },
+ "prune": {
+  "project": "lifesim",
+  "adr": "ADR-007"
+ },
+ "park": {
+  "project": "lifesim",
+  "bead": "lifesim-6dq0"
+ },
+ "stop": {
+  "project": "lifesim",
+  "bead": "lifesim-6dq0"
+ },
+ "note": {
+  "project": "lifesim",
+  "bead": "lifesim-6dq0",
+  "text": "keep the old save format readable"
+ }
+}

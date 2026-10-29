@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from taskloop.app.plan.decisions import Decisions
 from taskloop.contracts.argv import checks_to_wire
 from taskloop.domain.checks import lint
 from taskloop.domain.prompts.plan import PLAN_PROMPT, VISUAL_PLAN, VISUAL_STAGES
@@ -14,6 +15,7 @@ REPLAN_CALLS = 6  # the calls a replan may spend looking (study 63: the median r
 class PlanPrompt:
     def __init__(self, host: Any) -> None:
         self.e = host
+        self.decisions = Decisions(host)
 
     def notes(self) -> str:
         """engine.planner_notes: text, or "@path" of a repo file (read from the worktree), at most 2000 characters."""
@@ -68,6 +70,9 @@ class PlanPrompt:
         notes = self.notes()
         if notes:
             rules.append("Facts about this factory and project that the plan must respect:\n" + notes)
+        adrs = self.decisions.text()
+        if adrs:
+            rules.append(adrs)
         shared = e.shared.shared_text()
         if shared:
             rules.append(shared.strip())

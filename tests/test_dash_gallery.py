@@ -1,11 +1,10 @@
 """The owner-look gallery: items from metadata `looks` (or an old description), pictures served only when an item names
-them, good / redo / undo through bd (faked in memory), the signal in the Roadmap's strip."""
+them, the page's v1 answer through the `look` port, the signal in the Roadmap's strip. The verb itself: tests/asks/test_look_verb.py."""
 
 import json
 import os
 import sys
 import tempfile
-import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -13,68 +12,18 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
+from asks.dash_ports import answering  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
+from support.look_world import looks, world  # noqa: E402
 from support.narrow import must  # noqa: E402
 
-from taskloop.adapters.fake_beads import FakeBeads  # noqa: E402
-from taskloop.contracts.bead import BdError, Bead  # noqa: E402
-from taskloop.contracts.ports import BdFailure  # noqa: E402
-from taskloop_dash.views import gallery, graph, roadmap, signals  # noqa: E402
+from taskloop.contracts import gallery  # noqa: E402
+from taskloop_dash.views import graph, roadmap, signals  # noqa: E402
 
 LOOKS = make_dash().looks
 
 NOW = 1_800_000_000.0
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 16
-
-
-def shots(label="menu"):
-    return [{"path": f"docs/evidence/tl-1/{label}-before.png", "role": "before", "label": label},
-            {"path": f"docs/evidence/tl-1/{label}.png", "role": "after", "label": label}]
-
-
-def looks(*statuses):
-    return [
-        {
-            "id": f"tl-1#{int(k)}",
-            "bead": "tl-1",
-            "title": f"menu reads well {int(k)}",
-            "note": "judge: fine",
-            "shots": shots(f"m{int(k)}"),
-            "status": s,
-        }
-        for k, s in enumerate(statuses, 1)
-    ]
-
-
-class FakeBd(FakeBeads):
-    """The typed bd port in memory, with the writes the gallery makes recorded in `calls` and `refuse` naming writes that fail."""
-
-    def __init__(self, beads):
-        super().__init__(prefix="tl-r")
-        self.beads = {k: Bead(**v) for k, v in beads.items()}
-        self.calls, self.refuse = [], set()
-
-    def _try(self, what, bead):
-        self.calls.append((what, bead))
-        if what in self.refuse:
-            raise BdFailure(BdError(kind="other", text="boom"))
-
-    def update(self, bead, patch):
-        self._try("update-meta" if patch.metadata is not None and bead == "tl-look" else "update", bead)
-        super().update(bead, patch)
-
-    def close(self, bead, reason):
-        self._try("close", bead)
-        super().close(bead, reason)
-
-    def create(self, new):
-        self._try("create", "")
-        return super().create(new)
-
-
-def world(*statuses, status="open"):
-    return FakeBd({"tl-look": {"id": "tl-look", "title": "Look review", "status": status, "labels": [gallery.LABEL],
-                               "metadata": {"looks": looks(*statuses), "other": 1}}})
 
 
 def using(fake):
@@ -140,142 +89,10 @@ class Pictures(unittest.TestCase):
         self.assertIsNone(LOOKS.picture(str(self.repo), "docs/x.html", items))
 
 
-class Answers(unittest.TestCase):
-    def ask(self, fake, verdict, item="tl-1#1", note=""):
-        with using(fake):
-            return LOOKS.answer("/r", {"look_bead": "tl-look", "item": item, "verdict": verdict, "note": note}, now=NOW)
-
-    def stored(self, fake):
-        return {e["id"]: e for e in fake.beads["tl-look"].metadata["looks"]}
-
-    def test_good_settles_the_item_and_keeps_the_other_metadata(self):
-        fake = world("open", "open")
-        code, out = self.ask(fake, "good")
-        self.assertEqual((code, out["status"], out["open"]), (200, "good", 1))
-        self.assertEqual(self.stored(fake)["tl-1#1"]["status"], "good")
-        self.assertEqual(fake.beads["tl-look"].metadata["other"], 1)
-        self.assertEqual(fake.beads["tl-look"].status, "open")
-
-    def test_the_last_good_closes_the_look_bead(self):
-        fake = world("good", "open")
-        self.ask(fake, "good", item="tl-1#2")
-        self.assertEqual(fake.beads["tl-look"].status, "closed")
-
-    def test_redo_files_a_bead_with_the_note_and_the_pictures(self):
-        fake = world("open")
-        code, out = self.ask(fake, "redo", note="  the title is too small  ")
-        self.assertEqual((code, out["status"]), (200, "redo"))
-        made = fake.beads[out["redo_bead"]]
-        self.assertIn("the title is too small", made.description)
-        self.assertIn("docs/evidence/tl-1/m1.png (after)", made.description)
-        self.assertIn("docs/evidence/tl-1/m1-before.png (before)", made.description)
-        self.assertEqual([d.id for d in made.dependencies], ["related:tl-1"])
-        e = self.stored(fake)["tl-1#1"]
-        self.assertEqual((e["status"], e["redo_bead"], e["answer_note"]), ("redo", out["redo_bead"], "the title is too small"))
-        self.assertEqual(fake.beads["tl-look"].status, "closed")  # nothing waits any more
-
-    def test_redo_needs_a_note(self):
-        fake = world("open")
-        code, out = self.ask(fake, "redo", note="   ")
-        self.assertEqual((code, out["code"]), (400, "empty"))
-        self.assertFalse(any(c[0] == "create" for c in fake.calls))
-
-    def test_second_answer_finds_it_answered(self):
-        fake = world("open")
-        self.ask(fake, "good")
-        code, out = self.ask(fake, "redo", note="n")
-        self.assertEqual((code, out["code"]), (409, "answered"))
-        self.assertFalse(any(c[0] == "create" for c in fake.calls))
-
-    def test_undo_of_good_reopens_item_and_bead(self):
-        fake = world("open")
-        self.ask(fake, "good")
-        self.assertEqual(fake.beads["tl-look"].status, "closed")
-        code, out = self.ask(fake, "undo")
-        self.assertEqual((code, out["status"]), (200, "open"))
-        self.assertEqual((self.stored(fake)["tl-1#1"]["status"], fake.beads["tl-look"].status), ("open", "open"))
-
-    def test_undo_of_redo_closes_the_follow_up(self):
-        fake = world("open")
-        _, out = self.ask(fake, "redo", note="n")
-        self.ask(fake, "undo")
-        self.assertEqual(fake.beads[out["redo_bead"]].status, "closed")
-        e = self.stored(fake)["tl-1#1"]
-        self.assertEqual((e["status"], e["redo_bead"]), ("open", ""))
-
-    def test_undo_of_an_open_item_changes_nothing(self):
-        fake = world("open")
-        self.assertEqual(self.ask(fake, "undo")[0], 200)
-        self.assertFalse(any(c[0] in ("close", "create") for c in fake.calls))
-
-    def test_unknown_item_bead_and_bad_input(self):
-        fake = world("open")
-        self.assertEqual(self.ask(fake, "good", item="tl-1#9")[1]["code"], "item_missing")
-        with using(fake):
-            self.assertEqual(LOOKS.answer("/r", {"look_bead": "nope", "item": "x", "verdict": "good"})[0], 404)
-            for bad in (
-                {"look_bead": "--db=x", "item": "a", "verdict": "good"},
-                {"look_bead": "tl-look", "item": "a", "verdict": "x"},
-                [],
-                None,
-            ):
-                self.assertEqual(LOOKS.answer("/r", bad)[0], 400, bad)
-        fake.beads["plain"] = Bead(id="plain", title="", status="open", labels=["auto"], metadata={"looks": looks("open")})
-        with using(fake):  # not an owner-look bead: never touched
-            self.assertEqual(LOOKS.answer("/r", {"look_bead": "plain", "item": "tl-1#1", "verdict": "good"})[0], 404)
-
-    def test_an_old_description_bead_is_turned_into_metadata_by_the_first_answer(self):
-        desc = "## tl-9: Settings\n- docs/e/tl-9/a.png\n"
-        fake = FakeBd({"tl-look": {"id": "tl-look", "title": "", "status": "open", "labels": [gallery.LABEL], "description": desc}})
-        with using(fake):
-            code, _ = LOOKS.answer("/r", {"look_bead": "tl-look", "item": "tl-9#0", "verdict": "good"}, now=NOW)
-        self.assertEqual(code, 200)
-        self.assertEqual(fake.beads["tl-look"].metadata["looks"][0]["status"], "good")
-
-    def test_bd_failing_reports_and_changes_nothing_else(self):
-        fake = world("open")
-        fake.refuse = {"update-meta"}
-        code, out = self.ask(fake, "good")
-        self.assertEqual((code, out["code"]), (502, "bd"))
-        self.assertEqual(fake.beads["tl-look"].status, "open")
-
-
 class Hardening(unittest.TestCase):
     def test_a_backslash_path_from_windows_matches(self):
         items = gallery.items_of("b", {"metadata": {"looks": [{"id": "a#1", "shots": [{"path": "docs\\e\\a.png"}]}]}})
         self.assertEqual(items[0]["shots"][0]["path"], "docs/e/a.png")
-
-    def test_a_failed_save_closes_the_redo_bead_it_made(self):
-        fake = world("open")
-        fake.refuse = {"update-meta"}
-        with using(fake):
-            code, _ = LOOKS.answer("/r", {"look_bead": "tl-look", "item": "tl-1#1", "verdict": "redo", "note": "n"}, now=NOW)
-        self.assertEqual(code, 502)
-        self.assertEqual(fake.beads["tl-r-2"].status, "closed")
-
-    def test_two_clicks_at_once_file_one_follow_up(self):
-        fake = world("open")
-        res = []
-        with using(fake):
-            ts = [
-                threading.Thread(
-                    target=lambda: res.append(
-                        LOOKS.answer("/r", {"look_bead": "tl-look", "item": "tl-1#1", "verdict": "redo", "note": "n"})[0]
-                    )
-                )
-                for _ in range(4)
-            ]
-            [t.start() for t in ts]
-            [t.join() for t in ts]
-        self.assertEqual(sorted(res), [200, 409, 409, 409])
-        self.assertEqual(sum(1 for c in fake.calls if c[0] == "create"), 1)
-
-    def test_an_odd_redo_id_is_never_closed(self):
-        fake = world("open")
-        fake.beads["tl-look"].metadata["looks"][0].update(status="redo", redo_bead="--force")
-        with using(fake):
-            LOOKS.answer("/r", {"look_bead": "tl-look", "item": "tl-1#1", "verdict": "undo"})
-        self.assertFalse(any(c == ("close", "--force") for c in fake.calls))
 
 
 class Signal(unittest.TestCase):
@@ -309,6 +126,7 @@ class Api(unittest.TestCase):
             env = {"HOME": home, "XDG_CONFIG_HOME": str(cfg.parent), "APPDATA": str(cfg.parent)}
             with mock.patch.dict(os.environ, env):
                 dash = make_dash(home=home)
+            dash.env.ports = answering(lambda repo: fake, home)
             with mock.patch.object(dash.env.ports, "store", lambda repo: fake), \
                     mock.patch.object(dash.beads, "beads_of", lambda r: [{"id": "tl-look", "labels": [gallery.LABEL]}]):
                 out = dash.looks.api_looks("demo")
@@ -322,7 +140,11 @@ class Api(unittest.TestCase):
                 )
                 self.assertEqual(dash.looks.api_looks("demo")["summary"], {"open": 0, "good": 1, "redo": 0})
                 self.assertEqual(dash.looks.api_looks("")["repo"], "demo")  # a bare #looks means the first repo
-                self.assertEqual(dash.looks.answer_look({"repo": "nowhere"})[0], 404)
+                gone = {"repo": "nowhere", "look_bead": "tl-look", "item": "x", "verdict": "good"}
+                self.assertEqual(dash.looks.answer_look(gone)[0], 404)
+                self.assertEqual(dash.looks.answer_look({"repo": "demo"})[0], 400)
+                no_note = {"repo": "demo", "look_bead": "tl-look", "item": "tl-1#1", "verdict": "redo"}
+                self.assertEqual(dash.looks.answer_look(no_note)[0], 409)
 
 
 if __name__ == "__main__":

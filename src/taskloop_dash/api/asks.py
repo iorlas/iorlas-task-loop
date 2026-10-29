@@ -138,13 +138,8 @@ class Asks:
         if a is None or not isinstance(body, dict):
             return refused or GONE
         amend = body.get("amend") is True
-        text = body.get("text") if isinstance(body.get("text"), str) else ""
-        text = text.strip()
         opt = body.get("option")
-        action: AskAction = "text"
-        if isinstance(opt, int) and 0 <= opt < len(a.options):
-            o = a.options[opt]
-            action, text = o.action, " ".join(x for x in (o.text or (o.label if o.action == "text" else ""), text) if x)
+        action, text = self.words(a, opt if isinstance(opt, int) else None, body.get("text") if isinstance(body.get("text"), str) else "")
         if not text and action == "text":
             return 400, {"code": "empty", "error": "Write an answer first."}
         try:
@@ -152,6 +147,16 @@ class Asks:
         except OSError as e:
             return 502, {"code": "no_bd", "error": f"The dashboard cannot run bd ({e.strerror}). Nothing was changed."}
         return self.refuse(why) if why else (200, {"ok": True, "bead": a.bead, "next": next_step(a)})
+
+    @staticmethod
+    def words(a: AskRecord, option: int | None, text: str) -> tuple[AskAction, str]:
+        """(action, text) of an answer: `option` picks one of the ask's own options (its typed action and text, the owner's words added);
+        otherwise the words are a text answer. An option that is not one of the ask's counts as none."""
+        text = text.strip()
+        if option is not None and 0 <= option < len(a.options):
+            o = a.options[option]
+            return o.action, " ".join(x for x in (o.text or (o.label if o.action == "text" else ""), text) if x)
+        return "text", text
 
     def target(self, body: object) -> tuple[AskRecord | None, Reply | None]:
         """(the ask an answer is for, None) or (None, why it cannot be answered). An answered ask is a target only for an amend."""

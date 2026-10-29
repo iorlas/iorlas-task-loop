@@ -13,6 +13,8 @@ from taskloop_dash.api.looks import Looks
 from taskloop_dash.api.roadmap import RoadmapApi
 from taskloop_dash.api.runs import RunsApi
 from taskloop_dash.api.tasks import Tasks
+from taskloop_dash.api.v2 import V2
+from taskloop_dash.api.writes import Writes
 from taskloop_dash.env import Env
 from taskloop_dash.readers.beads import Beads
 from taskloop_dash.readers.events import Events
@@ -20,6 +22,7 @@ from taskloop_dash.readers.loops import Loops
 from taskloop_dash.readers.opencode import OpenCode
 from taskloop_dash.readers.records import Records
 from taskloop_dash.readers.runlogs import RunLogs
+from taskloop_dash.readers.world import Worlds
 
 
 class Dash:
@@ -41,6 +44,8 @@ class Dash:
         self.artifacts = Artifacts(env)
         self.bead = BeadApi(env, self.records, self.beads, self.runlogs, self.tasks, self.artifacts)
         self.live = Live(env, self.records, self.lanes)
+        self.v2 = V2(env, Worlds(env, self.records, self.beads, self.runlogs, self.looks))
+        self.writes = Writes(env, self.records, self.beads, self.asks, self.looks)
 
     def reflections(self, hours: object) -> dict[str, Any]:
         try:

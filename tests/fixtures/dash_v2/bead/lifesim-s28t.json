@@ -1,0 +1,174 @@
+{
+ "v": 1,
+ "t": 1793050200.0,
+ "card": {
+  "id": "lifesim-s28t",
+  "project": "lifesim",
+  "title": "Save/load screen polish",
+  "column": "done",
+  "marker": "done",
+  "status": "landed",
+  "tone": "",
+  "t": 1793039400.0,
+  "epic": "lifesim-d5f",
+  "slot": "devbox·2",
+  "lane": "OC Go",
+  "loops": 0,
+  "dots": [
+   {
+    "phase": "plan",
+    "state": "done"
+   },
+   {
+    "phase": "write",
+    "state": "done"
+   },
+   {
+    "phase": "test",
+    "state": "done"
+   },
+   {
+    "phase": "review",
+    "state": "done"
+   },
+   {
+    "phase": "look",
+    "state": "done"
+   },
+   {
+    "phase": "land",
+    "state": "done"
+   }
+  ],
+  "needs": [],
+  "goal": false,
+  "waits_why": "",
+  "cause": null,
+  "ack": false,
+  "totals": {
+   "secs": 6720,
+   "tokens": 1064000,
+   "usual": 600000,
+   "usual_n": 12,
+   "tone": ""
+  },
+  "assumptions": 0,
+  "shots": 3
+ },
+ "description": "Save/load screen polish. Part of Save system.",
+ "acceptance": "- works in a new save and an old one\n- tests cover the rule\n- no new warnings in the build",
+ "comments": [
+  {
+   "t": 1793038920.0,
+   "icon": "🚀",
+   "who": "loop",
+   "md": "landed on main",
+   "phase": null
+  },
+  {
+   "t": 1793032200.0,
+   "icon": "🧭",
+   "who": "planner · claude",
+   "md": "plan: 2 steps",
+   "phase": null
+  }
+ ],
+ "passes": [
+  {
+   "n": 1,
+   "cells": [
+    {
+     "phase": "plan",
+     "state": "visited",
+     "secs": 720,
+     "tokens": 114000,
+     "last": ""
+    },
+    {
+     "phase": "write",
+     "state": "visited",
+     "secs": 3120,
+     "tokens": 494000,
+     "last": ""
+    },
+    {
+     "phase": "test",
+     "state": "small",
+     "secs": 480,
+     "tokens": 76000,
+     "last": ""
+    },
+    {
+     "phase": "review",
+     "state": "visited",
+     "secs": 840,
+     "tokens": 133000,
+     "last": ""
+    },
+    {
+     "phase": "look",
+     "state": "visited",
+     "secs": 1080,
+     "tokens": 171000,
+     "last": ""
+    },
+    {
+     "phase": "land",
+     "state": "small",
+     "secs": 480,
+     "tokens": 76000,
+     "last": ""
+    }
+   ],
+   "end": "done",
+   "end_text": "landed",
+   "resumed": null,
+   "messages": [
+    {
+     "t": 1793038920.0,
+     "icon": "🚀",
+     "who": "loop",
+     "md": "landed on main",
+     "phase": null
+    },
+    {
+     "t": 1793032200.0,
+     "icon": "🧭",
+     "who": "planner · claude",
+     "md": "plan: 2 steps",
+     "phase": null
+    }
+   ]
+  }
+ ],
+ "artifacts": [
+  {
+   "name": "shot-1.png",
+   "url": "/api/artifact?project=lifesim&bead=lifesim-s28t&name=shot-1.png",
+   "kind": "image",
+   "t": 1793049840.0,
+   "pass_n": 1,
+   "phase": "look"
+  },
+  {
+   "name": "shot-2.png",
+   "url": "/api/artifact?project=lifesim&bead=lifesim-s28t&name=shot-2.png",
+   "kind": "image",
+   "t": 1793049840.0,
+   "pass_n": 1,
+   "phase": "look"
+  },
+  {
+   "name": "shot-3.png",
+   "url": "/api/artifact?project=lifesim&bead=lifesim-s28t&name=shot-3.png",
+   "kind": "image",
+   "t": 1793049840.0,
+   "pass_n": 1,
+   "phase": "look"
+  }
+ ],
+ "waits_for": [],
+ "unblocks": [],
+ "live": null,
+ "ask": null
+}

@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>dash check</title>
+<style>html,body{margin:0;background:#888}iframe{display:block;border:0;background:#fff}#out{display:none}</style>
+</head><body>
+<iframe id="f"></iframe><pre id="out"></pre>
+<script type="module">
+// Browser harness for the dashboard v2 page (dev/dash_check.py drives it). Headless Chrome will not size a window below
+// 500 px, so the page runs in an iframe of the asked size; same origin, so the harness reads its DOM and storage.
+// ?page=/&hash=#board&w=390&h=844&theme=light|dark&scn=<scenario>  ->  #out holds {"ok":bool,"fails":[...],"notes":[...]}
+const q = new URLSearchParams(location.search);
+const W = +q.get('w') || 1280, H = +q.get('h') || 860, theme = q.get('theme') || 'light', scn = q.get('scn') || '';
+const f = document.getElementById('f');
+f.style.width = W + 'px'; f.style.height = H + 'px';
+const fails = [], notes = [];
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const win = () => f.contentWindow, doc = () => f.contentDocument;
+
+let loads = 0;
+// ro=1 (a live server): every write is refused inside the page and counted, so a check never acts on real beads
+const RO = q.get('ro') === '1', blocked = [];
+function readOnly() {
+  const w = win(), real = w.fetch.bind(w);
+  w.fetch = (url, init = {}) => {
+    if ((init.method || 'GET').toUpperCase() === 'GET') return real(url, init);
+    blocked.push(String(url));
+    return Promise.resolve(new w.Response(JSON.stringify({ ok: false, message: 'read-only check' }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+  };
+}
+// a new document every time: a src that differs only in its hash would not fire load
+// root=/v2.html: the page's path on a server that serves something else at /
+const ROOT = q.get('root') || '/';
+function load(url) {
+  if (url === '/' || url.startsWith('/#') || url.startsWith('/?')) url = ROOT + url.slice(1);
+  const [path, h = ''] = url.split('#');
+  url = `${path}${path.includes('?') ? '&' : '?'}load=${++loads}${h ? '#' + h : ''}`;
+  return new Promise((res) => {
+    f.onload = () => { doc().documentElement.dataset.theme = theme; if (RO) readOnly(); res(); };
+    f.src = url;
+  });
+}
+async function settle(ms = 600) { await sleep(ms); }
+const $ = (sel) => doc().querySelector(sel);
+const $$ = (sel) => [...doc().querySelectorAll(sel)];
+function must(cond, msg) { if (!cond) fails.push(msg); return !!cond; }
+async function click(sel, text) {
+  const el = $$(sel).find((e) => text == null || e.textContent.includes(text));
+  if (!must(el, `click: no ${sel}${text != null ? ` with "${text}"` : ''}`)) return false;
+  el.click();
+  await settle();
+  return true;
+}
+
+// a layer that is closed (slid off screen) is not on the page for these checks
+const CLOSED = '.pg:not(.on),.sh:not(.on),.scrim:not(.on),.drw:not(.open),[aria-hidden=true]';
+function shown(el) {
+  if (el.closest(CLOSED)) return false;
+  const cs = win().getComputedStyle(el), r = el.getBoundingClientRect();
+  return cs.display !== 'none' && cs.visibility !== 'hidden' && r.width > 0 && r.height > 0;
+}
+const name = (el) => `${el.tagName.toLowerCase()}${el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).join('.') : ''} "${el.textContent.trim().slice(0, 30)}"`;
+
+// dash-spec §9 and §13: nothing wider than the viewport, no sideways scroller, taps >= 40 px, text >= 12 px, inputs 16 px
+function phoneRules(where) {
+  const vw = win().innerWidth, out = [];
+  if (doc().scrollingElement.scrollWidth > vw + 1) out.push(`page scrolls sideways (${doc().scrollingElement.scrollWidth} > ${vw})`);
+  for (const el of $$('body *')) {
+    if (!shown(el)) continue;
+    const r = el.getBoundingClientRect(), cs = win().getComputedStyle(el);
+    if (r.right > vw + 1 || r.left < -1) out.push(`wider than the viewport: ${name(el)} [${Math.round(r.left)}..${Math.round(r.right)}]`);
+    if (/(auto|scroll)/.test(cs.overflowX) && el.scrollWidth > el.clientWidth + 1) out.push(`sideways scroller: ${name(el)}`);
+    if (el.matches('button,a[href],select,[role=tab],input:not([type=hidden]),textarea') && (r.height < 40 || r.width < 40)) out.push(`tap target ${Math.round(r.width)}x${Math.round(r.height)}: ${name(el)}`);
+    if (el.matches('input,textarea,select') && parseFloat(cs.fontSize) < 16) out.push(`input font ${cs.fontSize}: ${name(el)}`);
+    for (const n of el.childNodes) {
+      if (n.nodeType === 3 && n.textContent.trim() && parseFloat(cs.fontSize) < 12) { out.push(`text ${cs.fontSize}: ${name(el)}`); break; }
+    }
+  }
+  for (const m of [...new Set(out)]) fails.push(`${where}: ${m}`);
+}
+
+function desktopRules(where) {
+  const vw = win().innerWidth;
+  if (doc().scrollingElement.scrollWidth > vw + 1) fails.push(`${where}: page scrolls sideways (${doc().scrollingElement.scrollWidth} > ${vw})`);
+  for (const el of $$('body *')) {
+    if (!shown(el)) continue;
+    const cs = win().getComputedStyle(el);
+    for (const n of el.childNodes) {
+      if (n.nodeType === 3 && n.textContent.trim() && parseFloat(cs.fontSize) < 11 && !el.closest('.axis,.tk,.ring')) { fails.push(`${where}: text ${cs.fontSize}: ${name(el)}`); break; }
+    }
+  }
+}
+
+const rules = () => (W <= 600 ? phoneRules : desktopRules);
+
+const writes = async () => (await fetch('/dev/writes')).json();
+function type(sel, text) {
+  const el = $(sel);
+  if (!must(el, `type: no ${sel}`)) return;
+  el.value = text;
+  el.dispatchEvent(new (win().Event)('input', { bubbles: true }));
+}
+const SCENARIOS = {
+  // a live server (ro=1): every tab and view option under the layout rules, then a slice of real beads' pages
+  async survey() {
+    localStorage.clear();
+    const views = ['#board', '#board~tree', '#floor', '#floor~2', '#decisions~wait', '#decisions~led', '#decisions~adr', '#lanes'];
+    const part = +(q.get('part') || 0);
+    if (part === 0) {
+      for (const v of views) {
+        await load(`/${v}`); await settle(1200);
+        must($('.app,#ph'), `${v}: the page did not render: ${doc().body.textContent.trim().slice(0, 120)}`);
+        must(!$('.ban.bad'), `${v}: server unreachable`); rules()(v);
+      }
+      return;
+    }
+    const snap = await (await fetch('/api/v2/snapshot')).json();
+    const pick = [];
+    for (const col of ['questions', 'look', 'working', 'review', 'landing', 'backlog', 'done']) pick.push(...snap.beads.filter((b) => b.column === col).slice(0, 3));
+    pick.push(...snap.beads.filter((b) => ['stuck', 'exited', 'ask', 'look'].includes(b.marker) && !pick.includes(b)));
+    pick.push(...snap.beads.filter((b) => b.needs.length && !pick.includes(b)).slice(0, 6));
+    const chunk = pick.slice((part - 1) * 6, part * 6);
+    notes.push(`beads ${chunk.map((b) => `${b.id}:${b.column}:${b.marker}`).join(' ')}`);
+    for (const b of chunk) {
+      await load(`/#board~~lifesim-${encodeURIComponent(b.id)}`); await settle(1500);
+      must(!$('.loading') && !$$('.empty').some((e) => /could not be read/.test(e.textContent)), `${b.id}: bead page did not load`);
+      rules()(`bead ${b.id}`);
+    }
+  },
+  // dash-spec §10 worker exited: 💀 on the bead, red; the page shows the exit code, the last 20 lines and the stop chips
+  async exited() {
+    localStorage.clear();
+    const phone = W <= 600;
+    await load('/#board~~lifesim-5ban.3'); await settle(1800);
+    must($$(phone ? '.pc' : '.kc').some((c) => /💀/.test(c.textContent) && /NPC daily/.test(c.textContent)) || $$('.tr,.pc,.kc').some((c) => /💀/.test(c.textContent)), 'the board marks the bead 💀');
+    const box = $('.box.bad');
+    must(box && /Worker exited · code 137/.test(box.textContent), `exit code shown: ${box && box.querySelector('.bh').textContent}`);
+    must(box && box.querySelectorAll('.term div').length > 6, `more than the 6 running lines (${box && box.querySelectorAll('.term div').length})`);
+    must(box && box.querySelector('.stopa'), 'the stop chips sit under it');
+    rules()('exited');
+  },
+  // slice 9: system back closes the top layer in order: sheet → bead page → goal level (dash-spec §9); a swipe from the
+  // left edge closes the bead page; pass tabs stick at 46 px; every sheet keeps the phone rules
+  async back() {
+    localStorage.clear();
+    const hash = () => win().location.hash, back = async () => { win().history.back(); await settle(); };
+    await load('/#board~tree'); await settle(1500);
+    await click('.pl .gr', 'First playable month');
+    await click('.pl .gr', 'Tax at year end');
+    await click('.pl .gr', 'Prices with a currency sign'); await settle(800);
+    must($('.pg.on'), 'bead page open');
+    const tabs = $('.pg.on .ptabs');
+    must(tabs && win().getComputedStyle(tabs).position === 'sticky' && tabs.querySelector('button').getBoundingClientRect().height >= 46, 'pass tabs stick at 46 px');
+    await click('.pab button', 'Note');
+    must($('.sh.on'), 'note sheet open');
+    await back(); must(!$('.sh.on') && $('.pg.on'), 'back 1 closes the sheet only');
+    await back(); must(!$('.pg.on') && /~lifesim-g1\/lifesim-q6$/.test(hash()), `back 2 closes the bead page, keeps the level: ${hash()}`);
+    await back(); must(/~~~lifesim-g1$/.test(hash()), `back 3 goes up a level: ${hash()}`);
+    await back(); must(/^#board~tree$/.test(hash()), `back 4 is the goal list: ${hash()}`);
+    // the left-edge swipe
+    await load('/#board~~lifesim-6dq0'); await settle(1500);
+    const pg = $('.pg.on');
+    try {
+      const T = win().Touch, TE = win().TouchEvent;
+      const t = (x) => new T({ identifier: 1, target: pg, clientX: x, clientY: 400 });
+      pg.dispatchEvent(new TE('touchstart', { bubbles: true, touches: [t(8)], changedTouches: [t(8)] }));
+      pg.dispatchEvent(new TE('touchend', { bubbles: true, touches: [], changedTouches: [t(160)] }));
+      await settle();
+      must(!$('.pg.on'), 'a swipe from the left edge closes the bead page');
+    } catch (e) { notes.push(`swipe not checked: ${e.message}`); }
+    // every tab and sheet keeps the phone rules
+    await load('/#board'); await settle(1500);
+    await click('.flt'); phoneRules('filter sheet'); await back();
+    await load('/#board~~lifesim-5ban.3'); await settle(1500);
+    await click('.pab button', 'Stop'); phoneRules('stop sheet'); await back();
+    for (const t of ['Floor', 'Decisions', 'Lanes']) { await click('.tb button', t); phoneRules(t); }
+  },
+  // slice 8: lanes worst first, the number inside the ring, a stale lane greyed with its age, chips open their bead;
+  // the header pill / top-bar rings show only lanes that are not fine and lead here
+  async lanes() {
+    localStorage.clear();
+    const phone = W <= 600;
+    await load('/#board'); await settle(1500);
+    const pill = $$(phone ? '.lp .lpi' : '.rbtn small').map((e) => e.textContent.trim());
+    must(pill.length === 2 && /gemini/.test(pill[0]) && /codex/.test(pill[1]), `only troubled lanes up top: ${pill.join(' | ')}`);
+    await click(phone ? '.lp' : '.rbtn');
+    must(/^#lanes/.test(win().location.hash), `the pill opens Lanes: ${win().location.hash}`);
+    const rows = $$(phone ? '.lc' : '.lt tbody tr');
+    const names = rows.map((r) => r.querySelector(phone ? '.lnm' : '.nm > div:last-child').firstChild.textContent.trim());
+    must(names.join(',') === 'gemini,codex,claude,OC Go,claude 2', `worst first: ${names.join(',')}`);
+    must(rows[0].querySelector('.ring b').textContent === '3d' && rows[1].querySelector('.ring b').textContent === '91%', 'the number sits in the ring');
+    const st = rows.find((r) => r.classList.contains('stale'));
+    must(st && /claude 2/.test(st.textContent) && /updated 2h\d* ago/.test(st.textContent), `stale lane greyed with its age: ${st && st.textContent}`);
+    rules()('lanes');
+    await click('.chip', '6dq0');
+    must(/6dq0/.test(win().location.hash), 'a chip opens its bead');
+  },
+  // slice 7: the goal tree (served with one bead two goals need): roots, order, a fold with its roll-up, the ⤴ stub;
+  // on the phone, drill down a level and back
+  async goals() {
+    localStorage.clear();
+    const phone = W <= 600;
+    await load('/#board~tree'); await settle(1500);
+    rules()('goals');
+    if (phone) {
+      must($$('.pl .gr').length === 5, `5 roots (${$$('.pl .gr').length})`);
+      await click('.pl .gr', 'First playable month');
+      must(/#board~tree~~~lifesim-g1$/.test(win().location.hash), `goal level in the hash: ${win().location.hash}`);
+      await click('.pl .gr', 'Tax at year end');
+      must($('.crumb') && /First playable month/.test($('.crumb').textContent), 'the crumb names the parent');
+      rules()('goal level 2');
+      win().history.back(); await settle();
+      must(/#board~tree~~~lifesim-g1$/.test(win().location.hash), `back goes up one level: ${win().location.hash}`);
+      await click('.pl .gr', 'Tax at year end');
+      await click('.pl .gr', 'Prices with a currency sign');
+      must($('.pg.on'), 'a leaf opens its bead page');
+      return;
+    }
+    const ids = () => $$('.tree .tr .id').map((e) => e.textContent.replace(/^.*· /, ''));
+    must(ids()[0] === 'g2' && ids().includes('5ban.3'), `roots first: ${ids().join(' ')}`);
+    const q6 = ids().indexOf('q6');
+    must(ids().slice(q6 + 1, q6 + 3).join(' ') === 'a3k.2 9xq.1', `ask before run under q6: ${ids().slice(q6, q6 + 4).join(' ')}`);
+    must($$('.tr .stub').length === 1, `one ⤴ stub (${$$('.tr .stub').length})`);
+    const g1 = $$('.tree .tr').find((r) => /First playable month/.test(r.textContent));
+    g1.querySelector('.tw').click(); await settle();
+    const folded = $$('.tree .tr').find((r) => /First playable month/.test(r.textContent));
+    must(folded.querySelector('.ru') && /🙋/.test(folded.querySelector('.ru').textContent), `folded g1 shows its roll-up: ${folded.textContent}`);
+    must(!ids().includes('q6'), 'the fold hides its branch');
+    await load('/#board~tree'); await settle(1200);
+    must(!ids().includes('q6'), 'the fold survives a reload');
+  },
+  // slice 6: the bead page's controls: Park, Stop only after a confirm, a note for the worker; a done bead takes Comment only
+  async controls() {
+    localStorage.clear();
+    const phone = W <= 600, sent = async (n0) => (await writes()).slice(n0);
+    await load('/#board~~lifesim-6dq0'); await settle(1500);
+    let n0 = (await writes()).length;
+    if (phone) {
+      await click('.pab button', 'Stop');
+      must($('.sh.on') && /Stop 6dq0\?/.test($('.sh.on').textContent), 'Stop opens a confirm sheet');
+      must(!(await sent(n0)).length, 'nothing stopped before the confirm');
+      phoneRules('stop sheet');
+      await click('.sh.on .danger', 'Stop the run');
+      must(!$('.sh.on'), 'the sheet closes');
+      await click('.pab button', 'Note');
+      must($('.sh.on textarea'), 'Note opens a sheet with a textarea');
+      phoneRules('note sheet');
+      type('.sh.on textarea', 'keep the old save format readable'); await settle(200);
+      $('.sh.on form').dispatchEvent(new (win().Event)('submit', { bubbles: true, cancelable: true })); await settle();
+      must(!$('.sh.on'), 'Send closes the note sheet');
+      await click('.pab button', 'Park');
+    } else {
+      await click('.ctl button', 'Stop');
+      must(!(await sent(n0)).length, 'nothing stopped before the confirm');
+      await click('.ctl.cf button', 'Stop the run');
+      type('.ctl .note1 input', 'keep the old save format readable'); await settle(200);
+      $('.ctl .note1').dispatchEvent(new (win().Event)('submit', { bubbles: true, cancelable: true })); await settle();
+      await click('.ctl button', 'Park');
+    }
+    const w = await sent(n0);
+    must(w.length === 3 && w[0][0] === 'stop' && w[0][1].bead === 'lifesim-6dq0' && w[1][0] === 'note' && w[1][1].text === 'keep the old save format readable'
+      && w[2][0] === 'park', `stop, note, park sent: ${JSON.stringify(w)}`);
+    await load('/#board~~lifesim-s28t'); await settle(1500);
+    const bar = $(phone ? '.pg.on .pab' : '.ctl');
+    must(bar && !/Park|Stop/.test(bar.textContent) && /Comment/.test(bar.textContent + (bar.querySelector('input') || {}).placeholder), `a done bead shows Comment only: ${bar && bar.textContent}`);
+    rules()('done bead');
+  },
+  // slice 5: the learning block from the fixture, Ledger filters (kept across a reload), make it stick and name a cause
+  // from a row, prune offered on an unused decision
+  async ledger() {
+    localStorage.clear();
+    await load('/#decisions~led'); await settle(1500);
+    const st = $$('.st4').map((e) => e.textContent);
+    must(/0\.6.*↓ from 0\.9/.test(st[0]) && /45%.*↑ from 30%/.test(st[3]) && /→ same/.test(st[2]), `stats: ${st.join(' | ')}`);
+    must($$('.par .q').some((e) => /\? no cause/.test(e.textContent)), '? no cause is amber');
+    must($$('.led tr').length === 10, `10 ledger rows (${$$('.led tr').length})`);
+    rules()('ledger');
+    await click('.chips .fc', 'Decision');
+    must($$('.led tr').length === 3, `Decision filter: 3 rows (${$$('.led tr').length})`);
+    await load('/#decisions~led'); await settle(1200);
+    must($$('.led tr').length === 3, 'the ledger filter survives a reload');
+    await click('.chips .fc', 'All');
+    const n0 = (await writes()).length;
+    const row = () => $$('.led tr').find((r) => /Stalled 40m/.test(r.textContent));
+    row().querySelector('.oc .fc').click(); await settle();
+    [...row().querySelectorAll('.oc .fc')].find((b) => /Record a decision/.test(b.textContent)).click(); await settle();
+    must(/📜 Decision/.test(row().querySelector('.oc').textContent), 'the row shows its outcome at once');
+    row().querySelector('.lnk.q').click(); await settle();
+    [...row().querySelectorAll('.fc')].find((b) => /process/.test(b.textContent)).click(); await settle();
+    const w = (await writes()).slice(n0);
+    must(w.length === 2 && w[0][0] === 'stick' && w[0][1].ask === 'lifesim-7hv.1-1' && w[0][1].outcome === 'adr'
+      && w[1][0] === 'cause' && w[1][1].ask === 'lifesim-7hv.1-1' && w[1][1].cause === 'process', `stick + cause sent: ${JSON.stringify(w)}`);
+    rules()('ledger after');
+    await click('.dtabs [role=tab]', W <= 600 ? 'In force' : 'Decisions in force');
+    must($$('.adr .z').some((e) => /prune/.test(e.textContent)), 'prune offered on ADR-007');
+    const n1 = (await writes()).length;
+    await click('.adr .lnk.warn', 'prune?');
+    await click('.adr .fc', 'Yes');
+    const pw = (await writes()).slice(n1);
+    must(pw.length === 1 && pw[0][0] === 'prune' && pw[0][1].adr === 'ADR-007', `prune sent: ${JSON.stringify(pw)}`);
+    must(!$$('.adr .mu').some((e) => e.textContent === 'ADR-007'), 'a pruned decision leaves the list at once');
+    rules()('in force');
+  },
+  // slice 4: the Floor draws the comeback as two pieces and a curve; a stuck bead takes a cause and 👁 Seen from its page
+  async floor() {
+    localStorage.clear();
+    const phone = W <= 600;
+    await load('/#floor'); await settle(1500);
+    rules()('floor');
+    must($$('.tb .bd.r.on,.nav .n').some((e) => e.textContent.trim() === '1'), 'Floor badge counts the stuck bead');
+    if (phone) {
+      must($$('.slc').length === 5, `one card per slot (${$$('.slc').length})`);
+      must($$('.slc').some((c) => /stuck/.test(c.querySelector('.pill').textContent) && /NPC daily/.test(c.textContent)), 'devbox·2 card is stuck');
+      must($$('.slc').some((c) => /Free · (lifesim · )?fld\.27 parked here/.test(c.textContent)), 'a parked slot reads Free · <bead> parked here');
+      must($$('.slc .stp i').length > 5, 'strips drawn');
+      await click('.slc', 'NPC daily');
+    } else {
+      must($$('svg.jmp path').length === 1, `one comeback curve (${$$('svg.jmp path').length})`);
+      must($$('.ln.cr .cap').some((e) => /→ devbox·1/.test(e.textContent)), 'first piece ends → devbox·1');
+      must($$('.trk .nm').some((e) => /↪ (lifesim · )?7hv\.2.*from mac·2/.test(e.textContent)), 'second piece starts ↪ … from mac·2');
+      must($$('.ln.stuck:not(.ack)').length === 1, 'the stuck line has its red outline');
+      const sc = $('.fl .sc'), nowX = parseFloat($('.fl .now').style.left);
+      must(nowX > sc.scrollLeft && nowX < sc.scrollLeft + sc.clientWidth, 'opens scrolled to now');
+      await click('.fbar .seg button', '2 h'); must(/~2$/.test(win().location.hash), `zoom in the hash (${win().location.hash})`);
+      await click('.trk .nm', '5ban.3');
+    }
+    await settle(800);
+    const n0 = (await writes()).length;
+    await click('.stopa .acts button', 'Seen');
+    await click('.stopa .fc', 'flaky test');
+    const w = (await writes()).slice(n0);
+    must(w.length === 2 && w[0][0] === 'ack' && w[0][1].ack === true && w[1][0] === 'cause' && w[1][1].cause === 'flaky_test' && !w[1][1].ask, `ack + cause sent: ${JSON.stringify(w)}`);
+    must(!$$('.tb .bd.r.on').length && !$$('.nav .n.bad').length, 'the Floor badge mutes');
+    rules()(phone ? 'stuck page' : 'stuck drawer');
+  },
+  // slice 3: answer from the card (5 s hold, then POST, then make it stick), Undo, ask back, a look, a draft across a reload
+  async asks() {
+    localStorage.clear();
+    const phone = W <= 600;
+    await load(phone ? '/#board' : '/#decisions'); await settle(1500);
+    const n0 = (await writes()).length;
+    if (phone) {
+      await click('.qa .pri', 'Rent weekly');
+      must($('.sh.on') && /Sending in/.test($('.sh.on').textContent), 'stick sheet shows the hold');
+      phoneRules('stick sheet');
+    } else {
+      const card = $$('.wcard').find((c) => /fld\.27/.test(c.textContent));
+      must(card, 'Waiting has the fld.27 card');
+      card.querySelector('.op.rec').click(); await settle();
+      must(/Sending in/.test(card.textContent), 'the card shows the 5 s hold');
+    }
+    must((await writes()).length === n0, 'nothing sent during the hold');
+    await settle(5600);
+    const w = (await writes()).slice(n0);
+    must(w.length === 1 && w[0][0] === 'answer' && w[0][1].ask === 'lifesim-fld.27-1' && w[0][1].option === 0 && w[0][1].kind === 'answer', `answer sent: ${JSON.stringify(w)}`);
+    await click(phone ? '.sh.on .rows button' : '.stick .bs button', 'Record a decision');
+    const w2 = (await writes()).slice(n0);
+    must(w2.length === 2 && w2[1][0] === 'stick' && w2[1][1].outcome === 'adr', `stick sent: ${JSON.stringify(w2)}`);
+    if (phone) { win().history.back(); await settle(); must(!$('.sh.on'), 'Done closes the sheet'); }
+    must(!$$('.pc,.wcard .askcard .q').some((e) => /Which bills/.test(e.textContent) && !e.closest('.wcard')), 'the answered card collapsed out');
+    // undo: nothing reaches the server
+    if (!phone) {
+      const soft = $$('.wcard').find((c) => /a3k\.2/.test(c.textContent));
+      soft.querySelector('.op').click(); await settle();
+      await click('.stick .lnk', 'Undo');
+      await settle(5600);
+      must(!(await writes()).some((x) => x[1].ask === 'lifesim-a3k.2-1' && x[0] === 'answer'), 'undo sent nothing');
+      // ask back: free text that asks a question keeps the ask open
+      type('.wcard .askb input', 'Does "$" cover the shop too?');
+      await settle(200);
+      $('.wcard .askb').dispatchEvent(new (win().Event)('submit', { bubbles: true, cancelable: true })); await settle();
+      must((await writes()).some((x) => x[0] === 'answer' && x[1].kind === 'ask_back'), 'ask back sent');
+      // a look: approve
+      const look = $$('.wcard').find((c) => /d5f\.48/.test(c.textContent));
+      look.querySelector('.op.rec').click(); await settle();
+      must((await writes()).some((x) => x[0] === 'look' && x[1].verdict === 'good' && x[1].bead === 'lifesim-d5f.48'), 'look approve sent');
+      rules()('decisions');
+    }
+  },
+  async draft() {
+    localStorage.clear();
+    await load('/#board~~lifesim-fld.27'); await settle(1500);
+    type('.askb input', 'half-typed answer');
+    win().location.reload();
+    await new Promise((r) => { f.onload = r; }); await settle(1800);
+    must($('.askb input') && $('.askb input').value === 'half-typed answer', `draft lost on reload: "${$('.askb input') && $('.askb input').value}"`);
+  },
+  // slice 2: a 4-pass bead's drawer (tabs, ending markers, cells, Bead tab) and a live tail that fills its terminal
+  async drawer() {
+    localStorage.clear();
+    await load('/#board~~lifesim-d5f.48'); await settle(1500);
+    const tabs = $$('.tabs .tab,.ptabs .tab').map((t) => t.textContent.trim());
+    must(tabs.length === 5, `d5f.48 has ${tabs.length} drawer tabs, want Bead + 4 passes: ${tabs}`);
+    must(/↩️/.test(tabs[1]) && /↩️/.test(tabs[2]) && /🙋/.test(tabs[3]), `pass ending markers: ${tabs}`);
+    must($$('.stagecard .row6:not(.hd):not(.th)>*').length === 6, 'six phase cells');
+    must($('.askcard'), 'the live pass of a look shows the look card');
+    await click('.tab', 'Bead');
+    must(/Acceptance/.test($('.bead').textContent), 'Bead tab shows acceptance');
+    rules()('drawer d5f.48');
+    await load('/#board~~lifesim-6dq0'); await settle(2500);
+    must($$('.term div').length >= 5, `live tail has ${$$('.term div').length} lines`);
+    must($('.box.run'), 'running box');
+    rules()('drawer 6dq0');
+    await load('/#board~~lifesim-5ban.3'); await settle(2000);
+    must($('.box.bad') && /Stuck/.test($('.box.bad').textContent), 'stuck box');
+  },
+  // dash-spec §10 states the server can put the page in (dash_check.py runs these against --state empty / down)
+  async empty() { await load('/#board'); await settle(1500); must($('.empty') && /No beads yet/.test($('.empty').textContent), 'no first-run EmptyState'); rules()('empty'); },
+  async down() { await load('/#board'); await settle(1500); must($('.ban.bad'), 'no unreachable line'); rules()('down'); },
+  // load the page as asked and check the layout rules (screenshots use this too)
+  async view() { await load(`${q.get('page') || '/'}${q.get('hash') || ''}`); await settle(1500); rules()(q.get('hash') || 'board'); },
+  // every tab, the bead page, the filter sheet, on the phone or the desktop
+  async walk() {
+    localStorage.clear();
+    await load('/#board'); await settle(1500);
+    const phone = W <= 600, check = rules();
+    check('board');
+    for (const t of ['Floor', 'Decisions', 'Lanes', 'Board']) { await click(phone ? '.tb button' : '.nav button', t); check(t); }
+    // a live board may show no card unfolded (all backlog): then there is no bead page to walk to, and no back to take
+    const opened = RO && !$(phone ? '.pc' : '.kc') ? (notes.push('no card on the board to open'), false) : await click(phone ? '.pc' : '.kc');
+    if (opened) { await settle(800); check('bead page'); }
+    if (phone) { if (opened) { win().history.back(); await settle(); } await click('.flt'); check('filter sheet'); }
+  },
+  // dash-spec §2.1: tab, Board mode, filters, open drawer, drawer tab and folds survive a reload
+  async persist() {
+    localStorage.clear();
+    await load('/#board'); await settle(1500);
+    const phone = W <= 600;
+    if (phone) {
+      await click('.flt'); await click('.sh .fc', 'lifesim'); win().history.back(); await settle();
+      await click('.ps h3 .fold', 'Backlog');
+      win().scrollTo(0, 300); await settle(400);
+      await click('.pc', 'Fix save corruption'); await settle(800);
+    } else {
+      await click('.fc', 'lifesim');
+      await click('.kc', 'Fix save corruption'); await settle(800);
+    }
+    await click('.tab', 'Bead');
+    const before = { hash: win().location.hash, ls: win().localStorage.getItem('tl-dash-v2') };
+    win().location.reload();
+    await new Promise((r) => { f.onload = r; });
+    await settle(1800);
+    must(win().location.hash === before.hash, `hash changed on reload: ${before.hash} -> ${win().location.hash}`);
+    must(win().localStorage.getItem('tl-dash-v2') === before.ls, 'stored state changed on reload');
+    must($(phone ? '.pg.on' : '.drw.open'), 'drawer closed after reload');
+    must($$('.tab.on').some((t) => t.textContent.includes('Bead')), 'drawer tab lost after reload');
+    must(phone ? $('.fsum') : $$('.fc.on').some((c) => c.textContent.includes('lifesim')), 'project filter lost after reload');
+    if (phone) {
+      must($$('.ps h3').some((h) => h.textContent.includes('Backlog') && h.querySelector('.chev.o')), 'Backlog fold lost after reload');
+      must(Math.abs(win().scrollY - 300) < 4, `board scroll lost after reload: ${win().scrollY}`);
+    }
+    notes.push(`hash ${before.hash}`);
+  },
+};
+
+(async () => {
+  try { await SCENARIOS[scn || 'view'](); } catch (e) { fails.push(`harness: ${e.stack || e}`); }
+  const out = document.getElementById('out');
+  if (blocked.length) notes.push(`writes refused (read-only): ${blocked.join(' ')}`);
+  out.textContent = JSON.stringify({ ok: !fails.length, fails, notes });
+  out.dataset.done = '1';
+})();
+</script></body></html>

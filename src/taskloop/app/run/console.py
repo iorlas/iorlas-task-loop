@@ -4,7 +4,7 @@ import sys
 import time
 from collections.abc import Callable
 
-from taskloop.contracts.log import CmdStart, EngineLog, Note, StepStart, Warn
+from taskloop.contracts.log import Assumed, CmdStart, EngineLog, Note, StepStart, Stuck, Warn
 
 QUIET = frozenset(
     {
@@ -28,6 +28,7 @@ QUIET = frozenset(
         "reload",
         "checks",
         "beat",
+        "said",
         "close",
     }
 )
@@ -40,9 +41,14 @@ def line(verbose: bool = True) -> Callable[[EngineLog], str | None]:
         if isinstance(rec, CmdStart) and not verbose:
             return None
         text = rec.text if isinstance(rec, (StepStart, CmdStart, Note, Warn)) else None
+        if isinstance(rec, Assumed):
+            text = "assumed: " + rec.text
+        elif isinstance(rec, Stuck):
+            text = f"stuck in {rec.step or 'the run'}: " + ("silent past the limit" if rec.why == "silent" else "the same checks red")
         if text is None:
             return None
-        return "[{}] {}{}".format(time.strftime("%H:%M:%S", time.localtime(rec.t)), "⚠ " if isinstance(rec, Warn) else "", text)
+        mark = "⚠ " if isinstance(rec, (Warn, Stuck)) else ""
+        return "[{}] {}{}".format(time.strftime("%H:%M:%S", time.localtime(rec.t)), mark, text)
 
     return render
 

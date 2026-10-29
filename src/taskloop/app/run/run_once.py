@@ -7,7 +7,7 @@ from typing import Any, cast
 from taskloop.adapters import beadtools, ident
 from taskloop.adapters import delegate as dg
 from taskloop.app.release import reexec
-from taskloop.app.run import outcomes
+from taskloop.app.run import outcomes, requests
 from taskloop.app.run.reload import Exec
 from taskloop.app.slots.lease import Lease
 from taskloop.contracts.enums import AskClass
@@ -44,6 +44,8 @@ class RunOnce:
             end.kind = b.kind
             end.outcome = outcomes.outcome_for(end.kind, b.why)
             end.why, end.spec = b.why, b.spec
+            if end.kind == oc.Kind.PAUSE_KILLED and e.requests.stopped:  # the stop flag was the owner's request, not a SIGTERM
+                end.why = requests.STOPPED_WHY
         except Exec:
             pass  # the process image is gone; nothing below runs in a real exec
         except Exception as err:  # the close-out must run whatever broke
@@ -53,9 +55,12 @@ class RunOnce:
         return 0 if e.moved or end.outcome in ("landed", "done") else 2
 
     def beat(self) -> None:
-        """The run's proof of life in its log (runlife.liveness reads it); a log that cannot be written must not kill the beat thread."""
+        """The run's proof of life in its log (runlife.liveness reads it), then the stuck tick and the owner's stop; a log that cannot
+        be written must not kill the beat thread."""
         with contextlib.suppress(OSError):
             self.e.log.emit(Beat())
+        self.e.stuck.tick()
+        self.e.requests.at_beat()
 
     def run(self, hb: Any, end: Ended) -> None:
         e = self.e
@@ -173,6 +178,8 @@ class RunOnce:
                 e.warn(f"{end.why or end.outcome} after the land went through; closing it landed")
                 end.outcome, end.why, end.sha, end.spec, end.kind = "landed", "", e.landed_sha, None, oc.Kind.LANDED
             hb.stop()
+            e.stuck.tick()  # the last tick: a run that stops on its third same red says it before its Close
+            e.requests.drop()  # what the run did not take is for a run that ended
             reexec.drop_reexec(e.bead)  # a run that ended is no crash after an exec
             if end.kind == oc.Kind.PAUSE_NETWORK and not e.dry:
                 e.reload.save_net_pause()

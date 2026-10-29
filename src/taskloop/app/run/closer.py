@@ -152,7 +152,7 @@ class Closer:
         if outcome in DONE:
             old = e.stores.asks.get(e.bead)
             if old:
-                e.stores.asks.close(e.bead, old.id, "the run landed")
+                e.stores.asks.close(e.bead, old.id, "the run landed", time.time())
             if e.unverified:
                 e.comment("Land (engine): " + e.owner_look.unverified_text())
             look = [u for u in e.unchecked if u["kind"] == "other" and not e.judge.is_look(u)]
@@ -189,7 +189,7 @@ class Closer:
         elif kind and oc.POLICY[kind].bd == "open":  # a machine fault or pause: the bead stays open, unassigned
             rc = self.leave_open(kind, why)
         else:
-            rc = track.block(e.bead, why + (("\n\nQuestion: " + spec.decision) if spec else ""), e.store)
+            rc = track.block(e.bead, why + (("\n\nQuestion: " + spec.decision) if spec else ""), e.store, e.comment)
         if rc:  # a repo's bd rules can refuse (e.g. a minimum reason length): say so, never report a clean close
             e.warn(f"bd refused to {'block' if outcome not in DONE else 'close'} {e.bead} (exit {rc}): close it by hand")
 

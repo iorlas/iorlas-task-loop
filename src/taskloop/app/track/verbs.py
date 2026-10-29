@@ -1,6 +1,7 @@
 """`tl claim|land|close|block`: the bead's life as the person or the engine drives it, each recorded as an event and in bd's provenance."""
 import json
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -51,7 +52,8 @@ def close(bead: str, reason: str | None = None, store: Beads | None = None) -> i
     return 0
 
 
-def block(bead: str, why: str, store: Beads | None = None) -> int:
+def block(bead: str, why: str, store: Beads | None = None, say: Callable[[str], None] | None = None) -> int:
+    """The bead blocked on the owner; `say` posts its comment (an engine run passes its own poster, Engine.comment)."""
     # tl-159: a parked bead lets go of its claim; the actor that held it stays live (a loop holds other beads), and a claim nobody works on
     # refused --fresh as 'taken: live claim'. A claim by an engine's actor ends with the run; a person's own claim stays theirs.
     st = store or bd_store()
@@ -61,7 +63,10 @@ def block(bead: str, why: str, store: Beads | None = None) -> int:
     except BdFailure as e:
         sys.stderr.write(e.error.text + "\n")
         return 1
-    attempt(st.add_comment, bead, "Blocked: " + why)
+    if say is not None:
+        say("Blocked: " + why)
+    else:
+        attempt(st.add_comment, bead, "Blocked: " + why)
     event("block", bead, why=why)
     provenance(bead, "suspend", session_id() or actor(), "transcript", {"why": why}, store=st)
     return 0

@@ -83,8 +83,8 @@ def v_slot(a: Any, c: Ctx) -> int:
 
 
 def v_ask(a: Any, c: Ctx) -> int:
-    """The owner's inbox and typed verbs (answer, hint, hold, override) from the terminal: src/taskloop/cli/asks.py over the AskStore. A
-    bead's ask names its repo, and the bd of that repo takes the bead's state."""
+    """The owner's inbox and typed verbs (answer, hint, hold, override, park, note) from the terminal: src/taskloop/cli/asks.py over the
+    AskStore. A bead's ask names its repo, and the bd of that repo takes the bead's state."""
     if a.op == "list":
         for b in wire_asks.sweep("close"):  # throttled: the loop sweeps too
             print(f"closed the ask of {b}: its bead is closed or gone")
@@ -290,7 +290,7 @@ VERBS: Final[dict[str, Handler]] = {
     "rollback": of_args(pins.run_rollback),
     "doctor": v_doctor,
     "slot": v_slot,
-    "ask": v_ask, "answer": v_ask, "hint": v_ask, "hold": v_ask, "override": v_ask,
+    "ask": v_ask, "answer": v_ask, "hint": v_ask, "hold": v_ask, "override": v_ask, "park": v_ask, "note": v_ask,
     "reflect": lazy("taskloop.cli.report", "cmd_reflect"),
     "land-lock": v_land_lock,
     "status": v_status,

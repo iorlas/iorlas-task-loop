@@ -1,0 +1,96 @@
+{
+ "v": 1,
+ "t": 1793050200.0,
+ "card": {
+  "id": "lifesim-q1",
+  "project": "lifesim",
+  "title": "Inventory sorting by weight",
+  "column": "backlog",
+  "marker": "ready",
+  "status": "next on codex",
+  "tone": "",
+  "t": null,
+  "epic": "lifesim-wld",
+  "slot": null,
+  "lane": "codex",
+  "loops": 0,
+  "dots": [],
+  "needs": [],
+  "goal": false,
+  "waits_why": "",
+  "cause": null,
+  "ack": false,
+  "totals": {
+   "secs": 0,
+   "tokens": 0,
+   "usual": null,
+   "usual_n": 0,
+   "tone": ""
+  },
+  "assumptions": 0,
+  "shots": 0
+ },
+ "description": "Inventory sorting by weight. Part of World.",
+ "acceptance": "- works in a new save and an old one\n- tests cover the rule\n- no new warnings in the build",
+ "comments": [],
+ "passes": [
+  {
+   "n": 1,
+   "cells": [
+    {
+     "phase": "plan",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "write",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "test",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "review",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "look",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "land",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    }
+   ],
+   "end": "",
+   "end_text": "",
+   "resumed": null,
+   "messages": []
+  }
+ ],
+ "artifacts": [],
+ "waits_for": [],
+ "unblocks": [
+  "lifesim-g2"
+ ],
+ "live": null,
+ "ask": null
+}

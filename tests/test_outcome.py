@@ -21,7 +21,7 @@ from taskloop.domain.outcome import POLICY, Kind
 
 class Table(unittest.TestCase):
     def test_twenty_two_kinds_and_no_ask_verify(self):
-        self.assertEqual(len(Kind), 22)
+        self.assertEqual(len(Kind), 23)
         self.assertNotIn("ASK_VERIFY", Kind.__members__)
         self.assertNotIn("OTHER", Kind.__members__)
 

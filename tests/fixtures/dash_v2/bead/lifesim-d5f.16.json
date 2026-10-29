@@ -1,0 +1,135 @@
+{
+ "v": 1,
+ "t": 1793050200.0,
+ "card": {
+  "id": "lifesim-d5f.16",
+  "project": "lifesim",
+  "title": "Autosave every 5 minutes",
+  "column": "done",
+  "marker": "done",
+  "status": "landed",
+  "tone": "",
+  "t": 1793035800.0,
+  "epic": "lifesim-d5f",
+  "slot": "mac·1",
+  "lane": "claude",
+  "loops": 0,
+  "dots": [
+   {
+    "phase": "plan",
+    "state": "done"
+   },
+   {
+    "phase": "write",
+    "state": "done"
+   },
+   {
+    "phase": "test",
+    "state": "done"
+   },
+   {
+    "phase": "review",
+    "state": "done"
+   },
+   {
+    "phase": "look",
+    "state": "done"
+   },
+   {
+    "phase": "land",
+    "state": "done"
+   }
+  ],
+  "needs": [],
+  "goal": false,
+  "waits_why": "",
+  "cause": null,
+  "ack": false,
+  "totals": {
+   "secs": 4200,
+   "tokens": 665000,
+   "usual": 600000,
+   "usual_n": 12,
+   "tone": ""
+  },
+  "assumptions": 0,
+  "shots": 0
+ },
+ "description": "Autosave every 5 minutes. Part of Save system.",
+ "acceptance": "- works in a new save and an old one\n- tests cover the rule\n- no new warnings in the build",
+ "comments": [
+  {
+   "t": 1793035800.0,
+   "icon": "🚀",
+   "who": "loop",
+   "md": "landed on main",
+   "phase": null
+  }
+ ],
+ "passes": [
+  {
+   "n": 1,
+   "cells": [
+    {
+     "phase": "plan",
+     "state": "visited",
+     "secs": 600,
+     "tokens": 95000,
+     "last": ""
+    },
+    {
+     "phase": "write",
+     "state": "visited",
+     "secs": 2040,
+     "tokens": 323000,
+     "last": ""
+    },
+    {
+     "phase": "test",
+     "state": "small",
+     "secs": 480,
+     "tokens": 76000,
+     "last": ""
+    },
+    {
+     "phase": "review",
+     "state": "visited",
+     "secs": 600,
+     "tokens": 95000,
+     "last": ""
+    },
+    {
+     "phase": "look",
+     "state": "skipped",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "land",
+     "state": "small",
+     "secs": 480,
+     "tokens": 76000,
+     "last": ""
+    }
+   ],
+   "end": "done",
+   "end_text": "landed",
+   "resumed": null,
+   "messages": [
+    {
+     "t": 1793035800.0,
+     "icon": "🚀",
+     "who": "loop",
+     "md": "landed on main",
+     "phase": null
+    }
+   ]
+  }
+ ],
+ "artifacts": [],
+ "waits_for": [],
+ "unblocks": [],
+ "live": null,
+ "ask": null
+}

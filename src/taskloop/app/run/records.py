@@ -44,7 +44,8 @@ class Records:
         lock = engine_lock.LOCK
         why = self.origin()
         e.log.emit(rec.RunStart(run=e.log_path.stem, bead=e.bead, worktree=str(e.wt), slot=(lock.data.get("slot") if lock else "") or None,
-                                prev_run=why["prev_run"], started_because=why["started_because"], ask=why["ask"]))
+                                prev_run=why["prev_run"], started_because=why["started_because"], ask=why["ask"],
+                                branch=e.git("symbolic-ref", "--short", "-q", "HEAD") or ""))
 
     def file_trace(self, outcome: str, why: str, sha: str) -> None:
         """One line per engine run in traces.jsonl, never pruned: bead, repo, branch, every session, the outcome."""

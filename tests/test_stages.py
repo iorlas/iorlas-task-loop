@@ -685,7 +685,11 @@ class Inputs(StagesTest):
         plan = json.loads((self.eng.run_dir / "plan.json").read_text())
         self.assertEqual(plan["assumptions"], [{"step": "plan", "text": plan["assumptions"][0]["text"], "reversible": True}])
         self.assertIn("Windows PC", plan["assumptions"][0]["text"])
-        self.assertIn("Assumption: ", self.eng.log_path.read_text())
+        recs = [json.loads(x) for x in self.eng.log_path.read_text().splitlines()]
+        assumed = [r for r in recs if r["kind"] == "assumed"]
+        self.assertEqual([r["text"] for r in assumed], [plan["assumptions"][0]["text"]])  # the typed record, the plan's own words
+        self.assertTrue(assumed[0]["step"].startswith("n"))
+        self.assertFalse(any(r["kind"] == "note" and r["text"].startswith("Assumption: ") for r in recs))  # no prose note any more
         self.assertIn("Windows PC", s.prompts[1])  # the writer reads the plan, assumptions included
 
     def ask(self):
@@ -697,7 +701,9 @@ class Inputs(StagesTest):
                  options=[{"label": "Wait", "cost": "slow", "answer": "wait", "recommended": True}])
         rc, _s = self.run_engine({"plan": [q], "write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0, self.blocked)
-        self.assertIsNone(self.ask())
+        got = self.ask()
+        assert got is not None
+        self.assertFalse(got["blocking"])  # a soft ask: filed for the owner, the run did not wait
         plan = json.loads((self.eng.run_dir / "plan.json").read_text())
         self.assertEqual({"question", "options", "decided", "unresolved"} & set(plan), set())  # the stored plan has none of them
         self.assertIn("84-self-hosting.md", plan["assumptions"][0]["text"])

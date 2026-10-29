@@ -1,7 +1,7 @@
 """EngineLog: the union of records an engine run appends to engine/<run>.jsonl (v2). Start/end pairs share an `id`, unique
 within the file; an end without its start, or the reverse, is a run that died in between."""
 from dataclasses import field
-from typing import ClassVar
+from typing import ClassVar, Literal
 
 from taskloop.contracts.checks import CheckRun
 from taskloop.contracts.codec import from_tagged, record, table_of
@@ -25,6 +25,7 @@ class RunStart(LogRec):
     prev_run: str = ""
     started_because: str = ""
     ask: str = ""
+    branch: str = ""  # the task branch the run works on ("" when HEAD is detached)
 
 
 @record
@@ -288,6 +289,42 @@ class Note(LogRec):
 
 
 @record
+class Said(LogRec):
+    """One comment the engine posted on the bead (Engine.comment, the one poster), tied to the step that was open."""
+
+    KIND: ClassVar[str] = "said"
+    step: str  # the id of the open step (StepStart.id), "" when none was open
+    who: str  # engine, or owner for an owner's note the run passed on
+    text: str
+
+
+@record
+class Assumed(LogRec):
+    """What the planner could not decide or find and planned around instead of asking (tl-ntp)."""
+
+    KIND: ClassVar[str] = "assumed"
+    step: str  # the id of the open step
+    text: str
+    reversible: bool = True
+
+
+StuckWhy = Literal["silent", "same_red"]
+
+
+@record
+class Stuck(LogRec):
+    """The run is stuck (domain/stuck.py decides, at the Beat tick): silent past its step's limit, or the same red checks
+    runlife.SAME_RED rounds in a row. One record per episode; the episode ends with new activity or a different round."""
+
+    KIND: ClassVar[str] = "stuck"
+    why: StuckWhy
+    step: str  # the name of the step it is stuck in ("" when none was open)
+    since: float  # silent: the last activity; same_red: the first of the red rounds
+    limit_s: float = 0.0  # silent: the step's limit
+    sig: str = ""  # same_red: CheckRun.signature() of the rounds
+
+
+@record
 class Beat(LogRec):
     """The proof of life: appended every runlife.BEAT_EVERY seconds while the run's process lives (it is what runlife.liveness reads)."""
 
@@ -305,10 +342,10 @@ class Close(LogRec):
 
 EngineLog = (RunStart | StepStart | StepEnd | CallStart | CallEnd | CmdStart | CmdEnd | CheckStart | CheckEnd | GateStart | GateEnd
              | LandTry | WaitStart | WaitEnd | Lock | Unlock | VendorError | Kill | Overrun | RetryDecision | Transition
-             | Reload | Checks | Artifacts | Warn | Note | Beat | Close)
+             | Reload | Checks | Artifacts | Warn | Note | Said | Assumed | Stuck | Beat | Close)
 ENGINE_LOG = table_of(RunStart, StepStart, StepEnd, CallStart, CallEnd, CmdStart, CmdEnd, CheckStart, CheckEnd, GateStart,
                       GateEnd, LandTry, WaitStart, WaitEnd, Lock, Unlock, VendorError, Kill, Overrun, RetryDecision, Transition,
-                      Reload, Checks, Artifacts, Warn, Note, Beat, Close)
+                      Reload, Checks, Artifacts, Warn, Note, Said, Assumed, Stuck, Beat, Close)
 
 
 def decode(data: object) -> EngineLog:

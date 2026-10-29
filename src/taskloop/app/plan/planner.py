@@ -8,6 +8,7 @@ from typing import Any
 
 from taskloop.app.plan import assume
 from taskloop.app.plan.cap import ReplanCap
+from taskloop.app.plan.decisions import Decisions
 from taskloop.app.plan.prompt import PlanPrompt
 from taskloop.app.plan.sendback import SendBack
 from taskloop.contracts.answers import ASSUMPTION, IRREVERSIBLE
@@ -26,6 +27,7 @@ class Planner:
         self.e = host
         self.cap = ReplanCap(host)
         self.prompts = PlanPrompt(host)
+        self.decisions = Decisions(host)
         self.sendback = SendBack(host)
 
     # -- one planner answer
@@ -111,7 +113,7 @@ class Planner:
         """tl-ntp: a question about anything that can be undone is an assumption, not an ask (82 item 1)."""
         e = self.e
         asked = data["question"].strip()
-        data = assume.assume_question(data, e.log)
+        data = assume.assume_question(data, e.assumed, e.ask_flow.raise_soft)
         if not data["stages"] and not data.get("leftovers") and not e.leftovers and not e.plan_assumed:
             e.plan_assumed = True
             e.warn(f"the planner asked a question about a step that can be undone, sent back: {asked[:300]}")
@@ -123,7 +125,7 @@ class Planner:
             data = copy.deepcopy(self.ask(prompt + ASSUME_TEXT % asked, step, "plan on assumptions", "checks_back"))
             data["assumptions"] = prior + data.get("assumptions", [])
             if data["question"].strip() and data.get("irreversible") not in IRREVERSIBLE:
-                data = assume.assume_question(data, e.log)
+                data = assume.assume_question(data, e.assumed, e.ask_flow.raise_soft)
         return data
 
     def accept(self, data: dict[str, Any], again: bool) -> dict[str, Any]:
@@ -142,10 +144,11 @@ class Planner:
         e.plan_data = data
         if data["question"].strip():
             e.steps.outcome("asks", data["question"][:200])
-            raise e.blocked_for("owner decision needed", "ASK_DECISION", spec=askspecs.open_question(data["question"], data.get("options")))
+            spec = askspecs.open_question(data["question"], data.get("options"), data.get("owner_cause"))
+            raise e.blocked_for("owner decision needed", "ASK_DECISION", spec=spec)
         n = len(data["stages"])
         e.steps.outcome(f"{n} stage{'' if n == 1 else 's'}", data["summary"][:200])
-        assume.check_unresolved(data, Path(e.wt), e.log)
+        assume.check_unresolved(data, Path(e.wt), e.log, e.assumed)
         if not data["stages"]:
             return self.finished_work(data, again)
         return self.finish(data)
@@ -173,6 +176,7 @@ class Planner:
             data.setdefault("leftovers", []).append(lo)
             e.log.note("the ledger defers a criterion the leftovers did not list; listed: {}".format(lo["title"][:160]))
         self.add_leftovers(data)
+        self.decisions.cited(data)
         e.comment(self.summary(data))
         stored(data)
         e.publish_plan()

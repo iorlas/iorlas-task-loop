@@ -1,0 +1,1046 @@
+{
+ "B": [
+  {
+   "id": "d5f.48",
+   "t": "Fix save corruption on quit",
+   "room": "Save system",
+   "slot": "mac·1",
+   "lane": "claude",
+   "col": "look",
+   "line": "4 screens ready to approve",
+   "age": "6m",
+   "loops": 2,
+   "shots": 4,
+   "seg": [
+    [
+     "plan",
+     -232,
+     -216
+    ],
+    [
+     "write",
+     -216,
+     -172
+    ],
+    [
+     "test",
+     -172,
+     -163,
+     "f"
+    ],
+    [
+     "write",
+     -163,
+     -134
+    ],
+    [
+     "test",
+     -134,
+     -126,
+     "f"
+    ],
+    [
+     "write",
+     -126,
+     -104
+    ],
+    [
+     "test",
+     -104,
+     -96
+    ],
+    [
+     "review",
+     -96,
+     -84
+    ],
+    [
+     "🙋 answered",
+     -84,
+     -38,
+     "parkx"
+    ],
+    [
+     "review",
+     -38,
+     -22
+    ],
+    [
+     "look",
+     -22,
+     -6
+    ],
+    [
+     "your look",
+     -6,
+     0,
+     "wait"
+    ]
+   ],
+   "ev": [
+    [
+     "−6m",
+     "📸",
+     "look",
+     "4 screens of the quit dialog ready for you"
+    ],
+    [
+     "−38m",
+     "✉️",
+     "you",
+     "answered: keep autosave, add a confirm"
+    ],
+    [
+     "−84m",
+     "🙋",
+     "reviewer · claude",
+     "asked: drop autosave on quit or keep it?"
+    ],
+    [
+     "−126m",
+     "🧪",
+     "loop",
+     "test failed: <code>save_roundtrip</code> (2nd time)"
+    ],
+    [
+     "−232m",
+     "🧭",
+     "planner · claude",
+     "plan: 5 steps"
+    ]
+   ],
+   "proj": "lifesim"
+  },
+  {
+   "id": "6dq0",
+   "t": "Rain lowers mood outdoors",
+   "room": "World",
+   "slot": "mac·2",
+   "lane": "codex",
+   "col": "working",
+   "line": "write · fixing weather_tick after a test failed",
+   "age": "31m",
+   "loops": 1,
+   "seg": [
+    [
+     "plan",
+     -124,
+     -104
+    ],
+    [
+     "write",
+     -104,
+     -44
+    ],
+    [
+     "test",
+     -44,
+     -33,
+     "f"
+    ],
+    [
+     "write",
+     -33,
+     0,
+     "live"
+    ],
+    [
+     "test",
+     0,
+     10,
+     "proj"
+    ],
+    [
+     "review",
+     10,
+     22,
+     "proj"
+    ]
+   ],
+   "ev": [
+    [
+     "now",
+     "✏️",
+     "writer · codex",
+     "<code>weather_tick()</code> now clamps mood at 0 when outdoors"
+    ],
+    [
+     "−33m",
+     "🧪",
+     "loop",
+     "test failed: <code>mood_rain_outdoor</code>"
+    ],
+    [
+     "−124m",
+     "🧭",
+     "planner · claude",
+     "plan: 3 steps"
+    ]
+   ],
+   "proj": "lifesim"
+  },
+  {
+   "id": "fld.27",
+   "t": "Rent and bills every week",
+   "room": "Economy",
+   "slot": "devbox·1",
+   "lane": "claude",
+   "col": "ask",
+   "line": "Which bills are monthly, which weekly?",
+   "age": "12m",
+   "ask": 1,
+   "seg": [
+    [
+     "plan",
+     -70,
+     -58
+    ],
+    [
+     "write",
+     -58,
+     -26
+    ],
+    [
+     "test",
+     -26,
+     -19
+    ],
+    [
+     "review",
+     -19,
+     -12
+    ],
+    [
+     "🙋 asking you",
+     -12,
+     0,
+     "park"
+    ]
+   ],
+   "ev": [
+    [
+     "−12m",
+     "🙋",
+     "reviewer · claude",
+     "asked: which bills are monthly vs weekly?"
+    ],
+    [
+     "−19m",
+     "🧪",
+     "loop",
+     "tests pass (14)"
+    ],
+    [
+     "−70m",
+     "🧭",
+     "planner · claude",
+     "plan: 4 steps"
+    ]
+   ],
+   "proj": "lifesim"
+  },
+  {
+   "id": "7hv.2",
+   "t": "Pets need feeding twice a day",
+   "room": "World",
+   "slot": "devbox·1",
+   "lane": "claude",
+   "col": "done",
+   "line": "landed · came back after codex ran out",
+   "age": "1h",
+   "loops": 1,
+   "seg": [
+    [
+     "plan",
+     -300,
+     -288,
+     "",
+     "mac·2"
+    ],
+    [
+     "write",
+     -288,
+     -246,
+     "",
+     "mac·2"
+    ],
+    [
+     "test",
+     -246,
+     -238,
+     "f",
+     "mac·2"
+    ],
+    [
+     "write",
+     -238,
+     -212,
+     "",
+     "mac·2"
+    ],
+    [
+     "⏸ codex out",
+     -212,
+     -205,
+     "parkx",
+     "mac·2"
+    ],
+    [
+     "waiting for a slot · 35m",
+     -205,
+     -170,
+     "gap",
+     null
+    ],
+    [
+     "write",
+     -170,
+     -140,
+     "",
+     "devbox·1"
+    ],
+    [
+     "test",
+     -140,
+     -131,
+     "",
+     "devbox·1"
+    ],
+    [
+     "review",
+     -131,
+     -118,
+     "",
+     "devbox·1"
+    ],
+    [
+     "land",
+     -118,
+     -110,
+     "",
+     "devbox·1"
+    ]
+   ],
+   "end": "✅",
+   "ev": [
+    [
+     "−110m",
+     "🚀",
+     "loop",
+     "landed on main"
+    ],
+    [
+     "−170m",
+     "↪",
+     "loop",
+     "resumed on devbox·1 · claude from branch <code>bd/7hv.2</code> (pass ③ continues)"
+    ],
+    [
+     "−205m",
+     "⏸",
+     "loop",
+     "parked: codex quota ran out mid-write; work kept on the branch"
+    ],
+    [
+     "−238m",
+     "🧪",
+     "loop",
+     "test failed: <code>pet_hunger_tick</code>"
+    ],
+    [
+     "−300m",
+     "🧭",
+     "planner · claude",
+     "plan: 3 steps"
+    ]
+   ],
+   "proj": "lifesim"
+  },
+  {
+   "id": "s28t",
+   "t": "Save/load screen polish",
+   "room": "Save system",
+   "slot": "devbox·2",
+   "lane": "OC Go",
+   "col": "done",
+   "line": "landed",
+   "age": "3h",
+   "shots": 3,
+   "seg": [
+    [
+     "plan",
+     -300,
+     -288
+    ],
+    [
+     "write",
+     -288,
+     -236
+    ],
+    [
+     "test",
+     -236,
+     -228
+    ],
+    [
+     "review",
+     -228,
+     -214
+    ],
+    [
+     "look",
+     -214,
+     -196
+    ],
+    [
+     "land",
+     -196,
+     -188
+    ]
+   ],
+   "end": "✅",
+   "ev": [
+    [
+     "−188m",
+     "🚀",
+     "loop",
+     "landed on main"
+    ],
+    [
+     "−300m",
+     "🧭",
+     "planner · claude",
+     "plan: 2 steps"
+    ]
+   ],
+   "proj": "lifesim"
+  },
+  {
+   "id": "5ban.3",
+   "t": "NPC daily schedule pathing",
+   "room": "World",
+   "slot": "devbox·2",
+   "lane": "OC Go",
+   "col": "working",
+   "line": "test failed 3× · no progress 22m",
+   "age": "22m",
+   "loops": 3,
+   "bad": 1,
+   "seg": [
+    [
+     "plan",
+     -180,
+     -166
+    ],
+    [
+     "write",
+     -166,
+     -120
+    ],
+    [
+     "test",
+     -120,
+     -112,
+     "f"
+    ],
+    [
+     "write",
+     -112,
+     -86
+    ],
+    [
+     "test",
+     -86,
+     -78,
+     "f"
+    ],
+    [
+     "write",
+     -78,
+     -52
+    ],
+    [
+     "test",
+     -52,
+     -44,
+     "f"
+    ],
+    [
+     "write",
+     -44,
+     -22
+    ],
+    [
+     "🛑 stuck",
+     -22,
+     0,
+     "stuck"
+    ]
+   ],
+   "ev": [
+    [
+     "−22m",
+     "🛑",
+     "watcher",
+     "no new commits or tool calls for 22m"
+    ],
+    [
+     "−44m",
+     "🧪",
+     "loop",
+     "test failed: <code>path_avoids_walls</code> (3rd time)"
+    ],
+    [
+     "−180m",
+     "🧭",
+     "planner · claude",
+     "plan: 6 steps"
+    ]
+   ],
+   "proj": "lifesim"
+  },
+  {
+   "id": "d5f.16",
+   "t": "Autosave every 5 minutes",
+   "room": "Save system",
+   "slot": "mac·1",
+   "lane": "claude",
+   "col": "done",
+   "line": "landed",
+   "age": "4h",
+   "seg": [
+    [
+     "plan",
+     -310,
+     -300
+    ],
+    [
+     "write",
+     -300,
+     -266
+    ],
+    [
+     "test",
+     -266,
+     -258
+    ],
+    [
+     "review",
+     -258,
+     -248
+    ],
+    [
+     "land",
+     -248,
+     -240
+    ]
+   ],
+   "end": "✅",
+   "ev": [
+    [
+     "−240m",
+     "🚀",
+     "loop",
+     "landed on main"
+    ]
+   ],
+   "proj": "lifesim"
+  },
+  {
+   "id": "a3k.2",
+   "t": "Prices with a currency sign",
+   "room": "Economy",
+   "slot": "mac·3",
+   "lane": "claude 2",
+   "col": "ask",
+   "line": "Landed with \"$\". Real currency symbols too?",
+   "age": "1h",
+   "ask": 1,
+   "soft": 1,
+   "seg": [
+    [
+     "plan",
+     -150,
+     -140
+    ],
+    [
+     "write",
+     -140,
+     -95
+    ],
+    [
+     "test",
+     -95,
+     -88
+    ],
+    [
+     "write · \"$\"",
+     -88,
+     -60
+    ],
+    [
+     "review",
+     -60,
+     -41
+    ],
+    [
+     "land",
+     -41,
+     -33
+    ]
+   ],
+   "end": "✅",
+   "ev": [
+    [
+     "−60m",
+     "🙋",
+     "writer · claude",
+     "asked, not blocking: going on with \"$\" meanwhile"
+    ],
+    [
+     "−150m",
+     "🧭",
+     "planner · claude",
+     "plan: 2 steps"
+    ]
+   ],
+   "proj": "lifesim"
+  },
+  {
+   "id": "9xq.1",
+   "t": "Fridge spoils food after 3 days",
+   "room": "Economy",
+   "slot": "mac·3",
+   "lane": "claude 2",
+   "col": "review",
+   "line": "AI review · 2 notes so far",
+   "age": "9m",
+   "seg": [
+    [
+     "plan",
+     -28,
+     -24
+    ],
+    [
+     "write",
+     -24,
+     -14
+    ],
+    [
+     "test",
+     -14,
+     -9
+    ],
+    [
+     "review",
+     -9,
+     0,
+     "live"
+    ],
+    [
+     "look",
+     0,
+     8,
+     "proj"
+    ]
+   ],
+   "ev": [
+    [
+     "now",
+     "👀",
+     "reviewer · claude",
+     "2 notes so far (naming, a missing test)"
+    ]
+   ],
+   "proj": "lifesim"
+  },
+  {
+   "id": "q1",
+   "t": "Inventory sorting by weight",
+   "room": "World",
+   "slot": "mac·2",
+   "lane": "codex",
+   "col": "backlog",
+   "line": "next on codex",
+   "seg": [
+    [
+     "plan",
+     24,
+     34,
+     "proj"
+    ],
+    [
+     "write",
+     34,
+     70,
+     "proj"
+    ]
+   ],
+   "proj": "lifesim"
+  },
+  {
+   "id": "q2",
+   "needs": [
+    "fld.27"
+   ],
+   "t": "Bills reminder notification",
+   "room": "Economy",
+   "col": "backlog",
+   "line": "waits for fld.27",
+   "proj": "lifesim"
+  },
+  {
+   "id": "q3",
+   "needs": [
+    "6dq0"
+   ],
+   "t": "Weather forecast on the phone",
+   "room": "World",
+   "col": "backlog",
+   "line": "waits for 6dq0",
+   "proj": "lifesim"
+  },
+  {
+   "id": "q4",
+   "needs": [
+    "d5f.48"
+   ],
+   "t": "Cloud save conflict dialog",
+   "room": "Save system",
+   "col": "backlog",
+   "line": "waits for d5f.48",
+   "proj": "lifesim"
+  },
+  {
+   "id": "q5",
+   "needs": [
+    "5ban.3"
+   ],
+   "t": "NPC greets by name",
+   "room": "World",
+   "col": "backlog",
+   "line": "waits for 5ban.3",
+   "proj": "lifesim"
+  },
+  {
+   "id": "g1",
+   "needs": [
+    "q6",
+    "q4"
+   ],
+   "t": "First playable month",
+   "room": "Economy",
+   "col": "backlog",
+   "line": "goal · waits for 2",
+   "proj": "lifesim"
+  },
+  {
+   "id": "g2",
+   "needs": [
+    "q3",
+    "q5",
+    "q1"
+   ],
+   "t": "Living town",
+   "room": "World",
+   "col": "backlog",
+   "line": "goal · waits for 3",
+   "proj": "lifesim"
+  },
+  {
+   "id": "q6",
+   "needs": [
+    "q2",
+    "a3k.2",
+    "9xq.1"
+   ],
+   "t": "Tax at year end",
+   "room": "Economy",
+   "col": "backlog",
+   "line": "waits for 2",
+   "proj": "lifesim"
+  },
+  {
+   "id": "k7m.4",
+   "t": "Main menu music fade",
+   "room": "World",
+   "col": "land",
+   "line": "merging · checks 3/4",
+   "age": "1m",
+   "proj": "lifesim"
+  },
+  {
+   "id": "tl-8k4",
+   "t": "Asks ledger store",
+   "room": "Dashboard v2",
+   "proj": "task-loop",
+   "col": "backlog",
+   "line": "ready"
+  },
+  {
+   "id": "tl-9mq",
+   "t": "Kanban column from engine state",
+   "room": "Dashboard v2",
+   "proj": "task-loop",
+   "col": "backlog",
+   "line": "waits for tl-8k4",
+   "needs": [
+    "tl-8k4"
+   ]
+  },
+  {
+   "id": "tl-7y6",
+   "t": "Contracts: RunState reader",
+   "room": "Substrate",
+   "proj": "task-loop",
+   "col": "review",
+   "slot": "devbox·1",
+   "lane": "claude",
+   "line": "AI review · clean so far",
+   "age": "4m"
+  }
+ ],
+ "SLOTS": [
+  [
+   "mac",
+   "mac·1",
+   "claude"
+  ],
+  [
+   "mac",
+   "mac·2",
+   "codex"
+  ],
+  [
+   "mac",
+   "mac·3",
+   "claude 2"
+  ],
+  [
+   "devbox",
+   "devbox·1",
+   "claude"
+  ],
+  [
+   "devbox",
+   "devbox·2",
+   "OC Go"
+  ]
+ ],
+ "TERM": {
+  "6dq0": [
+   "$ codex exec write",
+   "read  Assets/World/Weather.cs",
+   "edit  Weather.cs:88  +4 −1",
+   "$ dotnet build",
+   "Build succeeded. 0 errors",
+   "edit  MoodSystem.cs:41  +2",
+   "$ dotnet test --filter mood_rain",
+   "mood_rain_outdoor ........ <span class=\"o\">ok</span>"
+  ],
+  "9xq.1": [
+   "$ claude -p review",
+   "read  Assets/Food/Fridge.cs",
+   "read  Tests/FridgeTests.cs",
+   "note  naming: SpoilTimer → SpoilClock?",
+   "note  missing test: food in fridge does not spoil",
+   "read  Assets/Food/FoodItem.cs",
+   "summary: 2 notes, no blockers"
+  ]
+ },
+ "LED": [
+  [
+   "today 10:41",
+   "fld.27",
+   "Which bills are monthly, which weekly?",
+   "open",
+   "",
+   "requirement gap"
+  ],
+  [
+   "today 09:52",
+   "a3k.2",
+   "Real currency symbols or \"$\" only?",
+   "open (not blocking)",
+   "",
+   "decision"
+  ],
+  [
+   "today 08:58",
+   "d5f.48",
+   "Drop autosave on quit or keep it?",
+   "keep autosave, add a confirm",
+   "📜 ADR-013",
+   "decision"
+  ],
+  [
+   "yesterday",
+   "6dq0",
+   "Is \"outdoors\" the yard too?",
+   "yes, anything without a roof",
+   "✏️ bead text fixed",
+   "requirement gap"
+  ],
+  [
+   "yesterday",
+   "9xq.0",
+   "Unity license expired on devbox",
+   "renewed",
+   "🛠 fb.4 · license check before runs · done",
+   "environment"
+  ],
+  [
+   "2 days ago",
+   "5ban.1",
+   "NPCs walk through doors or open them?",
+   "open them",
+   "📜 ADR-012",
+   "decision"
+  ],
+  [
+   "3 days ago",
+   "a3k.1",
+   "Monthly salary or weekly?",
+   "weekly",
+   "📜 ADR-011",
+   "requirement gap"
+  ],
+  [
+   "3 days ago",
+   "5ban.2",
+   "Which test seed?",
+   "any, fixed per run",
+   "⬇ no longer blocks",
+   "process"
+  ],
+  [
+   "4 days ago",
+   "d5f.40",
+   "Fridge opens with E or click?",
+   "both",
+   "once",
+   "requirement gap"
+  ],
+  [
+   "5 days ago",
+   "7hv.1",
+   "Stalled 40m after build",
+   "—",
+   "",
+   "?"
+  ]
+ ],
+ "ADR": [
+  [
+   "ADR-013",
+   "Autosave stays on quit; ask to confirm when unsaved changes",
+   "new · 0 reuses",
+   "today"
+  ],
+  [
+   "ADR-012",
+   "NPCs open doors; never walk through them",
+   "reused 3×",
+   "2 days"
+  ],
+  [
+   "ADR-011",
+   "Salary is paid weekly; game money moves weekly unless the bead says otherwise",
+   "reused 4×",
+   "3 days"
+  ],
+  [
+   "ADR-007",
+   "Use \"$\" only until a locale bead lands",
+   "0 reuses in 30 days",
+   "31 days"
+  ]
+ ],
+ "LANES": [
+  {
+   "n": "claude",
+   "plan": "Max · sonnet",
+   "h5": 62,
+   "proj": 78,
+   "wk": 41,
+   "reset": "resets 18:40",
+   "st": "",
+   "fx": "lasts the window at this burn",
+   "slots": [
+    "mac·1",
+    "devbox·1"
+   ],
+   "run": [
+    "d5f.48",
+    "fld.27"
+   ],
+   "next": []
+  },
+  {
+   "n": "codex",
+   "plan": "Pro · gpt-5.1",
+   "h5": 91,
+   "proj": 100,
+   "wk": 70,
+   "reset": "resets 21:10",
+   "st": "w",
+   "fx": "runs out in ~45m at this burn; q1 then waits until 21:10",
+   "slots": [
+    "mac·2"
+   ],
+   "run": [
+    "6dq0"
+   ],
+   "next": [
+    "q1"
+   ]
+  },
+  {
+   "n": "OC Go",
+   "plan": "OpenCode Go · glm-4.6",
+   "h5": 55,
+   "proj": 55,
+   "wk": 48,
+   "reset": "resets 19:05",
+   "st": "",
+   "fx": "flat: 5ban.3 is stuck, burning nothing",
+   "slots": [
+    "devbox·2"
+   ],
+   "run": [
+    "5ban.3"
+   ],
+   "next": []
+  },
+  {
+   "n": "claude 2",
+   "plan": "Pro · sonnet",
+   "h5": 38,
+   "proj": 52,
+   "wk": 30,
+   "reset": "resets 20:15",
+   "st": "",
+   "fx": "lasts the window",
+   "slots": [
+    "mac·3"
+   ],
+   "run": [
+    "9xq.1"
+   ],
+   "next": []
+  },
+  {
+   "n": "gemini",
+   "plan": "Pro · 2.5 pro",
+   "h5": 100,
+   "proj": 100,
+   "wk": 100,
+   "reset": "weekly limit",
+   "st": "x",
+   "fx": "locked until Mon 09:00 (3d); no slot uses it",
+   "slots": [],
+   "run": [],
+   "next": []
+  }
+ ]
+}

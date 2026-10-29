@@ -1,0 +1,245 @@
+{
+ "v": 1,
+ "t": 1793050200.0,
+ "card": {
+  "id": "lifesim-6dq0",
+  "project": "lifesim",
+  "title": "Rain lowers mood outdoors",
+  "column": "working",
+  "marker": "run",
+  "status": "write · fixing weather_tick after a test failed",
+  "tone": "run",
+  "t": 1793048340.0,
+  "epic": "lifesim-wld",
+  "slot": "mac·2",
+  "lane": "codex",
+  "loops": 1,
+  "dots": [
+   {
+    "phase": "plan",
+    "state": "done"
+   },
+   {
+    "phase": "write",
+    "state": "live"
+   },
+   {
+    "phase": "test",
+    "state": "done"
+   },
+   {
+    "phase": "review",
+    "state": "todo"
+   },
+   {
+    "phase": "look",
+    "state": "todo"
+   },
+   {
+    "phase": "land",
+    "state": "todo"
+   }
+  ],
+  "needs": [],
+  "goal": false,
+  "waits_why": "",
+  "cause": null,
+  "ack": false,
+  "totals": {
+   "secs": 7440,
+   "tokens": 1178000,
+   "usual": 600000,
+   "usual_n": 12,
+   "tone": ""
+  },
+  "assumptions": 2,
+  "shots": 0
+ },
+ "description": "Rain lowers mood outdoors. Part of World.",
+ "acceptance": "- works in a new save and an old one\n- tests cover the rule\n- no new warnings in the build",
+ "comments": [
+  {
+   "t": 1793050200.0,
+   "icon": "✏️",
+   "who": "writer · codex",
+   "md": "`weather_tick()` now clamps mood at 0 when outdoors",
+   "phase": null
+  },
+  {
+   "t": 1793048220.0,
+   "icon": "🧪",
+   "who": "loop",
+   "md": "test failed: `mood_rain_outdoor`",
+   "phase": null
+  },
+  {
+   "t": 1793042760.0,
+   "icon": "🧭",
+   "who": "planner · claude",
+   "md": "plan: 3 steps",
+   "phase": null
+  }
+ ],
+ "passes": [
+  {
+   "n": 1,
+   "cells": [
+    {
+     "phase": "plan",
+     "state": "visited",
+     "secs": 1200,
+     "tokens": 190000,
+     "last": ""
+    },
+    {
+     "phase": "write",
+     "state": "visited",
+     "secs": 3600,
+     "tokens": 570000,
+     "last": ""
+    },
+    {
+     "phase": "test",
+     "state": "failed",
+     "secs": 660,
+     "tokens": 104500,
+     "last": ""
+    },
+    {
+     "phase": "review",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "look",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "land",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    }
+   ],
+   "end": "test_failed",
+   "end_text": "test failed: back to write",
+   "resumed": null,
+   "messages": [
+    {
+     "t": 1793048220.0,
+     "icon": "🧪",
+     "who": "loop",
+     "md": "test failed: `mood_rain_outdoor`",
+     "phase": null
+    },
+    {
+     "t": 1793042760.0,
+     "icon": "🧭",
+     "who": "planner · claude",
+     "md": "plan: 3 steps",
+     "phase": null
+    }
+   ]
+  },
+  {
+   "n": 2,
+   "cells": [
+    {
+     "phase": "plan",
+     "state": "skipped",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "write",
+     "state": "live",
+     "secs": 1980,
+     "tokens": 313500,
+     "last": ""
+    },
+    {
+     "phase": "test",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "review",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "look",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "land",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    }
+   ],
+   "end": "",
+   "end_text": "",
+   "resumed": null,
+   "messages": [
+    {
+     "t": 1793050200.0,
+     "icon": "✏️",
+     "who": "writer · codex",
+     "md": "`weather_tick()` now clamps mood at 0 when outdoors",
+     "phase": null
+    },
+    {
+     "t": 1793048220.0,
+     "icon": "🧪",
+     "who": "loop",
+     "md": "test failed: `mood_rain_outdoor`",
+     "phase": null
+    }
+   ]
+  }
+ ],
+ "artifacts": [],
+ "waits_for": [],
+ "unblocks": [
+  "lifesim-q3"
+ ],
+ "live": {
+  "kind": "run",
+  "phase": "write",
+  "pass_n": 2,
+  "t": 1793048220.0,
+  "cmd": "codex exec write bd/lifesim-6dq0",
+  "tokens": 312000,
+  "subtasks": [
+   {
+    "text": "clamp mood at 0 outdoors",
+    "done": true
+   },
+   {
+    "text": "mood_rain_outdoor passes",
+    "done": false
+   }
+  ],
+  "checks": null,
+  "why": "",
+  "silent_secs": null,
+  "exit_code": null
+ },
+ "ask": null
+}

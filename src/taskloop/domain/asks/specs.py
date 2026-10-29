@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from taskloop.contracts.ask import AskDetail, AskOption, BudgetLine, ReplanLine
+from taskloop.contracts.dash import OwnerCause
 from taskloop.contracts.enums import AskClass
 from taskloop.domain.asks.lint import DECISION_MAX, LABEL_MAX, TRIED_MAX
 from taskloop.domain.asks.spec import AskSpec
@@ -48,15 +49,25 @@ def worker_options(given: Sequence[dict[str, Any]] | None) -> list[AskOption]:
     return sorted(out, key=lambda o: not o.recommended)
 
 
-def open_question(text: str, given: Sequence[dict[str, Any]] | None) -> AskSpec:
-    """A planner, writer or reviewer asked the owner something. Fewer than two usable options are made up to two."""
+def declared(cause: object) -> OwnerCause:
+    """The cause an agent declared with its question; anything but a value of the list is '?'."""
+    try:
+        return OwnerCause(str(cause or "unknown"))
+    except ValueError:
+        return OwnerCause.UNKNOWN
+
+
+def open_question(text: str, given: Sequence[dict[str, Any]] | None, cause: object = "unknown", default: str = "") -> AskSpec:
+    """A planner, writer or reviewer asked the owner something. Fewer than two usable options are made up to two. A `default` makes it a
+    soft ask: the run went on with that and the question stays open for the owner."""
     opts = worker_options(given)
     if len(opts) < 2:
         opts += [SPLIT] if opts else [AskOption(label="Answer in words",
         consequence="The bead runs again with your answer as its instruction.",
                                                action="text", edit=True), SPLIT]
     opts = [_recommend(o, k == 0) for k, o in enumerate(opts)]
-    return AskSpec(AskClass.OPEN_QUESTION, question(text), [], opts, AskDetail(text=text[:RAW_CAP]))
+    return AskSpec(AskClass.OPEN_QUESTION, question(text), [], opts, AskDetail(text=text[:RAW_CAP]), declared(cause),
+                   blocking=not default.strip(), default=default.strip()[:300])
 
 
 def _recommend(o: AskOption, first: bool) -> AskOption:

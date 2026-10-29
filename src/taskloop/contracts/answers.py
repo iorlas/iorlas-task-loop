@@ -14,6 +14,7 @@ InputKind = Literal["file", "platform", "object", "engine", "tool", "other"]
 CaseClass = Literal["test", "look-objective", "taste"]
 ProvedBy = Literal["check", "stage", "leftover", "engine_step"]
 Irreversible = Literal["", "push_shared", "delete_outside", "close_epic", "spend_money"]
+AskCause = Literal["requirement", "decision", "environment", "process", "unknown"]
 Cause = Literal["engine", "prompt", "delegate", "repo_profile", "bead", "sandbox", "other"]
 Severity = Literal["high", "medium", "low"]
 Verdict = Literal["settled", "wrong", "open"]
@@ -33,6 +34,9 @@ VERDICTS = get_args(Verdict)
 # tl-ntp (owner ruling 82 item 1): agents assume and record an Assumption; only a step that cannot be undone may ask the owner.
 IRREVERSIBLE = {"push_shared": "a push to a shared branch", "delete_outside": "a deletion outside the worktree",
                 "close_epic": "closing an epic", "spend_money": "spending money"}
+CAUSE_DOC = ("why you ask, if you ask: requirement (the bead leaves out something it needs), decision (a choice only the owner makes), "
+             "environment (a tool, access or machine you lack), process (how the factory works), unknown")
+CITED_DOC = "the id (ADR-n) of each decision in force that this plan relied on, as listed in the prompt; [] when it relied on none"
 ASSUMPTION = "Assumption: "  # the stable prefix of an assumption line (plan comment, plan summary)
 
 
@@ -111,6 +115,8 @@ class PlanAnswer:
     leftovers: list[Leftover]
     irreversible: Irreversible = ""
     unresolved: list[Unresolved] = field(default_factory=list)
+    owner_cause: AskCause = field(default="unknown", metadata={"doc": CAUSE_DOC})
+    cited: list[str] = field(default_factory=list, metadata={"doc": CITED_DOC})
 
 
 @record
@@ -164,6 +170,7 @@ class WriteAnswer:
     shots: list[Shot] = field(default_factory=list)
     flakes: list[Flake] = field(default_factory=list)
     handoff: str = field(default="", metadata={"doc": "at most 1 KB: what a fresh writer taking over needs that the diff does not show"})
+    owner_cause: AskCause = field(default="unknown", metadata={"doc": CAUSE_DOC})
 
 
 @record
@@ -201,6 +208,7 @@ class ReviewAnswer:
     unchecked: list[Unchecked]
     accept_files: list[str] = field(default_factory=list)
     reject_files: list[str] = field(default_factory=list)
+    owner_cause: AskCause = field(default="unknown", metadata={"doc": CAUSE_DOC})
 
 
 @record

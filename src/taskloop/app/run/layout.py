@@ -7,7 +7,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from taskloop.adapters import ident
+from taskloop.adapters import ident, locks
 from taskloop.contracts.paths import TASK_EXCLUDE, ConfigDir
 from taskloop.contracts.runlife import RETAIN
 
@@ -28,14 +28,18 @@ def prune_check_rounds(runs: Path, days: int = CHECK_ROUNDS_DAYS) -> None:
 
 
 def prune_run_logs(cfg: ConfigDir, now: float, retain: float = RETAIN) -> None:
-    """An engine log not written for `retain` seconds goes with its .live/ folder (the worker's per-call files) and its .stderr. The
-    dashboard only reads: this, at each run's start, is the one place that deletes them. A live run beats every minute and is never old."""
+    """An engine log not written for `retain` seconds goes with its .live/ folder (the worker's per-call files), its .stderr and an
+    owner's request left in its run folder. The dashboard only reads: this, at each run's start, is the one place that deletes them. A
+    live run beats every minute and is never old."""
     for log in cfg.engine_log("*").parent.glob("*.jsonl"):
         with contextlib.suppress(OSError):
             if log.stat().st_mtime >= now - retain:
                 continue
             shutil.rmtree(cfg.live_dir(log.stem), ignore_errors=True)
             log.with_suffix(".stderr").unlink(missing_ok=True)
+            cfg.run_request(log.stem).unlink(missing_ok=True)  # an owner's request no run took (the run's close drops it too)
+            cfg.run_request_lock(log.stem).unlink(missing_ok=True)
+            locks.holder_file(cfg.run_request_lock(log.stem)).unlink(missing_ok=True)
             log.unlink()
 
 

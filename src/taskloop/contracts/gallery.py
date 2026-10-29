@@ -1,5 +1,5 @@
 """The owner-look gallery's items: taste items the engine filed into owner-look beads (metadata `looks`), with their before and
-after pictures. Pure: the answers and the bd calls are api/looks.py.
+after pictures. Pure: the answers and the bd calls are app/asks/looks.py (the owner's `look` verb).
 
 An item: {id "<source bead>#<n>", look_bead, bead, title, note, shots [{path, role before|after, label}], status
 open|good|redo, redo_bead, answer_note, answered}. A look bead from before `looks` existed has no metadata: its

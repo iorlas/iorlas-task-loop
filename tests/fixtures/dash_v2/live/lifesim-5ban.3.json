@@ -1,0 +1,44 @@
+{
+ "v": 1,
+ "cursor": "lifesim-5ban.3:6",
+ "state": "live",
+ "lines": [
+  {
+   "t": 1793050080.0,
+   "text": "$ dotnet test --filter path_avoids_walls",
+   "tone": ""
+  },
+  {
+   "t": 1793050100.0,
+   "text": "NavGrid: 48×48 built in 12ms",
+   "tone": ""
+  },
+  {
+   "t": 1793050120.0,
+   "text": "path_avoids_walls ........ FAILED",
+   "tone": "err"
+  },
+  {
+   "t": 1793050140.0,
+   "text": "  expected no wall tiles on path, found (12,7)",
+   "tone": ""
+  },
+  {
+   "t": 1793050160.0,
+   "text": "[agent] thinking…",
+   "tone": "dim"
+  },
+  {
+   "t": 1793050180.0,
+   "text": "[agent] thinking…",
+   "tone": "dim"
+  }
+ ],
+ "tools": [
+  {
+   "t": 1793050080.0,
+   "name": "Bash",
+   "arg": "dotnet test --filter path_avoids_walls"
+  }
+ ]
+}

@@ -58,7 +58,7 @@ def close_stale(asks: AskStore, store_at: StoreAt, marker: Path, now: float, eve
             listed_any = True
             for a in items:
                 why = closed_reason(store, status, a)
-                if why and asks.close(a.bead, a.id, why):
+                if why and asks.close(a.bead, a.id, why, now):
                     done.append(a.bead)
         except BdFailure:
             continue
@@ -73,7 +73,8 @@ def park_stale(asks: AskStore, store_at: StoreAt, marker: Path, now: float, ever
         return []
     done: list[str] = []
     for a in asks.live():
-        if a.status != AskStatus.OPEN or a.answer is not None or not a.parks_at or now <= a.parks_at or not Path(a.repo or "-").is_dir():
+        waiting = a.status == AskStatus.OPEN and a.blocking and a.answer is None
+        if not waiting or not a.parks_at or now <= a.parks_at or not Path(a.repo or "-").is_dir():
             continue
         if asks.park(a.bead, a.id):
             done.append(a.bead)

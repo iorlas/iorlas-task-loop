@@ -1,0 +1,11 @@
+/* Colour, type and motion tokens: the only place a colour value is written (dash-spec §2.3). */
+:root{--bg:#f6f5f2;--card:#fff;--line:#e5e3de;--cell:#efeee9;--tx:#20252b;--mut:#626b76;--ink:#20252b;
+--run:#0b6f7c;--runbg:#d9f0ef;--red:#b0362e;--redbg:#fae2dc;--amb:#92530a;--ambbg:#f9ecd0;--ok:#2e7131;--okbg:#e1f0dc;--you:#2459cf;--youbg:#e5e9fb;--v:109,79,194;
+--s1:#dcd9d2;--stx:#4a4f57;--term:#1d1f23;--termtx:#d6dae0;--sh:0 10px 30px rgba(0,0,0,.16);--mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+--onfill:#fff;--termerr:#ff8f7a;--termok:#8fd694;--hatch:rgba(127,127,127,.06);--sh1:rgba(0,0,0,.07);--sh2:rgba(0,0,0,.14);--scrim:rgba(0,0,0,.38);
+--v1:rgba(var(--v),.08);--v2:rgba(var(--v),.15);--v3:rgba(var(--v),.24);--v4:rgba(var(--v),.34)}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#141413;--card:#1c1c1b;--line:#2f2e2c;--cell:#262624;--tx:#ecebe8;--mut:#9a9893;--ink:#ecebe8;
+--run:#7fd6e6;--runbg:#12333a;--red:#f4a38a;--redbg:#3d2219;--amb:#f2b84a;--ambbg:#3a2f12;--ok:#7fd383;--okbg:#1d3a1f;--you:#8fb0ff;--youbg:#1d2740;--v:167,139,250;--s1:#3a3936;--stx:#c9c6c0;--term:#0e0f11;--sh:0 10px 30px rgba(0,0,0,.6)}}
+:root[data-theme=dark],[data-theme=dark]{--bg:#141413;--card:#1c1c1b;--line:#2f2e2c;--cell:#262624;--tx:#ecebe8;--mut:#9a9893;--ink:#ecebe8;
+--run:#7fd6e6;--runbg:#12333a;--red:#f4a38a;--redbg:#3d2219;--amb:#f2b84a;--ambbg:#3a2f12;--ok:#7fd383;--okbg:#1d3a1f;--you:#8fb0ff;--youbg:#1d2740;--v:167,139,250;--s1:#3a3936;--stx:#c9c6c0;--term:#0e0f11;--sh:0 10px 30px rgba(0,0,0,.6)}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}

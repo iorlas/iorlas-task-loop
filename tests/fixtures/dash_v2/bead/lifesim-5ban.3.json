@@ -1,0 +1,343 @@
+{
+ "v": 1,
+ "t": 1793050200.0,
+ "card": {
+  "id": "lifesim-5ban.3",
+  "project": "lifesim",
+  "title": "NPC daily schedule pathing",
+  "column": "working",
+  "marker": "stuck",
+  "status": "test failed 3× · no progress 22m",
+  "tone": "bad",
+  "t": 1793048880.0,
+  "epic": "lifesim-wld",
+  "slot": "devbox·2",
+  "lane": "OC Go",
+  "loops": 3,
+  "dots": [
+   {
+    "phase": "plan",
+    "state": "done"
+   },
+   {
+    "phase": "write",
+    "state": "bad"
+   },
+   {
+    "phase": "test",
+    "state": "done"
+   },
+   {
+    "phase": "review",
+    "state": "todo"
+   },
+   {
+    "phase": "look",
+    "state": "todo"
+   },
+   {
+    "phase": "land",
+    "state": "todo"
+   }
+  ],
+  "needs": [],
+  "goal": false,
+  "waits_why": "",
+  "cause": null,
+  "ack": false,
+  "totals": {
+   "secs": 10800,
+   "tokens": 1710000,
+   "usual": 600000,
+   "usual_n": 12,
+   "tone": "watch"
+  },
+  "assumptions": 0,
+  "shots": 0
+ },
+ "description": "NPC daily schedule pathing. Part of World.",
+ "acceptance": "- works in a new save and an old one\n- tests cover the rule\n- no new warnings in the build",
+ "comments": [
+  {
+   "t": 1793048880.0,
+   "icon": "🛑",
+   "who": "watcher",
+   "md": "no new commits or tool calls for 22m",
+   "phase": null
+  },
+  {
+   "t": 1793047560.0,
+   "icon": "🧪",
+   "who": "loop",
+   "md": "test failed: `path_avoids_walls` (3rd time)",
+   "phase": null
+  },
+  {
+   "t": 1793039400.0,
+   "icon": "🧭",
+   "who": "planner · claude",
+   "md": "plan: 6 steps",
+   "phase": null
+  }
+ ],
+ "passes": [
+  {
+   "n": 1,
+   "cells": [
+    {
+     "phase": "plan",
+     "state": "visited",
+     "secs": 840,
+     "tokens": 133000,
+     "last": ""
+    },
+    {
+     "phase": "write",
+     "state": "visited",
+     "secs": 2760,
+     "tokens": 437000,
+     "last": ""
+    },
+    {
+     "phase": "test",
+     "state": "failed",
+     "secs": 480,
+     "tokens": 76000,
+     "last": ""
+    },
+    {
+     "phase": "review",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "look",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "land",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    }
+   ],
+   "end": "test_failed",
+   "end_text": "test failed: back to write",
+   "resumed": null,
+   "messages": [
+    {
+     "t": 1793039400.0,
+     "icon": "🧭",
+     "who": "planner · claude",
+     "md": "plan: 6 steps",
+     "phase": null
+    }
+   ]
+  },
+  {
+   "n": 2,
+   "cells": [
+    {
+     "phase": "plan",
+     "state": "skipped",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "write",
+     "state": "visited",
+     "secs": 1560,
+     "tokens": 247000,
+     "last": ""
+    },
+    {
+     "phase": "test",
+     "state": "failed",
+     "secs": 480,
+     "tokens": 76000,
+     "last": ""
+    },
+    {
+     "phase": "review",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "look",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "land",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    }
+   ],
+   "end": "test_failed",
+   "end_text": "test failed: back to write",
+   "resumed": null,
+   "messages": []
+  },
+  {
+   "n": 3,
+   "cells": [
+    {
+     "phase": "plan",
+     "state": "skipped",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "write",
+     "state": "visited",
+     "secs": 1560,
+     "tokens": 247000,
+     "last": ""
+    },
+    {
+     "phase": "test",
+     "state": "failed",
+     "secs": 480,
+     "tokens": 76000,
+     "last": ""
+    },
+    {
+     "phase": "review",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "look",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "land",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    }
+   ],
+   "end": "test_failed",
+   "end_text": "test failed: back to write",
+   "resumed": null,
+   "messages": [
+    {
+     "t": 1793047560.0,
+     "icon": "🧪",
+     "who": "loop",
+     "md": "test failed: `path_avoids_walls` (3rd time)",
+     "phase": null
+    }
+   ]
+  },
+  {
+   "n": 4,
+   "cells": [
+    {
+     "phase": "plan",
+     "state": "skipped",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "write",
+     "state": "stuck",
+     "secs": 2640,
+     "tokens": 418000,
+     "last": ""
+    },
+    {
+     "phase": "test",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "review",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "look",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    },
+    {
+     "phase": "land",
+     "state": "empty",
+     "secs": 0,
+     "tokens": 0,
+     "last": ""
+    }
+   ],
+   "end": "",
+   "end_text": "",
+   "resumed": null,
+   "messages": [
+    {
+     "t": 1793048880.0,
+     "icon": "🛑",
+     "who": "watcher",
+     "md": "no new commits or tool calls for 22m",
+     "phase": null
+    },
+    {
+     "t": 1793047560.0,
+     "icon": "🧪",
+     "who": "loop",
+     "md": "test failed: `path_avoids_walls` (3rd time)",
+     "phase": null
+    }
+   ]
+  }
+ ],
+ "artifacts": [],
+ "waits_for": [],
+ "unblocks": [
+  "lifesim-q5"
+ ],
+ "live": {
+  "kind": "stuck",
+  "phase": "write",
+  "pass_n": 4,
+  "t": 1793048880.0,
+  "cmd": "dotnet test --filter path_avoids_walls",
+  "tokens": 0,
+  "subtasks": [],
+  "checks": {
+   "passed": 41,
+   "failed": 1,
+   "total": 42
+  },
+  "why": "same test failed 3×, then 22m with no tool calls",
+  "silent_secs": 1320,
+  "exit_code": null
+ },
+ "ask": null
+}

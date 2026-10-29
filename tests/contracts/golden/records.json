@@ -150,7 +150,7 @@
   "kfp": ""
  },
  "Ask": {
-  "v": 2,
+  "v": 3,
   "id": "tl-1-1",
   "n": 1,
   "bead": "tl-1",
@@ -205,7 +205,85 @@
   },
   "answered": 1793050205.5,
   "consumed": 1793050209.5,
-  "closed_why": ""
+  "closed_why": "",
+  "owner_cause": "process",
+  "cause_by": "owner",
+  "blocking": true,
+  "default": "keep v1",
+  "key": "open_question:old save",
+  "similar": [
+   {
+    "kind": "adr",
+    "id": "ADR-2"
+   },
+   {
+    "kind": "ask",
+    "id": "tl-0-1"
+   }
+  ],
+  "thread": [
+   {
+    "by": "owner",
+    "t": 1793050201.5,
+    "md": "why?"
+   },
+   {
+    "by": "helper",
+    "t": 1793050202.5,
+    "md": "because"
+   }
+  ],
+  "outcome": "adr",
+  "outcome_ref": "ADR-3"
+ },
+ "LedgerEntry": {
+  "v": 1,
+  "t": 1793050200.5,
+  "event": "stick",
+  "ask": "tl-1-1",
+  "bead": "tl-1",
+  "repo": "/r",
+  "question": "Which?",
+  "key": "open_question:which",
+  "blocking": false,
+  "cause": "decision",
+  "cause_by": "owner",
+  "answer": "ok",
+  "outcome": "adr",
+  "outcome_ref": "ADR-3",
+  "similar": [
+   {
+    "kind": "ask",
+    "id": "tl-0-1"
+   }
+  ],
+  "why": "w"
+ },
+ "Adr": {
+  "v": 1,
+  "id": "ADR-3",
+  "n": 3,
+  "repo": "/r",
+  "text": "Saves stay v1.",
+  "question": "Which?",
+  "answer": "ok",
+  "ask": "tl-1-1",
+  "bead": "tl-1",
+  "key": "open_question:which",
+  "t": 1793050200.5,
+  "by": "denis",
+  "refs": [
+   "tl-2-1"
+  ],
+  "retired_by": "denis",
+  "retired_t": 1793050209.5
+ },
+ "AdrUse": {
+  "v": 1,
+  "adr": "ADR-3",
+  "bead": "tl-2",
+  "run": "tl-7y6.3.1-20261027-002239",
+  "t": 1793050200.5
  },
  "Checkpoint": {
   "v": 3,
@@ -728,12 +806,22 @@
     "resets_at": 1793050800.5
    }
   ],
+  "five": 12.0,
+  "week": 100.0,
   "out": true,
   "out_until": 1793050800.5,
   "out_reason": "rate_limited",
   "notes": [
    "n"
   ]
+ },
+ "UsageRow": {
+  "v": 1,
+  "at": 1793050200.5,
+  "lane": "A",
+  "window": "weekly",
+  "used_pct": 9.0,
+  "resets_at": 1793050800.5
  },
  "NeedInput": {
   "what": "claude_usage",
@@ -756,6 +844,8 @@
     "unlock_at": null,
     "warnings": [],
     "windows": [],
+    "five": null,
+    "week": null,
     "out": false,
     "out_until": null,
     "out_reason": null,
@@ -1133,5 +1223,19 @@
    "ACCEPTANCE"
   ],
   "text": "t"
+ },
+ "OwnerRequest": {
+  "v": 1,
+  "park": true,
+  "stop": false,
+  "notes": [
+   {
+    "text": "use the blue one",
+    "t": 1793050200.5,
+    "by": "dash"
+   }
+  ],
+  "by": "dash",
+  "t": 1793050200.5
  }
 }

@@ -157,7 +157,7 @@ were not on the page. Added:
 ## Looks gallery (owner-look beads)
 
 Taste items never block a land: the engine files them into the owner-look bead (metadata `looks`, see `Engine.write_looks`).
-The **Looks** tab (`#looks&repo=R`, `taskloop_dash/views/gallery.py`, `/api/looks`) shows one card per item: the judge's note, before | after
+The **Looks** tab (`#looks&repo=R`, `taskloop/contracts/gallery.py`, `/api/looks`) shows one card per item: the judge's note, before | after
 pictures (a before-only or after-only item shows what it has), and two answers:
 
 - **Good**: the item's status becomes `good`; when no item of the look bead waits, the bead closes.

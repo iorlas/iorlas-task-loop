@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.contracts.ask import Ask, AskAction
+from taskloop.contracts.dash import Result
 from taskloop.contracts.locks import Ticket
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import AnswerAsk, Beads
@@ -49,6 +50,38 @@ def _no_answer(repo: str, bead: str, action: AskAction, text: str, amend: bool) 
     raise OSError(2, "bd is not installed")
 
 
+def _no_look(repo: str, item: str, verdict: str, note: str, look_bead: str) -> Result:
+    return Result(ok=False, message="bd is not installed")
+
+
+def _no_cause(repo: str, bead: str, scope: str, cause: str) -> Result:
+    return Result(ok=False, message="bd is not installed")
+
+
+def _no_ack(repo: str, bead: str, scope: str, on: bool) -> Result:
+    return Result(ok=False, message="bd is not installed")
+
+
+def _no_run_verb(repo: str, bead: str, run: str) -> Result:
+    return Result(ok=False, message="bd is not installed")
+
+
+def _no_note(repo: str, bead: str, run: str, text: str) -> Result:
+    return Result(ok=False, message="bd is not installed")
+
+
+def _no_stick(repo: str, ask: str, outcome: str, text: str) -> Result:
+    return Result(ok=False, message="bd is not installed")
+
+
+def _no_prune(repo: str, adr: str) -> Result:
+    return Result(ok=False, message="bd is not installed")
+
+
+def _no_ask_back(repo: str, bead: str, ask: str, text: str) -> Result:
+    return Result(ok=False, message="bd is not installed")
+
+
 def _no_versions() -> list[str]:
     return []
 
@@ -62,6 +95,15 @@ class Ports:
     load_cfg: Callable[[str], dict[str, Any]] = _default_cfg  # the repo's engine config: pick_label, skip_labels
     store: Callable[[str], Beads] = _no_store  # the typed bd port for a repo (the engine's BdStore); the only way the dash reaches bd
     answer: AnswerAsk = _no_answer  # file the owner's answer to an ask: the intake `tl answer` uses, receipt comment included
+    look: Callable[[str, str, str, str, str], Result] = _no_look  # (repo, look item id, good|redo|undo, note, look bead or ""): Intake.look
+    cause: Callable[[str, str, str, str], Result] = _no_cause  # (repo, bead, run or ask id, cause): Intake.cause
+    ack: Callable[[str, str, str, bool], Result] = _no_ack  # (repo, bead, run id, seen): Intake.ack
+    park: Callable[[str, str, str], Result] = _no_run_verb  # (repo, bead, newest run id): app/run/requests.OwnerVerbs.park
+    stop: Callable[[str, str, str], Result] = _no_run_verb  # (repo, bead, newest run id): OwnerVerbs.stop
+    note: Callable[[str, str, str, str], Result] = _no_note  # (repo, bead, newest run id, text): OwnerVerbs.note
+    stick: Callable[[str, str, str, str], Result] = _no_stick  # (repo, ask id, outcome, text): Intake.stick
+    prune: Callable[[str, str], Result] = _no_prune  # (repo, ADR id): Intake.prune
+    ask_back: Callable[[str, str, str, str], Result] = _no_ask_back  # (repo, bead, ask id, text): Intake.ask_back
     reflections: Callable[[int], dict[str, Any]] = _no_reflections  # the run reflections of the last N hours
     ask_text: Callable[[Ask], str] = _ask_text  # the card text of an ask, rendered from its fields (domain/asks/text.py)
     installed_versions: Callable[[], list[str]] = _no_versions  # task-loop versions in the plugin cache

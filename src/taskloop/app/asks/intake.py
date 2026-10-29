@@ -8,8 +8,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Final
 
-from taskloop.app.asks import sweeps
-from taskloop.contracts.ask import Ask, AskAction, AskAnswer
+from taskloop.app.asks import looks, stick, sweeps
+from taskloop.contracts.adrs import AdrStore
+from taskloop.contracts.ask import Ask, AskAction, AskAnswer, ThreadEntry
+from taskloop.contracts.dash import OwnerCause, Stick
 from taskloop.contracts.ports import BdFailure, BeadPatch, Beads
 from taskloop.contracts.stores import AskStore
 from taskloop.domain import timespec
@@ -21,7 +23,12 @@ WAIVERS: Final = "owner_waivers"  # JSON list of Waiver: what the owner waived, 
 WAIVER_KINDS: Final = ("waive", "defer", "drop")
 OVERRIDE: Final = "owner_override"
 OVERRIDES: Final = ("replan-cap",)
-VERBS: Final = ("answer", "hint", "hold", "override", "decision")
+CAUSE: Final = "owner_cause"  # JSON {scope, cause, t, by}: why a run stopped or an ask was asked, per the owner; scope = a run or ask id
+ACK: Final = "owner_ack"  # JSON {scope, t, by}: the owner has seen the stuck run `scope`; the key is unset when the owner takes it back
+VERBS: Final = ("answer", "hint", "hold", "override", "decision", "look", "cause", "ack", "stick", "askback")
+ASK_WHY: Final = {"gone": "This ask no longer exists.", "withdrawn": "The engine withdrew this ask.", "closed": "This ask is closed.",
+                  "superseded": "The engine asked again for this bead; the new ask replaces this one.",
+                  "consumed": "A run already used the answer."}
 RECEIPT: Final = "Owner (tl) "
 # What the engine writes into a bead (comments, and lines of Notes). It is never the owner's: not in the brief, not in the brief hash,
 # not in the snapshot an amend diffs against, not in an answer. A receipt is ours too.
@@ -74,8 +81,11 @@ def parse(comment: str) -> Parsed:
 class Intake:
     """The owner's verbs for one repo's tracker. `by` is who says it."""
 
-    def __init__(self, asks: AskStore, store: Beads, now: Callable[[], float], by: str) -> None:
+    def __init__(self, asks: AskStore, store: Beads, now: Callable[[], float], by: str, adrs: Callable[[str], AdrStore] | None = None,
+                 factory: Callable[[], Beads | None] | None = None) -> None:
+        """`adrs(repo)` is the decision store of a repo, `factory()` the tracker of the task-loop repo (None: none registered)."""
         self.asks, self.store, self.now, self.by = asks, store, now, by
+        self.adrs, self.factory = adrs, factory
 
     def note(self, bead: str, text: str) -> None:
         with contextlib.suppress(BdFailure):  # the receipt is for people: the typed record is already written
@@ -136,3 +146,60 @@ class Intake:
             raise ValueError("override what? one of: {}".format(", ".join(OVERRIDES)))
         self.store.update(bead, BeadPatch(set_metadata={OVERRIDE: what}))
         self.note(bead, receipt("override", what))
+
+    def look(self, item: str, verdict: str, note: str = "", look_bead: str = "") -> tuple[str, str]:
+        """Answer one look item (good, redo with a note, or undo). -> (the item's status after, "" or why nothing changed)."""
+        return looks.answer(self.store, item, verdict, note, self.now(), look_bead)
+
+    def cause(self, bead: str, scope: str, cause: str) -> str:
+        """Record why a run stopped or an ask was asked, for `scope` (a run id or an ask id). -> "" or why it was refused."""
+        if cause not in {c.value for c in OwnerCause}:
+            return f"unknown cause {cause!r}"
+        if not scope:
+            return "no run or ask to give a cause to"
+        said = {"scope": scope, "cause": cause, "t": self.now(), "by": self.by}
+        self.store.update(bead, BeadPatch(set_metadata={CAUSE: json.dumps(said)}))
+        self.asks.correct_cause(bead, scope, OwnerCause(cause), self.now())  # no-op unless `scope` is an ask the ledger knows
+        self.note(bead, receipt("cause", cause, scope=scope))
+        return ""
+
+    def stick(self, ask_id: str, outcome: Stick, text: str = "") -> str:
+        """Turn an answered ask into what the owner chose (an ADR, a factory bead, a fix of the bead text, a link to a decision, or just
+        a record). Works from the ledger, so it also holds for an ask a newer one replaced. -> "" or why it was refused."""
+        rows = self.asks.history(ask_id)
+        raised = next((r for r in rows if r.event == "raise"), None)
+        answered = next((r for r in reversed(rows) if r.event == "answer"), None)
+        if raised is None:
+            return "this ask is not in the ledger"
+        if answered is None:
+            return "answer the ask first"
+        if rows[-1].outcome is outcome:
+            return ""  # already done: a second tap files nothing twice
+        made, why = stick.decide(stick.Effects(self.adrs, self.factory, self.store), raised, answered, outcome, text, self.by, self.now())
+        if why:
+            return why
+        self.asks.stuck(raised.bead, ask_id, outcome, made, self.now())
+        self.note(raised.bead, receipt("stick", made, ask=ask_id, outcome=outcome.value))
+        return ""
+
+    def prune(self, repo: str, adr: str) -> str:
+        """Retire a decision in force of `repo` (kept in the store, marked with who and when). -> "" or why not."""
+        if self.adrs is None:
+            return "there is no decision store here"
+        return self.adrs(repo).retire(adr, self.by, self.now())
+
+    def ask_back(self, bead: str, ask_id: str, text: str) -> str:
+        """The owner asks back instead of answering: the entry joins the ask's thread and the ask stays open. -> "" or why not."""
+        if not text.strip():
+            return "write the question first"
+        _done, why = self.asks.say(bead, ask_id, ThreadEntry(by="owner", t=self.now(), md=text.strip()))
+        return ASK_WHY.get(why, why)
+
+    def ack(self, bead: str, scope: str, on: bool = True) -> str:
+        """The owner has seen that run `scope` is stuck (or takes that back). -> "" or why it was refused."""
+        if on and not scope:
+            return "no run to acknowledge"
+        seen = {ACK: json.dumps({"scope": scope, "t": self.now(), "by": self.by})}
+        self.store.update(bead, BeadPatch(set_metadata=seen) if on else BeadPatch(unset_metadata=[ACK]))
+        self.note(bead, receipt("ack", "" if on else "taken back", on="1" if on else "0", scope=scope))
+        return ""

@@ -122,6 +122,17 @@
    },
    "type": "array"
   },
+  "owner_cause": {
+   "description": "why you ask, if you ask: requirement (the bead leaves out something it needs), decision (a choice only the owner makes), environment (a tool, access or machine you lack), process (how the factory works), unknown",
+   "enum": [
+    "requirement",
+    "decision",
+    "environment",
+    "process",
+    "unknown"
+   ],
+   "type": "string"
+  },
   "question": {
    "type": "string"
   },

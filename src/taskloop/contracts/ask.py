@@ -4,9 +4,11 @@ from dataclasses import field
 from typing import ClassVar, Literal
 
 from taskloop.contracts.codec import record
+from taskloop.contracts.dash import OwnerCause, Stick
 from taskloop.contracts.enums import AskClass, AskKind, AskStatus, WhyCode
 
 AskAction = Literal["rerun", "confirm", "split", "text"]
+CauseBy = Literal["agent", "owner"]
 
 
 @record
@@ -56,8 +58,29 @@ class AskDetail:
 
 
 @record
+class SimilarRef:
+    """A past ask (`id` is its ask id) or a decision in force (`id` its ADR id) that has this ask's repeat key."""
+
+    kind: Literal["ask", "adr"]
+    id: str
+
+
+@record
+class ThreadEntry:
+    """One ask-back exchange on an ask. Only recorded here; the helper that answers an ask-back is a separate piece."""
+
+    by: Literal["owner", "helper", "agent"]
+    t: float
+    md: str
+
+
+@record
 class Ask:
-    V: ClassVar[int] = 2
+    """`owner_cause` is declared by the agent at raise and corrected by the owner (`cause_by`); `blocking=False` is a soft ask: the
+    run went on with `default` and the owner may still answer. `key` is the repeat key (domain/asks/similar.py), `similar` what it
+    matched when the ask was raised. `outcome` is what the owner made of the answer; the ask ledger holds the history."""
+
+    V: ClassVar[int] = 3
     id: str
     n: int
     bead: str
@@ -80,3 +103,12 @@ class Ask:
     answered: float | None = None
     consumed: float | None = None
     closed_why: str = ""
+    owner_cause: OwnerCause = OwnerCause.UNKNOWN
+    cause_by: CauseBy = "agent"
+    blocking: bool = True
+    default: str = ""
+    key: str = ""
+    similar: list[SimilarRef] = field(default_factory=list)
+    thread: list[ThreadEntry] = field(default_factory=list)
+    outcome: Stick | None = None
+    outcome_ref: str = ""
