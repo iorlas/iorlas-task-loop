@@ -73,13 +73,15 @@ Code (`~/.claude/projects`) and Codex (`~/.codex/sessions`, the codex plugin's j
 
 ```
 skills/task-loop/SKILL.md        the method (read by the orchestrating session)
-skills/task-loop/tl.py           helper: actor, claim/stage/worker/land/close/block, slots, worktrees, dashboard
-skills/task-loop/loop_env.py     tl loop / next / stop: the composition root of the loop (src/taskloop/app/loop/ is the loop itself)
-skills/task-loop/selftest.py     tl selftest: one bead through the engine with a scripted lane, on this install's code
+skills/task-loop/tl.py           the command line only: every verb lives in src/taskloop
+skills/task-loop/_vendor/        the shelf packages src/ imports by name (dev/vendor.py; never edited)
+src/taskloop/                    the engine, the loop and the verbs, in layers: contracts, domain, adapters, stores, app, cli, hook
+src/taskloop/app/launch/         what tl starts: loop.py (tl loop / next / stop), selftest.py (tl selftest: one bead through the
+                                 engine with a scripted lane, on this install's code), dash.py (tl dash), dash_ports.py
+src/taskloop/app/report/         tl report, lost and reflect digest: the data (cli/report.py prints it)
 src/taskloop_dash/               the dashboard package (stdlib; `python3 -m taskloop_dash`, started by `tl dash ensure`)
 src/taskloop_dash/static/        dashboard pages: index.html is the task view (no build, no dependencies)
 src/taskloop_dash/views/         engine logs -> runs, blocks, arrows for the task view (timeline.py)
-skills/task-loop/dash_wiring.py  the engine facts the dashboard is handed as ports
 hooks/hooks.json                 SessionStart: index session id -> transcript path
 tests/                           python3 -m unittest discover -s tests   (CI: Ubuntu, Python 3.12)
 dev/release.py                   the only way to release: release lock, version from origin, suite, marketplace, install

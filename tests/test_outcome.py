@@ -5,18 +5,18 @@ import tempfile
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
-import clock
-import loop_health as lh
-import outcome as oc
-from outcome import POLICY, Kind
 from support.narrow import must
 
+from taskloop.adapters import storm as storm_file
+from taskloop.adapters.fake_clock import FakeClock
 from taskloop.app.loop.health import loop_health
+from taskloop.domain import outcome as oc
+from taskloop.domain import storm as lh
+from taskloop.domain.outcome import POLICY, Kind
 
 
 class Table(unittest.TestCase):
@@ -106,14 +106,14 @@ class Apply(unittest.TestCase):
 
 class Storm(unittest.TestCase):
     def test_same_fingerprint_on_two_beads_inside_the_window_trips(self):
-        c = clock.FakeClock()
+        c = FakeClock()
         fp = oc.fingerprint(Kind.FAULT_BAD_REQUEST, "schema")
         h = [row("a", Kind.FAULT_BAD_REQUEST, fp, c.now())]
         self.assertIsNone(lh.storm_trip([], "a", Kind.FAULT_BAD_REQUEST, fp, c.now()))
         c.advance(60)
         trip = lh.storm_trip(h, "b", Kind.FAULT_BAD_REQUEST, fp, c.now())
         self.assertEqual(must(trip).beads, ("a", "b"))
-        self.assertIn("STOPPED: storm", lh.banner(trip))
+        self.assertIn("STOPPED: storm", lh.banner(must(trip)))
         self.assertIsNone(lh.storm_trip(h, "a", Kind.FAULT_BAD_REQUEST, fp, c.now()))  # one bead repeating is no storm
         c.advance(1800)
         self.assertIsNone(lh.storm_trip(h, "b", Kind.FAULT_BAD_REQUEST, fp, c.now()))  # outside the window
@@ -126,13 +126,13 @@ class Storm(unittest.TestCase):
             self.assertIsNone(lh.storm_trip([row("a", k, fp, 10.0)], "b", k, fp, 20.0), k)
 
     def test_the_record_is_written_once_and_expires(self):
-        p = lh.storm_path(tempfile.mkdtemp(), "repo")
-        trip = lh.StormTrip("fp", ("a", "b"), 100.0)
-        self.assertTrue(lh.write_storm(p, trip, 100.0))
-        self.assertFalse(lh.write_storm(p, trip, 150.0))
-        self.assertIsNone(lh.read_storm(p, 100.0 + 1800))
-        lh.clear_storm(p)
-        self.assertTrue(lh.write_storm(p, trip, 150.0))
+        p = storm_file.storm_path(tempfile.mkdtemp(), "repo")
+        win = oc.KNOBS["storm_window_s"]
+        self.assertTrue(storm_file.write_storm(p, "fp", ("a", "b"), 100.0, 100.0, win))
+        self.assertFalse(storm_file.write_storm(p, "fp", ("a", "b"), 100.0, 150.0, win))
+        self.assertIsNone(storm_file.read_storm(p, 100.0 + 1800, win))
+        storm_file.clear_storm(p)
+        self.assertTrue(storm_file.write_storm(p, "fp", ("a", "b"), 100.0, 150.0, win))
 
 
 class Health(unittest.TestCase):
@@ -153,8 +153,8 @@ def rows(name):
 def replay(name, stop_on_trip=True, squeeze=None):
     """Feed a corpus fixture through the close path (fingerprint, apply, storm) one row = one engine call. Returns
     (calls made, banners printed, dispositions). squeeze: spacing in seconds that replaces the real times."""
-    clk, history, banners, disps, calls = clock.FakeClock(), [], [], [], 0
-    path = lh.storm_path(tempfile.mkdtemp(), "repo")
+    clk, history, banners, disps, calls = FakeClock(), [], [], [], 0
+    path = storm_file.storm_path(tempfile.mkdtemp(), "repo")
     for n, r in enumerate(rows(name)):
         clk.t = r["t"] if squeeze is None else 1_000_000.0 + n * squeeze
         calls += 1
@@ -163,7 +163,7 @@ def replay(name, stop_on_trip=True, squeeze=None):
         disps.append(oc.apply(o, r["bead"], history, clk.now()))
         trip = lh.storm_trip(history, r["bead"], kind, o.fingerprint, clk.now())
         history.append({"bead": r["bead"], "kind": kind.value, "fingerprint": o.fingerprint, "t": clk.now()})
-        if trip and lh.write_storm(path, trip, clk.now(), r["text"]):
+        if trip and storm_file.write_storm(path, trip.fingerprint, trip.beads, trip.t, clk.now(), oc.KNOBS["storm_window_s"], r["text"]):
             banners.append(lh.banner(trip))
             if stop_on_trip:
                 break

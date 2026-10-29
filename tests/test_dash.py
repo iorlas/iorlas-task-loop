@@ -238,8 +238,9 @@ class Asks(unittest.TestCase):
             (asks / "x-1.json").write_text(json.dumps(rec))
             env = dict(os.environ, XDG_CONFIG_HOME=str(d), APPDATA=str(d), TASK_LOOP_DASH_BIND="127.0.0.1", HOME=str(d),
                        USERPROFILE=str(d), PATH=str(bin_) + os.pathsep + os.environ["PATH"],
-                       PYTHONPATH=os.pathsep.join([os.environ["PYTHONPATH"], str(ROOT / "skills" / "task-loop")]))
-            p = subprocess.Popen([sys.executable, "-m", "taskloop_dash", "--ports", "dash_wiring:ports",  # the launcher's bd, the fake one
+                       PYTHONPATH=os.environ["PYTHONPATH"])
+            p = subprocess.Popen([sys.executable, "-m", "taskloop_dash", "--ports",
+                                  "taskloop.app.launch.dash_ports:ports",  # the launcher's bd, the fake one
                                   "--port", str(port)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             try:
                 base = f"http://127.0.0.1:{port}"

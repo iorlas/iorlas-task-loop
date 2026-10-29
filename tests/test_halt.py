@@ -14,12 +14,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
-import outcome as oc
 from support import engine_case as te
 from support.engine_case import CLEAN, PLAN, WRITE, engine
 
 from taskloop.adapters import delegate, gitrepo, runner
 from taskloop.adapters import halt as halting
+from taskloop.domain import outcome as oc
 
 WAIT = 120  # the longest a helper waits for a started process on a loaded runner (it ends the moment the process is there)
 

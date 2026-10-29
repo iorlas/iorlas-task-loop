@@ -11,9 +11,9 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from test_loop import LoopBase, rec
 
 # isort: split
-import loop_env
 from support import looptest
 
+from taskloop.app.launch import loop as wloop
 from taskloop.app.slots.pool import SlotPool
 from taskloop.contracts.config import LoopConfig
 
@@ -42,7 +42,7 @@ class Tune(LoopBase):
         slot["metadata"] = meta
 
     def pool(self):
-        return SlotPool(loop_env.build(str(self.repo)).slot_env())
+        return SlotPool(wloop.build(str(self.repo)).slot_env())
 
     def test_a_smaller_slots_count_applies_to_the_next_take_and_never_to_a_held_slot(self):
         bd = self.beads({}, slots=2)

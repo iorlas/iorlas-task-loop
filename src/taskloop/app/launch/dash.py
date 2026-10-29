@@ -13,12 +13,12 @@ from pathlib import Path
 from typing import Any, Final
 
 from taskloop.adapters import procs
-from taskloop.adapters.ident import config_dir
+from taskloop.adapters.ident import PLUGIN_ROOT, config_dir
 from taskloop_dash import bind as dash_bind
 from taskloop_dash.cli import dash as dash_cli
 
-HERE: Final = Path(__file__).resolve().parent  # where `--ports dash_wiring:ports` is found
-SRC: Final = HERE.parents[1] / "src"
+SRC: Final = PLUGIN_ROOT / "src"  # where `--ports taskloop.app.launch.dash_ports:ports` is found
+VENDOR: Final = PLUGIN_ROOT / "skills" / "task-loop" / "_vendor"
 DASH: Final = SRC / "taskloop_dash" / "__main__.py"  # the script a running `python3 -m taskloop_dash` reports
 PORT: Final = int(os.environ.get("TASK_LOOP_DASH_PORT", "7878"))
 
@@ -67,7 +67,7 @@ def expected_binds() -> list[str]:
 
 
 def is_dev_checkout() -> bool:
-    return bool(dash_bind.is_dev_checkout(HERE))
+    return bool(dash_bind.is_dev_checkout(PLUGIN_ROOT))
 
 
 def free_port() -> int:
@@ -135,9 +135,9 @@ def start_server(port: int, bind: str | None = None) -> tuple[dict[str, Any] | N
     log = open(config_dir() / "dash.log", "ab")  # noqa: SIM115  the detached child keeps it
     env = {k: val for k, val in os.environ.items() if not k.startswith(("CLAUDE_CODE_SESSION", "DELEGATE_", "CODEX_COMPANION"))}
     more = [env["PYTHONPATH"]] if env.get("PYTHONPATH") else []
-    env["PYTHONPATH"] = os.pathsep.join([str(SRC), str(HERE), str(HERE / "_vendor"), *more])
+    env["PYTHONPATH"] = os.pathsep.join([str(SRC), str(VENDOR), *more])
     bind = bind or ",".join(default_binds())
-    cmd = [sys.executable, "-m", "taskloop_dash", "--ports", "dash_wiring:ports", "--port", str(port), "--bind", bind]
+    cmd = [sys.executable, "-m", "taskloop_dash", "--ports", "taskloop.app.launch.dash_ports:ports", "--port", str(port), "--bind", bind]
     proc = procs.spawn(cmd, stdin=subprocess.DEVNULL, stdout=log, stderr=log, env=env, cwd=str(config_dir()), close_fds=True,
                        start_new_session=True)
     for _ in range(40):

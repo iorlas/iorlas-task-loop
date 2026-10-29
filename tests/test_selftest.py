@@ -13,15 +13,13 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "skills" / "task-loop"
-sys.path.insert(0, str(SRC))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402, F401
 
 # isort: split
-import loop_env  # noqa: E402
-import selftest  # noqa: E402
-
 from taskloop.adapters.fake_beads import FakeBeads  # noqa: E402
+from taskloop.app.launch import loop as wloop  # noqa: E402
+from taskloop.app.launch import selftest  # noqa: E402
 from taskloop.app.loop.loop import Loop, LoopArgs  # noqa: E402
 
 
@@ -70,11 +68,11 @@ class SelfTest(unittest.TestCase):
         return {e["version"]: e for e in json.loads(f.read_text())["entries"]} if f.exists() else {}
 
     def the_loop(self):
-        env = loop_env.build(str(self.home), store=FakeBeads(), here=self.here)
+        env = wloop.build(str(self.home), store=FakeBeads(), here=self.here)
         return Loop(
             env,
-            loop_env.files_of(str(self.home)),
-            loop_env.installs(env.cfgdir, here=self.here),
+            wloop.files_of(str(self.home)),
+            wloop.installs(env.cfgdir, here=self.here),
             LoopArgs(argv=["loop", "--repo", str(self.home)]),
         )
 
@@ -125,7 +123,7 @@ class SelfTest(unittest.TestCase):
                 "-I",
                 "-c",
                 "import sys; sys.path.insert(0, sys.argv[1]); sys.path.insert(0, sys.argv[2]); "
-                "import tl, loop_env; import taskloop.app.run.engine",
+                "import tl, taskloop.app.launch.loop; import taskloop.app.run.engine",
                 str(d / "skills" / "task-loop"),
                 str(d / "src"),
             ],
@@ -147,7 +145,7 @@ class SelfTest(unittest.TestCase):
     def test_a_good_newer_install_is_still_moved_to(self):
         self.install("0.2.0")
         lp = self.the_loop()
-        with self.assertRaises(Moved), mock.patch.object(Loop, "say"), mock.patch.object(loop_env, "START_CWD", [None]):
+        with self.assertRaises(Moved), mock.patch.object(Loop, "say"):
             lp.maybe_move()
         self.assertIn("0.2.0", self.execs[0][1])
 

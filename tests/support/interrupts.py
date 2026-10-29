@@ -4,8 +4,6 @@ import signal
 from contextlib import ExitStack
 from unittest import mock
 
-import outcome as oc
-
 from support import fake_route
 from support.push_race import seam
 from taskloop.app.checks import evidence as check_evidence
@@ -14,6 +12,7 @@ from taskloop.app.run import engine
 from taskloop.app.run.state import Checkpoints
 from taskloop.app.run.steps import Steps
 from taskloop.app.write.stage_loop import StageLoop
+from taskloop.domain import outcome as oc
 
 
 class Interrupter:

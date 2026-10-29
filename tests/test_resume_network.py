@@ -11,12 +11,10 @@ from pathlib import Path
 from typing import Any, ClassVar
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: F401
 
 # isort: split
-import outcome as oc
 import test_stages_visual
 from support import engine_case as te
 from support import (
@@ -28,6 +26,7 @@ from taskloop.adapters import gitrepo, ident
 from taskloop.app.loop.gate import GateRole
 from taskloop.app.release import reexec
 from taskloop.contracts.config import LoopConfig
+from taskloop.domain import outcome as oc
 from taskloop.domain.lanes import netgate
 from taskloop.stores import call_state as callstate
 

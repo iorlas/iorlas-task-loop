@@ -3,14 +3,12 @@ Real git in a temp repo; each case changes the repo behind the memo and asks aga
 
 import os
 import subprocess
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 from taskloop.adapters import gitrepo, slotcheck, treehash  # noqa: E402
 from taskloop.app.run import engine  # noqa: E402
 

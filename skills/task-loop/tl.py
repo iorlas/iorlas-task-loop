@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""tl.py: the task-loop helper. Python 3.8+, standard library only; macOS, Linux (also in Docker).
+"""tl.py: the task-loop command line; every verb lives in src/taskloop. Python 3.12+, standard library only; macOS, Linux.
 
   tl.py actor                                   the --actor name this session uses for every bd call
   tl.py bd ARGS...                              run bd with this session's actor (in the current directory)
@@ -48,12 +48,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final
 
-import vendored  # noqa: F401  (puts _vendor on sys.path)
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))  # taskloop: the typed records and adapters ship in the plugin dir
-import dash_server
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))  # taskloop ships in the plugin dir; importing it adds _vendor
 
 from taskloop.adapters import beadtools, gitrepo, ident, landlock
+from taskloop.app.launch import dash as wire_dash
 from taskloop.app.release import pins
 from taskloop.app.track import trail, verbs
 from taskloop.app.wire import asks as wire_asks
@@ -248,15 +246,15 @@ def v_actor(a: Any, c: Ctx) -> int:
 
 def v_loop(a: Any, c: Ctx) -> int:
     a.argv = list(c.argv)  # the loop re-execs itself with these
-    return importlib.import_module("loop_env").cmd_loop(a, c.here, c.now)
+    return importlib.import_module("taskloop.cli.loop_cmd").cmd_loop(a, c.here, c.now)
 
 
 def v_next(a: Any, c: Ctx) -> int:
-    return importlib.import_module("loop_env").cmd_next(a, c.here, c.now)
+    return importlib.import_module("taskloop.cli.loop_cmd").cmd_next(a, c.here, c.now)
 
 
 def v_stop(a: Any, c: Ctx) -> int:
-    return importlib.import_module("loop_env").cmd_stop(a, c.here, c.now)
+    return importlib.import_module("taskloop.cli.loop_cmd").cmd_stop(a, c.here, c.now)
 
 
 def repo_of(a: Any) -> str:
@@ -287,22 +285,22 @@ VERBS: Final[dict[str, Handler]] = {
     "usage": of_args(wire_usage.feed, "windows"),
     "lanes": of_args(wire_lanes.refresh),
     "worktree": of_args(wslots.worktree, "op", "self_too"),
-    "dash": of_args(dash_server.run, "op"),
+    "dash": of_args(wire_dash.run, "op"),
     "pin": of_args(pins.run_pin, "version", "delegate", "clear"),
     "rollback": of_args(pins.run_rollback),
     "doctor": v_doctor,
     "slot": v_slot,
     "ask": v_ask, "answer": v_ask, "hint": v_ask, "hold": v_ask, "override": v_ask,
-    "reflect": lazy("reflect_digest", "cmd_reflect"),
+    "reflect": lazy("taskloop.cli.report", "cmd_reflect"),
     "land-lock": v_land_lock,
     "status": v_status,
     "handoff": v_handoff,
     "run-task": lazy("taskloop.app.run.entry", "main"),
-    "selftest": lazy("selftest", "cmd_selftest"),
-    "cutover": lazy("loop_env", "cmd_cutover"),
+    "selftest": lazy("taskloop.app.launch.selftest", "cmd_selftest"),
+    "cutover": lazy("taskloop.cli.loop_cmd", "cmd_cutover"),
     "next": v_next, "loop": v_loop, "stop": v_stop,
-    "report": lazy("report_cli", "cmd_report"),
-    "lost": lazy("report_cli", "cmd_lost"),
+    "report": lazy("taskloop.cli.report", "cmd_report"),
+    "lost": lazy("taskloop.cli.report", "cmd_lost"),
 }
 
 

@@ -19,7 +19,6 @@ import support.paths  # noqa: E402, F401
 # isort: split
 import contextlib  # noqa: E402
 
-import loop_env  # noqa: E402
 import tl  # noqa: E402
 from contracts import samples as S  # noqa: E402
 from support import (  # noqa: E402
@@ -34,6 +33,7 @@ from taskloop.adapters import (  # noqa: E402
     ident,
     pidcheck,
 )
+from taskloop.app.launch import loop as wloop  # noqa: E402
 from taskloop.app.release import pins  # noqa: E402
 from taskloop.app.slots import engine_lock  # noqa: E402
 from taskloop.app.track import trail  # noqa: E402
@@ -426,7 +426,7 @@ class PinAndRollback(Base):
         self.assertIn("/iorlas-delegate/0.5.0/", must(route()))
         root = self.claude / "plugins/cache/iorlas-marketplace/iorlas-task-loop/0.2.0"
         def target(**kw):
-            return loop_env.installs(loop_env.cfgdir(), here=root / "skills" / "task-loop").target(**kw)
+            return wloop.installs(wloop.cfgdir(), here=root / "skills" / "task-loop").target(**kw)
         self.assertEqual(target(), ("0.1.0", root.parent / "0.1.0"))  # older than the running one: still the pin
         self.assertEqual(target(skip=["0.1.0"]), None)
         self.assertEqual(self.pin("--clear")[0], 0)

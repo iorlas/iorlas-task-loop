@@ -1,4 +1,4 @@
-"""`tl next`, `tl loop [status]`, `tl stop`: parsing is tl.py's, building the env is loop_env.py's; this prints and runs."""
+"""`tl next`, `tl loop [status]`, `tl stop`: tl.py parses, app/launch/loop.py builds the env; this prints and runs."""
 import dataclasses
 import json
 import signal

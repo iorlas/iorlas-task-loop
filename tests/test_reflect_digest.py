@@ -8,16 +8,16 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
-import reflect_digest as rd
 from support import tlbd
 from support.dashes import Ports, make_dash
 
 from taskloop.adapters import ident
+from taskloop.app.report import reflect as rd
+from taskloop.domain.report import reflect as rules
 
 NOW = 1_800_000_000.0
 
@@ -84,14 +84,14 @@ class Clusters(Base):
         self.trace("r1", [("writer reran the full Unity test suite after every edit", "prompt", "9 runs, 41 min")])
         self.trace("r2", [("writer reran the Unity test suite after each edit again", "prompt", "7 runs")], bead="b2")
         self.trace("r3", [("writer reran the Unity test suite after every edit", "engine", "x")], bead="b3")
-        cs = rd.cluster(rd.items(NOW - 86400, NOW))
+        cs = rules.cluster(rd.items(NOW - 86400, NOW))
         self.assertEqual([(c["cause"], len(c["runs"])) for c in cs], [("prompt", 2), ("engine", 1)])
-        self.assertEqual([c["cause"] for c in rd.recurring(cs)], ["prompt"])
+        self.assertEqual([c["cause"] for c in rules.recurring(cs)], ["prompt"])
 
     def test_a_bare_shared_file_alone_does_not_merge_unrelated_items(self):
         self.trace("r1", [("planner missed the dependency edge", "engine", "engine.py")])
         self.trace("r2", [("close crashed because zebra giraffe", "engine", "engine.py")], bead="b2")
-        self.assertEqual(len(rd.cluster(rd.items(NOW - 86400, NOW))), 2)
+        self.assertEqual(len(rules.cluster(rd.items(NOW - 86400, NOW))), 2)
 
     def test_a_trace_repo_url_or_worktree_path_resolves_to_the_registered_repo(self):
         repos = list(self.repos.values())
@@ -105,15 +105,15 @@ class Clusters(Base):
     def test_one_beads_two_runs_are_not_recurring_but_three_are(self):
         self.trace("r1", [("writer reran the whole test suite after every edit", "prompt", "9")])
         self.trace("r2", [("writer reran the whole test suite after every edit again", "prompt", "7")])
-        self.assertEqual(rd.recurring(rd.cluster(rd.items(NOW - 86400, NOW))), [])
+        self.assertEqual(rules.recurring(rules.cluster(rd.items(NOW - 86400, NOW))), [])
         self.trace("r3", [("writer reran the whole test suite after every edit", "prompt", "5")])
-        self.assertEqual(len(rd.recurring(rd.cluster(rd.items(NOW - 86400, NOW)))), 1)
+        self.assertEqual(len(rules.recurring(rules.cluster(rd.items(NOW - 86400, NOW)))), 1)
 
     def test_a_shared_file_joins_items_that_say_different_things(self):
         self.trace("r1", [("planner missed the dependency edge", "engine", "see skills/task-loop/engine.py line 12")])
         self.trace("r2", [("planner crashed on the dependency list", "engine", "engine.py")], bead="b2")
         self.trace("r3", [("nothing alike whatsoever here", "engine", "other.py")], bead="b3")
-        cs = rd.cluster(rd.items(NOW - 86400, NOW))
+        cs = rules.cluster(rd.items(NOW - 86400, NOW))
         self.assertEqual(sorted(len(c["runs"]) for c in cs), [1, 2])
 
     def test_only_the_window_counts_and_runs_without_a_reflection_are_skipped(self):
@@ -126,7 +126,7 @@ class Clusters(Base):
         for cause, _want in (("engine", "iorlas-task-loop"), ("prompt", "iorlas-task-loop"), ("delegate", "iorlas-delegate"),
                             ("repo_profile", "lifesim"), ("sandbox", "lifesim")):
             self.trace("r-" + cause, [(f"x {cause} thing", cause, "e")])
-        owners = {c["cause"]: Path(rd.owner_repo(c) or "").name for c in rd.cluster(rd.items(NOW - 86400, NOW))}
+        owners = {c["cause"]: Path(rd.owner_repo(c) or "").name for c in rules.cluster(rd.items(NOW - 86400, NOW))}
         self.assertEqual(owners, {"engine": "iorlas-task-loop", "prompt": "iorlas-task-loop", "delegate": "iorlas-delegate",
                                   "repo_profile": "lifesim", "sandbox": "lifesim"})
 

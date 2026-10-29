@@ -21,7 +21,6 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from test_loop import bead, rec
 
 # isort: split
-import loop_env
 from support import (
     looptest,
     tlbd,
@@ -36,6 +35,7 @@ from support.narrow import must
 from test_slots import Slots
 
 from taskloop.adapters import ident
+from taskloop.app.launch import loop as wloop
 from taskloop.app.loop.core import Core
 from taskloop.app.loop.queue import QueueRule
 from taskloop.app.run import (
@@ -196,11 +196,11 @@ class Areas(AreasBase):
         bd.beads["x-1"]["status"] = "closed"
         bd.slots["sl-1"]["metadata"] = {"held_bead": "x-1"}  # open, as reclaim left it
         self.assertEqual(self.cli("slot", "hold", "s1", "--why", "screenshots")[0], 0)
-        self.assertEqual(loop_env.running(str(self.repo)), {})
+        self.assertEqual(wloop.running(str(self.repo)), {})
         self.assertEqual(self.order(), (["x-2"], {}))
         bd.slots["sl-2"]["metadata"] = {"held_bead": "x-1"}
         self.assertEqual(must(sl.take_slot(str(self.repo), self.cfg_slots()))[0], "s2")
-        self.assertEqual(loop_env.running(str(self.repo)), {})
+        self.assertEqual(wloop.running(str(self.repo)), {})
 
     def cfg_slots(self):
         return wslots.profile_slots(str(self.repo))

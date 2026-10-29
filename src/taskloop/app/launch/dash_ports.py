@@ -1,4 +1,4 @@
-"""The dashboard's ports, made from the flat engine code: the read-only facts the package taskloop_dash may not import (slot beads,
+"""The dashboard's ports, made from the engine code: the read-only facts the package taskloop_dash may not import (slot beads,
 the waiting line, a repo's config, the installed versions, the run reflections) and bd through the engine's adapter."""
 
 import dataclasses
@@ -6,11 +6,10 @@ import shutil
 from collections.abc import Callable
 from typing import Any
 
-import reflect_digest
-
 from taskloop.adapters.bd import BdStore
 from taskloop.app.asks.intake import Intake
 from taskloop.app.release import catalog
+from taskloop.app.report import reflect
 from taskloop.app.track.trail import now
 from taskloop.app.wire import asks as wire_asks
 from taskloop.app.wire import slots as wslots
@@ -41,12 +40,19 @@ def answer(repo: str, bead: str, action: AskAction, text: str, amend: bool) -> t
     return Intake(wire_asks.store(), store(repo), now, "dash").answer(bead, action, text, amend)
 
 
+def slot_beads(repo: str) -> list[dict[str, Any]]:
+    return [dataclasses.asdict(b) for b in wslots.slot_beads(repo)]
+
+
+def load_cfg(repo: str) -> dict[str, Any]:
+    return dataclasses.asdict(wslots.load_cfg(repo))
+
+
 def ports() -> Ports:
-    """`python3 -m taskloop_dash --ports dash_wiring:ports`: the dashboard process builds its ports from the flat code on its path, and
-    `tl ask` in a terminal uses the same."""
+    """`python3 -m taskloop_dash --ports taskloop.app.launch.dash_ports:ports`: the dashboard builds its ports from the engine's code."""
     return Ports(store=store, answer=answer, ask_text=asktext.markdown,
-                 slot_beads=quiet(lambda repo: [dataclasses.asdict(b) for b in wslots.slot_beads(repo)], []),
+                 slot_beads=quiet(slot_beads, []),
                  waiting_line=quiet(wslots.waiting_line, []),
-                 load_cfg=quiet(lambda repo: dataclasses.asdict(wslots.load_cfg(repo)), {"pick_label": "auto", "skip_labels": []}),
-                 reflections=quiet(reflect_digest.view, {}),
+                 load_cfg=quiet(load_cfg, {"pick_label": "auto", "skip_labels": []}),
+                 reflections=quiet(reflect.view, {}),
                  installed_versions=quiet(lambda: sorted(catalog.cache_dirs("task-loop")), []))

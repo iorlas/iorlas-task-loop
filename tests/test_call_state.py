@@ -1,13 +1,11 @@
 """CallState (the vendor call on disk) and the network gate (tl-7y6.2.13): checkpoints survive, finished output is never discarded."""
 import json
 import shutil
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 import support.paths  # noqa: E402, F401
 from support.narrow import must  # noqa: E402
 

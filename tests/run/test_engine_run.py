@@ -36,8 +36,6 @@ import time
 from pathlib import Path
 from unittest import mock
 
-import outcome as oc
-import seams
 from support import fake_route
 from support.briefs import bead_diff, bead_snapshot, brief_digest, linked_text
 from support.builders import cfg_with
@@ -53,6 +51,7 @@ from taskloop.adapters import (
 from taskloop.adapters import delegate as dl
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.plan.planner import Planner
+from taskloop.app.release import seams
 from taskloop.app.run import (
     engine,
     entry,
@@ -62,6 +61,7 @@ from taskloop.app.slots.lease import Lease
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import WaitWhat
+from taskloop.domain import outcome as oc
 from taskloop.domain.checks import matchers as check_matchers
 from taskloop.domain.checks import retry
 from taskloop.domain.lanes.matchers import read_only_command

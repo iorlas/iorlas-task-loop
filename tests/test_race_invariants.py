@@ -38,7 +38,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))  # python3 -m unittest 
 import test_loop
 
 # isort: split
-import clock as clocks
 import tl
 from support import slots as sl
 from support import tlbd
@@ -54,6 +53,7 @@ from taskloop.adapters import (
     pidcheck,
     slot_git,
 )
+from taskloop.adapters.fake_clock import FakeClock
 from taskloop.app.land.lander import Lander
 from taskloop.app.release import push as release_push
 from taskloop.app.release.shell import Shell
@@ -109,7 +109,7 @@ def claims(a):
 class Invariants(test_loop.Base):
     def setUp(self):
         super().setUp()
-        self.clock = clocks.FakeClock(1_800_000_000.0)
+        self.clock = FakeClock(1_800_000_000.0)
         self.live = {os.getpid()}  # the fake process table: a pid in it is alive
         self.actors = {}  # thread name -> actor name (default: the thread's name)
         self.out = io.StringIO()

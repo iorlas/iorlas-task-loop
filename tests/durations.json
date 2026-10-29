@@ -1361,7 +1361,7 @@
 "test_loop_more.LoopNetwork.test_the_probe_is_down_for_three_ticks_then_up_and_the_same_bead_resumes_within_a_minute": 0.156,
 "test_loop_more.LoopNetwork.test_without_a_delegate_to_probe_a_network_pause_rests_like_a_lane_pause_and_the_next_bead_runs": 0.203,
 "test_loop_more.LoopSelfUpdate.test_a_dev_checkout_never_moves": 0.078,
-"test_loop_more.LoopSelfUpdate.test_a_half_copied_loop_py_is_not_moved_to": 0.1,
+"test_loop_more.LoopSelfUpdate.test_a_half_copied_loop_module_is_not_moved_to": 0.1,
 "test_loop_more.LoopSelfUpdate.test_a_help_that_hangs_is_not_moved_to": 0.598,
 "test_loop_more.LoopSelfUpdate.test_a_pin_beats_the_newest_install": 0.092,
 "test_loop_more.LoopSelfUpdate.test_a_pin_to_a_missing_dir_stays_where_it_is_and_never_falls_back_to_the_newest": 0.082,

@@ -3,15 +3,16 @@
 A run exit is a Kind. Everything the engine does at the close (bead status, label, ask or not, the loop's result, the
 trace value, the storm count) is a cell of POLICY[kind]; a new reason is one enum member, one row and the raise site.
 Machine faults (FAULT_*) never make an ask; network and killed stops (PAUSE_*) are paused, not failed, and count toward
-no cap. `apply` is pure: the same (outcome, bead, history, now) gives the same Disposition. Python 3.8+, stdlib only;
+no cap. `apply` is pure: the same (outcome, bead, history, now) gives the same Disposition. Stdlib only;
 imports lifecycle (the one fingerprint normaliser), never engine.
 
 Design: 60-design-A1 sec 2.1 and 61-integration sec 1.2; ASK_VERIFY is retired (68-design-asks sec 8), so 22 members.
 """
 
 import enum
-import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from typing import Any, Final
 
 from taskloop.domain.report import matchers as lifecycle
 
@@ -47,7 +48,7 @@ PAUSES = tuple(k for k in Kind if k.name.startswith("PAUSE_"))
 FAULTS = tuple(k for k in Kind if k.name.startswith("FAULT_"))
 
 # The tunables, in one place. Cells are values: a predicate goes to code.
-KNOBS = {
+KNOBS: Final = {
     "storm_window_s": 1800,      # the same fingerprint on storm_beads distinct beads inside this window trips the storm
     "storm_beads": 2,
     "fault_retries": 3,          # the same fingerprint on one bead this often escalates to one ASK_STUCK
@@ -72,16 +73,16 @@ class Rule:
     wake: str = ""          # when a bead may be picked again: "" now | answer | lane | net | spec | cooldown
 
 
-def _fault(resolver="engineer"):
+def _fault(resolver: str = "engineer") -> Rule:
     return Rule("open", "failed", "failed", False, resolver, label="engine-fault", storm=True,
                 retries=KNOBS["fault_retries"], escalate_to=Kind.ASK_STUCK, wake="cooldown")
 
 
-def _ask(wake="answer", replan=False):
+def _ask(wake: str = "answer", replan: bool = False) -> Rule:
     return Rule("block", "parked", "parked", True, "owner", wake=wake, replan=replan)
 
 
-POLICY = {
+POLICY: Final = {
     Kind.LANDED: Rule("close", "landed", "landed", False, "none"),
     Kind.DONE: Rule("close", "landed", "done", False, "none"),
     Kind.CUT: Rule("none", "paused", "paused", False, "none"),
@@ -107,7 +108,7 @@ POLICY = {
     Kind.FAULT_CRASHED: _fault(),
 }
 
-ASK_NAME = {Kind.ASK_DECISION: "decision", Kind.ASK_STUCK: "stuck", Kind.ASK_BUDGET: "budget", Kind.ASK_TICKET: "ticket"}
+ASK_NAME: Final = {Kind.ASK_DECISION: "decision", Kind.ASK_STUCK: "stuck", Kind.ASK_BUDGET: "budget", Kind.ASK_TICKET: "ticket"}
 
 
 @dataclass(frozen=True)
@@ -118,23 +119,23 @@ class RunOutcome:
     v: int = 1
 
     @property
-    def rule(self):
+    def rule(self) -> Rule:
         return POLICY[self.kind]
 
 
-def fingerprint(kind, text):
+def fingerprint(kind: Kind, text: object) -> str:
     """The one normaliser: the kind name plus lifecycle's stripped text. Empty for a finish."""
     if kind in FINISH:
         return ""
-    slug = re.sub(r"#[0-9a-f]{8}$", "", lifecycle.fingerprint(text))  # lifecycle hashes a long tail; a storm is the same head
+    slug = lifecycle.fingerprint_head(text)
     return "{} {}".format(kind.name, slug or "unknown")
 
 
-def make(kind, text=""):
+def make(kind: Kind, text: str = "") -> RunOutcome:
     return RunOutcome(kind, fingerprint(kind, text), text)
 
 
-def load(kind, fp="", detail="", v=1):
+def load(kind: str, fp: str = "", detail: str = "", v: int = 1) -> RunOutcome:
     """A stored outcome. An unknown kind string or a newer version loads as FAULT_ENGINE with the raw text in detail:
     a reader never raises."""
     try:
@@ -158,7 +159,8 @@ class Disposition:
     escalated: bool     # a FAULT that hit its retries and became ASK_STUCK
 
 
-def apply(outcome, bead, history, now, knobs=KNOBS):
+def apply(outcome: RunOutcome, bead: str, history: Sequence[Mapping[str, Any]], now: float,
+          knobs: Mapping[str, float] = KNOBS) -> Disposition:
     """The close's Disposition. history: earlier closes as dicts {bead, kind, fingerprint, t}, oldest first (any bead).
     Pure: no clock, no IO."""
     kind, rule = outcome.kind, outcome.rule

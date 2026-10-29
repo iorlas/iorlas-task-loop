@@ -1,5 +1,5 @@
 """What the loop is handed: the repo, its bd, its slots and the few effects it may cause. The composition root
-(skills/task-loop/loop_env.py) builds one from the real tl and engine; a test builds one on fakes. Nothing here reads the
+(app/launch/loop.py) builds one from the real tl and engine; a test builds one on fakes. Nothing here reads the
 process environment, starts a process or touches git."""
 import time
 from collections.abc import Callable

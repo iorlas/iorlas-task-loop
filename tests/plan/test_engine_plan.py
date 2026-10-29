@@ -11,7 +11,6 @@ import json
 from pathlib import Path
 from unittest import mock
 
-import outcome as oc
 from support import fake_route
 from support.builders import cfg_with
 from support.logs import records
@@ -22,6 +21,7 @@ from taskloop.app.run import engine
 from taskloop.contracts import answers
 from taskloop.contracts.argv import checks_to_wire
 from taskloop.contracts.config import EngineConfig
+from taskloop.domain import outcome as oc
 from taskloop.domain.checks import lint
 from taskloop.domain.checks.names import log_var
 from taskloop.domain.prompts import plan as pp

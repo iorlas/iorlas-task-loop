@@ -1,12 +1,11 @@
 """One engine step, no AI: the repo's checks and the stage's acceptance checks, and the stop they can end in."""
 from typing import Any
 
-import outcome as oc
-
 from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.checks.host import CheckFault, CheckStuck
 from taskloop.app.run.blocked import Blocked
 from taskloop.contracts.checks import CheckFaultKind
+from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
 
 

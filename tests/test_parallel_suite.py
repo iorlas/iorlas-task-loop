@@ -15,7 +15,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402, F401
 
 sys.path.insert(0, str(ROOT / "dev"))
-sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 import shard  # noqa: E402
 
 from taskloop.adapters.suiteout import Shard, failure_report, merge_outputs  # noqa: E402

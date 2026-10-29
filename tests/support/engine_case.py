@@ -20,13 +20,10 @@ from pathlib import Path
 from typing import Any, ClassVar
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
-import outcome as oc
-import seams
 from contracts import samples as S
 
 from support import fake_route
@@ -42,15 +39,16 @@ from taskloop.adapters import (
     applog,
     gitrepo,
     ident,
-    )
+)
 from taskloop.adapters import delegate as dl
 from taskloop.adapters import delegate as lroute  # noqa: F401
 from taskloop.adapters import halt as halting
 from taskloop.app.asks import intake
+from taskloop.app.release import seams
 from taskloop.app.run import (
     engine,
     entry,
-    )
+)
 from taskloop.app.wire import slots as wslots
 from taskloop.app.write.newfiles import NewFiles
 from taskloop.contracts import codec
@@ -58,16 +56,16 @@ from taskloop.contracts.ask import AskAnswer
 from taskloop.contracts.checks import CheckRun
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.stores import AskStore
+from taskloop.domain import outcome as oc
 from taskloop.domain.checks import (
     lint,  # noqa: F401
-    )
+)
 from taskloop.domain.lanes import netgate  # noqa: F401
 from taskloop.domain.lanes import policy as lp  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
-sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))

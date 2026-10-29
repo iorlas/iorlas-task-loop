@@ -15,8 +15,8 @@ from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.loop import BadVersion, BadVersions
 from taskloop.contracts.stores import JsonStore
 
-CORE = ("tl.py", "loop_env.py")
-MODULES = ("tl", "loop_env", "taskloop.app.run.engine")
+CORE = ("tl.py",)
+MODULES = ("tl", "taskloop.app.launch.loop", "taskloop.app.run.engine")
 
 
 def version_key(name: str) -> tuple[int, ...] | None:

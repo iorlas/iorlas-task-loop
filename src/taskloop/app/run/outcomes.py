@@ -4,11 +4,10 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-import outcome as oc
-
 from taskloop.contracts import log as rec
 from taskloop.contracts.ask import BudgetLine
 from taskloop.contracts.stores import JsonlStore
+from taskloop.domain import outcome as oc
 from taskloop.domain.matchers import clip
 
 

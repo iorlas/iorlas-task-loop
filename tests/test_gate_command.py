@@ -7,7 +7,6 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "dev"))
-sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 import suite  # noqa: E402
 
 from taskloop.app.release import suite as runner  # noqa: E402

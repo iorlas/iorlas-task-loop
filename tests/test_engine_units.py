@@ -17,7 +17,6 @@ from typing import Any, ClassVar
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 import support.paths  # noqa: E402, F401
 from support.checkpoints import read_ck  # noqa: E402
 

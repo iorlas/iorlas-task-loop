@@ -1,17 +1,15 @@
 """lane_policy.decide (tl-7y6.2.6): the 20 legal stop tuples plus the unknown-tuple row, the incident rows, the network rules."""
 import ast
-import sys
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 import support.paths  # noqa: E402, F401
 
 # isort: split
-import outcome as oc  # noqa: E402
 from support.narrow import must, only  # noqa: E402
 
+from taskloop.domain import outcome as oc  # noqa: E402
 from taskloop.domain.lanes import policy as lp  # noqa: E402
 
 NOW = 1_000_000.0

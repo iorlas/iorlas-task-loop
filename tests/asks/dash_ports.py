@@ -1,4 +1,4 @@
-"""The dashboard's `answer` port as the launcher wires it (skills/task-loop/dash_wiring.py): the app-layer Intake over a given bd."""
+"""The dashboard's `answer` port as the launcher wires it (src/taskloop/app/launch/dash_ports.py): the app-layer Intake over a given bd."""
 import time
 from collections.abc import Callable
 from pathlib import Path

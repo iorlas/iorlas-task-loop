@@ -19,7 +19,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402, F401
 
 # isort: split
-import report  # noqa: E402
 import tl  # noqa: E402
 from support import (  # noqa: E402
     looptest,
@@ -32,6 +31,10 @@ from taskloop.adapters import (  # noqa: E402
     gitrepo,
     ident,
 )
+from taskloop.app.launch import repos  # noqa: E402
+from taskloop.app.report import card, inputs, lost, planner  # noqa: E402
+from taskloop.cli import report as cli_report  # noqa: E402
+from taskloop.domain.report import matchers  # noqa: E402
 
 T0 = datetime(2026, 10, 21, 6, 0).timestamp()  # the window's start in the fixtures: local 06:00
 MIN = 60.0
@@ -81,28 +84,28 @@ class ParseTime(unittest.TestCase):
     NOW = datetime(2026, 10, 21, 20, 30).timestamp()
 
     def test_hh_mm_is_today(self):
-        self.assertEqual(report.parse_time("06:00", self.NOW), datetime(2026, 10, 21, 6, 0).timestamp())
+        self.assertEqual(matchers.parse_time("06:00", self.NOW), datetime(2026, 10, 21, 6, 0).timestamp())
 
     def test_durations_count_back_from_now(self):
-        self.assertEqual(report.parse_time("12h", self.NOW), self.NOW - 12 * 3600)
-        self.assertEqual(report.parse_time("90m", self.NOW), self.NOW - 90 * 60)
-        self.assertEqual(report.parse_time("2d", self.NOW), self.NOW - 2 * 86400)
+        self.assertEqual(matchers.parse_time("12h", self.NOW), self.NOW - 12 * 3600)
+        self.assertEqual(matchers.parse_time("90m", self.NOW), self.NOW - 90 * 60)
+        self.assertEqual(matchers.parse_time("2d", self.NOW), self.NOW - 2 * 86400)
 
     def test_iso_local_and_with_offset(self):
-        self.assertEqual(report.parse_time("2026-10-20T22:15", self.NOW), datetime(2026, 10, 20, 22, 15).timestamp())
-        self.assertEqual(report.parse_time("2026-10-20 22:15", self.NOW), datetime(2026, 10, 20, 22, 15).timestamp())
-        self.assertEqual(report.parse_time("2026-10-20", self.NOW), datetime(2026, 10, 20).timestamp())
-        self.assertEqual(report.parse_time("2026-10-21T03:00:00Z", self.NOW), 1792551600.0)
+        self.assertEqual(matchers.parse_time("2026-10-20T22:15", self.NOW), datetime(2026, 10, 20, 22, 15).timestamp())
+        self.assertEqual(matchers.parse_time("2026-10-20 22:15", self.NOW), datetime(2026, 10, 20, 22, 15).timestamp())
+        self.assertEqual(matchers.parse_time("2026-10-20", self.NOW), datetime(2026, 10, 20).timestamp())
+        self.assertEqual(matchers.parse_time("2026-10-21T03:00:00Z", self.NOW), 1792551600.0)
 
     def test_since_hh_mm_rolls_back_until_rolls_forward(self):
         morning = datetime(2026, 10, 21, 7, 0).timestamp()
-        self.assertEqual(report.parse_time("22:00", morning), datetime(2026, 10, 20, 22, 0).timestamp())
-        self.assertEqual(report.parse_time("22:00", morning, forward=True), datetime(2026, 10, 21, 22, 0).timestamp())
-        self.assertEqual(report.parse_time("06:00", morning, forward=True), datetime(2026, 10, 22, 6, 0).timestamp())
+        self.assertEqual(matchers.parse_time("22:00", morning), datetime(2026, 10, 20, 22, 0).timestamp())
+        self.assertEqual(matchers.parse_time("22:00", morning, forward=True), datetime(2026, 10, 21, 22, 0).timestamp())
+        self.assertEqual(matchers.parse_time("06:00", morning, forward=True), datetime(2026, 10, 22, 6, 0).timestamp())
 
     def test_nonsense_is_refused(self):
         with self.assertRaises(ValueError):
-            report.parse_time("yesterday-ish", self.NOW)
+            matchers.parse_time("yesterday-ish", self.NOW)
 
 
 # ---- 10.2: lost work --------------------------------------------------------------------------------------------------
@@ -115,7 +118,7 @@ class LostWork(Base):
         return shas
 
     def lost(self, status, traces=(), since=None):
-        return report.lost_work(str(self.repo), since=since, base="main", status_of=status.get,
+        return lost.lost_work(str(self.repo), since=since, base="main", status_of=status.get,
                                 traces=list(traces))
 
     def by_class(self, rows):
@@ -183,9 +186,9 @@ class LostWork(Base):
 
     def test_bd_failing_reads_as_unknown(self):
         with tlbd.bd_boundary(result=tlbd.done(returncode=1, stderr="dolt: connection refused")):
-            self.assertEqual(report.bead_status("t-1", str(self.repo)), "?")
+            self.assertEqual(inputs.bead_status("t-1", str(self.repo)), "?")
         with tlbd.bd_boundary(result=tlbd.done(returncode=1, stderr="Error: issue t-1 not found")):
-            self.assertIsNone(report.bead_status("t-1", str(self.repo)))
+            self.assertIsNone(inputs.bead_status("t-1", str(self.repo)))
 
     def test_a_slot_resets_wip_branch_is_lost(self):
         self.branch("wip/s1/1792540800", [("f.txt", "dead session\n", "wip: left in slot s1")], T0)
@@ -276,7 +279,7 @@ class Scorecard(Base):
         self.status = {"t-6": "closed"}
 
     def card(self, until=None):
-        return report.scorecard(str(self.repo), T0, until or T0 + 200 * MIN, base="main",
+        return card.scorecard(str(self.repo), T0, until or T0 + 200 * MIN, base="main",
                                 comments_of=lambda b: [as_comment(c) for c in self.comments.get(b, [])], status_of=self.status.get,
                                 alive=lambda bead: bead == "t-9", now=T0 + 200 * MIN)
 
@@ -318,9 +321,9 @@ class Scorecard(Base):
         args = ["report", "--repo", str(self.repo), "--since", "2026-10-21T06:00", "--until", "2026-10-21T09:20"]
         store = FakeBeadStore()
         store.notes = {b: [as_comment(x) for x in c] for b, c in self.comments.items()}
-        with mock.patch.object(report, "default_base", return_value="main"), mock.patch.object(beadtools, "bd_store", return_value=store), \
-                mock.patch.object(report, "bead_status", lambda b, repo: self.status.get(b)), \
-                mock.patch.object(report, "run_alive", lambda bead: bead == "t-9"):
+        with mock.patch.object(repos, "default_base", return_value="main"), mock.patch.object(beadtools, "bd_store", return_value=store), \
+                mock.patch.object(lost, "bead_status", lambda b, repo: self.status.get(b)), \
+                mock.patch.object(cli_report, "run_alive", lambda bead: bead == "t-9"):
             out = io.StringIO()
             with redirect_stdout(out):
                 rc = tl.main(args)
@@ -369,26 +372,26 @@ class PlannerReport(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_calls_are_split_into_first_again_amend_and_send_back_and_input_is_in_plus_cached(self):
-        p = report.planner_stats(T0 - 1, T0 + 100, history=self.hist)
+        p = planner.planner_stats(T0 - 1, T0 + 100, history=self.hist)
         by = {x["bead"]: x for x in p["per_bead"]}
         self.assertEqual({k: by["x-1"][k] for k in ("calls", "first", "again", "amend", "back", "other", "input")},
                          {"calls": 4, "first": 1, "again": 1, "amend": 1, "back": 1, "other": 0, "input": 16100})
         self.assertEqual((by["x-2"]["calls"], by["x-2"]["first"], by["x-2"]["input"]), (1, 1, 1000))
         self.assertEqual((p["calls"], p["beads"], p["input"]), (6, 3, 17101))  # the worker call is no planner call
-        only = report.planner_stats(T0 - 1, T0 + 100, {"x"}, history=self.hist)
+        only = planner.planner_stats(T0 - 1, T0 + 100, {"x"}, history=self.hist)
         self.assertEqual((only["calls"], only["beads"]), (5, 2))
-        self.assertEqual(report.planner_stats(T0 + 50, T0 + 100, history=self.hist)["calls"], 0)  # outside the window
+        self.assertEqual(planner.planner_stats(T0 + 50, T0 + 100, history=self.hist)["calls"], 0)  # outside the window
 
     def test_input_is_in_when_in_already_holds_the_cache_else_in_plus_cached(self):
-        self.assertEqual(report.input_tokens({"in": 10000, "cached": 9000}), 10000)   # delegate 0.22+ and Codex
-        self.assertEqual(report.input_tokens({"in": 1000, "cached": 9000}), 10000)    # before 0.22: uncached-only in
-        self.assertEqual(report.input_tokens({"in": 5, "cached": 0}), 5)
-        self.assertEqual(report.input_tokens({}), 0)
+        self.assertEqual(planner.input_tokens({"in": 10000, "cached": 9000}), 10000)   # delegate 0.22+ and Codex
+        self.assertEqual(planner.input_tokens({"in": 1000, "cached": 9000}), 10000)    # before 0.22: uncached-only in
+        self.assertEqual(planner.input_tokens({"in": 5, "cached": 0}), 5)
+        self.assertEqual(planner.input_tokens({}), 0)
 
     def test_the_cli_prints_the_planner_table_read_only(self):
         before = sorted(p.name for p in self.eng.iterdir())
         out = io.StringIO()
-        with mock.patch.object(report, "HISTORY", str(self.hist)), redirect_stdout(out):
+        with mock.patch.object(planner, "HISTORY", str(self.hist)), redirect_stdout(out):
             rc = tl.main(["report", "--planner", "--prefix", "x", "--since", "2026-10-21", "--until", "2026-10-22"])
         text = out.getvalue()
         self.assertEqual(rc, 0)

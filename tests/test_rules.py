@@ -7,6 +7,7 @@ skipped by the caps):
             A listed entry may be removed or lowered, never added. Run `python3 tests/test_rules.py --measure` to see the current table.
   layers    src/<pkg>/{contracts,domain,adapters,app,cli,hook} edges (LAYER_EDGES), app-slice edges (APP_EDGES), no cycle between slices,
             the dashboard package imports `<pkg>.contracts` only, the two plugins never import each other.
+  launch    only app/launch (the verbs that start the loop, selftest, dashboard) may import the dashboard package.
   placement `import re` only in adapters/ and domain/**/matchers.py; our file names only in contracts/paths.py;
             no import inside a function body; no mutable module global in domain/app/cli/hook/dash.
   vendor    the vendored shelf copy is unedited and matches dev/vendor.json (VendorGuard, Smoke); EXEMPT_DIRS skips it for the caps.
@@ -31,10 +32,12 @@ from typing import cast
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
+sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "dev"))
+import taskloop  # noqa: E402, F401  (puts the vendored shelf packages on sys.path)
+
+# isort: split
 import vendor  # noqa: E402
-import vendored  # noqa: E402
 from git_porcelain import GitUnavailable, Identity, RealRepo  # noqa: E402
 from git_porcelain.testing import FakeRepo, git, hermetic_env  # noqa: E402
 
@@ -71,8 +74,11 @@ APP_EDGES = {
     "plan": frozenset({"checks", "asks"}),
     "look": frozenset({"checks", "asks"}),
     "land": frozenset({"checks", "slots", "asks"}),
+    "report": frozenset({"asks"}),  # `tl report` tells the owner's comments from the engine's (asks.intake.engine_written)
     "wire": EVERY,  # the composition root the launcher (tl.py) calls: it builds the world (stores, git, locks) from this machine
+    "launch": EVERY,  # what tl's verbs start (the loop, the selftest, the dashboard): nothing under app/ imports it, so it may import run
 }
+DASH_WIRING = ("app", "launch")  # the launcher builds the dashboard's ports and starts its server, so it may import taskloop_dash
 MUTABLE_LAYERS = frozenset({"domain", "app", "cli", "hook", "dash"})
 MUTABLE_CALLS = frozenset({"list", "dict", "set", "defaultdict", "deque", "OrderedDict", "Counter", "bytearray"})
 
@@ -231,7 +237,8 @@ def edge_problems(rel, parts, targets):
             elif top in DASH_PKGS and top != parts[0]:
                 out.add(f"{rel}: dash imports another dash package")
         elif top in DASH_PKGS:
-            out.add(f"{rel}: {here} imports the dashboard {top}")
+            if parts[1:3] != DASH_WIRING:
+                out.add(f"{rel}: {here} imports the dashboard {top}")
         elif len(target) > 1 and target[1] != "_vendor" and here in LAYER_EDGES and target[1] != here:
             if target[1] not in LAYER_EDGES:
                 out.add("{}: imports unknown layer {}".format(rel, ".".join(target[:2])))
@@ -656,6 +663,7 @@ class Planted(unittest.TestCase):
         )
         self.only({"src/taskloop_dash/x.py": "from taskloop.domain import d\n"}, "only taskloop.contracts")
         self.only({"src/taskloop/app/x.py": "import taskloop_dash\n"}, "imports the dashboard")
+        self.assertEqual(self.problems({"src/taskloop/app/launch/x.py": "import taskloop_dash\n"}), [])  # the launcher builds it
 
     def test_plugins_never_import_each_other(self):
         self.only({"src/taskloop/app/x.py": "import delegate.cli\n"}, "never import each other")
@@ -768,7 +776,7 @@ class VendorGuard(unittest.TestCase):
 
     def test_only_the_vendor_dir_is_exempt(self):
         self.assertEqual(EXEMPT_DIRS, ("skills/task-loop/_vendor",))
-        self.assertEqual(Path(vendored.VENDOR_DIR), ROOT / EXEMPT_DIRS[0])
+        self.assertIn(str(ROOT / EXEMPT_DIRS[0]), sys.path)  # importing taskloop put it there
 
     def test_vendor_drift(self):
         shelf = vendor.shelf_home()

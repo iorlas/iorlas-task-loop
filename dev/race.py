@@ -38,13 +38,11 @@ ROOT = Path(__file__).resolve().parents[1]
 FIX = ROOT / "tests" / "fixtures" / "race"
 TL = ROOT / "skills" / "task-loop" / "tl.py"
 RELEASE = ROOT / "dev" / "release.py"
-sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(ROOT / "tests"))
 sys.path.append(str(ROOT / "skills" / "task-loop" / "_vendor"))  # before the shelf imports below, as tests/support/paths.py does
 sys.path.append(str(ROOT / "src"))
 import stream_proc  # noqa: E402
 import support.paths  # noqa: E402, F401
-import vendored  # noqa: E402, F401
 from process_lock import LockHeldError, ProcessLock  # noqa: E402
 
 from taskloop.adapters import ident  # noqa: E402

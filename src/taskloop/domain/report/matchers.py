@@ -9,7 +9,10 @@ Pure; the regexes live here because nothing else in domain may import `re`.
 """
 
 import hashlib
+import os
 import re
+import time
+from datetime import datetime, timedelta
 
 # origin() writes one of these; an older row may have none at all.
 STARTED_BECAUSE = ("first", "answer", "resume", "retry", "fresh")
@@ -82,9 +85,105 @@ def fingerprint(why: object) -> str:
     return text
 
 
+HASH_TAIL = re.compile(r"#[0-9a-f]{8}$")
+
+
+def fingerprint_head(why: object) -> str:
+    """`fingerprint` without the hash of a long tail: a storm is the same head."""
+    return HASH_TAIL.sub("", fingerprint(why))
+
+
 def run_fingerprint(outcome: object, why: object) -> str:
     """A trace row's fingerprint: "" for a landed/done run, else the normalised cause (never empty)."""
     if str(outcome or "") in ("landed", "done"):
         return ""
     return fingerprint(why) or "unknown"
 
+
+# ---- what `tl report` and the reflect digest read out of text ------------------------------------------------------------------------
+
+# how the supervising session marks its own answers ("relayed by Claude" carries the owner's words: the owner's)
+SUPERVISOR = re.compile(r"\(Claude, supervising|checked by Claude|delegated the call to Claude")
+ANSWERED = re.compile(r"\bask (\S+) \(\w+\) is answered|\banswered verify ask (\S+)")
+STEM = re.compile(r"^(.+)-(\d{8}-\d{6})$")
+LAND_TAIL = re.compile(r"\(([^()\s]+)\)\s*$")
+BACK = re.compile(r"^(\d+(?:\.\d+)?)\s*([mhd])$")
+CLOCK = re.compile(r"^(\d{1,2}):(\d{2})$")
+HOURS = re.compile(r"(\d+)h")
+EPOCH = re.compile(r"^\d{9,}(\.\d+)?$")
+WORD = re.compile(r"[^\W\d_]{4,}")
+FILE = re.compile(r"[\w./-]+\.(?:py|md|cs|json|ya?ml|toml|html|js|ts|sh|cfg|txt)\b")
+GIT_SUFFIX = re.compile(r"\.git$")
+
+
+def parse_time(text: str | None, now: float, forward: bool = False) -> float:
+    """Epoch seconds for T: a duration back from now (90m, 12h, 2d), ISO (naive = local time), or HH:MM: its last
+    past occurrence (a morning --since 22:00 is last night), with forward its next one (--until)."""
+    s = (text or "").strip()
+    m = BACK.match(s)
+    if m:
+        return now - float(m.group(1)) * {"m": 60, "h": 3600, "d": 86400}[m.group(2)]
+    m = CLOCK.match(s)
+    if m:
+        t = datetime.fromtimestamp(now).replace(hour=int(m.group(1)), minute=int(m.group(2)), second=0, microsecond=0)
+        if forward and t.timestamp() < now:
+            t += timedelta(days=1)
+        elif not forward and t.timestamp() > now:
+            t -= timedelta(days=1)
+        return t.timestamp()
+    try:
+        d = datetime.fromisoformat(s[:-1] + "+00:00" if s.endswith("Z") else s)
+    except ValueError:
+        raise ValueError(f"not a time: {text!r} (use ISO, HH:MM or a duration like 12h)") from None
+    return d.timestamp()
+
+
+def window_time(text: str, now: float) -> float:
+    """`tl reflect digest --since/--until`: Nh back, epoch seconds, or anything parse_time takes."""
+    s = text.strip()
+    m = HOURS.fullmatch(s)
+    if m:
+        return now - int(m.group(1)) * 3600
+    return float(s) if EPOCH.match(s) else parse_time(text, now)
+
+
+def stem_time(stamp: str) -> float:
+    """Epoch seconds of the YYYYMMDD-HHMMSS tail of an engine log's name (local time)."""
+    return time.mktime(time.strptime(stamp, "%Y%m%d-%H%M%S"))
+
+
+def supervised(text: str) -> bool:
+    return bool(SUPERVISOR.search(text))
+
+
+def answered_ask(text: str) -> str:
+    """The ask id a log note says is answered, else ''."""
+    m = ANSWERED.search(text)
+    return (m.group(1) or m.group(2)) if m else ""
+
+
+def split_stem(stem: str) -> tuple[str, str] | None:
+    """(bead, YYYYMMDD-HHMMSS) of an engine log's stem, None when it is not one."""
+    m = STEM.match(stem)
+    return (m.group(1), m.group(2)) if m else None
+
+
+def land_bead(subject: str) -> str:
+    """The bead a land commit's subject names: '... (<bead>)', else ''."""
+    m = LAND_TAIL.search(subject)
+    return m.group(1) if m else ""
+
+
+def words(text: object) -> set[str]:
+    """The lower-case words of 4 letters or more."""
+    return set(WORD.findall(str(text).lower()))
+
+
+def files_named(text: str) -> set[str]:
+    """The base names of the files a text names."""
+    return {os.path.basename(f) for f in FILE.findall(text)}
+
+
+def repo_name(value: str) -> str:
+    """The folder name a repo URL or path ends in."""
+    return GIT_SUFFIX.sub("", value.rstrip("/").replace(":", "/").split("/")[-1])

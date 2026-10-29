@@ -3,8 +3,6 @@ import os
 from dataclasses import dataclass
 from typing import Any, cast
 
-import outcome as oc
-
 from taskloop.adapters import beadtools, ident
 from taskloop.adapters import delegate as dg
 from taskloop.app.release import reexec
@@ -12,6 +10,7 @@ from taskloop.app.run import outcomes
 from taskloop.app.run.reload import Exec
 from taskloop.app.slots.lease import Lease
 from taskloop.contracts.enums import AskClass
+from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.plan.matchers import AcceptanceText
 from taskloop.domain.review.kinds import UNCHECKED_KINDS

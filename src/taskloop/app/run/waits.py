@@ -3,12 +3,11 @@ import contextlib
 from collections.abc import Iterator
 from typing import Any
 
-import outcome as oc
-
 from taskloop.app.run import outcomes
 from taskloop.app.run.blocked import Blocked
 from taskloop.contracts import log as rec
 from taskloop.contracts.enums import WaitWhat
+from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.checks.matchers import slot_wait_secs
 

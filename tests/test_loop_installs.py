@@ -14,18 +14,19 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from test_loop import LoopBase, rec
 
 # isort: split
-import loop_env
 import test_loop_more as more
 from support import (
     eventlog,
     looptest,
 )
+from support.narrow import must
 
 from taskloop.adapters import ident
+from taskloop.app.launch import loop as wloop
 from taskloop.app.loop.loop import Loop
 from taskloop.app.run import (
     console,
-    )
+)
 from taskloop.contracts import codec
 from taskloop.contracts.loop import Carry, LoopState
 
@@ -62,7 +63,7 @@ class Entry(Moving):
             {"scope": "user", "installPath": str(self.cache / version)}]}}))
 
     def target(self):
-        return loop_env.installs(loop_env.cfgdir(), here=self.here).target()
+        return wloop.installs(wloop.cfgdir(), here=must(self.here)).target()
 
     def test_the_installed_entry_decides_not_the_highest_directory(self):
         self.install("0.2.0")
@@ -85,7 +86,7 @@ class Entry(Moving):
     def test_an_entry_whose_directory_is_gone_falls_through_with_one_warning_per_run_and_a_pin_never_does(self):
         self.install("0.3.0")
         self.installed("0.2.0")  # recorded, but its directory is not there
-        inst = loop_env.installs(loop_env.cfgdir(), here=self.here)
+        inst = wloop.installs(wloop.cfgdir(), here=must(self.here))
         self.assertEqual(inst.target(), ("0.3.0", self.cache / "0.3.0"))
         self.assertEqual(inst.dangling, "0.2.0")
         (ident.config_dir() / "pinned.json").write_text(json.dumps({"task-loop": "0.3.0"}))

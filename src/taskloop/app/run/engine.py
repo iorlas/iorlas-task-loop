@@ -9,15 +9,11 @@ from functools import cached_property
 from pathlib import Path
 from typing import Any, ClassVar
 
-import outcome as oc
-import seams
-import vendored  # noqa: F401  (puts _vendor on sys.path)
-from clock import SystemClock
-
 from taskloop.adapters import beadtools, context_size, gitrepo, ident, landlock, opencode, slotcheck
 from taskloop.adapters import halt as halting
 from taskloop.adapters import procs as sproc
 from taskloop.adapters.check_probe import PathProbe
+from taskloop.adapters.clock import SystemClock
 from taskloop.adapters.runner import live_path
 from taskloop.app.checks.runner import Checker
 from taskloop.app.land.checkout import Checkout
@@ -31,7 +27,7 @@ from taskloop.app.look.shots import Pictures
 from taskloop.app.plan.briefs import Briefs
 from taskloop.app.plan.cases import Cases
 from taskloop.app.plan.planner import Planner
-from taskloop.app.release import reexec
+from taskloop.app.release import reexec, seams
 from taskloop.app.review.link_check import LinkCheck
 from taskloop.app.review.routing import Routing
 from taskloop.app.review.settles import Settles
@@ -64,6 +60,7 @@ from taskloop.app.write.newfiles import NewFiles
 from taskloop.app.write.stage_loop import StageLoop
 from taskloop.contracts.argv import checks_to_text, checks_to_wire, text_of
 from taskloop.contracts.paths import PLAN_FILE, ConfigDir
+from taskloop.domain import outcome as oc
 from taskloop.domain.lanes.matchers import read_only_command
 from taskloop.domain.lanes.says import stop_say, stop_why
 from taskloop.stores.real import real_stores
@@ -81,7 +78,7 @@ class Engine(RunFields):
     stop_pending = False  # run_bead sets it when a SIGTERM came during the claim
     live_n = 0  # the number of delegate calls with a live file so far
     _probe: PathProbe | None = None
-    MARKERS_ARGV: ClassVar[list[str]] = ["python3", str(ident.PLUGIN_ROOT / "skills" / "task-loop" / "markers.py")]
+    MARKERS_ARGV: ClassVar[list[str]] = ["python3", str(ident.PLUGIN_ROOT / "src" / "taskloop" / "cli" / "markers.py")]
     MARKERS = text_of(MARKERS_ARGV)
     Blocked = Blocked  # the stop a step raises: components catch it through the host
     FixFailed = FixFailed

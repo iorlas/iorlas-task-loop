@@ -10,14 +10,13 @@ from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402, F401
 
 # isort: split
-import dash_server  # noqa: E402
 from support.narrow import must  # noqa: E402
 
+from taskloop.app.launch import dash as dash_server  # noqa: E402
 from taskloop_dash import bind  # noqa: E402
 
 SERVER = ROOT / "src" / "taskloop_dash" / "__main__.py"

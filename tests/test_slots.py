@@ -17,19 +17,18 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # python3 -m unittest tests.test_slots, from the repo root
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
-import dash_server
-import loop_env
 from support import slots as sl
 from support import tlbd
 from support.fakes import as_bead
 from test_loop import LoopBase, rec
 
 from taskloop.adapters import ident, pidcheck
+from taskloop.app.launch import dash as dash_server
+from taskloop.app.launch import loop as wloop
 from taskloop.app.loop.take import Taker
 from taskloop.app.run import (
     engine,
@@ -243,8 +242,8 @@ class LiveEngineBackstop(Slots):
         rc, out = self.cli("slot", "reset", "s1", "--bead", "x-1")
         self.assertEqual(rc, 4)
         self.assertIn("BUSY", out)
-        senv = dataclasses.replace(loop_env.build(str(self.repo)).slot_env(), git=ExplodingGit())  # pyrefly: ignore[bad-argument-type]  # any git in the live slot fails the test
-        env = dataclasses.replace(loop_env.build(str(self.repo)), slot_env=lambda: senv)
+        senv = dataclasses.replace(wloop.build(str(self.repo)).slot_env(), git=ExplodingGit())  # pyrefly: ignore[bad-argument-type]  # any git in the live slot fails the test
+        env = dataclasses.replace(wloop.build(str(self.repo)), slot_env=lambda: senv)
         with redirect_stdout(io.StringIO()):
             self.assertIsNotNone(REAL_PREPARE(Taker(env, mock.Mock(), mock.Mock(), mock.Mock(), mock.Mock(), {}), "s1", "x-1"))
 

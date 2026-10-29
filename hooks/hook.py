@@ -5,9 +5,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "skills" / "task-loop"))  # vendored.py: the vendored shelf packages the stores import
-sys.path.insert(0, str(ROOT / "src"))
-import vendored  # noqa: E402, F401
+sys.path.insert(0, str(ROOT / "src"))  # importing taskloop puts the vendored shelf packages the stores import on sys.path
 
 from taskloop.hook.main import main  # noqa: E402
 

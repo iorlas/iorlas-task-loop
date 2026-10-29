@@ -14,11 +14,9 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "task-loop"))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
-import seams
 from support import engine_case as te
 from support import fake_route
 from support.narrow import must
@@ -26,6 +24,7 @@ from support.narrow import must
 from taskloop.adapters import delegate as dg
 from taskloop.adapters import procs, runner
 from taskloop.adapters.delegate import Stopped
+from taskloop.app.release import seams
 from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.delegate import DelegateResult

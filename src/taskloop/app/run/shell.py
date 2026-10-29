@@ -3,7 +3,6 @@ import time
 from pathlib import Path
 from typing import Any
 
-import outcome as oc
 import stream_proc
 
 from taskloop.adapters import procs as sproc
@@ -11,6 +10,7 @@ from taskloop.adapters.gitenv import pinned_env
 from taskloop.app.run.blocked import Blocked
 from taskloop.contracts import log as rec
 from taskloop.contracts.argv import text_of
+from taskloop.domain import outcome as oc
 
 
 class Shell:

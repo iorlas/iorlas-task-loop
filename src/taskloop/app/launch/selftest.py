@@ -10,23 +10,25 @@ import tempfile
 import time
 import traceback
 from pathlib import Path
+from typing import Any, Final
 from unittest import mock
-
-import seams
 
 from taskloop.adapters import delegate as dg
 from taskloop.adapters.fake_beads import FakeBeads
 from taskloop.adapters.runner import Seam
+from taskloop.app.release import seams
 from taskloop.app.run.engine import Engine
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.bead import Bead
 
-CHECK = [sys.executable, "-c", "import os,sys; sys.exit(0 if os.path.exists('f.txt') else 1)"]  # an argv list, as the plan schema wants
-PLAN = {"summary": "do it", "stages": [{"goal": "add f", "files": ["f.txt"], "checks": [CHECK], "hard": False}],
+# an argv list, as the plan schema wants
+CHECK: Final = [sys.executable, "-c", "import os,sys; sys.exit(0 if os.path.exists('f.txt') else 1)"]
+PLAN: Final[dict[str, Any]] = {"summary": "do it", "stages": [{"goal": "add f", "files": ["f.txt"], "checks": [CHECK], "hard": False}],
         "risks": [], "question": "", "options": [], "decided": "", "cases": [], "leftovers": []}
-WRITE = {"summary": "wrote f", "checks_run": [{"cmd": shlex.join(CHECK), "exit": 0}], "question": "", "options": [], "decided": "",
+WRITE: Final[dict[str, Any]] = {"summary": "wrote f", "checks_run": [{"cmd": shlex.join(CHECK), "exit": 0}], "question": "", "options": [],
+         "decided": "",
          "bad_checks": [], "new_cases": [], "unchecked": [], "logic_only": ""}
-REVIEW = {
+REVIEW: Final[dict[str, Any]] = {
     "findings": [],
     "unmet": [],
     "criteria": [],
@@ -39,7 +41,7 @@ REVIEW = {
 }
 
 
-def lane(cmd, **kw):
+def lane(cmd: list[str], **kw: Any) -> subprocess.CompletedProcess[str]:
     """Fake route.py run: one contract 3 answer on stdout."""
     schema = json.loads(Path(cmd[cmd.index("--schema") + 1]).read_text(encoding="utf-8"))
     props, cwd = schema.get("properties", {}), cmd[cmd.index("--cwd") + 1]
@@ -53,7 +55,8 @@ def lane(cmd, **kw):
         ids = [ln.split(". ", 1)[0] for ln in brief.splitlines() if ln[:1] == "A" and ln.split(". ", 1)[0][1:].isdigit()]
         data, node = dict(REVIEW, criteria=[{"item": i, "status": "met", "evidence": "the checks pass"} for i in ids]), "review"
     tokens = {"in": 1, "cached": 0, "out": 1}
-    j = {"contract": dg.CONTRACT, "data": data, "text": "ok", "say": "", "ref": "ref-" + node, "lane": "L", "model": "m", "effort": "e",
+    j: dict[str, Any] = {"contract": dg.CONTRACT, "data": data, "text": "ok", "say": "", "ref": "ref-" + node, "lane": "L", "model": "m",
+         "effort": "e",
          "family": "openai" if node == "write" else "claude", "flag": None, "fallback": False, "first_lane": "L", "rung": 0,
          "tokens": tokens, "cost": 0.0, "secs": 1, "run_id": "selftest", "call_id": "selftest", "denied": [], "git_violation": [],
          "warnings": [], "usage": {"tokens": tokens, "cost": 0.0, "secs": 1, "turns": 1, "ref": "ref-" + node}, "stop": None,
@@ -64,12 +67,13 @@ def lane(cmd, **kw):
 class Runner(Seam):
     """The engine's process seam for the fake lane."""
 
-    def __call__(self, cmd, **kw):
-        self.stop, self.obs = {}, {}
+    def __call__(self, cmd: list[str], **kw: Any) -> subprocess.CompletedProcess[str]:
+        self.stop = {}
+        self.obs = {}
         return lane(cmd, **kw)
 
 
-def git_repo(home, wt):
+def git_repo(home: Path, wt: Path) -> str | None:
     """A bare origin and a clone of it with one commit on main; None, or what git said."""
     steps = [(home, ["init", "-q", "--bare", "-b", "main", str(home / "o.git")]), (home, ["clone", "-q", str(home / "o.git"), str(wt)])]
     for cwd, cmd in steps:
@@ -84,7 +88,7 @@ def git_repo(home, wt):
     return None
 
 
-def run_engine(home, wt):
+def run_engine(home: Path, wt: Path) -> tuple[int, Bead]:
     """(exit code, the bead as the fake bd holds it) after one bead ran through the engine on the scripted lane."""
     cfg = wslots.load_cfg(str(wt))
     res = seams.resolve_delegate(cfg.delegate)  # the configured delegate's own contract when there is one; else a bare one
@@ -119,7 +123,7 @@ def selftest():
     return None
 
 
-def cmd_selftest(a):
+def cmd_selftest(a: Any) -> int:
     started = time.monotonic()
     try:
         why = selftest()

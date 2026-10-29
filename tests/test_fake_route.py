@@ -18,14 +18,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402, F401
 
 # isort: split
-import clock  # noqa: E402
-import outcome as oc  # noqa: E402
 from support import dlcall, fake_route  # noqa: E402
 from support.narrow import must, only  # noqa: E402
 
 from taskloop.adapters import delegate as dl  # noqa: E402
 from taskloop.adapters import delegate_wire  # noqa: E402
+from taskloop.adapters.fake_clock import FakeClock  # noqa: E402
 from taskloop.app.loop.net import NetState  # noqa: E402
+from taskloop.domain import outcome as oc  # noqa: E402
 from taskloop.domain.lanes import netgate  # noqa: E402
 from taskloop.domain.lanes import policy as lp  # noqa: E402
 from taskloop.stores import call_state as cs  # noqa: E402
@@ -179,7 +179,7 @@ class Fake(unittest.TestCase):
     def drive(self, steps, probe, key=("write", 1, 0, 1)):
         """The executor loop of the engine (R21's), in miniature: call, decide, wait for the net, resume the same ref."""
         self.script_with(steps)
-        clk, net = clock.FakeClock(), NetState()
+        clk, net = FakeClock(), NetState()
         st = cs.begin(self.dir / "ck", "run-1", "t-1", key, role="worker", now=clk.now())
         resume, ctx_kw, actions, calls = "", {}, [], 0
         while True:

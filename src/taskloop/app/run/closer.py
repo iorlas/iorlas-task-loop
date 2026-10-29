@@ -7,10 +7,8 @@ import time
 from pathlib import Path
 from typing import Any
 
-import loop_health
-import outcome as oc
-
 from taskloop.adapters import beadtools, ident
+from taskloop.adapters import storm as storm_file
 from taskloop.app.asks import raiser
 from taskloop.app.land.followups import file_follow_ups
 from taskloop.app.run import outcomes
@@ -21,6 +19,8 @@ from taskloop.contracts import log as rec
 from taskloop.contracts.answers import VERDICTS
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.ports import BeadPatch
+from taskloop.domain import outcome as oc
+from taskloop.domain import storm
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.land.matchers import without_prefix
 from taskloop.domain.review import followups as fu
@@ -65,7 +65,7 @@ class Closer:
         e.fp = o.fingerprint
         history: list[Any]
         try:
-            history = loop_health.recent_closes(ident.config_dir() / "traces.jsonl", self.repo_id(), now)
+            history = storm_file.recent_closes(ident.config_dir() / "traces.jsonl", self.repo_id(), now)
         except OSError:
             history = []
         e.disp = oc.apply(o, e.bead, history, now)
@@ -77,11 +77,11 @@ class Closer:
 
     def storm(self, history: Any, kind: Any, o: Any, why: str) -> None:
         e = self.e
-        trip = loop_health.storm_trip(history, e.bead, kind, o.fingerprint, e.clock.now())
+        trip = storm.storm_trip(history, e.bead, kind, o.fingerprint, e.clock.now())
         if trip and not e.dry:
-            path = loop_health.storm_path(ident.config_dir(), self.repo_id())
-            if loop_health.write_storm(path, trip, e.clock.now(), why):
-                e.storm = loop_health.banner(trip)
+            path = storm_file.storm_path(ident.config_dir(), self.repo_id())
+            if storm_file.write_storm(path, trip.fingerprint, trip.beads, trip.t, e.clock.now(), oc.KNOBS["storm_window_s"], why):
+                e.storm = storm.banner(trip)
                 e.warn(e.storm)
                 say(e.storm)
 

@@ -1,56 +1,52 @@
-"""What the loop tests ask of the loop's files and queue, through the same code the loop uses (loop_env, app/loop)."""
+"""What the loop tests ask of the loop's files and queue, through the same code the loop uses (wloop, app/loop)."""
 import dataclasses
 import json
 import os
-import sys
 from pathlib import Path
 
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills" / "task-loop"))
-import loop_env
-
+from taskloop.app.launch import loop as wloop
 from taskloop.app.loop.queue import rank_ready
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.loop import LoopState
 
 
 def fake_install(cache, ver, tl_py="import sys\n", missing=(), loop_py=""):
-    """A version tree in the plugin cache: the core files of an install (loop_env.py holds `loop_py`), an empty engine module, a
-    plugin.json."""
+    """A version tree in the plugin cache: the core file of an install (tl.py), the loop module (`loop_py`) and an empty engine module
+    under src/, a plugin.json."""
     d = Path(cache) / ver / "skills" / "task-loop"
     d.mkdir(parents=True)
     (d.parents[1] / ".claude-plugin").mkdir()
     (d.parents[1] / ".claude-plugin" / "plugin.json").write_text("{}")
-    for f in ("tl.py", "loop_env.py"):
-        if f not in missing:
-            (d / f).write_text(tl_py if f == "tl.py" else loop_py)
-    engine = d.parents[1] / "src" / "taskloop" / "app" / "run"  # the engine module the loop imports to vet an install
-    engine.mkdir(parents=True)
-    for pkg in (engine.parents[2], engine.parents[1], engine):
+    if "tl.py" not in missing:
+        (d / "tl.py").write_text(tl_py)
+    app = d.parents[1] / "src" / "taskloop" / "app"  # the loop and engine modules the loop imports to vet an install
+    for pkg in (app.parent, app, app / "run", app / "wire"):
+        pkg.mkdir(exist_ok=True)
         (pkg / "__init__.py").write_text("")
-    (engine / "engine.py").write_text("")
+    (app / "run" / "engine.py").write_text("")
+    (app / "wire" / "loop.py").write_text(loop_py)
     return d
 
 
 def files(repo):
-    return loop_env.files_of(repo)
+    return wloop.files_of(repo)
 
 
 def queue(repo, store=None, say=lambda _: None):
     """([(bead, reason)] in the order the loop takes them, [(id, why skipped)]): `tl next`'s own look."""
-    env = loop_env.build(repo, store)
+    env = wloop.build(repo, store)
     env.fetch()
     q, _ = rank_ready(env, env.profile().engine, say)
     return [(r.bead, r.reason) for r in q.ranked], [(s.bead, s.skip.why) for s in q.skipped]
 
 
 def log(repo):
-    return loop_env.cfgdir().loop_log(wslots.repo_key(repo))
+    return wloop.cfgdir().loop_log(wslots.repo_key(repo))
 
 
 def state_path(repo, pid):
-    return loop_env.cfgdir().loop_state(f"{wslots.repo_key(repo)}.{pid}")
+    return wloop.cfgdir().loop_state(f"{wslots.repo_key(repo)}.{pid}")
 
 
 def write_state(repo, pid=None, **fields):
@@ -70,7 +66,7 @@ def live(repo):
 
 
 def command(repo):
-    return loop_env.cfgdir().loop_command(wslots.repo_key(repo))
+    return wloop.cfgdir().loop_command(wslots.repo_key(repo))
 
 
 def rests(repo):
@@ -78,7 +74,7 @@ def rests(repo):
 
 
 def rest_file(repo):
-    return loop_env.cfgdir().loop_rest(wslots.repo_key(repo))
+    return wloop.cfgdir().loop_rest(wslots.repo_key(repo))
 
 
 def last_exit(repo):

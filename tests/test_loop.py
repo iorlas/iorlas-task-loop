@@ -21,9 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402, F401
 
 # isort: split
-import loop_env  # noqa: E402
 import tl  # noqa: E402
-from loop_health import StormTrip, storm_path, write_storm  # noqa: E402
 from support import (  # noqa: E402
     looptest,
     tlbd,
@@ -35,6 +33,8 @@ from taskloop.adapters import (  # noqa: E402
     gitrepo,
     ident,
 )
+from taskloop.adapters.storm import storm_path, write_storm  # noqa: E402
+from taskloop.app.launch import loop as wloop  # noqa: E402
 from taskloop.app.loop.core import Core  # noqa: E402
 from taskloop.app.loop.loop import parse_handover  # noqa: E402
 from taskloop.app.loop.take import Taker  # noqa: E402
@@ -44,6 +44,7 @@ from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.contracts import codec  # noqa: E402
 from taskloop.contracts.config import LoopConfig  # noqa: E402
 from taskloop.contracts.loop import Carry, LoopState  # noqa: E402
+from taskloop.domain import outcome as oc  # noqa: E402
 
 
 def bead(id, priority=2, parent=None, labels=(), type="task"):
@@ -316,7 +317,7 @@ class QueueRuleFromBase(Base):
         self.push_rule({"engine": {"brief_kb": 7}})
         self.sh("git", "fetch", "-q", "origin", cwd=self.repo)
         (self.repo / ".task-loop.json").write_text(json.dumps({"engine": {"brief_kb": 99}}))
-        self.assertEqual(loop_env.wslots.load_cfg(str(self.repo)).brief_kb, 7)
+        self.assertEqual(wloop.wslots.load_cfg(str(self.repo)).brief_kb, 7)
 
     def test_no_remote_falls_back_to_the_working_tree(self):
         self.sh("git", "remote", "remove", "origin", cwd=self.repo)
@@ -393,10 +394,10 @@ class LoopBase(Base):
         }  # delegate's `status --json` roles{}: a test makes it a function of the clock
         self.script, self.hold, self.started, self.during = {}, {}, [], []
         for p in (mock.patch.object(Core, "nap", self.clock.nap),
-                  mock.patch.object(loop_env, "delegate_route", return_value="/fake/route.py"),
-                  mock.patch.object(loop_env.dg, "role_status", side_effect=lambda route: self.roles()),
-                  mock.patch.object(loop_env, "spawn", side_effect=lambda cmd, log, extra: (FakeChild(self, cmd, extra), mock.Mock())),
-                  mock.patch.object(loop_env.sproc, "stop_tree", side_effect=lambda p, **kw: p.terminate() or ()),
+                  mock.patch.object(wloop, "delegate_route", return_value="/fake/route.py"),
+                  mock.patch.object(wloop.dg, "role_status", side_effect=lambda route: self.roles()),
+                  mock.patch.object(wloop, "spawn", side_effect=lambda cmd, log, extra: (FakeChild(self, cmd, extra), mock.Mock())),
+                  mock.patch.object(wloop.sproc, "stop_tree", side_effect=lambda p, **kw: p.terminate() or ()),
                   mock.patch.object(Taker, "prepare", return_value=None)):
             p.start()
             self.addCleanup(p.stop)
@@ -533,7 +534,7 @@ class Loop(LoopBase):
         bd = self.beads({"x-1": [], "x-2": [rec("landed")]})
         self.hold["x-1"] = 3
         self.during.append(lambda: self.main(["stop", "--repo", str(self.repo), "--now"]))
-        with mock.patch.object(loop_env, "landed_on_base", return_value=True):
+        with mock.patch.object(wloop, "landed_on_base", return_value=True):
             self.run_loop()
         self.assertNotIn(("update", "x-1", "--status", "open", "--assignee", ""), bd.calls)
         self.assertIn("on the base", self.lines()[0]["why"])
@@ -592,7 +593,7 @@ class Loop(LoopBase):
     def test_a_live_storm_record_stops_a_loop_before_any_claim_with_one_line(self):
         self.beads({"x-1": [rec("landed")]})
         path = storm_path(ident.config_dir(), (gitrepo.git('remote', 'get-url', 'origin', cwd=str(self.repo)) or str(self.repo)))
-        write_storm(path, StormTrip("FAULT_INFRA y", ("x-8", "x-9"), self.clock.t), self.clock.t)
+        write_storm(path, "FAULT_INFRA y", ("x-8", "x-9"), self.clock.t, self.clock.t, oc.KNOBS["storm_window_s"])
         self.assertEqual(self.run_loop(), 2)
         self.assertEqual(self.started, [])
         self.assertEqual(self.out.count("STOPPED: storm FAULT_INFRA y on x-8,x-9"), 1)

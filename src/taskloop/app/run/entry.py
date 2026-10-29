@@ -14,8 +14,6 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, cast
 
-import outcome as oc
-
 from taskloop.adapters import beadtools, gitrepo, ident
 from taskloop.adapters import halt as halting
 from taskloop.app.asks import intake
@@ -30,6 +28,7 @@ from taskloop.contracts.enums import AskStatus
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadPatch
 from taskloop.contracts.stores import AskStore
+from taskloop.domain import outcome as oc
 
 say = console.say
 engine_written = intake.engine_written  # what the engine (or a receipt of ours) wrote into a bead is never the owner's (tl-7y6.6.2)

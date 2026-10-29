@@ -3,7 +3,7 @@ python-version = "3.12"
 project-includes = ["src", "skills", "tests", "dev"]
 # Vendored copies are byte-identical to their source repos and checked there; this repo only imports them.
 project-excludes = ["**/_vendor/**"]
-# Flat sibling imports (`import tl`) resolve through skills/task-loop; tests import their own helpers by bare name.
+# `import tl` (the launcher, in tests) resolves through skills/task-loop; tests import their own helpers by bare name.
 search-path = ["src", "skills/task-loop", "skills/task-loop/_vendor", "tests", "tests/stores", "dev"]
 check-unannotated-defs = true
 # Off: pyrefly matches .gitignore against absolute paths, so under .claude/worktrees/ it would match no file and pass.

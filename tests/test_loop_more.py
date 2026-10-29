@@ -14,14 +14,12 @@ from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: E402, F401
 
 # isort: split
 import itertools  # noqa: E402
 
-import loop_env  # noqa: E402
 from support import (  # noqa: E402
     eventlog,
     looptest,
@@ -32,10 +30,12 @@ from taskloop.adapters import (  # noqa: E402
     beadtools,
     ident,
 )
+from taskloop.app.launch import loop as wloop  # noqa: E402
 from taskloop.app.loop.core import Core  # noqa: E402
 from taskloop.app.loop.take import Taker  # noqa: E402
 from taskloop.app.loop.versions import Installs  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
+from taskloop.cli import loop_cmd  # noqa: E402
 from taskloop.contracts import codec  # noqa: E402
 from taskloop.contracts.config import LoopConfig  # noqa: E402
 from taskloop.contracts.loop import LoopCommand, LoopState  # noqa: E402
@@ -67,7 +67,7 @@ class LoopNetwork(LoopBase):
         return [(e["kind"], e["bead"]) for e in eventlog.read()]
 
     def probe(self, probe):
-        p = mock.patch.object(loop_env, "make_probe", return_value=probe)
+        p = mock.patch.object(wloop, "make_probe", return_value=probe)
         p.start()
         self.addCleanup(p.stop)
         return probe
@@ -311,7 +311,7 @@ class StopRequests(LoopBase):
         def stop():
             attempted.set()
             try:
-                loop_env.cmd_stop(mock.Mock(repo=self.repo_s, now=True))
+                loop_cmd.cmd_stop(mock.Mock(repo=self.repo_s, now=True))
             except Exception as e:
                 errors.append(e)
             finally:
@@ -391,7 +391,7 @@ class LoopSelfUpdate(LoopBase):
 
     def test_an_incomplete_or_failing_install_is_ignored_and_warned_once_per_version(self):
         self.beads({"x-1": [rec("landed")], "x-2": [rec("landed")]})
-        self.install("0.2.0", missing=("loop_env.py",))
+        self.install("0.2.0", missing=("tl.py",))
         self.install("0.3.0", tl_py="raise SystemExit(3)\n")
         self.assertEqual(self.run_loop(), 0)
         self.assertEqual(self.execs, [])
@@ -401,11 +401,11 @@ class LoopSelfUpdate(LoopBase):
 
     def test_an_incomplete_newest_warns_once(self):
         self.beads({"x-1": [rec("landed")], "x-2": [rec("landed")]})
-        self.install("0.2.0", missing=("loop_env.py",))
+        self.install("0.2.0", missing=("tl.py",))
         self.assertEqual(self.run_loop(), 0)
-        self.assertEqual(self.out.count("not moving to 0.2.0: loop_env.py is missing"), 1)
+        self.assertEqual(self.out.count("not moving to 0.2.0: tl.py is missing"), 1)
 
-    def test_a_half_copied_loop_py_is_not_moved_to(self):
+    def test_a_half_copied_loop_module_is_not_moved_to(self):
         self.beads({"x-1": [rec("landed")]})
         self.install("0.2.0", loop_py="def broken(:\n")  # --help alone would pass; the import does not
         self.assertEqual(self.run_loop(), 0)
@@ -591,12 +591,12 @@ class LandedOnBase(Base):
         sh("git", "checkout", "-q", "-b", "task/x-2", "origin/main")
         sh("git", "commit", "-q", "--allow-empty", "-m", "wip (x-2): failed")
         sh("git", "checkout", "-q", "-b", "task/x-3", "origin/main")
-        self.assertTrue(loop_env.landed_on_base(str(self.repo), beadtools.bd_store(str(self.repo)), str(wt), "x-1"))
-        self.assertFalse(loop_env.landed_on_base(str(self.repo), beadtools.bd_store(str(self.repo)), str(wt), "x-2"))  # work not on main
+        self.assertTrue(wloop.landed_on_base(str(self.repo), beadtools.bd_store(str(self.repo)), str(wt), "x-1"))
+        self.assertFalse(wloop.landed_on_base(str(self.repo), beadtools.bd_store(str(self.repo)), str(wt), "x-2"))  # work not on main
         self.assertFalse(
-            loop_env.landed_on_base(str(self.repo), beadtools.bd_store(str(self.repo)), str(wt), "x-3")
+            wloop.landed_on_base(str(self.repo), beadtools.bd_store(str(self.repo)), str(wt), "x-3")
         )  # no work: the tip is someone else's
-        self.assertFalse(loop_env.landed_on_base(str(self.repo), beadtools.bd_store(str(self.repo)), str(wt), "x-9"))  # no branch
+        self.assertFalse(wloop.landed_on_base(str(self.repo), beadtools.bd_store(str(self.repo)), str(wt), "x-9"))  # no branch
 
 
 @unittest.skipIf(os.name == "nt", "POSIX signals")
@@ -620,16 +620,16 @@ class LoopStopNow(Base):
         script.write_text(self.CHILD)
         self.config()
         bd = self.fake(bead("x-1"))
-        real = loop_env.spawn
+        real = wloop.spawn
         threads = []
 
         def spawn(cmd, log, extra):
             p = real([sys.executable, str(script), *cmd[2:]], log, extra)
-            t = threading.Timer(1.0, lambda: loop_env.cmd_stop(mock.Mock(repo=str(self.repo), now=True)))
+            t = threading.Timer(1.0, lambda: loop_cmd.cmd_stop(mock.Mock(repo=str(self.repo), now=True)))
             t.start()
             threads.append(t)
             return p
-        with mock.patch.object(loop_env, "spawn", spawn), mock.patch.object(Taker, "prepare", return_value=None), \
+        with mock.patch.object(wloop, "spawn", spawn), mock.patch.object(Taker, "prepare", return_value=None), \
                 mock.patch.object(wslots, "start_worktree", return_value=str(self.home)), redirect_stdout(io.StringIO()):
             t0 = time.time()
             self.assertEqual(self.main(["loop", "--repo", str(self.repo)]), 0)

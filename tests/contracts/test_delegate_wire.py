@@ -7,7 +7,6 @@ from typing import get_args, get_type_hints
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills" / "task-loop"))
 from contracts import samples as S
 from taskloop.adapters import delegate as dl
 from taskloop.adapters import delegate_wire

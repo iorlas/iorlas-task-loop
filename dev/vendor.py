@@ -7,8 +7,7 @@
 
 NAME is the shelf directory or the import name (process-lock or process_lock); the vendored directory uses the import name.
 Packages today: git_porcelain, atomic_io, jsonl_log, process_lock, stream_proc, child_env. src/ imports them by absolute name; the
-process edge
-(vendored.py, tests/support/paths.py) puts _vendor on sys.path.
+process edge (src/taskloop/__init__.py, tests/support/paths.py) puts _vendor on sys.path.
 
 dev/vendor.json is a list of {name, shelf_tag, shelf_commit, tree_hash}. `sync` reads the files with `git archive` from the
 tag (never from the shelf working tree); with no --tag it reuses the recorded one. `check` compares the vendored directory
@@ -22,7 +21,7 @@ The vendoring workaround lives in exactly these task-loop files (the vendored co
 no edits, no added files). Remove when the plugins depend on shelf directly: delete them and the _vendor/ directory.
     dev/vendor.py                        this tool
     dev/vendor.json                      the recorded tag, commit and tree hash (JSON has no comments, so the list is only here)
-    skills/task-loop/vendored.py         the one bootstrap module that puts _vendor on sys.path
+    src/taskloop/__init__.py             the one bootstrap that puts _vendor on sys.path
     skills/task-loop/_vendor/            the copy
     tests/test_rules.py                  test_vendor_drift, the no-edit guard, the RealRepo/FakeRepo smoke test, and EXEMPT_DIRS,
                                          the rules-gate exemption of _vendor/ from the 400/80 caps and file-count rules

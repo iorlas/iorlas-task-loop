@@ -3,10 +3,9 @@ import time
 from pathlib import Path
 from typing import Any
 
-import outcome as oc
-
 from taskloop.app.asks import raiser
 from taskloop.app.run.blocked import Blocked
+from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.asks import text as asktext
 

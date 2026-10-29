@@ -23,8 +23,6 @@ import support.paths  # noqa: E402, F401
 from support.checkpoints import read_ck  # noqa: E402
 
 sys.path.insert(0, str(ROOT / "tests"))
-import loop_env  # noqa: E402
-import seams  # noqa: E402
 from support import engine_case as te  # noqa: E402
 from support import (  # noqa: E402
     fake_route,
@@ -40,10 +38,12 @@ from taskloop.adapters import (  # noqa: E402
     ident,
 )
 from taskloop.adapters.fake_beads import FakeBeads  # noqa: E402
+from taskloop.app.launch import loop as wloop  # noqa: E402
 from taskloop.app.loop.run import BeadRun, Where  # noqa: E402
 from taskloop.app.release import (  # noqa: E402
     catalog,
     reexec,
+    seams,
 )
 from taskloop.app.run import (  # noqa: E402
     engine,
@@ -66,7 +66,7 @@ class Reload(te.EngineTest):
         te.EngineTest.setUp(self)
         self.cache = Path(self.tmp.name, "cache")
         here = self.install("0.1.0", fake=True)
-        self.here = here  # the install the engine under test runs from (loop_env.vet_newer / build take it)
+        self.here = here  # the install the engine under test runs from (wloop.vet_newer / build take it)
         p = mock.patch.object(ident, "plugin_version", return_value="0.1.0")
         p.start()
         self.addCleanup(p.stop)
@@ -110,7 +110,7 @@ class Reload(te.EngineTest):
         def fake_exec(argv):
             self.execs.append({"argv": argv, "env": json.loads(os.environ["TL_REEXEC"]), "marker": reexec.read_reexec("t-1")})
         eng.exec_fn = fake_exec
-        eng.newer_fn = lambda: loop_env.vet_newer(self.here)  # pyrefly: ignore[bad-assignment]
+        eng.newer_fn = lambda: wloop.vet_newer(self.here)  # pyrefly: ignore[bad-assignment]
         return eng
 
     def patches(self, script, during=None):
@@ -206,7 +206,7 @@ class Reload(te.EngineTest):
         script = fake_route.Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         eng = self.engine_for(script)
         tests = []
-        real = loop_env.installs.__globals__["Installs"].complete.__globals__["installs"].selftest_fails
+        real = wloop.installs.__globals__["Installs"].complete.__globals__["installs"].selftest_fails
         with mock.patch("taskloop.adapters.installs.selftest_fails", side_effect=lambda here, wait: tests.append(here) or real(here, wait)):
             rc = self.run_with(eng, script, during=lambda: self.install("0.2.0", plant=BREAK_PLAN))
         self.assertEqual(rc, 0)  # finished on 0.1.0
@@ -221,13 +221,13 @@ class Reload(te.EngineTest):
 
     def test_a_refused_version_is_tried_again_when_it_is_installed_again_and_a_newer_one_is_tried(self):
         self.install("0.2.0", plant=BREAK_PLAN)
-        self.assertEqual(must(loop_env.vet_newer(self.here))[:2], ("0.2.0", self.cache / "0.2.0"))
-        self.assertIsNone(loop_env.vet_newer(self.here))  # refused, key unchanged: not looked at
+        self.assertEqual(must(wloop.vet_newer(self.here))[:2], ("0.2.0", self.cache / "0.2.0"))
+        self.assertIsNone(wloop.vet_newer(self.here))  # refused, key unchanged: not looked at
         shutil.rmtree(self.cache / "0.2.0")
         self.install("0.2.0")  # the same number, re-released
-        self.assertIsNone(must(loop_env.vet_newer(self.here))[2])
+        self.assertIsNone(must(wloop.vet_newer(self.here))[2])
         self.install("0.3.0")
-        self.assertEqual(must(loop_env.vet_newer(self.here))[0], "0.3.0")
+        self.assertEqual(must(wloop.vet_newer(self.here))[0], "0.3.0")
 
     # -- the crash after an exec: the loop puts the run back on the version it came from, once
     def test_a_run_task_that_dies_right_after_the_exec_is_restarted_once_on_the_old_version(self):
@@ -268,9 +268,9 @@ class Reload(te.EngineTest):
         self.install("0.2.0")
         repo = str(self.wt)
         said = []
-        with mock.patch.object(loop_env, "spawn", side_effect=spawn), mock.patch.dict(os.environ, {}):
-            env = loop_env.build(repo, store=FakeBeads(), here=self.here)
-            run = BeadRun(env, looptest.files(repo), loop_env.installs(env.cfgdir, here=self.here), lambda: env.profile().loop, lambda: "",
+        with mock.patch.object(wloop, "spawn", side_effect=spawn), mock.patch.dict(os.environ, {}):
+            env = wloop.build(repo, store=FakeBeads(), here=self.here)
+            run = BeadRun(env, looptest.files(repo), wloop.installs(env.cfgdir, here=self.here), lambda: env.profile().loop, lambda: "",
                           lambda running: None, lambda: None, said.append)
             # the first child is the one that exec'd: its note appears while it runs
             t1 = as_bead({"id": "t-1"})
@@ -360,7 +360,7 @@ class Reload(te.EngineTest):
     # -- point 4: loop state and dashboard lane
     def test_loop_state_names_the_running_version_and_code_dir(self):
         repo = str(self.wt)
-        env = loop_env.build(repo, store=FakeBeads(), here=self.here)
+        env = wloop.build(repo, store=FakeBeads(), here=self.here)
         self.assertEqual((env.version, env.code_dir), ("0.1.0", str(self.here)))
 
     def test_releases_behind_counts_installed_versions_above_it(self):

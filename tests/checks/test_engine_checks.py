@@ -16,7 +16,6 @@ import time
 from pathlib import Path
 from unittest import mock
 
-import outcome as oc
 from support.briefs import brief_digest, linked_text
 from support.builders import cfg_with
 from support.checks import res
@@ -37,6 +36,7 @@ from taskloop.contracts import answers
 from taskloop.contracts.argv import checks_to_wire
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import WaitWhat
+from taskloop.domain import outcome as oc
 from taskloop.domain.checks import lint
 from taskloop.domain.checks import matchers as check_matchers
 from taskloop.domain.checks.writer_split import WriterSplit

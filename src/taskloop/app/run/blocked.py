@@ -1,7 +1,7 @@
 """The stop a step ends with: what the engine does at the close follows from its kind."""
 from typing import Any
 
-import outcome as oc
+from taskloop.domain import outcome as oc
 
 
 class Blocked(Exception):
