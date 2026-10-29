@@ -23,6 +23,7 @@
   tl.py run-task ID [--worktree DIR] [--slot S|any [--wait]] [--exclusive-area] [--dry-run] [--fresh]
                                                 one bead through the engine (engine.py), no judgement here
   tl.py next [--repo DIR] [--json]              the bead the loop would take next and why (claims nothing)
+  tl.py lint [BEAD | --ready [--fix]]           the bead rules (goal, acceptance, Touches, epic, type) over one bead or the ready ones
   tl.py loop [--repo DIR] [--max-beads N] [--until HH:MM] [--wait-slot-min M] [--wait-drained] [--pin]
                                                 run ready beads one after another, each in any free slot
   tl.py loop status [--repo DIR] [--last N]     the running loop and its last beads
@@ -189,6 +190,11 @@ def loop_parsers(sp):
     p.add_argument("--wait-drained", action="store_true", help="no ready bead: poll every 5 min instead of ending")
     p.add_argument("--pin", action="store_true", help="stay on this install (default: between beads, move to the newest installed one)")
     p.add_argument("--last", type=int, default=10, help="status: how many finished beads to show")
+    p = sp.add_parser("lint", help="check a bead (or every ready bead) against the loop's bead rules; --fix: drop `auto`, add `needs-ac`")
+    p.add_argument("bead", nargs="?")
+    p.add_argument("--ready", action="store_true")
+    p.add_argument("--fix", action="store_true")
+    p.add_argument("--repo")
     p = sp.add_parser("prune", help="remove old run data, merged build worktrees and release branches (--dry-run: only say)")
     p.add_argument("--repo")
     p.add_argument("--dry-run", action="store_true")
@@ -265,6 +271,10 @@ def v_prune(a: Any, c: Ctx) -> int:
     return importlib.import_module("taskloop.cli.prune").cmd_prune(a, c.now)
 
 
+def v_lint(a: Any, c: Ctx) -> int:
+    return importlib.import_module("taskloop.cli.lint").cmd_lint(a)
+
+
 def v_stop(a: Any, c: Ctx) -> int:
     return importlib.import_module("taskloop.cli.loop_cmd").cmd_stop(a, c.here, c.now)
 
@@ -318,6 +328,7 @@ VERBS: Final[dict[str, Handler]] = {
     "cutover": lazy("taskloop.cli.loop_cmd", "cmd_cutover"),
     "next": v_next, "loop": v_loop, "stop": v_stop,
     "prune": v_prune,
+    "lint": v_lint,
     "report": lazy("taskloop.cli.report", "cmd_report"),
     "lost": lazy("taskloop.cli.report", "cmd_lost"),
 }

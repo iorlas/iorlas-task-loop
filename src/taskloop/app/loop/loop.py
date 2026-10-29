@@ -12,6 +12,7 @@ from taskloop.app.loop.core import Core, prio_of
 from taskloop.app.loop.env import LoopEnv
 from taskloop.app.loop.files import LoopFiles
 from taskloop.app.loop.queue import Queue, QueueRule, rank_ready
+from taskloop.app.loop.refuse import Refuser
 from taskloop.app.loop.run import BeadRun, Where
 from taskloop.app.loop.settle import Settle
 from taskloop.app.loop.take import Taker
@@ -68,6 +69,7 @@ class Loop(Core):
         self.settle = Settle(env, files, self.tune, self.say, self.c, self.gate, self.net, self.left)
         self.runner = BeadRun(env, files, installs, self.tune, self.stop_mode, self.running, self.beat, self.say)
         self.taker = Taker(env, self.runner, self.tune, self.say, self.record, self.c.later)
+        self.refuser = Refuser(env.store, self.say)  # lint refusals: one label and comment per bead, one line per loop
         self.area_wait = [0.0, 0.0]  # when every ready bead began waiting for an area, and when that was last said
         if inherited:
             self.st = LoopState(pid=env.pid, started=self.started, t=env.now(), repo=env.repo, version=env.version, code_dir=env.code_dir,
@@ -228,6 +230,9 @@ class Loop(Core):
 
     def queue(self) -> tuple[Queue, QueueRule]:
         q, rule = rank_ready(self.env, self.prof.engine, self.say)
+        for s in q.skipped:
+            if s.of is not None:
+                self.refuser.refuse(s.of, s.skip.why)
         self.set_rows(q)
         return q, rule
 

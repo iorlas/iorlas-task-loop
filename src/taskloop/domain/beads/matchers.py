@@ -55,3 +55,39 @@ def why(bead: Bead, root: str = "") -> str:
     """The pick-step skip reason, or "" for a bead that is fine."""
     r = refs(bead, root)
     return f"{REASON} ({r[0][0]}: {r[0][1][:80]})" + (f" +{len(r) - 1} more" if len(r) > 1 else "") if r else ""
+
+
+_TOUCHES = re.compile(r"^\s*(?:[-*]\s*)?(?:#+\s*)?\**Touches\**\s*:?\**\s*(.*)$", re.I)
+_BULLET = re.compile(r"^\s*[-*]\s+(.*)$")
+_WORDS = re.compile(r"[\s,]+")
+_OUTPUT = re.compile(r"^\s*(?:[-*]\s*)?\**Output\**\s*:\**\s*(\S.*)$", re.I | re.M)
+_AC_HEADING = re.compile(r"^\s*#+\s*Acceptance Criteria\b", re.I | re.M)
+
+
+def _paths(text: str) -> list[str]:
+    return [w for x in _WORDS.split(text) if (w := x.strip("`'\",;"))]
+
+
+def touches(text: str) -> list[str]:
+    """The paths of the description's Touches field: the words after `Touches:` on its line, then the bullets right below it."""
+    lines = text.splitlines()
+    for i, ln in enumerate(lines):
+        m = _TOUCHES.match(ln)
+        if not m:
+            continue
+        out = _paths(m.group(1))
+        for nxt in lines[i + 1:]:
+            b = _BULLET.match(nxt)
+            if not b:
+                break
+            out += _paths(b.group(1))[:1]
+        return out
+    return []
+
+
+def has_output(text: str) -> bool:
+    return bool(_OUTPUT.search(text))
+
+
+def has_ac_heading(text: str) -> bool:
+    return bool(_AC_HEADING.search(text))

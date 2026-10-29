@@ -48,7 +48,8 @@ from taskloop.domain import outcome as oc  # noqa: E402
 
 
 def bead(id, priority=2, parent=None, labels=(), type="task"):
-    b = {"id": id, "title": "bead " + id, "status": "open", "priority": priority, "issue_type": type}
+    b = {"id": id, "title": "bead " + id, "status": "open", "priority": priority, "issue_type": type,
+         "description": "do " + id, "acceptance_criteria": "- " + id + " works"}  # what the bead lint asks of a bead
     if parent:
         b["parent"] = parent
     if labels:
@@ -219,7 +220,7 @@ class Queue(Base):
         ranked, skipped = looptest.queue(str(self.repo))
         self.assertEqual([b.id for b, _ in ranked], ["x-2", "x-3"])
         self.assertEqual([i for i, _ in skipped], ["x-1"])
-        self.assertTrue(skipped[0][1].startswith("needs inlined facts"), skipped)
+        self.assertIn("needs inlined facts", skipped[0][1])
 
     def test_priority_comes_before_epic_order(self):
         self.config(epic_order=["e-1", "e-2"])

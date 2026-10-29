@@ -260,7 +260,9 @@ bead's provenance.
 
 1. `tl bd reclaim --older-than 15m` (returns dead sessions' beads, slots included, to ready).
 2. Candidates: the profile's pick filter over `bd ready --json`, never a bead labelled `slot`, never `in_progress`,
-   never an epic.
+   never an epic. `tl lint BEAD|--ready [--fix]` runs the bead rules (goal, acceptance criteria, Touches <= 8, no epic with
+   children, no decision or output-less spike, nothing cited outside the repo); the loop refuses a failing bead once with the
+   `needs-ac` label and one comment, `--fix` also drops `auto` from failing ready beads.
 3. Order: beads whose `## Touches` overlap no `in_progress` bead's Touches first, by priority; overlapping ones after
    them, by priority. Overlap lowers the order, never skips a bead: the engine's rebase before landing resolves shared files.
 4. Take the first one to the engine (step 2): it claims the bead as this session (`TAKEN`, exit 1 → the next

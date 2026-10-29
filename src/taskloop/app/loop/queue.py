@@ -1,4 +1,4 @@
-"""The queue rule: ready beads with the pick label, minus skip labels, epics, slots, beads that cite material no worktree holds
+"""The queue rule: ready beads with the pick label, minus skip labels, epics, slots, beads that fail bead lint (domain/beads/rules.py)
 and beads whose area runs elsewhere; then priority, epic order, lowest id. Every skip says which rule skipped it as a typed
 Skip; nothing is parsed back out of text."""
 import itertools
@@ -40,6 +40,7 @@ class Ranked:
 class Skipped:
     bead: str
     skip: Skip
+    of: Bead | None = None  # the bead itself, when the skip is a lint refusal (the loop labels it)
 
 
 @dataclass
@@ -154,7 +155,7 @@ class QueueRule:
                 text = self.lint(b)
                 skip = Skip(why=text, kind="lint") if text else None
             if skip is not None:
-                q.skipped.append(Skipped(b.id, skip))
+                q.skipped.append(Skipped(b.id, skip, b if skip.kind == "lint" else None))
             else:
                 keep.append((b.priority if b.priority is not None else 2, rank, natural(b.id), b))
         keep.sort(key=lambda k: k[:3])

@@ -21,6 +21,7 @@ from taskloop.adapters.gitenv import run_git
 from taskloop.adapters.locks import hold_path
 from taskloop.app.asks import sweeps as ask_sweeps
 from taskloop.app.doctor import profiles
+from taskloop.app.loop import lintrun
 from taskloop.app.loop.env import LoopEnv, ReloadNote, Storm
 from taskloop.app.loop.files import LoopFiles
 from taskloop.app.loop.loop import parse_handover
@@ -41,7 +42,7 @@ from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.loop import LoopState
 from taskloop.contracts.ports import Beads
 from taskloop.domain import outcome as oc
-from taskloop.domain.beads import matchers as beadlint
+from taskloop.domain.beads import rules as beadlint
 
 STOP_GRACE_S = 300.0  # a stopped run-task is given this long to run its close step before stream-proc ends it
 HERE = ident.PLUGIN_ROOT / "skills" / "task-loop"  # the install this code runs from; tl.main takes it as a parameter for a test
@@ -206,7 +207,7 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         slot_env=lambda: wslots.slot_env(repo, store, profile().slots, now),
         profile=profile,
         fetch=lambda: fetch(repo),
-        lint=lambda b: beadlint.why(b, str(repo)),
+        lint=lambda b: beadlint.why(b, str(repo), lambda: lintrun.has_children(store, b.id)),
         running=lambda: running(repo, store),
         area_lock=lambda: area_lock(repo),
         wt_lock=lambda key: hold_path(cfg.lock_record(LockWhat.WORKTREE.value, key), f"pid {os.getpid()}", what=LockWhat.WORKTREE),
