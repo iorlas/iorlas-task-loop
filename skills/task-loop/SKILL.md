@@ -94,6 +94,7 @@ names it and its engine log; wait for it, never start a second one.
 
 A slot's git can only touch that slot: the engine's own git calls run with `GIT_DIR` and `GIT_WORK_TREE` pinned to the slot; workers and checks run unpinned (they may run git on other repos). The engine asserts before and after every node, and before the land, that ambient git agrees (`core.worktree` unset, `core.bare` not true); a worker or check that redirects git is caught before review or land, and the run stops with an owner ask. `tl doctor` warns when `extensions.worktreeConfig` is off.
 
+The run stays on top of the base: before each stage after the first the engine fetches and, only when the base moved, rebases the task branch (a conflict gets one fix round, else the bead is blocked with the branch kept); no move, no rebase, so cached checks stay valid.
 Land is one bead at a time per repo (a lock across slots and sessions): fetch, rebase, gate, push. A red gate or a
 rebase conflict goes to a fix round outside the lock: the writer fixes it, every stage's checks run again (plus no
 conflict markers), and a review checks the fix only; then land tries again. `engine.max_fix_rounds` (2) per bead, then

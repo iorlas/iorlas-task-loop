@@ -69,4 +69,4 @@ def cmd_diff(c: Ctx) -> int:
     else:
         for p in paths:
             c.raw("".join(file_diff(p, a.get(p), b.get(p))).encode())
-    return 0
+    return 1 if "--quiet" in fl and paths else 0  # --quiet: exit 1 when there is a difference

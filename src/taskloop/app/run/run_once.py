@@ -156,6 +156,24 @@ class RunOnce:
             e.checkpoints.save(stage=i, rounds=0, n=0, feedback="", step="write" if i < len(plan["stages"]) else "land")
             if i == len(plan["stages"]):
                 e.reload.safe_point("land")  # the checkpoint says land: the close and the land run on the newest code
+            else:
+                self.on_top_of_base()
+
+    def on_top_of_base(self) -> None:
+        """tl-7y6.23: before each stage after the first the run works on top of the base: fetch, and only when the base moved past the
+        branch, rebase it (the tree is clean: the stage was committed as wip). No move, no rebase: the check cache stays valid. A conflict
+        gets the one fix round; if that fails the bead is blocked and the branch kept."""
+        e = self.e
+        if e.dry or e.checkout.fetch()[0]:  # (a failed fetch is the land's to report)
+            return
+        moved = e.rebase.onto_base(salvage=True, between=True)
+        if moved == "conflict-fixable":
+            moved = e.rebase.salvage()
+        if moved == "conflict":
+            raise e.blocked_for(f"failed: the task branch no longer fits {e.cfg.base} (it moved during the run); the branch is kept at "
+                                "its last accepted stage, fix the conflict by hand, then rerun", "FAULT_LAND")
+        if moved:
+            e.stage_tree = ""  # the next stage's diff is measured from the new base
 
     def replan(self, i: int) -> Any:
         e = self.e

@@ -44,7 +44,9 @@ class Lander:
         if not e.git("status", "--porcelain") and e.git("rev-list", "--count", f"{e.cfg.base}..HEAD") in ("", "0"):
             e.log.note("nothing changed")
             return ""
-        self.commit(bead)
+        if not self.commit(bead):
+            e.log.note("nothing changed")  # (the wip commits add up to the base's own tree)
+            return ""
         if e.dry:
             e.log.note("dry run: not landing")
             return ""
@@ -57,8 +59,8 @@ class Lander:
             self.out.bd_sync(sha)
         return sha
 
-    def commit(self, bead: Any) -> None:
-        """One commit per task, titled after the bead: earlier runs' wip commits are folded in."""
+    def commit(self, bead: Any) -> bool:
+        """One commit per task, titled after the bead: earlier runs' wip commits are folded in. -> False: they add up to nothing."""
         e = self.e
         base = e.git("merge-base", "HEAD", e.cfg.base)
         if base:
@@ -66,9 +68,12 @@ class Lander:
         e.pictures.copy_looks()
         e.checkout.stage_all(check=True)
         e.newfiles.quarantine_strays()
+        if base and not e.sh(["git", "diff", "--cached", "--quiet"], pin=True)[0]:
+            return False
         rc, tail = e.sh(["git", "commit", "-q", "-m", f"{bead.title[:72]} ({e.bead})"], pin=True)
         if rc:
             raise e.blocked_for("failed: commit refused (hooks)\n" + tail, "FAULT_LAND")
+        return True
 
     def already(self, fetch: bool = True) -> str:
         """tl-7y6.2.13: a push that died of the network after origin took it. The task branch's tip is the land commit (titled

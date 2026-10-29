@@ -13,13 +13,16 @@ class Rebase:
     def __init__(self, host: Any) -> None:
         self.e = host
         self.squashed = False
+        self.between = False
 
-    def onto_base(self, salvage: bool = False) -> str:
+    def onto_base(self, salvage: bool = False, between: bool = False) -> str:
         """tl-bxk.13.8: a branch resumed from an earlier run is rebased onto the latest base before it is planned or re-planned, so the
         plan and the checks see what main has now. -> "rebased" (the plan count starts again), "conflict" (the work does not fit main: the
         caller starts again, tl-19i), "conflict-fixable" (salvage on: the rebase stopped on few files and is left running for the caller's
-        fix(conflict)), or "". More than one commit on the branch (the wip commits) is squashed first, so one conflict is fixed once."""
+        fix(conflict)), or "". More than one commit on the branch (the wip commits) is squashed first, so one conflict is fixed once.
+        tl-7y6.23: between=True is the same between two stages of a run: the plan stays, so its count does not start again."""
         e = self.e
+        self.between = between
         if e.dry or e.checkout.dirty_status():  # (the base-ignored files of an old branch are no reason not to rebase)
             return ""
         behind = e.git("rev-list", "--count", f"HEAD..{e.cfg.base}")
@@ -33,7 +36,8 @@ class Rebase:
         if rc:
             return self.stopped(salvage, tail, orig)
         self.follow_checkpoint()
-        e.log.note(f"rebased the task branch onto the latest {e.cfg.base} ({behind} commits behind) before planning")
+        when = "between stages" if between else "before planning"
+        e.log.note(f"rebased the task branch onto the latest {e.cfg.base} ({behind} commits behind) {when}")
         return self.plan_count()
 
     def squash_wip(self, orig: str) -> None:
@@ -105,6 +109,8 @@ class Rebase:
 
     def plan_count(self) -> str:
         e = self.e
+        if self.between:
+            return "rebased"
         if e.planned and e.rebase_resets < MAX_REBASE_RESETS:
             # tl-19i: plans made on the old base say nothing about this one. At most twice per bead
             e.log.note(f"the plan count starts again: {e.planned} earlier plan{'' if e.planned == 1 else 's'} were made on another base")
