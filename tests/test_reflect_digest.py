@@ -3,7 +3,6 @@ import json
 import os
 import sys
 import tempfile
-import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -13,7 +12,6 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
 from support import tlbd
-from support.dashes import Ports, make_dash
 
 from taskloop.adapters import ident
 from taskloop.app.report import reflect as rd
@@ -216,15 +214,6 @@ class Filing(Base):
         d = rd.digest(NOW - 86400, NOW)
         self.assertEqual((d["actions"][0]["action"], rd.read_state().get("filed")), ("failed", None))
 
-    def test_the_dashboard_view_shows_the_filed_bead_and_writes_nothing(self):
-        self.two()
-        rd.digest(NOW - 86400, NOW)
-        before = len(self.calls)
-        v = rd.view(24, NOW)
-        self.assertEqual((v["clusters"][0]["bead"], v["clusters"][0]["runs"], v["clusters"][0]["recurring"]), ("tl-new1", 2, True))
-        self.assertEqual(len(self.calls), before)
-
-
 class Daily(Base):
     def test_nothing_to_read_means_no_process(self):
         with mock.patch.object(rd.subprocess, "Popen") as p:
@@ -245,12 +234,3 @@ if __name__ == "__main__":
     unittest.main()
 
 
-class Api(Base):
-    def test_the_dashboard_api_returns_the_view(self):
-        server = make_dash(ports=Ports(reflections=rd.view))
-        self.trace("r1", [("writer reran the whole test suite after every edit", "prompt", "9")], t=time.time() - 60)
-        self.trace("r2", [("writer reran the whole test suite after every edit again", "prompt", "7")], bead="b2", t=time.time() - 30)
-        v = server.reflections("24")
-        self.assertEqual((v["hours"], v["clusters"][0]["runs"], v["clusters"][0]["recurring"]), (24, 2, True))
-        self.assertEqual(server.reflections("99999")["hours"], 24 * 14)
-        self.assertEqual(server.reflections("abc")["hours"], 24)

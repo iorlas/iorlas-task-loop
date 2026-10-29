@@ -1,4 +1,4 @@
-// The server side of the page: /api/v2 (docs/contracts/dash-api-v2.md). Polls the snapshot every 2.5 s while the page is
+// The server side of the page: /api (docs/contracts/dash-api.md). Polls the snapshot every 2.5 s while the page is
 // visible and at once on focus; sends `since` so an unchanged snapshot is a 304. A failed poll keeps the last data and
 // backs off up to 30 s.
 
@@ -17,7 +17,7 @@ async function poll() {
   clearTimeout(timer);
   try {
     const q = net.snap ? `?since=${encodeURIComponent(net.snap.version)}` : '';
-    const r = await fetch(`/api/v2/snapshot${q}`, { cache: 'no-store' });
+    const r = await fetch(`/api/snapshot${q}`, { cache: 'no-store' });
     if (r.status === 304) {
       net.fetchedAt = Date.now();
     } else if (r.ok) {
@@ -53,15 +53,15 @@ export const now = () => (net.snap ? net.snap.t + (Date.now() - net.fetchedAt) /
 export const dataAge = () => (net.fetchedAt ? (Date.now() - net.fetchedAt) / 1000 : 0);
 
 export async function bead(project, id) {
-  const r = await fetch(`/api/v2/bead?project=${encodeURIComponent(project)}&id=${encodeURIComponent(id)}`, { cache: 'no-store' });
+  const r = await fetch(`/api/bead?project=${encodeURIComponent(project)}&id=${encodeURIComponent(id)}`, { cache: 'no-store' });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
 }
 
-// POST /api/v2/<verb> with its WRITES record; a refused write is {ok:false, message}, never a throw
+// POST /api/<verb> with its WRITES record; a refused write is {ok:false, message}, never a throw
 export async function write(verb, body) {
   try {
-    const r = await fetch(`/api/v2/${verb}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const r = await fetch(`/api/${verb}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     if (!r.ok) return { ok: false, message: `${verb} failed: HTTP ${r.status}` };
     const res = await r.json();
     if (res.ok) retry();
@@ -73,7 +73,7 @@ export async function write(verb, body) {
 
 const LIVE_WAIT_S = 25, LIVE_MIN_MS = 1000;
 
-// the live tail of a running worker: long-polls /api/v2/live from the cursor and hands each page to onPage until the run
+// the live tail of a running worker: long-polls /api/live from the cursor and hands each page to onPage until the run
 // ends or stop() is called (dash-spec §11.2: no SSE)
 export function liveTail(project, id, onPage) {
   let cursor = '', on = true;
@@ -82,7 +82,7 @@ export function liveTail(project, id, onPage) {
       const t0 = Date.now();
       try {
         const q = `project=${encodeURIComponent(project)}&id=${encodeURIComponent(id)}&since=${encodeURIComponent(cursor)}&wait=${LIVE_WAIT_S}`;
-        const r = await fetch(`/api/v2/live?${q}`, { cache: 'no-store' });
+        const r = await fetch(`/api/live?${q}`, { cache: 'no-store' });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const page = await r.json();
         if (!on) return;

@@ -69,7 +69,7 @@ class RoundTrip(unittest.TestCase):
             if (
                 m.name in ("codec", "jsonl", "stores", "schema", "paths", "ports", "answers", "dash")
             # plumbing, not records (ports: call arguments, never written; answers: the workers' replies, tests/contracts/test_schema.py;
-            # dash: the dashboard view, sampled by tests/fixtures/dash_v2 and tests/contracts/test_dash.py)
+            # dash: the dashboard view, sampled by tests/fixtures/dash and tests/contracts/test_dash.py)
             ):
                 continue
             mod = importlib.import_module("taskloop.contracts." + m.name)

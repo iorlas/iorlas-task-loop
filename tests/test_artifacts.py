@@ -93,11 +93,6 @@ class Page(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def test_the_list_names_files_and_kinds_without_symlinks(self):
-        got = {a["name"]: a["kind"] for a in self.dash.artifacts.listing("tl-1")}
-        self.assertEqual(got, {"shot.png": "image", "r.pdf": "pdf", "page.html": "file"})
-        self.assertEqual(self.dash.artifacts.listing("../x"), [])
-
     def test_a_file_is_served_with_a_safe_type_and_bad_names_are_refused(self):
         self.assertEqual(self.dash.artifacts.file("tl-1", "shot.png"), (b"png", "image/png"))
         self.assertEqual(self.dash.artifacts.file("tl-1", "r.pdf"), (b"%PDF", "application/pdf"))

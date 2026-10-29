@@ -70,13 +70,13 @@ Caps (tests/test_rules.py): 400 SLOC per file, 80 per function, 800 per test fil
 
 ## Architecture Overview
 
-See README.md (Layout) and docs/design/dashboard.md. The skill (SKILL.md) is the method; `tl.py` is the only code the
+See README.md (Layout) and docs/design/dashboard/README.md. The skill (SKILL.md) is the method; `tl.py` is the only code the
 orchestrating session runs; the dashboard server only reads.
 
 ## Before changing the dashboard, tl.py, or the skill's Workers section
 
-Read `docs/dev/integrations.md`: every format task-loop reads but does not own (Claude transcripts, Codex state, bd,
-agent-runs), its one reader, and how delegate connects (worker-run v1, agent-runs v1, one table in SKILL.md).
+Read `docs/dev/integrations.md`: every format task-loop reads but does not own (delegate's status, OpenCode, bd), its one
+reader, and how delegate connects (worker-run, one table in SKILL.md).
 
 ## Conventions & Patterns
 

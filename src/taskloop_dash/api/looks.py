@@ -1,6 +1,5 @@
-"""The gallery's endpoints: every look item of a repo with its pictures, and the owner's answers. "good" settles an item; "redo" with a
-note files a follow-up bead that carries the note and the pictures; every answer can be taken back (the only writes the gallery
-makes, all through the `look` port)."""
+"""Look items: every item of a repo's owner-look beads with its pictures (GET /api/look-shot serves one), and the owner's answer through
+the `look` port. "good" settles an item; "redo" with a note files a follow-up bead that carries the note and the pictures."""
 
 import mimetypes
 import os
@@ -12,11 +11,8 @@ from taskloop.contracts import gallery
 from taskloop.contracts.dash import Result
 from taskloop.contracts.gallery import LABEL, PICTURES
 from taskloop_dash.env import Env
-from taskloop_dash.readers.beads import Beads, basename
+from taskloop_dash.readers.beads import Beads
 from taskloop_dash.readers.records import Records
-from taskloop_dash.views import names
-
-Reply = tuple[int, dict[str, Any]]
 
 
 class Looks:
@@ -40,20 +36,6 @@ class Looks:
         if not path:
             return "", []
         return path, self.env.ttl.get("looks:" + path, 10, lambda: self.collect(path, self.beads.beads_of(path)))
-
-    def api_looks(self, repo: str = "") -> dict[str, Any]:
-        """The gallery: every look item of the repo, open ones first (newest bead last), with counts."""
-        self.env.touch()
-        path, items = self.look_items(repo)
-        repos = [basename(p) for p in self.records.repos()]
-        if not path:
-            return {"repo": repo, "items": [], "summary": {"open": 0, "good": 0, "redo": 0}, "repos": repos}
-        order = {"open": 0, "redo": 1, "good": 2}
-        items = sorted(items, key=lambda i: (order[i["status"]], -(i["answered"] or 0)))
-        for i in items:
-            for sh in i["shots"]:
-                sh["url"] = self.shot_url(basename(path), sh["path"])
-        return {"repo": basename(path), "items": items, "summary": gallery.summary(items), "repos": repos}
 
     @staticmethod
     def shot_url(repo: str, path: str) -> str:
@@ -87,25 +69,8 @@ class Looks:
             return None
         return data, PICTURES.get(ext) or mimetypes.guess_type(rel)[0] or "application/octet-stream"
 
-    def answer_look(self, body: object) -> Reply:
-        """The page's v1 answer: {repo, look_bead, item, verdict good|redo|undo, note}: the same `look` port as /api/v2/look."""
-        if not isinstance(body, dict):
-            return 400, {"code": "bad_body", "error": "The request was not understood."}
-        repo, look_bead, item, verdict = body.get("repo"), body.get("look_bead"), body.get("item"), body.get("verdict")
-        note = body.get("note") if isinstance(body.get("note"), str) else ""
-        if verdict not in ("good", "redo", "undo") or not names.is_bead_id(look_bead) or not isinstance(item, str):
-            return 400, {"code": "bad_body", "error": "The request was not understood."}
-        path = self.beads.resolve_repo(str(repo or ""), "")
-        if not path:
-            return 404, {"code": "repo_missing", "error": "That repo is not registered."}
-        done = self.answer(path, item, verdict, note, str(look_bead))
-        if not done.ok:
-            return 409, {"code": "refused", "error": done.message}
-        return 200, {"ok": True, "status": "open" if verdict == "undo" else verdict}
-
     def answer(self, repo: str, item: str, verdict: str, note: str, look_bead: str = "") -> Result:
-        """Answer one look item through the `look` port, then drop what the gallery and the roadmap cached about the repo."""
+        """Answer one look item through the `look` port, then drop the repo's cached items."""
         done = self.env.ports.look(repo, item, verdict, note, look_bead)
         self.env.ttl.drop("looks:" + repo)
-        self.env.ttl.drop("roadmap:" + repo)
         return done

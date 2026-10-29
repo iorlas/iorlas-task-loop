@@ -1,4 +1,4 @@
-"""One bead's drawer (GET /api/v2/bead): the card, bd's text, every pass with its cells, the pictures, the live box and the open ask.
+"""One bead's drawer (GET /api/bead): the card, bd's text, every pass with its cells, the pictures, the live box and the open ask.
 
 `Pass.messages` and `Cell.last` come from the engine's Said records, `Resumed.branch` from RunStart.branch, the stuck `LiveBox` from an
 open Stuck episode. Left at its default: the live box's `subtasks` (no source)."""

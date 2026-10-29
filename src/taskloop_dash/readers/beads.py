@@ -102,23 +102,3 @@ class Beads:
             return named[0]
         return next((p for p in known if bead and any(x["id"] == bead for x in self.beads_of(p))), "")
 
-    def blocker_of(self, bead: str, repo_hint: str = "") -> dict[str, str] | None:
-        """The first open bead this one depends on with a `blocks` dependency, as {id, title}; None when there is none. Reads the
-        repo's cached `bd list`: one bd call per repo per refresh, never one per task."""
-        repo = repo_hint if repo_hint in self.records.repos() else ""
-        if not repo:
-            name = basename(repo_hint).removesuffix(".git")
-            repo = self.resolve_repo(name, bead) if name else self.resolve_repo("", bead)
-        if not repo:
-            return None
-        by_id = {b.get("id"): b for b in self.beads_of(repo)}
-        me = by_id.get(bead) or {}
-        if me.get("status") == "closed":
-            return None
-        for d in me.get("dependencies") or []:
-            if d.get("type") != "blocks":
-                continue
-            dep = by_id.get(d.get("id")) or {}
-            if dep and dep.get("status") != "closed":
-                return {"id": dep["id"], "title": dep.get("title") or ""}
-        return None

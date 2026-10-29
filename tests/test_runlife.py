@@ -25,6 +25,7 @@ from taskloop.contracts.paths import ConfigDir  # noqa: E402
 from taskloop.contracts.runlife import BEAT_EVERY, CRASHED_AFTER, RETAIN, Liveness, liveness  # noqa: E402
 from taskloop.domain.report import matchers  # noqa: E402
 from taskloop_dash import jsonl  # noqa: E402
+from taskloop_dash.api import live as live_api  # noqa: E402
 
 BEAD, STAMP = "t-1", "20261026-100000"
 RUN = f"{BEAD}-{STAMP}"
@@ -68,8 +69,8 @@ class Beats(unittest.TestCase):
 
 
 class Crash(unittest.TestCase):
-    """A kill -9: the log has no close and its newest record ages. Both readers say crashed within 2N seconds, live before it,
-    ended with a close."""
+    """A kill -9: the log has no close and its newest record ages. The dashboard's live view and the report both say crashed within
+    2N seconds, live before it, ended with a close."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
@@ -88,12 +89,9 @@ class Crash(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def dash_says(self) -> tuple[str, str, str]:
-        self.dash.env.ttl.clear()
+    def dash_says(self) -> str:
         self.dash.env.files.items.clear()
-        row = next(t for t in self.dash.tasks.api_tasks()["tasks"] if t["id"] == BEAD)
-        got = self.dash.live.api_live(BEAD)
-        return row["liveness"], got["liveness"], row["state"]
+        return self.dash.live.page(BEAD)[1]["state"]
 
     def report_crashes(self) -> list[str]:
         trace = [{"bead": BEAD, "run": "other", "worktree": "", "repo": ""}]  # makes the bead's prefix one the report knows
@@ -103,22 +101,20 @@ class Crash(unittest.TestCase):
 
     def test_a_recent_record_reads_live_in_both(self):
         self.now = self.t0 + 5 + N - 1
-        self.assertEqual(self.dash_says()[:2], ("live", "live"))
-        self.assertEqual(self.dash_says()[2], "running")
+        self.assertEqual(self.dash_says(), "live")
         self.assertEqual(self.report_crashes(), [])
 
     def test_a_run_killed_without_an_end_record_reads_crashed_within_2n_seconds(self):
         for age in (N, 2 * N):
             self.now = self.t0 + 5 + age
-            self.assertEqual(self.dash_says()[:2], ("crashed", "crashed"), age)
-            self.assertNotEqual(self.dash_says()[2], "running")
+            self.assertEqual(self.dash_says(), "crashed", age)
             self.assertEqual(self.report_crashes(), [RUN], age)
 
     def test_a_run_with_an_end_record_reads_ended_in_both(self):
         put(self.log, [typed("close", self.t0 + 9, outcome="landed", why="")])
         os.utime(self.log, (self.t0 + 9, self.t0 + 9))
         self.now = self.t0 + 9 + 50 * N
-        self.assertEqual(self.dash_says()[:2], ("ended", "ended"))
+        self.assertEqual(self.dash_says(), "ended")
         self.assertEqual(self.report_crashes(), [])
 
 
@@ -154,17 +150,16 @@ class BeatsAreNoEvents(unittest.TestCase):
         self.t0 = 1_800_000_000.0
         self.log = self.cfg / "engine" / f"{RUN}.jsonl"
 
-    def test_100_beats_between_two_events_are_two_events_and_no_timeline_row(self):
+    def test_100_beats_between_two_events_are_no_events(self):
         put(self.log, started(self.t0))
         put(self.log, [typed("beat", self.t0 + 2 + i) for i in range(100)])
         put(self.log, [typed("warn", self.t0 + 200, text="slow")])
         os.utime(self.log, (self.t0 + 200, self.t0 + 200))
         dash = make_dash(config=self.cfg, clock=lambda: self.t0 + 201)
-        got = dash.live.api_live(BEAD)
-        self.assertEqual([e["k"] for e in got["events"]], ["run_start", "step_start", "warn"])
-        self.assertEqual(got["liveness"], "live")
-        tl = json.dumps(dash.tasks.api_task_timeline("", BEAD))
-        self.assertNotIn("beat", tl)
+        run = dash.live.live_run(str(self.log))
+        run.refresh()
+        self.assertEqual([e["k"] for e in live_api.page(run)["events"]], ["run_start", "step_start", "warn"])
+        self.assertEqual(dash.live.page(BEAD)[1]["state"], "live")
         self.assertEqual(dash.runlogs.read(str(self.log))[-1].KIND, "warn")
 
     def test_liveness_reads_the_newest_records_after_the_log_rotates(self):
@@ -178,26 +173,6 @@ class BeatsAreNoEvents(unittest.TestCase):
         self.assertEqual(recs[-1].t, self.t0 + 29)
         self.assertIs(liveness(recs, self.t0 + 29 + 1), Liveness.LIVE)
         self.assertIs(liveness(recs, self.t0 + 29 + N), Liveness.CRASHED)
-
-
-class LongLog(unittest.TestCase):
-    def test_2500_events_answer_2000_and_a_before_cursor_that_fetches_the_rest(self):
-        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
-            cfg = Path(d) / "task-loop"
-            t0 = 1_800_000_000.0
-            log = cfg / "engine" / f"{RUN}.jsonl"
-            put(log, [typed("note", t0 + i, text=f"line {i}") for i in range(2500)])
-            os.utime(log, (t0 + 2500, t0 + 2500))
-            dash = make_dash(config=cfg, clock=lambda: t0 + 2501)
-            first = dash.live.api_live(BEAD, limit=5000)
-            self.assertEqual(len(first["events"]), 2000)
-            self.assertTrue(first["before"])
-            self.assertEqual(first["events"][-1]["text"], "line 2499")
-            rest = dash.live.api_live(BEAD, before=first["before"], limit=5000)
-            self.assertEqual(len(rest["events"]), 500)
-            self.assertIsNone(rest["before"])
-            seqs = {e["seq"] for e in first["events"] + rest["events"]}
-            self.assertEqual(len(seqs), 2500)
 
 
 if __name__ == "__main__":

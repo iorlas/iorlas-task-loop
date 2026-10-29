@@ -1,4 +1,4 @@
-// The kit: one look per component (docs/design/dashboard-v2/dash-kit-audit-1029.md). Components take contract records
+// The kit: one look per component (docs/design/dashboard/dash-kit-audit-1029.md). Components take contract records
 // (src/taskloop/contracts/dash.py) and callbacks; they hold no server state and decide nothing the engine decides.
 import { html, useEffect, useState } from '../../vendor/ui-runtime.js';
 import { causeOf, muted, troubleOf } from '../data.js';

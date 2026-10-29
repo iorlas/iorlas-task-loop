@@ -1,4 +1,4 @@
-"""Make it stick (dash v2 backend item 8): each outcome of an answered ask through the Intake verb, its effect and its ledger row."""
+"""Make it stick: each outcome of an answered ask through the Intake verb, its effect and its ledger row."""
 import sys
 import unittest
 from pathlib import Path

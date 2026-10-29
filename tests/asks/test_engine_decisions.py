@@ -1,4 +1,4 @@
-"""The engine side of dash v2 items 6 and 8: the planner reads the repo's decisions and cites them, a reversible plan question becomes a
+"""The engine side of asks and decisions: the planner reads the repo's decisions and cites them, a reversible plan question becomes a
 soft ask the run goes on past, an agent's declared cause reaches the ask, and a repeat is matched when it is raised."""
 import json
 import subprocess

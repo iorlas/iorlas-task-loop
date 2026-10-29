@@ -226,20 +226,6 @@ def _digest(since: float, until: float, dry: bool, traces: str | Path | None, re
     return out
 
 
-def view(hours: int = 24, now: float | None = None) -> dict[str, Any]:
-    """For the dashboard: the clusters of the last `hours`, each with the bead filed for it (state file), nothing written."""
-    now = now or time.time()
-    cs = cluster(items(now - hours * 3600, now))
-    st = read_state()
-    out = []
-    for c in cs:
-        e = next((e for e in st.get("filed", []) if e.get("cause") == c["cause"] and not e.get("closed") and same_cause(e, c)), None)
-        out.append({"cause": c["cause"], "title": c["title"], "runs": len(c["runs"]), "run_ids": c["runs"][:12], "beads": c["beads"][:8],
-                    "files": c["files"], "recurring": is_recurring(c), "bead": (e or {}).get("bead", ""),
-                    "repo": (e or {}).get("repo", ""), "last": c["last"]})
-    return {"hours": hours, "clusters": out}
-
-
 def due(now: float | None = None) -> bool:
     return (now or time.time()) - float(read_state().get("tried") or 0) >= DAY
 

@@ -10,7 +10,6 @@ from pathlib import Path
 from types import ModuleType
 
 from taskloop_dash import serve
-from taskloop_dash.app import Dash
 from taskloop_dash.env import Env, Ports
 
 PACKAGE = Path(__file__).resolve().parents[1]
@@ -35,13 +34,9 @@ def resolve_ports(spec: str | None, load: Callable[[str], ModuleType] = importli
     return getattr(load(module), func or "ports")()
 
 
-def make_dash(ports: Ports | None = None, version: str | None = None) -> Dash:
-    return Dash(Env(ports=ports, version=code_version() if version is None else version))
-
-
 def main(argv: Sequence[str] | None = None, load: Callable[[str], ModuleType] = importlib.import_module) -> None:
     ap = argparse.ArgumentParser(prog="python3 -m taskloop_dash", add_help=False, allow_abbrev=False)
     ap.add_argument("--ports", default=None, help="MODULE:FUNC returning the Ports (the engine's read-only facts)")
     known, rest = ap.parse_known_args(argv)
     env = Env(ports=resolve_ports(known.ports, load), version=code_version())
-    serve.main(env, PACKAGE, rest, page=PACKAGE / "static" / "index.html")
+    serve.main(env, PACKAGE, rest)

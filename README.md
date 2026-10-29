@@ -18,7 +18,7 @@ Claude Code. macOS and Linux (also inside a container); Windows is not supported
 Required: [iorlas-delegate](https://github.com/iorlas/iorlas-delegate) 0.14+ from the same marketplace
 (`claude plugin install iorlas-delegate@iorlas-marketplace`). The engine runs every AI step through it
 ([worker-run v3](docs/contracts/worker-run-v3.md)); it picks lane and model from live plan limits. You never call it
-yourself. Its runs and lane limits reach the dashboard as [agent-runs v1](docs/contracts/agent-runs-v1.md) records.
+yourself.
 
 ## What the loop does
 
@@ -57,17 +57,20 @@ Without slots, each loop session makes one worktree at start and reuses it.
 
 One read-only server per machine, started by the loop (`tl.py dash ensure`), default port 7878.
 
-- **Tasks:** what is live now, then each repo's bead tree (epics and children; live, open, blocked, done in 7 days).
-- **A task:** its sessions over time and every worker under them: the orchestrating Claude session, its Agent-tool
-  subagents, Codex runs (codex plugin jobs and `codex exec`), and runs any launcher publishes as agent-runs v1.
-- **Live log** of any of them, following new output.
-- **Workers:** every worker run on the machine in the last 24 hours.
+- **Board:** every bead of every registered repo by stage (backlog, working, asking, AI review, your look, landing, done),
+  and the goal tree.
+- **Floor:** each slot's timeline of stage passes, 2 to 8 hours back, and what is running now.
+- **Decisions:** the asks waiting on you, the ledger of every ask and what it became, the decisions in force.
+- **Lanes:** each delegate lane's usage and state.
+- **A bead:** its passes, stage by stage, the live tail of its running worker, screenshots and files; park, stop, a note.
+
+It works on a phone (below 600 px it switches to a phone layout).
 
 It listens on 127.0.0.1 and on the Tailscale address when Tailscale is up, so a phone on the tailnet can open it.
 In a container: `TASK_LOOP_DASH_BIND=0.0.0.0` and publish the port. `TASK_LOOP_DASH_PORT` changes the port.
 
-It reads only local files: the records `tl.py` writes (`~/.config/task-loop`), `bd list`, and the transcripts Claude
-Code (`~/.claude/projects`) and Codex (`~/.codex/sessions`, the codex plugin's job state) already write.
+It reads only local files: the records the engine and `tl.py` write (`~/.config/task-loop`) and bd. Its API is
+[docs/contracts/dash-api.md](docs/contracts/dash-api.md).
 
 ## Layout
 
@@ -81,13 +84,13 @@ src/taskloop/app/launch/         what tl starts: loop.py (tl loop / next / stop)
 src/taskloop/app/prune/          tl prune: run data, merged build worktrees and release branches past loop.keep_days (also run at loop start)
 src/taskloop/app/report/         tl report, lost and reflect digest: the data (cli/report.py prints it)
 src/taskloop_dash/               the dashboard package (stdlib; `python3 -m taskloop_dash`, started by `tl dash ensure`)
-src/taskloop_dash/static/        dashboard pages: index.html is the task view (no build, no dependencies)
-src/taskloop_dash/views/         engine logs -> runs, blocks, arrows for the task view (timeline.py)
+src/taskloop_dash/static/        the dashboard page: index.html and its ES modules (Preact + HTM vendored; no build)
+src/taskloop_dash/views/         engine logs, asks and bd -> the typed snapshot and bead records (contracts/dash.py)
 hooks/hooks.json                 SessionStart: index session id -> transcript path
 tests/                           python3 -m unittest discover -s tests   (CI: Ubuntu, Python 3.12)
 dev/release.py                   the only way to release: release lock, version from origin, suite, marketplace, install
 docs/design/                     design notes
-docs/contracts/agent-runs-v1.md  the format other tools use to show their workers on the dashboard
+docs/contracts/dash-api.md       the dashboard's HTTP API: GET /api/snapshot, /api/bead, /api/live, POST /api/<verb>
 docs/dev/integrations.md         for developers: every external format read, and how delegate connects
 docs/dev/runaway-process.md      for developers: capture a runaway process (/proc, py-spy, cgroup) before killing it
 ```

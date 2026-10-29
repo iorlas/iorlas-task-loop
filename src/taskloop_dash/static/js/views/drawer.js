@@ -1,5 +1,5 @@
 // The bead page: a drawer on desktop, a pushed page on the phone (dash-spec §6). Reads BeadDetail; the live tail of a running
-// worker long-polls /api/v2/live into an imperative terminal (spec §12: the terminal tail stays imperative).
+// worker long-polls /api/live into an imperative terminal (spec §12: the terminal tail stays imperative).
 import { html, useEffect, useRef, useState } from '../../vendor/ui-runtime.js';
 import * as act from '../actions.js';
 import * as api from '../api.js';

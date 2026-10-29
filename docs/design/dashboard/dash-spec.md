@@ -1,6 +1,6 @@
-# task-loop dashboard v2: implementation spec
+# task-loop dashboard: implementation spec
 
-Status: draft, 2026-10-29, awaiting the owner's review. The owner settled every view in rounds 1–9 (phone v2: "Phone view v2 is ok. Write the full dashboard spec now"); this file consolidates those decisions and has not been approved as a whole. This spec replaces the UI parts of `docs/design/dashboard.md` (Task view v3, Roadmap v4, Cockpit layer). The record and server parts of that document stay valid unless this spec changes them.
+Status: draft, 2026-10-29, awaiting the owner's review. The owner settled every view in rounds 1–9 (phone v2: "Phone view v2 is ok. Write the full dashboard spec now"); this file consolidates those decisions and has not been approved as a whole.
 
 Audience: the task-loop implementation session. Read this file first. Use the mocks to see the result, and use this spec as the rule.
 
@@ -33,7 +33,7 @@ Orchestrator defaults: these rules have no owner decision behind them. They are 
 - Stale thresholds of 30 s and 5 min.
 - Stuck also fires on "no commits for N min".
 - Prune is offered after 30 days with 0 reuses.
-- The snapshot returns 304 by version, and the routes are named `/api/v2/*`.
+- The snapshot returns 304 by version, and the routes are named `/api/*`.
 
 ## 1. Who uses it and for what
 
@@ -271,7 +271,7 @@ The drawer opens from the right, 640 px wide, with a ⤢ toggle for full width (
     - **Running:** the stage and pass, a timer, the command, tokens for this stage, and a terminal tail of the last 5–6 lines, new lines fading in, and the subtask list when the harness gives one (decision 1b). No burn rate (cut for v1, review 1029). Test counts appear only when the stage wrote a typed results file, never from regex on logs (decision 3); without one there is no test row. Behind it is a tool-call count ("14 calls · 1 failed"); clicking it lists one line per call with a type icon (read, 📝 edit, bash, search) and the tool name in bold.
     - **Ask:** the §5.1 card.
     - **Look:** the gallery, ✅ Approve → land, ↩️ Send back (says why).
-    - **Stuck:** the reason ("same test failed 3×, then 22m with no tool calls") and the time it started; the last command and the watcher line; a terminal tail; "Why did it stop?" chips (flaky test · wrong plan · environment · requirement unclear · other), one tap, which feed the cause chart. The actions are ⏸ Park it and 👁 Seen ("stop alerting until something changes"). The mock's 🔁 Re-plan from the failing test and 📝 Add a note and restart write are not in v2: the owner cut restart-with-note from v1 (review 1029); they wait for the restart verb (§14).
+    - **Stuck:** the reason ("same test failed 3×, then 22m with no tool calls") and the time it started; the last command and the watcher line; a terminal tail; "Why did it stop?" chips (flaky test · wrong plan · environment · requirement unclear · other), one tap, which feed the cause chart. The actions are ⏸ Park it and 👁 Seen ("stop alerting until something changes"). The mock's 🔁 Re-plan from the failing test and 📝 Add a note and restart write are not built: the owner cut restart-with-note (review 1029); they wait for the restart verb (§14).
   - **Messages, newest first.** These are the comments, AI notes and loop events of this pass only. Older lines fade when more than about 10 show.
 - **Bead tab:**
   - screenshots and files: a gallery with the newest big; clicking opens a full gallery;
@@ -392,8 +392,8 @@ The dashboard backend needs were sent to the refactor session as a heads-up on 2
 | stuck | `views/live_state.py` `silent` (fixed 60 s, worker lines), `hung`; `signals.py` churn | stuck = silent past a per-stage limit, or the same check red 3×; also "no commits for N min" (default); stuck `cause` and `ack` stored per bead run |
 | controls | CLI `tl stop`, `tl hold`, `tl hint` (owner_hint, read on the next run), `tl slot hold/release`; dash POSTs only answer, withdraw, look | `tl` verbs + POSTs for park (bead, at the next safe point), stop (one bead), note (a comment read at the next stage start, not only the next run), ack, cause, stick; restart-stage later |
 | lanes | `api/lanes.py` card (`usage[{window, used_pct, resets_at}]`, `out_until`), via the `tl lanes` snapshot | forecast (burn rate from the last hour of `AiCall` tokens per lane); a lane → slots map; "waits for it" from queue rows that need the lane |
-| slots | `tl slot list` (name, bead, status, holder); `LoopState`; slot beads per host | the slot's lane or harness recorded on the slot; a machine field; v2 stays one dashboard per machine |
-| projects | `~/.config/task-loop/repos.json` (`tl register`) | none for v2 |
+| slots | `tl slot list` (name, bead, status, holder); `LoopState`; slot beads per host | the slot's lane or harness recorded on the slot; a machine field; one dashboard per machine |
+| projects | `~/.config/task-loop/repos.json` (`tl register`) | none |
 | epics, needs | `/api/graph`, `views/graph.py`, `api/beads.py` deps | parent/epic on each bead in the snapshot; the goal-roots builder |
 | tokens, time, artifacts | `AiCall.tokens`, fresh formula in roadmap briefs, `/api/artifact`, `/api/look-shot` | tokens per stage per pass in the bead endpoint; usual per model lane with n |
 | live tail, tool calls | `/api/live` (paged events, `tool_start`/`tool_end`, long-poll `wait=`), byte-offset tails | a tool-call list shaped for the drawer (kind, name, ok/failed) |
@@ -404,7 +404,7 @@ The dashboard backend needs were sent to the refactor session as a heads-up on 2
 ### 11.2 Snapshot and live updates
 - **Process.** One dashboard per machine. It keeps running after every Claude session closes (it is a detached process and exits after its idle limit). `tl dash ensure` is idempotent: running it again, from any number of sessions, never starts a second server (decision 1b).
 - **Data path A.** The server keeps what it has read in process memory and reads only new bytes, using an offset and size per file. A restart reads everything once. Measure warm refresh and cold start before adding any persisted cache.
-- **Snapshot.** `GET /api/v2/snapshot` returns one JSON document holding everything the four tabs need. Filters are applied on the client.
+- **Snapshot.** `GET /api/snapshot` returns one JSON document holding everything the four tabs need. Filters are applied on the client.
   - `projects[]`, `machines[]`, `slots[]` (machine, name, lane, current bead, state);
   - `beads[]` (id, project, epic, title, column, marker, status line, age, loops, needs[], cause, ack, totals);
   - `passes[bead]` (pieces: stage, slot, start, end, kind, outcome);
@@ -412,20 +412,20 @@ The dashboard backend needs were sent to the refactor session as a heads-up on 2
   - `decisions[]` (ADR id, text, reuses, age), `learning` (the four weekly series plus causes this week and last week);
   - `lanes[]` (window %, forecast %, reset, week %, locked until, slots, running, waiting, status age);
   - `server` (version, data age, loop state per project).
-- **Per bead.** `GET /api/v2/bead?project&id` returns the full drawer: passes with stage cells, messages per pass, tool calls per stage, artifacts, description, acceptance, comments, waits for, unblocks.
-- **Live.** The live tail of the running worker (terminal lines, tool calls) reuses today's long-poll, `/api/live?…&wait=`, behind `GET /api/v2/live?project&id&since`. No SSE is added. Everything else polls the snapshot every 2.5 s while the page is visible, and at once when the page regains focus. Polls are keyed by version, so an unchanged snapshot returns 304.
+- **Per bead.** `GET /api/bead?project&id` returns the full drawer: passes with stage cells, messages per pass, tool calls per stage, artifacts, description, acceptance, comments, waits for, unblocks.
+- **Live.** The live tail of the running worker (terminal lines, tool calls) reuses the run's long-poll, `GET /api/live?project&id&since&wait`. No SSE is added. Everything else polls the snapshot every 2.5 s while the page is visible, and at once when the page regains focus. Polls are keyed by version, so an unchanged snapshot returns 304.
 - **Writes.** Every write is a POST under today's auth rule (§11.1) and goes through `tl` verbs, never through direct bd calls:
 
 | POST | does | `tl` verb |
 |---|---|---|
-| `/api/v2/answer` | answer, ask back, undo within 5 s | existing answer path, extended |
-| `/api/v2/look` | approve or send back (text required) | existing look path |
-| `/api/v2/stick` | outcome of an answered ask: adr, factory, fix, demote, once | new |
-| `/api/v2/cause` | set or correct the cause of an ask or a stop | new |
-| `/api/v2/ack` | 👁 Seen on a stuck bead | new |
-| `/api/v2/park` | park at the next safe point | new |
-| `/api/v2/stop` | stop the run, keep the branch | new |
-| `/api/v2/note` | note to the worker (bead comment) | new |
+| `/api/answer` | answer, ask back, undo within 5 s | existing answer path, extended |
+| `/api/look` | approve or send back (text required) | existing look path |
+| `/api/stick` | outcome of an answered ask: adr, factory, fix, demote, once | new |
+| `/api/cause` | set or correct the cause of an ask or a stop | new |
+| `/api/ack` | 👁 Seen on a stuck bead | new |
+| `/api/park` | park at the next safe point | new |
+| `/api/stop` | stop the run, keep the branch | new |
+| `/api/note` | note to the worker (bead comment) | new |
 
 ### 11.3 Derived in Python (pure, tested)
 These live in pure Python functions under `taskloop_dash/views/`, each with fixture tests:
@@ -460,7 +460,7 @@ The client only lays out.
 - **Phone.** It is the same components with a phone shell (`views/phone.js`) chosen by `matchMedia('(max-width:600px)')`. It is not a CSS squeeze of the desktop: the v1 attempt at that was rejected.
 - **`components.html`.** This sheet renders every kit component with fixtures, in light, dark and phone.
 - **Budget.** JS and CSS together stay at 100 KB gzip or less.
-- **Retired.** The old `index.html` and `live.html` are removed when v2 reaches the slice 4 gate. There is no backward compatibility.
+- **Retired.** The old pages and their API are removed. There is no backward compatibility.
 
 ## 13. Build slices (in order, each lands on its own)
 
@@ -482,14 +482,14 @@ The client only lays out.
 - on the phone: no element wider than the viewport, no horizontal scroll container, no tap target under 40 px, no text under 12 px, inputs at 16 px. Assert these in the scenario;
 - that state survives a refresh: an open drawer, a draft, a fold and the scroll position.
 
-## 14. Out of scope for v2 (later beads)
+## 14. Out of scope (later beads)
 
 - ⌘K command palette and keyboard shortcuts (file as a bead).
 - Morning report: "while you were away" grown into a daily report (file as a bead).
 - "What an answer unlocks": a brainstorm, low priority (file as a bead).
 - Owner attachments on answers: the lowest priority.
 - Affinity tags on beads, with Up next showing only beads that fit the slots in view.
-- One central dashboard across machines. v2 runs one per machine and lists its projects.
+- One central dashboard across machines. It runs one per machine and lists its projects.
 - Push notifications on an ask or a stuck bead.
 - Per-stage token baselines and the corner triangle.
 - Restart controls: 🔁 Re-plan from the failing test, 📝 Add a note and restart a stage (a `restart` verb and POST). Cut from v1 by the owner.

@@ -1,4 +1,4 @@
-"""POST /api/v2/<verb>: answer, look, cause and ack through the real Intake over a bd in memory; the Result shape; the refused cases."""
+"""POST /api/<verb>: answer, look, cause and ack through the real Intake over a bd in memory; the Result shape; the refused cases."""
 import dataclasses
 import json
 import sys
@@ -196,15 +196,6 @@ class Writes(unittest.TestCase):
         for verb, body in (("ack", {"project": "demo", "bead": "tl-5"}), ("ack", {"project": "demo", "bead": "t", "ack": True, "x": 1}),
                            ("look", []), ("look", {"project": "demo", "bead": "x", "verdict": "maybe"}), ("answer", None)):
             self.assertEqual(self.dash.writes.post(verb, body)[0], 400, (verb, body))
-
-    def test_the_v1_look_endpoint_calls_the_same_port(self):
-        calls = []
-        real = self.dash.env.ports.look
-        self.dash.env.ports.look = lambda *a: calls.append(a) or real(*a)
-        code, out = self.dash.looks.answer_look({"repo": "demo", "look_bead": "tl-look", "item": "tl-1#1", "verdict": "good"})
-        self.assertEqual((code, out["status"], len(calls)), (200, "good", 1))
-        self.assertEqual(self.dash.writes.post("look", {"project": "demo", "bead": "tl-1#1", "verdict": "undo"})[0], 400)  # v2 has no undo
-
 
 if __name__ == "__main__":
     unittest.main()

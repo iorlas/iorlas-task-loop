@@ -1,7 +1,7 @@
-"""Dashboard v2 fixtures: the round-8b mock data (tests/fixtures/dash_v2/mock-8b.json) turned into contract records.
+"""Dashboard fixtures: the round-8b mock data (tests/fixtures/dash/mock-8b.json) turned into contract records.
 
 The same JSON is the frontend's dev data (dev/dash_fixtures.py serves it) and the backend's target shape. `python3
-tests/support/dash_fixtures.py` rewrites tests/fixtures/dash_v2/; tests/contracts/test_dash.py fails when the files drift from
+tests/support/dash_fixtures.py` rewrites tests/fixtures/dash/; tests/contracts/test_dash.py fails when the files drift from
 this builder or stop decoding. Minutes in the mock are relative to now; NOW is fixed so the files are stable.
 """
 import json
@@ -16,7 +16,7 @@ from taskloop.contracts import codec
 from taskloop.contracts import dash as D
 
 ROOT = Path(__file__).resolve().parents[2]
-DIR = ROOT / "tests" / "fixtures" / "dash_v2"
+DIR = ROOT / "tests" / "fixtures" / "dash"
 NOW = 1793050200.0
 TOKENS_PER_MIN = 9500
 USUAL, USUAL_N = 600_000, 12

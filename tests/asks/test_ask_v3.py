@@ -1,4 +1,4 @@
-"""Ask v3 (dash v2 backend item 6): the new fields round-trip, an older ask file is absent, every transition leaves one ledger row, a repeat
+"""Ask v3: the new fields round-trip, an older ask file is absent, every transition leaves one ledger row, a repeat
 matches a past ask and a decision in force, and a soft ask never makes a run wait."""
 import dataclasses
 import json

@@ -1,4 +1,4 @@
-"""The Live view: /api/live merges the engine log with the worker's live files, the engine hands delegate the file, the page loads."""
+"""The live feed of GET /api/live: the engine log merged with the worker's live files by time; the engine hands delegate the file."""
 
 import json
 import os
@@ -7,9 +7,7 @@ import sys
 import tempfile
 import time
 import unittest
-import urllib.request
 from pathlib import Path
-from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / "skills" / "task-loop"
@@ -17,19 +15,13 @@ for sub in ("dash", "", "tests"):
     sys.path.insert(0, str(SKILL / sub) if sub != "tests" else str(ROOT / "tests"))
 import support.paths  # noqa: E402, F401
 from support import dlcall, fake_route  # noqa: E402
-from support.dashes import make_dash  # noqa: E402
 from support.logs import typed  # noqa: E402
 from support.narrow import must  # noqa: E402
-from test_dash import free_port  # noqa: E402
 
 from taskloop.adapters import delegate as dl  # noqa: E402
 from taskloop.adapters import runner as live_runner  # noqa: E402
 from taskloop.app.run import engine  # noqa: E402
-from taskloop.contracts.locks import Ticket  # noqa: E402
-from taskloop.contracts.runlife import CRASHED_AFTER, Liveness  # noqa: E402
-from taskloop_dash.api import live, overview  # noqa: E402
-from taskloop_dash.env import Ports  # noqa: E402
-from taskloop_dash.views import live_state  # noqa: E402
+from taskloop_dash.api import live  # noqa: E402
 
 BEAD, STAMP = "tl-live.1", "20261026-100000"
 T = 1793000000.0
@@ -115,21 +107,6 @@ class Feed(unittest.TestCase):
                 self.assertIn(k, got)
             self.assertEqual((got["wait_end"]["secs"], got["vendor_error"]["reason"]), (60, "hung"))
 
-    def test_before_pages_return_the_rest_exactly_once(self):
-        with tempfile.TemporaryDirectory() as d:
-            log, lf, run = self.run_of(d)
-            put(log, [typed("note", T + 20 + i, text=f"n{i}") for i in range(30)])
-            put(lf, [{"t": T + 20.5 + i, "k": "msg", "text": f"m{i}"} for i in range(30)])
-            run.refresh()
-            everything = [e["seq"] for e in run.events()]
-            seen, got = [], live.page(run, limit=25)
-            while True:
-                seen = [e["seq"] for e in got["events"]] + seen
-                if not got["before"]:
-                    break
-                got = live.page(run, before=live.decode(got["before"]), limit=25)
-            self.assertEqual(seen, everything)
-
     def test_a_run_without_worker_files(self):
         with tempfile.TemporaryDirectory() as d:
             _log, lf, run = self.run_of(d)
@@ -143,133 +120,14 @@ class Feed(unittest.TestCase):
             self.assertTrue(live.poll(run, None))
             cur = live.page(run)["cursor"]
             t0 = time.monotonic()
-            self.assertEqual(live.poll(run, live.decode(cur), wait=2)["events"], [])
-            self.assertGreaterEqual(time.monotonic() - t0, 2)
+            self.assertEqual(live.poll(run, live.decode(cur), wait=0.5)["events"], [])
+            self.assertGreaterEqual(time.monotonic() - t0, 0.5)
             threading = __import__("threading")
-            threading.Timer(0.5, put, (lf, [{"t": T + 30, "k": "tool_start", "id": "9", "text": "edit"}])).start()
+            threading.Timer(0.2, put, (lf, [{"t": T + 30, "k": "tool_start", "id": "9", "text": "edit"}])).start()
             t0 = time.monotonic()
             got = live.poll(run, live.decode(cur), wait=2)
-            self.assertLess(time.monotonic() - t0, 2.5)
+            self.assertLess(time.monotonic() - t0, 1.5)
             self.assertEqual([e["k"] for e in got["events"]], ["tool_start"])
-
-
-class States(unittest.TestCase):
-    """The eight states of the state line, each from the open pairs and the last events."""
-
-    def ev(self, *items):
-        out = []
-        for i, (src, k, t, kw) in enumerate(items):
-            out.append(dict(kw, src=src, k=k, t=T + t, seq=f"{src}:{i}"))
-        return out
-
-    def st(self, items, now=100, alive=True, output_t=lambda e: None):
-        return live_state.state_of(self.ev(*items), T + now, alive, output_t)
-
-    def test_each_state(self):
-        base = [("engine", "step_start", 1, {"id": "n1", "step": "write", "text": "write"})]
-        w = ("w", "start", 2, {"lane": "ZAI", "model": "glm"})
-        self.assertEqual(self.st([*base, ("engine", "wait_start", 3, {"id": "w1", "what": "lane", "holder": "X"})])["what"], "wait")
-        chk = self.st(
-            [*base, ("engine", "check_start", 3, {"id": "k1", "check": "unit", "cmd": "pytest", "round": 1, "log": "checks/a.log"})],
-            output_t=lambda e: T + 50,
-        )
-        self.assertEqual((chk["what"], chk["last_output_t"]), ("check", T + 50))
-        self.assertEqual(self.st([*base, ("engine", "gate_start", 3, {"cmd": "just check"})])["what"], "check")
-        self.assertEqual(self.st([*base, w, ("w", "cmd_start", 4, {"id": "1", "text": "pytest -q"})])["what"], "tool")
-        self.assertEqual(self.st([*base, w, ("w", "msg", 90, {"text": "hi"})], now=100)["what"], "thinking")
-        self.assertEqual(self.st([*base, w, ("w", "msg", 10, {"text": "hi"})], now=100)["what"], "silent")
-        self.assertEqual(self.st([*base, ("engine", "kill", 5, {"what": "call", "why": "silent"})])["what"], "hung")
-        self.assertEqual(self.st(base)["what"], "engine")
-        self.assertEqual(self.st([*base, ("engine", "close", 6, {"outcome": "landed"})])["what"], "ended")
-        self.assertEqual(self.st(base, alive=False)["what"], "ended")
-
-    def test_a_closed_pair_is_not_open_and_pairs_match_by_src_and_id(self):
-        items = [("engine", "cmd_start", 1, {"id": "a"}), ("w", "cmd_start", 2, {"id": "a"}), ("engine", "cmd_end", 3, {"id": "a"})]
-        opened = live_state.open_pairs(self.ev(*items))
-        self.assertEqual([(s, k) for s, k, _ in opened], [("w", "cmd_start")])
-
-
-class Overview(unittest.TestCase):
-    def test_three_rows_one_alive_one_paused_one_queued(self):
-        with tempfile.TemporaryDirectory() as d:
-            log, _lf = make_run(d)
-            eng = os.path.dirname(log)
-            other = os.path.join(eng, f"tl-live.2-{STAMP}.jsonl")
-            put(
-                other,
-                [
-                    typed("run_start", T, run="tl-live.2-" + STAMP, bead="tl-live.2", worktree=""),
-                    typed("step_start", T + 1, id="n1", step="write"),
-                    typed("step_end", T + 5, id="n1", step="write", outcome="done"),
-                    typed("step_start", T + 6, id="n2", step="close", text="close"),
-                    typed("close", T + 6, outcome="blocked", why="paused: no lane for write until 09:02 (lane_out: OPENAI_SUBSCRIPTION)"),
-                ],
-            )
-            entries = []
-            for bead, path, alive in ((BEAD, log, True), ("tl-live.2", other, False)):
-                run = live.LiveRun(path)
-                run.refresh()
-                entries.append({"bead": bead, "repo": "r", "title": "", "name": os.path.basename(path)[:-6], "run": run, "alive": alive})
-            lanes = [{"name": "OPENAI_SUBSCRIPTION", "out": True, "out_until": T + 5000, "usage": [{"window": "5h", "used_pct": 97}]}]
-            queue = [{"repo": "r", "bead": "tl-live.3", "prio": 2, "since": T, "ahead": 2}]
-            out = overview.overview(entries, queue, lanes, T + 100)
-            rows = out["beads"]
-            self.assertEqual([(r["bead"], r["state"]) for r in rows], [(BEAD, "tool"), ("tl-live.3", "queued"), ("tl-live.2", "paused")])
-            self.assertEqual(rows[1]["ahead"], 2)
-            self.assertEqual((rows[2]["lane"], rows[2]["until"]), ("OPENAI_SUBSCRIPTION", T + 5000))
-            self.assertEqual(out["lanes"], [{"id": "OPENAI_SUBSCRIPTION", "state": "out", "out_until": T + 5000, "used_pct": 97}])
-
-
-class SlotLine(unittest.TestCase):
-    def test_the_overview_queue_rows_come_from_typed_tickets_first_in_line_first(self):
-
-        line = [Ticket(pid=1, why="run-task x-1", since=7.0, prio=0, seq=2), Ticket(pid=1, why="tl loop", since=5.0, prio=2, seq=1)]
-        dash = make_dash(Ports(waiting_line=lambda repo: line))
-        with mock.patch.object(dash.live.records, "repos", return_value=["/work/r"]):
-            rows = dash.live.queue_rows()
-        self.assertEqual([(r["repo"], r["why"], r["prio"], r["since"], r["ahead"]) for r in rows],
-                         [("r", "run-task x-1", 0, 7.0, 0), ("r", "tl loop", 2, 5.0, 1)])
-
-
-class RunningFromTheLog(unittest.TestCase):
-    """running comes from the typed log alone (runlife.liveness): no end record and a recent record; no process is probed."""
-
-    def test_steps_and_no_end_record_is_running_with_no_process(self):
-        with tempfile.TemporaryDirectory() as d:
-            log, _lf = make_run(d)
-            put(log, [typed("run_start", T, run=f"{BEAD}-{STAMP}", bead=BEAD, worktree="/no/such/worktree")], mode="w")
-            put(log, [typed("step_start", T + 1, id="n1", step="write", text="write")])
-            run = live.LiveRun(log)
-            run.refresh()
-            now = T + 2
-            self.assertIs(run.liveness(now), Liveness.LIVE)
-            ans = live.answer(run, BEAD, "n", run.liveness(now), now=now)
-            self.assertTrue(ans["running"])
-            self.assertEqual(ans["liveness"], "live")
-            rows = overview.overview(
-                [{"bead": BEAD, "repo": "r", "title": "", "name": "n", "run": run, "alive": True}], [], [], now
-            )["beads"]
-            self.assertEqual([r["bead"] for r in rows], [BEAD])
-            self.assertIs(run.liveness(T + 1 + CRASHED_AFTER), Liveness.CRASHED)  # no record since: the process died
-            put(log, [typed("close", T + 9, outcome="landed", why="")])
-            run.refresh()
-            self.assertIs(run.liveness(now), Liveness.ENDED)
-
-
-class Page(unittest.TestCase):
-    """The page is one html file; its renderer keys rows by src + kind + id and ticks from data-t0 (checked on the source)."""
-
-    def test_the_page_source(self):
-        html = (ROOT / "src" / "taskloop_dash" / "static" / "live.html").read_text(encoding="utf-8")
-        self.assertIn("/api/live?", html)
-        self.assertIn("/api/live/overview", html)
-        self.assertIn("dataset.t0", html)       # an open row ticks from its start
-        self.assertIn("dataset.t1", html)       # a closed one freezes at its end
-        self.assertIn("'exit '+e.exit", html)   # a closed command shows its exit code
-        self.assertIn("e.secs", html)           # and its seconds
-        self.assertNotIn("innerHTML", html)     # append-only: rows are built, never re-parsed
-        self.assertIn("max-width:600px", html)  # the phone layout
-        self.assertNotIn("http://", html.replace("http://www.w3.org", ""))  # no CDN
 
 
 class CallSite(unittest.TestCase):
@@ -300,54 +158,6 @@ class CallSite(unittest.TestCase):
             self.assertTrue(os.path.isdir(os.path.dirname(p1)))
             src = Path(engine.__file__).with_name("worker_call.py").read_text(encoding="utf-8")
             self.assertEqual(src.count("e.live("), 1)  # the one delegate call site passes it
-
-
-class Served(unittest.TestCase):
-    def test_endpoint_and_page(self):
-        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
-            log, lf = make_run(d)
-            put(log, [typed("beat", time.time())])  # the run is alive now: its last beat
-            port = free_port()
-            env = dict(os.environ, XDG_CONFIG_HOME=d, APPDATA=d, TASK_LOOP_DASH_BIND="127.0.0.1", HOME=d, USERPROFILE=d)
-            p = subprocess.Popen([sys.executable, "-m", "taskloop_dash", "--port", str(port)], env=env,
-                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            try:
-                base = f"http://127.0.0.1:{port}"
-                end = time.monotonic() + 90
-                while True:
-                    try:
-                        urllib.request.urlopen(base + "/api/version", timeout=5)
-                        break
-                    except OSError:
-                        self.assertLess(time.monotonic(), end, "the server never answered")
-                        time.sleep(0.1)
-
-                def get(u):
-                    return json.loads(urllib.request.urlopen(base + u, timeout=60).read())
-                a = get("/api/live?bead=" + BEAD)
-                self.assertEqual(
-                    (a["bead"], a["run"], a["step"], a["worker"]["lane"], a["worker"]["model"]),
-                    (BEAD, f"{BEAD}-{STAMP}", "write", "CODEX", "gpt-x"),
-                )
-                self.assertIn(a["state"]["what"], ("tool",))
-                self.assertEqual([e["t"] for e in a["events"]], sorted(e["t"] for e in a["events"]))
-                put(lf, [{"t": T + 20, "k": "tool_start", "id": "2", "text": "edit a.py"}])
-                b = get("/api/live?bead={}&run={}-{}&since={}".format(BEAD, BEAD, STAMP, a["cursor"]))
-                self.assertEqual([e["k"] for e in b["events"]], ["tool_start"])
-                self.assertEqual(get("/api/live/overview")["beads"][0]["bead"], BEAD)
-                self.assertEqual(a["newest"], a["run"])
-                self.assertFalse(get("/api/live?bead=nope.1")["found"])
-                self.assertFalse(get("/api/live?bead=--help")["found"])
-                page = urllib.request.urlopen(base + "/live?bead=" + BEAD, timeout=60).read()
-                self.assertIn(b"/api/live", page)
-                self.assertIn(b"/live?bead=", urllib.request.urlopen(base + "/", timeout=60).read())
-            finally:
-                p.terminate()
-                try:
-                    p.wait(60)
-                except subprocess.TimeoutExpired:
-                    p.kill()
-                    p.wait()
 
 
 if __name__ == "__main__":

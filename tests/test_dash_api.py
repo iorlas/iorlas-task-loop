@@ -1,4 +1,4 @@
-"""GET /api/v2/snapshot and /api/v2/bead end to end: a Dash over a temp config dir (recorded typed logs on disk, a registered repo, an ask
+"""GET /api/snapshot and /api/bead end to end: a Dash over a temp config dir (recorded typed logs on disk, a registered repo, an ask
 file, a fake bd), its handler on a loopback port. The snapshot's version is its ETag: an unchanged one answers 304, a poll never runs bd."""
 
 import dataclasses
@@ -82,10 +82,10 @@ class Api(unittest.TestCase):
         self.tmp.cleanup()
 
     def get(self, path, q=None, held=None):
-        return self.dash.v2.get(path, q or {}, held)
+        return self.dash.reads.get(path, q or {}, held)
 
     def test_snapshot_decodes_strictly_with_the_facts_of_the_machine(self):
-        code, body, headers = self.get("/api/v2/snapshot")
+        code, body, headers = self.get("/api/snapshot")
         self.assertEqual(code, 200)
         snap = codec.from_json(Snapshot, json.loads(body))
         self.assertEqual(headers["ETag"], f'"{snap.version}"')
@@ -97,31 +97,31 @@ class Api(unittest.TestCase):
         self.assertEqual((snap.server.version, [p.id for p in snap.projects]), ("v-test", ["lifesim"]))
 
     def test_an_unchanged_snapshot_answers_304_by_since_and_by_etag(self):
-        _, body, headers = self.get("/api/v2/snapshot")
+        _, body, headers = self.get("/api/snapshot")
         version = json.loads(body)["version"]
         self.now += 5  # the snapshot is rebuilt, nothing changed
-        self.assertEqual(self.get("/api/v2/snapshot", {"since": version})[:2], (304, b""))
-        self.assertEqual(self.get("/api/v2/snapshot", {}, headers["ETag"])[:2], (304, b""))
-        code, body, _ = self.get("/api/v2/snapshot", {"since": "stale"})
+        self.assertEqual(self.get("/api/snapshot", {"since": version})[:2], (304, b""))
+        self.assertEqual(self.get("/api/snapshot", {}, headers["ETag"])[:2], (304, b""))
+        code, body, _ = self.get("/api/snapshot", {"since": "stale"})
         self.assertEqual((code, json.loads(body)["version"], json.loads(body)["t"]), (200, version, self.now))
 
     def test_a_new_record_gives_a_new_version(self):
-        _, body, _ = self.get("/api/v2/snapshot")
+        _, body, _ = self.get("/api/snapshot")
         before = json.loads(body)["version"]
         RunScript("b-1", slot="a", at=3000).step("plan", 300, 20_000, "OC Go").step("write", 200, 30_000, text="write 1", end=False).step(
             "checks", 60, 1
         ).beat().write(self.cfg)
         self.now += 5
-        self.assertNotEqual(json.loads(self.get("/api/v2/snapshot")[1])["version"], before)
+        self.assertNotEqual(json.loads(self.get("/api/snapshot")[1])["version"], before)
 
     def test_a_poll_does_not_run_bd_every_time(self):
         for _ in range(4):
-            self.get("/api/v2/snapshot")
+            self.get("/api/snapshot")
             self.now += 1.5
         self.assertEqual(self.finds, 1)
 
     def test_the_bead_drawer(self):
-        code, body, _ = self.get("/api/v2/bead", {"project": "lifesim", "id": "b-1"})
+        code, body, _ = self.get("/api/bead", {"project": "lifesim", "id": "b-1"})
         self.assertEqual(code, 200)
         d = codec.from_json(BeadDetail, json.loads(body))
         self.assertEqual((d.card.id, d.description, d.acceptance), ("b-1", "Clamp it.", "mood >= 0"))
@@ -130,19 +130,19 @@ class Api(unittest.TestCase):
         self.assertEqual((must(d.live).kind, must(d.live).phase.value), ("run", "write"))
 
     def test_unknown_or_malformed_requests(self):
-        self.assertEqual(self.get("/api/v2/bead", {"project": "lifesim", "id": "nope"})[0], 404)
-        self.assertEqual(self.get("/api/v2/bead", {"project": "other", "id": "b-1"})[0], 404)
-        self.assertEqual(self.get("/api/v2/bead", {"project": "lifesim", "id": "--flag"})[0], 404)
-        self.assertEqual(self.get("/api/v2/bead", {"id": "b-1"})[0], 400)
-        self.assertEqual(self.get("/api/v2/nothing")[0], 404)
+        self.assertEqual(self.get("/api/bead", {"project": "lifesim", "id": "nope"})[0], 404)
+        self.assertEqual(self.get("/api/bead", {"project": "other", "id": "b-1"})[0], 404)
+        self.assertEqual(self.get("/api/bead", {"project": "lifesim", "id": "--flag"})[0], 404)
+        self.assertEqual(self.get("/api/bead", {"id": "b-1"})[0], 400)
+        self.assertEqual(self.get("/api/nothing")[0], 404)
 
 
 class Wire(Api):
     def setUp(self):
         super().setUp()
-        page = Path(self.tmp.name) / "index.html"
-        page.write_text("<html></html>")
-        self.server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(self.dash, 0, ["127.0.0.1"], page, page, lambda: "t", "s"))
+        static = Path(self.tmp.name)
+        (static / "index.html").write_text("<html></html>")
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(self.dash, 0, ["127.0.0.1"], static, lambda: "t", "s"))
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.base = f"http://127.0.0.1:{self.server.server_address[1]}"
 
@@ -160,15 +160,15 @@ class Wire(Api):
             return e.code, e.read(), dict(e.headers)
 
     def test_etag_and_304_over_http(self):
-        code, body, headers = self.fetch("/api/v2/snapshot")
+        code, body, headers = self.fetch("/api/snapshot")
         self.assertEqual(code, 200)
         etag = headers["ETag"]
         self.assertEqual(etag, f'"{json.loads(body)["version"]}"')
-        self.assertEqual(self.fetch("/api/v2/snapshot", {"If-None-Match": etag})[:2], (304, b""))
-        self.assertEqual(self.fetch("/api/v2/snapshot?since=" + json.loads(body)["version"])[0], 304)
-        self.assertEqual(self.fetch("/api/v2/bead?project=lifesim&id=nope")[0], 404)
-        self.assertEqual(self.fetch("/api/v2/bead?project=lifesim&id=b-1")[0], 200)
-        self.assertEqual(self.fetch("/api/tasks")[0], 200)  # v1 is untouched
+        self.assertEqual(self.fetch("/api/snapshot", {"If-None-Match": etag})[:2], (304, b""))
+        self.assertEqual(self.fetch("/api/snapshot?since=" + json.loads(body)["version"])[0], 304)
+        self.assertEqual(self.fetch("/api/bead?project=lifesim&id=nope")[0], 404)
+        self.assertEqual(self.fetch("/api/bead?project=lifesim&id=b-1")[0], 200)
+        self.assertEqual(self.fetch("/api/tasks")[0], 404)  # the old API is gone
 
 
 if __name__ == "__main__":

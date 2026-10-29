@@ -1,4 +1,4 @@
-"""The v2 Snapshot (GET /api/v2/snapshot): everything the four tabs read, built from one World.
+"""The Snapshot (GET /api/snapshot): everything the four tabs read, built from one World.
 
 Filled from typed facts: server, projects, epics, slots, every bead card (its assumptions and stuck marker included), the Floor's
 pieces, the open asks and looks, the ask ledger, the decisions in force, the learning series and the lane cards (views.lanecards).

@@ -1,4 +1,4 @@
-"""dash.py: the dashboard v2 view contract. The committed fixtures are what the builder makes, every one decodes strictly and
+"""dash.py: the dashboard's view contract. The committed fixtures are what the builder makes, every one decodes strictly and
 re-encodes byte for byte, every dash record appears in them, and every bead id they name exists in the snapshot."""
 import dataclasses
 import json

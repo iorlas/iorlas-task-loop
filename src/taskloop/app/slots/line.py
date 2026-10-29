@@ -7,7 +7,6 @@ from collections.abc import Callable
 from taskloop.app.slots.env import DEFAULT_PRIO, TICKET_POLL, SlotEnv
 from taskloop.app.slots.pool import SlotPool
 from taskloop.contracts.locks import Ticket
-from taskloop.contracts.loop import QueueRow
 
 
 def order(t: Ticket) -> tuple[int, int]:
@@ -18,11 +17,6 @@ def order(t: Ticket) -> tuple[int, int]:
 def waiting_line(env: SlotEnv) -> list[Ticket]:
     """The live tickets, first in line first."""
     return env.tickets.line(env.repo_key)
-
-
-def queue_rows(env: SlotEnv) -> list[QueueRow]:
-    """The line as the loop's state file carries it (LoopState.queue): first in line first, `ahead` the places before it."""
-    return [QueueRow(bead=t.bead, prio=t.prio, since=t.since, ahead=n) for n, t in enumerate(waiting_line(env))]  # pyrefly: ignore[unexpected-keyword]
 
 
 def wait_slot(env: SlotEnv, why: str, bead: str = "", stop: Callable[[], bool] | None = None,
