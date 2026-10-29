@@ -22,7 +22,7 @@ class FakeChecks:
     scripts: dict[str, list[CheckResult]] = field(default_factory=dict)
     ran: list[CheckSpec] = field(default_factory=list)
 
-    def when(self, cmd: str, *results: CheckResult) -> "FakeChecks":
+    def when(self, cmd: str, *results: CheckResult) -> FakeChecks:
         """The next runs of exactly `cmd` answer `results` in order; the last one repeats."""
         self.scripts[cmd] = list(results)
         return self

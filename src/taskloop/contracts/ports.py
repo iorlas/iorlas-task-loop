@@ -101,7 +101,7 @@ class Beads(Protocol):
     def dolt_push(self) -> tuple[int, str]:
         """Push bd's Dolt data to its remote. -> (exit code, bd's words); never raises for bd's refusal."""
         ...
-    def at(self, cwd: str) -> "Beads":
+    def at(self, cwd: str) -> Beads:
         """The same store asked about the tracker in `cwd`."""
         ...
 

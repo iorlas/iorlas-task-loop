@@ -1,6 +1,6 @@
 #!/usr/bin/env -S uv run --script
 # /// script
-# requires-python = ">=3.12"
+# requires-python = ">=3.15"
 # dependencies = ["msgspec==0.22.0"]
 # ///
 """The task-loop plugin's hooks: `hook.py pretool | session-start | precompact`, the event JSON on stdin (see hooks.json).

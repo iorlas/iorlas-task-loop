@@ -38,12 +38,12 @@ just check                     # ruff + pyrefly + the structural rules (tools pi
 ```
 
 Dev and test tools (pytest, pytest-xdist) are the `dev` group of pyproject.toml, locked in uv.lock; `uv run` syncs them.
-CI runs the suite and `just check` on Ubuntu with Python 3.12. Linux locally: `docker run --rm -v "$PWD":/src:ro python:3.12-slim ...`.
+CI runs the suite and `just check` on Ubuntu with Python 3.15. Linux locally: `docker run --rm -v "$PWD":/src:ro python:3.15-slim ...`.
 Caps (tests/gate_rules.py): 400 SLOC per file, 80 per function, 800 per test file; the KNOWN_OVERSIZE table (tests/rules_ratchet.json) may only shrink.
 
 ## Conventions
 
-- Python 3.12+; macOS and Linux (in containers too), POSIX only. Dependencies: runtime ones are declared inline in `skills/task-loop/tl.py`
+- Python 3.15+; macOS and Linux (in containers too), POSIX only. Dependencies: runtime ones are declared inline in `skills/task-loop/tl.py`
   (PEP 723, the same pin as pyproject.toml's `dependencies`; tests/test_pep723.py holds them equal) and run with `uv run --script`: the
   `tl` shim, the loop's own spawns, dev/release.py and dev/suite.py. Dev and test tools live in pyproject.toml's `dev` group. The
   PreToolUse hook (every Bash call) stays on plain `python3` and imports no msgspec and no record (.importlinter, tests/test_hook.py).

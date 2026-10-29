@@ -1,6 +1,6 @@
 #!/usr/bin/env -S uv run --script
 # /// script
-# requires-python = ">=3.12"
+# requires-python = ">=3.15"
 # dependencies = ["msgspec==0.22.0"]
 # ///
 """The real-process race (tl-bxk.11.1, tl-vgo): two `tl loop`s, a hand `run-task --slot s1`, a hand `run-task --slot any --wait`,

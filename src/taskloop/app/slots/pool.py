@@ -11,7 +11,7 @@ from taskloop.contracts.slots import Hold, SlotFail
 
 
 class Slot:
-    def __init__(self, pool: "SlotPool", name: str, bead: Bead) -> None:
+    def __init__(self, pool: SlotPool, name: str, bead: Bead) -> None:
         self.pool, self.name, self.bead = pool, name, bead
         self.env = pool.env
         self.dir = pool.env.dir_of(name)

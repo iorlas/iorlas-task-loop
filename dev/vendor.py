@@ -26,7 +26,7 @@ no edits, no added files). Remove when the plugins depend on shelf directly: del
     tests/gate_rules.py                  test_vendor_drift, the no-edit guard, the RealRepo/FakeRepo smoke test, and EXEMPT_DIRS,
                                          the rules-gate exemption of _vendor/ from the 400/80 caps and file-count rules
 
-Python 3.12, standard library only, POSIX only.
+Python 3.15, standard library only, POSIX only.
 """
 import argparse
 import hashlib

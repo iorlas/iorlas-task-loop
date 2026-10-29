@@ -1,6 +1,6 @@
 #!/usr/bin/env -S uv run --script
 # /// script
-# requires-python = ">=3.12"
+# requires-python = ">=3.15"
 # dependencies = ["msgspec==0.22.0"]
 # ///
 """The land gate: the full suite through pytest-xdist workers (taskloop.app.release.suite), exit 0 when green, 1 when red.

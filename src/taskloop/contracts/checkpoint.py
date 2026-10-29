@@ -58,7 +58,7 @@ class RunState(Rec, frozen=False):
     pending_land_validation: str = ""
     review: ReviewState = msgspec.field(default_factory=ReviewState)
 
-    def start_again(self) -> "RunState":
+    def start_again(self) -> RunState:
         """The state of a task that starts again on the base: nothing of the old attempt, but what belongs to the bead (the follow-ups
         filed or refused, the owner's extra amends, the rebase resets, the brief as it is now, the planner thread)."""
         keep = ("extra", "rebase_resets", "brief_hash", "snap", "planner_ref", "pending_land_validation")
@@ -69,7 +69,7 @@ class RunState(Rec, frozen=False):
         return wire.dump(self)
 
     @classmethod
-    def from_dump(cls, data: dict[str, Any]) -> "RunState":
+    def from_dump(cls, data: dict[str, Any]) -> RunState:
         return wire.load(cls, data)
 
 

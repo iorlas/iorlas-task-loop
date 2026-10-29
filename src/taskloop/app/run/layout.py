@@ -100,7 +100,7 @@ class RunLayout:
     evidence_dir: Path  # the writer's proof of what the engine cannot rerun
 
     @classmethod
-    def open(cls, bead: str, wt: str | Path, taken: str | None) -> "RunLayout":
+    def open(cls, bead: str, wt: str | Path, taken: str | None) -> RunLayout:
         """The layout of the run `taken` (a run that goes on after an exec or a pause), else of a new one; its folders are made."""
         logs = ident.config_dir() / "engine"
         logs.mkdir(exist_ok=True)

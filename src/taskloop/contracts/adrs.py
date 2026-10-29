@@ -34,7 +34,7 @@ class AdrStore:
         self.docs, self.log = docs, uses
 
     @classmethod
-    def at(cls, cfg: paths.ConfigDir, repo: str) -> "AdrStore":
+    def at(cls, cfg: paths.ConfigDir, repo: str) -> AdrStore:
         return cls(AdrFiles(cfg, repo), JsonlStore(Path(cfg.adr_uses(loop_key(repo))), decode_use))
 
     def all(self) -> list[Adr]:

@@ -85,7 +85,7 @@ DEFAULTS: dict[tuple[str, ...], Fake] = {
 DEAD_PID = 2**22 + 7  # above any pid_max: the pid of a process that has ended, with no process to end
 
 
-WORLD: list["Procs"] = []  # the active world of the running test (set by `install`)
+WORLD: list[Procs] = []  # the active world of the running test (set by `install`)
 
 
 class Procs:

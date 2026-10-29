@@ -27,7 +27,7 @@ class CheckPlan:
 
     @classmethod
     def build(cls, items: Sequence[Check], history: Durations, groups: Sequence[str] | None = None,
-              acceptance_first: bool = False, conflict_fix: Sequence[str] | None = None, markers: str = "") -> "CheckPlan":
+              acceptance_first: bool = False, conflict_fix: Sequence[str] | None = None, markers: str = "") -> CheckPlan:
         """The round's steps from the repo's checks and the plan's. conflict_fix (the plan's check commands the fix skips, else
         None): a conflict fix runs the marker check and the repo's build checks only; the rest are recorded as skipped and the gate
         verifies the result. groups: only these groups (the cheap checks before a render)."""

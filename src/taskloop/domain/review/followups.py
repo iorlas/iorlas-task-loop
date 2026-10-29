@@ -16,7 +16,7 @@ class FollowKey:
     file: str
 
     @classmethod
-    def of(cls, bead: str, lo: Mapping[str, str]) -> "FollowKey":
+    def of(cls, bead: str, lo: Mapping[str, str]) -> FollowKey:
         return cls(bead, lo.get("category") or "leftover", lo.get("file") or lo["title"])
 
     def __str__(self) -> str:

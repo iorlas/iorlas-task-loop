@@ -1,6 +1,6 @@
 #!/usr/bin/env -S uv run --script
 # /// script
-# requires-python = ">=3.12"
+# requires-python = ">=3.15"
 # dependencies = ["msgspec==0.22.0"]
 # ///
 """Release the plugin: one release at a time, the version from origin, the suite green, the marketplace bumped.

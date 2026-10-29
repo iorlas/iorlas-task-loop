@@ -164,7 +164,7 @@ class BdStore:
         self._run: Runner = run or (lambda argv, where: subprocess_runner(argv, where, timeout))
         self.exe = exe or shutil.which("bd") or "bd"
 
-    def at(self, cwd: str) -> "BdStore":
+    def at(self, cwd: str) -> BdStore:
         return BdStore(self.actor, cwd, self.exe, self._run, self.timeout)
 
     def _call(self, *args: str) -> BdRun:

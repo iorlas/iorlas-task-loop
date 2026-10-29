@@ -17,7 +17,7 @@ constraint; time is: run independent work in parallel, and when a check is slow,
 Read this skill and the profile in full at the start and again after every context compaction.
 
 `tl` below means `uv run --script ${CLAUDE_SKILL_DIR}/tl.py` (macOS and Linux; `~/.config/task-loop/bin/tl` is the same command, kept by the
-SessionStart hook). It names the session for bd, records what the loop does for the dashboard, and runs slots. Python 3.12+ and uv; the
+SessionStart hook). It names the session for bd, records what the loop does for the dashboard, and runs slots. Python 3.15+ and uv; the
 script's header declares its one dependency (msgspec), which uv installs once and caches.
 
 ## The loop profile

@@ -1,5 +1,5 @@
 # Lint (88 sec 6). `just check` runs `ruff check`; `ruff format` applies to src/ only (see justfile).
-target-version = "py312"
+target-version = "py315"
 line-length = 140
 output-format = "concise"
 exclude = [".worktrees", ".slots", ".task", "tests/fixtures", "src/*/_vendor", "skills/task-loop/_vendor"]

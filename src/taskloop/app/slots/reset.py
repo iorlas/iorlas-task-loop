@@ -34,7 +34,7 @@ def retrying[T](env: SlotEnv, what: str, call: Callable[[], T]) -> T:
     raise AssertionError("unreachable")
 
 
-def ready_for(slot: "Slot", bead: str, *, force: bool = False) -> None:
+def ready_for(slot: Slot, bead: str, *, force: bool = False) -> None:
     env, d = slot.env, slot.dir
     busy = env.busy(d)  # never commit or switch branches under a running engine (2026-10-21, lifesim-5ar.7)
     hold = slot.hold()
@@ -55,7 +55,7 @@ def ready_for(slot: "Slot", bead: str, *, force: bool = False) -> None:
     setup(slot)
 
 
-def keep_work(slot: "Slot") -> None:
+def keep_work(slot: Slot) -> None:
     """A dead session's work: committed where it was (on a wip branch when HEAD was detached), never wiped."""
     env, d = slot.env, slot.dir
     if retrying(env, f"slot {slot.name}", lambda: env.git.rebasing(d)):
@@ -70,7 +70,7 @@ def keep_work(slot: "Slot") -> None:
     env.say("WIP committed on " + branch)
 
 
-def check_out(slot: "Slot", bead: str) -> None:
+def check_out(slot: Slot, bead: str) -> None:
     env, d, base = slot.env, slot.dir, slot.env.cfg.base
     what = f"slot {slot.name}"
     if bead and env.git.has_branch(d, "task/" + bead):
@@ -86,7 +86,7 @@ def check_out(slot: "Slot", bead: str) -> None:
         retrying(env, what, lambda: env.git.checkout_detached(d, base))
 
 
-def free_branch(slot: "Slot", branch: str) -> str:
+def free_branch(slot: Slot, branch: str) -> str:
     """Make `branch` free to check out in the slot. Another worktree holding it (a pre-slot worktree, a dead run's) is
     removed when clean, else detached where it stands: its files and commits stay (tl-bxk.10.26, lifesim 2026-10-22).
     "" when free, else why a live run keeps it (the repo's own checkout counts as live)."""
@@ -118,7 +118,7 @@ def inputs_hash(d: str, patterns: list[str]) -> str:
     return h.hexdigest()
 
 
-def setup(slot: "Slot", force: bool = False) -> None:
+def setup(slot: Slot, force: bool = False) -> None:
     """Run the profile's setup only when its inputs changed since the last setup in this slot."""
     env, d, cfg = slot.env, slot.dir, slot.env.cfg
     if not cfg.setup:

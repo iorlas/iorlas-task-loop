@@ -57,7 +57,7 @@ class RunContext:
         now: Callable[[], float] | None = None,
         guard: Callable[[str], None] | None = None,
         on_step: Callable[[str], None] | None = None,
-    ) -> "RunContext":
+    ) -> RunContext:
         """The context of run `run`: its log (appending to the file it may already have: ids go on), steps, budget, calls and checks."""
         now = now or clock.now
         seen = stores.run_log(run).read_from()

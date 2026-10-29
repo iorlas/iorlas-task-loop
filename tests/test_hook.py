@@ -173,6 +173,16 @@ class Speed(unittest.TestCase):
         r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
         self.assertEqual(r.stdout.strip(), "[]")
 
+    @real_proc("the system python3 is the interpreter the plugin's hooks.json gives PreToolUse")
+    def test_pretool_runs_on_the_system_python3_without_uv_or_python_3_15(self):
+        system = Path("/usr/bin/python3")
+        if not system.exists():
+            self.skipTest("no /usr/bin/python3")
+        event = json.dumps({"tool_name": "Bash", "tool_input": {"command": "pkill -f foo"}})
+        r = subprocess.run([str(system), str(HOOK), "pretool"], input=event, capture_output=True, text=True, env=self.env, check=False)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("deny", r.stdout)
+
     @real_proc("a fresh interpreter shows the hook's import graph and exit code")
     def test_an_unknown_event_is_an_error_not_a_silent_pass(self):
         r = subprocess.run([sys.executable, str(HOOK), "nonsense"], input="{}", capture_output=True, text=True, env=self.env, check=False)

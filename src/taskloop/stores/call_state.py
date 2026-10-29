@@ -41,7 +41,7 @@ class CallState:
     def path(self) -> Path:
         return path_for(self.dir, self.bead)
 
-    def save(self) -> "CallState":
+    def save(self) -> CallState:
         p = self.path
         p.parent.mkdir(parents=True, exist_ok=True)
         tmp = p.with_name(f"{p.name}.{os.getpid()}.tmp")
@@ -52,14 +52,14 @@ class CallState:
         os.replace(tmp, p)
         return self
 
-    def note_ref(self, ref: str, now: float = 0.0) -> "CallState":
+    def note_ref(self, ref: str, now: float = 0.0) -> CallState:
         """The vendor published its session id (the worker line on stderr); the first ref sticks."""
         if ref and not self.ref:
             self.ref, self.t_ref = ref, now
             self.save()
         return self
 
-    def returned(self, answer: object, answer_file: str | Path, now: float = 0.0) -> "CallState":
+    def returned(self, answer: object, answer_file: str | Path, now: float = 0.0) -> CallState:
         """The raw answer goes to answer_file first, then the phase moves: a crash between them loses nothing."""
         af = Path(answer_file)
         af.parent.mkdir(parents=True, exist_ok=True)
@@ -71,7 +71,7 @@ class CallState:
         self.phase, self.answer_file = "returned", str(af)
         return self.save()
 
-    def consumed(self) -> "CallState":
+    def consumed(self) -> CallState:
         self.phase = "consumed"
         return self.save()
 

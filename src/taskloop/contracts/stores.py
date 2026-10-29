@@ -167,7 +167,7 @@ class AskStore:
         self.ledger = ledger
 
     @classmethod
-    def at(cls, cfg: paths.ConfigDir) -> "AskStore":
+    def at(cls, cfg: paths.ConfigDir) -> AskStore:
         return cls(AskFiles(cfg), LedgerStore(cfg))
 
     def log(self, a: Ask, event: LedgerEvent, t: float, why: str = "") -> None:

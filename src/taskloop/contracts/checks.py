@@ -61,12 +61,12 @@ class CheckResult(Rec):
     sig: str = ""  # what a red's output says, timings aside: two reds with one sig failed the same way
 
     @classmethod
-    def skipped(cls, check: Check, why: str, producer: str = "") -> "CheckResult":
+    def skipped(cls, check: Check, why: str, producer: str = "") -> CheckResult:
         """The result of a check that did not run, and why."""
         return cls(id=check.id, cmd=check.cmd, group=check.group, exit=None, status="skipped", why=why, producer=producer)
 
     @classmethod
-    def failed_run(cls, cmd: str, tail: str, group: str = "gate", log: str = "") -> "CheckResult":
+    def failed_run(cls, cmd: str, tail: str, group: str = "gate", log: str = "") -> CheckResult:
         """A red run of a command that is not a check of a round (the gate, a rebase), to be shown like one."""
         return cls(id=cmd, cmd=cmd, group=group, exit=1, status="failed", tail=tail, log=log)
 

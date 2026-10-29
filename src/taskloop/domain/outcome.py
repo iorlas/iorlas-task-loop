@@ -70,7 +70,7 @@ class Rule:
     label: str = ""         # bd label added when the bead is left open
     storm: bool = False     # feeds the storm detector
     retries: int = 0        # same fingerprint on one bead before escalation (0: never escalates)
-    escalate_to: "Kind | None" = None
+    escalate_to: Kind | None = None
     replan: bool = False    # the exit charges the replan cap
     wake: str = ""          # when a bead may be picked again: "" now | answer | lane | net | spec | cooldown
 

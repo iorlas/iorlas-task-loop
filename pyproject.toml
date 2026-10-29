@@ -2,7 +2,7 @@
 name = "iorlas-task-loop"
 version = "0"
 description = "Task loop engine: the dependencies of tl.py (PEP 723 header, same pin) and the dev and test tooling."
-requires-python = ">=3.12"
+requires-python = ">=3.15"
 dependencies = [
     "msgspec==0.22.0",
 ]

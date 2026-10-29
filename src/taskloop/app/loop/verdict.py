@@ -41,7 +41,7 @@ class Verdict:
         return (self.outcome == "failed" and self.slot_fault == "slot_broken"
                 and (self.pre_engine or (self.minutes is not None and self.minutes < quick_min)))
 
-    def with_(self, **fields: Any) -> "Verdict":
+    def with_(self, **fields: Any) -> Verdict:
         return replace(self, **fields)
 
 

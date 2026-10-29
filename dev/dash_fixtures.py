@@ -1,6 +1,6 @@
 #!/usr/bin/env -S uv run --script
 # /// script
-# requires-python = ">=3.12"
+# requires-python = ">=3.15"
 # dependencies = ["msgspec==0.22.0"]
 # ///
 """The dashboard page against the contract fixtures, with no engine: the frontend's dev server.

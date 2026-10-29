@@ -51,5 +51,5 @@ class ReviewState(Rec):
         return wire.dump(self)
 
     @classmethod
-    def from_dump(cls, data: Any) -> "ReviewState":
+    def from_dump(cls, data: Any) -> ReviewState:
         return wire.load(cls, data)

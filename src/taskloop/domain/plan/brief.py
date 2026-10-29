@@ -41,7 +41,7 @@ class Brief:
             out[s.name] = out.get(s.name, 0) + s.size
         return out
 
-    def plus(self, name: str, text: str) -> "Brief":
+    def plus(self, name: str, text: str) -> Brief:
         """The brief with `text` appended as a section of its own."""
         if not text:
             return self

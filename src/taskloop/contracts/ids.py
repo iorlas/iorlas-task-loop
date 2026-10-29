@@ -26,7 +26,7 @@ class RunId:
         self.started = started
 
     @classmethod
-    def parse(cls, text: str) -> "RunId":
+    def parse(cls, text: str) -> RunId:
         parts = text.rsplit("-", 2)
         if len(parts) != 3:
             raise ValueError(f"not a run id: {text!r}")
@@ -60,7 +60,7 @@ class Version(tuple[int, ...]):
     __slots__ = ()
 
     @classmethod
-    def parse(cls, text: str) -> "Version":
+    def parse(cls, text: str) -> Version:
         parts = text.split(".")
         if not text or not all(p.isascii() and p.isdigit() for p in parts):
             raise ValueError(f"not a version: {text!r}")

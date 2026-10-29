@@ -100,5 +100,5 @@ class FakeBeads:
     def dolt_push(self) -> tuple[int, str]:
         return 0, ""
 
-    def at(self, cwd: str) -> "FakeBeads":
+    def at(self, cwd: str) -> FakeBeads:
         return self
