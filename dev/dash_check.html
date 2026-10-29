@@ -51,7 +51,7 @@ async function click(sel, text) {
 }
 
 // a layer that is closed (slid off screen) is not on the page for these checks
-const CLOSED = '.pg:not(.on),.sh:not(.on),.scrim:not(.on),.drw:not(.open),[aria-hidden=true]';
+const CLOSED = '.pg:not(.on),.sh:not(.on),.drw:not(.open),[popover]:not(:popover-open),[aria-hidden=true]';
 function shown(el) {
   if (el.closest(CLOSED)) return false;
   const cs = win().getComputedStyle(el), r = el.getBoundingClientRect();
@@ -399,6 +399,20 @@ const SCENARIOS = {
     must($$('.term div').length >= 5, `live tail has ${$$('.term div').length} lines`);
     must($('.box.run'), 'running box');
     rules()('drawer 6dq0');
+    if (W > 600) {  // the native overlays: the drawer is a modal dialog, the tool-call list a popover that a click inside closes
+      must($('dialog.drw.open:modal'), 'the open drawer is a modal dialog');
+      must(doc().activeElement === $('dialog.drw'), `the drawer takes the focus, not ${doc().activeElement && name(doc().activeElement)}`);
+      const pb = $$('[popovertarget]').find((b) => /tool call/.test(b.textContent));
+      if (must(pb, 'a tool-call popover button')) {
+        pb.click(); await settle(100);
+        const pop = $(`#${pb.getAttribute('popovertarget')}`);
+        must(pop.matches(':popover-open'), 'the tool-call popover opens');
+        pop.click(); await settle(100);
+        must(!pop.matches(':popover-open'), 'a click inside the popover closes it');
+      }
+      $('dialog.drw').dispatchEvent(new (win().Event)('cancel', { cancelable: true })); await settle();
+      must(!$('.drw.open') && !$('dialog.drw:modal'), 'Esc (cancel) closes the drawer');
+    }
     await load('/#board~~lifesim-5ban.3'); await settle(2000);
     must($('.box.bad') && /Stuck/.test($('.box.bad').textContent), 'stuck box');
   },

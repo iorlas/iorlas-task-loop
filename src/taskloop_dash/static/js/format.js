@@ -45,16 +45,15 @@ export function bid(id, project, all) {
 
 export const pct = (x) => `${Math.round(x)}%`;
 
-export function clock(t) {
-  const d = new Date(t * 1000);
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
+const HM = new Intl.DateTimeFormat('en', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+const DAYS = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+export const clock = (t) => HM.format(t * 1000);
 
-// a day label for the ledger: today 10:41, yesterday, N days ago
+// a day label for the ledger: today 10:41, yesterday, N days ago (calendar days, local time)
 export function day(t, now) {
-  const d = new Date(t * 1000), n = new Date(now * 1000);
-  const days = Math.round((new Date(n.getFullYear(), n.getMonth(), n.getDate()) - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 864e5);
-  return days <= 0 ? `today ${clock(t)}` : days === 1 ? 'yesterday' : `${days} days ago`;
+  const midnight = (s) => new Date(s * 1000).setHours(0, 0, 0, 0);
+  const days = Math.round((midnight(now) - midnight(t)) / 864e5);
+  return days <= 0 ? `today ${clock(t)}` : DAYS.format(-days, 'day');
 }
 
 const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
