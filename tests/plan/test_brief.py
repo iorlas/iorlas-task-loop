@@ -1,14 +1,19 @@
 """The brief renderer: the text stays byte-identical to the golden set, and the section boundaries cover it exactly."""
 import sys
+import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
+import taskloop.app.plan.briefs as mod
 from plan.brief_cases import CASES, beads
 from taskloop.app.asks import intake
-from taskloop.app.plan.briefs import ENGINE_LABELS
+from taskloop.app.plan.briefs import ENGINE_LABELS, Briefs
+from taskloop.contracts.bead import Bead, Comment
 from taskloop.domain.plan import brief as bf
 from taskloop.domain.prompts.plan import PLAN_BRIEF_KB, PLAN_PROMPT
 
@@ -75,6 +80,55 @@ class Diff(unittest.TestCase):
         self.assertIn("more characters not shown", out)
         self.assertLessEqual(len(out), bf.DIFF_CAP + 120)
         self.assertEqual(bf.field_diff("a", "a"), "")
+
+
+class FitsTheLimit(unittest.TestCase):
+    def brief(self, bead: Bead, comments: list[Comment], kb: float = 5) -> bf.Brief:
+        host = SimpleNamespace(cfg=SimpleNamespace(brief_kb=kb))
+        return Briefs(host).fit(bead, comments, "", 0)
+
+    def test_a_brief_that_grows_over_five_reruns_stays_under_the_limit_oldest_comments_first(self):
+        bead = Bead(id="t-1", title="Add f", status="open", description="Add the file f.", acceptance_criteria="f exists")
+        comments: list[Comment] = []
+        for rerun in range(1, 6):
+            comments.append(Comment(author="denis", text=f"decision {rerun}: " + "x" * 2000))
+            out = self.brief(bead, comments)
+            with self.subTest(rerun=rerun):
+                self.assertLess(len(out.text.encode()), 5 * 1024)
+                self.assertIn("Add the file f.", out.text)
+                self.assertIn("f exists", out.text)
+                self.assertIn(f"decision {rerun}:", out.text)  # the newest stays
+        self.assertNotIn("decision 1:", out.text)
+        self.assertEqual(out.dropped, 3)
+        self.assertIn("(+3 older comments left out", out.text)
+        self.assertLess(out.text.index("(+3"), out.text.index("decision 4:"))
+
+    def test_the_newest_comment_stays_even_when_it_alone_is_over_the_limit(self):
+        out = self.brief(Bead(id="t-1", title="T", status="open"), [Comment(author="a", text="old"), Comment(author="a", text="n" * 9000)])
+        self.assertIn("n" * 9000, out.text)
+        self.assertNotIn("- a: old", out.text)
+
+    def test_a_bead_text_over_the_limit_is_never_cut_and_the_comments_all_go_but_the_newest(self):
+        bead = Bead(id="t-1", title="T", status="open", description="d" * 7000)
+        out = self.brief(bead, [Comment(author="a", text="one"), Comment(author="a", text="two")])
+        self.assertIn("d" * 7000, out.text)
+        self.assertEqual(out.dropped, 1)
+
+    def test_export_warns_naming_the_bead_text_size_when_the_text_alone_is_over_the_limit(self):
+        bead = Bead(id="t-1", title="T", status="open", description="d" * 7000)
+        warns, notes = [], []
+        with tempfile.TemporaryDirectory() as d:
+            store = SimpleNamespace(comments=lambda i: [Comment(author="a", text="one"), Comment(author="a", text="two")],
+                                    show=lambda i: bead)
+            host = SimpleNamespace(
+                cfg=SimpleNamespace(brief_kb=5, pick_label="", needs_info_label=""), store=store, bead="t-1", run_dir=Path(d),
+                brief_file=Path(d) / "b.md", answered=None, warn=warns.append, log=SimpleNamespace(note=notes.append),
+                planner=SimpleNamespace(cap=SimpleNamespace(answered_words=lambda: "")))
+            with mock.patch.object(mod, "peek", lambda store, bead_id: bead):
+                Briefs(host).export()
+        self.assertEqual(len(warns), 1)
+        self.assertIn("bead's own text is 7 KB", warns[0])
+        self.assertIn("1 oldest comments left out", notes[0])
 
 
 if __name__ == "__main__":

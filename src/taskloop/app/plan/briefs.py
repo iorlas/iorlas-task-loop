@@ -20,6 +20,14 @@ class Briefs:
     def text(self) -> str:
         return (self.e.run_dir / "brief.md").read_text(encoding="utf-8")
 
+    def fit(self, bead: Bead, comments: list, hint: str, other: int) -> bf.Brief:
+        """The brief with the oldest comments left out until it fits cfg.brief_kb: the bead's text, the hint, the linked beads and the
+        owner's answer (`other` bytes) are never cut. The limit stays; it is not raised."""
+        e = self.e
+        base = bf.render(bead, [], intake.engine_written, hint)
+        room = int(float(e.cfg.brief_kb) * 1024) - len(base.text.encode()) - other
+        return bf.render(bead, comments, intake.engine_written, hint, room=max(room, 0))
+
     def export(self) -> None:
         """Write the brief to the run dir and to the copy a resumed writer re-reads; refresh the hash that tells a rerun the owner changed
         something, and the snapshot a later amend diffs against."""
@@ -27,11 +35,10 @@ class Briefs:
         bead = peek(e.store, e.bead) or Bead(id=e.bead, title="", status="")
         comments = e.store.comments(e.bead)
         hint = str(bead.metadata.get(intake.HINT) or "")
-        brief = bf.render(bead, comments, intake.engine_written, hint).plus(
-            "linked", bf.linked(e.bead, bead, comments, intake.engine_written, lambda i: peek(e.store, i), e.store.comments))
+        linked = bf.linked(e.bead, bead, comments, intake.engine_written, lambda i: peek(e.store, i), e.store.comments)
         said = e.planner.cap.answered_words()  # the owner's typed answer is no comment: the brief carries it for the workers
-        if said and e.answered:
-            brief = brief.plus("answer", f"\n## Owner answer (to ask {e.answered.id})\n{said}\n")
+        answer = f"\n## Owner answer (to ask {e.answered.id})\n{said}\n" if said and e.answered else ""
+        brief = self.fit(bead, comments, hint, len(linked.encode()) + len(answer.encode())).plus("linked", linked).plus("answer", answer)
         e.snap = bf.snapshot(bead, comments, intake.engine_written)
         (e.run_dir / "brief.md").write_text(brief.text, encoding="utf-8")
         e.brief_file.write_text(brief.text, encoding="utf-8")  # a resumed writer is told where to re-read it (tl-bxk.10.29)
@@ -40,6 +47,9 @@ class Briefs:
         plain = bf.render(bead, comments, intake.engine_written, hint, owner_only=True, engine_labels=(*ENGINE_LABELS, *ours))
         e.brief_hash = hashlib.sha1(plain.text.encode("utf-8")).hexdigest()
         self.parts = brief.sizes()
+        if brief.dropped:
+            e.log.note(f"brief: {brief.dropped} oldest comments left out to fit {e.cfg.brief_kb} KB (all stay in bd comments)")
         kb = len(brief.text.encode("utf-8")) / 1024
         if kb > float(e.cfg.brief_kb):
-            e.warn(f"the brief is {kb:.0f} KB (over {e.cfg.brief_kb} KB): the bead may be too big for one task")
+            e.warn(f"the brief is {kb:.0f} KB (over {e.cfg.brief_kb} KB) with the comments cut to the newest: the bead's own text is "
+                   f"{len(self.fit(bead, [], hint, 0).text.encode('utf-8')) / 1024:.0f} KB, too big for one task")

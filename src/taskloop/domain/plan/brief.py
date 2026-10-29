@@ -32,6 +32,7 @@ class Section:
 class Brief:
     text: str
     sections: tuple[Section, ...]
+    dropped: int = 0  # the oldest comments left out to fit `room` (render)
 
     def sizes(self) -> dict[str, int]:
         """{section name: bytes}; what accounting code reads."""
@@ -45,7 +46,8 @@ class Brief:
         if not text:
             return self
         at = len(self.text.encode())
-        return Brief(text=self.text + text, sections=(*self.sections, Section(name=name, start=at, end=at + len(text.encode()))))
+        return Brief(text=self.text + text, dropped=self.dropped,
+                     sections=(*self.sections, Section(name=name, start=at, end=at + len(text.encode()))))
 
 
 def people_lines(text: str | None) -> str:
@@ -55,10 +57,11 @@ def people_lines(text: str | None) -> str:
 
 
 def render(bead: Bead, comments: Sequence[Comment], is_engine: Callable[[str], bool], hint: str = "", owner_only: bool = False,
-           engine_labels: Sequence[str] = ()) -> Brief:
+           engine_labels: Sequence[str] = (), room: int | None = None) -> Brief:
     """Markdown brief: title, the bead's text fields whole, related beads by title, people's comments whole, and the bead's labels.
     Nothing the engine wrote (comments, Notes lines) is in it (tl-7y6.6.2). owner_only also leaves out `engine_labels`: the checkpoint
-    compares that text, so an engine run never looks like the owner's edit."""
+    compares that text, so an engine run never looks like the owner's edit. `room` is the bytes the comments may take: the oldest go
+    first, the newest stays whole, and a line names how many were left out."""
     parts: list[tuple[str, str]] = [("title", f"# {bead.id}: {bead.title}")]
     labels = [x for x in bead.labels if not (owner_only and x in engine_labels)]
     meta = [bead.issue_type, f"P{bead.priority}" if bead.priority is not None else "", ", ".join(labels)]
@@ -74,10 +77,27 @@ def render(bead: Bead, comments: Sequence[Comment], is_engine: Callable[[str], b
     if hint.strip():
         parts += [("hint", ""), ("hint", "## Owner hint"), ("hint", hint.strip())]
     people = [c for c in comments if not is_engine(c.text)]
+    lines = [f"- {c.author or '?'}: {c.text.strip()}" for c in people]
+    dropped = fit(lines, room)
     if people:
-        parts += [("comments", ""), ("comments", "## Comments")] + [("comments", f"- {c.author or '?'}: {c.text.strip()}") for c in people]
+        parts += [("comments", ""), ("comments", "## Comments")]
+        parts += [("comments", f"(+{dropped} older comments left out to fit the brief; see bd comments)")] if dropped else []
+        parts += [("comments", ln) for ln in lines[dropped:]]
     text = "\n".join(t for _, t in parts) + "\n"
-    return Brief(text=text, sections=boundaries(parts))
+    return Brief(text=text, sections=boundaries(parts), dropped=dropped)
+
+
+def fit(lines: Sequence[str], room: int | None) -> int:
+    """How many of the oldest `lines` to leave out so the rest takes at most `room` bytes; the newest line always stays."""
+    if room is None:
+        return 0
+    used, keep = 0, 0
+    for ln in reversed(lines):
+        used += len(ln.encode()) + 1
+        if used > room and keep:
+            break
+        keep += 1
+    return len(lines) - keep
 
 
 def boundaries(parts: Sequence[tuple[str, str]]) -> tuple[Section, ...]:
