@@ -1,5 +1,6 @@
-"""`tl ask list|answer|withdraw|age` and the owner's typed verbs `tl answer|hint|hold|override`: the argument handling over app/asks. Every
-write is a typed record (an AskAnswer, or a metadata key on the bead); nothing here reads or writes prose that something later parses."""
+"""`tl ask list|show|answer|withdraw|age` and the owner's typed verbs `tl answer|hint|hold|override`: the argument handling over
+app/asks. Every write is a typed record (an AskAnswer, or a metadata key on the bead);
+nothing here reads or writes prose that something later parses."""
 import json
 import time
 from argparse import Namespace
@@ -73,6 +74,25 @@ def age(asks: AskStore, now: float, out: Out) -> int:
     return 1 if faults else 0
 
 
+def show(asks: AskStore, key: str, out: Out) -> int:
+    """One ask by its id (or its bead's id), the Ask v3 fields; reads only."""
+    ask = asks.get(key) or next((x for x in asks.all() if x.id == key), None)
+    if ask is None:
+        out(f"tl: no ask {key or '(none given)'}")
+        return 1
+    out(f"ask {ask.id} (bead {ask.bead}, {ask.kind}, {ask.status})")
+    out(f"question: {ask.decision}")
+    out(f"owner cause: {ask.owner_cause} (set by {ask.cause_by})")
+    out(f"blocking: {'yes' if ask.blocking else 'no'}")
+    out(f"default: {ask.default or '-'}")
+    out("similar: " + (", ".join(f"{s.kind} {s.id}" for s in ask.similar) or "-"))
+    out("thread: " + ("" if ask.thread else "-"))
+    for t in ask.thread:
+        out(f"  [{t.by}] {t.md}")
+    out(f"outcome: {ask.outcome.value if ask.outcome else '-'}" + (f" ({ask.outcome_ref})" if ask.outcome_ref else ""))
+    return 0
+
+
 def run(a: Namespace, asks: AskStore, store_at: Callable[[str], Beads], now: Callable[[], float], by: str, out: Out = print) -> int:
     """One verb. `store_at(repo)` is the tracker of the ask's repo ('' = here)."""
     op = a.op
@@ -82,6 +102,8 @@ def run(a: Namespace, asks: AskStore, store_at: Callable[[str], Beads], now: Cal
     if op == "age":
         return age(asks, now(), out)
     bead = getattr(a, "bead", "")
+    if op == "show":
+        return show(asks, bead or "", out)
     if not bead:
         out(f"tl: {op} needs a bead id")
         return 2
@@ -136,8 +158,9 @@ def verb(a: Namespace, op: str, bead: str, ask: Ask | None, verbs: intake.Intake
 
 def add_parsers(sp: Any) -> None:
     """`tl ask ...` and the owner's verbs `tl answer|hint|hold|override|park|note`, on tl's subparsers."""
-    p = sp.add_parser("ask", help="the owner's inbox: list the open asks, answer one, withdraw one that no longer applies, or their age")
-    p.add_argument("op", choices=["list", "answer", "withdraw", "age"])
+    p = sp.add_parser("ask", help="the owner's inbox: list the open asks, show one, answer one, withdraw one that no longer applies, "
+                    "or their age")
+    p.add_argument("op", choices=["list", "show", "answer", "withdraw", "age"])
     p.add_argument("bead", nargs="?")
     p.add_argument("text", nargs="*", help="answer: the answer; withdraw: why")
     p.add_argument("--json", action="store_true")

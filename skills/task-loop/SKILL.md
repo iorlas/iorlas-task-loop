@@ -144,7 +144,7 @@ bead before T; T is `+2h`, `90m`, `HH:MM` or ISO); `tl override BEAD replan-cap`
 `tl park BEAD` holds the bead and asks its live run to end at its next step boundary (branch and checkpoint kept; `tl hold BEAD --release`
 lets it go); `tl note BEAD text` hands the live run's next worker a note (with no run going it is the hint). Both write the run's request
 file (`app/run/requests.py`); the dashboard's stop writes it too and ends the run at once through its stop flag. Each verb also leaves an `Owner (tl)`
-receipt comment for people. `tl ask list|withdraw|age`: the inbox, ordered by what each ask unblocks, a dismissal, and how long each
+receipt comment for people. `tl ask list|show|withdraw|age`: the inbox, `tl ask show ID` (read-only) prints one ask's question, owner cause, blocking, default, similar asks, thread and outcome, ordered by what each ask unblocks, a dismissal, and how long each
 ask has waited. An answer no run used within 30 minutes is an engine fault: `tl ask age` prints a `FAULT:` line and exits 1.
 `app/asks/intake.py` is the one place comments are classified (`parse(comment) -> kind, fields, body`): only receipts and the engine's
 own prefixes are told apart, everything else is a `note`.
@@ -350,7 +350,7 @@ container); the session that starts it only watches it.
   (exit 2); a landing ends the run, parks and pauses never count. `taken` (another live session holds it) → the next
   bead, that one again in 15 minutes. A bead a gone run left assigned (a pause keeps the bead open and assigned) is
   released first, as run-task does.
-- **Brief:** `tl status --brief [--json]`: first line says loop RUNNING or NOT RUNNING and when it last did anything, then asks, slots, versions and the last beads, at most 40 lines. `tl handoff show` prints the handoff a compaction hands on (the plugin's hooks write and inject it).
+- **Brief:** `tl status --brief [--json]`: first line says loop RUNNING or NOT RUNNING and when it last did anything, then asks, slots, versions and the last beads, at most 40 lines. `tl wait --bead ID|--any [--timeout S]` blocks until that run (or any live run of this repo) ends or an ask opens, prints one line and exits 0 landed/done, 10 ask, 11 parked/blocked/failed, 12 crashed, 13 no run, 14 timeout (read-only; polls the run logs). `tl handoff show` prints the handoff a compaction hands on (the plugin's hooks write and inject it).
 - **Watch:** `tl loop status [--last N]`: per live loop its pid, the bead running now, its slot and since when, then one line per
   finished bead (outcome, minutes, rounds, tests added, ask, trace id). Each live loop also writes its `LoopState`
   (`<repo>-<hash>.<pid>.json`) every pass, with the queue it ranked and why each skipped bead was skipped; the dashboard's

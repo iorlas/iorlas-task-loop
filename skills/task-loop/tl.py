@@ -35,6 +35,8 @@
   tl.py rollback                                pin the previous task-loop version (the delegate stays as it is)
   tl.py cutover check [--json]                  live runs and loops on this machine; exit 1 if any (docs/cutover.md)
   tl.py status [--brief] [--json] [--repo DIR]  loop RUNNING or NOT RUNNING, asks, slots, versions, recent beads (<= 40 lines, 8 KB)
+  tl.py wait --bead ID|--any [--timeout S]      block until the run ends or an ask opens; one line, the exit code says which (--help)
+  tl.py ask show ID                             one ask: question, owner cause, blocking, default, similar, thread, outcome (read-only)
   tl.py handoff write|show [--repo DIR]         the <= 4 KB handoff a compaction hands to the next session (hooks/hook.py writes it)
 
 State: ~/.config/task-loop : repos.json, events.jsonl, sessions/, dash.*.
@@ -63,6 +65,8 @@ from taskloop.app.wire import usage as wire_usage
 from taskloop.cli import asks as cli_asks
 from taskloop.cli import slots as slots_cli
 from taskloop.cli import status
+from taskloop.cli import wait as cli_wait
+from taskloop.contracts.paths import ConfigDir
 
 HERE = Path(__file__).resolve().parent
 
@@ -214,6 +218,7 @@ def loop_parsers(sp):
     p.add_argument("--brief", action="store_true", help="the only form (kept for the name the skill uses)")
     p.add_argument("--json", action="store_true")
     p.add_argument("--repo")
+    cli_wait.add_parser(sp)
     p = sp.add_parser("handoff", help="write or show the <= 4 KB handoff for the next session (made from the stores, never summarised)")
     p.add_argument("op", choices=["write", "show"])
     p.add_argument("--repo")
@@ -276,6 +281,11 @@ def v_status(a: Any, c: Ctx) -> int:
     return status.run_status(repo_of(a), c.here.parents[1], c.now(), a.json)
 
 
+def v_wait(a: Any, c: Ctx) -> int:
+    repo = repo_of(a)
+    return cli_wait.wait(a, ConfigDir(ident.config_dir()), wire_asks.store(), repo, hook_wire.main_checkout, now=c.now)
+
+
 def v_handoff(a: Any, c: Ctx) -> int:
     return status.run_handoff(a.op, repo_of(a), c.here.parents[1], c.now())
 
@@ -302,6 +312,7 @@ VERBS: Final[dict[str, Handler]] = {
     "land-lock": v_land_lock,
     "status": v_status,
     "handoff": v_handoff,
+    "wait": v_wait,
     "run-task": lazy("taskloop.app.run.entry", "main"),
     "selftest": lazy("taskloop.app.launch.selftest", "cmd_selftest"),
     "cutover": lazy("taskloop.cli.loop_cmd", "cmd_cutover"),
