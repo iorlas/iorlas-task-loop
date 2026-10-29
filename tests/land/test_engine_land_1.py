@@ -18,7 +18,6 @@ from support.engine_case import (
     _cells,
     finding,
     no_repo,
-    pyc,
     real_git,
     real_proc,
     review,
@@ -28,6 +27,7 @@ from support.engine_case import (
 
 # isort: split
 import contextlib
+import fcntl
 import json
 import os
 import shlex
@@ -292,10 +292,7 @@ class EngineLand1Test(EngineTest):
         with self.stoppable():
             rc, _ = self.run_engine(
                 {"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
-                land=pyc(
-                    "import os,signal,subprocess,sys,time; os.kill(os.getppid(), signal.SIGTERM); time.sleep(0.3); "
-                    "sys.exit(subprocess.call(['git', 'push', '-q', 'origin', 'HEAD:main']))"
-                ),
+                land=self.script("land-push.sh", "kill -TERM $PPID\nsleep 0.3\ngit push -q origin HEAD:main\n"),
             )
         self.assertEqual(rc, 0)
         self.assertEqual(self.eng.result()["outcome"], "landed")
@@ -316,9 +313,8 @@ class EngineLand1Test(EngineTest):
     @real_proc("the land command is a real child that signals its parent, the engine, mid-command")
     def test_a_stop_during_a_rejected_push_stops_after_it(self):
         with self.stoppable():
-            rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]},
-                                    land=pyc("import os,signal,sys,time; os.kill(os.getppid(), signal.SIGTERM); time.sleep(0.3); "
-                                             "print('! [rejected] (fetch first)', file=sys.stderr); sys.exit(1)"))
+            reject = self.script("land-reject.sh", "kill -TERM $PPID\nsleep 0.3\necho '! [rejected] (fetch first)' >&2\nexit 1\n")
+            rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, land=reject)
         self.assertEqual(rc, 2)
         self.assertIn("stopped (SIGTERM)", self.said())
 
@@ -715,18 +711,21 @@ class EngineLand1Test(EngineTest):
             self.assertIn("retry checks", ck["pending_land_validation"])
             self.assertEqual(ck["feedback"], ck["pending_land_validation"])
 
-    @real_proc("flock is per process: a second real interpreter shows the lock held across processes")
     def test_land_lock_is_one_per_repo_across_processes(self):
         if os.name == "nt":
             self.skipTest("POSIX flock")
         eng = self.checks_engine()
-        probe = ("import fcntl,sys; f=open(sys.argv[1],'a')\n"
-                 "try:\n fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB); print('free')\n"
-                 "except OSError: print('held')")
+
+        def probe(path):  # flock is per open file: a second descriptor sees what a second process sees
+            with open(path, "a") as f:
+                try:
+                    fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except OSError:
+                    return "held"
+                return "free"
         with eng.lander.lock() as path:
-            held = subprocess.run([sys.executable, "-c", probe, str(path)], capture_output=True, text=True, check=False).stdout
-        free = subprocess.run([sys.executable, "-c", probe, str(path)], capture_output=True, text=True, check=False).stdout
-        self.assertEqual((held.strip(), free.strip()), ("held", "free"))
+            held = probe(path)
+        self.assertEqual((held, probe(path)), ("held", "free"))
 
 
 _cells(EngineLand1Test, "push_race_failure_path_releases_land_lock", "push_race_failure_path_cell",

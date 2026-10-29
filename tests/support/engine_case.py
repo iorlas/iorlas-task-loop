@@ -454,10 +454,16 @@ class EngineTest(unittest.TestCase):
     def spawn(self, pidfile, term=False):
         """A check that starts a child sleeping 30 s and records its pid, then waits for it (term: after sending its parent, the
         engine, SIGTERM)."""
-        code = "import os,signal,subprocess; c=subprocess.Popen(['sleep','30']); open({!r},'w').write(str(c.pid)); {} c.wait()".format(
-            str(pidfile), "os.kill(os.getppid(), signal.SIGTERM);" if term else ""
-        )
-        return pyc(code)
+        kill = "kill -TERM $PPID; " if term else ""
+        script = Path(pidfile).with_suffix(".sh")  # a script, not `sh -c`: a check is an argv, and a shell string is refused
+        script.write_text(f"sleep 30 &\necho $! > {shlex.quote(str(pidfile))}\n{kill}wait\n")
+        return shlex.join(["sh", str(script)])
+
+    def script(self, name, body):
+        """A shell script in the test's temp dir, as the one-line text of a command that runs it."""
+        path = Path(self.tmp.name, name)
+        path.write_text(body)
+        return shlex.join(["sh", str(path)])
 
     def child_of(self, pidfile, limit=5):
         """The pid the check recorded. A caller that waits for a loaded runner to start the check passes a long limit (the wait ends

@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support import procsim
-from support.engine_case import pyc, real_proc
+from support.engine_case import real_proc
 from test_checks_speed import SpeedTest
 
 from taskloop.app.wire import slots as wslots
@@ -42,7 +42,7 @@ class Quiet(SpeedTest):
 
     @real_proc("the records of a real wall kill: the engine stops a sleeping check and the time between its start and end is real")
     def test_a_wall_hit_check_leaves_one_start_and_end_with_wall_hit_and_a_quiet_one_does_not(self):
-        eng, res = self.run_one(pyc("import time; time.sleep(30)"), wall_min=0.01)
+        eng, res = self.run_one("sleep 30", wall_min=0.01)
         self.assertEqual((res.exit, res.wall_hit), (124, True))
         start, end = self.log(eng, "check_start")[-1], self.log(eng, "check_end")[-1]
         self.assertEqual((end["id"], end["exit"], end["wall_hit"]), (start["id"], 124, True))
@@ -53,8 +53,8 @@ class Quiet(SpeedTest):
     @real_proc("a stop flag kills a real check's tree: the sleeping grandchild is gone")
     def test_the_stop_flag_ends_a_running_check_and_its_tree(self):
         mark = f"74.{os.getpid()}"
-        eng = self.checks_engine(checks=[{"id": "q", "cmd": pyc(f"import subprocess; subprocess.call(['sleep', {mark!r}])"),  # pyrefly: ignore[bad-argument-type]
-                                          "group": "tests"}])
+        sleeper = self.script("sleeper.sh", f"sleep {mark}\n:\n")  # the shell stays the parent of the sleep
+        eng = self.checks_engine(checks=[{"id": "q", "cmd": sleeper, "group": "tests"}])
         timer = threading.Timer(1.0, eng.halt.set)
         timer.start()
         self.addCleanup(timer.cancel)
