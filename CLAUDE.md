@@ -62,11 +62,12 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 
 ```bash
 python3 -m unittest discover -s tests
-just check        # ruff + pyrefly + the suite (tools pinned in mise.toml; `mise install`)
+just check        # ruff + pyrefly + import-linter + tests/gate_rules.py (tools pinned in mise.toml; `mise install`)
 ```
 
 CI runs the suite and `just check` on Ubuntu with Python 3.12. Linux locally: `docker run --rm -v "$PWD":/src:ro python:3.12-slim ...`.
 Caps (tests/gate_rules.py): 400 SLOC per file, 80 per function, 800 per test file; the KNOWN_OVERSIZE table (tests/rules_ratchet.json) may only shrink.
+Architecture (layers, app slices, dashboard, `import re` placement): the `.importlinter` contracts; lazy imports, banned modules, module docstrings: ruff (PLC0415, TID251, D100). Both run in `just rules`.
 
 ## Architecture Overview
 

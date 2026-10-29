@@ -1,3 +1,4 @@
+"""The dashboard server: pages, API and live state."""
 import dataclasses
 import json
 import os

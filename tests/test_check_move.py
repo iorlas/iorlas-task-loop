@@ -1,3 +1,4 @@
+"""dev/check_move.py: a pure move passes; a planted edit or a deletion without a destination fails."""
 import os
 import subprocess
 import sys

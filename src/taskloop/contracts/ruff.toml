@@ -1,0 +1,8 @@
+# The root config plus the modules this layer never imports (TID251; the one-file stdlib modules import-linter cannot name).
+extend = "../../../ruff.toml"
+
+[lint.flake8-tidy-imports.banned-api]
+"delegate".msg = "task-loop and delegate share only the worker-run contract; never import the other plugin"
+"subprocess".msg = "contracts never spawns a process"
+"socket".msg = "contracts never opens a socket"
+"threading".msg = "contracts never starts a thread"

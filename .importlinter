@@ -1,0 +1,411 @@
+# The architecture rules (was tests/gate_rules.py layer_problems / placement_problems and the contracts and ports rule files).
+# Run by `just rules` with src/ on PYTHONPATH. stdlib modules that are one file (subprocess, socket, threading) cannot be root packages
+# here (urllib, http, multiprocessing, re are packages): their ban is ruff TID251 (src/taskloop/contracts/ruff.toml, src/taskloop/stores/ruff.toml). "delegate" is banned by TID251 in ruff.toml.
+[importlinter]
+root_packages =
+    taskloop
+    taskloop_dash
+    re
+    urllib
+    http
+    multiprocessing
+    urllib
+    http
+    multiprocessing
+include_external_packages = True
+
+[importlinter:contract:layers]
+name = Layers: cli/hook > app > stores > domain/adapters > contracts
+type = layers
+layers =
+    taskloop.cli | taskloop.hook
+    taskloop.app
+    taskloop.stores
+    taskloop.domain | taskloop.adapters
+    taskloop.contracts
+
+[importlinter:contract:forbidden-regex]
+name = import re only in adapters and domain matchers
+type = forbidden
+source_modules =
+    taskloop
+    taskloop_dash
+forbidden_modules = re
+allow_indirect_imports = True
+ignore_imports =
+    taskloop.adapters.** -> re
+    taskloop.domain.**.matchers -> re
+    taskloop.domain.matchers -> re
+
+[importlinter:contract:contracts-no-network-or-processes]
+name = contracts never imports urllib, http or multiprocessing
+type = forbidden
+source_modules = taskloop.contracts
+forbidden_modules =
+    urllib
+    http
+    multiprocessing
+allow_indirect_imports = True
+
+[importlinter:contract:layers-no-skips]
+name = cli and hook never import domain or adapters
+type = forbidden
+source_modules =
+    taskloop.cli
+    taskloop.hook
+forbidden_modules =
+    taskloop.domain
+    taskloop.adapters
+allow_indirect_imports = True
+
+[importlinter:contract:stores-not-domain]
+name = stores never imports domain
+type = forbidden
+source_modules = taskloop.stores
+forbidden_modules = taskloop.domain
+allow_indirect_imports = True
+
+[importlinter:contract:dash-imports-contracts-only]
+name = the dashboard imports taskloop.contracts only
+type = forbidden
+source_modules = taskloop_dash
+forbidden_modules =
+    taskloop.domain
+    taskloop.adapters
+    taskloop.stores
+    taskloop.app
+    taskloop.cli
+    taskloop.hook
+allow_indirect_imports = True
+
+[importlinter:contract:only-launch-imports-dash]
+name = only app/launch (the verbs that start the dashboard) imports taskloop_dash
+type = forbidden
+source_modules = taskloop
+forbidden_modules = taskloop_dash
+allow_indirect_imports = True
+ignore_imports =
+    taskloop.app.launch.** -> taskloop_dash.**
+
+[importlinter:contract:app-slices-acyclic]
+name = app slices form no cycle (a layers order, top may import below)
+type = layers
+containers = taskloop.app
+layers =
+    launch
+    prune
+    run
+    wire
+    loop
+    land
+    write | review | plan | look
+    report
+    checks
+    release | track | doctor
+    slots
+    asks
+
+# The app slices: run, wire and launch may import every slice (the composition root and what tl's verbs start); every other slice
+# imports only the slices named in its contract.
+
+[importlinter:contract:app-asks]
+name = app slice asks imports only itself
+type = forbidden
+source_modules = taskloop.app.asks
+forbidden_modules =
+    taskloop.app.checks
+    taskloop.app.doctor
+    taskloop.app.land
+    taskloop.app.launch
+    taskloop.app.look
+    taskloop.app.loop
+    taskloop.app.plan
+    taskloop.app.prune
+    taskloop.app.release
+    taskloop.app.report
+    taskloop.app.review
+    taskloop.app.run
+    taskloop.app.slots
+    taskloop.app.track
+    taskloop.app.wire
+    taskloop.app.write
+allow_indirect_imports = True
+
+[importlinter:contract:app-checks]
+name = app slice checks imports only itself
+type = forbidden
+source_modules = taskloop.app.checks
+forbidden_modules =
+    taskloop.app.asks
+    taskloop.app.doctor
+    taskloop.app.land
+    taskloop.app.launch
+    taskloop.app.look
+    taskloop.app.loop
+    taskloop.app.plan
+    taskloop.app.prune
+    taskloop.app.release
+    taskloop.app.report
+    taskloop.app.review
+    taskloop.app.run
+    taskloop.app.slots
+    taskloop.app.track
+    taskloop.app.wire
+    taskloop.app.write
+allow_indirect_imports = True
+
+[importlinter:contract:app-doctor]
+name = app slice doctor imports only itself
+type = forbidden
+source_modules = taskloop.app.doctor
+forbidden_modules =
+    taskloop.app.asks
+    taskloop.app.checks
+    taskloop.app.land
+    taskloop.app.launch
+    taskloop.app.look
+    taskloop.app.loop
+    taskloop.app.plan
+    taskloop.app.prune
+    taskloop.app.release
+    taskloop.app.report
+    taskloop.app.review
+    taskloop.app.run
+    taskloop.app.slots
+    taskloop.app.track
+    taskloop.app.wire
+    taskloop.app.write
+allow_indirect_imports = True
+
+[importlinter:contract:app-land]
+name = app slice land imports only asks, checks, slots
+type = forbidden
+source_modules = taskloop.app.land
+forbidden_modules =
+    taskloop.app.doctor
+    taskloop.app.launch
+    taskloop.app.look
+    taskloop.app.loop
+    taskloop.app.plan
+    taskloop.app.prune
+    taskloop.app.release
+    taskloop.app.report
+    taskloop.app.review
+    taskloop.app.run
+    taskloop.app.track
+    taskloop.app.wire
+    taskloop.app.write
+allow_indirect_imports = True
+
+[importlinter:contract:app-look]
+name = app slice look imports only asks, checks
+type = forbidden
+source_modules = taskloop.app.look
+forbidden_modules =
+    taskloop.app.doctor
+    taskloop.app.land
+    taskloop.app.launch
+    taskloop.app.loop
+    taskloop.app.plan
+    taskloop.app.prune
+    taskloop.app.release
+    taskloop.app.report
+    taskloop.app.review
+    taskloop.app.run
+    taskloop.app.slots
+    taskloop.app.track
+    taskloop.app.wire
+    taskloop.app.write
+allow_indirect_imports = True
+
+[importlinter:contract:app-loop]
+name = app slice loop imports only asks, release, report, run, slots
+type = forbidden
+source_modules = taskloop.app.loop
+forbidden_modules =
+    taskloop.app.checks
+    taskloop.app.doctor
+    taskloop.app.land
+    taskloop.app.launch
+    taskloop.app.look
+    taskloop.app.plan
+    taskloop.app.prune
+    taskloop.app.review
+    taskloop.app.track
+    taskloop.app.wire
+    taskloop.app.write
+allow_indirect_imports = True
+
+[importlinter:contract:app-plan]
+name = app slice plan imports only asks, checks
+type = forbidden
+source_modules = taskloop.app.plan
+forbidden_modules =
+    taskloop.app.doctor
+    taskloop.app.land
+    taskloop.app.launch
+    taskloop.app.look
+    taskloop.app.loop
+    taskloop.app.prune
+    taskloop.app.release
+    taskloop.app.report
+    taskloop.app.review
+    taskloop.app.run
+    taskloop.app.slots
+    taskloop.app.track
+    taskloop.app.wire
+    taskloop.app.write
+allow_indirect_imports = True
+
+[importlinter:contract:app-prune]
+name = app slice prune imports only release, run, track
+type = forbidden
+source_modules = taskloop.app.prune
+forbidden_modules =
+    taskloop.app.asks
+    taskloop.app.checks
+    taskloop.app.doctor
+    taskloop.app.land
+    taskloop.app.launch
+    taskloop.app.look
+    taskloop.app.loop
+    taskloop.app.plan
+    taskloop.app.report
+    taskloop.app.review
+    taskloop.app.slots
+    taskloop.app.wire
+    taskloop.app.write
+allow_indirect_imports = True
+
+[importlinter:contract:app-release]
+name = app slice release imports only itself
+type = forbidden
+source_modules = taskloop.app.release
+forbidden_modules =
+    taskloop.app.asks
+    taskloop.app.checks
+    taskloop.app.doctor
+    taskloop.app.land
+    taskloop.app.launch
+    taskloop.app.look
+    taskloop.app.loop
+    taskloop.app.plan
+    taskloop.app.prune
+    taskloop.app.report
+    taskloop.app.review
+    taskloop.app.run
+    taskloop.app.slots
+    taskloop.app.track
+    taskloop.app.wire
+    taskloop.app.write
+allow_indirect_imports = True
+
+[importlinter:contract:app-report]
+name = app slice report imports only asks
+type = forbidden
+source_modules = taskloop.app.report
+forbidden_modules =
+    taskloop.app.checks
+    taskloop.app.doctor
+    taskloop.app.land
+    taskloop.app.launch
+    taskloop.app.look
+    taskloop.app.loop
+    taskloop.app.plan
+    taskloop.app.prune
+    taskloop.app.release
+    taskloop.app.review
+    taskloop.app.run
+    taskloop.app.slots
+    taskloop.app.track
+    taskloop.app.wire
+    taskloop.app.write
+allow_indirect_imports = True
+
+[importlinter:contract:app-review]
+name = app slice review imports only asks, checks
+type = forbidden
+source_modules = taskloop.app.review
+forbidden_modules =
+    taskloop.app.doctor
+    taskloop.app.land
+    taskloop.app.launch
+    taskloop.app.look
+    taskloop.app.loop
+    taskloop.app.plan
+    taskloop.app.prune
+    taskloop.app.release
+    taskloop.app.report
+    taskloop.app.run
+    taskloop.app.slots
+    taskloop.app.track
+    taskloop.app.wire
+    taskloop.app.write
+allow_indirect_imports = True
+
+[importlinter:contract:app-slots]
+name = app slice slots imports only itself
+type = forbidden
+source_modules = taskloop.app.slots
+forbidden_modules =
+    taskloop.app.asks
+    taskloop.app.checks
+    taskloop.app.doctor
+    taskloop.app.land
+    taskloop.app.launch
+    taskloop.app.look
+    taskloop.app.loop
+    taskloop.app.plan
+    taskloop.app.prune
+    taskloop.app.release
+    taskloop.app.report
+    taskloop.app.review
+    taskloop.app.run
+    taskloop.app.track
+    taskloop.app.wire
+    taskloop.app.write
+allow_indirect_imports = True
+
+[importlinter:contract:app-track]
+name = app slice track imports only itself
+type = forbidden
+source_modules = taskloop.app.track
+forbidden_modules =
+    taskloop.app.asks
+    taskloop.app.checks
+    taskloop.app.doctor
+    taskloop.app.land
+    taskloop.app.launch
+    taskloop.app.look
+    taskloop.app.loop
+    taskloop.app.plan
+    taskloop.app.prune
+    taskloop.app.release
+    taskloop.app.report
+    taskloop.app.review
+    taskloop.app.run
+    taskloop.app.slots
+    taskloop.app.wire
+    taskloop.app.write
+allow_indirect_imports = True
+
+[importlinter:contract:app-write]
+name = app slice write imports only asks, checks
+type = forbidden
+source_modules = taskloop.app.write
+forbidden_modules =
+    taskloop.app.doctor
+    taskloop.app.land
+    taskloop.app.launch
+    taskloop.app.look
+    taskloop.app.loop
+    taskloop.app.plan
+    taskloop.app.prune
+    taskloop.app.release
+    taskloop.app.report
+    taskloop.app.review
+    taskloop.app.run
+    taskloop.app.slots
+    taskloop.app.track
+    taskloop.app.wire
+allow_indirect_imports = True

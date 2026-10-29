@@ -1,3 +1,4 @@
+"""The land lock around a command: exit code passes through, a second caller waits, the lock is released after a failure."""
 import os
 import subprocess
 import sys

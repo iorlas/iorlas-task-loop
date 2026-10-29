@@ -1,3 +1,4 @@
+"""The tl.py launcher: its verbs and output."""
 import io
 import json
 import os

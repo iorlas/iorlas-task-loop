@@ -5,7 +5,7 @@ output-format = "concise"
 exclude = [".worktrees", ".slots", ".task", "tests/fixtures", "src/*/_vendor", "skills/task-loop/_vendor"]
 
 [lint]
-select = ["E", "F", "W", "I", "UP", "B", "C4", "C90", "SIM", "RUF", "PL"]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "C90", "SIM", "RUF", "PL", "D100", "TID251"]
 ignore = [
     "PLR0913",  # argument count: deep functions legitimately take many
     "PLR2004",  # magic values
@@ -14,6 +14,11 @@ ignore = [
 
 # No per-file ignores, none for tests, skills or dev either: tests/gate_rules.py fails if one comes back. A genuine boundary gets one
 # `# noqa: RULE  reason` on its own line (E402 after a sys.path edit, F401 for an import kept for its side effect, PLC0415, SIM115).
+
+# Banned imports (TID251). The two plugins never import each other; src/taskloop/{contracts,stores}/ruff.toml add the modules those layers never import.
+# The other architecture rules (layers, app slices, `import re` placement) are the `.importlinter` contracts, run by `just rules`.
+[lint.flake8-tidy-imports.banned-api]
+"delegate".msg = "task-loop and delegate share only the worker-run contract; never import the other plugin"
 
 [lint.mccabe]
 max-complexity = 12

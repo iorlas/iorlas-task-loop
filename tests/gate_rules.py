@@ -1,15 +1,12 @@
-"""A1 (tl-rules): the architecture rules as one stdlib test (88-target-architecture sections 3 and 6).
+"""A1 (tl-rules): the rules the linters cannot express, as one stdlib test (88-target-architecture sections 3 and 6).
 
-What it enforces, over every .py under src/, skills/, dev/ and tests/ (src/<pkg>/_vendor/ is a leaf for the layer walk; EXEMPT_DIRS is
-skipped by the caps):
+What it enforces, over every .py under src/, skills/, dev/ and tests/ (EXEMPT_DIRS is skipped by the caps):
   caps      400 SLOC per file, 80 per function, 800 per test file; SLOC = non-blank, non-comment, non-docstring lines by tokenize.
             Every cap violation that exists today is listed by file name in tests/rules_ratchet.json ("oversize" / "oversize_functions").
             A listed entry may be removed or lowered, never added. Run `python3 tests/gate_rules.py --measure` to see the current table.
-  layers    src/<pkg>/{contracts,domain,adapters,app,cli,hook} edges (LAYER_EDGES), app-slice edges (APP_EDGES), no cycle between slices,
-            the dashboard package imports `<pkg>.contracts` only, the two plugins never import each other.
-  launch    only app/launch (the verbs that start the loop, selftest, dashboard) may import the dashboard package.
-  placement `import re` only in adapters/ and domain/**/matchers.py; our file names only in contracts/paths.py;
-            no import inside a function body; no mutable module global in domain/app/cli/hook/dash.
+  layers    not here: the `.importlinter` contracts (layers, app slices, dashboard, `import re` placement) run in `just rules`;
+            lazy imports are ruff PLC0415, banned modules TID251, module docstrings D100 (ruff.toml).
+  placement our file names only in contracts/paths.py; no mutable module global in domain/app/cli/hook/dash.
   vendor    the vendored shelf copy is unedited and matches dev/vendor.json (VendorGuard, Smoke); EXEMPT_DIRS skips it for the caps.
   pyrefly   no baseline file: pyrefly check is clean, and a deliberate exception is a `# pyrefly: ignore[kind]` with its reason.
 The older folder table for skills/task-loop (ALLOWED, formerly tests/test_layers.py) stays here.
@@ -50,37 +47,11 @@ EXEMPT_DIRS = ("skills/task-loop/_vendor",)
 FILE_CAP, TEST_FILE_CAP, FUNC_CAP = 400, 800, 80
 
 # -- per-repo constants (the only lines that differ between iorlas-task-loop and iorlas-delegate) ------------------------------------
-MAIN_PKG = "taskloop"
 DASH_PKGS = frozenset({"taskloop_dash"})
-FOREIGN_PKGS = frozenset({"delegate"})      # this plugin never imports these
 FOREIGN_NAMES = ()                          # this plugin never names these in src/ text
 PATH_LITERALS = ("engine/", "plan.json", "engine.lock", ".task/", "asks/", "checkpoints/")
 
-# -- section 3 tables ---------------------------------------------------------------------------------------------------------------
-LAYER_EDGES = {
-    "contracts": frozenset(),
-    "domain": frozenset({"contracts"}),
-    "adapters": frozenset({"contracts"}),
-    "stores": frozenset({"contracts", "adapters"}),
-    "app": frozenset({"contracts", "domain", "adapters", "stores"}),
-    "cli": frozenset({"app", "contracts", "stores"}),
-    "hook": frozenset({"app", "contracts", "stores"}),
-}
-EVERY = frozenset({"*"})
-APP_EDGES = {
-    "run": EVERY,
-    "loop": frozenset({"run", "slots", "release", "asks", "report"}),
-    "write": frozenset({"checks", "asks"}),
-    "review": frozenset({"checks", "asks"}),
-    "plan": frozenset({"checks", "asks"}),
-    "look": frozenset({"checks", "asks"}),
-    "land": frozenset({"checks", "slots", "asks"}),
-    "prune": frozenset({"run", "track", "release"}),  # `tl prune` reuses the run sweeps, the event trim and the release's worktree helpers
-    "report": frozenset({"asks"}),  # `tl report` tells the owner's comments from the engine's (asks.intake.engine_written)
-    "wire": EVERY,  # the composition root the launcher (tl.py) calls: it builds the world (stores, git, locks) from this machine
-    "launch": EVERY,  # what tl's verbs start (the loop, the selftest, the dashboard): nothing under app/ imports it, so it may import run
-}
-DASH_WIRING = ("app", "launch")  # the launcher builds the dashboard's ports and starts its server, so it may import taskloop_dash
+# -- mutable globals ---------------------------------------------------------------------------------------------------------------
 MUTABLE_LAYERS = frozenset({"domain", "app", "cli", "hook", "dash"})
 MUTABLE_CALLS = frozenset({"list", "dict", "set", "defaultdict", "deque", "OrderedDict", "Counter", "bytearray"})
 
@@ -207,69 +178,11 @@ def src_files(root):
             yield path, parts
 
 
-def imports_of(parts, tree):
-    """Absolute dotted targets (as tuples) of every import in a module at `parts` (relative to src/)."""
-    package = parts[:-1]
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                yield tuple(alias.name.split("."))
-        elif isinstance(node, ast.ImportFrom):
-            if node.level:
-                base = package[:len(package) - (node.level - 1)] if node.level > 1 else package
-                module = base + tuple((node.module or "").split(".") if node.module else ())
-            else:
-                module = tuple((node.module or "").split("."))
-            yield module
-            for alias in node.names:
-                yield (*module, alias.name)
-
-
 def layer_of(parts):
     pkg = parts[0]
     if pkg in DASH_PKGS:
         return "dash"
     return parts[1] if len(parts) > 2 else None
-
-
-def slice_of(parts):
-    return Path(parts[2]).stem if len(parts) > 3 or (len(parts) == 3 and parts[1] == "app") else None
-
-
-def edge_problems(rel, parts, targets):
-    out, here = set(), layer_of(parts)
-    for target in set(targets):
-        top = target[0]
-        if top in FOREIGN_PKGS:
-            out.add(f"{rel}: imports {top} (the two plugins never import each other)")
-        elif top not in {parts[0], MAIN_PKG} | DASH_PKGS:
-            continue
-        elif parts[0] in DASH_PKGS:
-            if top == MAIN_PKG and target[1:2] not in (("contracts",), ()):
-                out.add("{}: dash imports {} (only {}.contracts)".format(rel, ".".join(target[:2]), MAIN_PKG))
-            elif top in DASH_PKGS and top != parts[0]:
-                out.add(f"{rel}: dash imports another dash package")
-        elif top in DASH_PKGS:
-            if parts[1:3] != DASH_WIRING:
-                out.add(f"{rel}: {here} imports the dashboard {top}")
-        elif len(target) > 1 and target[1] != "_vendor" and here in LAYER_EDGES and target[1] != here:
-            if target[1] not in LAYER_EDGES:
-                out.add("{}: imports unknown layer {}".format(rel, ".".join(target[:2])))
-            elif target[1] not in LAYER_EDGES[here]:
-                out.add(f"{rel}: {here} -> {target[1]} is not an allowed layer edge")
-    return sorted(out)
-
-
-def slice_edges(parts, targets):
-    """{(from slice, to slice)} for app modules importing other app slices."""
-    mine = slice_of(parts)
-    if layer_of(parts) != "app" or mine is None:
-        return set()
-    found = set()
-    for target in targets:
-        if target[0] == parts[0] and len(target) > 2 and target[1] == "app" and Path(target[2]).stem != mine:
-            found.add((mine, target[2]))
-    return found
 
 
 def cycle_in(edges):
@@ -297,40 +210,7 @@ def cycle_in(edges):
     return None
 
 
-def layer_problems(root):
-    out, all_slice_edges = [], set()
-    for path, parts in src_files(root):
-        rel = "src/" + "/".join(parts)
-        tree = parsed(path)[1]
-        targets = list(imports_of(parts, tree))
-        out += edge_problems(rel, parts, targets)
-        for a, b in slice_edges(parts, targets):
-            all_slice_edges.add((a, b))
-            allowed = APP_EDGES.get(a, frozenset())
-            if allowed != EVERY and b not in allowed:
-                out.append(f"{rel}: app slice {a} -> {b} is not an allowed edge")
-    cycle = cycle_in(all_slice_edges)
-    return out + (["app slices form a cycle: " + " -> ".join(cycle)] if cycle else [])
-
-
 # -- placement rules over src/ ---------------------------------------------------------------------------------------------------------
-def imports_re(tree):
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import) and any(a.name.split(".")[0] == "re" for a in node.names):
-            return True
-        if isinstance(node, ast.ImportFrom) and not node.level and (node.module or "").split(".")[0] == "re":
-            return True
-    return False
-
-
-def lazy_imports(tree):
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            for inner in ast.walk(node):
-                if isinstance(inner, (ast.Import, ast.ImportFrom)):
-                    yield inner.lineno
-
-
 def is_final(annotation):
     return any(
         (isinstance(n, ast.Name) and n.id == "Final") or (isinstance(n, ast.Attribute) and n.attr == "Final") for n in ast.walk(annotation)
@@ -383,9 +263,6 @@ def placement_problems(root):
     for path, parts in src_files(root):
         rel, layer = "src/" + "/".join(parts), layer_of(parts)
         text, tree = parsed(path)
-        if imports_re(tree) and not (layer == "adapters" or (layer == "domain" and parts[-1] == "matchers.py")):
-            out.append(f"{rel}: import re is allowed only in adapters/ and domain/**/matchers.py")
-        out += [f"{rel}:{n}: import inside a function body (a needed lazy import is a cycle)" for n in lazy_imports(tree)]
         if layer in MUTABLE_LAYERS:
             out += [f"{rel}:{n}: mutable module global {name}" for name, n in mutable_globals(tree)]
         if parts[1:] != ("contracts", "paths.py"):
@@ -396,7 +273,7 @@ def placement_problems(root):
 
 
 def src_problems(root=ROOT):
-    return layer_problems(root) + placement_problems(root)
+    return placement_problems(root)
 
 
 # -- no signal is sent outside stream-proc ------------------------------------------------------------------------------------------
@@ -636,7 +513,7 @@ class RealTree(unittest.TestCase):
                 self.assertTrue((ROOT / key.split("::")[0]).is_file(), key)
                 self.assertGreater(size, FUNC_CAP if "::" in key else FILE_CAP, key)
 
-    def test_src_obeys_layers_regex_lazy_imports_globals_and_file_names(self):
+    def test_src_has_no_mutable_globals_and_names_its_files_only_in_paths(self):
         self.assertEqual(src_problems(), [])
 
     def test_the_old_folder_table_has_no_sideways_import(self):
@@ -701,65 +578,6 @@ class Planted(unittest.TestCase):
         self.assertEqual(len(cap_problems(root, {"oversize": {}, "oversize_functions": {}})), 1)
         self.assertEqual(cap_problems(root, {"oversize": {}, "oversize_functions": {"dev/f.py::f": 82}}), [])
 
-    def test_layer_edges(self):
-        self.assertEqual(
-            self.problems({"src/taskloop/app/run/x.py": "from taskloop.domain.plan import p\nfrom ...contracts import c\n"}), []
-        )
-        self.only({"src/taskloop/domain/x.py": "from taskloop.adapters import git\n"}, "domain -> adapters")
-        self.only({"src/taskloop/adapters/x.py": "import taskloop.app\n"}, "adapters -> app")
-        self.only({"src/taskloop/cli/x.py": "from ..domain import y\n"}, "cli -> domain")
-        self.only({"src/taskloop/contracts/x.py": "from taskloop import domain\n"}, "contracts -> domain")
-
-    def test_vendor_is_a_leaf_any_layer_may_import(self):
-        files = {
-            "src/taskloop/contracts/x.py": "from taskloop._vendor.atomic_io import w\n",
-            "src/taskloop/_vendor/atomic_io/__init__.py": "import taskloop.app\n",
-        }
-        self.assertEqual(self.problems(files), [])
-
-    def test_dash_imports_contracts_only_and_main_never_imports_dash(self):
-        self.assertEqual(
-            self.problems({"src/taskloop_dash/x.py": "from taskloop.contracts import c\nimport taskloop_dash.y\nfrom . import z\n"}), []
-        )
-        self.only({"src/taskloop_dash/x.py": "from taskloop.domain import d\n"}, "only taskloop.contracts")
-        self.only({"src/taskloop/app/x.py": "import taskloop_dash\n"}, "imports the dashboard")
-        self.assertEqual(self.problems({"src/taskloop/app/launch/x.py": "import taskloop_dash\n"}), [])  # the launcher builds it
-
-    def test_plugins_never_import_each_other(self):
-        self.only({"src/taskloop/app/x.py": "import delegate.cli\n"}, "never import each other")
-
-    def test_app_slice_edges_and_cycles(self):
-        self.assertEqual(
-            self.problems(
-                {
-                    "src/taskloop/app/land/a.py": "from taskloop.app.checks import c\n",
-                    "src/taskloop/app/run/b.py": "from taskloop.app import land\n",
-                }
-            ),
-            [],
-        )
-        self.only({"src/taskloop/app/checks/a.py": "from taskloop.app.land import l\n"}, "checks -> land")
-        cyc = self.problems(
-            {"src/taskloop/app/run/a.py": "from taskloop.app import loop\n", "src/taskloop/app/loop/b.py": "from taskloop.app import run\n"}
-        )
-        self.assertTrue(any("cycle" in c for c in cyc), cyc)
-
-    def test_regex_placement(self):
-        self.assertEqual(
-            self.problems(
-                {"src/taskloop/adapters/a.py": "import re\n", "src/taskloop/domain/plan/matchers.py": "from re import compile\n"}
-            ),
-            [],
-        )
-        self.only({"src/taskloop/app/a.py": "import re\n"}, "import re")
-        self.only({"src/taskloop/domain/plan/rules.py": "import re as rx\n"}, "import re")
-        self.only({"src/taskloop/contracts/a.py": "from re import sub\n"}, "import re")
-        self.only({"src/taskloop_dash/a.py": "import re\n"}, "import re")
-
-    def test_lazy_imports(self):
-        self.only({"src/taskloop/app/a.py": "def f():\n    import os\n    return os\n"}, "a.py:2: import inside a function")
-        self.assertEqual(self.problems({"src/taskloop/app/a.py": "import os\n\ndef f():\n    return os\n"}), [])
-
     def test_mutable_module_globals(self):
         self.only({"src/taskloop/domain/a.py": "CACHE = {}\n"}, "mutable module global CACHE")
         self.only({"src/taskloop/app/a.py": "from collections import defaultdict\nSEEN = defaultdict(list)\n"}, "SEEN")
@@ -791,9 +609,6 @@ class FolderTable(unittest.TestCase):
     def test_no_import_cycle_in_the_table(self):
         edges = {(a, b) for a, bs in ALLOWED.items() for b in bs}
         self.assertIsNone(cycle_in(edges))
-
-    def test_the_layer_table_is_acyclic(self):
-        self.assertIsNone(cycle_in({(a, b) for a, bs in LAYER_EDGES.items() for b in bs}))
 
 
 

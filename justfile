@@ -6,7 +6,7 @@ test feature="":
 tools:
     MISE_IGNORED_CONFIG_PATHS=$HOME/.config/mise mise install --locked
 
-# The gate: ruff + pyrefly + the structural rules test (caps, layers, placement, ratchets). Seconds, not the 35-minute suite.
+# The gate: ruff + pyrefly + the structural rules (import-linter contracts, then caps, placement, ratchets). Seconds, not the 35-minute suite.
 check: lint types rules
 
 # check plus the whole unittest suite (what CI runs across its shards).
@@ -24,6 +24,9 @@ types:
     uv tool run "pyrefly@$(just pin pipx:pyrefly)" check
 
 rules:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    PYTHONPATH=src uv tool run --from "import-linter@$(just pin pipx:import-linter)" lint-imports
     python3 -m unittest tests.gate_rules
 
 # The version mise.toml pins for a tool (one source for the pins).

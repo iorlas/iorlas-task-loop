@@ -1,3 +1,4 @@
+"""The loop verbs: the engine loop's pick, run and stop."""
 import contextlib
 import io
 import json
