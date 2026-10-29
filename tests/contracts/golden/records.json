@@ -1009,7 +1009,8 @@
    "lane_wait_min": 10,
    "look_rounds": 2,
    "look_max_px": 1280,
-   "brief_kb": 5
+   "brief_kb": 5,
+   "evidence_cap_mb": 200
   },
   "slots": {
    "count": 2,
@@ -1044,7 +1045,10 @@
    "selftest_wait": 30,
    "help_wait": 20,
    "absent": 600,
-   "reload_fallback": 120
+   "reload_fallback": 120,
+   "keep_days": 14,
+   "min_free_gb": 5,
+   "build_dir": "~/Workspaces/wt"
   }
  },
  "RunRequest": {
