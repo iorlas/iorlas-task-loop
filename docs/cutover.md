@@ -31,7 +31,7 @@ history version, health state, a delegate contract number. Each is a cutover: no
 
 | # | what changed | landed |
 |---|---|---|
-| 1 | contract 3 (delegate stop reasons), `lane_policy` replacing the `_ai` ladder, release from a dedicated clone | R21, 0.23.69, 2026-10-27 |
+| 1 | contract 3 (delegate stop reasons), `lane_policy` replacing the `_ai` ladder | R21, 0.23.69, 2026-10-27; release from a dedicated clone came later in O3c, 0.23.113 |
 | 2 | RunState and `resume_decision` (the checkpoint reader) | E8b, 0.23.108; the engine moved to src/ in E9b, 0.23.116 |
 
 Records are typed file stores under src/taskloop/stores/; the records.db import was never built. Contract 3 and its consumer
