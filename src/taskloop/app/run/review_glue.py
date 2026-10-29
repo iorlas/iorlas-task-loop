@@ -2,12 +2,13 @@
 
 from typing import Any
 
+from taskloop.contracts import wire
 from taskloop.contracts.review import ReviewState, Unchecked, Unverified
 from taskloop.contracts.wire import Rec
 
 
 def known[T: Rec](cls: type[T], items: list[dict[str, Any]]) -> list[T]:
-    names = set(cls.model_fields)
+    names = set(wire.names(cls))
     return [cls(**{k: v for k, v in x.items() if k in names}) for x in items]
 
 
@@ -21,6 +22,6 @@ def apply_review(e: Any, review: ReviewState, *, unchecked: bool, late: bool = F
     follow-ups filed or refused only from a checkpoint this engine left (`late`)."""
     if late:
         e.filed, e.unfiled = list(review.filed), list(review.unfiled)
-    e.unverified = [u.model_dump() for u in review.unverified]
+    e.unverified = [u.to_dict() for u in review.unverified]
     if unchecked:
-        e.unchecked = [u.model_dump() for u in review.unchecked]
+        e.unchecked = [u.to_dict() for u in review.unchecked]

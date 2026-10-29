@@ -34,7 +34,7 @@ class JsonStore[T]:
     def read(self) -> T | None:
         try:
             return wire.load(self.cls, json.loads(self.path.read_text(encoding="utf-8")))
-        except (OSError, ValueError):  # ValidationError and StaleRecord are ValueErrors
+        except (OSError, ValueError):  # msgspec.ValidationError and StaleRecord are ValueErrors
             return None
 
     def write(self, rec: T) -> None:
@@ -247,7 +247,7 @@ class AskStore:
         a, why = self.state(bead, ask_id)
         if a is None or why:
             return a, why
-        done = a.model_copy(update={"status": AskStatus.ANSWERED, "answer": answer, "answered": answer.t})
+        done = a.replace(status=AskStatus.ANSWERED, answer=answer, answered=answer.t)
         self.put(done)
         self.log(done, "answer", answer.t)
         return done, ""
@@ -257,7 +257,7 @@ class AskStore:
         a, why = self.state(bead, ask_id)
         if a is None or why not in ("", "answered"):
             return a, why
-        done = a.model_copy(update={"status": AskStatus.ANSWERED, "answer": answer, "answered": answer.t})
+        done = a.replace(status=AskStatus.ANSWERED, answer=answer, answered=answer.t)
         self.put(done)
         self.log(done, "answer", answer.t)
         return done, ""
@@ -267,7 +267,7 @@ class AskStore:
         a = self.get(bead)
         if a is None or a.status not in (*LIVE, AskStatus.ANSWERED) or a.consumed is not None:
             return None
-        done = a.model_copy(update={"status": AskStatus.ANSWERED, "answered": a.answered or now, "consumed": now})
+        done = a.replace(status=AskStatus.ANSWERED, answered=a.answered or now, consumed=now)
         self.put(done)
         self.log(done, "consume", now)
         return done
@@ -279,7 +279,7 @@ class AskStore:
             return a, problem
         if problem == "withdrawn":
             return a, ""
-        done = a.model_copy(update={"status": AskStatus.WITHDRAWN, "closed_why": why, "answered": now if a.answer else None})
+        done = a.replace(status=AskStatus.WITHDRAWN, closed_why=why, answered=now if a.answer else None)
         self.put(done)
         self.log(done, "withdraw", now, why=why)
         return done, ""
@@ -289,7 +289,7 @@ class AskStore:
         a = self.get(bead)
         if a is None or a.id != ask_id or a.status not in (*LIVE, AskStatus.ANSWERED) or a.consumed is not None:
             return False
-        done = a.model_copy(update={"status": AskStatus.CLOSED, "closed_why": why})
+        done = a.replace(status=AskStatus.CLOSED, closed_why=why)
         self.put(done)
         self.log(done, "close", now, why=why)
         return True
@@ -298,7 +298,7 @@ class AskStore:
         a = self.get(bead)
         if a is None or a.id != ask_id or a.status != AskStatus.OPEN or a.answer is not None:
             return False
-        self.put(a.model_copy(update={"status": AskStatus.PARKED}))
+        self.put(a.replace(status=AskStatus.PARKED))
         return True
 
     def follow(self, ask_id: str, event: LedgerEvent, now: float, **changes: Any) -> bool:
@@ -307,14 +307,14 @@ class AskStore:
         rows = self.history(ask_id)
         if not rows or self.ledger is None:
             return False
-        self.ledger.append(rows[-1].model_copy(update={"t": now, "event": event, "similar": [], "why": "", **changes}))
+        self.ledger.append(rows[-1].replace(**{"t": now, "event": event, "similar": [], "why": "", **changes}))
         return True
 
     def correct_cause(self, bead: BeadId | str, ask_id: str, cause: OwnerCause, now: float) -> bool:
         """The owner names the cause of an ask: on the document while it is still the bead's ask, and a ledger row."""
         a = self.get(bead)
         if a is not None and a.id == ask_id:
-            self.put(a.model_copy(update={"owner_cause": cause, "cause_by": "owner"}))
+            self.put(a.replace(owner_cause=cause, cause_by="owner"))
         return self.follow(ask_id, "cause", now, cause=cause, cause_by="owner")
 
     def stuck(self, bead: BeadId | str, ask_id: str, outcome: Stick, ref: str, now: float) -> bool:
@@ -322,7 +322,7 @@ class AskStore:
         and a ledger row (`demote` for a demotion, `stick` for the rest)."""
         a = self.get(bead)
         if a is not None and a.id == ask_id:
-            self.put(a.model_copy(update={"outcome": outcome, "outcome_ref": ref}))
+            self.put(a.replace(outcome=outcome, outcome_ref=ref))
         return self.follow(ask_id, "demote" if outcome is Stick.DEMOTE else "stick", now, outcome=outcome, outcome_ref=ref)
 
     def say(self, bead: BeadId | str, ask_id: str, entry: ThreadEntry) -> tuple[Ask | None, str]:
@@ -330,7 +330,7 @@ class AskStore:
         a, why = self.state(bead, ask_id)
         if a is None or why not in ("", "answered"):
             return a, why
-        done = a.model_copy(update={"thread": [*a.thread, entry]})
+        done = a.replace(thread=[*a.thread, entry])
         self.put(done)
         return done, ""
 

@@ -169,7 +169,7 @@ class Taking(Rig):
         assert got is not None
         name, _, sb = got
         self.assertEqual(name, "s2")
-        self.bd.beads[sb] = self.bd.beads[sb].model_copy(update={"metadata": {"held_by": "someone-else"}})
+        self.bd.beads[sb] = self.bd.beads[sb].replace(metadata={"held_by": "someone-else"})
         self.slot("s2").release(mine=True)
         self.assertEqual(self.bd.beads[sb].status, "in_progress")
         self.assertIn("left alone", self.err[0])

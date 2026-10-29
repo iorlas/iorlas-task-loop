@@ -53,4 +53,4 @@ class FakeDelegate:
             for e in step.events:
                 on_event(e)
         res = step.result
-        return res if res.ref else res.model_copy(update={"ref": req.resume or f"fake-{int(n + 1)}"})
+        return res if res.ref else res.replace(ref=req.resume or f"fake-{int(n + 1)}")

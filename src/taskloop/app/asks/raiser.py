@@ -44,7 +44,7 @@ def raise_ask(asks: AskStore, spec: AskSpec, at: Asking, adrs: AdrStore | None =
     problems = lint(ask)
     if problems:
         return None, problems
-    ask = ask.model_copy(update={"similar": similar.find(ask.key, ask.id, asks.rows(), adrs.in_force() if adrs else [])})
+    ask = ask.replace(similar=similar.find(ask.key, ask.id, asks.rows(), adrs.in_force() if adrs else []))
     asks.file(ask)
     return ask, []
 

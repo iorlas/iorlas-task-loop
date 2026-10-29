@@ -183,7 +183,7 @@ def call(
             bf, sf = os.path.join(d, "brief.md"), os.path.join(d, "schema.json")
             Path(bf).write_text(brief, encoding="utf-8")
             Path(sf).write_text(json.dumps(schema), encoding="utf-8")
-            argv = req.model_copy(update={"brief_path": bf, "schema_path": sf}).to_argv(sys.executable, resolved.route)
+            argv = req.replace(brief_path=bf, schema_path=sf).to_argv(sys.executable, resolved.route)
             wall = (req.timeout_s + BACKSTOP_S) if req.timeout_s else None
             p = runner(argv, cwd=req.cwd or None, env=dict(procs.current_env() if env is None else env, **req.env()), timeout=wall)
     except (Stopped, subprocess.TimeoutExpired) as e:

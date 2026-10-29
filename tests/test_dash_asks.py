@@ -81,8 +81,8 @@ class Cards(Case):
                                              bead="b-0", key=key, t=NOW - 5 * DAY))
         a = self.raise_("b-1", NOW - DAY, cause="requirement", adrs=self.stores.adrs(REPO))
         self.assertEqual(a.similar, [SimilarRef(kind="adr", id=adr.id)])
-        self.asks.put(a.model_copy(update={"thread": [ThreadEntry(by="owner", t=NOW - 100, md="why?"),
-                                                     ThreadEntry(by="helper", t=NOW - 90, md="because")]}))
+        self.asks.put(a.replace(thread=[ThreadEntry(by="owner", t=NOW - 100, md="why?"),
+                                                     ThreadEntry(by="helper", t=NOW - 90, md="because")]))
         beads = [bead("b-1", "Bills"), bead("b-2", "Done after", "closed", closed_at=iso(NOW - 3600)),
                  bead("b-3", "Done before", "closed", closed_at=iso(NOW - 5 * DAY))]
         asks = {x.bead: x for x in self.snap(beads, adrs=[AdrIn(adr, 2, NOW - 100)]).asks}

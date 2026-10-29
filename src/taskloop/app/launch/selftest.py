@@ -95,7 +95,7 @@ def run_engine(home: Path, wt: Path) -> tuple[int, Bead]:
     resolved = dg.Resolved(Path("/selftest"), "/selftest/route.py", contract, "explicit")
     store = FakeBeads()
     store.beads["t-1"] = Bead(id="t-1", title="Add f", status="open", acceptance_criteria="f.txt exists")
-    cfg = cfg.model_copy(update={"reflect": False})
+    cfg = cfg.replace(reflect=False)
     os.chdir(wt)  # the engine reads cwd
     try:
         with mock.patch.object(time, "sleep"):

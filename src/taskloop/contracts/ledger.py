@@ -3,7 +3,7 @@ transition of an ask, so history outlives the one-file-per-bead ask document. An
 reads; its uses (a plan cited it) are rows of their own, so a reuse counter never rewrites the ADR."""
 from typing import ClassVar, Literal
 
-from pydantic import Field
+import msgspec
 
 from taskloop.contracts.ask import CauseBy, SimilarRef
 from taskloop.contracts.dash import OwnerCause, Stick
@@ -31,7 +31,7 @@ class LedgerEntry(Rec):
     answer: str = ""
     outcome: Stick | None = None
     outcome_ref: str = ""
-    similar: list[SimilarRef] = Field(default_factory=list)
+    similar: list[SimilarRef] = msgspec.field(default_factory=list)
     why: str = ""
 
 
@@ -50,7 +50,7 @@ class Adr(Rec):
     key: str
     t: float
     by: str = ""
-    refs: list[str] = Field(default_factory=list)
+    refs: list[str] = msgspec.field(default_factory=list)
     retired_by: str = ""  # who retired it (prune); a retired decision stays in the store but is no longer in force
     retired_t: float | None = None
 

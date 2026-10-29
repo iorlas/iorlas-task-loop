@@ -117,8 +117,8 @@ class Show(WaitCase):
         return rc
 
     def test_prints_the_v3_fields(self):
-        a = self.ask().model_copy(update={"owner_cause": OwnerCause.DECISION, "blocking": False, "default": "keep v1",
-                                "similar": [SimilarRef(kind="adr", id="adr-3")], "thread": [ThreadEntry(by="owner", t=1.0, md="why?")]})
+        a = self.ask().replace(owner_cause=OwnerCause.DECISION, blocking=False, default="keep v1",
+                                similar=[SimilarRef(kind="adr", id="adr-3")], thread=[ThreadEntry(by="owner", t=1.0, md="why?")])
         self.asks.put(a)
         for key in ("t-1-1", BEAD):
             self.out.clear()

@@ -1,7 +1,7 @@
 """Files other readers build their view from: the delegate status snapshot, the indexes, pins and the release result."""
 from typing import ClassVar
 
-from pydantic import Field
+import msgspec
 
 from taskloop.contracts.wire import Rec
 
@@ -24,14 +24,14 @@ class LaneStatus(Rec):
     emoji: str = ""
     reason: str = ""
     unlock_at: float | None = None
-    warnings: list[str] = Field(default_factory=list)
-    windows: list[WindowStatus] = Field(default_factory=list)
+    warnings: list[str] = msgspec.field(default_factory=list)
+    windows: list[WindowStatus] = msgspec.field(default_factory=list)
     five: float | None = None  # the contract's typed 5-hour window, percent used (the top-level `lanes[id].five`); windows[] names are free
     week: float | None = None  # the contract's typed weekly window, percent used (`lanes[id].week`)
     out: bool = False
     out_until: float | None = None
     out_reason: str | None = None
-    notes: list[str] = Field(default_factory=list)
+    notes: list[str] = msgspec.field(default_factory=list)
 
 
 class NeedInput(Rec):
@@ -46,8 +46,8 @@ class StatusSnapshot(Rec):
 
     V: ClassVar[int] = 1
     at: float
-    lanes: list[LaneStatus] = Field(default_factory=list)
-    needs_input: list[NeedInput] = Field(default_factory=list)
+    lanes: list[LaneStatus] = msgspec.field(default_factory=list)
+    needs_input: list[NeedInput] = msgspec.field(default_factory=list)
 
 
 class SessionIndex(Rec):
@@ -66,22 +66,22 @@ class RepoEntry(Rec):
 
 class ReposIndex(Rec):
     V: ClassVar[int] = 1
-    repos: dict[str, RepoEntry] = Field(default_factory=dict)
+    repos: dict[str, RepoEntry] = msgspec.field(default_factory=dict)
 
 
 class SharedNotes(Rec):
     """shared/<repo_key>.json: what runs of one repo tell each other (flaky tests, facts)."""
 
     V: ClassVar[int] = 1
-    flakes: dict[str, float] = Field(default_factory=dict)
-    notes: list[str] = Field(default_factory=list)
+    flakes: dict[str, float] = msgspec.field(default_factory=dict)
+    notes: list[str] = msgspec.field(default_factory=list)
 
 
 class Pin(Rec):
     """pinned.json: the install a loop and run-task use; each key optional."""
 
     V: ClassVar[int] = 1
-    task_loop: str | None = Field(default=None, alias="task-loop")
+    task_loop: str | None = msgspec.field(default=None, name="task-loop")
     delegate: str | None = None
 
 

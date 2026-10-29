@@ -10,6 +10,7 @@ import support.paths  # noqa: F401
 
 from taskloop.app.run.resume import KEEP_FOR_ACTIVE, LATE, Resume
 from taskloop.app.run.state import Checkpoints, StateAttrs, carries_state, state_names
+from taskloop.contracts import wire
 from taskloop.contracts.checkpoint import Checkpoint, RunState
 from taskloop.contracts.review import (
     ReviewState,
@@ -44,7 +45,7 @@ SAMPLE: dict[str, Any] = {
     "look_unjudged": {"i": "why"},
     "look_done": 1,
     "look_prev": [{"item": "i"}],
-    "rendered_names": {"a.png"},
+    "rendered_names": ["a.png"],
     "last_reqs": [{"method": "m"}],
     "render_stale": True,
     "handoff": {"rounds": [{"r": 1}], "seen_lows": ["l"]},
@@ -89,8 +90,8 @@ class Fields(unittest.TestCase):
 
     def test_the_dump_holds_every_field_and_nothing_else(self):
         dump = RunState().dump()
-        self.assertEqual(set(dump), set(RunState.model_fields))
-        self.assertEqual(set(dump["review"]), set(ReviewState.model_fields))
+        self.assertEqual(set(dump), set(wire.names(RunState)))
+        self.assertEqual(set(dump["review"]), set(wire.names(ReviewState)))
 
     def test_a_dump_loads_back_to_the_same_state(self):
         s = RunState(**SAMPLE)

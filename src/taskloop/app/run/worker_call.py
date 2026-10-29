@@ -317,7 +317,7 @@ class WorkerCall:
             reason=REASON_OVERRUN, scope="lane", permanence="transient", retry=delegate_wire.Retry(kind="none"), ref=res.ref or ""
         )
         said = f"the {c.node} call used its {int(c.limit_s // 60)} min budget"
-        return dg.Answer(res.model_copy(update={"stop": stop, "lane": lane or None, "say": said}), ans.raw)
+        return dg.Answer(res.replace(stop=stop, lane=lane or None, say=said), ans.raw)
 
     def note_result(self, c: Call, ans: dg.Answer, runner: Any) -> None:
         """The records a returned call leaves: the vendor error of a stop, the CallState."""

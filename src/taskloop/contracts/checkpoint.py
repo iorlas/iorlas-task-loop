@@ -9,11 +9,11 @@ this module never opens. An old checkpoint (another `v`) reads as absent: nothin
 
 from typing import Any, ClassVar
 
-from pydantic import ConfigDict, Field
+import msgspec
 
 from taskloop.contracts import wire
 from taskloop.contracts.review import ReviewState
-from taskloop.contracts.wire import Rec, SortedSet
+from taskloop.contracts.wire import Rec
 
 
 def fresh_handoff() -> dict[str, Any]:
@@ -23,42 +23,40 @@ def fresh_handoff() -> dict[str, Any]:
     return {"rounds": rounds, "seen_lows": lows}
 
 
-class RunState(Rec):
+class RunState(Rec, frozen=False):
     """What a run carries across a park. The only place these attributes are declared."""
-
-    model_config = ConfigDict(frozen=False)
 
     plan_data: dict[str, Any] | None = None
     brief_hash: str = ""
-    snap: dict[str, Any] = Field(default_factory=dict)
+    snap: dict[str, Any] = msgspec.field(default_factory=dict)
     planner_ref: str = ""
     planned: int = 0
     replans: int = 0
     fixes: int = 0
     extra: int = 0
     rebase_resets: int = 0
-    plan_log: list[dict[str, Any]] = Field(default_factory=list)
-    done: list[str] = Field(default_factory=list)
-    accepted: list[int] = Field(default_factory=list)
-    accepted_new: list[str] = Field(default_factory=list)
-    denials: list[str] = Field(default_factory=list)
-    writer: dict[str, Any] = Field(default_factory=dict)
+    plan_log: list[dict[str, Any]] = msgspec.field(default_factory=list)
+    done: list[str] = msgspec.field(default_factory=list)
+    accepted: list[int] = msgspec.field(default_factory=list)
+    accepted_new: list[str] = msgspec.field(default_factory=list)
+    denials: list[str] = msgspec.field(default_factory=list)
+    writer: dict[str, Any] = msgspec.field(default_factory=dict)
     writer_family: str | None = None
     writer_fallback: bool = False
     fallback_lane: str = ""
     writer_said: str = ""
-    look_paths: list[str] = Field(default_factory=list)
-    look_notes: list[str] = Field(default_factory=list)
-    look_unjudged: dict[str, Any] = Field(default_factory=dict)
+    look_paths: list[str] = msgspec.field(default_factory=list)
+    look_notes: list[str] = msgspec.field(default_factory=list)
+    look_unjudged: dict[str, Any] = msgspec.field(default_factory=dict)
     look_done: int = 0
-    look_prev: list[Any] = Field(default_factory=list)
-    rendered_names: SortedSet = Field(default_factory=set)
-    last_reqs: list[Any] = Field(default_factory=list)
+    look_prev: list[Any] = msgspec.field(default_factory=list)
+    rendered_names: list[str] = msgspec.field(default_factory=list)  # sorted: the pictures rendered so far
+    last_reqs: list[Any] = msgspec.field(default_factory=list)
     render_stale: bool = False
-    handoff: dict[str, Any] = Field(default_factory=fresh_handoff)
+    handoff: dict[str, Any] = msgspec.field(default_factory=fresh_handoff)
     stage_tree: str = ""
     pending_land_validation: str = ""
-    review: ReviewState = Field(default_factory=ReviewState)
+    review: ReviewState = msgspec.field(default_factory=ReviewState)
 
     def start_again(self) -> "RunState":
         """The state of a task that starts again on the base: nothing of the old attempt, but what belongs to the bead (the follow-ups
@@ -89,4 +87,4 @@ class Checkpoint(Rec):
     n: int = 0
     feedback: str = ""
     gate_tail: str = ""
-    state: RunState = Field(default_factory=RunState)
+    state: RunState = msgspec.field(default_factory=RunState)

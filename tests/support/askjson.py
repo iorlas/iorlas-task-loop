@@ -10,5 +10,5 @@ from taskloop.contracts import wire
 
 
 def ask_json(bead: str, n: int = 1, **over: Any) -> dict[str, Any]:
-    rec = MOCKS["lifesim-22b3"].model_copy(update={"bead": bead, "id": f"{bead}-{n}"})
+    rec = MOCKS["lifesim-22b3"].replace(bead=bead, id=f"{bead}-{n}")
     return {**wire.dump(rec), **over}

@@ -3,7 +3,7 @@
 park and the notes at its next step boundary. A request for a run that ended is refused, and one left at the close is dropped."""
 from typing import ClassVar
 
-from pydantic import Field
+import msgspec
 
 from taskloop.contracts.wire import Rec
 
@@ -18,6 +18,6 @@ class OwnerRequest(Rec):
     V: ClassVar[int] = 1
     park: bool = False  # end the run at the next step boundary; the branch and the checkpoint stay, the bead is parked
     stop: bool = False  # end the run now, through its stop flag (the halt path a SIGTERM takes)
-    notes: list[OwnerNote] = Field(default_factory=list)  # for the next stage's worker, oldest first
+    notes: list[OwnerNote] = msgspec.field(default_factory=list)  # for the next stage's worker, oldest first
     by: str = ""  # who asked last
     t: float = 0.0  # when

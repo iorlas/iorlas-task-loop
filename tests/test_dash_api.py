@@ -72,7 +72,7 @@ class Api(unittest.TestCase):
             return real_find(query)
 
         self.store.find = counting
-        slots = [bead("s-a", "slot box a", "in_progress", labels=["slot"], assignee="tl-a").model_dump()]
+        slots = [bead("s-a", "slot box a", "in_progress", labels=["slot"], assignee="tl-a").to_dict()]
         self.now = NOW
         ports = Ports(store=lambda repo: self.store, slot_beads=lambda repo: slots)
         self.dash = Dash(Env(config=self.cfg, home=root, ports=ports, clock=lambda: self.now, version="v-test"))

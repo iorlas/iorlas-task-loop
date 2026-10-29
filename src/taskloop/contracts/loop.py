@@ -1,7 +1,7 @@
 """Loop records: one state file per loop, the commands sent to it, and its rests."""
 from typing import ClassVar, Literal
 
-from pydantic import Field
+import msgspec
 
 from taskloop.contracts.wire import Rec
 
@@ -39,12 +39,12 @@ class QueueRow(Rec):
 class Carry(Rec):
     """What a loop hands to the install it moves to (the state JSON in TL_LOOP_STATE): counters and rests of this loop run."""
 
-    fails: list[str] = Field(default_factory=list)
+    fails: list[str] = msgspec.field(default_factory=list)
     ran: int = 0
-    later: dict[str, float] = Field(default_factory=dict)
-    pauses: dict[str, int] = Field(default_factory=dict)
-    gated: dict[str, tuple[str, float]] = Field(default_factory=dict)
-    warned: list[str] = Field(default_factory=list)
+    later: dict[str, float] = msgspec.field(default_factory=dict)
+    pauses: dict[str, int] = msgspec.field(default_factory=dict)
+    gated: dict[str, tuple[str, float]] = msgspec.field(default_factory=dict)
+    warned: list[str] = msgspec.field(default_factory=list)
     until: float = 0.0
     wt: str = ""
     back: str = ""  # the install dir this loop moved from, and when: a crash soon after the move goes back to it once
@@ -71,10 +71,10 @@ class LoopState(Rec):
     run_log: str = ""
     worktree: str = ""
     stop: StopRequest | None = None
-    queue: list[QueueRow] = Field(default_factory=list)
-    lanes_seen: list[str] = Field(default_factory=list)
+    queue: list[QueueRow] = msgspec.field(default_factory=list)
+    lanes_seen: list[str] = msgspec.field(default_factory=list)
     log: str = ""
-    carry: Carry = Field(default_factory=Carry)
+    carry: Carry = msgspec.field(default_factory=Carry)
 
 
 class LoopCommand(Rec):
@@ -85,7 +85,7 @@ class LoopCommand(Rec):
     action: Literal["stop_now", "stop_after_current", "resume"]
     by: str
     t: float
-    targets: list[int] = Field(default_factory=list)
+    targets: list[int] = msgspec.field(default_factory=list)
 
 
 class Rest(Rec):
@@ -93,7 +93,7 @@ class Rest(Rec):
     cooled after a fault; shared by every loop on the repo."""
 
     V: ClassVar[int] = 2
-    beads: dict[str, float] = Field(default_factory=dict)
+    beads: dict[str, float] = msgspec.field(default_factory=dict)
 
 
 class BadVersion(Rec):
@@ -110,4 +110,4 @@ class BadVersions(Rec):
     """bad-versions.json."""
 
     V: ClassVar[int] = 1
-    entries: list[BadVersion] = Field(default_factory=list)
+    entries: list[BadVersion] = msgspec.field(default_factory=list)

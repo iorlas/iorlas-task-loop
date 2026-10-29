@@ -105,7 +105,7 @@ class BadChecks(StagesTest):
         )
         self.assertEqual(why(c, [{"cmd": "grep -qE 'name=\"GameLogTests\"...unity-tests.xml", "why": "c"}]), "c")
         self.assertEqual(why(c, [{"cmd": "`" + c.cmd + "`", "why": "d"}]), "d")
-        self.assertEqual(why(c.model_copy(update={"id": "unity-tests"}), [{"cmd": "unity-tests", "why": "e"}]), "e")
+        self.assertEqual(why(c.replace(id="unity-tests"), [{"cmd": "unity-tests", "why": "e"}]), "e")
         self.assertEqual(why(c, [{"cmd": "grep -qE 'other'...nothing.xml", "why": "f"}]), "")
         self.assertEqual(why(c, [{"cmd": "grep", "why": "g"}]), "")  # too short to say which check
         self.assertEqual(why(c, []), "")

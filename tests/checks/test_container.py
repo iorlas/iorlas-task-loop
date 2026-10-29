@@ -49,7 +49,7 @@ class ContainerChecksTest(EngineTest):
         self.assertFalse((self.wt / "made").exists())  # what the check writes inside stays inside
         self.assertEqual((RepoDirs(self.wt).artifacts("t-1") / "p.txt").read_text(), "c")  # $TL_ARTIFACTS comes back
         host, _ = self.run_one(WRITE, boxed=False)
-        self.assertEqual(res.model_copy(update={"secs": 0, "log": "", "wall_hit": False}), host.model_copy(update={"secs": 0, "log": ""}))
+        self.assertEqual(res.replace(secs=0, log="", wall_hit=False), host.replace(secs=0, log=""))
 
     @real_git("the runner lists the worktree with a real git")
     def test_docker_down_falls_back_to_the_host_with_one_warning(self):

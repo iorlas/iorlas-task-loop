@@ -172,7 +172,7 @@ class InputCache(SpeedTest):
         self.assertEqual(key(), k)
         (self.wt / "client" / "a.cs").write_text("2\n")
         self.assertNotEqual(key(), k)
-        self.assertNotEqual(InputKeys(self.wt, self.tree(), "b", os.environ).key(c.model_copy(update={"exclude": []})), key())
+        self.assertNotEqual(InputKeys(self.wt, self.tree(), "b", os.environ).key(c.replace(exclude=[])), key())
 
     def tree(self):
         return self.eng_tree.checkout.tree_hash()

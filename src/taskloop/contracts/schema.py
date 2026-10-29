@@ -2,12 +2,14 @@
 
 `of(cls)` is the contract form: an object with `additionalProperties: false`, every field without a default in `required`, an
 optional (defaulted) field left out of it. `strict(schema)` is the wire form OpenAI-style strict structured output takes: every
-property required, a field the contract left optional may be null. A field's description is `Field(description=...)`.
+property required, a field the contract left optional may be null. A field's description is `Annotated[T, msgspec.Meta(description=...)]`.
 """
 import copy
 import enum
 import types
-from typing import Any, Literal, Union, get_args, get_origin
+from typing import Annotated, Any, Literal, Union, get_args, get_origin
+
+import msgspec
 
 from taskloop.contracts.wire import Rec
 
@@ -21,15 +23,27 @@ def of(cls: type[Rec]) -> dict[str, Any]:
     if cls.V is not None:
         props["v"] = {"type": "integer", "enum": [cls.V]}
         required.append("v")
-    for name, f in cls.model_fields.items():
-        node = _hint(f.annotation)
-        if f.description:
-            node = {**node, "description": f.description}
-        wire = f.alias or name
-        props[wire] = node
-        if f.is_required():
-            required.append(wire)
+    tag = cls.__struct_config__.tag
+    if tag is not None:
+        props["kind"] = {"type": "string", "enum": [tag]}
+        required.append("kind")
+    for f in msgspec.structs.fields(cls):
+        hint, desc = _meta(f.type)
+        node = _hint(hint)
+        if desc:
+            node = {**node, "description": desc}
+        props[f.encode_name] = node
+        if f.required:
+            required.append(f.encode_name)
     return {"type": "object", "additionalProperties": False, "required": required, "properties": props}
+
+
+def _meta(h: Any) -> tuple[Any, str]:
+    """The type under `Annotated[T, msgspec.Meta(description=...)]` and that description ("" when none)."""
+    if get_origin(h) is not Annotated:
+        return h, ""
+    inner, *notes = get_args(h)
+    return inner, next((n.description for n in notes if isinstance(n, msgspec.Meta) and n.description), "")
 
 
 def _hint(h: Any) -> dict[str, Any]:

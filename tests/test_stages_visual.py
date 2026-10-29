@@ -257,7 +257,7 @@ class VisualWork(StagesTest):
         self.assertIn("hue gradient", judges[1])
 
     def test_only_the_engines_own_pictures_count_with_a_shot_table(self):
-        e = make_engine(self.wt, cfg={"shot_table": "shots.json"}, store=self.store, attrs={"rendered_names": {"main.png"}})
+        e = make_engine(self.wt, cfg={"shot_table": "shots.json"}, store=self.store, attrs={"rendered_names": ["main.png"]})
         e.evidence_dir.mkdir(parents=True, exist_ok=True)
         (e.evidence_dir / "writer.png").write_bytes(b"x")
         (e.evidence_dir / "main.png").write_bytes(b"x")
@@ -298,7 +298,7 @@ class VisualWork(StagesTest):
         e = make_engine(self.wt, store=self.store, attrs={
             "look_done": 1,
             "look_prev": [{"why": "x", "where": ""}],
-            "rendered_names": {"a.png"},
+            "rendered_names": ["a.png"],
             "last_reqs": self.SHOTS,
             "render_stale": True,
             "plan_data": dict(PLAN),
@@ -311,7 +311,7 @@ class VisualWork(StagesTest):
         again = engine.Engine("t-1", str(self.wt), wslots.load_cfg(str(self.wt)), store=self.store)
         again.tree.reset(as_bead(BEAD))
         again.resume.point()
-        self.assertEqual((again.look_done, again.rendered_names, again.render_stale), (1, {"a.png"}, True))
+        self.assertEqual((again.look_done, again.rendered_names, again.render_stale), (1, ["a.png"], True))
 
     def test_a_non_visual_repo_gets_none_of_it(self):
         _rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
@@ -548,14 +548,14 @@ class ResumeCount(StagesTest):
                 "look_paths": ["p.png"],
                 "fixes": 2,
                 "replans": 2,
-                "rendered_names": {"a.png"},
+                "rendered_names": ["a.png"],
                 "verify_answer": "Use the old format",
             },
         )
         e.git("checkout", "-q", "task/t-1")
         e.handoff["rounds"] = [{"r": 1}]
         self.assertTrue(e.rebase.start_again("x"))
-        self.assertEqual((e.unverified, e.look_paths, e.handoff["rounds"], e.fixes, e.replans, e.rendered_names), ([], [], [], 0, 0, set()))
+        self.assertEqual((e.unverified, e.look_paths, e.handoff["rounds"], e.fixes, e.replans, e.rendered_names), ([], [], [], 0, 0, []))
         self.assertEqual(e.verify_answer, "Use the old format")  # the owner's word still goes to the planner
 
 

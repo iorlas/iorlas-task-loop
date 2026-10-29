@@ -67,7 +67,7 @@ def ref(fx: Effects, raised: LedgerEntry, text: str) -> tuple[str, str]:
     if found is None or found.retired_t is not None:
         return "", "name a decision in force (ADR-n) to link this ask to" if not named else f"{named} is not a decision of this repo"
     if raised.ask not in found.refs:
-        store.put(found.model_copy(update={"refs": [*found.refs, raised.ask]}))
+        store.put(found.replace(refs=[*found.refs, raised.ask]))
     return found.id, ""
 
 

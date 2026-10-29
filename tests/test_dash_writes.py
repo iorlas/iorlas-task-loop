@@ -22,7 +22,7 @@ from taskloop.contracts.enums import AskStatus
 from taskloop.contracts.stores import AskStore
 
 NOW = 1_800_000_000.0
-ASK = MOCKS["lifesim-22b3"].model_copy(update={"bead": "b-1", "id": "b-1-1"})
+ASK = MOCKS["lifesim-22b3"].replace(bead="b-1", id="b-1-1")
 RUN = "tl-5-20261026-100000"
 
 

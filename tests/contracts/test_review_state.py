@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 from contracts import samples as S
+from taskloop.contracts import wire
 from taskloop.contracts.review import ReviewState
 from taskloop.contracts.wire import StaleRecord
 
@@ -16,7 +17,7 @@ FIELDS = ["reviews", "rounds", "unchecked", "unverified", "verified", "filed", "
 
 class ReviewStateFields(unittest.TestCase):
     def test_the_fields_are_exactly_these(self):
-        self.assertEqual(list(ReviewState.model_fields), FIELDS)
+        self.assertEqual(list(wire.names(ReviewState)), FIELDS)
 
     def test_an_empty_state_dumps_and_reads_back(self):
         d = ReviewState().dump()

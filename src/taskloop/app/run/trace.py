@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from types import MappingProxyType
 from typing import Any
 
-from taskloop.contracts import ids
+from taskloop.contracts import ids, wire
 from taskloop.contracts import trace as t
 from taskloop.contracts.enums import Outcome, WhyCode
 from taskloop.contracts.wire import Rec
@@ -43,7 +43,7 @@ def why_code(kind: str, outcome: str) -> WhyCode | None:
 
 
 def _known(cls: type[Rec], row: Mapping[str, Any]) -> dict[str, Any]:
-    names = set(cls.model_fields)
+    names = set(wire.names(cls))
     return {k: v for k, v in row.items() if k in names and v is not None}
 
 

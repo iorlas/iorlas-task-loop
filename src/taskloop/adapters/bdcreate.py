@@ -31,6 +31,6 @@ def create_checked(store: Beads, new: NewBead, bead: str, note: Callable[[str], 
             return "", e.error.text
     note(f"bd refused the create ({', '.join(need)}): trying again with the sections it names")
     try:
-        return store.create(new.model_copy(update={"description": with_sections(new.description, need, bead)})), ""
+        return store.create(new.replace(description=with_sections(new.description, need, bead))), ""
     except BdFailure as e:
         return "", e.error.text

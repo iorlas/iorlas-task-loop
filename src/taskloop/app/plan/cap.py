@@ -56,7 +56,7 @@ class ReplanCap:
         e = self.e
 
         def one_more(ck: Checkpoint) -> Checkpoint:
-            return ck.model_copy(update={"state": ck.state.model_copy(update={"extra": ck.state.extra + 1})})
+            return ck.replace(state=ck.state.replace(extra=ck.state.extra + 1))
 
         if not e.checkpoints.amend(one_more):
             e.extra += 1

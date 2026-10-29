@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.12"
-# dependencies = ["pydantic==2.14.2"]
+# dependencies = ["msgspec==0.22.0"]
 # ///
 """Release the plugin: one release at a time, the version from origin, the suite green, the marketplace bumped.
 

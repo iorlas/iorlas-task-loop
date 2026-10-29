@@ -7,9 +7,9 @@ wherever a row can come from more than one. A field with no source yet keeps its
 slice that fills it.
 """
 from enum import StrEnum
-from typing import ClassVar, Literal
+from typing import Annotated, ClassVar, Literal
 
-from pydantic import Field
+import msgspec
 
 from taskloop.contracts.wire import Rec
 
@@ -96,9 +96,9 @@ class LoopInfo(Rec):
 
 
 class ServerInfo(Rec):
-    version: str = Field(description="server code hash; a change means reload the page")
+    version: Annotated[str, msgspec.Meta(description="server code hash; a change means reload the page")]
     host: str
-    loops: list[LoopInfo] = Field(default_factory=list)
+    loops: list[LoopInfo] = msgspec.field(default_factory=list)
 
 
 class Project(Rec):
@@ -119,7 +119,7 @@ class Totals(Rec):
     (dash-spec §2.6)."""
 
     secs: int = 0
-    tokens: int = Field(default=0, description="fresh tokens: input - cached + output")
+    tokens: Annotated[int, msgspec.Meta(description="fresh tokens: input - cached + output")] = 0
     usual: int | None = None
     usual_n: int = 0
     tone: Literal["", "watch", "bad", "grey"] = ""
@@ -138,22 +138,22 @@ class BeadCard(Rec):
     title: str
     column: Column
     marker: Marker
-    status: str = Field(description="one line; for a running bead its last action")
+    status: Annotated[str, msgspec.Meta(description="one line; for a running bead its last action")]
     tone: Tone = ""
-    t: float | None = Field(default=None, description="when the bead entered its current state; the age")
+    t: Annotated[float | None, msgspec.Meta(description="when the bead entered its current state; the age")] = None
     epic: str | None = None
     slot: str | None = None
     lane: str | None = None
     loops: int = 0
-    dots: list[PhaseDot] = Field(default_factory=list)
-    needs: list[str] = Field(
-        default_factory=list, description="open blockers only; a landed one is dropped, so every id is in the snapshot"
+    dots: list[PhaseDot] = msgspec.field(default_factory=list)
+    needs: Annotated[list[str], msgspec.Meta(description="open blockers only; a landed one is dropped, so every id is in the snapshot")] = (
+        msgspec.field(default_factory=list)
     )
     goal: bool = False
-    waits_why: str = Field(default="", description="a ready bead no slot took: why it waits; only while a loop runs")
+    waits_why: Annotated[str, msgspec.Meta(description="a ready bead no slot took: why it waits; only while a loop runs")] = ""
     cause: OwnerCause | None = None
     ack: bool = False
-    totals: Totals = Field(default_factory=Totals)
+    totals: Totals = msgspec.field(default_factory=Totals)
     assumptions: int = 0
     shots: int = 0
 
@@ -181,7 +181,7 @@ class Piece(Rec):
 class Slot(Rec):
     id: str
     name: str
-    lane: str = Field(description="lane of the slot's current or last call")
+    lane: Annotated[str, msgspec.Meta(description="lane of the slot's current or last call")]
     state: Literal["running", "stuck", "look", "free", "idle", "held"]
     project: str | None = None
     bead: str | None = None
@@ -222,16 +222,16 @@ class AskCard(Rec):
     t: float
     blocking: bool = True
     why: str = ""
-    tried: list[str] = Field(default_factory=list)
-    options: list[AskOptionCard] = Field(default_factory=list)
-    default: str = Field(default="", description="what a non-blocking ask went on with")
+    tried: list[str] = msgspec.field(default_factory=list)
+    options: list[AskOptionCard] = msgspec.field(default_factory=list)
+    default: Annotated[str, msgspec.Meta(description="what a non-blocking ask went on with")] = ""
     owner_cause: OwnerCause = OwnerCause.UNKNOWN
     cause_by: Literal["agent", "owner"] = "agent"
-    shots: list[str] = Field(default_factory=list, description="artifact urls")
-    thread: list[ThreadMsg] = Field(default_factory=list)
+    shots: Annotated[list[str], msgspec.Meta(description="artifact urls")] = msgspec.field(default_factory=list)
+    thread: list[ThreadMsg] = msgspec.field(default_factory=list)
     ask_backs: int = 0
     similar: Similar | None = None
-    stale: int = Field(default=0, description="beads landed since the ask was made")
+    stale: Annotated[int, msgspec.Meta(description="beads landed since the ask was made")] = 0
 
 
 class LedgerRow(Rec):
@@ -268,12 +268,12 @@ class CauseCount(Rec):
 class Learning(Rec):
     """'Is the factory learning?': 8 weekly points, oldest first, the last one this week (dash-spec §7.1)."""
 
-    weeks: list[str] = Field(default_factory=list)
-    asks_per_landed: list[float] = Field(default_factory=list)
-    repeat_asks: list[int] = Field(default_factory=list)
-    sendbacks_per_bead: list[float] = Field(default_factory=list)
-    durable_pct: list[float] = Field(default_factory=list)
-    causes: list[CauseCount] = Field(default_factory=list)
+    weeks: list[str] = msgspec.field(default_factory=list)
+    asks_per_landed: list[float] = msgspec.field(default_factory=list)
+    repeat_asks: list[int] = msgspec.field(default_factory=list)
+    sendbacks_per_bead: list[float] = msgspec.field(default_factory=list)
+    durable_pct: list[float] = msgspec.field(default_factory=list)
+    causes: list[CauseCount] = msgspec.field(default_factory=list)
 
 
 class LaneCard(Rec):
@@ -288,9 +288,9 @@ class LaneCard(Rec):
     week_pct: float | None = None
     locked_until: float | None = None
     forecast: str = ""
-    slots: list[str] = Field(default_factory=list)
-    running: list[str] = Field(default_factory=list)
-    waiting: list[str] = Field(default_factory=list)
+    slots: list[str] = msgspec.field(default_factory=list)
+    running: list[str] = msgspec.field(default_factory=list)
+    waiting: list[str] = msgspec.field(default_factory=list)
     status_t: float | None = None
 
 
@@ -303,17 +303,17 @@ class Snapshot(Rec):
     version: str
     t: float
     server: ServerInfo
-    projects: list[Project] = Field(default_factory=list)
-    epics: list[Epic] = Field(default_factory=list)
-    slots: list[Slot] = Field(default_factory=list)
-    beads: list[BeadCard] = Field(default_factory=list)
+    projects: list[Project] = msgspec.field(default_factory=list)
+    epics: list[Epic] = msgspec.field(default_factory=list)
+    slots: list[Slot] = msgspec.field(default_factory=list)
+    beads: list[BeadCard] = msgspec.field(default_factory=list)
     backlog_more: int = 0
-    pieces: list[Piece] = Field(default_factory=list)
-    asks: list[AskCard] = Field(default_factory=list)
-    ledger: list[LedgerRow] = Field(default_factory=list)
-    adrs: list[AdrRow] = Field(default_factory=list)
-    learning: Learning = Field(default_factory=Learning)
-    lanes: list[LaneCard] = Field(default_factory=list)
+    pieces: list[Piece] = msgspec.field(default_factory=list)
+    asks: list[AskCard] = msgspec.field(default_factory=list)
+    ledger: list[LedgerRow] = msgspec.field(default_factory=list)
+    adrs: list[AdrRow] = msgspec.field(default_factory=list)
+    learning: Learning = msgspec.field(default_factory=Learning)
+    lanes: list[LaneCard] = msgspec.field(default_factory=list)
 
 
 # ---- bead drawer: GET /api/bead?project=&id=
@@ -332,7 +332,7 @@ class Cell(Rec):
     state: CellState
     secs: int = 0
     tokens: int = 0
-    last: str = Field(default="", description="last comment of the stage, for the hover")
+    last: Annotated[str, msgspec.Meta(description="last comment of the stage, for the hover")] = ""
 
 
 class Resumed(Rec):
@@ -347,7 +347,7 @@ class Pass(Rec):
     end: PassEnd = ""
     end_text: str = ""
     resumed: Resumed | None = None
-    messages: list[Msg] = Field(default_factory=list, description="this pass only, newest first")
+    messages: Annotated[list[Msg], msgspec.Meta(description="this pass only, newest first")] = msgspec.field(default_factory=list)
 
 
 class Artifact(Rec):
@@ -379,9 +379,9 @@ class LiveBox(Rec):
     t: float
     cmd: str = ""
     tokens: int = 0
-    subtasks: list[Subtask] = Field(default_factory=list)
+    subtasks: list[Subtask] = msgspec.field(default_factory=list)
     checks: CheckCount | None = None
-    why: str = Field(default="", description="stuck or exited: what happened, one line")
+    why: Annotated[str, msgspec.Meta(description="stuck or exited: what happened, one line")] = ""
     silent_secs: int | None = None
     exit_code: int | None = None
 
@@ -392,11 +392,11 @@ class BeadDetail(Rec):
     card: BeadCard
     description: str = ""
     acceptance: str = ""
-    comments: list[Msg] = Field(default_factory=list)
-    passes: list[Pass] = Field(default_factory=list)
-    artifacts: list[Artifact] = Field(default_factory=list)
-    waits_for: list[str] = Field(default_factory=list)
-    unblocks: list[str] = Field(default_factory=list)
+    comments: list[Msg] = msgspec.field(default_factory=list)
+    passes: list[Pass] = msgspec.field(default_factory=list)
+    artifacts: list[Artifact] = msgspec.field(default_factory=list)
+    waits_for: list[str] = msgspec.field(default_factory=list)
+    unblocks: list[str] = msgspec.field(default_factory=list)
     live: LiveBox | None = None
     ask: AskCard | None = None
 
@@ -424,8 +424,8 @@ class LivePage(Rec):
     V: ClassVar[int] = 1
     cursor: str
     state: Literal["live", "ended", "crashed"]
-    lines: list[TermLine] = Field(default_factory=list)
-    tools: list[ToolCall] = Field(default_factory=list)
+    lines: list[TermLine] = msgspec.field(default_factory=list)
+    tools: list[ToolCall] = msgspec.field(default_factory=list)
 
 
 # ---- writes: POST /api/<verb>, JSON body, one Result back

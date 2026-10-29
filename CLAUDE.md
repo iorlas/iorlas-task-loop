@@ -87,7 +87,7 @@ reader, and how delegate connects (worker-run, one table in SKILL.md).
 - Python 3.12+; macOS and Linux (in containers too), POSIX only. Dependencies: runtime ones are declared inline in `skills/task-loop/tl.py`
   (PEP 723, the same pin as pyproject.toml's `dependencies`; tests/test_pep723.py holds them equal) and run with `uv run --script`: the
   `tl` shim, the loop's own spawns, dev/release.py and dev/suite.py. Dev and test tools live in pyproject.toml's `dev` group. The
-  PreToolUse hook (every Bash call) stays on plain `python3` and imports no pydantic and no record (.importlinter, tests/test_hook.py).
+  PreToolUse hook (every Bash call) stays on plain `python3` and imports no msgspec and no record (.importlinter, tests/test_hook.py).
 - The page is one HTML file, no build, no CDN.
 - The engine requires the iorlas-delegate plugin (worker-run v1) and has no launcher of its own; never add one back.
   Only the contract is shared: never read delegate's files or call anything but `route.py run` and `status`.

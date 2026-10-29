@@ -19,7 +19,7 @@ class FakeBeads:
         return self.beads[bead]
 
     def _put(self, b: Bead, **changes: Any) -> None:
-        self.beads[b.id] = b.model_copy(update=changes)
+        self.beads[b.id] = b.replace(**changes)
 
     def show(self, bead: str) -> Bead | None:
         return self.beads.get(bead)

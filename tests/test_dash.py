@@ -140,8 +140,8 @@ class Asks(unittest.TestCase):
             (bin_ / "bd").chmod(0o755)
             asks = d / "task-loop" / "asks"
             asks.mkdir(parents=True)
-            rec = wire.dump(MOCKS["lifesim-22b3"].model_copy(update={"bead": "x-1", "id": "x-1-1", "repo": str(d), "t": time.time() - 3600,
-                                                    "parks_at": time.time() + 86400}))
+            rec = wire.dump(MOCKS["lifesim-22b3"].replace(bead="x-1", id="x-1-1", repo=str(d), t=time.time() - 3600,
+                                                    parks_at=time.time() + 86400))
             (asks / "x-1.json").write_text(json.dumps(rec))
             env = dict(os.environ, XDG_CONFIG_HOME=str(d), APPDATA=str(d), TASK_LOOP_DASH_BIND="127.0.0.1", HOME=str(d),
                        USERPROFILE=str(d), PATH=str(bin_) + os.pathsep + os.environ["PATH"],

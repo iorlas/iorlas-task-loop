@@ -1,6 +1,6 @@
 # task-loop dashboard
 
-One read-only server per machine (`python3 -m taskloop_dash` on the interpreter `tl dash ensure` runs on, so it has pydantic), one page, one API.
+One read-only server per machine (`python3 -m taskloop_dash` on the interpreter `tl dash ensure` runs on, so it has msgspec), one page, one API.
 
 - **The rule:** [dash-spec.md](dash-spec.md). Owner decisions: [dash-decisions.md](dash-decisions.md). The mocks it names
   (`dash-round-*.html`) show the result; older mocks are history.

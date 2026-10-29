@@ -279,7 +279,7 @@ class EngineRunTest(EngineTest):
         sh("git", "checkout", "-q", "task/t-1", cwd=self.wt)  # (a parked slot is left detached at the base: back on the bead's branch)
         sh("git", "reset", "-q", "--soft", "HEAD~1", cwd=self.wt)
         self.eng.stores.checkpoints.of("t-1").write(
-            ck.model_copy(update={"closed": False, "head": gitrepo.git("rev-parse", "HEAD", cwd=str(self.wt))})
+            ck.replace(closed=False, head=gitrepo.git("rev-parse", "HEAD", cwd=str(self.wt)))
         )
         rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
         self.assertEqual(rc, 0)

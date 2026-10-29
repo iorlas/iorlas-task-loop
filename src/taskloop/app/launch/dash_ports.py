@@ -128,7 +128,7 @@ def owner_intake(asks: AskStore, store_of: Callable[[str], Any], clock: Callable
 
 
 def slot_beads(repo: str) -> list[dict[str, Any]]:
-    return [b.model_dump() for b in wslots.slot_beads(repo)]
+    return [b.to_dict() for b in wslots.slot_beads(repo)]
 
 
 def ports() -> Ports:

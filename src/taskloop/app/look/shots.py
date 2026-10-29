@@ -146,7 +146,7 @@ class Pictures:
                 names.append(self.keep_picture(f, names, base))
             if m and files:
                 self.warn_if_untracked(m, files)
-        e.rendered_names |= set(names)
+        e.rendered_names = sorted({*e.rendered_names, *names})
         if names:
             e.render_stale = False
         plural = "" if len(names) == 1 else "s"

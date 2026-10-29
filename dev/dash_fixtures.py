@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.12"
-# dependencies = ["pydantic==2.14.2"]
+# dependencies = ["msgspec==0.22.0"]
 # ///
 """The dashboard page against the contract fixtures, with no engine: the frontend's dev server.
 

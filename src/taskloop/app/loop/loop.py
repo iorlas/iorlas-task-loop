@@ -55,7 +55,7 @@ def parse_handover(raw: str) -> tuple[LoopState | None, str]:
         return None, ""
     try:
         return wire.load(LoopState, json.loads(raw)), ""
-    except ValueError as e:  # ValidationError, StaleRecord and bad JSON are ValueErrors
+    except ValueError as e:  # msgspec.ValidationError, StaleRecord and bad JSON are ValueErrors
         return None, str(e)[:200]
 
 
@@ -112,14 +112,14 @@ class Loop(Core):
         self.installs.record_bad(self.installs.mine, why)
         env.event("reload_fallback", "", who="loop", old=env.version, new=Path(c.back).name, why=why)
         self.say(f"RED: task-loop {env.version} broke after the move; going back to {Path(c.back).name}")
-        self.carry_in = c.model_copy(update={"fallback": True})
+        self.carry_in = c.replace(fallback=True)
         self.exec_to(Path(c.back), back=env.code_dir)
 
     def exec_to(self, d: Path, back: str) -> bool:
         """Exec into the install in `d` with this loop's argv and state. Returns only when the exec itself failed."""
         env = self.env
-        self.carry_in = self.carry_in.model_copy(update={"back": back, "moved_at": env.now()})
-        self.st = self.st.model_copy(update={"carry": self.carry()})
+        self.carry_in = self.carry_in.replace(back=back, moved_at=env.now())
+        self.st = self.st.replace(carry=self.carry())
         try:
             env.exec_into(d, list(self.args.argv), json.dumps(wire.dump(self.st)))
         except OSError as e:  # execv itself failed: the loop goes on where it is

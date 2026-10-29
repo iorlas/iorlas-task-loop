@@ -46,7 +46,7 @@ Caps (tests/gate_rules.py): 400 SLOC per file, 80 per function, 800 per test fil
 - Python 3.12+; macOS and Linux (in containers too), POSIX only. Dependencies: runtime ones are declared inline in `skills/task-loop/tl.py`
   (PEP 723, the same pin as pyproject.toml's `dependencies`; tests/test_pep723.py holds them equal) and run with `uv run --script`: the
   `tl` shim, the loop's own spawns, dev/release.py and dev/suite.py. Dev and test tools live in pyproject.toml's `dev` group. The
-  PreToolUse hook (every Bash call) stays on plain `python3` and imports no pydantic and no record (.importlinter, tests/test_hook.py).
+  PreToolUse hook (every Bash call) stays on plain `python3` and imports no msgspec and no record (.importlinter, tests/test_hook.py).
 
 ## Quick Reference
 

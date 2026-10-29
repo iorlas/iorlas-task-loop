@@ -1,7 +1,7 @@
 """Beads as the code reads them from bd (an external contract: no `v`, never written by us). `adapters/bd.py` is the one reader."""
 from typing import Any
 
-from pydantic import Field
+import msgspec
 
 from taskloop.contracts.wire import Rec
 
@@ -35,14 +35,14 @@ class Bead(Rec):
     issue_type: str = ""
     priority: int | None = None
     assignee: str = ""
-    labels: list[str] = Field(default_factory=list)
+    labels: list[str] = msgspec.field(default_factory=list)
     parent: str = ""
     description: str = ""
     design: str = ""
     acceptance_criteria: str = ""
     notes: str = ""
-    dependencies: list[Dep] = Field(default_factory=list)
-    metadata: dict[str, Any] = Field(default_factory=dict)  # free-form: held_by, held_bead, branch, slot, looks, ...
+    dependencies: list[Dep] = msgspec.field(default_factory=list)
+    metadata: dict[str, Any] = msgspec.field(default_factory=dict)  # free-form: held_by, held_bead, branch, slot, looks, ...
     lease_expires_at: str = ""
     close_reason: str = ""
     created_at: str = ""
@@ -52,5 +52,5 @@ class Bead(Rec):
 
 class BdError(Rec):
     kind: str  # lint, not_found, not_claimable, other
-    missing_sections: list[str] = Field(default_factory=list)
+    missing_sections: list[str] = msgspec.field(default_factory=list)
     text: str = ""

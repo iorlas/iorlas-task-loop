@@ -83,10 +83,10 @@ src/taskloop/app/launch/         what tl starts: loop.py (tl loop / next / stop)
                                  engine with a scripted lane, on this install's code), dash.py (tl dash), dash_ports.py
 src/taskloop/app/prune/          tl prune: run data, merged build worktrees and release branches past loop.keep_days (also run at loop start)
 src/taskloop/app/report/         tl report, lost and reflect digest: the data (cli/report.py prints it)
-src/taskloop_dash/               the dashboard package (imports taskloop.contracts, so pydantic; runs on the interpreter `tl dash ensure` runs on)
+src/taskloop_dash/               the dashboard package (imports taskloop.contracts, so msgspec; runs on the interpreter `tl dash ensure` runs on)
 src/taskloop_dash/static/        the dashboard page: index.html and its ES modules (Preact + HTM vendored; no build)
 src/taskloop_dash/views/         engine logs, asks and bd -> the typed snapshot and bead records (contracts/dash.py)
-hooks/hooks.json                 SessionStart: index session id -> transcript path (uv run --script); PreToolUse: python3, no pydantic
+hooks/hooks.json                 SessionStart: index session id -> transcript path (uv run --script); PreToolUse: python3, no msgspec
 tests/                           uv run pytest   (pytest + xdist, the dev group of pyproject.toml; CI: Ubuntu, Python 3.12)
 dev/release.py                   the only way to release: release lock, version from origin, suite, marketplace, install
 docs/design/                     design notes

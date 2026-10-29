@@ -1,7 +1,7 @@
 """Run records: what a run-task process reports to its loop, and the hand-over between two engine versions."""
 from typing import ClassVar
 
-from pydantic import Field
+import msgspec
 
 from taskloop.contracts.enums import Outcome, WhyCode
 from taskloop.contracts.wire import Rec
@@ -44,6 +44,6 @@ class Reexec(Rec):
     from_version: str
     to_version: str
     step: str
-    owned: list[str] = Field(default_factory=list)
+    owned: list[str] = msgspec.field(default_factory=list)
     fallback: str = ""
-    counters: dict[str, int] = Field(default_factory=dict)
+    counters: dict[str, int] = msgspec.field(default_factory=dict)

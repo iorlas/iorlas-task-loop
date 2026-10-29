@@ -21,7 +21,7 @@ class RunLog:
     def emit(self, rec: EngineLog) -> int:
         """Append the record (stamped with the time when it has none); echo a line of it unless its kind is quiet. Returns its offset."""
         if not rec.t:
-            rec = rec.model_copy(update={"t": self.clock()})
+            rec = rec.replace(t=self.clock())
         at = self.log.append(rec)
         if self.echo is not None and rec.kind not in self.quiet:
             line = self.render(rec) if self.render else self.plain(rec)

@@ -8,7 +8,7 @@ owner, and the follow-ups filed or refused by bd.
 """
 from typing import Any, ClassVar
 
-from pydantic import Field
+import msgspec
 
 from taskloop.contracts import wire
 from taskloop.contracts.trace import Verified
@@ -41,11 +41,11 @@ class ReviewState(Rec):
     V: ClassVar[int] = 1
     reviews: int = 0
     rounds: int = 0
-    unchecked: list[Unchecked] = Field(default_factory=list)
-    unverified: list[Unverified] = Field(default_factory=list)
-    verified: list[Verified] = Field(default_factory=list)
-    filed: list[str] = Field(default_factory=list)
-    unfiled: list[Unfiled] = Field(default_factory=list)
+    unchecked: list[Unchecked] = msgspec.field(default_factory=list)
+    unverified: list[Unverified] = msgspec.field(default_factory=list)
+    verified: list[Verified] = msgspec.field(default_factory=list)
+    filed: list[str] = msgspec.field(default_factory=list)
+    unfiled: list[Unfiled] = msgspec.field(default_factory=list)
 
     def dump(self) -> dict[str, Any]:
         return wire.dump(self)

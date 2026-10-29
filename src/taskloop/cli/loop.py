@@ -19,7 +19,7 @@ def cmd_next(env: LoopEnv, a: Any) -> int:
     q, _ = rank_ready(env, env.profile().engine)
     ranked, skipped = q.ranked, q.skipped
     if a.json:
-        print(json.dumps({"pick": ranked[0].bead.model_dump() if ranked else None, "reason": ranked[0].reason if ranked else "",
+        print(json.dumps({"pick": ranked[0].bead.to_dict() if ranked else None, "reason": ranked[0].reason if ranked else "",
                           "next": [{"id": r.bead.id, "priority": r.bead.priority, "reason": r.reason} for r in ranked[1:6]],
                           "skipped": [{"id": s.bead, "why": s.skip.why} for s in skipped]}, ensure_ascii=False))
         return 0 if ranked else 1

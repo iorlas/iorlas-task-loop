@@ -100,9 +100,9 @@ class Table(unittest.TestCase):
 
     def test_the_decision_reads_nothing_but_its_arguments(self):
         c, w = ck(), world(brief_hash="b2", brief_diff="x", brief_diff_quiet="x")
-        before = (c.model_dump(), w)
+        before = (c.to_dict(), w)
         resume_decision(c, w)
-        self.assertEqual((c.model_dump(), w), before)
+        self.assertEqual((c.to_dict(), w), before)
 
 
 if __name__ == "__main__":

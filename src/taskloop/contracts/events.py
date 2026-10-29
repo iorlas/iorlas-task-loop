@@ -1,15 +1,12 @@
 """Event: the union of records appended to events.jsonl, the cross-repo index of claims, stages, slots and landings (v2)."""
-from typing import Annotated, ClassVar, Literal
-
-from pydantic import Field
+from typing import ClassVar
 
 from taskloop.contracts.enums import WhyCode
-from taskloop.contracts.wire import Rec, load
+from taskloop.contracts.wire import Tagged, load
 
 
-class EventRec(Rec):
+class EventRec(Tagged):
     V: ClassVar[int] = 2
-    kind: str = ""  # each member narrows it to its tag; declared here so `kind` is written right after `v`
     t: float
     bead: str
     session: str = ""
@@ -18,69 +15,58 @@ class EventRec(Rec):
     host: str = ""
 
 
-class Claim(EventRec):
-    kind: Literal["claim"] = "claim"
+class Claim(EventRec, tag="claim"):
     branch: str = ""
     slot: str | None = None
     title: str = ""
     worktree: str = ""
 
 
-class Stage(EventRec):
-    kind: Literal["stage"] = "stage"
+class Stage(EventRec, tag="stage"):
     step: str = ""
     text: str = ""
 
 
-class SlotTake(EventRec):
-    kind: Literal["slot_take"] = "slot_take"
+class SlotTake(EventRec, tag="slot_take"):
     slot: str = ""
     slot_bead: str = ""
     ticket: int | None = None
     worktree: str = ""
 
 
-class SlotRelease(EventRec):
-    kind: Literal["slot_release"] = "slot_release"
+class SlotRelease(EventRec, tag="slot_release"):
     slot: str = ""
 
 
-class SlotSetup(EventRec):
-    kind: Literal["slot_setup"] = "slot_setup"
+class SlotSetup(EventRec, tag="slot_setup"):
     exit: int = 0
     secs: float = 0.0
 
 
-class SlotHold(EventRec):
-    kind: Literal["slot_hold"] = "slot_hold"
+class SlotHold(EventRec, tag="slot_hold"):
     until: float | None = None
     why: str = ""
 
 
-class SlotAside(EventRec):
-    kind: Literal["slot_aside"] = "slot_aside"
+class SlotAside(EventRec, tag="slot_aside"):
     held: str = ""
     why: str = ""
 
 
-class Block(EventRec):
-    kind: Literal["block"] = "block"
+class Block(EventRec, tag="block"):
     why_code: WhyCode | None = None
     why: str = ""
 
 
-class BeadClosed(EventRec):
-    kind: Literal["close"] = "close"
+class BeadClosed(EventRec, tag="close"):
     reason: str = ""
 
 
-class Land(EventRec):
-    kind: Literal["land"] = "land"
+class Land(EventRec, tag="land"):
     sha: str = ""
 
 
-class CodeReloaded(EventRec):
-    kind: Literal["reload"] = "reload"
+class CodeReloaded(EventRec, tag="reload"):
     code_dir: str = ""
     new: str = ""
     old: str = ""
@@ -88,17 +74,15 @@ class CodeReloaded(EventRec):
     why: str = ""
 
 
-class WorktreeStart(EventRec):
-    kind: Literal["worktree_start"] = "worktree_start"
+class WorktreeStart(EventRec, tag="worktree_start"):
     worktree: str = ""
 
 
-Event = Annotated[
-    Claim | Stage | SlotTake | SlotRelease | SlotSetup | SlotHold | SlotAside | Block | BeadClosed | Land | CodeReloaded | WorktreeStart,
-    Field(discriminator="kind"),
-]
+Event = (
+    Claim | Stage | SlotTake | SlotRelease | SlotSetup | SlotHold | SlotAside | Block | BeadClosed | Land | CodeReloaded | WorktreeStart
+)
 
 
 def decode(data: object) -> Event:
-    """The event record `data` is; ValidationError (StaleRecord for a foreign v) otherwise."""
+    """The event record `data` is; msgspec.ValidationError (StaleRecord for a foreign v) otherwise."""
     return load(Event, data)

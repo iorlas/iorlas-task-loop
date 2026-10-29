@@ -3,9 +3,9 @@ import json
 import sys
 import unittest
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import Field
+import msgspec
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -84,15 +84,15 @@ class Generator(unittest.TestCase):
     def test_scalars_enums_nullable_and_docs(self):
 
         class Probe(Rec):
-            name: str = Field(description="what it is called")
+            name: Annotated[str, msgspec.Meta(description="what it is called")]
             n: int
             ratio: float
             ok: bool
             kind: Literal["a", "b"]
             step: enums.Step
             maybe: str | None
-            items: list[int] = Field(default_factory=list)
-            table: dict[str, float] = Field(default_factory=dict)
+            items: list[int] = msgspec.field(default_factory=list)
+            table: dict[str, float] = msgspec.field(default_factory=dict)
 
         s = schema.of(Probe)
         self.assertEqual(s["required"], ["name", "n", "ratio", "ok", "kind", "step", "maybe"])
@@ -111,7 +111,7 @@ class Generator(unittest.TestCase):
 
     def test_a_type_with_no_schema_is_an_error(self):
         class Bad(Rec):
-            x: set[complex] = Field(default_factory=set)
+            x: set[complex] = msgspec.field(default_factory=set)
 
         with self.assertRaises(TypeError):
             schema.of(Bad)

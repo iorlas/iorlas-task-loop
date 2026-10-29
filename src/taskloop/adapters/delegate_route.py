@@ -56,7 +56,7 @@ class RouteDelegate:
             brief_path, schema_path, live = Path(d, "brief.md"), Path(d, "schema.json"), Path(d, "live.jsonl")
             brief_path.write_text(brief, encoding="utf-8")
             schema_path.write_text(json.dumps(schema), encoding="utf-8")
-            call = req.model_copy(update={"brief_path": str(brief_path), "schema_path": str(schema_path), "live_file": str(live)})
+            call = req.replace(brief_path=str(brief_path), schema_path=str(schema_path), live_file=str(live))
             tail = LiveTail(live, on_event)
             ran = run_group(call.to_argv(self.python, self.route), req.cwd or None, self._env(call.env()),
                             self.timeout_s + self.backstop_s, tail.drain)

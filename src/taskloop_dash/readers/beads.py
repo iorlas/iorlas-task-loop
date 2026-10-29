@@ -19,7 +19,7 @@ SHARED = 30  # seconds another process's listing on disk is good enough
 
 def row_of(b: TypedBead) -> dict[str, Any]:
     """A typed bead as the dash's views read it: a dict, its dependencies as {id, type, title, status}."""
-    out = b.model_dump()
+    out = b.to_dict()
     out["dependencies"] = [{k: d.get(k) for k in ("id", "type", "title", "status")} for d in out["dependencies"]]
     return out
 
@@ -87,7 +87,7 @@ class Beads:
 
     def comments(self, repo: str, bead: str) -> list[dict[str, Any]]:
         try:
-            return [c.model_dump() for c in self.env.ports.store(repo).comments(bead)] if repo else []
+            return [c.to_dict() for c in self.env.ports.store(repo).comments(bead)] if repo else []
         except (BdFailure, ValueError, OSError):
             return []
 

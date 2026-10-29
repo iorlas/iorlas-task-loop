@@ -28,6 +28,7 @@ from taskloop.adapters import procs, runner
 from taskloop.adapters.delegate import Stopped
 from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
+from taskloop.contracts import wire
 from taskloop.contracts.config import ConfigError, EngineConfig, load
 from taskloop.contracts.delegate import DelegateResult, RunRequest
 
@@ -67,7 +68,7 @@ class NoEngineSideSilence(unittest.TestCase):
     def test_the_engine_has_no_warn_stop_cap_timer_of_its_own(self):
         self.assertFalse(hasattr(runner, "Silence") or hasattr(runner, "WATCH_S"))
         self.assertNotIn("silence", inspect.signature(runner.StreamRunner).parameters)
-        cfg = set(EngineConfig.model_fields)
+        cfg = set(wire.names(EngineConfig))
         self.assertTrue({"write_idle_min", "write_cap_min"} <= cfg)
         self.assertFalse({"write_idle_warn_min", "write_idle_stop_min"} & cfg)
 

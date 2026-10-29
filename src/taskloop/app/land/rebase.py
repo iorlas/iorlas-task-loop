@@ -76,7 +76,7 @@ class Rebase:
                 return ck
             # unsquashed, the wip commit reset() made on top of the checkpoint's head is still on top of it
             above = not self.squashed and len(e.rebase_pre) > 1 and ck.head == e.rebase_pre[1]
-            return ck.model_copy(update={"head": e.git("rev-parse", "HEAD~1" if above else "HEAD")})
+            return ck.replace(head=e.git("rev-parse", "HEAD~1" if above else "HEAD"))
 
         e.checkpoints.amend(move)
 

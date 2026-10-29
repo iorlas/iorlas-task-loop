@@ -1,9 +1,9 @@
 """The six worker answers (plan, write, review, reflect, look, verify) as records. The JSON Schema a node sends is generated from
 its record (`schema.of`), the strict form from that (`schema.strict`), and an answer is validated by decoding it into the record
 (`check`): one definition, no hand-written schema. A visual stage's write and review also require their look field."""
-from typing import Any, Literal, get_args
+from typing import Annotated, Any, Literal, get_args
 
-from pydantic import Field, ValidationError
+import msgspec
 
 from taskloop.contracts import schema
 from taskloop.contracts.argv import FORM
@@ -68,17 +68,21 @@ class Anchor(Rec):
 class Stage(Rec):
     goal: str
     files: list[str]
-    checks: list[list[str]] = Field(description=ARGV_DOC)
+    checks: Annotated[list[list[str]], msgspec.Meta(description=ARGV_DOC)]
     hard: bool
-    anchors: list[Anchor] = Field(default_factory=list, description="at most 8: where in the code the stage's work starts")
-    read_first: list[str] = Field(default_factory=list, description="files to read before touching anything")
-    patterns: list[str] = Field(default_factory=list, description="existing code to follow, one line each")
-    constraints: str | None = Field(default=None, description="what the stage must not break or touch")
+    anchors: Annotated[
+        list[Anchor], msgspec.Meta(description="at most 8: where in the code the stage's work starts")
+    ] = msgspec.field(default_factory=list)
+    read_first: Annotated[
+        list[str], msgspec.Meta(description="files to read before touching anything")
+    ] = msgspec.field(default_factory=list)
+    patterns: Annotated[list[str], msgspec.Meta(description="existing code to follow, one line each")] = msgspec.field(default_factory=list)
+    constraints: Annotated[str | None, msgspec.Meta(description="what the stage must not break or touch")] = None
 
 
 class Risk(Rec):
     what: str
-    check: list[str] = Field(description=ARGV_DOC)
+    check: Annotated[list[str], msgspec.Meta(description=ARGV_DOC)]
 
 
 class Unresolved(Rec):
@@ -89,8 +93,8 @@ class Unresolved(Rec):
 
 class Case(Rec):
     criterion: str
-    check: list[str] = Field(description=ARGV_DOC)
-    class_: CaseClass = Field(default="test", alias="class")
+    check: Annotated[list[str], msgspec.Meta(description=ARGV_DOC)]
+    class_: CaseClass = msgspec.field(default="test", name="class")
     proved_by: ProvedBy = "check"
     via: str = ""
 
@@ -105,9 +109,9 @@ class PlanAnswer(Rec):
     cases: list[Case]
     leftovers: list[Leftover]
     irreversible: Irreversible = ""
-    unresolved: list[Unresolved] = Field(default_factory=list)
-    owner_cause: AskCause = Field(default="unknown", description=CAUSE_DOC)
-    cited: list[str] = Field(default_factory=list, description=CITED_DOC)
+    unresolved: list[Unresolved] = msgspec.field(default_factory=list)
+    owner_cause: Annotated[AskCause, msgspec.Meta(description=CAUSE_DOC)] = "unknown"
+    cited: Annotated[list[str], msgspec.Meta(description=CITED_DOC)] = msgspec.field(default_factory=list)
 
 
 class ShotArg(Rec):
@@ -128,7 +132,7 @@ class Flake(Rec):
 
 class NewCase(Rec):
     criterion: str
-    check: list[str] = Field(description=ARGV_DOC)
+    check: Annotated[list[str], msgspec.Meta(description=ARGV_DOC)]
     why: str
 
 
@@ -151,14 +155,16 @@ class WriteAnswer(Rec):
     bad_checks: list[BadCheck]
     new_cases: list[NewCase]
     unchecked: list[Unchecked]
-    shots: list[Shot] = Field(default_factory=list)
-    flakes: list[Flake] = Field(default_factory=list)
-    handoff: str = Field(default="", description="at most 1 KB: what a fresh writer taking over needs that the diff does not show")
-    owner_cause: AskCause = Field(default="unknown", description=CAUSE_DOC)
+    shots: list[Shot] = msgspec.field(default_factory=list)
+    flakes: list[Flake] = msgspec.field(default_factory=list)
+    handoff: Annotated[
+        str, msgspec.Meta(description="at most 1 KB: what a fresh writer taking over needs that the diff does not show")
+    ] = ""
+    owner_cause: Annotated[AskCause, msgspec.Meta(description=CAUSE_DOC)] = "unknown"
 
 
-class WriteAnswerLook(WriteAnswer):
-    logic_only: str = Field(kw_only=True)
+class WriteAnswerLook(WriteAnswer, kw_only=True):
+    logic_only: str
 
 
 class Finding(Rec):
@@ -166,33 +172,39 @@ class Finding(Rec):
     line: int
     severity: Severity
     fix: str
-    axis: Axis = Field(description="spec: a requirement is unmet or unasked behaviour; standards: a break of the repo's rules")
-    category: str = Field(description="one word: logic, contract, test, docs, security, convention")
-    scenario: str = Field(description="the inputs and the wrong output; empty when you cannot state one (then it is only a note)")
+    axis: Annotated[
+        Axis, msgspec.Meta(description="spec: a requirement is unmet or unasked behaviour; standards: a break of the repo's rules")
+    ]
+    category: Annotated[str, msgspec.Meta(description="one word: logic, contract, test, docs, security, convention")]
+    scenario: Annotated[
+        str, msgspec.Meta(description="the inputs and the wrong output; empty when you cannot state one (then it is only a note)")
+    ]
 
 
 class Criterion(Rec):
-    item: str = Field(description="the id of an acceptance item as listed in the prompt (A1, A2, ...)")
+    item: Annotated[str, msgspec.Meta(description="the id of an acceptance item as listed in the prompt (A1, A2, ...)")]
     status: Status
-    evidence: str = Field(description="what shows it: a check, a file and line, the evidence folder; empty only for engine")
+    evidence: Annotated[
+        str, msgspec.Meta(description="what shows it: a check, a file and line, the evidence folder; empty only for engine")
+    ]
 
 
 class ReviewAnswer(Rec):
     findings: list[Finding]
     unmet: list[str]
-    criteria: list[Criterion] = Field(description="one entry per acceptance item the prompt lists; [] when it lists none")
+    criteria: Annotated[list[Criterion], msgspec.Meta(description="one entry per acceptance item the prompt lists; [] when it lists none")]
     question: str
     options: list[Option]
     decided: str
     leftovers: list[Leftover]
     unchecked: list[Unchecked]
-    accept_files: list[str] = Field(default_factory=list)
-    reject_files: list[str] = Field(default_factory=list)
-    owner_cause: AskCause = Field(default="unknown", description=CAUSE_DOC)
+    accept_files: list[str] = msgspec.field(default_factory=list)
+    reject_files: list[str] = msgspec.field(default_factory=list)
+    owner_cause: Annotated[AskCause, msgspec.Meta(description=CAUSE_DOC)] = "unknown"
 
 
-class ReviewAnswerLook(ReviewAnswer):
-    look: str = Field(kw_only=True)
+class ReviewAnswerLook(ReviewAnswer, kw_only=True):
+    look: str
 
 
 class WentBadly(Rec):
@@ -265,14 +277,16 @@ def check(node: str, visual: bool, data: Any) -> list[str]:
     rec = record_for(node, visual)
     try:
         load(rec, schema.prune(data, schema_for(node, visual)))
-    except ValidationError as e:
-        return [_reason(rec, x) for x in e.errors(include_url=False)]
+    except msgspec.ValidationError as e:
+        return [_reason(rec, str(e))]
     return []
 
 
-def _reason(rec: type[Rec], err: Any) -> str:
+def _reason(rec: type[Rec], error: str) -> str:
     """One validation error as `Record.path: what is wrong`; a command that is not an argv array also gets the form."""
-    where = "".join(f"[{p}]" if isinstance(p, int) else f".{p}" for p in err["loc"])[1:]
-    said = "missing" if err["type"] == "missing" else err["msg"]
-    form = f" ({ARGV_DOC})" if err["type"] == "list_type" and ".check" in where else ""
-    return f"{rec.__name__}.{where}: {said}{form}"
+    what, _, where = error.partition(" - at `$")
+    where = where.rstrip("`")
+    if what.startswith("Object missing required field `"):
+        where, what = f"{where}.{what.split('`')[1]}", "missing"
+    form = f" ({ARGV_DOC})" if what.startswith("Expected `array`") and ".check" in where else ""
+    return f"{rec.__name__}{where}: {what}{form}"

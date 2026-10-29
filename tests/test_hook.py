@@ -156,7 +156,7 @@ class Texts(unittest.TestCase):
 
 
 class Speed(unittest.TestCase):
-    """A hook runs before every tool call: pretool imports no store, adapter, app, record or pydantic module; an unknown event fails."""
+    """A hook runs before every tool call: pretool imports no store, adapter, app, record or msgspec module; an unknown event fails."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -164,11 +164,11 @@ class Speed(unittest.TestCase):
         self.env = dict(os.environ, XDG_CONFIG_HOME=self.tmp.name, CLAUDE_CONFIG_DIR=self.tmp.name)
 
     @real_proc("a fresh interpreter shows the hook's import graph and exit code")
-    def test_pretool_imports_no_store_adapter_app_module_record_or_pydantic(self):
+    def test_pretool_imports_no_store_adapter_app_module_record_or_msgspec(self):
         code = (
             "import sys; sys.path.insert(0, {!r}); from taskloop.hook import main, pretool; pretool.main('{{}}'); "
             "print([m for m in sys.modules if m.startswith(('taskloop.app', 'taskloop.adapters', 'taskloop.stores', 'taskloop.contracts', "
-            "'pydantic'))])"
+            "'msgspec'))])"
         ).format(str(ROOT / "src"))
         r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
         self.assertEqual(r.stdout.strip(), "[]")

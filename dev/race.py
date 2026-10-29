@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.12"
-# dependencies = ["pydantic==2.14.2"]
+# dependencies = ["msgspec==0.22.0"]
 # ///
 """The real-process race (tl-bxk.11.1, tl-vgo): two `tl loop`s, a hand `run-task --slot s1`, a hand `run-task --slot any --wait`,
 a `tl slot hold s2` and two `dev/release.py` at once, all real processes, on a fake repo (bare origin, fake bd, fake

@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from typing import Any, get_args
 
-from pydantic import ValidationError
+import msgspec
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -20,22 +20,22 @@ from taskloop.contracts import delegate, enums, events, ids, log, trace, wire
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.loop import LoopCommand
 from taskloop.contracts.run import LoopLogLine
-from taskloop.contracts.wire import Rec, SortedSet, StaleRecord
+from taskloop.contracts.wire import Rec, StaleRecord
 
 GOLDEN = Path(__file__).resolve().parent / "golden"
 FAMILIES = {"engine_log": (S.LOG, log.EngineLog), "events": (S.EVENTS, events.Event), "live_events": (S.LIVE, delegate.LiveEvent)}
 
 
 def kinds(union: Any) -> set[str]:
-    """The tags of a discriminated union's members."""
-    return {m.model_fields["kind"].default for m in get_args(get_args(union)[0])}
+    """The tags of a tagged union's members."""
+    return {m.__struct_config__.tag for m in get_args(union)}
 
 
 def reachable(obj: Any, out: set) -> None:
     """Every record type found in `obj`, nested ones included."""
     if isinstance(obj, Rec):
         out.add(type(obj))
-        for name in type(obj).model_fields:
+        for name in wire.names(type(obj)):
             reachable(getattr(obj, name), out)
     elif isinstance(obj, (list, tuple, set, frozenset)):
         for x in obj:
@@ -61,7 +61,7 @@ class RoundTrip(unittest.TestCase):
                     body = json.loads(json.dumps(wire.dump(rec)))
                     back = wire.load(type(rec), body)
                     self.assertEqual(back, rec)
-                    self.assertEqual(wire.dump(back), body)
+                    self.assertEqual(json.loads(json.dumps(wire.dump(back))), body)
 
     def test_every_record_class_of_the_package_has_a_sample(self):
         found: set = set()
@@ -133,18 +133,18 @@ class Refusals(unittest.TestCase):
             wire.load(type(S.OUTCOME), {k: v for k, v in self.wire().items() if k != "v"})
 
     def test_an_unknown_key_is_refused(self):
-        with self.assertRaisesRegex(ValidationError, "extra"):
+        with self.assertRaisesRegex(msgspec.ValidationError, "extra"):
             wire.load(type(S.OUTCOME), self.wire(extra=1))
 
     def test_a_missing_required_key_is_named(self):
         d = self.wire()
         del d["bead"]
-        with self.assertRaisesRegex(ValidationError, "bead"):
+        with self.assertRaisesRegex(msgspec.ValidationError, "bead"):
             wire.load(type(S.OUTCOME), d)
 
     def test_types_are_not_coerced(self):
         for key, bad in (("minutes", "3"), ("rounds", 2.5), ("rounds", True), ("asked", 1), ("bead", 7), ("outcome", "nope")):
-            with self.subTest(key), self.assertRaises(ValidationError):
+            with self.subTest(key), self.assertRaises(msgspec.ValidationError):
                 wire.load(type(S.OUTCOME), self.wire(**{key: bad}))
 
     def test_an_int_is_a_float_but_a_float_is_not_an_int(self):
@@ -153,23 +153,23 @@ class Refusals(unittest.TestCase):
     def test_the_path_names_the_nested_field(self):
         d = wire.dump(S.LOG["call_end"])
         d["tokens"]["out"] = "many"
-        with self.assertRaises(ValidationError) as cm:
+        with self.assertRaises(msgspec.ValidationError) as cm:
             wire.load(log.CallEnd, d)
-        self.assertEqual(cm.exception.errors()[0]["loc"], ("tokens", "out"))
+        self.assertIn("$.tokens.out", str(cm.exception))
 
     def test_a_wrong_kind_and_an_unknown_kind(self):
         d = wire.dump(S.LOG["warn"])
-        with self.assertRaises(ValidationError):
+        with self.assertRaises(msgspec.ValidationError):
             wire.load(log.Note, d)
-        with self.assertRaisesRegex(ValidationError, "union_tag_invalid|does not match"):
+        with self.assertRaisesRegex(msgspec.ValidationError, "kind"):
             wire.load(log.EngineLog, dict(d, kind="nope"))
-        with self.assertRaises(ValidationError):
+        with self.assertRaises(msgspec.ValidationError):
             wire.load(log.Note, [])
 
     def test_a_literal_takes_only_its_members(self):
         d = wire.dump(S.other(LoopCommand))
         d["action"] = "explode"
-        with self.assertRaisesRegex(ValidationError, "action"):
+        with self.assertRaisesRegex(msgspec.ValidationError, "action"):
             wire.load(type(S.other(LoopCommand)), d)
 
 
@@ -181,17 +181,13 @@ class Wire(unittest.TestCase):
     def test_v_and_kind_come_first(self):
         self.assertEqual(list(wire.dump(S.LOG["lock"]))[:3], ["v", "kind", "t"])
 
-    def test_a_set_is_written_sorted_and_a_tuple_as_an_array(self):
-        class WithSet(Rec):
-            features: SortedSet
-
-        self.assertEqual(wire.dump(WithSet(features={"b", "a"}))["features"], ["a", "b"])
-        self.assertEqual(wire.dump(S.LOCK)["route"], [10, S.T])
+    def test_a_tuple_is_written_as_an_array(self):
+        self.assertEqual(json.dumps(wire.dump(S.LOCK)["route"]), f"[10, {S.T}]")
 
     def test_an_optional_nested_record_is_null_or_a_dict(self):
         a = S.other(Ask)
         self.assertEqual(wire.dump(a)["answer"]["action"], "confirm")
-        self.assertIsNone(wire.dump(a.model_copy(update={"answer": None}))["answer"])
+        self.assertIsNone(wire.dump(a.replace(answer=None))["answer"])
 
     def test_nested_records_carry_no_version(self):
         d = wire.dump(S.other(LoopLogLine))
@@ -199,7 +195,7 @@ class Wire(unittest.TestCase):
         self.assertNotIn("v", d["outcome"])
 
     def test_a_record_is_frozen(self):
-        with self.assertRaises(ValidationError):
+        with self.assertRaises(AttributeError):
             S.OUTCOME.rounds = 9  # type: ignore[misc]
 
 

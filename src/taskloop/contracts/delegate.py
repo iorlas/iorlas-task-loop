@@ -2,12 +2,12 @@
 
 Mirrors of what delegate emits; delegate's generated contract.json is the authority and a later release checks these fields
 against it. `RunRequest.to_argv` is the only place that builds the `route.py run` argv."""
-from typing import Annotated, Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal
 
-from pydantic import Field
+import msgspec
 
 from taskloop.contracts.trace import Tokens
-from taskloop.contracts.wire import Rec
+from taskloop.contracts.wire import Rec, Tagged
 
 REASON_TIMEOUT = "timeout"  # the wire id of a worker that did not finish within --timeout
 REASON_OVERRUN = "overrun"  # made by the engine: a reviewer call used its budget
@@ -30,7 +30,8 @@ class RunRequest(Rec):
     timeout_s: int = 0
     idle_s: int = 0
     live_file: str = ""  # DELEGATE_LIVE_FILE: where delegate appends the worker's live events
-    engine_only: list[str] = Field(default_factory=list)  # bare `just` recipe names a write step must not run: --engine-only once each
+    # bare `just` recipe names a write step must not run: --engine-only once each
+    engine_only: list[str] = msgspec.field(default_factory=list)
 
     def to_argv(self, python: str, route: str) -> list[str]:
         out = [python, route, "run", self.role, "--brief", self.brief_path, "--cwd", self.cwd, "--schema", self.schema_path]
@@ -98,7 +99,7 @@ class Denial(Rec):
     kind: Literal["policy", "sandbox_limit", "secret"]
     tool: str | None = None
     path: str | None = None
-    input: dict[str, Any] = Field(default_factory=dict)
+    input: dict[str, Any] = msgspec.field(default_factory=dict)
 
 
 class TranscriptInfo(Rec):
@@ -106,7 +107,7 @@ class TranscriptInfo(Rec):
 
     path: str
     kind: Literal["codex", "claude", "opencode_export"]
-    from_: int = Field(alias="from")
+    from_: int = msgspec.field(name="from")
     to: int
     bytes: int
 
@@ -125,7 +126,7 @@ class WorkerEnd(Rec):
     term_sent: bool = False
     kill_sent: bool = False
     waited_s: float = 0.0
-    survivors: list[Survivor] = Field(default_factory=list)
+    survivors: list[Survivor] = msgspec.field(default_factory=list)
     pid: int | None = None
     pgid: int | None = None
     start: str | None = None
@@ -147,7 +148,7 @@ class DelegateResult(Rec):
     flag: str | None = None
     cost: float = 0.0
     tokens: Tokens | None = None
-    denied: list[Denial] = Field(default_factory=list)
+    denied: list[Denial] = msgspec.field(default_factory=list)
     secs: float = 0.0
     run_id: str | None = None
     call_id: str | None = None
@@ -155,7 +156,7 @@ class DelegateResult(Rec):
     transcript_info: TranscriptInfo | None = None
     transcript_status: str | None = None
     say: str = ""
-    git_violation: list[str] = Field(default_factory=list)
+    git_violation: list[str] = msgspec.field(default_factory=list)
     usage: Usage | None = None
     context: dict[str, Any] | None = None
     worker: WorkerEnd | None = None
@@ -165,7 +166,7 @@ class DelegateResult(Rec):
     first_lane: str | None = None
     warning: str = ""
     ask_kind: str = ""
-    warnings: list[str] = Field(default_factory=list)
+    warnings: list[str] = msgspec.field(default_factory=list)
     agent_model: str | None = None
 
 
@@ -178,14 +179,12 @@ class WorkerStarted(Rec):
     run_id: str
 
 
-class LiveRec(Rec):
+class LiveRec(Tagged):
     V: ClassVar[int] = 1
-    kind: str = ""  # each member narrows it to its tag; declared here so `kind` is written right after `v`
     t: float
 
 
-class LiveStart(LiveRec):
-    kind: Literal["start"] = "start"
+class LiveStart(LiveRec, tag="start"):
     harness: str
     pid: int
     lane: str = ""
@@ -194,79 +193,67 @@ class LiveStart(LiveRec):
     role: str = ""
 
 
-class LiveCmdStart(LiveRec):
-    kind: Literal["cmd_start"] = "cmd_start"
+class LiveCmdStart(LiveRec, tag="cmd_start"):
     id: str
     text: str
     cwd: str = ""
     prov: bool = False
 
 
-class LiveCmdEnd(LiveRec):
-    kind: Literal["cmd_end"] = "cmd_end"
+class LiveCmdEnd(LiveRec, tag="cmd_end"):
     id: str
     exit: int | None = None  # null: the harness did not say
     secs: float = 0.0
     out: str = ""
 
 
-class LiveToolStart(LiveRec):
-    kind: Literal["tool_start"] = "tool_start"
+class LiveToolStart(LiveRec, tag="tool_start"):
     id: str
     text: str
     prov: bool = False
 
 
-class LiveToolEnd(LiveRec):
-    kind: Literal["tool_end"] = "tool_end"
+class LiveToolEnd(LiveRec, tag="tool_end"):
     id: str
     secs: float = 0.0
     out: str = ""
 
 
-class LiveMsg(LiveRec):
-    kind: Literal["msg"] = "msg"
+class LiveMsg(LiveRec, tag="msg"):
     text: str
 
 
-class LiveThink(LiveRec):
-    kind: Literal["think"] = "think"
+class LiveThink(LiveRec, tag="think"):
     text: str
 
 
-class LiveTokens(LiveRec):
-    kind: Literal["tokens"] = "tokens"
-    in_: int = Field(default=0, alias="in")
+class LiveTokens(LiveRec, tag="tokens"):
+    in_: int = msgspec.field(default=0, name="in")
     cached: int = 0
     out: int = 0
 
 
-class LiveStall(LiveRec):
-    kind: Literal["stall"] = "stall"
+class LiveStall(LiveRec, tag="stall"):
     secs: float
 
 
-class LiveRetry(LiveRec):
-    kind: Literal["retry"] = "retry"
+class LiveRetry(LiveRec, tag="retry"):
     n: int = 0
     of: int = 0
     why: str = ""
 
 
-class LiveEnd(LiveRec):
-    kind: Literal["end"] = "end"
+class LiveEnd(LiveRec, tag="end"):
     status: Literal["done", "timeout", "killed", "error"]
     secs: float = 0.0
     cost_usd: float = 0.0
 
 
-class LiveRaw(LiveRec):
-    kind: Literal["raw"] = "raw"
+class LiveRaw(LiveRec, tag="raw"):
     type: str
 
 
-LiveEvent = Annotated[
+LiveEvent = (
     LiveStart | LiveCmdStart | LiveCmdEnd | LiveToolStart | LiveToolEnd | LiveMsg | LiveThink | LiveTokens | LiveStall | LiveRetry
-    | LiveEnd | LiveRaw,
-    Field(discriminator="kind"),
-]
+    | LiveEnd | LiveRaw
+)

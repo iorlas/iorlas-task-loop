@@ -4,7 +4,7 @@ from collections.abc import Iterator
 from enum import StrEnum
 from typing import ClassVar, Literal, override
 
-from pydantic import Field
+import msgspec
 
 from taskloop.contracts.enums import CheckStatus
 from taskloop.contracts.wire import Rec
@@ -24,14 +24,14 @@ class Check(Rec):
     id: str
     cmd: str
     group: Group = "tests"
-    when: list[str] = Field(default_factory=list)
+    when: list[str] = msgspec.field(default_factory=list)
     retry: int = 0
     wall_min: float = 60.0
     cache: bool = True
-    inputs: list[str] = Field(default_factory=list)
+    inputs: list[str] = msgspec.field(default_factory=list)
     inputs_only: bool = False
-    exclude: list[str] = Field(default_factory=list)
-    env: dict[str, str] = Field(default_factory=dict)
+    exclude: list[str] = msgspec.field(default_factory=list)
+    env: dict[str, str] = msgspec.field(default_factory=dict)
     repo: bool = False
     writer: bool | None = None  # True: the writer may run it, whatever it cost; False: never; None: by its duration
     writer_max_s: float | None = None  # its own cut for "too slow for the writer", else the engine's
@@ -90,7 +90,7 @@ class CheckRun(Rec):
     V: ClassVar[int] = 1
     round: int
     tree: str = ""
-    results: list[CheckResult] = Field(default_factory=list)
+    results: list[CheckResult] = msgspec.field(default_factory=list)
     hits: int = 0
     misses: int = 0
 
@@ -133,13 +133,13 @@ class CheckCacheEntry(Rec):
 
     V: ClassVar[int] = 1
     key: str = ""  # "<tree> <base sha>" the `whole` entries are facts about
-    whole: dict[str, CacheHit] = Field(default_factory=dict)
-    inputs: dict[str, CacheHit] = Field(default_factory=dict)
-    base_red: dict[str, bool] = Field(default_factory=dict)  # "<base sha> <command>" -> red on that base
+    whole: dict[str, CacheHit] = msgspec.field(default_factory=dict)
+    inputs: dict[str, CacheHit] = msgspec.field(default_factory=dict)
+    base_red: dict[str, bool] = msgspec.field(default_factory=dict)  # "<base sha> <command>" -> red on that base
 
 
 class Durations(Rec):
     """check-durations/<repo>.json: the seconds of the last runs of each command, newest last."""
 
     V: ClassVar[int] = 1
-    runs: dict[str, list[float]] = Field(default_factory=dict)
+    runs: dict[str, list[float]] = msgspec.field(default_factory=dict)

@@ -238,7 +238,7 @@ class LandReview(LandReviewBase):
         for how in ("red", "older", "unknown"):
             e = self.evidenced(self.engine_checks(**({"unity-tests": {"exit": 1, "status": "failed", "why": ""}} if how == "red" else {})))
             if how == "older":
-                e.last_run = cast(CheckRun, e.last_run).model_copy(update={"tree": "0" * 40})
+                e.last_run = cast(CheckRun, e.last_run).replace(tree="0" * 40)
             if how == "unknown":
                 e.last_run = None
                 e.run_dir = Path(self.tmp.name, "nope")

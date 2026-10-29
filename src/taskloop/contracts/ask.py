@@ -2,7 +2,7 @@
 engine read fields, never prose."""
 from typing import ClassVar, Literal
 
-from pydantic import Field
+import msgspec
 
 from taskloop.contracts.dash import OwnerCause, Stick
 from taskloop.contracts.enums import AskClass, AskKind, AskStatus, WhyCode
@@ -48,8 +48,8 @@ class ReplanLine(Rec):
 class AskDetail(Rec):
     """The structured part of an ask, so a page renders it without parsing prose. `text`: the worker's own words, whole."""
 
-    budget: list[BudgetLine] = Field(default_factory=list)
-    replans: list[ReplanLine] = Field(default_factory=list)
+    budget: list[BudgetLine] = msgspec.field(default_factory=list)
+    replans: list[ReplanLine] = msgspec.field(default_factory=list)
     text: str = ""
 
 
@@ -78,14 +78,14 @@ class Ask(Rec):
     n: int
     bead: str
     kind: AskKind
-    ask_class: AskClass = Field(alias="class")
+    ask_class: AskClass = msgspec.field(name="class")
     decision: str
     run: str
     t: float
     status: AskStatus
-    tried: list[str] = Field(default_factory=list)
-    options: list[AskOption] = Field(default_factory=list)
-    detail: AskDetail = Field(default_factory=AskDetail)
+    tried: list[str] = msgspec.field(default_factory=list)
+    options: list[AskOption] = msgspec.field(default_factory=list)
+    detail: AskDetail = msgspec.field(default_factory=AskDetail)
     why_code: WhyCode | None = None
     why: str = ""
     parks_at: float | None = None
@@ -101,7 +101,7 @@ class Ask(Rec):
     blocking: bool = True
     default: str = ""
     key: str = ""
-    similar: list[SimilarRef] = Field(default_factory=list)
-    thread: list[ThreadEntry] = Field(default_factory=list)
+    similar: list[SimilarRef] = msgspec.field(default_factory=list)
+    thread: list[ThreadEntry] = msgspec.field(default_factory=list)
     outcome: Stick | None = None
     outcome_ref: str = ""

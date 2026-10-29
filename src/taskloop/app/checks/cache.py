@@ -61,7 +61,7 @@ class CheckCache:
     def cached(self, c: Check, hit: CacheHit, ikey: str) -> CheckResult:
         """The remembered result as this round's: cached, with the round it ran in said."""
         note = "inputs unchanged since round %s" % (hit.round or "?") if ikey else ""
-        return hit.result.model_copy(update={"id": c.id, "cmd": c.cmd, "group": c.group, "cached": True, "log": "", "note": note})
+        return hit.result.replace(id=c.id, cmd=c.cmd, group=c.group, cached=True, log="", note=note)
 
     def remember(self, c: Check, res: CheckResult, rnd: int, log_abs: str, ikey: str) -> None:
         """Only a pass is a fact about the tree."""

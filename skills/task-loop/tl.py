@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.12"
-# dependencies = ["pydantic==2.14.2"]
+# dependencies = ["msgspec==0.22.0"]
 # ///
 """tl.py: the task-loop command line; every verb lives in src/taskloop. Python 3.12+, standard library only; macOS, Linux.
 

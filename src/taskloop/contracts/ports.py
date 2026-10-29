@@ -5,7 +5,7 @@ A port is a Protocol plus the typed requests and results that cross it. Adapters
 from collections.abc import Callable
 from typing import Any, Protocol
 
-from pydantic import Field
+import msgspec
 
 from taskloop.contracts.argv import text_of
 from taskloop.contracts.ask import Ask, AskAction
@@ -41,9 +41,9 @@ class NewBead(Rec):
     priority: int | None = None
     description: str = ""
     acceptance_criteria: str = ""
-    labels: list[str] = Field(default_factory=list)
+    labels: list[str] = msgspec.field(default_factory=list)
     parent: str = ""
-    deps: list[str] = Field(default_factory=list)
+    deps: list[str] = msgspec.field(default_factory=list)
     no_inherit_labels: bool = False
 
 
@@ -56,8 +56,8 @@ class BeadPatch(Rec):
     description: str | None = None
     notes: str | None = None
     metadata: dict[str, Any] | None = None  # the whole metadata object replaced (set_metadata changes single keys)
-    set_metadata: dict[str, str] = Field(default_factory=dict)
-    unset_metadata: list[str] = Field(default_factory=list)
+    set_metadata: dict[str, str] = msgspec.field(default_factory=dict)
+    unset_metadata: list[str] = msgspec.field(default_factory=list)
 
 
 class BeadQuery(Rec):
@@ -110,7 +110,7 @@ class CheckSpec(Rec):
     argv: list[str]
     cwd: str
     timeout_s: float = 3600.0
-    env: dict[str, str] = Field(default_factory=dict)
+    env: dict[str, str] = msgspec.field(default_factory=dict)
 
     @property
     def cmd(self) -> str:

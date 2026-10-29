@@ -1,8 +1,8 @@
 """Lock records: who holds the engine, a slot ticket, a named lock. Liveness is a pid probe, nothing more."""
 from typing import ClassVar
 
+import msgspec
 import stream_proc
-from pydantic import Field
 
 from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.wire import Rec
@@ -33,7 +33,7 @@ class EngineLock(Rec):
     slot: str | None = None
     slot_bead: str | None = None
     route: tuple[int, float] | None = None
-    workers: list[tuple[int, float]] = Field(default_factory=list)
+    workers: list[tuple[int, float]] = msgspec.field(default_factory=list)
 
     def alive(self) -> bool:
         return pid_alive(self.pid)

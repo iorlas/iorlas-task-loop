@@ -24,7 +24,7 @@ def cls_of(rel: str) -> type:
 def records(obj, seen: set) -> None:
     if isinstance(obj, Rec):
         seen.add(type(obj))
-        for name in type(obj).model_fields:
+        for name in wire.names(type(obj)):
             records(getattr(obj, name), seen)
     elif isinstance(obj, (list, tuple)):
         for v in obj:

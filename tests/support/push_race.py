@@ -86,7 +86,7 @@ class PushRace:
         result = self.real["checks"](this, st, name, *a, **kw)
         if self.failure == "checks_exhausted" and (name.startswith("fix ") or state.get("resuming")):
             red = {"status": "failed", "exit": 1, "tail": "still red"}
-            result = result.model_copy(update={"results": [c.model_copy(update=red) for c in result]})
+            result = result.replace(results=[c.replace(**red) for c in result])
         if state.get("resuming"):
             state.setdefault("resume_checks", []).append(result)
         if name == "land retry":

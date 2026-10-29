@@ -1,7 +1,7 @@
 """RepoProfile: the repo's .task-loop.json as typed records . An unknown key is an error, not a silent no-op."""
 from typing import Any, Literal, TextIO
 
-from pydantic import Field
+import msgspec
 
 from taskloop.contracts import wire
 from taskloop.contracts.argv import FORM, shape_problem, text_of
@@ -34,8 +34,8 @@ def fill_slot_env(values: Any, **names: str) -> dict[str, str]:
 class VisualConfig(Rec):
     """Globs saying which changes are visual (a look judge reads the pictures)."""
 
-    include: list[str] = Field(default_factory=list)
-    exclude: list[str] = Field(default_factory=list)
+    include: list[str] = msgspec.field(default_factory=list)
+    exclude: list[str] = msgspec.field(default_factory=list)
 
 
 class ContainerConfig(Rec):
@@ -50,20 +50,21 @@ class CheckSpec(Rec):
     argv: list[str]
     group: Literal["static", "tests", "acceptance"] = "tests"
     run: Literal["stage", "gate", "both"] = "stage"  # stage: the round after each write; gate: land's gate steps (and `tl check`); both
-    when: list[str] = Field(default_factory=list)
+    when: list[str] = msgspec.field(default_factory=list)
     retry: int = 0
     wall_min: float | None = None  # this check's wall-time limit; absent: engine.check_wall_min
     cache: bool | None = None
-    inputs: list[str] | str = Field(default_factory=list)
+    inputs: list[str] | str = msgspec.field(default_factory=list)
     inputs_only: bool = False
-    exclude: list[str] = Field(default_factory=list)
-    env: dict[str, str] = Field(default_factory=dict)
+    exclude: list[str] = msgspec.field(default_factory=list)
+    env: dict[str, str] = msgspec.field(default_factory=dict)
     writer: bool | None = None  # true: the writer may run it whatever it costs; false: never; absent: by how long it takes
     writer_check_max_s: float | None = None  # this check's own cut for "too slow for the writer" (else engine.writer_check_max_s)
     tail_log: str = ""  # a log of the tree whose first compile errors join this check's red output when it shows none
-    where: Literal["host", "container"] = Field(default="host", alias="in")  # container: needs engine.container
+    where: Literal["host", "container"] = msgspec.field(default="host", name="in")  # container: needs engine.container
     why: str = ""  # run gate: why no plan check may run this command (it is told to the planner)
-    fix: list[str] = Field(default_factory=list)  # argv run in the worktree before the checks (a formatter); what it changes is checked
+    # argv run in the worktree before the checks (a formatter); what it changes is checked
+    fix: list[str] = msgspec.field(default_factory=list)
 
     @property
     def cmd(self) -> str:
@@ -75,9 +76,9 @@ class SlotsConfig(Rec):
     count: int = 0
     dir: str = ".slots"
     base: str = "origin/main"
-    setup: list[str] = Field(default_factory=list)  # argv
-    setup_inputs: list[str] = Field(default_factory=list)
-    keep: list[str] = Field(default_factory=list)
+    setup: list[str] = msgspec.field(default_factory=list)  # argv
+    setup_inputs: list[str] = msgspec.field(default_factory=list)
+    keep: list[str] = msgspec.field(default_factory=list)
 
 
 class LoopConfig(Rec):
@@ -111,34 +112,35 @@ class LoopConfig(Rec):
 class EngineConfig(Rec):
     """The `engine` block; every key has the default the engine uses today."""
 
-    land: list[str] = Field(default_factory=lambda: ["git", "push", "origin", "HEAD:main"])
+    land: list[str] = msgspec.field(default_factory=lambda: ["git", "push", "origin", "HEAD:main"])
     land_optimistic_tries: int = 2  # gate re-runs outside the land lock when main moved under it, then inside (0: inside)
     base: str = "origin/main"
     check_links: bool = True
     pick_label: str = ""
     needs_info_label: str = "needs-info"
-    skip_labels: list[str] = Field(default_factory=list)
-    epic_order: list[str] = Field(default_factory=list)
+    skip_labels: list[str] = msgspec.field(default_factory=list)
+    epic_order: list[str] = msgspec.field(default_factory=list)
     epic_only: bool = False
     reflect: bool = True
     planner_notes: str = ""
     shot_table: str = ""
     write_fresh_stage_k: float = 100
-    write_fresh_above_k: float | dict[str, float] = Field(default_factory=lambda: dict(FRESH_ABOVE_K))
+    write_fresh_above_k: float | dict[str, float] = msgspec.field(default_factory=lambda: dict(FRESH_ABOVE_K))
     delegate: str = ""
-    untracked_ignore: list[str] = Field(default_factory=list)
-    checks: list[CheckSpec] = Field(default_factory=list)
-    slot_env: dict[str, str] = Field(default_factory=dict)  # added to (over) the slot's environment; {slot} {slot_dir} {repo} filled in
+    untracked_ignore: list[str] = msgspec.field(default_factory=list)
+    checks: list[CheckSpec] = msgspec.field(default_factory=list)
+    # added to (over) the slot's environment; {slot} {slot_dir} {repo} filled in
+    slot_env: dict[str, str] = msgspec.field(default_factory=dict)
     container: ContainerConfig | None = None
     host: bool = False
     worker_rules: str = ""
     test_pattern: str = TEST_PATTERN
     area_label_prefix: str = ""
-    areas: dict[str, Any] = Field(default_factory=dict)
+    areas: dict[str, Any] = msgspec.field(default_factory=dict)
     visual_paths: VisualConfig | None = None
     budget_usd: float = 15
     budget_min: float = 180
-    budget_min_by_label: dict[str, float] = Field(default_factory=dict)
+    budget_min_by_label: dict[str, float] = msgspec.field(default_factory=dict)
     bead_token_cap: int = 0  # tokens (in + out) a bead may use over all its runs: at the cap no worker starts (0: no cap)
     max_rounds: int = 3
     max_check_tries: int = 3
@@ -180,15 +182,15 @@ class EngineConfig(Rec):
 class RepoProfile(Rec):
     """A person writes the file, so it carries no `v`."""
 
-    engine: EngineConfig = Field(default_factory=EngineConfig)
-    slots: SlotsConfig = Field(default_factory=SlotsConfig)
-    loop: LoopConfig = Field(default_factory=LoopConfig)
+    engine: EngineConfig = msgspec.field(default_factory=EngineConfig)
+    slots: SlotsConfig = msgspec.field(default_factory=SlotsConfig)
+    loop: LoopConfig = msgspec.field(default_factory=LoopConfig)
 
 
 def _string_commands(data: Any) -> list[str]:
     """Where the profile still has a command as a string: every command is an argv list."""
     root = data if isinstance(data, dict) else {}
-    eng_name, slots_name = list(RepoProfile.model_fields)[:2]  # the first two fields: engine, slots
+    eng_name, slots_name = list(wire.names(RepoProfile))[:2]  # the first two fields: engine, slots
     eng, slots = root.get(eng_name), root.get(slots_name)
     eng, slots = (eng if isinstance(eng, dict) else {}), (slots if isinstance(slots, dict) else {})
     found = [f"{eng_name}.land"] if isinstance(eng.get("land"), str) else []
@@ -198,7 +200,7 @@ def _string_commands(data: Any) -> list[str]:
     return found
 
 
-ENG = next(iter(RepoProfile.model_fields))  # the profile's first block, engine
+ENG = next(iter(wire.names(RepoProfile)))  # the profile's first block, engine
 RETIRED_ENGINE = ("check_idle_min",)  # keys that once did something and now do nothing: loaded without them, not an error
 RETIRED_CHECK = ("idle_min",)  # the same, on one entry of engine.checks
 GONE_ENGINE = {  # key -> what to do instead: refused at load (the old spelling is not read)

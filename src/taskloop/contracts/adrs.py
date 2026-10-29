@@ -52,7 +52,7 @@ class AdrStore:
             return f"{adr} is not a decision of this repo"
         if found.retired_t is not None:
             return f"{adr} is already retired"
-        self.put(found.model_copy(update={"retired_by": by, "retired_t": now}))
+        self.put(found.replace(retired_by=by, retired_t=now))
         return ""
 
     def get(self, adr: str) -> Adr | None:
@@ -61,7 +61,7 @@ class AdrStore:
     def add(self, adr: Adr) -> Adr:
         """File the ADR under the next free number; `adr.id` and `adr.n` are replaced."""
         n = max([a.n for a in self.all()], default=0) + 1
-        done = adr.model_copy(update={"id": f"ADR-{n}", "n": n})
+        done = adr.replace(id=f"ADR-{n}", n=n)
         self.docs.of(done.id).write(done)
         return done
 

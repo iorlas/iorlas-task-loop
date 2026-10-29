@@ -736,7 +736,7 @@ class LandReviewBase(EngineTest):
             res("just unity-tests", None, id="unity-tests", why="no change under client/**, content/**"),
             res(self.SUITE, 0, id=self.SUITE, group="acceptance", secs=3, log="checks/06-tests_Sim.Properties.r2.log", tail="succeeded: 4"),
         ]
-        return [r.model_copy(update=over.get(r.id, {})) for r in rows]
+        return [r.replace(**over.get(r.id, {})) for r in rows]
 
     def evidenced(self, checks=None, attrs=None):
         e = self.verifier(attrs, checks=self.CFG_CHECKS[:2], gate="just check")

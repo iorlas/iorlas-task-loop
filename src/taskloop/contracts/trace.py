@@ -1,14 +1,15 @@
 """RunTrace: one engine run as the report reads it (traces.jsonl, v2). A defaulted field is one the older rows did not carry."""
 from typing import Any, ClassVar
 
-from pydantic import Field
+import msgspec
 
 from taskloop.contracts.enums import Outcome, WhyCode
-from taskloop.contracts.wire import Rec, RunIdWire
+from taskloop.contracts.ids import RunId
+from taskloop.contracts.wire import Rec
 
 
 class Tokens(Rec):
-    in_: int = Field(default=0, alias="in")
+    in_: int = msgspec.field(default=0, name="in")
     cached: int = 0
     out: int = 0
 
@@ -19,7 +20,7 @@ class Cost(Rec):
 
 class Denied(Rec):
     tool: str
-    input: dict[str, Any] = Field(default_factory=dict)
+    input: dict[str, Any] = msgspec.field(default_factory=dict)
 
 
 class AiCall(Rec):
@@ -42,10 +43,10 @@ class AiCall(Rec):
     flag: str | None = None
     host: bool | None = None
     cost: float | None = None
-    tokens: Tokens = Field(default_factory=Tokens)
+    tokens: Tokens = msgspec.field(default_factory=Tokens)
     turns: int | None = None
     context_k: int | None = None
-    denied: list[Denied] = Field(default_factory=list)
+    denied: list[Denied] = msgspec.field(default_factory=list)
     next: str | None = None
     reason: str | None = None
     stopped: str | None = None
@@ -75,10 +76,10 @@ class WentBadly(Rec):
 
 
 class Reflection(Rec):
-    went_well: list[str] = Field(default_factory=list)
-    went_badly: list[WentBadly] = Field(default_factory=list)
-    wasted: list[str] = Field(default_factory=list)
-    change: list[str] = Field(default_factory=list)
+    went_well: list[str] = msgspec.field(default_factory=list)
+    went_badly: list[WentBadly] = msgspec.field(default_factory=list)
+    wasted: list[str] = msgspec.field(default_factory=list)
+    change: list[str] = msgspec.field(default_factory=list)
 
 
 class WriteRound(Rec):
@@ -114,7 +115,7 @@ class Fault(Rec):
 
 class RunTrace(Rec):
     V: ClassVar[int] = 2
-    run: RunIdWire
+    run: RunId
     bead: str
     repo_url: str
     worktree: str
@@ -129,24 +130,24 @@ class RunTrace(Rec):
     version: str = ""
     why_code: WhyCode | None = None
     fingerprint: str = ""
-    cost: Cost = Field(default_factory=Cost)
-    stats: Stats = Field(default_factory=Stats)
+    cost: Cost = msgspec.field(default_factory=Cost)
+    stats: Stats = msgspec.field(default_factory=Stats)
     host: bool | None = None
     delegate_path: str = ""
     log: str = ""
     stderr: str = ""
-    lanes: dict[str, Any] = Field(default_factory=dict)
-    sessions: list[AiCall] = Field(default_factory=list)
-    verified: list[Verified] = Field(default_factory=list)
-    write_rounds: list[WriteRound] = Field(default_factory=list)
-    strays: list[str] = Field(default_factory=list)
+    lanes: dict[str, Any] = msgspec.field(default_factory=dict)
+    sessions: list[AiCall] = msgspec.field(default_factory=list)
+    verified: list[Verified] = msgspec.field(default_factory=list)
+    write_rounds: list[WriteRound] = msgspec.field(default_factory=list)
+    strays: list[str] = msgspec.field(default_factory=list)
     reflection: Reflection | None = None
-    lane_notes: list[str] = Field(default_factory=list)
+    lane_notes: list[str] = msgspec.field(default_factory=list)
     salvaged: bool = False
     backfilled: bool = False
     ask: str = ""
     prev_run: str = ""
     started_because: str = ""
-    faults: list[Fault] = Field(default_factory=list)
+    faults: list[Fault] = msgspec.field(default_factory=list)
     kind: str = ""  # the run's outcome.Kind value, and its fingerprint: what the storm detector counts
     kfp: str = ""
