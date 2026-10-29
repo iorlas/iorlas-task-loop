@@ -74,6 +74,7 @@ class CheckSpec:
     writer_check_max_s: float | None = None  # this check's own cut for "too slow for the writer" (else engine.writer_check_max_s)
     tail_log: str = ""  # a log of the tree whose first compile errors join this check's red output when it shows none
     where: Literal["host", "container"] = field(default="host", metadata={"name": "in"})  # container: needs engine.container
+    fix: list[str] = field(default_factory=list)  # argv run in the worktree before the checks (a formatter); what it changes is checked
 
     @property
     def cmd(self) -> str:
@@ -281,6 +282,7 @@ def load(data: Any, say_to: TextIO | None = None) -> RepoProfile:
         raise ConfigError(f"the repo profile: check {boxed[0]} says \"in\": \"container\" but engine.container is not set")
     fill_slot_env(profile.engine.slot_env, **dict.fromkeys(SLOT_PLACEHOLDERS, ""))
     cmds = [k.argv for k in profile.engine.checks] + [g.argv for g in profile.engine.gate_only] + [profile.engine.land]
+    cmds += [k.fix for k in profile.engine.checks if k.fix]
     cmds += [c for c in (profile.engine.gate, profile.slots.setup) if c]
     bad = [shape_problem(c) for c in cmds]
     if any(bad):

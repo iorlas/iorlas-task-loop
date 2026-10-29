@@ -39,8 +39,9 @@ class Round:
 
 class CheckExecutor:
     def __init__(self, host: CheckHost, cache: CheckCache, keys: InputKeys, attempts: Attempts, checklog: CheckLog,
-                 history: Durations) -> None:
+                 history: Durations, fix_red: dict[str, CheckResult] | None = None) -> None:
         self.host, self.cache, self.keys, self.attempts, self.checklog, self.history = host, cache, keys, attempts, checklog, history
+        self.fix_red = fix_red or {}  # id -> the red of a check whose fix command failed: it does not run
         self.logs = host.run_dir / "checks"
 
     def run_group(self, plan: CheckPlan, rnd: int) -> Round:
@@ -61,6 +62,9 @@ class CheckExecutor:
             if skipped.why.endswith(FAILED_FIRST):
                 st.red_skipped.add(n)
             return skipped, None
+        if c.id in self.fix_red:
+            st.red = c.group
+            return self.fix_red[c.id], None
         again = self._reused(c, st)
         if again:
             st.red = c.group if again.exit != 0 else st.red

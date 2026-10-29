@@ -9,6 +9,7 @@ from taskloop.app.checks.attempts import Attempts
 from taskloop.app.checks.base import BaseCheck
 from taskloop.app.checks.cache import CheckCache, InputKeys
 from taskloop.app.checks.executor import CheckExecutor, Round
+from taskloop.app.checks.fixer import Fixer
 from taskloop.app.checks.host import CheckHost, CheckStuck
 from taskloop.contracts.checks import CheckResult, CheckRun, Durations
 from taskloop.domain.checks.durations import merged, seconds
@@ -42,11 +43,12 @@ class Checker:
         history = history_doc.read() or Durations()
         plan = CheckPlan.build(items_of(host.cfg, stage_checks), history, groups,
                                acceptance_first, conflict_fix, markers)
+        fix_red = Fixer(host).run(plan, self.round)  # before the tree is hashed: the checks see the fixed files
         tree, base = host.checkout.tree_hash(), host.git("rev-parse", host.cfg.base)
         cache = CheckCache(host.stores.check_cache.of(host.bead), f"{tree} {base}")
         keys = InputKeys(host.wt, tree, base, env)
         attempts = Attempts(host, BaseCheck(host, cache, base, host.checkout.git_env), self.sleep)
-        st = CheckExecutor(host, cache, keys, attempts, host.checklog, history).run_group(plan, self.round)
+        st = CheckExecutor(host, cache, keys, attempts, host.checklog, history, fix_red).run_group(plan, self.round)
         run = self._finish(st, tree, history, history_doc)
         cache.save(base)
         host.checklog.round(host.steps.id, run)
